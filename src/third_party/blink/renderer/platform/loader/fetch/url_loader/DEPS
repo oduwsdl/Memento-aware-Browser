@@ -1,5 +1,0 @@
-specific_include_rules = {
-    "request_conversion.cc" : [
-        "+media/media_buildflags.h"
-    ],
-}
