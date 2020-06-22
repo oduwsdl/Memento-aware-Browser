@@ -111,6 +111,7 @@ void PurgeExtensionDataFromUnsentLogStore(
     const std::string& compressed_log_data =
         ukm_log_store->GetLogAtIndex(index);
     std::string uncompressed_log_data;
+    // TODO(crbug/1086910): Use the utilities in log_decoder.h instead.
     const bool uncompress_successful = compression::GzipUncompress(
         compressed_log_data, &uncompressed_log_data);
     DCHECK(uncompress_successful);
@@ -188,19 +189,18 @@ bool UkmService::LogCanBeParsed(const std::string& serialized_data) {
 
 UkmService::UkmService(PrefService* pref_service,
                        metrics::MetricsServiceClient* client,
-                       bool restrict_to_whitelist_entries,
                        std::unique_ptr<metrics::UkmDemographicMetricsProvider>
                            demographics_provider)
     : pref_service_(pref_service),
-      restrict_to_whitelist_entries_(restrict_to_whitelist_entries),
+      // We only need to restrict to whitelisted Entries if metrics reporting is
+      // not forced.
+      restrict_to_whitelist_entries_(!client->IsMetricsReportingForceEnabled()),
       client_(client),
       demographics_provider_(std::move(demographics_provider)),
       reporting_service_(client, pref_service) {
   DCHECK(pref_service_);
   DCHECK(client_);
-  DCHECK(demographics_provider_);
   DVLOG(1) << "UkmService::Constructor";
-
   reporting_service_.Initialize();
 
   base::RepeatingClosure rotate_callback = base::BindRepeating(
@@ -377,8 +377,10 @@ void UkmService::RotateLog() {
 }
 
 void UkmService::AddSyncedUserNoiseBirthYearAndGenderToReport(Report* report) {
-  if (!base::FeatureList::IsEnabled(kReportUserNoisedUserBirthYearAndGender))
+  if (!base::FeatureList::IsEnabled(kReportUserNoisedUserBirthYearAndGender) ||
+      !demographics_provider_) {
     return;
+  }
 
   demographics_provider_->ProvideSyncedUserNoisedBirthYearAndGenderToReport(
       report);
@@ -398,6 +400,12 @@ void UkmService::BuildAndStoreLog() {
   report.set_client_id(client_id_);
   report.set_session_id(session_id_);
   report.set_report_id(++report_count_);
+
+  const auto product = static_cast<metrics::ChromeUserMetricsExtension_Product>(
+      client_->GetProduct());
+  // Only set the product if it differs from the default value.
+  if (product != report.product())
+    report.set_product(product);
 
   StoreRecordingsInReport(&report);
 

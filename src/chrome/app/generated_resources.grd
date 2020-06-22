@@ -4646,8 +4646,8 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_EXTENSION_SETTINGS_OVERRIDDEN_DIALOG_CHANGE_IT_BACK" desc="The text of the button to revert to old settings; displayed in the dialog describing settings overridden by an extension.">
         Change it back
       </message>
-      <message name="IDS_EXTENSION_SETTINGS_OVERRIDDEN_DIALOG_IGNORE" desc="The text of the button to ignore the settings changes, allowing the extension changes to remain in effect. Displayed in the dialog describing settings overridden by an extension.">
-        Ignore
+      <message name="IDS_EXTENSION_SETTINGS_OVERRIDDEN_DIALOG_KEEP_IT" desc="The text of the button to ignore the settings changes, allowing the extension changes to remain in effect. Displayed in the dialog describing settings overridden by an extension.">
+        Keep it
       </message>
       <message name="IDS_EXTENSION_NTP_OVERRIDDEN_DIALOG_TITLE_GENERIC" desc="The title of the dialog informing the user that the new tab page has been overridden by an extension.">
         Did you mean to change this page?
@@ -5832,6 +5832,9 @@ the Bookmarks menu.">
       <message name="IDS_REOPEN_TAB_PROMO_SCREENREADER" desc="Text announced encouraging users to reopen a tab with the given shortcut">
         <ph name="SHORTCUT">$1<ex>CTRL+SHIFT+T</ex></ph> can reopen accidentally closed tabs
       </message>
+      <message name="IDS_TAB_GROUPS_NEW_GROUP_PROMO" desc="Text shown on promotional UI encouraging users to create a tab group in their tab strip">
+        To group tabs together, right-click a tab
+      </message>
 
       <!-- Browser Hung Plugin Detector -->
       <if expr="is_win">
@@ -5946,11 +5949,11 @@ the Bookmarks menu.">
         <message name="IDS_PASSWORD_MANAGER_IPH_TITLE_SAVE_TO_ACCOUNT" desc="Title of the in Product Help shown when the 'Save to account` is selected ">
           Choose where to save
         </message>
+        <message name="IDS_PASSWORD_MANAGER_IPH_BODY_SAVE_REAUTH_FAIL" desc="Body of the in Product Help shown in the password save bubble when the account auth fails">
+          This password will be saved on this device
+        </message>
         <message name="IDS_PASSWORD_MANAGER_IPH_BODY_SAVE_TO_ACCOUNT" desc="Body of the in Product Help shown when the 'Save to account` is selected">
           You can save this password in your Google Account or only on this device
-        </message>
-        <message name="IDS_PASSWORD_MANAGER_IPH_TITLE_SAVE_TO_DEVICE" desc="Title of the in Product Help shown when the 'Save to device` is selected ">
-          This password will be saved on this device
         </message>
         <message name="IDS_PASSWORD_MANAGER_TOOLTIP_SAVE" desc="Text for the 'Manage Passwords' icon's 'password to be saved' state">
           Save your password

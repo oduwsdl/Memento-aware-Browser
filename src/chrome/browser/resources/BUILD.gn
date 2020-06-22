@@ -6,12 +6,13 @@ import("//chrome/common/features.gni")
 import("//chrome/test/base/js2gtest.gni")
 import("//chrome/test/include_js_tests.gni")
 import("//components/nacl/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
-if (closure_compile) {
+if (enable_js_type_check) {
   group("closure_compile") {
     deps = [
       "components:closure_compile",
@@ -67,6 +68,7 @@ if (closure_compile) {
       deps += [
         "explore_sites_internals:closure_compile",
         "feed_internals:closure_compile",
+        "internals/query_tiles:closure_compile",
         "offline_pages:closure_compile",
         "snippets_internals:closure_compile",
         "webapks:closure_compile",
@@ -360,6 +362,7 @@ if (!is_android && !is_chromeos) {
   grit("profile_picker_resources") {
     source = "signin/profile_picker/profile_picker_resources.grd"
 
+    deps = [ "//chrome/browser/resources/signin/profile_picker:web_components" ]
     grit_flags = [
       "-E",
       "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
@@ -423,16 +426,10 @@ if (enable_print_preview) {
 
     if (optimize_webui) {
       source = "print_preview/print_preview_resources_vulcanized.grd"
-      deps = [
-        "//chrome/browser/resources/pdf/elements:web_components",
-        "//chrome/browser/resources/print_preview:build",
-      ]
+      deps = [ "//chrome/browser/resources/print_preview:build" ]
     } else {
       source = "print_preview/print_preview_resources.grd"
-      deps = [
-        "//chrome/browser/resources/pdf/elements:web_components",
-        "//chrome/browser/resources/print_preview/ui:web_components",
-      ]
+      deps = [ "//chrome/browser/resources/print_preview/ui:web_components" ]
     }
 
     defines = chrome_grit_defines
@@ -441,6 +438,25 @@ if (enable_print_preview) {
       "grit/print_preview_resources_map.cc",
       "grit/print_preview_resources_map.h",
       "print_preview_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("print_preview_pdf_resources") {
+    grit_flags = [
+      "-E",
+      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    ]
+
+    source = "print_preview/print_preview_pdf_resources.grd"
+    deps = [ "//chrome/browser/resources/pdf/elements:web_components" ]
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/print_preview_pdf_resources.h",
+      "grit/print_preview_pdf_resources_map.cc",
+      "grit/print_preview_pdf_resources_map.h",
+      "print_preview_pdf_resources.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
   }

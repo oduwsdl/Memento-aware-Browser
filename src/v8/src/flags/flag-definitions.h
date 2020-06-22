@@ -658,6 +658,9 @@ DEFINE_INT(reuse_opt_code_count, 0,
 // Native context independent (NCI) code.
 DEFINE_BOOL(turbo_nci, false,
             "enable experimental native context independent code.")
+// TODO(v8:8888): Temporary until NCI caching is implemented or
+// feedback collection is made unconditional.
+DEFINE_IMPLICATION(turbo_nci, turbo_collect_feedback_in_generic_lowering)
 DEFINE_BOOL(turbo_nci_as_highest_tier, false,
             "replace default TF with NCI code as the highest tier for testing "
             "purposes.")
@@ -720,16 +723,8 @@ DEFINE_DEBUG_BOOL(trace_wasm_streaming, false,
 DEFINE_INT(trace_wasm_ast_start, 0,
            "start function for wasm AST trace (inclusive)")
 DEFINE_INT(trace_wasm_ast_end, 0, "end function for wasm AST trace (exclusive)")
-// Enable Liftoff by default on ia32 and x64. More architectures will follow
-// once they are implemented and sufficiently tested.
-#if V8_TARGET_ARCH_IA32 || V8_TARGET_ARCH_X64
 DEFINE_BOOL(liftoff, true,
             "enable Liftoff, the baseline compiler for WebAssembly")
-#else
-DEFINE_BOOL(liftoff, false,
-            "enable Liftoff, the baseline compiler for WebAssembly")
-DEFINE_IMPLICATION(future, liftoff)
-#endif
 // We can't tier up (from Liftoff to TurboFan) in single-threaded mode, hence
 // disable Liftoff in that configuration for now. The alternative is disabling
 // TurboFan, which would reduce peak performance considerably.
@@ -1270,15 +1265,11 @@ DEFINE_IMPLICATION(trace_maps, log_code)
 
 // parser.cc
 DEFINE_BOOL(allow_natives_syntax, false, "allow natives syntax")
-DEFINE_BOOL(allow_natives_for_fuzzing, false,
-            "allow only natives explicitly whitelisted for fuzzers")
 DEFINE_BOOL(allow_natives_for_differential_fuzzing, false,
             "allow only natives explicitly whitelisted for differential "
             "fuzzers")
 DEFINE_IMPLICATION(allow_natives_for_differential_fuzzing, allow_natives_syntax)
-DEFINE_IMPLICATION(allow_natives_for_fuzzing, allow_natives_syntax)
-DEFINE_IMPLICATION(allow_natives_for_differential_fuzzing,
-                   allow_natives_for_fuzzing)
+DEFINE_IMPLICATION(allow_natives_for_differential_fuzzing, fuzzing)
 DEFINE_BOOL(parse_only, false, "only parse the sources")
 
 // simulator-arm.cc, simulator-arm64.cc and simulator-mips.cc

@@ -41,6 +41,8 @@ import org.chromium.chrome.browser.tab.TabIdManager;
 import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabState;
+import org.chromium.chrome.browser.tab.TabStateExtractor;
+import org.chromium.chrome.browser.tab.TabStateFileManager;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -317,9 +319,10 @@ public class TabPersistentStore extends TabPersister {
                 int id = tab.getId();
                 boolean incognito = tab.isIncognito();
                 try {
-                    TabState state = TabState.from(tab);
+                    TabState state = TabStateExtractor.from(tab);
                     if (state != null) {
-                        TabState.saveState(getTabStateFile(id, incognito), state, incognito);
+                        TabStateFileManager.saveState(
+                                getTabStateFile(id, incognito), state, incognito);
                     }
                 } catch (OutOfMemoryError e) {
                     Log.e(TAG, "Out of memory error while attempting to save tab state.  Erasing.");
@@ -552,7 +555,7 @@ public class TabPersistentStore extends TabPersister {
                 logExecutionTime("RestoreTabPrefetchTime", timeWaitingForPrefetch);
             } else {
                 // Necessary to do on the UI thread as a last resort.
-                state = TabState.restoreTabState(getStateDirectory(), tabToRestore.id);
+                state = TabStateFileManager.restoreTabState(getStateDirectory(), tabToRestore.id);
             }
             logExecutionTime("RestoreTabTime", time);
             restoreTab(tabToRestore, state, setAsActive);
@@ -794,7 +797,7 @@ public class TabPersistentStore extends TabPersister {
     }
 
     private void cleanupPersistentData(int id, boolean incognito) {
-        deleteFileAsync(TabState.getTabStateFilename(id, incognito));
+        deleteFileAsync(TabStateFileManager.getTabStateFilename(id, incognito));
         // No need to forward that event to the tab content manager as this is already
         // done as part of the standard tab removal process.
     }
@@ -1020,7 +1023,7 @@ public class TabPersistentStore extends TabPersister {
 
                     for (File file : files) {
                         Pair<Integer, Boolean> tabStateInfo =
-                                TabState.parseInfoFromFilename(file.getName());
+                                TabStateFileManager.parseInfoFromFilename(file.getName());
                         if (tabStateInfo != null) {
                             maxId = Math.max(maxId, tabStateInfo.first);
                         } else if (isStateFile(file.getName())) {
@@ -1142,7 +1145,7 @@ public class TabPersistentStore extends TabPersister {
         @Override
         protected void onPreExecute() {
             if (mDestroyed || isCancelled()) return;
-            mState = TabState.from(mTab);
+            mState = TabStateExtractor.from(mTab);
         }
 
         @Override
@@ -1316,7 +1319,7 @@ public class TabPersistentStore extends TabPersister {
         protected TabState doInBackground() {
             if (mDestroyed || isCancelled()) return null;
             try {
-                return TabState.restoreTabState(getStateDirectory(), mTabToRestore.id);
+                return TabStateFileManager.restoreTabState(getStateDirectory(), mTabToRestore.id);
             } catch (Exception e) {
                 Log.w(TAG, "Unable to read state: " + e);
                 return null;
@@ -1420,7 +1423,7 @@ public class TabPersistentStore extends TabPersister {
         mPrefetchActiveTabTask = new BackgroundOnlyAsyncTask<TabState>() {
             @Override
             protected TabState doInBackground() {
-                return TabState.restoreTabState(getStateDirectory(), activeTabId);
+                return TabStateFileManager.restoreTabState(getStateDirectory(), activeTabId);
             }
         }.executeOnTaskRunner(taskRunner);
     }

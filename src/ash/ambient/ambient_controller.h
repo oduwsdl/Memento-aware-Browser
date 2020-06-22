@@ -11,10 +11,12 @@
 #include "ash/ambient/ambient_photo_controller.h"
 #include "ash/ambient/ambient_view_delegate_impl.h"
 #include "ash/ambient/model/ambient_backend_model.h"
+#include "ash/ambient/ui/ambient_view_delegate.h"
 #include "ash/ash_export.h"
-#include "ash/public/cpp/ambient/ambient_mode_state.h"
+#include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/session/session_observer.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -28,8 +30,7 @@ class AmbientPhotoController;
 class AmbientViewDelegateObserver;
 
 // Class to handle all ambient mode functionalities.
-class ASH_EXPORT AmbientController : public views::WidgetObserver,
-                                     public AmbientModeStateObserver,
+class ASH_EXPORT AmbientController : public AmbientUiModelObserver,
                                      public SessionObserver {
  public:
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -37,49 +38,67 @@ class ASH_EXPORT AmbientController : public views::WidgetObserver,
   AmbientController();
   ~AmbientController() override;
 
-  // views::WidgetObserver:
-  void OnWidgetDestroying(views::Widget* widget) override;
-
-  // AmbientModeStateObserver:
-  void OnAmbientModeEnabled(bool enabled) override;
+  // AmbientUiModelObserver:
+  void OnAmbientUiVisibilityChanged(AmbientUiVisibility visibility) override;
 
   // SessionObserver:
   void OnLockStateChanged(bool locked) override;
 
-  // Creates and displays the ambient mode screen on top of the lock screen.
-  void Show();
-  // Destroys the ambient mode screen widget.
-  void Destroy();
-  // Toggle between show and destroy the ambient mode screen.
-  // Should be removed once we delete the shortcut entry point.
-  void Toggle();
+  void AddAmbientViewDelegateObserver(AmbientViewDelegateObserver* observer);
+  void RemoveAmbientViewDelegateObserver(AmbientViewDelegateObserver* observer);
+
+  // Initializes the |container_view_|. Called in |CreateWidget()| as the
+  // contents view.
+  std::unique_ptr<AmbientContainerView> CreateContainerView();
+
+  // Hides the |container_view_|. Called in |OnBackgroundPhotoEvents()| when
+  // user interacts with the lock-screen UI.
+  void HideContainerView();
+
+  // Handles the in-session ambient UI, which is displayed in its own widget.
+  void ShowInSessionUI();
+  void CloseInSessionUI();
+  void ToggleInSessionUI();
+
+  // Returns true if the |container_view_| is currently visible.
+  bool IsShown() const;
+
+  // Handles events on the background photo.
+  void OnBackgroundPhotoEvents();
+
+  void UpdateUiMode(AmbientUiMode ui_mode);
 
   void RequestAccessToken(
       AmbientAccessTokenController::AccessTokenCallback callback);
 
-  void AddAmbientViewDelegateObserver(AmbientViewDelegateObserver* observer);
-  void RemoveAmbientViewDelegateObserver(AmbientViewDelegateObserver* observer);
-
-  AmbientBackendModel* ambient_backend_model();
-
-  bool is_showing() const { return !!container_view_; }
-
-  // Handles user interactions on the background photo. For now the behavior
-  // is showing lock screen contents (login pod and media control view) on top
-  // while fading-out the current shown image.
-  void OnBackgroundPhotoEvents();
+  AmbientBackendModel* GetAmbientBackendModel();
 
   AmbientBackendController* ambient_backend_controller() {
     return ambient_backend_controller_.get();
   }
 
+  AmbientUiModel* ambient_ui_model() { return &ambient_ui_model_; }
+
  private:
+  class InactivityMonitor;
   friend class AmbientAshTestBase;
 
-  void CreateContainerView();
-  void DestroyContainerView();
+  // TODO(meilinw): reuses the lock-screen widget: b/156531168, b/157175030.
+  // Creates and shows a full-screen widget responsible for showing
+  // the ambient UI.
+  void CreateWidget();
 
-  void StartFadeOutAnimation();
+  void StartRefreshingImages();
+  void StopRefreshingImages();
+
+  // Invoked when the auto-show timer in |InactivityMonitor| gets fired after
+  // device being inactive for a specific amount of time.
+  void OnAutoShowTimeOut();
+
+  void CleanUpOnClosed();
+
+  void set_backend_controller_for_testing(
+      std::unique_ptr<AmbientBackendController> photo_client);
 
   AmbientPhotoController* get_ambient_photo_controller_for_testing() {
     return &ambient_photo_controller_;
@@ -89,21 +108,20 @@ class ASH_EXPORT AmbientController : public views::WidgetObserver,
     return container_view_;
   }
 
-  void set_backend_controller_for_testing(
-      std::unique_ptr<AmbientBackendController> photo_client);
+  // Owned by |RootView| of its parent widget.
+  AmbientContainerView* container_view_ = nullptr;
 
   AmbientViewDelegateImpl delegate_{this};
-
-  AmbientContainerView* container_view_ = nullptr;   // Owned by view hierarchy.
-
-  AmbientModeState ambient_state_;
+  AmbientUiModel ambient_ui_model_;
 
   AmbientAccessTokenController access_token_controller_;
-
   std::unique_ptr<AmbientBackendController> ambient_backend_controller_;
-
   AmbientPhotoController ambient_photo_controller_;
 
+  // Monitors the device inactivity and controls the auto-show of ambient.
+  std::unique_ptr<InactivityMonitor> inactivity_monitor_;
+
+  base::WeakPtrFactory<AmbientController> weak_ptr_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(AmbientController);
 };
 

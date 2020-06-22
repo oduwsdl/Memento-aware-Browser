@@ -1313,6 +1313,7 @@ if (!is_android) {
       "../browser/ui/views/sharing/shared_clipboard_browsertest.cc",
       "../browser/ui/views/sharing/sharing_browsertest.cc",
       "../browser/ui/views/sharing/sharing_browsertest.h",
+      "../browser/ui/views/tabs/tab_groups_iph_controller_browsertest.cc",
       "../browser/ui/views/tabs/tab_strip_browsertest.cc",
       "../browser/ui/views/try_chrome_dialog_win/try_chrome_dialog_browsertest.cc",
       "../browser/ui/views/web_apps/web_app_frame_toolbar_browsertest.cc",
@@ -1431,6 +1432,10 @@ if (!is_android) {
     if (is_win) {
       data += [ "$root_out_dir/chrome_200_percent.pak" ]
       deps += [ "//chrome/app:chrome_dll_resources" ]
+    }
+
+    if (is_mac) {
+      sources += [ "../browser/metrics/power_metrics_provider_mac_unittest.cc" ]
     }
 
     if (is_chromeos) {
@@ -2263,6 +2268,7 @@ if (!is_android) {
         "../browser/chromeos/login/screens/update_screen_browsertest.cc",
         "../browser/chromeos/login/screens/user_selection_screen_browsertest.cc",
         "../browser/chromeos/login/screens/welcome_screen_browsertest.cc",
+        "../browser/chromeos/login/screens/wrong_hwid_screen_browsertest.cc",
         "../browser/chromeos/login/session/chrome_session_manager_browsertest.cc",
         "../browser/chromeos/login/session_login_browsertest.cc",
         "../browser/chromeos/login/signin/device_id_browsertest.cc",
@@ -3330,6 +3336,7 @@ test("unit_tests") {
     "../browser/predictors/loading_predictor_unittest.cc",
     "../browser/predictors/loading_stats_collector_unittest.cc",
     "../browser/predictors/preconnect_manager_unittest.cc",
+    "../browser/predictors/prefetch_manager_unittest.cc",
     "../browser/predictors/resource_prefetch_predictor_tables_unittest.cc",
     "../browser/predictors/resource_prefetch_predictor_unittest.cc",
     "../browser/prefs/chrome_command_line_pref_store_proxy_unittest.cc",
@@ -3609,6 +3616,7 @@ test("unit_tests") {
       "../browser/ui/bookmarks/bookmark_editor_unittest.cc",
       "../browser/ui/bookmarks/bookmark_ui_utils_desktop_unittest.cc",
       "../browser/ui/bookmarks/recently_used_folders_combo_model_unittest.cc",
+      "../browser/ui/passwords/well_known_change_password_navigation_throttle_unittest.cc",
       "../browser/ui/sync/profile_signin_confirmation_helper_unittest.cc",
       "../browser/ui/sync/sync_promo_ui_unittest.cc",
       "../browser/ui/toolbar/app_menu_icon_controller_unittest.cc",
@@ -3649,6 +3657,7 @@ test("unit_tests") {
   }
 
   data_deps = [
+    "//chrome/browser/media/kaleidoscope/test/proto:test",
     "//chrome/test/data/media/engagement/preload:generate_preload_list",
     "//chrome/test/data/media/engagement/preload:test_data",
     "//testing/buildbot/filters:unit_tests_filters",
@@ -5413,7 +5422,6 @@ test("unit_tests") {
       "../browser/ui/views/desktop_capture/desktop_media_picker_views_unittest.cc",
       "../browser/ui/views/device_chooser_content_view_unittest.cc",
       "../browser/ui/views/download/download_in_progress_dialog_view_unittest.cc",
-      "../browser/ui/views/download/download_item_view_unittest.cc",
       "../browser/ui/views/extensions/chooser_dialog_view_unittest.cc",
       "../browser/ui/views/extensions/expandable_container_view_unittest.cc",
       "../browser/ui/views/extensions/extensions_menu_item_unittest.cc",

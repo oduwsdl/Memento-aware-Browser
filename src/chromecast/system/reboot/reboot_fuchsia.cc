@@ -8,8 +8,8 @@
 #include <lib/sys/cpp/service_directory.h>
 #include <zircon/types.h>
 
-#include "base/fuchsia/default_context.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/process_context.h"
 #include "base/no_destructor.h"
 #include "chromecast/public/reboot_shlib.h"
 #include "chromecast/system/reboot/reboot_util.h"
@@ -17,9 +17,10 @@
 using fuchsia::feedback::LastReboot;
 using fuchsia::feedback::LastRebootInfoProviderSyncPtr;
 using fuchsia::feedback::RebootReason;
-using fuchsia::hardware::power::statecontrol::Admin_Suspend_Result;
+using fuchsia::hardware::power::statecontrol::Admin_Reboot_Result;
 using fuchsia::hardware::power::statecontrol::AdminSyncPtr;
-using fuchsia::hardware::power::statecontrol::SystemPowerState;
+using StateControlRebootReason =
+    fuchsia::hardware::power::statecontrol::RebootReason;
 
 namespace chromecast {
 
@@ -43,8 +44,7 @@ void InitializeRebootShlib(const std::vector<std::string>& argv,
 
 // static
 void RebootShlib::Initialize(const std::vector<std::string>& argv) {
-  InitializeRebootShlib(
-      argv, base::fuchsia::ComponentContextForCurrentProcess()->svc().get());
+  InitializeRebootShlib(argv, base::ComponentContextForProcess()->svc().get());
 }
 
 // static
@@ -63,9 +63,23 @@ bool RebootShlib::IsRebootSourceSupported(
 
 // static
 bool RebootShlib::RebootNow(RebootSource reboot_source) {
-  Admin_Suspend_Result out_result;
-  zx_status_t status =
-      GetAdminSyncPtr()->Suspend(SystemPowerState::REBOOT, &out_result);
+  StateControlRebootReason reason;
+  switch (reboot_source) {
+    case RebootSource::API:
+      reason = StateControlRebootReason::USER_REQUEST;
+      break;
+    case RebootSource::OTA:
+      reason = StateControlRebootReason::SYSTEM_UPDATE;
+      break;
+    case RebootSource::OVERHEAT:
+      reason = StateControlRebootReason::HIGH_TEMPERATURE;
+      break;
+    default:
+      reason = StateControlRebootReason::USER_REQUEST;
+      break;
+  }
+  Admin_Reboot_Result out_result;
+  zx_status_t status = GetAdminSyncPtr()->Reboot(reason, &out_result);
   ZX_CHECK(status == ZX_OK, status) << "Failed to suspend device";
   return !out_result.is_err();
 }

@@ -92,16 +92,16 @@ class WebAppInstallManager final : public InstallManager,
   FRIEND_TEST_ALL_PREFIXES(WebAppInstallManagerTest,
                            TaskQueueWebContentsReadyRace);
 
-  void MaybeEnqueuePendingBookmarkAppInstalls();
-  void EnqueueInstallBookmarkAppFromSync(
-      const AppId& bookmark_app_id,
+  void MaybeEnqueuePendingAppSyncInstalls();
+  void EnqueueInstallAppFromSync(
+      const AppId& sync_app_id,
       std::unique_ptr<WebApplicationInfo> web_application_info,
       OnceInstallCallback callback);
   bool IsAppIdAlreadyEnqueued(const AppId& app_id) const;
 
   // On failure will attempt a fallback install only loading icon URLs.
-  void LoadAndInstallWebAppFromManifestWithFallbackCompleted_ForBookmarkAppSync(
-      const AppId& bookmark_app_id,
+  void LoadAndInstallWebAppFromManifestWithFallbackCompleted_ForAppSync(
+      const AppId& sync_app_id,
       std::unique_ptr<WebApplicationInfo> web_application_info,
       OnceInstallCallback callback,
       const AppId& web_app_id,
@@ -121,10 +121,6 @@ class WebAppInstallManager final : public InstallManager,
                              const AppId& app_id,
                              InstallResultCode code);
   // For the new USS-based system only:
-  void OnWebAppInstalledAfterSync(const AppId& app_in_sync_install_id,
-                                  OnceInstallCallback callback,
-                                  const AppId& installed_app_id,
-                                  InstallResultCode code);
   void OnWebAppUninstalledAfterSync(std::unique_ptr<WebApp> web_app,
                                     OnceUninstallCallback callback,
                                     bool uninstalled);
@@ -150,20 +146,28 @@ class WebAppInstallManager final : public InstallManager,
 
   // Tasks can be queued for sequential completion (to be run one at a time).
   // FIFO. This is a subset of |tasks_|.
-  using TaskQueue = base::queue<base::OnceClosure>;
+  struct PendingTask {
+    PendingTask();
+    PendingTask(PendingTask&&);
+    ~PendingTask();
+
+    const WebAppInstallTask* task = nullptr;
+    base::OnceClosure start;
+  };
+  using TaskQueue = base::queue<PendingTask>;
   TaskQueue task_queue_;
-  bool is_running_queued_task_ = false;
+  const WebAppInstallTask* current_queued_task_ = nullptr;
 
-  struct BookmarkAppInstallRequest {
-    BookmarkAppInstallRequest();
-    BookmarkAppInstallRequest(BookmarkAppInstallRequest&&);
-    ~BookmarkAppInstallRequest();
+  struct AppSyncInstallRequest {
+    AppSyncInstallRequest();
+    AppSyncInstallRequest(AppSyncInstallRequest&&);
+    ~AppSyncInstallRequest();
 
-    AppId bookmark_app_id;
+    AppId sync_app_id;
     std::unique_ptr<WebApplicationInfo> web_application_info;
     OnceInstallCallback callback;
   };
-  std::vector<BookmarkAppInstallRequest> pending_bookmark_app_installs_;
+  std::vector<AppSyncInstallRequest> pending_app_sync_installs_;
 
   // A single WebContents, shared between tasks in |task_queue_|.
   std::unique_ptr<content::WebContents> web_contents_;

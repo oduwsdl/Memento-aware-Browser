@@ -32,6 +32,7 @@
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/permission_result.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "components/ukm/content/source_url_recorder.h"
 #include "components/webrtc/media_stream_devices_controller.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -83,7 +84,7 @@
 #include "base/android/jni_string.h"
 #include "base/json/json_writer.h"
 #include "base/trace_event/trace_event.h"
-#include "components/autofill/android/autofill_provider_android.h"
+#include "components/autofill/android/provider/autofill_provider_android.h"
 #include "components/embedder_support/android/contextmenu/context_menu_builder.h"
 #include "components/embedder_support/android/delegate/color_chooser_android.h"
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"  // nogncheck
@@ -321,6 +322,7 @@ TabImpl::TabImpl(ProfileImpl* profile,
   PasswordManagerDriverFactory::CreateForWebContents(web_contents_.get());
 
   InitializePageLoadMetricsForWebContents(web_contents_.get());
+  ukm::InitializeSourceUrlRecorderForWebContents(web_contents_.get());
 
 #if defined(OS_ANDROID)
   InfoBarService::CreateForWebContents(web_contents_.get());

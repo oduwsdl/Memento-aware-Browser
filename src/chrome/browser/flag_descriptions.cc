@@ -345,6 +345,20 @@ const char kContextMenuSearchWithGoogleLensDescription[] =
     "Replaces default image search with an intent to Google Lens when "
     "supported.";
 
+const char kContextMenuShopWithGoogleLensName[] =
+    "Google Lens powered image search for shoppable images in the context "
+    "menu.";
+const char kContextMenuShopWithGoogleLensDescription[] =
+    "Replaces default image search with a Shopping intent to Google Lens when "
+    "supported";
+
+const char kContextMenuSearchAndShopWithGoogleLensName[] =
+    "Google Lens powered image search and shopping in the context menu.";
+const char kContextMenuSearchAndShopWithGoogleLensDescription[] =
+    "Replaces default image search with an intent to Google Lens when "
+    "supported. Also display an additional menu item for a Shopping intent to "
+    "Google Lens when supported";
+
 const char kOmniboxContextMenuShowFullUrlsName[] =
     "Context menu show full URLs";
 const char kOmniboxContextMenuShowFullUrlsDescription[] =
@@ -908,10 +922,6 @@ const char kEnableSyncTrustedVaultName[] =
 const char kEnableSyncTrustedVaultDescription[] =
     "Enables the new, experimental passphrase type for sync data";
 
-const char kEnableSyncUSSNigoriName[] = "Enable USS for sync encryption keys";
-const char kEnableSyncUSSNigoriDescription[] =
-    "Enables the new, experimental implementation of sync encryption keys";
-
 const char kEnableTextFragmentAnchorName[] = "Enable Text Fragment Anchor.";
 const char kEnableTextFragmentAnchorDescription[] =
     "Enables scrolling to text specified in URL's fragment.";
@@ -1454,6 +1464,12 @@ const char kOmniboxSuggestionsWrapAroundName[] =
     "Omnibox Suggestions Wrap-Around";
 const char kOmniboxSuggestionsWrapAroundDescription[] =
     "Allow long search suggestions to wrap around to reveal their content";
+
+const char kOmniboxTabSwitchSuggestionsName[] =
+    "Omnibox switch to tab suggestions";
+const char kOmniboxTabSwitchSuggestionsDescription[] =
+    "Enable URL suggestions to optionally take the user to a tab where a "
+    "website is already opened.";
 
 const char kOmniboxUIHideSteadyStateUrlSchemeName[] =
     "Omnibox UI Hide Steady-State URL Scheme";
@@ -3057,11 +3073,6 @@ const char kOmniboxShortBookmarkSuggestionsName[] =
 const char kOmniboxShortBookmarkSuggestionsDescription[] =
     "Match very short input words to beginning of words in bookmark "
     "suggestions.";
-
-const char kOmniboxTabSwitchSuggestionsName[] =
-    "Omnibox tab switch suggestions";
-const char kOmniboxTabSwitchSuggestionsDescription[] =
-    "Enable suggestions for switching to open tabs within the Omnibox.";
 
 const char kOmniboxTabSwitchSuggestionsDedicatedRowName[] =
     "Omnibox dedicated row tab switch suggestions";

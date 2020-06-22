@@ -63,6 +63,7 @@ using v8::MemoryPressureLevel;
 class AllocationObserver;
 class ArrayBufferCollector;
 class ArrayBufferSweeper;
+class BasicMemoryChunk;
 class CodeLargeObjectSpace;
 class ConcurrentMarking;
 class GCIdleTimeHandler;
@@ -775,9 +776,6 @@ class Heap {
   inline PagedSpace* paged_space(int idx);
   inline Space* space(int idx);
 
-  // Returns name of the space.
-  V8_EXPORT_PRIVATE static const char* GetSpaceName(AllocationSpace space);
-
   // ===========================================================================
   // Getters to other components. ==============================================
   // ===========================================================================
@@ -1065,7 +1063,7 @@ class Heap {
     return local_embedder_heap_tracer_.get();
   }
 
-  void SetEmbedderHeapTracer(EmbedderHeapTracer* tracer);
+  V8_EXPORT_PRIVATE void SetEmbedderHeapTracer(EmbedderHeapTracer* tracer);
   EmbedderHeapTracer* GetEmbedderHeapTracer() const;
 
   void RegisterExternallyReferencedObject(Address* location);
@@ -2409,12 +2407,12 @@ class CodePageCollectionMemoryModificationScope {
 // was registered to be executable. It can be used by concurrent threads.
 class CodePageMemoryModificationScope {
  public:
-  explicit inline CodePageMemoryModificationScope(MemoryChunk* chunk);
+  explicit inline CodePageMemoryModificationScope(BasicMemoryChunk* chunk);
   explicit inline CodePageMemoryModificationScope(Code object);
   inline ~CodePageMemoryModificationScope();
 
  private:
-  MemoryChunk* chunk_;
+  BasicMemoryChunk* chunk_;
   bool scope_active_;
 
   // Disallow any GCs inside this scope, as a relocation of the underlying

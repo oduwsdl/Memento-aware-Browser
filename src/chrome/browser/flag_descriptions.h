@@ -204,6 +204,12 @@ extern const char kBypassAppBannerEngagementChecksDescription[];
 extern const char kContextMenuSearchWithGoogleLensName[];
 extern const char kContextMenuSearchWithGoogleLensDescription[];
 
+extern const char kContextMenuShopWithGoogleLensName[];
+extern const char kContextMenuShopWithGoogleLensDescription[];
+
+extern const char kContextMenuSearchAndShopWithGoogleLensName[];
+extern const char kContextMenuSearchAndShopWithGoogleLensDescription[];
+
 extern const char kOmniboxContextMenuShowFullUrlsName[];
 extern const char kOmniboxContextMenuShowFullUrlsDescription[];
 
@@ -532,9 +538,6 @@ extern const char kEnableSubresourceRedirectDescription[];
 extern const char kEnableSyncTrustedVaultName[];
 extern const char kEnableSyncTrustedVaultDescription[];
 
-extern const char kEnableSyncUSSNigoriName[];
-extern const char kEnableSyncUSSNigoriDescription[];
-
 extern const char kEnableTextFragmentAnchorName[];
 extern const char kEnableTextFragmentAnchorDescription[];
 
@@ -853,6 +856,9 @@ extern const char kOmniboxSuggestionsRecyclerViewDescription[];
 
 extern const char kOmniboxSuggestionsWrapAroundName[];
 extern const char kOmniboxSuggestionsWrapAroundDescription[];
+
+extern const char kOmniboxTabSwitchSuggestionsName[];
+extern const char kOmniboxTabSwitchSuggestionsDescription[];
 
 extern const char kOmniboxUIHideSteadyStateUrlSchemeName[];
 extern const char kOmniboxUIHideSteadyStateUrlSchemeDescription[];
@@ -1757,9 +1763,6 @@ extern const char kOmniboxSuggestionButtonRowDescription[];
 
 extern const char kOmniboxReverseAnswersName[];
 extern const char kOmniboxReverseAnswersDescription[];
-
-extern const char kOmniboxTabSwitchSuggestionsName[];
-extern const char kOmniboxTabSwitchSuggestionsDescription[];
 
 extern const char kOmniboxTabSwitchSuggestionsDedicatedRowName[];
 extern const char kOmniboxTabSwitchSuggestionsDedicatedRowDescription[];

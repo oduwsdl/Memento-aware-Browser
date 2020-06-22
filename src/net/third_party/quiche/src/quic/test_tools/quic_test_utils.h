@@ -676,6 +676,8 @@ class MockQuicConnection : public QuicConnection {
     QuicConnection::OnError(framer);
   }
 
+  void ReallyOnCanWrite() { QuicConnection::OnCanWrite(); }
+
   void ReallyCloseConnection(
       QuicErrorCode error,
       const std::string& details,
@@ -1618,7 +1620,7 @@ QuicStreamId GetNthClientInitiatedUnidirectionalStreamId(
     int n);
 
 StreamType DetermineStreamType(QuicStreamId id,
-                               QuicTransportVersion version,
+                               ParsedQuicVersion version,
                                Perspective perspective,
                                bool is_incoming,
                                StreamType default_type);

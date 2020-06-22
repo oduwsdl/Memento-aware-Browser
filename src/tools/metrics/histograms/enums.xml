@@ -695,6 +695,16 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="245" label="UMA_API_WINDOW_GET_ISTOPMOST">
     UIA Window.get_IsTopmost
   </int>
+  <int value="246" label="UMA_API_ELEMENT_PROVIDER_FROM_POINT">
+    UIA FragmentRoot.ElementProviderFromPoint
+  </int>
+  <int value="247" label="UMA_API_GET_FOCUS">UIA FragmentRoot.GetFocus</int>
+  <int value="248" label="UMA_API_ADVISE_EVENT_ADDED">
+    UIA AdviseEvents.AdviseEventAdded
+  </int>
+  <int value="249" label="UMA_API_ADVISE_EVENT_REMOVED">
+    UIA AdviseEvents.AdviseEventRemoved
+  </int>
 </enum>
 
 <enum name="AccessibilityWinAPIGetPropertyValueEnum">
@@ -1449,6 +1459,22 @@ Unknown properties are collapsed to zero. -->
 <enum name="AndroidArmFpu">
   <int value="0" label="No NEON support"/>
   <int value="1" label="NEON support"/>
+</enum>
+
+<enum name="AndroidDefaultBrowserPromoOutcomeType">
+  <int value="0" label="No Default"/>
+  <int value="1" label="Other Default"/>
+  <int value="2" label="Chrome Default"/>
+</enum>
+
+<enum name="AndroidDefaultBrowserPromoType">
+  <int value="0" label="No Default"/>
+  <int value="1" label="Other Default"/>
+</enum>
+
+<enum name="AndroidDefaultBrowserPromoUserActionType">
+  <int value="0" label="Change Default"/>
+  <int value="1" label="No Thanks"/>
 </enum>
 
 <enum name="AndroidDownloadExtensionType">
@@ -10132,6 +10158,7 @@ histogram as enum -->
   <int value="12" label="WebAPK"/>
   <int value="13" label="Yahoo Mail"/>
   <int value="14" label="Viber"/>
+  <int value="15" label="YouTube"/>
 </enum>
 
 <enum name="ClientCertSelectionResult">
@@ -11396,7 +11423,7 @@ Called by update_net_error_codes.py.-->
 
 <enum name="ContextMenuLensSupportStatus">
   <summary>Whether lens is supported and if not the reason why.</summary>
-  <int value="0" label="Lens Supported"/>
+  <int value="0" label="Lens Search Supported"/>
   <int value="1" label="Not Google Search Engine"/>
   <int value="2" label="Activity Not Accessible"/>
   <int value="3" label="Out of Date"/>
@@ -11404,6 +11431,8 @@ Called by update_net_error_codes.py.-->
   <int value="5" label="OS Below Android O"/>
   <int value="6" label="Invalid Package"/>
   <int value="7" label="Image Format Not Support"/>
+  <int value="8" label="Lens Shop Supported"/>
+  <int value="9" label="Lens Search And Shop Supported"/>
 </enum>
 
 <enum name="ContextMenuOption">
@@ -39461,6 +39490,7 @@ from previous Chrome versions.
   <int value="-1469536698" label="ChromeHomeDoodle:enabled"/>
   <int value="-1469228683" label="QuickUnlockPinSignin:disabled"/>
   <int value="-1468126425" label="ResourceLoadScheduler:disabled"/>
+  <int value="-1467839547" label="ContextMenuShopWithGoogleLens:disabled"/>
   <int value="-1467642274" label="KeyboardShortcutViewer:disabled"/>
   <int value="-1467332609" label="tab-management-experiment-type-anise"/>
   <int value="-1467062925" label="AndroidDefaultBrowserPromo:enabled"/>
@@ -39850,6 +39880,8 @@ from previous Chrome versions.
   <int value="-1083736482" label="OmniboxCompactSuggestions:enabled"/>
   <int value="-1083547717" label="NotificationExpansionAnimation:disabled"/>
   <int value="-1082302549" label="scan-cards-in-web-payments"/>
+  <int value="-1081295536"
+      label="ContextMenuSearchAndShopWithGoogleLens:enabled"/>
   <int value="-1078093206" label="ash-debug-shortcuts"/>
   <int value="-1077752943" label="enable-password-generation"/>
   <int value="-1075156797" label="enable-brotli"/>
@@ -41825,6 +41857,8 @@ from previous Chrome versions.
   <int value="1155905651" label="DrawVerticallyEdgeToEdge:disabled"/>
   <int value="1155923106" label="NTPOfflinePages:enabled"/>
   <int value="1158333871" label="QueryTilesEnableQueryEditing:enabled"/>
+  <int value="1159760152"
+      label="ContextMenuSearchAndShopWithGoogleLens:disabled"/>
   <int value="1163255347" label="ash-enable-touch-view-touch-feedback"/>
   <int value="1164377197" label="SwipingFromLeftEdgeToGoBack:enabled"/>
   <int value="1164460660" label="AutofillEnableVirtualCard:enabled"/>
@@ -42405,6 +42439,7 @@ from previous Chrome versions.
   <int value="1798347197"
       label="ContextualSuggestionsIPHReverseScroll:disabled"/>
   <int value="1799521026" label="LegacyTLSEnforced:disabled"/>
+  <int value="1801585504" label="ContextMenuShopWithGoogleLens:enabled"/>
   <int value="1802874714" label="QueryTilesEnableQueryEditing:disabled"/>
   <int value="1803465156" label="enable-zero-suggest-most-visited"/>
   <int value="1803470125" label="SyncUSSSessions:enabled"/>
@@ -51210,6 +51245,7 @@ Called by update_net_trust_anchors.py.-->
   <int value="604" label="Assistant: Ok Google"/>
   <int value="605" label="Assistant: Notifications"/>
   <int value="606" label="Assistant: Voice Input"/>
+  <int value="607" label="Assistant: Train voice model"/>
   <int value="700" label="Manage Android Preferences"/>
   <int value="701" label="Remove Play Store"/>
   <int value="702" label="Turn On Play Store"/>
@@ -51262,6 +51298,7 @@ Called by update_net_trust_anchors.py.-->
   <int value="1525" label="Switch Action: Auto Scan Keyboard"/>
   <int value="1526" label="Get Image Descriptions From Google"/>
   <int value="1527" label="Live Captions"/>
+  <int value="1528" label="Cursor Colors: On/Off"/>
   <int value="1600" label="Powerwash"/>
   <int value="1700" label="Change Chrome Channel"/>
   <int value="1701" label="Copy Detailed Build Info"/>
@@ -51333,6 +51370,7 @@ Called by update_net_trust_anchors.py.-->
   <int value="100" label="Bluetooth Devices"/>
   <int value="200" label="Multi Device Features"/>
   <int value="201" label="Smart Lock"/>
+  <int value="202" label="Nearby Share"/>
   <int value="300" label="My Accounts"/>
   <int value="301" label="Sync"/>
   <int value="302" label="Sync (Deprecated)"/>
@@ -51366,6 +51404,7 @@ Called by update_net_trust_anchors.py.-->
   <int value="1200" label="Languages And Input Details"/>
   <int value="1201" label="Manage Input Methods"/>
   <int value="1202" label="Smart Inputs"/>
+  <int value="1203" label="Input Method Options"/>
   <int value="1300" label="Network File Shares"/>
   <int value="1400" label="Printing Details"/>
   <int value="1500" label="Manage Accessibility"/>
@@ -52461,6 +52500,19 @@ Called by update_net_trust_anchors.py.-->
   <int value="0" label="Success"/>
   <int value="1" label="Network/server error"/>
   <int value="2" label="Malformed response"/>
+</enum>
+
+<enum name="PasswordManager.MoveToAccountStoreTrigger">
+  <summary>
+    Triggers that will cause Chrome to offer to move a password from the profile
+    store to the account store.
+  </summary>
+  <int value="0" label="kSuccessfulLoginWithProfileStorePassword">
+    The user successfully logged in with a password from the profile store.
+  </int>
+  <int value="1" label="kExplicitlyTriggeredInSettings">
+    The user explicitly asked to move a password listed in Settings.
+  </int>
 </enum>
 
 <enum name="PasswordManager.ReauthResult">
@@ -67030,8 +67082,10 @@ would be helpful to identify which type is being sent.
   <int value="7" label="Permission denied"/>
   <int value="8" label="Sync turned off"/>
   <int value="9" label="Sync network error"/>
-  <int value="10" label="Sync server error"/>
+  <int value="10" label="[DEPRECATED] Sync server or auth error"/>
   <int value="11" label="Sync bridge timeout"/>
+  <int value="12" label="Sync server error"/>
+  <int value="13" label="Sync auth error"/>
 </enum>
 
 <enum name="SyncSimpleConflictResolutions">
@@ -72770,6 +72824,17 @@ Called by update_scheduler_enums.py.-->
 <enum name="WebViewClientTypeEnum">
   <int value="0" label="Regular WebViewClient"/>
   <int value="1" label="WebViewClientCompat (via AndroidX)"/>
+</enum>
+
+<enum name="WebViewDrawAndSubmissionType">
+  <int value="0" label="No invalidate + no submission + same params"/>
+  <int value="1" label="Params changed"/>
+  <int value="2" label="Frame submitted"/>
+  <int value="3" label="Frame submitted + params changed"/>
+  <int value="4" label="Invalidate"/>
+  <int value="5" label="Invalidate + params changed"/>
+  <int value="6" label="Invalidate + frame submitted"/>
+  <int value="7" label="Invalidate + frame submitted + params changed"/>
 </enum>
 
 <enum name="WebViewExtraHeaders">

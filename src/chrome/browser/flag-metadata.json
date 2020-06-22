@@ -603,9 +603,19 @@
     "expiry_milestone": 90
   },
   {
+    "name": "context-menu-search-and-shop-with-google-lens",
+    "owners": [ "yusuyoutube", "benwgold", "lens-chrome" ],
+    "expiry_milestone": 90
+  },
+  {
     "name": "context-menu-search-with-google-lens",
     "owners": [ "benwgold", "lens-chrome" ],
-    "expiry_milestone": 88
+    "expiry_milestone": 90
+  },
+  {
+    "name": "context-menu-shop-with-google-lens",
+    "owners": [ "yusuyoutube", "benwgold", "lens-chrome" ],
+    "expiry_milestone": 90
   },
   {
     "name": "contextual-nudges",
@@ -2220,11 +2230,6 @@
     "expiry_milestone": 85
   },
   {
-    "name": "enable-sync-uss-nigori",
-    "owners": [ "mmoskvitin@google.com", "//components/sync/OWNERS" ],
-    "expiry_milestone": 83
-  },
-  {
     "name": "enable-system-webapps",
     "owners": [ "calamity" ],
     "expiry_milestone": 78
@@ -2548,8 +2553,8 @@
   },
   {
     "name": "file-handling-api",
-    "owners": ["mgiuca@chromium.org", "oyiptong@chromium.org"],
-    "expiry_milestone": 82
+    "owners": ["mgiuca", "cmp"],
+    "expiry_milestone": 88
   },
   {
     "name": "files-ng",

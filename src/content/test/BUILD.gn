@@ -1525,7 +1525,10 @@ test("content_browsertests") {
       "//mojo/public/cpp/platform",
       "//mojo/public/mojom/base",
     ]
-    data_deps += [ "//content/shell:content_shell" ]
+    data_deps += [
+      "//content/shell:content_shell",
+      "//mojo/core:shared_library",
+    ]
   }
 
   if (!is_chrome_branded) {
@@ -2262,7 +2265,7 @@ test("content_unittests") {
     ]
     if (is_chromeos) {
       sources += [
-        "../browser/media/capture/lame_capture_overlay_chromeos_unittest.cc",
+        "../browser/media/capture/slow_capture_overlay_chromeos_unittest.cc",
       ]
     }
   }

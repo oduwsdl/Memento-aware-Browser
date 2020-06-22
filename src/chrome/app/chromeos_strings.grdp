@@ -2191,7 +2191,7 @@
     A factory error has been detected
   </message>
   <message name="IDS_WRONG_HWID_SCREEN_MESSAGE_FIRST_PART" desc="Warning message shown on screen notifying about malformed hardware ID. First paragraph.">
-    Unfortunately, your computer is configured with a malformed hardware ID. This prevents Chrome OS from updating with the latest security fixes and your computer <ph name="BEGIN_BOLD">$1</ph>may be vulnerable to malicious attacks<ph name="END_BOLD">$2</ph>.
+    Unfortunately, your computer is configured with a malformed hardware ID. This prevents Chrome OS from updating with the latest security fixes and your computer <ph name="BEGIN_BOLD">&lt;b&gt;</ph>may be vulnerable to malicious attacks<ph name="END_BOLD">&lt;/b&gt;</ph>.
   </message>
   <message name="IDS_WRONG_HWID_SCREEN_MESSAGE_SECOND_PART" desc="Warning message shown on screen notifying about malformed hardware ID. Second paragraph.">
     Please contact your hardware manufacturer immediately to send your computer to a repair facility.
@@ -2281,6 +2281,9 @@
   </message>
 
   <!-- Common Network type strings -->
+  <message name="IDS_NETWORK_TYPE" desc="Label for network types">
+    Type
+  </message>
   <message name="IDS_NETWORK_TYPE_ETHERNET" desc="Label for Ethernet networks.">
     Ethernet
   </message>
@@ -2307,6 +2310,9 @@
   </message>
   <message name="IDS_NETWORK_TYPE_VPN_BUILTIN" desc="The built-in VPN types (Open VPN and L2TP/IPSec).">
     OpenVPN / L2TP
+  </message>
+  <message name="IDS_NETWORK_TYPE_WIRELESS" desc="Label for wireless networks (Cellular, Tether, and WiFi.).">
+    Wireless
   </message>
 
   <!-- Status bar -->
@@ -2831,14 +2837,36 @@
   </message>
 
   <!-- Update Required Notiifcation Strings-->
-  <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_TITLE_IMMEDIATE" desc="The title of the notification dialog informing the user that the device is not connected to the internet and it is last day to update the device.">
-    Last day to update device
-  </message>
-  <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_TITLE_DAYS" desc="The title of the notification dialog informing the user that the device is not connected to the internet and an update is required within two or more days.">
-    Update device within <ph name="COUNT">$1<ex>2</ex></ph> days
+  <message name="IDS_UPDATE_REQUIRED_NETWORK_LIMITATION_TITLE_DAYS" desc="The title of the notification dialog informing the user that the device is not connected to a network suitable for downloading updates and an update is required within one or more days.">
+    {0, plural,
+      =1 {Last day to update device}
+      other {Update device within # days}}
   </message>
   <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_MESSAGE" desc="The body text of the notification dialog informing the user that the device is not connected to the internet and an update is required.">
     <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to download an update before the deadline. The update will download automatically when you connect to the internet.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_MESSAGE_IMMEDIATE" desc="The body text of the notification dialog informing the user that the device is not connected to the internet and it is last day to update the device.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to download an update today. The update will download automatically when you connect to the internet.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_METERED_NETWORK_MESSAGE" desc="The body text of the notification dialog informing the user that the device is connected to a metered network and an update is required.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi and download an update before the deadline. Or, download from a metered connection (charges may apply).
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_METERED_NETWORK_MESSAGE_IMMEDIATE" desc="The body text of the notification dialog informing the user that the device is connected to a metered network and it is last day to update the device.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi today to download an update. Or, download from a metered connection (charges may apply).
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_TITLE_DAYS" desc="The title of the notification dialog informing the user that the device has reached end of life and should be returned before the deadline.">
+    {0, plural,
+      =1 {Immediate return required}
+      other {Return device within # days}}
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_MESSAGE_IMMEDIATE" desc="The body text of the noti fication dialog informing the user that the device has reached end of life and it is last day to return it.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to back up your data and return this device today.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_MESSAGE" desc="The body text of the notification dialog informing the user that the device has reached end of life and should be returned before the deadline.">
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to back up your data and return this device before the deadline.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_SEE_DETAILS" desc="The button text of the notification dialog which can be clicked to view return instructions from the admin on the settings page.">
+    See Details
   </message>
 
   <!-- Genius App -->
@@ -3377,6 +3405,18 @@
   <message name="IDS_NETWORK_UI_TITLE" desc="Title of the page">
     Network
   </message>
+  <message name="IDS_NETWORK_UI_TAB_GENERAL" desc="General tab name">
+    General
+  </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_HEALTH" desc="Network health tab name">
+    Network Health
+  </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_STATE" desc="Network state tab name">
+    Network State
+  </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_SELECT" desc="Network Select tab name">
+    Network Select
+  </message>
   <message name="IDS_NETWORK_UI_AUTO_REFRESH" desc="Instructions for how to auto-refresh the page">
     Add a query param in URL to auto-refresh the page: chrome://network/?refresh=&lt;sec&gt;
   </message>
@@ -3440,6 +3480,35 @@
 
   <message name="IDS_DEVICE_LOG_LINK_TEXT" desc="Message preceeding link to chrome://device-log">
     For network logs, see: <ph name="DEVICE_LOG_LINK">&lt;a href="chrome://device-log"&gt;chrome://device-log&lt;/a&gt;</ph>
+  </message>
+
+  <!-- Network Health display strings -->
+  <message name="IDS_NETWORK_HEALTH_STATE" desc="Network Health State label">
+    State
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_UNINITIALIZED" desc="Network Health State - Uninitialized">
+    Uninitialized
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_DISABLED" desc="Network Health State - Disabled">
+    Disabled
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_PROHIBITED" desc="Network Health State - Prohibited">
+    Prohibited
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_NOT_CONNECTED" desc="Network Health State - Not Connected">
+    Not Connected
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_CONNECTING" desc="Network Health State - Connecting">
+    Connecting
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_PORTAL" desc="Network Health State - Portal">
+    Portal
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_CONNECTED" desc="Network Health State - Connected">
+    Connected
+  </message>
+  <message name="IDS_NETWORK_HEALTH_STATE_ONLINE" desc="Network Health State - Online">
+    Online
   </message>
 
   <!-- Set time/date UI display strings -->
@@ -4956,7 +5025,7 @@
     Set up <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph> on your Chromebook
   </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_CONFIRMATION_MESSAGE" desc="Body of the Plugin VM installer when asking user to start installation." translateable="false">
-    <ph name="RECOMMENDED_SPACE">$1<ex>32GB</ex></ph> of free space is recommended for installation.
+    <ph name="MINIMUM_SPACE">$1<ex>20GB</ex></ph> of free space is required for installation.
   </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_INSTALL_BUTTON" desc="Label for the button in the Plugin VM installer to begin installion.">
     Install
@@ -4978,9 +5047,6 @@
   </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_ERROR_OFFLINE_MESSAGE" desc="Text of the Plugin VM installer when the user starts installation but the device is offline.">
     Connect to the internet and try again
-  </message>
-  <message name="IDS_PLUGIN_VM_INSTALLER_LOW_DISK_SPACE_MESSAGE" desc="Text of the Plugin VM installer that warns them of low disk space.">
-    Your device is low on storage. At least <ph name="RECOMMENDED_SPACE">$1<ex>32GB</ex></ph> of free space is recommended to use <ph name="APP_NAME">$2<ex>Plugin VM</ex></ph>. To increase free space, delete files from your device.
   </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_START_DOWNLOADING_MESSAGE" desc="Text of the Plugin VM installer that informs the user that setup may take a while.">
     This may take awhile
@@ -5070,7 +5136,7 @@
     Please restart your device to use <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph>.
   </message>
   <message name="IDS_PLUGIN_VM_INSUFFICIENT_DISK_SPACE_MESSAGE" desc="Error message shown if Plugin VM installation fails because there is not enough free space on the device.">
-      Your device is low on storage. At least <ph name="MINIMUM_SPACE">$1<ex>16GB</ex></ph> of free space is required to use <ph name="APP_NAME">$2<ex>Plugin VM</ex></ph>, and over <ph name="RECOMMENDED_SPACE">$3<ex>32GB</ex></ph> of free space is recommended. To increase free space, delete files from device.
+      Your device is low on storage. At least <ph name="MINIMUM_SPACE">$1<ex>16GB</ex></ph> of free space is required to use <ph name="APP_NAME">$2<ex>Plugin VM</ex></ph>. To increase free space, delete files from device.
   </message>
 
   <!-- Strings for Account Manager error screen -->

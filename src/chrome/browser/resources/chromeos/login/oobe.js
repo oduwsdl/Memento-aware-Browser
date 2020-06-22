@@ -27,7 +27,6 @@
 // <include src="screen_app_launch_splash.js">
 // <include src="screen_arc_terms_of_service.js">
 // <include src="screen_error_message.js">
-// <include src="screen_wrong_hwid.js">
 // <include src="screen_fatal_error.js">
 // <include src="screen_sync_consent.js">
 // <include src="screen_app_downloading.js">
@@ -51,7 +50,6 @@ cr.define('cr.ui.Oobe', function() {
      */
     initialize() {
       cr.ui.login.DisplayManager.initialize();
-      login.WrongHWIDScreen.register();
       login.EulaScreen.register();
       login.AutoEnrollmentCheckScreen.register();
       login.EnableDebuggingScreen.register();
@@ -92,14 +90,6 @@ cr.define('cr.ui.Oobe', function() {
      */
     setTpmPassword(password) {
       $('eula').setTpmPassword(password);
-    },
-
-    /**
-     * Refreshes a11y menu state.
-     * @param {!Object} data New dictionary with a11y features state.
-     */
-    refreshA11yInfo(data) {
-      $('connect').a11yStatus = data;
     },
 
     /**

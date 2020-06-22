@@ -263,6 +263,11 @@ class TabStrip : public views::AccessiblePaneView,
   // Returns the index of the focused tab, if any.
   base::Optional<int> GetFocusedTabIndex() const;
 
+  // Returns a view for anchoring an in-product help promo. |index_hint|
+  // indicates at which tab the promo should be displayed, but is not
+  // binding.
+  views::View* GetTabViewForPromoAnchor(int index_hint);
+
   // TabController:
   const ui::ListSelectionModel& GetSelectionModel() const override;
   bool SupportsMultipleSelection() override;
@@ -617,7 +622,11 @@ class TabStrip : public views::AccessiblePaneView,
   void UpdateNewTabButtonBorder();
 
   // Called whenever a tab animation has progressed.
-  void OnTabAnimationProgressed();
+  void OnTabSlotAnimationProgressed(TabSlotView* view);
+
+  // Called to update the visuals for a tab group when tabs in the group are
+  // moved or resized.
+  void UpdateTabGroupVisuals(tab_groups::TabGroupId tab_group_id);
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;

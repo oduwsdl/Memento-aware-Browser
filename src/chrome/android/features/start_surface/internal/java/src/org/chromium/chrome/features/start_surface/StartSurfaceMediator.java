@@ -39,11 +39,11 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeState;
 import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
@@ -494,7 +494,8 @@ class StartSurfaceMediator
                     && mFeedSurfaceCreator != null) {
                 mPropertyModel.set(FEED_SURFACE_COORDINATOR,
                         mFeedSurfaceCreator.createFeedSurfaceCoordinator(
-                                mNightModeStateProvider.isInNightMode(), getIsPlaceholderShown()));
+                                mNightModeStateProvider.isInNightMode(),
+                                shouldShowFeedPlaceholder()));
             }
             mTabModelSelector.addObserver(mTabModelSelectorObserver);
 
@@ -539,6 +540,17 @@ class StartSurfaceMediator
     @Override
     public void enableRecordingFirstMeaningfulPaint(long activityCreateTimeMs) {
         mController.enableRecordingFirstMeaningfulPaint(activityCreateTimeMs);
+    }
+
+    void onOverviewShownAtLaunch(long activityCreationTimeMs) {
+        mController.onOverviewShownAtLaunch(activityCreationTimeMs);
+        if (mPropertyModel != null) {
+            FeedSurfaceCoordinator feedSurfaceCoordinator =
+                    mPropertyModel.get(FEED_SURFACE_COORDINATOR);
+            if (feedSurfaceCoordinator != null) {
+                feedSurfaceCoordinator.onOverviewShownAtLaunch(activityCreationTimeMs);
+            }
+        }
     }
 
     // Implements TabSwitcher.OverviewModeObserver.
@@ -611,9 +623,10 @@ class StartSurfaceMediator
         setOverviewState(OverviewModeState.SHOWN_TABSWITCHER);
     }
 
-    private boolean getIsPlaceholderShown() {
+    public boolean shouldShowFeedPlaceholder() {
         return mSurfaceMode == SurfaceMode.SINGLE_PANE
-                && CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START);
+                && CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
+                && StartSurfaceConfiguration.getFeedArticlesVisibility();
     }
 
     /** This interface builds the feed surface coordinator when showing if needed. */
@@ -625,7 +638,7 @@ class StartSurfaceMediator
                 && !mActivityStateChecker.isFinishingOrDestroyed()) {
             mPropertyModel.set(FEED_SURFACE_COORDINATOR,
                     mFeedSurfaceCreator.createFeedSurfaceCoordinator(
-                            mNightModeStateProvider.isInNightMode(), getIsPlaceholderShown()));
+                            mNightModeStateProvider.isInNightMode(), shouldShowFeedPlaceholder()));
         }
 
         mPropertyModel.set(IS_EXPLORE_SURFACE_VISIBLE, isVisible);

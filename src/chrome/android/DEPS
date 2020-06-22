@@ -1,6 +1,8 @@
 include_rules = [
+  "+chrome/browser/browser_controls/android",
   "+chrome/browser/enterprise",
   "+chrome/browser/flags/android",
+  "+chrome/browser/fullscreen/android",
   "+chrome/browser/notifications",
   "+chrome/browser/preferences/android/java",
   "+chrome/browser/safety_check/android",
@@ -11,6 +13,7 @@ include_rules = [
   "+chrome/browser/util/android/java",
   "+chrome/browser/xsurface/android",
   "+components/browser_ui/android/bottomsheet",
+  "+components/browser_ui/media/android",
   "+components/browser_ui/modaldialog/android",
   "+components/browser_ui/share/android",
   "+components/browser_ui/site_settings/android",

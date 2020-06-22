@@ -6,6 +6,7 @@ import("//base/allocator/allocator.gni")
 import("//build/buildflag_header.gni")
 import("//build/config/buildflags_paint_preview.gni")
 import("//build/config/chrome_build.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/pgo/pgo.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
@@ -1319,6 +1320,8 @@ static_library("browser") {
     "predictors/predictors_enums.h",
     "predictors/predictors_features.cc",
     "predictors/predictors_features.h",
+    "predictors/prefetch_manager.cc",
+    "predictors/prefetch_manager.h",
     "predictors/proxy_lookup_client_impl.cc",
     "predictors/proxy_lookup_client_impl.h",
     "predictors/resolve_host_client_impl.cc",
@@ -2677,8 +2680,6 @@ static_library("browser") {
       "android/preferences/browser_prefs_android.h",
       "android/preferences/clipboard_android.cc",
       "android/preferences/clipboard_android.h",
-      "android/preferences/cookie_controls_bridge.cc",
-      "android/preferences/cookie_controls_bridge.h",
       "android/preferences/cookie_controls_service_bridge.cc",
       "android/preferences/cookie_controls_service_bridge.h",
       "android/preferences/pref_change_registrar_android.cc",
@@ -4098,6 +4099,13 @@ static_library("browser") {
     sources += [
       "metrics/cached_metrics_profile.cc",
       "metrics/cached_metrics_profile.h",
+    ]
+  }
+
+  if (chromeos_is_browser_only) {
+    sources += [
+      "metrics/lacros_metrics_provider.cc",
+      "metrics/lacros_metrics_provider.h",
     ]
   }
 

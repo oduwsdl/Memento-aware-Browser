@@ -132,6 +132,8 @@
   'built-ins/TypedArray/prototype/reduce/BigInt/callbackfn-detachbuffer': [FAIL],
   'built-ins/TypedArray/prototype/reduceRight/callbackfn-detachbuffer': [FAIL],
   'built-ins/TypedArray/prototype/reduceRight/BigInt/callbackfn-detachbuffer': [FAIL],
+  'built-ins/TypedArray/prototype/set/array-arg-primitive-toobject': [FAIL],
+  'built-ins/TypedArray/prototype/set/BigInt/array-arg-primitive-toobject': [FAIL],
   'built-ins/TypedArray/prototype/some/callbackfn-detachbuffer': [FAIL],
   'built-ins/TypedArray/prototype/some/BigInt/callbackfn-detachbuffer': [FAIL],
   # DataView functions should also throw on detached buffers
@@ -535,8 +537,6 @@
   'built-ins/RegExp/prototype/Symbol.replace/fn-invoke-args-empty-result': [FAIL],
 
   # https://bugs.chromium.org/p/v8/issues/detail?id=10395
-  'built-ins/AsyncFromSyncIteratorPrototype/next/absent-value-not-passed': [FAIL],
-  'built-ins/AsyncFromSyncIteratorPrototype/return/absent-value-not-passed': [FAIL],
   'built-ins/AsyncFromSyncIteratorPrototype/return/return-null': [FAIL],
   'built-ins/AsyncFromSyncIteratorPrototype/throw/throw-null': [FAIL],
 
@@ -638,10 +638,6 @@
   'built-ins/Atomics/waitAsync/object-for-timeout-agent': [SKIP],
   'built-ins/Atomics/waitAsync/true-for-timeout-agent': [SKIP],
   'built-ins/Atomics/waitAsync/value-not-equal-agent': [SKIP],
-
-  # https://github.com/tc39/test262/pull/2659
-  'intl402/DateTimeFormat/prototype/resolvedOptions/order-style': [FAIL],
-  'intl402/DateTimeFormat/constructor-options-order-timedate-style': [FAIL],
 
   ######################## NEEDS INVESTIGATION ###########################
 

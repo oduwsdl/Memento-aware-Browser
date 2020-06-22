@@ -116,14 +116,6 @@ void BookmarkAppInstallFinalizer::FinalizeInstall(
   crx_installer->InstallWebApp(web_app_info);
 }
 
-void BookmarkAppInstallFinalizer::FinalizeFallbackInstallAfterSync(
-    const web_app::AppId& app_id,
-    InstallFinalizedCallback callback) {
-  // TODO(crbug.com/1018630): Install synced bookmark apps using a freshly
-  // fetched manifest instead of sync data.
-  NOTREACHED();
-}
-
 void BookmarkAppInstallFinalizer::FinalizeUninstallAfterSync(
     const web_app::AppId& app_id,
     UninstallWebAppCallback callback) {
@@ -139,8 +131,6 @@ void BookmarkAppInstallFinalizer::FinalizeUpdate(
 
   const Extension* existing_extension = GetEnabledExtension(expected_app_id);
   if (!existing_extension) {
-    DCHECK(ExtensionRegistry::Get(profile_)->GetInstalledExtension(
-        expected_app_id));
     std::move(callback).Run(web_app::AppId(),
                             web_app::InstallResultCode::kWebAppDisabled);
     return;

@@ -976,6 +976,17 @@ void QuicConnection::OnSuccessfulVersionNegotiation() {
   }
 }
 
+void QuicConnection::OnSuccessfulMigrationAfterProbing() {
+  DCHECK_EQ(perspective_, Perspective::IS_CLIENT);
+  if (IsPathDegrading()) {
+    // If path was previously degrading, and migration is successful after
+    // probing, restart the path degrading and blackhole detection.
+    OnForwardProgressMade();
+  }
+  // TODO(b/159074035): notify SentPacketManger with RTT sample from probing and
+  // reset cwnd if this is a successful network migration.
+}
+
 void QuicConnection::OnTransportParametersSent(
     const TransportParameters& transport_parameters) const {
   if (debug_visitor_ != nullptr) {
@@ -1978,24 +1989,8 @@ void QuicConnection::OnUndecryptablePacket(const QuicEncryptedPacket& packet,
     ++stats_.undecryptable_packets_received_before_handshake_complete;
   }
 
-  bool should_enqueue = true;
-  if (encryption_level_ == ENCRYPTION_FORWARD_SECURE) {
-    // We do not expect to install any further keys.
-    should_enqueue = false;
-  } else if (undecryptable_packets_.size() >= max_undecryptable_packets_) {
-    // We do not queue more than max_undecryptable_packets_ packets.
-    should_enqueue = false;
-  } else if (has_decryption_key) {
-    // We already have the key for this decryption level, therefore no
-    // future keys will allow it be decrypted.
-    should_enqueue = false;
-  } else if (version().KnowsWhichDecrypterToUse() &&
-             decryption_level <= encryption_level_) {
-    // On versions that know which decrypter to use, we install keys in order
-    // so we will not get newer keys for lower encryption levels.
-    should_enqueue = false;
-  }
-
+  const bool should_enqueue =
+      ShouldEnqueueUnDecryptablePacket(decryption_level, has_decryption_key);
   if (should_enqueue) {
     QueueUndecryptablePacket(packet, decryption_level);
   }
@@ -2004,6 +1999,43 @@ void QuicConnection::OnUndecryptablePacket(const QuicEncryptedPacket& packet,
     debug_visitor_->OnUndecryptablePacket(decryption_level,
                                           /*dropped=*/!should_enqueue);
   }
+}
+
+bool QuicConnection::ShouldEnqueueUnDecryptablePacket(
+    EncryptionLevel decryption_level,
+    bool has_decryption_key) const {
+  if (encryption_level_ == ENCRYPTION_FORWARD_SECURE) {
+    // We do not expect to install any further keys.
+    return false;
+  }
+  if (undecryptable_packets_.size() >= max_undecryptable_packets_) {
+    // We do not queue more than max_undecryptable_packets_ packets.
+    return false;
+  }
+  if (has_decryption_key) {
+    // We already have the key for this decryption level, therefore no
+    // future keys will allow it be decrypted.
+    return false;
+  }
+  if (version().KnowsWhichDecrypterToUse() &&
+      decryption_level <= encryption_level_) {
+    // On versions that know which decrypter to use, we install keys in order
+    // so we will not get newer keys for lower encryption levels.
+    return false;
+  }
+  return true;
+}
+
+std::string QuicConnection::UndecryptablePacketsInfo() const {
+  std::string info = quiche::QuicheStrCat(
+      "num_undecryptable_packets: ", undecryptable_packets_.size(), " {");
+  for (const auto& packet : undecryptable_packets_) {
+    info = quiche::QuicheStrCat(
+        info, "[", EncryptionLevelToString(packet.encryption_level), ", ",
+        packet.packet->length(), ", ", packet.processed, "]");
+  }
+  info = quiche::QuicheStrCat(info, "}");
+  return info;
 }
 
 void QuicConnection::ProcessUdpPacket(const QuicSocketAddress& self_address,
@@ -2318,7 +2350,10 @@ void QuicConnection::SendProbingRetransmissions() {
 void QuicConnection::RetransmitZeroRttPackets() {
   sent_packet_manager_.RetransmitZeroRttPackets();
 
-  WriteIfNotBlocked();
+  if (!GetQuicReloadableFlag(
+          quic_do_not_retransmit_immediately_on_zero_rtt_reject)) {
+    WriteIfNotBlocked();
+  }
 }
 
 void QuicConnection::NeuterUnencryptedPackets() {
@@ -3131,27 +3166,79 @@ void QuicConnection::MaybeProcessUndecryptablePackets() {
     return;
   }
 
-  while (connected_ && !undecryptable_packets_.empty()) {
-    // Making sure there is no pending frames when processing next undecrypted
-    // packet because the queued ack frame may change.
-    packet_creator_.FlushCurrentPacket();
-    if (!connected_) {
-      return;
+  if (GetQuicReloadableFlag(quic_fix_undecryptable_packets)) {
+    QUIC_RELOADABLE_FLAG_COUNT(quic_fix_undecryptable_packets);
+    auto iter = undecryptable_packets_.begin();
+    while (connected_ && iter != undecryptable_packets_.end()) {
+      // Making sure there is no pending frames when processing next undecrypted
+      // packet because the queued ack frame may change.
+      packet_creator_.FlushCurrentPacket();
+      if (!connected_) {
+        return;
+      }
+      UndecryptablePacket* undecryptable_packet = &*iter;
+      ++iter;
+      if (undecryptable_packet->processed) {
+        continue;
+      }
+      QUIC_DVLOG(1) << ENDPOINT << "Attempting to process undecryptable packet";
+      if (debug_visitor_ != nullptr) {
+        debug_visitor_->OnAttemptingToProcessUndecryptablePacket(
+            undecryptable_packet->encryption_level);
+      }
+      if (framer_.ProcessPacket(*undecryptable_packet->packet)) {
+        QUIC_DVLOG(1) << ENDPOINT << "Processed undecryptable packet!";
+        undecryptable_packet->processed = true;
+        ++stats_.packets_processed;
+        continue;
+      }
+      const bool has_decryption_key =
+          version().KnowsWhichDecrypterToUse() &&
+          framer_.HasDecrypterOfEncryptionLevel(
+              undecryptable_packet->encryption_level);
+      if (framer_.error() == QUIC_DECRYPTION_FAILURE &&
+          ShouldEnqueueUnDecryptablePacket(
+              undecryptable_packet->encryption_level, has_decryption_key)) {
+        QUIC_DVLOG(1)
+            << ENDPOINT
+            << "Need to attempt to process this undecryptable packet later";
+        continue;
+      }
+      undecryptable_packet->processed = true;
     }
-    QUIC_DVLOG(1) << ENDPOINT << "Attempting to process undecryptable packet";
-    const auto& undecryptable_packet = undecryptable_packets_.front();
-    if (debug_visitor_ != nullptr) {
-      debug_visitor_->OnAttemptingToProcessUndecryptablePacket(
-          undecryptable_packet.encryption_level);
+    // Remove processed packets. We cannot remove elements in the while loop
+    // above because currently QuicCircularDeque does not support removing
+    // mid elements.
+    while (!undecryptable_packets_.empty()) {
+      if (!undecryptable_packets_.front().processed) {
+        break;
+      }
+      undecryptable_packets_.pop_front();
     }
-    if (!framer_.ProcessPacket(*undecryptable_packet.packet) &&
-        framer_.error() == QUIC_DECRYPTION_FAILURE) {
-      QUIC_DVLOG(1) << ENDPOINT << "Unable to process undecryptable packet...";
-      break;
+  } else {
+    while (connected_ && !undecryptable_packets_.empty()) {
+      // Making sure there is no pending frames when processing next undecrypted
+      // packet because the queued ack frame may change.
+      packet_creator_.FlushCurrentPacket();
+      if (!connected_) {
+        return;
+      }
+      QUIC_DVLOG(1) << ENDPOINT << "Attempting to process undecryptable packet";
+      const auto& undecryptable_packet = undecryptable_packets_.front();
+      if (debug_visitor_ != nullptr) {
+        debug_visitor_->OnAttemptingToProcessUndecryptablePacket(
+            undecryptable_packet.encryption_level);
+      }
+      if (!framer_.ProcessPacket(*undecryptable_packet.packet) &&
+          framer_.error() == QUIC_DECRYPTION_FAILURE) {
+        QUIC_DVLOG(1) << ENDPOINT
+                      << "Unable to process undecryptable packet...";
+        break;
+      }
+      QUIC_DVLOG(1) << ENDPOINT << "Processed undecryptable packet!";
+      ++stats_.packets_processed;
+      undecryptable_packets_.pop_front();
     }
-    QUIC_DVLOG(1) << ENDPOINT << "Processed undecryptable packet!";
-    ++stats_.packets_processed;
-    undecryptable_packets_.pop_front();
   }
 
   // Once forward secure encryption is in use, there will be no
@@ -4150,13 +4237,44 @@ EncryptionLevel QuicConnection::GetConnectionCloseEncryptionLevel() const {
   return ENCRYPTION_INITIAL;
 }
 
+void QuicConnection::MaybeBundleCryptoDataWithInitialAck() {
+  DCHECK(SupportsMultiplePacketNumberSpaces());
+  const QuicTime initial_ack_timeout =
+      uber_received_packet_manager_.GetAckTimeout(INITIAL_DATA);
+  if (!initial_ack_timeout.IsInitialized() ||
+      (initial_ack_timeout > clock_->ApproximateNow() &&
+       initial_ack_timeout >
+           uber_received_packet_manager_.GetEarliestAckTimeout())) {
+    // Not going to send initial ACK.
+    return;
+  }
+  if (coalesced_packet_.length() > 0) {
+    // Do not bundle CRYPTO data if the ACK could be coalesced with other
+    // packets.
+    return;
+  }
+  // Initial ACK will be padded to full anyway, so try to bundle INITIAL crypto
+  // data.
+  sent_packet_manager_.RetransmitInitialDataIfAny();
+}
+
 void QuicConnection::SendAllPendingAcks() {
   DCHECK(SupportsMultiplePacketNumberSpaces());
   QUIC_DVLOG(1) << ENDPOINT << "Trying to send all pending ACKs";
   ack_alarm_->Cancel();
-  const QuicTime earliest_ack_timeout =
+  QuicTime earliest_ack_timeout =
       uber_received_packet_manager_.GetEarliestAckTimeout();
   QUIC_BUG_IF(!earliest_ack_timeout.IsInitialized());
+  if (GetQuicReloadableFlag(quic_bundle_crypto_data_with_initial_ack) &&
+      perspective() == Perspective::IS_SERVER) {
+    MaybeBundleCryptoDataWithInitialAck();
+    earliest_ack_timeout =
+        uber_received_packet_manager_.GetEarliestAckTimeout();
+    if (!earliest_ack_timeout.IsInitialized()) {
+      QUIC_RELOADABLE_FLAG_COUNT(quic_bundle_crypto_data_with_initial_ack);
+      return;
+    }
+  }
   // Latches current encryption level.
   const EncryptionLevel current_encryption_level = encryption_level_;
   for (int8_t i = INITIAL_DATA; i <= APPLICATION_DATA; ++i) {
@@ -4255,13 +4373,15 @@ bool QuicConnection::FlushCoalescedPacket() {
   if (coalesced_packet_.length() == 0) {
     return true;
   }
-  QUIC_DVLOG(1) << ENDPOINT << "Sending coalesced packet";
+
   char buffer[kMaxOutgoingPacketSize];
   const size_t length = packet_creator_.SerializeCoalescedPacket(
       coalesced_packet_, buffer, coalesced_packet_.max_packet_length());
   if (length == 0) {
     return false;
   }
+  QUIC_DVLOG(1) << ENDPOINT << "Sending coalesced packet "
+                << coalesced_packet_.ToString(length);
 
   if (!buffered_packets_.empty() || HandleWriteBlocked()) {
     QUIC_DVLOG(1) << ENDPOINT
@@ -4492,10 +4612,14 @@ void QuicConnection::OnHandshakeTimeout() {
   DCHECK(use_idle_network_detector_);
   const QuicTime::Delta duration =
       clock_->ApproximateNow() - stats_.connection_creation_time;
-  const std::string error_details = quiche::QuicheStrCat(
+  std::string error_details = quiche::QuicheStrCat(
       "Handshake timeout expired after ", duration.ToDebuggingValue(),
       ". Timeout:",
       idle_network_detector_.handshake_timeout().ToDebuggingValue());
+  if (perspective() == Perspective::IS_CLIENT && version().UsesTls()) {
+    error_details =
+        quiche::QuicheStrCat(error_details, UndecryptablePacketsInfo());
+  }
   QUIC_DVLOG(1) << ENDPOINT << error_details;
   CloseConnection(QUIC_HANDSHAKE_TIMEOUT, error_details,
                   ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);

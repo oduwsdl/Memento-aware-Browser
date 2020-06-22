@@ -39,8 +39,9 @@
 
 namespace {
 
+constexpr int64_t kBytesPerGigabyte = 1024 * 1024 * 1024;
 // Size to use for calculating progress when the actual size isn't available.
-constexpr int64_t kDownloadSizeFallbackEstimate = 15LL * 1024 * 1024 * 1024;
+constexpr int64_t kDownloadSizeFallbackEstimate = 15LL * kBytesPerGigabyte;
 
 constexpr char kFailureReasonHistogram[] = "PluginVm.SetupFailureReason";
 
@@ -68,6 +69,12 @@ bool IsIsoImage(const base::FilePath& image) {
     }
   }
   return false;
+}
+
+// TODO(crbug.com/1009837): Remove when base::DeleteFile() is no longer
+// ambiguous.
+bool DeleteFileWrapper(const base::FilePath& to_delete) {
+  return base::DeleteFile(to_delete);
 }
 
 }  // namespace
@@ -109,18 +116,6 @@ void PluginVmInstaller::Start() {
   CheckLicense();
 }
 
-void PluginVmInstaller::Continue() {
-  if (state_ != State::kInstalling ||
-      installing_state_ != InstallingState::kPausedLowDiskSpace) {
-    LOG(ERROR) << "Tried to continue installation in unexpected state "
-               << GetStateName(state_) << ", "
-               << GetInstallingStateName(installing_state_);
-    return;
-  }
-
-  StartDlcDownload();
-}
-
 void PluginVmInstaller::Cancel() {
   if (state_ != State::kInstalling) {
     LOG(ERROR) << "Tried to cancel installation from unexpected state "
@@ -129,9 +124,6 @@ void PluginVmInstaller::Cancel() {
   }
   state_ = State::kCancelling;
   switch (installing_state_) {
-    case InstallingState::kPausedLowDiskSpace:
-      CancelFinished();
-      return;
     case InstallingState::kCheckingLicense:
     case InstallingState::kCheckingDiskSpace:
     case InstallingState::kCheckingForExistingVm:
@@ -206,18 +198,8 @@ void PluginVmInstaller::OnAvailableDiskSpace(int64_t bytes) {
   // and have low disk space as it's simpler to check for existing VMs after
   // installing DLC and this case should be very rare.
 
-  if (bytes < kMinimumFreeDiskSpace) {
+  if (bytes < RequiredFreeDiskSpace()) {
     InstallFailed(FailureReason::INSUFFICIENT_DISK_SPACE);
-    return;
-  }
-
-  if (bytes < kRecommendedFreeDiskSpace) {
-    // If there's no observer, we would get stuck in the paused state.
-    if (!observer_) {
-      InstallFinished();
-      return;
-    }
-    UpdateInstallingState(InstallingState::kPausedLowDiskSpace);
     return;
   }
 
@@ -260,8 +242,7 @@ void PluginVmInstaller::OnUpdateVmStateFailed() {
 }
 
 void PluginVmInstaller::StartDlcDownload() {
-  DCHECK(installing_state_ == InstallingState::kCheckingDiskSpace ||
-         installing_state_ == InstallingState::kPausedLowDiskSpace);
+  DCHECK_EQ(installing_state_, InstallingState::kCheckingDiskSpace);
   UpdateInstallingState(InstallingState::kDownloadingDlc);
 
   if (!GetPluginVmImageDownloadUrl().is_valid()) {
@@ -783,6 +764,12 @@ GURL PluginVmInstaller::GetPluginVmImageDownloadUrl() {
   return GURL(url_ptr->GetString());
 }
 
+int64_t PluginVmInstaller::RequiredFreeDiskSpace() {
+  return profile_->GetPrefs()->GetInt64(
+             prefs::kPluginVmRequiredFreeDiskSpaceGB) *
+         kBytesPerGigabyte;
+}
+
 std::string PluginVmInstaller::GetStateName(State state) {
   switch (state) {
     case State::kIdle:
@@ -800,8 +787,6 @@ std::string PluginVmInstaller::GetInstallingStateName(InstallingState state) {
       return "kInactive";
     case InstallingState::kCheckingDiskSpace:
       return "kCheckingDiskSpace";
-    case InstallingState::kPausedLowDiskSpace:
-      return "kPausedLowDiskSpace";
     case InstallingState::kCheckingForExistingVm:
       return "kCheckingForExistingVm";
     case InstallingState::kDownloadingDlc:
@@ -888,8 +873,7 @@ void PluginVmInstaller::RemoveTemporaryImageIfExists() {
   } else if (!downloaded_image_.empty()) {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-        base::BindOnce(&base::DeleteFile, downloaded_image_,
-                       false /* recursive */),
+        base::BindOnce(&DeleteFileWrapper, downloaded_image_),
         base::BindOnce(&PluginVmInstaller::OnTemporaryImageRemoved,
                        weak_ptr_factory_.GetWeakPtr()));
   }

@@ -394,6 +394,9 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   void StartExponentialBackoffAfterNthPto(
       size_t exponential_backoff_start_point);
 
+  // Called to retransmit in flight INITIAL packet if any.
+  void RetransmitInitialDataIfAny();
+
   bool supports_multiple_packet_number_spaces() const {
     return unacked_packets_.supports_multiple_packet_number_spaces();
   }
@@ -655,6 +658,10 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // If true, use standard deviation (instead of mean deviation) when
   // calculating PTO timeout.
   bool use_standard_deviation_for_pto_;
+
+  // The multiplier for caculating PTO timeout before any RTT sample is
+  // available.
+  float pto_multiplier_without_rtt_samples_;
 };
 
 }  // namespace quic

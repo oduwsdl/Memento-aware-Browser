@@ -256,6 +256,9 @@ public abstract class ChromeFeatureList {
     public static final String CONTEXT_MENU_PERFORMANCE_INFO = "ContextMenuPerformanceInfo";
     public static final String CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS =
             "ContextMenuSearchWithGoogleLens";
+    public static final String CONTEXT_MENU_SHOP_WITH_GOOGLE_LENS = "ContextMenuShopWithGoogleLens";
+    public static final String CONTEXT_MENU_SEARCH_AND_SHOP_WITH_GOOGLE_LENS =
+            "ContextMenuSearchAndShopWithGoogleLens";
     public static final String CONTEXTUAL_SEARCH_DEBUG = "ContextualSearchDebug";
     public static final String CONTEXTUAL_SEARCH_DEFINITIONS = "ContextualSearchDefinitions";
     public static final String CONTEXTUAL_SEARCH_ML_TAP_SUPPRESSION =
@@ -360,6 +363,8 @@ public abstract class ChromeFeatureList {
             "WebPaymentsPerMethodCanMakePaymentQuota";
     public static final String PHOTO_PICKER_VIDEO_SUPPORT = "PhotoPickerVideoSupport";
     public static final String PHOTO_PICKER_ZOOM = "PhotoPickerZoom";
+    public static final String PORTALS = "Portals";
+    public static final String PORTALS_CROSS_ORIGIN = "PortalsCrossOrigin";
     public static final String PREDICTIVE_PREFETCHING_ALLOWED_ON_ALL_CONNECTION_TYPES =
             "PredictivePrefetchingAllowedOnAllConnectionTypes";
     public static final String PRIORITIZE_BOOTSTRAP_TASKS = "PrioritizeBootstrapTasks";

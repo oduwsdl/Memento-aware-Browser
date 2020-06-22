@@ -38,7 +38,8 @@ void WebAppRegistrar::Shutdown() {
 }
 
 bool WebAppRegistrar::IsInstalled(const AppId& app_id) const {
-  return GetAppById(app_id) != nullptr;
+  const WebApp* web_app = GetAppById(app_id);
+  return web_app && !web_app->is_in_sync_install();
 }
 
 bool WebAppRegistrar::IsLocallyInstalled(const AppId& app_id) const {
@@ -129,6 +130,21 @@ std::vector<SquareSizePx> WebAppRegistrar::GetAppDownloadedIconSizes(
   auto* web_app = GetAppById(app_id);
   return web_app ? web_app->downloaded_icon_sizes()
                  : std::vector<SquareSizePx>();
+}
+
+std::vector<WebApplicationShortcutsMenuItemInfo>
+WebAppRegistrar::GetAppShortcutInfos(const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->shortcut_infos()
+                 : std::vector<WebApplicationShortcutsMenuItemInfo>();
+}
+
+std::vector<std::vector<SquareSizePx>>
+WebAppRegistrar::GetAppDownloadedShortcutsMenuIconsSizes(
+    const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->downloaded_shortcuts_menu_icons_sizes()
+                 : std::vector<std::vector<SquareSizePx>>();
 }
 
 std::vector<AppId> WebAppRegistrar::GetAppIds() const {

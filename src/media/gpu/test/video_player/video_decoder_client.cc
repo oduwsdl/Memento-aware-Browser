@@ -189,8 +189,7 @@ void VideoDecoderClient::CreateDecoderTask(bool* success,
             base::ThreadTaskRunnerHandle::Get(),
             std::make_unique<PlatformVideoFramePool>(
                 gpu_memory_buffer_factory_),
-            std::make_unique<VideoFrameConverter>(),
-            gpu_memory_buffer_factory_);
+            std::make_unique<VideoFrameConverter>());
       } else {
         LOG(ERROR) << "VD-based video decoders only support import mode";
       }
@@ -387,7 +386,7 @@ void VideoDecoderClient::DecodeDoneTask(media::DecodeStatus status) {
 
 void VideoDecoderClient::FrameReadyTask(scoped_refptr<VideoFrame> video_frame) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_client_sequence_checker_);
-  DCHECK(video_frame->metadata()->IsTrue(VideoFrameMetadata::POWER_EFFICIENT));
+  DCHECK(video_frame->metadata()->power_efficient);
 
   frame_renderer_->RenderFrame(video_frame);
 

@@ -2690,21 +2690,25 @@ void InstructionSelector::VisitF64x2Pmax(Node* node) { UNIMPLEMENTED(); }
 #if !V8_TARGET_ARCH_X64 && !V8_TARGET_ARCH_ARM64 && !V8_TARGET_ARCH_S390X && \
     !V8_TARGET_ARCH_IA32
 // TODO(v8:10553) Prototyping floating point rounding instructions.
+// TODO(zhin): Temporary convoluted way to for unimplemented opcodes on ARM as
+// we are implementing them one at a time.
+#if !V8_TARGET_ARCH_ARM
+void InstructionSelector::VisitF32x4Ceil(Node* node) { UNIMPLEMENTED(); }
+#endif  // !V8_TARGET_ARCH_ARM
 void InstructionSelector::VisitF64x2Ceil(Node* node) { UNIMPLEMENTED(); }
 void InstructionSelector::VisitF64x2Floor(Node* node) { UNIMPLEMENTED(); }
 void InstructionSelector::VisitF64x2Trunc(Node* node) { UNIMPLEMENTED(); }
 void InstructionSelector::VisitF64x2NearestInt(Node* node) { UNIMPLEMENTED(); }
-void InstructionSelector::VisitF32x4Ceil(Node* node) { UNIMPLEMENTED(); }
 void InstructionSelector::VisitF32x4Floor(Node* node) { UNIMPLEMENTED(); }
 void InstructionSelector::VisitF32x4Trunc(Node* node) { UNIMPLEMENTED(); }
 void InstructionSelector::VisitF32x4NearestInt(Node* node) { UNIMPLEMENTED(); }
 #endif  // !V8_TARGET_ARCH_X64 && !V8_TARGET_ARCH_ARM64 && !V8_TARGET_ARCH_S390X
         // && !V8_TARGET_ARCH_IA32
 
-#if !V8_TARGET_ARCH_X64
+#if !V8_TARGET_ARCH_X64 && !V8_TARGET_ARCH_IA32
 // TODO(v8:10583) Prototype i32x4.dot_i16x8_s
 void InstructionSelector::VisitI32x4DotI16x8S(Node* node) { UNIMPLEMENTED(); }
-#endif  // !V8_TARGET_ARCH_X64
+#endif  // !V8_TARGET_ARCH_X64 && !V8_TARGET_ARCH_IA32
 
 void InstructionSelector::VisitFinishRegion(Node* node) { EmitIdentity(node); }
 
@@ -2845,7 +2849,7 @@ void InstructionSelector::VisitCall(Node* node, BasicBlock* handler) {
   switch (call_descriptor->kind()) {
     case CallDescriptor::kCallAddress: {
       int misc_field = static_cast<int>(call_descriptor->ParameterCount());
-#if defined(_AIX)
+#if ABI_USES_FUNCTION_DESCRIPTORS
       // Highest misc_field bit is used on AIX to indicate if a CFunction call
       // has function descriptor or not.
       if (!call_descriptor->NoFunctionDescriptor()) {

@@ -10,8 +10,6 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tasks.TasksSurface;
 import org.chromium.chrome.browser.tasks.TasksSurfaceProperties;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
@@ -86,6 +84,7 @@ public class StartSurfaceCoordinator implements StartSurface {
     private boolean mIsInitPending;
 
     private boolean mIsSecondaryTaskInitPending;
+    private FeedLoadingCoordinator mFeedLoadingCoordinator;
 
     // TODO(http://crbug.com/1093421): Remove dependency on ChromeActivity.
     public StartSurfaceCoordinator(ChromeActivity activity, ScrimCoordinator scrimCoordinator) {
@@ -117,11 +116,10 @@ public class StartSurfaceCoordinator implements StartSurface {
                 StartSurfaceConfiguration.START_SURFACE_SHOW_STACK_TAB_SWITCHER.getValue());
 
         // Show feed loading image.
-        if (mSurfaceMode == SurfaceMode.SINGLE_PANE
-                && CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)) {
-            FeedLoadingCoordinator feedLoadingCoordinator = new FeedLoadingCoordinator(
+        if (mStartSurfaceMediator.shouldShowFeedPlaceholder()) {
+            mFeedLoadingCoordinator = new FeedLoadingCoordinator(
                     mActivity, mTasksSurface.getBodyViewContainer(), false);
-            feedLoadingCoordinator.setUpLoadingView();
+            mFeedLoadingCoordinator.setUpLoadingView();
         }
     }
 
@@ -228,6 +226,14 @@ public class StartSurfaceCoordinator implements StartSurface {
     @Override
     public TabSwitcher.TabDialogDelegation getTabDialogDelegate() {
         return mTabSwitcher.getTabGridDialogDelegation();
+    }
+
+    @Override
+    public void onOverviewShownAtLaunch(long activityCreationTimeMs) {
+        mStartSurfaceMediator.onOverviewShownAtLaunch(activityCreationTimeMs);
+        if (mFeedLoadingCoordinator != null) {
+            mFeedLoadingCoordinator.onOverviewShownAtLaunch(activityCreationTimeMs);
+        }
     }
 
     @VisibleForTesting

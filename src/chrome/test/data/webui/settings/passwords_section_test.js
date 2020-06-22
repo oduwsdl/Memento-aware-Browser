@@ -516,6 +516,7 @@ suite('PasswordsSection', function() {
     flush();
 
     getFirstPasswordListItem(passwordsSection).$$('#passwordMenu').click();
+    flush();
     assertTrue(
         passwordsSection.$.passwordsListHandler.$$('#menuCopyPassword').hidden);
   });
@@ -531,6 +532,7 @@ suite('PasswordsSection', function() {
     flush();
 
     getFirstPasswordListItem(passwordsSection).$$('#passwordMenu').click();
+    flush();
     assertFalse(
         passwordsSection.$.passwordsListHandler.$$('#menuCopyPassword').hidden);
   });
@@ -982,6 +984,7 @@ suite('PasswordsSection', function() {
     // toast is shown.
     getFirstPasswordListItem(passwordsSection).$$('#passwordMenu').click();
     passwordsSection.$.passwordsListHandler.$.menuRemovePassword.click();
+    flush();
     assertTrue(toastManager.isToastOpen);
 
     // Remove the passwords section from the DOM and check that this closes
@@ -1277,12 +1280,14 @@ suite('PasswordsSection', function() {
               passwordsSection.root.querySelectorAll('password-list-item');
           passwordListItems[0].$$('#passwordMenu').click();
           passwordsSection.$.passwordsListHandler.$.menuRemovePassword.click();
+          flush();
           assertEquals(
               passwordsSection.i18n('passwordDeletedFromAccount'),
               getToastManager().$.content.textContent);
 
           passwordListItems[1].$$('#passwordMenu').click();
           passwordsSection.$.passwordsListHandler.$.menuRemovePassword.click();
+          flush();
           assertEquals(
               passwordsSection.i18n('passwordDeletedFromDevice'),
               getToastManager().$.content.textContent);
@@ -1358,6 +1363,7 @@ suite('PasswordsSection', function() {
       // Uncheck the account checkboxes then confirm. Only the device copy is
       // removed.
       removeDialog.$.removeFromAccountCheckbox.click();
+      flush();
       assertTrue(
           !removeDialog.$.removeFromAccountCheckbox.checked &&
           removeDialog.$.removeFromDeviceCheckbox.checked);
@@ -1637,6 +1643,7 @@ suite('PasswordsSection', function() {
     const passwordsSection =
         elementFactory.createPasswordsSection(passwordManager, [], []);
     passwordsSection.$$('#checkPasswordsButton').click();
+    flush();
     const router = Router.getInstance();
     assertEquals(routes.CHECK_PASSWORDS, router.currentRoute);
     assertEquals('true', router.getQueryParameters().get('start'));
@@ -1650,6 +1657,7 @@ suite('PasswordsSection', function() {
     const passwordsSection =
         elementFactory.createPasswordsSection(passwordManager, [], []);
     passwordsSection.$$('#checkPasswordsLinkRow').click();
+    flush();
     const router = Router.getInstance();
     assertEquals(routes.CHECK_PASSWORDS, router.currentRoute);
     assertEquals('true', router.getQueryParameters().get('start'));

@@ -45,6 +45,7 @@
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/common/ax_content_node_data.h"
+#include "content/common/ax_content_tree_update.h"
 #include "content/common/buildflags.h"
 #include "content/common/content_export.h"
 #include "content/common/dom_automation_controller.mojom.h"
@@ -2096,9 +2097,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Deletes the Web Bluetooth Service owned by the frame.
   void DeleteWebBluetoothService(
       WebBluetoothServiceImpl* web_bluetooth_service);
-
-  // Callback for connection error on the media::mojom::InterfaceFactory client.
-  void OnMediaInterfaceFactoryConnectionError();
 
 #if !defined(OS_ANDROID)
   void BindAuthenticatorReceiver(

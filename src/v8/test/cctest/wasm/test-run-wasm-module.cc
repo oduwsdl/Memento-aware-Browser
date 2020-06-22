@@ -961,22 +961,22 @@ TEST(GcStructIdsPass) {
         U32V_1(3),            // field count
         kLocalI32,            // field 0
         U32V_1(1),            // mutability
-        kLocalRef,            // field 1
+        kLocalOptRef,         // field 1
         U32V_1(0),            // --
         U32V_1(1),            // mutability
-        kLocalRef,            // field 2
+        kLocalOptRef,         // field 2
         U32V_1(1),            // --
         U32V_1(1),            // mutability
         kWasmStructTypeCode,  // index 1 = struct(type(0), type(2))
         U32V_1(2),            // field count
-        kLocalRef,            // field 0
+        kLocalOptRef,         // field 0
         U32V_1(0),            // --
         U32V_1(1),            // mutability
-        kLocalRef,            // field 1
+        kLocalOptRef,         // field 1
         U32V_1(2),            // --
         U32V_1(1),            // mutability
         kWasmArrayTypeCode,   // index 2 = array(type(0))
-        kLocalRef,            // element type
+        kLocalOptRef,         // element type
         U32V_1(0),            // --
         U32V_1(1)             // mutability
     };
@@ -1008,7 +1008,7 @@ TEST(GcTypeIdsUndefinedIndex) {
         U32V_1(1),            // type count
         kWasmStructTypeCode,  // index 0 = struct(type(1))
         U32V_1(1),            // field count
-        kLocalRef,            // field 0
+        kLocalOptRef,         // field 0
         U32V_1(1),            // --
         U32V_1(1)             // mutability
     };
@@ -1041,7 +1041,7 @@ TEST(GcTypeIdsIllegalIndex) {
         U32V_1(2),              // type count
         kWasmStructTypeCode,    // index 0 = struct(type(1))
         U32V_1(1),              // field count
-        kLocalRef,              // field 0
+        kLocalOptRef,           // field 0
         U32V_1(1),              // --
         U32V_1(1),              // mutability
         kWasmFunctionTypeCode,  // index 1 = int32 -> int32
@@ -1076,11 +1076,11 @@ TEST(GcTypeIdsFunSigIllegalIndex) {
         kTypeSectionCode,       // --
         U32V_1(7),              // Section size
         U32V_1(1),              // type count
-        kWasmFunctionTypeCode,  // index 1 = int32 -> int32
+        kWasmFunctionTypeCode,  // index 0 = int32 -> int32
         U32V_1(1),              // param count
         kLocalI32,              // param 0
         U32V_1(1),              // returns count
-        kLocalRef,              // return 0
+        kLocalOptRef,           // return 0
         U32V_1(0)               // --
     };
     CompileAndInstantiateForTesting(

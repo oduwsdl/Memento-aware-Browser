@@ -397,11 +397,10 @@ class LiftoffCompiler {
     switch (type.kind()) {
       case ValueType::kS128:
         return kSimd;
-      case ValueType::kExternRef:
-      case ValueType::kFuncRef:
+      case ValueType::kOptRef:
+      case ValueType::kRef:
+        // TODO(7748): Refine this.
         return kRefTypes;
-      case ValueType::kExnRef:
-        return kExceptionHandling;
       case ValueType::kBottom:
         return kMultiValue;
       default:
@@ -709,9 +708,10 @@ class LiftoffCompiler {
     asm_.AbortCompilation();
   }
 
-  void NextInstruction(FullDecoder* decoder, WasmOpcode opcode) {
+  V8_NOINLINE void EmitDebuggingInfo(FullDecoder* decoder, WasmOpcode opcode) {
+    DCHECK(V8_UNLIKELY(for_debugging_));
     bool breakpoint = false;
-    if (V8_UNLIKELY(next_breakpoint_ptr_)) {
+    if (next_breakpoint_ptr_) {
       if (*next_breakpoint_ptr_ == 0) {
         // A single breakpoint at offset 0 indicates stepping.
         DCHECK_EQ(next_breakpoint_ptr_ + 1, next_breakpoint_end_);
@@ -736,6 +736,12 @@ class LiftoffCompiler {
     }
     // Potentially generate the source position to OSR to this instruction.
     MaybeGenerateExtraSourcePos(decoder, !breakpoint);
+  }
+
+  void NextInstruction(FullDecoder* decoder, WasmOpcode opcode) {
+    // Add a single check, so that the fast path can be inlined while
+    // {EmitDebuggingInfo} stays outlined.
+    if (V8_UNLIKELY(for_debugging_)) EmitDebuggingInfo(decoder, opcode);
     TraceCacheState(decoder);
 #ifdef DEBUG
     SLOW_DCHECK(__ ValidateCacheState());
@@ -942,7 +948,7 @@ class LiftoffCompiler {
                               ? __ GetUnusedRegister(result_rc, {src}, {})
                               : __ GetUnusedRegister(result_rc, {});
     CallEmitFn(fn, dst, src);
-    __ PushRegister(ValueType(result_type), dst);
+    __ PushRegister(ValueType::Primitive(result_type), dst);
   }
 
   template <ValueType::Kind type>
@@ -952,9 +958,9 @@ class LiftoffCompiler {
     auto emit_with_c_fallback = [=](LiftoffRegister dst, LiftoffRegister src) {
       if ((asm_.*emit_fn)(dst.fp(), src.fp())) return;
       ExternalReference ext_ref = fallback_fn();
-      ValueType sig_reps[] = {ValueType(type)};
+      ValueType sig_reps[] = {ValueType::Primitive(type)};
       FunctionSig sig(0, 1, sig_reps);
-      GenerateCCall(&dst, &sig, ValueType(type), &src, ext_ref);
+      GenerateCCall(&dst, &sig, ValueType::Primitive(type), &src, ext_ref);
     };
     EmitUnOp<type, type>(emit_with_c_fallback);
   }
@@ -980,20 +986,22 @@ class LiftoffCompiler {
       ExternalReference ext_ref = fallback_fn();
       if (can_trap) {
         // External references for potentially trapping conversions return int.
-        ValueType sig_reps[] = {kWasmI32, ValueType(src_type)};
+        ValueType sig_reps[] = {kWasmI32, ValueType::Primitive(src_type)};
         FunctionSig sig(1, 1, sig_reps);
         LiftoffRegister ret_reg =
             __ GetUnusedRegister(kGpReg, LiftoffRegList::ForRegs(dst));
         LiftoffRegister dst_regs[] = {ret_reg, dst};
-        GenerateCCall(dst_regs, &sig, ValueType(dst_type), &src, ext_ref);
+        GenerateCCall(dst_regs, &sig, ValueType::Primitive(dst_type), &src,
+                      ext_ref);
         __ emit_cond_jump(kEqual, trap, kWasmI32, ret_reg.gp());
       } else {
-        ValueType sig_reps[] = {ValueType(src_type)};
+        ValueType sig_reps[] = {ValueType::Primitive(src_type)};
         FunctionSig sig(0, 1, sig_reps);
-        GenerateCCall(&dst, &sig, ValueType(dst_type), &src, ext_ref);
+        GenerateCCall(&dst, &sig, ValueType::Primitive(dst_type), &src,
+                      ext_ref);
       }
     }
-    __ PushRegister(ValueType(dst_type), dst);
+    __ PushRegister(ValueType::Primitive(dst_type), dst);
   }
 
   void UnOp(FullDecoder* decoder, WasmOpcode opcode, const Value& value,
@@ -1151,7 +1159,7 @@ class LiftoffCompiler {
                                 : __ GetUnusedRegister(result_rc, {});
 
       CallEmitFn(fnImm, dst, lhs, imm);
-      __ PushRegister(ValueType(result_type), dst);
+      __ PushRegister(ValueType::Primitive(result_type), dst);
     } else {
       // The RHS was not an immediate.
       EmitBinOp<src_type, result_type>(fn);
@@ -1172,7 +1180,7 @@ class LiftoffCompiler {
     if (swap_lhs_rhs) std::swap(lhs, rhs);
 
     CallEmitFn(fn, dst, lhs, rhs);
-    __ PushRegister(ValueType(result_type), dst);
+    __ PushRegister(ValueType::Primitive(result_type), dst);
   }
 
   void EmitDivOrRem64CCall(LiftoffRegister dst, LiftoffRegister lhs,
@@ -2142,7 +2150,7 @@ class LiftoffCompiler {
                        WasmCode::kThrowWasmTrapMemOutOfBounds,
                        protected_load_pc);
     }
-    __ PushRegister(ValueType{kS128}, value);
+    __ PushRegister(ValueType::Primitive(kS128), value);
 
     if (FLAG_trace_wasm_memory) {
       // Again load extend is different.
@@ -2460,7 +2468,7 @@ class LiftoffCompiler {
                                    LiftoffRegList::ForRegs(src1, src2))
             : __ GetUnusedRegister(result_rc, {});
     CallEmitFn(fn, dst, src1, src2, src3);
-    __ PushRegister(ValueType(result_type), dst);
+    __ PushRegister(ValueType::Primitive(result_type), dst);
   }
 
   template <typename EmitFn, typename EmitFnImm>
@@ -2862,7 +2870,7 @@ class LiftoffCompiler {
                               ? __ GetUnusedRegister(result_rc, {lhs}, {})
                               : __ GetUnusedRegister(result_rc, {});
     fn(dst, lhs, imm.lane);
-    __ PushRegister(ValueType(result_type), dst);
+    __ PushRegister(ValueType::Primitive(result_type), dst);
   }
 
   template <ValueType::Kind src2_type, typename EmitFn>

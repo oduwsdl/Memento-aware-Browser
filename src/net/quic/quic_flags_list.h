@@ -166,9 +166,6 @@ QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_quic_allow_client_enabled_bbr_v2,
           false)
 
-// If true, will negotiate the ACK delay time.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_negotiate_ack_delay_time, true)
-
 // If true, QuicFramer::WriteClientVersionNegotiationProbePacket uses
 // length-prefixed connection IDs.
 QUIC_FLAG(bool, FLAGS_quic_prober_uses_length_prefixed_connection_ids, false)
@@ -228,16 +225,25 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_q043, false)
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_q046, false)
 
 // If true, disable QUIC version Q048.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_q048, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_q048, true)
 
 // If true, disable QUIC version Q049.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_q049, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_q049, true)
 
 // If true, disable QUIC version Q050.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_q050, false)
 
 // A testonly reloadable flag that will always default to false.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_testonly_default_false, false)
+
+// A testonly reloadable flag that will always default to true.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_testonly_default_true, true)
+
+// A testonly restart flag that will always default to false.
+QUIC_FLAG(bool, FLAGS_quic_restart_flag_quic_testonly_default_false, false)
+
+// A testonly restart flag that will always default to true.
+QUIC_FLAG(bool, FLAGS_quic_restart_flag_quic_testonly_default_true, true)
 
 // In BBR, slow pacing rate if it is likely causing overshoot.
 QUIC_FLAG(
@@ -331,7 +337,7 @@ QUIC_FLAG(
     true)
 
 // If true, support for IETF QUIC 0-rtt is enabled.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_zero_rtt_for_tls, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_zero_rtt_for_tls, true)
 
 // If true, default on PTO which unifies TLP + RTO loss recovery.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_default_on_pto, false)
@@ -408,7 +414,7 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_t050, false)
 
 // If true, do not arm PTO on half RTT packets if they are the only ones in
 // flight.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fix_server_pto_timeout, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fix_server_pto_timeout, true)
 
 // If true, default-enable 5RTO blachole detection.
 QUIC_FLAG(
@@ -433,3 +439,33 @@ QUIC_FLAG(bool,
 QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_quic_save_user_agent_in_quic_session,
           false)
+
+// When true, QUIC_CRYPTO versions of QUIC will not send the max ACK delay
+// unless it is configured to a non-default value.
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_dont_send_max_ack_delay_if_default,
+          true)
+
+// If true, remove the head of line blocking caused by an unprocessable packet
+// in the undecryptable packets list.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fix_undecryptable_packets, true)
+
+// If true, QUIC client only tries to retransmit data when 1-RTT key is
+// available.
+QUIC_FLAG(
+    bool,
+    FLAGS_quic_reloadable_flag_quic_do_not_retransmit_immediately_on_zero_rtt_reject,
+    true)
+
+// If true, try to bundle INITIAL data when trying to send INITIAL ACK.
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_bundle_crypto_data_with_initial_ack,
+          false)
+
+// If true, do not use QuicUtil::IsBidirectionalStreamId() to determine gQUIC
+// stream type.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fix_gquic_stream_type, true)
+
+// When true, do not pad the QUIC_CRYPTO CHLO message itself. Note that the
+// packet containing the CHLO will still be padded.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_dont_pad_chlo, false)

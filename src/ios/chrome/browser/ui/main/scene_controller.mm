@@ -378,12 +378,11 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
         [self shouldOpenNTPTabOnActivationOfBrowser:self.currentInterface
                                                         .browser]) {
       DCHECK(!self.dismissingTabSwitcher);
-      [self beginDismissingTabSwitcherWithCurrentBrowser:self.currentInterface
+      [self beginDismissingTabSwitcherWithCurrentBrowser:self.mainInterface
                                                              .browser
                                             focusOmnibox:NO];
 
-      OpenNewTabCommand* command = [OpenNewTabCommand
-          commandWithIncognito:self.currentInterface.incognito];
+      OpenNewTabCommand* command = [OpenNewTabCommand commandWithIncognito:NO];
       command.userInitiated = NO;
       Browser* browser = self.currentInterface.browser;
       id<ApplicationCommands> applicationHandler = HandlerForProtocol(
@@ -430,6 +429,11 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
 
 // TODO(crbug.com/1072408): factor out into a new class.
 - (void)displayBlockingOverlay {
+  if (self.blockingOverlayViewController) {
+    // The overlay is already displayed, nothing to do.
+    return;
+  }
+
   // Make the window visible. This is because in safe mode it's not visible yet.
   if (self.sceneState.window.hidden) {
     [self.sceneState.window makeKeyAndVisible];

@@ -48,6 +48,11 @@ InstallManager::InstallParams CreateSyncInstallParams(
   return params;
 }
 
+bool TaskExpectsAppId(const WebAppInstallTask* task, const AppId& app_id) {
+  return task && task->app_id_to_expect().has_value() &&
+         task->app_id_to_expect().value() == app_id;
+}
+
 }  // namespace
 
 WebAppInstallManager::WebAppInstallManager(Profile* profile)
@@ -63,7 +68,7 @@ void WebAppInstallManager::Start() {
   DCHECK(!started_);
   started_ = true;
 
-  MaybeEnqueuePendingBookmarkAppInstalls();
+  MaybeEnqueuePendingAppSyncInstalls();
 }
 
 void WebAppInstallManager::Shutdown() {
@@ -173,38 +178,42 @@ void WebAppInstallManager::InstallBookmarkAppFromSync(
     const AppId& bookmark_app_id,
     std::unique_ptr<WebApplicationInfo> web_application_info,
     OnceInstallCallback callback) {
+  if (disable_bookmark_app_sync_install_for_testing())
+    return;
+
   // This method can be called by
   // ExtensionSyncService::ApplyBookmarkAppSyncData() while |this| is not
   // |started_|.
   if (started_) {
-    EnqueueInstallBookmarkAppFromSync(
-        bookmark_app_id, std::move(web_application_info), std::move(callback));
+    EnqueueInstallAppFromSync(bookmark_app_id, std::move(web_application_info),
+                              std::move(callback));
   } else {
-    BookmarkAppInstallRequest request;
-    request.bookmark_app_id = bookmark_app_id;
+    AppSyncInstallRequest request;
+    request.sync_app_id = bookmark_app_id;
     request.web_application_info = std::move(web_application_info);
     request.callback = std::move(callback);
 
-    pending_bookmark_app_installs_.push_back(std::move(request));
+    pending_app_sync_installs_.push_back(std::move(request));
   }
 }
 
-void WebAppInstallManager::EnqueueInstallBookmarkAppFromSync(
-    const AppId& bookmark_app_id,
+void WebAppInstallManager::EnqueueInstallAppFromSync(
+    const AppId& sync_app_id,
     std::unique_ptr<WebApplicationInfo> web_application_info,
     OnceInstallCallback callback) {
   DCHECK(started_);
 
-  // Skip sync update if app exists.
-  // All manifest fields will be set locally via update (see crbug.com/926083)
-  // so we must not sync them in order to avoid a device-to-device sync war.
-  if (registrar()->IsInstalled(bookmark_app_id)) {
-    std::move(callback).Run(bookmark_app_id,
+  if (registrar()->IsInstalled(sync_app_id) ||
+      // Note that we call the callback too early here: an enqueued task has not
+      // yet installed the app. This is fine (for now) because |callback| is
+      // only used in tests.
+      IsAppIdAlreadyEnqueued(sync_app_id)) {
+    std::move(callback).Run(sync_app_id,
                             InstallResultCode::kSuccessAlreadyInstalled);
     return;
   }
 
-  // If bookmark_app_id is not installed enqueue full background installation
+  // If sync_app_id is not installed enqueue full background installation
   // flow. This install may produce a web app or an extension-based bookmark
   // app, depending on the BMO flag.
   GURL launch_url = web_application_info->app_url;
@@ -213,7 +222,7 @@ void WebAppInstallManager::EnqueueInstallBookmarkAppFromSync(
       profile(), registrar(), shortcut_manager(), file_handler_manager(),
       finalizer(), data_retriever_factory_.Run());
 
-  task->ExpectAppId(bookmark_app_id);
+  task->ExpectAppId(sync_app_id);
   task->SetInstallParams(CreateSyncInstallParams(
       launch_url, web_application_info->title,
       web_application_info->open_as_window ? DisplayMode::kStandalone
@@ -221,8 +230,8 @@ void WebAppInstallManager::EnqueueInstallBookmarkAppFromSync(
 
   OnceInstallCallback task_completed_callback = base::BindOnce(
       &WebAppInstallManager::
-          LoadAndInstallWebAppFromManifestWithFallbackCompleted_ForBookmarkAppSync,
-      base::Unretained(this), bookmark_app_id, std::move(web_application_info),
+          LoadAndInstallWebAppFromManifestWithFallbackCompleted_ForAppSync,
+      base::Unretained(this), sync_app_id, std::move(web_application_info),
       std::move(callback));
 
   base::OnceClosure start_task = base::BindOnce(
@@ -237,11 +246,12 @@ void WebAppInstallManager::EnqueueInstallBookmarkAppFromSync(
 }
 
 bool WebAppInstallManager::IsAppIdAlreadyEnqueued(const AppId& app_id) const {
+  if (TaskExpectsAppId(current_queued_task_, app_id))
+    return true;
+
   for (const std::unique_ptr<WebAppInstallTask>& task : tasks_) {
-    if (task->app_id_to_expect().has_value() &&
-        task->app_id_to_expect().value() == app_id) {
+    if (TaskExpectsAppId(task.get(), app_id))
       return true;
-    }
   }
 
   return false;
@@ -271,46 +281,23 @@ void WebAppInstallManager::InstallWebAppsAfterSync(
     RepeatingInstallCallback callback) {
   DCHECK(started_);
 
+  if (disable_web_app_sync_install_for_testing())
+    return;
+
   for (WebApp* web_app : web_apps) {
     DCHECK(web_app->is_in_sync_install());
 
-    // TODO(crbug.com/1065748): Delete this check together with
-    // WebAppInstallManager::InstallBookmarkAppFromSync backward compatibility
-    // install.
-    if (IsAppIdAlreadyEnqueued(web_app->app_id())) {
-      // An install for this app is already enqueued. It will overwrite the
-      // web app in sync install anyway. Note that we call the callback too
-      // early here: an enqueued task has not yet installed the app. Let's use
-      // kSuccessAlreadyInstalled here to indicate it (not
-      // kSuccessNewInstall).
-      callback.Run(web_app->app_id(),
-                   InstallResultCode::kSuccessAlreadyInstalled);
-      continue;
-    }
+    auto web_application_info = std::make_unique<WebApplicationInfo>();
+    web_application_info->app_url = web_app->launch_url();
+    web_application_info->title = base::UTF8ToUTF16(web_app->sync_data().name);
+    web_application_info->scope = web_app->sync_data().scope;
+    web_application_info->theme_color = web_app->sync_data().theme_color;
+    web_application_info->open_as_window =
+        web_app->user_display_mode() != DisplayMode::kBrowser;
+    web_application_info->icon_infos = web_app->sync_data().icon_infos;
 
-    auto task = std::make_unique<WebAppInstallTask>(
-        profile(), registrar(), shortcut_manager(), file_handler_manager(),
-        finalizer(), data_retriever_factory_.Run());
-
-    task->ExpectAppId(web_app->app_id());
-    task->SetInstallParams(CreateSyncInstallParams(
-        web_app->launch_url(), base::UTF8ToUTF16(web_app->sync_data().name),
-        web_app->user_display_mode()));
-
-    OnceInstallCallback sync_install_callback =
-        base::BindOnce(&WebAppInstallManager::OnWebAppInstalledAfterSync,
-                       base::Unretained(this), web_app->app_id(), callback);
-
-    base::OnceClosure start_task = base::BindOnce(
-        &WebAppInstallTask::LoadAndInstallWebAppFromManifestWithFallback,
-        base::Unretained(task.get()), web_app->launch_url(),
-        EnsureWebContentsCreated(), base::Unretained(url_loader_.get()),
-        WebappInstallSource::SYNC,
-        base::BindOnce(&WebAppInstallManager::OnQueuedTaskCompleted,
-                       base::Unretained(this), task.get(),
-                       std::move(sync_install_callback)));
-
-    EnqueueTask(std::move(task), std::move(start_task));
+    EnqueueInstallAppFromSync(web_app->app_id(),
+                              std::move(web_application_info), callback);
   }
 }
 
@@ -335,19 +322,19 @@ void WebAppInstallManager::SetUrlLoaderForTesting(
   url_loader_ = std::move(url_loader);
 }
 
-void WebAppInstallManager::MaybeEnqueuePendingBookmarkAppInstalls() {
-  for (BookmarkAppInstallRequest& request : pending_bookmark_app_installs_) {
-    EnqueueInstallBookmarkAppFromSync(request.bookmark_app_id,
-                                      std::move(request.web_application_info),
-                                      std::move(request.callback));
+void WebAppInstallManager::MaybeEnqueuePendingAppSyncInstalls() {
+  for (AppSyncInstallRequest& request : pending_app_sync_installs_) {
+    EnqueueInstallAppFromSync(request.sync_app_id,
+                              std::move(request.web_application_info),
+                              std::move(request.callback));
   }
 
-  pending_bookmark_app_installs_.clear();
+  pending_app_sync_installs_.clear();
 }
 
 void WebAppInstallManager::
-    LoadAndInstallWebAppFromManifestWithFallbackCompleted_ForBookmarkAppSync(
-        const AppId& bookmark_app_id,
+    LoadAndInstallWebAppFromManifestWithFallbackCompleted_ForAppSync(
+        const AppId& sync_app_id,
         std::unique_ptr<WebApplicationInfo> web_application_info,
         OnceInstallCallback callback,
         const AppId& web_app_id,
@@ -355,10 +342,15 @@ void WebAppInstallManager::
   // TODO(loyso): Record |code| for this specific case in
   // Webapp.BookmarkAppInstalledAfterSyncResult UMA.
   if (IsSuccess(code)) {
-    DCHECK_EQ(bookmark_app_id, web_app_id);
+    DCHECK_EQ(sync_app_id, web_app_id);
     std::move(callback).Run(web_app_id, code);
     return;
   }
+
+  // The web contents getting destroyed indicates we could be shutting down;
+  // don't enqueue another task.
+  if (code == InstallResultCode::kWebContentsDestroyed)
+    return;
 
   // Install failed. Do the fallback install from info fetching just icon URLs.
   auto task = std::make_unique<WebAppInstallTask>(
@@ -383,8 +375,12 @@ void WebAppInstallManager::EnqueueTask(std::unique_ptr<WebAppInstallTask> task,
                                        base::OnceClosure start_task) {
   DCHECK(web_contents_);
 
+  PendingTask pending_task;
+  pending_task.task = task.get();
+  pending_task.start = std::move(start_task);
+  task_queue_.push(std::move(pending_task));
+
   tasks_.insert(std::move(task));
-  task_queue_.push(std::move(start_task));
 
   if (web_contents_ready_)
     MaybeStartQueuedTask();
@@ -394,15 +390,14 @@ void WebAppInstallManager::MaybeStartQueuedTask() {
   DCHECK(web_contents_ready_);
   DCHECK(!task_queue_.empty());
 
-  if (is_running_queued_task_)
+  if (current_queued_task_)
     return;
 
-  is_running_queued_task_ = true;
-
-  base::OnceClosure task_closure = std::move(task_queue_.front());
+  PendingTask pending_task = std::move(task_queue_.front());
   task_queue_.pop();
+  current_queued_task_ = pending_task.task;
 
-  std::move(task_closure).Run();
+  std::move(pending_task.start).Run();
 }
 
 void WebAppInstallManager::SetDataRetrieverFactoryForTesting(
@@ -428,14 +423,15 @@ void WebAppInstallManager::OnQueuedTaskCompleted(WebAppInstallTask* task,
                                                  OnceInstallCallback callback,
                                                  const AppId& app_id,
                                                  InstallResultCode code) {
-  DCHECK(is_running_queued_task_);
-  is_running_queued_task_ = false;
+  DCHECK(current_queued_task_);
+  DCHECK_EQ(current_queued_task_, task);
+  current_queued_task_ = nullptr;
 
   OnInstallTaskCompleted(task, std::move(callback), app_id, code);
   task = nullptr;
 
   // |callback| may have started another task.
-  if (is_running_queued_task_)
+  if (current_queued_task_)
     return;
 
   web_contents_ready_ = false;
@@ -475,23 +471,6 @@ void WebAppInstallManager::OnLoadWebAppAndCheckInstallabilityCompleted(
   std::move(callback).Run(std::move(web_contents), result, opt_app_id);
 }
 
-void WebAppInstallManager::OnWebAppInstalledAfterSync(
-    const AppId& app_in_sync_install_id,
-    OnceInstallCallback callback,
-    const AppId& installed_app_id,
-    InstallResultCode code) {
-  // TODO(loyso): Record |code| for this specific case in
-  // Webapp.SyncInitiatedFullInstallResult UMA.
-  if (IsSuccess(code)) {
-    DCHECK_EQ(app_in_sync_install_id, installed_app_id);
-    std::move(callback).Run(installed_app_id, code);
-  } else {
-    // Install failed. Do the fallback install to generate icons.
-    finalizer()->FinalizeFallbackInstallAfterSync(app_in_sync_install_id,
-                                                  std::move(callback));
-  }
-}
-
 void WebAppInstallManager::OnWebAppUninstalledAfterSync(
     std::unique_ptr<WebApp> web_app,
     OnceUninstallCallback callback,
@@ -525,13 +504,17 @@ void WebAppInstallManager::OnWebContentsReady(WebAppUrlLoader::Result result) {
   MaybeStartQueuedTask();
 }
 
-WebAppInstallManager::BookmarkAppInstallRequest::BookmarkAppInstallRequest() =
-    default;
+WebAppInstallManager::PendingTask::PendingTask() = default;
 
-WebAppInstallManager::BookmarkAppInstallRequest::BookmarkAppInstallRequest(
-    BookmarkAppInstallRequest&&) = default;
+WebAppInstallManager::PendingTask::PendingTask(PendingTask&&) = default;
 
-WebAppInstallManager::BookmarkAppInstallRequest::~BookmarkAppInstallRequest() =
-    default;
+WebAppInstallManager::PendingTask::~PendingTask() = default;
+
+WebAppInstallManager::AppSyncInstallRequest::AppSyncInstallRequest() = default;
+
+WebAppInstallManager::AppSyncInstallRequest::AppSyncInstallRequest(
+    AppSyncInstallRequest&&) = default;
+
+WebAppInstallManager::AppSyncInstallRequest::~AppSyncInstallRequest() = default;
 
 }  // namespace web_app

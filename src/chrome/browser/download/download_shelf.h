@@ -14,53 +14,16 @@
 
 class Browser;
 
-namespace gfx {
-class Canvas;
-}
-
-namespace ui {
-class ThemeProvider;
-}
-
-using offline_items_collection::ContentId;
-using offline_items_collection::OfflineItem;
-using DownloadUIModelPtr = DownloadUIModel::DownloadUIModelPtr;
+namespace offline_items_collection {
+struct ContentId;
+}  // namespace offline_items_collection
 
 // This is an abstract base class for platform specific download shelf
 // implementations.
 class DownloadShelf {
  public:
-  // Size of the space used for the progress indicator.
-  static constexpr int kProgressIndicatorSize = 25;
-
   DownloadShelf(Browser* browser, Profile* profile);
   virtual ~DownloadShelf();
-
-  // Paint the common download animation progress foreground and background,
-  // clipping the foreground to 'percent' full. If percent is -1, then we don't
-  // know the total size, so we just draw a rotating segment until we're done.
-  // |progress_time| is only used for these unknown size downloads.
-  static void PaintDownloadProgress(gfx::Canvas* canvas,
-                                    const ui::ThemeProvider& theme_provider,
-                                    const base::TimeDelta& progress_time,
-                                    int percent);
-
-  static void PaintDownloadComplete(gfx::Canvas* canvas,
-                                    const ui::ThemeProvider& theme_provider,
-                                    double animation_progress);
-
-  static void PaintDownloadInterrupted(gfx::Canvas* canvas,
-                                       const ui::ThemeProvider& theme_provider,
-                                       double animation_progress);
-
-  // A new download has started. Add it to our shelf and show the download
-  // started animation.
-  //
-  // Some downloads are removed from the shelf on completion (See
-  // DownloadItemModel::ShouldRemoveFromShelfWhenComplete()). These transient
-  // downloads are added to the shelf after a delay. If the download completes
-  // before the delay duration, it will not be added to the shelf at all.
-  void AddDownload(DownloadUIModelPtr download);
 
   // The browser view needs to know when we are going away to properly return
   // the resize corner size to WebKit so that we don't draw on top of it.
@@ -70,6 +33,15 @@ class DownloadShelf {
 
   // Returns whether the download shelf is showing the close animation.
   virtual bool IsClosing() const = 0;
+
+  // A new download has started. Add it to our shelf and show the download
+  // started animation.
+  //
+  // Some downloads are removed from the shelf on completion (See
+  // DownloadItemModel::ShouldRemoveFromShelfWhenComplete()). These transient
+  // downloads are added to the shelf after a delay. If the download completes
+  // before the delay duration, it will not be added to the shelf at all.
+  void AddDownload(DownloadUIModel::DownloadUIModelPtr download);
 
   // Opens the shelf.
   void Open();
@@ -90,7 +62,7 @@ class DownloadShelf {
   bool is_hidden() { return is_hidden_; }
 
  protected:
-  virtual void DoAddDownload(DownloadUIModelPtr download) = 0;
+  virtual void DoShowDownload(DownloadUIModel::DownloadUIModelPtr download) = 0;
   virtual void DoOpen() = 0;
   virtual void DoClose() = 0;
   virtual void DoHide() = 0;
@@ -98,17 +70,17 @@ class DownloadShelf {
 
   // Time delay to wait before adding a transient download to the shelf.
   // Protected virtual for testing.
-  virtual base::TimeDelta GetTransientDownloadShowDelay();
+  virtual base::TimeDelta GetTransientDownloadShowDelay() const;
 
   Profile* profile() { return profile_; }
 
  private:
   // Show the download on the shelf immediately. Also displayes the download
   // started animation if necessary.
-  void ShowDownload(DownloadUIModelPtr download);
+  void ShowDownload(DownloadUIModel::DownloadUIModelPtr download);
 
   // Similar to ShowDownload() but refers to the download using an ID.
-  void ShowDownloadById(ContentId id);
+  void ShowDownloadById(const offline_items_collection::ContentId& id);
 
   Browser* const browser_;
   Profile* const profile_;

@@ -55,6 +55,10 @@ class V8_EXPORT_PRIVATE Marker {
       Worklist<HeapObjectHeader*, 64 /*local entries */, kNumMarkers>;
 
   struct MarkingConfig {
+    enum class CollectionType : uint8_t {
+      kMinor,
+      kMajor,
+    };
     using StackState = cppgc::Heap::StackState;
     enum MarkingType : uint8_t {
       kAtomic,
@@ -64,6 +68,7 @@ class V8_EXPORT_PRIVATE Marker {
 
     static constexpr MarkingConfig Default() { return {}; }
 
+    CollectionType collection_type = CollectionType::kMajor;
     StackState stack_state = StackState::kMayContainHeapPointers;
     MarkingType marking_type = MarkingType::kAtomic;
   };
@@ -77,6 +82,19 @@ class V8_EXPORT_PRIVATE Marker {
   // Initialize marking according to the given config. This method will
   // trigger incremental/concurrent marking if needed.
   void StartMarking(MarkingConfig config);
+
+  // Signals entering the atomic marking pause. The method
+  // - stops incremental/concurrent marking;
+  // - flushes back any in-construction worklists if needed;
+  // - Updates the MarkingConfig if the stack state has changed;
+  void EnterAtomicPause(MarkingConfig config);
+
+  // Makes marking progress.
+  virtual bool AdvanceMarkingWithDeadline(v8::base::TimeDelta);
+
+  // Signals leaving the atomic marking pause. This method expects no more
+  // objects to be marked and merely updates marking states if needed.
+  void LeaveAtomicPause();
 
   // Combines:
   // - EnterAtomicPause()
@@ -108,20 +126,6 @@ class V8_EXPORT_PRIVATE Marker {
   virtual std::unique_ptr<MutatorThreadMarkingVisitor>
   CreateMutatorThreadMarkingVisitor();
 
-  // Signals entering the atomic marking pause. The method
-  // - stops incremental/concurrent marking;
-  // - flushes back any in-construction worklists if needed;
-  // - Updates the MarkingConfig if the stack state has changed;
-  void EnterAtomicPause(MarkingConfig config);
-
-  // Makes marking progress.
-  virtual bool AdvanceMarkingWithDeadline(v8::base::TimeDelta);
-
-  // Signals leaving the atomic marking pause. This method expects no more
-  // objects to be marked and merely updates marking states if needed.
-  void LeaveAtomicPause();
-
- private:
   void VisitRoots();
 
   void FlushNotFullyConstructedObjects();

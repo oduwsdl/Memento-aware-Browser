@@ -190,7 +190,9 @@ def run_benchmarks(benchmarks, gn_args, output_directory, repeat):
     args_gn_path = os.path.join(out_dir, 'args.gn')
     with _backup_file(args_gn_path):
         with open(args_gn_path, 'w') as f:
-            f.write(gn_args)
+            # Use newlines instead of spaces since autoninja.py uses regex to
+            # determine whether use_goma is turned on or off.
+            f.write('\n'.join(gn_args))
         yield f'gn gen', [_run_gn_gen(out_dir)]
         for name, info in _parse_benchmarks(benchmarks):
             logging.info(f'Starting {name}...')
@@ -251,12 +253,12 @@ def main():
     logging.basicConfig(
         level=level, format='%(levelname).1s %(relativeCreated)6d %(message)s')
 
-    gn_args = ' '.join(_GN_ARG_PRESETS[args.args])
+    gn_args = _GN_ARG_PRESETS[args.args]
     results = run_benchmarks(args.benchmark, gn_args, args.out_dir,
                              args.repeat)
 
     print('Summary')
-    print(f'gn args: {gn_args}')
+    print(f'gn args: {" ".join(gn_args)}')
     for name, result in results:
         print(f'{name}: {_format_result(result)}')
 

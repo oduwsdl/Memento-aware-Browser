@@ -29,11 +29,11 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.init.FirstDrawDetector;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.tab.Tab;
@@ -694,6 +694,9 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     public void enableRecordingFirstMeaningfulPaint(long activityCreateTimeMs) {
         mFirstMeaningfulPaintRecorder = new FirstMeaningfulPaintRecorder(activityCreateTimeMs);
     }
+
+    @Override
+    public void onOverviewShownAtLaunch(long activityCreationTimeMs) {}
 
     /**
      * Do clean-up work after the overview hiding animation is finished.

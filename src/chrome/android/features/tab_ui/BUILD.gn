@@ -181,6 +181,7 @@ android_library("java") {
     "//chrome/android/features/start_surface/internal:java",
     "//chrome/app:java_strings_grd",
     "//chrome/browser/android/lifecycle:java",
+    "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/flags:java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/tab:java",

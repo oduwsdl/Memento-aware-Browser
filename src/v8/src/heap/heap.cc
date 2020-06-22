@@ -483,8 +483,7 @@ void Heap::PrintShortHeapStatistics() {
                "Read-only space,        used: %6zu KB"
                ", available: %6zu KB"
                ", committed: %6zu KB\n",
-               read_only_space_->Size() / KB,
-               read_only_space_->Available() / KB,
+               read_only_space_->Size() / KB, size_t{0},
                read_only_space_->CommittedMemory() / KB);
   PrintIsolate(isolate_,
                "New space,              used: %6zu KB"
@@ -535,8 +534,8 @@ void Heap::PrintShortHeapStatistics() {
                "All spaces,             used: %6zu KB"
                ", available: %6zu KB"
                ", committed: %6zu KB\n",
-               (this->SizeOfObjects() + ro_space->SizeOfObjects()) / KB,
-               (this->Available() + ro_space->Available()) / KB,
+               (this->SizeOfObjects() + ro_space->Size()) / KB,
+               (this->Available()) / KB,
                (this->CommittedMemory() + ro_space->CommittedMemory()) / KB);
   PrintIsolate(isolate_,
                "Unmapper buffering %zu chunks of committed: %6zu KB\n",
@@ -644,7 +643,8 @@ void Heap::DumpJSONHeapStatistics(std::stringstream& stream) {
     std::stringstream stream;
     stream << DICT(
       MEMBER("name")
-        << ESCAPE(GetSpaceName(static_cast<AllocationSpace>(space_index)))
+        << ESCAPE(BaseSpace::GetSpaceName(
+              static_cast<AllocationSpace>(space_index)))
         << ","
       MEMBER("size") << space_stats.space_size() << ","
       MEMBER("used_size") << space_stats.space_used_size() << ","
@@ -890,29 +890,6 @@ size_t Heap::TotalGlobalHandlesSize() {
 
 size_t Heap::UsedGlobalHandlesSize() {
   return isolate_->global_handles()->UsedSize();
-}
-
-// static
-const char* Heap::GetSpaceName(AllocationSpace space) {
-  switch (space) {
-    case NEW_SPACE:
-      return "new_space";
-    case OLD_SPACE:
-      return "old_space";
-    case MAP_SPACE:
-      return "map_space";
-    case CODE_SPACE:
-      return "code_space";
-    case LO_SPACE:
-      return "large_object_space";
-    case NEW_LO_SPACE:
-      return "new_large_object_space";
-    case CODE_LO_SPACE:
-      return "code_large_object_space";
-    case RO_SPACE:
-      return "read_only_space";
-  }
-  UNREACHABLE();
 }
 
 void Heap::MergeAllocationSitePretenuringFeedback(
@@ -1977,6 +1954,9 @@ bool Heap::ReserveSpace(Reservation* reservations, std::vector<Address>* maps) {
 #else
           if (space == NEW_SPACE) {
             allocation = new_space()->AllocateRawUnaligned(size);
+          } else if (space == RO_SPACE) {
+            allocation = read_only_space()->AllocateRaw(
+                size, AllocationAlignment::kWordAligned);
           } else {
             // The deserializer will update the skip list.
             allocation = paged_space(space)->AllocateRawUnaligned(size);
@@ -3029,10 +3009,12 @@ HeapObject CreateFillerObjectAtImpl(ReadOnlyRoots roots, Address addr, int size,
 
 #ifdef DEBUG
 void VerifyNoNeedToClearSlots(Address start, Address end) {
-  MemoryChunk* chunk = MemoryChunk::FromAddress(start);
+  BasicMemoryChunk* basic_chunk = BasicMemoryChunk::FromAddress(start);
+  if (basic_chunk->InReadOnlySpace()) return;
+  MemoryChunk* chunk = static_cast<MemoryChunk*>(basic_chunk);
   // TODO(ulan): Support verification of large pages.
   if (chunk->InYoungGeneration() || chunk->IsLargePage()) return;
-  Space* space = chunk->owner();
+  BaseSpace* space = chunk->owner();
   if (static_cast<PagedSpace*>(space)->is_off_thread_space()) return;
   space->heap()->VerifySlotRangeHasNoRecordedSlots(start, end);
 }
@@ -3095,7 +3077,7 @@ bool Heap::InOffThreadSpace(HeapObject heap_object) {
 #ifdef V8_ENABLE_THIRD_PARTY_HEAP
   return false;  // currently unsupported
 #else
-  Space* owner = MemoryChunk::FromHeapObject(heap_object)->owner();
+  BaseSpace* owner = BasicMemoryChunk::FromHeapObject(heap_object)->owner();
   if (owner->identity() == OLD_SPACE) {
     // TODO(leszeks): Should we exclude compaction spaces here?
     return static_cast<PagedSpace*>(owner)->is_off_thread_space();
@@ -3114,12 +3096,12 @@ bool Heap::IsImmovable(HeapObject object) {
     return true;
   }
 
-  MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
+  BasicMemoryChunk* chunk = BasicMemoryChunk::FromHeapObject(object);
   return chunk->NeverEvacuate() || IsLargeObject(object);
 }
 
 bool Heap::IsLargeObject(HeapObject object) {
-  return MemoryChunk::FromHeapObject(object)->IsLargePage();
+  return BasicMemoryChunk::FromHeapObject(object)->IsLargePage();
 }
 
 #ifdef ENABLE_SLOW_DCHECKS
@@ -3148,7 +3130,8 @@ class LeftTrimmerVerifierRootVisitor : public RootVisitor {
 namespace {
 bool MayContainRecordedSlots(HeapObject object) {
   // New space object do not have recorded slots.
-  if (MemoryChunk::FromHeapObject(object)->InYoungGeneration()) return false;
+  if (BasicMemoryChunk::FromHeapObject(object)->InYoungGeneration())
+    return false;
   // Whitelist objects that definitely do not have pointers.
   if (object.IsByteArray() || object.IsFixedDoubleArray()) return false;
   // Conservatively return true for other objects.
@@ -4213,28 +4196,6 @@ bool Heap::IsValidAllocationSpace(AllocationSpace space) {
 }
 
 #ifdef VERIFY_HEAP
-class VerifyReadOnlyPointersVisitor : public VerifyPointersVisitor {
- public:
-  explicit VerifyReadOnlyPointersVisitor(Heap* heap)
-      : VerifyPointersVisitor(heap) {}
-
- protected:
-  void VerifyPointers(HeapObject host, MaybeObjectSlot start,
-                      MaybeObjectSlot end) override {
-    if (!host.is_null()) {
-      CHECK(ReadOnlyHeap::Contains(host.map()));
-    }
-    VerifyPointersVisitor::VerifyPointers(host, start, end);
-
-    for (MaybeObjectSlot current = start; current < end; ++current) {
-      HeapObject heap_object;
-      if ((*current)->GetHeapObject(&heap_object)) {
-        CHECK(ReadOnlyHeap::Contains(heap_object));
-      }
-    }
-  }
-};
-
 void Heap::Verify() {
   CHECK(HasBeenSetUp());
   SafepointScope safepoint_scope(this);
@@ -4274,8 +4235,7 @@ void Heap::Verify() {
 
 void Heap::VerifyReadOnlyHeap() {
   CHECK(!read_only_space_->writable());
-  VerifyReadOnlyPointersVisitor read_only_visitor(this);
-  read_only_space_->Verify(isolate(), &read_only_visitor);
+  read_only_space_->Verify(isolate());
 }
 
 class SlotVerifyingVisitor : public ObjectVisitor {
@@ -5209,7 +5169,7 @@ HeapObject Heap::EnsureImmovableCode(HeapObject heap_object, int object_size) {
   if (!Heap::IsImmovable(heap_object)) {
     if (isolate()->serializer_enabled() ||
         code_space_->first_page()->Contains(heap_object.address())) {
-      MemoryChunk::FromHeapObject(heap_object)->MarkNeverEvacuate();
+      BasicMemoryChunk::FromHeapObject(heap_object)->MarkNeverEvacuate();
     } else {
       // Discard the first code allocation, which was on a page where it could
       // be moved.
@@ -5352,13 +5312,15 @@ void Heap::SetUpFromReadOnlyHeap(ReadOnlyHeap* ro_heap) {
   DCHECK_NOT_NULL(ro_heap);
   DCHECK_IMPLIES(read_only_space_ != nullptr,
                  read_only_space_ == ro_heap->read_only_space());
-  space_[RO_SPACE] = read_only_space_ = ro_heap->read_only_space();
+  space_[RO_SPACE] = nullptr;
+  read_only_space_ = ro_heap->read_only_space();
 }
 
 void Heap::ReplaceReadOnlySpace(SharedReadOnlySpace* space) {
   CHECK(V8_SHARED_RO_HEAP_BOOL);
   delete read_only_space_;
-  space_[RO_SPACE] = read_only_space_ = space;
+
+  read_only_space_ = space;
 }
 
 void Heap::SetUpSpaces() {
@@ -5659,7 +5621,7 @@ void Heap::TearDown() {
   tracer_.reset();
 
   isolate()->read_only_heap()->OnHeapTearDown();
-  space_[RO_SPACE] = read_only_space_ = nullptr;
+  read_only_space_ = nullptr;
   for (int i = FIRST_MUTABLE_SPACE; i <= LAST_MUTABLE_SPACE; i++) {
     delete space_[i];
     space_[i] = nullptr;
@@ -5993,14 +5955,14 @@ class UnreachableObjectsFilter : public HeapObjectsFilter {
 
   bool SkipObject(HeapObject object) override {
     if (object.IsFreeSpaceOrFiller()) return true;
-    MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
+    BasicMemoryChunk* chunk = BasicMemoryChunk::FromHeapObject(object);
     if (reachable_.count(chunk) == 0) return true;
     return reachable_[chunk]->count(object) == 0;
   }
 
  private:
   bool MarkAsReachable(HeapObject object) {
-    MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
+    BasicMemoryChunk* chunk = BasicMemoryChunk::FromHeapObject(object);
     if (reachable_.count(chunk) == 0) {
       reachable_[chunk] = new std::unordered_set<HeapObject, Object::Hasher>();
     }
@@ -6082,7 +6044,7 @@ class UnreachableObjectsFilter : public HeapObjectsFilter {
 
   Heap* heap_;
   DisallowHeapAllocation no_allocation_;
-  std::unordered_map<MemoryChunk*,
+  std::unordered_map<BasicMemoryChunk*,
                      std::unordered_set<HeapObject, Object::Hasher>*>
       reachable_;
 };
@@ -6869,7 +6831,7 @@ bool Heap::PageFlagsAreConsistent(HeapObject object) {
   if (V8_ENABLE_THIRD_PARTY_HEAP_BOOL) {
     return true;
   }
-  MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
+  BasicMemoryChunk* chunk = BasicMemoryChunk::FromHeapObject(object);
   heap_internals::MemoryChunk* slim_chunk =
       heap_internals::MemoryChunk::FromHeapObject(object);
 
@@ -6878,7 +6840,7 @@ bool Heap::PageFlagsAreConsistent(HeapObject object) {
   CHECK_EQ(chunk->IsFlagSet(MemoryChunk::INCREMENTAL_MARKING),
            slim_chunk->IsMarking());
 
-  AllocationSpace identity = chunk->owner_identity();
+  AllocationSpace identity = chunk->owner()->identity();
 
   // Generation consistency.
   CHECK_EQ(identity == NEW_SPACE || identity == NEW_LO_SPACE,

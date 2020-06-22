@@ -470,7 +470,7 @@ inline WasmOpcode LoadStoreOpcodeOf(MachineType type, bool store) {
 #define WASM_RETURN_CALL_INDIRECT(sig_index, ...) \
   __VA_ARGS__, kExprReturnCallIndirect, static_cast<byte>(sig_index), TABLE_ZERO
 
-#define WASM_REF_TYPE(typeidx) kLocalRef, U32V_1(typeidx)
+#define WASM_REF_TYPE(typeidx) kLocalOptRef, U32V_1(typeidx)
 
 // shift locals by 1; let (locals[0]: local_type) = value in ...
 #define WASM_LET_1_V(local_type, value, ...)                                  \

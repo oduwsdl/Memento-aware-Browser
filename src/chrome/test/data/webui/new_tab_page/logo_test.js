@@ -2,15 +2,51 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {$$, BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
+import {$$, BrowserProxy, hexColorToSkColor} from 'chrome://new-tab-page/new_tab_page.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {assertNotStyle, assertStyle, createTestProxy, keydown} from 'chrome://test/new_tab_page/test_support.js';
 import {eventToPromise, flushTasks} from 'chrome://test/test_util.m.js';
 
-function createImageDoodle() {
+/**
+ * @param {!Element} element
+ * @param {!Element} reference
+ * @return {!{top: number, right: number, bottom: number, left: number}}
+ */
+function getRelativePosition(element, reference) {
+  const referenceRect = reference.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  return {
+    top: elementRect.top - referenceRect.top,
+    right: elementRect.right - referenceRect.right,
+    bottom: elementRect.bottom - referenceRect.bottom,
+    left: elementRect.left - referenceRect.left,
+  };
+}
+
+/**
+ * @param {number} width
+ * @param {number} height
+ * @return {string}
+ */
+function createImageDataUrl(width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * @param {number} width
+ * @param {number} height
+ * @return {!newTabPage.mojom.Doodle}
+ */
+function createImageDoodle(width, height) {
+  width = width || 500;
+  height = height || 200;
   return {
     content: {
       imageDoodle: {
-        imageUrl: {url: 'data:foo'},
+        imageUrl: {url: createImageDataUrl(width, height)},
         onClickUrl: {url: 'https://foo.com'},
         shareButton: {
           backgroundColor: {value: 0xFFFF0000},
@@ -19,12 +55,15 @@ function createImageDoodle() {
           iconUrl: {url: 'data:bar'},
         },
         imageImpressionLogUrl: {url: 'https://log.com'},
+        width,
+        height,
+        backgroundColor: {value: 0xffffffff},
       }
     }
   };
 }
 
-suite('NewTabPageLogoTest', () => {
+function createSuite(themeModeDoodlesEnabled) {
   /**
    * @implements {BrowserProxy}
    * @extends {TestBrowserProxy}
@@ -37,9 +76,14 @@ suite('NewTabPageLogoTest', () => {
     }));
     const logo = document.createElement('ntp-logo');
     document.body.appendChild(logo);
+    logo.backgroundColor = {value: 0xffffffff};
     await flushTasks();
     return logo;
   }
+
+  suiteSetup(() => {
+    loadTimeData.overrideValues({themeModeDoodlesEnabled});
+  });
 
   setup(() => {
     PolymerTest.clearBody();
@@ -55,12 +99,11 @@ suite('NewTabPageLogoTest', () => {
 
   test('setting simple doodle shows image', async () => {
     // Arrange.
-    const doodle = createImageDoodle();
-    doodle.content.imageDoodle.imageUrl = {url: 'data:foo'};
+    const doodle = createImageDoodle(/*width=*/ 500, /*height=*/ 200);
     doodle.content.imageDoodle.shareButton = {
       backgroundColor: {value: 0xFFFF0000},
-      x: 11,
-      y: 12,
+      x: 10,
+      y: 20,
       iconUrl: {url: 'data:bar'},
     };
 
@@ -70,15 +113,59 @@ suite('NewTabPageLogoTest', () => {
     // Assert.
     assertNotStyle($$(logo, '#doodle'), 'display', 'none');
     assertEquals($$(logo, '#logo'), null);
-    assertEquals($$(logo, '#image').src, 'data:foo');
+    assertEquals(
+        $$(logo, '#image').src, doodle.content.imageDoodle.imageUrl.url);
     assertNotStyle($$(logo, '#image'), 'display', 'none');
+    assertEquals(500, $$(logo, '#image').offsetWidth);
+    assertEquals(200, $$(logo, '#image').offsetHeight);
     assertNotStyle($$(logo, '#shareButton'), 'display', 'none');
     assertStyle($$(logo, '#shareButton'), 'background-color', 'rgb(255, 0, 0)');
-    assertStyle($$(logo, '#shareButton'), 'left', '11px');
-    assertStyle($$(logo, '#shareButton'), 'top', '12px');
+    const shareButtonPosition =
+        getRelativePosition($$(logo, '#shareButton'), $$(logo, '#image'));
+    assertEquals(10, shareButtonPosition.left);
+    assertEquals(20, shareButtonPosition.top);
+    assertEquals(26, $$(logo, '#shareButton').offsetWidth);
+    assertEquals(26, $$(logo, '#shareButton').offsetHeight);
     assertEquals($$(logo, '#shareButtonImage').src, 'data:bar');
     assertStyle($$(logo, '#animation'), 'display', 'none');
     assertFalse(!!$$(logo, '#iframe'));
+  });
+
+  [null, '#ff0000'].forEach(color => {
+    test(`${color || 'no'} background color shows box`, async () => {
+      // Arrange.
+      const doodle = createImageDoodle();
+      doodle.content.imageDoodle.backgroundColor.value = 0xff0000ff;
+
+      // Act.
+      const logo = await createLogo(doodle);
+      logo.backgroundColor = !color || hexColorToSkColor(color);
+
+      // Assert.
+      assertStyle($$(logo, '#imageDoodle'), 'padding', '16px 24px');
+      assertStyle(
+          $$(logo, '#imageDoodle'), 'background-color', 'rgb(0, 0, 255)');
+    });
+  });
+
+  test('setting too large image doodle resizes image', async () => {
+    // Arrange.
+    const doodle = createImageDoodle(/*width=*/ 1000, /*height=*/ 500);
+    doodle.content.imageDoodle.shareButton.x = 10;
+    doodle.content.imageDoodle.shareButton.y = 20;
+
+    // Act.
+    const logo = await createLogo(doodle);
+
+    // Assert.
+    assertEquals(460, $$(logo, '#image').offsetWidth);
+    assertEquals(230, $$(logo, '#image').offsetHeight);
+    const shareButtonPosition =
+        getRelativePosition($$(logo, '#shareButton'), $$(logo, '#image'));
+    assertEquals(5, Math.round(shareButtonPosition.left));
+    assertEquals(9, Math.round(shareButtonPosition.top));
+    assertEquals(12, $$(logo, '#shareButton').offsetWidth);
+    assertEquals(12, $$(logo, '#shareButton').offsetHeight);
   });
 
   test('setting animated doodle shows image', async () => {
@@ -110,15 +197,60 @@ suite('NewTabPageLogoTest', () => {
         }
       }
     });
+    logo.dark = false;
 
     // Assert.
     assertNotStyle($$(logo, '#doodle'), 'display', 'none');
     assertEquals($$(logo, '#logo'), null);
-    assertEquals($$(logo, '#iframe').src, 'https://foo.com/');
     assertNotStyle($$(logo, '#iframe'), 'display', 'none');
     assertStyle($$(logo, '#iframe'), 'width', '200px');
     assertStyle($$(logo, '#iframe'), 'height', '100px');
-    assertStyle($$(logo, '#imageContainer'), 'display', 'none');
+    assertStyle($$(logo, '#imageDoodle'), 'display', 'none');
+    if (themeModeDoodlesEnabled) {
+      assertEquals(
+          $$(logo, '#iframe').src, 'https://foo.com/?theme_messages=0');
+      assertEquals(1, testProxy.getCallCount('postMessage'));
+      const [iframe, {cmd, dark}, origin] =
+          await testProxy.whenCalled('postMessage');
+      assertEquals($$(logo, '#iframe'), iframe);
+      assertEquals('changeMode', cmd);
+      assertEquals(false, dark);
+      assertEquals('https://foo.com', origin);
+    } else {
+      assertEquals($$(logo, '#iframe').src, 'https://foo.com/');
+    }
+  });
+
+  test('message only after mode has been set', async () => {
+    // Act (no mode).
+    const logo = await createLogo({
+      content: {
+        interactiveDoodle: {
+          url: {url: 'https://foo.com'},
+          width: 200,
+          height: 100,
+        }
+      }
+    });
+
+    // Assert (no mode).
+    assertEquals(0, testProxy.getCallCount('postMessage'));
+
+    // Act (setting mode).
+    logo.dark = true;
+
+    // Assert (setting mode).
+    if (themeModeDoodlesEnabled) {
+      assertEquals(1, testProxy.getCallCount('postMessage'));
+      const [iframe, {cmd, dark}, origin] =
+          await testProxy.whenCalled('postMessage');
+      assertEquals($$(logo, '#iframe'), iframe);
+      assertEquals('changeMode', cmd);
+      assertEquals(true, dark);
+      assertEquals('https://foo.com', origin);
+    } else {
+      assertEquals(0, testProxy.getCallCount('postMessage'));
+    }
   });
 
   test('disallowing doodle shows logo', async () => {
@@ -232,6 +364,30 @@ suite('NewTabPageLogoTest', () => {
     assertEquals($$(logo, '#iframe').offsetWidth, width);
   });
 
+  test('receiving mode message sends mode', async () => {
+    // Arrange.
+    const logo = await createLogo(
+        {content: {interactiveDoodle: {url: {url: 'https://foo.com'}}}});
+    logo.dark = false;
+    testProxy.resetResolver('postMessage');
+
+    // Act.
+    window.postMessage({cmd: 'sendMode'}, '*');
+    await flushTasks();
+
+    // Assert.
+    if (themeModeDoodlesEnabled) {
+      assertEquals(1, testProxy.getCallCount('postMessage'));
+      const [_, {cmd, dark}, origin] =
+          await testProxy.whenCalled('postMessage');
+      assertEquals('changeMode', cmd);
+      assertEquals(false, dark);
+      assertEquals('https://foo.com', origin);
+    } else {
+      assertEquals(0, testProxy.getCallCount('postMessage'));
+    }
+  });
+
   test('clicking simple doodle opens link', async () => {
     // Arrange.
     const doodle = createImageDoodle();
@@ -276,6 +432,9 @@ suite('NewTabPageLogoTest', () => {
     assertNotStyle($$(logo, '#image'), 'display', 'none');
     assertNotStyle($$(logo, '#animation'), 'display', 'none');
     assertEquals($$(logo, '#animation').path, 'image?https://foo.com');
+    assertDeepEquals(
+        $$(logo, '#image').getBoundingClientRect(),
+        $$(logo, '#animation').getBoundingClientRect());
   });
 
   test('clicking animation of animated doodle opens link', async () => {
@@ -444,5 +603,14 @@ suite('NewTabPageLogoTest', () => {
     assertEquals(newTabPage.mojom.DoodleShareChannel.TWITTER, channel);
     assertEquals('supi', doodleId);
     assertEquals('123', shareId);
+  });
+}
+
+suite('NewTabPageLogoTest', () => {
+  [true, false].forEach(themeModeDoodlesEnabled => {
+    const enabled = themeModeDoodlesEnabled ? 'enabled' : 'disabled';
+    suite(`theme mode doodles ${enabled}`, () => {
+      createSuite(themeModeDoodlesEnabled);
+    });
   });
 });

@@ -202,8 +202,12 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
     SetQuicReloadableFlag(quic_donot_change_queued_ack, true);
     SetQuicReloadableFlag(quic_fix_last_inflight_packets_sent_time, true);
     SetQuicReloadableFlag(quic_fix_server_pto_timeout, true);
+    SetQuicReloadableFlag(quic_do_not_retransmit_immediately_on_zero_rtt_reject,
+                          true);
 
     SetQuicReloadableFlag(quic_support_handshake_done_in_t050, true);
+    SetQuicReloadableFlag(quic_enable_tls_resumption, true);
+    SetQuicReloadableFlag(quic_enable_zero_rtt_for_tls, true);
   }
 
   ~EndToEndTest() override { QuicRecyclePort(server_address_.port()); }
@@ -630,16 +634,9 @@ TEST_P(EndToEndTest, SimpleRequestResponseWithAckDelayChange) {
   EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   EXPECT_FALSE(client_->client()->EarlyDataAccepted());
   EXPECT_FALSE(client_->client()->ReceivedInchoateReject());
-  if (GetQuicReloadableFlag(quic_negotiate_ack_delay_time)) {
-    EXPECT_EQ(kClientMaxAckDelay, GetSentPacketManagerFromFirstServerSession()
-                                      ->peer_max_ack_delay()
-                                      .ToMilliseconds());
-  } else {
-    EXPECT_EQ(kDefaultDelayedAckTimeMs,
-              GetSentPacketManagerFromFirstServerSession()
-                  ->peer_max_ack_delay()
-                  .ToMilliseconds());
-  }
+  EXPECT_EQ(kClientMaxAckDelay, GetSentPacketManagerFromFirstServerSession()
+                                    ->peer_max_ack_delay()
+                                    .ToMilliseconds());
 }
 
 // Simple transaction, but set a non-default ack exponent at the client
@@ -1243,11 +1240,6 @@ TEST_P(EndToEndTest, LargePostNoPacketLossWithDelayAndReordering) {
 }
 
 TEST_P(EndToEndTest, LargePostZeroRTTFailure) {
-  if (version_.UsesTls()) {
-    // TODO(b/152551499): Re-enable this test when TLS supports 0-RTT.
-    Initialize();
-    return;
-  }
   // Send a request and then disconnect. This prepares the client to attempt
   // a 0-RTT handshake for the next request.
   ASSERT_TRUE(Initialize());
@@ -1299,11 +1291,6 @@ TEST_P(EndToEndTest, LargePostZeroRTTFailure) {
 }
 
 TEST_P(EndToEndTest, SynchronousRequestZeroRTTFailure) {
-  if (version_.UsesTls()) {
-    // TODO(b/152551499): Re-enable this test when TLS supports 0-RTT.
-    Initialize();
-    return;
-  }
   // Send a request and then disconnect. This prepares the client to attempt
   // a 0-RTT handshake for the next request.
   ASSERT_TRUE(Initialize());
@@ -1365,10 +1352,6 @@ TEST_P(EndToEndTest, LargePostSynchronousRequest) {
   EXPECT_FALSE(client_->client()->ReceivedInchoateReject());
 
   client_->Disconnect();
-  if (version_.UsesTls()) {
-    // TODO(b/152551499): remove this when TLS supports 0-RTT.
-    return;
-  }
 
   // The 0-RTT handshake should succeed.
   client_->Connect();
@@ -3944,11 +3927,6 @@ TEST_P(EndToEndPacketReorderingTest, ReorderedConnectivityProbing) {
 }
 
 TEST_P(EndToEndPacketReorderingTest, Buffer0RttRequest) {
-  if (version_.UsesTls()) {
-    // TODO(b/152551499): Re-enable this test when TLS supports 0-RTT.
-    Initialize();
-    return;
-  }
   ASSERT_TRUE(Initialize());
   // Finish one request to make sure handshake established.
   client_->SendSynchronousRequest("/foo");

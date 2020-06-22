@@ -392,7 +392,8 @@
         'swarming': {
           'dimension_sets': [
             {
-              'device_os': 'LMY48I',
+              # TODO(crbug.com/1091539): Move these over to LMY48M.
+              'device_os': 'LMY48M|LMY48I',
               'device_type': 'hammerhead',
               'os': 'Android',
             },

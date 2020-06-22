@@ -2116,15 +2116,12 @@ Node* WasmGraphBuilder::Throw(uint32_t exception_index,
             values_array, &index,
             graph()->NewNode(m->I32x4ExtractLane(3), value));
         break;
-      case wasm::ValueType::kExternRef:
-      case wasm::ValueType::kFuncRef:
-      case wasm::ValueType::kExnRef:
       case wasm::ValueType::kRef:
       case wasm::ValueType::kOptRef:
-      case wasm::ValueType::kEqRef:
         STORE_FIXED_ARRAY_SLOT_ANY(values_array, index, value);
         ++index;
         break;
+      case wasm::ValueType::kRtt:  // TODO(7748): Implement.
       case wasm::ValueType::kI8:
       case wasm::ValueType::kI16:
       case wasm::ValueType::kStmt:
@@ -2270,15 +2267,12 @@ Node* WasmGraphBuilder::GetExceptionValues(Node* except_obj,
             mcgraph()->machine()->I32x4ReplaceLane(3), value,
             BuildDecodeException32BitValue(values_array, &index));
         break;
-      case wasm::ValueType::kExternRef:
-      case wasm::ValueType::kFuncRef:
-      case wasm::ValueType::kExnRef:
       case wasm::ValueType::kRef:
       case wasm::ValueType::kOptRef:
-      case wasm::ValueType::kEqRef:
         value = LOAD_FIXED_ARRAY_SLOT_ANY(values_array, index);
         ++index;
         break;
+      case wasm::ValueType::kRtt:  // TODO(7748): Implement.
       case wasm::ValueType::kI8:
       case wasm::ValueType::kI16:
       case wasm::ValueType::kStmt:
@@ -3360,7 +3354,7 @@ Node* WasmGraphBuilder::BuildCallToRuntime(Runtime::FunctionId f,
 
 Node* WasmGraphBuilder::GlobalGet(uint32_t index) {
   const wasm::WasmGlobal& global = env_->module->globals[index];
-  if (global.type.IsReferenceType()) {
+  if (global.type.is_reference_type()) {
     if (global.mutability && global.imported) {
       Node* base = nullptr;
       Node* offset = nullptr;
@@ -3389,7 +3383,7 @@ Node* WasmGraphBuilder::GlobalGet(uint32_t index) {
 
 Node* WasmGraphBuilder::GlobalSet(uint32_t index, Node* val) {
   const wasm::WasmGlobal& global = env_->module->globals[index];
-  if (global.type.IsReferenceType()) {
+  if (global.type.is_reference_type()) {
     if (global.mutability && global.imported) {
       Node* base = nullptr;
       Node* offset = nullptr;
@@ -4046,6 +4040,12 @@ Node* WasmGraphBuilder::BuildAsmjsStoreMem(MachineType type, Node* index,
   return val;
 }
 
+Node* WasmGraphBuilder::BuildF32x4Ceil(Node* input) {
+  MachineType type = MachineType::Simd128();
+  ExternalReference ref = ExternalReference::wasm_f32x4_ceil();
+  return BuildCFuncInstruction(ref, type, input);
+}
+
 void WasmGraphBuilder::PrintDebugName(Node* node) {
   PrintF("#%d:%s", node->id(), node->op()->mnemonic());
 }
@@ -4287,6 +4287,9 @@ Node* WasmGraphBuilder::SimdOp(wasm::WasmOpcode opcode, Node* const* inputs) {
       return graph()->NewNode(mcgraph()->machine()->F32x4Pmax(), inputs[0],
                               inputs[1]);
     case wasm::kExprF32x4Ceil:
+      // Architecture support for F32x4Ceil and Float32RoundUp is the same.
+      if (!mcgraph()->machine()->Float32RoundUp().IsSupported())
+        return BuildF32x4Ceil(inputs[0]);
       return graph()->NewNode(mcgraph()->machine()->F32x4Ceil(), inputs[0]);
     case wasm::kExprF32x4Floor:
       return graph()->NewNode(mcgraph()->machine()->F32x4Floor(), inputs[0]);
@@ -5161,7 +5164,7 @@ Node* StoreWithTaggedAlignment(WasmGraphAssembler* gasm, Node* base,
     return gasm->StoreUnaligned(rep, base, offset, value);
   } else {
     WriteBarrierKind write_barrier =
-        type.IsReferenceType() ? kPointerWriteBarrier : kNoWriteBarrier;
+        type.is_reference_type() ? kPointerWriteBarrier : kNoWriteBarrier;
     StoreRepresentation store_rep(rep, write_barrier);
     return gasm->Store(store_rep, base, offset, value);
   }
@@ -5566,16 +5569,12 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
         return BuildChangeFloat32ToNumber(node);
       case wasm::ValueType::kF64:
         return BuildChangeFloat64ToNumber(node);
-      case wasm::ValueType::kExternRef:
-      case wasm::ValueType::kFuncRef:
-      case wasm::ValueType::kExnRef:
-        return node;
       case wasm::ValueType::kRef:
       case wasm::ValueType::kOptRef:
-      case wasm::ValueType::kEqRef:
-        // TODO(7748): Implement properly. For now, we just expose the raw
-        // object for testing.
+        // TODO(7748): Implement properly for arrays and structs.
+        // For now, we just expose the raw object for testing.
         return node;
+      case wasm::ValueType::kRtt:
       case wasm::ValueType::kI8:
       case wasm::ValueType::kI16:
         UNIMPLEMENTED();
@@ -5629,30 +5628,35 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
 
   Node* FromJS(Node* input, Node* js_context, wasm::ValueType type) {
     switch (type.kind()) {
-      case wasm::ValueType::kExternRef:
-      case wasm::ValueType::kExnRef:
-        return input;
+      case wasm::ValueType::kRef:
+      case wasm::ValueType::kOptRef: {
+        switch (type.heap_type()) {
+          case wasm::kHeapExtern:
+          case wasm::kHeapExn:
+            return input;
+          case wasm::kHeapFunc: {
+            Node* check =
+                BuildChangeSmiToInt32(SetEffect(BuildCallToRuntimeWithContext(
+                    Runtime::kWasmIsValidFuncRefValue, js_context, &input, 1)));
 
-      case wasm::ValueType::kFuncRef: {
-        Node* check =
-            BuildChangeSmiToInt32(SetEffect(BuildCallToRuntimeWithContext(
-                Runtime::kWasmIsValidFuncRefValue, js_context, &input, 1)));
+            Diamond type_check(graph(), mcgraph()->common(), check,
+                               BranchHint::kTrue);
+            type_check.Chain(control());
+            SetControl(type_check.if_false);
 
-        Diamond type_check(graph(), mcgraph()->common(), check,
-                           BranchHint::kTrue);
-        type_check.Chain(control());
-        SetControl(type_check.if_false);
+            Node* old_effect = effect();
+            BuildCallToRuntimeWithContext(Runtime::kWasmThrowTypeError,
+                                          js_context, nullptr, 0);
 
-        Node* old_effect = effect();
-        BuildCallToRuntimeWithContext(Runtime::kWasmThrowTypeError, js_context,
-                                      nullptr, 0);
+            SetEffectControl(type_check.EffectPhi(old_effect, effect()),
+                             type_check.merge);
 
-        SetEffectControl(type_check.EffectPhi(old_effect, effect()),
-                         type_check.merge);
-
-        return input;
+            return input;
+          }
+          default:
+            UNREACHABLE();
+        }
       }
-
       case wasm::ValueType::kF32:
         return graph()->NewNode(
             mcgraph()->machine()->TruncateFloat64ToFloat32(),
@@ -5669,10 +5673,8 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
         DCHECK(enabled_features_.has_bigint());
         return BuildChangeBigIntToInt64(input, js_context);
 
+      case wasm::ValueType::kRtt:  // TODO(7748): Implement.
       case wasm::ValueType::kS128:
-      case wasm::ValueType::kRef:
-      case wasm::ValueType::kOptRef:
-      case wasm::ValueType::kEqRef:
       case wasm::ValueType::kI8:
       case wasm::ValueType::kI16:
       case wasm::ValueType::kBottom:

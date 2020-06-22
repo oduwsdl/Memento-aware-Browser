@@ -82,11 +82,12 @@
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/localized_error.h"
+#include "components/grit/components_scaled_resources.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/pdf/renderer/pepper_pdf_host.h"
-#include "components/prerender/common/prerender_types.h"
+#include "components/prerender/common/prerender_types.mojom.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/renderer/threat_dom_details.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
@@ -1332,7 +1333,7 @@ bool ChromeContentRendererClient::IsPrefetchOnly(
     content::RenderFrame* render_frame,
     const blink::WebURLRequest& request) {
   return prerender::PrerenderHelper::GetPrerenderMode(render_frame) ==
-         prerender::PREFETCH_ONLY;
+         prerender::mojom::PrerenderMode::kPrefetchOnly;
 }
 
 uint64_t ChromeContentRendererClient::VisitedLinkHash(const char* canonical_url,

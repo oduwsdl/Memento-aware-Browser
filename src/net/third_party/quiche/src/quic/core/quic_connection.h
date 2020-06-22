@@ -965,6 +965,9 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // Called when version is considered negotiated.
   void OnSuccessfulVersionNegotiation();
 
+  // Called when self migration succeeds after probing.
+  void OnSuccessfulMigrationAfterProbing();
+
   // Called for QUIC+TLS versions when we send transport parameters.
   void OnTransportParametersSent(
       const TransportParameters& transport_parameters) const;
@@ -1092,12 +1095,16 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   struct QUIC_EXPORT_PRIVATE UndecryptablePacket {
     UndecryptablePacket(const QuicEncryptedPacket& packet,
                         EncryptionLevel encryption_level)
-        : packet(packet.Clone()), encryption_level(encryption_level) {}
+        : packet(packet.Clone()),
+          encryption_level(encryption_level),
+          processed(false) {}
 
     std::unique_ptr<QuicEncryptedPacket> packet;
-    // Currently, |encryption_level| is only used for logging and does not
-    // affect processing of the packet.
     EncryptionLevel encryption_level;
+    // This gets set to true if 1) connection sucessfully processed the packet
+    // or 2) connection failed to process the packet and will not try to process
+    // it later.
+    bool processed;
   };
 
   // Notifies the visitor of the close and marks the connection as disconnected.
@@ -1310,6 +1317,17 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // on validation failure.
   bool ValidateConfigConnectionIds(const QuicConfig& config);
   bool ValidateConfigConnectionIdsOld(const QuicConfig& config);
+
+  // Called when ACK alarm goes off. Try to bundle INITIAL data with the ACK.
+  void MaybeBundleCryptoDataWithInitialAck();
+
+  // Returns true if an undecryptable packet of |decryption_level| should be
+  // buffered (such that connection can try to decrypt it later).
+  bool ShouldEnqueueUnDecryptablePacket(EncryptionLevel decryption_level,
+                                        bool has_decryption_key) const;
+
+  // Returns string which contains undecryptable packets information.
+  std::string UndecryptablePacketsInfo() const;
 
   QuicFramer framer_;
 

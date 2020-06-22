@@ -25,9 +25,9 @@ scoped_refptr<VideoFrame> DefaultCreateFrame(
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
     base::TimeDelta timestamp) {
-  return CreatePlatformVideoFrame(gpu_memory_buffer_factory, format, coded_size,
-                                  visible_rect, natural_size, timestamp,
-                                  gfx::BufferUsage::SCANOUT_VDA_WRITE);
+  return CreateGpuMemoryBufferVideoFrame(
+      gpu_memory_buffer_factory, format, coded_size, visible_rect, natural_size,
+      timestamp, gfx::BufferUsage::SCANOUT_VDA_WRITE);
 }
 
 }  // namespace
@@ -95,7 +95,7 @@ scoped_refptr<VideoFrame> PlatformVideoFramePool::GetFrame() {
 
   // Clear all metadata before returning to client, in case origin frame has any
   // unrelated metadata.
-  wrapped_frame->metadata()->Clear();
+  wrapped_frame->clear_metadata();
   return wrapped_frame;
 }
 

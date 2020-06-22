@@ -1459,8 +1459,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
                             Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     {"addSite", IDS_SETTINGS_ADD_SITE},
-    {"addSiteExceptionPlaceholder",
-     IDS_SETTINGS_ADD_SITE_EXCEPTION_PLACEHOLDER},
     {"addSiteTitle", IDS_SETTINGS_ADD_SITE_TITLE},
 #if defined(OS_CHROMEOS)
     {"androidSmsNote", IDS_SETTINGS_ANDROID_SMS_NOTE},
@@ -1985,6 +1983,9 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
   html_source->AddBoolean("enableWebBluetoothNewPermissionsBackend",
                           base::FeatureList::IsEnabled(
                               features::kWebBluetoothNewPermissionsBackend));
+
+  // The exception placeholder should not be translated. See crbug.com/1095878.
+  html_source->AddString("addSiteExceptionPlaceholder", "[*.]example.com");
 }
 
 #if !defined(OS_CHROMEOS)

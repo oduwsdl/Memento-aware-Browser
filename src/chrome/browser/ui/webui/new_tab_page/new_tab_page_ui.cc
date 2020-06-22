@@ -79,6 +79,10 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       "oneGoogleBarModalOverlaysEnabled",
       base::FeatureList::IsEnabled(ntp_features::kOneGoogleBarModalOverlays));
 
+  source->AddBoolean(
+      "themeModeDoodlesEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kWebUIThemeModeDoodles));
+
   static constexpr webui::LocalizedString kStrings[] = {
       {"doneButton", IDS_DONE},
       {"title", IDS_NEW_TAB_TITLE},
@@ -188,8 +192,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {omnibox::kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH}};
   webui::AddResourcePathsBulk(source, kImages);
 
-  source->AddResourcePath("skcolor.mojom-lite.js",
-                          IDR_NEW_TAB_PAGE_SKCOLOR_MOJO_LITE_JS);
   source->AddResourcePath("new_tab_page.mojom-lite.js",
                           IDR_NEW_TAB_PAGE_MOJO_LITE_JS);
   source->AddResourcePath("omnibox.mojom-lite.js",

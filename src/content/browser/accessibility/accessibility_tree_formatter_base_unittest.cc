@@ -30,11 +30,23 @@ class AccessibilityTreeFormatterBaseTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(AccessibilityTreeFormatterBaseTest);
 };
 
-void ParseAndCheck(const char* input, const char* expected) {
+PropertyNode Parse(const char* input) {
   AccessibilityTreeFormatter::PropertyFilter filter(
       base::UTF8ToUTF16(input),
       AccessibilityTreeFormatter::PropertyFilter::ALLOW);
-  auto got = PropertyNode::FromPropertyFilter(filter).ToString();
+  return PropertyNode::FromPropertyFilter(filter);
+}
+
+PropertyNode GetArgumentNode(const char* input) {
+  auto got = Parse(input);
+  if (got.parameters.size() == 0) {
+    return PropertyNode();
+  }
+  return std::move(got.parameters[0]);
+}
+
+void ParseAndCheck(const char* input, const char* expected) {
+  auto got = Parse(input).ToString();
   EXPECT_EQ(got, expected);
 }
 
@@ -50,6 +62,14 @@ TEST_F(AccessibilityTreeFormatterBaseTest, ParseProperty) {
   ParseAndCheck("[3, 4]", "[](3, 4)");
   ParseAndCheck("Cell([3, 4])", "Cell([](3, 4))");
 
+  // Arguments
+  ParseAndCheck("Text({val: 1})", "Text({}(val: 1))");
+  ParseAndCheck("Text({lat: 1, len: 1})", "Text({}(lat: 1, len: 1))");
+  ParseAndCheck("Text({dict: {val: 1}})", "Text({}(dict: {}(val: 1)))");
+  ParseAndCheck("Text({dict: {val: 1}, 3})", "Text({}(dict: {}(val: 1), 3))");
+  ParseAndCheck("Text({dict: [1, 2]})", "Text({}(dict: [](1, 2)))");
+  ParseAndCheck("Text({dict: ValueFor(1)})", "Text({}(dict: ValueFor(1)))");
+
   // Line indexes filter.
   ParseAndCheck(":3,:5;AXDOMClassList", ":3,:5;AXDOMClassList");
 
@@ -57,6 +77,24 @@ TEST_F(AccessibilityTreeFormatterBaseTest, ParseProperty) {
   ParseAndCheck("Role(3", "Role(3)");
   ParseAndCheck("TableFor(CellBy(id", "TableFor(CellBy(id))");
   ParseAndCheck("[3, 4", "[](3, 4)");
+
+  // Arguments conversion
+  EXPECT_EQ(GetArgumentNode("ChildAt([3])").IsArray(), true);
+  EXPECT_EQ(GetArgumentNode("Text({loc: 3, len: 2})").IsDict(), true);
+  EXPECT_EQ(GetArgumentNode("ChildAt(3)").IsDict(), false);
+  EXPECT_EQ(GetArgumentNode("ChildAt(3)").IsArray(), false);
+  EXPECT_EQ(GetArgumentNode("ChildAt(3)").AsInt(), 3);
+  EXPECT_EQ(GetArgumentNode("Text({start: :1, dir: forward})").FindKey("start"),
+            base::ASCIIToUTF16(":1"));
+  EXPECT_EQ(GetArgumentNode("Text({start: :1, dir: forward})").FindKey("dir"),
+            base::ASCIIToUTF16("forward"));
+  EXPECT_EQ(
+      GetArgumentNode("Text({start: :1, dir: forward})").FindKey("notexists"),
+      base::nullopt);
+  EXPECT_EQ(GetArgumentNode("Text({loc: 3, len: 2})").FindIntKey("loc"), 3);
+  EXPECT_EQ(GetArgumentNode("Text({loc: 3, len: 2})").FindIntKey("len"), 2);
+  EXPECT_EQ(GetArgumentNode("Text({loc: 3, len: 2})").FindIntKey("notexists"),
+            base::nullopt);
 }
 
 }  // namespace content

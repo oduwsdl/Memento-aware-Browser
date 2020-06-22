@@ -139,19 +139,25 @@ class WasmGCTester {
   ErrorThrower thrower;
 };
 
+ValueType ref(uint32_t type_index) {
+  return ValueType::Ref(static_cast<HeapType>(type_index), kNonNullable);
+}
+ValueType optref(uint32_t type_index) {
+  return ValueType::Ref(static_cast<HeapType>(type_index), kNullable);
+}
+
 // TODO(7748): Use WASM_EXEC_TEST once interpreter and liftoff are supported
 TEST(WasmBasicStruct) {
   WasmGCTester tester;
   uint32_t type_index =
       tester.DefineStruct({F(kWasmI32, true), F(kWasmI32, true)});
-  ValueType kRefTypes[] = {ValueType(ValueType::kRef, type_index)};
-  ValueType kOptRefType = ValueType(ValueType::kOptRef, type_index);
+  ValueType kRefTypes[] = {ref(type_index)};
+  ValueType kOptRefType = optref(type_index);
   FunctionSig sig_q_v(1, 0, kRefTypes);
 
   // Test struct.new and struct.get.
-
   tester.DefineFunction(
-      "f", tester.sigs.i_v(), {},
+      "get1", tester.sigs.i_v(), {},
       {WASM_STRUCT_GET(
            type_index, 0,
            WASM_STRUCT_NEW(type_index, WASM_I32V(42), WASM_I32V(64))),
@@ -159,7 +165,7 @@ TEST(WasmBasicStruct) {
 
   // Test struct.new and struct.get.
   tester.DefineFunction(
-      "g", tester.sigs.i_v(), {},
+      "get2", tester.sigs.i_v(), {},
       {WASM_STRUCT_GET(
            type_index, 1,
            WASM_STRUCT_NEW(type_index, WASM_I32V(42), WASM_I32V(64))),
@@ -167,14 +173,14 @@ TEST(WasmBasicStruct) {
 
   // Test struct.new, returning struct references to JS.
   tester.DefineFunction(
-      "h", &sig_q_v, {},
+      "getJs", &sig_q_v, {},
       {WASM_STRUCT_NEW(type_index, WASM_I32V(42), WASM_I32V(64)), kExprEnd});
 
   // Test struct.set, struct refs types in locals.
   uint32_t j_local_index = 0;
   uint32_t j_field_index = 0;
   tester.DefineFunction(
-      "j", tester.sigs.i_v(), {kOptRefType},
+      "set", tester.sigs.i_v(), {kOptRefType},
       {WASM_SET_LOCAL(j_local_index, WASM_STRUCT_NEW(type_index, WASM_I32V(42),
                                                      WASM_I32V(64))),
        WASM_STRUCT_SET(type_index, j_field_index, WASM_GET_LOCAL(j_local_index),
@@ -183,13 +189,29 @@ TEST(WasmBasicStruct) {
                        WASM_GET_LOCAL(j_local_index)),
        kExprEnd});
 
-  // Test struct.set, ref.as_non_null,
-  // struct refs types in globals and if-results.
+  tester.CompileModule();
+
+  tester.CheckResult("get1", 42, {});
+  tester.CheckResult("get2", 64, {});
+  CHECK(tester.GetJSResult("getJs", {}).ToHandleChecked()->IsWasmStruct());
+  tester.CheckResult("set", -99, {});
+}
+
+// Test struct.set, ref.as_non_null,
+// struct refs types in globals and if-results.
+TEST(WasmRefAsNonNull) {
+  WasmGCTester tester;
+  uint32_t type_index =
+      tester.DefineStruct({F(kWasmI32, true), F(kWasmI32, true)});
+  ValueType kRefTypes[] = {ref(type_index)};
+  ValueType kOptRefType = optref(type_index);
+  FunctionSig sig_q_v(1, 0, kRefTypes);
+
   uint32_t k_global_index = tester.AddGlobal(
       kOptRefType, true, WasmInitExpr(WasmInitExpr::kRefNullConst));
   uint32_t k_field_index = 0;
   tester.DefineFunction(
-      "k", tester.sigs.i_v(), {},
+      "f", tester.sigs.i_v(), {},
       {WASM_SET_GLOBAL(
            k_global_index,
            WASM_STRUCT_NEW(type_index, WASM_I32V(55), WASM_I32V(66))),
@@ -200,10 +222,20 @@ TEST(WasmBasicStruct) {
                                                WASM_REF_NULL_GC(type_index)))),
        kExprEnd});
 
-  // Test br_on_null 1.
+  tester.CompileModule();
+  tester.CheckResult("f", 55, {});
+}
+
+TEST(WasmBrOnNull) {
+  WasmGCTester tester;
+  uint32_t type_index =
+      tester.DefineStruct({F(kWasmI32, true), F(kWasmI32, true)});
+  ValueType kRefTypes[] = {ref(type_index)};
+  ValueType kOptRefType = optref(type_index);
+  FunctionSig sig_q_v(1, 0, kRefTypes);
   uint32_t l_local_index = 0;
   tester.DefineFunction(
-      "l", tester.sigs.i_v(), {kOptRefType},
+      "taken", tester.sigs.i_v(), {kOptRefType},
       {WASM_BLOCK_I(WASM_I32V(42),
                     // Branch will be taken.
                     // 42 left on stack outside the block (not 52).
@@ -211,10 +243,9 @@ TEST(WasmBasicStruct) {
                     WASM_I32V(52), WASM_BR(0)),
        kExprEnd});
 
-  // Test br_on_null 2.
   uint32_t m_field_index = 0;
   tester.DefineFunction(
-      "m", tester.sigs.i_v(), {},
+      "notTaken", tester.sigs.i_v(), {},
       {WASM_BLOCK_I(
            WASM_I32V(42),
            WASM_STRUCT_GET(
@@ -226,10 +257,22 @@ TEST(WasmBasicStruct) {
            WASM_BR(0)),
        kExprEnd});
 
-  // Test ref.eq
+  tester.CompileModule();
+  tester.CheckResult("taken", 42, {});
+  tester.CheckResult("notTaken", 52, {});
+}
+
+TEST(WasmRefEq) {
+  WasmGCTester tester;
+  uint32_t type_index =
+      tester.DefineStruct({F(kWasmI32, true), F(kWasmI32, true)});
+  ValueType kRefTypes[] = {ref(type_index)};
+  ValueType kOptRefType = optref(type_index);
+  FunctionSig sig_q_v(1, 0, kRefTypes);
+
   uint32_t n_local_index = 0;
   tester.DefineFunction(
-      "n", tester.sigs.i_v(), {kOptRefType},
+      "f", tester.sigs.i_v(), {kOptRefType},
       {WASM_SET_LOCAL(n_local_index, WASM_STRUCT_NEW(type_index, WASM_I32V(55),
                                                      WASM_I32V(66))),
        WASM_I32_ADD(
@@ -252,21 +295,9 @@ TEST(WasmBasicStruct) {
                                              WASM_REF_NULL_GC(type_index)),
                                          WASM_I32V(3))))),
        kExprEnd});
-  // Result: 0b1001
-
-  /************************* End of test definitions *************************/
 
   tester.CompileModule();
-
-  tester.CheckResult("f", 42, {});
-  tester.CheckResult("g", 64, {});
-
-  CHECK(tester.GetJSResult("h", {}).ToHandleChecked()->IsWasmStruct());
-  tester.CheckResult("j", -99, {});
-  tester.CheckResult("k", 55, {});
-  tester.CheckResult("l", 42, {});
-  tester.CheckResult("m", 52, {});
-  tester.CheckResult("n", 0b1001, {});
+  tester.CheckResult("f", 0b1001, {});
 }
 
 TEST(WasmPackedStructU) {
@@ -274,7 +305,7 @@ TEST(WasmPackedStructU) {
 
   uint32_t type_index = tester.DefineStruct(
       {F(kWasmI8, true), F(kWasmI16, true), F(kWasmI32, true)});
-  ValueType struct_type = ValueType(ValueType::kOptRef, type_index);
+  ValueType struct_type = optref(type_index);
 
   uint32_t local_index = 0;
 
@@ -309,7 +340,7 @@ TEST(WasmPackedStructS) {
 
   uint32_t type_index = tester.DefineStruct(
       {F(kWasmI8, true), F(kWasmI16, true), F(kWasmI32, true)});
-  ValueType struct_type = ValueType(ValueType::kOptRef, type_index);
+  ValueType struct_type = optref(type_index);
 
   uint32_t local_index = 0;
 
@@ -396,9 +427,9 @@ TEST(WasmLetInstruction) {
 TEST(WasmBasicArray) {
   WasmGCTester tester;
   uint32_t type_index = tester.DefineArray(wasm::kWasmI32, true);
-  ValueType kRefTypes[] = {ValueType(ValueType::kRef, type_index)};
+  ValueType kRefTypes[] = {ref(type_index)};
   FunctionSig sig_q_v(1, 0, kRefTypes);
-  ValueType kOptRefType = ValueType(ValueType::kOptRef, type_index);
+  ValueType kOptRefType = optref(type_index);
 
   // f: a = [12, 12, 12]; a[1] = 42; return a[arg0]
   uint32_t local_index = 1;
@@ -443,7 +474,7 @@ TEST(WasmBasicArray) {
 TEST(WasmPackedArrayU) {
   WasmGCTester tester;
   uint32_t array_index = tester.DefineArray(kWasmI8, true);
-  ValueType array_type = ValueType(ValueType::kOptRef, array_index);
+  ValueType array_type = optref(array_index);
 
   uint32_t param_index = 0;
   uint32_t local_index = 1;
@@ -478,7 +509,7 @@ TEST(WasmPackedArrayU) {
 TEST(WasmPackedArrayS) {
   WasmGCTester tester;
   uint32_t array_index = tester.DefineArray(kWasmI16, true);
-  ValueType array_type = ValueType(ValueType::kOptRef, array_index);
+  ValueType array_type = optref(array_index);
 
   int32_t expected_outputs[] = {0x12345678, 10, 0xFEDC, 0xFF1234};
 

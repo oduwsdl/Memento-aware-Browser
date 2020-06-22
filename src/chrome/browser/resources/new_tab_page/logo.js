@@ -9,9 +9,14 @@ import './doodle_share_dialog.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {BrowserProxy} from './browser_proxy.js';
-import {skColorToRgba} from './utils.js';
+import {$$, skColorToRgba} from './utils.js';
+
+/** @type {number} */
+const SHARE_BUTTON_SIZE_PX = 26;
 
 // Shows the Google logo or a doodle if available.
 class LogoElement extends PolymerElement {
@@ -45,11 +50,30 @@ class LogoElement extends PolymerElement {
         value: false,
       },
 
+      /**
+       * If true displays the dark mode doodle if possible.
+       * @type {boolean}
+       */
+      dark: {
+        observer: 'onDarkChange_',
+        type: Boolean,
+      },
+
+      /**
+       * The NTP's background color. If null or undefined the NTP does not have
+       * a single background color, e.g. when a background image is set.
+       * @type {skia.mojom.SkColor}
+       */
+      backgroundColor: Object,
+
       /** @private */
       loaded_: Boolean,
 
       /** @private {newTabPage.mojom.Doodle} */
-      doodle_: Object,
+      doodle_: {
+        observer: 'onDoodleChange_',
+        type: Object,
+      },
 
       /** @private */
       canShowDoodle_: {
@@ -67,6 +91,13 @@ class LogoElement extends PolymerElement {
       showDoodle_: {
         computed: 'computeShowDoodle_(doodleAllowed, loaded_, canShowDoodle_)',
         type: Boolean,
+      },
+
+      /** @private */
+      doodleBoxed_: {
+        reflectToAttribute: true,
+        type: Boolean,
+        computed: 'computeDoodleBoxed_(backgroundColor, doodle_)',
       },
 
       /** @private */
@@ -143,13 +174,16 @@ class LogoElement extends PolymerElement {
   connectedCallback() {
     super.connectedCallback();
     this.eventTracker_.add(window, 'message', ({data}) => {
-      if (data['cmd'] !== 'resizeDoodle') {
-        return;
+      if (data['cmd'] === 'resizeDoodle') {
+        this.duration_ = assert(data.duration);
+        this.height_ = assert(data.height);
+        this.width_ = assert(data.width);
+      } else if (data['cmd'] === 'sendMode') {
+        this.sendMode_();
       }
-      this.duration_ = assert(data.duration);
-      this.height_ = assert(data.height);
-      this.width_ = assert(data.width);
     });
+    // Make sure the doodle gets the mode in case it has already requested it.
+    this.sendMode_();
   }
 
   /** @override */
@@ -162,6 +196,25 @@ class LogoElement extends PolymerElement {
   ready() {
     super.ready();
     performance.measure('logo-creation', 'logo-creation-start');
+  }
+
+  /** @private */
+  onDoodleChange_() {
+    const imageDoodle = this.doodle_ && this.doodle_.content.imageDoodle;
+    this.updateStyles({
+      '--ntp-logo-share-button-background-color':
+          imageDoodle && skColorToRgba(imageDoodle.shareButton.backgroundColor),
+      '--ntp-logo-share-button-height':
+          imageDoodle && `${SHARE_BUTTON_SIZE_PX / imageDoodle.height * 100}%`,
+      '--ntp-logo-share-button-width':
+          imageDoodle && `${SHARE_BUTTON_SIZE_PX / imageDoodle.width * 100}%`,
+      '--ntp-logo-share-button-x': imageDoodle &&
+          `${imageDoodle.shareButton.x / imageDoodle.width * 100}%`,
+      '--ntp-logo-share-button-y': imageDoodle &&
+          `${imageDoodle.shareButton.y / imageDoodle.height * 100}%`,
+      '--ntp-logo-box-color':
+          imageDoodle && skColorToRgba(imageDoodle.backgroundColor),
+    });
   }
 
   /**
@@ -189,6 +242,17 @@ class LogoElement extends PolymerElement {
    */
   computeShowDoodle_() {
     return !!this.doodleAllowed && this.canShowDoodle_;
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeDoodleBoxed_() {
+    return !this.backgroundColor ||
+        !!this.doodle_ && !!this.doodle_.content.imageDoodle &&
+        this.doodle_.content.imageDoodle.backgroundColor.value !==
+            this.backgroundColor.value;
   }
 
   /**
@@ -283,6 +347,33 @@ class LogoElement extends PolymerElement {
   }
 
   /**
+   * Sends a postMessage to the interactive doodle whether the  current theme is
+   * dark or light. Won't do anything if we don't have an interactive doodle or
+   * we haven't been told yet whether the current theme is dark or light.
+   * @private
+   */
+  sendMode_() {
+    const iframe = $$(this, '#iframe');
+    if (!loadTimeData.getBoolean('themeModeDoodlesEnabled') ||
+        this.dark === undefined || !iframe) {
+      return;
+    }
+    BrowserProxy.getInstance().postMessage(
+        iframe,
+        {
+          cmd: 'changeMode',
+          dark: this.dark,
+        },
+        new URL(iframe.src).origin,
+    );
+  }
+
+  /** @private */
+  onDarkChange_() {
+    this.sendMode_();
+  }
+
+  /**
    * @return {string}
    * @private
    */
@@ -309,18 +400,15 @@ class LogoElement extends PolymerElement {
    * @private
    */
   computeIframeUrl_() {
-    return this.doodle_ && this.doodle_.content.interactiveDoodle &&
-        this.doodle_.content.interactiveDoodle.url.url ||
-        '';
-  }
-
-  /**
-   * @param {skia.mojom.SkColor} skColor
-   * @return {string}
-   * @private
-   */
-  rgbaOrUnset_(skColor) {
-    return skColor ? skColorToRgba(skColor) : 'unset';
+    if (this.doodle_ && this.doodle_.content.interactiveDoodle) {
+      const url = new URL(this.doodle_.content.interactiveDoodle.url.url);
+      if (loadTimeData.getBoolean('themeModeDoodlesEnabled')) {
+        url.searchParams.append('theme_messages', '0');
+      }
+      return url.href;
+    } else {
+      return '';
+    }
   }
 
   /**

@@ -57,6 +57,7 @@
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/user_activity/user_activity_detector.h"
@@ -941,6 +942,15 @@ UserSelectionScreen::UpdateAndReturnUserListForAsh() {
     ash::LoginUserInfo user_info;
     user_info.basic_user_info.type = user->GetType();
     user_info.basic_user_info.account_id = user->GetAccountId();
+
+    if (!user_manager::known_user::GetBooleanPref(
+            account_id, ::prefs::kUse24HourClock,
+            &user_info.use_24hour_clock)) {
+      // Fallback to system default in case pref was not found.
+      user_info.use_24hour_clock =
+          base::GetHourClockType() == base::k24HourClock;
+    }
+
     user_info.basic_user_info.display_name =
         base::UTF16ToUTF8(user->GetDisplayName());
     user_info.basic_user_info.display_email = user->display_email();

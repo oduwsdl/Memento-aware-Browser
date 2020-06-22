@@ -136,7 +136,7 @@ void RecordConnectionCloseErrorCode(const quic::QuicConnectionCloseFrame& frame,
                                     quic::ConnectionCloseSource source,
                                     const std::string& hostname,
                                     bool handshake_confirmed) {
-  bool is_google_host = HasGoogleHost(GURL("https://" + hostname));
+  bool is_google_host = IsGoogleHost(hostname);
   std::string histogram = "Net.QuicSession.ConnectionCloseErrorCode";
 
   if (source == quic::ConnectionCloseSource::FROM_SELF) {
@@ -1382,7 +1382,7 @@ bool QuicChromiumClientSession::ShouldCreateIncomingStream(
   if (quic::QuicUtils::IsClientInitiatedStreamId(
           connection()->transport_version(), id) ||
       (connection()->version().HasIetfQuicFrames() &&
-       quic::QuicUtils::IsBidirectionalStreamId(id))) {
+       quic::QuicUtils::IsBidirectionalStreamId(id, connection()->version()))) {
     LOG(WARNING) << "Received invalid push stream id " << id;
     connection()->CloseConnection(
         quic::QUIC_INVALID_STREAM_ID,

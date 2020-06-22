@@ -232,6 +232,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prerender/common/prerender_final_status.h"
+#include "components/prerender/common/prerender_types.mojom.h"
 #include "components/previews/content/previews_decider.h"
 #include "components/previews/content/previews_decider_impl.h"
 #include "components/previews/content/previews_ui_service.h"
@@ -459,6 +460,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/passwords/google_password_manager_navigation_throttle.h"
+#include "chrome/browser/ui/passwords/well_known_change_password_navigation_throttle.h"
 #include "chrome/browser/ui/search/new_tab_page_navigation_throttle.h"
 #include "chrome/browser/webauthn/authenticator_request_scheduler.h"
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
@@ -4046,6 +4048,10 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
   MaybeAddThrottle(
       GooglePasswordManagerNavigationThrottle::MaybeCreateThrottleFor(handle),
       &throttles);
+
+  MaybeAddThrottle(
+      WellKnownChangePasswordNavigationThrottle::MaybeCreateThrottleFor(handle),
+      &throttles);
 #endif
 
   throttles.push_back(
@@ -4362,7 +4368,8 @@ ChromeContentBrowserClient::CreateURLLoaderThrottles(
 #endif
 
   if (chrome_navigation_ui_data &&
-      chrome_navigation_ui_data->prerender_mode() != prerender::NO_PRERENDER) {
+      chrome_navigation_ui_data->prerender_mode() !=
+          prerender::mojom::PrerenderMode::kNoPrerender) {
     result.push_back(std::make_unique<prerender::PrerenderURLLoaderThrottle>(
         chrome_navigation_ui_data->prerender_mode(),
         chrome_navigation_ui_data->prerender_histogram_prefix(),
@@ -4694,7 +4701,7 @@ bool ChromeContentBrowserClient::WillCreateURLLoaderFactory(
   // |frame| is null when |type| is service worker.
   if (frame && isolated_prerender_service) {
     use_proxy |= isolated_prerender_service->MaybeProxyURLLoaderFactory(
-        render_process_id, frame->GetFrameTreeNodeId(), type, factory_receiver);
+        frame, render_process_id, type, factory_receiver);
   }
 
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)

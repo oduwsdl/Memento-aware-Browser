@@ -19,6 +19,22 @@ struct DocumentTiming {
   mojo_base.mojom.TimeDelta? load_event_start;
 };
 
+struct LargestContentfulPaintTiming {
+  // Time when the page's largest image is painted. Removed images are excluded.
+  mojo_base.mojom.TimeDelta? largest_image_paint;
+
+  // Size of the largest image of the largest image paint, by
+  // Size = Height * Width. Removed images are excluded.
+  uint64 largest_image_paint_size;
+
+  // Time when the page's largest text is painted. Removed text is excluded.
+  mojo_base.mojom.TimeDelta? largest_text_paint;
+
+  // Size of the largest text of the largest text paint, by
+  // Size = Height * Width. Removed text is excluded.
+  uint64 largest_text_paint_size;
+};
+
 // TimeDeltas below relative to navigation start.
 struct PaintTiming {
   // Time when the first paint is performed.
@@ -33,19 +49,11 @@ struct PaintTiming {
   // (Experimental) Time when the page's primary content is painted.
   mojo_base.mojom.TimeDelta? first_meaningful_paint;
 
-  // (Experimental) Time when the page's largest image is painted.
-  mojo_base.mojom.TimeDelta? largest_image_paint;
+  // Largest contentful paint, which excludes removed content.
+  LargestContentfulPaintTiming largest_contentful_paint;
 
-  // (Experimental) Size of the largest image of the largest image paint, by
-  // Size = Height * Width.
-  uint64 largest_image_paint_size;
-
-  // (Experimental) Time when the page's largest text is painted.
-  mojo_base.mojom.TimeDelta? largest_text_paint;
-
-  // (Experimental) Size of the largest text of the largest text paint, by
-  // Size = Height * Width.
-  uint64 largest_text_paint_size;
+  // (Experimental) largest contentful paint including removed content.
+  LargestContentfulPaintTiming experimental_largest_contentful_paint;
 
   // (Experimental) Time when first input or scroll is received, causing the
   // largest contentful paint algorithm to stop.
@@ -138,13 +146,9 @@ struct PageLoadTiming {
   PaintTiming paint_timing;
   ParseTiming parse_timing;
 
-  // Time relative to the back-forward cache. This records only the last timing
-  // of back-foward cache usages.
-  //
-  // TODO(hajimehoshi): Now only the last one is recorded, but we might miss
-  // the information when, e.g., another back-forward navigation happens before
-  // recording the first contentful paint. We should have this as an array.
-  BackForwardCacheTiming back_forward_cache_timing;
+  // List of back-forward cache timings, one for each time a page was restored
+  // from the cache.
+  array<BackForwardCacheTiming> back_forward_cache_timings;
 
   // Time between user input and navigation start. This is set for navigations
   // where the input start timing is known; currently when the navigation is
@@ -352,11 +356,10 @@ interface PageLoadMetrics {
   SubmitThroughputData(ThroughputUkmData throughput_data);
 };
 
-// TimeDeltas below relative to the navigation restoring page from the back-
-// forward cache.
+// TimeDelta below relative to the navigation start of the navigation restoring
+// page from the back- forward cache.
 struct BackForwardCacheTiming {
-  // Times when the first paint is performed after the time when the page
+  // Time when the first paint is performed after the time when the page
   // is restored from the back-forward cache.
-  array<mojo_base.mojom.TimeDelta>
-      first_paint_after_back_forward_cache_restore;
+  mojo_base.mojom.TimeDelta first_paint_after_back_forward_cache_restore;
 };

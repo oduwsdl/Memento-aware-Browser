@@ -2288,9 +2288,6 @@
   <message name="IDS_SETTINGS_NO_HID_DEVICES_FOUND" desc="Explanation for not showing HID devices in site settings.">
     No HID devices found
   </message>
-  <message name="IDS_SETTINGS_ADD_SITE_EXCEPTION_PLACEHOLDER" desc="Placeholder text shown before the user starts typing a new content settings exception for a site." >
-    [*.]example.com
-  </message>
   <message name="IDS_SETTINGS_ADD_SITE_TITLE" desc="Title for the Add Site dialog">
     Add a site
   </message>

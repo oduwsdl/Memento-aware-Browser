@@ -68,16 +68,25 @@ class LenientMockV8PerFrameMemoryReporter
 using MockV8PerFrameMemoryReporter =
     testing::StrictMock<LenientMockV8PerFrameMemoryReporter>;
 
-void AddPerFrameIsolateMemoryUsage(base::UnguessableToken frame_id,
+void AddPerFrameIsolateMemoryUsage(FrameToken frame_token,
                                    int64_t world_id,
                                    uint64_t bytes_used,
                                    mojom::PerProcessV8MemoryUsageData* data) {
-  if (!base::Contains(data->associated_memory, frame_id)) {
-    data->associated_memory[frame_id] = mojom::PerFrameV8MemoryUsageData::New();
+  mojom::PerFrameV8MemoryUsageData* per_frame_data = nullptr;
+  for (auto& datum : data->associated_memory) {
+    if (datum->frame_token == frame_token.value()) {
+      per_frame_data = datum.get();
+      break;
+    }
   }
 
-  mojom::PerFrameV8MemoryUsageData* per_frame_data =
-      data->associated_memory[frame_id].get();
+  if (!per_frame_data) {
+    mojom::PerFrameV8MemoryUsageDataPtr datum =
+        mojom::PerFrameV8MemoryUsageData::New();
+    datum->frame_token = frame_token.value();
+    per_frame_data = datum.get();
+    data->associated_memory.push_back(std::move(datum));
+  }
   ASSERT_FALSE(base::Contains(per_frame_data->associated_bytes, world_id));
 
   auto isolated_world_usage = mojom::V8IsolatedWorldMemoryUsage::New();
@@ -393,8 +402,8 @@ TEST_F(V8PerFrameMemoryDecoratorTest, PerFrameDataIsDistributed) {
   {
     auto data = mojom::PerProcessV8MemoryUsageData::New();
     // Add data for an unknown frame.
-    AddPerFrameIsolateMemoryUsage(base::UnguessableToken::Create(), 0, 1024u,
-                                  data.get());
+    AddPerFrameIsolateMemoryUsage(FrameToken(base::UnguessableToken::Create()),
+                                  0, 1024u, data.get());
 
     ExpectBindAndRespondToQuery(&reporter, std::move(data));
   }
@@ -415,13 +424,15 @@ TEST_F(V8PerFrameMemoryDecoratorTest, PerFrameDataIsDistributed) {
   // Create a couple of frames with specified IDs.
   auto page = CreateNode<PageNodeImpl>();
 
-  base::UnguessableToken frame1_id = base::UnguessableToken::Create();
-  auto frame1 = CreateNode<FrameNodeImpl>(process.get(), page.get(), nullptr, 1,
-                                          2, frame1_id);
+  FrameToken frame1_id = FrameToken(base::UnguessableToken::Create());
+  auto frame1 =
+      CreateNode<FrameNodeImpl>(process.get(), page.get(), nullptr, 1, 2,
+                                base::UnguessableToken::Create(), frame1_id);
 
-  base::UnguessableToken frame2_id = base::UnguessableToken::Create();
-  auto frame2 = CreateNode<FrameNodeImpl>(process.get(), page.get(), nullptr, 3,
-                                          4, frame2_id);
+  FrameToken frame2_id = FrameToken(base::UnguessableToken::Create());
+  auto frame2 =
+      CreateNode<FrameNodeImpl>(process.get(), page.get(), nullptr, 3, 4,
+                                base::UnguessableToken::Create(), frame2_id);
   {
     auto data = mojom::PerProcessV8MemoryUsageData::New();
     AddPerFrameIsolateMemoryUsage(frame1_id, 0, 1001u, data.get());
@@ -442,8 +453,8 @@ TEST_F(V8PerFrameMemoryDecoratorTest, PerFrameDataIsDistributed) {
   {
     auto data = mojom::PerProcessV8MemoryUsageData::New();
     AddPerFrameIsolateMemoryUsage(frame1_id, 0, 1003u, data.get());
-    AddPerFrameIsolateMemoryUsage(base::UnguessableToken::Create(), 0, 2233u,
-                                  data.get());
+    AddPerFrameIsolateMemoryUsage(FrameToken(base::UnguessableToken::Create()),
+                                  0, 2233u, data.get());
     ExpectQueryAndReply(&reporter, std::move(data));
   }
   task_env().FastForwardBy(kMinTimeBetweenRequests);
