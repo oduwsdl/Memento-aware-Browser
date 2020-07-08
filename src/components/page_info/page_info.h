@@ -105,7 +105,7 @@ class PageInfo : public content::WebContentsObserver {
     SAFE_BROWSING_STATUS_SIGNED_IN_SYNC_PASSWORD_REUSE,
     SAFE_BROWSING_STATUS_SIGNED_IN_NON_SYNC_PASSWORD_REUSE,
     SAFE_BROWSING_STATUS_ENTERPRISE_PASSWORD_REUSE,
-    SAFE_BROWSING_STATUS_BILLING,
+    SAFE_BROWSING_STATUS_BILLING
   };
 
   // Events for UMA. Do not reorder or change! Exposed in header so enum is
@@ -351,6 +351,8 @@ class PageInfo : public content::WebContentsObserver {
   security_state::SecurityLevel security_level_;
 
   security_state::VisibleSecurityState visible_security_state_for_metrics_;
+
+  bool memento_status_;
 
   // Set when the user ignored the password reuse modal warning dialog. When
   // |show_change_password_buttons_| is true, the page identity area of the page

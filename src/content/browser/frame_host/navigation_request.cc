@@ -3929,6 +3929,7 @@ void NavigationRequest::DidCommitNavigation(
     bool did_replace_entry,
     const GURL& previous_url,
     NavigationType navigation_type) {
+
   common_params_->url = params.url;
   did_replace_entry_ = did_replace_entry;
   should_update_history_ = params.should_update_history;
@@ -4268,6 +4269,11 @@ bool NavigationRequest::IsErrorPage() {
 net::HttpResponseInfo::ConnectionInfo NavigationRequest::GetConnectionInfo() {
   return response() ? response()->connection_info
                     : net::HttpResponseInfo::ConnectionInfo();
+}
+
+bool NavigationRequest::GetMementoInfo() {
+  return response() ? response()->memento_info
+                    : 0;
 }
 
 bool NavigationRequest::IsInMainFrame() {

@@ -384,6 +384,7 @@ NavigationEntryImpl::NavigationEntryImpl(
       restore_type_(RestoreType::NONE),
       is_overriding_user_agent_(false),
       http_status_code_(0),
+      memento_info_(false),
       is_renderer_initiated_(is_renderer_initiated),
       should_replace_entry_(false),
       should_clear_history_list_(false),
@@ -653,6 +654,14 @@ void NavigationEntryImpl::SetHttpStatusCode(int http_status_code) {
 
 int NavigationEntryImpl::GetHttpStatusCode() {
   return http_status_code_;
+}
+
+void NavigationEntryImpl::SetMementoInfo(bool memento_info) {
+  memento_info_ = memento_info;
+}
+
+bool NavigationEntryImpl::GetMementoInfo() {
+  return memento_info_;
 }
 
 void NavigationEntryImpl::SetRedirectChain(

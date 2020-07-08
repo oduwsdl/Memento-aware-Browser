@@ -975,7 +975,6 @@ void WebURLLoaderImpl::PopulateURLResponse(
 
   if (head.raw_request_response_info.get()) {
     WebHTTPLoadInfo load_info;
-
     load_info.SetHTTPStatusCode(
         head.raw_request_response_info->http_status_code);
     load_info.SetHTTPStatusText(WebString::FromLatin1(
@@ -1012,6 +1011,7 @@ void WebURLLoaderImpl::PopulateURLResponse(
   response->SetHttpVersion(version);
   response->SetHttpStatusCode(headers->response_code());
   response->SetHttpStatusText(WebString::FromLatin1(headers->GetStatusText()));
+  response->SetMementoInfo(head.memento_info);
 
   // Build up the header map.
   size_t iter = 0;

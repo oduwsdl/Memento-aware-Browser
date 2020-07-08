@@ -422,8 +422,10 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
 
   content::NavigationEntry* entry =
       web_contents->GetController().GetVisibleEntry();
+
   if (!entry)
     return state;
+
   // Set fields that are not dependent on the connection info.
   state->is_error_page = entry->GetPageType() == content::PAGE_TYPE_ERROR;
   state->is_view_source =
@@ -441,6 +443,7 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->certificate = ssl.certificate;
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
+  state->memento_status = entry->GetMementoInfo();
   state->key_exchange_group = ssl.key_exchange_group;
   state->peer_signature_algorithm = ssl.peer_signature_algorithm;
   state->pkp_bypassed = ssl.pkp_bypassed;

@@ -94,6 +94,13 @@ void PopulateResourceResponse(net::URLRequest* request,
   response->content_length = request->GetExpectedContentSize();
   request->GetMimeType(&response->mime_type);
   net::HttpResponseInfo response_info = request->response_info();
+  response->memento_info = response_info.memento_info;
+  if(response->memento_info) {
+    DVLOG(0) << "Memento-Datetime header is present.";
+  }
+  else {
+    DVLOG(0) << "_______________________________________________________________________________________";
+  }
   response->was_fetched_via_spdy = response_info.was_fetched_via_spdy;
   response->was_alpn_negotiated = response_info.was_alpn_negotiated;
   response->alpn_negotiated_protocol = response_info.alpn_negotiated_protocol;

@@ -37,6 +37,9 @@
   <message name="IDS_PAGE_INFO_READER_MODE_PAGE" desc="Message to display in the page info bubble when the page you are viewing is the reader mode version of an article which was retrieved over an insecure connection.">
     Chrome simplified this page to make it easier to read. Chrome retrieved the original page over an insecure connection.
   </message>
+  <message name="IDS_PAGE_INFO_MEMENTO" desc="Message to display when the page you are viewing contains the Memento Datetime header.">
+    The page displayed is a Memento from an archive.
+  </message>
 
   <!-- Safety Tip summary strings -->
   <message name="IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_TITLE" desc="Message to display in the page info bubble when the page you are on triggered a safety tip.">

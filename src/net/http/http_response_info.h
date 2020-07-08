@@ -85,6 +85,10 @@ class NET_EXPORT HttpResponseInfo {
     CONNECTION_INFO_COARSE_OTHER,
   };
 
+  enum MementoInfo {
+    RESPONSE_IS_MEMENTO
+  };
+
   // Used for categorizing transactions for reporting in histograms.
   // CacheEntryStatus covers relatively common use cases being measured and
   // considered for optimization. Many use cases that are more complex or
@@ -208,6 +212,9 @@ class NET_EXPORT HttpResponseInfo {
 
   // The type of connection used for this response.
   ConnectionInfo connection_info;
+
+  // Whether or not the current page is a Memento
+  bool memento_info = false;
 
   // The time at which the request was made that resulted in this response.
   // For cached responses, this is the last time the cache entry was validated.

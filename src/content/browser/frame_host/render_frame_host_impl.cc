@@ -2390,6 +2390,7 @@ void RenderFrameHostImpl::OnCreateChildFrame(
 void RenderFrameHostImpl::DidNavigate(
     const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
     bool is_same_document_navigation) {
+
   // Keep track of the last committed URL and origin in the RenderFrameHost
   // itself.  These allow GetLastCommittedURL and GetLastCommittedOrigin to
   // stay correct even if the render_frame_host later becomes pending deletion.
@@ -2839,6 +2840,7 @@ void RenderFrameHostImpl::DidCommitPerNavigationMojoInterfaceNavigation(
     NavigationRequest* committing_navigation_request,
     std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params,
     mojom::DidCommitProvisionalLoadInterfaceParamsPtr interface_params) {
+
   DCHECK(committing_navigation_request);
   committing_navigation_request->IgnoreCommitInterfaceDisconnection();
   if (!MaybeInterceptCommitCallback(committing_navigation_request, params.get(),
@@ -2854,6 +2856,7 @@ void RenderFrameHostImpl::DidCommitPerNavigationMojoInterfaceNavigation(
 
   std::unique_ptr<NavigationRequest> owned_request = std::move(request->second);
   navigation_requests_.erase(committing_navigation_request);
+  params->memento_status = committing_navigation_request->GetMementoInfo();
   DidCommitNavigation(std::move(owned_request), std::move(params),
                       std::move(interface_params));
 }
@@ -8023,6 +8026,7 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
     std::unique_ptr<NavigationRequest> navigation_request,
     std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params,
     bool is_same_document_navigation) {
+
   // Sanity-check the page transition for frame type.
   DCHECK_EQ(ui::PageTransitionIsMainFrame(params->transition), !GetParent());
 
@@ -8115,6 +8119,7 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
 
   last_http_status_code_ = params->http_status_code;
   last_http_method_ = params->method;
+  last_memento_status_ = params->memento_status;
   UpdateSiteURL(params->url, params->url_is_unreachable);
   if (!is_same_document_navigation)
     UpdateRenderProcessHostFramePriorities();
@@ -8397,6 +8402,7 @@ void RenderFrameHostImpl::DidCommitNavigation(
     std::unique_ptr<NavigationRequest> committing_navigation_request,
     std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params,
     mojom::DidCommitProvisionalLoadInterfaceParamsPtr interface_params) {
+
   // BackForwardCacheImpl::CanStoreRenderFrameHost prevents placing the pages
   // with in-flight navigation requests in the back-forward cache and it's not
   // possible to start/commit a new one after the RenderFrameHost is in the

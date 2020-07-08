@@ -48,6 +48,9 @@ struct CONTENT_EXPORT FrameNavigateParams : public IPC::NoParams {
   // URL of the page being loaded.
   GURL url;
 
+  // whether the page is a memento
+  bool memento_status;
+
   // The base URL for the page's document when the frame was committed. Empty if
   // similar to 'url' above. Note that any base element in the page has not been
   // parsed yet and is therefore not reflected.

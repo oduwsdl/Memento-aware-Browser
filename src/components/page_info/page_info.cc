@@ -349,6 +349,7 @@ PageInfo::PageInfo(std::unique_ptr<PageInfoDelegate> delegate,
   DCHECK(delegate_);
   security_level_ = delegate_->GetSecurityLevel();
   visible_security_state_for_metrics_ = delegate_->GetVisibleSecurityState();
+  memento_status_ = visible_security_state_for_metrics_.memento_status;
 }
 
 PageInfo::~PageInfo() {
@@ -901,6 +902,7 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
       delegate->HasAllowException(url.host(), web_contents()) &&
       visible_security_state.malicious_content_status ==
           security_state::MALICIOUS_CONTENT_STATUS_NONE;
+
 }
 
 void PageInfo::PresentSitePermissions() {
@@ -1018,6 +1020,7 @@ void PageInfo::PresentSiteIdentity() {
   info.connection_status_description = UTF16ToUTF8(site_connection_details_);
   info.identity_status = site_identity_status_;
   info.safe_browsing_status = safe_browsing_status_;
+  info.memento_status = memento_status_;
   if (base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
     info.safety_tip_info = safety_tip_info_;
   }

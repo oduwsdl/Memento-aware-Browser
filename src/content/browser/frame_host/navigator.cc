@@ -198,6 +198,7 @@ void Navigator::DidNavigate(
     std::unique_ptr<NavigationRequest> navigation_request,
     bool was_within_same_document) {
   DCHECK(navigation_request);
+
   FrameTreeNode* frame_tree_node = render_frame_host->frame_tree_node();
   FrameTree* frame_tree = frame_tree_node->frame_tree();
 

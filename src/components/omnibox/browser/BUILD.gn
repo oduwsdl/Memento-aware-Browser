@@ -52,6 +52,7 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "https_valid.icon",
     "https_valid_in_chip.icon",
     "keyword_search.icon",
+    "memento.icon",
     "not_secure_warning.icon",
     "offline_pin.icon",
     "page.icon",

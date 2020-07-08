@@ -85,6 +85,9 @@ struct URLResponseHead {
   // Information about the type of connection used to fetch this response.
   ConnectionInfo connection_info;
 
+  // Whether or not the displayed page is a Memento
+  bool memento_info;
+
   // ALPN protocol negotiated with the server.
   string alpn_negotiated_protocol;
 

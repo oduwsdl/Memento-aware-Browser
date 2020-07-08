@@ -124,6 +124,8 @@ class PageInfoUI {
     // Extended Validation certificates, or the URL's hostname for all other
     // sites.
     std::string site_identity;
+    // Whether or not the page is a memento
+    bool memento_status;
     // Status of the site's identity.
     PageInfo::SiteIdentityStatus identity_status;
     // Site's Safe Browsing status.

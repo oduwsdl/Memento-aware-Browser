@@ -140,6 +140,8 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   bool GetCanLoadLocalResources() override;
   void SetHttpStatusCode(int http_status_code) override;
   int GetHttpStatusCode() override;
+  void SetMementoInfo(bool memento_info) override;
+  bool GetMementoInfo() override;
   void SetRedirectChain(const std::vector<GURL>& redirects) override;
   const std::vector<GURL>& GetRedirectChain() override;
   const base::Optional<ReplacedNavigationEntryData>& GetReplacedEntryData()
@@ -438,6 +440,7 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   bool is_overriding_user_agent_;
   base::Time timestamp_;
   int http_status_code_;
+  bool memento_info_ = false;
 
   // This member is not persisted with session restore because it is transient.
   // If the post request succeeds, this field is cleared since the same

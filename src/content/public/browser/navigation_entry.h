@@ -215,6 +215,11 @@ class NavigationEntry : public base::SupportsUserData {
   virtual void SetHttpStatusCode(int http_status_code) = 0;
   virtual int GetHttpStatusCode() = 0;
 
+  // Flag for whether or not the page is a memento. If it is
+  // 0, then the page is nat a memento.
+  virtual void SetMementoInfo(bool memento_info) = 0;
+  virtual bool GetMementoInfo() = 0;
+
   // The redirect chain traversed during this navigation, from the initial
   // redirecting URL to the final non-redirecting current URL.
   virtual void SetRedirectChain(const std::vector<GURL>& redirects) = 0;

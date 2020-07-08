@@ -2449,6 +2449,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Track this frame's last committed URL.
   GURL last_committed_url_;
 
+  // Track this frame's last memento status.
+  bool last_memento_status_;
+
   // Track the frame priority of the last committed document, which is nullopt
   // prior to the first commit.
   base::Optional<RenderProcessHostImpl::FramePriority>

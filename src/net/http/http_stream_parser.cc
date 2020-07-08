@@ -54,6 +54,7 @@ std::string GetResponseHeaderLines(const HttpResponseHeaders& headers) {
 // values.
 bool HeadersContainMultipleCopiesOfField(const HttpResponseHeaders& headers,
                                          const std::string& field_name) {
+
   size_t it = 0;
   std::string field_value;
   if (!headers.EnumerateHeader(&it, field_name, &field_value))
@@ -66,6 +67,17 @@ bool HeadersContainMultipleCopiesOfField(const HttpResponseHeaders& headers,
       return true;
   }
   return false;
+}
+
+// Return true if |headers| contains the Memento-Datetime field
+bool HeadersContainMementoDatetime(const HttpResponseHeaders& headers,
+                                         const std::string& field_name) {
+  size_t it = 0;
+  std::string field_value;
+  if (headers.EnumerateHeader(&it, field_name, &field_value))
+    return true;
+  else
+    return false;
 }
 
 base::Value NetLogSendRequestBodyParams(uint64_t length,
@@ -459,7 +471,7 @@ int HttpStreamParser::DoLoop(int result) {
     }
   } while (result != ERR_IO_PENDING &&
            (io_state_ != STATE_DONE && io_state_ != STATE_NONE));
-
+  
   return result;
 }
 
@@ -1052,6 +1064,16 @@ int HttpStreamParser::ParseResponseHeaders(int end_offset) {
            << response_->headers->GetContentLength() << "\n\""
            << " headers = \"" << GetResponseHeaderLines(*response_->headers)
            << "\"";
+
+  // Check for Memento Datetime header
+  if (HeadersContainMementoDatetime(*headers, "Memento-Datetime")) {
+    response_->memento_info = true;
+  }
+  else {
+    response_->memento_info = false;
+    //DVLOG(0) << "NOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO";
+  }
+
   return OK;
 }
 

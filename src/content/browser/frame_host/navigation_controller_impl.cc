@@ -1163,6 +1163,7 @@ bool NavigationControllerImpl::RendererDidNavigate(
   NavigationEntryImpl* active_entry = GetLastCommittedEntry();
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
+  active_entry->SetMementoInfo(params.memento_status);
   // TODO(altimin, crbug.com/933147): Remove this logic after we are done with
   // implementing back-forward cache.
   if (!active_entry->back_forward_cache_metrics()) {
@@ -3437,7 +3438,9 @@ NavigationControllerImpl::CreateNavigationRequestFromEntry(
 }
 
 void NavigationControllerImpl::NotifyNavigationEntryCommitted(
-    LoadCommittedDetails* details) {
+    LoadCommittedDetails
+    * details) {
+
   details->entry = GetLastCommittedEntry();
 
   // We need to notify the ssl_manager_ before the web_contents_ so the

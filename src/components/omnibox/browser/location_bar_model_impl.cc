@@ -191,6 +191,13 @@ const gfx::VectorIcon& LocationBarModelImpl::GetVectorIcon() const {
     return omnibox::kOfflinePinIcon;
 
   security_state::SecurityLevel security_level = GetSecurityLevel();
+  std::unique_ptr<security_state::VisibleSecurityState>
+          visible_security_state = delegate_->GetVisibleSecurityState();
+
+  DVLOG(0) << "<<<<<<<<<< " << visible_security_state->memento_status << " >>>>>>>>>>";
+  if (visible_security_state->memento_status)
+    return omnibox::kMementoIcon;
+
   switch (security_level) {
     case security_state::NONE:
       return omnibox::kHttpIcon;

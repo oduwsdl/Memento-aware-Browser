@@ -173,6 +173,8 @@ gfx::ImageSkia OmniboxView::GetIcon(int dip_size,
   return gfx::ImageSkia();
 #else
 
+  DVLOG(0) << "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&";
+
   // For tests, model_ will be null.
   if (!model_) {
     AutocompleteMatch fake_match;
