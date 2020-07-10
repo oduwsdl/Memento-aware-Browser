@@ -93,7 +93,8 @@ class OmniboxView {
   // available, |on_icon_fetched| may be called later asynchronously.
   gfx::ImageSkia GetIcon(int dip_size,
                          SkColor color,
-                         IconFetchedCallback on_icon_fetched) const;
+                         IconFetchedCallback on_icon_fetched,
+                         bool is_memento) const;
 
   // The user text is the text the user has manually keyed in.  When present,
   // this is shown in preference to the permanent text; hitting escape will

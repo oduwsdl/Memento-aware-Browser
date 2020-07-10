@@ -352,7 +352,7 @@ void CustomTabBarView::UpdateContents() {
   }
 
   title_origin_view_->Update(title, location);
-  location_icon_view_->Update(/*suppress animations = */ false);
+  location_icon_view_->Update(/*suppress animations = */ false, false);
 
   // Hide location icon if we're already hiding the origin.
   location_icon_view_->SetVisible(!location.empty());
@@ -416,6 +416,14 @@ gfx::ImageSkia CustomTabBarView::GetLocationIcon(
     LocationIconView::Delegate::IconFetchedCallback on_icon_fetched) const {
   return gfx::CreateVectorIcon(
       delegate_->GetLocationBarModel()->GetVectorIcon(),
+      GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
+      GetSecurityChipColor(GetLocationBarModel()->GetSecurityLevel()));
+}
+
+gfx::ImageSkia CustomTabBarView::GetMementoIcon(
+    LocationIconView::Delegate::IconFetchedCallback on_icon_fetched) const {
+  return gfx::CreateVectorIcon(
+      delegate_->GetLocationBarModel()->GetMementoIcon(),
       GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
       GetSecurityChipColor(GetLocationBarModel()->GetSecurityLevel()));
 }

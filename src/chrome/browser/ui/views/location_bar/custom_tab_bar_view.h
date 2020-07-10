@@ -76,6 +76,8 @@ class CustomTabBarView : public views::AccessiblePaneView,
   const LocationBarModel* GetLocationBarModel() const override;
   gfx::ImageSkia GetLocationIcon(LocationIconView::Delegate::IconFetchedCallback
                                      on_icon_fetched) const override;
+  gfx::ImageSkia GetMementoIcon(LocationIconView::Delegate::IconFetchedCallback
+                                     on_icon_fetched) const override;
 
   // ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;

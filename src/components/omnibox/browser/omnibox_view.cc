@@ -166,7 +166,8 @@ bool OmniboxView::IsEditingOrEmpty() const {
 // want to consider reusing the same code for both the popup and omnibox icons.
 gfx::ImageSkia OmniboxView::GetIcon(int dip_size,
                                     SkColor color,
-                                    IconFetchedCallback on_icon_fetched) const {
+                                    IconFetchedCallback on_icon_fetched,
+                                    bool is_memento) const {
 #if defined(OS_ANDROID) || defined(OS_IOS)
   // This is used on desktop only.
   NOTREACHED();
@@ -181,6 +182,12 @@ gfx::ImageSkia OmniboxView::GetIcon(int dip_size,
     fake_match.type = AutocompleteMatchType::URL_WHAT_YOU_TYPED;
     const gfx::VectorIcon& vector_icon = fake_match.GetVectorIcon(false);
     return gfx::CreateVectorIcon(vector_icon, dip_size, color);
+  }
+
+  if (is_memento) {
+    LocationBarModel* location_bar_model = controller_->GetLocationBarModel();
+    return gfx::CreateVectorIcon(location_bar_model->GetMementoIcon(), dip_size,
+                                 color);
   }
 
   if (model_->ShouldShowCurrentPageIcon()) {

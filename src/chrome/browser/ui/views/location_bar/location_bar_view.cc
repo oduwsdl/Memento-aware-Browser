@@ -185,6 +185,11 @@ void LocationBarView::Init() {
   location_icon_view->set_drag_controller(this);
   location_icon_view_ = AddChildView(std::move(location_icon_view));
 
+  auto location_icon_view2 =
+      std::make_unique<LocationIconView>(font_list, this, this);
+  location_icon_view2->set_drag_controller(this);
+  location_icon_view2_ = AddChildView(std::move(location_icon_view2));
+
   // Initialize the Omnibox view.
   auto omnibox_view = std::make_unique<OmniboxViewViews>(
       this, std::make_unique<ChromeOmniboxClient>(this, profile_),
@@ -478,14 +483,14 @@ void LocationBarView::Layout() {
   //
   // TODO(jdonnelly): The better solution may be to remove the location icon
   // text when zero suggest triggers.
-  const bool should_indent = GetOmniboxPopupView()->IsOpen() &&
+  /*const bool should_indent = GetOmniboxPopupView()->IsOpen() &&
                              !location_icon_view_->ShouldShowLabel() &&
-                             !ShouldShowKeywordBubble();
+                             !ShouldShowKeywordBubble();*/
 
   // We have an odd indent value because this is what matches the odd text
   // indent value in OmniboxMatchCellView.
-  constexpr int kTextJogIndentDp = 11;
-  int leading_edit_item_padding = should_indent ? kTextJogIndentDp : 0;
+  //constexpr int kTextJogIndentDp = 11;
+  int leading_edit_item_padding = 20;//should_indent ? kTextJogIndentDp : 0;
 
   // We always subtract the left padding of the OmniboxView itself to allow for
   // an extended I-beam click target without affecting actual layout.
@@ -514,6 +519,7 @@ void LocationBarView::Layout() {
 
   if (ShouldShowKeywordBubble()) {
     location_icon_view_->SetVisible(false);
+    location_icon_view2_->SetVisible(false);
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, selected_keyword_view_);
@@ -544,6 +550,12 @@ void LocationBarView::Layout() {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, location_icon_view_);
+  } else if (location_icon_view2_->ShouldShowMementoInfo()) { /*should_show_memento_info*/
+    leading_decorations.AddDecoration(vertical_padding, location_height, false,
+                                      0, edge_padding, location_icon_view2_);
+
+    leading_decorations.AddDecoration(vertical_padding, location_height, false,
+                                      0, edge_padding, location_icon_view_);
   } else {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_view_);
@@ -705,7 +717,8 @@ void LocationBarView::Update(WebContents* contents) {
   RefreshContentSettingViews();
 
   RefreshPageActionIconViews();
-  location_icon_view_->Update(/*suppress_animations=*/contents);
+  location_icon_view_->Update(/*suppress_animations=*/contents, false);
+  location_icon_view2_->Update(/*suppress_animations=*/contents, true);
 
   if (contents)
     omnibox_view_->OnTabChanged(contents);
@@ -1142,7 +1155,8 @@ void LocationBarView::AnimationCanceled(const gfx::Animation* animation) {
 }
 
 void LocationBarView::OnChanged() {
-  location_icon_view_->Update(/*suppress_animations=*/false);
+  location_icon_view_->Update(/*suppress_animations=*/false, false);
+  location_icon_view2_->Update(/*suppress_animations=*/false, true);
   clear_all_button_->SetVisible(
       omnibox_view_ && omnibox_view_->model()->user_input_in_progress() &&
       !omnibox_view_->GetText().empty() &&
@@ -1213,13 +1227,15 @@ void LocationBarView::OnTouchUiChanged() {
   const gfx::FontList& font_list = views::style::GetFont(
       CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
   location_icon_view_->SetFontList(font_list);
+  location_icon_view2_->SetFontList(font_list);
   omnibox_view_->SetFontList(font_list);
   ime_inline_autocomplete_view_->SetFontList(font_list);
   selected_keyword_view_->SetFontList(font_list);
   for (ContentSettingImageView* view : content_setting_views_)
     view->SetFontList(font_list);
   page_action_icon_controller_->SetFontList(font_list);
-  location_icon_view_->Update(/*suppress_animations=*/false);
+  location_icon_view_->Update(/*suppress_animations=*/false, false);
+  location_icon_view2_->Update(/*suppress_animations=*/false, true);
   PreferredSizeChanged();
 }
 
@@ -1270,6 +1286,7 @@ bool LocationBarView::ShowPageInfoDialog() {
           base::BindOnce(&LocationBarView::OnPageInfoBubbleClosed,
                          weak_factory_.GetWeakPtr()));
   bubble->SetHighlightedButton(location_icon_view_);
+  bubble->SetHighlightedButton(location_icon_view2_);
   bubble->GetWidget()->Show();
   return true;
 }
@@ -1280,5 +1297,16 @@ gfx::ImageSkia LocationBarView::GetLocationIcon(
     return gfx::ImageSkia();
   return omnibox_view_->GetIcon(GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
                                 location_icon_view_->GetForegroundColor(),
-                                std::move(on_icon_fetched));
+                                std::move(on_icon_fetched),
+                                false);
+}
+
+gfx::ImageSkia LocationBarView::GetMementoIcon(
+    LocationIconView::Delegate::IconFetchedCallback on_icon_fetched) const {
+  if (!omnibox_view_)
+    return gfx::ImageSkia();
+  return omnibox_view_->GetIcon(GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
+                                location_icon_view2_->GetForegroundColor(),
+                                std::move(on_icon_fetched),
+                                true);
 }

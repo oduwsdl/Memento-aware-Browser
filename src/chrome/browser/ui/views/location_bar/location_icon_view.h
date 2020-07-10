@@ -56,6 +56,8 @@ class LocationIconView : public IconLabelBubbleView {
     // Gets an icon for the location bar icon chip.
     virtual gfx::ImageSkia GetLocationIcon(
         IconFetchedCallback on_icon_fetched) const = 0;
+    virtual gfx::ImageSkia GetMementoIcon(
+        IconFetchedCallback on_icon_fetched) const = 0;
   };
 
   LocationIconView(const gfx::FontList& font_list,
@@ -81,7 +83,7 @@ class LocationIconView : public IconLabelBubbleView {
   // Updates the icon's ink drop mode, focusable behavior, text and security
   // status. |suppress_animations| indicates whether this update should suppress
   // the text change animation (e.g. when swapping tabs).
-  void Update(bool suppress_animations);
+  void Update(bool suppress_animations, bool is_memento);
 
   // Returns text to be placed in the view.
   // - For secure/insecure pages, returns text describing the URL's security
@@ -97,6 +99,10 @@ class LocationIconView : public IconLabelBubbleView {
   // - the current page is explicitly secure or insecure.
   // - the current page has a special scheme (chrome://, extension, file://).
   bool ShouldShowText() const;
+
+  // Determines whether or not the Memento icon should be shown.
+  // Returns true when Memento-Datetime header is present for the current page.
+  bool ShouldShowMementoInfo() const;
 
   const views::InkDrop* get_ink_drop_for_testing();
 
@@ -135,6 +141,9 @@ class LocationIconView : public IconLabelBubbleView {
 
   // Updates Icon based on the current state and theme.
   void UpdateIcon();
+
+  // Updates Memento Icon based on the current state and theme.
+  void UpdateMementoIcon();
 
   // Handles the arrival of an asynchronously fetched icon.
   void OnIconFetched(const gfx::Image& image);

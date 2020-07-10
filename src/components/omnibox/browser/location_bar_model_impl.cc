@@ -194,9 +194,9 @@ const gfx::VectorIcon& LocationBarModelImpl::GetVectorIcon() const {
   std::unique_ptr<security_state::VisibleSecurityState>
           visible_security_state = delegate_->GetVisibleSecurityState();
 
-  DVLOG(0) << "<<<<<<<<<< " << visible_security_state->memento_status << " >>>>>>>>>>";
-  if (visible_security_state->memento_status)
-    return omnibox::kMementoIcon;
+  DVLOG(0) << "<<<<<<<<<< " << (visible_security_state->memento_status) << " >>>>>>>>>>";
+  /*if (visible_security_state->memento_status) 
+    return omnibox::kMementoIcon;*/
 
   switch (security_level) {
     case security_state::NONE:
@@ -220,6 +220,18 @@ const gfx::VectorIcon& LocationBarModelImpl::GetVectorIcon() const {
   }
   NOTREACHED();
   return omnibox::kHttpIcon;
+#else
+  NOTREACHED();
+  static const gfx::VectorIcon dummy = {};
+  return dummy;
+#endif
+}
+
+const gfx::VectorIcon& LocationBarModelImpl::GetMementoIcon() const {
+#if (!defined(OS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !defined(OS_IOS)
+
+  return omnibox::kMementoIcon;
+
 #else
   NOTREACHED();
   static const gfx::VectorIcon dummy = {};
@@ -282,4 +294,11 @@ bool LocationBarModelImpl::ShouldDisplayURL() const {
 
 bool LocationBarModelImpl::IsOfflinePage() const {
   return delegate_->IsOfflinePage();
+}
+
+bool LocationBarModelImpl::IsMemento() const {
+  std::unique_ptr<security_state::VisibleSecurityState>
+          visible_security_state = delegate_->GetVisibleSecurityState();
+
+  return visible_security_state->memento_status;
 }

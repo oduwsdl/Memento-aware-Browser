@@ -232,6 +232,8 @@ class LocationBarView : public LocationBar,
       security_state::SecurityLevel security_level) const override;
   gfx::ImageSkia GetLocationIcon(LocationIconView::Delegate::IconFetchedCallback
                                      on_icon_fetched) const override;
+  gfx::ImageSkia GetMementoIcon(LocationIconView::Delegate::IconFetchedCallback
+                                     on_icon_fetched) const override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SecurityIndicatorTest, CheckIndicatorText);
@@ -376,6 +378,7 @@ class LocationBarView : public LocationBar,
   // An icon to the left of the edit field: the HTTPS lock, blank page icon,
   // search icon, EV HTTPS bubble, etc.
   LocationIconView* location_icon_view_ = nullptr;
+  LocationIconView* location_icon_view2_ = nullptr;
 
   // A view to show inline autocompletion when an IME is active.  In this case,
   // we shouldn't change the text or selection inside the OmniboxView itself,

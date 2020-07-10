@@ -191,7 +191,7 @@ void SearchBoxView::UpdateModel(bool initiated_by_user) {
 
 void SearchBoxView::UpdateSearchIcon() {
   const gfx::VectorIcon& google_icon =
-      is_search_box_active() ? kGoogleColorIcon : kGoogleBlackIcon;
+      is_search_box_active() ? kGoogleBlackIcon : kGoogleBlackIcon;
   const gfx::VectorIcon& icon = search_model_->search_engine_is_google()
                                     ? google_icon
                                     : kSearchEngineNotGoogleIcon;

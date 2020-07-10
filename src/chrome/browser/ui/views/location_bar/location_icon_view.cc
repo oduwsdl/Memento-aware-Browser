@@ -102,7 +102,7 @@ void LocationIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 }
 
 void LocationIconView::AddedToWidget() {
-  Update(true);
+  Update(true, false);
 }
 
 void LocationIconView::OnThemeChanged() {
@@ -140,6 +140,10 @@ bool LocationIconView::ShouldShowText() const {
   }
 
   return !location_bar_model->GetSecureDisplayText().empty();
+}
+
+bool LocationIconView::ShouldShowMementoInfo() const {
+  return delegate_->GetLocationBarModel()->IsMemento();
 }
 
 const views::InkDrop* LocationIconView::get_ink_drop_for_testing() {
@@ -215,14 +219,30 @@ void LocationIconView::UpdateIcon() {
     SetImage(icon);
 }
 
+void LocationIconView::UpdateMementoIcon() {
+  // Cancel any previous outstanding icon requests, as they are now outdated.
+  icon_fetch_weak_ptr_factory_.InvalidateWeakPtrs();
+
+  gfx::ImageSkia icon = delegate_->GetMementoIcon(
+      base::BindOnce(&LocationIconView::OnIconFetched,
+                     icon_fetch_weak_ptr_factory_.GetWeakPtr()));
+  if (!icon.isNull())
+    SetImage(icon);
+}
+
 void LocationIconView::OnIconFetched(const gfx::Image& image) {
   DCHECK(!image.IsEmpty());
   SetImage(image.AsImageSkia());
 }
 
-void LocationIconView::Update(bool suppress_animations) {
+void LocationIconView::Update(bool suppress_animations, bool memento_icon) {
   UpdateTextVisibility(suppress_animations);
-  UpdateIcon();
+
+  if (memento_icon)
+    UpdateMementoIcon();
+  else
+    UpdateIcon();
+  
 
   // The label text color may have changed in response to changes in security
   // level.

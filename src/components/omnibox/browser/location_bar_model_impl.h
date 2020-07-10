@@ -35,10 +35,12 @@ class LocationBarModelImpl : public LocationBarModel {
   metrics::OmniboxEventProto::PageClassification GetPageClassification(
       OmniboxFocusSource focus_source) override;
   const gfx::VectorIcon& GetVectorIcon() const override;
+  const gfx::VectorIcon& GetMementoIcon() const override;
   base::string16 GetSecureDisplayText() const override;
   base::string16 GetSecureAccessibilityText() const override;
   bool ShouldDisplayURL() const override;
   bool IsOfflinePage() const override;
+  bool IsMemento() const override;
 
  private:
   base::string16 GetFormattedURL(

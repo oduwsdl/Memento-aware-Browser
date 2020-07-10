@@ -58,6 +58,8 @@ class LocationBarModel {
   // icon.
   virtual const gfx::VectorIcon& GetVectorIcon() const = 0;
 
+  virtual const gfx::VectorIcon& GetMementoIcon() const = 0;
+
   // Returns text for the omnibox secure verbose chip, displayed next to the
   // security icon on certain platforms.
   virtual base::string16 GetSecureDisplayText() const = 0;
@@ -72,6 +74,9 @@ class LocationBarModel {
   // Returns whether the page is an offline page, sourced from a cache of
   // previously-downloaded content.
   virtual bool IsOfflinePage() const = 0;
+
+  // Returns whether the page is a Memento
+  virtual bool IsMemento() const = 0;
 
  protected:
   LocationBarModel() = default;
