@@ -85,10 +85,6 @@ class NET_EXPORT HttpResponseInfo {
     CONNECTION_INFO_COARSE_OTHER,
   };
 
-  enum MementoInfo {
-    RESPONSE_IS_MEMENTO
-  };
-
   // Used for categorizing transactions for reporting in histograms.
   // CacheEntryStatus covers relatively common use cases being measured and
   // considered for optimization. Many use cases that are more complex or
