@@ -461,8 +461,10 @@ void MetricsWebContentsObserver::DidFinishNavigation(
       navigation_handle->IsSameDocument()) {
     if (navigation_handle_tracker)
       navigation_handle_tracker->StopTracking();
-    if (committed_load_)
+    if (committed_load_) {
+      DVLOG(0) << "MetricsWebContentsObserver::DidFinishNavigation ---------- ?";
       committed_load_->DidCommitSameDocumentNavigation(navigation_handle);
+    }
     return;
   }
 

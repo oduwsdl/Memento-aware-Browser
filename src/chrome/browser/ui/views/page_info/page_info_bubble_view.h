@@ -81,6 +81,7 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
     VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG,
     VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_SITE_SETTINGS,
     VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_CERTIFICATE_VIEWER,
+    VIEW_ID_PAGE_INFO_MEMENTO_INFO_VIEWER,
     VIEW_ID_PAGE_INFO_BUTTON_END_VR,
     VIEW_ID_PAGE_INFO_HOVER_BUTTON_VR_PRESENTATION,
     VIEW_ID_PAGE_INFO_BUTTON_LEAVE_SITE,
@@ -98,7 +99,8 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
       Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
-      PageInfoClosingCallback closing_callback);
+      PageInfoClosingCallback closing_callback,
+      bool is_memento_bubble);
 
  protected:
   const base::string16 details_text() const { return details_text_; }
@@ -115,7 +117,8 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
       Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
-      PageInfoClosingCallback closing_callback);
+      PageInfoClosingCallback closing_callback,
+      bool is_memento_bubble);
 
   // PageInfoBubbleViewBase:
   gfx::Size CalculatePreferredSize() const override;
@@ -142,6 +145,7 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
   void SetPermissionInfo(const PermissionInfoList& permission_info_list,
                          ChosenObjectInfoList chosen_object_info_list) override;
   void SetIdentityInfo(const IdentityInfo& identity_info) override;
+  void SetMementoInfo(const IdentityInfo& identity_info) override;
   void SetPageFeatureInfo(const PageFeatureInfo& info) override;
 
   void LayoutPermissionsLikeUiRow(views::GridLayout* layout,
@@ -187,6 +191,9 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
 
   // The button that opens the "Certificate" dialog.
   PageInfoHoverButton* certificate_button_ = nullptr;
+
+  // The button that opens the "Memento Info" dialog.
+  PageInfoHoverButton* memento_info_button_ = nullptr;
 
   // The view that contains the "Permissions" table of the bubble.
   views::View* permissions_view_ = nullptr;

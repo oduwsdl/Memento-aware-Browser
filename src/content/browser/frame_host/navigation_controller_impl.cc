@@ -1163,7 +1163,9 @@ bool NavigationControllerImpl::RendererDidNavigate(
   NavigationEntryImpl* active_entry = GetLastCommittedEntry();
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
+  DVLOG(0) << "ACTIVE ENTRY ---------- " << params.memento_datetime;
   active_entry->SetMementoInfo(params.memento_status);
+  active_entry->SetMementoDatetime(params.memento_datetime);
   // TODO(altimin, crbug.com/933147): Remove this logic after we are done with
   // implementing back-forward cache.
   if (!active_entry->back_forward_cache_metrics()) {
@@ -1211,6 +1213,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
   details->entry = active_entry;
   details->is_main_frame = !rfh->GetParent();
   details->http_status_code = params.http_status_code;
+  details->is_memento = params.memento_status;//SetMementoInfo(params.memento_status);
+  DVLOG(0) << "NavigationControllerImpl::RendererDidNavigate ---------- " << active_entry->GetMementoInfo();
 
   // If the NavigationRequest was created without a NavigationEntry and
   // SetIsOverridingUserAgent() was called, it needs to be applied to the

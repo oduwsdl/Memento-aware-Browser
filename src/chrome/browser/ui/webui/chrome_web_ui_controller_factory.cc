@@ -882,6 +882,7 @@ ChromeWebUIControllerFactory::CreateWebUIControllerForURL(WebUI* web_ui,
     webui::LogWebUIUrl(url);
 
   return base::WrapUnique((*function)(web_ui, url));
+  //return nullptr;
 }
 
 void ChromeWebUIControllerFactory::GetFaviconForURL(

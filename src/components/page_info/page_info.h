@@ -160,7 +160,7 @@ class PageInfo : public content::WebContentsObserver {
   // occurs in this method. If this initialization flow was done as part of
   // PageInfo's constructor, those subclasses would not have their PageInfo
   // member set and crashes would ensue.
-  void InitializeUiState(PageInfoUI* ui);
+  void InitializeUiState(PageInfoUI* ui, bool is_memento);
 
   // This method is called to update the presenter's security state and forwards
   // that change on to the UI to be redrawn.
@@ -230,7 +230,7 @@ class PageInfo : public content::WebContentsObserver {
 
   // Sets (presents) the information about the site's identity and connection
   // in the |ui_|.
-  void PresentSiteIdentity();
+  void PresentSiteIdentity(bool is_memento_info);
 
   // Presents feature related info in the |ui_|; like, if VR content is being
   // presented in a headset.
@@ -352,7 +352,9 @@ class PageInfo : public content::WebContentsObserver {
 
   security_state::VisibleSecurityState visible_security_state_for_metrics_;
 
-  bool memento_status_;
+  bool memento_status_ = false;
+
+  std::string memento_datetime_ = "";
 
   // Set when the user ignored the password reuse modal warning dialog. When
   // |show_change_password_buttons_| is true, the page identity area of the page

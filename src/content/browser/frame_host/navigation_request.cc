@@ -4241,6 +4241,7 @@ NavigationRequest::MakeDidCommitProvisionalLoadParamsForBFCache() {
   params->transition = common_params().transition;
   params->history_list_was_cleared = false;
   params->request_id = GetGlobalRequestID().request_id;
+  params->memento_status = GetMementoInfo();
 
   return params;
 }
@@ -4272,8 +4273,13 @@ net::HttpResponseInfo::ConnectionInfo NavigationRequest::GetConnectionInfo() {
 }
 
 bool NavigationRequest::GetMementoInfo() {
-  return response() ? response()->memento_info
-                    : 0;
+  if (response()) {
+    DVLOG(0) << "NavigationRequest::GetMementoInfo ---------- " << response()->memento_info;
+    return !(response()->memento_datetime == "");
+  }
+  DVLOG(0) << "NavigationRequest::GetMementoInfo ---------- 0";
+  
+  return 0;
 }
 
 bool NavigationRequest::IsInMainFrame() {

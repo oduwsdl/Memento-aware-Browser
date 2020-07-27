@@ -212,6 +212,9 @@ class NET_EXPORT HttpResponseInfo {
   // Whether or not the current page is a Memento
   bool memento_info = false;
 
+  // Datetime if the page is a Memento
+  std::string memento_datetime = "";
+
   // The time at which the request was made that resulted in this response.
   // For cached responses, this is the last time the cache entry was validated.
   base::Time request_time;

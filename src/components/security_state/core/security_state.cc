@@ -267,6 +267,7 @@ VisibleSecurityState::VisibleSecurityState()
       cert_status(0),
       connection_status(0),
       memento_status(false),
+      memento_datetime(""),
       key_exchange_group(0),
       peer_signature_algorithm(0),
       displayed_mixed_content(false),

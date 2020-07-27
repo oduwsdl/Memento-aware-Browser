@@ -174,7 +174,7 @@ gfx::ImageSkia OmniboxView::GetIcon(int dip_size,
   return gfx::ImageSkia();
 #else
 
-  DVLOG(0) << "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&";
+  DVLOG(0) << "OmniboxView::GetIcon ---------- " << is_memento;
 
   // For tests, model_ will be null.
   if (!model_) {

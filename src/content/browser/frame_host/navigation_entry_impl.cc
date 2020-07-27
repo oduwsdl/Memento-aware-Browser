@@ -664,6 +664,14 @@ bool NavigationEntryImpl::GetMementoInfo() {
   return memento_info_;
 }
 
+void NavigationEntryImpl::SetMementoDatetime(std::string memento_datetime) {
+  memento_datetime_ = memento_datetime;
+}
+
+std::string NavigationEntryImpl::GetMementoDatetime() {
+  return memento_datetime_;
+}
+
 void NavigationEntryImpl::SetRedirectChain(
     const std::vector<GURL>& redirect_chain) {
   root_node()->frame_entry->set_redirect_chain(redirect_chain);
@@ -743,6 +751,7 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   copy->is_overriding_user_agent_ = is_overriding_user_agent_;
   copy->timestamp_ = timestamp_;
   copy->http_status_code_ = http_status_code_;
+  copy->memento_info_ = memento_info_;
   // ResetForCommit: post_data_
   copy->extra_headers_ = extra_headers_;
   copy->base_url_for_data_url_ = base_url_for_data_url_;

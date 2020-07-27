@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/views/memento_views.h"
 #include "chrome/browser/ui/views/collected_cookies_views.h"
 
 #include <map>
@@ -236,9 +237,9 @@ class InfobarView : public views::View {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// CollectedCookiesViews, public:
+// MementoViews, public:
 
-CollectedCookiesViews::~CollectedCookiesViews() {
+MementoViews::~MementoViews() {
   if (!destroying_) {
     // The owning WebContents is being destroyed before the Widget. Close the
     // widget pronto.
@@ -251,9 +252,9 @@ CollectedCookiesViews::~CollectedCookiesViews() {
 }
 
 // static
-void CollectedCookiesViews::CreateAndShowForWebContents(
+void MementoViews::CreateAndShowForWebContents(
     content::WebContents* web_contents) {
-  CollectedCookiesViews* instance = FromWebContents(web_contents);
+  MementoViews* instance = FromWebContents(web_contents);
   if (!instance) {
     CreateForWebContents(web_contents);
     return;
@@ -274,13 +275,13 @@ void CollectedCookiesViews::CreateAndShowForWebContents(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// CollectedCookiesViews, views::DialogDelegate implementation:
+// MementoViews, views::DialogDelegate implementation:
 
-base::string16 CollectedCookiesViews::GetWindowTitle() const {
+base::string16 MementoViews::GetWindowTitle() const {
   return base::string16();//l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_DIALOG_TITLE);
 }
 
-bool CollectedCookiesViews::Accept() {
+bool MementoViews::Accept() {
   // If the user closes our parent tab while we're still open, this method will
   // (eventually) be called in response to a WebContentsDestroyed() call from
   // the WebContentsImpl to its observers.  But since the InfoBarService is also
@@ -294,15 +295,15 @@ bool CollectedCookiesViews::Accept() {
   return true;
 }
 
-ui::ModalType CollectedCookiesViews::GetModalType() const {
+ui::ModalType MementoViews::GetModalType() const {
   return ui::MODAL_TYPE_CHILD;
 }
 
-bool CollectedCookiesViews::ShouldShowCloseButton() const {
+bool MementoViews::ShouldShowCloseButton() const {
   return false;
 }
 
-void CollectedCookiesViews::DeleteDelegate() {
+void MementoViews::DeleteDelegate() {
   if (!destroying_) {
     // The associated Widget is being destroyed before the owning WebContents.
     // Tell the owner to delete |this|.
@@ -312,9 +313,9 @@ void CollectedCookiesViews::DeleteDelegate() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// CollectedCookiesViews, views::ButtonListener implementation:
+// MementoViews, views::ButtonListener implementation:
 
-void CollectedCookiesViews::ButtonPressed(views::Button* sender,
+void MementoViews::ButtonPressed(views::Button* sender,
                                           const ui::Event& event) {
   if (sender == block_allowed_button_) {
     AddContentException(allowed_cookies_tree_, CONTENT_SETTING_BLOCK);
@@ -329,9 +330,9 @@ void CollectedCookiesViews::ButtonPressed(views::Button* sender,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// CollectedCookiesViews, views::TabbedPaneListener implementation:
+// MementoViews, views::TabbedPaneListener implementation:
 
-void CollectedCookiesViews::TabSelectedAt(int index) {
+void MementoViews::TabSelectedAt(int index) {
   //EnableControls();
   //ShowCookieInfo();
 
@@ -340,26 +341,26 @@ void CollectedCookiesViews::TabSelectedAt(int index) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// CollectedCookiesViews, views::TreeViewController implementation:
+// MementoViews, views::TreeViewController implementation:
 
-void CollectedCookiesViews::OnTreeViewSelectionChanged(
+void MementoViews::OnTreeViewSelectionChanged(
     views::TreeView* tree_view) {
   EnableControls();
   ShowCookieInfo();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// CollectedCookiesViews, views::View overrides:
+// MementoViews, views::View overrides:
 
-gfx::Size CollectedCookiesViews::GetMinimumSize() const {
+gfx::Size MementoViews::GetMinimumSize() const {
   // Allow UpdateWebContentsModalDialogPosition to clamp the dialog width.
   return gfx::Size(0, View::GetMinimumSize().height());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// CollectedCookiesViews, private:
+// MementoViews, private:
 
-CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
+MementoViews::MementoViews(content::WebContents* web_contents)
     : web_contents_(web_contents) {
   SetButtons(ui::DIALOG_BUTTON_OK);
   SetButtonLabel(ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_DONE));
@@ -414,7 +415,7 @@ CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
   //ShowCookieInfo();
 }
 
-std::unique_ptr<views::View> CollectedCookiesViews::CreateAllowedPane() {
+std::unique_ptr<views::View> MementoViews::CreateAllowedPane() {
   content_settings::TabSpecificContentSettings* content_settings =
       content_settings::TabSpecificContentSettings::FromWebContents(
           web_contents_);
@@ -471,7 +472,7 @@ std::unique_ptr<views::View> CollectedCookiesViews::CreateAllowedPane() {
   return pane;
 }
 
-std::unique_ptr<views::View> CollectedCookiesViews::CreateBlockedPane() {
+std::unique_ptr<views::View> MementoViews::CreateBlockedPane() {
   content_settings::TabSpecificContentSettings* content_settings =
       content_settings::TabSpecificContentSettings::FromWebContents(
           web_contents_);
@@ -537,7 +538,7 @@ std::unique_ptr<views::View> CollectedCookiesViews::CreateBlockedPane() {
   return pane;
 }
 
-std::unique_ptr<views::View> CollectedCookiesViews::CreateButtonsPane() {
+std::unique_ptr<views::View> MementoViews::CreateButtonsPane() {
   auto view = std::make_unique<views::View>();
   view->SetLayoutManager(std::make_unique<views::FillLayout>());
 
@@ -574,14 +575,14 @@ std::unique_ptr<views::View> CollectedCookiesViews::CreateButtonsPane() {
   return view;
 }
 
-std::unique_ptr<views::View> CollectedCookiesViews::CreateScrollView(
+std::unique_ptr<views::View> MementoViews::CreateScrollView(
     std::unique_ptr<views::TreeView> pane) {
   auto scroll_view = views::ScrollView::CreateScrollViewWithBorder();
   scroll_view->SetContents(std::move(pane));
   return scroll_view;
 }
 
-void CollectedCookiesViews::EnableControls() {
+void MementoViews::EnableControls() {
   bool enable_allowed_buttons = false;
   ui::TreeModelNode* node = allowed_cookies_tree_->GetSelectedNode();
   if (node) {
@@ -609,7 +610,7 @@ void CollectedCookiesViews::EnableControls() {
   for_session_blocked_button_->SetEnabled(enable_blocked_buttons);
 }
 
-void CollectedCookiesViews::ShowCookieInfo() {
+void MementoViews::ShowCookieInfo() {
   ui::TreeModelNode* node = allowed_cookies_tree_->IsDrawn() ?
                             allowed_cookies_tree_->GetSelectedNode() : nullptr;
 
@@ -632,7 +633,7 @@ void CollectedCookiesViews::ShowCookieInfo() {
   }
 }
 
-void CollectedCookiesViews::AddContentException(views::TreeView* tree_view,
+void MementoViews::AddContentException(views::TreeView* tree_view,
                                                 ContentSetting setting) {
   CookieTreeHostNode* host_node =
       static_cast<CookieTreeHostNode*>(tree_view->GetSelectedNode());
@@ -651,4 +652,4 @@ void CollectedCookiesViews::AddContentException(views::TreeView* tree_view,
   tree_view->SchedulePaint();
 }
 
-WEB_CONTENTS_USER_DATA_KEY_IMPL(CollectedCookiesViews)
+WEB_CONTENTS_USER_DATA_KEY_IMPL(MementoViews)

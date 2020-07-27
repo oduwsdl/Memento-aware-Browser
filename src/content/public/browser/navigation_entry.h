@@ -220,6 +220,9 @@ class NavigationEntry : public base::SupportsUserData {
   virtual void SetMementoInfo(bool memento_info) = 0;
   virtual bool GetMementoInfo() = 0;
 
+  virtual void SetMementoDatetime(std::string memento_datetime) = 0;
+  virtual std::string GetMementoDatetime() = 0;
+
   // The redirect chain traversed during this navigation, from the initial
   // redirecting URL to the final non-redirecting current URL.
   virtual void SetRedirectChain(const std::vector<GURL>& redirects) = 0;

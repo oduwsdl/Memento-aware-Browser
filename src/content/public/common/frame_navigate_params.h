@@ -51,6 +51,8 @@ struct CONTENT_EXPORT FrameNavigateParams : public IPC::NoParams {
   // whether the page is a memento
   bool memento_status;
 
+  std::string memento_datetime;
+
   // The base URL for the page's document when the frame was committed. Empty if
   // similar to 'url' above. Note that any base element in the page has not been
   // parsed yet and is therefore not reflected.

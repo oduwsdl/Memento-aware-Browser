@@ -62,7 +62,7 @@ views::Widget* BookmarkBubbleView::ShowBubble(
     Profile* profile,
     const GURL& url,
     bool already_bookmarked) {
-  if (bookmark_bubble_)
+  /*if (bookmark_bubble_)
     return nullptr;
 
   bookmark_bubble_ =
@@ -81,7 +81,8 @@ views::Widget* BookmarkBubbleView::ShowBubble(
     const BookmarkNode* node = model->GetMostRecentlyAddedUserNodeForURL(url);
     bookmark_bubble_->observer_->OnBookmarkBubbleShown(node);
   }
-  return bubble_widget;
+  return bubble_widget;*/
+  return nullptr;
 }
 
 // static

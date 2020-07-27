@@ -38,6 +38,7 @@ class X509Certificate;
 // etc.).
 class PageInfoUI {
  public:
+
   enum class SecuritySummaryColor {
     RED,
     GREEN,
@@ -57,6 +58,8 @@ class PageInfoUI {
   };
 
   struct SecurityDescription {
+    SecurityDescription();
+    ~SecurityDescription();
     // The text style for |summary| used to color it. This provides an
     // opinionated guide to the user on the overall security state of the site.
     SecuritySummaryColor summary_style;
@@ -65,6 +68,10 @@ class PageInfoUI {
     // A short paragraph with more details about the state, and how
     // the user should treat it.
     base::string16 details;
+    // A one-line summary of the memento state.
+    base::string16 memento_summary;
+    // A short sentence that explains that the page is a memento.
+    base::string16 memento_info;
     // The category of the security description, used to determine which help
     // center article to link to.
     SecurityDescriptionType type;
@@ -125,7 +132,8 @@ class PageInfoUI {
     // sites.
     std::string site_identity;
     // Whether or not the page is a memento
-    bool memento_status;
+    bool memento_status = false;
+    std::string memento_datetime = "";
     // Status of the site's identity.
     PageInfo::SiteIdentityStatus identity_status;
     // Site's Safe Browsing status.
@@ -221,6 +229,10 @@ class PageInfoUI {
   static const gfx::ImageSkia GetCertificateIcon(
       const SkColor related_text_color);
 
+  // Returns the icon for the Memento info.
+  static const gfx::ImageSkia GetMementoIcon(
+      const SkColor related_text_color);
+
   // Returns the icon for the button / link to Site settings.
   static const gfx::ImageSkia GetSiteSettingsIcon(
       const SkColor related_text_color);
@@ -245,6 +257,8 @@ class PageInfoUI {
 
   // Sets site identity information.
   virtual void SetIdentityInfo(const IdentityInfo& identity_info) = 0;
+
+  virtual void SetMementoInfo(const IdentityInfo& identity_info) = 0;
 
   virtual void SetPageFeatureInfo(const PageFeatureInfo& page_feature_info) = 0;
 

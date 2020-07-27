@@ -228,6 +228,7 @@ class LocationBarView : public LocationBar,
   void OnLocationIconPressed(const ui::MouseEvent& event) override;
   void OnLocationIconDragged(const ui::MouseEvent& event) override;
   bool ShowPageInfoDialog() override;
+  bool Dialog() override;
   SkColor GetSecurityChipColor(
       security_state::SecurityLevel security_level) const override;
   gfx::ImageSkia GetLocationIcon(LocationIconView::Delegate::IconFetchedCallback
@@ -378,6 +379,8 @@ class LocationBarView : public LocationBar,
   // An icon to the left of the edit field: the HTTPS lock, blank page icon,
   // search icon, EV HTTPS bubble, etc.
   LocationIconView* location_icon_view_ = nullptr;
+
+  // Memento icon to the left of location_icon_view_
   LocationIconView* location_icon_view2_ = nullptr;
 
   // A view to show inline autocompletion when an IME is active.  In this case,

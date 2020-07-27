@@ -142,6 +142,8 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   int GetHttpStatusCode() override;
   void SetMementoInfo(bool memento_info) override;
   bool GetMementoInfo() override;
+  void SetMementoDatetime(std::string memento_datetime) override;
+  std::string GetMementoDatetime() override;
   void SetRedirectChain(const std::vector<GURL>& redirects) override;
   const std::vector<GURL>& GetRedirectChain() override;
   const base::Optional<ReplacedNavigationEntryData>& GetReplacedEntryData()
@@ -441,6 +443,7 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   base::Time timestamp_;
   int http_status_code_;
   bool memento_info_ = false;
+  std::string memento_datetime_ = "";
 
   // This member is not persisted with session restore because it is transient.
   // If the post request succeeds, this field is cleared since the same

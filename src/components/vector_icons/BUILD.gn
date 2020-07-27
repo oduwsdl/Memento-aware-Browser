@@ -54,6 +54,7 @@ aggregate_vector_icons("components_vector_icons") {
     "media_router_warning.icon",
     "media_seek_backward.icon",
     "media_seek_forward.icon",
+    "memento.icon",
     "mic.icon",
     "midi.icon",
     "notifications.icon",

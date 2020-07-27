@@ -79,6 +79,10 @@ class SESSIONS_EXPORT SerializedNavigationEntry {
   void set_http_status_code(int http_status_code) {
     http_status_code_ = http_status_code;
   }
+  bool memento_status() const { return memento_status_; }
+  void set_memento_status(bool memento_status) {
+    memento_status_ = memento_status;
+  }
   ui::PageTransition transition_type() const {
     return transition_type_;
   }
@@ -207,6 +211,7 @@ class SESSIONS_EXPORT SerializedNavigationEntry {
   base::Time timestamp_;
   GURL favicon_url_;
   int http_status_code_ = 0;
+  bool memento_status_ = false;
   bool is_restored_ = false;          // Not persisted.
   std::vector<GURL> redirect_chain_;  // Not persisted.
   base::Optional<ReplacedNavigationEntryData>

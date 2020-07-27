@@ -294,6 +294,7 @@ void Navigator::DidNavigate(
 
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;
+  DVLOG(0) << "Navigator::DidNavigate ---------- " << params.memento_status;
   bool did_navigate = controller_->RendererDidNavigate(
       render_frame_host, params, &details, is_same_document_navigation,
       previous_document_was_activated, navigation_request.get());

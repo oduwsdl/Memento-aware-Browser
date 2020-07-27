@@ -2918,6 +2918,8 @@ static_library("ui") {
       "views/chrome_web_dialog_view.h",
       "views/collected_cookies_views.cc",
       "views/collected_cookies_views.h",
+      "views/memento_views.cc",
+      "views/memento_views.h",
       "views/confirm_bubble_views.cc",
       "views/confirm_bubble_views.h",
       "views/constrained_web_dialog_delegate_views.cc",

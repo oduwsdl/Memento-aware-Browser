@@ -191,8 +191,6 @@ const gfx::VectorIcon& LocationBarModelImpl::GetVectorIcon() const {
     return omnibox::kOfflinePinIcon;
 
   security_state::SecurityLevel security_level = GetSecurityLevel();
-  std::unique_ptr<security_state::VisibleSecurityState>
-          visible_security_state = delegate_->GetVisibleSecurityState();
 
   switch (security_level) {
     case security_state::NONE:
@@ -225,6 +223,14 @@ const gfx::VectorIcon& LocationBarModelImpl::GetVectorIcon() const {
 
 const gfx::VectorIcon& LocationBarModelImpl::GetMementoIcon() const {
 #if (!defined(OS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !defined(OS_IOS)
+  auto* const icon_override = delegate_->GetVectorIconOverride();
+  if (icon_override)
+    return *icon_override;
+
+  std::unique_ptr<security_state::VisibleSecurityState>
+          visible_security_state = delegate_->GetVisibleSecurityState();
+
+  DVLOG(0) << "LocationBarModelImpl::GetMementoIcon ---------- " << visible_security_state->memento_status;
 
   return omnibox::kMementoIcon;
 

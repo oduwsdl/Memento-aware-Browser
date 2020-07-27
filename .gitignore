@@ -286,8 +286,6 @@ vs-chromium-project.txt
 /src/testserver.log
 # See third_party/.gitignore for entries covering /src/third_party.
 
-/src/third_party/
-
 /src/tools/.bisect-builds-cache.json
 /src/tools/cygprofile/*.wprgo
 /src/tools/clang/dsymutil/bin/dsymutil

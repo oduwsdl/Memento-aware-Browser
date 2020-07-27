@@ -350,6 +350,7 @@ PageInfo::PageInfo(std::unique_ptr<PageInfoDelegate> delegate,
   security_level_ = delegate_->GetSecurityLevel();
   visible_security_state_for_metrics_ = delegate_->GetVisibleSecurityState();
   memento_status_ = visible_security_state_for_metrics_.memento_status;
+  memento_datetime_ = visible_security_state_for_metrics_.memento_datetime;
 }
 
 PageInfo::~PageInfo() {
@@ -423,15 +424,19 @@ PageInfo::~PageInfo() {
   }
 }
 
-void PageInfo::InitializeUiState(PageInfoUI* ui) {
+void PageInfo::InitializeUiState(PageInfoUI* ui, bool is_memento) {
   ui_ = ui;
   DCHECK(ui_);
 
+  DVLOG(0) << "PageInfo::InitializeUiState ---------- " << is_memento;
+
   ComputeUIInputs(site_url_);
-  PresentSitePermissions();
-  PresentSiteIdentity();
-  PresentSiteData();
-  PresentPageFeatureInfo();
+  PresentSiteIdentity(is_memento);
+  if(!is_memento) {
+    PresentSitePermissions();
+    PresentSiteData();
+    PresentPageFeatureInfo();
+  }
 
   // Every time the Page Info UI is opened, this method is called.
   // So this counts how often the Page Info UI is opened.
@@ -444,7 +449,7 @@ void PageInfo::InitializeUiState(PageInfoUI* ui) {
 
 void PageInfo::UpdateSecurityState() {
   ComputeUIInputs(site_url_);
-  PresentSiteIdentity();
+  PresentSiteIdentity(false);
 }
 
 void PageInfo::RecordPageInfoAction(PageInfoAction action) {
@@ -1008,7 +1013,7 @@ void PageInfo::PresentSiteData() {
   ui_->SetCookieInfo(cookie_info_list);
 }
 
-void PageInfo::PresentSiteIdentity() {
+void PageInfo::PresentSiteIdentity(bool is_memento) {
   // After initialization the status about the site's connection and its
   // identity must be available.
   DCHECK_NE(site_identity_status_, SITE_IDENTITY_STATUS_UNKNOWN);
@@ -1021,6 +1026,7 @@ void PageInfo::PresentSiteIdentity() {
   info.identity_status = site_identity_status_;
   info.safe_browsing_status = safe_browsing_status_;
   info.memento_status = memento_status_;
+  info.memento_datetime = memento_datetime_;
   if (base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
     info.safety_tip_info = safety_tip_info_;
   }
@@ -1032,7 +1038,10 @@ void PageInfo::PresentSiteIdentity() {
   info.certificate = certificate_;
   info.show_ssl_decision_revoke_button = show_ssl_decision_revoke_button_;
   info.show_change_password_buttons = show_change_password_buttons_;
-  ui_->SetIdentityInfo(info);
+  if(is_memento)
+    ui_->SetMementoInfo(info);
+  else
+    ui_->SetIdentityInfo(info);
 }
 
 void PageInfo::PresentPageFeatureInfo() {

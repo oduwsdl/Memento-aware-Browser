@@ -201,6 +201,8 @@ std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
   security_description->summary_style = style;
   security_description->summary = l10n_util::GetStringUTF16(summary_id);
   security_description->details = l10n_util::GetStringUTF16(details_id);
+  security_description->memento_summary = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MEMENTO_SUMMARY);
+  security_description->memento_info = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MEMENTO_DETAILS);
   security_description->type = type;
   return security_description;
 }
@@ -241,6 +243,10 @@ ContentSetting GetEffectiveSetting(ContentSettingsType type,
 
 }  // namespace
 
+PageInfoUI::SecurityDescription::SecurityDescription() {}
+
+PageInfoUI::SecurityDescription::~SecurityDescription() {}
+
 PageInfoUI::CookieInfo::CookieInfo() : allowed(-1), blocked(-1) {}
 
 PageInfoUI::PermissionInfo::PermissionInfo()
@@ -277,6 +283,7 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
 
   DVLOG(0) << "Page info UI Memento status:";
   DVLOG(0) << identity_info.memento_status;
+  DVLOG(0) << identity_info.memento_datetime;
 
   switch (identity_info.safe_browsing_status) {
     case PageInfo::SAFE_BROWSING_STATUS_NONE:
@@ -338,8 +345,6 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
       FALLTHROUGH;
     case PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
 
-    // Add check for Memento HTTP response headers
-    
       switch (identity_info.connection_status) {
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE:
           return CreateSecurityDescription(SecuritySummaryColor::RED,
@@ -708,6 +713,14 @@ const gfx::ImageSkia PageInfoUI::GetCertificateIcon(
     const SkColor related_text_color) {
   return gfx::CreateVectorIcon(
       vector_icons::kCertificateIcon, kVectorIconSize,
+      color_utils::DeriveDefaultIconColor(related_text_color));
+}
+
+// static
+const gfx::ImageSkia PageInfoUI::GetMementoIcon(
+    const SkColor related_text_color) {
+  return gfx::CreateVectorIcon(
+      vector_icons::kMementoIcon, kVectorIconSize,
       color_utils::DeriveDefaultIconColor(related_text_color));
 }
 

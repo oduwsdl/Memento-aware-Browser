@@ -127,6 +127,18 @@ void ShowCertificateViewer(WebContents* web_contents,
                                            parent);
 }
 
+void ShowMementoViewer(WebContents* web_contents,
+                           gfx::NativeWindow parent,
+                           net::X509Certificate* cert) {
+  net::ScopedCERTCertificateList nss_certs =
+      net::x509_util::CreateCERTCertificateListFromX509Certificate(cert);
+  if (nss_certs.empty())
+    return;
+
+  CertificateViewerDialog::ShowConstrained(std::move(nss_certs), web_contents,
+                                           parent);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // CertificateViewerDialog
 

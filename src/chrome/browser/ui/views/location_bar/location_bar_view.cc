@@ -184,11 +184,13 @@ void LocationBarView::Init() {
       std::make_unique<LocationIconView>(font_list, this, this);
   location_icon_view->set_drag_controller(this);
   location_icon_view_ = AddChildView(std::move(location_icon_view));
+  location_icon_view_->SetIconType(false);
 
   auto location_icon_view2 =
       std::make_unique<LocationIconView>(font_list, this, this);
   location_icon_view2->set_drag_controller(this);
   location_icon_view2_ = AddChildView(std::move(location_icon_view2));
+  location_icon_view2_->SetIconType(true);
 
   // Initialize the Omnibox view.
   auto omnibox_view = std::make_unique<OmniboxViewViews>(
@@ -483,14 +485,14 @@ void LocationBarView::Layout() {
   //
   // TODO(jdonnelly): The better solution may be to remove the location icon
   // text when zero suggest triggers.
-  /*const bool should_indent = GetOmniboxPopupView()->IsOpen() &&
+  const bool should_indent = GetOmniboxPopupView()->IsOpen() &&
                              !location_icon_view_->ShouldShowLabel() &&
-                             !ShouldShowKeywordBubble();*/
+                             !ShouldShowKeywordBubble();
 
   // We have an odd indent value because this is what matches the odd text
   // indent value in OmniboxMatchCellView.
-  //constexpr int kTextJogIndentDp = 11;
-  int leading_edit_item_padding = 20;//should_indent ? kTextJogIndentDp : 0;
+  constexpr int kTextJogIndentDp = 11;
+  int leading_edit_item_padding = should_indent ? kTextJogIndentDp : 0;
 
   // We always subtract the left padding of the OmniboxView itself to allow for
   // an extended I-beam click target without affecting actual layout.
@@ -546,19 +548,26 @@ void LocationBarView::Layout() {
       }
       selected_keyword_view_->SetCustomImage(image);
     }
-  } else if (location_icon_view_->ShouldShowText()) {
+  } else if (location_icon_view_->ShouldShowText() && !location_icon_view_->ShouldShowMementoInfo()) {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, location_icon_view_);
-  } else if (location_icon_view2_->ShouldShowMementoInfo()) { /*should_show_memento_info*/
+    location_icon_view2_->SetVisible(false);
+  } else if (!location_icon_view_->ShouldShowText() && location_icon_view2_->ShouldShowMementoInfo()) {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_view2_);
-
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_view_);
-  } else {
+  } else if (location_icon_view_->ShouldShowText() && location_icon_view2_->ShouldShowMementoInfo()) {
+    leading_decorations.AddDecoration(vertical_padding, location_height, false,
+                                      kLeadingDecorationMaxFraction,
+                                      edge_padding, location_icon_view_);
+    location_icon_view2_->SetVisible(false);
+  }
+   else {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_view_);
+    location_icon_view2_->SetVisible(false);
   }
 
   auto add_trailing_decoration = [&trailing_decorations, vertical_padding,
@@ -1125,7 +1134,8 @@ void LocationBarView::WriteDragDataForView(views::View* sender,
 
 int LocationBarView::GetDragOperationsForView(views::View* sender,
                                               const gfx::Point& p) {
-  DCHECK_EQ(location_icon_view_, sender);
+  //DCHECK_EQ(location_icon_view_, sender);
+
   WebContents* web_contents = delegate_->GetWebContents();
   return (web_contents && web_contents->GetURL().is_valid() &&
           (!GetOmniboxView()->IsEditingOrEmpty()))
@@ -1284,8 +1294,28 @@ bool LocationBarView::ShowPageInfoDialog() {
           this, gfx::Rect(), GetWidget()->GetNativeWindow(), profile_, contents,
           entry->GetVirtualURL(),
           base::BindOnce(&LocationBarView::OnPageInfoBubbleClosed,
-                         weak_factory_.GetWeakPtr()));
+                         weak_factory_.GetWeakPtr()), false);
   bubble->SetHighlightedButton(location_icon_view_);
+  bubble->GetWidget()->Show();
+  return true;
+}
+
+bool LocationBarView::Dialog() {
+  WebContents* contents = GetWebContents();
+  if (!contents)
+    return false;
+
+  content::NavigationEntry* entry = contents->GetController().GetVisibleEntry();
+  if (!entry)
+    return false;
+
+  DCHECK(GetWidget());
+  views::BubbleDialogDelegateView* bubble =
+      PageInfoBubbleView::CreatePageInfoBubble(
+          this, gfx::Rect(), GetWidget()->GetNativeWindow(), profile_, contents,
+          entry->GetVirtualURL(),
+          base::BindOnce(&LocationBarView::OnPageInfoBubbleClosed,
+                         weak_factory_.GetWeakPtr()), true);
   bubble->SetHighlightedButton(location_icon_view2_);
   bubble->GetWidget()->Show();
   return true;

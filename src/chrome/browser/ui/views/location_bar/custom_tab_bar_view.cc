@@ -408,6 +408,14 @@ bool CustomTabBarView::ShowPageInfoDialog() {
       bubble_anchor_util::Anchor::kCustomTabBar);
 }
 
+bool CustomTabBarView::Dialog() {
+  return ::ShowPageInfoDialog(
+      GetWebContents(),
+      base::BindOnce(&CustomTabBarView::AppInfoClosedCallback,
+                     weak_factory_.GetWeakPtr()),
+      bubble_anchor_util::Anchor::kCustomTabBar);
+}
+
 const LocationBarModel* CustomTabBarView::GetLocationBarModel() const {
   return delegate_->GetLocationBarModel();
 }
@@ -422,6 +430,7 @@ gfx::ImageSkia CustomTabBarView::GetLocationIcon(
 
 gfx::ImageSkia CustomTabBarView::GetMementoIcon(
     LocationIconView::Delegate::IconFetchedCallback on_icon_fetched) const {
+  DVLOG(0) << "CustomTabBarView::GetMementoIcon ---------- " << delegate_->GetLocationBarModel()->IsMemento();
   return gfx::CreateVectorIcon(
       delegate_->GetLocationBarModel()->GetMementoIcon(),
       GetLayoutConstant(LOCATION_BAR_ICON_SIZE),

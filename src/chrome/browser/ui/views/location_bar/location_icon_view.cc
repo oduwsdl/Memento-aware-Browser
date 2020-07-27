@@ -67,7 +67,11 @@ bool LocationIconView::ShouldShowSeparator() const {
 }
 
 bool LocationIconView::ShowBubble(const ui::Event& event) {
+  if (GetIconType()) {
+    return delegate_->Dialog();
+  }
   return delegate_->ShowPageInfoDialog();
+  
 }
 
 bool LocationIconView::IsBubbleShowing() const {
@@ -143,7 +147,16 @@ bool LocationIconView::ShouldShowText() const {
 }
 
 bool LocationIconView::ShouldShowMementoInfo() const {
+  DVLOG(0) << "LocationIconView::ShouldShowMementoInfo ---------- " << delegate_->GetLocationBarModel()->IsMemento();
   return delegate_->GetLocationBarModel()->IsMemento();
+}
+
+void LocationIconView::SetIconType(bool is_memento_icon) {
+  is_memento_icon_ = is_memento_icon;
+}
+
+bool LocationIconView::GetIconType() {
+  return is_memento_icon_;
 }
 
 const views::InkDrop* LocationIconView::get_ink_drop_for_testing() {
@@ -238,10 +251,12 @@ void LocationIconView::OnIconFetched(const gfx::Image& image) {
 void LocationIconView::Update(bool suppress_animations, bool memento_icon) {
   UpdateTextVisibility(suppress_animations);
 
-  if (memento_icon)
+  if (memento_icon) {
     UpdateMementoIcon();
-  else
+  }
+  else {
     UpdateIcon();
+  }
   
 
   // The label text color may have changed in response to changes in security

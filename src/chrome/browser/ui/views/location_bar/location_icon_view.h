@@ -49,6 +49,7 @@ class LocationIconView : public IconLabelBubbleView {
     // how and where to show the dialog. Returns true if a dialog was shown,
     // false otherwise.
     virtual bool ShowPageInfoDialog() = 0;
+    virtual bool Dialog() = 0;
 
     // Gets the LocationBarModel.
     const virtual LocationBarModel* GetLocationBarModel() const = 0;
@@ -104,6 +105,9 @@ class LocationIconView : public IconLabelBubbleView {
   // Returns true when Memento-Datetime header is present for the current page.
   bool ShouldShowMementoInfo() const;
 
+  void SetIconType(bool is_memento_icon);
+  bool GetIconType();
+
   const views::InkDrop* get_ink_drop_for_testing();
 
  protected:
@@ -119,6 +123,8 @@ class LocationIconView : public IconLabelBubbleView {
   // Whether the delegate's editing or empty flag was set the last time the
   // location icon was updated.
   bool was_editing_or_empty_ = false;
+
+  bool is_memento_icon_ = false;
 
   // Returns what the minimum size would be if the preferred size were |size|.
   gfx::Size GetMinimumSizeForPreferredSize(gfx::Size size) const;

@@ -190,6 +190,14 @@ void WebURLResponse::SetMementoInfo(bool memento_info) {
   resource_response_->SetMementoInfo(memento_info);
 }
 
+std::string WebURLResponse::MementoDatetime() const {
+  return resource_response_->MementoDatetime();
+}
+
+void WebURLResponse::SetMementoDatetime(std::string memento_datetime) {
+  resource_response_->SetMementoDatetime(memento_datetime);
+}
+
 WebString WebURLResponse::HttpStatusText() const {
   return resource_response_->HttpStatusText();
 }

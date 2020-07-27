@@ -86,7 +86,10 @@ struct URLResponseHead {
   ConnectionInfo connection_info;
 
   // Whether or not the displayed page is a Memento
-  bool memento_info;
+  bool memento_info = false;
+
+  // Datetime if the page is a Memento
+  string memento_datetime = "";
 
   // ALPN protocol negotiated with the server.
   string alpn_negotiated_protocol;

@@ -444,6 +444,8 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
   state->memento_status = entry->GetMementoInfo();
+  state->memento_datetime = entry->GetMementoDatetime();
+  DVLOG(0) << "ContentUtils::GetVisibleSecurityState ---------- " << state->memento_status;
   state->key_exchange_group = ssl.key_exchange_group;
   state->peer_signature_algorithm = ssl.peer_signature_algorithm;
   state->pkp_bypassed = ssl.pkp_bypassed;

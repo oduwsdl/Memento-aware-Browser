@@ -63,6 +63,7 @@ ContentSerializedNavigationBuilder::FromNavigationEntry(
   if (entry->GetFavicon().valid)
     navigation.favicon_url_ = entry->GetFavicon().url;
   navigation.http_status_code_ = entry->GetHttpStatusCode();
+  navigation.memento_status_ = entry->GetMementoInfo();
   navigation.redirect_chain_ = entry->GetRedirectChain();
   navigation.replaced_entry_data_ =
       ConvertReplacedEntryData(entry->GetReplacedEntryData());
@@ -81,6 +82,8 @@ ContentSerializedNavigationBuilder::FromNavigationEntry(
     if (!value.empty())
       navigation.extended_info_map_[handler_entry.first] = value;
   }
+
+  DVLOG(0) << "???????????????????????????????????????????????????????????????????????????????";
 
   return navigation;
 }
@@ -158,6 +161,7 @@ ContentSerializedNavigationBuilder::ToNavigationEntry(
   entry->SetIsOverridingUserAgent(navigation->is_overriding_user_agent_);
   entry->SetTimestamp(navigation->timestamp_);
   entry->SetHttpStatusCode(navigation->http_status_code_);
+  entry->SetMementoInfo(navigation->memento_status_);
   entry->SetRedirectChain(navigation->redirect_chain_);
   entry->SetVirtualURL(navigation->virtual_url_);
   sessions::NavigationTaskId* navigation_task_id =

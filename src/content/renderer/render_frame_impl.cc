@@ -4920,6 +4920,9 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
   std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params =
       std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>();
   params->http_status_code = response.HttpStatusCode();
+  DVLOG(0) << "RenderFrameImpl::MakeDidCommitProvisionalLoadParams ---------- " << response.MementoDatetime();
+  params->memento_status = response.MementoInfo();
+  params->memento_datetime = response.MementoDatetime();
   params->url_is_unreachable = document_loader->HasUnreachableURL();
   params->method = "GET";
   params->intended_as_new_entry =
@@ -5197,7 +5200,20 @@ void RenderFrameImpl::DidCommitNavigationInternal(
   // load committing.
   auto params = MakeDidCommitProvisionalLoadParams(commit_type, transition,
                                                    embedding_token);
+
+  if (params->memento_datetime == "") {
+    DVLOG(0) << "GONNA BE 0";
+    params->memento_status = 0;
+  } else {
+    DVLOG(0) << "GONNA BE 1";
+    params->memento_status = 1;
+  }
+
+
+
   if (was_within_same_document) {
+    DVLOG(0) << "RenderFrameImpl::DidCommitNavigationInternal ---------- " << params->memento_status;
+    
     GetFrameHost()->DidCommitSameDocumentNavigation(std::move(params));
   } else {
     NavigationState* navigation_state =

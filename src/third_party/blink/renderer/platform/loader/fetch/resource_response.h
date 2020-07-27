@@ -222,6 +222,9 @@ class PLATFORM_EXPORT ResourceResponse final {
   bool MementoInfo() const;
   void SetMementoInfo(bool);
 
+  std::string MementoDatetime() const;
+  void SetMementoDatetime(std::string);
+
   const AtomicString& HttpStatusText() const;
   void SetHttpStatusText(const AtomicString&);
 
@@ -496,6 +499,7 @@ class PLATFORM_EXPORT ResourceResponse final {
   unsigned connection_id_ = 0;
   int http_status_code_ = 0;
   bool memento_info_ = false;
+  std::string memento_datetime_ = "";
   AtomicString http_status_text_;
   HTTPHeaderMap http_header_fields_;
 

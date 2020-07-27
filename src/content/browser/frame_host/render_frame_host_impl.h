@@ -571,6 +571,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Return the http status code of the last committed navigation.
   int last_http_status_code() { return last_http_status_code_; }
 
+  // Return the memento status of the last committed navigation.
+  bool last_memento_status() { return last_memento_status_; }
+
   // Returns |frame_origin| if this frame is the top (i.e. root) frame in the
   // frame tree. Otherwise, it returns the top frame's origin.
   const url::Origin& ComputeTopFrameOrigin(
@@ -2450,7 +2453,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   GURL last_committed_url_;
 
   // Track this frame's last memento status.
-  bool last_memento_status_;
+  bool last_memento_status_ = false;
 
   // Track the frame priority of the last committed document, which is nullopt
   // prior to the first commit.

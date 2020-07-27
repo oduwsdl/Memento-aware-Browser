@@ -174,6 +174,7 @@ struct VisibleSecurityState {
   int connection_status;
   // Whether or not the page is a memento
   bool memento_status;
+  std::string memento_datetime;
   // The ID of the (EC)DH group used by the key exchange. The value is zero if
   // unknown (older cache entries may not store the value) or not applicable.
   uint16_t key_exchange_group;

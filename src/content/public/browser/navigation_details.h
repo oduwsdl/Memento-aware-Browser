@@ -53,6 +53,9 @@ struct CONTENT_EXPORT LoadCommittedDetails {
   // sub-frame.
   bool is_main_frame;
 
+  // True when the main frame is a memento
+  bool is_memento;
+
   // Returns whether the main frame navigated to a different page (e.g., not
   // scrolling to a fragment inside the current page). We often need this logic
   // for showing or hiding something.

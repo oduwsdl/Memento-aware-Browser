@@ -73,6 +73,7 @@ class CustomTabBarView : public views::AccessiblePaneView,
   SkColor GetSecurityChipColor(
       security_state::SecurityLevel security_level) const override;
   bool ShowPageInfoDialog() override;
+  bool Dialog() override;
   const LocationBarModel* GetLocationBarModel() const override;
   gfx::ImageSkia GetLocationIcon(LocationIconView::Delegate::IconFetchedCallback
                                      on_icon_fetched) const override;

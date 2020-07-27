@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/collected_cookies_views.h"
+//#include "chrome/browser/ui/views/memento_views.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/hover_button.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
@@ -143,7 +144,7 @@ class BubbleHeaderView : public views::View {
   void SetSummary(const base::string16& summary_text);
 
   // Sets the security details for the current page.
-  void SetDetails(const base::string16& details_text);
+  void SetDetails(const base::string16& details_text, bool is_memento_info);
 
   void AddEvCertificateDetailsLabel(
       const PageInfoBubbleView::IdentityInfo& identity_info);
@@ -245,23 +246,30 @@ BubbleHeaderView::BubbleHeaderView(
 
 BubbleHeaderView::~BubbleHeaderView() {}
 
-void BubbleHeaderView::SetDetails(const base::string16& details_text) {
+void BubbleHeaderView::SetDetails(const base::string16& details_text, bool is_memento_bubble) {
   std::vector<base::string16> subst;
   subst.push_back(details_text);
-  subst.push_back(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
 
-  std::vector<size_t> offsets;
+  if (!is_memento_bubble) {
+    subst.push_back(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
+    std::vector<size_t> offsets;
 
-  base::string16 text = base::ReplaceStringPlaceholders(
-      base::ASCIIToUTF16("$1 $2"), subst, &offsets);
-  security_details_label_->SetText(text);
-  gfx::Range details_range(offsets[1], text.length());
+    base::string16 text = base::ReplaceStringPlaceholders(
+        base::ASCIIToUTF16("$1 $2"), subst, &offsets);
+    security_details_label_->SetText(text);
+    gfx::Range details_range(offsets[1], text.length());
 
-  views::StyledLabel::RangeStyleInfo link_style =
-      views::StyledLabel::RangeStyleInfo::CreateForLink();
-  link_style.disable_line_wrapping = false;
+    views::StyledLabel::RangeStyleInfo link_style =
+        views::StyledLabel::RangeStyleInfo::CreateForLink();
+    link_style.disable_line_wrapping = false;
 
-  security_details_label_->AddStyleRange(details_range, link_style);
+    security_details_label_->AddStyleRange(details_range, link_style);
+  } else {
+    security_details_label_->SetText(details_text);
+  }
+
+  
+
 }
 
 void BubbleHeaderView::AddResetDecisionsLabel() {
@@ -449,8 +457,11 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& url,
-    PageInfoClosingCallback closing_callback) {
+    PageInfoClosingCallback closing_callback,
+    bool is_memento_bubble) {
   gfx::NativeView parent_view = platform_util::GetViewForWindow(parent_window);
+
+  DVLOG(0) << "PageInfoBubbleView::CreatePageInfoBubble ---------- " << is_memento_bubble;
 
   if (url.SchemeIs(content::kChromeUIScheme) ||
       url.SchemeIs(content::kChromeDevToolsScheme) ||
@@ -463,7 +474,8 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
   }
 
   return new PageInfoBubbleView(anchor_view, anchor_rect, parent_view, profile,
-                                web_contents, url, std::move(closing_callback));
+                                web_contents, url, std::move(closing_callback),
+                                is_memento_bubble);
 }
 
 PageInfoBubbleView::PageInfoBubbleView(
@@ -473,7 +485,8 @@ PageInfoBubbleView::PageInfoBubbleView(
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& url,
-    PageInfoClosingCallback closing_callback)
+    PageInfoClosingCallback closing_callback,
+    bool is_memento_bubble)
     : PageInfoBubbleViewBase(anchor_view,
                              anchor_rect,
                              parent_window,
@@ -541,7 +554,7 @@ PageInfoBubbleView::PageInfoBubbleView(
   presenter_ = std::make_unique<PageInfo>(
       std::make_unique<ChromePageInfoDelegate>(web_contents), web_contents,
       url);
-  presenter_->InitializeUiState(this);
+  presenter_->InitializeUiState(this, is_memento_bubble);
 }
 
 void PageInfoBubbleView::WebContentsDestroyed() {
@@ -593,6 +606,10 @@ void PageInfoBubbleView::ButtonPressed(views::Button* button,
     case PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG:
     case PageInfoBubbleView::
         VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_CERTIFICATE_VIEWER:
+      HandleMoreInfoRequest(button);
+      break;
+    case PageInfoBubbleView::
+        VIEW_ID_PAGE_INFO_MEMENTO_INFO_VIEWER:
       HandleMoreInfoRequest(button);
       break;
     case PageInfoBubbleView::VIEW_ID_PAGE_INFO_HOVER_BUTTON_VR_PRESENTATION:
@@ -852,7 +869,86 @@ void PageInfoBubbleView::SetIdentityInfo(const IdentityInfo& identity_info) {
             SAFE_BROWSING_STATUS_SAVED_PASSWORD_REUSE);
   }
   details_text_ = security_description->details;
-  header_->SetDetails(security_description->details);
+  header_->SetDetails(security_description->details, false);
+
+  Layout();
+  SizeToContents();
+}
+
+void PageInfoBubbleView::SetMementoInfo(const IdentityInfo& identity_info) {
+  std::unique_ptr<PageInfoUI::SecurityDescription> security_description =
+      GetSecurityDescription(identity_info);
+
+  set_window_title(security_description->memento_summary);
+  set_security_description_type(security_description->type);
+  GetBubbleFrameView()->UpdateWindowTitle();
+
+  if (identity_info.certificate) {
+    certificate_ = identity_info.certificate;
+
+    if (identity_info.show_ssl_decision_revoke_button) {
+      header_->AddResetDecisionsLabel();
+    }
+
+    // Show information about the page's certificate.
+    // The text of link to the Certificate Viewer varies depending on the
+    // validity of the Certificate.
+    const bool valid_identity =
+        (identity_info.identity_status != PageInfo::SITE_IDENTITY_STATUS_ERROR);
+    base::string16 tooltip;
+    if (valid_identity) {
+      tooltip = base::string16();/*l10n_util::GetStringFUTF16(
+          IDS_PAGE_INFO_CERTIFICATE_VALID_LINK_TOOLTIP,
+          base::UTF8ToUTF16(certificate_->issuer().GetDisplayName()));*/
+    } else {
+      tooltip = l10n_util::GetStringUTF16(
+          IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK_TOOLTIP);
+    }
+
+    // Add the Certificate Section.
+    const gfx::ImageSkia icon =
+        PageInfoUI::GetMementoIcon(GetRelatedTextColor());
+    const base::string16 secondary_text = base::string16();/*l10n_util::GetStringUTF16(
+        valid_identity ? IDS_PAGE_INFO_CERTIFICATE_VALID_PARENTHESIZED
+                       : IDS_PAGE_INFO_CERTIFICATE_INVALID_PARENTHESIZED);*/
+
+    base::string16 subtitle_text;
+    if (base::FeatureList::IsEnabled(features::kEvDetailsInPageInfo)) {
+      // Only show the EV certificate details if there are no errors or mixed
+      // content.
+      if (identity_info.identity_status ==
+              PageInfo::SITE_IDENTITY_STATUS_EV_CERT &&
+          identity_info.connection_status ==
+              PageInfo::SITE_CONNECTION_STATUS_ENCRYPTED) {
+        // An EV cert is required to have an organization name and a country.
+        if (!certificate_->subject().organization_names.empty() &&
+            !certificate_->subject().country_name.empty()) {
+          subtitle_text = l10n_util::GetStringFUTF16(
+              IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_VERIFIED,
+              base::UTF8ToUTF16(certificate_->subject().organization_names[0]),
+              base::UTF8ToUTF16(certificate_->subject().country_name));
+        }
+      }
+    }
+
+    // If the certificate button has been added previously, remove the old one
+    // before recreating it. Re-adding it bumps it to the bottom of the
+    // container, but its unlikely that the user will notice, since other things
+    // are changing too.
+    if (memento_info_button_) {
+      site_settings_view_->RemoveChildView(memento_info_button_);
+      auto to_delete = std::make_unique<views::View*>(memento_info_button_);
+    }
+    memento_info_button_ = site_settings_view_->AddChildView(
+        std::make_unique<PageInfoHoverButton>(
+            this, icon, IDS_PAGE_INFO_MEMENTO_INFO_BUTTON_TEXT, secondary_text,
+            VIEW_ID_PAGE_INFO_MEMENTO_INFO_VIEWER, tooltip,
+            subtitle_text)
+            .release());
+  }
+
+  //details_text_ = security_description->details;
+  header_->SetDetails(security_description->memento_info, true);
 
   Layout();
   SizeToContents();
@@ -1011,6 +1107,11 @@ void PageInfoBubbleView::HandleMoreInfoRequestAsync(int view_id) {
       }
       break;
     }
+    case PageInfoBubbleView::
+        VIEW_ID_PAGE_INFO_MEMENTO_INFO_VIEWER: {
+      CollectedCookiesViews::CreateAndShowForWebContents(web_contents());
+      break;
+    }
     default:
       NOTREACHED();
   }
@@ -1056,7 +1157,7 @@ void ShowPageInfoDialogImpl(Browser* browser,
       PageInfoBubbleView::CreatePageInfoBubble(
           configuration.anchor_view, anchor_rect, parent_window,
           browser->profile(), web_contents, virtual_url,
-          std::move(closing_callback));
+          std::move(closing_callback), false);
   bubble->SetHighlightedButton(configuration.highlighted_button);
   bubble->SetArrow(configuration.bubble_arrow);
   bubble->GetWidget()->Show();

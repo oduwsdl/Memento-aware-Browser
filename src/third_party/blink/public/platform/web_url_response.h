@@ -202,6 +202,9 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT bool MementoInfo() const;
   BLINK_PLATFORM_EXPORT void SetMementoInfo(bool);
 
+  BLINK_PLATFORM_EXPORT std::string MementoDatetime() const;
+  BLINK_PLATFORM_EXPORT void SetMementoDatetime(std::string);
+
   BLINK_PLATFORM_EXPORT WebString HttpStatusText() const;
   BLINK_PLATFORM_EXPORT void SetHttpStatusText(const WebString&);
 

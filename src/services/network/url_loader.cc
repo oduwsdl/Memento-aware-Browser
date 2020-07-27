@@ -95,8 +95,10 @@ void PopulateResourceResponse(net::URLRequest* request,
   request->GetMimeType(&response->mime_type);
   net::HttpResponseInfo response_info = request->response_info();
   response->memento_info = response_info.memento_info;
-  if(response->memento_info) {
+  response->memento_datetime = response_info.memento_datetime;
+  if(response->memento_datetime != "") {
     DVLOG(0) << "Memento-Datetime header is present.";
+    DVLOG(0) << "PopulateResourceResponse ---------- " << response->memento_datetime;
   }
   else {
     DVLOG(0) << "_______________________________________________________________________________________";

@@ -9,6 +9,7 @@
 
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/collected_cookies_views.h"
+#include "chrome/browser/ui/views/memento_views.h"
 #include "chrome/browser/ui/views/hung_renderer_view.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
 #include "content/public/browser/web_contents.h"

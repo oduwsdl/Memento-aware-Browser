@@ -91,6 +91,11 @@
         <include name="IDR_CERTIFICATE_VIEWER_JS" file="resources\certificate_viewer.js" type="BINDATA" />
         <include name="IDR_CERTIFICATE_VIEWER_CSS" file="resources\certificate_viewer.css" type="BINDATA" />
       </if>
+      <if expr="is_posix and not is_macosx">
+        <include name="IDR_MEMENTO_INFO_VIEWER_HTML" file="resources\memento_info_viewer.html" type="BINDATA" />
+        <!--include name="IDR_CERTIFICATE_VIEWER_JS" file="resources\certificate_viewer.js" type="BINDATA" />
+        <include name="IDR_CERTIFICATE_VIEWER_CSS" file="resources\certificate_viewer.css" type="BINDATA" /-->
+      </if>
       <if expr="chromeos">
         <include name="IDR_CHROME_APP_MANIFEST" file="resources\chrome_app\manifest.json" type="BINDATA" />
       </if>
