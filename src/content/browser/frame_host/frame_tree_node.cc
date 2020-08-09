@@ -299,6 +299,10 @@ void FrameTreeNode::SetCurrentURL(const GURL& url) {
   blame_context_.TakeSnapshot();
 }
 
+void FrameTreeNode::SetCurrentDatetime(const std::string& datetime) {
+  current_frame_host()->SetLastCommittedDatetime(datetime);
+}
+
 void FrameTreeNode::SetCurrentOrigin(
     const url::Origin& origin,
     bool is_potentially_trustworthy_unique_origin) {

@@ -153,6 +153,8 @@ class NET_EXPORT HttpResponseHeaders
   // Get the HTTP status text of the normalized status line.
   std::string GetStatusText() const;
 
+  std::string GetMementoDatetime() const;
+
   // Enumerate the "lines" of the response headers.  This skips over the status
   // line.  Use GetStatusLine if you are interested in that.  Note that this
   // method returns the un-coalesced response header lines, so if a response

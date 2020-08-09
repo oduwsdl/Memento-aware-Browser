@@ -151,9 +151,15 @@ class CONTENT_EXPORT FrameTreeNode {
     return current_frame_host()->GetLastCommittedURL();
   }
 
+  const std::string datetime() const {
+    return current_frame_host()->GetLastCommittedDatetime();
+  }
+
   // Sets the last committed URL for this frame and updates
   // has_committed_real_load accordingly.
   void SetCurrentURL(const GURL& url);
+
+  void SetCurrentDatetime(const std::string& datetime);
 
   // Returns true iff SetCurrentURL has been called with a non-blank URL.
   bool has_committed_real_load() const { return has_committed_real_load_; }

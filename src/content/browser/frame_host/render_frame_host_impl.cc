@@ -1437,6 +1437,10 @@ const url::Origin& RenderFrameHostImpl::GetLastCommittedOrigin() {
   return last_committed_origin_;
 }
 
+const std::string& RenderFrameHostImpl::GetLastCommittedDatetime() {
+  return last_memento_datetime_;
+}
+
 const net::NetworkIsolationKey& RenderFrameHostImpl::GetNetworkIsolationKey() {
   DCHECK(!isolation_info_.IsEmpty());
   return isolation_info_.network_isolation_key();
@@ -2396,6 +2400,8 @@ void RenderFrameHostImpl::DidNavigate(
   // stay correct even if the render_frame_host later becomes pending deletion.
   // The URL is set regardless of whether it's for a net error or not.
   frame_tree_node_->SetCurrentURL(params.url);
+  frame_tree_node_->SetCurrentDatetime(params.memento_datetime);
+  DVLOG(0) << "RenderFrameHostImpl::DidNavigate" << params.memento_datetime;
   SetLastCommittedOrigin(params.origin);
 
   // Separately, update the frame's last successful URL except for net error
@@ -2597,6 +2603,10 @@ void RenderFrameHostImpl::ResetChildren() {
 
 void RenderFrameHostImpl::SetLastCommittedUrl(const GURL& url) {
   last_committed_url_ = url;
+}
+
+void RenderFrameHostImpl::SetLastCommittedDatetime(const std::string& datetime) {
+  last_memento_datetime_ = datetime;
 }
 
 void RenderFrameHostImpl::UpdateRenderProcessHostFramePriorities() {
@@ -2855,7 +2865,13 @@ void RenderFrameHostImpl::DidCommitPerNavigationMojoInterfaceNavigation(
   CHECK(request != navigation_requests_.end());
 
   std::unique_ptr<NavigationRequest> owned_request = std::move(request->second);
-  params->memento_status = committing_navigation_request->GetMementoInfo();
+  //params->memento_status = committing_navigation_request->GetMementoInfo();
+  params->memento_datetime = committing_navigation_request->GetMementoDatetime();
+  /*if (params->memento_datetime != "") {
+    params->memento_status = 1;
+  } else {
+    params->memento_status = 0;
+  }*/
   navigation_requests_.erase(committing_navigation_request);
   DVLOG(0) << "RenderFrameHostImpl::DidCommitPerNavigationMojoInterfaceNavigation ---------- " << params->memento_status;
   DidCommitNavigation(std::move(owned_request), std::move(params),
@@ -2895,6 +2911,12 @@ void RenderFrameHostImpl::DidCommitSameDocumentNavigation(
       same_document_navigation_request_ &&
       (same_document_navigation_request_->commit_params().navigation_token ==
        params->navigation_token);
+
+  /*if (params->memento_datetime != "") {
+    params->memento_status = 1;
+  } else {
+    params->memento_status = 0;
+  }*/
 
   if (!DidCommitNavigationInternal(
           is_browser_initiated ? std::move(same_document_navigation_request_)
@@ -8124,14 +8146,15 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
   last_http_status_code_ = params->http_status_code;
   last_http_method_ = params->method;
   DVLOG(0) << "RenderFrameHostImpl::DidCommitNavigationInternal ---------- " << params->memento_datetime;
-  /*if (params->memento_datetime == "") {
+  if (params->memento_datetime == "") {
     DVLOG(0) << "RIGHT HERE 0";
     params->memento_status = 0;
   } else {
     DVLOG(0) << "RIGHT HERE 1";
     params->memento_status = 1;
-  }*/
+  }
   last_memento_status_ = params->memento_status;
+  //last_memento_datetime_ = params->memento_datetime;
   UpdateSiteURL(params->url, params->url_is_unreachable);
   if (!is_same_document_navigation)
     UpdateRenderProcessHostFramePriorities();

@@ -295,6 +295,13 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
     force_ignore_site_for_cookies_ = attach;
   }
 
+  std::string memento_datetime() const {
+    return memento_datetime_;
+  }
+  void set_memento_datetime(std::string datetime) {
+    memento_datetime_ = datetime;
+  }
+
   // The first-party URL policy to apply when updating the first party URL
   // during redirects. The first-party URL policy may only be changed before
   // Start() is called.
@@ -852,6 +859,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   IsolationInfo isolation_info_;
 
   bool force_ignore_site_for_cookies_;
+  std::string memento_datetime_;
   base::Optional<url::Origin> initiator_;
   GURL delegate_redirect_url_;
   std::string method_;  // "GET", "POST", etc. Should be all uppercase.

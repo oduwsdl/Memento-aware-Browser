@@ -1013,9 +1013,8 @@ void WebURLLoaderImpl::PopulateURLResponse(
   response->SetHttpStatusText(WebString::FromLatin1(headers->GetStatusText()));
   response->SetMementoDatetime(head.memento_datetime);
   response->SetMementoInfo(head.memento_info);
-  //bool is_memento = headers->HasHeader("Memento-Datetime");
-  //response->SetMementoInfo(is_memento);
-  DVLOG(0) << "WebURLLoaderImpl::PopulateURLResponse ---------- " << response->MementoDatetime();
+
+  DVLOG(0) << "WebURLLoaderImpl::PopulateURLResponse ---------- " << head.memento_datetime;
 
   // Build up the header map.
   size_t iter = 0;

@@ -600,6 +600,31 @@ bool HttpResponseHeaders::EnumerateHeader(size_t* iter,
   return true;
 }
 
+std::string HttpResponseHeaders::GetMementoDatetime() const {
+
+  std::string value = "";
+  std::string field = "Memento-Datetime";
+
+  std::string status_text = GetStatusLine();
+  std::string::const_iterator value_begin = raw_headers_.begin();
+  std::string::const_iterator value_end = raw_headers_.end();
+  std::string::const_iterator field_begin = field.begin();
+  std::string::const_iterator field_end = field.end();
+
+  std::string::const_iterator i = std::search(value_begin, value_end, field_begin, field_end);
+
+  if (i == value_end) {
+    std::string field = "memento-datetime";
+    std::string::const_iterator field_begin = field.begin();
+    std::string::const_iterator field_end = field.end();
+    i = std::search(value_begin, value_end, field_begin, field_end);
+  }
+
+  value.assign(i+17, i + 47);
+
+  return value;
+}
+
 bool HttpResponseHeaders::HasHeaderValue(base::StringPiece name,
                                          base::StringPiece value) const {
   // The value has to be an exact match.  This is important since

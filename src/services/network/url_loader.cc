@@ -90,19 +90,26 @@ void PopulateResourceResponse(net::URLRequest* request,
   response->parsed_headers =
       PopulateParsedHeaders(response->headers, request->url());
 
+  DVLOG(0) << response->headers->raw_headers();
+  if (response->headers->HasHeader("Memento-Datetime")) {
+    DVLOG(0) << "PopulateResourceResponse ----- Memento ---------- " << 1;
+    response->memento_info = true;
+    response->memento_datetime = response->headers->GetMementoDatetime();
+    DVLOG(0) << "----- " << response->memento_datetime << " -----";
+  } else if (response->headers->HasHeader("memento_datetime")) {
+    DVLOG(0) << "PopulateResourceResponse ----- memento ---------- " << 1;
+    response->memento_info = true;
+    response->memento_datetime = response->headers->GetMementoDatetime();
+    DVLOG(0) << "----- " << response->memento_datetime << " -----";
+  } else {
+    DVLOG(0) << "PopulateResourceResponse ---------- " << 0;
+  }
+
   request->GetCharset(&response->charset);
   response->content_length = request->GetExpectedContentSize();
   request->GetMimeType(&response->mime_type);
   net::HttpResponseInfo response_info = request->response_info();
-  response->memento_info = response_info.memento_info;
-  response->memento_datetime = response_info.memento_datetime;
-  if(response->memento_datetime != "") {
-    DVLOG(0) << "Memento-Datetime header is present.";
-    DVLOG(0) << "PopulateResourceResponse ---------- " << response->memento_datetime;
-  }
-  else {
-    DVLOG(0) << "_______________________________________________________________________________________";
-  }
+  response_info.memento_datetime = response->memento_datetime;
   response->was_fetched_via_spdy = response_info.was_fetched_via_spdy;
   response->was_alpn_negotiated = response_info.was_alpn_negotiated;
   response->alpn_negotiated_protocol = response_info.alpn_negotiated_protocol;

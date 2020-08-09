@@ -261,6 +261,7 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
         SSL_CONNECTION_VERSION_SSL3) {
       return false;
     }
+    DVLOG(0) << "connection_status " << memento_datetime;
     ssl_info.connection_status = connection_status;
   }
 

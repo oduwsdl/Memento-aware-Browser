@@ -627,6 +627,8 @@ class PLATFORM_EXPORT ResourceRequest final : public ResourceRequestHead {
   ResourceRequest& operator=(const ResourceRequest&);
 
   ResourceRequestBody body_;
+
+  //std::string memento_datetime_;
 };
 
 }  // namespace blink

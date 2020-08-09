@@ -63,6 +63,7 @@ void HTMLFrameElement::AttachLayoutTree(AttachContext& context) {
 
 void HTMLFrameElement::ParseAttribute(
     const AttributeModificationParams& params) {
+  DVLOG(0) << "HTMLFrameElement::ParseAttribute";
   if (params.name == html_names::kFrameborderAttr) {
     frame_border_ = params.new_value.ToInt();
     frame_border_set_ = !params.new_value.IsNull();

@@ -501,6 +501,7 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
     WebFrameLoadType frame_load_type = WebFrameLoadType::kStandard;
     if (replace_current_item)
       frame_load_type = WebFrameLoadType::kReplaceCurrentItem;
+    DVLOG(0) << "HTMLFrameOwnerElement::LoadOrRedirectSubframe" << url_to_request;
     ContentFrame()->Navigate(frame_load_request, frame_load_type);
     return true;
   }

@@ -110,6 +110,7 @@ void NavigationThrottleRunner::RegisterNavigationThrottles() {
   // FormSubmissionThrottle so that when folks block mixed content with a CSP
   // policy, they don't get a warning. They'll still get a warning in the
   // console about CSP blocking the load.
+  DVLOG(0) << "NavigationThrottleRunner::RegisterNavigationThrottles";
   AddThrottle(
       MixedContentNavigationThrottle::CreateThrottleForNavigation(request));
 

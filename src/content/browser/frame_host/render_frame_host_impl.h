@@ -298,6 +298,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   bool IsCrossProcessSubframe() override;
   const GURL& GetLastCommittedURL() override;
   const url::Origin& GetLastCommittedOrigin() override;
+  const std::string& GetLastCommittedDatetime();
   const net::NetworkIsolationKey& GetNetworkIsolationKey() override;
   const net::IsolationInfo& GetIsolationInfoForSubresources() override;
   gfx::NativeView GetNativeView() override;
@@ -561,6 +562,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // whether a real load has committed or not.
   void SetLastCommittedUrl(const GURL& url);
 
+  void SetLastCommittedDatetime(const std::string& datetime);
+
   // The most recent non-net-error URL to commit in this frame.  In almost all
   // cases, use GetLastCommittedURL instead.
   const GURL& last_successful_url() { return last_successful_url_; }
@@ -573,6 +576,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Return the memento status of the last committed navigation.
   bool last_memento_status() { return last_memento_status_; }
+
+  std::string last_memento_datetime() { return last_memento_datetime_; }
 
   // Returns |frame_origin| if this frame is the top (i.e. root) frame in the
   // frame tree. Otherwise, it returns the top frame's origin.
@@ -2454,6 +2459,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Track this frame's last memento status.
   bool last_memento_status_ = false;
+
+  std::string last_memento_datetime_ = "";
 
   // Track the frame priority of the last committed document, which is nullopt
   // prior to the first commit.

@@ -64,6 +64,7 @@ void UpdateRendererOnMixedContentFound(NavigationRequest* navigation_request,
                                        const GURL& mixed_content_url,
                                        bool was_allowed,
                                        bool for_redirect) {
+  DVLOG(0) << "UpdateRendererOnMixedContentFound";
   // TODO(carlosk): the root node should never be considered as being/having
   // mixed content for now. Once/if the browser should also check form submits
   // for mixed content than this will be allowed to happen and this DCHECK
@@ -130,16 +131,22 @@ const char* MixedContentNavigationThrottle::GetNameForLogging() {
 
 // Based off of MixedContentChecker::shouldBlockFetch.
 bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
+  DVLOG(0) << "MixedContentNavigationThrottle::ShouldBlockNavigation";
   NavigationRequest* request = NavigationRequest::From(navigation_handle());
   FrameTreeNode* node = request->frame_tree_node();
 
   // Find the parent frame where mixed content is characterized, if any.
   RenderFrameHostImpl* mixed_content_frame =
       InWhichFrameIsContentMixed(node, request->GetURL());
+
+  InWhichFrameIsMemento(node, request->GetURL(), request->GetDatetime());
+
   if (!mixed_content_frame) {
     MaybeSendBlinkFeatureUsageReport();
+    DVLOG(0) << "!mixed_content_frame";
     return false;
   }
+  DVLOG(0) << "MadeItPast";
 
   // From this point on we know this is not a main frame navigation and that
   // there is mixed content. Now let's decide if it's OK to proceed with it.
@@ -182,14 +189,17 @@ bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
     // in IsUrlPotentiallySecure() and cause an early-return because of the
     // InWhichFrameIsContentMixed() check above.
     UMA_HISTOGRAM_BOOLEAN("SSL.NonWebbyMixedContentLoaded", true);
+    DVLOG(0) << "ShouldTreatURLSchemeAsCorsEnabled";
     return false;
   }
 
   bool allowed = false;
   RenderFrameHostDelegate* frame_host_delegate =
       node->current_frame_host()->delegate();
+  DVLOG(0) << "WillTryToDisplayMixedContent";
   switch (mixed_context_type) {
     case blink::WebMixedContentContextType::kOptionallyBlockable:
+      DVLOG(0) << "kOptionallyBlockable";
       allowed = !strict_mode;
       if (allowed) {
         frame_host_delegate->PassiveInsecureContentFound(request->GetURL());
@@ -198,6 +208,7 @@ bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
       break;
 
     case blink::WebMixedContentContextType::kBlockable: {
+      DVLOG(0) << "kBlockable";
       // Note: from the renderer side implementation it seems like we don't need
       // to care about reporting
       // blink::UseCounter::BlockableMixedContentInSubframeBlocked because it is
@@ -223,12 +234,14 @@ bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
     }
 
     case blink::WebMixedContentContextType::kShouldBeBlockable:
+      DVLOG(0) << "kShouldBeBlockable";
       allowed = !strict_mode;
       if (allowed)
         frame_host_delegate->DidDisplayInsecureContent();
       break;
 
     case blink::WebMixedContentContextType::kNotMixedContent:
+      DVLOG(0) << "kNotMixedContent";
       NOTREACHED();
       break;
   };
@@ -252,6 +265,8 @@ RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsContentMixed(
   if (node->IsMainFrame())
     return nullptr;
 
+  DVLOG(0) << "NOT THE MAIN FRAME ----- " << url;
+
   // There's no mixed content if any of these are true:
   // - The navigated URL is potentially secure.
   // - Neither the root nor parent frames have secure origins.
@@ -262,7 +277,10 @@ RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsContentMixed(
   RenderFrameHostImpl* mixed_content_frame = nullptr;
   RenderFrameHostImpl* root = node->parent()->GetMainFrame();
   RenderFrameHostImpl* parent = node->parent();
+  DVLOG(0) << "ROOT: " << root->GetLastCommittedURL();
+  DVLOG(0) << "PARENT: " << parent->GetLastCommittedURL();
   if (!IsUrlPotentiallySecure(url)) {
+    DVLOG(0) << "IsUrlPotentiallySecure";
     // TODO(carlosk): we might need to check more than just the immediate parent
     // and the root. See https://crbug.com/623486.
 
@@ -286,6 +304,7 @@ RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsContentMixed(
     // make sure we're not breaking the world without realizing it.
     if (mixed_content_frame->GetLastCommittedOrigin().scheme() !=
         url::kHttpsScheme) {
+      DVLOG(0) << "kMixedContentInNonHTTPSFrameThatRestrictsMixedContent";
       mixed_content_features_.insert(
           blink::mojom::WebFeature::
               kMixedContentInNonHTTPSFrameThatRestrictsMixedContent);
@@ -293,10 +312,47 @@ RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsContentMixed(
   } else if (!IsOriginSecure(url) &&
              (IsSecureScheme(root->GetLastCommittedOrigin().scheme()) ||
               IsSecureScheme(parent->GetLastCommittedOrigin().scheme()))) {
+    DVLOG(0) << "kMixedContentInSecureFrameThatDoesNotRestrictMixedContent";
     mixed_content_features_.insert(
         blink::mojom::WebFeature::
             kMixedContentInSecureFrameThatDoesNotRestrictMixedContent);
   }
+
+  return mixed_content_frame;
+}
+
+RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsMemento(
+    FrameTreeNode* node,
+    const GURL& url,
+    std::string datetime) {
+  // Main frame navigations cannot be mixed content.
+  // TODO(carlosk): except for form submissions which might be supported in the
+  // future.
+  if (node->IsMainFrame())
+    return nullptr;
+
+  RenderFrameHostImpl* mixed_content_frame = nullptr;
+  RenderFrameHostImpl* root = node->parent()->GetMainFrame();
+  RenderFrameHostImpl* parent = node->parent();
+  DVLOG(0) << "ROOT (memento): " << root->GetLastCommittedURL();
+  DVLOG(0) << "PARENT (memento): " << parent->GetLastCommittedURL();
+  DVLOG(0) << "NOT THE MAIN FRAME (MEMENTO) ----- " << url << "    " << datetime;
+  DVLOG(0) << "frame_tree_node_id_: " << node->parent()->last_memento_datetime() << " --- " << node->parent()->last_successful_url();
+  //std::string found_datetime = node->parent()->last_memento_datetime();
+
+  if (node->parent()->last_memento_datetime() != "") {
+    DVLOG(0) << "Found a memento: " << node->parent()->last_memento_datetime();
+    mixed_content_frame = root;
+    //root->frame_tree_node()->SetCurrentDatetime(node->parent()->last_memento_datetime());
+    node->navigator().GetController()->GetVisibleEntry()->SetMementoDatetime(node->parent()->last_memento_datetime());
+    node->navigator().GetController()->GetVisibleEntry()->SetMementoInfo(true);
+    DVLOG(0) << "navigator " << node->navigator().GetController()->GetVisibleEntry()->GetMementoDatetime() << " " << node->navigator().GetController()->GetVisibleEntry()->GetURL();
+  }
+
+  if (parent == root) {
+    DVLOG(0) << "PARENT == ROOT";
+  }
+
   return mixed_content_frame;
 }
 

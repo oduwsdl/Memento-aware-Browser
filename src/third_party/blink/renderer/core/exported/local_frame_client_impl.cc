@@ -545,6 +545,8 @@ void LocalFrameClientImpl::BeginNavigation(
   if (!web_frame_->Client())
     return;
 
+  DVLOG(0) << "LocalFrameClientImpl::BeginNavigation";
+
   auto navigation_info = std::make_unique<WebNavigationInfo>();
   navigation_info->url_request.CopyFrom(WrappedResourceRequest(request));
   navigation_info->frame_type = frame_type;
@@ -661,6 +663,8 @@ void LocalFrameClientImpl::BeginNavigation(
       owner ? base::make_optional(owner->GetFramePolicy()) : base::nullopt;
 
   navigation_info->href_translate = href_translate;
+
+  navigation_info->memento_datetime = "whoop";
 
   web_frame_->Client()->BeginNavigation(std::move(navigation_info));
 }

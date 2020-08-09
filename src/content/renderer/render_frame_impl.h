@@ -1280,6 +1280,8 @@ class CONTENT_EXPORT RenderFrameImpl
   RenderViewImpl* render_view_;
   const int routing_id_;
 
+  std::string frame_memento_datetime_;
+
   // If this RenderFrame was created to replace a previous object, this will
   // store its routing id. The previous object can be:
   // - A RenderFrame. This requires RenderDocument to be enabled.

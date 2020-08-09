@@ -258,6 +258,7 @@ class CONTENT_EXPORT NavigationRequest
   // NavigationHandle implementation:
   int64_t GetNavigationId() override;
   const GURL& GetURL() override;
+  const std::string& GetDatetime() override;
   SiteInstanceImpl* GetStartingSiteInstance() override;
   SiteInstanceImpl* GetSourceSiteInstance() override;
   bool IsInMainFrame() override;
@@ -295,6 +296,7 @@ class CONTENT_EXPORT NavigationRequest
   const net::HttpResponseHeaders* GetResponseHeaders() override;
   net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() override;
   bool GetMementoInfo();
+  std::string GetMementoDatetime();
   const base::Optional<net::SSLInfo>& GetSSLInfo() override;
   const base::Optional<net::AuthChallengeInfo>& GetAuthChallengeInfo() override;
   net::ResolveErrorInfo GetResolveErrorInfo() override;

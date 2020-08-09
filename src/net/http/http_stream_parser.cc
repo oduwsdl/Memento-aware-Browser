@@ -70,21 +70,7 @@ bool HeadersContainMultipleCopiesOfField(const HttpResponseHeaders& headers,
 }
 
 // Return true if |headers| contains the Memento-Datetime field
-bool HeadersContainMementoDatetime(const HttpResponseHeaders& headers,
-                                   const std::string& field_name) {
-  size_t it = 0;
-  std::string field_value;
-  if (headers.EnumerateHeader(&it, field_name, &field_value)) {
-    //response_->memento_datetime = field_value;
-    DVLOG(0) << "----- " << field_value << " -----";
-    return 1;
-  }
-  else
-    return 0;
-}
-
-// Return true if |headers| contains the Memento-Datetime field
-std::string GetMementoDatetimeValue(const HttpResponseHeaders& headers,
+/*std::string GetMementoDatetimeValue(const HttpResponseHeaders& headers,
                                         std::string* field_name) {
   size_t it = 0;
   std::string field_value;
@@ -94,7 +80,7 @@ std::string GetMementoDatetimeValue(const HttpResponseHeaders& headers,
   }
   else
     return "";
-}
+}*/
 
 base::Value NetLogSendRequestBodyParams(uint64_t length,
                                         bool is_chunked,
@@ -1081,25 +1067,22 @@ int HttpStreamParser::ParseResponseHeaders(int end_offset) {
            << " headers = \"" << GetResponseHeaderLines(*response_->headers)
            << "\"";
 
-  // Check for Memento Datetime header
-  std::string field_name = "Memento-Datetime";
-  /*response_->memento_datetime = HeadersContainMementoDatetime(*headers, &field_name);
-  if (response_->memento_datetime == "") {
-    DVLOG(0) << "HttpStreamParser::ParseResponseHeaders ---------- " << 0;
-  } else {
-    DVLOG(0) << "HttpStreamParser::ParseResponseHeaders ---------- " << 1;
-  }*/
-  if (HeadersContainMementoDatetime(*headers, "Memento-Datetime")) {
+  /*DVLOG(0) << headers->raw_headers();
+  if (headers->HasHeader("Memento-Datetime")) {
     DVLOG(0) << "HttpStreamParser::ParseResponseHeaders ---------- " << 1;
     response_->memento_info = true;
-    response_->memento_datetime = GetMementoDatetimeValue(*headers, &field_name);
-    DVLOG(0) << "----- " << response_->memento_datetime << " -----";
-  }
-  else {
+    response_->memento_datetime = headers->GetMementoDatetime();
+    DVLOG(0) << "----- " << headers->GetMementoDatetime() << " -----";
+  } else if (headers->HasHeader("memento_datetime")) {
+    DVLOG(0) << "HttpStreamParser::ParseResponseHeaders ---------- " << 1;
+    response_->memento_info = true;
+    response_->memento_datetime = headers->GetMementoDatetime();
+    DVLOG(0) << "----- " << headers->GetMementoDatetime() << " -----";
+  } else {
     DVLOG(0) << "HttpStreamParser::ParseResponseHeaders ---------- " << 0;
-    response_->memento_info = false;
-    response_->memento_datetime = "";
-  }
+    //response_->memento_info = false;
+    //response_->memento_datetime = "";
+  }*/
 
   return OK;
 }

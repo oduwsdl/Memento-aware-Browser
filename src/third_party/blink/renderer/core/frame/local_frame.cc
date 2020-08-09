@@ -467,6 +467,7 @@ void LocalFrame::Navigate(FrameLoadRequest& request,
 
   const ClientNavigationReason client_redirect_reason =
       request.ClientRedirectReason();
+  DVLOG(0) << "LocalFrame::Navigate";
   loader_.StartNavigation(request, frame_load_type);
 
   if (client_redirect_reason != ClientNavigationReason::kNone)

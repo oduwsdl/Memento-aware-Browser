@@ -818,6 +818,9 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
     }
   }
 
+  DVLOG(0) << "shwoompf: " << entry->GetMementoDatetime();
+  DVLOG(0) << "whoop: " << common_params->memento_datetime;
+
   std::unique_ptr<NavigationRequest> navigation_request(new NavigationRequest(
       frame_tree_node, std::move(common_params), std::move(navigation_params),
       std::move(commit_params), browser_initiated,
@@ -957,6 +960,7 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateForCommit(
           params.url,
           // TODO(nasko): Investigate better value to pass for
           // |initiator_origin|.
+          params.memento_datetime,
           params.origin,
           blink::mojom::Referrer::New(params.referrer.url,
                                       params.referrer.policy),
@@ -1194,6 +1198,7 @@ NavigationRequest::NavigationRequest(
     }
 
     headers.AddHeadersFromString(begin_params_->headers);
+    DVLOG(0) << "NavigationRequest::NavigationRequest";
     AddAdditionalRequestHeaders(
         &headers, common_params_->url, common_params_->navigation_type,
         common_params_->transition, controller->GetBrowserContext(),
@@ -3820,6 +3825,7 @@ void NavigationRequest::WillStartRequest() {
     return;
   }
 
+  DVLOG(0) << "NavigationRequest::WillStartRequest";
   throttle_runner_->RegisterNavigationThrottles();
 
   // If the content/ embedder did not pass the NavigationUIData at the beginning
@@ -4275,11 +4281,20 @@ net::HttpResponseInfo::ConnectionInfo NavigationRequest::GetConnectionInfo() {
 bool NavigationRequest::GetMementoInfo() {
   if (response()) {
     DVLOG(0) << "NavigationRequest::GetMementoInfo ---------- " << response()->memento_info;
-    return !(response()->memento_datetime == "");
+    return response()->memento_info;
   }
   DVLOG(0) << "NavigationRequest::GetMementoInfo ---------- 0";
-  
   return 0;
+}
+
+std::string NavigationRequest::GetMementoDatetime() {
+  if (response()) {
+    DVLOG(0) << "NavigationRequest::GetMementoDatetime ---------- " << response()->memento_datetime;
+    return response()->memento_datetime;
+  }
+  DVLOG(0) << "NavigationRequest::GetMementoDatetime ---------- 0";
+  
+  return "";
 }
 
 bool NavigationRequest::IsInMainFrame() {
@@ -4313,6 +4328,12 @@ int64_t NavigationRequest::GetNavigationId() {
 
 const GURL& NavigationRequest::GetURL() {
   return common_params().url;
+}
+
+const std::string& NavigationRequest::GetDatetime() {
+  //DVLOG(0) << "NavigationRequest::GetDatetime";
+  //GetResponseHeaders()->GetMementoDatetime();
+  return common_params().memento_datetime;
 }
 
 SiteInstanceImpl* NavigationRequest::GetStartingSiteInstance() {

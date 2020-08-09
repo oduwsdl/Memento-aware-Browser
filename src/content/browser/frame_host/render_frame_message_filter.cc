@@ -87,6 +87,7 @@ void CreateChildFrameOnUI(
   // Handles the RenderFrameHost being deleted on the UI thread while
   // processing a subframe creation message.
   if (render_frame_host) {
+    DVLOG(0) << "CreateChildFrameOnUI";
     render_frame_host->OnCreateChildFrame(
         new_routing_id,
         mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>(

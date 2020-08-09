@@ -117,7 +117,9 @@ FrameTree::FrameTree(NavigationControllerImpl* navigation_controller,
                               blink::mojom::FrameOwnerProperties(),
                               blink::mojom::FrameOwnerElementType::kNone)),
       focused_frame_tree_node_id_(FrameTreeNode::kFrameTreeNodeInvalidId),
-      load_progress_(0.0) {}
+      load_progress_(0.0) {
+        DVLOG(0) << "FrameTree::FrameTree";
+      }
 
 FrameTree::~FrameTree() {
   delete root_;
@@ -194,6 +196,7 @@ FrameTreeNode* FrameTree::AddFrame(
     const blink::mojom::FrameOwnerProperties& frame_owner_properties,
     bool was_discarded,
     blink::mojom::FrameOwnerElementType owner_type) {
+  DVLOG(0) << "FrameTree::AddFrame " << parent->last_memento_datetime() << " --- " << parent->last_successful_url();
   CHECK_NE(new_routing_id, MSG_ROUTING_NONE);
 
   // A child frame always starts with an initial empty document, which means

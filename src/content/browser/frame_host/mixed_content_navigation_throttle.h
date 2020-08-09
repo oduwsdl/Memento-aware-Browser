@@ -54,6 +54,10 @@ class MixedContentNavigationThrottle : public NavigationThrottle {
   RenderFrameHostImpl* InWhichFrameIsContentMixed(FrameTreeNode* node,
                                                   const GURL& url);
 
+  RenderFrameHostImpl* InWhichFrameIsMemento(FrameTreeNode* node,
+                                                  const GURL& url,
+                                                  std::string datetime);
+
   // Updates the renderer about any Blink feature usage.
   void MaybeSendBlinkFeatureUsageReport();
 

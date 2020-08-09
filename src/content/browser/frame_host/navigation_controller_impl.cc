@@ -954,6 +954,8 @@ void NavigationControllerImpl::LoadURLWithParams(const LoadURLParams& params) {
   if (params.is_renderer_initiated)
     DCHECK(params.initiator_origin.has_value());
 
+  DVLOG(0) << "NavigationControllerImpl::LoadURLWithParams";
+
   TRACE_EVENT1("browser,navigation",
                "NavigationControllerImpl::LoadURLWithParams", "url",
                params.url.possibly_invalid_spec());
@@ -1164,8 +1166,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
   DVLOG(0) << "ACTIVE ENTRY ---------- " << params.memento_datetime;
-  active_entry->SetMementoInfo(params.memento_status);
-  active_entry->SetMementoDatetime(params.memento_datetime);
+  //active_entry->SetMementoInfo(params.memento_status);
+  //active_entry->SetMementoDatetime(params.memento_datetime);
   // TODO(altimin, crbug.com/933147): Remove this logic after we are done with
   // implementing back-forward cache.
   if (!active_entry->back_forward_cache_metrics()) {
@@ -2361,6 +2363,7 @@ void NavigationControllerImpl::NavigateFromFrameProxy(
   /* params.reload_type: skip */
   params.impression = impression;
 
+  DVLOG(0) << "NavigationControllerImpl::NavigateFromFrameProxy";
   std::unique_ptr<NavigationRequest> request =
       CreateNavigationRequestFromLoadParams(
           node, params, override_user_agent, should_replace_current_entry,
@@ -3014,6 +3017,7 @@ void NavigationControllerImpl::NavigateWithoutEntry(
   // navigation_ui_data should only be present for main frame navigations.
   DCHECK(node->IsMainFrame() || !params.navigation_ui_data);
 
+  DVLOG(0) << "NavigationControllerImpl::NavigateWithoutEntry";
   DCHECK(pending_entry_);
   std::unique_ptr<NavigationRequest> request =
       CreateNavigationRequestFromLoadParams(
@@ -3260,11 +3264,12 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
   if (is_view_source_mode)
     download_policy.SetDisallowed(NavigationDownloadType::kViewSource);
 
+  DVLOG(0) << "NavigationControllerImpl::CreateNavigationRequestFromLoadParams " << url_to_load << " " << entry->GetMementoDatetime();
   const GURL& history_url_for_data_url =
       params.base_url_for_data_url.is_empty() ? GURL() : virtual_url;
   mojom::CommonNavigationParamsPtr common_params =
       mojom::CommonNavigationParams::New(
-          url_to_load, params.initiator_origin,
+          url_to_load, entry->GetMementoDatetime(), params.initiator_origin,
           blink::mojom::Referrer::New(params.referrer.url,
                                       params.referrer.policy),
           params.transition_type, navigation_type, download_policy,
@@ -3321,6 +3326,7 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
   std::string extra_headers_crlf;
   base::ReplaceChars(params.extra_headers, "\n", "\r\n", &extra_headers_crlf);
 
+  DVLOG(0) << "auto navigation_request = NavigationRequest::CreateBrowserInitiated(";
   auto navigation_request = NavigationRequest::CreateBrowserInitiated(
       node, std::move(common_params), std::move(commit_params),
       !params.is_renderer_initiated, params.initiator_routing_id,

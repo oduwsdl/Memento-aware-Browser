@@ -42,6 +42,7 @@ class NavigationParams {
   const base::Optional<url::Origin>& initiator_origin() const {
     return initiator_origin_;
   }
+  std::string memento_datetime() { return memento_datetime_; }
 
  private:
 
@@ -56,6 +57,7 @@ class NavigationParams {
   bool is_renderer_initiated_;
   GURL base_url_for_data_url_;
   base::Optional<url::Origin> initiator_origin_;
+  std::string memento_datetime_;
 };
 
 }  // namespace navigation_interception

@@ -318,6 +318,7 @@ bool MixedContentChecker::IsMixedContent(
 // static
 Frame* MixedContentChecker::InWhichFrameIsContentMixed(LocalFrame* frame,
                                                        const KURL& url) {
+  DVLOG(0) << "InWhichFrameIsContentMixed";
   // Frameless requests cannot be mixed content.
   if (!frame)
     return nullptr;
@@ -325,12 +326,16 @@ Frame* MixedContentChecker::InWhichFrameIsContentMixed(LocalFrame* frame,
   // Check the top frame first.
   Frame& top = frame->Tree().Top();
   MeasureStricterVersionOfIsMixedContent(top, url, frame);
-  if (IsMixedContent(top.GetSecurityContext()->GetSecurityOrigin(), url))
+  if (IsMixedContent(top.GetSecurityContext()->GetSecurityOrigin(), url)) {
+    DVLOG(0) << "top is mixed";
     return &top;
+  }
 
   MeasureStricterVersionOfIsMixedContent(*frame, url, frame);
-  if (IsMixedContent(frame->GetSecurityContext()->GetSecurityOrigin(), url))
+  if (IsMixedContent(frame->GetSecurityContext()->GetSecurityOrigin(), url)) {
+    DVLOG(0) << "frame is mixed";
     return frame;
+  }
 
   // No mixed content, no problem.
   return nullptr;
@@ -343,6 +348,7 @@ ConsoleMessage* MixedContentChecker::CreateConsoleMessageAboutFetch(
     mojom::RequestContextType request_context,
     bool allowed,
     std::unique_ptr<SourceLocation> source_location) {
+  DVLOG(0) << "MIXED CONTENT FOUND";
   String message = String::Format(
       "Mixed Content: The page at '%s' was loaded over HTTPS, but requested an "
       "insecure %s '%s'. %s",
@@ -425,6 +431,7 @@ bool MixedContentChecker::ShouldBlockFetch(
     const KURL& url,
     const base::Optional<String>& devtools_id,
     ReportingDisposition reporting_disposition) {
+  DVLOG(0) << "MixedContentChecker::ShouldBlockFetch";
   Frame* mixed_frame = InWhichFrameIsContentMixed(frame, url);
   if (!mixed_frame)
     return false;
@@ -560,6 +567,7 @@ bool MixedContentChecker::ShouldBlockFetchOnWorker(
     const KURL& url,
     ReportingDisposition reporting_disposition,
     bool is_worklet_global_scope) {
+  DVLOG(0) << "MixedContentChecker::ShouldBlockFetchOnWorker";
   const FetchClientSettingsObject& fetch_client_settings_object =
       worker_fetch_context.GetResourceFetcherProperties()
           .GetFetchClientSettingsObject();
@@ -839,6 +847,7 @@ void MixedContentChecker::MixedContentFound(
     const KURL& url_before_redirects,
     bool had_redirect,
     std::unique_ptr<SourceLocation> source_location) {
+  DVLOG(0) << "MixedContentChecker::MixedContentFound";
   // Logs to the frame console.
   frame->GetDocument()->AddConsoleMessage(CreateConsoleMessageAboutFetch(
       main_resource_url, mixed_content_url, request_context, was_allowed,

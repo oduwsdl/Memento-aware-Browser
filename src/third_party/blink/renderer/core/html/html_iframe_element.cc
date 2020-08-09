@@ -138,6 +138,7 @@ void HTMLIFrameElement::CollectStyleForPresentationAttribute(
 
 void HTMLIFrameElement::ParseAttribute(
     const AttributeModificationParams& params) {
+  DVLOG(0) << "HTMLIFrameElement::ParseAttribute";
   const QualifiedName& name = params.name;
   const AtomicString& value = params.new_value;
   if (name == html_names::kNameAttr) {

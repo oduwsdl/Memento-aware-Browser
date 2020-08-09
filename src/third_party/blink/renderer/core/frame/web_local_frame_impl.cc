@@ -987,6 +987,7 @@ void WebLocalFrameImpl::StartReload(WebFrameLoadType frame_load_type) {
     GetTextFinder()->ClearActiveFindMatch();
 
   FrameLoadRequest frame_load_request(nullptr, request);
+  DVLOG(0) << "WebLocalFrameImpl::StartReload";
   GetFrame()->Loader().StartNavigation(frame_load_request, frame_load_type);
 }
 
@@ -1010,6 +1011,7 @@ void WebLocalFrameImpl::StartNavigation(const WebURLRequest& request) {
     GetTextFinder()->ClearActiveFindMatch();
 
   FrameLoadRequest frame_load_request(nullptr, request.ToResourceRequest());
+  DVLOG(0) << "void WebLocalFrameImpl::StartNavigation(const WebURLRequest& request)";
   GetFrame()->Loader().StartNavigation(frame_load_request,
                                        WebFrameLoadType::kStandard);
 }
@@ -2233,8 +2235,10 @@ void WebLocalFrameImpl::DownloadURL(
 }
 
 bool WebLocalFrameImpl::WillStartNavigation(const WebNavigationInfo& info) {
+  DVLOG(0) << "WebLocalFrameImpl::WillStartNavigation";
   DCHECK(!info.url_request.IsNull());
   DCHECK(!info.url_request.Url().ProtocolIs("javascript"));
+  //DVLOG(0) << "WebLocalFrameImpl::StartNavigation";
   return GetFrame()->Loader().WillStartNavigation(info);
 }
 

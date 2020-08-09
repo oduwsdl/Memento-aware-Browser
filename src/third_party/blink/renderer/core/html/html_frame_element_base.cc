@@ -103,11 +103,13 @@ void HTMLFrameElementBase::OpenURL(bool replace_current_item) {
             "Invalid relative frame source URL (" + url_ +
                 ") within data URL."));
   }
+  DVLOG(0) << "HTMLFrameElementBase::OpenURL";
   LoadOrRedirectSubframe(url, frame_name_, replace_current_item);
 }
 
 void HTMLFrameElementBase::ParseAttribute(
     const AttributeModificationParams& params) {
+  DVLOG(0) << "HTMLFrameElementBase::ParseAttribute";
   const QualifiedName& name = params.name;
   const AtomicString& value = params.new_value;
   if (name == html_names::kSrcdocAttr) {
@@ -213,6 +215,8 @@ void HTMLFrameElementBase::AttachLayoutTree(AttachContext& context) {
 
 void HTMLFrameElementBase::SetLocation(const String& str) {
   url_ = AtomicString(str);
+
+  DVLOG(0) << "HTMLFrameElementBase::SetLocation";
 
   if (isConnected())
     OpenURL(false);

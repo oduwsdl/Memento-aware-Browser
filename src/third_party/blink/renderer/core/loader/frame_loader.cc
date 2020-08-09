@@ -834,6 +834,8 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
       origin_document ? origin_document->GetSecurityContext().AddressSpace()
                       : network::mojom::IPAddressSpace::kUnknown;
 
+  DVLOG(0) << "FrameLoader::StartNavigation";
+
   Client()->BeginNavigation(
       resource_request, request.GetFrameType(), origin_document,
       nullptr /* document_loader */, navigation_type,

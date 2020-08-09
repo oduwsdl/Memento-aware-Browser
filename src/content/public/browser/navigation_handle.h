@@ -70,6 +70,8 @@ class CONTENT_EXPORT NavigationHandle {
   // e.g. URLs might be rewritten by the renderer before being committed.
   virtual const GURL& GetURL() = 0;
 
+  virtual const std::string& GetDatetime() = 0;
+
   // Returns the SiteInstance where the frame being navigated was at the start
   // of the navigation.  If a frame in SiteInstance A navigates a frame in
   // SiteInstance B to a URL in SiteInstance C, then this returns B.
