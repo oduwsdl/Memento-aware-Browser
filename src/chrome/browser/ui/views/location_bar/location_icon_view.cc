@@ -150,7 +150,6 @@ bool LocationIconView::ShouldShowText() const {
 }
 
 bool LocationIconView::ShouldShowMementoInfo() const {
-  DVLOG(0) << "LocationIconView::ShouldShowMementoInfo ---------- " << delegate_->GetLocationBarModel()->IsMemento();
   return delegate_->GetLocationBarModel()->IsMemento();
 }
 

@@ -57,6 +57,7 @@ class LocationIconView : public IconLabelBubbleView {
     // Gets an icon for the location bar icon chip.
     virtual gfx::ImageSkia GetLocationIcon(
         IconFetchedCallback on_icon_fetched) const = 0;
+    // Gets an icon for the location bar memento icon chip.
     virtual gfx::ImageSkia GetMementoIcon(
         IconFetchedCallback on_icon_fetched) const = 0;
   };

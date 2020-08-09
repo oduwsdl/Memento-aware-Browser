@@ -461,8 +461,6 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
     bool is_memento_bubble) {
   gfx::NativeView parent_view = platform_util::GetViewForWindow(parent_window);
 
-  DVLOG(0) << "PageInfoBubbleView::CreatePageInfoBubble ---------- " << is_memento_bubble;
-
   if (url.SchemeIs(content::kChromeUIScheme) ||
       url.SchemeIs(content::kChromeDevToolsScheme) ||
       url.SchemeIs(extensions::kExtensionScheme) ||

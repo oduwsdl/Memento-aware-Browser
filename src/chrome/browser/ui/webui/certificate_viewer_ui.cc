@@ -54,7 +54,7 @@ content::WebUIDataSource* GetWebUIDataSource(const std::string& host) {
       IDR_CERTIFICATE_VIEWER_JS);
   html_source->AddResourcePath("certificate_viewer.css",
       IDR_CERTIFICATE_VIEWER_CSS);
-  html_source->SetDefaultResource(IDR_MEMENTO_INFO_VIEWER_HTML);
+  html_source->SetDefaultResource(IDR_CERTIFICATE_VIEWER_HTML);
   return html_source;
 }
 
