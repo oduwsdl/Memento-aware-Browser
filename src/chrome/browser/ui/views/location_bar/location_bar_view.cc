@@ -186,11 +186,11 @@ void LocationBarView::Init() {
   location_icon_view_ = AddChildView(std::move(location_icon_view));
   location_icon_view_->SetIconType(false);
 
-  auto location_icon_view2 =
+  auto location_icon_memento =
       std::make_unique<LocationIconView>(font_list, this, this);
-  location_icon_view2->set_drag_controller(this);
-  location_icon_view2_ = AddChildView(std::move(location_icon_view2));
-  location_icon_view2_->SetIconType(true);
+  location_icon_memento->set_drag_controller(this);
+  location_icon_memento_ = AddChildView(std::move(location_icon_memento));
+  location_icon_memento_->SetIconType(true);
 
   // Initialize the Omnibox view.
   auto omnibox_view = std::make_unique<OmniboxViewViews>(
@@ -521,7 +521,7 @@ void LocationBarView::Layout() {
 
   if (ShouldShowKeywordBubble()) {
     location_icon_view_->SetVisible(false);
-    location_icon_view2_->SetVisible(false);
+    location_icon_memento_->SetVisible(false);
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, selected_keyword_view_);
@@ -552,22 +552,24 @@ void LocationBarView::Layout() {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, location_icon_view_);
-    location_icon_view2_->SetVisible(false);
-  } else if (!location_icon_view_->ShouldShowText() && location_icon_view2_->ShouldShowMementoInfo()) {
+    location_icon_memento_->SetVisible(false);
+  } else if (!location_icon_view_->ShouldShowText() && location_icon_memento_->ShouldShowMementoInfo()) {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
-                                      0, edge_padding, location_icon_view2_);
+                                      0, edge_padding, location_icon_memento_);
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_view_);
-  } else if (location_icon_view_->ShouldShowText() && location_icon_view2_->ShouldShowMementoInfo()) {
+  } else if (location_icon_view_->ShouldShowText() && location_icon_memento_->ShouldShowMementoInfo()) {
+    leading_decorations.AddDecoration(vertical_padding, location_height, false,
+                                      0, edge_padding, location_icon_memento_);
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, location_icon_view_);
-    location_icon_view2_->SetVisible(false);
+    //location_icon_memento_->SetVisible(false);
   }
    else {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_view_);
-    location_icon_view2_->SetVisible(false);
+    location_icon_memento_->SetVisible(false);
   }
 
   auto add_trailing_decoration = [&trailing_decorations, vertical_padding,
@@ -727,7 +729,7 @@ void LocationBarView::Update(WebContents* contents) {
 
   RefreshPageActionIconViews();
   location_icon_view_->Update(/*suppress_animations=*/contents, false);
-  location_icon_view2_->Update(/*suppress_animations=*/contents, true);
+  location_icon_memento_->Update(/*suppress_animations=*/contents, true);
 
   if (contents)
     omnibox_view_->OnTabChanged(contents);
@@ -1166,7 +1168,7 @@ void LocationBarView::AnimationCanceled(const gfx::Animation* animation) {
 
 void LocationBarView::OnChanged() {
   location_icon_view_->Update(/*suppress_animations=*/false, false);
-  location_icon_view2_->Update(/*suppress_animations=*/false, true);
+  location_icon_memento_->Update(/*suppress_animations=*/false, true);
   clear_all_button_->SetVisible(
       omnibox_view_ && omnibox_view_->model()->user_input_in_progress() &&
       !omnibox_view_->GetText().empty() &&
@@ -1237,7 +1239,7 @@ void LocationBarView::OnTouchUiChanged() {
   const gfx::FontList& font_list = views::style::GetFont(
       CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
   location_icon_view_->SetFontList(font_list);
-  location_icon_view2_->SetFontList(font_list);
+  location_icon_memento_->SetFontList(font_list);
   omnibox_view_->SetFontList(font_list);
   ime_inline_autocomplete_view_->SetFontList(font_list);
   selected_keyword_view_->SetFontList(font_list);
@@ -1245,7 +1247,7 @@ void LocationBarView::OnTouchUiChanged() {
     view->SetFontList(font_list);
   page_action_icon_controller_->SetFontList(font_list);
   location_icon_view_->Update(/*suppress_animations=*/false, false);
-  location_icon_view2_->Update(/*suppress_animations=*/false, true);
+  location_icon_memento_->Update(/*suppress_animations=*/false, true);
   PreferredSizeChanged();
 }
 
@@ -1316,7 +1318,7 @@ bool LocationBarView::Dialog() {
           entry->GetVirtualURL(),
           base::BindOnce(&LocationBarView::OnPageInfoBubbleClosed,
                          weak_factory_.GetWeakPtr()), true);
-  bubble->SetHighlightedButton(location_icon_view2_);
+  bubble->SetHighlightedButton(location_icon_memento_);
   bubble->GetWidget()->Show();
   return true;
 }
@@ -1336,7 +1338,7 @@ gfx::ImageSkia LocationBarView::GetMementoIcon(
   if (!omnibox_view_)
     return gfx::ImageSkia();
   return omnibox_view_->GetIcon(GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
-                                location_icon_view2_->GetForegroundColor(),
+                                location_icon_memento_->GetForegroundColor(),
                                 std::move(on_icon_fetched),
                                 true);
 }

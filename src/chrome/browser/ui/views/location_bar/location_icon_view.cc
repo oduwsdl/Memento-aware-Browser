@@ -134,6 +134,9 @@ bool LocationIconView::ShouldShowText() const {
   if (delegate_->IsEditingOrEmpty())
     return false;
 
+  if (is_memento_icon_)
+    return false;
+
   const auto* location_bar_model = delegate_->GetLocationBarModel();
   const GURL& url = location_bar_model->GetURL();
   if (url.SchemeIs(content::kChromeUIScheme) ||

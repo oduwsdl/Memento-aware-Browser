@@ -381,7 +381,7 @@ class LocationBarView : public LocationBar,
   LocationIconView* location_icon_view_ = nullptr;
 
   // Memento icon to the left of location_icon_view_
-  LocationIconView* location_icon_view2_ = nullptr;
+  LocationIconView* location_icon_memento_ = nullptr;
 
   // A view to show inline autocompletion when an IME is active.  In this case,
   // we shouldn't change the text or selection inside the OmniboxView itself,
