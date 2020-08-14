@@ -954,8 +954,6 @@ void NavigationControllerImpl::LoadURLWithParams(const LoadURLParams& params) {
   if (params.is_renderer_initiated)
     DCHECK(params.initiator_origin.has_value());
 
-  DVLOG(0) << "NavigationControllerImpl::LoadURLWithParams";
-
   TRACE_EVENT1("browser,navigation",
                "NavigationControllerImpl::LoadURLWithParams", "url",
                params.url.possibly_invalid_spec());
@@ -1165,7 +1163,6 @@ bool NavigationControllerImpl::RendererDidNavigate(
   NavigationEntryImpl* active_entry = GetLastCommittedEntry();
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
-  DVLOG(0) << "ACTIVE ENTRY ---------- " << params.memento_datetime;
   //active_entry->SetMementoInfo(params.memento_status);
   //active_entry->SetMementoDatetime(params.memento_datetime);
   // TODO(altimin, crbug.com/933147): Remove this logic after we are done with
@@ -1215,8 +1212,7 @@ bool NavigationControllerImpl::RendererDidNavigate(
   details->entry = active_entry;
   details->is_main_frame = !rfh->GetParent();
   details->http_status_code = params.http_status_code;
-  details->is_memento = params.memento_status;//SetMementoInfo(params.memento_status);
-  DVLOG(0) << "NavigationControllerImpl::RendererDidNavigate ---------- " << active_entry->GetMementoInfo();
+  details->is_memento = params.memento_status;
 
   // If the NavigationRequest was created without a NavigationEntry and
   // SetIsOverridingUserAgent() was called, it needs to be applied to the
@@ -3264,12 +3260,11 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
   if (is_view_source_mode)
     download_policy.SetDisallowed(NavigationDownloadType::kViewSource);
 
-  DVLOG(0) << "NavigationControllerImpl::CreateNavigationRequestFromLoadParams " << url_to_load << " " << entry->GetMementoDatetime();
   const GURL& history_url_for_data_url =
       params.base_url_for_data_url.is_empty() ? GURL() : virtual_url;
   mojom::CommonNavigationParamsPtr common_params =
       mojom::CommonNavigationParams::New(
-          url_to_load, entry->GetMementoDatetime(), params.initiator_origin,
+          url_to_load, params.initiator_origin,
           blink::mojom::Referrer::New(params.referrer.url,
                                       params.referrer.policy),
           params.transition_type, navigation_type, download_policy,

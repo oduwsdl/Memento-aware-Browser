@@ -787,7 +787,7 @@ NavigationEntryImpl::ConstructCommonNavigationParams(
     download_policy.SetDisallowed(NavigationDownloadType::kViewSource);
 
   return mojom::CommonNavigationParams::New(
-      dest_url, memento_datetime_, frame_entry.initiator_origin(), std::move(dest_referrer),
+      dest_url, frame_entry.initiator_origin(), std::move(dest_referrer),
       GetTransitionType(), navigation_type, download_policy,
       should_replace_entry(), GetBaseURLForDataURL(), GetHistoryURLForDataURL(),
       previews_state, navigation_start, frame_entry.method(),

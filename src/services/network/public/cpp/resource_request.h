@@ -115,7 +115,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   bool obey_origin_policy = false;
   base::Optional<base::UnguessableToken> recursive_prefetch_token;
   base::Optional<TrustedParams> trusted_params;
-  std::string memento_datetime;
   // |trust_token_params| uses a custom base::Optional-like type to make the
   // field trivially copyable; see OptionalTrustTokenParams's definition for
   // more context.

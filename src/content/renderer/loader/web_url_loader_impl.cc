@@ -1014,8 +1014,6 @@ void WebURLLoaderImpl::PopulateURLResponse(
   response->SetMementoDatetime(head.memento_datetime);
   response->SetMementoInfo(head.memento_info);
 
-  DVLOG(0) << "WebURLLoaderImpl::PopulateURLResponse ---------- " << head.memento_datetime;
-
   // Build up the header map.
   size_t iter = 0;
   std::string name;

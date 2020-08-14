@@ -48,7 +48,6 @@ struct CONTENT_EXPORT FrameNavigateParams : public IPC::NoParams {
   // URL of the page being loaded.
   GURL url;
 
-  // whether the page is a memento
   bool memento_status;
 
   std::string memento_datetime;

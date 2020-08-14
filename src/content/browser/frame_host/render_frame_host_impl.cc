@@ -2401,7 +2401,6 @@ void RenderFrameHostImpl::DidNavigate(
   // The URL is set regardless of whether it's for a net error or not.
   frame_tree_node_->SetCurrentURL(params.url);
   frame_tree_node_->SetCurrentDatetime(params.memento_datetime);
-  DVLOG(0) << "RenderFrameHostImpl::DidNavigate" << params.memento_datetime;
   SetLastCommittedOrigin(params.origin);
 
   // Separately, update the frame's last successful URL except for net error
@@ -2865,15 +2864,9 @@ void RenderFrameHostImpl::DidCommitPerNavigationMojoInterfaceNavigation(
   CHECK(request != navigation_requests_.end());
 
   std::unique_ptr<NavigationRequest> owned_request = std::move(request->second);
-  //params->memento_status = committing_navigation_request->GetMementoInfo();
   params->memento_datetime = committing_navigation_request->GetMementoDatetime();
-  /*if (params->memento_datetime != "") {
-    params->memento_status = 1;
-  } else {
-    params->memento_status = 0;
-  }*/
+
   navigation_requests_.erase(committing_navigation_request);
-  DVLOG(0) << "RenderFrameHostImpl::DidCommitPerNavigationMojoInterfaceNavigation ---------- " << params->memento_status;
   DidCommitNavigation(std::move(owned_request), std::move(params),
                       std::move(interface_params));
 }
@@ -2903,20 +2896,12 @@ void RenderFrameHostImpl::DidCommitSameDocumentNavigation(
                "frame_tree_node", frame_tree_node_->frame_tree_node_id(), "url",
                params->url.possibly_invalid_spec());
 
-  DVLOG(0) << "RenderFrameHostImpl::DidCommitSameDocumentNavigation ---------- " << params->memento_datetime;
-
   // Check if the navigation matches a stored same-document NavigationRequest.
   // In that case it is browser-initiated.
   bool is_browser_initiated =
       same_document_navigation_request_ &&
       (same_document_navigation_request_->commit_params().navigation_token ==
        params->navigation_token);
-
-  /*if (params->memento_datetime != "") {
-    params->memento_status = 1;
-  } else {
-    params->memento_status = 0;
-  }*/
 
   if (!DidCommitNavigationInternal(
           is_browser_initiated ? std::move(same_document_navigation_request_)
@@ -8145,16 +8130,13 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
 
   last_http_status_code_ = params->http_status_code;
   last_http_method_ = params->method;
-  DVLOG(0) << "RenderFrameHostImpl::DidCommitNavigationInternal ---------- " << params->memento_datetime;
   if (params->memento_datetime == "") {
-    DVLOG(0) << "RIGHT HERE 0";
     params->memento_status = 0;
   } else {
-    DVLOG(0) << "RIGHT HERE 1";
     params->memento_status = 1;
   }
   last_memento_status_ = params->memento_status;
-  //last_memento_datetime_ = params->memento_datetime;
+  last_memento_datetime_ = params->memento_datetime;
   UpdateSiteURL(params->url, params->url_is_unreachable);
   if (!is_same_document_navigation)
     UpdateRenderProcessHostFramePriorities();

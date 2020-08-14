@@ -613,7 +613,7 @@ std::string HttpResponseHeaders::GetMementoDatetime() const {
 
   std::string::const_iterator i = std::search(value_begin, value_end, field_begin, field_end);
 
-  if (i == value_end) {
+  if (i == value_end) { // If "Memento-Datetime" was not present
     std::string field = "memento-datetime";
     std::string::const_iterator field_begin = field.begin();
     std::string::const_iterator field_end = field.end();

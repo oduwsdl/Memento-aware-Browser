@@ -664,8 +664,6 @@ void LocalFrameClientImpl::BeginNavigation(
 
   navigation_info->href_translate = href_translate;
 
-  navigation_info->memento_datetime = "whoop";
-
   web_frame_->Client()->BeginNavigation(std::move(navigation_info));
 }
 

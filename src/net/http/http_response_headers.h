@@ -153,6 +153,7 @@ class NET_EXPORT HttpResponseHeaders
   // Get the HTTP status text of the normalized status line.
   std::string GetStatusText() const;
 
+  // Get the value of the Memento-Datetime field.
   std::string GetMementoDatetime() const;
 
   // Enumerate the "lines" of the response headers.  This skips over the status

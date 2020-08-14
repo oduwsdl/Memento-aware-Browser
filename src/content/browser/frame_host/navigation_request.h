@@ -258,7 +258,6 @@ class CONTENT_EXPORT NavigationRequest
   // NavigationHandle implementation:
   int64_t GetNavigationId() override;
   const GURL& GetURL() override;
-  const std::string& GetDatetime() override;
   SiteInstanceImpl* GetStartingSiteInstance() override;
   SiteInstanceImpl* GetSourceSiteInstance() override;
   bool IsInMainFrame() override;

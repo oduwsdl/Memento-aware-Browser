@@ -90,19 +90,13 @@ void PopulateResourceResponse(net::URLRequest* request,
   response->parsed_headers =
       PopulateParsedHeaders(response->headers, request->url());
 
-  DVLOG(0) << response->headers->raw_headers();
+  // Check for Memento-Datetime header.
   if (response->headers->HasHeader("Memento-Datetime")) {
-    DVLOG(0) << "PopulateResourceResponse ----- Memento ---------- " << 1;
     response->memento_info = true;
     response->memento_datetime = response->headers->GetMementoDatetime();
-    DVLOG(0) << "----- " << response->memento_datetime << " -----";
   } else if (response->headers->HasHeader("memento_datetime")) {
-    DVLOG(0) << "PopulateResourceResponse ----- memento ---------- " << 1;
     response->memento_info = true;
     response->memento_datetime = response->headers->GetMementoDatetime();
-    DVLOG(0) << "----- " << response->memento_datetime << " -----";
-  } else {
-    DVLOG(0) << "PopulateResourceResponse ---------- " << 0;
   }
 
   request->GetCharset(&response->charset);

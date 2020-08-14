@@ -428,8 +428,6 @@ void PageInfo::InitializeUiState(PageInfoUI* ui, bool is_memento) {
   ui_ = ui;
   DCHECK(ui_);
 
-  DVLOG(0) << "PageInfo::InitializeUiState ---------- " << is_memento;
-
   ComputeUIInputs(site_url_);
   PresentSiteIdentity(is_memento);
   if(!is_memento) {

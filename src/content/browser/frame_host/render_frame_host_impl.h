@@ -577,6 +577,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Return the memento status of the last committed navigation.
   bool last_memento_status() { return last_memento_status_; }
 
+  // Return the memento datetime of the last committed navigation.
   std::string last_memento_datetime() { return last_memento_datetime_; }
 
   // Returns |frame_origin| if this frame is the top (i.e. root) frame in the

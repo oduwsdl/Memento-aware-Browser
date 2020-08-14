@@ -41,8 +41,6 @@
 #include "third_party/blink/public/web/web_navigation_type.h"
 #include "third_party/blink/public/web/web_origin_policy.h"
 
-#include <string>
-
 #if INSIDE_BLINK
 #include "base/memory/scoped_refptr.h"
 #endif
@@ -65,8 +63,6 @@ struct BLINK_EXPORT WebNavigationInfo {
 
   // The main resource request.
   WebURLRequest url_request;
-
-  std::string memento_datetime;
 
   // The frame type. This must not be kNone. See RequestContextFrameType.
   // TODO(dgozman): enforce this is not kNone.

@@ -518,9 +518,7 @@ mojom::CommonNavigationParamsPtr MakeCommonNavigationParams(
     int load_flags,
     bool has_download_sandbox_flag,
     bool from_ad,
-    bool is_history_navigation_in_new_child_frame,
-    std::string frame_memento_datetime) {
-  DVLOG(0) << "MakeCommonNavigationParams";
+    bool is_history_navigation_in_new_child_frame) {
   // A valid RequestorOrigin is always expected to be present.
   DCHECK(!info->url_request.RequestorOrigin().IsNull());
 
@@ -572,7 +570,7 @@ mojom::CommonNavigationParamsPtr MakeCommonNavigationParams(
   }
 
   return mojom::CommonNavigationParams::New(
-      info->url_request.Url(), info->memento_datetime, info->url_request.RequestorOrigin(),
+      info->url_request.Url(), info->url_request.RequestorOrigin(),
       std::move(referrer), extra_data->transition_type(), navigation_type,
       download_policy,
       info->frame_load_type == WebFrameLoadType::kReplaceCurrentItem, GURL(),
@@ -1811,7 +1809,6 @@ RenderFrameImpl::RenderFrameImpl(CreateParams params)
       in_frame_tree_(false),
       render_view_(params.render_view),
       routing_id_(params.routing_id),
-      frame_memento_datetime_(""),
       previous_routing_id_(MSG_ROUTING_NONE),
 #if BUILDFLAG(ENABLE_PLUGINS)
       plugin_power_saver_helper_(nullptr),
@@ -4923,10 +4920,8 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
   std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params =
       std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>();
   params->http_status_code = response.HttpStatusCode();
-  DVLOG(0) << "RenderFrameImpl::MakeDidCommitProvisionalLoadParams ---------- " << response.MementoDatetime();
   params->memento_status = response.MementoInfo();
   params->memento_datetime = response.MementoDatetime();
-  frame_memento_datetime_ = response.MementoDatetime();
   params->url_is_unreachable = document_loader->HasUnreachableURL();
   params->method = "GET";
   params->intended_as_new_entry =
@@ -5206,14 +5201,10 @@ void RenderFrameImpl::DidCommitNavigationInternal(
                                                    embedding_token);
 
   if (params->memento_datetime == "") {
-    DVLOG(0) << "GONNA BE 0";
     params->memento_status = 0;
   } else {
-    DVLOG(0) << "GONNA BE 1";
     params->memento_status = 1;
   }
-
-
 
   if (was_within_same_document) {
     DVLOG(0) << "RenderFrameImpl::DidCommitNavigationInternal ---------- " << params->memento_datetime;
@@ -6085,7 +6076,7 @@ void RenderFrameImpl::BeginNavigationInternal(
   GetFrameHost()->BeginNavigation(
       MakeCommonNavigationParams(frame_->GetSecurityOrigin(), std::move(info),
                                  load_flags, has_download_sandbox_flag, from_ad,
-                                 is_history_navigation_in_new_child_frame, frame_memento_datetime_),
+                                 is_history_navigation_in_new_child_frame),
       std::move(begin_navigation_params), std::move(blob_url_token),
       std::move(navigation_client_remote), std::move(navigation_initiator));
 }

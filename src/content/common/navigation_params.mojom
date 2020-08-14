@@ -165,8 +165,6 @@ struct CommonNavigationParams {
   // May be modified when the navigation is ready to commit.
   url.mojom.Url url;
 
-  string memento_datetime;
-
   // When a frame navigates another frame, this is the origin of the document
   // which initiated the navigation. This parameter can be null for
   // browser-initiated navigations.

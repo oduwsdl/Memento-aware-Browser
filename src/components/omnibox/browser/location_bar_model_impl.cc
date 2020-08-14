@@ -230,8 +230,6 @@ const gfx::VectorIcon& LocationBarModelImpl::GetMementoIcon() const {
   std::unique_ptr<security_state::VisibleSecurityState>
           visible_security_state = delegate_->GetVisibleSecurityState();
 
-  DVLOG(0) << "LocationBarModelImpl::GetMementoIcon ---------- " << visible_security_state->memento_status;
-
   return omnibox::kMementoIcon;
 
 #else
