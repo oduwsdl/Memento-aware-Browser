@@ -16,9 +16,9 @@
 #include "ui/views/controls/tree/tree_view_controller.h"
 #include "ui/views/window/dialog_delegate.h"
 
-class CookieInfoView;
+class MementoInfoView;
 class CookiesTreeModel;
-class CookiesTreeViewDrawingProvider;
+class MementoTreeViewDrawingProvider;
 class InfobarView;
 
 namespace content {
@@ -111,10 +111,10 @@ class MementoViews
   std::unique_ptr<CookiesTreeModel> allowed_cookies_tree_model_;
   std::unique_ptr<CookiesTreeModel> blocked_cookies_tree_model_;
 
-  CookiesTreeViewDrawingProvider* allowed_cookies_drawing_provider_ = nullptr;
-  CookiesTreeViewDrawingProvider* blocked_cookies_drawing_provider_ = nullptr;
+  MementoTreeViewDrawingProvider* allowed_cookies_drawing_provider_ = nullptr;
+  MementoTreeViewDrawingProvider* blocked_cookies_drawing_provider_ = nullptr;
 
-  CookieInfoView* cookie_info_view_ = nullptr;
+  MementoInfoView* cookie_info_view_ = nullptr;
 
   InfobarView* infobar_ = nullptr;
 

@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/memento_views.h"
-#include "chrome/browser/ui/views/collected_cookies_views.h"
+//#include "chrome/browser/ui/views/collected_cookies_views.h"
 
 #include <map>
 #include <utility>
@@ -18,7 +18,7 @@
 #include "chrome/browser/ui/collected_cookies_infobar_delegate.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
-#include "chrome/browser/ui/views/cookie_info_view.h"
+#include "chrome/browser/ui/views/memento_info_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browsing_data/content/appcache_helper.h"
 #include "components/browsing_data/content/cookie_helper.h"
@@ -122,10 +122,10 @@ std::unique_ptr<CookiesTreeModel> CreateCookiesTreeModel(
 // text. Annotated nodes will be drawn in a lighter color than normal to
 // indicate that their state has changed, and will have their auxiliary text
 // drawn on the trailing end of their row.
-class CookiesTreeViewDrawingProvider : public views::TreeViewDrawingProvider {
+class MementoTreeViewDrawingProvider : public views::TreeViewDrawingProvider {
  public:
-  CookiesTreeViewDrawingProvider() {}
-  ~CookiesTreeViewDrawingProvider() override {}
+  MementoTreeViewDrawingProvider() {}
+  ~MementoTreeViewDrawingProvider() override {}
 
   void AnnotateNode(ui::TreeModelNode* node, const base::string16& text);
 
@@ -140,12 +140,12 @@ class CookiesTreeViewDrawingProvider : public views::TreeViewDrawingProvider {
   std::map<ui::TreeModelNode*, base::string16> annotations_;
 };
 
-void CookiesTreeViewDrawingProvider::AnnotateNode(ui::TreeModelNode* node,
+void MementoTreeViewDrawingProvider::AnnotateNode(ui::TreeModelNode* node,
                                                   const base::string16& text) {
   annotations_[node] = text;
 }
 
-SkColor CookiesTreeViewDrawingProvider::GetTextColorForNode(
+SkColor MementoTreeViewDrawingProvider::GetTextColorForNode(
     views::TreeView* tree_view,
     ui::TreeModelNode* node) {
   SkColor color = TreeViewDrawingProvider::GetTextColorForNode(tree_view, node);
@@ -154,7 +154,7 @@ SkColor CookiesTreeViewDrawingProvider::GetTextColorForNode(
   return color;
 }
 
-base::string16 CookiesTreeViewDrawingProvider::GetAuxiliaryTextForNode(
+base::string16 MementoTreeViewDrawingProvider::GetAuxiliaryTextForNode(
     views::TreeView* tree_view,
     ui::TreeModelNode* node) {
   if (annotations_.find(node) != annotations_.end())
@@ -162,7 +162,7 @@ base::string16 CookiesTreeViewDrawingProvider::GetAuxiliaryTextForNode(
   return TreeViewDrawingProvider::GetAuxiliaryTextForNode(tree_view, node);
 }
 
-bool CookiesTreeViewDrawingProvider::ShouldDrawIconForNode(
+bool MementoTreeViewDrawingProvider::ShouldDrawIconForNode(
     views::TreeView* tree_view,
     ui::TreeModelNode* node) {
   CookieTreeNode* cookie_node = static_cast<CookieTreeNode*>(node);
@@ -247,8 +247,8 @@ MementoViews::~MementoViews() {
     GetWidget()->CloseNow();
   }
 
-  allowed_cookies_tree_->SetModel(nullptr);
-  blocked_cookies_tree_->SetModel(nullptr);
+  //allowed_cookies_tree_->SetModel(nullptr);
+  //blocked_cookies_tree_->SetModel(nullptr);
 }
 
 // static
@@ -345,8 +345,8 @@ void MementoViews::TabSelectedAt(int index) {
 
 void MementoViews::OnTreeViewSelectionChanged(
     views::TreeView* tree_view) {
-  EnableControls();
-  ShowCookieInfo();
+  //EnableControls();
+  //ShowCookieInfo();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -380,8 +380,8 @@ MementoViews::MementoViews(content::WebContents* web_contents)
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1.0,
                         views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 
-  //layout->StartRow(views::GridLayout::kFixedSize, single_column_layout_id);
-  /*views::TabbedPane* tabbed_pane =
+  layout->StartRow(views::GridLayout::kFixedSize, single_column_layout_id);
+  views::TabbedPane* tabbed_pane =
       layout->AddView(std::make_unique<views::TabbedPane>());
 
   // NOTE: Panes must be added after |tabbed_pane| has been added to its parent.
@@ -390,9 +390,9 @@ MementoViews::MementoViews(content::WebContents* web_contents)
   base::string16 label_blocked = l10n_util::GetStringUTF16(
       IDS_COLLECTED_COOKIES_BLOCKED_COOKIES_TAB_LABEL);
   tabbed_pane->AddTab(label_allowed, CreateAllowedPane());
-  tabbed_pane->AddTab(label_blocked, CreateBlockedPane());
+  //tabbed_pane->AddTab(label_blocked, CreateBlockedPane());
   tabbed_pane->SelectTabAt(0);
-  tabbed_pane->set_listener(this);*/
+  tabbed_pane->set_listener(this);
 
   layout->StartRow(views::GridLayout::kFixedSize, single_column_layout_id);
   //cookie_info_view_ = layout->AddView(std::make_unique<CookieInfoView>());
@@ -428,8 +428,8 @@ std::unique_ptr<views::View> MementoViews::CreateAllowedPane() {
 
   allowed_cookies_tree_model_ =
       CreateCookiesTreeModel(content_settings->allowed_local_shared_objects());
-  std::unique_ptr<CookiesTreeViewDrawingProvider> allowed_drawing_provider =
-      std::make_unique<CookiesTreeViewDrawingProvider>();
+  std::unique_ptr<MementoTreeViewDrawingProvider> allowed_drawing_provider =
+      std::make_unique<MementoTreeViewDrawingProvider>();
   allowed_cookies_drawing_provider_ = allowed_drawing_provider.get();
   auto allowed_cookies_tree = std::make_unique<views::TreeView>();
   allowed_cookies_tree->SetModel(allowed_cookies_tree_model_.get());
@@ -465,9 +465,9 @@ std::unique_ptr<views::View> MementoViews::CreateAllowedPane() {
   layout->StartRow(1.0, single_column_layout_id);
 
   allowed_cookies_tree_ = allowed_cookies_tree.get();
-  layout->AddView(CreateScrollView(std::move(allowed_cookies_tree)), 1, 1,
+  /*layout->AddView(CreateScrollView(std::move(allowed_cookies_tree)), 1, 1,
                   views::GridLayout::FILL, views::GridLayout::FILL,
-                  kTreeViewWidth, kTreeViewHeight);
+                  kTreeViewWidth, kTreeViewHeight);*/
 
   return pane;
 }
@@ -493,8 +493,8 @@ std::unique_ptr<views::View> MementoViews::CreateBlockedPane() {
   blocked_label->SizeToFit(kTreeViewWidth);
   blocked_cookies_tree_model_ =
       CreateCookiesTreeModel(content_settings->blocked_local_shared_objects());
-  std::unique_ptr<CookiesTreeViewDrawingProvider> blocked_drawing_provider =
-      std::make_unique<CookiesTreeViewDrawingProvider>();
+  std::unique_ptr<MementoTreeViewDrawingProvider> blocked_drawing_provider =
+      std::make_unique<MementoTreeViewDrawingProvider>();
   blocked_cookies_drawing_provider_ = blocked_drawing_provider.get();
   auto blocked_cookies_tree = std::make_unique<views::TreeView>();
   blocked_cookies_tree->SetModel(blocked_cookies_tree_model_.get());
@@ -644,7 +644,7 @@ void MementoViews::AddContentException(views::TreeView* tree_view,
   infobar_->SetLabelText(setting, host_node->GetTitle());
   status_changed_ = true;
 
-  CookiesTreeViewDrawingProvider* provider =
+  MementoTreeViewDrawingProvider* provider =
       (tree_view == allowed_cookies_tree_) ? allowed_cookies_drawing_provider_
                                            : blocked_cookies_drawing_provider_;
   provider->AnnotateNode(tree_view->GetSelectedNode(),

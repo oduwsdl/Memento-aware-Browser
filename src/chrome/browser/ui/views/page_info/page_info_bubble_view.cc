@@ -35,7 +35,7 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/collected_cookies_views.h"
-//#include "chrome/browser/ui/views/memento_views.h"
+#include "chrome/browser/ui/views/memento_views.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/hover_button.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
@@ -1107,7 +1107,7 @@ void PageInfoBubbleView::HandleMoreInfoRequestAsync(int view_id) {
     }
     case PageInfoBubbleView::
         VIEW_ID_PAGE_INFO_MEMENTO_INFO_VIEWER: {
-      CollectedCookiesViews::CreateAndShowForWebContents(web_contents());
+      MementoViews::CreateAndShowForWebContents(web_contents());
       break;
     }
     default:

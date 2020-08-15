@@ -60,7 +60,7 @@ constexpr int kTreeViewHeight = 125;
 // Baseline height of the cookie info view. We limit the height of the scroll
 // pane for the cookie info so that the overall dialog is not too tall to fit in
 // a smaller browser window.
-//constexpr int kInfoViewHeight = 130;
+constexpr int kInfoViewHeight = 130;
 
 // Adds a ColumnSet to |layout| to hold two buttons with padding between.
 // Starts a new row with the added ColumnSet.
@@ -277,7 +277,7 @@ void CollectedCookiesViews::CreateAndShowForWebContents(
 // CollectedCookiesViews, views::DialogDelegate implementation:
 
 base::string16 CollectedCookiesViews::GetWindowTitle() const {
-  return base::string16();//l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_DIALOG_TITLE);
+  return l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_DIALOG_TITLE);
 }
 
 bool CollectedCookiesViews::Accept() {
@@ -332,11 +332,11 @@ void CollectedCookiesViews::ButtonPressed(views::Button* sender,
 // CollectedCookiesViews, views::TabbedPaneListener implementation:
 
 void CollectedCookiesViews::TabSelectedAt(int index) {
-  //EnableControls();
-  //ShowCookieInfo();
+  EnableControls();
+  ShowCookieInfo();
 
-  //allowed_buttons_pane_->SetVisible(index == 0);
-  //blocked_buttons_pane_->SetVisible(index == 1);
+  allowed_buttons_pane_->SetVisible(index == 0);
+  blocked_buttons_pane_->SetVisible(index == 1);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -379,8 +379,8 @@ CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1.0,
                         views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 
-  //layout->StartRow(views::GridLayout::kFixedSize, single_column_layout_id);
-  /*views::TabbedPane* tabbed_pane =
+  layout->StartRow(views::GridLayout::kFixedSize, single_column_layout_id);
+  views::TabbedPane* tabbed_pane =
       layout->AddView(std::make_unique<views::TabbedPane>());
 
   // NOTE: Panes must be added after |tabbed_pane| has been added to its parent.
@@ -391,27 +391,27 @@ CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
   tabbed_pane->AddTab(label_allowed, CreateAllowedPane());
   tabbed_pane->AddTab(label_blocked, CreateBlockedPane());
   tabbed_pane->SelectTabAt(0);
-  tabbed_pane->set_listener(this);*/
+  tabbed_pane->set_listener(this);
 
   layout->StartRow(views::GridLayout::kFixedSize, single_column_layout_id);
-  //cookie_info_view_ = layout->AddView(std::make_unique<CookieInfoView>());
+  cookie_info_view_ = layout->AddView(std::make_unique<CookieInfoView>());
   // Fix the height of the cookie info view, which is scrollable. It needs to be
   // large enough to fit at least 3-4 lines of information, but small enough
   // that it doesn't make the dialog too tall to fit in a small-ish browser.
   // (This is an accessibility issue; low-vision users using a high DPI zoom may
   // have browser windows under 600dip tall.)
-  //cookie_info_view_->ClipHeightTo(kInfoViewHeight, kInfoViewHeight);
+  cookie_info_view_->ClipHeightTo(kInfoViewHeight, kInfoViewHeight);
 
   layout->StartRow(views::GridLayout::kFixedSize, single_column_layout_id);
   infobar_ = layout->AddView(std::make_unique<InfobarView>());
 
-  //SetExtraView(CreateButtonsPane());
+  SetExtraView(CreateButtonsPane());
 
   constrained_window::ShowWebModalDialogViews(this, web_contents);
   chrome::RecordDialogCreation(chrome::DialogIdentifier::COLLECTED_COOKIES);
 
-  //EnableControls();
-  //ShowCookieInfo();
+  EnableControls();
+  ShowCookieInfo();
 }
 
 std::unique_ptr<views::View> CollectedCookiesViews::CreateAllowedPane() {
