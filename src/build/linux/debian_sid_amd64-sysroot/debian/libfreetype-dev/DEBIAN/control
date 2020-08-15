@@ -1,0 +1,22 @@
+Package: libfreetype-dev
+Source: freetype
+Version: 2.10.1-2
+Architecture: amd64
+Maintainer: Hugh McMaster <hugh.mcmaster@outlook.com>
+Installed-Size: 1945
+Depends: libfreetype6 (= 2.10.1-2), libc6-dev | libc-dev, zlib1g-dev | libz-dev, libpng-dev
+Suggests: freetype2-doc (= 2.10.1-2)
+Breaks: libfreetype6-dev (<< 2.10.1)
+Replaces: libfreetype6-dev (<< 2.10.1)
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: https://www.freetype.org
+Description: FreeType 2 font engine, development files
+ The FreeType project is a team of volunteers who develop free,
+ portable and high-quality software solutions for digital typography.
+ They specifically target embedded systems and focus on providing small,
+ efficient and ubiquitous products.
+ .
+ This package contains all of the supplementary files you need to develop your
+ own programs using the FreeType 2 library.

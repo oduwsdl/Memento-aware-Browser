@@ -1,0 +1,18 @@
+Package: libpcre2-posix0
+Source: pcre2
+Version: 10.22-3
+Architecture: amd64
+Maintainer: Matthew Vernon <matthew@debian.org>
+Installed-Size: 43
+Depends: libc6 (>= 2.4), libpcre2-8-0
+Section: libs
+Priority: optional
+Multi-Arch: same
+Description: New Perl Compatible Regular Expression Library - posix-compatible runtime files
+ This is PCRE2, the new implementation of PCRE, a library of functions
+ to support regular expressions whose syntax and semantics are as
+ close as possible to those of the Perl 5 language. New projects
+ should use this library in preference to the older library,
+ confusingly called pcre3 in Debian.
+ .
+ This package contains the runtime library for the posix-compatible API.

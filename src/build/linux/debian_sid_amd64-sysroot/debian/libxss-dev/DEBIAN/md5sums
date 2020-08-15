@@ -1,0 +1,7 @@
+b787827224574ffbee2224e2137e3288  usr/include/X11/extensions/scrnsaver.h
+7cdb30c96a6523b378ae995aad1c02f3  usr/lib/x86_64-linux-gnu/libXss.a
+8c59a5bdd3cf15f54325fd1141d598cf  usr/lib/x86_64-linux-gnu/pkgconfig/xscrnsaver.pc
+33112a7e6d0714807d1ede6e160709b3  usr/share/doc/libxss-dev/changelog.Debian.gz
+ddcf1259b80c41db625a8f5cccd778ec  usr/share/doc/libxss-dev/changelog.gz
+40de40e38c8c945bf2bc7797b1660b72  usr/share/doc/libxss-dev/copyright
+47f2c4735c8ab0775ed8a331cc7512cc  usr/share/man/man3/Xss.3.gz

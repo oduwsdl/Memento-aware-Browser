@@ -1,0 +1,21 @@
+Package: libgraphene-1.0-dev
+Source: graphene
+Version: 1.10.0-1
+Architecture: amd64
+Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>
+Installed-Size: 700
+Depends: libgraphene-1.0-0 (= 1.10.0-1), gir1.2-graphene-1.0 (= 1.10.0-1), libglib2.0-dev, libgirepository1.0-dev
+Suggests: libgraphene-doc
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: https://ebassi.github.io/graphene/
+Description: library of graphic data types (development files)
+ Graphene provides a small set of mathematical types needed to implement
+ graphic libraries that deal with 2D and 3D transformations and projections.
+ .
+ This library provides types and their relative API; it does not deal with
+ windowing system surfaces, drawing, scene graphs, or input.
+ .
+ This package contains the header files required for developing software that
+ uses libgraphene.

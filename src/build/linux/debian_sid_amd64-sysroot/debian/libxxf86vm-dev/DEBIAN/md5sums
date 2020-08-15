@@ -1,0 +1,8 @@
+44e9778f0440731710a4924bf0b5b862  usr/include/X11/extensions/xf86vmode.h
+0a850c7df52dc959b6653cbb4debfa30  usr/lib/x86_64-linux-gnu/libXxf86vm.a
+613e9d7b1bd9b25b842935c27468a633  usr/lib/x86_64-linux-gnu/pkgconfig/xxf86vm.pc
+438ee3622cb2f70b2d505a6dddcb05e3  usr/share/doc/libxxf86vm-dev/changelog.Debian.amd64.gz
+93147f0fee3d797570d6a205a9a54e1a  usr/share/doc/libxxf86vm-dev/changelog.Debian.gz
+35edadb605dfdf67e69b6b3c434676da  usr/share/doc/libxxf86vm-dev/changelog.gz
+ff60738efe36e8adf23a2dbf07a4cea2  usr/share/doc/libxxf86vm-dev/copyright
+727246f012af9d16495f6a488e1ca19c  usr/share/man/man3/XF86VM.3.gz

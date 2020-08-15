@@ -1,0 +1,18 @@
+Package: libncurses6
+Source: ncurses
+Version: 6.1+20191019-1
+Architecture: i386
+Maintainer: Craig Small <csmall@debian.org>
+Installed-Size: 345
+Depends: libtinfo6 (= 6.1+20191019-1), libc6 (>= 2.7)
+Recommends: libgpm2
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://invisible-island.net/ncurses/
+Description: shared libraries for terminal handling
+ The ncurses library routines are a terminal-independent method of
+ updating character screens with reasonable optimization.
+ .
+ This package contains the shared libraries necessary to run programs
+ compiled with ncurses.

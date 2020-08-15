@@ -1,0 +1,24 @@
+Package: libwayland-egl1
+Source: wayland
+Version: 1.17.0-1
+Architecture: amd64
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 32
+Depends: libc6 (>= 2.2.5)
+Breaks: libwayland-egl1-mesa (<< 18.0.5-0)
+Replaces: libwayland-egl1-mesa (<< 18.0.5-0)
+Provides: libwayland-egl1-mesa
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://wayland.freedesktop.org/
+Description: wayland compositor infrastructure - EGL library
+ Wayland is a protocol for a compositor to talk to its clients as well
+ as a C library implementation of that protocol. The compositor can be
+ a standalone display server running on Linux kernel modesetting and
+ evdev input devices, an X application, or a wayland client
+ itself. The clients can be traditional applications, X servers
+ (rootless or fullscreen) or other display servers.
+ .
+ This package ships the library that implements the Wayland EGL platform
+ of the Wayland protocol.

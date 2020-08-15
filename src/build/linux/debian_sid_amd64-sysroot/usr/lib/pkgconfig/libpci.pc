@@ -1,0 +1,11 @@
+prefix=/usr
+includedir=/usr/include/x86_64-linux-gnu
+libdir=/usr/lib/x86_64-linux-gnu
+idsdir=/usr/share/misc
+
+Name: libpci
+Description: libpci
+Version: 3.6.2
+Libs: -L${libdir} -lpci
+Libs.private:   -lz -lresolv -ludev
+Cflags: -I${includedir}

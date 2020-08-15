@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -e
+
+
+
+if [ -d /usr/lib/x86_64-linux-gnu/gtk-4.0/4.0.0 ]; then
+    # Purge the cache
+    for dir in immodules printbackends; do
+        if [ -e "/usr/lib/x86_64-linux-gnu/gtk-4.0/4.0.0/$dir" ]; then
+            rm -f "/usr/lib/x86_64-linux-gnu/gtk-4.0/4.0.0/$dir/giomodule.cache"
+            rmdir -p --ignore-fail-on-non-empty "/usr/lib/x86_64-linux-gnu/gtk-4.0/4.0.0/$dir"
+        fi
+    done
+fi

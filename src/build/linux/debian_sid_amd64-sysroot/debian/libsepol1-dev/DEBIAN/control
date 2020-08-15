@@ -1,0 +1,20 @@
+Package: libsepol1-dev
+Source: libsepol
+Version: 3.0-1
+Architecture: amd64
+Maintainer: Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>
+Installed-Size: 1775
+Depends: libsepol1 (= 3.0-1)
+Conflicts: libsepol-dev
+Provides: libsepol-dev
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: http://userspace.selinuxproject.org/
+Description: SELinux binary policy manipulation library and development files
+ libsepol allows programs to easily modify SELinux binary policies.  This
+ means changing the default values for booleans, or reading the policy for
+ analysis.
+ .
+ This package contains the headers and archives used for linking it into your
+ programs.

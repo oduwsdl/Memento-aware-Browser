@@ -1,0 +1,2 @@
+libwacom 2 libwacom2 (>= 1.1)
+udeb: libwacom 2 libwacom2-udeb (>= 1.1)

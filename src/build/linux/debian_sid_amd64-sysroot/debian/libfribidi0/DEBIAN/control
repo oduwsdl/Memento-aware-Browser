@@ -1,0 +1,15 @@
+Package: libfribidi0
+Source: fribidi
+Version: 1.0.7-1.1
+Architecture: amd64
+Maintainer: Debian Hebrew Packaging Team <team+hebrew@tracker.debian.org>
+Installed-Size: 172
+Depends: libc6 (>= 2.3.4)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://www.fribidi.org/
+Description: Free Implementation of the Unicode BiDi algorithm
+ FriBiDi is a BiDi algorithm implementation for Hebrew and/or Arabic
+ languages.
+ This package contains the shared libraries.

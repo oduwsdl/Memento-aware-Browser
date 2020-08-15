@@ -1,0 +1,20 @@
+Package: libgtk-4-dev
+Source: gtk+4.0
+Version: 3.96.0-2
+Architecture: amd64
+Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>
+Installed-Size: 8722
+Depends: gir1.2-gtk-4.0 (= 3.96.0-2), libatk-bridge2.0-dev, libatk1.0-dev (>= 2.15.1), libcairo2-dev (>= 1.14.0), libegl1-mesa-dev, libepoxy-dev (>= 1.0), libfontconfig1-dev, libgdk-pixbuf2.0-dev (>= 2.30.0), libglib2.0-dev (>= 2.53.0), libgraphene-1.0-dev (>= 1.5.1), libpango1.0-dev (>= 1.40.5), libwayland-dev (>= 1.9.91), libx11-dev, libxcomposite-dev, libxcursor-dev, libxdamage-dev, libxext-dev, libxfixes-dev, libxi-dev, libxinerama-dev, libxkbcommon-dev, libxrandr-dev, libvulkan-dev, pkg-config, wayland-protocols (>= 1.9), libgtk-4-common, libgtk-4-0 (= 3.96.0-2)
+Suggests: libgtk-4-doc
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: http://www.gtk.org/
+Description: development files for the GTK library
+ GTK is a multi-platform toolkit for creating graphical user
+ interfaces. Offering a complete set of widgets, GTK is suitable
+ for projects ranging from small one-off tools to complete application
+ suites.
+ .
+ This package contains the header and development files which are
+ needed for building GTK applications.

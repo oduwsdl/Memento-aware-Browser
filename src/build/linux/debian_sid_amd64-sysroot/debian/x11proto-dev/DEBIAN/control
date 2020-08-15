@@ -1,0 +1,23 @@
+Package: x11proto-dev
+Source: xorgproto
+Version: 2018.4-4
+Architecture: all
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 1362
+Depends: xorg-sgml-doctools (>= 1:1.5)
+Breaks: x11proto-bigreqs-dev (<< 1:2018.3), x11proto-composite-dev (<< 1:2018.3), x11proto-core-dev (<< 2018.3), x11proto-damage-dev (<< 1:2018.3), x11proto-dmx-dev (<< 1:2018.3), x11proto-dri2-dev (<< 2018.3), x11proto-dri3-dev (<< 2018.3), x11proto-fixes-dev (<< 1:2018.3), x11proto-fonts-dev (<< 2018.3), x11proto-gl-dev (<< 2018.3), x11proto-input-dev (<< 2018.3), x11proto-kb-dev (<< 2018.3), x11proto-present-dev (<< 2018.3), x11proto-randr-dev (<< 2018.3), x11proto-record-dev (<< 2018.3), x11proto-render-dev (<< 2:2018.3), x11proto-resource-dev (<< 2018.3), x11proto-scrnsaver-dev (<< 2018.3), x11proto-video-dev (<< 2018.3), x11proto-xcmisc-dev (<< 2018.3), x11proto-xext-dev (<< 2018.3), x11proto-xf86bigfont-dev (<< 2018.3), x11proto-xf86dga-dev (<< 2018.3), x11proto-xf86dri-dev (<< 2018.3), x11proto-xf86vidmode-dev (<< 2018.3), x11proto-xinerama-dev (<< 2018.3)
+Replaces: x11proto-bigreqs-dev (<< 1:2018.3), x11proto-composite-dev (<< 1:2018.3), x11proto-core-dev (<< 2018.3), x11proto-damage-dev (<< 1:2018.3), x11proto-dmx-dev (<< 1:2018.3), x11proto-dri2-dev (<< 2018.3), x11proto-dri3-dev (<< 2018.3), x11proto-fixes-dev (<< 1:2018.3), x11proto-fonts-dev (<< 2018.3), x11proto-gl-dev (<< 2018.3), x11proto-input-dev (<< 2018.3), x11proto-kb-dev (<< 2018.3), x11proto-present-dev (<< 2018.3), x11proto-randr-dev (<< 2018.3), x11proto-record-dev (<< 2018.3), x11proto-render-dev (<< 2:2018.3), x11proto-resource-dev (<< 2018.3), x11proto-scrnsaver-dev (<< 2018.3), x11proto-video-dev (<< 2018.3), x11proto-xcmisc-dev (<< 2018.3), x11proto-xext-dev (<< 2018.3), x11proto-xf86bigfont-dev (<< 2018.3), x11proto-xf86dga-dev (<< 2018.3), x11proto-xf86dri-dev (<< 2018.3), x11proto-xf86vidmode-dev (<< 2018.3), x11proto-xinerama-dev (<< 2018.3)
+Provides: x11proto-bigreqs-dev, x11proto-composite-dev, x11proto-core-dev, x11proto-damage-dev, x11proto-dmx-dev, x11proto-dri2-dev, x11proto-dri3-dev, x11proto-fixes-dev, x11proto-fonts-dev, x11proto-gl-dev, x11proto-input-dev, x11proto-kb-dev, x11proto-present-dev, x11proto-randr-dev, x11proto-record-dev, x11proto-render-dev, x11proto-resource-dev, x11proto-scrnsaver-dev, x11proto-video-dev, x11proto-xcmisc-dev, x11proto-xext-dev, x11proto-xf86bigfont-dev, x11proto-xf86dga-dev, x11proto-xf86dri-dev, x11proto-xf86vidmode-dev, x11proto-xinerama-dev
+Section: x11
+Priority: optional
+Multi-Arch: foreign
+Homepage: https://www.x.org/
+Description: X11 extension protocols and auxiliary headers
+ This package provides development headers describing the wire protocol
+ for the X11 core and extension protocols, and also provides a number of
+ utility headers, used to abstract OS-specific functions.
+ .
+ More information about X.Org can be found at:
+ <URL:https://www.X.org>
+ .
+ This package is built from the X.org xorgproto module.

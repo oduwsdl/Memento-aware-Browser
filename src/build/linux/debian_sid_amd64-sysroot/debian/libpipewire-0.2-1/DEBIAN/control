@@ -1,0 +1,19 @@
+Package: libpipewire-0.2-1
+Source: pipewire
+Version: 0.2.7-1
+Architecture: amd64
+Maintainer: Utopia Maintenance Team <pkg-utopia-maintainers@alioth-lists.debian.net>
+Installed-Size: 267
+Depends: libc6 (>= 2.28)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://pipewire.org/
+Description: libraries for the PipeWire multimedia server
+ PipeWire is a server and user space API to deal with multimedia
+ pipelines. This includes:
+ .
+  - Making available sources of video (such as from a capture devices or
+    application provided streams) and multiplexing this with clients.
+  - Accessing sources of video for consumption.
+  - Generating graphs for audio and video processing.

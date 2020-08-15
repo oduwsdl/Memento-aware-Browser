@@ -1,0 +1,17 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+targets=broadway wayland x11
+
+gtk_binary_version=4.0.0
+gtk_host=x86_64-linux
+
+Name: GTK
+Description: GTK Graphical UI Library
+Version: 3.96.0
+Requires: pango >= 1.41.0 pangocairo >= 1.41.0 gdk-pixbuf-2.0 >= 2.30.0 cairo >= 1.14.0 cairo-gobject >= 1.14.0vulkan graphene-gobject-1.0 >= 1.9.1 atk >= 2.15.1 gio-2.0 >= 2.59.0
+Requires.private: gio-unix-2.0 >= 2.59.0 epoxy >= 1.4 fontconfig x11 xext xi xrandr xcursor xfixes xcomposite xdamage xinerama wayland-client >= 1.14.91 wayland-protocols >= 1.12 xkbcommon >= 0.2.0 wayland-cursor >= 1.14.91 wayland-egl cairo-xlib cairo  atk atk-bridge-2.0 pangoft2
+Libs: -L${libdir} -lgtk-4
+Libs.private: -lz  
+Cflags: -I${includedir}/gtk-4.0   

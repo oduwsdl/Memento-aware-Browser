@@ -1,0 +1,17 @@
+Package: libpng16-16
+Source: libpng1.6
+Version: 1.6.37-1
+Architecture: amd64
+Maintainer: Maintainers of libpng1.6 packages <libpng1.6@packages.debian.org>
+Installed-Size: 440
+Depends: libc6 (>= 2.14), zlib1g (>= 1:1.2.11.dfsg)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://libpng.org/pub/png/libpng.html
+Description: PNG library - runtime (version 1.6)
+ libpng is a library implementing an interface for reading and writing
+ PNG (Portable Network Graphics) format files.
+ .
+ This package contains the runtime library files needed to run software
+ using libpng.

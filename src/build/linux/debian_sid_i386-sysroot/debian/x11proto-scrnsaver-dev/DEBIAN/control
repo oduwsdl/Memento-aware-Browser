@@ -1,0 +1,13 @@
+Package: x11proto-scrnsaver-dev
+Source: xorgproto
+Version: 2018.4-4
+Architecture: all
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 11
+Depends: x11proto-dev
+Section: oldlibs
+Priority: optional
+Multi-Arch: foreign
+Homepage: https://www.x.org/
+Description: transitional dummy package
+ This is a transitional dummy package, it can be safely removed.

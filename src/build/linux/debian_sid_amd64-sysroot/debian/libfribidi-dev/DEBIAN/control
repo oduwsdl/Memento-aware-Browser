@@ -1,0 +1,16 @@
+Package: libfribidi-dev
+Source: fribidi
+Version: 1.0.7-1.1
+Architecture: amd64
+Maintainer: Debian Hebrew Packaging Team <team+hebrew@tracker.debian.org>
+Installed-Size: 319
+Depends: libfribidi0 (= 1.0.7-1.1)
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: http://www.fribidi.org/
+Description: Development files for FreeBidi library
+ FriBiDi is a BiDi algorithm implementation for Hebrew and/or Arabic
+ languages.
+ This package contains the header files and static libraries for the
+ FriBidi C library.

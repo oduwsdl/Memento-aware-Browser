@@ -1,0 +1,17 @@
+Package: libharfbuzz-gobject0
+Source: harfbuzz
+Version: 2.6.4-1
+Architecture: amd64
+Maintainer: أحمد المحمودي (Ahmed El-Mahmoudy) <aelmahmoudy@users.sourceforge.net>
+Installed-Size: 1073
+Depends: libc6 (>= 2.2.5), libglib2.0-0 (>= 2.19.1), libharfbuzz0b (>= 1.7.7)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://www.freedesktop.org/wiki/Software/HarfBuzz
+Description: OpenType text shaping engine ICU backend (GObject library)
+ HarfBuzz is an implementation of the OpenType Layout engine (aka layout
+ engine) and the script-specific logic (aka shaping engine).
+ .
+ This package contains the GObject library, providing wrapper GObject type
+ bindings for all HarfBuzz objects and enums.

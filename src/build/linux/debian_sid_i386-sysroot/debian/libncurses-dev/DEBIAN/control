@@ -1,0 +1,22 @@
+Package: libncurses-dev
+Source: ncurses
+Version: 6.1+20191019-1
+Architecture: i386
+Maintainer: Craig Small <csmall@debian.org>
+Installed-Size: 2115
+Depends: libtinfo6 (= 6.1+20191019-1), libncurses6 (= 6.1+20191019-1), libncursesw6 (= 6.1+20191019-1), libc6-dev | libc-dev, ncurses-bin (>= 6.0+20151017)
+Suggests: ncurses-doc
+Conflicts: ncurses-dev
+Breaks: libncurses5-dev (<< 6.1+20180210), libncursesw5-dev (<< 6.1+20180210), libtinfo-dev (<< 6.1+20180210)
+Replaces: libncurses5-dev (<< 6.1+20180210), libncursesw5-dev (<< 6.1+20180210), libtinfo-dev (<< 6.1+20180210), ncurses-bin (<< 6.0+20151017), ncurses-dev
+Provides: libncurses5-dev, libncursesw5-dev, libtinfo-dev, ncurses-dev
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: https://invisible-island.net/ncurses/
+Description: developer's libraries for ncurses
+ The ncurses library routines are a terminal-independent method of
+ updating character screens with reasonable optimization.
+ .
+ This package contains the header files, static libraries
+ and symbolic links that developers using ncurses will need.

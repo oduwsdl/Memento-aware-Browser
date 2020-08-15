@@ -1,0 +1,9 @@
+prefix=/usr
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+
+Name: Libinput
+Description: Input device library
+Version: 1.14.3
+Libs: -L${libdir} -linput
+Cflags: -I${includedir}

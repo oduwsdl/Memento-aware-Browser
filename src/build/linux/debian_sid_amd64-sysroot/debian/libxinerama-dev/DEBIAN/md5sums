@@ -1,0 +1,8 @@
+2dcc6783fc513e6d90f0c8d98fdcea9e  usr/include/X11/extensions/Xinerama.h
+28d70f6509bc592a2a92f9e4df5ec2b3  usr/include/X11/extensions/panoramiXext.h
+fbc55d7b321678e26395ae5bb51fc9e1  usr/lib/x86_64-linux-gnu/libXinerama.a
+1880f0b229b4b7b40f118aa4f4a29a3b  usr/lib/x86_64-linux-gnu/pkgconfig/xinerama.pc
+d63943f4d16c9311b94e271f8cb3709a  usr/share/doc/libxinerama-dev/changelog.Debian.gz
+82c07e060b4ebcff0ce5074358bf7241  usr/share/doc/libxinerama-dev/changelog.gz
+8fdd34040015283cd73da6400545ce8d  usr/share/doc/libxinerama-dev/copyright
+15caf9693234f05ece0a668e7d4aac0f  usr/share/man/man3/Xinerama.3.gz

@@ -1,0 +1,19 @@
+Package: libicu-le-hb0
+Source: icu-le-hb (1.0.3+git180724-3)
+Version: 1.0.3+git180724-3+b1
+Architecture: amd64
+Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.org>
+Installed-Size: 59
+Depends: libc6 (>= 2.14), libgcc1 (>= 1:3.0), libharfbuzz0b (>= 1.0.3), libicu63 (>= 63.1-1~), libstdc++6 (>= 5)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://github.com/behdad/icu-le-hb
+Description: ICU Layout Engine API on top of HarfBuzz shaping library
+ A library implementing the ICU Layout Engine (icu-le) API using external
+ HarfBuzz library for implementation.  This is useful as a compatibility layer
+ to make applications using ICU Layout Engine to use HarfBuzz without porting
+ them to use the HarfBuzz API.
+ .
+ The code is mostly a trimmed down version of icu/source/layout, with all
+ shapers stripped out, and HarfBuzz integrated.

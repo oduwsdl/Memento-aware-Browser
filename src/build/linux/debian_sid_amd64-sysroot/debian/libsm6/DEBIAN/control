@@ -1,0 +1,18 @@
+Package: libsm6
+Source: libsm
+Version: 2:1.2.3-1
+Architecture: amd64
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 73
+Depends: libc6 (>= 2.14), libice6 (>= 1:1.0.0), libuuid1 (>= 2.16)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://www.x.org
+Description: X11 Session Management library
+ This package provides the main interface to the X11 Session Management
+ library, which allows for applications to both manage sessions, and make use
+ of session managers to save and restore their state for later use.
+ .
+ This module can be found at
+ git://anongit.freedesktop.org/git/xorg/lib/libSM

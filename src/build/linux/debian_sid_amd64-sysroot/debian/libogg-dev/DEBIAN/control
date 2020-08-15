@@ -1,0 +1,14 @@
+Package: libogg-dev
+Source: libogg (1.3.2-1)
+Version: 1.3.2-1+b1
+Architecture: amd64
+Maintainer: Ron Lee <ron@debian.org>
+Installed-Size: 473
+Depends: libogg0 (= 1.3.2-1+b1)
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: http://xiph.org/ogg/
+Description: Ogg bitstream library development files
+ The libogg-dev package contains the header files and documentation
+ needed to develop applications with libogg.

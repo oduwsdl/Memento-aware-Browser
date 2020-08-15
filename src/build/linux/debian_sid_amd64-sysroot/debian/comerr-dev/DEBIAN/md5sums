@@ -1,0 +1,16 @@
+d6abcdcc06d4fb8db0657a57d79ca844  usr/bin/compile_et
+b1e3784cd241530eb4c773216ebb4944  usr/include/et/com_err.h
+0d08fba89c53e8bb9b522a15c0a42f81  usr/lib/x86_64-linux-gnu/libcom_err.a
+1f5f6c36943db0b262fb96ae90e01acd  usr/lib/x86_64-linux-gnu/pkgconfig/com_err.pc
+eb5a24ad827bae80b198ef7bb63ff40a  usr/share/doc-base/comerr-manual
+a33ed5cafe4245ab52d93d1b5a290642  usr/share/doc/comerr-dev/changelog.Debian.gz
+9ec071e6bebea1858e3ef66eb2ba355c  usr/share/doc/comerr-dev/com_err.texi.gz
+7c3e79fb1dc42838b81614695b02be5b  usr/share/doc/comerr-dev/copyright
+eb9a588272224d0d9e30a7a3000cc29b  usr/share/doc/comerr-dev/examples/ext2_err.et.gz
+854b018a524fbe1c56451876d9c07594  usr/share/doc/comerr-dev/examples/ss_err.et
+4c6d03165179c26685adb48c44aa218d  usr/share/doc/comerr-dev/html-info/com_err.html
+71fdfd25214d12014217706002cd3711  usr/share/et/et_c.awk
+a5c6d9dd3bf259cda5ef92c2f62910e9  usr/share/et/et_h.awk
+be82e50918bb2c840e80e1be46272575  usr/share/info/com_err.info.gz
+b021d15738982196935e4e20a6d1d9de  usr/share/man/man1/compile_et.1.gz
+1acbbb4341483553e3e23aeca012a0a4  usr/share/man/man3/com_err.3.gz

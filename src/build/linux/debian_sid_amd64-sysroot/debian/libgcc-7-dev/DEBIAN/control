@@ -1,0 +1,16 @@
+Package: libgcc-7-dev
+Source: gcc-7
+Version: 7.5.0-3
+Architecture: amd64
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 13512
+Depends: gcc-7-base (= 7.5.0-3), libgcc1 (>= 1:7.5.0-3), libgomp1 (>= 7.5.0-3), libitm1 (>= 7.5.0-3), libatomic1 (>= 7.5.0-3), libasan4 (>= 7.5.0-3), liblsan0 (>= 7.5.0-3), libtsan0 (>= 7.5.0-3), libubsan0 (>= 7.5.0-3), libcilkrts5 (>= 7.5.0-3), libmpx2 (>= 7.5.0-3), libquadmath0 (>= 7.5.0-3)
+Recommends: libc6-dev (>= 2.13-5)
+Replaces: gccgo-7 (<< 7.5.0-3)
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GCC support library (development files)
+ This package contains the headers and static library files necessary for
+ building C programs which use libgcc, libgomp, libquadmath, libssp or libitm.
