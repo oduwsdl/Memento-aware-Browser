@@ -1,0 +1,3 @@
+[submodule "src/third_party/angle"]
+	path = src/third_party/angle
+	url = https://chromium.googlesource.com/angle/angle.git
