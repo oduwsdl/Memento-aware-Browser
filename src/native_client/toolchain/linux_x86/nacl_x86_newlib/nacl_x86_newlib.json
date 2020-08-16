@@ -1,0 +1,8 @@
+{
+  "archives": [
+    "core_sdk.tgz",
+    "gdb_i686_linux.tgz",
+    "naclsdk.tgz"
+  ],
+  "version": 1
+}
