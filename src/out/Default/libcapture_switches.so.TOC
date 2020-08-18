@@ -1,0 +1,7 @@
+ 0x000000000000000e (SONAME)             Library soname: [libcapture_switches.so]
+__gmon_start__ w
+_ITM_deregisterTMCloneTable w
+_ITM_registerTMCloneTable w
+__cxa_finalize w
+_ZN8switches31kVideoCaptureUseGpuMemoryBufferE R
+_ZN8switches38kDisableVideoCaptureUseGpuMemoryBufferE R

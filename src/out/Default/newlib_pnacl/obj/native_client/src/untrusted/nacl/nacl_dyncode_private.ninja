@@ -1,0 +1,15 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -D_POSIX_C_SOURCE=199506 -D_XOPEN_SOURCE=600 -D_GNU_SOURCE=1 -D__STDC_LIMIT_MACROS=1 -DNACL_BUILD_ARCH=pnacl -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Inewlib_pnacl/gen
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -O0 -fno-omit-frame-pointer -g2 -fvisibility=hidden
+cflags_c = -Wno-self-assign -std=c11
+label_name = nacl_dyncode_private
+root_out_dir = newlib_pnacl
+target_out_dir = newlib_pnacl/obj/native_client/src/untrusted/nacl
+target_output_name = libnacl_dyncode_private
+
+build newlib_pnacl/obj/native_client/src/untrusted/nacl/nacl_dyncode_private/dyncode_private.o: newlib_pnacl_cc ../../native_client/src/untrusted/nacl/dyncode_private.c
+
+build newlib_pnacl/obj/native_client/src/untrusted/nacl/libnacl_dyncode_private.a: newlib_pnacl_alink newlib_pnacl/obj/native_client/src/untrusted/nacl/nacl_dyncode_private/dyncode_private.o || newlib_pnacl/obj/build/config/nacl/nacl_base.stamp
+  arflags =
+  output_extension = .a
+  output_dir = newlib_pnacl/obj/native_client/src/untrusted/nacl

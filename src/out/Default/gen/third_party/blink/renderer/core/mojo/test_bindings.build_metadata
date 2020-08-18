@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/third_party/blink/renderer/core/mojo/tests/js_to_cpp.mojom"
+  ]
+}

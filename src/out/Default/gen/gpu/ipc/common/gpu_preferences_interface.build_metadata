@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/gpu/ipc/common/gpu_preferences.mojom"
+  ]
+}

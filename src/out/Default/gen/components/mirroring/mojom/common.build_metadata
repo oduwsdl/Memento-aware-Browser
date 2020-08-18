@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/network/public/mojom/mojom_ip_address.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/components/mirroring/mojom/cast_message_channel.mojom",
+    "/home/abigail/final/src/components/mirroring/mojom/session_observer.mojom",
+    "/home/abigail/final/src/components/mirroring/mojom/session_parameters.mojom"
+  ]
+}

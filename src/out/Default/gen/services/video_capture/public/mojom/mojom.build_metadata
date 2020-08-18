@@ -1,0 +1,21 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/media/capture/mojom/image_capture.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/media/capture/mojom/video_capture.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/media/mojo/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/video_capture/public/mojom/device.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/device_factory.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/devices_changed_observer.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/producer.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/scoped_access_permission.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/testing_controls.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/video_capture_service.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/video_frame_handler.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/video_source.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/video_source_provider.mojom",
+    "/home/abigail/final/src/services/video_capture/public/mojom/virtual_device.mojom"
+  ]
+}

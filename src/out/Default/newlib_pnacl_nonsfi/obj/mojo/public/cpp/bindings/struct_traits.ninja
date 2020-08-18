@@ -1,0 +1,9 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../../native_client/src/public/linux_syscalls -I../.. -Inewlib_pnacl_nonsfi/gen
+label_name = struct_traits
+root_out_dir = newlib_pnacl_nonsfi
+target_out_dir = newlib_pnacl_nonsfi/obj/mojo/public/cpp/bindings
+target_output_name = struct_traits
+
+
+build newlib_pnacl_nonsfi/obj/mojo/public/cpp/bindings/struct_traits.stamp: newlib_pnacl_nonsfi_stamp

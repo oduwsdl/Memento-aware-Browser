@@ -1,0 +1,26 @@
+defines = -DFLAC__OVERFLOW_DETECT -DVERSION=\"1.3.1\" -DHAVE_LROUND -DHAVE_INTTYPES_H -DUSE_UDEV -DUSE_AURA=1 -DUSE_GLIB=1 -DUSE_NSS_CERTS=1 -DUSE_X11=1 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -DCOMPONENT_BUILD -D_LIBCPP_ABI_UNSTABLE -D_LIBCPP_ABI_VERSION=Cr -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -DCR_SYSROOT_HASH=d6879d611f3dcf3da8dd92e080029394aa30bc42 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DFLAC__NO_DLL
+include_dirs = -I../../third_party/flac/include -I../../third_party/flac/src/libFLAC/include -I../.. -Igen
+cflags = -fno-strict-aliasing --param=ssp-buffer-size=4 -fstack-protector -funwind-tables -fPIC -pthread -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -Xclang -mllvm -Xclang -instcombine-lower-dbg-declare=0 -fcomplete-member-pointers -m64 -march=x86-64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -g2 -Xclang -debug-info-kind=constructor -gsplit-dwarf -ggnu-pubnames -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Xclang -plugin-arg-find-bad-constructs -Xclang check-ipc -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Wno-conversion -Wno-unused-const-variable -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wmax-tokens
+cflags_c = -std=c11 --sysroot=../../build/linux/debian_sid_amd64-sysroot -Wno-implicit-fallthrough
+label_name = flac
+target_out_dir = obj/third_party/flac
+target_output_name = flac
+
+build obj/third_party/flac/flac/alloc.o: cc ../../third_party/flac/src/libFLAC/alloc.c
+build obj/third_party/flac/flac/bitmath.o: cc ../../third_party/flac/src/libFLAC/bitmath.c
+build obj/third_party/flac/flac/bitreader.o: cc ../../third_party/flac/src/libFLAC/bitreader.c
+build obj/third_party/flac/flac/bitwriter.o: cc ../../third_party/flac/src/libFLAC/bitwriter.c
+build obj/third_party/flac/flac/cpu.o: cc ../../third_party/flac/src/libFLAC/cpu.c
+build obj/third_party/flac/flac/crc.o: cc ../../third_party/flac/src/libFLAC/crc.c
+build obj/third_party/flac/flac/fixed.o: cc ../../third_party/flac/src/libFLAC/fixed.c
+build obj/third_party/flac/flac/float.o: cc ../../third_party/flac/src/libFLAC/float.c
+build obj/third_party/flac/flac/format.o: cc ../../third_party/flac/src/libFLAC/format.c
+build obj/third_party/flac/flac/lpc.o: cc ../../third_party/flac/src/libFLAC/lpc.c
+build obj/third_party/flac/flac/md5.o: cc ../../third_party/flac/src/libFLAC/md5.c
+build obj/third_party/flac/flac/memory.o: cc ../../third_party/flac/src/libFLAC/memory.c
+build obj/third_party/flac/flac/stream_decoder.o: cc ../../third_party/flac/src/libFLAC/stream_decoder.c
+build obj/third_party/flac/flac/stream_encoder.o: cc ../../third_party/flac/src/libFLAC/stream_encoder.c
+build obj/third_party/flac/flac/stream_encoder_framing.o: cc ../../third_party/flac/src/libFLAC/stream_encoder_framing.c
+build obj/third_party/flac/flac/window.o: cc ../../third_party/flac/src/libFLAC/window.c
+
+build obj/third_party/flac/flac.stamp: stamp obj/third_party/flac/flac/alloc.o obj/third_party/flac/flac/bitmath.o obj/third_party/flac/flac/bitreader.o obj/third_party/flac/flac/bitwriter.o obj/third_party/flac/flac/cpu.o obj/third_party/flac/flac/crc.o obj/third_party/flac/flac/fixed.o obj/third_party/flac/flac/float.o obj/third_party/flac/flac/format.o obj/third_party/flac/flac/lpc.o obj/third_party/flac/flac/md5.o obj/third_party/flac/flac/memory.o obj/third_party/flac/flac/stream_decoder.o obj/third_party/flac/flac/stream_encoder.o obj/third_party/flac/flac/stream_encoder_framing.o obj/third_party/flac/flac/window.o

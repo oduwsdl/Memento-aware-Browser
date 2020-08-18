@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/gpu/ipc/common/gpu_preferences_interface.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/gpu/ipc/common/interfaces.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/gpu/ipc/common/vulkan_interface.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/gpu/ipc/common/traits_test_service.mojom"
+  ]
+}

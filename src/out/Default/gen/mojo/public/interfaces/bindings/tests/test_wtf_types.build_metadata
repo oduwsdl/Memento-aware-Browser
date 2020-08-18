@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/mojo/public/interfaces/bindings/tests/test_wtf_types.mojom"
+  ]
+}

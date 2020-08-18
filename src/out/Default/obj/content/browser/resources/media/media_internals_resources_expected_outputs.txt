@@ -1,0 +1,4 @@
+gen/content/browser/resources/media/grit/media_internals_resources.h
+gen/content/browser/resources/media/grit/media_internals_resources_map.cc
+gen/content/browser/resources/media/grit/media_internals_resources_map.h
+gen/content/browser/resources/media/media_internals_resources.pak

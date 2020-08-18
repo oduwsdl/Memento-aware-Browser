@@ -1,0 +1,4 @@
+gen/chrome/grit/bluetooth_internals_resources.h
+gen/chrome/grit/bluetooth_internals_resources_map.h
+gen/chrome/grit/bluetooth_internals_resources_map.cc
+gen/chrome/bluetooth_internals_resources.pak

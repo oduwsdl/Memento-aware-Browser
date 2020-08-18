@@ -1,0 +1,16 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Iglibc_x64/gen
+cflags = -fno-strict-aliasing -m64 -march=x86-64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Wall -Werror -Wno-unused-local-typedefs -Wno-maybe-uninitialized -Wno-deprecated-declarations -Wno-comments -Wno-packed-not-aligned -Wno-missing-field-initializers -Wno-unused-parameter -O0 -fno-omit-frame-pointer -fvisibility=hidden
+cflags_cc = -Wno-narrowing -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = ppapi_test_lib
+root_out_dir = glibc_x64
+target_out_dir = glibc_x64/obj/chrome/test/data/nacl
+target_output_name = ppapi_test_lib
+
+build glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/get_browser_interface.o: glibc_x64_cxx ../../chrome/test/data/nacl/ppapi_test_lib/get_browser_interface.cc
+build glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/internal_utils.o: glibc_x64_cxx ../../chrome/test/data/nacl/ppapi_test_lib/internal_utils.cc
+build glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/module_instance.o: glibc_x64_cxx ../../chrome/test/data/nacl/ppapi_test_lib/module_instance.cc
+build glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/test_interface.o: glibc_x64_cxx ../../chrome/test/data/nacl/ppapi_test_lib/test_interface.cc
+build glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/testable_callback.o: glibc_x64_cxx ../../chrome/test/data/nacl/ppapi_test_lib/testable_callback.cc
+
+build glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib.stamp: glibc_x64_stamp glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/get_browser_interface.o glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/internal_utils.o glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/module_instance.o glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/test_interface.o glibc_x64/obj/chrome/test/data/nacl/ppapi_test_lib/testable_callback.o || glibc_x64/obj/native_client/src/shared/gio/libgio.a glibc_x64/obj/native_client/src/shared/platform/libplatform.a glibc_x64/obj/ppapi/native_client/ppapi_lib.stamp glibc_x64/obj/build/config/nacl/nacl_base.stamp glibc_x64/obj/ppapi/native_client/src/untrusted/irt_stub/libppapi_stub.a

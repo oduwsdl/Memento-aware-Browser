@@ -1,0 +1,30 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/components/payments/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/components/schema_org/common/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/media_session/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/third_party/blink/public/mojom/blob/blob.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/blob/blob_registry.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/blob/blob_url_store.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/blob/data_element.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/blob/serialized_blob.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/document_metadata/document_metadata.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/font_unique_name_lookup/font_unique_name_lookup.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/input/input_host.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/input/input_messages.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/installation/installation.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/installedapp/installed_app_provider.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/installedapp/related_application.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/mediasession/media_session.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/payments/payment_handler_host.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/payments/payment_request.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/webauthn/authenticator.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/webshare/webshare.mojom"
+  ]
+}

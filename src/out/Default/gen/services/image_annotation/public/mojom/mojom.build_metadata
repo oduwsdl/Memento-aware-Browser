@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/image_annotation/public/mojom/image_annotation.mojom"
+  ]
+}

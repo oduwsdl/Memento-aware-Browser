@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/printing/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/components/printing/common/print.mojom"
+  ]
+}

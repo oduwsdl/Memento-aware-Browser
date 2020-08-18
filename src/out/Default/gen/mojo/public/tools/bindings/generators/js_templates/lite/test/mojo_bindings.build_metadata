@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/mojo/public/tools/bindings/generators/js_templates/lite/test/test.test-mojom"
+  ]
+}

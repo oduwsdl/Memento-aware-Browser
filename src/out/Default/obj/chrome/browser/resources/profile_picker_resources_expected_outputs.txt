@@ -1,0 +1,4 @@
+gen/chrome/grit/profile_picker_resources.h
+gen/chrome/grit/profile_picker_resources_map.cc
+gen/chrome/grit/profile_picker_resources_map.h
+gen/chrome/profile_picker_resources.pak

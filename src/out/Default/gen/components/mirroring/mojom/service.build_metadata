@@ -1,0 +1,15 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/components/mirroring/mojom/common.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/media/capture/mojom/video_capture.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/media/mojo/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/media/mojo/mojom/remoting.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/viz/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/components/mirroring/mojom/mirroring_service.mojom",
+    "/home/abigail/final/src/components/mirroring/mojom/resource_provider.mojom"
+  ]
+}

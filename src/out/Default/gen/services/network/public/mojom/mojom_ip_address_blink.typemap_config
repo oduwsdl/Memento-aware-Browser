@@ -1,0 +1,48 @@
+[
+  {
+    "traits_headers": [
+      "services/network/public/cpp/ip_address_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cpp_base"
+    ],
+    "types": [
+      {
+        "cpp": "::net::IPAddress",
+        "mojom": "network.mojom.IPAddress"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "services/network/public/cpp/ip_endpoint_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cpp_base"
+    ],
+    "types": [
+      {
+        "cpp": "::net::IPEndPoint",
+        "mojom": "network.mojom.IPEndPoint"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "net/http/http_response_info.h",
+      "services/network/public/cpp/network_ipc_param_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cpp_base"
+    ],
+    "types": [
+      {
+        "cpp": "::net::HttpResponseInfo::ConnectionInfo",
+        "mojom": "network.mojom.ConnectionInfo"
+      }
+    ]
+  }
+]

@@ -1,0 +1,2 @@
+gen/chrome/grit/dev_ui_browser_resources.h
+gen/chrome/dev_ui_browser_resources.pak

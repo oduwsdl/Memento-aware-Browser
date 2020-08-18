@@ -1,0 +1,1653 @@
+{
+  "program": {
+    "fileInfos": {
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es5.d.ts": {
+        "version": "70ae6416528e68c2ee7b62892200d2ca631759943d4429f8b779b947ff1e124d",
+        "signature": "70ae6416528e68c2ee7b62892200d2ca631759943d4429f8b779b947ff1e124d",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.d.ts": {
+        "version": "dc47c4fa66b9b9890cf076304de2a9c5201e94b740cffdf09f87296d877d71f6",
+        "signature": "dc47c4fa66b9b9890cf076304de2a9c5201e94b740cffdf09f87296d877d71f6",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2016.d.ts": {
+        "version": "7a387c58583dfca701b6c85e0adaf43fb17d590fb16d5b2dc0a2fbd89f35c467",
+        "signature": "7a387c58583dfca701b6c85e0adaf43fb17d590fb16d5b2dc0a2fbd89f35c467",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.d.ts": {
+        "version": "8a12173c586e95f4433e0c6dc446bc88346be73ffe9ca6eec7aa63c8f3dca7f9",
+        "signature": "8a12173c586e95f4433e0c6dc446bc88346be73ffe9ca6eec7aa63c8f3dca7f9",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.d.ts": {
+        "version": "5f4e733ced4e129482ae2186aae29fde948ab7182844c3a5a51dd346182c7b06",
+        "signature": "5f4e733ced4e129482ae2186aae29fde948ab7182844c3a5a51dd346182c7b06",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.d.ts": {
+        "version": "e6b724280c694a9f588847f754198fb96c43d805f065c3a5b28bbc9594541c84",
+        "signature": "e6b724280c694a9f588847f754198fb96c43d805f065c3a5b28bbc9594541c84",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.d.ts": {
+        "version": "94b4108552f078722078d7c4a010ca4851063882f6c0c51a1468aa7a39aed4b3",
+        "signature": "94b4108552f078722078d7c4a010ca4851063882f6c0c51a1468aa7a39aed4b3",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.d.ts": {
+        "version": "2f8f379dedbdbd96a38a1e445cb3919853a1157a950fd977f85808db8d0f8a58",
+        "signature": "2f8f379dedbdbd96a38a1e445cb3919853a1157a950fd977f85808db8d0f8a58",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.dom.d.ts": {
+        "version": "9affb0a2ddc57df5b8174c0af96c288d697a262e5bc9ca1f544c999dc64a91e6",
+        "signature": "9affb0a2ddc57df5b8174c0af96c288d697a262e5bc9ca1f544c999dc64a91e6",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.core.d.ts": {
+        "version": "63e0cc12d0f77394094bd19e84464f9840af0071e5b9358ced30511efef1d8d2",
+        "signature": "63e0cc12d0f77394094bd19e84464f9840af0071e5b9358ced30511efef1d8d2",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.collection.d.ts": {
+        "version": "43fb1d932e4966a39a41b464a12a81899d9ae5f2c829063f5571b6b87e6d2f9c",
+        "signature": "43fb1d932e4966a39a41b464a12a81899d9ae5f2c829063f5571b6b87e6d2f9c",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.generator.d.ts": {
+        "version": "cdccba9a388c2ee3fd6ad4018c640a471a6c060e96f1232062223063b0a5ac6a",
+        "signature": "cdccba9a388c2ee3fd6ad4018c640a471a6c060e96f1232062223063b0a5ac6a",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.iterable.d.ts": {
+        "version": "42f5e41e5893da663dbf0394268f54f1da4b43dc0ddd2ea4bf471fe5361d6faf",
+        "signature": "42f5e41e5893da663dbf0394268f54f1da4b43dc0ddd2ea4bf471fe5361d6faf",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.promise.d.ts": {
+        "version": "0b7a905675e6cb4211c128f0a3aa47d414b275180a299a9aad5d3ec298abbfc4",
+        "signature": "0b7a905675e6cb4211c128f0a3aa47d414b275180a299a9aad5d3ec298abbfc4",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.proxy.d.ts": {
+        "version": "dfff68b3c34338f6b307a25d4566de15eed7973b0dc5d69f9fde2bcac1c25315",
+        "signature": "dfff68b3c34338f6b307a25d4566de15eed7973b0dc5d69f9fde2bcac1c25315",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.reflect.d.ts": {
+        "version": "cb609802a8698aa28b9c56331d4b53f590ca3c1c3a255350304ae3d06017779d",
+        "signature": "cb609802a8698aa28b9c56331d4b53f590ca3c1c3a255350304ae3d06017779d",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.symbol.d.ts": {
+        "version": "3013574108c36fd3aaca79764002b3717da09725a36a6fc02eac386593110f93",
+        "signature": "3013574108c36fd3aaca79764002b3717da09725a36a6fc02eac386593110f93",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.symbol.wellknown.d.ts": {
+        "version": "4670208dd7da9d6c774ab1b75c1527a810388c7989c4905de6aaea8561cb9dce",
+        "signature": "4670208dd7da9d6c774ab1b75c1527a810388c7989c4905de6aaea8561cb9dce",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2016.array.include.d.ts": {
+        "version": "3be5a1453daa63e031d266bf342f3943603873d890ab8b9ada95e22389389006",
+        "signature": "3be5a1453daa63e031d266bf342f3943603873d890ab8b9ada95e22389389006",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.object.d.ts": {
+        "version": "17bb1fc99591b00515502d264fa55dc8370c45c5298f4a5c2083557dccba5a2a",
+        "signature": "17bb1fc99591b00515502d264fa55dc8370c45c5298f4a5c2083557dccba5a2a",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.sharedmemory.d.ts": {
+        "version": "d0db416bccdb33975548baf09a42ee8c47eace1aac7907351a000f1e568e7232",
+        "signature": "d0db416bccdb33975548baf09a42ee8c47eace1aac7907351a000f1e568e7232",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.string.d.ts": {
+        "version": "6a6b173e739a6a99629a8594bfb294cc7329bfb7b227f12e1f7c11bc163b8577",
+        "signature": "6a6b173e739a6a99629a8594bfb294cc7329bfb7b227f12e1f7c11bc163b8577",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.intl.d.ts": {
+        "version": "12a310447c5d23c7d0d5ca2af606e3bd08afda69100166730ab92c62999ebb9d",
+        "signature": "12a310447c5d23c7d0d5ca2af606e3bd08afda69100166730ab92c62999ebb9d",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.typedarrays.d.ts": {
+        "version": "b0124885ef82641903d232172577f2ceb5d3e60aed4da1153bab4221e1f6dd4e",
+        "signature": "b0124885ef82641903d232172577f2ceb5d3e60aed4da1153bab4221e1f6dd4e",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.asyncgenerator.d.ts": {
+        "version": "8f03386d697248c5d356fd53f2729b920ea124cd1414a6c22de03c5d24729277",
+        "signature": "8f03386d697248c5d356fd53f2729b920ea124cd1414a6c22de03c5d24729277",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.asynciterable.d.ts": {
+        "version": "a40c4d82bf13fcded295ac29f354eb7d40249613c15e07b53f2fc75e45e16359",
+        "signature": "a40c4d82bf13fcded295ac29f354eb7d40249613c15e07b53f2fc75e45e16359",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.intl.d.ts": {
+        "version": "df9c8a72ca8b0ed62f5470b41208a0587f0f73f0a7db28e5a1272cf92537518e",
+        "signature": "df9c8a72ca8b0ed62f5470b41208a0587f0f73f0a7db28e5a1272cf92537518e",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.promise.d.ts": {
+        "version": "bb2d3fb05a1d2ffbca947cc7cbc95d23e1d053d6595391bd325deb265a18d36c",
+        "signature": "bb2d3fb05a1d2ffbca947cc7cbc95d23e1d053d6595391bd325deb265a18d36c",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.regexp.d.ts": {
+        "version": "c80df75850fea5caa2afe43b9949338ce4e2de086f91713e9af1a06f973872b8",
+        "signature": "c80df75850fea5caa2afe43b9949338ce4e2de086f91713e9af1a06f973872b8",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.array.d.ts": {
+        "version": "9d57b2b5d15838ed094aa9ff1299eecef40b190722eb619bac4616657a05f951",
+        "signature": "9d57b2b5d15838ed094aa9ff1299eecef40b190722eb619bac4616657a05f951",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.object.d.ts": {
+        "version": "6c51b5dd26a2c31dbf37f00cfc32b2aa6a92e19c995aefb5b97a3a64f1ac99de",
+        "signature": "6c51b5dd26a2c31dbf37f00cfc32b2aa6a92e19c995aefb5b97a3a64f1ac99de",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.string.d.ts": {
+        "version": "93544ca2f26a48716c1b6c5091842cad63129daac422dfa4bc52460465f22bb1",
+        "signature": "93544ca2f26a48716c1b6c5091842cad63129daac422dfa4bc52460465f22bb1",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.symbol.d.ts": {
+        "version": "2ad234885a4240522efccd77de6c7d99eecf9b4de0914adb9a35c0c22433f993",
+        "signature": "2ad234885a4240522efccd77de6c7d99eecf9b4de0914adb9a35c0c22433f993",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.bigint.d.ts": {
+        "version": "a5e25d9579ce8582f7b0c07aaa739784f355eb3734fceacaecc2ea6abf9069b7",
+        "signature": "a5e25d9579ce8582f7b0c07aaa739784f355eb3734fceacaecc2ea6abf9069b7",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.promise.d.ts": {
+        "version": "ea2d62f611bbe855ee8a66ea7972198718da7f0da955f5750100c18b819984b6",
+        "signature": "ea2d62f611bbe855ee8a66ea7972198718da7f0da955f5750100c18b819984b6",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.string.d.ts": {
+        "version": "faf0221ae0465363c842ce6aa8a0cbda5d9296940a8e26c86e04cc4081eea21e",
+        "signature": "faf0221ae0465363c842ce6aa8a0cbda5d9296940a8e26c86e04cc4081eea21e",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.symbol.wellknown.d.ts": {
+        "version": "936d7d2e8851af9ccfa5333b15e877a824417d352b1d7fd06388639dc69ef80a",
+        "signature": "936d7d2e8851af9ccfa5333b15e877a824417d352b1d7fd06388639dc69ef80a",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.intl.d.ts": {
+        "version": "89bf2b7a601b73ea4311eda9c41f86a58994fec1bee3b87c4a14d68d9adcdcbd",
+        "signature": "89bf2b7a601b73ea4311eda9c41f86a58994fec1bee3b87c4a14d68d9adcdcbd",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.string.d.ts": {
+        "version": "cebef4c7f9b6afb02cd08e7288fab05d0be3e3c898c720775b8aa286e9f7cfed",
+        "signature": "cebef4c7f9b6afb02cd08e7288fab05d0be3e3c898c720775b8aa286e9f7cfed",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.promise.d.ts": {
+        "version": "5f0738e96b305d1d844c9b6346fef2b196647e41a194c0fac3bc6535fc792227",
+        "signature": "5f0738e96b305d1d844c9b6346fef2b196647e41a194c0fac3bc6535fc792227",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js": {
+        "version": "2bc804c8eb709a5a32d4609bcd9794804e1746955bf75333720f70a2b70a34d6",
+        "signature": "718a7cc70bee1178d8c25a8336e4ed3391dca53ab6c4730f5dd033df0060dda5",
+        "affectsGlobalScope": false
+      },
+      "../platform/utilities.d.ts": {
+        "version": "2b72abd5d918c11a1f31c582ee1c22200e633a176e7e085fa3a28be863940ad4",
+        "signature": "2b72abd5d918c11a1f31c582ee1c22200e633a176e7e085fa3a28be863940ad4",
+        "affectsGlobalScope": false
+      },
+      "../platform/string-utilities.d.ts": {
+        "version": "02564c6bc557c54a16fb6bbcd96e9090a796d0a8e128c630126ad41b1e1ed52a",
+        "signature": "02564c6bc557c54a16fb6bbcd96e9090a796d0a8e128c630126ad41b1e1ed52a",
+        "affectsGlobalScope": false
+      },
+      "../platform/UIString.d.ts": {
+        "version": "973668a933891f63d00990923236b0c82bae46a98c11d18703fe999dbf0f532a",
+        "signature": "973668a933891f63d00990923236b0c82bae46a98c11d18703fe999dbf0f532a",
+        "affectsGlobalScope": false
+      },
+      "../platform/array-utilities.d.ts": {
+        "version": "0977b9dbafa65301e115357c3913ca4c1c299ca40d0b8ef5deaaf1297b9ed090",
+        "signature": "0977b9dbafa65301e115357c3913ca4c1c299ca40d0b8ef5deaaf1297b9ed090",
+        "affectsGlobalScope": false
+      },
+      "../platform/date-utilities.d.ts": {
+        "version": "b44c86da6dcd7e4a9bddcb1ab53224ed0f243d1a18dc685d5b5644515dc4696f",
+        "signature": "b44c86da6dcd7e4a9bddcb1ab53224ed0f243d1a18dc685d5b5644515dc4696f",
+        "affectsGlobalScope": false
+      },
+      "../platform/number-utilities.d.ts": {
+        "version": "a60f8adf9f46bc0df4c2732f0c87a35daf250fa16652781fbe077f2c082895ba",
+        "signature": "a60f8adf9f46bc0df4c2732f0c87a35daf250fa16652781fbe077f2c082895ba",
+        "affectsGlobalScope": false
+      },
+      "../platform/set-utilities.d.ts": {
+        "version": "b264fcbd18522caa0fa2d59ac9e33d3ffd41a35d99e7934ae08b9e67a8d242bb",
+        "signature": "b264fcbd18522caa0fa2d59ac9e33d3ffd41a35d99e7934ae08b9e67a8d242bb",
+        "affectsGlobalScope": false
+      },
+      "../platform/platform.d.ts": {
+        "version": "44d4268a3d4764927349f44d8209b1bd9db4692e2931c366a9a61c3e09e29973",
+        "signature": "44d4268a3d4764927349f44d8209b1bd9db4692e2931c366a9a61c3e09e29973",
+        "affectsGlobalScope": false
+      },
+      "../common/Color.d.ts": {
+        "version": "201452930552ee16cff03555debaa281303fa8556e9c9b1690b8505b32682dfa",
+        "signature": "201452930552ee16cff03555debaa281303fa8556e9c9b1690b8505b32682dfa",
+        "affectsGlobalScope": false
+      },
+      "../common/EventTarget.d.ts": {
+        "version": "5965d039f10b3604bc1fb19f02f864ca038ef6485fb05c65f66196bc34b6fbb8",
+        "signature": "5965d039f10b3604bc1fb19f02f864ca038ef6485fb05c65f66196bc34b6fbb8",
+        "affectsGlobalScope": false
+      },
+      "../common/Object.d.ts": {
+        "version": "a00311720cd8671911ab53247a471518e7065035ec3b49fcf3db3a7c7ad96a1f",
+        "signature": "a00311720cd8671911ab53247a471518e7065035ec3b49fcf3db3a7c7ad96a1f",
+        "affectsGlobalScope": false
+      },
+      "../root/Runtime.d.ts": {
+        "version": "c0499f35e9752a590d79c044a2694ebc83220ddfb0fd690f1ce79058ca09397f",
+        "signature": "c0499f35e9752a590d79c044a2694ebc83220ddfb0fd690f1ce79058ca09397f",
+        "affectsGlobalScope": false
+      },
+      "../root/root.d.ts": {
+        "version": "a63cbf720b67dd43bfed5ecc633ab71d3e5d2a810650377efbdf59a51b5f1189",
+        "signature": "a63cbf720b67dd43bfed5ecc633ab71d3e5d2a810650377efbdf59a51b5f1189",
+        "affectsGlobalScope": false
+      },
+      "../common/Settings.d.ts": {
+        "version": "a55df42c0caad0151dc61fdf9090a97e236eea02600fe5998c5fddc39c185274",
+        "signature": "a55df42c0caad0151dc61fdf9090a97e236eea02600fe5998c5fddc39c185274",
+        "affectsGlobalScope": false
+      },
+      "../common/App.d.ts": {
+        "version": "d1cf336ef20c9eeea44d22fab81568745b3094b06eb91899b7270c4283ea81d3",
+        "signature": "d1cf336ef20c9eeea44d22fab81568745b3094b06eb91899b7270c4283ea81d3",
+        "affectsGlobalScope": false
+      },
+      "../common/AppProvider.d.ts": {
+        "version": "f9cb6c338ab20de9cfba76842355559254839c2a048542d95a54baccec765463",
+        "signature": "f9cb6c338ab20de9cfba76842355559254839c2a048542d95a54baccec765463",
+        "affectsGlobalScope": false
+      },
+      "../common/CharacterIdMap.d.ts": {
+        "version": "b7f7c991f322ef3b99756e07e8e8d21386b86a1b70852a6a6b8fa8b69d4e5241",
+        "signature": "b7f7c991f322ef3b99756e07e8e8d21386b86a1b70852a6a6b8fa8b69d4e5241",
+        "affectsGlobalScope": false
+      },
+      "../common/ColorUtils.d.ts": {
+        "version": "c05af1067d82fd973a210932060b5ada778aec405a89cd713245a1cc91fd3a85",
+        "signature": "c05af1067d82fd973a210932060b5ada778aec405a89cd713245a1cc91fd3a85",
+        "affectsGlobalScope": false
+      },
+      "../common/Console.d.ts": {
+        "version": "af0f199707445298e40fee1617ed2e478dcde0e0908ab2ba64c31c3c4c1d410b",
+        "signature": "af0f199707445298e40fee1617ed2e478dcde0e0908ab2ba64c31c3c4c1d410b",
+        "affectsGlobalScope": false
+      },
+      "../common/JavaScriptMetaData.d.ts": {
+        "version": "9c756f5a11892e04b6760526894f43b31616412205d18f0c6a33e3f790647873",
+        "signature": "9c756f5a11892e04b6760526894f43b31616412205d18f0c6a33e3f790647873",
+        "affectsGlobalScope": false
+      },
+      "../common/Lazy.d.ts": {
+        "version": "2cd6969a04fa812e9a45dac6b7de656a3b478c3afd3d84917cb98741a9bd3819",
+        "signature": "2cd6969a04fa812e9a45dac6b7de656a3b478c3afd3d84917cb98741a9bd3819",
+        "affectsGlobalScope": false
+      },
+      "../common/Linkifier.d.ts": {
+        "version": "e3e7996129c33179f159dd4d317dc908774674fed15e3b0d766ff49a9a05e69b",
+        "signature": "e3e7996129c33179f159dd4d317dc908774674fed15e3b0d766ff49a9a05e69b",
+        "affectsGlobalScope": false
+      },
+      "../common/ParsedURL.d.ts": {
+        "version": "854ec5942a63878c8d282488e4c6527175da39e9ebf2e297c80ed1ad6c40adb9",
+        "signature": "854ec5942a63878c8d282488e4c6527175da39e9ebf2e297c80ed1ad6c40adb9",
+        "affectsGlobalScope": false
+      },
+      "../common/Progress.d.ts": {
+        "version": "bde812d20fe9eaafbe29c6b348f97cb96d384c7a0651820631a538fc46489a48",
+        "signature": "bde812d20fe9eaafbe29c6b348f97cb96d384c7a0651820631a538fc46489a48",
+        "affectsGlobalScope": false
+      },
+      "../common/QueryParamHandler.d.ts": {
+        "version": "1eda325d2be8f24071db5ad93781f9a43714b2b3511160bdc7362766f4d07bb5",
+        "signature": "1eda325d2be8f24071db5ad93781f9a43714b2b3511160bdc7362766f4d07bb5",
+        "affectsGlobalScope": false
+      },
+      "../common/ResourceType.d.ts": {
+        "version": "de9a251a3a506428a793bca58580ea064b7212ba60fa1ac36f8c4fbe1fa5666f",
+        "signature": "de9a251a3a506428a793bca58580ea064b7212ba60fa1ac36f8c4fbe1fa5666f",
+        "affectsGlobalScope": false
+      },
+      "../common/Revealer.d.ts": {
+        "version": "527b7383149ea982f97986257c9e50eaa55ca867b1b7751566d571fea2759580",
+        "signature": "527b7383149ea982f97986257c9e50eaa55ca867b1b7751566d571fea2759580",
+        "affectsGlobalScope": false
+      },
+      "../common/Runnable.d.ts": {
+        "version": "9f359da32b7f6d7bf0bee09ecd5aebf41d737e6dea00ab7825c3483df3e94a7d",
+        "signature": "9f359da32b7f6d7bf0bee09ecd5aebf41d737e6dea00ab7825c3483df3e94a7d",
+        "affectsGlobalScope": false
+      },
+      "../common/SegmentedRange.d.ts": {
+        "version": "a76efe8d47793c7815da1b4427c57c207304597c9bc2c2211065e69d79167e8f",
+        "signature": "a76efe8d47793c7815da1b4427c57c207304597c9bc2c2211065e69d79167e8f",
+        "affectsGlobalScope": false
+      },
+      "../common/StringOutputStream.d.ts": {
+        "version": "df2f0ff1433502e3a0581693d11fd7c04820dcba9594cfe2800f774f3dcb4450",
+        "signature": "df2f0ff1433502e3a0581693d11fd7c04820dcba9594cfe2800f774f3dcb4450",
+        "affectsGlobalScope": false
+      },
+      "../common/Trie.d.ts": {
+        "version": "0f127f4553c0e2f2dcdd65827088ca1e2480d63c5acbf04d8c05ea6ef5f595fa",
+        "signature": "0f127f4553c0e2f2dcdd65827088ca1e2480d63c5acbf04d8c05ea6ef5f595fa",
+        "affectsGlobalScope": false
+      },
+      "../common/TextDictionary.d.ts": {
+        "version": "fc82000dc93c53cece3dace032ad5cab278ab1e20407c4c190c74419274eec62",
+        "signature": "fc82000dc93c53cece3dace032ad5cab278ab1e20407c4c190c74419274eec62",
+        "affectsGlobalScope": false
+      },
+      "../common/Throttler.d.ts": {
+        "version": "0f43bd93dd406cc7c5da8289f92c6b59d7c3f471df79e1ba75f36fd78d8ecccb",
+        "signature": "0f43bd93dd406cc7c5da8289f92c6b59d7c3f471df79e1ba75f36fd78d8ecccb",
+        "affectsGlobalScope": false
+      },
+      "../common/Worker.d.ts": {
+        "version": "f095c968f8cf88d3439d8749a67d5f8b03bfda6c16eeb9e54cdebc4309a3428c",
+        "signature": "f095c968f8cf88d3439d8749a67d5f8b03bfda6c16eeb9e54cdebc4309a3428c",
+        "affectsGlobalScope": false
+      },
+      "../common/WasmDisassembly.d.ts": {
+        "version": "e5a18ddedebe77435844c6a75690bd31d2cda54fea8a5c7262b04b71923419cd",
+        "signature": "e5a18ddedebe77435844c6a75690bd31d2cda54fea8a5c7262b04b71923419cd",
+        "affectsGlobalScope": false
+      },
+      "../common/common.d.ts": {
+        "version": "469d15fcdbb45bcb49c3fa2b89645561895c591006db5c37829c22d3dadaebf2",
+        "signature": "469d15fcdbb45bcb49c3fa2b89645561895c591006db5c37829c22d3dadaebf2",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextFlavorListener.js": {
+        "version": "c91cb87c74b7521861a5467afb1167f89f519be8fde62433c5c3b8f0afb87335",
+        "signature": "cd3c194d062dbe7d6fb6cbba7e66e5b1e1d124dfe2a467ade8c00e117c8a2b3d",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Context.js": {
+        "version": "6792cac9f43315c9ece7d89622bda3ad13c4bd315767bbfa6fe64b663a584c24",
+        "signature": "36c0d77c21870d0481463d347ab4276675104c940f236770b6a7546dce93e526",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionDelegate.js": {
+        "version": "5777b4505b838ae2a80c133932e2b36d72e3318a82a4b0ef18652860ef102f97",
+        "signature": "21450365356e96250eb93135a834611e2e762c9d3479862579d926fce6764aea",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Action.js": {
+        "version": "d26085cf55d8eb96081e9ab3ced875bb7ecee00d7603af8317a37e2ca84b38b8",
+        "signature": "c0686506cd75979d482d9b3b3dd2b1997a7c91bcf5526bc9e5dbcd393304e755",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionRegistry.js": {
+        "version": "3555ed73a567f05a68b707108e0f61149d8c43857d9b9c214b18ce822352abff",
+        "signature": "40aff70dfd33f8521c973d9e3d36e5ff2e03c11387908137e2c238e1923ca73f",
+        "affectsGlobalScope": false
+      },
+      "../host/InspectorFrontendHostAPI.d.ts": {
+        "version": "7ffca652a335f6baf99b19db7356f9b682366663f42f2bbb858b94b27dde35a4",
+        "signature": "7ffca652a335f6baf99b19db7356f9b682366663f42f2bbb858b94b27dde35a4",
+        "affectsGlobalScope": false
+      },
+      "../host/InspectorFrontendHost.d.ts": {
+        "version": "cd46704e871c02289e351215d9178a2ae890c1ac1ed0e0d01c3b927c8e7ebf9d",
+        "signature": "cd46704e871c02289e351215d9178a2ae890c1ac1ed0e0d01c3b927c8e7ebf9d",
+        "affectsGlobalScope": false
+      },
+      "../host/Platform.d.ts": {
+        "version": "9ffb51718e865b6d4b96cbd7b4ee69ea732168319583a8c931b19caf93a2e713",
+        "signature": "9ffb51718e865b6d4b96cbd7b4ee69ea732168319583a8c931b19caf93a2e713",
+        "affectsGlobalScope": false
+      },
+      "../host/ResourceLoader.d.ts": {
+        "version": "31975509c84de9648a1df0f126e377a0552b3b87c931085f5feb83490e883b4c",
+        "signature": "31975509c84de9648a1df0f126e377a0552b3b87c931085f5feb83490e883b4c",
+        "affectsGlobalScope": false
+      },
+      "../host/UserMetrics.d.ts": {
+        "version": "cf8ff41f7a638340ac33e1af8101738af35e5e7dca0401b8fefbc5bd267cf73a",
+        "signature": "cf8ff41f7a638340ac33e1af8101738af35e5e7dca0401b8fefbc5bd267cf73a",
+        "affectsGlobalScope": false
+      },
+      "../host/host.d.ts": {
+        "version": "19d4386f583cb257b9d3cf22b3a1e3a52a6b1acaa0b90c098fdc9f2cac4bd981",
+        "signature": "19d4386f583cb257b9d3cf22b3a1e3a52a6b1acaa0b90c098fdc9f2cac4bd981",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js": {
+        "version": "484754b4fd493a35af1327aa4efc26be70d5b752905e523265e57efd127cc3af",
+        "signature": "51705a647051e41d93608150e40e55e30f8f4e659dc4b8ced284db88d8ac2916",
+        "affectsGlobalScope": false
+      },
+      "./utils/register-custom-element.d.ts": {
+        "version": "8ac797e8daad87ddf415659f2771385ca9c4f09c6c2831a7f062329e186df152",
+        "signature": "8ac797e8daad87ddf415659f2771385ca9c4f09c6c2831a7f062329e186df152",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js": {
+        "version": "6eee6e4beb6ca2515be7ecbae0a5f79c6c93dc744f851ab822ee2e1eaafb003e",
+        "signature": "6dc0fc10c0910f9f5a746923c984d8a3ed6fbd74b5acbb1ef1e009320d08dff1",
+        "affectsGlobalScope": false
+      },
+      "./utils/measured-scrollbar-width.d.ts": {
+        "version": "9ef05056cb07da4721c9741fecb8f4e215e00ce59fe021e81491367832db12a6",
+        "signature": "9ef05056cb07da4721c9741fecb8f4e215e00ce59fe021e81491367832db12a6",
+        "affectsGlobalScope": false
+      },
+      "./utils/append-style.d.ts": {
+        "version": "e8fc4aa7e0eef6d7fd735d24426d462b769a9d3b548d030be63e5b142feacbe6",
+        "signature": "e8fc4aa7e0eef6d7fd735d24426d462b769a9d3b548d030be63e5b142feacbe6",
+        "affectsGlobalScope": false
+      },
+      "./utils/create-shadow-root-with-core-styles.d.ts": {
+        "version": "82f7961dfdbd21683ddb4ad884ea4641d4349e8be2dfcbec8fcf5c69a48b667e",
+        "signature": "82f7961dfdbd21683ddb4ad884ea4641d4349e8be2dfcbec8fcf5c69a48b667e",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XElement.js": {
+        "version": "d50178aa4cfbfb98af5be3d94c0970f81839d5a8b1206fc05853b8e79b04a7e2",
+        "signature": "f6298db47a0b87c0765c9a2f83f5f6419986c9a8a16b6699fa4b5f52f2bf51c6",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XWidget.js": {
+        "version": "52327904906e1923d9ea2bdfd9edd81df23fe400ce20a97422226a7d71086356",
+        "signature": "58a7990095d8e6f5fb13377f6d5f2f954cebede2592ad4f7aa9185e1225336b6",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js": {
+        "version": "749f438b96a088459104b4f29b1d0614081f67b1ee12f444591308df8e677458",
+        "signature": "df34db80d58e8de7bb42bd1f739207c791b5c202ffe28d16b532bba83c694cfe",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js": {
+        "version": "34d25f6481ea40e9f37dcd18491a8d266d0af785be6eb132692e350c4fb28d50",
+        "signature": "554aeb1e84f91f3d3f04fe68a9fcd328ebdb12943bb1f8bc3cd71e4f8ae83b90",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js": {
+        "version": "83bd2e487136046f364dd6b4cb39116381997e846056ed6382456ca29f2ca3b8",
+        "signature": "6b6f0a9c0ac8a26de8f7bb34c854d14a7e15c5662618360fcbbcf8ccc2825fd7",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ResizerWidget.js": {
+        "version": "19a8b3b95f76508484bec7cb8c091c08883d5b09046bab3e2cc04536632037c5",
+        "signature": "5e53168ee9254e78627afbce521edda1a812929bb90fb9b8734217ea1103dff5",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SettingsUI.js": {
+        "version": "0e3210a67524d355df6b76a7fb4bc22b54c86f9d755c66310c1caa99704835d1",
+        "signature": "91b9f8105f577c434e54a68def03c059427f3fa315c02e7b5467629db286c7c1",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListModel.js": {
+        "version": "1ce72b91517ce018c29569f6ba63c3c2ad372d10bfb65c1906fbdb59c7371c2e",
+        "signature": "36f18083831ef1926404b0c8403a530893b44e4d92b47ff8b6fe46c2f6d14a72",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListControl.js": {
+        "version": "9bf30b7d6060bd1450ad64ed59dbf7c85fa926171dd02233425b695b83882aff",
+        "signature": "590a9f27f03d2860c12ddc75e5df3970ca0b399306c4ad4c3c821b366d7242d9",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js": {
+        "version": "2466716bbbe90a3ef361bce44574c06c298f0671335dd96dfa158c159c16f3be",
+        "signature": "25db40ab5878cbb0374f3610ffbe4688691050d03ae9bfacdd809dc6f800ab71",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextPrompt.js": {
+        "version": "0cfe096709980973b4b299fbe1ca9da848f3e716f113e1ceee31ab3a40688440",
+        "signature": "53d30542b30c7833140db547ea99c4ac1972853ec0b3172f2cdb4ec8b551b79d",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ZoomManager.js": {
+        "version": "83ac363be39124f353890a62e249cacc304588ca485eb4262106ca0514841835",
+        "signature": "ee0d78f2669ad349822545d8cb365b6fff1ccc5e5e7c38a322dd056f39afafb5",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Tooltip.js": {
+        "version": "7b3083ac22ccbf6e3c66920234f9830b1bf4161cda8fce34638e1c250054ee97",
+        "signature": "3ae74d9f07676364cc6794ac543a7e1e397c28880b8092fc8623c5950c9eadf7",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js": {
+        "version": "99926fa49483e6799b9c79293cb17527cecac5d44341c42ee22bf8df75624c9f",
+        "signature": "4e61078ac00a57e10ba4290cfa8f6ebb2e2760389fd9fa84134ed5e10f548556",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SplitWidget.js": {
+        "version": "e1ee7f5c55dd3e86551888b06740f1c43e5b0560d464531ec1d3590a48e44812",
+        "signature": "f5cb47cbbabf246b3b8baa3f410b78b96b1e380787e8eea1279cfd92b0d268c9",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Dialog.js": {
+        "version": "9dfa7fdcd040dcef413911209333643784eacc5729f997733f408d28524ab572",
+        "signature": "91a852db21cae51e6beb0f8162a9c2e5ae8921d284441643ca558531e4e9b1f1",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InplaceEditor.js": {
+        "version": "0e1c028def80ae4785495d4affb58c0a8d6c165b29536ddbcc17b621cd23bd11",
+        "signature": "7da57102d3ccc659877163eba29b67f0c99e1b20d9a261019eb688f342f41102",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Treeoutline.js": {
+        "version": "618510dfa1211754e8373b0365bc05916a43ed888aebd4dba4cc9da61c0a949d",
+        "signature": "4d3d2fefdafdd24a202cc36d2665d4486570e7e365df8eefef6ca7d2a8497249",
+        "affectsGlobalScope": false
+      },
+      "./utils/focus-changed.d.ts": {
+        "version": "a67851b0339576f15a1271a9ba560aec3cc3301d9f75a95e4eb28625cd9d7d35",
+        "signature": "a67851b0339576f15a1271a9ba560aec3cc3301d9f75a95e4eb28625cd9d7d35",
+        "affectsGlobalScope": false
+      },
+      "./utils/inject-core-styles.d.ts": {
+        "version": "e457288e373306de88d60a080c443393c0936c8700a0449111e4db5e4f019af9",
+        "signature": "e457288e373306de88d60a080c443393c0936c8700a0449111e4db5e4f019af9",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Fragment.js": {
+        "version": "42a9f088204471be7325c4a1ecc81807c973de60052ed51e4950886f812857fe",
+        "signature": "719711aacb567484bd46094c37e2a2bcaae1aeca13974263475773a2532aa8c7",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XLink.js": {
+        "version": "fe967e072c5dd35f80e14592e95db70f5d13aed15db5408b43bbf88c47f6a631",
+        "signature": "d37dd4160c4901cb1e306a6fd911bfb8d09b3a3d7aa3cccdd972a3e9b26d066a",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js": {
+        "version": "7a5c9deaf5fa558f424a17988f609011a22106598d3d29f25e27245b7d3d0e2f",
+        "signature": "38115e9862238083acd2863b1721a3f584c7c9e6eacd8c00395cc162b8edddb8",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftContextMenu.js": {
+        "version": "16e52f84eb34cde3397cda4d6278d6216a4c31a40a727bf2f71c784f2051b629",
+        "signature": "6a92a0a4191f60393b84da90418a7b6c5232edcd9663e21e56acb6928b1b1434",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js": {
+        "version": "07b0f426144e37e5a0831490e008d5039953f503668bb5b800cbe9cc630da4f6",
+        "signature": "9e7462e07de5db1046301849278dd91c5a8b0cea3ff92d6696fa3442a21be44e",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/DropTarget.js": {
+        "version": "0b266a93b52dfb059ed54e13d73cebe24ccd177e85151fbba1b1eda99787c32b",
+        "signature": "4a1d1b10419b4c506e994c4d1354e4eddcdefd4f5db7bc093837176d7e8c1f98",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/EmptyWidget.js": {
+        "version": "82df970a5e67e3ff277c922df90e39c782aa35d28ddf7644ac2e59c1bfe98fe3",
+        "signature": "4e0c844d39fe0b25d55fe31ee9d75ff45eb0e10594eb1be49091a97c670c355f",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/FilterBar.js": {
+        "version": "19b0e70099c97364175b3b771dc84c60c3746321df2c75dda1b8414f0505c318",
+        "signature": "d3580c2050b33d7e4771222af1889b21bea92666c73f1789989daf67125cacd0",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/FilterSuggestionBuilder.js": {
+        "version": "d09ef65495962af3ac10fef74a8dc50489083fa112e6631dd0da618016a07def",
+        "signature": "fe195af0eced763e043df7d2c65caad963741ee6ed5e64281e005cfe3bba1cd7",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutRegistry.js": {
+        "version": "e99a940bdf21f65675e23775fd2cc82cd2760f9f55609d1db95f107c18f705e5",
+        "signature": "14c88013fc061d1ca9043e73360ef017f2287b1c5f7b91981941bec2171e2031",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ForwardedInputEventHandler.js": {
+        "version": "bbc43e404c2555b4e295383dd1e5d7bfae1d9536cec17e0dd04f531e0d227e07",
+        "signature": "5786a98d776ca7f2f1c5a37b7ea4e0936641a6763892f748109b7ee3e251b8ff",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/HistoryInput.js": {
+        "version": "79e0302f0a66789402f373dfb94f6864839c30776d5ee4bf409f820062d4e31b",
+        "signature": "183f5842acdc63faafd7747a192f767889e82ff7b0c65d385409a3f2b6988935",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Infobar.js": {
+        "version": "b40543b038e679177390344737818233c9ad2bb37ec31420efa0d716f9d9e302",
+        "signature": "6b86d136d88f948e9d76e115d77990e2b4a5c384393053bd4d35a5589baba57c",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SearchableView.js": {
+        "version": "3006342d5be29f00f3788fce4e3a7d2c91f496328ade6422145edbbca98d0615",
+        "signature": "5a919dacee308c03b5496648b33387afed6f350b767e2efa72ebfcaf14cfe124",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Panel.js": {
+        "version": "797b4f86a9f56d54da91ca06987c88de38b04bebc7d49499542fa940670cb4f0",
+        "signature": "4b1ca166b7b1ce63288954eefcaad45ed498b8917ffd41b11807044982dd93a5",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TabbedPane.js": {
+        "version": "ea726a8376f7539cd1aa4d04d894a9da0daca4aaf3788506b1a07ed36115b935",
+        "signature": "080969542a1d7d10d761f0ad1ef849563e0ebcfb359906282e9d8e7d4dc1f4c6",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ViewManager.js": {
+        "version": "83baaa7898a9b22d93300052f96cb07fb3e32c210bab4c155937666cb5664414",
+        "signature": "cf3bc28006bb9e06c05246c639d4184727a9790247e02ae8aff25b9662e149bb",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/View.js": {
+        "version": "0565c653e0996a5c40ac308ed68c71b326ddbf6b51576b6be7e0bd1291a88693",
+        "signature": "3a030b00bd51166a4710802295eeefbbed930214078584ebd03d98b163cbe8a8",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InspectorView.js": {
+        "version": "7a391ecebe150de885ef8be4bbcbb0681f111da9d5882d78c46efa744f2af5bd",
+        "signature": "905a8e9f8905b0c3ef78df5043b4871353d0983fa974f251e7552eeaec693c94",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListWidget.js": {
+        "version": "4396465e70cb2286737b3853fc9d881434a804abf40e3a9f30e90034a588784c",
+        "signature": "56d9c7d0971c7345d25d495d77830e6ed24dcad789b2057e64ee017a0346c430",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/PopoverHelper.js": {
+        "version": "1b77ad661b8699a70f8f1adf988fd4f817a86f1926af6666498acb06a4c0abab",
+        "signature": "b554d8d9d8dd00d192b75872b3864c831d2b9f402709941dea889abff945e4a6",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ProgressIndicator.js": {
+        "version": "d31c35c31a47aa45bc7ad93b507ce868fb3c850b4eddb9eaa5475115aede5775",
+        "signature": "189a7f47f5cf19c1de977672a7b3b02c8ca806da64bec7952cf044c03e9c3bcb",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/RemoteDebuggingTerminatedScreen.js": {
+        "version": "9e6c7ad44e428e56708dbb572c0f03e107746eaec6bbc12234f5d6b4e08c4f90",
+        "signature": "64c5cae2ae951f93a57a7a3bc664d1aa009bdd901631a8f412edfcb43cf8995c",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ReportView.js": {
+        "version": "3432d7e8c7f0c8dc7a1403b2998d69ee087312b39ab73cf84c2a24b967d4ed12",
+        "signature": "5f04d735d85a79a04880065ebcacc0c276e84e512c7512b8fb566f9002f755b0",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/RootView.js": {
+        "version": "356246fb104aa093a14b81126bd59b53f03b194d4389ca3252633a4b2c54cdba",
+        "signature": "437eb9e7af6612e3b063aeed498d6535cea1e5c9e2dcbd3e035fd7745a6c54ac",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SegmentedButton.js": {
+        "version": "935ab7b619ba33a908e279947230d27564985a8655a381d109869e576cff54d4",
+        "signature": "199464fa85f735e95257e416e41c07aa6091661f64894963e1a30b3597519850",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutsScreen.js": {
+        "version": "dc728131b48abdd5a0422225b88695fb03c6df0e10aebb8d3287877b3ca4d78f",
+        "signature": "fe39a71780a9a6f3518c58dcb523ce35b1e970ad78368d99c1991cd7ed680ebc",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftDropDown.js": {
+        "version": "36ccaad8ff08022ad4491f097548e37fd666de5898c2d8be13bbe80ec429624b",
+        "signature": "ade1e91f63052a2bd51896e874987fbe68876c7c966e40bc7b1b628377305ad1",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SyntaxHighlighter.js": {
+        "version": "f559c35c57e335880f569cfe9f95c223be8546946a2766bf4ac5bb36369bce75",
+        "signature": "709e4fac4c79ba0ef92da089e0ef34bae7e38fd58b7a125c7c99ca15f2236473",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TargetCrashedScreen.js": {
+        "version": "ca51690fbd7acb906f57e4249a2d3fbcb21aec983156ea1e5acae1c8fe98570e",
+        "signature": "c3aea4e70ed5a28aec15083b799aac982653065955e4ec3708c3bd9bc33ef9d6",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/ContentProvider.d.ts": {
+        "version": "4af64552e6b0b957c23c38ab89c0f701f4cd54ac4f0c8fea4ed1e370c4daa57e",
+        "signature": "4af64552e6b0b957c23c38ab89c0f701f4cd54ac4f0c8fea4ed1e370c4daa57e",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/StaticContentProvider.d.ts": {
+        "version": "ac59174d2cf283f24077d7e03e4930560758356c44f5f64d269fa10af66cf1f2",
+        "signature": "ac59174d2cf283f24077d7e03e4930560758356c44f5f64d269fa10af66cf1f2",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/TextRange.d.ts": {
+        "version": "48b352e836eb573be48f4ca72fe9658e3b81306760e1269f840f0c2fd223ad08",
+        "signature": "48b352e836eb573be48f4ca72fe9658e3b81306760e1269f840f0c2fd223ad08",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/Text.d.ts": {
+        "version": "f3558ff9109be27940fcc94bdc679d22a3b979482103afdda5712f46012d6c2e",
+        "signature": "f3558ff9109be27940fcc94bdc679d22a3b979482103afdda5712f46012d6c2e",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/TextCursor.d.ts": {
+        "version": "7ceaa3aeff9ea6ff09c2d6d211f7156c6fe37b0e8d1e38263e6d57a7b7ffc5b0",
+        "signature": "7ceaa3aeff9ea6ff09c2d6d211f7156c6fe37b0e8d1e38263e6d57a7b7ffc5b0",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/TextUtils.d.ts": {
+        "version": "2543915ae26878529430e5ef8d5700107c490ccdd14efafa01fa7e6bbd97ffe8",
+        "signature": "2543915ae26878529430e5ef8d5700107c490ccdd14efafa01fa7e6bbd97ffe8",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/text_utils.d.ts": {
+        "version": "87dbf0f7c68fa9149026276d34fb71a0a0d5a68819c868c31da77fa4a1299287",
+        "signature": "87dbf0f7c68fa9149026276d34fb71a0a0d5a68819c868c31da77fa4a1299287",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextEditor.js": {
+        "version": "98af3180840c4e133f723a33e667dfb8a316f20f35166683647cb791e2fe3f2a",
+        "signature": "1cb962eaf244704c2d2b969a15ed8d9d221895e1af187e9cb77f0e8a7ed0b67f",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ThrottledWidget.js": {
+        "version": "0aa8a5e1424e2e2b25b585236c58c62d8c063a136a570e9261bec90368ddfe94",
+        "signature": "967aa5cf983eebb7a51c29d4099922c7395b4789e765a9d61fa231374ee2e1a8",
+        "affectsGlobalScope": false
+      },
+      "./utils/utils.d.ts": {
+        "version": "bcacda47cce2929943ace273b0b4fe967304206d07640e388f297cb4682ec7c9",
+        "signature": "bcacda47cce2929943ace273b0b4fe967304206d07640e388f297cb4682ec7c9",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ui.js": {
+        "version": "6943be8f1bd80a6655d366d5577048b101021186d9fea30c8523885d2df9da8d",
+        "signature": "7753bd2014a3e33830fe577494eeb367db7bc10698c79a98954e0c1276031999",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/legacy/legacy-defs.d.ts": {
+        "version": "cc57a2bc0ff111a2f9b7d8c7ebe35ef1cb7825ebd64cf5cec50715e6ed5fad4e",
+        "signature": "cc57a2bc0ff111a2f9b7d8c7ebe35ef1cb7825ebd64cf5cec50715e6ed5fad4e",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/resize_observer.d.ts": {
+        "version": "455f91d65666ba004aecfcff9f54d636e9855a8749a2da99f37ecce7ec514af6",
+        "signature": "455f91d65666ba004aecfcff9f54d636e9855a8749a2da99f37ecce7ec514af6",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/global_defs.d.ts": {
+        "version": "a583590b4bdbc9856f12fc45fb3a1776b8888b342100ef7d6fb2a7c9d97d4cae",
+        "signature": "a583590b4bdbc9856f12fc45fb3a1776b8888b342100ef7d6fb2a7c9d97d4cae",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/generated/protocol.d.ts": {
+        "version": "9243ab296ce61ff071cfe83aab09bdb1ea611461115dd8b5e48b40e39ea8dd83",
+        "signature": "9243ab296ce61ff071cfe83aab09bdb1ea611461115dd8b5e48b40e39ea8dd83",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/generated/protocol-proxy-api.d.ts": {
+        "version": "d63d31190aeeec124c9fd0e04e7a04395f16b84dbc762bca683d19c3c59fcb62",
+        "signature": "d63d31190aeeec124c9fd0e04e7a04395f16b84dbc762bca683d19c3c59fcb62",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filewriter/index.d.ts": {
+        "version": "d9932f317f16ea21c183b67b73a72f17883c52933980292e7ebba2215495bb5c",
+        "signature": "d9932f317f16ea21c183b67b73a72f17883c52933980292e7ebba2215495bb5c",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filesystem/index.d.ts": {
+        "version": "55b843a46c67c99e8cd5e012f9ad3b77376bb34c33492dcce99c15a7c28c6adf",
+        "signature": "55b843a46c67c99e8cd5e012f9ad3b77376bb34c33492dcce99c15a7c28c6adf",
+        "affectsGlobalScope": true
+      }
+    },
+    "options": {
+      "composite": true,
+      "tsBuildInfoFile": "./ui-tsconfig.json.tsbuildinfo",
+      "target": 99,
+      "noEmitOnError": true,
+      "noImplicitReturns": true,
+      "sourceMap": true,
+      "typeRoots": [],
+      "declaration": true,
+      "allowJs": true,
+      "module": 99,
+      "baseUrl": "./",
+      "strict": true,
+      "checkJs": true,
+      "forceConsistentCasingInFileNames": true,
+      "skipLibCheck": true,
+      "lib": [
+        "lib.esnext.d.ts",
+        "lib.dom.d.ts"
+      ],
+      "noFallthroughCasesInSwitch": true,
+      "rootDir": "../../../../../../../../third_party/devtools-frontend/src/front_end/ui",
+      "outDir": "./",
+      "project": "./ui-tsconfig.json",
+      "configFilePath": "./ui-tsconfig.json"
+    },
+    "referencedMap": {
+      "../common/AppProvider.d.ts": [
+        "../common/App.d.ts"
+      ],
+      "../common/Console.d.ts": [
+        "../common/Object.d.ts"
+      ],
+      "../common/Object.d.ts": [
+        "../common/EventTarget.d.ts"
+      ],
+      "../common/Settings.d.ts": [
+        "../common/Color.d.ts",
+        "../common/EventTarget.d.ts",
+        "../common/Object.d.ts",
+        "../root/root.d.ts"
+      ],
+      "../common/TextDictionary.d.ts": [
+        "../common/Trie.d.ts"
+      ],
+      "../common/common.d.ts": [
+        "../common/App.d.ts",
+        "../common/AppProvider.d.ts",
+        "../common/CharacterIdMap.d.ts",
+        "../common/Color.d.ts",
+        "../common/ColorUtils.d.ts",
+        "../common/Console.d.ts",
+        "../common/EventTarget.d.ts",
+        "../common/JavaScriptMetaData.d.ts",
+        "../common/Lazy.d.ts",
+        "../common/Linkifier.d.ts",
+        "../common/Object.d.ts",
+        "../common/ParsedURL.d.ts",
+        "../common/Progress.d.ts",
+        "../common/QueryParamHandler.d.ts",
+        "../common/ResourceType.d.ts",
+        "../common/Revealer.d.ts",
+        "../common/Runnable.d.ts",
+        "../common/SegmentedRange.d.ts",
+        "../common/Settings.d.ts",
+        "../common/StringOutputStream.d.ts",
+        "../common/TextDictionary.d.ts",
+        "../common/Throttler.d.ts",
+        "../common/Trie.d.ts",
+        "../common/WasmDisassembly.d.ts",
+        "../common/Worker.d.ts",
+        "../platform/platform.d.ts"
+      ],
+      "../host/InspectorFrontendHost.d.ts": [
+        "../common/common.d.ts",
+        "../host/InspectorFrontendHostAPI.d.ts",
+        "../root/root.d.ts"
+      ],
+      "../host/InspectorFrontendHostAPI.d.ts": [
+        "../root/root.d.ts"
+      ],
+      "../host/ResourceLoader.d.ts": [
+        "../common/common.d.ts"
+      ],
+      "../host/host.d.ts": [
+        "../host/InspectorFrontendHost.d.ts",
+        "../host/InspectorFrontendHostAPI.d.ts",
+        "../host/Platform.d.ts",
+        "../host/ResourceLoader.d.ts",
+        "../host/UserMetrics.d.ts"
+      ],
+      "../platform/UIString.d.ts": [
+        "../platform/string-utilities.d.ts"
+      ],
+      "../platform/platform.d.ts": [
+        "../platform/UIString.d.ts",
+        "../platform/array-utilities.d.ts",
+        "../platform/date-utilities.d.ts",
+        "../platform/number-utilities.d.ts",
+        "../platform/set-utilities.d.ts",
+        "../platform/string-utilities.d.ts",
+        "../platform/utilities.d.ts"
+      ],
+      "../root/root.d.ts": [
+        "../root/Runtime.d.ts"
+      ],
+      "../text_utils/ContentProvider.d.ts": [
+        "../common/common.d.ts"
+      ],
+      "../text_utils/StaticContentProvider.d.ts": [
+        "../common/common.d.ts",
+        "../text_utils/ContentProvider.d.ts"
+      ],
+      "../text_utils/Text.d.ts": [
+        "../text_utils/TextRange.d.ts"
+      ],
+      "../text_utils/TextUtils.d.ts": [
+        "../text_utils/ContentProvider.d.ts"
+      ],
+      "../text_utils/text_utils.d.ts": [
+        "../text_utils/ContentProvider.d.ts",
+        "../text_utils/StaticContentProvider.d.ts",
+        "../text_utils/Text.d.ts",
+        "../text_utils/TextCursor.d.ts",
+        "../text_utils/TextRange.d.ts",
+        "../text_utils/TextUtils.d.ts"
+      ],
+      "./utils/utils.d.ts": [
+        "./utils/append-style.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts",
+        "./utils/focus-changed.d.ts",
+        "./utils/inject-core-styles.d.ts",
+        "./utils/measured-scrollbar-width.d.ts",
+        "./utils/register-custom-element.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/global_defs.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/resize_observer.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Action.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionDelegate.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionDelegate.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Context.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionRegistry.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Action.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Context.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Context.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextFlavorListener.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftContextMenu.js",
+        "../common/common.d.ts",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Dialog.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SplitWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/DropTarget.js": [
+        "./utils/create-shadow-root-with-core-styles.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/EmptyWidget.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XLink.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/FilterBar.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SettingsUI.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextPrompt.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/FilterSuggestionBuilder.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ForwardedInputEventHandler.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutRegistry.js",
+        "../common/common.d.ts",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../platform/platform.d.ts",
+        "./utils/measured-scrollbar-width.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/HistoryInput.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "./utils/register-custom-element.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js": [
+        "./utils/register-custom-element.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Infobar.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InplaceEditor.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InspectorView.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionDelegate.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Context.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Dialog.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Panel.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SplitWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TabbedPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/View.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ViewManager.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js": [
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListControl.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListModel.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../common/common.d.ts",
+        "../platform/platform.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListModel.js": [
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListWidget.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Panel.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SearchableView.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SplitWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/PopoverHelper.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ProgressIndicator.js": [
+        "../common/common.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/RemoteDebuggingTerminatedScreen.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Dialog.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ReportView.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ResizerWidget.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/RootView.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ZoomManager.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SearchableView.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/HistoryInput.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SegmentedButton.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SettingsUI.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutRegistry.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Action.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionRegistry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Context.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Dialog.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../host/host.d.ts",
+        "../platform/platform.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutsScreen.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftContextMenu.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftDropDown.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListControl.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListModel.js",
+        "../common/common.d.ts",
+        "./utils/append-style.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SplitWidget.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ResizerWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ZoomManager.js",
+        "../common/common.d.ts",
+        "../platform/platform.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListControl.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListModel.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "./utils/create-shadow-root-with-core-styles.d.ts",
+        "./utils/measured-scrollbar-width.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TabbedPane.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ZoomManager.js",
+        "../common/common.d.ts",
+        "../platform/platform.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TargetCrashedScreen.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextEditor.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts",
+        "../text_utils/text_utils.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextPrompt.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../common/common.d.ts",
+        "../platform/platform.d.ts",
+        "./utils/append-style.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ThrottledWidget.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Action.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SettingsUI.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextPrompt.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Tooltip.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../common/common.d.ts",
+        "../host/host.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Tooltip.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ZoomManager.js",
+        "../platform/platform.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Treeoutline.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InplaceEditor.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../common/common.d.ts",
+        "./utils/append-style.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Dialog.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Treeoutline.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XLink.js",
+        "../common/common.d.ts",
+        "../host/host.d.ts",
+        "../platform/platform.d.ts",
+        "./utils/append-style.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts",
+        "./utils/focus-changed.d.ts",
+        "./utils/inject-core-styles.d.ts",
+        "./utils/measured-scrollbar-width.d.ts",
+        "./utils/register-custom-element.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/View.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TabbedPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ViewManager.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ViewManager.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TabbedPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/View.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../common/common.d.ts",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XWidget.js",
+        "../common/common.d.ts",
+        "./utils/append-style.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XLink.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Fragment.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XElement.js",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XWidget.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XElement.js",
+        "./utils/append-style.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ZoomManager.js": [
+        "../common/common.d.ts",
+        "../host/host.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ui.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Action.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionDelegate.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionRegistry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Context.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextFlavorListener.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Dialog.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/DropTarget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/EmptyWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/FilterBar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/FilterSuggestionBuilder.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ForwardedInputEventHandler.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Fragment.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/HistoryInput.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Infobar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InplaceEditor.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InspectorView.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListControl.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListModel.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Panel.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/PopoverHelper.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ProgressIndicator.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/RemoteDebuggingTerminatedScreen.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ReportView.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ResizerWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/RootView.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SearchableView.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SegmentedButton.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SettingsUI.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutRegistry.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutsScreen.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftContextMenu.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftDropDown.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SplitWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SyntaxHighlighter.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TabbedPane.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TargetCrashedScreen.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextEditor.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextPrompt.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ThrottledWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Tooltip.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Treeoutline.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/View.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ViewManager.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XElement.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XLink.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XWidget.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ZoomManager.js",
+        "./utils/utils.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filesystem/index.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filewriter/index.d.ts"
+      ]
+    },
+    "exportedModulesMap": {
+      "../common/AppProvider.d.ts": [
+        "../common/App.d.ts"
+      ],
+      "../common/Console.d.ts": [
+        "../common/Object.d.ts"
+      ],
+      "../common/Object.d.ts": [
+        "../common/EventTarget.d.ts"
+      ],
+      "../common/Settings.d.ts": [
+        "../common/Color.d.ts",
+        "../common/EventTarget.d.ts",
+        "../common/Object.d.ts",
+        "../root/root.d.ts"
+      ],
+      "../common/TextDictionary.d.ts": [
+        "../common/Trie.d.ts"
+      ],
+      "../common/common.d.ts": [
+        "../common/App.d.ts",
+        "../common/AppProvider.d.ts",
+        "../common/CharacterIdMap.d.ts",
+        "../common/Color.d.ts",
+        "../common/ColorUtils.d.ts",
+        "../common/Console.d.ts",
+        "../common/EventTarget.d.ts",
+        "../common/JavaScriptMetaData.d.ts",
+        "../common/Lazy.d.ts",
+        "../common/Linkifier.d.ts",
+        "../common/Object.d.ts",
+        "../common/ParsedURL.d.ts",
+        "../common/Progress.d.ts",
+        "../common/QueryParamHandler.d.ts",
+        "../common/ResourceType.d.ts",
+        "../common/Revealer.d.ts",
+        "../common/Runnable.d.ts",
+        "../common/SegmentedRange.d.ts",
+        "../common/Settings.d.ts",
+        "../common/StringOutputStream.d.ts",
+        "../common/TextDictionary.d.ts",
+        "../common/Throttler.d.ts",
+        "../common/Trie.d.ts",
+        "../common/WasmDisassembly.d.ts",
+        "../common/Worker.d.ts",
+        "../platform/platform.d.ts"
+      ],
+      "../host/InspectorFrontendHost.d.ts": [
+        "../common/common.d.ts",
+        "../host/InspectorFrontendHostAPI.d.ts",
+        "../root/root.d.ts"
+      ],
+      "../host/InspectorFrontendHostAPI.d.ts": [
+        "../root/root.d.ts"
+      ],
+      "../host/ResourceLoader.d.ts": [
+        "../common/common.d.ts"
+      ],
+      "../host/host.d.ts": [
+        "../host/InspectorFrontendHost.d.ts",
+        "../host/InspectorFrontendHostAPI.d.ts",
+        "../host/Platform.d.ts",
+        "../host/ResourceLoader.d.ts",
+        "../host/UserMetrics.d.ts"
+      ],
+      "../platform/UIString.d.ts": [
+        "../platform/string-utilities.d.ts"
+      ],
+      "../platform/platform.d.ts": [
+        "../platform/UIString.d.ts",
+        "../platform/array-utilities.d.ts",
+        "../platform/date-utilities.d.ts",
+        "../platform/number-utilities.d.ts",
+        "../platform/set-utilities.d.ts",
+        "../platform/string-utilities.d.ts",
+        "../platform/utilities.d.ts"
+      ],
+      "../root/root.d.ts": [
+        "../root/Runtime.d.ts"
+      ],
+      "../text_utils/ContentProvider.d.ts": [
+        "../common/common.d.ts"
+      ],
+      "../text_utils/StaticContentProvider.d.ts": [
+        "../common/common.d.ts",
+        "../text_utils/ContentProvider.d.ts"
+      ],
+      "../text_utils/Text.d.ts": [
+        "../text_utils/TextRange.d.ts"
+      ],
+      "../text_utils/TextUtils.d.ts": [
+        "../text_utils/ContentProvider.d.ts"
+      ],
+      "../text_utils/text_utils.d.ts": [
+        "../text_utils/ContentProvider.d.ts",
+        "../text_utils/StaticContentProvider.d.ts",
+        "../text_utils/Text.d.ts",
+        "../text_utils/TextCursor.d.ts",
+        "../text_utils/TextRange.d.ts",
+        "../text_utils/TextUtils.d.ts"
+      ],
+      "./utils/utils.d.ts": [
+        "./utils/append-style.d.ts",
+        "./utils/create-shadow-root-with-core-styles.d.ts",
+        "./utils/focus-changed.d.ts",
+        "./utils/inject-core-styles.d.ts",
+        "./utils/measured-scrollbar-width.d.ts",
+        "./utils/register-custom-element.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/global_defs.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/resize_observer.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InspectorView.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/View.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filesystem/index.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filewriter/index.d.ts"
+      ]
+    },
+    "semanticDiagnosticsPerFile": [
+      "../common/App.d.ts",
+      "../common/AppProvider.d.ts",
+      "../common/CharacterIdMap.d.ts",
+      "../common/Color.d.ts",
+      "../common/ColorUtils.d.ts",
+      "../common/Console.d.ts",
+      "../common/EventTarget.d.ts",
+      "../common/JavaScriptMetaData.d.ts",
+      "../common/Lazy.d.ts",
+      "../common/Linkifier.d.ts",
+      "../common/Object.d.ts",
+      "../common/ParsedURL.d.ts",
+      "../common/Progress.d.ts",
+      "../common/QueryParamHandler.d.ts",
+      "../common/ResourceType.d.ts",
+      "../common/Revealer.d.ts",
+      "../common/Runnable.d.ts",
+      "../common/SegmentedRange.d.ts",
+      "../common/Settings.d.ts",
+      "../common/StringOutputStream.d.ts",
+      "../common/TextDictionary.d.ts",
+      "../common/Throttler.d.ts",
+      "../common/Trie.d.ts",
+      "../common/WasmDisassembly.d.ts",
+      "../common/Worker.d.ts",
+      "../common/common.d.ts",
+      "../host/InspectorFrontendHost.d.ts",
+      "../host/InspectorFrontendHostAPI.d.ts",
+      "../host/Platform.d.ts",
+      "../host/ResourceLoader.d.ts",
+      "../host/UserMetrics.d.ts",
+      "../host/host.d.ts",
+      "../platform/UIString.d.ts",
+      "../platform/array-utilities.d.ts",
+      "../platform/date-utilities.d.ts",
+      "../platform/number-utilities.d.ts",
+      "../platform/platform.d.ts",
+      "../platform/set-utilities.d.ts",
+      "../platform/string-utilities.d.ts",
+      "../platform/utilities.d.ts",
+      "../root/Runtime.d.ts",
+      "../root/root.d.ts",
+      "../text_utils/ContentProvider.d.ts",
+      "../text_utils/StaticContentProvider.d.ts",
+      "../text_utils/Text.d.ts",
+      "../text_utils/TextCursor.d.ts",
+      "../text_utils/TextRange.d.ts",
+      "../text_utils/TextUtils.d.ts",
+      "../text_utils/text_utils.d.ts",
+      "./utils/append-style.d.ts",
+      "./utils/create-shadow-root-with-core-styles.d.ts",
+      "./utils/focus-changed.d.ts",
+      "./utils/inject-core-styles.d.ts",
+      "./utils/measured-scrollbar-width.d.ts",
+      "./utils/register-custom-element.d.ts",
+      "./utils/utils.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/generated/protocol-proxy-api.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/generated/protocol.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/global_defs.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/resize_observer.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/legacy/legacy-defs.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ARIAUtils.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Action.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionDelegate.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ActionRegistry.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Context.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextFlavorListener.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ContextMenu.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Dialog.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/DropTarget.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/EmptyWidget.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/FilterBar.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/FilterSuggestionBuilder.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ForwardedInputEventHandler.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Fragment.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Geometry.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/GlassPane.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/HistoryInput.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Icon.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Infobar.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InplaceEditor.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/InspectorView.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/KeyboardShortcut.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListControl.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListModel.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ListWidget.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Panel.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/PopoverHelper.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ProgressIndicator.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/RemoteDebuggingTerminatedScreen.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ReportView.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ResizerWidget.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/RootView.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SearchableView.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SegmentedButton.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SettingsUI.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutRegistry.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ShortcutsScreen.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftContextMenu.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SoftDropDown.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SplitWidget.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SuggestBox.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/SyntaxHighlighter.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TabbedPane.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TargetCrashedScreen.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextEditor.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/TextPrompt.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ThrottledWidget.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Toolbar.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Tooltip.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Treeoutline.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/UIUtils.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/View.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ViewManager.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/Widget.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XElement.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XLink.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/XWidget.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ZoomManager.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/ui/ui.js",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filesystem/index.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filewriter/index.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.dom.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.collection.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.core.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.generator.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.iterable.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.promise.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.proxy.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.reflect.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.symbol.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.symbol.wellknown.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2016.array.include.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2016.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.intl.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.object.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.sharedmemory.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.string.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.typedarrays.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.asyncgenerator.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.asynciterable.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.intl.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.promise.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.regexp.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.array.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.object.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.string.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.symbol.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.bigint.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.promise.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.string.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.symbol.wellknown.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es5.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.intl.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.promise.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.string.d.ts"
+    ]
+  },
+  "version": "3.9.3"
+}

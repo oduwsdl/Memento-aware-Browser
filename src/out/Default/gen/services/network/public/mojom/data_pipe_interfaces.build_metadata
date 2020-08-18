@@ -1,0 +1,9 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/network/public/mojom/chunked_data_pipe_getter.mojom",
+    "/home/abigail/final/src/services/network/public/mojom/data_pipe_getter.mojom"
+  ]
+}

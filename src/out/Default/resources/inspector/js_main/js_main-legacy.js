@@ -1,0 +1,1 @@
+import*as JsMainModule from'./js_main.js';self.JsMain=self.JsMain||{};JsMain=JsMain||{};JsMain.JsMain=JsMainModule.JsMain.JsMainImpl;

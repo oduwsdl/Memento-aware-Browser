@@ -1,0 +1,22 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Iirt_x64/gen
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -integrated-as -m64 -march=x86-64 -fasynchronous-unwind-tables -fomit-frame-pointer -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Os -ffunction-sections -fdata-sections -fno-omit-frame-pointer -g2 -fvisibility=hidden -Wno-unused-const-variable -Wno-unused-function
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = double_conversion
+root_out_dir = irt_x64
+target_out_dir = irt_x64/obj/base/third_party/double_conversion
+target_output_name = libdouble_conversion
+
+build irt_x64/obj/base/third_party/double_conversion/double_conversion/bignum-dtoa.o: irt_x64_cxx ../../base/third_party/double_conversion/double-conversion/bignum-dtoa.cc || ./tls_edit
+build irt_x64/obj/base/third_party/double_conversion/double_conversion/bignum.o: irt_x64_cxx ../../base/third_party/double_conversion/double-conversion/bignum.cc || ./tls_edit
+build irt_x64/obj/base/third_party/double_conversion/double_conversion/cached-powers.o: irt_x64_cxx ../../base/third_party/double_conversion/double-conversion/cached-powers.cc || ./tls_edit
+build irt_x64/obj/base/third_party/double_conversion/double_conversion/double-to-string.o: irt_x64_cxx ../../base/third_party/double_conversion/double-conversion/double-to-string.cc || ./tls_edit
+build irt_x64/obj/base/third_party/double_conversion/double_conversion/fast-dtoa.o: irt_x64_cxx ../../base/third_party/double_conversion/double-conversion/fast-dtoa.cc || ./tls_edit
+build irt_x64/obj/base/third_party/double_conversion/double_conversion/fixed-dtoa.o: irt_x64_cxx ../../base/third_party/double_conversion/double-conversion/fixed-dtoa.cc || ./tls_edit
+build irt_x64/obj/base/third_party/double_conversion/double_conversion/string-to-double.o: irt_x64_cxx ../../base/third_party/double_conversion/double-conversion/string-to-double.cc || ./tls_edit
+build irt_x64/obj/base/third_party/double_conversion/double_conversion/strtod.o: irt_x64_cxx ../../base/third_party/double_conversion/double-conversion/strtod.cc || ./tls_edit
+
+build irt_x64/obj/base/third_party/double_conversion/libdouble_conversion.a: irt_x64_alink irt_x64/obj/base/third_party/double_conversion/double_conversion/bignum-dtoa.o irt_x64/obj/base/third_party/double_conversion/double_conversion/bignum.o irt_x64/obj/base/third_party/double_conversion/double_conversion/cached-powers.o irt_x64/obj/base/third_party/double_conversion/double_conversion/double-to-string.o irt_x64/obj/base/third_party/double_conversion/double_conversion/fast-dtoa.o irt_x64/obj/base/third_party/double_conversion/double_conversion/fixed-dtoa.o irt_x64/obj/base/third_party/double_conversion/double_conversion/string-to-double.o irt_x64/obj/base/third_party/double_conversion/double_conversion/strtod.o
+  arflags =
+  output_extension = .a
+  output_dir = irt_x64/obj/base/third_party/double_conversion

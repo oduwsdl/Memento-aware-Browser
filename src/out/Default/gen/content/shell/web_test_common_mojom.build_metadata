@@ -1,0 +1,16 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/content/public/common/web_preferences_mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/skia/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/accessibility/ax_enums_mojo.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/content/shell/common/web_test/fake_bluetooth_chooser.mojom",
+    "/home/abigail/final/src/content/shell/common/web_test/web_test.mojom",
+    "/home/abigail/final/src/content/shell/common/web_test/web_test_bluetooth_fake_adapter_setter.mojom"
+  ]
+}

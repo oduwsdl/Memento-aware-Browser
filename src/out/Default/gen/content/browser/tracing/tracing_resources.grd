@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><grit current_release="1" latest_public_release="0" output_all_resource_defines="false">
+  <outputs>
+    <output filename="grit/tracing_resources.h" type="rc_header">
+      <emit emit_type="prepend"/>
+    </output>
+    <output filename="tracing_resources.pak" type="data_package"/>
+  </outputs>
+  <release seq="1">
+    <includes>
+      <if expr="not is_android">
+        <include allowexternalscript="true" compress="gzip" file="about_tracing.html" flattenhtml="true" name="IDR_TRACING_HTML" type="BINDATA"/>
+        <include compress="gzip" file="about_tracing.js" flattenhtml="true" name="IDR_TRACING_JS" type="BINDATA"/></if>
+    </includes>
+  </release>
+</grit>

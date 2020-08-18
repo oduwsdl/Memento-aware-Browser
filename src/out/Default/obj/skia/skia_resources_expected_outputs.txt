@@ -1,0 +1,4 @@
+gen/skia/grit/skia_resources.h
+gen/skia/grit/skia_resources_map.cc
+gen/skia/grit/skia_resources_map.h
+gen/skia/skia_resources.pak

@@ -1,0 +1,4 @@
+gen/content/browser/devtools/grit/devtools_resources.h
+gen/content/browser/devtools/devtools_resources.pak
+gen/content/browser/devtools/grit/devtools_resources_map.cc
+gen/content/browser/devtools/grit/devtools_resources_map.h

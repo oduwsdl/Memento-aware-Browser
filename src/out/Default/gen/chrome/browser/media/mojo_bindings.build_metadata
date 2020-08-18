@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/services/media_session/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/chrome/browser/media/history/media_history_store.mojom",
+    "/home/abigail/final/src/chrome/browser/media/media_engagement_score_details.mojom"
+  ]
+}

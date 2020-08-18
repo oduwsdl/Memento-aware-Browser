@@ -1,0 +1,20 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/newlib_pnacl_nonsfi/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/newlib_pnacl_nonsfi/gen/services/network/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/newlib_pnacl_nonsfi/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/home/abigail/final/src/out/Default/newlib_pnacl_nonsfi/gen/third_party/blink/public/mojom/mojom_platform.build_metadata",
+    "/home/abigail/final/src/out/Default/newlib_pnacl_nonsfi/gen/content/public/common/client_hints_mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/content/public/common/browser_controls_state.mojom",
+    "/home/abigail/final/src/content/public/common/drop_data.mojom",
+    "/home/abigail/final/src/content/public/common/fullscreen_video_element.mojom",
+    "/home/abigail/final/src/content/public/common/performance_manager/v8_per_frame_memory.mojom",
+    "/home/abigail/final/src/content/public/common/resource_usage_reporter.mojom",
+    "/home/abigail/final/src/content/public/common/transferrable_url_loader.mojom",
+    "/home/abigail/final/src/content/public/common/was_activated_option.mojom",
+    "/home/abigail/final/src/content/public/common/webplugininfo.mojom",
+    "/home/abigail/final/src/content/public/common/window_container_type.mojom"
+  ]
+}

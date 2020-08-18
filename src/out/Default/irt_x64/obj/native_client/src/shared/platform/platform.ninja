@@ -1,0 +1,26 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -D_POSIX_C_SOURCE=199506 -D_XOPEN_SOURCE=600 -D_GNU_SOURCE=1 -D__STDC_LIMIT_MACROS=1 -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Iirt_x64/gen
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -integrated-as -m64 -march=x86-64 -fasynchronous-unwind-tables -fomit-frame-pointer -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Os -ffunction-sections -fdata-sections -fno-omit-frame-pointer -g2 -fvisibility=hidden
+cflags_c = -std=c11
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = platform
+root_out_dir = irt_x64
+target_out_dir = irt_x64/obj/native_client/src/shared/platform
+target_output_name = libplatform
+
+build irt_x64/obj/native_client/src/shared/platform/platform/nacl_check.o: irt_x64_cc ../../native_client/src/shared/platform/nacl_check.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/nacl_log.o: irt_x64_cc ../../native_client/src/shared/platform/nacl_log.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/condition_variable.o: irt_x64_cc ../../native_client/src/shared/platform/posix/condition_variable.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/lock.o: irt_x64_cc ../../native_client/src/shared/platform/posix/lock.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/nacl_error.o: irt_x64_cc ../../native_client/src/shared/platform/posix/nacl_error.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/nacl_exit.o: irt_x64_cc ../../native_client/src/shared/platform/posix/nacl_exit.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/nacl_thread_id.o: irt_x64_cc ../../native_client/src/shared/platform/posix/nacl_thread_id.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/nacl_threads.o: irt_x64_cc ../../native_client/src/shared/platform/posix/nacl_threads.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/nacl_timestamp.o: irt_x64_cc ../../native_client/src/shared/platform/posix/nacl_timestamp.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/nacl_sync_checked.o: irt_x64_cc ../../native_client/src/shared/platform/nacl_sync_checked.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/platform/platform/refcount_base.o: irt_x64_cxx ../../native_client/src/shared/platform/refcount_base.cc || ./tls_edit
+
+build irt_x64/obj/native_client/src/shared/platform/libplatform.a: irt_x64_alink irt_x64/obj/native_client/src/shared/platform/platform/nacl_check.o irt_x64/obj/native_client/src/shared/platform/platform/nacl_log.o irt_x64/obj/native_client/src/shared/platform/platform/condition_variable.o irt_x64/obj/native_client/src/shared/platform/platform/lock.o irt_x64/obj/native_client/src/shared/platform/platform/nacl_error.o irt_x64/obj/native_client/src/shared/platform/platform/nacl_exit.o irt_x64/obj/native_client/src/shared/platform/platform/nacl_thread_id.o irt_x64/obj/native_client/src/shared/platform/platform/nacl_threads.o irt_x64/obj/native_client/src/shared/platform/platform/nacl_timestamp.o irt_x64/obj/native_client/src/shared/platform/platform/nacl_sync_checked.o irt_x64/obj/native_client/src/shared/platform/platform/refcount_base.o || irt_x64/obj/build/config/nacl/nacl_base.stamp irt_x64/obj/native_client/src/shared/gio/libgio.a
+  arflags =
+  output_extension = .a
+  output_dir = irt_x64/obj/native_client/src/shared/platform

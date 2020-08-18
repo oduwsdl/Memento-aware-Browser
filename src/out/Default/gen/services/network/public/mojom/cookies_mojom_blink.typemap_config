@@ -1,0 +1,17 @@
+[
+  {
+    "traits_headers": [
+      "services/network/public/cpp/site_for_cookies_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cookies_mojom_support"
+    ],
+    "types": [
+      {
+        "cpp": "::net::SiteForCookies",
+        "mojom": "network.mojom.SiteForCookies"
+      }
+    ]
+  }
+]

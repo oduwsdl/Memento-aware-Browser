@@ -1,0 +1,17 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -D_POSIX_C_SOURCE=199506 -D_XOPEN_SOURCE=600 -D_GNU_SOURCE=1 -D__STDC_LIMIT_MACROS=1 -DNACL_BUILD_ARCH=pnacl -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Inewlib_pnacl/gen
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -O0 -fno-omit-frame-pointer -g2 -fvisibility=hidden
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = exit_status_test_nexe
+root_out_dir = newlib_pnacl
+target_out_dir = newlib_pnacl/obj/chrome/test/data/nacl
+target_output_name = pm_exit_status_test_newlib_pnacl
+
+build newlib_pnacl/obj/chrome/test/data/nacl/exit_status_test_nexe/pm_exit_status_test.o: newlib_pnacl_cxx ../../chrome/test/data/nacl/exit_status/pm_exit_status_test.cc
+
+build newlib_pnacl/pm_exit_status_test_newlib_pnacl.pexe newlib_pnacl/exe.unstripped/pm_exit_status_test_newlib_pnacl.pexe: newlib_pnacl_link newlib_pnacl/obj/chrome/test/data/nacl/exit_status_test_nexe/pm_exit_status_test.o newlib_pnacl/obj/ppapi/cpp/libppapi_cpp_lib.a newlib_pnacl/obj/ppapi/native_client/src/untrusted/irt_stub/libppapi_stub.a || newlib_pnacl/obj/build/config/nacl/nacl_base.stamp newlib_pnacl/obj/ppapi/native_client/ppapi_lib.stamp newlib_pnacl/obj/build/config/executable_deps.stamp
+  ldflags = -pthread -Wl,--fatal-warnings -Wl,--build-id -Werror
+  libs =
+  frameworks =
+  output_extension = .pexe
+  output_dir = newlib_pnacl

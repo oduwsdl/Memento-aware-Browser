@@ -1,0 +1,10 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/mojo/public/js/test/module_a.test-mojom",
+    "/home/abigail/final/src/mojo/public/js/test/module_b_1.test-mojom",
+    "/home/abigail/final/src/mojo/public/js/test/module_b_2.test-mojom"
+  ]
+}

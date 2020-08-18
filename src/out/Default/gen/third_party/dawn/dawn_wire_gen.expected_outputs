@@ -1,0 +1,12 @@
+src/dawn_wire/WireCmd_autogen.h
+src/dawn_wire/WireCmd_autogen.cpp
+src/dawn_wire/client/ApiObjects_autogen.h
+src/dawn_wire/client/ApiProcs_autogen.cpp
+src/dawn_wire/client/ApiProcs_autogen.h
+src/dawn_wire/client/ClientBase_autogen.h
+src/dawn_wire/client/ClientHandlers_autogen.cpp
+src/dawn_wire/client/ClientPrototypes_autogen.inc
+src/dawn_wire/server/ServerBase_autogen.h
+src/dawn_wire/server/ServerDoers_autogen.cpp
+src/dawn_wire/server/ServerHandlers_autogen.cpp
+src/dawn_wire/server/ServerPrototypes_autogen.inc

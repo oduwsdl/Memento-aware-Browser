@@ -1,0 +1,13 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/components/discardable_memory/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/viz/privileged/mojom/compositing/compositing.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/viz/privileged/mojom/gl/gl.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/viz/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/viz/privileged/mojom/viz_main.mojom"
+  ]
+}

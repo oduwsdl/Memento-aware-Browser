@@ -1,0 +1,26 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -DPERFETTO_IMPLEMENTATION
+include_dirs = -I../.. -Iirt_x64/gen -I../../third_party/perfetto -I../../third_party/perfetto/include -Iirt_x64/gen/third_party/perfetto/build_config -Iirt_x64/gen/third_party/perfetto
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -integrated-as -m64 -march=x86-64 -fasynchronous-unwind-tables -fomit-frame-pointer -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Os -ffunction-sections -fdata-sections -fno-omit-frame-pointer -g2 -fvisibility=hidden
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = base
+root_out_dir = irt_x64
+target_out_dir = irt_x64/obj/third_party/perfetto/src/base
+target_output_name = base
+
+build irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp: irt_x64_stamp ./tls_edit irt_x64/obj/third_party/perfetto/gn/gen_buildflags.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/file_utils.o: irt_x64_cxx ../../third_party/perfetto/src/base/file_utils.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/logging.o: irt_x64_cxx ../../third_party/perfetto/src/base/logging.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/metatrace.o: irt_x64_cxx ../../third_party/perfetto/src/base/metatrace.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/paged_memory.o: irt_x64_cxx ../../third_party/perfetto/src/base/paged_memory.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/string_splitter.o: irt_x64_cxx ../../third_party/perfetto/src/base/string_splitter.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/string_utils.o: irt_x64_cxx ../../third_party/perfetto/src/base/string_utils.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/string_view.o: irt_x64_cxx ../../third_party/perfetto/src/base/string_view.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/subprocess.o: irt_x64_cxx ../../third_party/perfetto/src/base/subprocess.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/thread_checker.o: irt_x64_cxx ../../third_party/perfetto/src/base/thread_checker.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/time.o: irt_x64_cxx ../../third_party/perfetto/src/base/time.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/uuid.o: irt_x64_cxx ../../third_party/perfetto/src/base/uuid.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/virtual_destructors.o: irt_x64_cxx ../../third_party/perfetto/src/base/virtual_destructors.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/waitable_event.o: irt_x64_cxx ../../third_party/perfetto/src/base/waitable_event.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+build irt_x64/obj/third_party/perfetto/src/base/base/watchdog_posix.o: irt_x64_cxx ../../third_party/perfetto/src/base/watchdog_posix.cc || irt_x64/obj/third_party/perfetto/src/base/base.inputdeps.stamp
+
+build irt_x64/obj/third_party/perfetto/src/base/base.stamp: irt_x64_stamp irt_x64/obj/third_party/perfetto/src/base/base/file_utils.o irt_x64/obj/third_party/perfetto/src/base/base/logging.o irt_x64/obj/third_party/perfetto/src/base/base/metatrace.o irt_x64/obj/third_party/perfetto/src/base/base/paged_memory.o irt_x64/obj/third_party/perfetto/src/base/base/string_splitter.o irt_x64/obj/third_party/perfetto/src/base/base/string_utils.o irt_x64/obj/third_party/perfetto/src/base/base/string_view.o irt_x64/obj/third_party/perfetto/src/base/base/subprocess.o irt_x64/obj/third_party/perfetto/src/base/base/thread_checker.o irt_x64/obj/third_party/perfetto/src/base/base/time.o irt_x64/obj/third_party/perfetto/src/base/base/uuid.o irt_x64/obj/third_party/perfetto/src/base/base/virtual_destructors.o irt_x64/obj/third_party/perfetto/src/base/base/waitable_event.o irt_x64/obj/third_party/perfetto/src/base/base/watchdog_posix.o || irt_x64/obj/third_party/perfetto/include/perfetto/base/base.stamp irt_x64/obj/third_party/perfetto/include/perfetto/ext/base/base.stamp irt_x64/obj/third_party/perfetto/gn/default_deps.stamp

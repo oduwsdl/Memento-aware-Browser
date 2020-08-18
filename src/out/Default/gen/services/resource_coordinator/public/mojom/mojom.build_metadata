@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/metrics/public/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/resource_coordinator/public/mojom/memory_instrumentation/constants.mojom",
+    "/home/abigail/final/src/services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom",
+    "/home/abigail/final/src/services/resource_coordinator/public/mojom/resource_coordinator_service.mojom"
+  ]
+}

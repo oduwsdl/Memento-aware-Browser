@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/components/services/quarantine/public/mojom/quarantine.mojom"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/device/public/mojom/sensor.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/sensor_provider.mojom"
+  ]
+}

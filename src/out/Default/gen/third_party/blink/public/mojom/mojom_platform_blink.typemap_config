@@ -1,0 +1,34 @@
+[
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/page/drag_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//third_party/blink/public/common:headers"
+    ],
+    "types": [
+      {
+        "copyable_pass_by_value": true,
+        "cpp": "::blink::WebDragOperation",
+        "mojom": "blink.mojom.DragOperation"
+      },
+      {
+        "copyable_pass_by_value": true,
+        "cpp": "::blink::WebDragOperationsMask",
+        "mojom": "blink.mojom.AllowedDragOperations"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::std::unique_ptr<::blink::WebCoalescedInputEvent>",
+        "mojom": "blink.mojom.Event",
+        "move_only": true
+      }
+    ]
+  }
+]

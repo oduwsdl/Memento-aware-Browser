@@ -1,0 +1,23 @@
+defines = -DHAVE_CONFIG_H -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../../base/third_party/libevent/nacl_nonsfi -I../../native_client/src/public/linux_syscalls -I../.. -Inewlib_pnacl_nonsfi/gen
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ --pnacl-allow-translate -arch x86-32-nonsfi --pnacl-bias=x86-32-nonsfi --target=i686-unknown-nacl -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -O0 -fno-omit-frame-pointer -g2 -fvisibility=hidden -Werror -Wno-unused-variable -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration
+cflags_c = -std=c11
+label_name = libevent
+root_out_dir = newlib_pnacl_nonsfi
+target_out_dir = newlib_pnacl_nonsfi/obj/base/third_party/libevent
+target_output_name = libevent
+
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/buffer.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/buffer.c
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/evbuffer.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/evbuffer.c
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/event.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/event.c
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/evutil.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/evutil.c
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/log.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/log.c
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/poll.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/poll.c
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/strlcpy.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/strlcpy.c
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/random.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/nacl_nonsfi/random.c
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/signal_stub.o: newlib_pnacl_nonsfi_cc ../../base/third_party/libevent/nacl_nonsfi/signal_stub.c
+
+build newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent.a: newlib_pnacl_nonsfi_alink newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/buffer.o newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/evbuffer.o newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/event.o newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/evutil.o newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/log.o newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/poll.o newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/strlcpy.o newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/random.o newlib_pnacl_nonsfi/obj/base/third_party/libevent/libevent/signal_stub.o
+  arflags =
+  output_extension = .a
+  output_dir = newlib_pnacl_nonsfi/obj/base/third_party/libevent

@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/interfaces/bindings/bindings.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/ipc/ipc.mojom"
+  ]
+}

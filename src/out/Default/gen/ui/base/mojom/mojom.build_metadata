@@ -1,0 +1,9 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/ui/base/mojom/ui_base_types.mojom",
+    "/home/abigail/final/src/ui/base/mojom/window_open_disposition.mojom"
+  ]
+}

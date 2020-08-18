@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/content/public/test/test_service.mojom",
+    "/home/abigail/final/src/content/test/frame_host_test_interface.mojom",
+    "/home/abigail/final/src/content/test/test_browser_associated_interfaces.mojom"
+  ]
+}

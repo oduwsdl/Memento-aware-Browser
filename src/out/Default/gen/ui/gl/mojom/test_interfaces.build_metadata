@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/ui/gl/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/ui/gl/mojom/traits_test_service.mojom"
+  ]
+}

@@ -1,0 +1,4 @@
+gen/content/grit/content_resources.h
+gen/content/grit/content_resources_map.cc
+gen/content/grit/content_resources_map.h
+gen/content/content_resources.pak

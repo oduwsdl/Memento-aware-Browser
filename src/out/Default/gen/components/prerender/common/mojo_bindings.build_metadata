@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/components/prerender/common/prerender_canceler.mojom",
+    "/home/abigail/final/src/components/prerender/common/prerender_types.mojom"
+  ]
+}

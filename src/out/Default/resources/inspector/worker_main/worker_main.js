@@ -1,0 +1,1 @@
+import*as WorkerMain from'./WorkerMain.js';export{WorkerMain,};

@@ -1,0 +1,96 @@
+{
+  "c++": {
+    "network.mojom.IPEndPoint": {
+      "hashable": false, 
+      "typename": "::net::IPEndPoint", 
+      "traits_headers": [], 
+      "copyable_pass_by_value": false, 
+      "force_serialize": false, 
+      "move_only": false, 
+      "nullable_is_same_type": false, 
+      "non_copyable_non_movable": false, 
+      "public_headers": [
+        "services/network/public/cpp/ip_endpoint_mojom_traits.h"
+      ]
+    }, 
+    "network.mojom.QuicTransportError": {
+      "hashable": false, 
+      "typename": "::net::QuicTransportError", 
+      "traits_headers": [], 
+      "copyable_pass_by_value": false, 
+      "force_serialize": false, 
+      "move_only": false, 
+      "nullable_is_same_type": false, 
+      "non_copyable_non_movable": false, 
+      "public_headers": [
+        "services/network/public/cpp/quic_transport_error_mojom_traits.h"
+      ]
+    }, 
+    "network.mojom.AddressFamily": {
+      "hashable": false, 
+      "typename": "::net::AddressFamily", 
+      "traits_headers": [], 
+      "copyable_pass_by_value": false, 
+      "force_serialize": false, 
+      "move_only": false, 
+      "nullable_is_same_type": false, 
+      "non_copyable_non_movable": false, 
+      "public_headers": [
+        "services/network/public/cpp/address_family_mojom_traits.h"
+      ]
+    }, 
+    "url.mojom.Url": {
+      "hashable": false, 
+      "force_serialize": false, 
+      "non_copyable_non_movable": false, 
+      "typename": "::GURL", 
+      "traits_headers": [], 
+      "copyable_pass_by_value": false, 
+      "move_only": false, 
+      "nullable_is_same_type": false, 
+      "public_headers": [
+        "url/mojom/url_gurl_mojom_traits.h"
+      ]
+    }, 
+    "network.mojom.ConnectionInfo": {
+      "hashable": false, 
+      "typename": "::net::HttpResponseInfo::ConnectionInfo", 
+      "traits_headers": [], 
+      "copyable_pass_by_value": false, 
+      "force_serialize": false, 
+      "move_only": false, 
+      "nullable_is_same_type": false, 
+      "non_copyable_non_movable": false, 
+      "public_headers": [
+        "net/http/http_response_info.h", 
+        "services/network/public/cpp/network_ipc_param_traits.h"
+      ]
+    }, 
+    "network.mojom.IPAddress": {
+      "hashable": false, 
+      "typename": "::net::IPAddress", 
+      "traits_headers": [], 
+      "copyable_pass_by_value": false, 
+      "force_serialize": false, 
+      "move_only": false, 
+      "nullable_is_same_type": false, 
+      "non_copyable_non_movable": false, 
+      "public_headers": [
+        "services/network/public/cpp/ip_address_mojom_traits.h"
+      ]
+    }, 
+    "network.mojom.AddressList": {
+      "hashable": false, 
+      "typename": "::net::AddressList", 
+      "traits_headers": [], 
+      "copyable_pass_by_value": false, 
+      "force_serialize": false, 
+      "move_only": false, 
+      "nullable_is_same_type": false, 
+      "non_copyable_non_movable": false, 
+      "public_headers": [
+        "services/network/public/cpp/address_list_mojom_traits.h"
+      ]
+    }
+  }
+}

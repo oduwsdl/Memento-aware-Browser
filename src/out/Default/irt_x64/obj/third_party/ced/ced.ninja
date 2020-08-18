@@ -1,0 +1,18 @@
+defines = -DCOMPILER_GCC -DHTML5_MODE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Iirt_x64/gen -I../../third_party/ced/src
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -integrated-as -m64 -march=x86-64 -fasynchronous-unwind-tables -fomit-frame-pointer -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Os -ffunction-sections -fdata-sections -fno-omit-frame-pointer -g2 -fvisibility=hidden -Werror -Wno-unused-variable -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-unused-function
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = ced
+root_out_dir = irt_x64
+target_out_dir = irt_x64/obj/third_party/ced
+target_output_name = libced
+
+build irt_x64/obj/third_party/ced/ced/compact_enc_det.o: irt_x64_cxx ../../third_party/ced/src/compact_enc_det/compact_enc_det.cc || ./tls_edit
+build irt_x64/obj/third_party/ced/ced/compact_enc_det_hint_code.o: irt_x64_cxx ../../third_party/ced/src/compact_enc_det/compact_enc_det_hint_code.cc || ./tls_edit
+build irt_x64/obj/third_party/ced/ced/encodings.o: irt_x64_cxx ../../third_party/ced/src/util/encodings/encodings.cc || ./tls_edit
+build irt_x64/obj/third_party/ced/ced/languages.o: irt_x64_cxx ../../third_party/ced/src/util/languages/languages.cc || ./tls_edit
+
+build irt_x64/obj/third_party/ced/libced.a: irt_x64_alink irt_x64/obj/third_party/ced/ced/compact_enc_det.o irt_x64/obj/third_party/ced/ced/compact_enc_det_hint_code.o irt_x64/obj/third_party/ced/ced/encodings.o irt_x64/obj/third_party/ced/ced/languages.o
+  arflags =
+  output_extension = .a
+  output_dir = irt_x64/obj/third_party/ced

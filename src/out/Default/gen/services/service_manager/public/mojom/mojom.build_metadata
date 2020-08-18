@@ -1,0 +1,15 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/services/service_manager/public/mojom/constants.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/service_manager/public/mojom/connector.mojom",
+    "/home/abigail/final/src/services/service_manager/public/mojom/interface_provider.mojom",
+    "/home/abigail/final/src/services/service_manager/public/mojom/interface_provider_spec.mojom",
+    "/home/abigail/final/src/services/service_manager/public/mojom/service.mojom",
+    "/home/abigail/final/src/services/service_manager/public/mojom/service_control.mojom",
+    "/home/abigail/final/src/services/service_manager/public/mojom/service_filter.mojom",
+    "/home/abigail/final/src/services/service_manager/public/mojom/service_manager.mojom"
+  ]
+}

@@ -1,0 +1,16 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -D_POSIX_C_SOURCE=199506 -D_XOPEN_SOURCE=600 -D_GNU_SOURCE=1 -D__STDC_LIMIT_MACROS=1 -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Iirt_x64/gen
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -integrated-as -m64 -march=x86-64 -fasynchronous-unwind-tables -fomit-frame-pointer -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Os -ffunction-sections -fdata-sections -fno-omit-frame-pointer -g2 -fvisibility=hidden
+cflags_c = -std=c11
+label_name = gio
+root_out_dir = irt_x64
+target_out_dir = irt_x64/obj/native_client/src/shared/gio
+target_output_name = libgio
+
+build irt_x64/obj/native_client/src/shared/gio/gio/gio.o: irt_x64_cc ../../native_client/src/shared/gio/gio.c || ./tls_edit
+build irt_x64/obj/native_client/src/shared/gio/gio/gprintf.o: irt_x64_cc ../../native_client/src/shared/gio/gprintf.c || ./tls_edit
+
+build irt_x64/obj/native_client/src/shared/gio/libgio.a: irt_x64_alink irt_x64/obj/native_client/src/shared/gio/gio/gio.o irt_x64/obj/native_client/src/shared/gio/gio/gprintf.o || irt_x64/obj/build/config/nacl/nacl_base.stamp
+  arflags =
+  output_extension = .a
+  output_dir = irt_x64/obj/native_client/src/shared/gio

@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/components/discardable_memory/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/accessibility/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/components/services/print_compositor/public/mojom/print_compositor.mojom"
+  ]
+}

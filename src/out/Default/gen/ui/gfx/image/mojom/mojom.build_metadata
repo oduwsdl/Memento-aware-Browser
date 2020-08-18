@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/skia/public/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/ui/gfx/image/mojom/image.mojom"
+  ]
+}

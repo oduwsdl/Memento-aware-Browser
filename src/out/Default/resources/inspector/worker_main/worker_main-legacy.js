@@ -1,0 +1,1 @@
+import*as WorkerMainModule from'./worker_main.js';self.WorkerMain=self.WorkerMain||{};WorkerMain=WorkerMain||{};WorkerMain.WorkerMain=WorkerMainModule.WorkerMain.WorkerMainImpl;

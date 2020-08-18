@@ -1,0 +1,34 @@
+[
+  {
+    "traits_headers": [
+      "ui/base/mojom/ui_base_types_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//ui/base"
+    ],
+    "types": [
+      {
+        "cpp": "::ui::DialogButton",
+        "mojom": "ui.mojom.DialogButton"
+      },
+      {
+        "cpp": "::ui::ModalType",
+        "mojom": "ui.mojom.ModalType"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "ui/base/mojom/window_open_disposition_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//ui/base"
+    ],
+    "types": [
+      {
+        "cpp": "::WindowOpenDisposition",
+        "mojom": "ui.mojom.WindowOpenDisposition"
+      }
+    ]
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/service_manager/tests/background.test-mojom",
+    "/home/abigail/final/src/services/service_manager/tests/test_support.test-mojom",
+    "/home/abigail/final/src/services/service_manager/tests/sandbox_status.test-mojom"
+  ]
+}

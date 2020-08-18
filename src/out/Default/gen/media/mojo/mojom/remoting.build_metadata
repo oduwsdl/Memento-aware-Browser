@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/media/mojo/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/media/mojo/mojom/remoting_common.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/media/mojo/mojom/remoting.mojom"
+  ]
+}

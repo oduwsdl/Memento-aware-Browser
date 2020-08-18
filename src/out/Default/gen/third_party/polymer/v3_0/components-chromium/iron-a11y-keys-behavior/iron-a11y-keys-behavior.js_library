@@ -1,0 +1,5 @@
+sources:
+../../third_party/polymer/v3_0/components-chromium/iron-a11y-keys-behavior/iron-a11y-keys-behavior.js
+deps:
+gen/third_party/polymer/v3_0/components-chromium/polymer/polymer_bundled.js_library
+externs:

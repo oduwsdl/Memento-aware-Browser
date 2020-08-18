@@ -1,0 +1,30 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/home/abigail/final/src/mojo/public/mojom/base/application_state.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/big_buffer.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/big_string.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/binder.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/file.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/file_error.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/file_info.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/file_path.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/generic_pending_receiver.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/memory_allocator_dump_cross_process_uid.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/memory_pressure_level.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/message_pump_type.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/process_id.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/read_only_buffer.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/ref_counted_memory.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/shared_memory.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/string16.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/text_direction.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/thread_priority.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/time.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/token.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/unguessable_token.mojom",
+    "/home/abigail/final/src/mojo/public/mojom/base/values.mojom"
+  ]
+}

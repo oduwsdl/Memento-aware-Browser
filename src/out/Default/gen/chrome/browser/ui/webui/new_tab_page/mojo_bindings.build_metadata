@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/chrome/common/search/mojo_bindings.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/skia/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom"
+  ]
+}

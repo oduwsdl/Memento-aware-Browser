@@ -1,0 +1,17 @@
+[
+    ImplementedAs=audio_worklet_global_scope_core_constructors
+] partial interface AudioWorkletGlobalScope {
+    attribute ByteLengthQueuingStrategyConstructor ByteLengthQueuingStrategy;
+    attribute CountQueuingStrategyConstructor CountQueuingStrategy;
+    attribute EventConstructor Event;
+    attribute EventTargetConstructor EventTarget;
+    attribute MessageEventConstructor MessageEvent;
+    attribute MessagePortConstructor MessagePort;
+    attribute ReadableStreamConstructor ReadableStream;
+    attribute ReadableStreamDefaultReaderConstructor ReadableStreamDefaultReader;
+    attribute TransformStreamConstructor TransformStream;
+    attribute UserActivationConstructor UserActivation;
+    attribute WorkletGlobalScopeConstructor WorkletGlobalScope;
+    attribute WritableStreamConstructor WritableStream;
+    attribute WritableStreamDefaultWriterConstructor WritableStreamDefaultWriter;
+};

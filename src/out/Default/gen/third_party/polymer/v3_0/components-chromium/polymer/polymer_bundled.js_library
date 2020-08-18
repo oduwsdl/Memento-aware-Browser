@@ -1,0 +1,9 @@
+sources:
+../../third_party/polymer/v3_0/components-chromium/polymer/polymer_bundled.js
+deps:
+externs:
+../../third_party/polymer/v3_0/components-chromium/polymer/externs/closure-types.js
+../../third_party/polymer/v3_0/components-chromium/polymer/externs/polymer-dom-api-externs.js
+../../third_party/polymer/v3_0/components-chromium/polymer/externs/polymer-externs.js
+../../third_party/polymer/v3_0/components-chromium/polymer/externs/shadycss-externs.js
+../../third_party/polymer/v3_0/components-chromium/polymer/externs/webcomponents-externs.js

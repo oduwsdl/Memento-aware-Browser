@@ -1,0 +1,19 @@
+{
+  "c++": {
+    "nacl.mojom.NaClErrorCode": {
+      "hashable": false, 
+      "typename": "::NaClErrorCode", 
+      "traits_headers": [
+        "components/nacl/common/nacl_types_param_traits.h"
+      ], 
+      "copyable_pass_by_value": false, 
+      "force_serialize": false, 
+      "move_only": false, 
+      "nullable_is_same_type": false, 
+      "non_copyable_non_movable": false, 
+      "public_headers": [
+        "native_client/src/trusted/service_runtime/nacl_error_code.h"
+      ]
+    }
+  }
+}

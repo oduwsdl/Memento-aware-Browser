@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/media/midi/midi_service.mojom"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/media/mojo/mojom/remoting_common.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/media/mojo/mojom/mirror_service_remoting.mojom"
+  ]
+}

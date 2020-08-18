@@ -1,0 +1,4 @@
+gen/chrome/grit/print_preview_pdf_resources.h
+gen/chrome/grit/print_preview_pdf_resources_map.cc
+gen/chrome/grit/print_preview_pdf_resources_map.h
+gen/chrome/print_preview_pdf_resources.pak

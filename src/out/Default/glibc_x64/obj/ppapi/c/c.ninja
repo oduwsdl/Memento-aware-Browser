@@ -1,0 +1,9 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Iglibc_x64/gen
+label_name = c
+root_out_dir = glibc_x64
+target_out_dir = glibc_x64/obj/ppapi/c
+target_output_name = c
+
+
+build glibc_x64/obj/ppapi/c/c.stamp: glibc_x64_stamp

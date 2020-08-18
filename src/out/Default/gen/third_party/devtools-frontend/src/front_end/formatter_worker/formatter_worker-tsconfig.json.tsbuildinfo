@@ -1,0 +1,817 @@
+{
+  "program": {
+    "fileInfos": {
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es5.d.ts": {
+        "version": "70ae6416528e68c2ee7b62892200d2ca631759943d4429f8b779b947ff1e124d",
+        "signature": "70ae6416528e68c2ee7b62892200d2ca631759943d4429f8b779b947ff1e124d",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.d.ts": {
+        "version": "dc47c4fa66b9b9890cf076304de2a9c5201e94b740cffdf09f87296d877d71f6",
+        "signature": "dc47c4fa66b9b9890cf076304de2a9c5201e94b740cffdf09f87296d877d71f6",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2016.d.ts": {
+        "version": "7a387c58583dfca701b6c85e0adaf43fb17d590fb16d5b2dc0a2fbd89f35c467",
+        "signature": "7a387c58583dfca701b6c85e0adaf43fb17d590fb16d5b2dc0a2fbd89f35c467",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.d.ts": {
+        "version": "8a12173c586e95f4433e0c6dc446bc88346be73ffe9ca6eec7aa63c8f3dca7f9",
+        "signature": "8a12173c586e95f4433e0c6dc446bc88346be73ffe9ca6eec7aa63c8f3dca7f9",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.d.ts": {
+        "version": "5f4e733ced4e129482ae2186aae29fde948ab7182844c3a5a51dd346182c7b06",
+        "signature": "5f4e733ced4e129482ae2186aae29fde948ab7182844c3a5a51dd346182c7b06",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.d.ts": {
+        "version": "e6b724280c694a9f588847f754198fb96c43d805f065c3a5b28bbc9594541c84",
+        "signature": "e6b724280c694a9f588847f754198fb96c43d805f065c3a5b28bbc9594541c84",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.d.ts": {
+        "version": "94b4108552f078722078d7c4a010ca4851063882f6c0c51a1468aa7a39aed4b3",
+        "signature": "94b4108552f078722078d7c4a010ca4851063882f6c0c51a1468aa7a39aed4b3",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.d.ts": {
+        "version": "2f8f379dedbdbd96a38a1e445cb3919853a1157a950fd977f85808db8d0f8a58",
+        "signature": "2f8f379dedbdbd96a38a1e445cb3919853a1157a950fd977f85808db8d0f8a58",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.dom.d.ts": {
+        "version": "9affb0a2ddc57df5b8174c0af96c288d697a262e5bc9ca1f544c999dc64a91e6",
+        "signature": "9affb0a2ddc57df5b8174c0af96c288d697a262e5bc9ca1f544c999dc64a91e6",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.core.d.ts": {
+        "version": "63e0cc12d0f77394094bd19e84464f9840af0071e5b9358ced30511efef1d8d2",
+        "signature": "63e0cc12d0f77394094bd19e84464f9840af0071e5b9358ced30511efef1d8d2",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.collection.d.ts": {
+        "version": "43fb1d932e4966a39a41b464a12a81899d9ae5f2c829063f5571b6b87e6d2f9c",
+        "signature": "43fb1d932e4966a39a41b464a12a81899d9ae5f2c829063f5571b6b87e6d2f9c",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.generator.d.ts": {
+        "version": "cdccba9a388c2ee3fd6ad4018c640a471a6c060e96f1232062223063b0a5ac6a",
+        "signature": "cdccba9a388c2ee3fd6ad4018c640a471a6c060e96f1232062223063b0a5ac6a",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.iterable.d.ts": {
+        "version": "42f5e41e5893da663dbf0394268f54f1da4b43dc0ddd2ea4bf471fe5361d6faf",
+        "signature": "42f5e41e5893da663dbf0394268f54f1da4b43dc0ddd2ea4bf471fe5361d6faf",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.promise.d.ts": {
+        "version": "0b7a905675e6cb4211c128f0a3aa47d414b275180a299a9aad5d3ec298abbfc4",
+        "signature": "0b7a905675e6cb4211c128f0a3aa47d414b275180a299a9aad5d3ec298abbfc4",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.proxy.d.ts": {
+        "version": "dfff68b3c34338f6b307a25d4566de15eed7973b0dc5d69f9fde2bcac1c25315",
+        "signature": "dfff68b3c34338f6b307a25d4566de15eed7973b0dc5d69f9fde2bcac1c25315",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.reflect.d.ts": {
+        "version": "cb609802a8698aa28b9c56331d4b53f590ca3c1c3a255350304ae3d06017779d",
+        "signature": "cb609802a8698aa28b9c56331d4b53f590ca3c1c3a255350304ae3d06017779d",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.symbol.d.ts": {
+        "version": "3013574108c36fd3aaca79764002b3717da09725a36a6fc02eac386593110f93",
+        "signature": "3013574108c36fd3aaca79764002b3717da09725a36a6fc02eac386593110f93",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.symbol.wellknown.d.ts": {
+        "version": "4670208dd7da9d6c774ab1b75c1527a810388c7989c4905de6aaea8561cb9dce",
+        "signature": "4670208dd7da9d6c774ab1b75c1527a810388c7989c4905de6aaea8561cb9dce",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2016.array.include.d.ts": {
+        "version": "3be5a1453daa63e031d266bf342f3943603873d890ab8b9ada95e22389389006",
+        "signature": "3be5a1453daa63e031d266bf342f3943603873d890ab8b9ada95e22389389006",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.object.d.ts": {
+        "version": "17bb1fc99591b00515502d264fa55dc8370c45c5298f4a5c2083557dccba5a2a",
+        "signature": "17bb1fc99591b00515502d264fa55dc8370c45c5298f4a5c2083557dccba5a2a",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.sharedmemory.d.ts": {
+        "version": "d0db416bccdb33975548baf09a42ee8c47eace1aac7907351a000f1e568e7232",
+        "signature": "d0db416bccdb33975548baf09a42ee8c47eace1aac7907351a000f1e568e7232",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.string.d.ts": {
+        "version": "6a6b173e739a6a99629a8594bfb294cc7329bfb7b227f12e1f7c11bc163b8577",
+        "signature": "6a6b173e739a6a99629a8594bfb294cc7329bfb7b227f12e1f7c11bc163b8577",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.intl.d.ts": {
+        "version": "12a310447c5d23c7d0d5ca2af606e3bd08afda69100166730ab92c62999ebb9d",
+        "signature": "12a310447c5d23c7d0d5ca2af606e3bd08afda69100166730ab92c62999ebb9d",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.typedarrays.d.ts": {
+        "version": "b0124885ef82641903d232172577f2ceb5d3e60aed4da1153bab4221e1f6dd4e",
+        "signature": "b0124885ef82641903d232172577f2ceb5d3e60aed4da1153bab4221e1f6dd4e",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.asyncgenerator.d.ts": {
+        "version": "8f03386d697248c5d356fd53f2729b920ea124cd1414a6c22de03c5d24729277",
+        "signature": "8f03386d697248c5d356fd53f2729b920ea124cd1414a6c22de03c5d24729277",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.asynciterable.d.ts": {
+        "version": "a40c4d82bf13fcded295ac29f354eb7d40249613c15e07b53f2fc75e45e16359",
+        "signature": "a40c4d82bf13fcded295ac29f354eb7d40249613c15e07b53f2fc75e45e16359",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.intl.d.ts": {
+        "version": "df9c8a72ca8b0ed62f5470b41208a0587f0f73f0a7db28e5a1272cf92537518e",
+        "signature": "df9c8a72ca8b0ed62f5470b41208a0587f0f73f0a7db28e5a1272cf92537518e",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.promise.d.ts": {
+        "version": "bb2d3fb05a1d2ffbca947cc7cbc95d23e1d053d6595391bd325deb265a18d36c",
+        "signature": "bb2d3fb05a1d2ffbca947cc7cbc95d23e1d053d6595391bd325deb265a18d36c",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.regexp.d.ts": {
+        "version": "c80df75850fea5caa2afe43b9949338ce4e2de086f91713e9af1a06f973872b8",
+        "signature": "c80df75850fea5caa2afe43b9949338ce4e2de086f91713e9af1a06f973872b8",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.array.d.ts": {
+        "version": "9d57b2b5d15838ed094aa9ff1299eecef40b190722eb619bac4616657a05f951",
+        "signature": "9d57b2b5d15838ed094aa9ff1299eecef40b190722eb619bac4616657a05f951",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.object.d.ts": {
+        "version": "6c51b5dd26a2c31dbf37f00cfc32b2aa6a92e19c995aefb5b97a3a64f1ac99de",
+        "signature": "6c51b5dd26a2c31dbf37f00cfc32b2aa6a92e19c995aefb5b97a3a64f1ac99de",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.string.d.ts": {
+        "version": "93544ca2f26a48716c1b6c5091842cad63129daac422dfa4bc52460465f22bb1",
+        "signature": "93544ca2f26a48716c1b6c5091842cad63129daac422dfa4bc52460465f22bb1",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.symbol.d.ts": {
+        "version": "2ad234885a4240522efccd77de6c7d99eecf9b4de0914adb9a35c0c22433f993",
+        "signature": "2ad234885a4240522efccd77de6c7d99eecf9b4de0914adb9a35c0c22433f993",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.bigint.d.ts": {
+        "version": "a5e25d9579ce8582f7b0c07aaa739784f355eb3734fceacaecc2ea6abf9069b7",
+        "signature": "a5e25d9579ce8582f7b0c07aaa739784f355eb3734fceacaecc2ea6abf9069b7",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.promise.d.ts": {
+        "version": "ea2d62f611bbe855ee8a66ea7972198718da7f0da955f5750100c18b819984b6",
+        "signature": "ea2d62f611bbe855ee8a66ea7972198718da7f0da955f5750100c18b819984b6",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.string.d.ts": {
+        "version": "faf0221ae0465363c842ce6aa8a0cbda5d9296940a8e26c86e04cc4081eea21e",
+        "signature": "faf0221ae0465363c842ce6aa8a0cbda5d9296940a8e26c86e04cc4081eea21e",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.symbol.wellknown.d.ts": {
+        "version": "936d7d2e8851af9ccfa5333b15e877a824417d352b1d7fd06388639dc69ef80a",
+        "signature": "936d7d2e8851af9ccfa5333b15e877a824417d352b1d7fd06388639dc69ef80a",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.intl.d.ts": {
+        "version": "89bf2b7a601b73ea4311eda9c41f86a58994fec1bee3b87c4a14d68d9adcdcbd",
+        "signature": "89bf2b7a601b73ea4311eda9c41f86a58994fec1bee3b87c4a14d68d9adcdcbd",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.string.d.ts": {
+        "version": "cebef4c7f9b6afb02cd08e7288fab05d0be3e3c898c720775b8aa286e9f7cfed",
+        "signature": "cebef4c7f9b6afb02cd08e7288fab05d0be3e3c898c720775b8aa286e9f7cfed",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.promise.d.ts": {
+        "version": "5f0738e96b305d1d844c9b6346fef2b196647e41a194c0fac3bc6535fc792227",
+        "signature": "5f0738e96b305d1d844c9b6346fef2b196647e41a194c0fac3bc6535fc792227",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.d.ts": {
+        "version": "6b367f2f5a28a345367c022e500e86528f6f25a5a4e518b71f56fe08eda1809f",
+        "signature": "6b367f2f5a28a345367c022e500e86528f6f25a5a4e518b71f56fe08eda1809f",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.mjs.d.ts": {
+        "version": "e64dc4af62a6bcd59d3474867f3e2e7a8fd4ce6c6c2c6f6b6bf6cb575826b665",
+        "signature": "e64dc4af62a6bcd59d3474867f3e2e7a8fd4ce6c6c2c6f6b6bf6cb575826b665",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/Acorn.js": {
+        "version": "5c219677938cb620a22ec7a1b1543937daf5ca445236d847a92c85f9082d1107",
+        "signature": "2162b1adbd1dcc443d43787015e9b67e3596b67c1a04e9cf02d887ffe56a4cf6",
+        "affectsGlobalScope": false
+      },
+      "../platform/utilities.d.ts": {
+        "version": "2b72abd5d918c11a1f31c582ee1c22200e633a176e7e085fa3a28be863940ad4",
+        "signature": "2b72abd5d918c11a1f31c582ee1c22200e633a176e7e085fa3a28be863940ad4",
+        "affectsGlobalScope": false
+      },
+      "../platform/string-utilities.d.ts": {
+        "version": "02564c6bc557c54a16fb6bbcd96e9090a796d0a8e128c630126ad41b1e1ed52a",
+        "signature": "02564c6bc557c54a16fb6bbcd96e9090a796d0a8e128c630126ad41b1e1ed52a",
+        "affectsGlobalScope": false
+      },
+      "../platform/UIString.d.ts": {
+        "version": "973668a933891f63d00990923236b0c82bae46a98c11d18703fe999dbf0f532a",
+        "signature": "973668a933891f63d00990923236b0c82bae46a98c11d18703fe999dbf0f532a",
+        "affectsGlobalScope": false
+      },
+      "../platform/array-utilities.d.ts": {
+        "version": "0977b9dbafa65301e115357c3913ca4c1c299ca40d0b8ef5deaaf1297b9ed090",
+        "signature": "0977b9dbafa65301e115357c3913ca4c1c299ca40d0b8ef5deaaf1297b9ed090",
+        "affectsGlobalScope": false
+      },
+      "../platform/date-utilities.d.ts": {
+        "version": "b44c86da6dcd7e4a9bddcb1ab53224ed0f243d1a18dc685d5b5644515dc4696f",
+        "signature": "b44c86da6dcd7e4a9bddcb1ab53224ed0f243d1a18dc685d5b5644515dc4696f",
+        "affectsGlobalScope": false
+      },
+      "../platform/number-utilities.d.ts": {
+        "version": "a60f8adf9f46bc0df4c2732f0c87a35daf250fa16652781fbe077f2c082895ba",
+        "signature": "a60f8adf9f46bc0df4c2732f0c87a35daf250fa16652781fbe077f2c082895ba",
+        "affectsGlobalScope": false
+      },
+      "../platform/set-utilities.d.ts": {
+        "version": "b264fcbd18522caa0fa2d59ac9e33d3ffd41a35d99e7934ae08b9e67a8d242bb",
+        "signature": "b264fcbd18522caa0fa2d59ac9e33d3ffd41a35d99e7934ae08b9e67a8d242bb",
+        "affectsGlobalScope": false
+      },
+      "../platform/platform.d.ts": {
+        "version": "44d4268a3d4764927349f44d8209b1bd9db4692e2931c366a9a61c3e09e29973",
+        "signature": "44d4268a3d4764927349f44d8209b1bd9db4692e2931c366a9a61c3e09e29973",
+        "affectsGlobalScope": false
+      },
+      "../common/Color.d.ts": {
+        "version": "201452930552ee16cff03555debaa281303fa8556e9c9b1690b8505b32682dfa",
+        "signature": "201452930552ee16cff03555debaa281303fa8556e9c9b1690b8505b32682dfa",
+        "affectsGlobalScope": false
+      },
+      "../common/EventTarget.d.ts": {
+        "version": "5965d039f10b3604bc1fb19f02f864ca038ef6485fb05c65f66196bc34b6fbb8",
+        "signature": "5965d039f10b3604bc1fb19f02f864ca038ef6485fb05c65f66196bc34b6fbb8",
+        "affectsGlobalScope": false
+      },
+      "../common/Object.d.ts": {
+        "version": "a00311720cd8671911ab53247a471518e7065035ec3b49fcf3db3a7c7ad96a1f",
+        "signature": "a00311720cd8671911ab53247a471518e7065035ec3b49fcf3db3a7c7ad96a1f",
+        "affectsGlobalScope": false
+      },
+      "../root/Runtime.d.ts": {
+        "version": "c0499f35e9752a590d79c044a2694ebc83220ddfb0fd690f1ce79058ca09397f",
+        "signature": "c0499f35e9752a590d79c044a2694ebc83220ddfb0fd690f1ce79058ca09397f",
+        "affectsGlobalScope": false
+      },
+      "../root/root.d.ts": {
+        "version": "a63cbf720b67dd43bfed5ecc633ab71d3e5d2a810650377efbdf59a51b5f1189",
+        "signature": "a63cbf720b67dd43bfed5ecc633ab71d3e5d2a810650377efbdf59a51b5f1189",
+        "affectsGlobalScope": false
+      },
+      "../common/Settings.d.ts": {
+        "version": "a55df42c0caad0151dc61fdf9090a97e236eea02600fe5998c5fddc39c185274",
+        "signature": "a55df42c0caad0151dc61fdf9090a97e236eea02600fe5998c5fddc39c185274",
+        "affectsGlobalScope": false
+      },
+      "../common/App.d.ts": {
+        "version": "d1cf336ef20c9eeea44d22fab81568745b3094b06eb91899b7270c4283ea81d3",
+        "signature": "d1cf336ef20c9eeea44d22fab81568745b3094b06eb91899b7270c4283ea81d3",
+        "affectsGlobalScope": false
+      },
+      "../common/AppProvider.d.ts": {
+        "version": "f9cb6c338ab20de9cfba76842355559254839c2a048542d95a54baccec765463",
+        "signature": "f9cb6c338ab20de9cfba76842355559254839c2a048542d95a54baccec765463",
+        "affectsGlobalScope": false
+      },
+      "../common/CharacterIdMap.d.ts": {
+        "version": "b7f7c991f322ef3b99756e07e8e8d21386b86a1b70852a6a6b8fa8b69d4e5241",
+        "signature": "b7f7c991f322ef3b99756e07e8e8d21386b86a1b70852a6a6b8fa8b69d4e5241",
+        "affectsGlobalScope": false
+      },
+      "../common/ColorUtils.d.ts": {
+        "version": "c05af1067d82fd973a210932060b5ada778aec405a89cd713245a1cc91fd3a85",
+        "signature": "c05af1067d82fd973a210932060b5ada778aec405a89cd713245a1cc91fd3a85",
+        "affectsGlobalScope": false
+      },
+      "../common/Console.d.ts": {
+        "version": "af0f199707445298e40fee1617ed2e478dcde0e0908ab2ba64c31c3c4c1d410b",
+        "signature": "af0f199707445298e40fee1617ed2e478dcde0e0908ab2ba64c31c3c4c1d410b",
+        "affectsGlobalScope": false
+      },
+      "../common/JavaScriptMetaData.d.ts": {
+        "version": "9c756f5a11892e04b6760526894f43b31616412205d18f0c6a33e3f790647873",
+        "signature": "9c756f5a11892e04b6760526894f43b31616412205d18f0c6a33e3f790647873",
+        "affectsGlobalScope": false
+      },
+      "../common/Lazy.d.ts": {
+        "version": "2cd6969a04fa812e9a45dac6b7de656a3b478c3afd3d84917cb98741a9bd3819",
+        "signature": "2cd6969a04fa812e9a45dac6b7de656a3b478c3afd3d84917cb98741a9bd3819",
+        "affectsGlobalScope": false
+      },
+      "../common/Linkifier.d.ts": {
+        "version": "e3e7996129c33179f159dd4d317dc908774674fed15e3b0d766ff49a9a05e69b",
+        "signature": "e3e7996129c33179f159dd4d317dc908774674fed15e3b0d766ff49a9a05e69b",
+        "affectsGlobalScope": false
+      },
+      "../common/ParsedURL.d.ts": {
+        "version": "854ec5942a63878c8d282488e4c6527175da39e9ebf2e297c80ed1ad6c40adb9",
+        "signature": "854ec5942a63878c8d282488e4c6527175da39e9ebf2e297c80ed1ad6c40adb9",
+        "affectsGlobalScope": false
+      },
+      "../common/Progress.d.ts": {
+        "version": "bde812d20fe9eaafbe29c6b348f97cb96d384c7a0651820631a538fc46489a48",
+        "signature": "bde812d20fe9eaafbe29c6b348f97cb96d384c7a0651820631a538fc46489a48",
+        "affectsGlobalScope": false
+      },
+      "../common/QueryParamHandler.d.ts": {
+        "version": "1eda325d2be8f24071db5ad93781f9a43714b2b3511160bdc7362766f4d07bb5",
+        "signature": "1eda325d2be8f24071db5ad93781f9a43714b2b3511160bdc7362766f4d07bb5",
+        "affectsGlobalScope": false
+      },
+      "../common/ResourceType.d.ts": {
+        "version": "de9a251a3a506428a793bca58580ea064b7212ba60fa1ac36f8c4fbe1fa5666f",
+        "signature": "de9a251a3a506428a793bca58580ea064b7212ba60fa1ac36f8c4fbe1fa5666f",
+        "affectsGlobalScope": false
+      },
+      "../common/Revealer.d.ts": {
+        "version": "527b7383149ea982f97986257c9e50eaa55ca867b1b7751566d571fea2759580",
+        "signature": "527b7383149ea982f97986257c9e50eaa55ca867b1b7751566d571fea2759580",
+        "affectsGlobalScope": false
+      },
+      "../common/Runnable.d.ts": {
+        "version": "9f359da32b7f6d7bf0bee09ecd5aebf41d737e6dea00ab7825c3483df3e94a7d",
+        "signature": "9f359da32b7f6d7bf0bee09ecd5aebf41d737e6dea00ab7825c3483df3e94a7d",
+        "affectsGlobalScope": false
+      },
+      "../common/SegmentedRange.d.ts": {
+        "version": "a76efe8d47793c7815da1b4427c57c207304597c9bc2c2211065e69d79167e8f",
+        "signature": "a76efe8d47793c7815da1b4427c57c207304597c9bc2c2211065e69d79167e8f",
+        "affectsGlobalScope": false
+      },
+      "../common/StringOutputStream.d.ts": {
+        "version": "df2f0ff1433502e3a0581693d11fd7c04820dcba9594cfe2800f774f3dcb4450",
+        "signature": "df2f0ff1433502e3a0581693d11fd7c04820dcba9594cfe2800f774f3dcb4450",
+        "affectsGlobalScope": false
+      },
+      "../common/Trie.d.ts": {
+        "version": "0f127f4553c0e2f2dcdd65827088ca1e2480d63c5acbf04d8c05ea6ef5f595fa",
+        "signature": "0f127f4553c0e2f2dcdd65827088ca1e2480d63c5acbf04d8c05ea6ef5f595fa",
+        "affectsGlobalScope": false
+      },
+      "../common/TextDictionary.d.ts": {
+        "version": "fc82000dc93c53cece3dace032ad5cab278ab1e20407c4c190c74419274eec62",
+        "signature": "fc82000dc93c53cece3dace032ad5cab278ab1e20407c4c190c74419274eec62",
+        "affectsGlobalScope": false
+      },
+      "../common/Throttler.d.ts": {
+        "version": "0f43bd93dd406cc7c5da8289f92c6b59d7c3f471df79e1ba75f36fd78d8ecccb",
+        "signature": "0f43bd93dd406cc7c5da8289f92c6b59d7c3f471df79e1ba75f36fd78d8ecccb",
+        "affectsGlobalScope": false
+      },
+      "../common/Worker.d.ts": {
+        "version": "f095c968f8cf88d3439d8749a67d5f8b03bfda6c16eeb9e54cdebc4309a3428c",
+        "signature": "f095c968f8cf88d3439d8749a67d5f8b03bfda6c16eeb9e54cdebc4309a3428c",
+        "affectsGlobalScope": false
+      },
+      "../common/WasmDisassembly.d.ts": {
+        "version": "e5a18ddedebe77435844c6a75690bd31d2cda54fea8a5c7262b04b71923419cd",
+        "signature": "e5a18ddedebe77435844c6a75690bd31d2cda54fea8a5c7262b04b71923419cd",
+        "affectsGlobalScope": false
+      },
+      "../common/common.d.ts": {
+        "version": "469d15fcdbb45bcb49c3fa2b89645561895c591006db5c37829c22d3dadaebf2",
+        "signature": "469d15fcdbb45bcb49c3fa2b89645561895c591006db5c37829c22d3dadaebf2",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/ContentProvider.d.ts": {
+        "version": "4af64552e6b0b957c23c38ab89c0f701f4cd54ac4f0c8fea4ed1e370c4daa57e",
+        "signature": "4af64552e6b0b957c23c38ab89c0f701f4cd54ac4f0c8fea4ed1e370c4daa57e",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/StaticContentProvider.d.ts": {
+        "version": "ac59174d2cf283f24077d7e03e4930560758356c44f5f64d269fa10af66cf1f2",
+        "signature": "ac59174d2cf283f24077d7e03e4930560758356c44f5f64d269fa10af66cf1f2",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/TextRange.d.ts": {
+        "version": "48b352e836eb573be48f4ca72fe9658e3b81306760e1269f840f0c2fd223ad08",
+        "signature": "48b352e836eb573be48f4ca72fe9658e3b81306760e1269f840f0c2fd223ad08",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/Text.d.ts": {
+        "version": "f3558ff9109be27940fcc94bdc679d22a3b979482103afdda5712f46012d6c2e",
+        "signature": "f3558ff9109be27940fcc94bdc679d22a3b979482103afdda5712f46012d6c2e",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/TextCursor.d.ts": {
+        "version": "7ceaa3aeff9ea6ff09c2d6d211f7156c6fe37b0e8d1e38263e6d57a7b7ffc5b0",
+        "signature": "7ceaa3aeff9ea6ff09c2d6d211f7156c6fe37b0e8d1e38263e6d57a7b7ffc5b0",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/TextUtils.d.ts": {
+        "version": "2543915ae26878529430e5ef8d5700107c490ccdd14efafa01fa7e6bbd97ffe8",
+        "signature": "2543915ae26878529430e5ef8d5700107c490ccdd14efafa01fa7e6bbd97ffe8",
+        "affectsGlobalScope": false
+      },
+      "../text_utils/text_utils.d.ts": {
+        "version": "87dbf0f7c68fa9149026276d34fb71a0a0d5a68819c868c31da77fa4a1299287",
+        "signature": "87dbf0f7c68fa9149026276d34fb71a0a0d5a68819c868c31da77fa4a1299287",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/AcornTokenizer.js": {
+        "version": "d9656a35ad6a70d64a6066f7952e331c5dddcc05b0101ad3c866837bd8101b38",
+        "signature": "89d2fe3e4a8a625fe8edb326b6a17aa8a7074ddc1ad9ddd75547a5ea7b85cb44",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/ESTreeWalker.js": {
+        "version": "0a75b6198f16ec8b7af7bde1f34ebff67f1761e9a5e0e651d00d71c6143c8dc3",
+        "signature": "47b6e1a0e41fd22fd37dde99d847368a340ad55d8f30fcdbe0339a65c8b3b0af",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/FormattedContentBuilder.js": {
+        "version": "834fb9a23623958dfbeff8d6021e9f9b266491b15f0266dda6b635282486b077",
+        "signature": "175d6ddfcd71c90fb142a43d26cbfdc411594831baeb78e840e453f5e2a19941",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/JavaScriptFormatter.js": {
+        "version": "ea1649e3e2398c184b57ab6f2c7f7fb279230ef5aec81b3dc6df8a35623dbcd1",
+        "signature": "565dabe895bcc173000bbdf15892a4005dddd4c68dc92c7cb4ce81bba420d5e3",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/legacy/legacy-defs.d.ts": {
+        "version": "cc57a2bc0ff111a2f9b7d8c7ebe35ef1cb7825ebd64cf5cec50715e6ed5fad4e",
+        "signature": "cc57a2bc0ff111a2f9b7d8c7ebe35ef1cb7825ebd64cf5cec50715e6ed5fad4e",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/resize_observer.d.ts": {
+        "version": "455f91d65666ba004aecfcff9f54d636e9855a8749a2da99f37ecce7ec514af6",
+        "signature": "455f91d65666ba004aecfcff9f54d636e9855a8749a2da99f37ecce7ec514af6",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/global_defs.d.ts": {
+        "version": "a583590b4bdbc9856f12fc45fb3a1776b8888b342100ef7d6fb2a7c9d97d4cae",
+        "signature": "a583590b4bdbc9856f12fc45fb3a1776b8888b342100ef7d6fb2a7c9d97d4cae",
+        "affectsGlobalScope": false
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/generated/protocol.d.ts": {
+        "version": "9243ab296ce61ff071cfe83aab09bdb1ea611461115dd8b5e48b40e39ea8dd83",
+        "signature": "9243ab296ce61ff071cfe83aab09bdb1ea611461115dd8b5e48b40e39ea8dd83",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/generated/protocol-proxy-api.d.ts": {
+        "version": "d63d31190aeeec124c9fd0e04e7a04395f16b84dbc762bca683d19c3c59fcb62",
+        "signature": "d63d31190aeeec124c9fd0e04e7a04395f16b84dbc762bca683d19c3c59fcb62",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filewriter/index.d.ts": {
+        "version": "d9932f317f16ea21c183b67b73a72f17883c52933980292e7ebba2215495bb5c",
+        "signature": "d9932f317f16ea21c183b67b73a72f17883c52933980292e7ebba2215495bb5c",
+        "affectsGlobalScope": true
+      },
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filesystem/index.d.ts": {
+        "version": "55b843a46c67c99e8cd5e012f9ad3b77376bb34c33492dcce99c15a7c28c6adf",
+        "signature": "55b843a46c67c99e8cd5e012f9ad3b77376bb34c33492dcce99c15a7c28c6adf",
+        "affectsGlobalScope": true
+      }
+    },
+    "options": {
+      "composite": true,
+      "tsBuildInfoFile": "./formatter_worker-tsconfig.json.tsbuildinfo",
+      "target": 99,
+      "noEmitOnError": true,
+      "noImplicitReturns": true,
+      "sourceMap": true,
+      "typeRoots": [],
+      "declaration": true,
+      "allowJs": true,
+      "module": 99,
+      "baseUrl": "./",
+      "strict": true,
+      "checkJs": true,
+      "forceConsistentCasingInFileNames": true,
+      "skipLibCheck": true,
+      "lib": [
+        "lib.esnext.d.ts",
+        "lib.dom.d.ts"
+      ],
+      "noFallthroughCasesInSwitch": true,
+      "rootDir": "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker",
+      "outDir": "./",
+      "project": "./formatter_worker-tsconfig.json",
+      "configFilePath": "./formatter_worker-tsconfig.json"
+    },
+    "referencedMap": {
+      "../common/AppProvider.d.ts": [
+        "../common/App.d.ts"
+      ],
+      "../common/Console.d.ts": [
+        "../common/Object.d.ts"
+      ],
+      "../common/Object.d.ts": [
+        "../common/EventTarget.d.ts"
+      ],
+      "../common/Settings.d.ts": [
+        "../common/Color.d.ts",
+        "../common/EventTarget.d.ts",
+        "../common/Object.d.ts",
+        "../root/root.d.ts"
+      ],
+      "../common/TextDictionary.d.ts": [
+        "../common/Trie.d.ts"
+      ],
+      "../common/common.d.ts": [
+        "../common/App.d.ts",
+        "../common/AppProvider.d.ts",
+        "../common/CharacterIdMap.d.ts",
+        "../common/Color.d.ts",
+        "../common/ColorUtils.d.ts",
+        "../common/Console.d.ts",
+        "../common/EventTarget.d.ts",
+        "../common/JavaScriptMetaData.d.ts",
+        "../common/Lazy.d.ts",
+        "../common/Linkifier.d.ts",
+        "../common/Object.d.ts",
+        "../common/ParsedURL.d.ts",
+        "../common/Progress.d.ts",
+        "../common/QueryParamHandler.d.ts",
+        "../common/ResourceType.d.ts",
+        "../common/Revealer.d.ts",
+        "../common/Runnable.d.ts",
+        "../common/SegmentedRange.d.ts",
+        "../common/Settings.d.ts",
+        "../common/StringOutputStream.d.ts",
+        "../common/TextDictionary.d.ts",
+        "../common/Throttler.d.ts",
+        "../common/Trie.d.ts",
+        "../common/WasmDisassembly.d.ts",
+        "../common/Worker.d.ts",
+        "../platform/platform.d.ts"
+      ],
+      "../platform/UIString.d.ts": [
+        "../platform/string-utilities.d.ts"
+      ],
+      "../platform/platform.d.ts": [
+        "../platform/UIString.d.ts",
+        "../platform/array-utilities.d.ts",
+        "../platform/date-utilities.d.ts",
+        "../platform/number-utilities.d.ts",
+        "../platform/set-utilities.d.ts",
+        "../platform/string-utilities.d.ts",
+        "../platform/utilities.d.ts"
+      ],
+      "../root/root.d.ts": [
+        "../root/Runtime.d.ts"
+      ],
+      "../text_utils/ContentProvider.d.ts": [
+        "../common/common.d.ts"
+      ],
+      "../text_utils/StaticContentProvider.d.ts": [
+        "../common/common.d.ts",
+        "../text_utils/ContentProvider.d.ts"
+      ],
+      "../text_utils/Text.d.ts": [
+        "../text_utils/TextRange.d.ts"
+      ],
+      "../text_utils/TextUtils.d.ts": [
+        "../text_utils/ContentProvider.d.ts"
+      ],
+      "../text_utils/text_utils.d.ts": [
+        "../text_utils/ContentProvider.d.ts",
+        "../text_utils/StaticContentProvider.d.ts",
+        "../text_utils/Text.d.ts",
+        "../text_utils/TextCursor.d.ts",
+        "../text_utils/TextRange.d.ts",
+        "../text_utils/TextUtils.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/Acorn.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.mjs.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/AcornTokenizer.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/Acorn.js",
+        "../platform/platform.d.ts",
+        "../text_utils/text_utils.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/JavaScriptFormatter.js": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/Acorn.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/AcornTokenizer.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/ESTreeWalker.js",
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/FormattedContentBuilder.js"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/global_defs.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/resize_observer.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.mjs.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filesystem/index.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filewriter/index.d.ts"
+      ]
+    },
+    "exportedModulesMap": {
+      "../common/AppProvider.d.ts": [
+        "../common/App.d.ts"
+      ],
+      "../common/Console.d.ts": [
+        "../common/Object.d.ts"
+      ],
+      "../common/Object.d.ts": [
+        "../common/EventTarget.d.ts"
+      ],
+      "../common/Settings.d.ts": [
+        "../common/Color.d.ts",
+        "../common/EventTarget.d.ts",
+        "../common/Object.d.ts",
+        "../root/root.d.ts"
+      ],
+      "../common/TextDictionary.d.ts": [
+        "../common/Trie.d.ts"
+      ],
+      "../common/common.d.ts": [
+        "../common/App.d.ts",
+        "../common/AppProvider.d.ts",
+        "../common/CharacterIdMap.d.ts",
+        "../common/Color.d.ts",
+        "../common/ColorUtils.d.ts",
+        "../common/Console.d.ts",
+        "../common/EventTarget.d.ts",
+        "../common/JavaScriptMetaData.d.ts",
+        "../common/Lazy.d.ts",
+        "../common/Linkifier.d.ts",
+        "../common/Object.d.ts",
+        "../common/ParsedURL.d.ts",
+        "../common/Progress.d.ts",
+        "../common/QueryParamHandler.d.ts",
+        "../common/ResourceType.d.ts",
+        "../common/Revealer.d.ts",
+        "../common/Runnable.d.ts",
+        "../common/SegmentedRange.d.ts",
+        "../common/Settings.d.ts",
+        "../common/StringOutputStream.d.ts",
+        "../common/TextDictionary.d.ts",
+        "../common/Throttler.d.ts",
+        "../common/Trie.d.ts",
+        "../common/WasmDisassembly.d.ts",
+        "../common/Worker.d.ts",
+        "../platform/platform.d.ts"
+      ],
+      "../platform/UIString.d.ts": [
+        "../platform/string-utilities.d.ts"
+      ],
+      "../platform/platform.d.ts": [
+        "../platform/UIString.d.ts",
+        "../platform/array-utilities.d.ts",
+        "../platform/date-utilities.d.ts",
+        "../platform/number-utilities.d.ts",
+        "../platform/set-utilities.d.ts",
+        "../platform/string-utilities.d.ts",
+        "../platform/utilities.d.ts"
+      ],
+      "../root/root.d.ts": [
+        "../root/Runtime.d.ts"
+      ],
+      "../text_utils/ContentProvider.d.ts": [
+        "../common/common.d.ts"
+      ],
+      "../text_utils/StaticContentProvider.d.ts": [
+        "../common/common.d.ts",
+        "../text_utils/ContentProvider.d.ts"
+      ],
+      "../text_utils/Text.d.ts": [
+        "../text_utils/TextRange.d.ts"
+      ],
+      "../text_utils/TextUtils.d.ts": [
+        "../text_utils/ContentProvider.d.ts"
+      ],
+      "../text_utils/text_utils.d.ts": [
+        "../text_utils/ContentProvider.d.ts",
+        "../text_utils/StaticContentProvider.d.ts",
+        "../text_utils/Text.d.ts",
+        "../text_utils/TextCursor.d.ts",
+        "../text_utils/TextRange.d.ts",
+        "../text_utils/TextUtils.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/global_defs.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/resize_observer.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.mjs.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.d.ts"
+      ],
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filesystem/index.d.ts": [
+        "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filewriter/index.d.ts"
+      ]
+    },
+    "semanticDiagnosticsPerFile": [
+      "../common/App.d.ts",
+      "../common/AppProvider.d.ts",
+      "../common/CharacterIdMap.d.ts",
+      "../common/Color.d.ts",
+      "../common/ColorUtils.d.ts",
+      "../common/Console.d.ts",
+      "../common/EventTarget.d.ts",
+      "../common/JavaScriptMetaData.d.ts",
+      "../common/Lazy.d.ts",
+      "../common/Linkifier.d.ts",
+      "../common/Object.d.ts",
+      "../common/ParsedURL.d.ts",
+      "../common/Progress.d.ts",
+      "../common/QueryParamHandler.d.ts",
+      "../common/ResourceType.d.ts",
+      "../common/Revealer.d.ts",
+      "../common/Runnable.d.ts",
+      "../common/SegmentedRange.d.ts",
+      "../common/Settings.d.ts",
+      "../common/StringOutputStream.d.ts",
+      "../common/TextDictionary.d.ts",
+      "../common/Throttler.d.ts",
+      "../common/Trie.d.ts",
+      "../common/WasmDisassembly.d.ts",
+      "../common/Worker.d.ts",
+      "../common/common.d.ts",
+      "../platform/UIString.d.ts",
+      "../platform/array-utilities.d.ts",
+      "../platform/date-utilities.d.ts",
+      "../platform/number-utilities.d.ts",
+      "../platform/platform.d.ts",
+      "../platform/set-utilities.d.ts",
+      "../platform/string-utilities.d.ts",
+      "../platform/utilities.d.ts",
+      "../root/Runtime.d.ts",
+      "../root/root.d.ts",
+      "../text_utils/ContentProvider.d.ts",
+      "../text_utils/StaticContentProvider.d.ts",
+      "../text_utils/Text.d.ts",
+      "../text_utils/TextCursor.d.ts",
+      "../text_utils/TextRange.d.ts",
+      "../text_utils/TextUtils.d.ts",
+      "../text_utils/text_utils.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/Acorn.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/AcornTokenizer.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/ESTreeWalker.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/FormattedContentBuilder.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/formatter_worker/JavaScriptFormatter.js",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/generated/protocol-proxy-api.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/generated/protocol.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/global_defs.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/global_typings/resize_observer.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/legacy/legacy-defs.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/front_end/third_party/acorn/package/dist/acorn.mjs.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filesystem/index.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/@types/filewriter/index.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.dom.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.collection.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.core.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.generator.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.iterable.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.promise.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.proxy.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.reflect.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.symbol.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2015.symbol.wellknown.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2016.array.include.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2016.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.intl.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.object.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.sharedmemory.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.string.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2017.typedarrays.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.asyncgenerator.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.asynciterable.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.intl.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.promise.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2018.regexp.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.array.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.object.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.string.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2019.symbol.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.bigint.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.promise.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.string.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es2020.symbol.wellknown.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.es5.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.intl.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.promise.d.ts",
+      "../../../../../../../../third_party/devtools-frontend/src/node_modules/typescript/lib/lib.esnext.string.d.ts"
+    ]
+  },
+  "version": "3.9.3"
+}

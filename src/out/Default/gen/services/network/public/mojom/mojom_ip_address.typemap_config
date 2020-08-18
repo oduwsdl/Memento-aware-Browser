@@ -1,0 +1,94 @@
+[
+  {
+    "traits_headers": [
+      "services/network/public/cpp/address_family_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net"
+    ],
+    "traits_sources": [
+      "//services/network/public/cpp/address_family_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::net::AddressFamily",
+        "mojom": "network.mojom.AddressFamily"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "services/network/public/cpp/address_list_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net"
+    ],
+    "types": [
+      {
+        "cpp": "::net::AddressList",
+        "mojom": "network.mojom.AddressList"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "services/network/public/cpp/quic_transport_error_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cpp_base"
+    ],
+    "types": [
+      {
+        "cpp": "::net::QuicTransportError",
+        "mojom": "network.mojom.QuicTransportError"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "services/network/public/cpp/ip_address_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cpp_base"
+    ],
+    "types": [
+      {
+        "cpp": "::net::IPAddress",
+        "mojom": "network.mojom.IPAddress"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "services/network/public/cpp/ip_endpoint_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cpp_base"
+    ],
+    "types": [
+      {
+        "cpp": "::net::IPEndPoint",
+        "mojom": "network.mojom.IPEndPoint"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "net/http/http_response_info.h",
+      "services/network/public/cpp/network_ipc_param_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cpp_base"
+    ],
+    "types": [
+      {
+        "cpp": "::net::HttpResponseInfo::ConnectionInfo",
+        "mojom": "network.mojom.ConnectionInfo"
+      }
+    ]
+  }
+]

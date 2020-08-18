@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/irt_x64/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/gpu/ipc/common/vulkan_info.mojom",
+    "/home/abigail/final/src/gpu/ipc/common/vulkan_types.mojom"
+  ]
+}

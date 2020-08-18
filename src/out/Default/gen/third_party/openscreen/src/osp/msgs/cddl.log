@@ -1,0 +1,1523 @@
+OUTPUT FOR CDDL CODE GENERATION TOOL:
+
+CDDL GENERATION TOOL
+---------------------------------------------
+
+Successfully initialized CDDL Code generator!
+Parsing CDDL input file...
+Processed text "agent-info-request = {
+  request
+}
+
+" into node: 
+--kRule: agent-info-request = { request } 
+----kTypename: agent-info-request
+----kAssign: =
+----kType: { request } 
+------kType1: { request } 
+--------kType2: { request }
+----------kGroup: request 
+------------kGrpchoice: request 
+--------------kGrpent: request 
+----------------kType: request 
+------------------kType1: request 
+--------------------kType2: request
+----------------------kTypename: request
+Processed text "; type key 11
+agent-info-response = {
+  response
+  1: agent-info ; agent-info
+}
+
+" into node: 
+--kRule (type key="11"): ; type key 11 agent-info-response = { response 1: agent-info ; agent-info } 
+----kTypename: agent-info-response
+----kAssign: =
+----kType: { response 1: agent-info ; agent-info } 
+------kType1: { response 1: agent-info ; agent-info } 
+--------kType2: { response 1: agent-info ; agent-info }
+----------kGroup: response 1: agent-info ; agent-info 
+------------kGrpchoice: response 1: agent-info ; agent-info 
+--------------kGrpent: response 
+----------------kType: response 
+------------------kType1: response 
+--------------------kType2: response
+----------------------kTypename: response
+--------------kGrpent: 1: agent-info ; agent-info 
+----------------kMemberKey: agent-info
+------------------kId: agent-info
+----------------kType: agent-info 
+------------------kType1: agent-info 
+--------------------kType2: agent-info
+----------------------kTypename: agent-info
+Processed text "agent-info = {
+  0: text ; friendly-name
+  1: text ; model-name
+  ; ...
+}
+
+" into node: 
+--kRule: agent-info = { 0: text ; friendly-name 1: text ; model-name ; ... } 
+----kTypename: agent-info
+----kAssign: =
+----kType: { 0: text ; friendly-name 1: text ; model-name ; ... } 
+------kType1: { 0: text ; friendly-name 1: text ; model-name ; ... } 
+--------kType2: { 0: text ; friendly-name 1: text ; model-name ; ... }
+----------kGroup: 0: text ; friendly-name 1: text ; model-name ; ... 
+------------kGrpchoice: 0: text ; friendly-name 1: text ; model-name ; ... 
+--------------kGrpent: 0: text ; friendly-name 
+----------------kMemberKey: friendly-name
+------------------kId: friendly-name
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+--------------kGrpent: 1: text ; model-name 
+----------------kMemberKey: model-name
+------------------kId: model-name
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+Processed text "; type key 12
+agent-status-request = {
+  request
+  ? 1: status ; status
+}
+
+" into node: 
+--kRule (type key="12"): ; type key 12 agent-status-request = { request ? 1: status ; status } 
+----kTypename: agent-status-request
+----kAssign: =
+----kType: { request ? 1: status ; status } 
+------kType1: { request ? 1: status ; status } 
+--------kType2: { request ? 1: status ; status }
+----------kGroup: request ? 1: status ; status 
+------------kGrpchoice: request ? 1: status ; status 
+--------------kGrpent: request 
+----------------kType: request 
+------------------kType1: request 
+--------------------kType2: request
+----------------------kTypename: request
+--------------kGrpent: ? 1: status ; status 
+----------------kOccur: ?
+----------------kMemberKey: status
+------------------kId: status
+----------------kType: status 
+------------------kType1: status 
+--------------------kType2: status
+----------------------kTypename: status
+Processed text "; type key 13
+agent-status-response = {
+  response
+  ? 1: status ; status
+}
+
+" into node: 
+--kRule (type key="13"): ; type key 13 agent-status-response = { response ? 1: status ; status } 
+----kTypename: agent-status-response
+----kAssign: =
+----kType: { response ? 1: status ; status } 
+------kType1: { response ? 1: status ; status } 
+--------kType2: { response ? 1: status ; status }
+----------kGroup: response ? 1: status ; status 
+------------kGrpchoice: response ? 1: status ; status 
+--------------kGrpent: response 
+----------------kType: response 
+------------------kType1: response 
+--------------------kType2: response
+----------------------kTypename: response
+--------------kGrpent: ? 1: status ; status 
+----------------kOccur: ?
+----------------kMemberKey: status
+------------------kId: status
+----------------kType: status 
+------------------kType1: status 
+--------------------kType2: status
+----------------------kTypename: status
+Processed text "request = (
+ 0: request-id ; request-id
+)
+
+" into node: 
+--kRule: request = ( 0: request-id ; request-id ) 
+----kGroupname: request
+----kAssign: =
+----kGrpent: ( 0: request-id ; request-id )
+------kGroup: 0: request-id ; request-id 
+--------kGrpchoice: 0: request-id ; request-id 
+----------kGrpent: 0: request-id ; request-id 
+------------kMemberKey: request-id
+--------------kId: request-id
+------------kType: request-id 
+--------------kType1: request-id 
+----------------kType2: request-id
+------------------kTypename: request-id
+Processed text "response = (
+ 0: request-id ; request-id
+)
+
+" into node: 
+--kRule: response = ( 0: request-id ; request-id ) 
+----kGroupname: response
+----kAssign: =
+----kGrpent: ( 0: request-id ; request-id )
+------kGroup: 0: request-id ; request-id 
+--------kGrpchoice: 0: request-id ; request-id 
+----------kGrpent: 0: request-id ; request-id 
+------------kMemberKey: request-id
+--------------kId: request-id
+------------kType: request-id 
+--------------kType1: request-id 
+----------------kType2: request-id
+------------------kTypename: request-id
+Processed text "request-id = uint
+
+" into node: 
+--kRule: request-id = uint 
+----kTypename: request-id
+----kAssign: =
+----kType: uint 
+------kType1: uint 
+--------kType2: uint
+----------kTypename: uint
+Processed text "microseconds = uint
+
+" into node: 
+--kRule: microseconds = uint 
+----kTypename: microseconds
+----kAssign: =
+----kType: uint 
+------kType1: uint 
+--------kType2: uint
+----------kTypename: uint
+Processed text "; type key 1001
+authentication-request = {
+  request
+  1: authentication-mechanism ; mechanism
+  2: bytes ; salt
+  3: uint ; cost
+}
+
+" into node: 
+--kRule (type key="1001"): ; type key 1001 authentication-request = { request 1: authentication-mechanism ; mechanism 2: bytes ; salt 3: uint ; cost } 
+----kTypename: authentication-request
+----kAssign: =
+----kType: { request 1: authentication-mechanism ; mechanism 2: bytes ; salt 3: uint ; cost } 
+------kType1: { request 1: authentication-mechanism ; mechanism 2: bytes ; salt 3: uint ; cost } 
+--------kType2: { request 1: authentication-mechanism ; mechanism 2: bytes ; salt 3: uint ; cost }
+----------kGroup: request 1: authentication-mechanism ; mechanism 2: bytes ; salt 3: uint ; cost 
+------------kGrpchoice: request 1: authentication-mechanism ; mechanism 2: bytes ; salt 3: uint ; cost 
+--------------kGrpent: request 
+----------------kType: request 
+------------------kType1: request 
+--------------------kType2: request
+----------------------kTypename: request
+--------------kGrpent: 1: authentication-mechanism ; mechanism 
+----------------kMemberKey: mechanism
+------------------kId: mechanism
+----------------kType: authentication-mechanism 
+------------------kType1: authentication-mechanism 
+--------------------kType2: authentication-mechanism
+----------------------kTypename: authentication-mechanism
+--------------kGrpent: 2: bytes ; salt 
+----------------kMemberKey: salt
+------------------kId: salt
+----------------kType: bytes 
+------------------kType1: bytes 
+--------------------kType2: bytes
+----------------------kTypename: bytes
+--------------kGrpent: 3: uint ; cost 
+----------------kMemberKey: cost
+------------------kId: cost
+----------------kType: uint 
+------------------kType1: uint 
+--------------------kType2: uint
+----------------------kTypename: uint
+Processed text "; type key 1002
+authentication-response = {
+  response
+  1: authentication-response-result ; result
+  2: bytes ; proof
+}
+
+" into node: 
+--kRule (type key="1002"): ; type key 1002 authentication-response = { response 1: authentication-response-result ; result 2: bytes ; proof } 
+----kTypename: authentication-response
+----kAssign: =
+----kType: { response 1: authentication-response-result ; result 2: bytes ; proof } 
+------kType1: { response 1: authentication-response-result ; result 2: bytes ; proof } 
+--------kType2: { response 1: authentication-response-result ; result 2: bytes ; proof }
+----------kGroup: response 1: authentication-response-result ; result 2: bytes ; proof 
+------------kGrpchoice: response 1: authentication-response-result ; result 2: bytes ; proof 
+--------------kGrpent: response 
+----------------kType: response 
+------------------kType1: response 
+--------------------kType2: response
+----------------------kTypename: response
+--------------kGrpent: 1: authentication-response-result ; result 
+----------------kMemberKey: result
+------------------kId: result
+----------------kType: authentication-response-result 
+------------------kType1: authentication-response-result 
+--------------------kType2: authentication-response-result
+----------------------kTypename: authentication-response-result
+--------------kGrpent: 2: bytes ; proof 
+----------------kMemberKey: proof
+------------------kId: proof
+----------------kType: bytes 
+------------------kType1: bytes 
+--------------------kType2: bytes
+----------------------kTypename: bytes
+Processed text "; type key 1003
+authentication-result = {
+  1: authentication-result-result ; result
+}
+
+" into node: 
+--kRule (type key="1003"): ; type key 1003 authentication-result = { 1: authentication-result-result ; result } 
+----kTypename: authentication-result
+----kAssign: =
+----kType: { 1: authentication-result-result ; result } 
+------kType1: { 1: authentication-result-result ; result } 
+--------kType2: { 1: authentication-result-result ; result }
+----------kGroup: 1: authentication-result-result ; result 
+------------kGrpchoice: 1: authentication-result-result ; result 
+--------------kGrpent: 1: authentication-result-result ; result 
+----------------kMemberKey: result
+------------------kId: result
+----------------kType: authentication-result-result 
+------------------kType1: authentication-result-result 
+--------------------kType2: authentication-result-result
+----------------------kTypename: authentication-result-result
+Processed text "authentication-mechanism = &(
+  hkdf-of-scrypt-of-psk: 1
+)
+
+" into node: 
+--kRule: authentication-mechanism = &( hkdf-of-scrypt-of-psk: 1 ) 
+----kTypename: authentication-mechanism
+----kAssign: =
+----kType: &( hkdf-of-scrypt-of-psk: 1 ) 
+------kType1: &( hkdf-of-scrypt-of-psk: 1 ) 
+--------kType2: &( hkdf-of-scrypt-of-psk: 1 )
+----------kGroup: hkdf-of-scrypt-of-psk: 1 
+------------kGrpchoice: hkdf-of-scrypt-of-psk: 1 
+--------------kGrpent: hkdf-of-scrypt-of-psk: 1 
+----------------kMemberKey: hkdf-of-scrypt-of-psk:
+------------------kId: hkdf-of-scrypt-of-psk
+----------------kType: 1 
+------------------kType1: 1 
+--------------------kType2: 1
+----------------------kNumber: 1
+Processed text "authentication-response-result = &(
+  ok: 0
+  unknown-error: 1
+  mechanism-unknown: 2
+  salt-too-small: 3
+  cost-too-low: 4
+  cost-too-high: 5
+  secret-unknown: 6
+  calculation-took-too-long: 7
+)
+
+" into node: 
+--kRule: authentication-response-result = &( ok: 0 unknown-error: 1 mechanism-unknown: 2 salt-too-small: 3 cost-too-low: 4 cost-too-high: 5 secret-unknown: 6 calculation-took-too-long: 7 ) 
+----kTypename: authentication-response-result
+----kAssign: =
+----kType: &( ok: 0 unknown-error: 1 mechanism-unknown: 2 salt-too-small: 3 cost-too-low: 4 cost-too-high: 5 secret-unknown: 6 calculation-took-too-long: 7 ) 
+------kType1: &( ok: 0 unknown-error: 1 mechanism-unknown: 2 salt-too-small: 3 cost-too-low: 4 cost-too-high: 5 secret-unknown: 6 calculation-took-too-long: 7 ) 
+--------kType2: &( ok: 0 unknown-error: 1 mechanism-unknown: 2 salt-too-small: 3 cost-too-low: 4 cost-too-high: 5 secret-unknown: 6 calculation-took-too-long: 7 )
+----------kGroup: ok: 0 unknown-error: 1 mechanism-unknown: 2 salt-too-small: 3 cost-too-low: 4 cost-too-high: 5 secret-unknown: 6 calculation-took-too-long: 7 
+------------kGrpchoice: ok: 0 unknown-error: 1 mechanism-unknown: 2 salt-too-small: 3 cost-too-low: 4 cost-too-high: 5 secret-unknown: 6 calculation-took-too-long: 7 
+--------------kGrpent: ok: 0 
+----------------kMemberKey: ok:
+------------------kId: ok
+----------------kType: 0 
+------------------kType1: 0 
+--------------------kType2: 0
+----------------------kNumber: 0
+--------------kGrpent: unknown-error: 1 
+----------------kMemberKey: unknown-error:
+------------------kId: unknown-error
+----------------kType: 1 
+------------------kType1: 1 
+--------------------kType2: 1
+----------------------kNumber: 1
+--------------kGrpent: mechanism-unknown: 2 
+----------------kMemberKey: mechanism-unknown:
+------------------kId: mechanism-unknown
+----------------kType: 2 
+------------------kType1: 2 
+--------------------kType2: 2
+----------------------kNumber: 2
+--------------kGrpent: salt-too-small: 3 
+----------------kMemberKey: salt-too-small:
+------------------kId: salt-too-small
+----------------kType: 3 
+------------------kType1: 3 
+--------------------kType2: 3
+----------------------kNumber: 3
+--------------kGrpent: cost-too-low: 4 
+----------------kMemberKey: cost-too-low:
+------------------kId: cost-too-low
+----------------kType: 4 
+------------------kType1: 4 
+--------------------kType2: 4
+----------------------kNumber: 4
+--------------kGrpent: cost-too-high: 5 
+----------------kMemberKey: cost-too-high:
+------------------kId: cost-too-high
+----------------kType: 5 
+------------------kType1: 5 
+--------------------kType2: 5
+----------------------kNumber: 5
+--------------kGrpent: secret-unknown: 6 
+----------------kMemberKey: secret-unknown:
+------------------kId: secret-unknown
+----------------kType: 6 
+------------------kType1: 6 
+--------------------kType2: 6
+----------------------kNumber: 6
+--------------kGrpent: calculation-took-too-long: 7 
+----------------kMemberKey: calculation-took-too-long:
+------------------kId: calculation-took-too-long
+----------------kType: 7 
+------------------kType1: 7 
+--------------------kType2: 7
+----------------------kNumber: 7
+Processed text "authentication-result-result = &(
+  authenticated: 0
+  unknown-error: 1
+  proof-invalid: 2
+)
+
+" into node: 
+--kRule: authentication-result-result = &( authenticated: 0 unknown-error: 1 proof-invalid: 2 ) 
+----kTypename: authentication-result-result
+----kAssign: =
+----kType: &( authenticated: 0 unknown-error: 1 proof-invalid: 2 ) 
+------kType1: &( authenticated: 0 unknown-error: 1 proof-invalid: 2 ) 
+--------kType2: &( authenticated: 0 unknown-error: 1 proof-invalid: 2 )
+----------kGroup: authenticated: 0 unknown-error: 1 proof-invalid: 2 
+------------kGrpchoice: authenticated: 0 unknown-error: 1 proof-invalid: 2 
+--------------kGrpent: authenticated: 0 
+----------------kMemberKey: authenticated:
+------------------kId: authenticated
+----------------kType: 0 
+------------------kType1: 0 
+--------------------kType2: 0
+----------------------kNumber: 0
+--------------kGrpent: unknown-error: 1 
+----------------kMemberKey: unknown-error:
+------------------kId: unknown-error
+----------------kType: 1 
+------------------kType1: 1 
+--------------------kType2: 1
+----------------------kNumber: 1
+--------------kGrpent: proof-invalid: 2 
+----------------kMemberKey: proof-invalid:
+------------------kId: proof-invalid
+----------------kType: 2 
+------------------kType1: 2 
+--------------------kType2: 2
+----------------------kNumber: 2
+Processed text "; type key 14
+presentation-url-availability-request = {
+  request
+  1: [* text] ; urls
+  2: microseconds ; watch-duration
+  3: uint ; watch-id
+}
+
+" into node: 
+--kRule (type key="14"): ; type key 14 presentation-url-availability-request = { request 1: [* text] ; urls 2: microseconds ; watch-duration 3: uint ; watch-id } 
+----kTypename: presentation-url-availability-request
+----kAssign: =
+----kType: { request 1: [* text] ; urls 2: microseconds ; watch-duration 3: uint ; watch-id } 
+------kType1: { request 1: [* text] ; urls 2: microseconds ; watch-duration 3: uint ; watch-id } 
+--------kType2: { request 1: [* text] ; urls 2: microseconds ; watch-duration 3: uint ; watch-id }
+----------kGroup: request 1: [* text] ; urls 2: microseconds ; watch-duration 3: uint ; watch-id 
+------------kGrpchoice: request 1: [* text] ; urls 2: microseconds ; watch-duration 3: uint ; watch-id 
+--------------kGrpent: request 
+----------------kType: request 
+------------------kType1: request 
+--------------------kType2: request
+----------------------kTypename: request
+--------------kGrpent: 1: [* text] ; urls 
+----------------kMemberKey: urls
+------------------kId: urls
+----------------kType: [* text] 
+------------------kType1: [* text] 
+--------------------kType2: [* text]
+----------------------kGroup: * text
+------------------------kGrpchoice: * text
+--------------------------kGrpent: * text
+----------------------------kOccur: *
+----------------------------kType: text
+------------------------------kType1: text
+--------------------------------kType2: text
+----------------------------------kTypename: text
+--------------kGrpent: 2: microseconds ; watch-duration 
+----------------kMemberKey: watch-duration
+------------------kId: watch-duration
+----------------kType: microseconds 
+------------------kType1: microseconds 
+--------------------kType2: microseconds
+----------------------kTypename: microseconds
+--------------kGrpent: 3: uint ; watch-id 
+----------------kMemberKey: watch-id
+------------------kId: watch-id
+----------------kType: uint 
+------------------kType1: uint 
+--------------------kType2: uint
+----------------------kTypename: uint
+Processed text "; type key 15
+presentation-url-availability-response = {
+  response
+  1: [* url-availability] ; url-availabilities
+}
+
+" into node: 
+--kRule (type key="15"): ; type key 15 presentation-url-availability-response = { response 1: [* url-availability] ; url-availabilities } 
+----kTypename: presentation-url-availability-response
+----kAssign: =
+----kType: { response 1: [* url-availability] ; url-availabilities } 
+------kType1: { response 1: [* url-availability] ; url-availabilities } 
+--------kType2: { response 1: [* url-availability] ; url-availabilities }
+----------kGroup: response 1: [* url-availability] ; url-availabilities 
+------------kGrpchoice: response 1: [* url-availability] ; url-availabilities 
+--------------kGrpent: response 
+----------------kType: response 
+------------------kType1: response 
+--------------------kType2: response
+----------------------kTypename: response
+--------------kGrpent: 1: [* url-availability] ; url-availabilities 
+----------------kMemberKey: url-availabilities
+------------------kId: url-availabilities
+----------------kType: [* url-availability] 
+------------------kType1: [* url-availability] 
+--------------------kType2: [* url-availability]
+----------------------kGroup: * url-availability
+------------------------kGrpchoice: * url-availability
+--------------------------kGrpent: * url-availability
+----------------------------kOccur: *
+----------------------------kType: url-availability
+------------------------------kType1: url-availability
+--------------------------------kType2: url-availability
+----------------------------------kTypename: url-availability
+Processed text "; type key 103
+presentation-url-availability-event = {
+  1: uint ; watch-id
+  2: [* url-availability] ; url-availabilities
+}
+
+" into node: 
+--kRule (type key="103"): ; type key 103 presentation-url-availability-event = { 1: uint ; watch-id 2: [* url-availability] ; url-availabilities } 
+----kTypename: presentation-url-availability-event
+----kAssign: =
+----kType: { 1: uint ; watch-id 2: [* url-availability] ; url-availabilities } 
+------kType1: { 1: uint ; watch-id 2: [* url-availability] ; url-availabilities } 
+--------kType2: { 1: uint ; watch-id 2: [* url-availability] ; url-availabilities }
+----------kGroup: 1: uint ; watch-id 2: [* url-availability] ; url-availabilities 
+------------kGrpchoice: 1: uint ; watch-id 2: [* url-availability] ; url-availabilities 
+--------------kGrpent: 1: uint ; watch-id 
+----------------kMemberKey: watch-id
+------------------kId: watch-id
+----------------kType: uint 
+------------------kType1: uint 
+--------------------kType2: uint
+----------------------kTypename: uint
+--------------kGrpent: 2: [* url-availability] ; url-availabilities 
+----------------kMemberKey: url-availabilities
+------------------kId: url-availabilities
+----------------kType: [* url-availability] 
+------------------kType1: [* url-availability] 
+--------------------kType2: [* url-availability]
+----------------------kGroup: * url-availability
+------------------------kGrpchoice: * url-availability
+--------------------------kGrpent: * url-availability
+----------------------------kOccur: *
+----------------------------kType: url-availability
+------------------------------kType1: url-availability
+--------------------------------kType2: url-availability
+----------------------------------kTypename: url-availability
+Processed text "; idea: use HTTP response codes?
+url-availability = &(
+  available: 0
+  unavailable: 1
+  invalid: 10
+)
+
+" into node: 
+--kRule: ; idea: use HTTP response codes? url-availability = &( available: 0 unavailable: 1 invalid: 10 ) 
+----kTypename: url-availability
+----kAssign: =
+----kType: &( available: 0 unavailable: 1 invalid: 10 ) 
+------kType1: &( available: 0 unavailable: 1 invalid: 10 ) 
+--------kType2: &( available: 0 unavailable: 1 invalid: 10 )
+----------kGroup: available: 0 unavailable: 1 invalid: 10 
+------------kGrpchoice: available: 0 unavailable: 1 invalid: 10 
+--------------kGrpent: available: 0 
+----------------kMemberKey: available:
+------------------kId: available
+----------------kType: 0 
+------------------kType1: 0 
+--------------------kType2: 0
+----------------------kNumber: 0
+--------------kGrpent: unavailable: 1 
+----------------kMemberKey: unavailable:
+------------------kId: unavailable
+----------------kType: 1 
+------------------kType1: 1 
+--------------------kType2: 1
+----------------------kNumber: 1
+--------------kGrpent: invalid: 10 
+----------------kMemberKey: invalid:
+------------------kId: invalid
+----------------kType: 10 
+------------------kType1: 10 
+--------------------kType2: 10
+----------------------kNumber: 10
+Processed text "; type key 104
+presentation-start-request = {
+  request
+  1: text ; presentation-id
+  2: text ; url
+  3: [* http-header] ; headers
+}
+
+" into node: 
+--kRule (type key="104"): ; type key 104 presentation-start-request = { request 1: text ; presentation-id 2: text ; url 3: [* http-header] ; headers } 
+----kTypename: presentation-start-request
+----kAssign: =
+----kType: { request 1: text ; presentation-id 2: text ; url 3: [* http-header] ; headers } 
+------kType1: { request 1: text ; presentation-id 2: text ; url 3: [* http-header] ; headers } 
+--------kType2: { request 1: text ; presentation-id 2: text ; url 3: [* http-header] ; headers }
+----------kGroup: request 1: text ; presentation-id 2: text ; url 3: [* http-header] ; headers 
+------------kGrpchoice: request 1: text ; presentation-id 2: text ; url 3: [* http-header] ; headers 
+--------------kGrpent: request 
+----------------kType: request 
+------------------kType1: request 
+--------------------kType2: request
+----------------------kTypename: request
+--------------kGrpent: 1: text ; presentation-id 
+----------------kMemberKey: presentation-id
+------------------kId: presentation-id
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+--------------kGrpent: 2: text ; url 
+----------------kMemberKey: url
+------------------kId: url
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+--------------kGrpent: 3: [* http-header] ; headers 
+----------------kMemberKey: headers
+------------------kId: headers
+----------------kType: [* http-header] 
+------------------kType1: [* http-header] 
+--------------------kType2: [* http-header]
+----------------------kGroup: * http-header
+------------------------kGrpchoice: * http-header
+--------------------------kGrpent: * http-header
+----------------------------kOccur: *
+----------------------------kType: http-header
+------------------------------kType1: http-header
+--------------------------------kType2: http-header
+----------------------------------kTypename: http-header
+Processed text "http-header = [
+  key: text
+  value: text
+]
+
+" into node: 
+--kRule: http-header = [ key: text value: text ] 
+----kTypename: http-header
+----kAssign: =
+----kType: [ key: text value: text ] 
+------kType1: [ key: text value: text ] 
+--------kType2: [ key: text value: text ]
+----------kGroup: key: text value: text 
+------------kGrpchoice: key: text value: text 
+--------------kGrpent: key: text 
+----------------kMemberKey: key:
+------------------kId: key
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+--------------kGrpent: value: text 
+----------------kMemberKey: value:
+------------------kId: value
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+Processed text "; type key 105
+presentation-start-response = {
+  response
+  1: &result ; result
+  2: uint ; connection-id
+}
+
+" into node: 
+--kRule (type key="105"): ; type key 105 presentation-start-response = { response 1: &result ; result 2: uint ; connection-id } 
+----kTypename: presentation-start-response
+----kAssign: =
+----kType: { response 1: &result ; result 2: uint ; connection-id } 
+------kType1: { response 1: &result ; result 2: uint ; connection-id } 
+--------kType2: { response 1: &result ; result 2: uint ; connection-id }
+----------kGroup: response 1: &result ; result 2: uint ; connection-id 
+------------kGrpchoice: response 1: &result ; result 2: uint ; connection-id 
+--------------kGrpent: response 
+----------------kType: response 
+------------------kType1: response 
+--------------------kType2: response
+----------------------kTypename: response
+--------------kGrpent: 1: &result ; result 
+----------------kMemberKey: result
+------------------kId: result
+----------------kType: &result 
+------------------kType1: &result 
+--------------------kType2: &result
+----------------------kGroupname: result
+--------------kGrpent: 2: uint ; connection-id 
+----------------kMemberKey: connection-id
+------------------kId: connection-id
+----------------kType: uint 
+------------------kType1: uint 
+--------------------kType2: uint
+----------------------kTypename: uint
+Processed text "; type key 106
+presentation-termination-request = {
+  request
+  1: text ; presentation-id
+  2: &(
+    controller-called-terminate: 10
+    user-terminated-via-controller: 11
+    unknown: 255
+  )
+ ; reason
+}
+
+" into node: 
+--kRule (type key="106"): ; type key 106 presentation-termination-request = { request 1: text ; presentation-id 2: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) ; reason } 
+----kTypename: presentation-termination-request
+----kAssign: =
+----kType: { request 1: text ; presentation-id 2: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) ; reason } 
+------kType1: { request 1: text ; presentation-id 2: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) ; reason } 
+--------kType2: { request 1: text ; presentation-id 2: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) ; reason }
+----------kGroup: request 1: text ; presentation-id 2: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) ; reason 
+------------kGrpchoice: request 1: text ; presentation-id 2: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) ; reason 
+--------------kGrpent: request 
+----------------kType: request 
+------------------kType1: request 
+--------------------kType2: request
+----------------------kTypename: request
+--------------kGrpent: 1: text ; presentation-id 
+----------------kMemberKey: presentation-id
+------------------kId: presentation-id
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+--------------kGrpent: 2: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) ; reason 
+----------------kMemberKey: reason
+------------------kId: reason
+----------------kType: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) 
+------------------kType1: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 ) 
+--------------------kType2: &( controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 )
+----------------------kGroup: controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 
+------------------------kGrpchoice: controller-called-terminate: 10 user-terminated-via-controller: 11 unknown: 255 
+--------------------------kGrpent: controller-called-terminate: 10 
+----------------------------kMemberKey: controller-called-terminate:
+------------------------------kId: controller-called-terminate
+----------------------------kType: 10 
+------------------------------kType1: 10 
+--------------------------------kType2: 10
+----------------------------------kNumber: 10
+--------------------------kGrpent: user-terminated-via-controller: 11 
+----------------------------kMemberKey: user-terminated-via-controller:
+------------------------------kId: user-terminated-via-controller
+----------------------------kType: 11 
+------------------------------kType1: 11 
+--------------------------------kType2: 11
+----------------------------------kNumber: 11
+--------------------------kGrpent: unknown: 255 
+----------------------------kMemberKey: unknown:
+------------------------------kId: unknown
+----------------------------kType: 255 
+------------------------------kType1: 255 
+--------------------------------kType2: 255
+----------------------------------kNumber: 255
+Processed text "; type key 107
+presentation-termination-response = {
+  response
+  1: &result ; result
+}
+
+" into node: 
+--kRule (type key="107"): ; type key 107 presentation-termination-response = { response 1: &result ; result } 
+----kTypename: presentation-termination-response
+----kAssign: =
+----kType: { response 1: &result ; result } 
+------kType1: { response 1: &result ; result } 
+--------kType2: { response 1: &result ; result }
+----------kGroup: response 1: &result ; result 
+------------kGrpchoice: response 1: &result ; result 
+--------------kGrpent: response 
+----------------kType: response 
+------------------kType1: response 
+--------------------kType2: response
+----------------------kTypename: response
+--------------kGrpent: 1: &result ; result 
+----------------kMemberKey: result
+------------------kId: result
+----------------kType: &result 
+------------------kType1: &result 
+--------------------kType2: &result
+----------------------kGroupname: result
+Processed text "; type key 108
+presentation-termination-event = {
+  1: text ; presentation-id
+  2: &(
+    receiver-called-terminate: 1
+    user-terminated-via-receiver: 2
+    controller-called-terminate: 10
+    user-terminated-via-controller: 11
+    receiver-replaced-presentation: 20
+    receiver-idle-too-long: 30
+    receiver-attempted-to-navigate: 31
+    receiver-powering-down: 100
+    receiver-crashed: 101
+    unknown: 255
+  ) ; reason
+}
+
+" into node: 
+--kRule (type key="108"): ; type key 108 presentation-termination-event = { 1: text ; presentation-id 2: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) ; reason } 
+----kTypename: presentation-termination-event
+----kAssign: =
+----kType: { 1: text ; presentation-id 2: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) ; reason } 
+------kType1: { 1: text ; presentation-id 2: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) ; reason } 
+--------kType2: { 1: text ; presentation-id 2: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) ; reason }
+----------kGroup: 1: text ; presentation-id 2: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) ; reason 
+------------kGrpchoice: 1: text ; presentation-id 2: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) ; reason 
+--------------kGrpent: 1: text ; presentation-id 
+----------------kMemberKey: presentation-id
+------------------kId: presentation-id
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+--------------kGrpent: 2: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) ; reason 
+----------------kMemberKey: reason
+------------------kId: reason
+----------------kType: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) 
+------------------kType1: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 ) 
+--------------------kType2: &( receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 )
+----------------------kGroup: receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 
+------------------------kGrpchoice: receiver-called-terminate: 1 user-terminated-via-receiver: 2 controller-called-terminate: 10 user-terminated-via-controller: 11 receiver-replaced-presentation: 20 receiver-idle-too-long: 30 receiver-attempted-to-navigate: 31 receiver-powering-down: 100 receiver-crashed: 101 unknown: 255 
+--------------------------kGrpent: receiver-called-terminate: 1 
+----------------------------kMemberKey: receiver-called-terminate:
+------------------------------kId: receiver-called-terminate
+----------------------------kType: 1 
+------------------------------kType1: 1 
+--------------------------------kType2: 1
+----------------------------------kNumber: 1
+--------------------------kGrpent: user-terminated-via-receiver: 2 
+----------------------------kMemberKey: user-terminated-via-receiver:
+------------------------------kId: user-terminated-via-receiver
+----------------------------kType: 2 
+------------------------------kType1: 2 
+--------------------------------kType2: 2
+----------------------------------kNumber: 2
+--------------------------kGrpent: controller-called-terminate: 10 
+----------------------------kMemberKey: controller-called-terminate:
+------------------------------kId: controller-called-terminate
+----------------------------kType: 10 
+------------------------------kType1: 10 
+--------------------------------kType2: 10
+----------------------------------kNumber: 10
+--------------------------kGrpent: user-terminated-via-controller: 11 
+----------------------------kMemberKey: user-terminated-via-controller:
+------------------------------kId: user-terminated-via-controller
+----------------------------kType: 11 
+------------------------------kType1: 11 
+--------------------------------kType2: 11
+----------------------------------kNumber: 11
+--------------------------kGrpent: receiver-replaced-presentation: 20 
+----------------------------kMemberKey: receiver-replaced-presentation:
+------------------------------kId: receiver-replaced-presentation
+----------------------------kType: 20 
+------------------------------kType1: 20 
+--------------------------------kType2: 20
+----------------------------------kNumber: 20
+--------------------------kGrpent: receiver-idle-too-long: 30 
+----------------------------kMemberKey: receiver-idle-too-long:
+------------------------------kId: receiver-idle-too-long
+----------------------------kType: 30 
+------------------------------kType1: 30 
+--------------------------------kType2: 30
+----------------------------------kNumber: 30
+--------------------------kGrpent: receiver-attempted-to-navigate: 31 
+----------------------------kMemberKey: receiver-attempted-to-navigate:
+------------------------------kId: receiver-attempted-to-navigate
+----------------------------kType: 31 
+------------------------------kType1: 31 
+--------------------------------kType2: 31
+----------------------------------kNumber: 31
+--------------------------kGrpent: receiver-powering-down: 100 
+----------------------------kMemberKey: receiver-powering-down:
+------------------------------kId: receiver-powering-down
+----------------------------kType: 100 
+------------------------------kType1: 100 
+--------------------------------kType2: 100
+----------------------------------kNumber: 100
+--------------------------kGrpent: receiver-crashed: 101 
+----------------------------kMemberKey: receiver-crashed:
+------------------------------kId: receiver-crashed
+----------------------------kType: 101 
+------------------------------kType1: 101 
+--------------------------------kType2: 101
+----------------------------------kNumber: 101
+--------------------------kGrpent: unknown: 255 
+----------------------------kMemberKey: unknown:
+------------------------------kId: unknown
+----------------------------kType: 255 
+------------------------------kType1: 255 
+--------------------------------kType2: 255
+----------------------------------kNumber: 255
+Processed text "; type key 109
+presentation-connection-open-request = {
+  request
+  1: text ; presentation-id
+  2: text ; url
+}
+
+" into node: 
+--kRule (type key="109"): ; type key 109 presentation-connection-open-request = { request 1: text ; presentation-id 2: text ; url } 
+----kTypename: presentation-connection-open-request
+----kAssign: =
+----kType: { request 1: text ; presentation-id 2: text ; url } 
+------kType1: { request 1: text ; presentation-id 2: text ; url } 
+--------kType2: { request 1: text ; presentation-id 2: text ; url }
+----------kGroup: request 1: text ; presentation-id 2: text ; url 
+------------kGrpchoice: request 1: text ; presentation-id 2: text ; url 
+--------------kGrpent: request 
+----------------kType: request 
+------------------kType1: request 
+--------------------kType2: request
+----------------------kTypename: request
+--------------kGrpent: 1: text ; presentation-id 
+----------------kMemberKey: presentation-id
+------------------kId: presentation-id
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+--------------kGrpent: 2: text ; url 
+----------------kMemberKey: url
+------------------kId: url
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+Processed text "; type key 110
+presentation-connection-open-response = {
+  response
+  1: &result ; result
+  2: uint; connection-id
+}
+
+" into node: 
+--kRule (type key="110"): ; type key 110 presentation-connection-open-response = { response 1: &result ; result 2: uint; connection-id } 
+----kTypename: presentation-connection-open-response
+----kAssign: =
+----kType: { response 1: &result ; result 2: uint; connection-id } 
+------kType1: { response 1: &result ; result 2: uint; connection-id } 
+--------kType2: { response 1: &result ; result 2: uint; connection-id }
+----------kGroup: response 1: &result ; result 2: uint; connection-id 
+------------kGrpchoice: response 1: &result ; result 2: uint; connection-id 
+--------------kGrpent: response 
+----------------kType: response 
+------------------kType1: response 
+--------------------kType2: response
+----------------------kTypename: response
+--------------kGrpent: 1: &result ; result 
+----------------kMemberKey: result
+------------------kId: result
+----------------kType: &result 
+------------------kType1: &result 
+--------------------kType2: &result
+----------------------kGroupname: result
+--------------kGrpent: 2: uint; connection-id 
+----------------kMemberKey: connection-id
+------------------kId: connection-id
+----------------kType: uint
+------------------kType1: uint
+--------------------kType2: uint
+----------------------kTypename: uint
+Processed text "; type key 111
+presentation-connection-close-request = {
+  request
+  1: uint ; connection-id
+}
+
+" into node: 
+--kRule (type key="111"): ; type key 111 presentation-connection-close-request = { request 1: uint ; connection-id } 
+----kTypename: presentation-connection-close-request
+----kAssign: =
+----kType: { request 1: uint ; connection-id } 
+------kType1: { request 1: uint ; connection-id } 
+--------kType2: { request 1: uint ; connection-id }
+----------kGroup: request 1: uint ; connection-id 
+------------kGrpchoice: request 1: uint ; connection-id 
+--------------kGrpent: request 
+----------------kType: request 
+------------------kType1: request 
+--------------------kType2: request
+----------------------kTypename: request
+--------------kGrpent: 1: uint ; connection-id 
+----------------kMemberKey: connection-id
+------------------kId: connection-id
+----------------kType: uint 
+------------------kType1: uint 
+--------------------kType2: uint
+----------------------kTypename: uint
+Processed text "; type key 112
+presentation-connection-close-response = {
+  response
+  ; TODO(btolsch): Update the spec or revert.
+  1: &(success: 0, invalid-connection-id: 1) ; result
+}
+
+" into node: 
+--kRule (type key="112"): ; type key 112 presentation-connection-close-response = { response ; TODO(btolsch): Update the spec or revert. 1: &(success: 0, invalid-connection-id: 1) ; result } 
+----kTypename: presentation-connection-close-response
+----kAssign: =
+----kType: { response ; TODO(btolsch): Update the spec or revert. 1: &(success: 0, invalid-connection-id: 1) ; result } 
+------kType1: { response ; TODO(btolsch): Update the spec or revert. 1: &(success: 0, invalid-connection-id: 1) ; result } 
+--------kType2: { response ; TODO(btolsch): Update the spec or revert. 1: &(success: 0, invalid-connection-id: 1) ; result }
+----------kGroup: response ; TODO(btolsch): Update the spec or revert. 1: &(success: 0, invalid-connection-id: 1) ; result 
+------------kGrpchoice: response ; TODO(btolsch): Update the spec or revert. 1: &(success: 0, invalid-connection-id: 1) ; result 
+--------------kGrpent: response ; TODO(btolsch): Update the spec or revert. 
+----------------kType: response ; TODO(btolsch): Update the spec or revert. 
+------------------kType1: response 
+--------------------kType2: response
+----------------------kTypename: response
+--------------kGrpent: 1: &(success: 0, invalid-connection-id: 1) ; result 
+----------------kMemberKey: result
+------------------kId: result
+----------------kType: &(success: 0, invalid-connection-id: 1) 
+------------------kType1: &(success: 0, invalid-connection-id: 1) 
+--------------------kType2: &(success: 0, invalid-connection-id: 1)
+----------------------kGroup: success: 0, invalid-connection-id: 1
+------------------------kGrpchoice: success: 0, invalid-connection-id: 1
+--------------------------kGrpent: success: 0
+----------------------------kMemberKey: success:
+------------------------------kId: success
+----------------------------kType: 0
+------------------------------kType1: 0
+--------------------------------kType2: 0
+----------------------------------kNumber: 0
+--------------------------kGrpent: invalid-connection-id: 1
+----------------------------kMemberKey: invalid-connection-id:
+------------------------------kId: invalid-connection-id
+----------------------------kType: 1
+------------------------------kType1: 1
+--------------------------------kType2: 1
+----------------------------------kNumber: 1
+Processed text "; type key 113
+presentation-connection-close-event = {
+  1: uint; connection-id
+  2: &(
+    close-method-called: 1
+    connection-object-discarded: 10
+    unrecoverable-error-while-sending-or-receiving-message: 100
+  ) ; reason
+  ? 3: text ; error-message
+}
+
+" into node: 
+--kRule (type key="113"): ; type key 113 presentation-connection-close-event = { 1: uint; connection-id 2: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) ; reason ? 3: text ; error-message } 
+----kTypename: presentation-connection-close-event
+----kAssign: =
+----kType: { 1: uint; connection-id 2: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) ; reason ? 3: text ; error-message } 
+------kType1: { 1: uint; connection-id 2: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) ; reason ? 3: text ; error-message } 
+--------kType2: { 1: uint; connection-id 2: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) ; reason ? 3: text ; error-message }
+----------kGroup: 1: uint; connection-id 2: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) ; reason ? 3: text ; error-message 
+------------kGrpchoice: 1: uint; connection-id 2: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) ; reason ? 3: text ; error-message 
+--------------kGrpent: 1: uint; connection-id 
+----------------kMemberKey: connection-id
+------------------kId: connection-id
+----------------kType: uint
+------------------kType1: uint
+--------------------kType2: uint
+----------------------kTypename: uint
+--------------kGrpent: 2: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) ; reason 
+----------------kMemberKey: reason
+------------------kId: reason
+----------------kType: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) 
+------------------kType1: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 ) 
+--------------------kType2: &( close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 )
+----------------------kGroup: close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 
+------------------------kGrpchoice: close-method-called: 1 connection-object-discarded: 10 unrecoverable-error-while-sending-or-receiving-message: 100 
+--------------------------kGrpent: close-method-called: 1 
+----------------------------kMemberKey: close-method-called:
+------------------------------kId: close-method-called
+----------------------------kType: 1 
+------------------------------kType1: 1 
+--------------------------------kType2: 1
+----------------------------------kNumber: 1
+--------------------------kGrpent: connection-object-discarded: 10 
+----------------------------kMemberKey: connection-object-discarded:
+------------------------------kId: connection-object-discarded
+----------------------------kType: 10 
+------------------------------kType1: 10 
+--------------------------------kType2: 10
+----------------------------------kNumber: 10
+--------------------------kGrpent: unrecoverable-error-while-sending-or-receiving-message: 100 
+----------------------------kMemberKey: unrecoverable-error-while-sending-or-receiving-message:
+------------------------------kId: unrecoverable-error-while-sending-or-receiving-message
+----------------------------kType: 100 
+------------------------------kType1: 100 
+--------------------------------kType2: 100
+----------------------------------kNumber: 100
+--------------kGrpent: ? 3: text ; error-message 
+----------------kOccur: ?
+----------------kMemberKey: error-message
+------------------kId: error-message
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+Processed text "; type key 16
+presentation-connection-message = {
+  1: uint ; connection-id
+  2: bytes / text ; message
+}
+
+" into node: 
+--kRule (type key="16"): ; type key 16 presentation-connection-message = { 1: uint ; connection-id 2: bytes / text ; message } 
+----kTypename: presentation-connection-message
+----kAssign: =
+----kType: { 1: uint ; connection-id 2: bytes / text ; message } 
+------kType1: { 1: uint ; connection-id 2: bytes / text ; message } 
+--------kType2: { 1: uint ; connection-id 2: bytes / text ; message }
+----------kGroup: 1: uint ; connection-id 2: bytes / text ; message 
+------------kGrpchoice: 1: uint ; connection-id 2: bytes / text ; message 
+--------------kGrpent: 1: uint ; connection-id 
+----------------kMemberKey: connection-id
+------------------kId: connection-id
+----------------kType: uint 
+------------------kType1: uint 
+--------------------kType2: uint
+----------------------kTypename: uint
+--------------kGrpent: 2: bytes / text ; message 
+----------------kMemberKey: message
+------------------kId: message
+----------------kType: bytes / text 
+------------------kType1: bytes 
+--------------------kType2: bytes
+----------------------kTypename: bytes
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+Processed text "status = {
+  status: text
+}
+
+" into node: 
+--kRule: status = { status: text } 
+----kTypename: status
+----kAssign: =
+----kType: { status: text } 
+------kType1: { status: text } 
+--------kType2: { status: text }
+----------kGroup: status: text 
+------------kGrpchoice: status: text 
+--------------kGrpent: status: text 
+----------------kMemberKey: status:
+------------------kId: status
+----------------kType: text 
+------------------kType1: text 
+--------------------kType2: text
+----------------------kTypename: text
+Processed text "result = (
+  success: 1
+  invalid-url: 10
+  invalid-presentation-id: 11
+  timeout: 100
+  transient-error: 101
+  permanent-error: 102
+  terminating: 103
+  unknown-error: 199
+)
+" into node: 
+--kRule: result = ( success: 1 invalid-url: 10 invalid-presentation-id: 11 timeout: 100 transient-error: 101 permanent-error: 102 terminating: 103 unknown-error: 199 ) 
+----kGroupname: result
+----kAssign: =
+----kGrpent: ( success: 1 invalid-url: 10 invalid-presentation-id: 11 timeout: 100 transient-error: 101 permanent-error: 102 terminating: 103 unknown-error: 199 )
+------kGroup: success: 1 invalid-url: 10 invalid-presentation-id: 11 timeout: 100 transient-error: 101 permanent-error: 102 terminating: 103 unknown-error: 199 
+--------kGrpchoice: success: 1 invalid-url: 10 invalid-presentation-id: 11 timeout: 100 transient-error: 101 permanent-error: 102 terminating: 103 unknown-error: 199 
+----------kGrpent: success: 1 
+------------kMemberKey: success:
+--------------kId: success
+------------kType: 1 
+--------------kType1: 1 
+----------------kType2: 1
+------------------kNumber: 1
+----------kGrpent: invalid-url: 10 
+------------kMemberKey: invalid-url:
+--------------kId: invalid-url
+------------kType: 10 
+--------------kType1: 10 
+----------------kType2: 10
+------------------kNumber: 10
+----------kGrpent: invalid-presentation-id: 11 
+------------kMemberKey: invalid-presentation-id:
+--------------kId: invalid-presentation-id
+------------kType: 11 
+--------------kType1: 11 
+----------------kType2: 11
+------------------kNumber: 11
+----------kGrpent: timeout: 100 
+------------kMemberKey: timeout:
+--------------kId: timeout
+------------kType: 100 
+--------------kType1: 100 
+----------------kType2: 100
+------------------kNumber: 100
+----------kGrpent: transient-error: 101 
+------------kMemberKey: transient-error:
+--------------kId: transient-error
+------------kType: 101 
+--------------kType1: 101 
+----------------kType2: 101
+------------------kNumber: 101
+----------kGrpent: permanent-error: 102 
+------------kMemberKey: permanent-error:
+--------------kId: permanent-error
+------------kType: 102 
+--------------kType1: 102 
+----------------kType2: 102
+------------------kNumber: 102
+----------kGrpent: terminating: 103 
+------------kMemberKey: terminating:
+--------------kId: terminating
+------------kType: 103 
+--------------kType1: 103 
+----------------kType2: 103
+------------------kNumber: 103
+----------kGrpent: unknown-error: 199 
+------------kMemberKey: unknown-error:
+--------------kId: unknown-error
+------------kType: 199 
+--------------kType1: 199 
+----------------kType2: 199
+------------------kNumber: 199
+Successfully parsed CDDL input file!
+Generating CDDL Symbol Table...
+agent-info
+--kMap: 
+----kType: friendly-name=>
+------kId: text
+----kType: model-name=>
+------kId: text
+agent-info-request
+--kMap: 
+----kType:
+------kId: request
+agent-info-response
+--kMap (type key="11"): 
+----kType:
+------kId: response
+----kType: agent-info=>
+------kId: agent-info
+agent-status-request
+--kMap (type key="12"): 
+----kType:
+------kId: request
+----kType:minOccurance: 0 maxOccurance: 1 status=>
+------kId: status
+agent-status-response
+--kMap (type key="13"): 
+----kType:
+------kId: response
+----kType:minOccurance: 0 maxOccurance: 1 status=>
+------kId: status
+authentication-mechanism
+--kGroupChoice: 
+----kType: hkdf-of-scrypt-of-psk=>
+------kValue: 1
+authentication-request
+--kMap (type key="1001"): 
+----kType:
+------kId: request
+----kType: mechanism=>
+------kId: authentication-mechanism
+----kType: salt=>
+------kId: bytes
+----kType: cost=>
+------kId: uint
+authentication-response
+--kMap (type key="1002"): 
+----kType:
+------kId: response
+----kType: result=>
+------kId: authentication-response-result
+----kType: proof=>
+------kId: bytes
+authentication-response-result
+--kGroupChoice: 
+----kType: ok=>
+------kValue: 0
+----kType: unknown-error=>
+------kValue: 1
+----kType: mechanism-unknown=>
+------kValue: 2
+----kType: salt-too-small=>
+------kValue: 3
+----kType: cost-too-low=>
+------kValue: 4
+----kType: cost-too-high=>
+------kValue: 5
+----kType: secret-unknown=>
+------kValue: 6
+----kType: calculation-took-too-long=>
+------kValue: 7
+authentication-result
+--kMap (type key="1003"): 
+----kType: result=>
+------kId: authentication-result-result
+authentication-result-result
+--kGroupChoice: 
+----kType: authenticated=>
+------kValue: 0
+----kType: unknown-error=>
+------kValue: 1
+----kType: proof-invalid=>
+------kValue: 2
+http-header
+--kArray: 
+----kType: key=>
+------kId: text
+----kType: value=>
+------kId: text
+microseconds
+--kId: uint
+presentation-connection-close-event
+--kMap (type key="113"): 
+----kType: connection-id=>
+------kId: uint
+----kType: reason=>
+------kGroupChoice: 
+--------kType: close-method-called=>
+----------kValue: 1
+--------kType: connection-object-discarded=>
+----------kValue: 10
+--------kType: unrecoverable-error-while-sending-or-receiving-message=>
+----------kValue: 100
+----kType:minOccurance: 0 maxOccurance: 1 error-message=>
+------kId: text
+presentation-connection-close-request
+--kMap (type key="111"): 
+----kType:
+------kId: request
+----kType: connection-id=>
+------kId: uint
+presentation-connection-close-response
+--kMap (type key="112"): 
+----kType:
+------kId: response
+----kType: result=>
+------kGroupChoice: 
+--------kType: success=>
+----------kValue: 0
+--------kType: invalid-connection-id=>
+----------kValue: 1
+presentation-connection-message
+--kMap (type key="16"): 
+----kType: connection-id=>
+------kId: uint
+----kType: message=>
+kDirectChoice: 
+--------kId: bytes
+--------kId: text
+presentation-connection-open-request
+--kMap (type key="109"): 
+----kType:
+------kId: request
+----kType: presentation-id=>
+------kId: text
+----kType: url=>
+------kId: text
+presentation-connection-open-response
+--kMap (type key="110"): 
+----kType:
+------kId: response
+----kType: result=>
+------kGroupnameChoice: 
+----kType: connection-id=>
+------kId: uint
+presentation-start-request
+--kMap (type key="104"): 
+----kType:
+------kId: request
+----kType: presentation-id=>
+------kId: text
+----kType: url=>
+------kId: text
+----kType: headers=>
+------kArray: 
+--------kType:minOccurance: 0 maxOccurance: 4294967295
+----------kId: http-header
+presentation-start-response
+--kMap (type key="105"): 
+----kType:
+------kId: response
+----kType: result=>
+------kGroupnameChoice: 
+----kType: connection-id=>
+------kId: uint
+presentation-termination-event
+--kMap (type key="108"): 
+----kType: presentation-id=>
+------kId: text
+----kType: reason=>
+------kGroupChoice: 
+--------kType: receiver-called-terminate=>
+----------kValue: 1
+--------kType: user-terminated-via-receiver=>
+----------kValue: 2
+--------kType: controller-called-terminate=>
+----------kValue: 10
+--------kType: user-terminated-via-controller=>
+----------kValue: 11
+--------kType: receiver-replaced-presentation=>
+----------kValue: 20
+--------kType: receiver-idle-too-long=>
+----------kValue: 30
+--------kType: receiver-attempted-to-navigate=>
+----------kValue: 31
+--------kType: receiver-powering-down=>
+----------kValue: 100
+--------kType: receiver-crashed=>
+----------kValue: 101
+--------kType: unknown=>
+----------kValue: 255
+presentation-termination-request
+--kMap (type key="106"): 
+----kType:
+------kId: request
+----kType: presentation-id=>
+------kId: text
+----kType: reason=>
+------kGroupChoice: 
+--------kType: controller-called-terminate=>
+----------kValue: 10
+--------kType: user-terminated-via-controller=>
+----------kValue: 11
+--------kType: unknown=>
+----------kValue: 255
+presentation-termination-response
+--kMap (type key="107"): 
+----kType:
+------kId: response
+----kType: result=>
+------kGroupnameChoice: 
+presentation-url-availability-event
+--kMap (type key="103"): 
+----kType: watch-id=>
+------kId: uint
+----kType: url-availabilities=>
+------kArray: 
+--------kType:minOccurance: 0 maxOccurance: 4294967295
+----------kId: url-availability
+presentation-url-availability-request
+--kMap (type key="14"): 
+----kType:
+------kId: request
+----kType: urls=>
+------kArray: 
+--------kType:minOccurance: 0 maxOccurance: 4294967295
+----------kId: text
+----kType: watch-duration=>
+------kId: microseconds
+----kType: watch-id=>
+------kId: uint
+presentation-url-availability-response
+--kMap (type key="15"): 
+----kType:
+------kId: response
+----kType: url-availabilities=>
+------kArray: 
+--------kType:minOccurance: 0 maxOccurance: 4294967295
+----------kId: url-availability
+request-id
+--kId: uint
+status
+--kMap: 
+----kType: status=>
+------kId: text
+url-availability
+--kGroupChoice: 
+----kType: available=>
+------kValue: 0
+----kType: unavailable=>
+------kValue: 1
+----kType: invalid=>
+------kValue: 10
+request
+--
+----kType: request-id=>
+------kId: request-id
+response
+--
+----kType: request-id=>
+------kId: request-id
+result
+--
+----kType: success=>
+------kValue: 1
+----kType: invalid-url=>
+------kValue: 10
+----kType: invalid-presentation-id=>
+------kValue: 11
+----kType: timeout=>
+------kValue: 100
+----kType: transient-error=>
+------kValue: 101
+----kType: permanent-error=>
+------kValue: 102
+----kType: terminating=>
+------kValue: 103
+----kType: unknown-error=>
+------kValue: 199
+Successfully generated CDDL symbol table!
+Generating CPP symbol table...
+Successfully generated CPP symbol table!
+Writing Header prologue...
+Successfully wrote header prologue!
+Writing type definitions...
+Successfully wrote type definitions!
+Writing function declaration...
+Successfully wrote function declarations!
+Writing header epilogue...
+Successfully wrote header epilogue!
+Writing source prologue...
+Successfully wrote source prologue!
+Writing encoders...
+Successfully wrote encoders!
+Writing decoders...
+Successfully wrote decoders!
+Writing equality operators...
+Successfully wrote equality operators!
+Writing source epilogue...
+Successfully wrote source epilogue!
+SUCCESSFULLY COMPLETED ALL OPERATIONS

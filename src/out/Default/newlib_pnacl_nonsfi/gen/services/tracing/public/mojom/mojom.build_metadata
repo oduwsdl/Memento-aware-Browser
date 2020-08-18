@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/newlib_pnacl_nonsfi/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/tracing/public/mojom/background_tracing_agent.mojom",
+    "/home/abigail/final/src/services/tracing/public/mojom/traced_process.mojom",
+    "/home/abigail/final/src/services/tracing/public/mojom/tracing_service.mojom"
+  ]
+}

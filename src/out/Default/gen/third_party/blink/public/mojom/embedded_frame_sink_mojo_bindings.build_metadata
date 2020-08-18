@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/services/viz/public/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/third_party/blink/public/mojom/frame_sinks/embedded_frame_sink.mojom"
+  ]
+}

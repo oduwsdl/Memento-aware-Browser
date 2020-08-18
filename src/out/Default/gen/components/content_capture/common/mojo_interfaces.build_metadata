@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/components/content_capture/common/mojo_types.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/components/content_capture/common/content_capture.mojom"
+  ]
+}

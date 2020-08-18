@@ -1,0 +1,4 @@
+gen/mojo/public/js/grit/mojo_bindings_resources.h
+gen/mojo/public/js/grit/mojo_bindings_resources_map.cc
+gen/mojo/public/js/grit/mojo_bindings_resources_map.h
+gen/mojo/public/js/mojo_bindings_resources.pak

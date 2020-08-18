@@ -1,0 +1,38 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/third_party/blink/public/mojom/android_mojo_bindings.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/third_party/blink/public/mojom/mojom_platform.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/third_party/blink/public/mojom/web_feature_mojo_bindings.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/cc/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/components/payments/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/service_manager/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/skia/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/third_party/blink/public/mojom/frame/frame.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/frame/frame_owner_properties.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/frame/frame_policy.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/frame/navigation_initiator.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/messaging/cloneable_message.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/messaging/message_port_descriptor.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/messaging/transferable_message.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/messaging/user_activation_snapshot.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/portal/portal.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/service_worker/controller_service_worker.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/service_worker/embedded_worker.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/service_worker/service_worker.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/service_worker/service_worker_container.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/service_worker/service_worker_object.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/service_worker/service_worker_provider.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/service_worker/service_worker_registration.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/worker/shared_worker.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/worker/shared_worker_connector.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom",
+    "/home/abigail/final/src/third_party/blink/public/mojom/worker/shared_worker_factory.mojom"
+  ]
+}

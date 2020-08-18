@@ -1,0 +1,14 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/media_session/public/mojom/audio_focus.mojom",
+    "/home/abigail/final/src/services/media_session/public/mojom/constants.mojom",
+    "/home/abigail/final/src/services/media_session/public/mojom/media_controller.mojom",
+    "/home/abigail/final/src/services/media_session/public/mojom/media_session.mojom",
+    "/home/abigail/final/src/services/media_session/public/mojom/media_session_service.mojom"
+  ]
+}

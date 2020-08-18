@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/components/mirroring/mojom/common.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/components/mirroring/mojom/mirroring_service_host.mojom"
+  ]
+}

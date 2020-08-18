@@ -1,0 +1,29 @@
+defines = -DUSE_UDEV -DUSE_AURA=1 -DUSE_GLIB=1 -DUSE_NSS_CERTS=1 -DUSE_X11=1 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"n356902-4e813bbd-1\" -DCOMPONENT_BUILD -D_LIBCPP_ABI_UNSTABLE -D_LIBCPP_ABI_VERSION=Cr -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -DCR_SYSROOT_HASH=d6879d611f3dcf3da8dd92e080029394aa30bc42 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -D_GLFW_X11
+include_dirs = -I../.. -Igen -I../../third_party/glfw/src/include
+cflags = -fno-strict-aliasing --param=ssp-buffer-size=4 -fstack-protector -funwind-tables -fPIC -pthread -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -Xclang -mllvm -Xclang -instcombine-lower-dbg-declare=0 -fcomplete-member-pointers -m64 -march=x86-64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -g2 -Xclang -debug-info-kind=constructor -gsplit-dwarf -ggnu-pubnames -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Xclang -plugin-arg-find-bad-constructs -Xclang check-ipc -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wmax-tokens
+cflags_c = -Wno-sign-compare -Wno-missing-field-initializers -std=c11 --sysroot=../../build/linux/debian_sid_amd64-sysroot -Wno-implicit-fallthrough
+label_name = glfw
+target_out_dir = obj/third_party/dawn/third_party/gn/glfw
+target_output_name = libglfw
+
+build obj/third_party/dawn/third_party/gn/glfw/glfw/context.o: cc ../../third_party/glfw/src/src/context.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/egl_context.o: cc ../../third_party/glfw/src/src/egl_context.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/init.o: cc ../../third_party/glfw/src/src/init.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/input.o: cc ../../third_party/glfw/src/src/input.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/monitor.o: cc ../../third_party/glfw/src/src/monitor.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/osmesa_context.o: cc ../../third_party/glfw/src/src/osmesa_context.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/vulkan.o: cc ../../third_party/glfw/src/src/vulkan.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/window.o: cc ../../third_party/glfw/src/src/window.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/posix_thread.o: cc ../../third_party/glfw/src/src/posix_thread.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/glx_context.o: cc ../../third_party/glfw/src/src/glx_context.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/linux_joystick.o: cc ../../third_party/glfw/src/src/linux_joystick.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/posix_time.o: cc ../../third_party/glfw/src/src/posix_time.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/x11_init.o: cc ../../third_party/glfw/src/src/x11_init.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/x11_monitor.o: cc ../../third_party/glfw/src/src/x11_monitor.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/x11_window.o: cc ../../third_party/glfw/src/src/x11_window.c
+build obj/third_party/dawn/third_party/gn/glfw/glfw/xkb_unicode.o: cc ../../third_party/glfw/src/src/xkb_unicode.c
+
+build obj/third_party/dawn/third_party/gn/glfw/libglfw.a: alink obj/third_party/dawn/third_party/gn/glfw/glfw/context.o obj/third_party/dawn/third_party/gn/glfw/glfw/egl_context.o obj/third_party/dawn/third_party/gn/glfw/glfw/init.o obj/third_party/dawn/third_party/gn/glfw/glfw/input.o obj/third_party/dawn/third_party/gn/glfw/glfw/monitor.o obj/third_party/dawn/third_party/gn/glfw/glfw/osmesa_context.o obj/third_party/dawn/third_party/gn/glfw/glfw/vulkan.o obj/third_party/dawn/third_party/gn/glfw/glfw/window.o obj/third_party/dawn/third_party/gn/glfw/glfw/posix_thread.o obj/third_party/dawn/third_party/gn/glfw/glfw/glx_context.o obj/third_party/dawn/third_party/gn/glfw/glfw/linux_joystick.o obj/third_party/dawn/third_party/gn/glfw/glfw/posix_time.o obj/third_party/dawn/third_party/gn/glfw/glfw/x11_init.o obj/third_party/dawn/third_party/gn/glfw/glfw/x11_monitor.o obj/third_party/dawn/third_party/gn/glfw/glfw/x11_window.o obj/third_party/dawn/third_party/gn/glfw/glfw/xkb_unicode.o
+  arflags = -T
+  output_extension = .a
+  output_dir = obj/third_party/dawn/third_party/gn/glfw

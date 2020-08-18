@@ -1,0 +1,4 @@
+gen/ash/app_list/resources/grit/app_list_resources.h
+gen/ash/app_list/resources/app_list_resources_100_percent.pak
+gen/ash/app_list/resources/app_list_resources_200_percent.pak
+gen/ash/app_list/resources/app_list_resources_300_percent.pak

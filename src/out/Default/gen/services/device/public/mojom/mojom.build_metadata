@@ -1,0 +1,33 @@
+{
+  "deps": [
+    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/services/network/public/mojom/mutable_network_traffic_annotation_interface.build_metadata",
+    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/home/abigail/final/src/services/device/public/mojom/battery_monitor.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/battery_status.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/bluetooth_system.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/fingerprint.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/geolocation.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/geolocation_config.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/geolocation_context.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/geolocation_control.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/geoposition.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/hid.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/input_service.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/nfc.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/nfc_provider.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/power_monitor.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/public_ip_address_geolocation_provider.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/screen_orientation.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/screen_orientation_lock_types.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/serial.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/time_zone_monitor.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/vibration_manager.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/wake_lock.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/wake_lock_context.mojom",
+    "/home/abigail/final/src/services/device/public/mojom/wake_lock_provider.mojom"
+  ]
+}

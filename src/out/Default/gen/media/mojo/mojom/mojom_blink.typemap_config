@@ -1,0 +1,16 @@
+[
+  {
+    "traits_headers": [
+      "media/mojo/mojom/video_frame_metadata_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      ":shared_mojom_traits"
+    ],
+    "types": [
+      {
+        "cpp": "::media::VideoFrameMetadata",
+        "mojom": "media.mojom.VideoFrameMetadata"
+      }
+    ]
+  }
+]
