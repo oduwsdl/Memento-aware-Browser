@@ -1,3 +1,1 @@
-src/third_party/instrumented_libraries/binaries/msan-chained-origins-trusty.tgz filter=lfs diff=lfs merge=lfs -text
-src/third_party/jdk/current/lib/modules filter=lfs diff=lfs merge=lfs -text
-src/third_party/instrumented_libraries/binaries/msan-no-origins-trusty.tgz filter=lfs diff=lfs merge=lfs -text
+
