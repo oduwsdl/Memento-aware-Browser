@@ -46,3 +46,19 @@ Once built, run the browser with the following command:
 ```
 $ out/Default/chrome
 ```
+### Mac (Not tested)
+Create the build directory by running:
+```
+$ gn gen out/Default
+```
+* Ninja updates build files as needed, so you only have to run this once for each new build directory.
+* You can replace Default with another name.
+
+You can then build Chromium (the "chrome" target) with Ninja using the command:
+```
+$ autoninja -C out/Default chrome
+```
+Finally, run the browser:
+```
+$ out/Default/Chromium.app/Contents/MacOS/Chromium
+```
