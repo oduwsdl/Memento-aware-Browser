@@ -1,0 +1,8 @@
+{
+  "extract_dir": "",
+  "hash": "57e4bb6a2f8904a73aac916c6c09150dc4df20e5",
+  "log_url": null,
+  "name": "naclsdk.tgz",
+  "tar_src_dir": "sdk/nacl-sdk",
+  "url": "https://storage.googleapis.com/nativeclient-archive2/toolchain/11953a35fcd4f999b097a343bc49d89f94af21a8/naclsdk_win_x86.tgz"
+}

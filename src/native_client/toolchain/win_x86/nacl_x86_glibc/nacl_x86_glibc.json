@@ -1,0 +1,8 @@
+{
+  "archives": [
+    "core_sdk.tar.bz2",
+    "gdb_i686_w64_mingw32.tgz",
+    "toolchain.tar.bz2"
+  ],
+  "version": 1
+}
