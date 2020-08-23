@@ -1,9 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/components/performance_manager/public/mojom/coordination_unit.mojom",
-    "/home/abigail/final/src/components/performance_manager/public/mojom/lifecycle.mojom"
-  ]
-}

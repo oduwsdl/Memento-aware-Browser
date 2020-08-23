@@ -1,2 +1,0 @@
-gen/content/browser/webrtc/resources/grit/webrtc_internals_resources.h
-gen/content/browser/webrtc/resources/webrtc_internals_resources.pak

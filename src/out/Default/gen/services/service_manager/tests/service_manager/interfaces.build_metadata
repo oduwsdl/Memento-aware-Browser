@@ -1,8 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/services/service_manager/public/mojom/mojom.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/services/service_manager/tests/service_manager/service_manager.test-mojom"
-  ]
-}

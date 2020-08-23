@@ -1,2 +1,0 @@
-newlib_pnacl_nonsfi/gen/content/grit/dev_ui_content_resources.h
-newlib_pnacl_nonsfi/gen/content/dev_ui_content_resources.pak

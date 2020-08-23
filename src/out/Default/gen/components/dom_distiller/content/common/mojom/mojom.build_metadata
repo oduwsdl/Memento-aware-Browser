@@ -1,9 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/components/dom_distiller/core/mojom/mojom.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/components/dom_distiller/content/common/mojom/distillability_service.mojom",
-    "/home/abigail/final/src/components/dom_distiller/content/common/mojom/distiller_javascript_service.mojom"
-  ]
-}

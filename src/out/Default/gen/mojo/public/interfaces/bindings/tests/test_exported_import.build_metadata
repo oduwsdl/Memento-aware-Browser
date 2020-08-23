@@ -1,8 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/mojo/public/interfaces/bindings/tests/test_export.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/mojo/public/interfaces/bindings/tests/test_import.mojom"
-  ]
-}

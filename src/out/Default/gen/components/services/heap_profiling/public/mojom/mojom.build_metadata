@@ -1,9 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/components/services/heap_profiling/public/mojom/heap_profiling_client.mojom",
-    "/home/abigail/final/src/components/services/heap_profiling/public/mojom/heap_profiling_service.mojom"
-  ]
-}

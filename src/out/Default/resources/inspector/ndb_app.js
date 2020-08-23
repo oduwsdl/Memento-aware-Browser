@@ -1,1 +1,0 @@
-Root.allDescriptors.push(...[]);Root.applicationDescriptor.modules.push(...[]);import'./shell.js';import{startApplication}from'./RuntimeInstantiator.js';startApplication('ndb_app');

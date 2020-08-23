@@ -1,9 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/media/learning/mojo/public/mojom/learning_task_controller.mojom",
-    "/home/abigail/final/src/media/learning/mojo/public/mojom/learning_types.mojom"
-  ]
-}

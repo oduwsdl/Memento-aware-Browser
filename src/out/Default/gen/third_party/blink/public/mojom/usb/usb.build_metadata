@@ -1,9 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
-    "/home/abigail/final/src/out/Default/gen/services/device/public/mojom/usb.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/third_party/blink/public/mojom/usb/web_usb_service.mojom"
-  ]
-}

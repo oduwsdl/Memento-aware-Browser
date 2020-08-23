@@ -1,8 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/device/bluetooth/public/mojom/mojom.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/device/bluetooth/public/mojom/test/fake_bluetooth.mojom"
-  ]
-}

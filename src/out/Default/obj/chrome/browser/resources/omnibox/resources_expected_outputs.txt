@@ -1,2 +1,0 @@
-gen/chrome/grit/omnibox_resources.h
-gen/chrome/omnibox_resources.pak

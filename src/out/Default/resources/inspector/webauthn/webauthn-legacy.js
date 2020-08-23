@@ -1,1 +1,0 @@
-import*as WebauthnModule from'./webauthn.js';self.Webauthn=self.Webauthn||{};Webauthn=Webauthn||{};Webauthn.WebauthnPane=WebauthnModule.WebauthnPane.WebauthnPaneImpl;

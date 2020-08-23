@@ -1,8 +1,0 @@
-[
-    ImplementedAs=paint_worklet_global_scope_modules_constructors
-] partial interface PaintWorkletGlobalScope {
-    attribute PaintRenderingContext2DConstructor PaintRenderingContext2D;
-    attribute PaintSizeConstructor PaintSize;
-    attribute PaintWorkletGlobalScopeConstructor PaintWorkletGlobalScope;
-    attribute Path2DConstructor Path2D;
-};

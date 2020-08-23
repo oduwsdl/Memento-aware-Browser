@@ -1,8 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/chrome/common/media_router/mojom/media_router.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/chrome/common/media_router/mojom/media_router_traits_test_service.mojom"
-  ]
-}

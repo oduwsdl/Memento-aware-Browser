@@ -1,7 +1,0 @@
-sources:
-../../third_party/polymer/v3_0/components-chromium/iron-behaviors/iron-button-state.js
-deps:
-gen/third_party/polymer/v3_0/components-chromium/iron-behaviors/iron-control-state.js_library
-gen/third_party/polymer/v3_0/components-chromium/iron-a11y-keys-behavior/iron-a11y-keys-behavior.js_library
-gen/third_party/polymer/v3_0/components-chromium/polymer/polymer_bundled.js_library
-externs:

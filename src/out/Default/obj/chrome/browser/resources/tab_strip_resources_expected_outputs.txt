@@ -1,4 +1,0 @@
-gen/chrome/grit/tab_strip_resources.h
-gen/chrome/grit/tab_strip_resources_map.cc
-gen/chrome/grit/tab_strip_resources_map.h
-gen/chrome/tab_strip_resources.pak

@@ -1,1 +1,0 @@
-self.Runtime.cachedResources["webauthn/webauthnPane.css"]="/*\n * Copyright (c) 2020 The Chromium Authors. All rights reserved.\n * Use of this source code is governed by a BSD-style license that can be\n * found in the LICENSE file.\n */\n\n.webauthn-toolbar {\n  border-bottom: var(--divider-border);\n}\n\n/*# sourceURL=webauthn/webauthnPane.css */";

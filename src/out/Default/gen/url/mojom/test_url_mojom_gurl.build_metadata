@@ -1,9 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
-    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/url/mojom/url_test.mojom"
-  ]
-}

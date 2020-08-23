@@ -1,9 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/media/mojo/mojom/mojom.build_metadata",
-    "/home/abigail/final/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/chrome/services/media_gallery_util/public/mojom/media_parser.mojom"
-  ]
-}

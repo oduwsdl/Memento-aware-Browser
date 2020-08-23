@@ -1,4 +1,0 @@
-gen/chrome/grit/history_resources.h
-gen/chrome/grit/history_resources_map.cc
-gen/chrome/grit/history_resources_map.h
-gen/chrome/history_resources.pak

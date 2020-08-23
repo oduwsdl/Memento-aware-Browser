@@ -1,8 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/components/autofill/core/common/mojom/mojo_types.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/components/autofill/core/common/mojom/test_autofill_types.mojom"
-  ]
-}

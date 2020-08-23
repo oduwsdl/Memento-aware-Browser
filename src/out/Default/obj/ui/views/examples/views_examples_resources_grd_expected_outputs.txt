@@ -1,2 +1,0 @@
-gen/ui/views/examples/grit/views_examples_resources.h
-gen/ui/views/examples/views_examples_resources.pak

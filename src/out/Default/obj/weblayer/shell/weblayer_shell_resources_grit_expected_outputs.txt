@@ -1,2 +1,0 @@
-gen/weblayer/shell/grit/shell_resources.h
-gen/weblayer/shell/weblayer_shell_resources.pak

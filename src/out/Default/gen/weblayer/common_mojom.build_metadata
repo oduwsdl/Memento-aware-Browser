@@ -1,8 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/components/content_settings/core/common/mojo_bindings.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/weblayer/common/renderer_configuration.mojom"
-  ]
-}

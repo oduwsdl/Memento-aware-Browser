@@ -1,9 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/third_party/blink/public/mojom/mojom_core.build_metadata",
-    "/home/abigail/final/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom"
-  ]
-}

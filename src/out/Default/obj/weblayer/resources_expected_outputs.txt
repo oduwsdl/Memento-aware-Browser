@@ -1,2 +1,0 @@
-gen/weblayer/grit/weblayer_resources.h
-gen/weblayer/weblayer_resources.pak

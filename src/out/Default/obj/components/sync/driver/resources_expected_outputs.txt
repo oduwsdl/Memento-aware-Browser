@@ -1,2 +1,0 @@
-gen/components/grit/sync_driver_resources.h
-gen/components/sync_driver_resources.pak

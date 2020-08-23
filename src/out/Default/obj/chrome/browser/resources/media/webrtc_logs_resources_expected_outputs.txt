@@ -1,2 +1,0 @@
-gen/chrome/grit/webrtc_logs_resources.h
-gen/chrome/webrtc_logs_resources.pak

@@ -1,8 +1,0 @@
-{
-  "deps": [
-    "/home/abigail/final/src/out/Default/gen/components/content_capture/common/mojo_types.build_metadata"
-  ],
-  "sources": [
-    "/home/abigail/final/src/components/content_capture/common/traits_test_service.test-mojom"
-  ]
-}
