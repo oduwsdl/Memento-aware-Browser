@@ -5,6 +5,7 @@ Build instructions for the Memento-aware Browser differ slightly from the [Chrom
 Chromium uses a package of scripts called [depot_tools](https://dev.chromium.org/developers/how-tos/depottools). To build and run the Memento-aware Browser, you must [install depot_tools](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up).
 After installing depot_tools, you can clone the repository and change into the src directory.
 ```
+$ git config http.postBuffer 524288000
 $ git clone https://github.com/a-mabe/Memento-aware-Browser.git
 $ cd Memento-aware-Browser/src
 ```
