@@ -1,0 +1,18 @@
+Package: libevdev2
+Source: libevdev
+Version: 1.8.0+dfsg-2
+Architecture: amd64
+Maintainer: Stephen Kitt <skitt@debian.org>
+Installed-Size: 136
+Depends: libc6 (>= 2.14)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://www.freedesktop.org/wiki/Software/libevdev/
+Description: wrapper library for evdev devices
+ libevdev is a wrapper library for evdev devices. It provides
+ functions covering the common tasks when dealing with evdev devices,
+ thus avoiding erroneous ioctls and other errors.
+ .
+ This package contains the files required to run software using
+ libevdev.

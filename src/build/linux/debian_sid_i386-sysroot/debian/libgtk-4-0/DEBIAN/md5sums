@@ -1,0 +1,7 @@
+000343e5bddfc5af9851ef762810ed1b  usr/lib/i386-linux-gnu/gtk-4.0/4.0.0/printbackends/libprintbackend-cloudprint.so
+25fd1ea72161bdf051010952d910f352  usr/lib/i386-linux-gnu/gtk-4.0/4.0.0/printbackends/libprintbackend-cups.so
+5f31462f8f890aec899119e1514401f0  usr/lib/i386-linux-gnu/gtk-4.0/4.0.0/printbackends/libprintbackend-file.so
+cdb619e2c44f126ed7b0c5943de4a6f8  usr/lib/i386-linux-gnu/libgtk-4.so.0.9600.0
+30936eb5ccf83a6ce0c966b087bd180a  usr/share/doc/libgtk-4-0/changelog.Debian.gz
+5ef954d10ae0a0bd2d0f3aef034bc5ec  usr/share/doc/libgtk-4-0/copyright
+7dad23529b4cf9c7a850f6dba641761e  usr/share/lintian/overrides/libgtk-4-0

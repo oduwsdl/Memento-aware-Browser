@@ -1,0 +1,15 @@
+#!/bin/bash
+# Put -V argument(s) prior to -m32. Otherwise the GCC driver does not accept it.
+program_name="x86_64-nacl-c++"
+if [[ "$1" = "-V" ]]; then
+  shift
+  OPTV="$1"
+  shift
+  exec "${0%/*}/$program_name" -V "$OPTV" -m32 "$@"
+elif [[ "${1:0:2}" = "-V" ]]; then
+  OPTV="$1"
+  shift
+  exec "${0%/*}/$program_name" "$OPTV" -m32 "$@"
+else
+  exec "${0%/*}/$program_name" -m32 "$@"
+fi

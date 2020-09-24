@@ -1,0 +1,21 @@
+Package: libinput-dev
+Source: libinput
+Version: 1.14.3-1
+Architecture: amd64
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 202
+Depends: libinput10 (= 1.14.3-1), libmtdev-dev (>= 1.1.0), libudev-dev, libevdev-dev (>= 0.4), libwacom-dev (>= 0.20)
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: http://www.freedesktop.org/wiki/Software/libinput/
+Description: input device management and event handling library - development files
+ libinput is a library that handles input devices for display servers and
+ other applications that need to directly deal with input devices.
+ .
+ It provides device detection, device handling, input device event
+ processing and abstraction to minimize the amount of custom input
+ code the user of libinput needs to provide the common set of
+ functionality that users expect.
+ .
+ This package includes the development headers.

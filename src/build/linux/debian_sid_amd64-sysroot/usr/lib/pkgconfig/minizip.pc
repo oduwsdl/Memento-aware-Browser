@@ -1,0 +1,12 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include/minizip
+
+Name: minizip
+Description: Minizip zip file manipulation library
+Requires:
+Version: 1.2.8
+Libs: -L${libdir} -lminizip
+Libs.private: -lz
+Cflags: -I${includedir}

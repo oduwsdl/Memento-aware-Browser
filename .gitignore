@@ -243,7 +243,6 @@ vs-chromium-project.txt
 /src/media/test/data/internal
 /src/metro_driver
 /src/mojo/internal
-/src/native_client
 /src/net/Debug
 /src/net/net_derived_sources.xml
 /src/net/net_unittests_run.xml

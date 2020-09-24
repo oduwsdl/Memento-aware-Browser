@@ -1,0 +1,8 @@
+prefix=/usr
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+
+Name: libspa
+Description: Simple Plugin API
+Version: 0.2.7
+Cflags: -I${includedir} -D_REENTRANT

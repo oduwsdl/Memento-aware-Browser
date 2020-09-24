@@ -1,0 +1,16 @@
+Package: libgudev-1.0-0
+Source: libgudev
+Version: 233-1
+Architecture: amd64
+Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>
+Installed-Size: 64
+Depends: libc6 (>= 2.4), libglib2.0-0 (>= 2.38), libudev1 (>= 199)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://wiki.gnome.org/Projects/libgudev
+Description: GObject-based wrapper library for libudev
+ This library makes it much simpler to use libudev from programs already using
+ GObject. It also makes it possible to easily use libudev from other
+ programming languages, such as Javascript, because of GObject introspection
+ support.

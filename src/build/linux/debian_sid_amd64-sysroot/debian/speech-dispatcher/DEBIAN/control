@@ -1,0 +1,25 @@
+Package: speech-dispatcher
+Version: 0.9.1-3
+Architecture: amd64
+Maintainer: Debian TTS Team <tts-project@lists.alioth.debian.org>
+Installed-Size: 1698
+Depends: adduser, lsb-base (>= 3.0-10), speech-dispatcher-audio-plugins (= 0.9.1-3), init-system-helpers (>= 1.51), libc6 (>= 2.16), libdotconf0 (>= 1.0.13), libglib2.0-0 (>= 2.36), libltdl7 (>= 2.4.6), libsndfile1 (>= 1.0.20), libspeechd2 (>= 0.9.0~rc1)
+Recommends: pulseaudio, speech-dispatcher-espeak-ng, sound-icons
+Suggests: libttspico-utils, espeak, mbrola, speech-dispatcher-doc-cs, speech-dispatcher-festival, speech-dispatcher-cicero, speech-dispatcher-flite, speech-dispatcher-espeak
+Breaks: cl-speech-dispatcher (<< 0.9~), libspeechd2 (<< 0.9~), python-speechd (<< 0.9~), python3-speechd (<< 0.9~)
+Section: sound
+Priority: optional
+Multi-Arch: foreign
+Homepage: http://devel.freebsoft.org/speechd
+Description: Common interface to speech synthesizers
+ Speech Dispatcher provides a device independent layer for speech synthesis.
+ It supports various software and hardware speech synthesizers as
+ backends and provides a generic layer for synthesizing speech and
+ playing back PCM data via those different backends to applications.
+ .
+ Various high level concepts like enqueueing vs. interrupting speech and
+ application specific user configurations are implemented in a device
+ independent way, therefore freeing the application programmer from
+ having to yet again reinvent the wheel.
+ .
+ This package contains Speech Dispatcher itself.

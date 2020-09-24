@@ -1,0 +1,8 @@
+{
+  "extract_dir": "",
+  "hash": "fb787bc52c4742410d469e7273da5c0f0cc65404",
+  "log_url": null,
+  "name": "core_sdk.tgz",
+  "tar_src_dir": "core_sdk",
+  "url": "https://storage.googleapis.com/nativeclient-archive2/toolchain/11953a35fcd4f999b097a343bc49d89f94af21a8/core_sdk_linux_x86.tgz"
+}

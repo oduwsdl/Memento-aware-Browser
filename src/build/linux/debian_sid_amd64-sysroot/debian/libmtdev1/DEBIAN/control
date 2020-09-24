@@ -1,0 +1,15 @@
+Package: libmtdev1
+Source: mtdev
+Version: 1.1.5-1.1
+Architecture: amd64
+Maintainer: Nobuhiro Iwamatsu <iwamatsu@debian.org>
+Installed-Size: 55
+Depends: libc6 (>= 2.4)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://bitmath.org/code/mtdev/
+Description: Multitouch Protocol Translation Library - shared library
+ libmtdev is a library for translating evdev multitouch events using the legacy
+ protocol to the new multitouch slots protocol. This is necessary for kernel
+ drivers that have not been updated to use the newer protocol.

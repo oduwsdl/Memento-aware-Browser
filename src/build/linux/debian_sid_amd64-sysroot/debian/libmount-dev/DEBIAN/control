@@ -1,0 +1,14 @@
+Package: libmount-dev
+Source: util-linux
+Version: 2.34-0.1
+Architecture: amd64
+Maintainer: LaMont Jones <lamont@debian.org>
+Installed-Size: 919
+Depends: libc6-dev | libc-dev, libmount1 (= 2.34-0.1), libblkid-dev
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Description: device mounting library - headers and static libraries
+ This device mounting library is used by mount and umount helpers.
+ .
+ This package contains the development environment for the mount library.

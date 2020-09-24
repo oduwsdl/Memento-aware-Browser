@@ -1,0 +1,20 @@
+Package: libgtk-3-dev
+Source: gtk+3.0
+Version: 3.24.13-1
+Architecture: amd64
+Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>
+Installed-Size: 13676
+Depends: gir1.2-gtk-3.0 (= 3.24.13-1), libatk-bridge2.0-dev, libatk1.0-dev (>= 2.15.1), libcairo2-dev (>= 1.14.0), libegl1-mesa-dev, libepoxy-dev (>= 1.0), libfontconfig1-dev, libfribidi-dev (>= 0.19.7), libgdk-pixbuf2.0-dev (>= 2.30.0), libglib2.0-dev (>= 2.57.2), libpango1.0-dev (>= 1.41), libwayland-dev (>= 1.9.91), libx11-dev, libxcomposite-dev, libxcursor-dev, libxdamage-dev, libxext-dev, libxfixes-dev, libxi-dev, libxinerama-dev, libxkbcommon-dev, libxrandr-dev, pkg-config, wayland-protocols (>= 1.14), dconf-gsettings-backend | gsettings-backend, libgtk-3-common, libgtk-3-0 (= 3.24.13-1)
+Suggests: libgtk-3-doc
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: https://www.gtk.org/
+Description: development files for the GTK library
+ GTK is a multi-platform toolkit for creating graphical user
+ interfaces. Offering a complete set of widgets, GTK is suitable
+ for projects ranging from small one-off tools to complete application
+ suites.
+ .
+ This package contains the header and development files which are
+ needed for building GTK applications.

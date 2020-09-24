@@ -1,0 +1,9 @@
+68b329da9893e34099c7d8ad5cb9c940  usr/lib/python2.7/dist-packages/xcbgen/__init__.py
+aaee01807358dac221bdf9f6fc53aef0  usr/lib/python2.7/dist-packages/xcbgen/align.py
+217105f2ec6b1815f6e54fd752be41a1  usr/lib/python2.7/dist-packages/xcbgen/error.py
+461c7230697635dde2b8793a0940733b  usr/lib/python2.7/dist-packages/xcbgen/expr.py
+7c9c0fb15c4297b50bc06ff6068a5a32  usr/lib/python2.7/dist-packages/xcbgen/matcher.py
+94af712a1c6c3810371cffed84bf932c  usr/lib/python2.7/dist-packages/xcbgen/state.py
+a623b35fd033c5e440da8a2bef567c14  usr/lib/python2.7/dist-packages/xcbgen/xtypes.py
+e2a0c8d8c57f19a9bf64b557870e38f1  usr/share/doc/python-xcbgen/changelog.Debian.gz
+618ee90893b45d0d0c19d41a3a3d2e7d  usr/share/doc/python-xcbgen/copyright

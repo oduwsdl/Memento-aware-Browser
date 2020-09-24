@@ -1,0 +1,8 @@
+{
+  "extract_dir": "",
+  "hash": "79350190542831078309ce2c5f98b5ed4b52ece5",
+  "log_url": null,
+  "name": "core_sdk.tar.bz2",
+  "tar_src_dir": "core_sdk",
+  "url": "https://storage.googleapis.com/nativeclient-archive2/x86_toolchain/r9ff1dc0c05b45941b86bed303a87a9eac17192ea/core_sdk_linux_x86.tar.bz2"
+}

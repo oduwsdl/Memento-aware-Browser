@@ -1,0 +1,14 @@
+Package: libasan4
+Source: gcc-7
+Version: 7.5.0-3
+Architecture: amd64
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 1417
+Depends: gcc-7-base (= 7.5.0-3), libc6 (>= 2.23), libgcc1, libstdc++6
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: AddressSanitizer -- a fast memory error detector
+ AddressSanitizer (ASan) is a fast memory error detector.  It finds
+ use-after-free and {heap,stack,global}-buffer overflow bugs in C/C++ programs.

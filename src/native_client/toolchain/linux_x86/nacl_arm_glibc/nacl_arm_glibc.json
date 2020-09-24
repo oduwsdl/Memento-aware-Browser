@@ -1,0 +1,11 @@
+{
+  "archives": [
+    "binutils_arm_x86_64_linux.tgz",
+    "gcc_arm_x86_64_linux.tgz",
+    "gcc_libs_arm.tgz",
+    "gdb_x86_64_linux.tgz",
+    "glibc_arm.tgz",
+    "sdk_libs_arm.tgz"
+  ],
+  "version": 1
+}

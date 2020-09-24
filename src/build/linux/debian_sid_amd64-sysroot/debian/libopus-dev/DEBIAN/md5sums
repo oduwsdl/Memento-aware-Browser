@@ -1,0 +1,10 @@
+12d5a7721f7d4b58dc3d7dec2141f1f9  usr/include/opus/opus.h
+390010f7fd6227d8fbdb3f19abb69b54  usr/include/opus/opus_defines.h
+39656f5c2fae0eca8367bde019d765a2  usr/include/opus/opus_multistream.h
+c525d963e8b904de6b31638e2f3e0cd9  usr/include/opus/opus_projection.h
+74aa00a5fc0971fdbb4e76f871f3976e  usr/include/opus/opus_types.h
+ba2f580e3707b7fe40c4cc1b0b30c9bb  usr/lib/x86_64-linux-gnu/libopus.a
+57f341152e239fe4d53d9d61da63b566  usr/lib/x86_64-linux-gnu/pkgconfig/opus.pc
+fd188c768d7315185ae32e4edaf2d58f  usr/share/doc/libopus-dev/changelog.Debian.amd64.gz
+04693f918599f305c4da35c33dd62500  usr/share/doc/libopus-dev/changelog.Debian.gz
+60911555818e35b32cb4d3744ab1f7bd  usr/share/doc/libopus-dev/copyright

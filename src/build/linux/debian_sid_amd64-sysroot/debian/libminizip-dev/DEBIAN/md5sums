@@ -1,0 +1,10 @@
+4a341ac9dc56d6cd775f80905131a64f  usr/include/minizip/crypt.h
+6dd34ddd402007ef0834f11aa53d7946  usr/include/minizip/ioapi.h
+121993292e19a2f445c63f171c8cc810  usr/include/minizip/mztools.h
+3b037f1e9e35be452e4c751c15691baa  usr/include/minizip/unzip.h
+e1495f151b00503a64aae7b375cc3b80  usr/include/minizip/zip.h
+71892c214d23362a527636c76446294a  usr/lib/x86_64-linux-gnu/libminizip.a
+2689371cff4a8d1891eb7188f3de6a0d  usr/lib/x86_64-linux-gnu/pkgconfig/minizip.pc
+11a75513ac1fb550ebbcc2a0d0e8b44b  usr/share/doc/libminizip-dev/changelog.Debian.amd64.gz
+642a251b2152a7ccd13f9373de24e0d8  usr/share/doc/libminizip-dev/changelog.Debian.gz
+f72916d9aea05ed2979aef2a2701af3f  usr/share/doc/libminizip-dev/copyright

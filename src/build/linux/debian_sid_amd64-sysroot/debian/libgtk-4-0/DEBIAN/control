@@ -1,0 +1,22 @@
+Package: libgtk-4-0
+Source: gtk+4.0
+Version: 3.96.0-2
+Architecture: amd64
+Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>
+Installed-Size: 8470
+Depends: adwaita-icon-theme, hicolor-icon-theme, shared-mime-info, libatk-bridge2.0-0 (>= 2.5.3), libatk1.0-0 (>= 2.15.1), libc6 (>= 2.28), libcairo-gobject2 (>= 1.10.0), libcairo2 (>= 1.14.0), libcolord2 (>= 0.1.10), libcups2 (>= 1.6.0), libepoxy0 (>= 1.4.3), libfontconfig1 (>= 2.12.6), libfreetype6 (>= 2.2.1), libfribidi0 (>= 0.19.7), libgdk-pixbuf2.0-0 (>= 2.30.1), libglib2.0-0 (>= 2.59.0), libgraphene-1.0-0 (>= 1.9.4), libharfbuzz0b (>= 1.2.6), libjson-glib-1.0-0 (>= 0.12.0), libpango-1.0-0 (>= 1.42.0), libpangocairo-1.0-0 (>= 1.41.0), libpangoft2-1.0-0 (>= 1.41.0), librest-0.7-0 (>= 0.7), libvulkan1, libwayland-client0 (>= 1.14.91), libwayland-cursor0 (>= 1.14.91), libwayland-egl1 (>= 1.15.0), libx11-6 (>= 2:1.4.99.1), libxcomposite1 (>= 1:0.3-1), libxcursor1 (>> 1.1.2), libxdamage1 (>= 1:1.1), libxext6, libxfixes3, libxi6 (>= 2:1.2.99.4), libxinerama1, libxkbcommon0 (>= 0.5.0), libxrandr2 (>= 2:1.5.0), libgtk-4-common (>= 3.96.0-2)
+Recommends: libgtk-4-bin
+Suggests: gvfs, librsvg2-common
+Breaks: gnome-themes-standard (<< 3.6), gtk3-engines-oxygen (<< 1.4.1-3)
+Provides: gtk4-binver-4.0.0, libgtk-4-0.9600.0
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://www.gtk.org/
+Description: GTK graphical user interface library
+ GTK is a multi-platform toolkit for creating graphical user
+ interfaces. Offering a complete set of widgets, GTK is suitable
+ for projects ranging from small one-off tools to complete application
+ suites.
+ .
+ This package contains the shared libraries.

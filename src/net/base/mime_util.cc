@@ -533,7 +533,7 @@ namespace {
 // From http://www.w3schools.com/media/media_mimeref.asp and
 // http://plugindoc.mozdev.org/winmime.php
 static const char* const kStandardImageTypes[] = {"image/avif",
-                                                  "image/avif-sequence"
+                                                  "image/avif-sequence",
                                                   "image/bmp",
                                                   "image/cis-cod",
                                                   "image/gif",

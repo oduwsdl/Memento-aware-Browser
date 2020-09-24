@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+update_modules () {
+    for dir in immodules printbackends; do
+        if [ -d "/usr/lib/x86_64-linux-gnu/gtk-4.0/4.0.0/$dir" ]; then
+            /usr/lib/x86_64-linux-gnu/glib-2.0/gio-querymodules "/usr/lib/x86_64-linux-gnu/gtk-4.0/4.0.0/$dir" || true
+        fi
+    done
+}
+
+if [ "$1" = triggered ]; then
+    # This is triggered everytime an application installs a
+    # GTK IM module or print backend
+    update_modules
+    exit 0
+fi
+
+
+
+# Also handle the initial installation
+update_modules

@@ -1,0 +1,15 @@
+Package: libwacom2
+Source: libwacom
+Version: 1.1-2
+Architecture: amd64
+Maintainer: Timo Aaltonen <tjaalton@debian.org>
+Installed-Size: 70
+Depends: libc6 (>= 2.8), libglib2.0-0 (>= 2.24.0), libgudev-1.0-0 (>= 146), libwacom-common (= 1.1-2)
+Recommends: libwacom-bin (= 1.1-2)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Description: Wacom model feature query library
+ libwacom is a library to identify wacom tablets and their model-specific
+ features. It provides easy access to information such as "is this a built-in
+ on-screen tablet", "what is the size of this model", etc.

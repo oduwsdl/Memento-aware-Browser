@@ -1,0 +1,7 @@
+0b0bcb4a60436d217dad76744be4d104  usr/include/libevdev-1.0/libevdev/libevdev-uinput.h
+6aa96820bbb1d68cdaccd7e1a91c0566  usr/include/libevdev-1.0/libevdev/libevdev.h
+12bb1f48eb4ba50fee1ff326c627cd3b  usr/lib/x86_64-linux-gnu/libevdev.a
+86eaab0a76395663b083a3a66fd33487  usr/lib/x86_64-linux-gnu/pkgconfig/libevdev.pc
+905623ffe9e72835170a4da05ab9baf3  usr/share/doc/libevdev-dev/changelog.Debian.gz
+bc60f057580d2d29d2a2d4769b576ffd  usr/share/doc/libevdev-dev/copyright
+0a75c4e6027153d3d2438ae3fe2018c1  usr/share/man/man3/libevdev.3.gz

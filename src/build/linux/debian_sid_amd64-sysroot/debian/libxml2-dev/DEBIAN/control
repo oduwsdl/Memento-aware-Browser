@@ -1,0 +1,22 @@
+Package: libxml2-dev
+Source: libxml2
+Version: 2.9.4+dfsg1-8
+Architecture: amd64
+Maintainer: Debian XML/SGML Group <debian-xml-sgml-pkgs@lists.alioth.debian.org>
+Installed-Size: 3421
+Depends: libicu-dev, libxml2 (= 2.9.4+dfsg1-8)
+Suggests: pkg-config
+Section: libdevel
+Priority: optional
+Multi-Arch: same
+Homepage: http://xmlsoft.org
+Description: Development files for the GNOME XML library
+ XML is a metalanguage to let you design your own markup language.
+ A regular markup language defines a way to describe information in
+ a certain class of documents (eg HTML). XML lets you define your
+ own customized markup languages for many classes of document. It
+ can do this because it's written in SGML, the international standard
+ metalanguage for markup languages.
+ .
+ Install this package if you wish to develop your own programs using
+ the GNOME XML library.

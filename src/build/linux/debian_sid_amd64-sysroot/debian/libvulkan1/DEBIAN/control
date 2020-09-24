@@ -1,0 +1,21 @@
+Package: libvulkan1
+Source: vulkan-loader
+Version: 1.1.126.0-2
+Architecture: amd64
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 381
+Depends: libc6 (>= 2.29)
+Recommends: mesa-vulkan-drivers | vulkan-icd
+Breaks: libvulkan-dev (<< 1.1.70+dfsg1-2), vulkan-loader
+Replaces: libvulkan-dev (<< 1.1.70+dfsg1-2), vulkan-loader
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://github.com/KhronosGroup/Vulkan-Loader
+Description: Vulkan loader library
+ The Loader implements the main VK library. It handles layer management and
+ driver management. The loader fully supports multi-gpu operation. As part of
+ this, it dispatches API calls to the correct driver, and to the correct
+ layers, based on the GPU object selected by the application.
+ .
+ This package includes the loader library.

@@ -1,0 +1,10 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+
+Name: libevdev
+Description: Handler library for evdev events
+Version: 1.8.0
+Cflags: -I${includedir}/libevdev-1.0/
+Libs: -L${libdir} -levdev

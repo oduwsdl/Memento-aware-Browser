@@ -1,0 +1,4 @@
+1425a45cf67a1bd627b18c51689f50f1  usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2.2
+5c94ad36b744b847d443a757f175d0b3  usr/share/doc/libgssapi-krb5-2/changelog.Debian.gz
+55245d0f2c5677eb816754f87456a1e7  usr/share/doc/libgssapi-krb5-2/copyright
+ff06c79275a2e9c2cece1bdf3d8d1b3b  usr/share/lintian/overrides/libgssapi-krb5-2

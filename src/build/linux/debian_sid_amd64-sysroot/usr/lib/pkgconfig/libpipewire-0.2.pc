@@ -1,0 +1,11 @@
+prefix=/usr
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+
+moduledir=${libdir}/pipewire-0.2
+
+Name: libpipewire
+Description: PipeWire Interface
+Version: 0.2.7
+Libs: -L${libdir} -lpipewire-0.2
+Cflags: -I${includedir} -D_REENTRANT

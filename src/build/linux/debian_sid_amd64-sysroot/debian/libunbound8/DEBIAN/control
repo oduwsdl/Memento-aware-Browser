@@ -1,0 +1,15 @@
+Package: libunbound8
+Source: unbound (1.9.4-2)
+Version: 1.9.4-2+b1
+Architecture: amd64
+Maintainer: unbound packagers <unbound@packages.debian.org>
+Installed-Size: 1069
+Depends: libc6 (>= 2.27), libevent-2.1-7 (>= 2.1.8-stable), libgmp10, libhogweed5, libnettle7
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://www.unbound.net/
+Description: library implementing DNS resolution and validation
+ libunbound performs and validates DNS lookups; it can be used to convert
+ hostnames to IP addresses and back and obtain other information from the
+ DNS. Cryptographic validation of results is performed with DNSSEC.

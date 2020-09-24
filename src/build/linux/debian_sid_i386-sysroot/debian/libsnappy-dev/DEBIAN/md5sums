@@ -1,0 +1,14 @@
+32ef0acc7a6d1ed079bb357b358dcd55  usr/include/snappy-c.h
+b517b97b9e18315babd0a86d497635b4  usr/include/snappy-sinksource.h
+4dd913812deeea6e8b2ae544c90542d2  usr/include/snappy-stubs-public.h
+c8eb364baec3c5793b074fc3b04efbf4  usr/include/snappy.h
+726d9bc34c246575a47287cc10791f3f  usr/lib/i386-linux-gnu/cmake/Snappy/SnappyConfig.cmake
+ecc19ca5a962e5b0e81abb180d86fbcf  usr/lib/i386-linux-gnu/cmake/Snappy/SnappyConfigVersion.cmake
+17b75ff53ab40cb81ae90ce6a6e6f00e  usr/lib/i386-linux-gnu/cmake/Snappy/SnappyTargets-relwithdebinfo.cmake
+08e30ad6358624bfca0dada632beed37  usr/lib/i386-linux-gnu/cmake/Snappy/SnappyTargets.cmake
+c72d71969459bd54c332d966368895a3  usr/lib/i386-linux-gnu/libsnappy.a
+3585e813cd54f6f918e260dfce574a47  usr/lib/i386-linux-gnu/pkgconfig/snappy.pc
+8fafea5078542348174f8dd85200ab26  usr/share/doc/libsnappy-dev/NEWS.gz
+0a12c13c641620c033c8904e826ac04c  usr/share/doc/libsnappy-dev/README.md.gz
+212c1cdf42ab9a92d7fa2265e911ce80  usr/share/doc/libsnappy-dev/changelog.Debian.gz
+6cf1eae5604bff03a2bae235467d20dc  usr/share/doc/libsnappy-dev/copyright

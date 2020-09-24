@@ -1,0 +1,18 @@
+Package: libgles1
+Source: libglvnd (1.1.0-1)
+Version: 1.1.0-1+b1
+Architecture: amd64
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 79
+Depends: libc6 (>= 2.14), libglvnd0 (= 1.1.0-1+b1)
+Breaks: libgles1-mesa (<< 17.0.0~rc3-1), libgles2 (<< 1.0.0+git20180308-5)
+Replaces: libgles1-mesa (<< 17.0.0~rc3-1), libgles2 (<< 1.0.0+git20180308-5)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://github.com/NVIDIA/libglvnd
+Description: Vendor neutral GL dispatch library -- GLESv1 support
+ This is an implementation of the vendor-neutral dispatch layer for
+ arbitrating OpenGL API calls between multiple vendors on a per-screen basis.
+ .
+ This package contains support for GLESv1.
