@@ -41,6 +41,7 @@ class LocationBarModelImpl : public LocationBarModel {
   bool ShouldDisplayURL() const override;
   bool IsOfflinePage() const override;
   bool IsMemento() const override;
+  bool IsMixedContent() const override;
 
  private:
   base::string16 GetFormattedURL(

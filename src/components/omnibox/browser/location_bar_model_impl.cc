@@ -302,3 +302,14 @@ bool LocationBarModelImpl::IsMemento() const {
 
   return visible_security_state->memento_status;
 }
+
+bool LocationBarModelImpl::IsMixedContent() const {
+  std::unique_ptr<security_state::VisibleSecurityState>
+          visible_security_state = delegate_->GetVisibleSecurityState();
+
+  DVLOG(0) << "090909090909090909090909090909090900";
+  DVLOG(0) << visible_security_state->mixed_memento;
+  DVLOG(0) << "////////////////////////////////////";
+
+  return visible_security_state->mixed_memento;
+}

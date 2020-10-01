@@ -385,6 +385,7 @@ NavigationEntryImpl::NavigationEntryImpl(
       is_overriding_user_agent_(false),
       http_status_code_(0),
       memento_info_(false),
+      is_mixed_memento_content_(false),
       is_renderer_initiated_(is_renderer_initiated),
       should_replace_entry_(false),
       should_clear_history_list_(false),
@@ -670,6 +671,14 @@ void NavigationEntryImpl::SetMementoDatetime(std::string memento_datetime) {
 
 std::string NavigationEntryImpl::GetMementoDatetime() {
   return memento_datetime_;
+}
+
+void NavigationEntryImpl::SetMixedMementoContentInfo(bool is_mixed_memento_content) {
+  is_mixed_memento_content_ = is_mixed_memento_content;
+}
+
+bool NavigationEntryImpl::GetMixedMementoContentInfo() {
+  return is_mixed_memento_content_;
 }
 
 void NavigationEntryImpl::SetRedirectChain(

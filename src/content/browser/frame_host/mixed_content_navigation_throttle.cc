@@ -320,8 +320,14 @@ RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsMemento(
   if (node->parent()->last_memento_datetime() != "") {
     mixed_content_frame = root;
 
+
+    DVLOG(0) << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^";
+    DVLOG(0) << node->parent()->last_memento_datetime();
+    DVLOG(0) << "----------------------------";
+
     node->navigator().GetController()->GetVisibleEntry()->SetMementoDatetime(node->parent()->last_memento_datetime());
     node->navigator().GetController()->GetVisibleEntry()->SetMementoInfo(true);
+    node->navigator().GetController()->GetVisibleEntry()->SetMixedMementoContentInfo(true);
   }
 
   return mixed_content_frame;

@@ -78,6 +78,9 @@ class LocationBarModel {
   // Returns whether the page is a Memento
   virtual bool IsMemento() const = 0;
 
+  // Returns whether the page contains a mix of Memento content
+  virtual bool IsMixedContent() const = 0;
+
  protected:
   LocationBarModel() = default;
 
