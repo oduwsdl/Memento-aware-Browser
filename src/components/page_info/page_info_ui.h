@@ -245,7 +245,9 @@ class PageInfoUI {
   static bool ContentSettingsTypeInPageInfo(ContentSettingsType type);
 
   static std::unique_ptr<SecurityDescription>
-  CreateSafetyTipSecurityDescription(const security_state::SafetyTipInfo& info);
+  CreateSafetyTipSecurityDescription(const security_state::SafetyTipInfo& info,
+                                     bool memento_status,
+                                     std::string memento_datetime);
 
   // Sets cookie information.
   virtual void SetCookieInfo(const CookieInfoList& cookie_info_list) = 0;

@@ -195,14 +195,25 @@ std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
     PageInfoUI::SecuritySummaryColor style,
     int summary_id,
     int details_id,
-    PageInfoUI::SecurityDescriptionType type) {
+    PageInfoUI::SecurityDescriptionType type,
+    bool memento_status,
+    std::string memento_datetime) {
   std::unique_ptr<PageInfoUI::SecurityDescription> security_description(
       new PageInfoUI::SecurityDescription());
   security_description->summary_style = style;
   security_description->summary = l10n_util::GetStringUTF16(summary_id);
   security_description->details = l10n_util::GetStringUTF16(details_id);
   security_description->memento_summary = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MEMENTO_SUMMARY);
-  security_description->memento_info = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MEMENTO_DETAILS);
+  if (memento_status && memento_datetime != "") {
+    std::string datetime_string = "The page displayed is a Memento captured on " + memento_datetime;
+    security_description->memento_info = base::UTF8ToUTF16(datetime_string);
+  }
+  else if (memento_status && memento_datetime == "") {
+    security_description->memento_info = base::UTF8ToUTF16("The current page contains web archived content.");
+  }
+  else {
+    security_description->memento_info = base::UTF8ToUTF16("");
+  }
   security_description->type = type;
   return security_description;
 }
@@ -292,17 +303,23 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
       return CreateSecurityDescription(SecuritySummaryColor::RED,
                                        IDS_PAGE_INFO_MALWARE_SUMMARY,
                                        IDS_PAGE_INFO_MALWARE_DETAILS,
-                                       SecurityDescriptionType::SAFE_BROWSING);
+                                       SecurityDescriptionType::SAFE_BROWSING,
+                                       identity_info.memento_status,
+                                       identity_info.memento_datetime);
     case PageInfo::SAFE_BROWSING_STATUS_SOCIAL_ENGINEERING:
       return CreateSecurityDescription(SecuritySummaryColor::RED,
                                        IDS_PAGE_INFO_SOCIAL_ENGINEERING_SUMMARY,
                                        IDS_PAGE_INFO_SOCIAL_ENGINEERING_DETAILS,
-                                       SecurityDescriptionType::SAFE_BROWSING);
+                                       SecurityDescriptionType::SAFE_BROWSING,
+                                       identity_info.memento_status,
+                                       identity_info.memento_datetime);
     case PageInfo::SAFE_BROWSING_STATUS_UNWANTED_SOFTWARE:
       return CreateSecurityDescription(SecuritySummaryColor::RED,
                                        IDS_PAGE_INFO_UNWANTED_SOFTWARE_SUMMARY,
                                        IDS_PAGE_INFO_UNWANTED_SOFTWARE_DETAILS,
-                                       SecurityDescriptionType::SAFE_BROWSING);
+                                       SecurityDescriptionType::SAFE_BROWSING,
+                                       identity_info.memento_status,
+                                       identity_info.memento_datetime);
     case PageInfo::SAFE_BROWSING_STATUS_SAVED_PASSWORD_REUSE:
     case PageInfo::SAFE_BROWSING_STATUS_SIGNED_IN_SYNC_PASSWORD_REUSE:
     case PageInfo::SAFE_BROWSING_STATUS_SIGNED_IN_NON_SYNC_PASSWORD_REUSE:
@@ -316,11 +333,15 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
       return CreateSecurityDescription(SecuritySummaryColor::RED,
                                        IDS_PAGE_INFO_BILLING_SUMMARY,
                                        IDS_PAGE_INFO_BILLING_DETAILS,
-                                       SecurityDescriptionType::SAFE_BROWSING);
+                                       SecurityDescriptionType::SAFE_BROWSING,
+                                       identity_info.memento_status,
+                                       identity_info.memento_datetime);
   }
 
   std::unique_ptr<SecurityDescription> safety_tip_security_desc =
-      CreateSafetyTipSecurityDescription(identity_info.safety_tip_info);
+      CreateSafetyTipSecurityDescription(identity_info.safety_tip_info,
+                                         identity_info.memento_status,
+                                         identity_info.memento_datetime);
   if (safety_tip_security_desc) {
     return safety_tip_security_desc;
   }
@@ -332,7 +353,9 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
       // deduplicates them in the UI code.
       return CreateSecurityDescription(
           SecuritySummaryColor::GREEN, IDS_PAGE_INFO_INTERNAL_PAGE,
-          IDS_PAGE_INFO_INTERNAL_PAGE, SecurityDescriptionType::INTERNAL);
+          IDS_PAGE_INFO_INTERNAL_PAGE, SecurityDescriptionType::INTERNAL,
+                                       identity_info.memento_status,
+                                       identity_info.memento_datetime);
 #else
       // Internal pages on desktop have their own UI implementations which
       // should never call this function.
@@ -350,27 +373,37 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
           return CreateSecurityDescription(SecuritySummaryColor::RED,
                                            IDS_PAGE_INFO_NOT_SECURE_SUMMARY,
                                            IDS_PAGE_INFO_NOT_SECURE_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+                                           SecurityDescriptionType::CONNECTION,
+                                           identity_info.memento_status,
+                                           identity_info.memento_datetime);
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_FORM_ACTION:
           return CreateSecurityDescription(SecuritySummaryColor::RED,
                                            IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
                                            IDS_PAGE_INFO_NOT_SECURE_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+                                           SecurityDescriptionType::CONNECTION,
+                                           identity_info.memento_status,
+                                           identity_info.memento_datetime);
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE:
           return CreateSecurityDescription(SecuritySummaryColor::RED,
                                            IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
                                            IDS_PAGE_INFO_MIXED_CONTENT_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+                                           SecurityDescriptionType::CONNECTION,
+                                           identity_info.memento_status,
+                                           identity_info.memento_datetime);
         case PageInfo::SITE_CONNECTION_STATUS_LEGACY_TLS:
           return CreateSecurityDescription(SecuritySummaryColor::RED,
                                            IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
                                            IDS_PAGE_INFO_LEGACY_TLS_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+                                           SecurityDescriptionType::CONNECTION,
+                                           identity_info.memento_status,
+                                           identity_info.memento_datetime);
         default:
           return CreateSecurityDescription(SecuritySummaryColor::GREEN,
                                            IDS_PAGE_INFO_SECURE_SUMMARY,
                                            IDS_PAGE_INFO_SECURE_DETAILS,
-                                           SecurityDescriptionType::CONNECTION);
+                                           SecurityDescriptionType::CONNECTION,
+                                           identity_info.memento_status,
+                                           identity_info.memento_datetime);
       }
     case PageInfo::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
     case PageInfo::SITE_IDENTITY_STATUS_UNKNOWN:
@@ -379,7 +412,9 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
       return CreateSecurityDescription(SecuritySummaryColor::RED,
                                        IDS_PAGE_INFO_NOT_SECURE_SUMMARY,
                                        IDS_PAGE_INFO_NOT_SECURE_DETAILS,
-                                       SecurityDescriptionType::CONNECTION);
+                                       SecurityDescriptionType::CONNECTION,
+                                       identity_info.memento_status,
+                                       identity_info.memento_datetime);
   }
 }
 
@@ -752,7 +787,9 @@ bool PageInfoUI::ContentSettingsTypeInPageInfo(ContentSettingsType type) {
 // static
 std::unique_ptr<PageInfoUI::SecurityDescription>
 PageInfoUI::CreateSafetyTipSecurityDescription(
-    const security_state::SafetyTipInfo& info) {
+    const security_state::SafetyTipInfo& info,
+    bool memento_status,
+    std::string memento_datetime) {
   switch (info.status) {
     case security_state::SafetyTipStatus::kBadReputation:
     case security_state::SafetyTipStatus::kBadReputationIgnored:
@@ -760,7 +797,9 @@ PageInfoUI::CreateSafetyTipSecurityDescription(
           SecuritySummaryColor::RED,
           IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_TITLE,
           IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_DESCRIPTION,
-          PageInfoUI::SecurityDescriptionType::SAFETY_TIP);
+          PageInfoUI::SecurityDescriptionType::SAFETY_TIP,
+          memento_status,
+          memento_datetime);
     case security_state::SafetyTipStatus::kLookalike:
     case security_state::SafetyTipStatus::kLookalikeIgnored:
       return CreateSecurityDescriptionForLookalikeSafetyTip(info.safe_url);
