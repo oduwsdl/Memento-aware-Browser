@@ -64,6 +64,9 @@ class LocationBarModel {
   // security icon on certain platforms.
   virtual base::string16 GetSecureDisplayText() const = 0;
 
+  // Displays the mixed memento content warning text for the omnibox verbose chip
+  virtual base::string16 GetMementoDisplayText() const = 0;
+
   // Returns text describing the security state for accessibility.
   virtual base::string16 GetSecureAccessibilityText() const = 0;
 

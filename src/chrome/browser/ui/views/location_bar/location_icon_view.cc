@@ -135,7 +135,7 @@ bool LocationIconView::ShouldShowText() const {
     return false;
 
   if (is_memento_icon_)
-    return false;
+    return ShouldShowMixedContentWarning();
 
   const auto* location_bar_model = delegate_->GetLocationBarModel();
   const GURL& url = location_bar_model->GetURL();
@@ -149,6 +149,10 @@ bool LocationIconView::ShouldShowText() const {
   return !location_bar_model->GetSecureDisplayText().empty();
 }
 
+bool LocationIconView::ShouldShowMixedContentWarning() const {
+  return delegate_->GetLocationBarModel()->IsMixedContent();
+}
+
 bool LocationIconView::ShouldShowMementoInfo() const {
   return delegate_->GetLocationBarModel()->IsMemento();
 }
@@ -160,6 +164,14 @@ void LocationIconView::SetIconType(bool is_memento_icon) {
 bool LocationIconView::GetIconType() {
   return is_memento_icon_;
 }
+
+/*void LocationIconView::SetContentType(bool is_mixed_memento_content) {
+  is_mixed_memento_content_ = is_mixed_memento_content;
+}
+
+bool LocationIconView::SetContentType() {
+  return is_mixed_memento_content_;
+}*/
 
 const views::InkDrop* LocationIconView::get_ink_drop_for_testing() {
   return GetInkDrop();
@@ -195,6 +207,10 @@ base::string16 LocationIconView::GetText() const {
       return extension_name;
   }
 
+  if (is_memento_icon_)
+    return delegate_->GetLocationBarModel()->GetMementoDisplayText();
+
+  //return delegate_->GetLocationBarModel()->GetMementoDisplayText();
   return delegate_->GetLocationBarModel()->GetSecureDisplayText();
 }
 

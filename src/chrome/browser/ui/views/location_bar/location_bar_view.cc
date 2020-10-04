@@ -553,9 +553,14 @@ void LocationBarView::Layout() {
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, location_icon_view_);
     location_icon_memento_->SetVisible(false);
-  } else if (!location_icon_view_->ShouldShowText() && location_icon_memento_->ShouldShowMementoInfo()) {
+  } else if (!location_icon_view_->ShouldShowText() && location_icon_memento_->ShouldShowMementoInfo() && !location_icon_memento_->ShouldShowText()) {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_memento_);
+    leading_decorations.AddDecoration(vertical_padding, location_height, false,
+                                      0, edge_padding, location_icon_view_);
+  } else if (!location_icon_view_->ShouldShowText() && location_icon_memento_->ShouldShowMementoInfo() && location_icon_memento_->ShouldShowText()) {
+    leading_decorations.AddDecoration(vertical_padding, location_height, false,
+                                      kLeadingDecorationMaxFraction, edge_padding, location_icon_memento_);
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_view_);
   } else if (location_icon_view_->ShouldShowText() && location_icon_memento_->ShouldShowMementoInfo()) {
@@ -564,7 +569,6 @@ void LocationBarView::Layout() {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, location_icon_view_);
-    //location_icon_memento_->SetVisible(false);
   }
    else {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,

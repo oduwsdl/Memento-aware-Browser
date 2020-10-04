@@ -679,6 +679,7 @@ void NavigationEntryImpl::SetMixedMementoContentInfo(bool is_mixed_memento_conte
 
 bool NavigationEntryImpl::GetMixedMementoContentInfo() {
   return is_mixed_memento_content_;
+  //return true;
 }
 
 void NavigationEntryImpl::SetRedirectChain(

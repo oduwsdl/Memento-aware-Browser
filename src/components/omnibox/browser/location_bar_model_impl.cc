@@ -275,6 +275,10 @@ base::string16 LocationBarModelImpl::GetSecureDisplayText() const {
   }
 }
 
+base::string16 LocationBarModelImpl::GetMementoDisplayText() const {
+    return base::UTF8ToUTF16("Mixed content");
+} 
+
 base::string16 LocationBarModelImpl::GetSecureAccessibilityText() const {
   auto display_text = GetSecureDisplayText();
   if (!display_text.empty())

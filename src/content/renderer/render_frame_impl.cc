@@ -5206,9 +5206,7 @@ void RenderFrameImpl::DidCommitNavigationInternal(
     params->memento_status = 1;
   }
 
-  if (was_within_same_document) {
-    DVLOG(0) << "RenderFrameImpl::DidCommitNavigationInternal ---------- " << params->memento_datetime;
-    
+  if (was_within_same_document) {    
     GetFrameHost()->DidCommitSameDocumentNavigation(std::move(params));
   } else {
     NavigationState* navigation_state =
@@ -5382,7 +5380,6 @@ void RenderFrameImpl::FocusedElementChanged(const blink::WebElement& element) {
 
 void RenderFrameImpl::BeginNavigation(
     std::unique_ptr<blink::WebNavigationInfo> info) {
-  DVLOG(0) << "RenderFrameImpl::BeginNavigation";
   // This method is only called for renderer initiated navigations, which
   // may have originated from a link-click, script, drag-n-drop operation, etc.
 

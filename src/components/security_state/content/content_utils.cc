@@ -446,7 +446,6 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->memento_status = entry->GetMementoInfo();
   state->memento_datetime = entry->GetMementoDatetime();
   state->mixed_memento = entry->GetMixedMementoContentInfo();
-  DVLOG(0) << "ContentUtils::GetVisibleSecurityState ---------- " << state->memento_datetime;
   state->key_exchange_group = ssl.key_exchange_group;
   state->peer_signature_algorithm = ssl.peer_signature_algorithm;
   state->pkp_bypassed = ssl.pkp_bypassed;

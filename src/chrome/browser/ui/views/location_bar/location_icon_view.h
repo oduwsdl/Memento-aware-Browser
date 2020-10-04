@@ -102,6 +102,10 @@ class LocationIconView : public IconLabelBubbleView {
   // - the current page has a special scheme (chrome://, extension, file://).
   bool ShouldShowText() const;
 
+  // Determines whether or not the mixed content text needs
+  // to be shown next to the Memento icon
+  bool ShouldShowMixedContentWarning() const;
+
   // Determines whether or not the Memento icon should be shown.
   // Returns true when Memento-Datetime header is present for the current page.
   bool ShouldShowMementoInfo() const;

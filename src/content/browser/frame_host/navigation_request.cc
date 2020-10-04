@@ -1194,7 +1194,6 @@ NavigationRequest::NavigationRequest(
     }
 
     headers.AddHeadersFromString(begin_params_->headers);
-    DVLOG(0) << "NavigationRequest::NavigationRequest";
     AddAdditionalRequestHeaders(
         &headers, common_params_->url, common_params_->navigation_type,
         common_params_->transition, controller->GetBrowserContext(),
@@ -3821,7 +3820,6 @@ void NavigationRequest::WillStartRequest() {
     return;
   }
 
-  DVLOG(0) << "NavigationRequest::WillStartRequest";
   throttle_runner_->RegisterNavigationThrottles();
 
   // If the content/ embedder did not pass the NavigationUIData at the beginning

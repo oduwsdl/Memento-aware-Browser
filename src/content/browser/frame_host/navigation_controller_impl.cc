@@ -2359,7 +2359,6 @@ void NavigationControllerImpl::NavigateFromFrameProxy(
   /* params.reload_type: skip */
   params.impression = impression;
 
-  DVLOG(0) << "NavigationControllerImpl::NavigateFromFrameProxy";
   std::unique_ptr<NavigationRequest> request =
       CreateNavigationRequestFromLoadParams(
           node, params, override_user_agent, should_replace_current_entry,
@@ -3013,7 +3012,6 @@ void NavigationControllerImpl::NavigateWithoutEntry(
   // navigation_ui_data should only be present for main frame navigations.
   DCHECK(node->IsMainFrame() || !params.navigation_ui_data);
 
-  DVLOG(0) << "NavigationControllerImpl::NavigateWithoutEntry";
   DCHECK(pending_entry_);
   std::unique_ptr<NavigationRequest> request =
       CreateNavigationRequestFromLoadParams(
@@ -3321,7 +3319,6 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
   std::string extra_headers_crlf;
   base::ReplaceChars(params.extra_headers, "\n", "\r\n", &extra_headers_crlf);
 
-  DVLOG(0) << "auto navigation_request = NavigationRequest::CreateBrowserInitiated(";
   auto navigation_request = NavigationRequest::CreateBrowserInitiated(
       node, std::move(common_params), std::move(commit_params),
       !params.is_renderer_initiated, params.initiator_routing_id,

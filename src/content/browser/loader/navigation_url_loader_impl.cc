@@ -766,8 +766,6 @@ void NavigationURLLoaderImpl::OnStartLoadingResponseBody(
         base::TimeTicks::Now() - on_receive_response_time_);
   }
 
-  DVLOG(0) << "NavigationURLLoaderImpl::OnStartLoadingResponseBody";
-
   response_body_ = std::move(response_body);
   received_response_ = true;
 
@@ -1055,7 +1053,6 @@ void NavigationURLLoaderImpl::ParseHeaders(
     const GURL& url,
     network::mojom::URLResponseHead* head,
     base::OnceClosure continuation) {
-  DVLOG(0) << "NavigationURLLoaderImpl::ParseHeaders";
   // The main path:
   // --------------
   // The ParsedHeaders are already provided. No more work needed.
@@ -1120,7 +1117,6 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
       navigation_ui_data_(std::move(navigation_ui_data)),
       interceptors_(std::move(initial_interceptors)),
       download_policy_(request_info_->common_params->download_policy) {
-  DVLOG(0) << "NavigationURLLoaderImpl::NavigationURLLoaderImpl";
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   TRACE_EVENT_ASYNC_BEGIN_WITH_TIMESTAMP1(
