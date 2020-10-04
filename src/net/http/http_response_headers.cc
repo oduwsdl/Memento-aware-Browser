@@ -620,7 +620,7 @@ std::string HttpResponseHeaders::GetMementoDatetime() const {
     i = std::search(value_begin, value_end, field_begin, field_end);
   }
 
-  value.assign(i+17, i + 47);
+  value.assign(i+17, i + 46);
 
   return value;
 }
