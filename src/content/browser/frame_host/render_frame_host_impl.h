@@ -537,7 +537,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Update this frame's state at the appropriate time when a navigation
   // commits. This is called by Navigator::DidNavigate as a helper, in the
   // midst of a DidCommitProvisionalLoad call.
-  void DidNavigate(const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+  std::string DidNavigate(const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
                    bool is_same_document_navigation);
 
   RenderViewHostImpl* render_view_host() { return render_view_host_.get(); }

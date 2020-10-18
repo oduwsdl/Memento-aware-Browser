@@ -5,6 +5,7 @@
 #include "content/browser/frame_host/navigator.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/check_op.h"
 #include "base/debug/dump_without_crashing.h"
@@ -292,11 +293,35 @@ void Navigator::DidNavigate(
   if (ui::PageTransitionIsMainFrame(params.transition) && delegate_)
     delegate_->SetMainFrameMimeType(params.contents_mime_type);
 
+  /// Grab the root node
+  FrameTreeNode* root = frame_tree->root();
+
+  std::string datetime = render_frame_host->DidNavigate(params, is_same_document_navigation);
+
+  if (datetime != "") {
+    DVLOG(0) << "\t Adding datetime " << datetime;
+    root->AddMementoDate(datetime);
+  }
+
+  /*DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t The returned datetime in Navigator is:";
+  DVLOG(0) << "\t" << datetime;
+  DVLOG(0) << "\t******************************************************\n";*/
+
+  /*std::vector<std::string> dates = root->GetMementoDates();
+  DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t CHECKING THE VECTOR HERE";
+  for (auto i = dates.begin(); i != dates.end(); ++i) {
+    DVLOG(0) << "\t" << *i;
+  }
+  DVLOG(0) << "\t******************************************************";*/
+  
+
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;
   bool did_navigate = controller_->RendererDidNavigate(
       render_frame_host, params, &details, is_same_document_navigation,
-      previous_document_was_activated, navigation_request.get());
+      previous_document_was_activated, navigation_request.get(), datetime);
 
   // If the history length and/or offset changed, update other renderers in the
   // FrameTree.
@@ -309,8 +334,6 @@ void Navigator::DidNavigate(
             controller_->GetEntryCount()),
         site_instance);
   }
-
-  render_frame_host->DidNavigate(params, is_same_document_navigation);
 
   // Send notification about committed provisional loads. This notification is
   // different from the NAV_ENTRY_COMMITTED notification which doesn't include

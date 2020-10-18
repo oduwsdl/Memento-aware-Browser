@@ -238,7 +238,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       LoadCommittedDetails* details,
       bool is_same_document_navigation,
       bool previous_document_was_activated,
-      NavigationRequest* navigation_request);
+      NavigationRequest* navigation_request,
+      std::string datetime);
 
   // Notifies us that we just became active. This is used by the WebContentsImpl
   // so that we know to load URLs that were pending as "lazy" loads.

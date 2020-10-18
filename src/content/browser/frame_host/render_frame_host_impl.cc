@@ -2391,7 +2391,7 @@ void RenderFrameHostImpl::OnCreateChildFrame(
                         frame_owner_properties, was_discarded_, owner_type);
 }
 
-void RenderFrameHostImpl::DidNavigate(
+std::string RenderFrameHostImpl::DidNavigate(
     const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
     bool is_same_document_navigation) {
 
@@ -2399,9 +2399,36 @@ void RenderFrameHostImpl::DidNavigate(
   // itself.  These allow GetLastCommittedURL and GetLastCommittedOrigin to
   // stay correct even if the render_frame_host later becomes pending deletion.
   // The URL is set regardless of whether it's for a net error or not.
+
   frame_tree_node_->SetCurrentURL(params.url);
-  frame_tree_node_->SetCurrentDatetime(params.memento_datetime);
+
+  // Keep track of memento datetimes and if one is found, set it as the 
+  // last committed datetime for the parent node.
+  if (params.memento_datetime != "" && frame_tree_node_->parent()) {
+    frame_tree_node_->parent()->SetLastCommittedDatetime(params.memento_datetime);
+  }
+  else if (last_memento_datetime_ != "") {
+    // If the last committed datetime exists, set it as the current datetime
+    // for the frame_tree_node.
+    frame_tree_node_->SetCurrentDatetime(last_memento_datetime_);
+  }
+
   SetLastCommittedOrigin(params.origin);
+
+  /*DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t*  The current URL and depth is:";
+  DVLOG(0) << "\t* ----------------------------------------------------";
+  DVLOG(0) << "\t*  Class:  RenderFrameHostImpl";
+  DVLOG(0) << "\t*  URL:  " << params.url;
+  DVLOG(0) << "\t*  Depth:  " << frame_tree_node_->depth();
+
+  if (frame_tree_node_->parent()) {
+    DVLOG(0) << "\t*  Parent datetime:  " << frame_tree_node_->parent()->last_memento_datetime();
+
+  }
+
+  DVLOG(0) << "\t*  Datetime:  " << last_memento_datetime_;
+  DVLOG(0) << "\t******************************************************\n";*/
 
   // Separately, update the frame's last successful URL except for net error
   // pages, since those do not end up in the correct process after transfers
@@ -2425,6 +2452,10 @@ void RenderFrameHostImpl::DidNavigate(
   // Reset the salt so that media device IDs are reset after the new navigation
   // if necessary.
   media_device_id_salt_base_ = BrowserContext::CreateRandomMediaDeviceIDSalt();
+
+  // Any datetimes found as we iterate through all the rendered frames 
+  // will be returned.
+  return last_memento_datetime_;
 }
 
 void RenderFrameHostImpl::SetLastCommittedOrigin(const url::Origin& origin) {
@@ -2864,6 +2895,7 @@ void RenderFrameHostImpl::DidCommitPerNavigationMojoInterfaceNavigation(
   CHECK(request != navigation_requests_.end());
 
   std::unique_ptr<NavigationRequest> owned_request = std::move(request->second);
+
   params->memento_datetime = committing_navigation_request->GetMementoDatetime();
 
   navigation_requests_.erase(committing_navigation_request);
@@ -8130,13 +8162,12 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
 
   last_http_status_code_ = params->http_status_code;
   last_http_method_ = params->method;
-  if (params->memento_datetime == "") {
-    params->memento_status = 0;
-  } else {
-    params->memento_status = 1;
+
+  if (params->memento_datetime != "") {
+    last_memento_datetime_ = params->memento_datetime;
+    last_memento_status_ = true;
   }
-  last_memento_status_ = params->memento_status;
-  last_memento_datetime_ = params->memento_datetime;
+
   UpdateSiteURL(params->url, params->url_is_unreachable);
   if (!is_same_document_navigation)
     UpdateRenderProcessHostFramePriorities();

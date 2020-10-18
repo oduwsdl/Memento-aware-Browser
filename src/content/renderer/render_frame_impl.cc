@@ -4920,8 +4920,20 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
   std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params =
       std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>();
   params->http_status_code = response.HttpStatusCode();
-  params->memento_status = response.MementoInfo();
-  params->memento_datetime = response.MementoDatetime();
+
+  if (response.MementoDatetime() != "") {
+    params->memento_status = response.MementoInfo();
+    params->memento_datetime = response.MementoDatetime();
+
+    DVLOG(0) << "\t******************************************************";
+    DVLOG(0) << "\t*  Memento-Datetime added to params.";
+    DVLOG(0) << "\t* ----------------------------------------------------";
+    DVLOG(0) << "\t*  Class:  RenderFrameImpl";
+    DVLOG(0) << "\t*  Date:  " << response.MementoDatetime();
+    DVLOG(0) << "\t******************************************************\n";
+
+  }
+
   params->url_is_unreachable = document_loader->HasUnreachableURL();
   params->method = "GET";
   params->intended_as_new_entry =
@@ -5200,11 +5212,12 @@ void RenderFrameImpl::DidCommitNavigationInternal(
   auto params = MakeDidCommitProvisionalLoadParams(commit_type, transition,
                                                    embedding_token);
 
-  if (params->memento_datetime == "") {
-    params->memento_status = 0;
-  } else {
-    params->memento_status = 1;
-  }
+  DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t*  Params contains:";
+  DVLOG(0) << "\t* ----------------------------------------------------";
+  DVLOG(0) << "\t*  Class:  RenderFrameImpl";
+  DVLOG(0) << "\t*  Date:  " << params->memento_datetime;
+  DVLOG(0) << "\t******************************************************\n";
 
   if (was_within_same_document) {    
     GetFrameHost()->DidCommitSameDocumentNavigation(std::move(params));

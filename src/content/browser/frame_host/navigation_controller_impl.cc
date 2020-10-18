@@ -1000,7 +1000,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
     LoadCommittedDetails* details,
     bool is_same_document_navigation,
     bool previous_document_was_activated,
-    NavigationRequest* navigation_request) {
+    NavigationRequest* navigation_request,
+    std::string datetime) {
   DCHECK(navigation_request);
   is_initial_navigation_ = false;
 
@@ -1098,6 +1099,11 @@ bool NavigationControllerImpl::RendererDidNavigate(
                             pending_entry_ &&
                             !PendingEntryMatchesRequest(navigation_request);
 
+  //NavigationEntryImpl* active_entry = GetLastCommittedEntry();
+  FrameTreeNode* root = rfh->frame_tree()->root();
+
+  std::vector<std::string> datetimes = root->GetMementoDates();
+
   switch (details->type) {
     case NAVIGATION_TYPE_NEW_PAGE:
       RendererDidNavigateToNewPage(
@@ -1119,7 +1125,19 @@ bool NavigationControllerImpl::RendererDidNavigate(
           previous_document_was_activated, navigation_request);
       break;
     case NAVIGATION_TYPE_AUTO_SUBFRAME:
+
+      /*DVLOG(0) << "\t******************************************************";
+      DVLOG(0) << "\t*  This is what the datetime is.";
+      DVLOG(0) << "\t* ----------------------------------------------------";
+      DVLOG(0) << "\t*  Class:  NavigationControllerImpl";
+      DVLOG(0) << "\t*  Vector length:  " << datetimes.size();
+      DVLOG(0) << "\t******************************************************\n";*/
+
       if (!RendererDidNavigateAutoSubframe(rfh, params, navigation_request)) {
+
+        NavigationEntry* visible_entry = GetVisibleEntry();
+        visible_entry->SetMementoDates(datetimes);
+
         // We don't send a notification about auto-subframe PageState during
         // UpdateStateForFrame, since it looks like nothing has changed.  Send
         // it here at commit time instead.
@@ -1128,6 +1146,7 @@ bool NavigationControllerImpl::RendererDidNavigate(
       }
       break;
     case NAVIGATION_TYPE_NAV_IGNORE:
+
       // If a pending navigation was in progress, this canceled it.  We should
       // discard it and make sure it is removed from the URL bar.  After that,
       // there is nothing we can do with this navigation, so we just return to
@@ -1163,8 +1182,26 @@ bool NavigationControllerImpl::RendererDidNavigate(
   NavigationEntryImpl* active_entry = GetLastCommittedEntry();
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
-  //active_entry->SetMementoInfo(params.memento_status);
-  //active_entry->SetMementoDatetime(params.memento_datetime);
+
+  /*DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t*  Memento-Datetime set for entry.";
+  DVLOG(0) << "\t* ----------------------------------------------------";
+  DVLOG(0) << "\t*  Class:  NavigationControllerImpl";
+  DVLOG(0) << "\t*  Params:  " << params.memento_datetime;
+  DVLOG(0) << "\t*  datetime:  " << datetime;
+  DVLOG(0) << "\t******************************************************\n";*/
+
+  if (datetime != "")
+    active_entry->SetMementoDatetime(datetime);
+  else if (params.memento_datetime != "")
+    active_entry->SetMementoDatetime(params.memento_datetime);
+
+  std::vector<std::string> dates = active_entry->GetMementoDates();
+  
+  if (active_entry->GetMementoDatetime() != "") {
+    active_entry->SetMementoInfo(true);
+  }
+
   // TODO(altimin, crbug.com/933147): Remove this logic after we are done with
   // implementing back-forward cache.
   if (!active_entry->back_forward_cache_metrics()) {

@@ -223,6 +223,10 @@ class NavigationEntry : public base::SupportsUserData {
   virtual void SetMementoDatetime(std::string memento_datetime) = 0;
   virtual std::string GetMementoDatetime() = 0;
 
+  virtual void AddMementoDate(std::string memento_datetime) = 0;
+  virtual void SetMementoDates(std::vector<std::string> datetimes) = 0;
+  virtual std::vector<std::string> GetMementoDates() = 0;
+
   // Flag for whether or not the webpage has mixed memento content
   virtual void SetMixedMementoContentInfo(bool is_mixed_memento_content) = 0;
   virtual bool GetMixedMementoContentInfo() = 0;

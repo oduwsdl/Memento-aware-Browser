@@ -673,13 +673,24 @@ std::string NavigationEntryImpl::GetMementoDatetime() {
   return memento_datetime_;
 }
 
+void NavigationEntryImpl::AddMementoDate(std::string memento_datetime) {
+  memento_dates_.push_back(memento_datetime);
+}
+
+void NavigationEntryImpl::SetMementoDates(std::vector<std::string> datetimes) {
+  memento_dates_ = datetimes;
+}
+
+std::vector<std::string> NavigationEntryImpl::GetMementoDates() {
+  return memento_dates_;
+}
+
 void NavigationEntryImpl::SetMixedMementoContentInfo(bool is_mixed_memento_content) {
   is_mixed_memento_content_ = is_mixed_memento_content;
 }
 
 bool NavigationEntryImpl::GetMixedMementoContentInfo() {
   return is_mixed_memento_content_;
-  //return true;
 }
 
 void NavigationEntryImpl::SetRedirectChain(
@@ -762,6 +773,7 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   copy->timestamp_ = timestamp_;
   copy->http_status_code_ = http_status_code_;
   copy->memento_info_ = memento_info_;
+  //copy->memento_datetime = memento_datetime_;
   // ResetForCommit: post_data_
   copy->extra_headers_ = extra_headers_;
   copy->base_url_for_data_url_ = base_url_for_data_url_;
@@ -918,6 +930,12 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
     int64_t post_id,
     scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
     std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info) {
+
+  /*DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t Adding or Updating Frame Entry";
+  DVLOG(0) << "\t Vector length: " << frame_tree_node->GetMementoDates().size();
+  DVLOG(0) << "\t******************************************************";*/
+
   // If this is called for the main frame, the FrameNavigationEntry is
   // guaranteed to exist, so just update it directly and return.
   if (frame_tree_node->IsMainFrame()) {

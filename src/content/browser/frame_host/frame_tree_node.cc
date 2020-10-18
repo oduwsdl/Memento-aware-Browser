@@ -260,6 +260,14 @@ size_t FrameTreeNode::GetFrameTreeSize() const {
   return size;
 }
 
+void FrameTreeNode::AddMementoDate(std::string memento_datetime) {
+  memento_dates_.push_back(memento_datetime);
+}
+
+std::vector<std::string> FrameTreeNode::GetMementoDates() {
+  return memento_dates_;
+}
+
 void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
   if (opener_) {
     opener_->RemoveObserver(opener_observer_.get());

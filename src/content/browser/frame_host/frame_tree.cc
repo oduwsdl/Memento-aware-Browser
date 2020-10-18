@@ -194,6 +194,7 @@ FrameTreeNode* FrameTree::AddFrame(
     const blink::mojom::FrameOwnerProperties& frame_owner_properties,
     bool was_discarded,
     blink::mojom::FrameOwnerElementType owner_type) {
+
   CHECK_NE(new_routing_id, MSG_ROUTING_NONE);
 
   // A child frame always starts with an initial empty document, which means
@@ -224,6 +225,37 @@ FrameTreeNode* FrameTree::AddFrame(
   // Add the new node to the FrameTree, creating the RenderFrameHost.
   FrameTreeNode* added_node = parent->AddChild(std::move(new_node), process_id,
                                                new_routing_id, frame_token);
+
+  DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t*  Memento-Datetime response header found for an element.";
+  DVLOG(0) << "\t* ----------------------------------------------------";
+  DVLOG(0) << "\t*  Class: FrameTree";
+  DVLOG(0) << "\t*  Date: " << added_node->parent()->last_memento_datetime();
+  DVLOG(0) << "\t*  Page: " << added_node->current_url();
+  DVLOG(0) << "\t*  Depth: " << added_node->depth();
+  DVLOG(0) << "\t******************************************************\n";
+
+  /*if (added_node->parent()->last_memento_datetime() != "") {
+
+    DVLOG(0) << "\t******************************************************";
+    DVLOG(0) << "\t*  Memento-Datetime response header found for an element.";
+    DVLOG(0) << "\t* ----------------------------------------------------";
+    DVLOG(0) << "\t*  Class: FrameTree";
+    DVLOG(0) << "\t*  Date: " << added_node->parent()->last_memento_datetime();
+    DVLOG(0) << "\t*  Page: " << added_node->current_url();
+    DVLOG(0) << "\t*  Depth: " << added_node->depth();
+    DVLOG(0) << "\t******************************************************\n";
+
+    added_node->navigator().GetController()->GetVisibleEntry()->SetMementoInfo(true);
+
+    if (added_node->depth() > 2) {
+      added_node->navigator().GetController()->GetVisibleEntry()->SetMixedMementoContentInfo(true);
+      
+    } else {
+      added_node->navigator().GetController()->GetVisibleEntry()->SetMixedMementoContentInfo(false);
+      added_node->navigator().GetController()->GetVisibleEntry()->SetMementoDatetime(added_node->parent()->last_memento_datetime());
+    }
+  }*/
 
   DCHECK(interface_provider_receiver.is_valid());
   added_node->current_frame_host()->BindInterfaceProviderReceiver(

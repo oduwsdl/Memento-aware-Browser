@@ -130,6 +130,10 @@ class CONTENT_EXPORT FrameTreeNode {
   // this node.
   size_t GetFrameTreeSize() const;
 
+  void AddMementoDate(std::string memento_datetime);
+
+  std::vector<std::string> GetMementoDates();
+
   // Assigns a new opener for this node and, if |opener| is non-null, registers
   // an observer that will clear this node's opener if |opener| is ever
   // destroyed.
@@ -488,6 +492,8 @@ class CONTENT_EXPORT FrameTreeNode {
   // Track information that needs to be replicated to processes that have
   // proxies for this frame.
   FrameReplicationState replication_state_;
+
+  std::vector<std::string> memento_dates_;
 
   // Track the pending sandbox flags and container policy for this frame. When a
   // parent frame dynamically updates 'sandbox', 'allow', 'allowfullscreen',

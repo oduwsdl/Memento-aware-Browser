@@ -130,8 +130,14 @@ const char* MixedContentNavigationThrottle::GetNameForLogging() {
 
 // Based off of MixedContentChecker::shouldBlockFetch.
 bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
+
   NavigationRequest* request = NavigationRequest::From(navigation_handle());
   FrameTreeNode* node = request->frame_tree_node();
+
+  DVLOG(0) << "\t-------------------------------------------------";
+  DVLOG(0) << "\tShouldBlockNavigation beginning...";
+  DVLOG(0) << "\t  " << node->current_url();
+  DVLOG(0) << "\t-------------------------------------------------\n";
 
   // Find the parent frame where mixed content is characterized, if any.
   RenderFrameHostImpl* mixed_content_frame =
@@ -314,22 +320,36 @@ RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsMemento(
   if (node->IsMainFrame())
     return nullptr;
 
+  DVLOG(0) << "\t-------------------------------------------------";
+  DVLOG(0) << "\tInWhichFrameIsMemento beginning...";
+  DVLOG(0) << "\t  " << node->current_url();
+  DVLOG(0) << "\t  " << node->depth();
+  DVLOG(0) << "\t-------------------------------------------------\n";
+
   RenderFrameHostImpl* mixed_content_frame = nullptr;
   RenderFrameHostImpl* root = node->parent()->GetMainFrame();
 
   if (node->parent()->last_memento_datetime() != "") {
     mixed_content_frame = root;
 
-    DVLOG(0) << "--------------------------------------";
-    DVLOG(0) << "Memento-Date response header found.";
-    DVLOG(0) << "--------------------------------------";
-    //DVLOG()
-    DVLOG(0) << node->parent()->last_memento_datetime();
-    DVLOG(0) << "--------------------------------------";
+    DVLOG(0) << "\t******************************************************";
+    DVLOG(0) << "\t*  Memento-Datetime response header found for an element.";
+    DVLOG(0) << "\t* ----------------------------------------------------";
+    DVLOG(0) << "\t*  Class: MixedContentNavigationThrottle";
+    DVLOG(0) << "\t*  Date: " << node->parent()->last_memento_datetime();
+    DVLOG(0) << "\t*  Page: " << node->current_url();
+    DVLOG(0) << "\t*  Depth: " << node->depth();
+    DVLOG(0) << "\t******************************************************\n";
 
-    node->navigator().GetController()->GetVisibleEntry()->SetMementoDatetime(node->parent()->last_memento_datetime());
     node->navigator().GetController()->GetVisibleEntry()->SetMementoInfo(true);
-    node->navigator().GetController()->GetVisibleEntry()->SetMixedMementoContentInfo(true);
+
+    if (node->depth() > 2) {
+      node->navigator().GetController()->GetVisibleEntry()->SetMixedMementoContentInfo(true);
+      
+    } else {
+      node->navigator().GetController()->GetVisibleEntry()->SetMixedMementoContentInfo(false);
+      node->navigator().GetController()->GetVisibleEntry()->SetMementoDatetime(node->parent()->last_memento_datetime());
+    }
   }
 
   return mixed_content_frame;

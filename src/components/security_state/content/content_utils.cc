@@ -423,6 +423,10 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   content::NavigationEntry* entry =
       web_contents->GetController().GetVisibleEntry();
 
+  /*content::RenderFrameHost* frame = web_contents->GetMainFrame();
+
+  frame->GetLastCommittedURL();*/
+
   if (!entry)
     return state;
 
@@ -444,6 +448,11 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
   state->memento_status = entry->GetMementoInfo();
+  //DVLOG(0) << "\t MementoDates size: " << entry->GetMementoDates().size();
+  if (entry->GetMementoDates().size() > 1) {
+    state->memento_status = true;
+  }
+  //state->memento_status = true;
   state->memento_datetime = entry->GetMementoDatetime();
   state->mixed_memento = entry->GetMixedMementoContentInfo();
   state->key_exchange_group = ssl.key_exchange_group;

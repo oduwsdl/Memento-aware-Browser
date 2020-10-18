@@ -1011,8 +1011,16 @@ void WebURLLoaderImpl::PopulateURLResponse(
   response->SetHttpVersion(version);
   response->SetHttpStatusCode(headers->response_code());
   response->SetHttpStatusText(WebString::FromLatin1(headers->GetStatusText()));
-  response->SetMementoDatetime(head.memento_datetime);
-  response->SetMementoInfo(head.memento_info);
+
+  /*DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t*  Memento-Datetime set.";
+  DVLOG(0) << "\t* ----------------------------------------------------";
+  DVLOG(0) << "\t*  Class:  WebURLLoaderImpl";
+  DVLOG(0) << "\t*  Date:  " << head.memento_datetime;
+  DVLOG(0) << "\t******************************************************\n";*/
+
+  //response->SetMementoDatetime(head.memento_datetime);
+  //response->SetMementoInfo(head.memento_info);
 
   // Build up the header map.
   size_t iter = 0;
