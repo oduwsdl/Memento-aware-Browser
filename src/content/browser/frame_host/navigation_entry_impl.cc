@@ -772,7 +772,7 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   copy->is_overriding_user_agent_ = is_overriding_user_agent_;
   copy->timestamp_ = timestamp_;
   copy->http_status_code_ = http_status_code_;
-  copy->memento_info_ = memento_info_;
+  //copy->memento_info_ = memento_info_;
   //copy->memento_datetime = memento_datetime_;
   // ResetForCommit: post_data_
   copy->extra_headers_ = extra_headers_;

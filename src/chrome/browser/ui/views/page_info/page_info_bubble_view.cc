@@ -937,12 +937,14 @@ void PageInfoBubbleView::SetMementoInfo(const IdentityInfo& identity_info) {
       site_settings_view_->RemoveChildView(memento_info_button_);
       auto to_delete = std::make_unique<views::View*>(memento_info_button_);
     }
-    memento_info_button_ = site_settings_view_->AddChildView(
-        std::make_unique<PageInfoHoverButton>(
-            this, icon, IDS_PAGE_INFO_MEMENTO_INFO_BUTTON_TEXT, secondary_text,
-            VIEW_ID_PAGE_INFO_MEMENTO_INFO_VIEWER, tooltip,
-            subtitle_text)
-            .release());
+    if (!identity_info.mixed_memento) {
+      memento_info_button_ = site_settings_view_->AddChildView(
+          std::make_unique<PageInfoHoverButton>(
+              this, icon, IDS_PAGE_INFO_MEMENTO_INFO_BUTTON_TEXT, secondary_text,
+              VIEW_ID_PAGE_INFO_MEMENTO_INFO_VIEWER, tooltip,
+              subtitle_text)
+              .release());
+    }
   }
 
   //details_text_ = security_description->details;

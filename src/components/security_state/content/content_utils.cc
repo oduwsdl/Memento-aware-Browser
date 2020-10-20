@@ -447,14 +447,19 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->certificate = ssl.certificate;
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
-  state->memento_status = entry->GetMementoInfo();
-  //DVLOG(0) << "\t MementoDates size: " << entry->GetMementoDates().size();
-  if (entry->GetMementoDates().size() > 1) {
+  if (entry->GetMementoDatetime() != "") {
+    DVLOG(0) << "==========================================================================================";
     state->memento_status = true;
+    state->mixed_memento = false;
   }
-  //state->memento_status = true;
+  else if (entry->GetMementoDates().size() > 1) {
+    DVLOG(0) << "///////////////////////////////////////////////////////////////////////////////////////////";
+    state->memento_status = true;
+    entry->SetMixedMementoContentInfo(true);
+    state->mixed_memento = true;
+  }
   state->memento_datetime = entry->GetMementoDatetime();
-  state->mixed_memento = entry->GetMixedMementoContentInfo();
+  //state->mixed_memento = true;//entry->GetMixedMementoContentInfo();
   state->key_exchange_group = ssl.key_exchange_group;
   state->peer_signature_algorithm = ssl.peer_signature_algorithm;
   state->pkp_bypassed = ssl.pkp_bypassed;

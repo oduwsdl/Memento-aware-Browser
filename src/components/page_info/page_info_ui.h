@@ -72,6 +72,9 @@ class PageInfoUI {
     base::string16 memento_summary;
     // A short sentence that explains that the page is a memento.
     base::string16 memento_info;
+
+    bool mixed_memento_content;
+
     // The category of the security description, used to determine which help
     // center article to link to.
     SecurityDescriptionType type;
@@ -134,6 +137,7 @@ class PageInfoUI {
     // Whether or not the page is a memento
     bool memento_status = false;
     std::string memento_datetime = "";
+    bool mixed_memento = false;
     // Status of the site's identity.
     PageInfo::SiteIdentityStatus identity_status;
     // Site's Safe Browsing status.

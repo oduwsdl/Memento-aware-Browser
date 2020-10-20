@@ -203,12 +203,13 @@ std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
   security_description->summary_style = style;
   security_description->summary = l10n_util::GetStringUTF16(summary_id);
   security_description->details = l10n_util::GetStringUTF16(details_id);
-  security_description->memento_summary = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MEMENTO_SUMMARY);
   if (memento_status && memento_datetime != "") {
+    security_description->memento_summary = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MEMENTO_SUMMARY);
     std::string datetime_string = "The page displayed is a Memento captured on " + memento_datetime;
     security_description->memento_info = base::UTF8ToUTF16(datetime_string);
   }
   else if (memento_status && memento_datetime == "") {
+    security_description->memento_summary = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MIXED_MEMENTO_SUMMARY);
     security_description->memento_info = base::UTF8ToUTF16("The current page contains web archived content.");
   }
   else {
@@ -292,9 +293,10 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
   std::unique_ptr<PageInfoUI::SecurityDescription> security_description(
       new PageInfoUI::SecurityDescription());
 
-  DVLOG(0) << "Page info UI Memento status:";
+  /*DVLOG(0) << "Page info UI Memento status:";
   DVLOG(0) << identity_info.memento_status;
   DVLOG(0) << identity_info.memento_datetime;
+  DVLOG(0) << identity_info.mixed_memento;*/
 
   switch (identity_info.safe_browsing_status) {
     case PageInfo::SAFE_BROWSING_STATUS_NONE:

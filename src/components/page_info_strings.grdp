@@ -22,6 +22,9 @@
   <message name="IDS_PAGE_INFO_MEMENTO_SUMMARY" desc="A short summary phrase at the top of the Page Info bubble (which shows when you click the lock icon) that indicates that the connection to the current website is secure.">
     Viewing a Memento
   </message>
+    <message name="IDS_PAGE_INFO_MIXED_MEMENTO_SUMMARY" desc="A short summary phrase at the top of the Page Info bubble (which shows when you click the lock icon) that indicates that the connection to the current website is secure.">
+    Memento Content
+  </message>
 
   <!-- Internal page summary strings -->
   <!-- Note: IDS_PAGE_INFO_INTERNAL_PAGE would be here, but it is in components_{chromium,google_chrome}_strings.grd because it uses the browser name. -->

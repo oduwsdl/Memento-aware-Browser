@@ -165,14 +165,6 @@ bool LocationIconView::GetIconType() {
   return is_memento_icon_;
 }
 
-/*void LocationIconView::SetContentType(bool is_mixed_memento_content) {
-  is_mixed_memento_content_ = is_mixed_memento_content;
-}
-
-bool LocationIconView::SetContentType() {
-  return is_mixed_memento_content_;
-}*/
-
 const views::InkDrop* LocationIconView::get_ink_drop_for_testing() {
   return GetInkDrop();
 }
