@@ -1,0 +1,2 @@
+modules filter=lfs diff=lfs merge=lfs -text
+third_party/jdk/current/lib/modules filter=lfs diff=lfs merge=lfs -text
