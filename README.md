@@ -1,5 +1,26 @@
+
 # Memento-aware Browser
 A [Chromium](https://www.chromium.org/Home) based Memento-aware web Browser.
+
+## Features
+
+### Alert the user of archived webpages
+
+The browser detects when a page returns the Memento-Datetime header and alerts the user by adding a Memento icon next to the HTTPS lock icon. The user may click the Memento icon to view the date the page was archived.
+
+<p align="center"><img src="https://github.com/a-mabe/Memento-aware-Browser/blob/master/docs/GIFs/memento-icon-plus-popup.gif" width="500"></p>
+
+### Alert the user of mixed live web and archived content
+
+There are two scenarios where live web and archived content are mixed within the same page:
+
+  * The page is a Memento with the live web leaking in.
+  * The webpage is live and not a Memento, yet it is displaying archived content, such as with iframes that display Mementos on the live webpage.
+  
+The browser detects both of these instances and alerts the user that there is a mix of live web content and archived content.
+
+<p align="center"><img src="https://github.com/a-mabe/Memento-aware-Browser/blob/master/docs/GIFs/mixed-memento-content-alert.gif" width="500"></p>
+
 ## Build and Run
 Build instructions for the Memento-aware Browser differ slightly from the [Chromium build instructions](https://www.chromium.org/developers/how-tos/get-the-code).
 Chromium uses a package of scripts called [depot_tools](https://dev.chromium.org/developers/how-tos/depottools). To build and run the Memento-aware Browser, you must [install depot_tools](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up).
