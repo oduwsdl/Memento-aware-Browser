@@ -4,6 +4,8 @@ A [Chromium](https://www.chromium.org/Home) based Memento-aware web Browser.
 
 ## Features
 
+A video deomonstrating the current features can be found here: [https://youtu.be/2zxzp9alatY](https://youtu.be/2zxzp9alatY)
+
 ### Alert the user of archived webpages
 
 The browser detects when a page returns the Memento-Datetime header and alerts the user by adding a Memento icon next to the HTTPS lock icon. The user may click the Memento icon to view the date the page was archived.
