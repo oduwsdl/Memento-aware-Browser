@@ -4,7 +4,7 @@ A [Chromium](https://www.chromium.org/Home) based Memento-aware web Browser.
 
 ## Features
 
-A video deomonstrating the current features can be found here: [https://youtu.be/2zxzp9alatY](https://youtu.be/2zxzp9alatY)
+A video demonstrating the current features can be found here: [https://youtu.be/2zxzp9alatY](https://youtu.be/2zxzp9alatY)
 
 ### Alert the user of archived webpages
 
