@@ -447,16 +447,14 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->certificate = ssl.certificate;
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
+  state->mixed_memento = true;
   if (entry->GetMementoDatetime() != "") {
-    DVLOG(0) << "==========================================================================================";
     state->memento_status = true;
     state->mixed_memento = false;
   }
   else if (entry->GetMementoDates().size() > 1) {
-    DVLOG(0) << "///////////////////////////////////////////////////////////////////////////////////////////";
+    DVLOG(0) << "Detected Mixed Archival Content.";
     state->memento_status = true;
-    entry->SetMixedMementoContentInfo(true);
-    state->mixed_memento = true;
   }
   state->memento_datetime = entry->GetMementoDatetime();
   //state->mixed_memento = true;//entry->GetMixedMementoContentInfo();

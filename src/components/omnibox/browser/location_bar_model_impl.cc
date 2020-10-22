@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <regex>
+
 #include "components/omnibox/browser/location_bar_model_impl.h"
 
 #include "base/check.h"
@@ -276,7 +278,58 @@ base::string16 LocationBarModelImpl::GetSecureDisplayText() const {
 }
 
 base::string16 LocationBarModelImpl::GetMementoDisplayText() const {
-    return base::UTF8ToUTF16("Mixed content");
+
+  DVLOG(0) << "Determining Memento display text.";
+
+  std::map<std::string, std::string> months
+    {
+        { "Jan", "01" },
+        { "Feb", "02" },
+        { "Mar", "03" },
+        { "Apr", "04" },
+        { "May", "05" },
+        { "Jun", "06" },
+        { "Jul", "07" },
+        { "Aug", "08" },
+        { "Sep", "09" },
+        { "Oct", "10" },
+        { "Nov", "11" },
+        { "Dec", "12" }
+    };
+
+    if (IsMixedContent())
+      return base::UTF8ToUTF16("Mixed archival content");
+    else {
+
+      const std::string s = GetMementoDatetime();
+
+      DVLOG(0) << "The datetime = " << s;
+
+      // Get the day
+      std::regex dayRGX("[\\ ](\\d{2})[\\ ]");
+      std::smatch dayMatch;
+
+      if (std::regex_search(s.begin(), s.end(), dayMatch, dayRGX))
+          DVLOG(0 ) << "Day: " << dayMatch[1] << '\n';
+
+      std::regex yearRGX("(\\d{4})");
+      std::smatch yearMatch;
+
+      if (std::regex_search(s.begin(), s.end(), yearMatch, yearRGX))
+          DVLOG(0 ) << "Year: " << yearMatch[1] << '\n';
+
+      std::regex monthRGX("([A-Z]{1}[a-z]{2})[\\ ]");
+      std::smatch monthMatch;
+
+      if (std::regex_search(s.begin(), s.end(), monthMatch, monthRGX))
+          DVLOG(0 ) << "Month: " << months[monthMatch[1]] << '\n';
+
+      std::string dateString = std::string(yearMatch[1]) + "-" + 
+                               months[monthMatch[1]] + "-" + 
+                               std::string(dayMatch[1]);
+
+      return base::UTF8ToUTF16(dateString);
+    }
 } 
 
 base::string16 LocationBarModelImpl::GetSecureAccessibilityText() const {
@@ -312,4 +365,11 @@ bool LocationBarModelImpl::IsMixedContent() const {
           visible_security_state = delegate_->GetVisibleSecurityState();
 
   return visible_security_state->mixed_memento;
+}
+
+std::string LocationBarModelImpl::GetMementoDatetime() const {
+  std::unique_ptr<security_state::VisibleSecurityState>
+          visible_security_state = delegate_->GetVisibleSecurityState();
+
+  return visible_security_state->memento_datetime;
 }

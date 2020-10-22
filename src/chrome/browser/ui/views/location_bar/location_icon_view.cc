@@ -135,7 +135,7 @@ bool LocationIconView::ShouldShowText() const {
     return false;
 
   if (is_memento_icon_)
-    return ShouldShowMixedContentWarning();
+    return true;//ShouldShowMixedContentWarning();
 
   const auto* location_bar_model = delegate_->GetLocationBarModel();
   const GURL& url = location_bar_model->GetURL();
