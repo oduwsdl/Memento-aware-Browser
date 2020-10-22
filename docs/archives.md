@@ -1,0 +1,18 @@
+# Tested Web Archives
+
+* [Archive-It](https://wayback.archive-it.org/)
+* [Archive.today]( https://archive.today/)
+* [Australian Web Archive](https://web.archive.org.au/)
+* [BAnQ](https://waext.banq.qc.ca/)
+* [Bibliotheca Alexandrina Web Archive](https://web.archive.bibalex.org/)
+* [Icelandic Web Archive](https://wayback.vefsafn.is/)
+* [Internet Archive](https://web.archive.org/)
+* [Library and Archives Canada](https://webarchive.bac-lac.gc.ca/)
+* [Library of Congress](https://webarchive.loc.gov/)
+* [National Records of Scotland](https://webarchive.nrscotland.gov.uk/)
+* [Perma Archive](https://perma.cc/)
+* [Portugeuse Web Archive](https://arquivo.pt/)
+* [Stanford Web Archive](https://swap.stanford.edu/)
+* [UK National Archives Web Archive](https://webarchive.nationalarchives.gov/)
+* [UK Parliament Web Archive](https://webarchive.parliament.uk/)
+* [UK Web Archive](https://webarchive.org.uk/)
