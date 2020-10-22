@@ -10,7 +10,7 @@ A video demonstrating the current features can be found here: [https://youtu.be/
 
 The browser detects when a page returns the Memento-Datetime header and alerts the user by adding a Memento icon next to the HTTPS lock icon. The user may click the Memento icon to view the date the page was archived.
 
-<p align="center"><img src="https://github.com/a-mabe/Memento-aware-Browser/blob/master/docs/GIFs/memento-icon-plus-popup.gif" width="500"></p>
+<p align="center"><img src="https://github.com/a-mabe/Memento-aware-Browser/blob/master/docs/GIFs/memento-popup.gif" width="500"></p>
 
 ### Alert the user of mixed live web and archived content
 
@@ -21,7 +21,7 @@ There are two scenarios where live web and archived content are mixed within the
   
 The browser detects both of these instances and alerts the user that there is a mix of live web content and archived content.
 
-<p align="center"><img src="https://github.com/a-mabe/Memento-aware-Browser/blob/master/docs/GIFs/mixed-memento-content-alert.gif" width="500"></p>
+<p align="center"><img src="https://github.com/a-mabe/Memento-aware-Browser/blob/master/docs/GIFs/mixed-archival-content.gif" width="500"></p>
 
 ## Build and Run
 Build instructions for the Memento-aware Browser differ slightly from the [Chromium build instructions](https://www.chromium.org/developers/how-tos/get-the-code).
