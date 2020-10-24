@@ -22,9 +22,7 @@ namespace {
 
 constexpr char kUserActionSetupDone[] = "setup-done";
 constexpr char kUserActionSetupSkipped[] = "setup-skipped";
-constexpr char kUserActionDoItLater[] = "do-it-later";
 constexpr char kUserActionAddAnotherFinger[] = "add-another-finger";
-constexpr char kUserActionShowSensorLocation[] = "show-sensor-location";
 
 struct FingerprintSetupUserAction {
   const char* name_;
@@ -35,11 +33,8 @@ const FingerprintSetupUserAction actions[] = {
     {kUserActionSetupDone, FingerprintSetupScreen::UserAction::kSetupDone},
     {kUserActionSetupSkipped,
      FingerprintSetupScreen::UserAction::kSetupSkipped},
-    {kUserActionDoItLater, FingerprintSetupScreen::UserAction::kDoItLater},
     {kUserActionAddAnotherFinger,
      FingerprintSetupScreen::UserAction::kAddAnotherFinger},
-    {kUserActionShowSensorLocation,
-     FingerprintSetupScreen::UserAction::kShowSensorLocation},
 };
 
 void RecordFingerprintSetupUserAction(
@@ -97,8 +92,6 @@ std::string FingerprintSetupScreen::GetResultString(Result result) {
       return "Done";
     case Result::SKIPPED:
       return "Skipped";
-    case Result::DO_IT_LATER:
-      return "DoItLater";
     case Result::NOT_APPLICABLE:
       return BaseScreen::kNotApplicable;
   }
@@ -127,7 +120,7 @@ FingerprintSetupScreen::~FingerprintSetupScreen() {
   view_->Bind(nullptr);
 }
 
-bool FingerprintSetupScreen::MaybeSkip() {
+bool FingerprintSetupScreen::MaybeSkip(WizardContext* context) {
   if (!chromeos::quick_unlock::IsFingerprintEnabled(
           ProfileManager::GetActiveUserProfile()) ||
       chrome_user_manager_util::IsPublicSessionOrEphemeralLogin()) {
@@ -162,8 +155,6 @@ void FingerprintSetupScreen::OnUserAction(const std::string& action_id) {
     exit_callback_.Run(Result::DONE);
   } else if (action_id == kUserActionSetupSkipped) {
     exit_callback_.Run(Result::SKIPPED);
-  } else if (action_id == kUserActionDoItLater) {
-    exit_callback_.Run(Result::DO_IT_LATER);
   } else if (action_id == kUserActionAddAnotherFinger) {
     StartAddingFinger();
   }

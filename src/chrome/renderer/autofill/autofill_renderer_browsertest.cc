@@ -70,6 +70,9 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
  private:
   // mojom::AutofillDriver:
+  void SetFormToBeProbablySubmitted(
+      const base::Optional<FormData>& form) override {}
+
   void FormsSeen(const std::vector<FormData>& forms,
                  base::TimeTicks timestamp) override {
     // FormsSeen() could be called multiple times and sometimes even with empty
@@ -106,7 +109,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
   void HidePopup() override {}
 
-  void FocusNoLongerOnForm() override {}
+  void FocusNoLongerOnForm(bool had_interacted_form) override {}
 
   void FocusOnFormField(const FormData& form,
                         const FormFieldData& field,

@@ -10,6 +10,7 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -38,10 +39,12 @@
 #include "printing/buildflags/buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/switches.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -61,7 +64,7 @@ using testing::UnorderedElementsAreArray;
 namespace headless {
 class HeadlessWebContentsTest : public HeadlessBrowserTest {};
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 #define MAYBE_Navigation DISABLED_Navigation
 #else
@@ -83,7 +86,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, MAYBE_Navigation) {
               UnorderedElementsAre(web_contents));
 }
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 #define MAYBE_WindowOpen DISABLED_WindowOpen
 #else
@@ -122,17 +125,17 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, MAYBE_WindowOpen) {
     EXPECT_NE(parent->window_tree_host(), child->window_tree_host());
 
   gfx::Rect expected_bounds(0, 0, 200, 100);
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   EXPECT_EQ(expected_bounds, child->web_contents()->GetViewBounds());
   EXPECT_EQ(expected_bounds, child->web_contents()->GetContainerBounds());
-#else   // !defined(OS_MACOSX)
+#else   // !defined(OS_MAC)
   // Mac does not support GetViewBounds() and view positions are random.
   EXPECT_EQ(expected_bounds.size(),
             child->web_contents()->GetContainerBounds().size());
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 }
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 #define MAYBE_FocusOfHeadlessWebContents_IsIndependent \
   DISABLED_FocusOfHeadlessWebContents_IsIndependent
@@ -171,7 +174,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest,
   EXPECT_TRUE(has_focus->GetResult()->GetValue()->GetBool());
 }
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 #define MAYBE_HandleSSLError DISABLED_HandleSSLError
 #else
@@ -251,7 +254,7 @@ class HeadlessWebContentsScreenshotTest
 HEADLESS_ASYNC_DEVTOOLED_TEST_P(HeadlessWebContentsScreenshotTest);
 
 // Instantiate test case for both software and gpu compositing modes.
-#if !defined(OS_WIN)
+#if !defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled on Windows due to flakiness.
 INSTANTIATE_TEST_SUITE_P(HeadlessWebContentsScreenshotTests,
                          HeadlessWebContentsScreenshotTest,
@@ -287,7 +290,7 @@ class HeadlessWebContentsScreenshotWindowPositionTest
 };
 
 // Flaky on Windows Debug https://crbug.com/1090801
-#if defined(OS_WIN) && !defined(NDEBUG)
+#if defined(NO_WIN_FLAKES) && !defined(NDEBUG)
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_P(
     HeadlessWebContentsScreenshotWindowPositionTest);
 #else
@@ -296,7 +299,7 @@ HEADLESS_ASYNC_DEVTOOLED_TEST_P(
 #endif
 
 // Instantiate test case for both software and gpu compositing modes.
-#if defined(OS_WIN) || (defined(OS_MACOSX) && defined(ADDRESS_SANITIZER))
+#if defined(NO_WIN_FLAKES) || (defined(OS_MAC) && defined(ADDRESS_SANITIZER))
 // TODO(crbug.com/1045980): Disabled on Windows due to flakiness.
 // TODO(crbug.com/1086872): Disabled due to flakiness on Mac ASAN.
 INSTANTIATE_TEST_SUITE_P(HeadlessWebContentsScreenshotWindowPositionTests,
@@ -351,26 +354,31 @@ class HeadlessWebContentsPDFTest : public HeadlessAsyncDevTooledBrowserTest {
     EXPECT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_span, &num_pages, nullptr));
     EXPECT_EQ(std::ceil(kDocHeight / kPaperHeight), num_pages);
 
+    constexpr chrome_pdf::RenderOptions options = {
+        .stretch_to_bounds = false,
+        .keep_aspect_ratio = true,
+        .autorotate = true,
+        .use_color = true,
+        .render_device_type = chrome_pdf::RenderDeviceType::kPrinter,
+    };
     for (int i = 0; i < num_pages; i++) {
-      double width_in_points;
-      double height_in_points;
-      EXPECT_TRUE(chrome_pdf::GetPDFPageSizeByIndex(
-          pdf_span, i, &width_in_points, &height_in_points));
-      EXPECT_EQ(static_cast<int>(width_in_points),
+      base::Optional<gfx::SizeF> size_in_points =
+          chrome_pdf::GetPDFPageSizeByIndex(pdf_span, i);
+      ASSERT_TRUE(size_in_points.has_value());
+      EXPECT_EQ(static_cast<int>(size_in_points.value().width()),
                 static_cast<int>(kPaperWidth * printing::kPointsPerInch));
-      EXPECT_EQ(static_cast<int>(height_in_points),
+      EXPECT_EQ(static_cast<int>(size_in_points.value().height()),
                 static_cast<int>(kPaperHeight * printing::kPointsPerInch));
 
       gfx::Rect rect(kPaperWidth * kDpi, kPaperHeight * kDpi);
       printing::PdfRenderSettings settings(
-          rect, gfx::Point(0, 0), gfx::Size(kDpi, kDpi), /*autorotate=*/true,
-          /*use_color=*/true, printing::PdfRenderSettings::Mode::NORMAL);
+          rect, gfx::Point(), gfx::Size(kDpi, kDpi), options.autorotate,
+          options.use_color, printing::PdfRenderSettings::Mode::NORMAL);
       std::vector<uint8_t> page_bitmap_data(kColorChannels *
                                             settings.area.size().GetArea());
       EXPECT_TRUE(chrome_pdf::RenderPDFPageToBitmap(
-          pdf_span, i, page_bitmap_data.data(), settings.area.size().width(),
-          settings.area.size().height(), settings.dpi.width(),
-          settings.dpi.height(), settings.autorotate, settings.use_color));
+          pdf_span, i, page_bitmap_data.data(), settings.area.size(),
+          settings.dpi, options));
       EXPECT_EQ(0x56, page_bitmap_data[0]);  // B
       EXPECT_EQ(0x34, page_bitmap_data[1]);  // G
       EXPECT_EQ(0x12, page_bitmap_data[2]);  // R
@@ -379,7 +387,7 @@ class HeadlessWebContentsPDFTest : public HeadlessAsyncDevTooledBrowserTest {
   }
 };
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsPDFTest);
 #else
@@ -466,7 +474,7 @@ class HeadlessWebContentsPDFStreamTest
   std::string base64_data_;
 };
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsPDFStreamTest);
 #else
@@ -520,9 +528,10 @@ class HeadlessWebContentsPDFPageSizeRoundingTest
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsPDFPageSizeRoundingTest);
 
 const char kExpectedStructTreeJSON[] = R"({
+   "lang": "en",
    "type": "Document",
    "~children": [ {
-      "type": "H",
+      "type": "H1",
       "~children": [ {
          "type": "NonStruct"
       } ]
@@ -540,6 +549,14 @@ const char kExpectedStructTreeJSON[] = R"({
          } ]
       }, {
          "type": "LI",
+         "~children": [ {
+            "type": "NonStruct"
+         } ]
+      } ]
+   }, {
+      "type": "Div",
+      "~children": [ {
+         "type": "Link",
          "~children": [ {
             "type": "NonStruct"
          } ]
@@ -574,10 +591,21 @@ const char kExpectedStructTreeJSON[] = R"({
          } ]
       } ]
    }, {
+      "type": "H2",
+      "~children": [ {
+         "type": "NonStruct"
+      } ]
+   }, {
       "type": "Div",
       "~children": [ {
          "alt": "Car at the beach",
          "type": "Figure"
+      } ]
+   }, {
+      "lang": "fr",
+      "type": "P",
+      "~children": [ {
+         "type": "NonStruct"
       } ]
    } ]
 }
@@ -651,7 +679,7 @@ class HeadlessWebContentsTaggedPDFTest
 };
 
 // Flaky on Windows Debug https://crbug.com/1090801
-#if defined(OS_WIN) && !defined(NDEBUG)
+#if defined(NO_WIN_FLAKES) && !defined(NDEBUG)
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsTaggedPDFTest);
 #else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsTaggedPDFTest);
@@ -704,7 +732,7 @@ class HeadlessWebContentsRequestStorageQuotaTest
   }
 };
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(
     HeadlessWebContentsRequestStorageQuotaTest);
@@ -712,7 +740,7 @@ DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsRequestStorageQuotaTest);
 #endif
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 #define MAYBE_BrowserTabChangeContent DISABLED_BrowserTabChangeContent
 #else
@@ -737,7 +765,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, MAYBE_BrowserTabChangeContent) {
   EXPECT_TRUE(WaitForLoad(web_contents));
 }
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 #define MAYBE_BrowserOpenInTab DISABLED_BrowserOpenInTab
 #else
@@ -768,7 +796,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, MAYBE_BrowserOpenInTab) {
 }
 
 // BeginFrameControl is not supported on MacOS.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 
 class HeadlessWebContentsBeginFrameControlTest
     : public HeadlessBrowserTest,
@@ -822,7 +850,7 @@ class HeadlessWebContentsBeginFrameControlTest
     command_line->AppendSwitch(::switches::kDisableNewContentRenderingTimeout);
     command_line->AppendSwitch(cc::switches::kDisableCheckerImaging);
     command_line->AppendSwitch(cc::switches::kDisableThreadedAnimation);
-    command_line->AppendSwitch(::switches::kDisableThreadedScrolling);
+    command_line->AppendSwitch(blink::switches::kDisableThreadedScrolling);
   }
 
   void OnCreateTargetResult(
@@ -1000,7 +1028,7 @@ class HeadlessWebContentsBeginFrameControlBasicTest
   }
 };
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(
     HeadlessWebContentsBeginFrameControlBasicTest);
@@ -1089,7 +1117,7 @@ class HeadlessWebContentsBeginFrameControlViewportTest
   }
 };
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(
     HeadlessWebContentsBeginFrameControlViewportTest);
@@ -1098,7 +1126,7 @@ HEADLESS_ASYNC_DEVTOOLED_TEST_F(
     HeadlessWebContentsBeginFrameControlViewportTest);
 #endif
 
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 class CookiesEnabled : public HeadlessAsyncDevTooledBrowserTest,
                        page::Observer {
@@ -1128,7 +1156,7 @@ class CookiesEnabled : public HeadlessAsyncDevTooledBrowserTest,
   }
 };
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(CookiesEnabled);
 #else
@@ -1140,7 +1168,10 @@ const char* kPageWhichOpensAWindow = R"(
 <html>
 <body>
 <script>
-window.open('/page2.html');
+const win = window.open('/page2.html');
+if (!win)
+  console.error('ready');
+win.addEventListener('load', () => console.log('ready'));
 </script>
 </body>
 </html>
@@ -1155,18 +1186,18 @@ Page 2.
 )";
 }  // namespace
 
-class WebContentsOpenTest : public page::Observer,
+class WebContentsOpenTest : public runtime::Observer,
                             public HeadlessAsyncDevTooledBrowserTest {
  public:
   void RunDevTooledTest() override {
-    devtools_client_->GetPage()->AddObserver(this);
     interceptor_->InsertResponse("http://foo.com/index.html",
                                  {kPageWhichOpensAWindow, "text/html"});
     interceptor_->InsertResponse("http://foo.com/page2.html",
                                  {kPage2, "text/html"});
 
     base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-    devtools_client_->GetPage()->Enable(run_loop.QuitClosure());
+    devtools_client_->GetRuntime()->AddObserver(this);
+    devtools_client_->GetRuntime()->Enable(run_loop.QuitClosure());
     run_loop.Run();
 
     devtools_client_->GetPage()->Navigate("http://foo.com/index.html");
@@ -1180,7 +1211,8 @@ class DontBlockWebContentsOpenTest : public WebContentsOpenTest {
     builder.SetBlockNewWebContents(false);
   }
 
-  void OnLoadEventFired(const page::LoadEventFiredParams&) override {
+  void OnConsoleAPICalled(
+      const runtime::ConsoleAPICalledParams& params) override {
     EXPECT_THAT(
         interceptor_->urls_requested(),
         ElementsAre("http://foo.com/index.html", "http://foo.com/page2.html"));
@@ -1188,14 +1220,7 @@ class DontBlockWebContentsOpenTest : public WebContentsOpenTest {
   }
 };
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_FUCHSIA)
-// TODO(crbug.com/1045980): Disabled due to flakiness.
-// TODO(crbug.com/1078405): Disabled due to flakiness.
-// TODO(crbug.com/1090936): Disabled due to flakiness.
-DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(DontBlockWebContentsOpenTest);
-#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(DontBlockWebContentsOpenTest);
-#endif
 
 class BlockWebContentsOpenTest : public WebContentsOpenTest {
  public:
@@ -1204,18 +1229,14 @@ class BlockWebContentsOpenTest : public WebContentsOpenTest {
     builder.SetBlockNewWebContents(true);
   }
 
-  void OnLoadEventFired(const page::LoadEventFiredParams&) override {
+  void OnConsoleAPICalled(
+      const runtime::ConsoleAPICalledParams& params) override {
     EXPECT_THAT(interceptor_->urls_requested(),
                 ElementsAre("http://foo.com/index.html"));
     FinishAsynchronousTest();
   }
 };
 
-#if defined(OS_WIN)
-// TODO(crbug.com/1045980): Disabled due to flakiness.
-DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(BlockWebContentsOpenTest);
-#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(BlockWebContentsOpenTest);
-#endif
 
 }  // namespace headless

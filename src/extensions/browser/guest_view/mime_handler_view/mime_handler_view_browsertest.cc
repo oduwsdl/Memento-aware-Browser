@@ -196,7 +196,7 @@ class PrintPreviewWaiter : public content::BrowserMessageFilter {
   }
 
   void OnDidStartPreview(const printing::mojom::DidStartPreviewParams& params,
-                         const PrintHostMsg_PreviewIds& ids) {
+                         const printing::mojom::PreviewIds& ids) {
     // Expect that there is at least one page.
     did_load_ = true;
     run_loop_.Quit();
@@ -443,7 +443,8 @@ IN_PROC_BROWSER_TEST_F(MimeHandlerViewTest, BackgroundPage) {
 IN_PROC_BROWSER_TEST_F(MimeHandlerViewTest, TargetBlankAnchor) {
   RunTest("testTargetBlankAnchor.csv");
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
-  content::WaitForLoadStop(browser()->tab_strip_model()->GetWebContentsAt(1));
+  EXPECT_TRUE(content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetWebContentsAt(1)));
   EXPECT_EQ(
       GURL(url::kAboutBlankURL),
       browser()->tab_strip_model()->GetWebContentsAt(1)->GetLastCommittedURL());

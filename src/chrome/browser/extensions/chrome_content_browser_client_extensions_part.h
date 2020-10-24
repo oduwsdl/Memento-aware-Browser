@@ -51,8 +51,8 @@ class ChromeContentBrowserClientExtensionsPart
   static bool DoesSiteRequireDedicatedProcess(
       content::BrowserContext* browser_context,
       const GURL& effective_site_url);
-  static bool ShouldLockToOrigin(content::BrowserContext* browser_context,
-                                 const GURL& effective_site_url);
+  static bool ShouldLockProcessToSite(content::BrowserContext* browser_context,
+                                      const GURL& effective_site_url);
   static bool CanCommitURL(content::RenderProcessHost* process_host,
                            const GURL& url);
   static bool IsSuitableHost(Profile* profile,
@@ -103,7 +103,7 @@ class ChromeContentBrowserClientExtensionsPart
   void SiteInstanceGotProcess(content::SiteInstance* site_instance) override;
   void SiteInstanceDeleting(content::SiteInstance* site_instance) override;
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
-                           content::WebPreferences* web_prefs) override;
+                           blink::web_pref::WebPreferences* web_prefs) override;
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
   void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_allowed_schemes) override;

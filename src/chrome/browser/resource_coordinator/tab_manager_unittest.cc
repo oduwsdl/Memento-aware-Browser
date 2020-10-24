@@ -14,23 +14,17 @@
 #include "base/check.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial.h"
 #include "base/notreached.h"
 #include "base/strings/string16.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/simple_test_tick_clock.h"
-#include "base/test/test_mock_time_task_runner.h"
-#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_tracker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
-#include "chrome/browser/resource_coordinator/local_site_characteristics_data_unittest_utils.h"
-#include "chrome/browser/resource_coordinator/local_site_characteristics_webcontents_observer.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
@@ -46,6 +40,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/variations/variations_associated_data.h"
@@ -110,17 +105,13 @@ class FakeOfflineNetworkChangeNotifier : public net::NetworkChangeNotifier {
 
 }  // namespace
 
-class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
+class TabManagerTest : public ChromeRenderViewHostTestHarness {
  public:
   TabManagerTest()
-      : scoped_context_(
-            std::make_unique<base::TestMockTimeTaskRunner::ScopedContext>(
-                task_runner_)),
-        scoped_set_tick_clock_for_testing_(task_runner_->GetMockTickClock()) {
-    base::MessageLoopCurrent::Get()->SetTaskRunner(task_runner_);
-
+      : ChromeRenderViewHostTestHarness(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
     // Start with a non-zero time.
-    task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(42));
+    task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(42));
   }
 
   std::unique_ptr<WebContents> CreateWebContents() {
@@ -130,17 +121,11 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
     content::WebContentsTester::For(web_contents.get())
         ->NavigateAndCommit(GURL("https://www.example.com"));
 
-    base::RepeatingClosure run_loop_cb = base::BindRepeating(
-        &base::TestMockTimeTaskRunner::RunUntilIdle, task_runner_);
-
-    testing::WaitForLocalDBEntryToBeInitialized(web_contents.get(),
-                                                run_loop_cb);
-    testing::ExpireLocalDBObservationWindows(web_contents.get());
     return web_contents;
   }
 
   void SetUp() override {
-    ChromeTestHarnessWithLocalDB::SetUp();
+    ChromeRenderViewHostTestHarness::SetUp();
     tab_manager_ = g_browser_process->GetTabManager();
   }
 
@@ -164,7 +149,7 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
     nav_handle3_.reset();
 
     // WebContents must be deleted before
-    // ChromeTestHarnessWithLocalDB::TearDown() deletes the
+    // ChromeRenderViewHostTestHarness::TearDown() deletes the
     // RenderProcessHost.
     contents1_.reset();
     contents2_.reset();
@@ -173,10 +158,7 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
 
   void TearDown() override {
     ResetState();
-
-    task_runner_->RunUntilIdle();
-    scoped_context_.reset();
-    ChromeTestHarnessWithLocalDB::TearDown();
+    ChromeRenderViewHostTestHarness::TearDown();
   }
 
   void PrepareTabs(const char* url1 = kTestUrl,
@@ -266,10 +248,6 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
   }
 
   TabManager* tab_manager_ = nullptr;
-  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_ =
-      base::MakeRefCounted<base::TestMockTimeTaskRunner>();
-  std::unique_ptr<base::TestMockTimeTaskRunner::ScopedContext> scoped_context_;
-  ScopedSetTickClockForTesting scoped_set_tick_clock_for_testing_;
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle1_;
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle2_;
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle3_;
@@ -327,7 +305,8 @@ TEST_F(TabManagerTest, IsInternalPage) {
 
 // Data race on Linux. http://crbug.com/787842
 // Flaky on Mac and Windows: https://crbug.com/995682
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) || \
+    defined(OS_WIN)
 #define MAYBE_DiscardTabWithNonVisibleTabs DISABLED_DiscardTabWithNonVisibleTabs
 #else
 #define MAYBE_DiscardTabWithNonVisibleTabs DiscardTabWithNonVisibleTabs
@@ -364,7 +343,7 @@ TEST_F(TabManagerTest, MAYBE_DiscardTabWithNonVisibleTabs) {
   tab_strip2->GetWebContentsAt(1)->WasHidden();
 
   // Advance time enough that the tabs are urgent discardable.
-  task_runner_->AdvanceMockTickClock(kBackgroundUrgentProtectionTime);
+  task_environment()->AdvanceClock(kBackgroundUrgentProtectionTime);
 
   for (int i = 0; i < 4; ++i)
     tab_manager_->DiscardTab(LifecycleUnitDiscardReason::URGENT);
@@ -518,7 +497,7 @@ TEST_F(TabManagerTest, TimeoutWhenLoadingBackgroundTabs) {
 
   // Simulate timeout when loading the 1st tab. TabManager should start loading
   // the 2nd tab.
-  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(10));
 
   EXPECT_TRUE(tab_manager_->IsTabLoadingForTest(contents1_.get()));
   EXPECT_TRUE(tab_manager_->IsTabLoadingForTest(contents2_.get()));
@@ -528,7 +507,7 @@ TEST_F(TabManagerTest, TimeoutWhenLoadingBackgroundTabs) {
   EXPECT_TRUE(tab_manager_->IsNavigationDelayedForTest(nav_handle3_.get()));
 
   // Simulate timeout again. TabManager should start loading the 3rd tab.
-  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(10));
 
   EXPECT_TRUE(tab_manager_->IsTabLoadingForTest(contents1_.get()));
   EXPECT_TRUE(tab_manager_->IsTabLoadingForTest(contents2_.get()));
@@ -561,7 +540,7 @@ TEST_F(TabManagerTest, BackgroundTabLoadingMode) {
             tab_manager_->background_tab_loading_mode_);
 
   // Simulate timeout when loading the 1st tab.
-  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(10));
 
   // Tab 2 and 3 are still pending because of the paused loading mode.
   EXPECT_FALSE(tab_manager_->IsTabLoadingForTest(contents2_.get()));
@@ -925,7 +904,7 @@ TEST_F(TabManagerTest, GetSortedLifecycleUnits) {
 
   const int num_of_tabs_to_test = 20;
   for (int i = 0; i < num_of_tabs_to_test; ++i) {
-    task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+    task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(10));
     tab_strip->AppendWebContents(CreateWebContents(), /*foreground=*/true);
   }
 

@@ -29,6 +29,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxTheme;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties.Action;
 import org.chromium.components.browser_ui.widget.RoundedCornerImageView;
@@ -131,8 +132,8 @@ public class BaseSuggestionViewBinderUnitTest {
     @Test
     public void actionIcon_showIcon() {
         Runnable callback = mock(Runnable.class);
-        List<Action> list =
-                Arrays.asList(new Action(SuggestionDrawableState.Builder.forColor(0).build(),
+        List<Action> list = Arrays.asList(
+                new Action(mActivity, SuggestionDrawableState.Builder.forColor(0).build(),
                         R.string.accessibility_omnibox_btn_refine, callback));
         mModel.set(BaseSuggestionViewProperties.ACTIONS, list);
 
@@ -140,6 +141,7 @@ public class BaseSuggestionViewBinderUnitTest {
         Assert.assertEquals(1, actionButtons.size());
         Assert.assertEquals(View.VISIBLE, actionButtons.get(0).getVisibility());
         Assert.assertEquals(list.get(0).icon.drawable, actionButtons.get(0).getDrawable());
+        Assert.assertNotNull(actionButtons.get(0).getBackground());
         verify(mBaseView, times(1)).addView(actionButtons.get(0));
 
         Assert.assertTrue(actionButtons.get(0).performClick());
@@ -154,13 +156,13 @@ public class BaseSuggestionViewBinderUnitTest {
         Runnable call2 = mock(Runnable.class);
         Runnable call3 = mock(Runnable.class);
 
-        List<Action> list =
-                Arrays.asList(new Action(SuggestionDrawableState.Builder.forColor(0).build(),
-                                      R.string.accessibility_omnibox_btn_refine, call1),
-                        new Action(SuggestionDrawableState.Builder.forColor(0).build(),
-                                R.string.accessibility_omnibox_btn_refine, call2),
-                        new Action(SuggestionDrawableState.Builder.forColor(0).build(),
-                                R.string.accessibility_omnibox_btn_refine, call3));
+        List<Action> list = Arrays.asList(
+                new Action(mActivity, SuggestionDrawableState.Builder.forColor(0).build(),
+                        R.string.accessibility_omnibox_btn_refine, call1),
+                new Action(mActivity, SuggestionDrawableState.Builder.forColor(0).build(),
+                        R.string.accessibility_omnibox_btn_refine, call2),
+                new Action(mActivity, SuggestionDrawableState.Builder.forColor(0).build(),
+                        R.string.accessibility_omnibox_btn_refine, call3));
         mModel.set(BaseSuggestionViewProperties.ACTIONS, list);
 
         List<ImageView> actionButtons = mBaseView.getActionButtons();
@@ -187,13 +189,13 @@ public class BaseSuggestionViewBinderUnitTest {
 
     @Test
     public void actionIcon_hideIcons() {
-        final List<Action> list =
-                Arrays.asList(new Action(SuggestionDrawableState.Builder.forColor(0).build(),
-                                      R.string.accessibility_omnibox_btn_refine, () -> {}),
-                        new Action(SuggestionDrawableState.Builder.forColor(0).build(),
-                                R.string.accessibility_omnibox_btn_refine, () -> {}),
-                        new Action(SuggestionDrawableState.Builder.forColor(0).build(),
-                                R.string.accessibility_omnibox_btn_refine, () -> {}));
+        final List<Action> list = Arrays.asList(
+                new Action(mActivity, SuggestionDrawableState.Builder.forColor(0).build(),
+                        R.string.accessibility_omnibox_btn_refine, () -> {}),
+                new Action(mActivity, SuggestionDrawableState.Builder.forColor(0).build(),
+                        R.string.accessibility_omnibox_btn_refine, () -> {}),
+                new Action(mActivity, SuggestionDrawableState.Builder.forColor(0).build(),
+                        R.string.accessibility_omnibox_btn_refine, () -> {}));
 
         final List<ImageView> actionButtons = mBaseView.getActionButtons();
         mModel.set(BaseSuggestionViewProperties.ACTIONS, list);
@@ -225,7 +227,7 @@ public class BaseSuggestionViewBinderUnitTest {
         Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
         mBaseView.setActionButtonsCount(1);
         // Change in color scheme happening ahead of setting action could cause a crash.
-        mModel.set(SuggestionCommonProperties.USE_DARK_COLORS, false);
+        mModel.set(SuggestionCommonProperties.OMNIBOX_THEME, OmniboxTheme.LIGHT_THEME);
     }
 
     @Test

@@ -56,8 +56,7 @@ void ArcAppInstallEventLogUploader::OnUploadSuccess() {
   delegate_->OnUploadSuccess();
 }
 
-void ArcAppInstallEventLogUploader::PostTaskForStartSerialization(
-    const int retry_backoff_ms) {
+void ArcAppInstallEventLogUploader::PostTaskForStartSerialization() {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&InstallEventLogUploaderBase::StartSerialization,
@@ -76,9 +75,9 @@ void ArcAppInstallEventLogUploader::OnSerialized(
   // base::Unretained() is safe here as the destructor cancels any pending
   // upload, after which the |client_| is guaranteed to not call the callback.
   client_->UploadAppInstallReport(
-      std::move(value_report), base::AdaptCallbackForRepeating(base::BindOnce(
-                                   &ArcAppInstallEventLogUploader::OnUploadDone,
-                                   base::Unretained(this))));
+      std::move(value_report),
+      base::BindOnce(&ArcAppInstallEventLogUploader::OnUploadDone,
+                     base::Unretained(this)));
 }
 
 }  // namespace policy

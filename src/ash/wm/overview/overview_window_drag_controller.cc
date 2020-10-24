@@ -30,6 +30,7 @@
 #include "ash/wm/window_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/ranges.h"
+#include "base/numerics/safe_conversions.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display.h"
@@ -665,10 +666,10 @@ OverviewWindowDragController::CompleteNormalDrag(
     // Get the window and bounds from |item_| before removing it from its grid.
     aura::Window* window = item_->GetWindow();
     const gfx::RectF target_item_bounds = item_->target_bounds();
-    // Remove |item_| from its grid. Leave the repositioning to the
+    // Remove |item_| from overview. Leave the repositioning to the
     // |OverviewItemMoveHelper|.
-    item_overview_grid->RemoveItem(item_, /*item_destroying=*/false,
-                                   /*reposition=*/false);
+    overview_session_->RemoveItem(item_, /*item_destroying=*/false,
+                                  /*reposition=*/false);
     item_ = nullptr;
     // The |OverviewItemMoveHelper| will self destruct when we move |window| to
     // |target_root|.
@@ -726,9 +727,9 @@ SplitViewController::SnapPosition OverviewWindowDragController::GetSnapPosition(
     return SplitViewController::NONE;
   if (split_view_controller->InSplitViewMode()) {
     const int position =
-        gfx::ToRoundedInt(SplitViewController::IsLayoutHorizontal()
-                              ? location_in_screen.x() - area.x()
-                              : location_in_screen.y() - area.y());
+        base::ClampRound(SplitViewController::IsLayoutHorizontal()
+                             ? location_in_screen.x() - area.x()
+                             : location_in_screen.y() - area.y());
     SplitViewController::SnapPosition default_snap_position =
         split_view_controller->default_snap_position();
     // If we're trying to snap to a position that already has a snapped window:

@@ -8,8 +8,13 @@
 #include <memory>
 #include <string>
 
+#include "components/safe_browsing/core/proto/csd.pb.h"
 #include "components/safe_browsing/core/realtime/url_lookup_service_base.h"
 #include "url/gurl.h"
+
+namespace net {
+struct NetworkTrafficAnnotationTag;
+}
 
 namespace network {
 class SharedURLLoaderFactory;
@@ -18,6 +23,12 @@ class SharedURLLoaderFactory;
 namespace policy {
 class DMToken;
 }  // namespace policy
+
+namespace syncer {
+class SyncService;
+}
+
+class PrefService;
 
 class Profile;
 
@@ -32,28 +43,37 @@ class ChromeEnterpriseRealTimeUrlLookupService
   ChromeEnterpriseRealTimeUrlLookupService(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       VerdictCacheManager* cache_manager,
-      Profile* profile);
+      Profile* profile,
+      syncer::SyncService* sync_service,
+      PrefService* pref_service,
+      const ChromeUserPopulation::ProfileManagementStatus&
+          profile_management_status,
+      bool is_under_advanced_protection,
+      bool is_off_the_record);
   ~ChromeEnterpriseRealTimeUrlLookupService() override;
 
   // RealTimeUrlLookupServiceBase:
   bool CanPerformFullURLLookup() const override;
-
   bool CanCheckSubresourceURL() const override;
-
   bool CanCheckSafeBrowsingDb() const override;
 
-  void StartLookup(const GURL& url,
-                   RTLookupRequestCallback request_callback,
-                   RTLookupResponseCallback response_callback) override;
-
  private:
-  policy::DMToken GetDMToken() const;
+  // RealTimeUrlLookupServiceBase:
+  net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag() const override;
+  bool CanPerformFullURLLookupWithToken() const override;
+  void GetAccessToken(const GURL& url,
+                      RTLookupRequestCallback request_callback,
+                      RTLookupResponseCallback response_callback) override;
+  base::Optional<std::string> GetDMTokenString() const override;
+  std::string GetMetricSuffix() const override;
+  bool ShouldIncludeCredentials() const override;
 
-  // The URLLoaderFactory we use to issue network requests.
-  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
+  policy::DMToken GetDMToken() const;
 
   // Unowned object used for checking profile based settings.
   Profile* profile_;
+
+  friend class ChromeEnterpriseRealTimeUrlLookupServiceTest;
 
   base::WeakPtrFactory<ChromeEnterpriseRealTimeUrlLookupService> weak_factory_{
       this};

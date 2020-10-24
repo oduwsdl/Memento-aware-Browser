@@ -25,6 +25,7 @@
 #include "content/public/common/origin_util.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/service_worker/service_worker_scope_match.h"
 
 namespace content {
 
@@ -282,7 +283,7 @@ void ServiceWorkerContainerHost::GetRegistrations(
                            "ServiceWorkerContainerHost::GetRegistrations",
                            trace_id);
   context_->registry()->GetRegistrationsForOrigin(
-      url_.GetOrigin(),
+      url::Origin::Create(url_),
       base::AdaptCallbackForRepeating(base::BindOnce(
           &ServiceWorkerContainerHost::GetRegistrationsComplete,
           weak_factory_.GetWeakPtr(), std::move(callback), trace_id)));
@@ -455,7 +456,7 @@ void ServiceWorkerContainerHost::OnSkippedWaiting(
 void ServiceWorkerContainerHost::AddMatchingRegistration(
     ServiceWorkerRegistration* registration) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  DCHECK(ServiceWorkerUtils::ScopeMatches(registration->scope(), url_));
+  DCHECK(blink::ServiceWorkerScopeMatches(registration->scope(), url_));
   if (!IsContextSecureForServiceWorker())
     return;
   size_t key = registration->scope().spec().size();
@@ -725,7 +726,8 @@ void ServiceWorkerContainerHost::OnBeginNavigationCommit(
     int container_frame_id,
     const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
-        coep_reporter) {
+        coep_reporter,
+    ukm::SourceId document_ukm_source_id) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(IsContainerForWindowClient());
 
@@ -771,6 +773,9 @@ void ServiceWorkerContainerHost::OnBeginNavigationCommit(
             container_process_id, frame_id_, client_uuid(), GetWeakPtr()));
   }
 
+  DCHECK_EQ(ukm_source_id_, ukm::kInvalidSourceId);
+  ukm_source_id_ = document_ukm_source_id;
+
   TransitionToClientPhase(ClientPhase::kResponseCommitted);
 }
 
@@ -788,7 +793,8 @@ void ServiceWorkerContainerHost::OnEndNavigationCommit() {
 }
 
 void ServiceWorkerContainerHost::CompleteWebWorkerPreparation(
-    const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy) {
+    const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
+    ukm::SourceId worker_ukm_source_id) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(IsContainerForWorkerClient());
 
@@ -802,6 +808,9 @@ void ServiceWorkerContainerHost::CompleteWebWorkerPreparation(
                                      cross_origin_embedder_policy_.value(),
                                      mojo::NullRemote());
   }
+
+  DCHECK_EQ(ukm_source_id_, ukm::kInvalidSourceId);
+  ukm_source_id_ = worker_ukm_source_id;
 
   TransitionToClientPhase(ClientPhase::kResponseCommitted);
   SetExecutionReady();
@@ -973,7 +982,7 @@ bool ServiceWorkerContainerHost::IsContextSecureForServiceWorker() const {
     return true;
 
   std::set<std::string> schemes;
-  GetContentClient()->browser()->GetSchemesBypassingSecureContextCheckWhitelist(
+  GetContentClient()->browser()->GetSchemesBypassingSecureContextCheckAllowlist(
       &schemes);
   return schemes.find(url_.scheme()) != schemes.end();
 }
@@ -1125,7 +1134,7 @@ void ServiceWorkerContainerHost::SyncMatchingRegistrations() {
   for (const auto& key_registration : registrations) {
     ServiceWorkerRegistration* registration = key_registration.second;
     if (!registration->is_uninstalled() &&
-        ServiceWorkerUtils::ScopeMatches(registration->scope(), url_)) {
+        blink::ServiceWorkerScopeMatches(registration->scope(), url_)) {
       AddMatchingRegistration(registration);
     }
   }
@@ -1183,6 +1192,9 @@ void ServiceWorkerContainerHost::SetExecutionReady() {
   DCHECK(!is_execution_ready());
   TransitionToClientPhase(ClientPhase::kExecutionReady);
   RunExecutionReadyCallbacks();
+
+  if (context_)
+    context_->NotifyClientIsExecutionReady(*this);
 }
 
 void ServiceWorkerContainerHost::RunExecutionReadyCallbacks() {

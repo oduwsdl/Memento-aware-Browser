@@ -10,15 +10,32 @@
 #include "base/bind_helpers.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "ios/chrome/browser/signin/feature_flags.h"
+#include "components/signin/ios/browser/account_consistency_service.h"
 #include "ios/net/cookies/system_cookie_util.h"
-#include "ios/web/common/features.h"
 #include "ios/web/public/browser_state.h"
 #import "net/base/mac/url_conversions.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+#pragma mark - GaiaAuthFetcherIOSNSURLSessionBridge::Request
+
+GaiaAuthFetcherIOSNSURLSessionBridge::Request::Request()
+    : pending(false), should_use_xml_http_request(false) {}
+
+GaiaAuthFetcherIOSNSURLSessionBridge::Request::Request(
+    const GURL& request_url,
+    const std::string& request_headers,
+    const std::string& request_body,
+    bool should_use_xml_http_request)
+    : pending(true),
+      url(request_url),
+      headers(request_headers),
+      body(request_body),
+      should_use_xml_http_request(should_use_xml_http_request) {}
+
+#pragma mark - GaiaAuthFetcherIOSURLSessionDelegate
 
 @interface GaiaAuthFetcherIOSURLSessionDelegate
     : NSObject <NSURLSessionTaskDelegate>
@@ -81,8 +98,7 @@
 GaiaAuthFetcherIOSNSURLSessionBridge::GaiaAuthFetcherIOSNSURLSessionBridge(
     GaiaAuthFetcherIOSBridge::GaiaAuthFetcherIOSBridgeDelegate* delegate,
     web::BrowserState* browser_state)
-    : GaiaAuthFetcherIOSBridge(delegate, browser_state) {
-  DCHECK(base::FeatureList::IsEnabled(kUseNSURLSessionForGaiaSigninRequests));
+    : GaiaAuthFetcherIOSBridge(delegate), browser_state_(browser_state) {
   url_session_delegate_ = [[GaiaAuthFetcherIOSURLSessionDelegate alloc] init];
   url_session_delegate_.bridge = this;
 }
@@ -91,15 +107,22 @@ GaiaAuthFetcherIOSNSURLSessionBridge::~GaiaAuthFetcherIOSNSURLSessionBridge() {
   url_session_delegate_.bridge = nullptr;
 }
 
-void GaiaAuthFetcherIOSNSURLSessionBridge::FetchPendingRequest() {
+void GaiaAuthFetcherIOSNSURLSessionBridge::Fetch(
+    const GURL& url,
+    const std::string& headers,
+    const std::string& body,
+    bool should_use_xml_http_request) {
+  DCHECK(!request_.pending);
+
+  request_ = Request(url, headers, body, should_use_xml_http_request);
   network::mojom::CookieManager* cookie_manager =
-      GetBrowserState()->GetCookieManager();
+      browser_state_->GetCookieManager();
   net::CookieOptions options;
   options.set_include_httponly();
   options.set_same_site_cookie_context(
       net::CookieOptions::SameSiteCookieContext::MakeInclusive());
   cookie_manager->GetCookieList(
-      GetRequest().url, options,
+      request_.url, options,
       base::BindOnce(
           &GaiaAuthFetcherIOSNSURLSessionBridge::FetchPendingRequestWithCookies,
           base::Unretained(this)));
@@ -111,13 +134,56 @@ void GaiaAuthFetcherIOSNSURLSessionBridge::Cancel() {
   OnURLFetchFailure(net::ERR_ABORTED, 0);
 }
 
+void GaiaAuthFetcherIOSNSURLSessionBridge::OnURLFetchSuccess(
+    const std::string& data,
+    int response_code) {
+  if (!request_.pending) {
+    return;
+  }
+  GURL url = FinishPendingRequest();
+  delegate()->OnFetchComplete(url, data, net::OK, response_code);
+}
+
+void GaiaAuthFetcherIOSNSURLSessionBridge::OnURLFetchFailure(
+    int error,
+    int response_code) {
+  if (!request_.pending) {
+    return;
+  }
+  GURL url = FinishPendingRequest();
+  delegate()->OnFetchComplete(url, std::string(),
+                              static_cast<net::Error>(error), response_code);
+}
+
+NSURLRequest* GaiaAuthFetcherIOSNSURLSessionBridge::GetNSURLRequest() const {
+  DCHECK(request_.pending);
+  NSMutableURLRequest* request = [[NSMutableURLRequest alloc]
+      initWithURL:net::NSURLWithGURL(request_.url)];
+  net::HttpRequestHeaders request_headers;
+  request_headers.AddHeadersFromString(request_.headers);
+  for (net::HttpRequestHeaders::Iterator it(request_headers); it.GetNext();) {
+    [request setValue:base::SysUTF8ToNSString(it.value())
+        forHTTPHeaderField:base::SysUTF8ToNSString(it.name())];
+  }
+  if (!request_.body.empty()) {
+    NSData* post_data = [base::SysUTF8ToNSString(request_.body)
+        dataUsingEncoding:NSUTF8StringEncoding];
+    [request setHTTPBody:post_data];
+    [request setHTTPMethod:@"POST"];
+    DCHECK(![[request allHTTPHeaderFields] objectForKey:@"Content-Type"]);
+    [request setValue:@"application/x-www-form-urlencoded"
+        forHTTPHeaderField:@"Content-Type"];
+  }
+  return request;
+}
+
 void GaiaAuthFetcherIOSNSURLSessionBridge::SetCanonicalCookiesFromResponse(
     NSHTTPURLResponse* response) {
   NSArray* cookies =
       [NSHTTPCookie cookiesWithResponseHeaderFields:response.allHeaderFields
                                              forURL:response.URL];
   network::mojom::CookieManager* cookie_manager =
-      GetBrowserState()->GetCookieManager();
+      browser_state_->GetCookieManager();
   for (NSHTTPCookie* cookie : cookies) {
     net::CookieOptions options;
     options.set_include_httponly();
@@ -149,6 +215,13 @@ void GaiaAuthFetcherIOSNSURLSessionBridge::FetchPendingRequestWithCookies(
   NSMutableArray* http_cookies = [[NSMutableArray alloc]
       initWithCapacity:cookies_with_access_results.size()];
   for (const auto& cookie_with_access_result : cookies_with_access_results) {
+    // |CHROME_CONNECTED| cookie is attached to all web requests to Google web
+    // properties. Requests initiated from the browser services (e.g.
+    // GaiaCookieManagerService) must not include this cookie.
+    if (cookie_with_access_result.cookie.Name() ==
+        AccountConsistencyService::kChromeConnectedCookieName) {
+      continue;
+    }
     [http_cookies addObject:net::SystemCookieFromCanonicalCookie(
                                 cookie_with_access_result.cookie)];
   }
@@ -157,6 +230,13 @@ void GaiaAuthFetcherIOSNSURLSessionBridge::FetchPendingRequestWithCookies(
            forTask:url_session_data_task_];
 
   [url_session_data_task_ resume];
+}
+
+GURL GaiaAuthFetcherIOSNSURLSessionBridge::FinishPendingRequest() {
+  DCHECK(request_.pending);
+  GURL url = request_.url;
+  request_ = Request();
+  return url;
 }
 
 NSURLSession* GaiaAuthFetcherIOSNSURLSessionBridge::CreateNSURLSession(

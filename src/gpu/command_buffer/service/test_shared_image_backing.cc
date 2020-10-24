@@ -6,6 +6,7 @@
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/mock/GrMockTypes.h"
@@ -72,7 +73,9 @@ class TestSharedImageRepresentationSkia : public SharedImageRepresentationSkia {
     if (!static_cast<TestSharedImageBacking*>(backing())->can_access()) {
       return nullptr;
     }
-    return SkSurface::MakeRasterN32Premul(size().width(), size().height());
+    SkSurfaceProps props = skia::LegacyDisplayGlobals::GetSkSurfaceProps();
+    return SkSurface::MakeRasterN32Premul(size().width(), size().height(),
+                                          &props);
   }
   void EndWriteAccess(sk_sp<SkSurface> surface) override {}
   sk_sp<SkPromiseImageTexture> BeginReadAccess(
@@ -118,6 +121,7 @@ class TestSharedImageRepresentationOverlay
   bool BeginReadAccess() override { return true; }
   void EndReadAccess() override {}
   gl::GLImage* GetGLImage() override { return nullptr; }
+  std::unique_ptr<gfx::GpuFence> GetReadFence() override { return nullptr; }
 
 #if defined(OS_ANDROID)
   void NotifyOverlayPromotion(bool promotion,
@@ -132,6 +136,8 @@ TestSharedImageBacking::TestSharedImageBacking(
     viz::ResourceFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     size_t estimated_size,
     GLuint texture_id)
@@ -139,6 +145,8 @@ TestSharedImageBacking::TestSharedImageBacking(
                          format,
                          size,
                          color_space,
+                         surface_origin,
+                         alpha_type,
                          usage,
                          estimated_size,
                          false /* is_thread_safe */),
@@ -163,12 +171,16 @@ TestSharedImageBacking::TestSharedImageBacking(
     viz::ResourceFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     size_t estimated_size)
     : TestSharedImageBacking(mailbox,
                              format,
                              size,
                              color_space,
+                             surface_origin,
+                             alpha_type,
                              usage,
                              estimated_size,
                              203 /* texture_id */) {

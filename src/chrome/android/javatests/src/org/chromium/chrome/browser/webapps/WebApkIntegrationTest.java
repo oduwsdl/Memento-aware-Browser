@@ -22,6 +22,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.CommandLine;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
@@ -29,10 +30,9 @@ import org.chromium.chrome.browser.test.MockCertVerifierRuleAndroid;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content_public.browser.test.NativeLibraryTestRule;
+import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.common.ContentSwitches;
-import org.chromium.webapk.lib.client.WebApkValidator;
 
 import java.util.concurrent.TimeoutException;
 
@@ -42,15 +42,12 @@ import java.util.concurrent.TimeoutException;
 public class WebApkIntegrationTest {
     public final WebApkActivityTestRule mActivityTestRule = new WebApkActivityTestRule();
 
-    public final NativeLibraryTestRule mNativeLibraryTestRule = new NativeLibraryTestRule();
-
     public MockCertVerifierRuleAndroid mCertVerifierRule =
-            new MockCertVerifierRuleAndroid(mNativeLibraryTestRule, 0 /* net::OK */);
+            new MockCertVerifierRuleAndroid(0 /* net::OK */);
 
     @Rule
     public RuleChain mRuleChain = RuleChain.emptyRuleChain()
                                           .around(mActivityTestRule)
-                                          .around(mNativeLibraryTestRule)
                                           .around(mCertVerifierRule);
 
     @Before
@@ -60,7 +57,7 @@ public class WebApkIntegrationTest {
                 Uri.parse(mActivityTestRule.getEmbeddedTestServerRule().getServer().getURL("/"));
         CommandLine.getInstance().appendSwitchWithValue(
                 ContentSwitches.HOST_RESOLVER_RULES, "MAP * " + mapToUri.getAuthority());
-        WebApkValidator.disableValidationForTesting();
+        WebApkValidator.setDisableValidationForTesting(true);
     }
 
     /**
@@ -89,6 +86,7 @@ public class WebApkIntegrationTest {
     @Test
     @LargeTest
     @Feature({"Webapps"})
+    @FlakyTest(message = "https://crbug.com/1112352")
     public void testShare() throws TimeoutException {
         final String sharedSubject = "Fun tea parties";
         final String sharedText = "Boston";

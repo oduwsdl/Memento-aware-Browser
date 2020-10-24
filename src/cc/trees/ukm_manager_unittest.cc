@@ -4,6 +4,7 @@
 
 #include "cc/trees/ukm_manager.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/time/time.h"
@@ -65,7 +66,7 @@ const char kVizBreakdownSwapStartToSwapEnd[] =
 const char kVizBreakdownSwapEndToPresentationCompositorFrame[] =
     "SubmitCompositorFrameToPresentationCompositorFrame."
     "SwapEndToPresentationCompositorFrame";
-const char kTotalLatencyToSwapEnd[] = "TotalLatencyToSwapEnd";
+const char kTotalLatencyToSwapBegin[] = "TotalLatencyToSwapBegin";
 const char kTotalLatency[] = "TotalLatency";
 
 // Names of frame sequence types use in compositor latency UKM metrics (see
@@ -74,8 +75,8 @@ const char kCompositorAnimation[] = "CompositorAnimation";
 const char kMainThreadAnimation[] = "MainThreadAnimation";
 const char kPinchZoom[] = "PinchZoom";
 const char kRAF[] = "RAF";
+const char kScrollbarScroll[] = "ScrollbarScroll";
 const char kTouchScroll[] = "TouchScroll";
-const char kUniversal[] = "Universal";
 const char kVideo[] = "Video";
 const char kWheelScroll[] = "WheelScroll";
 
@@ -261,11 +262,11 @@ TEST_P(UkmManagerCompositorLatencyTest, CompositorLatency) {
 
   CompositorFrameReporter::ActiveTrackers active_trackers;
   active_trackers.set(
+      static_cast<size_t>(FrameSequenceTrackerType::kScrollbarScroll));
+  active_trackers.set(
       static_cast<size_t>(FrameSequenceTrackerType::kTouchScroll));
   active_trackers.set(
       static_cast<size_t>(FrameSequenceTrackerType::kCompositorAnimation));
-  active_trackers.set(
-      static_cast<size_t>(FrameSequenceTrackerType::kUniversal));
 
   manager_->RecordCompositorLatencyUKM(report_type(), stage_history,
                                        active_trackers, viz_breakdown);
@@ -336,10 +337,10 @@ TEST_P(UkmManagerCompositorLatencyTest, CompositorLatency) {
 
   test_ukm_recorder_->ExpectEntryMetric(entry, kCompositorAnimation, true);
   test_ukm_recorder_->ExpectEntryMetric(entry, kTouchScroll, true);
+  test_ukm_recorder_->ExpectEntryMetric(entry, kScrollbarScroll, true);
   EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kMainThreadAnimation));
   EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kPinchZoom));
   EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kRAF));
-  EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kUniversal));
   EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kVideo));
   EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kWheelScroll));
 }
@@ -349,12 +350,14 @@ TEST_F(UkmManagerTest, EventLatency) {
 
   const base::TimeTicks event_time = now;
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_BEGIN, event_time,
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_BEGIN, base::nullopt,
+                           event_time, ui::ScrollInputType::kWheel),
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE,
+                           EventMetrics::ScrollUpdateType::kStarted, event_time,
                            ui::ScrollInputType::kWheel),
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE, event_time,
-                           ui::ScrollInputType::kWheel),
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE, event_time,
-                           ui::ScrollInputType::kWheel),
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE,
+                           EventMetrics::ScrollUpdateType::kContinued,
+                           event_time, ui::ScrollInputType::kWheel),
   };
   EXPECT_THAT(event_metrics_ptrs, ::testing::Each(::testing::NotNull()));
   std::vector<EventMetrics> events_metrics = {
@@ -379,7 +382,7 @@ TEST_F(UkmManagerTest, EventLatency) {
   viz_breakdown.presentation_feedback.timestamp =
       (now += base::TimeDelta::FromMicroseconds(5));
 
-  const base::TimeTicks swap_end_time = viz_breakdown.swap_timings.swap_end;
+  const base::TimeTicks swap_start_time = viz_breakdown.swap_timings.swap_start;
   const base::TimeTicks present_time =
       viz_breakdown.presentation_feedback.timestamp;
 
@@ -445,8 +448,8 @@ TEST_F(UkmManagerTest, EventLatency) {
         entry, kSubmitCompositorFrameToPresentationCompositorFrame,
         (present_time - submit_time).InMicroseconds());
     test_ukm_recorder_->ExpectEntryMetric(
-        entry, kTotalLatencyToSwapEnd,
-        (swap_end_time - event_time).InMicroseconds());
+        entry, kTotalLatencyToSwapBegin,
+        (swap_start_time - event_time).InMicroseconds());
     test_ukm_recorder_->ExpectEntryMetric(
         entry, kTotalLatency, (present_time - event_time).InMicroseconds());
   }

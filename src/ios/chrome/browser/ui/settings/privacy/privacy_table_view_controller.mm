@@ -6,6 +6,8 @@
 
 #include "base/check.h"
 #import "base/mac/foundation_util.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/handoff/pref_names_ios.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
@@ -17,9 +19,9 @@
 #include "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
-#import "ios/chrome/browser/ui/settings/privacy/cookies_status_description.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_navigation_commands.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
@@ -48,7 +50,6 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeClearBrowsingDataClear = kItemTypeEnumZero,
-  ItemTypeCookies,
   // Footer to suggest the user to open Sync and Google services settings.
   ItemTypePrivacyFooter,
   ItemTypeOtherDevicesHandoff,
@@ -74,7 +75,6 @@ const char kGoogleServicesSettingsURL[] = "settings://open_google_services";
 
 // Browser.
 @property(nonatomic, readonly) Browser* browser;
-@property(nonatomic, strong) CookiesStatusDescription* cookiesDescription;
 
 @end
 
@@ -82,8 +82,7 @@ const char kGoogleServicesSettingsURL[] = "settings://open_google_services";
 
 #pragma mark - Initialization
 
-- (instancetype)initWithBrowser:(Browser*)browser
-             cookiesDescription:(CookiesStatusDescription*)cookiesDescription {
+- (instancetype)initWithBrowser:(Browser*)browser {
   DCHECK(browser);
   UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
                                ? UITableViewStylePlain
@@ -92,7 +91,6 @@ const char kGoogleServicesSettingsURL[] = "settings://open_google_services";
   if (self) {
     _browser = browser;
     _browserState = browser->GetBrowserState();
-    _cookiesDescription = cookiesDescription;
     self.title =
         l10n_util::GetNSString(IDS_OPTIONS_ADVANCED_SECTION_TITLE_PRIVACY);
 
@@ -137,12 +135,6 @@ const char kGoogleServicesSettingsURL[] = "settings://open_google_services";
   [model addItem:[self clearBrowsingDetailItem]
       toSectionWithIdentifier:SectionIdentifierPrivacyContent];
 
-  if (base::FeatureList::IsEnabled(content_settings::kImprovedCookieControls)) {
-    // Cookies item.
-    [model addItem:[self cookiesItemWithDetailText:self.cookiesDescription
-                                                       .headerDescription]
-        toSectionWithIdentifier:SectionIdentifierPrivacyContent];
-  }
   [model setFooter:[self showPrivacyFooterItem]
       forSectionWithIdentifier:SectionIdentifierPrivacyContent];
 
@@ -180,14 +172,6 @@ const char kGoogleServicesSettingsURL[] = "settings://open_google_services";
   return showPrivacyFooterItem;
 }
 
-// Returns TableViewHeaderFooterItem instance to open Cookies screen.
-- (TableViewItem*)cookiesItemWithDetailText:(NSString*)detailText {
-  return [self detailItemWithType:ItemTypeCookies
-                          titleId:IDS_IOS_OPTIONS_PRIVACY_COOKIES
-                       detailText:detailText
-          accessibilityIdentifier:kSettingsCookiesCellId];
-}
-
 - (TableViewItem*)clearBrowsingDetailItem {
   return [self detailItemWithType:ItemTypeClearBrowsingDataClear
                           titleId:IDS_IOS_CLEAR_BROWSING_DATA_TITLE
@@ -209,6 +193,16 @@ const char kGoogleServicesSettingsURL[] = "settings://open_google_services";
   detailItem.accessibilityIdentifier = accessibilityIdentifier;
 
   return detailItem;
+}
+
+#pragma mark - SettingsControllerProtocol
+
+- (void)reportDismissalUserAction {
+  base::RecordAction(base::UserMetricsAction("MobilePrivacySettingsClose"));
+}
+
+- (void)reportBackUserAction {
+  base::RecordAction(base::UserMetricsAction("MobilePrivacySettingsBack"));
 }
 
 #pragma mark - UITableViewDelegate
@@ -235,9 +229,6 @@ const char kGoogleServicesSettingsURL[] = "settings://open_google_services";
       break;
     case ItemTypeClearBrowsingDataClear:
       [self.handler showClearBrowsingData];
-      break;
-    case ItemTypeCookies:
-      [self.handler showCookies];
       break;
     default:
       break;
@@ -269,22 +260,6 @@ const char kGoogleServicesSettingsURL[] = "settings://open_google_services";
   } else {
     [super view:view didTapLinkURL:URL];
   }
-}
-
-#pragma mark - CookiesStatusConsumer
-
-- (void)cookiesOptionChangedToDescription:
-    (CookiesStatusDescription*)description {
-  // Update the Cookies Header.
-  NSIndexPath* indexPath = [self.tableViewModel
-      indexPathForItemType:ItemTypeCookies
-         sectionIdentifier:SectionIdentifierPrivacyContent];
-  TableViewDetailIconItem* cookiesHeader =
-      base::mac::ObjCCastStrict<TableViewDetailIconItem>(
-          [self.tableViewModel itemAtIndexPath:indexPath]);
-  cookiesHeader.detailText = description.headerDescription;
-
-  [self reconfigureCellsForItems:@[ cookiesHeader ]];
 }
 
 @end

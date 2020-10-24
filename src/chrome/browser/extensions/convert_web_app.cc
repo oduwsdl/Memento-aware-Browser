@@ -48,7 +48,6 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/color_utils.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -201,7 +200,7 @@ std::string ConvertTimeToExtensionVersion(const base::Time& create_time) {
       (create_time_exploded.hour * base::Time::kMicrosecondsPerHour));
   double day_fraction = micros / base::Time::kMicrosecondsPerDay;
   int stamp =
-      gfx::ToRoundedInt(day_fraction * std::numeric_limits<uint16_t>::max());
+      base::ClampRound(day_fraction * std::numeric_limits<uint16_t>::max());
 
   return base::StringPrintf("%i.%i.%i.%i", create_time_exploded.year,
                             create_time_exploded.month,
@@ -230,11 +229,11 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   // Create the manifest
   std::unique_ptr<base::DictionaryValue> root(new base::DictionaryValue);
   root->SetString(keys::kPublicKey,
-                  web_app::GenerateAppKeyFromURL(web_app.app_url));
+                  web_app::GenerateAppKeyFromURL(web_app.start_url));
   root->SetString(keys::kName, base::UTF16ToUTF8(web_app.title));
   root->SetString(keys::kVersion, ConvertTimeToExtensionVersion(create_time));
   root->SetString(keys::kDescription, base::UTF16ToUTF8(web_app.description));
-  root->SetString(keys::kLaunchWebURL, web_app.app_url.spec());
+  root->SetString(keys::kLaunchWebURL, web_app.start_url.spec());
   if (web_app.generated_icon_color != SK_ColorTRANSPARENT) {
     root->SetString(keys::kAppIconColor, image_util::GenerateHexColorString(
                                              web_app.generated_icon_color));
@@ -257,13 +256,13 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   // case of all SWAs today is equal to the scope they set. This DCHECK ensure
   // we notice if this changes.
   if (!web_app.scope.is_empty() &&
-      web_app.app_url.SchemeIs(content::kChromeUIUntrustedScheme)) {
-    DCHECK_EQ(web_app.app_url.GetWithoutFilename(), web_app.scope);
+      web_app.start_url.SchemeIs(content::kChromeUIUntrustedScheme)) {
+    DCHECK_EQ(web_app.start_url.GetWithoutFilename(), web_app.scope);
   }
 #endif  // DCHECK_IS_ON()
 
   if (!web_app.scope.is_empty() &&
-      !web_app.app_url.SchemeIs(content::kChromeUIUntrustedScheme)) {
+      !web_app.start_url.SchemeIs(content::kChromeUIUntrustedScheme)) {
     root->SetDictionary(keys::kUrlHandlers, CreateURLHandlersForBookmarkApp(
                                                 web_app.scope, web_app.title));
   }
@@ -288,6 +287,9 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   auto linked_icons = std::make_unique<base::ListValue>();
   for (const WebApplicationIconInfo& icon_info : web_app.icon_infos) {
     DCHECK(icon_info.url.is_valid());
+    // Web apps in Extensions system supports Purpose::ANY icons only.
+    if (icon_info.purpose != blink::Manifest::ImageResource::Purpose::ANY)
+      continue;
     std::unique_ptr<base::DictionaryValue> linked_icon(
         new base::DictionaryValue());
     linked_icon->SetString(keys::kLinkedAppIconURL, icon_info.url.spec());
@@ -298,7 +300,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   }
   auto icons = std::make_unique<base::DictionaryValue>();
   for (const std::pair<const SquareSizePx, SkBitmap>& icon :
-       web_app.icon_bitmaps) {
+       web_app.icon_bitmaps_any) {
     std::string size = base::StringPrintf("%i", icon.first);
     std::string icon_path = base::StringPrintf("%s/%s.png", kIconsDirName,
                                                size.c_str());
@@ -310,12 +312,12 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   // Add shortcuts icons and linked shortcut items information.
   if (base::FeatureList::IsEnabled(
           features::kDesktopPWAsAppIconShortcutsMenu) &&
-      !web_app.shortcut_infos.empty()) {
+      !web_app.shortcuts_menu_item_infos.empty()) {
     // |linked_shortcut_items| is a list of all entries in the Web App
     // Manifest's shortcuts member. It includes the name, url and list of
     // shortcut_icon_infos associated with the shortcut item.
     auto linked_shortcut_items = std::make_unique<base::ListValue>();
-    for (const auto& shortcut : web_app.shortcut_infos) {
+    for (const auto& shortcut : web_app.shortcuts_menu_item_infos) {
       auto linked_shortcut_item = std::make_unique<base::DictionaryValue>();
       linked_shortcut_item->SetString(keys::kWebAppLinkedShortcutItemName,
                                       shortcut.name);
@@ -347,8 +349,8 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
          web_app.shortcuts_menu_icons_bitmaps) {
       // |shortcut_icons| is a mapping of filepath keyed to SquareSizePx
       // specified in the WebAppManifest for every icon written to disk for the
-      // current shortcut in web_app.shortcut_infos. A shortcut in the
-      // WebAppManifest can have different icons for different sizes.
+      // current shortcut in web_app.shortcuts_menu_item_infos. A shortcut in
+      // the WebAppManifest can have different icons for different sizes.
       auto shortcut_icons = std::make_unique<base::DictionaryValue>();
       std::string curr_icon = base::NumberToString(shortcuts_icons->size());
       for (const auto& icon : shortcut_icon_bitmaps) {
@@ -385,7 +387,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
     return nullptr;
   }
   for (const std::pair<const SquareSizePx, SkBitmap>& icon :
-       web_app.icon_bitmaps) {
+       web_app.icon_bitmaps_any) {
     DCHECK_NE(icon.second.colorType(), kUnknown_SkColorType);
 
     base::FilePath icon_file =
@@ -407,7 +409,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   // Write the shortcut icon files.
   if (base::FeatureList::IsEnabled(
           features::kDesktopPWAsAppIconShortcutsMenu) &&
-      !web_app.shortcut_infos.empty()) {
+      !web_app.shortcuts_menu_item_infos.empty()) {
     base::FilePath shortcut_icons_dir =
         temp_dir.GetPath().AppendASCII(kShortcutIconsDirName);
     for (size_t i = 0; i < web_app.shortcuts_menu_icons_bitmaps.size(); ++i) {

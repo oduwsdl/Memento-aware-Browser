@@ -4,11 +4,21 @@
 
 #include "math.h"
 
+#include "base/path_service.h"
 #include "build/build_config.h"
+#include "cc/test/pixel_comparator.h"
+#include "cc/test/pixel_test_utils.h"
 #include "chrome/browser/ui/views/accessibility/accessibility_focus_highlight.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/common/chrome_paths.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "content/public/browser/focused_node_details.h"
+#include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/notification_types.h"
 #include "content/public/test/browser_test.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/accessibility/accessibility_features.h"
@@ -16,13 +26,21 @@
 #include "ui/snapshot/snapshot.h"
 #include "ui/views/widget/widget.h"
 
+#if defined(OS_MAC)
+#include "base/mac/mac_util.h"
+#endif
+
+// To rebaseline this test on all platforms:
+// 1. Run a CQ+1 dry run.
+// 2. Click the failing bots for android, windows, mac, and linux.
+// 3. Find the failing interactive_ui_browsertests step.
+// 4. Click the "Deterministic failure" link for the failing test case.
+// 5. Copy the "Actual pixels" data url and paste into browser.
+// 6. Save the image into your chromium checkout in
+//    chrome/test/data/accessibility.
+
 class AccessibilityFocusHighlightBrowserTest : public InProcessBrowserTest {
  public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // This is required for the output to be rendered, then captured.
-    command_line->AppendSwitch(switches::kEnablePixelOutputInTests);
-  }
-
   AccessibilityFocusHighlightBrowserTest() = default;
   ~AccessibilityFocusHighlightBrowserTest() override = default;
   AccessibilityFocusHighlightBrowserTest(
@@ -32,6 +50,7 @@ class AccessibilityFocusHighlightBrowserTest : public InProcessBrowserTest {
 
   // InProcessBrowserTest overrides:
   void SetUp() override {
+    EnablePixelOutput();
     scoped_feature_list_.InitAndEnableFeature(
         features::kAccessibilityFocusHighlight);
     InProcessBrowserTest::SetUp();
@@ -117,7 +136,7 @@ class AccessibilityFocusHighlightBrowserTest : public InProcessBrowserTest {
 // focus highlight actually gets drawn.
 //
 // Flaky on Mac. TODO(crbug.com/1083806): Enable this test.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_DrawsHighlight DISABLED_DrawsHighlight
 #else
 #define MAYBE_DrawsHighlight DrawsHighlight
@@ -126,11 +145,15 @@ IN_PROC_BROWSER_TEST_F(AccessibilityFocusHighlightBrowserTest,
                        MAYBE_DrawsHighlight) {
   ui_test_utils::NavigateToURL(
       browser(), GURL("data:text/html,"
-                      "<body style='background-color: rgb(204, 255, 255)'>"
-                      "<input id='textfield' style='width: 100%'>"));
+                      "<body style='background-color: rgb(204, 255, 255);'>"
+                      "<div tabindex=0 id='div'>Focusable div</div>"));
 
   AccessibilityFocusHighlight::SetNoFadeForTesting();
   AccessibilityFocusHighlight::SkipActivationCheckForTesting();
+  AccessibilityFocusHighlight::UseDefaultColorForTesting();
+
+  browser()->profile()->GetPrefs()->SetBoolean(
+      prefs::kAccessibilityFocusHighlightEnabled, true);
 
   // The web page has a background with a specific color. Keep looping until we
   // capture an image of the page that's more than 90% that color.
@@ -141,16 +164,16 @@ IN_PROC_BROWSER_TEST_F(AccessibilityFocusHighlightBrowserTest,
   } while (CountPercentPixelsWithColor(image, SkColorSetRGB(204, 255, 255)) <
            90.0f);
 
-  // Initially less than 0.01% of the image should be the focus ring's highlight
+  SkColor highlight_color = AccessibilityFocusHighlight::default_color_;
+
+  // Initially less than 0.05% of the image should be the focus ring's highlight
   // color.
-  SkColor highlight_color =
-      AccessibilityFocusHighlight::GetHighlightColorForTesting();
-  ASSERT_LT(CountPercentPixelsWithColor(image, highlight_color), 0.01f);
+  ASSERT_LT(CountPercentPixelsWithColor(image, highlight_color), 0.05f);
 
   // Focus something.
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  std::string script("document.getElementById('textfield').focus();");
+  std::string script("document.getElementById('div').focus();");
   EXPECT_TRUE(content::ExecuteScript(web_contents, script));
 
   // Now wait until at least 0.1% of the image has the focus ring's highlight
@@ -159,4 +182,166 @@ IN_PROC_BROWSER_TEST_F(AccessibilityFocusHighlightBrowserTest,
     base::RunLoop().RunUntilIdle();
     image = CaptureWindowContents();
   } while (CountPercentPixelsWithColor(image, highlight_color) < 0.1f);
+}
+
+// Observes the notifications for changes in focused node/element in the page.
+class FocusedNodeChangedObserver : content::NotificationObserver {
+ public:
+  FocusedNodeChangedObserver() {
+    registrar_.Add(this, content::NOTIFICATION_FOCUS_CHANGED_IN_PAGE,
+                   content::NotificationService::AllSources());
+  }
+
+  void WaitForFocusChangeInPage() {
+    if (observed_)
+      return;
+    run_loop_ = std::make_unique<base::RunLoop>();
+    run_loop_->Run();
+  }
+
+  // content::NotificationObserver override.
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override {
+    auto focused_node_details =
+        content::Details<content::FocusedNodeDetails>(details);
+    focused_node_bounds_in_screen_ =
+        focused_node_details->node_bounds_in_screen;
+    observed_ = true;
+    if (run_loop_)
+      run_loop_->Quit();
+  }
+
+  const gfx::Rect& focused_node_bounds_in_screen() const {
+    return focused_node_bounds_in_screen_;
+  }
+
+ private:
+  content::NotificationRegistrar registrar_;
+  bool observed_{false};
+  gfx::Rect focused_node_bounds_in_screen_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(FocusedNodeChangedObserver);
+};
+
+IN_PROC_BROWSER_TEST_F(AccessibilityFocusHighlightBrowserTest,
+                       FocusBoundsIncludeImages) {
+  ui_test_utils::NavigateToURL(browser(),
+                               GURL("data:text/html,"
+                                    "<a id='link' href=''>"
+                                    "<img id='image' width='220' height='147' "
+                                    "style='vertical-align: middle;'>"
+                                    "</a>"));
+
+  FocusedNodeChangedObserver observer;
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  std::string script("document.getElementById('link').focus();");
+  ASSERT_TRUE(content::ExecuteScript(web_contents, script));
+  observer.WaitForFocusChangeInPage();
+
+  gfx::Rect bounds = observer.focused_node_bounds_in_screen();
+  EXPECT_EQ(220, bounds.width());
+
+  // Not sure where the extra px of height are coming from...
+  EXPECT_EQ(147, bounds.height());
+}
+
+class ReadbackHolder : public base::RefCountedThreadSafe<ReadbackHolder> {
+ public:
+  ReadbackHolder() : run_loop_(std::make_unique<base::RunLoop>()) {}
+
+  void OutputRequestCallback(std::unique_ptr<viz::CopyOutputResult> result) {
+    if (result->IsEmpty())
+      result_.reset();
+    else
+      result_ = std::make_unique<SkBitmap>(result->AsSkBitmap());
+    run_loop_->Quit();
+  }
+
+  void WaitForReadback() { run_loop_->Run(); }
+
+  const SkBitmap& result() const { return *result_; }
+
+ private:
+  friend class base::RefCountedThreadSafe<ReadbackHolder>;
+
+  virtual ~ReadbackHolder() = default;
+
+  std::unique_ptr<SkBitmap> result_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+};
+
+const cc::ExactPixelComparator pixel_comparator(/*discard_alpha=*/false);
+
+#if defined(OS_MAC) && MAC_OS_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_15
+#define MAYBE_FocusAppearance DISABLED_FocusAppearance
+#else
+#define MAYBE_FocusAppearance FocusAppearance
+#endif
+
+IN_PROC_BROWSER_TEST_F(AccessibilityFocusHighlightBrowserTest,
+                       MAYBE_FocusAppearance) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  AccessibilityFocusHighlight::SetNoFadeForTesting();
+  AccessibilityFocusHighlight::SkipActivationCheckForTesting();
+
+  browser()->profile()->GetPrefs()->SetBoolean(
+      prefs::kAccessibilityFocusHighlightEnabled, true);
+
+  ui_test_utils::NavigateToURL(browser(), GURL("data:text/html,"
+                                               "<a id='link' href=''>"
+                                               "<img width='10' height='10'>"
+                                               "</a>"));
+
+  FocusedNodeChangedObserver observer;
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  std::string script("document.getElementById('link').focus();");
+  ASSERT_TRUE(content::ExecuteScript(web_contents, script));
+  observer.WaitForFocusChangeInPage();
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  AccessibilityFocusHighlight* highlight =
+      browser_view->GetAccessibilityFocusHighlightForTesting();
+  ui::Layer* layer = highlight->GetLayerForTesting();
+
+  gfx::Rect source_rect = gfx::Rect(layer->size());
+  scoped_refptr<ReadbackHolder> holder(new ReadbackHolder);
+  std::unique_ptr<viz::CopyOutputRequest> request =
+      std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+          base::BindOnce(&ReadbackHolder::OutputRequestCallback, holder));
+  request->set_area(source_rect);
+  layer->RequestCopyOfOutput(std::move(request));
+  holder->WaitForReadback();
+  SkBitmap bitmap(holder->result());
+  ASSERT_FALSE(bitmap.drawsNothing());
+
+  base::FilePath dir_test_data;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &dir_test_data));
+
+  std::string screenshot_filename = "focus_highlight_appearance";
+  std::string platform_suffix;
+#if defined(OS_MAC)
+  platform_suffix = "_mac";
+#elif defined(OS_WIN)
+  platform_suffix = "_win";
+#endif
+
+  base::FilePath golden_filepath =
+      dir_test_data.AppendASCII("accessibility")
+          .AppendASCII(screenshot_filename + ".png");
+  base::FilePath golden_filepath_platform =
+      golden_filepath.InsertBeforeExtensionASCII(platform_suffix);
+  if (base::PathExists(golden_filepath_platform)) {
+    golden_filepath = golden_filepath_platform;
+  }
+
+  bool snapshot_matches =
+      cc::MatchesPNGFile(bitmap, golden_filepath, pixel_comparator);
+  EXPECT_TRUE(snapshot_matches);
 }

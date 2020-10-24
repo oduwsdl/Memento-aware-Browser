@@ -12,6 +12,7 @@ import android.widget.TextView;
 import androidx.test.espresso.matcher.ViewMatchers;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -19,11 +20,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.explore_sites.ExploreSitesBridge;
 import org.chromium.chrome.browser.explore_sites.ExploreSitesCategory;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -44,6 +46,7 @@ import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -55,6 +58,7 @@ import java.util.concurrent.TimeoutException;
  * Instrumentation tests for {@link TileGroup} on the New Tab Page.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
+@Batch(Batch.PER_CLASS)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TileGroupTest {
     @Rule
@@ -112,7 +116,7 @@ public class TileGroupTest {
 
         // Dismiss the tile using the context menu.
         invokeContextMenu(tileView, ContextMenuManager.ContextMenuItemId.REMOVE);
-        Assert.assertTrue(mMostVisitedSites.isUrlBlacklisted(mSiteSuggestionUrls[0]));
+        Assert.assertTrue(mMostVisitedSites.isUrlBlocklisted(new GURL(mSiteSuggestionUrls[0])));
 
         // Ensure that the removal is reflected in the ui.
         Assert.assertEquals(3, getTileGridLayout().getChildCount());
@@ -145,6 +149,9 @@ public class TileGroupTest {
     @MediumTest
     @Feature({"NewTabPage"})
     public void testDismissTileUndo() throws Exception {
+        GURL url0 = new GURL(mSiteSuggestionUrls[0]);
+        GURL url1 = new GURL(mSiteSuggestionUrls[1]);
+        GURL url2 = new GURL(mSiteSuggestionUrls[2]);
         SiteSuggestion siteToDismiss = mMostVisitedSites.getCurrentSites().get(0);
         final ViewGroup tileContainer = getTileGridLayout();
         final View tileView = getTileViewFor(siteToDismiss);
@@ -161,10 +168,10 @@ public class TileGroupTest {
         Assert.assertEquals(2, tileContainer.getChildCount());
         final View snackbarButton = waitForSnackbar(mActivityTestRule.getActivity());
 
-        Assert.assertTrue(mMostVisitedSites.isUrlBlacklisted(mSiteSuggestionUrls[0]));
+        Assert.assertTrue(mMostVisitedSites.isUrlBlocklisted(url0));
         TestThreadUtils.runOnUiThreadBlocking(() -> { snackbarButton.callOnClick(); });
 
-        Assert.assertFalse(mMostVisitedSites.isUrlBlacklisted(mSiteSuggestionUrls[0]));
+        Assert.assertFalse(mMostVisitedSites.isUrlBlocklisted(url0));
 
         // Ensure that the removal of the update goes through.
         TestThreadUtils.runOnUiThreadBlocking(
@@ -200,17 +207,13 @@ public class TileGroupTest {
     private static View waitForSnackbar(final ChromeActivity activity) {
         final String expectedSnackbarMessage =
                 activity.getResources().getString(R.string.most_visited_item_removed);
-        CriteriaHelper.pollUiThread(new Criteria("The snackbar was not shown.") {
-            @Override
-            public boolean isSatisfied() {
-                SnackbarManager snackbarManager = activity.getSnackbarManager();
-                if (!snackbarManager.isShowing()) return false;
-
-                TextView snackbarMessage = (TextView) activity.findViewById(R.id.snackbar_message);
-                if (snackbarMessage == null) return false;
-
-                return snackbarMessage.getText().toString().equals(expectedSnackbarMessage);
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            SnackbarManager snackbarManager = activity.getSnackbarManager();
+            Criteria.checkThat(snackbarManager.isShowing(), Matchers.is(true));
+            TextView snackbarMessage = (TextView) activity.findViewById(R.id.snackbar_message);
+            Criteria.checkThat(snackbarMessage, Matchers.notNullValue());
+            Criteria.checkThat(
+                    snackbarMessage.getText().toString(), Matchers.is(expectedSnackbarMessage));
         });
 
         return activity.findViewById(R.id.snackbar_button);
@@ -262,8 +265,8 @@ public class TileGroupTest {
                 new ArrayList<>(mMostVisitedSites.getCurrentSites());
 
         SiteSuggestion exploreTile = new SiteSuggestion("chrome-native://explore",
-                "chrome-native://explore", "", TileTitleSource.UNKNOWN, TileSource.EXPLORE,
-                TileSectionType.PERSONALIZED, new Date());
+                new GURL("chrome-native://explore"), "", TileTitleSource.UNKNOWN,
+                TileSource.EXPLORE, TileSectionType.PERSONALIZED, new Date());
         currentSuggestions.add(exploreTile);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> mMostVisitedSites.setTileSuggestions(currentSuggestions));

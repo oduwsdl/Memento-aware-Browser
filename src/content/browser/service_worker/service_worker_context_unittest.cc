@@ -116,7 +116,8 @@ class InstallActivateWorker : public FakeServiceWorker {
     events_.emplace_back(ServiceWorkerMetrics::EventType::INSTALL);
     std::move(callback).Run(
         reject_install_ ? blink::mojom::ServiceWorkerEventStatus::REJECTED
-                        : blink::mojom::ServiceWorkerEventStatus::COMPLETED);
+                        : blink::mojom::ServiceWorkerEventStatus::COMPLETED,
+        /*fetch_count=*/0);
   }
 
   void DispatchActivateEvent(
@@ -446,7 +447,9 @@ TEST_F(ServiceWorkerContextTest, Observer_ControlleeEvents) {
 
   auto version = base::MakeRefCounted<ServiceWorkerVersion>(
       registration.get(), script_url, blink::mojom::ScriptType::kClassic,
-      2l /* dummy version id */, context()->AsWeakPtr());
+      2l /* dummy version id */,
+      mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
+      context()->AsWeakPtr());
   version->set_fetch_handler_existence(
       ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
   version->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -497,7 +500,9 @@ TEST_F(ServiceWorkerContextTest, VersionActivatedObserver) {
 
   auto version = base::MakeRefCounted<ServiceWorkerVersion>(
       registration.get(), script_url, blink::mojom::ScriptType::kClassic,
-      2l /* dummy version id */, context()->AsWeakPtr());
+      2l /* dummy version id */,
+      mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
+      context()->AsWeakPtr());
 
   TestServiceWorkerContextObserver observer(context_wrapper());
 
@@ -524,7 +529,9 @@ TEST_F(ServiceWorkerContextTest, VersionRedundantObserver) {
 
   auto version = base::MakeRefCounted<ServiceWorkerVersion>(
       registration.get(), script_url, blink::mojom::ScriptType::kClassic,
-      2l /* dummy version id */, context()->AsWeakPtr());
+      2l /* dummy version id */,
+      mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
+      context()->AsWeakPtr());
 
   TestServiceWorkerContextObserver observer(context_wrapper());
 
@@ -554,7 +561,7 @@ TEST_F(ServiceWorkerContextTest, OnVersionRunningStatusChangedObserver) {
       base::BindOnce(&RegisteredCallback, run_loop.QuitClosure()));
   run_loop.Run();
 
-  context_wrapper()->StopAllServiceWorkersForOrigin(scope);
+  context_wrapper()->StopAllServiceWorkersForOrigin(url::Origin::Create(scope));
   base::RunLoop().RunUntilIdle();
 
   std::vector<TestServiceWorkerContextObserver::EventLog> events;
@@ -631,7 +638,7 @@ TEST_F(ServiceWorkerContextTest, Register) {
   EXPECT_EQ(registration_id, notifications_[1].registration_id);
 
   context()->registry()->FindRegistrationForId(
-      registration_id, scope.GetOrigin(),
+      registration_id, url::Origin::Create(scope),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kOk,
                      false /* expect_waiting */, true /* expect_active */));
@@ -681,7 +688,7 @@ TEST_F(ServiceWorkerContextTest, Register_RejectInstall) {
   EXPECT_EQ(registration_id, notifications_[0].registration_id);
 
   context()->registry()->FindRegistrationForId(
-      registration_id, scope.GetOrigin(),
+      registration_id, url::Origin::Create(scope),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kErrorNotFound,
                      false /* expect_waiting */, false /* expect_active */));
@@ -732,7 +739,7 @@ TEST_F(ServiceWorkerContextTest, Register_RejectActivate) {
   EXPECT_EQ(registration_id, notifications_[1].registration_id);
 
   context()->registry()->FindRegistrationForId(
-      registration_id, scope.GetOrigin(),
+      registration_id, url::Origin::Create(scope),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kOk,
                      false /* expect_waiting */, true /* expect_active */));
@@ -766,7 +773,7 @@ TEST_F(ServiceWorkerContextTest, Unregister) {
   ASSERT_TRUE(called);
 
   context()->registry()->FindRegistrationForId(
-      registration_id, scope.GetOrigin(),
+      registration_id, url::Origin::Create(scope),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kErrorNotFound,
                      false /* expect_waiting */, false /* expect_active */));
@@ -857,7 +864,7 @@ TEST_F(ServiceWorkerContextTest, UnregisterMultiple) {
             registration_id4);
 
   bool called = false;
-  context()->DeleteForOrigin(origin1_s1.GetOrigin(),
+  context()->DeleteForOrigin(url::Origin::Create(origin1_s1),
                              MakeUnregisteredCallback(&called));
 
   ASSERT_FALSE(called);
@@ -865,23 +872,23 @@ TEST_F(ServiceWorkerContextTest, UnregisterMultiple) {
   ASSERT_TRUE(called);
 
   context()->registry()->FindRegistrationForId(
-      registration_id1, origin1_s1.GetOrigin(),
+      registration_id1, url::Origin::Create(origin1_s1),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kErrorNotFound,
                      false /* expect_waiting */, false /* expect_active */));
   context()->registry()->FindRegistrationForId(
-      registration_id2, origin1_s2.GetOrigin(),
+      registration_id2, url::Origin::Create(origin1_s2),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kErrorNotFound,
                      false /* expect_waiting */, false /* expect_active */));
   context()->registry()->FindRegistrationForId(
-      registration_id3, origin2_s1.GetOrigin(),
+      registration_id3, url::Origin::Create(origin2_s1),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kOk,
                      false /* expect_waiting */, true /* expect_active */));
 
   context()->registry()->FindRegistrationForId(
-      registration_id4, origin3_s1.GetOrigin(),
+      registration_id4, url::Origin::Create(origin3_s1),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kOk,
                      false /* expect_waiting */, true /* expect_active */));
@@ -1063,6 +1070,7 @@ TEST_F(ServiceWorkerContextTest, ContainerHostIterator) {
           registration.get(),
           GURL("https://another-origin.example.net/test/script_url"),
           blink::mojom::ScriptType::kClassic, 1L /* version_id */,
+          mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
           helper_->context()->AsWeakPtr());
   remote_endpoints.emplace_back();
   // ServiceWorkerHost creates ServiceWorkerContainerHost for a service worker
@@ -1137,7 +1145,7 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
   EXPECT_TRUE(called);
 
   context()->registry()->FindRegistrationForId(
-      registration_id, scope.GetOrigin(),
+      registration_id, url::Origin::Create(scope),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kOk,
                      false /* expect_waiting */, true /* expect_active */));
@@ -1148,7 +1156,7 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
   // The storage is disabled while the recovery process is running, so the
   // operation should be aborted.
   context()->registry()->FindRegistrationForId(
-      registration_id, scope.GetOrigin(),
+      registration_id, url::Origin::Create(scope),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kErrorAbort,
                      false /* expect_waiting */, true /* expect_active */));
@@ -1157,7 +1165,7 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
   // The context started over and the storage was re-initialized, so the
   // registration should not be found.
   context()->registry()->FindRegistrationForId(
-      registration_id, scope.GetOrigin(),
+      registration_id, url::Origin::Create(scope),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kErrorNotFound,
                      false /* expect_waiting */, true /* expect_active */));
@@ -1173,7 +1181,7 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
   EXPECT_TRUE(called);
 
   context()->registry()->FindRegistrationForId(
-      registration_id, scope.GetOrigin(),
+      registration_id, url::Origin::Create(scope),
       base::BindOnce(&ExpectRegisteredWorkers,
                      blink::ServiceWorkerStatusCode::kOk,
                      false /* expect_waiting */, true /* expect_active */));

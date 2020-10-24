@@ -23,6 +23,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -48,7 +49,6 @@ void AddStringResources(content::WebUIDataSource* source) {
       {"errorTitle", IDS_CROSTINI_INSTALLER_ERROR_TITLE},
 
       {"loadTerminaError", IDS_CROSTINI_INSTALLER_LOAD_TERMINA_ERROR},
-      {"startConciergeError", IDS_CROSTINI_INSTALLER_START_CONCIERGE_ERROR},
       {"createDiskImageError", IDS_CROSTINI_INSTALLER_CREATE_DISK_IMAGE_ERROR},
       {"startTerminaVmError", IDS_CROSTINI_INSTALLER_START_TERMINA_VM_ERROR},
       {"startContainerError", IDS_CROSTINI_INSTALLER_START_CONTAINER_ERROR},
@@ -60,7 +60,6 @@ void AddStringResources(content::WebUIDataSource* source) {
       {"unknownError", IDS_CROSTINI_INSTALLER_UNKNOWN_ERROR},
 
       {"loadTerminaMessage", IDS_CROSTINI_INSTALLER_LOAD_TERMINA_MESSAGE},
-      {"startConciergeMessage", IDS_CROSTINI_INSTALLER_START_CONCIERGE_MESSAGE},
       {"createDiskImageMessage",
        IDS_CROSTINI_INSTALLER_CREATE_DISK_IMAGE_MESSAGE},
       {"startTerminaVmMessage",
@@ -138,8 +137,10 @@ CrostiniInstallerUI::CrostiniInstallerUI(content::WebUI* web_ui)
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUICrostiniInstallerHost);
   auto* profile = Profile::FromWebUI(web_ui);
-  source->OverrideContentSecurityPolicyScriptSrc(
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self';");
+  source->DisableTrustedTypesCSP();
   AddStringResources(source);
   source->AddBoolean(
       "diskResizingEnabled",
@@ -154,8 +155,8 @@ CrostiniInstallerUI::CrostiniInstallerUI(content::WebUI* web_ui)
                           IDR_CROSTINI_INSTALLER_MOJO_LITE_JS);
   source->AddResourcePath("crostini_types.mojom-lite.js",
                           IDR_CROSTINI_INSTALLER_TYPES_MOJO_LITE_JS);
-  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
-  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
+  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
+  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
   source->AddResourcePath("images/linux_illustration.png",
                           IDR_LINUX_ILLUSTRATION);
   source->SetDefaultResource(IDR_CROSTINI_INSTALLER_INDEX_HTML);

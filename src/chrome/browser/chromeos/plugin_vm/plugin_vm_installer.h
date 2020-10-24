@@ -16,6 +16,8 @@
 #include "chromeos/dbus/dlcservice/dlcservice_client.h"
 #include "components/download/public/background_service/download_params.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
 
 namespace download {
 class DownloadService;
@@ -110,7 +112,8 @@ class PluginVmInstaller : public KeyedService,
   bool IsProcessing();
 
   // Start the installation. Progress updates will be sent to the observer.
-  void Start();
+  // Returns a FailureReason if the installation couldn't be started.
+  base::Optional<FailureReason> Start();
   // Cancel the installation.
   void Cancel();
 
@@ -122,13 +125,12 @@ class PluginVmInstaller : public KeyedService,
   void OnDlcDownloadCompleted(
       const chromeos::DlcserviceClient::InstallResult& install_result);
 
-  // Called by PluginVmImageDownloadClient, are not supposed to be used by other
-  // classes.
+  // Used by PluginVmImageDownloadClient and PluginVmDriveImageDownloadService,
+  // other classes should not call into here.
   void OnDownloadStarted();
   void OnDownloadProgressUpdated(uint64_t bytes_downloaded,
                                  int64_t content_length);
   void OnDownloadCompleted(const download::CompletionInfo& info);
-  void OnDownloadCancelled();
   void OnDownloadFailed(FailureReason reason);
 
   // ConciergeClient::DiskImageObserver:
@@ -152,7 +154,7 @@ class PluginVmInstaller : public KeyedService,
   void SetDriveDownloadServiceForTesting(
       std::unique_ptr<PluginVmDriveImageDownloadService>
           drive_download_service);
-  std::string GetCurrentDownloadGuidForTesting();
+  std::string GetCurrentDownloadGuid();
 
  private:
   void CheckLicense();
@@ -193,6 +195,7 @@ class PluginVmInstaller : public KeyedService,
   download::DownloadService* download_service_ = nullptr;
   State state_ = State::kIdle;
   InstallingState installing_state_ = InstallingState::kInactive;
+  base::TimeTicks setup_start_tick_;
   std::string current_download_guid_;
   base::FilePath downloaded_image_;
   // Used to identify our running import with concierge:
@@ -263,6 +266,10 @@ class PluginVmInstaller : public KeyedService,
 
   void RemoveTemporaryImageIfExists();
   void OnTemporaryImageRemoved(bool success);
+
+  // Keep the system awake during installation.
+  device::mojom::WakeLock* GetWakeLock();
+  mojo::Remote<device::mojom::WakeLock> wake_lock_;
 
   base::WeakPtrFactory<PluginVmInstaller> weak_ptr_factory_{this};
 

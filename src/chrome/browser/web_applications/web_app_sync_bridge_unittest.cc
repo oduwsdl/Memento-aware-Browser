@@ -12,10 +12,13 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind_test_util.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/test/test_web_app_database_factory.h"
 #include "chrome/browser/web_applications/test/test_web_app_registry_controller.h"
+#include "chrome/browser/web_applications/test/web_app_install_observer.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
@@ -46,13 +49,14 @@ bool IsSyncDataEqualIfApplied(const WebApp& expected_app,
   if (!entity_data.specifics.has_web_app())
     return false;
 
-  const GURL sync_launch_url(entity_data.specifics.web_app().launch_url());
-  if (expected_app.app_id() != GenerateAppIdFromURL(sync_launch_url))
+  const GURL sync_start_url(entity_data.specifics.web_app().start_url());
+  if (expected_app.app_id() != GenerateAppIdFromURL(sync_start_url))
     return false;
 
   // ApplySyncDataToApp enforces kSync source on |app_to_apply_sync_data|.
   ApplySyncDataToApp(entity_data.specifics.web_app(),
                      app_to_apply_sync_data.get());
+  app_to_apply_sync_data->SetName(entity_data.name);
   return expected_app == *app_to_apply_sync_data;
 }
 
@@ -84,23 +88,24 @@ bool RegistryContainsSyncDataBatchChanges(
 }
 
 std::unique_ptr<WebApp> CreateWebApp(const std::string& url) {
-  const GURL launch_url(url);
-  const AppId app_id = GenerateAppIdFromURL(launch_url);
+  const GURL start_url(url);
+  const AppId app_id = GenerateAppIdFromURL(start_url);
 
   auto web_app = std::make_unique<WebApp>(app_id);
-  web_app->SetLaunchUrl(launch_url);
+  web_app->SetStartUrl(start_url);
   web_app->SetUserDisplayMode(DisplayMode::kStandalone);
   web_app->SetName("Name");
   return web_app;
 }
 
 std::unique_ptr<WebApp> CreateWebAppWithSyncOnlyFields(const std::string& url) {
-  const GURL launch_url(url);
-  const AppId app_id = GenerateAppIdFromURL(launch_url);
+  const GURL start_url(url);
+  const AppId app_id = GenerateAppIdFromURL(start_url);
 
   auto web_app = std::make_unique<WebApp>(app_id);
   web_app->AddSource(Source::kSync);
-  web_app->SetLaunchUrl(launch_url);
+  web_app->SetStartUrl(start_url);
+  web_app->SetName("Name");
   web_app->SetUserDisplayMode(DisplayMode::kStandalone);
   return web_app;
 }
@@ -198,6 +203,10 @@ class WebAppSyncBridgeTest : public WebAppTest {
   void SetUp() override {
     WebAppTest::SetUp();
 
+    WebAppProviderBase::GetProviderBase(profile())
+        ->os_integration_manager()
+        .SuppressOsHooksForTesting();
+
     test_registry_controller_ =
         std::make_unique<TestWebAppRegistryController>();
     test_registry_controller_->SetUp(profile());
@@ -210,6 +219,13 @@ class WebAppSyncBridgeTest : public WebAppTest {
   }
 
   void InitSyncBridge() { controller().Init(); }
+
+  void InitSyncBridgeFromAppList(const AppsList& apps_list) {
+    Registry registry;
+    InsertAppsListIntoRegistry(&registry, apps_list);
+    database_factory().WriteRegistry(registry);
+    InitSyncBridge();
+  }
 
   void MergeSyncData(const AppsList& merged_apps) {
     syncer::EntityChangeList entity_data_list;
@@ -278,16 +294,16 @@ TEST_F(WebAppSyncBridgeTest, GetData) {
   std::unique_ptr<WebApp> synced_app1 =
       CreateWebAppWithSyncOnlyFields("https://example.com/app1/");
   {
-    WebApp::SyncData sync_data;
-    sync_data.name = "Sync Name";
-    sync_data.theme_color = SK_ColorCYAN;
-    synced_app1->SetSyncData(std::move(sync_data));
+    WebApp::SyncFallbackData sync_fallback_data;
+    sync_fallback_data.name = "Sync Name";
+    sync_fallback_data.theme_color = SK_ColorCYAN;
+    synced_app1->SetSyncFallbackData(std::move(sync_fallback_data));
   }
   InsertAppIntoRegistry(&registry, std::move(synced_app1));
 
   std::unique_ptr<WebApp> synced_app2 =
       CreateWebAppWithSyncOnlyFields("https://example.com/app2/");
-  // sync_data is empty for this app.
+  // sync_fallback_data is empty for this app.
   InsertAppIntoRegistry(&registry, std::move(synced_app2));
 
   std::unique_ptr<WebApp> policy_app = CreateWebApp("https://example.org/");
@@ -602,10 +618,10 @@ TEST_F(WebAppSyncBridgeTest, ApplySyncChanges_UpdateOnly) {
     auto app_to_update = std::make_unique<WebApp>(*merged_apps[i]);
     app_to_update->SetUserDisplayMode(DisplayMode::kStandalone);
 
-    WebApp::SyncData sync_data;
-    sync_data.name = "Sync Name";
-    sync_data.theme_color = SK_ColorYELLOW;
-    app_to_update->SetSyncData(std::move(sync_data));
+    WebApp::SyncFallbackData sync_fallback_data;
+    sync_fallback_data.name = "Sync Name";
+    sync_fallback_data.theme_color = SK_ColorYELLOW;
+    app_to_update->SetSyncFallbackData(std::move(sync_fallback_data));
 
     ConvertAppToEntityChange(
         *app_to_update, syncer::EntityChange::ACTION_UPDATE, &entity_changes);
@@ -694,10 +710,10 @@ TEST_F(WebAppSyncBridgeTest,
     auto app_to_update = std::make_unique<WebApp>(*policy_and_sync_apps[i]);
     app_to_update->SetUserDisplayMode(DisplayMode::kBrowser);
 
-    WebApp::SyncData sync_data;
-    sync_data.name = "Updated Sync Name";
-    sync_data.theme_color = SK_ColorWHITE;
-    app_to_update->SetSyncData(std::move(sync_data));
+    WebApp::SyncFallbackData sync_fallback_data;
+    sync_fallback_data.name = "Updated Sync Name";
+    sync_fallback_data.theme_color = SK_ColorWHITE;
+    app_to_update->SetSyncFallbackData(std::move(sync_fallback_data));
 
     ConvertAppToEntityChange(
         *app_to_update, syncer::EntityChange::ACTION_UPDATE, &entity_changes);
@@ -872,10 +888,10 @@ TEST_F(WebAppSyncBridgeTest, CommitUpdate_UpdateSyncApp) {
     // Obtain a writeable handle.
     WebApp* sync_app = update->UpdateApp(app->app_id());
 
-    WebApp::SyncData sync_data;
-    sync_data.name = "Updated Sync Name";
-    sync_data.theme_color = SK_ColorBLACK;
-    sync_app->SetSyncData(std::move(sync_data));
+    WebApp::SyncFallbackData sync_fallback_data;
+    sync_fallback_data.name = "Updated Sync Name";
+    sync_fallback_data.theme_color = SK_ColorBLACK;
+    sync_app->SetSyncFallbackData(std::move(sync_fallback_data));
     sync_app->SetUserDisplayMode(DisplayMode::kBrowser);
 
     // Override the app in the expected registry.
@@ -1068,6 +1084,63 @@ TEST_F(WebAppSyncBridgeTest, InstallAppsInSyncInstall) {
   InitSyncBridge();
 
   run_loop.Run();
+}
+
+// Tests that OnWebAppsWillBeUpdatedFromSync observer notification is called
+// properly.
+TEST_F(WebAppSyncBridgeTest, ApplySyncChanges_OnWebAppsWillBeUpdatedFromSync) {
+  AppsList initial_registry_apps = CreateAppsList("https://example.com/", 10);
+  for (std::unique_ptr<WebApp>& app : initial_registry_apps)
+    app->SetUserDisplayMode(DisplayMode::kBrowser);
+  InitSyncBridgeFromAppList(initial_registry_apps);
+
+  WebAppInstallObserver observer{&registrar()};
+  base::RunLoop run_loop;
+
+  observer.SetWebAppWillBeUpdatedFromSyncDelegate(base::BindLambdaForTesting(
+      [&](const std::vector<const WebApp*>& new_apps_state) {
+        EXPECT_EQ(5u, new_apps_state.size());
+
+        for (const WebApp* new_app_state : new_apps_state) {
+          const WebApp* old_app_state =
+              registrar().GetAppById(new_app_state->app_id());
+          EXPECT_NE(*old_app_state, *new_app_state);
+
+          EXPECT_EQ(old_app_state->user_display_mode(), DisplayMode::kBrowser);
+          EXPECT_EQ(new_app_state->user_display_mode(),
+                    DisplayMode::kStandalone);
+
+          // new and old states must be equal if diff fixed:
+          auto old_app_state_no_diff = std::make_unique<WebApp>(*old_app_state);
+          old_app_state_no_diff->SetUserDisplayMode(DisplayMode::kStandalone);
+          EXPECT_EQ(*old_app_state_no_diff, *new_app_state);
+
+          RemoveWebAppFromAppsList(&initial_registry_apps,
+                                   new_app_state->app_id());
+        }
+
+        run_loop.Quit();
+      }));
+
+  AppsList apps_server_state;
+
+  // Update first 5 apps: change user_display_mode field only.
+  for (int i = 0; i < 5; ++i) {
+    auto app_server_state = std::make_unique<WebApp>(*initial_registry_apps[i]);
+    app_server_state->SetUserDisplayMode(DisplayMode::kStandalone);
+    apps_server_state.push_back(std::move(app_server_state));
+  }
+
+  controller().ApplySyncChanges_UpdateApps(apps_server_state);
+
+  run_loop.Run();
+
+  // 5 other apps left unchanged:
+  EXPECT_EQ(5u, initial_registry_apps.size());
+  for (int i = 0; i < 5; ++i) {
+    EXPECT_EQ(DisplayMode::kBrowser,
+              initial_registry_apps[i]->user_display_mode());
+  }
 }
 
 }  // namespace web_app

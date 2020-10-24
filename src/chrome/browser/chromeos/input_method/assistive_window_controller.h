@@ -13,7 +13,7 @@
 #include "chrome/browser/chromeos/input_method/ui/suggestion_window_view.h"
 #include "chrome/browser/chromeos/input_method/ui/undo_window.h"
 #include "content/public/browser/tts_controller.h"
-#include "ui/base/ime/ime_assistive_window_handler_interface.h"
+#include "ui/base/ime/chromeos/ime_assistive_window_handler_interface.h"
 #include "ui/gfx/native_widget_types.h"
 
 class Profile;
@@ -69,15 +69,14 @@ class AssistiveWindowController : public views::WidgetObserver,
 
  private:
   // IMEAssistiveWindowHandlerInterface implementation.
-  void SetBounds(const gfx::Rect& cursor_bounds) override;
+  void SetBounds(const Bounds& bounds) override;
   void SetAssistiveWindowProperties(
       const AssistiveWindowProperties& window) override;
-  void ShowSuggestion(const base::string16& text,
-                      const size_t confirmed_length,
-                      const bool show_tab) override;
+  void ShowSuggestion(const ui::ime::SuggestionDetails& details) override;
   void ShowMultipleSuggestions(
       const std::vector<base::string16>& suggestions) override;
-  void HighlightSuggestionCandidate(int index) override;
+  void SetButtonHighlighted(const ui::ime::AssistiveWindowButton& button,
+                            bool highlighted) override;
   void AcceptSuggestion(const base::string16& suggestion) override;
   void HideSuggestion() override;
   base::string16 GetSuggestionText() const override;
@@ -87,8 +86,7 @@ class AssistiveWindowController : public views::WidgetObserver,
 
   // ui::ime::AssistiveDelegate implementation.
   void AssistiveWindowButtonClicked(
-      ui::ime::ButtonId id,
-      ui::ime::AssistiveWindowType type) const override;
+      const ui::ime::AssistiveWindowButton& button) const override;
 
   void InitSuggestionWindow();
   void InitUndoWindow();
@@ -101,6 +99,7 @@ class AssistiveWindowController : public views::WidgetObserver,
   ui::ime::UndoWindow* undo_window_ = nullptr;
   base::string16 suggestion_text_;
   size_t confirmed_length_ = 0;
+  Bounds bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistiveWindowController);
 };

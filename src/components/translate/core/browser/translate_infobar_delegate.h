@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -50,6 +49,9 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
     // Handles UI changes on the translate step given.
     virtual void OnTranslateStepChanged(translate::TranslateStep step,
                                         TranslateErrors::Type error_type) = 0;
+    // Handles UI changes when the target language is updated.
+    virtual void OnTargetLanguageChanged(
+        const std::string& target_language_code) = 0;
     // Return whether user declined translate service.
     virtual bool IsDeclinedByUser() = 0;
     // Called when the TranslateInfoBarDelegate instance is destroyed.
@@ -127,6 +129,8 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
     return step_ == translate::TRANSLATE_STEP_TRANSLATE_ERROR;
   }
 
+  void OnErrorShown(TranslateErrors::Type error_type);
+
   // Return true if the translation was triggered by a menu entry instead of
   // via an infobar/bubble or preference.
   bool triggered_from_menu() const {
@@ -177,7 +181,6 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
 
   // The following methods are called by the infobar that displays the status
   // while translating and also the one displaying the error message.
-  base::string16 GetMessageInfoBarText();
   base::string16 GetMessageInfoBarButtonText();
   void MessageInfoBarButtonPressed();
   bool ShouldShowMessageInfoBarButton();

@@ -351,7 +351,7 @@ class GCMClientImplTest : public testing::Test,
     return gcm_client_->state_;
   }
   FakeMCSClient* mcs_client() const {
-    return reinterpret_cast<FakeMCSClient*>(gcm_client_->mcs_client_.get());
+    return static_cast<FakeMCSClient*>(gcm_client_->mcs_client_.get());
   }
   ConnectionFactory* connection_factory() const {
     return gcm_client_->connection_factory_.get();
@@ -737,7 +737,7 @@ TEST_F(GCMClientImplTest, LoadingWithEmptyDirectory) {
 
   // Make the store directory empty, to simulate a previous destroy store
   // operation failing to delete the store directory.
-  ASSERT_TRUE(base::DeleteFileRecursively(gcm_store_path()));
+  ASSERT_TRUE(base::DeletePathRecursively(gcm_store_path()));
   ASSERT_TRUE(base::CreateDirectory(gcm_store_path()));
 
   base::HistogramTester histogram_tester;

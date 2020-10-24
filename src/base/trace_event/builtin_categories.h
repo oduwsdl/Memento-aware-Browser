@@ -82,6 +82,7 @@
   X("fonts")                                                             \
   X("GAMEPAD")                                                           \
   X("gpu")                                                               \
+  X("gpu.angle")                                                         \
   X("gpu.capture")                                                       \
   X("gpu.memory")                                                        \
   X("headless")                                                          \
@@ -114,6 +115,7 @@
   X("omnibox")                                                           \
   X("oobe")                                                              \
   X("ozone")                                                             \
+  X("partition_alloc")                                                   \
   X("passwords")                                                         \
   X("p2p")                                                               \
   X("page-serialization")                                                \
@@ -184,6 +186,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler"))                     \
   X(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler.frames"))              \
   X(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler.now"))                 \
+  X(TRACE_DISABLED_BY_DEFAULT("content.verbose"))                        \
   X(TRACE_DISABLED_BY_DEFAULT("cpu_profiler"))                           \
   X(TRACE_DISABLED_BY_DEFAULT("cpu_profiler.debug"))                     \
   X(TRACE_DISABLED_BY_DEFAULT("devtools.screenshot"))                    \
@@ -211,6 +214,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("mediastream"))                            \
   X(TRACE_DISABLED_BY_DEFAULT("memory-infra"))                           \
   X(TRACE_DISABLED_BY_DEFAULT("memory-infra.v8.code_stats"))             \
+  X(TRACE_DISABLED_BY_DEFAULT("mojom"))                                  \
   X(TRACE_DISABLED_BY_DEFAULT("net"))                                    \
   X(TRACE_DISABLED_BY_DEFAULT("network"))                                \
   X(TRACE_DISABLED_BY_DEFAULT("paint-worklet"))                          \
@@ -237,9 +241,11 @@
   X(TRACE_DISABLED_BY_DEFAULT("v8.runtime"))                             \
   X(TRACE_DISABLED_BY_DEFAULT("v8.runtime_stats"))                       \
   X(TRACE_DISABLED_BY_DEFAULT("v8.runtime_stats_sampling"))              \
+  X(TRACE_DISABLED_BY_DEFAULT("v8.stack_trace"))                         \
   X(TRACE_DISABLED_BY_DEFAULT("v8.turbofan"))                            \
   X(TRACE_DISABLED_BY_DEFAULT("v8.wasm.detailed"))                       \
   X(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"))                \
+  X(TRACE_DISABLED_BY_DEFAULT("viz.gpu_composite_time"))                 \
   X(TRACE_DISABLED_BY_DEFAULT("viz.debug.overlay_planes"))               \
   X(TRACE_DISABLED_BY_DEFAULT("viz.hit_testing_flow"))                   \
   X(TRACE_DISABLED_BY_DEFAULT("viz.overdraw"))                           \
@@ -249,7 +255,8 @@
   X(TRACE_DISABLED_BY_DEFAULT("viz.triangles"))                          \
   X(TRACE_DISABLED_BY_DEFAULT("webaudio.audionode"))                     \
   X(TRACE_DISABLED_BY_DEFAULT("webrtc"))                                 \
-  X(TRACE_DISABLED_BY_DEFAULT("worker.scheduler"))
+  X(TRACE_DISABLED_BY_DEFAULT("worker.scheduler"))                       \
+  X(TRACE_DISABLED_BY_DEFAULT("xr.debug"))
 
 #define INTERNAL_TRACE_INIT_CATEGORY_NAME(name) name,
 

@@ -20,19 +20,11 @@
 // src="../../../../../ui/login/account_picker/chromeos_user_pod_row.js">
 // <include src="cr_ui.js">
 // <include src="oobe_screen_autolaunch.js">
-// <include src="oobe_screen_supervision_transition.js">
-// <include src="oobe_screen_assistant_optin_flow.js">
 // <include src="oobe_select.js">
 
 // <include src="screen_app_launch_splash.js">
 // <include src="screen_arc_terms_of_service.js">
 // <include src="screen_error_message.js">
-// <include src="screen_fatal_error.js">
-// <include src="screen_active_directory_password_change.js">
-// <include src="screen_encryption_migration.js">
-// <include src="screen_update_required.js">
-// <include src="screen_sync_consent.js">
-// <include src="screen_app_downloading.js">
 // <include src="screen_discover.js">
 // <include src="screen_multidevice_setup.js">
 
@@ -60,17 +52,9 @@ cr.define('cr.ui.Oobe', function() {
       login.AccountPickerScreen.register();
       login.AutolaunchScreen.register();
       login.ErrorMessageScreen.register();
-      login.SyncConsentScreen.register();
       login.ArcTermsOfServiceScreen.register();
-      login.AppDownloadingScreen.register();
       login.AppLaunchSplashScreen.register();
-      login.FatalErrorScreen.register();
-      login.ActiveDirectoryPasswordChangeScreen.register(/* lazyInit= */ true);
-      login.EncryptionMigrationScreen.register();
-      login.SupervisionTransitionScreen.register();
-      login.UpdateRequiredScreen.register();
       login.DiscoverScreen.register();
-      login.AssistantOptInFlowScreen.register();
       login.MultiDeviceSetupScreen.register();
 
       cr.ui.Bubble.decorate($('bubble-persistent'));
@@ -83,8 +67,6 @@ cr.define('cr.ui.Oobe', function() {
     },
 
     // Dummy Oobe functions not present with stripped login UI.
-    setUsageStats(checked) {},
-    setTpmPassword(password) {},
     refreshA11yInfo(data) {},
     reloadEulaContent(data) {},
 

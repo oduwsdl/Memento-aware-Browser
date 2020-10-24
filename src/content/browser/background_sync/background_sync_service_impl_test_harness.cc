@@ -20,7 +20,6 @@
 #include "content/public/test/mock_permission_manager.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/test_background_sync_context.h"
-#include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/system/functions.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
@@ -185,7 +184,7 @@ void BackgroundSyncServiceImplTestHarness::CreateServiceWorkerRegistration() {
   ASSERT_TRUE(called);
 
   embedded_worker_helper_->context_wrapper()->FindReadyRegistrationForId(
-      sw_registration_id_, GURL(kServiceWorkerScope).GetOrigin(),
+      sw_registration_id_, url::Origin::Create(GURL(kServiceWorkerScope)),
       base::BindOnce(FindServiceWorkerRegistrationCallback, &sw_registration_));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(sw_registration_);

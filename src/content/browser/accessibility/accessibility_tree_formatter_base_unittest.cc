@@ -31,9 +31,7 @@ class AccessibilityTreeFormatterBaseTest : public testing::Test {
 };
 
 PropertyNode Parse(const char* input) {
-  AccessibilityTreeFormatter::PropertyFilter filter(
-      base::UTF8ToUTF16(input),
-      AccessibilityTreeFormatter::PropertyFilter::ALLOW);
+  ui::AXPropertyFilter filter(input, ui::AXPropertyFilter::ALLOW);
   return PropertyNode::FromPropertyFilter(filter);
 }
 
@@ -48,6 +46,26 @@ PropertyNode GetArgumentNode(const char* input) {
 void ParseAndCheck(const char* input, const char* expected) {
   auto got = Parse(input).ToString();
   EXPECT_EQ(got, expected);
+}
+
+struct ProperyNodeCheck {
+  std::string target;
+  std::string name_or_value;
+  std::vector<ProperyNodeCheck> parameters;
+};
+
+void Check(const PropertyNode& got, const ProperyNodeCheck& expected) {
+  EXPECT_EQ(got.target, expected.target);
+  EXPECT_EQ(got.name_or_value, expected.name_or_value);
+  EXPECT_EQ(got.parameters.size(), expected.parameters.size());
+  for (auto i = 0U;
+       i < std::min(expected.parameters.size(), got.parameters.size()); i++) {
+    Check(got.parameters[i], expected.parameters[i]);
+  }
+}
+
+void ParseAndCheck(const char* input, const ProperyNodeCheck& expected) {
+  Check(Parse(input), expected);
 }
 
 TEST_F(AccessibilityTreeFormatterBaseTest, ParseProperty) {
@@ -70,8 +88,23 @@ TEST_F(AccessibilityTreeFormatterBaseTest, ParseProperty) {
   ParseAndCheck("Text({dict: [1, 2]})", "Text({}(dict: [](1, 2)))");
   ParseAndCheck("Text({dict: ValueFor(1)})", "Text({}(dict: ValueFor(1)))");
 
+  // Nested arguments
+  ParseAndCheck("AXIndexForTextMarker(AXTextMarkerForIndex(0))",
+                "AXIndexForTextMarker(AXTextMarkerForIndex(0))");
+
   // Line indexes filter.
   ParseAndCheck(":3,:5;AXDOMClassList", ":3,:5;AXDOMClassList");
+
+  // Context object.
+  ParseAndCheck(":1.AXDOMClassList", ":1.AXDOMClassList");
+  ParseAndCheck(":1.AXDOMClassList", {":1", "AXDOMClassList"});
+
+  ParseAndCheck(":1.AXIndexForTextMarker(:1.AXTextMarkerForIndex(0))",
+                ":1.AXIndexForTextMarker(:1.AXTextMarkerForIndex(0))");
+  ParseAndCheck(":1.AXIndexForTextMarker(:1.AXTextMarkerForIndex(0))",
+                {":1",
+                 "AXIndexForTextMarker",
+                 {{":1", "AXTextMarkerForIndex", {{"", "0"}}}}});
 
   // Wrong format.
   ParseAndCheck("Role(3", "Role(3)");
@@ -84,17 +117,38 @@ TEST_F(AccessibilityTreeFormatterBaseTest, ParseProperty) {
   EXPECT_EQ(GetArgumentNode("ChildAt(3)").IsDict(), false);
   EXPECT_EQ(GetArgumentNode("ChildAt(3)").IsArray(), false);
   EXPECT_EQ(GetArgumentNode("ChildAt(3)").AsInt(), 3);
-  EXPECT_EQ(GetArgumentNode("Text({start: :1, dir: forward})").FindKey("start"),
-            base::ASCIIToUTF16(":1"));
-  EXPECT_EQ(GetArgumentNode("Text({start: :1, dir: forward})").FindKey("dir"),
-            base::ASCIIToUTF16("forward"));
+
+  // Dict: FindStringKey
   EXPECT_EQ(
-      GetArgumentNode("Text({start: :1, dir: forward})").FindKey("notexists"),
-      base::nullopt);
+      GetArgumentNode("Text({start: :1, dir: forward})").FindStringKey("start"),
+      ":1");
+  EXPECT_EQ(
+      GetArgumentNode("Text({start: :1, dir: forward})").FindStringKey("dir"),
+      "forward");
+  EXPECT_EQ(GetArgumentNode("Text({start: :1, dir: forward})")
+                .FindStringKey("notexists"),
+            base::nullopt);
+
+  // Dict: FindIntKey
   EXPECT_EQ(GetArgumentNode("Text({loc: 3, len: 2})").FindIntKey("loc"), 3);
   EXPECT_EQ(GetArgumentNode("Text({loc: 3, len: 2})").FindIntKey("len"), 2);
   EXPECT_EQ(GetArgumentNode("Text({loc: 3, len: 2})").FindIntKey("notexists"),
             base::nullopt);
+
+  // Dict: FindKey
+  EXPECT_EQ(GetArgumentNode("Text({anchor: {:1, 0, up}})")
+                .FindKey("anchor")
+                ->ToString(),
+            "anchor: {}(:1, 0, up)");
+
+  EXPECT_EQ(GetArgumentNode("Text({anchor: {:1, 0, up}})").FindKey("focus"),
+            nullptr);
+
+  EXPECT_EQ(GetArgumentNode("AXStringForTextMarkerRange({anchor: {:2, 1, "
+                            "down}, focus: {:2, 2, down}})")
+                .FindKey("anchor")
+                ->ToString(),
+            "anchor: {}(:2, 1, down)");
 }
 
 }  // namespace content

@@ -15,9 +15,13 @@ const char kAssistiveInputFeatureSettings[] =
 const char kAssistPersonalInfoEnabled[] =
     "assistive_input.personal_info_enabled";
 
-// A boolean pref of whether emoji suggestion addition is enabled.
+// A boolean pref of whether emoji suggestion is enabled.
 const char kEmojiSuggestionEnabled[] =
     "assistive_input.emoji_suggestion_enabled";
+
+// A boolean pref of whether emoji suggestion is enabled for managed device.
+const char kEmojiSuggestionEnterpriseAllowed[] =
+    "assistive_input.emoji_suggestion.enterprise_allowed";
 
 // A dictionary pref to hold the mute setting for all the currently known
 // audio devices.
@@ -64,6 +68,11 @@ const char kEduCoexistenceId[] = "account_manager.edu_coexistence_id";
 const char kEduCoexistenceSecondaryAccountsInvalidationVersion[] =
     "account_manager.edu_coexistence_secondary_accounts_invalidation_version";
 
+// A string pref containing valid version of Edu Coexistence Terms of Service.
+// Controlled by EduCoexistenceToSVersion policy.
+const char kEduCoexistenceToSVersion[] =
+    "family_link_user.edu_coexistence_tos_version";
+
 // A dictionary of info for Quirks Client/Server interaction, mostly last server
 // request times, keyed to display product_id's.
 const char kQuirksClientLastServerCheck[] = "quirks_client.last_server_check";
@@ -103,6 +112,10 @@ const char kLoginDisplayPasswordButtonEnabled[] =
 
 // Boolean pref indicating whether the user has enabled Suggested Content.
 const char kSuggestedContentEnabled[] = "settings.suggested_content_enabled";
+
+// Boolean pref recording whether a search result has ever been launched from
+// the Chrome OS launcher.
+const char kLauncherResultEverLaunched[] = "launcher.result_ever_launched";
 
 }  // namespace prefs
 }  // namespace chromeos

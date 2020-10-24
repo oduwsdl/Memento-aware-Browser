@@ -26,13 +26,11 @@ BookmarkBubbleSignInDelegate::~BookmarkBubbleSignInDelegate() {
   BrowserList::RemoveObserver(this);
 }
 
-void BookmarkBubbleSignInDelegate::OnEnableSync(const AccountInfo& account,
-                                                bool is_default_promo_account) {
+void BookmarkBubbleSignInDelegate::OnEnableSync(const AccountInfo& account) {
   EnsureBrowser();
-  signin_ui_util::EnableSyncFromPromo(
+  signin_ui_util::EnableSyncFromSingleAccountPromo(
       browser_, account,
-      signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE,
-      is_default_promo_account);
+      signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE);
 
   // TODO(msarda): Close the bookmarks bubble once the enable sync flow has
   // started.

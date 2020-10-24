@@ -249,12 +249,12 @@ ArcNotificationContentView::ArcNotificationContentView(
       control_buttons_view_(message_view) {
   DCHECK(message_view);
 
-  // kNotificationWidth must be 360, since this value is separately defiend in
+  // kNotificationWidth must be 360, since this value is separately defined in
   // ArcNotificationWrapperView class in Android side.
   DCHECK_EQ(360, message_center::kNotificationWidth);
 
   SetFocusBehavior(FocusBehavior::ALWAYS);
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
 
   item_->IncrementWindowRefCount();
   item_->AddObserver(this);
@@ -291,6 +291,7 @@ ArcNotificationContentView::~ArcNotificationContentView() {
     item_->RemoveObserver(this);
     item_->DecrementWindowRefCount();
   }
+  CHECK(!views::WidgetObserver::IsInObserverList());
 }
 
 const char* ArcNotificationContentView::GetClassName() const {
@@ -347,7 +348,7 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
     return;
 
   // Add the guard to prevent an infinite loop. Changing visibility may generate
-  // an event and it may call thie method again.
+  // an event and it may call this method again.
   base::AutoReset<bool> reset(&updating_control_buttons_visibility_, true);
 
   if (target_visibility)
@@ -558,7 +559,8 @@ void ArcNotificationContentView::UpdateMask(bool force_update) {
 
   auto mask_painter =
       std::make_unique<message_center::NotificationBackgroundPainter>(
-          top_radius_, bottom_radius_);
+          top_radius_, bottom_radius_,
+          message_center::kNotificationBackgroundColor);
   // Set insets to round visible notification corners. https://crbug.com/866777
   mask_painter->set_insets(new_insets);
 

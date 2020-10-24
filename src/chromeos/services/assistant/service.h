@@ -11,7 +11,6 @@
 #include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/session/session_activation_observer.h"
-#include "ash/public/mojom/assistant_controller.mojom.h"
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
 #include "base/component_export.h"
@@ -24,12 +23,7 @@
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/services/assistant/assistant_manager_service.h"
 #include "chromeos/services/assistant/public/cpp/assistant_service.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "components/signin/public/identity_manager/account_info.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
 class GoogleServiceAuthError;
@@ -87,14 +81,15 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // itself is created, so we do not have time in our tests to grab a handle
   // to |Service| and set this before it is too late.
   static void OverrideS3ServerUriForTesting(const char* uri);
+  static void OverrideDeviceIdForTesting(const char* device_id);
 
   void SetAssistantManagerServiceForTesting(
       std::unique_ptr<AssistantManagerService> assistant_manager_service);
 
   // AssistantService overrides:
   void Init() override;
-  void BindAssistant(mojo::PendingReceiver<mojom::Assistant> receiver) override;
   void Shutdown() override;
+  Assistant* GetAssistant() override;
 
  private:
   friend class AssistantServiceTest;
@@ -159,8 +154,6 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // for the device.
   bool ShouldEnableHotword();
 
-  mojo::ReceiverSet<mojom::Assistant> assistant_receivers_;
-
   signin::IdentityManager* const identity_manager_;
   std::unique_ptr<ScopedAshSessionObserver> scoped_ash_session_observer_;
   ScopedObserver<ash::AmbientUiModel, ash::AmbientUiModelObserver>
@@ -189,9 +182,6 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
       assistant_manager_service_for_testing_ = nullptr;
 
   base::Optional<std::string> access_token_;
-
-  mojo::Remote<ash::mojom::AssistantNotificationController>
-      assistant_notification_controller_;
 
   // |ServiceContext| object passed to child classes so they can access some of
   // our functionality without depending on us.

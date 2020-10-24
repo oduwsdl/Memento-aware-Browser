@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "ash/app_list/test/app_list_test_helper.h"
+#include "ash/frame_throttler/frame_throttling_controller.h"
+#include "ash/frame_throttler/mock_frame_throttling_observer.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/keyboard/ui/keyboard_util.h"
 #include "ash/keyboard/ui/test/keyboard_test_util.h"
@@ -29,7 +31,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/aura/client/window_types.h"
 #include "ui/base/hit_test.h"
@@ -141,7 +142,6 @@ class TestOverviewObserver : public OverviewObserver {
   AnimationState ending_animation_state() const {
     return ending_animation_state_;
   }
-  bool last_animation_was_slide() const { return last_animation_was_slide_; }
   bool last_animation_was_fade() const { return last_animation_was_fade_; }
 
  private:
@@ -149,10 +149,6 @@ class TestOverviewObserver : public OverviewObserver {
     DCHECK(selector);
     const OverviewEnterExitType enter_exit_type =
         selector->enter_exit_overview_type();
-
-    last_animation_was_slide_ =
-        enter_exit_type == OverviewEnterExitType::kSlideInEnter ||
-        enter_exit_type == OverviewEnterExitType::kSlideOutExit;
 
     last_animation_was_fade_ =
         enter_exit_type == OverviewEnterExitType::kFadeInEnter ||
@@ -172,7 +168,6 @@ class TestOverviewObserver : public OverviewObserver {
 
   AnimationState starting_animation_state_ = UNKNOWN;
   AnimationState ending_animation_state_ = UNKNOWN;
-  bool last_animation_was_slide_ = false;
   bool last_animation_was_fade_ = false;
   // If false, skips the checks in OnOverviewMode Starting/Ending
   // AnimationComplete.
@@ -235,7 +230,7 @@ TEST_F(OverviewControllerTest, AnimationCallbacksForCrossFadeWallpaper) {
   overview_controller->EndOverview();
   EXPECT_FALSE(overview_controller->InOverviewSession());
   EXPECT_EQ(TestOverviewObserver::UNKNOWN, observer.ending_animation_state());
-  EXPECT_EQ(10, wallpaper_widget_controller->GetWallpaperProperty().blur_sigma);
+  EXPECT_EQ(30, wallpaper_widget_controller->GetWallpaperProperty().blur_sigma);
   EXPECT_FALSE(wallpaper_widget_controller->IsAnimating());
 
   observer.WaitForEndingAnimationComplete();
@@ -512,32 +507,10 @@ TEST_F(OverviewControllerTest, ObserverCallsMatch) {
   }
 }
 
-// Parameterized test depending on whether kDragFromShelfToHomeOrOverview is
-// enabled.
-class OverviewControllerTestWithDragFromShelfToHomeOrOverview
-    : public OverviewControllerTest,
-      public testing::WithParamInterface<bool> {
- public:
-  OverviewControllerTestWithDragFromShelfToHomeOrOverview() {
-    if (GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          features::kDragFromShelfToHomeOrOverview);
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {features::kDragFromShelfToHomeOrOverview,
-               chromeos::features::kShelfHotseat});
-    }
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // Tests which animation for overview is used in tablet if all windows
 // are minimized, and that if overview is exited from the home launcher all
 // windows are minimized.
-TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
-       OverviewEnterExitAnimationTablet) {
+TEST_F(OverviewControllerTest, OverviewEnterExitAnimationTablet) {
   TestOverviewObserver observer(/*should_monitor_animation_state = */ false);
 
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
@@ -550,32 +523,26 @@ TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
 
   Shell::Get()->overview_controller()->StartOverview();
   EXPECT_FALSE(observer.last_animation_was_fade());
-  EXPECT_FALSE(observer.last_animation_was_slide());
 
-  // Exit to home launcher using either fade out or slide out animation. This
-  // should minimize all windows.
-  const bool is_homerview_enabled = GetParam();
+  // Exit to home launcher using fade out animation. This should minimize all
+  // windows.
   Shell::Get()->overview_controller()->EndOverview(
-      is_homerview_enabled ? OverviewEnterExitType::kFadeOutExit
-                           : OverviewEnterExitType::kSlideOutExit);
+      OverviewEnterExitType::kFadeOutExit);
 
-  EXPECT_EQ(is_homerview_enabled, observer.last_animation_was_fade());
-  EXPECT_EQ(!is_homerview_enabled, observer.last_animation_was_slide());
+  EXPECT_TRUE(observer.last_animation_was_fade());
 
   ASSERT_FALSE(Shell::Get()->overview_controller()->InOverviewSession());
   EXPECT_TRUE(WindowState::Get(window.get())->IsMinimized());
 
-  // All windows are minimized, so we should use the slide in or the fade in
-  // animation to enter overview.
+  // All windows are minimized, so we should use the fade in animation to enter
+  // overview.
   Shell::Get()->overview_controller()->StartOverview();
-  EXPECT_EQ(is_homerview_enabled, observer.last_animation_was_fade());
-  EXPECT_EQ(!is_homerview_enabled, observer.last_animation_was_slide());
+  EXPECT_TRUE(observer.last_animation_was_fade());
 }
 
-// Tests that the slide and fade animations are not used to enter or exit
-// overview in clamshell.
-TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
-       OverviewEnterExitAnimationClamshell) {
+// Tests that fade animations are not used to enter or exit overview in
+// clamshell.
+TEST_F(OverviewControllerTest, OverviewEnterExitAnimationClamshell) {
   TestOverviewObserver observer(/*should_monitor_animation_state = */ false);
 
   const gfx::Rect bounds(200, 200);
@@ -583,24 +550,20 @@ TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
       CreateTestWindowInShellWithBounds(bounds));
 
   Shell::Get()->overview_controller()->StartOverview();
-  EXPECT_FALSE(observer.last_animation_was_slide());
   EXPECT_FALSE(observer.last_animation_was_fade());
 
   Shell::Get()->overview_controller()->EndOverview();
-  EXPECT_FALSE(observer.last_animation_was_slide());
   EXPECT_FALSE(observer.last_animation_was_fade());
 
-  // Even with all window minimized, overview should not use slide, nor fade
-  // animation to enter.
+  // Even with all window minimized, overview should not use fade animation to
+  // enter.
   ASSERT_FALSE(Shell::Get()->overview_controller()->InOverviewSession());
   WindowState::Get(window.get())->Minimize();
   Shell::Get()->overview_controller()->StartOverview();
-  EXPECT_FALSE(observer.last_animation_was_slide());
   EXPECT_FALSE(observer.last_animation_was_fade());
 }
 
-TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
-       WallpaperAnimationTiming) {
+TEST_F(OverviewControllerTest, WallpaperAnimationTiming) {
   const gfx::Rect bounds(200, 200);
   std::unique_ptr<aura::Window> window(
       CreateTestWindowInShellWithBounds(bounds));
@@ -609,21 +572,17 @@ TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
   ui::ScopedAnimationDurationScaleMode non_zero(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
-  const bool is_homerview_enabled = GetParam();
   Shell::Get()->overview_controller()->StartOverview(
-      is_homerview_enabled ? OverviewEnterExitType::kFadeInEnter
-                           : OverviewEnterExitType::kSlideInEnter);
+      OverviewEnterExitType::kFadeInEnter);
   auto* wallpaper_widget_controller =
       Shell::GetPrimaryRootWindowController()->wallpaper_widget_controller();
-  EXPECT_EQ(is_homerview_enabled,
-            wallpaper_widget_controller->GetWallpaperProperty().blur_sigma > 0);
-  EXPECT_EQ(is_homerview_enabled, wallpaper_widget_controller->IsAnimating());
+  EXPECT_GT(wallpaper_widget_controller->GetWallpaperProperty().blur_sigma, 0);
+  EXPECT_TRUE(wallpaper_widget_controller->IsAnimating());
 }
 
 // Tests that overview session exits cleanly if exit is requested before
 // previous enter animations finish.
-TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
-       OverviewExitWhileStillEntering) {
+TEST_F(OverviewControllerTest, OverviewExitWhileStillEntering) {
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
   // Ensure calls to SetEnabledForTest complete.
   base::RunLoop().RunUntilIdle();
@@ -639,16 +598,13 @@ TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
   Shell::Get()->overview_controller()->StartOverview();
 
-  // Exit to home launcher using either fade out or slide out animation. This
-  // should minimize all windows.
-  const bool is_homerview_enabled = GetParam();
+  // Exit to home launcher using fade out animation. This should minimize all
+  // windows.
   TestOverviewObserver observer(/*should_monitor_animation_state = */ true);
   Shell::Get()->overview_controller()->EndOverview(
-      is_homerview_enabled ? OverviewEnterExitType::kFadeOutExit
-                           : OverviewEnterExitType::kSlideOutExit);
+      OverviewEnterExitType::kFadeOutExit);
 
-  EXPECT_EQ(is_homerview_enabled, observer.last_animation_was_fade());
-  EXPECT_EQ(!is_homerview_enabled, observer.last_animation_was_slide());
+  EXPECT_TRUE(observer.last_animation_was_fade());
 
   // Verify that the overview exits cleanly.
   observer.WaitForEndingAnimationComplete();
@@ -656,11 +612,6 @@ TEST_P(OverviewControllerTestWithDragFromShelfToHomeOrOverview,
   EXPECT_FALSE(Shell::Get()->overview_controller()->InOverviewSession());
   EXPECT_TRUE(WindowState::Get(window.get())->IsMinimized());
 }
-
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    OverviewControllerTestWithDragFromShelfToHomeOrOverview,
-    testing::Bool());
 
 class OverviewVirtualKeyboardTest : public OverviewControllerTest {
  protected:
@@ -703,6 +654,36 @@ TEST_F(OverviewVirtualKeyboardTest,
 
   Shell::Get()->overview_controller()->StartOverview();
   EXPECT_FALSE(keyboard::IsKeyboardHiding());
+}
+
+// Tests that frame throttling starts and ends accordingly when overview starts
+// and ends.
+TEST_F(OverviewControllerTest, FrameThrottling) {
+  MockFrameThrottlingObserver observer;
+  FrameThrottlingController* frame_throttling_controller =
+      Shell::Get()->frame_throttling_controller();
+  frame_throttling_controller->AddObserver(&observer);
+  const int browser_window_count = 3;
+  const int arc_window_count = 2;
+  const int total_window_count = browser_window_count + arc_window_count;
+  std::unique_ptr<aura::Window> created_windows[total_window_count];
+  std::vector<aura::Window*> windows(total_window_count, nullptr);
+  for (int i = 0; i < total_window_count; ++i) {
+    created_windows[i] = CreateAppWindow(gfx::Rect(), i < browser_window_count
+                                                          ? AppType::BROWSER
+                                                          : AppType::ARC_APP);
+    windows[i] = created_windows[i].get();
+  }
+
+  auto* controller = Shell::Get()->overview_controller();
+  EXPECT_CALL(observer, OnThrottlingStarted(
+                            testing::UnorderedElementsAreArray(windows),
+                            frame_throttling_controller->throttled_fps()));
+  controller->StartOverview();
+
+  EXPECT_CALL(observer, OnThrottlingEnded());
+  controller->EndOverview();
+  frame_throttling_controller->RemoveObserver(&observer);
 }
 
 }  // namespace ash

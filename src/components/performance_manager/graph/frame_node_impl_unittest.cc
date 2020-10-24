@@ -7,6 +7,8 @@
 #include "base/test/gtest_util.h"
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/graph/process_node_impl.h"
+#include "components/performance_manager/public/render_process_host_id.h"
+#include "components/performance_manager/public/render_process_host_proxy.h"
 #include "components/performance_manager/test_support/graph_test_harness.h"
 #include "components/performance_manager/test_support/mock_graphs.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -64,12 +66,12 @@ TEST_F(FrameNodeImplTest, AddFrameHierarchyBasic) {
 }
 
 TEST_F(FrameNodeImplTest, GetFrameNodeById) {
-  auto process_a =
-      CreateNode<ProcessNodeImpl>(content::PROCESS_TYPE_RENDERER,
-                                  RenderProcessHostProxy::CreateForTesting(42));
-  auto process_b =
-      CreateNode<ProcessNodeImpl>(content::PROCESS_TYPE_RENDERER,
-                                  RenderProcessHostProxy::CreateForTesting(43));
+  auto process_a = CreateNode<ProcessNodeImpl>(
+      content::PROCESS_TYPE_RENDERER,
+      RenderProcessHostProxy::CreateForTesting(RenderProcessHostId(42)));
+  auto process_b = CreateNode<ProcessNodeImpl>(
+      content::PROCESS_TYPE_RENDERER,
+      RenderProcessHostProxy::CreateForTesting(RenderProcessHostId(43)));
   auto page = CreateNode<PageNodeImpl>();
   auto frame_a1 = CreateFrameNodeAutoId(process_a.get(), page.get());
   auto frame_a2 = CreateFrameNodeAutoId(process_a.get(), page.get());
@@ -148,6 +150,8 @@ class LenientMockObserver : public FrameNodeImpl::Observer {
                void(const FrameNode*, const PriorityAndReason& previous_value));
   MOCK_METHOD1(OnHadFormInteractionChanged, void(const FrameNode*));
   MOCK_METHOD1(OnIsAudibleChanged, void(const FrameNode*));
+  MOCK_METHOD1(OnViewportIntersectionChanged, void(const FrameNode*));
+  MOCK_METHOD1(OnFrameVisibilityChanged, void(const FrameNode*));
   MOCK_METHOD1(OnNonPersistentNotificationCreated, void(const FrameNode*));
   MOCK_METHOD2(OnFirstContentfulPaint, void(const FrameNode*, base::TimeDelta));
 
@@ -276,7 +280,7 @@ TEST_F(FrameNodeImplTest, IsHoldingIndexedDBLock) {
 }
 
 TEST_F(FrameNodeImplTest, Priority) {
-  using PriorityAndReason = frame_priority::PriorityAndReason;
+  using PriorityAndReason = execution_context_priority::PriorityAndReason;
 
   auto process = CreateNode<ProcessNodeImpl>();
   auto page = CreateNode<PageNodeImpl>();
@@ -365,6 +369,43 @@ TEST_F(FrameNodeImplTest, IsAudible) {
   graph()->RemoveFrameNodeObserver(&obs);
 }
 
+TEST_F(FrameNodeImplTest, ViewportIntersection) {
+  auto process = CreateNode<ProcessNodeImpl>();
+  auto page = CreateNode<PageNodeImpl>();
+  // A child frame node is used because the main frame does not have a viewport
+  // intersection.
+  auto main_frame_node = CreateFrameNodeAutoId(process.get(), page.get());
+  auto child_frame_node =
+      CreateFrameNodeAutoId(process.get(), page.get(), main_frame_node.get());
+
+  MockObserver obs;
+  graph()->AddFrameNodeObserver(&obs);
+
+  EXPECT_CALL(obs, OnViewportIntersectionChanged(child_frame_node.get()));
+
+  gfx::Rect kViewportIntersection(25, 25, 100, 100);
+  child_frame_node->SetViewportIntersection(kViewportIntersection);
+  EXPECT_EQ(child_frame_node->viewport_intersection(), kViewportIntersection);
+
+  graph()->RemoveFrameNodeObserver(&obs);
+}
+
+TEST_F(FrameNodeImplTest, Visibility) {
+  auto process = CreateNode<ProcessNodeImpl>();
+  auto page = CreateNode<PageNodeImpl>();
+  auto frame_node = CreateFrameNodeAutoId(process.get(), page.get());
+
+  MockObserver obs;
+  graph()->AddFrameNodeObserver(&obs);
+
+  EXPECT_CALL(obs, OnFrameVisibilityChanged(frame_node.get()));
+
+  frame_node->SetVisibility(FrameNode::Visibility::kVisible);
+  EXPECT_EQ(frame_node->visibility(), FrameNode::Visibility::kVisible);
+
+  graph()->RemoveFrameNodeObserver(&obs);
+}
+
 TEST_F(FrameNodeImplTest, FirstContentfulPaint) {
   auto process = CreateNode<ProcessNodeImpl>();
   auto page = CreateNode<PageNodeImpl>();
@@ -384,7 +425,10 @@ TEST_F(FrameNodeImplTest, PublicInterface) {
   auto process = CreateNode<ProcessNodeImpl>();
   auto page = CreateNode<PageNodeImpl>();
   auto frame_node = CreateFrameNodeAutoId(process.get(), page.get());
+  auto child_frame_node =
+      CreateFrameNodeAutoId(process.get(), page.get(), frame_node.get());
   const FrameNode* public_frame_node = frame_node.get();
+  const FrameNode* public_child_frame_node = child_frame_node.get();
 
   // Simply test that the public interface impls yield the same result as their
   // private counterpart.
@@ -397,8 +441,6 @@ TEST_F(FrameNodeImplTest, PublicInterface) {
             public_frame_node->GetProcessNode());
   EXPECT_EQ(frame_node->frame_tree_node_id(),
             public_frame_node->GetFrameTreeNodeId());
-  EXPECT_EQ(frame_node->dev_tools_token(),
-            public_frame_node->GetDevToolsToken());
   EXPECT_EQ(frame_node->frame_token(), public_frame_node->GetFrameToken());
   EXPECT_EQ(frame_node->browsing_instance_id(),
             public_frame_node->GetBrowsingInstanceId());
@@ -427,6 +469,11 @@ TEST_F(FrameNodeImplTest, PublicInterface) {
             public_frame_node->IsHoldingIndexedDBLock());
   EXPECT_EQ(frame_node->had_form_interaction(),
             public_frame_node->HadFormInteraction());
+  // Use the child frame node to test the viewport intersection because the
+  // viewport intersection of the main frame is not tracked.
+  EXPECT_EQ(child_frame_node->viewport_intersection(),
+            public_child_frame_node->GetViewportIntersection());
+  EXPECT_EQ(frame_node->visibility(), public_frame_node->GetVisibility());
 }
 
 TEST_F(FrameNodeImplTest, VisitChildFrameNodes) {

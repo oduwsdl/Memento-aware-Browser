@@ -67,10 +67,9 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeAccount = kItemTypeEnumZero,
   ItemTypeAddAccount,
-  // Provides experimental and production sign out items. In the experimental
-  // item, this type is used only for non-managed accounts.
+  // Provides sign out items used only for non-managed accounts.
   ItemTypeSignOut,
-  // Experimental sign out item that clears Chrome data. Used for both managed
+  // Sign out item that clears Chrome data. Used for both managed
   // and non-managed accounts.
   ItemTypeSignOutAndClearData,
   ItemTypeHeader,
@@ -110,6 +109,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 // Modal alert for confirming account removal.
 @property(nonatomic, strong) AlertCoordinator* removeAccountCoordinator;
+
+// If YES, the UI elements are disabled.
+@property(nonatomic, assign) BOOL uiDisabled;
 
 // Stops observing browser state services. This is required during the shutdown
 // phase to avoid observing services for a browser state that is being killed.
@@ -160,6 +162,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)reportDismissalUserAction {
   base::RecordAction(base::UserMetricsAction("MobileAccountsSettingsClose"));
+}
+
+- (void)reportBackUserAction {
+  base::RecordAction(base::UserMetricsAction("MobileAccountsSettingsBack"));
 }
 
 - (void)settingsWillBeDismissed {
@@ -234,30 +240,24 @@ typedef NS_ENUM(NSInteger, ItemType) {
       toSectionWithIdentifier:SectionIdentifierAccounts];
 
   // Sign out section.
-  if (base::FeatureList::IsEnabled(kClearSyncedData)) {
-    [model addSectionWithIdentifier:SectionIdentifierSignOut];
-    // Adds a signout option if the account is not managed.
-    if (![self authService]->IsAuthenticatedIdentityManaged()) {
-      [model addItem:[self experimentalSignOutItem]
-          toSectionWithIdentifier:SectionIdentifierSignOut];
-    }
-    // Adds a signout and clear data option.
-    [model addItem:[self experimentalSignOutAndClearDataItem]
-        toSectionWithIdentifier:SectionIdentifierSignOut];
-
-    // Adds a footer with signout explanation depending on the type of
-    // account whether managed or non-managed.
-    if ([self authService]->IsAuthenticatedIdentityManaged()) {
-      [model setFooter:[self signOutManagedAccountFooterItem]
-          forSectionWithIdentifier:SectionIdentifierSignOut];
-    } else {
-      [model setFooter:[self signOutNonManagedAccountFooterItem]
-          forSectionWithIdentifier:SectionIdentifierSignOut];
-    }
-  } else {
-    [model addSectionWithIdentifier:SectionIdentifierSignOut];
+  [model addSectionWithIdentifier:SectionIdentifierSignOut];
+  // Adds a signout option if the account is not managed.
+  if (![self authService]->IsAuthenticatedIdentityManaged()) {
     [model addItem:[self signOutItem]
         toSectionWithIdentifier:SectionIdentifierSignOut];
+  }
+  // Adds a signout and clear data option.
+  [model addItem:[self signOutAndClearDataItem]
+      toSectionWithIdentifier:SectionIdentifierSignOut];
+
+  // Adds a footer with signout explanation depending on the type of
+  // account whether managed or non-managed.
+  if ([self authService]->IsAuthenticatedIdentityManaged()) {
+    [model setFooter:[self signOutManagedAccountFooterItem]
+        forSectionWithIdentifier:SectionIdentifierSignOut];
+  } else {
+    [model setFooter:[self signOutNonManagedAccountFooterItem]
+        forSectionWithIdentifier:SectionIdentifierSignOut];
   }
 }
 
@@ -314,16 +314,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (TableViewItem*)signOutItem {
-  TableViewDetailTextItem* item =
-      [[TableViewDetailTextItem alloc] initWithType:ItemTypeSignOut];
-  item.text =
-      l10n_util::GetNSString(IDS_IOS_OPTIONS_ACCOUNTS_SIGN_OUT_TURN_OFF_SYNC);
-  item.accessibilityTraits |= UIAccessibilityTraitButton;
-  item.accessibilityIdentifier = kSettingsAccountsTableViewSignoutCellId;
-  return item;
-}
-
-- (TableViewItem*)experimentalSignOutItem {
   TableViewTextItem* item =
       [[TableViewTextItem alloc] initWithType:ItemTypeSignOut];
   item.text =
@@ -334,7 +324,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return item;
 }
 
-- (TableViewItem*)experimentalSignOutAndClearDataItem {
+- (TableViewItem*)signOutAndClearDataItem {
   TableViewTextItem* item =
       [[TableViewTextItem alloc] initWithType:ItemTypeSignOutAndClearData];
   item.text = l10n_util::GetNSString(
@@ -350,6 +340,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)tableView:(UITableView*)tableView
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  // If there is an operation in process that does not allow selecting a cell
+  // exit without performing the selection.
+  if (self.uiDisabled) {
+    return;
+  }
+
   [super tableView:tableView didSelectRowAtIndexPath:indexPath];
 
   NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
@@ -360,6 +356,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
           base::mac::ObjCCastStrict<TableViewAccountItem>(
               [self.tableViewModel itemAtIndexPath:indexPath]);
       DCHECK(item.chromeIdentity);
+
       UIView* itemView =
           [[tableView cellForRowAtIndexPath:indexPath] contentView];
       [self showAccountDetails:item.chromeIdentity itemView:itemView];
@@ -370,13 +367,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
       break;
     }
     case ItemTypeSignOut: {
-      if (base::FeatureList::IsEnabled(kClearSyncedData)) {
-        UIView* itemView =
-            [[tableView cellForRowAtIndexPath:indexPath] contentView];
-        [self showSignOutWithClearData:NO itemView:itemView];
-      } else {
-        [self showSignOut];
-      }
+      UIView* itemView =
+          [[tableView cellForRowAtIndexPath:indexPath] contentView];
+      [self showSignOutWithClearData:NO itemView:itemView];
       break;
     }
     case ItemTypeSignOutAndClearData: {
@@ -480,9 +473,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
                         addItemWithTitle:l10n_util::GetNSString(
                                              IDS_IOS_REMOVE_ACCOUNT_LABEL)
                                   action:^{
+                                    weakSelf.uiDisabled = YES;
                                     ios::GetChromeBrowserProvider()
                                         ->GetChromeIdentityService()
-                                        ->ForgetIdentity(identity, nil);
+                                        ->ForgetIdentity(
+                                            identity, ^(NSError* error) {
+                                              weakSelf.uiDisabled = NO;
+                                            });
                                   }
                                    style:UIAlertActionStyleDestructive];
 
@@ -501,6 +498,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)showSignOutWithClearData:(BOOL)forceClearData
                         itemView:(UIView*)itemView {
+  if (_authenticationOperationInProgress || [_alertCoordinator isVisible] ||
+      self != [self.navigationController topViewController]) {
+    // An action is already in progress, ignore user's request.
+    return;
+  }
+
   NSString* alertMessage = nil;
   NSString* signOutTitle = nil;
   UIAlertActionStyle actionStyle = UIAlertActionStyleDefault;
@@ -540,51 +543,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [_alertCoordinator start];
 }
 
-- (void)showSignOut {
-  if (_authenticationOperationInProgress || [_alertCoordinator isVisible] ||
-      self != [self.navigationController topViewController]) {
-    // An action is already in progress, ignore user's request.
-    return;
-  }
-
-  NSString* title = nil;
-  NSString* message = nil;
-  NSString* continueButtonTitle = nil;
-
-  if ([self authService] -> IsAuthenticatedIdentityManaged()) {
-    title =
-        l10n_util::GetNSString(IDS_IOS_MANAGED_DISCONNECT_DIALOG_TITLE_UNITY);
-    message = l10n_util::GetNSStringF(
-        IDS_IOS_MANAGED_DISCONNECT_DIALOG_INFO_UNITY, self.hostedDomain);
-    continueButtonTitle =
-        l10n_util::GetNSString(IDS_IOS_MANAGED_DISCONNECT_DIALOG_ACCEPT_UNITY);
-  } else {
-    title = l10n_util::GetNSString(IDS_IOS_DISCONNECT_DIALOG_TITLE_UNITY);
-    message =
-        l10n_util::GetNSString(IDS_IOS_DISCONNECT_DIALOG_INFO_MOBILE_UNITY);
-    continueButtonTitle = l10n_util::GetNSString(
-        IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE);
-  }
-
-  _alertCoordinator =
-      [[AlertCoordinator alloc] initWithBaseViewController:self
-                                                   browser:_browser
-                                                     title:title
-                                                   message:message];
-
-  __weak AccountsTableViewController* weakSelf = self;
-  [_alertCoordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
-                               action:nil
-                                style:UIAlertActionStyleCancel];
-  [_alertCoordinator addItemWithTitle:continueButtonTitle
-                               action:^{
-                                 [weakSelf handleSignOutWithForceClearData:NO];
-                               }
-                                style:UIAlertActionStyleDefault];
-
-  [_alertCoordinator start];
-}
-
 - (void)handleSignOutWithForceClearData:(BOOL)forceClearData {
   AuthenticationService* authService = [self authService];
   if (authService->IsAuthenticated()) {
@@ -593,15 +551,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
     authService->SignOut(
         signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS, forceClearData, ^{
           [self allowUserInteraction];
-          _authenticationOperationInProgress = NO;
-          [base::mac::ObjCCastStrict<SettingsNavigationController>(
-              self.navigationController)
-              popViewControllerOrCloseSettingsAnimated:YES];
+          [self handleAuthenticationOperationDidFinish];
         });
-    // Get UMA metrics on the usage of the new UI, which is only available for
-    // users in the experiement with non-managed accounts.
-    if (base::FeatureList::IsEnabled(kClearSyncedData) &&
-        ![self authService]->IsAuthenticatedIdentityManaged()) {
+    // Get UMA metrics on the usage of different options for signout available
+    // for users with non-managed accounts.
+    if (![self authService]->IsAuthenticatedIdentityManaged()) {
       UMA_HISTOGRAM_BOOLEAN("Signin.UserRequestedWipeDataOnSignout",
                             forceClearData);
     }

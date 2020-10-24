@@ -17,7 +17,7 @@ import org.junit.runners.model.Statement;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Log;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.components.offline_items_collection.ContentId;
@@ -30,7 +30,6 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -51,6 +50,7 @@ public class DownloadTestRule extends ChromeActivityTestRule<ChromeActivity> {
     public static final long UPDATE_DELAY_MILLIS = 1000;
 
     private final CustomMainActivityStart mActivityStart;
+    private List<DownloadItem> mAllDownloads;
 
     public DownloadTestRule(CustomMainActivityStart action) {
         super(ChromeActivity.class);
@@ -186,10 +186,18 @@ public class DownloadTestRule extends ChromeActivityTestRule<ChromeActivity> {
         return eventReceived;
     }
 
+    public List<DownloadItem> getAllDownloads() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            DownloadManagerService.getDownloadManagerService().getAllDownloads(false);
+        });
+        return mAllDownloads;
+    }
+
     private class TestDownloadManagerServiceObserver
             implements DownloadManagerService.DownloadObserver {
         @Override
         public void onAllDownloadsRetrieved(final List<DownloadItem> list, boolean isOffTheRecord) {
+            mAllDownloads = list;
         }
 
         @Override
@@ -213,7 +221,7 @@ public class DownloadTestRule extends ChromeActivityTestRule<ChromeActivity> {
 
     private class TestDownloadBackendObserver implements OfflineContentProvider.Observer {
         @Override
-        public void onItemsAdded(ArrayList<OfflineItem> items) {}
+        public void onItemsAdded(List<OfflineItem> items) {}
 
         @Override
         public void onItemRemoved(ContentId id) {}

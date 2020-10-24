@@ -4,7 +4,10 @@
 
 package org.chromium.chrome.browser.payments;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.components.payments.PaymentApp;
+import org.chromium.components.payments.PaymentAppFactoryParams;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,20 +23,33 @@ public class PaymentAppService implements PaymentAppFactoryInterface {
 
     /** @return The singleton instance of this class. */
     public static PaymentAppService getInstance() {
+        if (sInstance == null) {
+            sInstance = new PaymentAppService();
+            sInstance.addFactory(new AutofillPaymentAppFactory());
+            sInstance.addFactory(new PaymentAppServiceBridge());
+            sInstance.addFactory(new AndroidPaymentAppFactory());
+        }
+        return sInstance;
+    }
+
+    @VisibleForTesting
+    public static PaymentAppService getInstanceWithoutFactoryForTest() {
         if (sInstance == null) sInstance = new PaymentAppService();
         return sInstance;
     }
 
     /** Prevent instantiation. */
-    private PaymentAppService() {
-        mFactories.add(new AutofillPaymentAppFactory());
-        mFactories.add(new PaymentAppServiceBridge());
-        mFactories.add(new AndroidPaymentAppFactory());
-    }
+    private PaymentAppService() {}
 
     /** @param factory The factory to add. */
     public void addFactory(PaymentAppFactoryInterface factory) {
         mFactories.add(factory);
+    }
+
+    /** Resets the instance, used by //clank tests. */
+    @VisibleForTesting
+    public void resetForTest() {
+        sInstance = null;
     }
 
     // PaymentAppFactoryInterface implementation.
@@ -128,6 +144,15 @@ public class PaymentAppService implements PaymentAppFactoryInterface {
 
         Set<PaymentApp> uniquePaymentApps = new HashSet<>(identifierToAppMapping.values());
         for (PaymentApp app : identifierToAppMapping.values()) {
+            // If a preferred payment app is present (e.g. Play Billing within a TWA), all other
+            // payment apps are ignored.
+            if (app.isPreferred()) {
+                uniquePaymentApps.clear();
+                uniquePaymentApps.add(app);
+
+                return uniquePaymentApps;
+            }
+
             // The list of native applications from the web app manifest's "related_applications"
             // section. If "prefer_related_applications" is true in the manifest and any one of the
             // related application is installed on the device, then the corresponding service worker

@@ -20,7 +20,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/common/chrome_features.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
@@ -97,12 +96,10 @@ BrowserStatusMonitor::BrowserStatusMonitor(
       browser_tab_strip_tracker_(this, nullptr) {
   DCHECK(launcher_controller_);
 
-  if (base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry)) {
-    app_service_instance_helper_ =
-        launcher_controller->app_service_app_window_controller()
-            ->app_service_instance_helper();
-    DCHECK(app_service_instance_helper_);
-  }
+  app_service_instance_helper_ =
+      launcher_controller->app_service_app_window_controller()
+          ->app_service_instance_helper();
+  DCHECK(app_service_instance_helper_);
 }
 
 BrowserStatusMonitor::~BrowserStatusMonitor() {

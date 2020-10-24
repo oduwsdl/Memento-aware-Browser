@@ -60,6 +60,10 @@ LocalCardMigrationBubbleViews::LocalCardMigrationBubbleViews(
   SetAcceptCallback(
       base::BindOnce(&LocalCardMigrationBubbleViews::OnDialogAccepted,
                      base::Unretained(this)));
+
+  SetShowCloseButton(true);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
 }
 
 void LocalCardMigrationBubbleViews::Show(DisplayReason reason) {
@@ -89,13 +93,6 @@ void LocalCardMigrationBubbleViews::OnDialogCancelled() {
   // TODO(https://crbug.com/1046793): Maybe delete this.
   if (controller_)
     controller_->OnCancelButtonClicked();
-}
-
-gfx::Size LocalCardMigrationBubbleViews::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 void LocalCardMigrationBubbleViews::AddedToWidget() {
@@ -139,10 +136,6 @@ void LocalCardMigrationBubbleViews::AddedToWidget() {
   GetBubbleFrameView()->SetTitleView(std::move(title_container));
 }
 
-bool LocalCardMigrationBubbleViews::ShouldShowCloseButton() const {
-  return true;
-}
-
 base::string16 LocalCardMigrationBubbleViews::GetWindowTitle() const {
   return controller_ ? l10n_util::GetStringUTF16(
                            IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_TITLE)
@@ -168,10 +161,10 @@ LocalCardMigrationBubbleViews::~LocalCardMigrationBubbleViews() = default;
 
 void LocalCardMigrationBubbleViews::Init() {
   SetLayoutManager(std::make_unique<views::FillLayout>());
-  auto* explanatory_message =
-      new views::Label(l10n_util::GetStringUTF16(
-                           IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_BODY_TEXT),
-                       CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_SECONDARY);
+  auto* explanatory_message = new views::Label(
+      l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_BODY_TEXT),
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_SECONDARY);
   explanatory_message->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   explanatory_message->SetMultiLine(true);
   AddChildView(explanatory_message);

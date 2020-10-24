@@ -43,10 +43,8 @@ SaveCardBubbleViews::SyncPromoDelegate::SyncPromoDelegate(
 }
 
 void SaveCardBubbleViews::SyncPromoDelegate::OnEnableSync(
-    const AccountInfo& account,
-    bool is_default_promo_account) {
-  controller_->OnSyncPromoAccepted(account, access_point_,
-                                   is_default_promo_account);
+    const AccountInfo& account) {
+  controller_->OnSyncPromoAccepted(account, access_point_);
 }
 
 SaveCardBubbleViews::SaveCardBubbleViews(views::View* anchor_view,
@@ -54,13 +52,17 @@ SaveCardBubbleViews::SaveCardBubbleViews(views::View* anchor_view,
                                          SaveCardBubbleController* controller)
     : LocationBarBubbleDelegateView(anchor_view, web_contents),
       controller_(controller) {
+  DCHECK(controller);
   SetButtonLabel(ui::DIALOG_BUTTON_OK, controller->GetAcceptButtonText());
   SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, controller->GetDeclineButtonText());
   SetCancelCallback(base::BindOnce(&SaveCardBubbleViews::OnDialogCancelled,
                                    base::Unretained(this)));
   SetAcceptCallback(base::BindOnce(&SaveCardBubbleViews::OnDialogAccepted,
                                    base::Unretained(this)));
-  DCHECK(controller);
+
+  SetShowCloseButton(true);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::SAVE_CARD);
 }
 
@@ -94,13 +96,6 @@ void SaveCardBubbleViews::OnDialogCancelled() {
     controller_->OnCancelButton();
 }
 
-gfx::Size SaveCardBubbleViews::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
 void SaveCardBubbleViews::AddedToWidget() {
   // Use a custom title container if offering to upload a server card.
   // Done when this view is added to the widget, so the bubble frame
@@ -110,10 +105,6 @@ void SaveCardBubbleViews::AddedToWidget() {
 
   GetBubbleFrameView()->SetTitleView(
       std::make_unique<TitleWithIconAndSeparatorView>(GetWindowTitle()));
-}
-
-bool SaveCardBubbleViews::ShouldShowCloseButton() const {
-  return true;
 }
 
 base::string16 SaveCardBubbleViews::GetWindowTitle() const {
@@ -156,8 +147,9 @@ std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
   // info.
   base::string16 explanation = controller_->GetExplanatoryMessage();
   if (!explanation.empty()) {
-    auto* explanation_label = new views::Label(
-        explanation, CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_SECONDARY);
+    auto* explanation_label =
+        new views::Label(explanation, views::style::CONTEXT_DIALOG_BODY_TEXT,
+                         views::style::STYLE_SECONDARY);
     explanation_label->SetMultiLine(true);
     explanation_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     view->AddChildView(explanation_label);
@@ -178,12 +170,12 @@ std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
       ui::ResourceBundle::GetSharedInstance()
           .GetImageNamed(CreditCard::IconResourceId(card.network()))
           .AsImageSkia());
-  card_network_icon->set_tooltip_text(card.NetworkForDisplay());
+  card_network_icon->SetTooltipText(card.NetworkForDisplay());
   description_view->AddChildView(card_network_icon);
 
-  views::Label* label = description_view->AddChildView(
-      new views::Label(GetCardIdentifierString(), CONTEXT_BODY_TEXT_LARGE,
-                       views::style::STYLE_PRIMARY));
+  views::Label* label = description_view->AddChildView(new views::Label(
+      GetCardIdentifierString(), views::style::CONTEXT_DIALOG_BODY_TEXT,
+      views::style::STYLE_PRIMARY));
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   int label_width =
@@ -200,7 +192,7 @@ std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
 
     auto* expiration_date_label = new views::Label(
         card.AbbreviatedExpirationDateForDisplay(false),
-        CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_SECONDARY);
+        views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_SECONDARY);
     expiration_date_label->SetID(DialogViewId::EXPIRATION_DATE_LABEL);
     description_view->AddChildView(expiration_date_label);
     constexpr int kExpirationDateLabelWidth = 60;

@@ -4,7 +4,6 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -14,7 +13,6 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -30,6 +28,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "ui/display/screen_base.h"
+#include "ui/display/test/test_screen.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/shell.h"
@@ -273,7 +272,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_FALSE(IsWindowFullscreenForTabOrPending());
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // http://crbug.com/100467
 IN_PROC_BROWSER_TEST_F(ExclusiveAccessTest,
                        DISABLED_TabEntersPresentationModeFromWindowed) {
@@ -332,8 +331,14 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest, EscapingMouseLock) {
 // Disabled due to flakiness.
 // TODO(crbug.com/976883): Fix and re-enable this.
 // Tests mouse lock and fullscreen modes can be escaped with ESC key.
+#if defined(OS_WIN)
+#define MAYBE_EscapingMouseLockAndFullscreen EscapingMouseLockAndFullscreen
+#else
+#define MAYBE_EscapingMouseLockAndFullscreen \
+  DISABLED_EscapingMouseLockAndFullscreen
+#endif
 IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
-                       DISABLED_EscapingMouseLockAndFullscreen) {
+                       MAYBE_EscapingMouseLockAndFullscreen) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(kFullscreenMouseLockHTML));
@@ -385,7 +390,6 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
 
 // Times out sometimes on Linux. http://crbug.com/135115
 // Mac: http://crbug.com/103912
-// Windows: Failing flakily on try jobs also.
 // Tests mouse lock then fullscreen in same request.
 #if defined(OS_WIN)
 #define MAYBE_MouseLockAndFullscreen MouseLockAndFullscreen
@@ -407,37 +411,6 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
     fullscreen_observer.Wait();
   }
   ASSERT_TRUE(IsExclusiveAccessBubbleDisplayed());
-  ASSERT_TRUE(IsMouseLocked());
-  ASSERT_TRUE(IsWindowFullscreenForTabOrPending());
-}
-
-// Tests mouse lock and fullscreen for the privileged fullscreen case (e.g.,
-// embedded flash fullscreen, since the Flash plugin handles user permissions
-// requests itself).
-// Flaky on Linux: crbug.com/1066607
-#if defined(OS_LINUX)
-#define MAYBE_PrivilegedMouseLockAndFullscreen \
-  DISABLED_PrivilegedMouseLockAndFullscreen
-#else
-#define MAYBE_PrivilegedMouseLockAndFullscreen PrivilegedMouseLockAndFullscreen
-#endif
-IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
-                       MAYBE_PrivilegedMouseLockAndFullscreen) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL(kFullscreenMouseLockHTML));
-
-  ASSERT_FALSE(IsExclusiveAccessBubbleDisplayed());
-
-  SetPrivilegedFullscreen(true);
-
-  // Request to lock the mouse and enter fullscreen.
-  FullscreenNotificationObserver fullscreen_observer(browser());
-  PressKeyAndWaitForMouseLockRequest(ui::VKEY_B);
-  fullscreen_observer.Wait();
-
-  // Confirm they are enabled and there is no prompt.
-  ASSERT_FALSE(IsExclusiveAccessBubbleDisplayed());
   ASSERT_TRUE(IsMouseLocked());
   ASSERT_TRUE(IsWindowFullscreenForTabOrPending());
 }
@@ -545,8 +518,10 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
   ASSERT_FALSE(IsMouseLocked());
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA) || \
+    defined(OS_WIN) && defined(NDEBUG)
 // TODO(erg): linux_aura bringup: http://crbug.com/163931
+// Test is flaky on Windows: https://crbug.com/1124492
 #define MAYBE_TestTabDoesntExitMouseLockOnSubFrameNavigation \
   DISABLED_TestTabDoesntExitMouseLockOnSubFrameNavigation
 #else
@@ -677,9 +652,7 @@ IN_PROC_BROWSER_TEST_F(ExperimentalFullscreenControllerInteractiveTest,
                        MAYBE_FullscreenOnSecondDisplay) {
   // Updates the display configuration to add a secondary display.
 #if defined(OS_CHROMEOS)
-  display::DisplayManager* display_manager =
-      ash::Shell::Get()->display_manager();
-  display::test::DisplayManagerTestApi(display_manager)
+  display::test::DisplayManagerTestApi(ash::Shell::Get()->display_manager())
       .UpdateDisplay("100+100-801x802,901+100-801x802");
 #else
   display::Screen* original_screen = display::Screen::GetScreen();
@@ -702,13 +675,14 @@ IN_PROC_BROWSER_TEST_F(ExperimentalFullscreenControllerInteractiveTest,
   EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
 
-  // Auto-accept the permission request.
+  // Auto-accept the Window Placement permission request.
   permissions::PermissionRequestManager* permission_request_manager =
       permissions::PermissionRequestManager::FromWebContents(tab);
   permission_request_manager->set_auto_response_for_test(
       permissions::PermissionRequestManager::ACCEPT_ALL);
 
   // Execute JS to request fullscreen on the second display (on the right).
+  FullscreenNotificationObserver enter_fullscreen_observer(browser());
   const std::string request_fullscreen_script = R"(
       (async () => {
           const screens = await self.getScreens();
@@ -718,7 +692,8 @@ IN_PROC_BROWSER_TEST_F(ExperimentalFullscreenControllerInteractiveTest,
       })();
   )";
   EXPECT_EQ(true, EvalJs(tab, request_fullscreen_script));
-  EXPECT_TRUE(IsExclusiveAccessBubbleDisplayed());
+  enter_fullscreen_observer.Wait();
+  EXPECT_TRUE(browser()->window()->IsFullscreen());
 #if defined(OS_CHROMEOS)
   EXPECT_EQ(gfx::Rect(801, 0, 801, 802), browser()->window()->GetBounds());
 #else
@@ -726,6 +701,7 @@ IN_PROC_BROWSER_TEST_F(ExperimentalFullscreenControllerInteractiveTest,
 #endif  // OS_CHROMEOS
 
   // Execute JS to exit fullscreen.
+  FullscreenNotificationObserver exit_fullscreen_observer(browser());
   const std::string exit_fullscreen_script = R"(
       (async () => {
           await document.exitFullscreen();
@@ -733,8 +709,69 @@ IN_PROC_BROWSER_TEST_F(ExperimentalFullscreenControllerInteractiveTest,
       })();
   )";
   EXPECT_EQ(false, EvalJs(tab, exit_fullscreen_script));
-  EXPECT_FALSE(IsExclusiveAccessBubbleDisplayed());
+  exit_fullscreen_observer.Wait();
+  EXPECT_FALSE(browser()->window()->IsFullscreen());
   EXPECT_EQ(original_bounds, browser()->window()->GetBounds());
+
+#if !defined(OS_CHROMEOS)
+  display::Screen::SetScreenInstance(original_screen);
+#endif  // !OS_CHROMEOS
+}
+
+// Tests async fullscreen requests on screenschange event.
+// TODO(crbug.com/1134731): Disabled on Windows, where RenderWidgetHostViewAura
+// blindly casts display::Screen::GetScreen() to display::win::ScreenWin*.
+#if defined(OS_WIN)
+#define MAYBE_FullscreenOnScreensChange DISABLED_FullscreenOnScreensChange
+#else
+#define MAYBE_FullscreenOnScreensChange FullscreenOnScreensChange
+#endif
+IN_PROC_BROWSER_TEST_F(ExperimentalFullscreenControllerInteractiveTest,
+                       MAYBE_FullscreenOnScreensChange) {
+#if !defined(OS_CHROMEOS)
+  // Install a mock screen object to be monitored by a new web contents.
+  display::Screen* original_screen = display::Screen::GetScreen();
+  display::ScreenBase screen;
+  screen.display_list().AddDisplay({1, gfx::Rect(100, 100, 801, 802)},
+                                   display::DisplayList::Type::PRIMARY);
+  display::Screen::SetScreenInstance(&screen);
+#endif  // OS_CHROMEOS
+
+  // Open a new foreground tab that will observe the mock screen object.
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url(embedded_test_server()->GetURL("/simple.html"));
+  AddTabAtIndex(1, url, PAGE_TRANSITION_TYPED);
+  auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Auto-accept the Window Placement permission request.
+  permissions::PermissionRequestManager* permission_request_manager =
+      permissions::PermissionRequestManager::FromWebContents(tab);
+  permission_request_manager->set_auto_response_for_test(
+      permissions::PermissionRequestManager::ACCEPT_ALL);
+
+  // Add a screenschange handler to requestFullscreen after awaiting getScreens.
+  const std::string request_fullscreen_script = R"(
+      window.onscreenschange = async () => {
+        const screens = await self.getScreens();
+        await document.body.requestFullscreen();
+      };
+  )";
+  EXPECT_TRUE(EvalJs(tab, request_fullscreen_script).error.empty());
+  EXPECT_FALSE(browser()->window()->IsFullscreen());
+
+  FullscreenNotificationObserver fullscreen_observer(browser());
+
+  // Update the display configuration to trigger window.onscreenschange.
+#if defined(OS_CHROMEOS)
+  display::test::DisplayManagerTestApi(ash::Shell::Get()->display_manager())
+      .UpdateDisplay("100+100-801x802,901+100-801x802");
+#else
+  screen.display_list().AddDisplay({2, gfx::Rect(901, 100, 801, 802)},
+                                   display::DisplayList::Type::NOT_PRIMARY);
+#endif  // OS_CHROMEOS
+
+  fullscreen_observer.Wait();
+  EXPECT_TRUE(browser()->window()->IsFullscreen());
 
 #if !defined(OS_CHROMEOS)
   display::Screen::SetScreenInstance(original_screen);

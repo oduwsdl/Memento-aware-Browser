@@ -18,6 +18,7 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/password_manager/core/browser/form_fetcher.h"
+#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/ui/credential_provider_interface.h"
@@ -25,10 +26,6 @@
 #include "components/prefs/pref_member.h"
 #include "components/undo/undo_manager.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
-
-namespace autofill {
-struct PasswordForm;
-}
 
 namespace password_manager {
 class PasswordManagerClient;
@@ -58,28 +55,28 @@ class PasswordManagerPresenter
   void UpdatePasswordLists();
 
   // Gets the password entry at |index|.
-  const autofill::PasswordForm* GetPassword(size_t index) const;
+  const password_manager::PasswordForm* GetPassword(size_t index) const;
+
+  // Gets the password entries corresponding to |sort_key|.
+  base::span<const std::unique_ptr<autofill::PasswordForm>> GetPasswordsForKey(
+      const std::string& sort_key) const;
 
   // Gets the vector of password entries with the same credentials and from the
   // same site as the one stored at |index|.
-  base::span<const std::unique_ptr<autofill::PasswordForm>> GetPasswords(
-      size_t index) const;
+  base::span<const std::unique_ptr<password_manager::PasswordForm>>
+  GetPasswords(size_t index) const;
 
   // Gets the vector of usernames from password entries from the same site as
   // the one stored at |index|. Note that this vector can contain duplicates.
   std::vector<base::string16> GetUsernamesForRealm(size_t index);
 
   // password::manager::CredentialProviderInterface:
-  std::vector<std::unique_ptr<autofill::PasswordForm>> GetAllPasswords()
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> GetAllPasswords()
       override;
 
   // Gets the password exception entry at |index|.
-  const autofill::PasswordForm* GetPasswordException(size_t index) const;
-
-  // Changes the username and password corresponding to |sort_key|.
-  void ChangeSavedPassword(const std::string& sort_key,
-                           const base::string16& new_username,
-                           const base::Optional<base::string16>& new_password);
+  const password_manager::PasswordForm* GetPasswordException(
+      size_t index) const;
 
   // Removes the saved password entries at |index|, or corresponding to
   // |sort_key|, respectively.
@@ -98,12 +95,13 @@ class PasswordManagerPresenter
   // Undoes the last saved password or exception removal.
   void UndoRemoveSavedPasswordOrException();
 
-  // Moves a password stored in the profile store to the account store. Results
-  // in a no-op if any of these is true: |sort_key| is invalid, |sort_key|
-  // corresponds to a password already in the account store, or the user is not
-  // using the account-scoped password storage.
+  // Moves a list of passwords stored in the profile store to the account store.
+  // For each password to move, the result is a no-op if any of these is true:
+  // |sort_key| is invalid, |sort_key| corresponds to a password already in the
+  // account store, or the user is not using the account-scoped password
+  // storage.
   void MovePasswordToAccountStore(
-      const std::string& sort_key,
+      const std::vector<std::string>& sort_keys,
       password_manager::PasswordManagerClient* client);
 
 #if !defined(OS_ANDROID)
@@ -120,11 +118,11 @@ class PasswordManagerPresenter
 
   // Wrapper around |PasswordStore::AddLogin| that adds the corresponding undo
   // action to |undo_manager_|.
-  void AddLogin(const autofill::PasswordForm& form);
+  void AddLogin(const password_manager::PasswordForm& form);
 
   // Wrapper around |PasswordStore::RemoveLogin| that adds the corresponding
   // undo action to |undo_manager_|.
-  void RemoveLogin(const autofill::PasswordForm& form);
+  void RemoveLogin(const password_manager::PasswordForm& form);
 
  private:
   // Used for moving a form from the profile store to the account store.
@@ -133,7 +131,7 @@ class PasswordManagerPresenter
    public:
     // Starts moving |form|. |done_callback| is run when done.
     MovePasswordToAccountStoreHelper(
-        const autofill::PasswordForm& form,
+        const password_manager::PasswordForm& form,
         password_manager::PasswordManagerClient* client,
         base::OnceClosure done_callback);
     ~MovePasswordToAccountStoreHelper() override;
@@ -142,7 +140,7 @@ class PasswordManagerPresenter
     // FormFetcher::Consumer.
     void OnFetchCompleted() override;
 
-    autofill::PasswordForm form_;
+    password_manager::PasswordForm form_;
     password_manager::PasswordManagerClient* const client_;
     base::OnceClosure done_callback_;
     std::unique_ptr<password_manager::FormFetcher> form_fetcher_;
@@ -156,7 +154,7 @@ class PasswordManagerPresenter
   // map contains forms with the same sort key.
   using PasswordFormMap =
       std::map<std::string,
-               std::vector<std::unique_ptr<autofill::PasswordForm>>>;
+               std::vector<std::unique_ptr<password_manager::PasswordForm>>>;
 
   using MovePasswordToAccountStoreHelperList =
       std::list<std::unique_ptr<MovePasswordToAccountStoreHelper>>;
@@ -180,7 +178,8 @@ class PasswordManagerPresenter
 
   // PasswordStoreConsumer:
   void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+      std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
+      override;
 
   // Sets the password and exception list of the UI view.
   void SetPasswordList();

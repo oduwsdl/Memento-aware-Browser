@@ -23,6 +23,7 @@
 #include "components/flags_ui/feature_entry.h"
 #include "components/flags_ui/flags_storage.h"
 #include "components/flags_ui/flags_ui_switches.h"
+#include "components/variations/field_trial_config/field_trial_util.h"
 #include "components/variations/variations_associated_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
@@ -339,7 +340,8 @@ struct FlagsState::SwitchEntry {
   SwitchEntry() : feature_state(false) {}
 };
 
-bool FlagsState::Delegate::ShouldExcludeFlag(const FeatureEntry& entry) {
+bool FlagsState::Delegate::ShouldExcludeFlag(const FlagsStorage* state,
+                                             const FeatureEntry& entry) {
   return false;
 }
 
@@ -613,6 +615,7 @@ void FlagsState::GetFlagFeatureEntries(
     base::ListValue* supported_entries,
     base::ListValue* unsupported_entries,
     base::RepeatingCallback<bool(const FeatureEntry&)> skip_feature_entry) {
+  DCHECK(flags_storage);
   std::set<std::string> enabled_entries;
   GetSanitizedEnabledFlags(flags_storage, &enabled_entries);
 
@@ -676,13 +679,13 @@ void FlagsState::GetFlagFeatureEntries(
 
 // static
 int FlagsState::GetCurrentPlatform() {
-#if defined(OS_IOS)  // Needs to be before the OS_MACOSX check.
+#if defined(OS_IOS)
   return kOsIos;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   return kOsMac;
 #elif defined(OS_WIN)
   return kOsWin;
-#elif defined(OS_CHROMEOS)  // Needs to be before the OS_LINUX check.
+#elif defined(OS_CHROMEOS)
   return kOsCrOS;
 #elif defined(OS_LINUX) || defined(OS_OPENBSD)
   return kOsLinux;
@@ -824,6 +827,7 @@ void FlagsState::MergeFeatureCommandLineSwitch(
 }
 
 std::set<std::string> FlagsState::SanitizeList(
+    const FlagsStorage* storage,
     const std::set<std::string>& enabled_entries,
     int platform_mask) const {
   std::set<std::string> new_enabled_entries;
@@ -834,7 +838,7 @@ std::set<std::string> FlagsState::SanitizeList(
   // |feature_entries_| first because |feature_entries_| is large and
   // |enabled_entries| should generally be small/empty.
   for (const std::string& entry_name : enabled_entries) {
-    if (IsSupportedFeature(entry_name, platform_mask))
+    if (IsSupportedFeature(storage, entry_name, platform_mask))
       new_enabled_entries.insert(entry_name);
   }
 
@@ -844,7 +848,8 @@ std::set<std::string> FlagsState::SanitizeList(
 void FlagsState::GetSanitizedEnabledFlags(FlagsStorage* flags_storage,
                                           std::set<std::string>* result) const {
   std::set<std::string> enabled_entries = flags_storage->GetFlags();
-  std::set<std::string> new_enabled_entries = SanitizeList(enabled_entries, -1);
+  std::set<std::string> new_enabled_entries =
+      SanitizeList(flags_storage, enabled_entries, -1);
   if (new_enabled_entries.size() != enabled_entries.size())
     flags_storage->SetFlags(new_enabled_entries);
   result->swap(new_enabled_entries);
@@ -861,7 +866,8 @@ void FlagsState::GetSanitizedEnabledFlagsForCurrentPlatform(
 #if defined(OS_CHROMEOS)
   platform_mask |= kOsCrOSOwnerOnly;
 #endif
-  std::set<std::string> platform_entries = SanitizeList(*result, platform_mask);
+  std::set<std::string> platform_entries =
+      SanitizeList(flags_storage, *result, platform_mask);
   result->swap(platform_entries);
 }
 
@@ -922,10 +928,27 @@ void FlagsState::GenerateFlagsToSwitchesMapping(
             AddFeatureMapping(entry.NameForOption(j), std::string(), false,
                               name_to_switch_map);
           } else {
-            AddFeatureMapping(entry.NameForOption(j),
-                              entry.feature.feature->name,
-                              state == FeatureEntry::FeatureState::ENABLED,
-                              name_to_switch_map);
+            const FeatureEntry::FeatureVariation* variation =
+                entry.VariationForOption(j);
+            std::string feature_name(entry.feature.feature->name);
+            std::vector<std::string> params_value;
+
+            if (variation) {
+              feature_name.append(":");
+              for (int i = 0; i < variation->num_params; ++i) {
+                std::string param_name =
+                    variations::EscapeValue(variation->params[i].param_name);
+                std::string param_value =
+                    variations::EscapeValue(variation->params[i].param_value);
+                params_value.push_back(
+                    param_name.append("/").append(param_value));
+              }
+            }
+            AddFeatureMapping(
+                entry.NameForOption(j),
+                feature_name.append(base::JoinString(params_value, "/")),
+                state == FeatureEntry::FeatureState::ENABLED,
+                name_to_switch_map);
           }
         }
         break;
@@ -942,7 +965,8 @@ const FeatureEntry* FlagsState::FindFeatureEntryByName(
   return nullptr;
 }
 
-bool FlagsState::IsSupportedFeature(const std::string& name,
+bool FlagsState::IsSupportedFeature(const FlagsStorage* storage,
+                                    const std::string& name,
                                     int platform_mask) const {
   for (const auto& entry : feature_entries_) {
     DCHECK(IsValidFeatureEntry(entry));
@@ -950,7 +974,7 @@ bool FlagsState::IsSupportedFeature(const std::string& name,
       continue;
     if (!entry.InternalNameMatches(name))
       continue;
-    if (delegate_ && delegate_->ShouldExcludeFlag(entry))
+    if (delegate_ && delegate_->ShouldExcludeFlag(storage, entry))
       continue;
     return true;
   }

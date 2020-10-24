@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "content/browser/sms/sms_service.h"
+#include "content/browser/sms/webotp_service.h"
 
 #include <string>
 
@@ -11,6 +11,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "content/browser/sms/sms_provider.h"
 #include "content/browser/sms/sms_provider_gms_verification.h"
+#include "content/public/browser/sms_fetcher.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/test/content_unittests_jni_headers/SmsVerificationFakes_jni.h"
@@ -33,6 +34,7 @@ class MockObserver : public SmsProvider::Observer {
 
   MOCK_METHOD2(OnReceive,
                bool(const Origin&, const std::string& one_time_code));
+  MOCK_METHOD1(OnFailure, bool(SmsFetcher::FailureType));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockObserver);
@@ -51,7 +53,7 @@ class SmsProviderGmsVerificationTest : public RenderViewHostTestHarness {
     j_fake_sms_retriever_client_.Reset(
         Java_FakeSmsRetrieverClient_create(AttachCurrentThread()));
     Java_SmsVerificationFakes_setClientForTesting(
-        AttachCurrentThread(), provider_->GetSmsReceiverForTesting(),
+        AttachCurrentThread(), provider_->GetWebOTPServiceForTesting(),
         j_fake_sms_retriever_client_);
     provider_->AddObserver(&observer_);
   }

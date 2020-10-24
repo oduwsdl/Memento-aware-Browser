@@ -11,6 +11,7 @@ import android.view.View;
 import androidx.preference.Preference;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -27,7 +28,6 @@ import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.homepage.settings.HomepageMetricsEnums.HomeButtonPreferenceState;
 import org.chromium.chrome.browser.homepage.settings.HomepageMetricsEnums.HomepageLocationType;
 import org.chromium.chrome.browser.homepage.settings.HomepageSettings;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -38,16 +38,15 @@ import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
-import org.chromium.policy.test.annotations.Policies;
 
 /**
  * Integration test for {@link HomepagePolicyManager}.
@@ -57,7 +56,6 @@ import org.chromium.policy.test.annotations.Policies;
 // clang-format off
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@Features.EnableFeatures(ChromeFeatureList.HOMEPAGE_LOCATION_POLICY)
 @Policies.Add({
     @Policies.Item(key = "HomepageLocation", string = HomepagePolicyIntegrationTest.TEST_URL)
 })
@@ -66,9 +64,6 @@ public class HomepagePolicyIntegrationTest {
     public static final String TEST_URL = "http://127.0.0.1:8000/foo.html";
     public static final String GOOGLE_HTML = "/chrome/test/data/android/google.html";
 
-    private static final String METRICS_HOME_BUTTON_STATE_ENUM =
-            "Settings.ShowHomeButtonPreferenceStateManaged";
-    private static final String METRICS_HOMEPAGE_IS_CUSTOMIZED = "Settings.HomePageIsCustomized";
     private static final String METRICS_HOMEPAGE_LOCATION_TYPE = "Settings.Homepage.LocationType";
 
     private EmbeddedTestServer mTestServer;
@@ -118,18 +113,6 @@ public class HomepagePolicyIntegrationTest {
                 SharedPreferencesManager.getInstance().readString(
                         ChromePreferenceKeys.HOMEPAGE_LOCATION_POLICY, ""));
 
-        // METRICS_HOMEPAGE_IS_CUSTOMIZED Should be collected twice it is called in:
-        // 1. ProcessInitializationHandler#handleDeferredStartupTasksInitialization;
-        // 2. HomepageManager#onHomepagePolicyUpdate, which will be called when native initialized.
-        Assert.assertEquals(
-                "Settings.HomepageIsCustomized should be recorded twice when policy enabled", 2,
-                RecordHistogram.getHistogramTotalCountForTesting(METRICS_HOMEPAGE_IS_CUSTOMIZED));
-
-        // METRICS_HOME_BUTTON_STATE_ENUM should be collected once in deferred start up tasks.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        METRICS_HOME_BUTTON_STATE_ENUM, HomeButtonPreferenceState.MANAGED_ENABLED));
-
         // METRICS_HOMEPAGE_LOCATION_TYPE is recorded once in deferred start up tasks.
         Assert.assertEquals("Settings.Homepage.LocationType should record POLICY_OTHER once.", 1,
                 RecordHistogram.getHistogramValueCountForTesting(
@@ -139,7 +122,8 @@ public class HomepagePolicyIntegrationTest {
         destroyAndRestartActivity();
 
         Assert.assertEquals("Start up homepage should be the same as the policy setting", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 
     @Test
@@ -151,7 +135,8 @@ public class HomepagePolicyIntegrationTest {
                 .fullyLoadUrl(anotherUrl);
 
         Assert.assertNotEquals("Did not switch to a different URL", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
 
         ChromeTabUtils.waitForTabPageLoaded(
                 mActivityTestRule.getActivity().getActivityTab(), TEST_URL, () -> {
@@ -172,7 +157,8 @@ public class HomepagePolicyIntegrationTest {
                 });
 
         Assert.assertEquals("After clicking HomeButton, URL should be back to Homepage", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 
     @Test
@@ -217,17 +203,15 @@ public class HomepagePolicyIntegrationTest {
                 () -> { activity.getTabModelSelector().closeAllTabs(); });
 
         activity.finish();
-        CriteriaHelper.pollUiThread(new Criteria("Activity should be destroyed, current state: "
-                + ApplicationStatus.getStateForActivity(activity)) {
-            @Override
-            public boolean isSatisfied() {
-                return ApplicationStatus.getStateForActivity(activity) == ActivityState.DESTROYED;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(ApplicationStatus.getStateForActivity(activity),
+                    Matchers.is(ActivityState.DESTROYED));
         });
 
         // Start a new ChromeActivity.
         mActivityTestRule.startActivityCompletely(intent);
         Assert.assertEquals("Start up page is not homepage", HomepageManager.getHomepageUri(),
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 }

@@ -115,7 +115,9 @@ public class StatusView extends LinearLayout {
             // Setup the padding once we're loaded, the other padding changes will happen with post-
             // layout positioning.
             setPaddingRelative(getPaddingStart(), getPaddingTop(),
-                    getEndPaddingPixelSizeForFocusState(false), getPaddingBottom());
+                    getResources().getDimensionPixelOffset(
+                            R.dimen.sei_location_bar_icon_end_padding),
+                    getPaddingBottom());
             // Note: the margins and implicit padding were removed from the status view for the
             // dse icon experiment. Moving padding values that were there to the verbose status
             // text view and the verbose text extra space.
@@ -423,19 +425,6 @@ public class StatusView extends LinearLayout {
     }
 
     /**
-     * @returns The end padding for the given state.
-     */
-    public int getEndPaddingPixelSizeForFocusState(boolean hasFocus) {
-        if (hasFocus) {
-            return getResources().getDimensionPixelOffset(
-                    R.dimen.sei_location_bar_icon_end_padding_focused);
-        } else {
-            return getResources().getDimensionPixelOffset(
-                    R.dimen.sei_location_bar_icon_end_padding);
-        }
-    }
-
-    /**
      * Create a touch delegate to expand the clickable area for the padlock icon (see
      * crbug.com/970031 for motivation/info). This method will be called when the icon is animating
      * in and when layout changes. It's called on these intervals because (1) the layout could
@@ -465,8 +454,8 @@ public class StatusView extends LinearLayout {
                     getResources().getDimensionPixelSize(R.dimen.location_bar_lateral_padding);
         }
         if (mTouchDelegateEndOffset == 0) {
-            mTouchDelegateEndOffset = getResources().getDimensionPixelSize(
-                    R.dimen.location_bar_start_icon_margin_end);
+            mTouchDelegateEndOffset =
+                    getResources().getDimensionPixelSize(R.dimen.location_bar_icon_margin_end);
         }
         touchDelegateBounds.left -= isRtl ? mTouchDelegateEndOffset : mTouchDelegateStartOffset;
         touchDelegateBounds.right += isRtl ? mTouchDelegateStartOffset : mTouchDelegateEndOffset;

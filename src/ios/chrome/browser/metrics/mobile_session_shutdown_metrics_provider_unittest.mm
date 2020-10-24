@@ -19,8 +19,8 @@
 #include "components/metrics/test/test_enabled_state_provider.h"
 #include "components/metrics/test/test_metrics_service_client.h"
 #include "components/prefs/testing_pref_service.h"
-#import "ios/chrome/browser/metrics/previous_session_info.h"
-#import "ios/chrome/browser/metrics/previous_session_info_private.h"
+#import "components/previous_session_info/previous_session_info.h"
+#import "components/previous_session_info/previous_session_info_private.h"
 #include "testing/gtest/include/gtest/gtest-param-test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -198,6 +198,7 @@ TEST_F(MobileSessionShutdownMetricsProviderTest,
 
   // Test UTE with no possible explanation.
   auto histogram_tester = std::make_unique<base::HistogramTester>();
+  [PreviousSessionInfo resetSharedInstanceForTesting];
   [PreviousSessionInfo sharedInstance].OSRestartedAfterPreviousSession = NO;
   metrics_provider_->ProvidePreviousSessionData(nullptr);
   histogram_tester->ExpectUniqueSample(

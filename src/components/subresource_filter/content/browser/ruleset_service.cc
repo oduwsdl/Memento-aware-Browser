@@ -29,6 +29,7 @@
 #include "components/subresource_filter/content/common/subresource_filter_messages.h"
 #include "components/subresource_filter/core/browser/copying_file_stream.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
+#include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/common/common_features.h"
 #include "components/subresource_filter/core/common/indexed_ruleset.h"
 #include "components/subresource_filter/core/common/time_measurements.h"
@@ -76,7 +77,7 @@ class SentinelFile {
 
   bool IsPresent() { return base::PathExists(path_); }
   bool Create() { return base::WriteFile(path_, nullptr, 0) == 0; }
-  bool Remove() { return base::DeleteFile(path_, false /* recursive */); }
+  bool Remove() { return base::DeleteFile(path_); }
 
  private:
   base::FilePath path_;
@@ -128,7 +129,7 @@ void IndexedRulesetLocator::DeleteObsoleteRulesets(
   for (base::FilePath format_dir = format_dirs.Next(); !format_dir.empty();
        format_dir = format_dirs.Next()) {
     if (format_dir != current_format_dir)
-      base::DeleteFileRecursively(format_dir);
+      base::DeletePathRecursively(format_dir);
   }
 
   base::FilePath most_recent_version_dir =
@@ -147,7 +148,7 @@ void IndexedRulesetLocator::DeleteObsoleteRulesets(
       continue;
     if (version_dir == most_recent_version_dir)
       continue;
-    base::DeleteFileRecursively(version_dir);
+    base::DeletePathRecursively(version_dir);
   }
 }
 
@@ -160,6 +161,35 @@ decltype(&RulesetService::IndexRuleset) RulesetService::g_index_ruleset_func =
 // static
 decltype(&base::ReplaceFile) RulesetService::g_replace_file_func =
     &base::ReplaceFile;
+
+// static
+std::unique_ptr<RulesetService> RulesetService::Create(
+    PrefService* local_state,
+    const base::FilePath& user_data_dir) {
+  if (!base::FeatureList::IsEnabled(kSafeBrowsingSubresourceFilter)) {
+    return nullptr;
+  }
+
+  // Runner for tasks critical for user experience.
+  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
+
+  // Runner for tasks that do not influence user experience.
+  scoped_refptr<base::SequencedTaskRunner> background_task_runner(
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
+
+  base::FilePath indexed_ruleset_base_dir =
+      user_data_dir.Append(kTopLevelDirectoryName)
+          .Append(kIndexedRulesetBaseDirectoryName);
+
+  return std::make_unique<RulesetService>(local_state, background_task_runner,
+                                          indexed_ruleset_base_dir,
+                                          blocking_task_runner);
+}
 
 RulesetService::RulesetService(
     PrefService* local_state,
@@ -373,14 +403,14 @@ RulesetService::IndexAndWriteRulesetResult RulesetService::WriteRuleset(
   // Due to the same-version check in IndexAndStoreAndPublishRulesetIfNeeded, we
   // would not normally find a pre-existing copy at this point unless the
   // previous write was interrupted.
-  if (!base::DeleteFileRecursively(indexed_ruleset_version_dir))
+  if (!base::DeletePathRecursively(indexed_ruleset_version_dir))
     return IndexAndWriteRulesetResult::FAILED_DELETE_PREEXISTING;
 
   base::FilePath scratch_dir_with_new_indexed_ruleset = scratch_dir.Take();
   base::File::Error error;
   if (!(*g_replace_file_func)(scratch_dir_with_new_indexed_ruleset,
                               indexed_ruleset_version_dir, &error)) {
-    base::DeleteFileRecursively(scratch_dir_with_new_indexed_ruleset);
+    base::DeletePathRecursively(scratch_dir_with_new_indexed_ruleset);
     // While enumerators of base::File::Error all have negative values, the
     // histogram records the absolute values.
     UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.WriteRuleset.ReplaceFileError",

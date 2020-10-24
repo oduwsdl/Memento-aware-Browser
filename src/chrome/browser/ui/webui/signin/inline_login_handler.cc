@@ -23,7 +23,6 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -58,10 +57,6 @@ void InlineLoginHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "switchToFullTab",
       base::BindRepeating(&InlineLoginHandler::HandleSwitchToFullTabMessage,
-                          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "navigationButtonClicked",
-      base::BindRepeating(&InlineLoginHandler::HandleNavigationButtonClicked,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "dialogClose", base::BindRepeating(&InlineLoginHandler::HandleDialogClose,
@@ -231,16 +226,6 @@ void InlineLoginHandler::HandleSwitchToFullTabMessage(
   Navigate(&params);
 
   CloseDialogFromJavascript();
-}
-
-void InlineLoginHandler::HandleNavigationButtonClicked(
-    const base::ListValue* args) {
-#if !defined(OS_CHROMEOS)
-  NOTREACHED() << "The inline login handler is no longer used in a browser "
-                  "or tab modal dialog.";
-#else
-  FireWebUIListener("navigate-back-in-webview");
-#endif
 }
 
 void InlineLoginHandler::HandleDialogClose(const base::ListValue* args) {

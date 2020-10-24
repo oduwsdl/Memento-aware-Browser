@@ -7,7 +7,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_store_default.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/signin/authentication_service_factory.h"
@@ -28,7 +28,7 @@
 
 namespace {
 
-using autofill::PasswordForm;
+using password_manager::PasswordForm;
 using base::test::ios::WaitUntilConditionOrTimeout;
 using base::test::ios::kWaitForFileOperationTimeout;
 using password_manager::PasswordStoreDefault;
@@ -45,8 +45,8 @@ class CredentialProviderServiceTest : public PlatformTest {
     password_store_ = CreatePasswordStore();
     password_store_->Init(nullptr);
 
-    NSUserDefaults* shared_defaults = app_group::GetGroupUserDefaults();
-    EXPECT_FALSE([shared_defaults
+    NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
+    EXPECT_FALSE([user_defaults
         boolForKey:kUserDefaultsCredentialProviderFirstTimeSyncCompleted]);
 
     credential_store_ = [[ArchivableCredentialStore alloc] initWithFileURL:nil];
@@ -63,15 +63,15 @@ class CredentialProviderServiceTest : public PlatformTest {
             chrome_browser_state_.get()));
 
     credential_provider_service_ = std::make_unique<CredentialProviderService>(
-        password_store_, auth_service_, credential_store_, nullptr);
+        password_store_, auth_service_, credential_store_, nullptr, nullptr);
   }
 
   void TearDown() override {
     credential_provider_service_->Shutdown();
     password_store_->ShutdownOnUIThread();
-    NSUserDefaults* shared_defaults = app_group::GetGroupUserDefaults();
-    [shared_defaults removeObjectForKey:
-                         kUserDefaultsCredentialProviderFirstTimeSyncCompleted];
+    NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
+    [user_defaults removeObjectForKey:
+                       kUserDefaultsCredentialProviderFirstTimeSyncCompleted];
     PlatformTest::TearDown();
   }
 
@@ -104,7 +104,8 @@ TEST_F(CredentialProviderServiceTest, Create) {
 TEST_F(CredentialProviderServiceTest, FirstSync) {
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForFileOperationTimeout, ^{
     base::RunLoop().RunUntilIdle();
-    return [app_group::GetGroupUserDefaults()
+    NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
+    return [user_defaults
         boolForKey:kUserDefaultsCredentialProviderFirstTimeSyncCompleted];
   }));
 }
@@ -190,6 +191,23 @@ TEST_F(CredentialProviderServiceTest, AccountChange) {
         isEqualToString:credential_store_.credentials.firstObject
                             .validationIdentifier];
   }));
+}
+
+// Test that CredentialProviderService observes changes in the password store.
+TEST_F(CredentialProviderServiceTest, AndroidCredential) {
+  EXPECT_EQ(0u, credential_store_.credentials.count);
+
+  PasswordForm form;
+  form.url = GURL(form.signon_realm);
+  form.signon_realm = "android://hash@com.example.my.app";
+  form.password_element = base::ASCIIToUTF16("pwd");
+  form.password_value = base::ASCIIToUTF16("example");
+
+  password_store_->AddLogin(form);
+  task_environment_.RunUntilIdle();
+
+  // Expect the store to be populated with 1 credential.
+  ASSERT_EQ(1u, credential_store_.credentials.count);
 }
 
 }  // namespace

@@ -41,6 +41,7 @@
 #include "components/arc/mojom/notifications.mojom.h"
 #include "components/arc/mojom/obb_mounter.mojom.h"
 #include "components/arc/mojom/oemcrypto.mojom.h"
+#include "components/arc/mojom/payment_app.mojom.h"
 #include "components/arc/mojom/pip.mojom.h"
 #include "components/arc/mojom/policy.mojom.h"
 #include "components/arc/mojom/power.mojom.h"
@@ -49,6 +50,7 @@
 #include "components/arc/mojom/property.mojom.h"
 #include "components/arc/mojom/rotation_lock.mojom.h"
 #include "components/arc/mojom/screen_capture.mojom.h"
+#include "components/arc/mojom/sensor.mojom.h"
 #include "components/arc/mojom/storage_manager.mojom.h"
 #include "components/arc/mojom/timer.mojom.h"
 #include "components/arc/mojom/tracing.mojom.h"
@@ -238,11 +240,18 @@ void ArcBridgeHostImpl::OnNetInstanceReady(
 
 void ArcBridgeHostImpl::OnNotificationsInstanceReady(
     mojo::PendingRemote<mojom::NotificationsInstance> notifications_remote) {
+  auto* host_initializer = ash::ArcNotificationsHostInitializer::Get();
+  auto* manager = host_initializer->GetArcNotificationManagerInstance();
+  if (manager) {
+    static_cast<ash::ArcNotificationManager*>(manager)->SetInstance(
+        std::move(notifications_remote));
+    return;
+  }
   // Forward notification instance to ash by injecting ArcNotificationManager.
-  auto manager = std::make_unique<ash::ArcNotificationManager>();
-  manager->SetInstance(std::move(notifications_remote));
+  auto new_manager = std::make_unique<ash::ArcNotificationManager>();
+  new_manager->SetInstance(std::move(notifications_remote));
   ash::ArcNotificationsHostInitializer::Get()
-      ->SetArcNotificationManagerInstance(std::move(manager));
+      ->SetArcNotificationManagerInstance(std::move(new_manager));
 }
 
 void ArcBridgeHostImpl::OnObbMounterInstanceReady(
@@ -255,6 +264,12 @@ void ArcBridgeHostImpl::OnOemCryptoInstanceReady(
     mojo::PendingRemote<mojom::OemCryptoInstance> oemcrypto_remote) {
   OnInstanceReady(arc_bridge_service_->oemcrypto(),
                   std::move(oemcrypto_remote));
+}
+
+void ArcBridgeHostImpl::OnPaymentAppInstanceReady(
+    mojo::PendingRemote<mojom::PaymentAppInstance> payment_app_remote) {
+  OnInstanceReady(arc_bridge_service_->payment_app(),
+                  std::move(payment_app_remote));
 }
 
 void ArcBridgeHostImpl::OnPipInstanceReady(
@@ -298,6 +313,11 @@ void ArcBridgeHostImpl::OnScreenCaptureInstanceReady(
     mojo::PendingRemote<mojom::ScreenCaptureInstance> screen_capture_remote) {
   OnInstanceReady(arc_bridge_service_->screen_capture(),
                   std::move(screen_capture_remote));
+}
+
+void ArcBridgeHostImpl::OnSensorInstanceReady(
+    mojo::PendingRemote<mojom::SensorInstance> sensor_remote) {
+  OnInstanceReady(arc_bridge_service_->sensor(), std::move(sensor_remote));
 }
 
 void ArcBridgeHostImpl::OnSmartCardManagerInstanceReady(

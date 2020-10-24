@@ -20,6 +20,7 @@
 #include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
 
 namespace content {
+class PaymentAppProvider;
 class WebContents;
 }  // namespace content
 
@@ -36,23 +37,24 @@ class ServiceWorkerPaymentApp : public PaymentApp,
                                 public content::WebContentsObserver {
  public:
   // This constructor is used for a payment app that has been installed in
-  // Chrome.
+  // Chrome. The `spec` parameter should not be null.
   ServiceWorkerPaymentApp(
       content::WebContents* web_contents,
       const GURL& top_origin,
       const GURL& frame_origin,
-      const PaymentRequestSpec* spec,
+      base::WeakPtr<PaymentRequestSpec> spec,
       std::unique_ptr<content::StoredPaymentApp> stored_payment_app_info,
       bool is_incognito,
       const base::RepeatingClosure& show_processing_spinner);
 
   // This constructor is used for a payment app that has not been installed in
-  // Chrome but can be installed when paying with it.
+  // Chrome but can be installed when paying with it. The `spec` parameter
+  // should not be null.
   ServiceWorkerPaymentApp(
       content::WebContents* web_contents,
       const GURL& top_origin,
       const GURL& frame_origin,
-      const PaymentRequestSpec* spec,
+      base::WeakPtr<PaymentRequestSpec> spec,
       std::unique_ptr<WebAppInstallationInfo> installable_payment_app_info,
       const std::string& enabled_method,
       bool is_incognito,
@@ -113,7 +115,7 @@ class ServiceWorkerPaymentApp : public PaymentApp,
  private:
   friend class ServiceWorkerPaymentAppTest;
 
-  void OnPaymentAppInvoked(mojom::PaymentHandlerResponsePtr response);
+  void OnPaymentAppResponse(mojom::PaymentHandlerResponsePtr response);
   mojom::PaymentRequestEventDataPtr CreatePaymentRequestEventData();
 
   mojom::CanMakePaymentEventDataPtr CreateCanMakePaymentEventData();
@@ -129,9 +131,11 @@ class ServiceWorkerPaymentApp : public PaymentApp,
   //    invoked.
   void OnPaymentAppIdentity(const url::Origin& origin, int64_t registration_id);
 
+  content::PaymentAppProvider* GetPaymentAppProvider();
+
   GURL top_origin_;
   GURL frame_origin_;
-  const PaymentRequestSpec* spec_;
+  base::WeakPtr<PaymentRequestSpec> spec_;
   std::unique_ptr<content::StoredPaymentApp> stored_payment_app_info_;
 
   // Weak pointer is fine here since the owner of this object is

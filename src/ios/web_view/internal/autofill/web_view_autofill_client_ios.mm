@@ -142,9 +142,17 @@ AddressNormalizer* WebViewAutofillClientIOS::GetAddressNormalizer() {
   return nullptr;
 }
 
+const GURL& WebViewAutofillClientIOS::GetLastCommittedURL() {
+  return web_state_->GetLastCommittedURL();
+}
+
 security_state::SecurityLevel
 WebViewAutofillClientIOS::GetSecurityLevelForUmaHistograms() {
   return security_state::GetSecurityLevelForWebState(web_state_);
+}
+
+const translate::LanguageState* WebViewAutofillClientIOS::GetLanguageState() {
+  return nullptr;
 }
 
 void WebViewAutofillClientIOS::ShowAutofillSettings(
@@ -294,6 +302,10 @@ void WebViewAutofillClientIOS::LoadRiskData(
 
 LogManager* WebViewAutofillClientIOS::GetLogManager() const {
   return log_manager_.get();
+}
+
+bool WebViewAutofillClientIOS::IsQueryIDRelevant(int query_id) {
+  return [bridge_ isQueryIDRelevant:query_id];
 }
 
 }  // namespace autofill

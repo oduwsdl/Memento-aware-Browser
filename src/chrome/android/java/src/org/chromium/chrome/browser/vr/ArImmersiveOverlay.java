@@ -24,12 +24,11 @@ import androidx.annotation.NonNull;
 
 import org.chromium.base.Log;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.compositor.CompositorView;
-import org.chromium.chrome.browser.fullscreen.FullscreenManager;
-import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.components.webxr.ArCompositorDelegate;
 import org.chromium.content_public.browser.ScreenOrientationDelegate;
 import org.chromium.content_public.browser.ScreenOrientationProvider;
+import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.display.DisplayAndroidManager;
 import org.chromium.ui.widget.Toast;
 
@@ -45,22 +44,28 @@ public class ArImmersiveOverlay
     private static final boolean DEBUG_LOGS = false;
 
     private ArCoreJavaUtils mArCoreJavaUtils;
-    private ChromeActivity mActivity;
+    private ArCompositorDelegate mArCompositorDelegate;
+    private Activity mActivity;
     private boolean mSurfaceReportedReady;
     private Integer mRestoreOrientation;
     private boolean mCleanupInProgress;
     private SurfaceUiWrapper mSurfaceUi;
+    private WebContents mWebContents;
 
     // Set containing all currently touching pointers.
     private HashMap<Integer, PointerData> mPointerIdToData;
     // ID of primary pointer (if present).
     private Integer mPrimaryPointerId;
 
-    public void show(
-            @NonNull ChromeActivity activity, @NonNull ArCoreJavaUtils caller, boolean useOverlay) {
+    public void show(@NonNull ArCompositorDelegate compositorDelegate,
+            @NonNull WebContents webContents, @NonNull ArCoreJavaUtils caller, boolean useOverlay) {
         if (DEBUG_LOGS) Log.i(TAG, "constructor");
         mArCoreJavaUtils = caller;
-        mActivity = activity;
+
+        mWebContents = webContents;
+        mArCompositorDelegate = compositorDelegate;
+
+        mActivity = ArCoreJavaUtils.getActivity(webContents);
 
         mPointerIdToData = new HashMap<Integer, PointerData>();
         mPrimaryPointerId = null;
@@ -160,8 +165,7 @@ public class ArImmersiveOverlay
 
     private class SurfaceUiCompositor implements SurfaceUiWrapper {
         private SurfaceView mSurfaceView;
-        private CompositorView mCompositorView;
-        private FullscreenManager.Observer mFullscreenListener;
+        private WebContentsObserver mWebContentsObserver;
 
         public SurfaceUiCompositor() {
             mSurfaceView = new SurfaceView(mActivity);
@@ -179,23 +183,30 @@ public class ArImmersiveOverlay
             ViewGroup group = (ViewGroup) content.getParent();
             group.addView(mSurfaceView);
 
-            mCompositorView = mActivity.getCompositorViewHolder().getCompositorView();
-
             // Enable alpha channel for the compositor and make the background
             // transparent. (A variant of CompositorView::SetOverlayVideoMode.)
-            if (DEBUG_LOGS) Log.i(TAG, "calling mCompositorView.setOverlayImmersiveArMode(true)");
-            mCompositorView.setOverlayImmersiveArMode(true);
+            if (DEBUG_LOGS) {
+                Log.i(TAG, "calling mArCompositorDelegate.setOverlayImmersiveArMode(true)");
+            }
+            mArCompositorDelegate.setOverlayImmersiveArMode(true);
 
-            mFullscreenListener = new FullscreenManager.Observer() {
+            mWebContentsObserver = new WebContentsObserver() {
                 @Override
-                public void onExitFullscreen(Tab tab) {
-                    if (DEBUG_LOGS) Log.i(TAG, "onExitFullscreenMode");
-                    cleanupAndExit();
+                public void hasEffectivelyFullscreenVideoChange(boolean isFullscreen) {
+                    if (DEBUG_LOGS) {
+                        Log.i(TAG,
+                                "hasEffectivelyFullscreenVideoChange(), isFullscreen="
+                                        + isFullscreen);
+                    }
+
+                    if (!isFullscreen) {
+                        cleanupAndExit();
+                    }
                 }
             };
 
             // Watch for fullscreen exit triggered from JS, this needs to end the session.
-            mActivity.getFullscreenManager().addObserver(mFullscreenListener);
+            mWebContents.addObserver(mWebContentsObserver);
         }
 
         @Override // SurfaceUiWrapper
@@ -203,18 +214,17 @@ public class ArImmersiveOverlay
 
         @Override // SurfaceUiWrapper
         public void forwardMotionEvent(MotionEvent ev) {
-            View contentView = mActivity.getCompositorViewHolder();
-            contentView.dispatchTouchEvent(ev);
+            mArCompositorDelegate.dispatchTouchEvent(ev);
         }
 
         @Override // SurfaceUiWrapper
         public void destroy() {
-            mActivity.getFullscreenManager().removeObserver(mFullscreenListener);
+            mWebContents.removeObserver(mWebContentsObserver);
             View content = mActivity.getWindow().findViewById(android.R.id.content);
             ViewGroup group = (ViewGroup) content.getParent();
             group.removeView(mSurfaceView);
             mSurfaceView = null;
-            mCompositorView.setOverlayImmersiveArMode(false);
+            mArCompositorDelegate.setOverlayImmersiveArMode(false);
         }
     }
 
@@ -501,8 +511,8 @@ public class ArImmersiveOverlay
         // The JS app may have put an element into fullscreen mode during the immersive session,
         // even if this wasn't visible to the user. Ensure that we fully exit out of any active
         // fullscreen state on session end to avoid being left in a confusing state.
-        if (mActivity.getActivityTab() != null && !mActivity.isActivityFinishingOrDestroyed()) {
-            mActivity.getFullscreenManager().onExitFullscreen(mActivity.getActivityTab());
+        if (!mWebContents.isDestroyed()) {
+            mWebContents.exitFullscreen();
         }
 
         // Restore orientation.

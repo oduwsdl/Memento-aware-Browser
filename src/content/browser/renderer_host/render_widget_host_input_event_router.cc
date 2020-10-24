@@ -123,7 +123,6 @@ class TouchEventAckQueue {
 
  private:
   void ProcessAckedTouchEvents();
-  void ReportTouchEventAckQueueUmaStats();
 
   std::deque<AckData> ack_queue_;
   RenderWidgetHostInputEventRouter* client_;
@@ -144,7 +143,6 @@ void TouchEventAckQueue::Add(const TouchEventWithLatencyInfo& touch_event,
   ack_queue_.push_back(data);
   if (touch_event_ack_status == TouchEventAckStatus::TouchEventAcked)
     ProcessAckedTouchEvents();
-  ReportTouchEventAckQueueUmaStats();
 }
 
 void TouchEventAckQueue::Add(const TouchEventWithLatencyInfo& touch_event,
@@ -204,14 +202,6 @@ void TouchEventAckQueue::ProcessAckedTouchEvents() {
                                                  ack_data.ack_result);
     }
   }
-}
-
-void TouchEventAckQueue::ReportTouchEventAckQueueUmaStats() {
-  size_t count = ack_queue_.size();
-  UMA_HISTOGRAM_COUNTS_10000("Event.FrameEventRouting.TouchEventAckQueueSize",
-                             count);
-  // TODO(wjmaclean): is it worth also recording how many different renderers
-  // are waiting on touch event acks at the time of reporting?
 }
 
 void TouchEventAckQueue::UpdateQueueAfterTargetDestroyed(
@@ -556,13 +546,13 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindViewAtLocation(
   float device_scale_factor = root_view->GetDeviceScaleFactor();
   DCHECK_GT(device_scale_factor, 0.0f);
   gfx::PointF point_in_pixels =
-      gfx::ConvertPointToPixel(device_scale_factor, point);
+      gfx::ConvertPointToPixels(point, device_scale_factor);
   viz::Target target = query->FindTargetForLocationStartingFrom(
       source, point_in_pixels, root_view->GetFrameSinkId());
   frame_sink_id = target.frame_sink_id;
   if (frame_sink_id.is_valid()) {
     *transformed_point =
-        gfx::ConvertPointToDIP(device_scale_factor, target.location_in_target);
+        gfx::ConvertPointToDips(target.location_in_target, device_scale_factor);
   } else {
     *transformed_point = point;
   }
@@ -1539,8 +1529,6 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
     //
     // For now, we do a synchronous-only hit test here, which even though
     // incorrect is not likely to have a large effect in the short term.
-    UMA_HISTOGRAM_BOOLEAN("Event.FrameEventRouting.NoGestureTarget", true);
-    LOG(ERROR) << "Gesture sequence start detected with no target available.";
     // It is still safe to continue; we will recalculate the target.
     gfx::PointF transformed_point;
     gfx::PointF original_point(gesture_event.PositionInWidget());

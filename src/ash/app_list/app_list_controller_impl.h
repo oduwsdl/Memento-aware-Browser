@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/app_list/app_list_color_provider_impl.h"
 #include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_presenter_impl.h"
 #include "ash/app_list/app_list_view_delegate.h"
@@ -23,19 +24,22 @@
 #include "ash/public/cpp/app_list/app_list_controller.h"
 #include "ash/public/cpp/assistant/controller/assistant_controller_observer.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/public/cpp/wallpaper_controller_observer.h"
-#include "ash/session/session_observer.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell_observer.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "base/observer_list.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/sync/model/string_ordinal.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/message_center/message_center_observer.h"
 
+class PrefChangeRegistrar;
 class PrefRegistrySimple;
 
 namespace ui {
@@ -49,22 +53,25 @@ class AppListControllerObserver;
 // Ash's AppListController owns the AppListModel and implements interface
 // functions that allow Chrome to modify and observe the Shelf and AppListModel
 // state.
-class ASH_EXPORT AppListControllerImpl : public AppListController,
-                                         public SessionObserver,
-                                         public AppListModelObserver,
-                                         public AppListViewDelegate,
-                                         public ShellObserver,
-                                         public OverviewObserver,
-                                         public TabletModeObserver,
-                                         public KeyboardControllerObserver,
-                                         public WallpaperControllerObserver,
-                                         public AssistantStateObserver,
-                                         public WindowTreeHostManager::Observer,
-                                         public aura::WindowObserver,
-                                         public MruWindowTracker::Observer,
-                                         public AssistantControllerObserver,
-                                         public AssistantUiModelObserver,
-                                         public HomeScreenDelegate {
+class ASH_EXPORT AppListControllerImpl
+    : public AppListController,
+      public SessionObserver,
+      public AppListModelObserver,
+      public AppListViewDelegate,
+      public ShellObserver,
+      public OverviewObserver,
+      public TabletModeObserver,
+      public KeyboardControllerObserver,
+      public WallpaperControllerObserver,
+      public AssistantStateObserver,
+      public WindowTreeHostManager::Observer,
+      public aura::WindowObserver,
+      public MruWindowTracker::Observer,
+      public AssistantControllerObserver,
+      public AssistantUiModelObserver,
+      public HomeScreenDelegate,
+      public apps::AppRegistryCache::Observer,
+      public message_center::MessageCenterObserver {
  public:
   AppListControllerImpl();
   ~AppListControllerImpl() override;
@@ -82,6 +89,8 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   // AppListController:
   void SetClient(AppListClient* client) override;
   AppListClient* GetClient() override;
+  void AddObserver(AppListControllerObserver* observer) override;
+  void RemoveObserver(AppListControllerObserver* obsever) override;
   void AddItem(std::unique_ptr<AppListItemMetadata> app_item) override;
   void AddItemToFolder(std::unique_ptr<AppListItemMetadata> app_item,
                        const std::string& folder_id) override;
@@ -113,6 +122,7 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   void ResolveOemFolderPosition(
       const syncer::StringOrdinal& preferred_oem_position,
       ResolveOemFolderPositionCallback callback) override;
+  void NotifyProcessSyncChangesFinished() override;
   void DismissAppList() override;
   void GetAppInfoDialogBounds(GetAppInfoDialogBoundsCallback callback) override;
   void ShowAppList() override;
@@ -188,13 +198,9 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
       AppListViewState target_state) override;
   void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
                                 ui::MenuSourceType source_type) override;
-  bool ProcessHomeLauncherGesture(ui::GestureEvent* event) override;
   bool KeyboardTraversalEngaged() override;
   bool CanProcessEventsOnApplistViews() override;
   bool ShouldDismissImmediately() override;
-  void GetNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override;
   int GetTargetYForAppListHide(aura::Window* root_window) override;
   AssistantViewDelegate* GetAssistantViewDelegate() override;
   void OnSearchResultVisibilityChanged(const std::string& id,
@@ -203,12 +209,11 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
       const base::string16& raw_query,
       const SearchResultIdWithPositionIndices& results,
       int position_index) override;
+  void MaybeIncreasePrivacyInfoShownCounts() override;
   bool IsAssistantAllowedAndEnabled() const override;
   bool ShouldShowAssistantPrivacyInfo() const override;
-  void MaybeIncreaseAssistantPrivacyInfoShownCount() override;
   void MarkAssistantPrivacyInfoDismissed() override;
   bool ShouldShowSuggestedContentInfo() const override;
-  void MaybeIncreaseSuggestedContentInfoShownCount() override;
   void MarkSuggestedContentInfoDismissed() override;
   void OnStateTransitionAnimationCompleted(AppListViewState state) override;
   void OnViewStateChanged(AppListViewState state) override;
@@ -218,9 +223,7 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   gfx::Rect SnapBoundsToDisplayEdge(const gfx::Rect& bounds) override;
   int GetShelfSize() override;
   bool IsInTabletMode() override;
-
-  void AddObserver(AppListControllerObserver* observer);
-  void RemoveObserver(AppListControllerObserver* obsever);
+  AppListColorProviderImpl* GetColorProvider();
 
   // Notifies observers of AppList visibility changes.
   void OnVisibilityChanged(bool visible, int64_t display_id);
@@ -277,11 +280,6 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   // HomeScreenDelegate:
   void ShowHomeScreenView() override;
   aura::Window* GetHomeScreenWindow() override;
-  void UpdateYPositionAndOpacityForHomeLauncher(
-      int y_position_in_screen,
-      float opacity,
-      base::Optional<AnimationInfo> animation_info,
-      UpdateAnimationSettingsCallback callback) override;
   void UpdateScaleAndOpacityForHomeLauncher(
       float scale,
       float opacity,
@@ -295,6 +293,14 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   bool IsHomeScreenVisible() override;
   gfx::Rect GetInitialAppListItemScreenBoundsForWindow(
       aura::Window* window) override;
+
+  // apps::AppRegistryCache::Observer:
+  void OnAppUpdate(const apps::AppUpdate& update) override;
+  void OnAppRegistryCacheWillBeDestroyed(
+      apps::AppRegistryCache* cache) override;
+
+  // message_center::MessageCenterObserver:
+  void OnQuietModeChanged(bool in_quiet_mode) override;
 
   bool onscreen_keyboard_shown() const { return onscreen_keyboard_shown_; }
 
@@ -349,11 +355,6 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   void RecordAppListState();
 
  private:
-  // HomeScreenDelegate:
-  void OnHomeLauncherDragStart() override;
-  void OnHomeLauncherDragInProgress() override;
-  void OnHomeLauncherDragEnd() override;
-
   syncer::StringOrdinal GetOemFolderPos();
   std::unique_ptr<AppListItem> CreateAppListItem(
       std::unique_ptr<AppListItemMetadata> metadata);
@@ -381,6 +382,15 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   // Updates the window that is tracked as |tracked_app_window_|.
   void UpdateTrackedAppWindow();
 
+  // Updates whether a notification badge is shown for the AppListItemView
+  // corresponding with the |app_id|.
+  void UpdateItemNotificationBadge(const std::string& app_id,
+                                   apps::mojom::OptionalBool has_badge);
+
+  // Checks the notification badging pref and then updates whether a
+  // notification badge is shown for each AppListItem.
+  void UpdateAppBadging();
+
   // Whether the home launcher is
   // * being shown (either through an animation or a drag)
   // * being hidden (either through an animation or a drag)
@@ -396,6 +406,10 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
 
   std::unique_ptr<AppListModel> model_;
   SearchModel search_model_;
+
+  // Used to fetch colors from AshColorProvider. Should be destructed after
+  // |presenter_| and UI.
+  AppListColorProviderImpl color_provider_;
 
   // |presenter_| should be put below |client_| and |model_| to prevent a crash
   // in destruction.
@@ -457,6 +471,22 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   base::Optional<base::ScopedClosureRunner> home_screen_blur_disabler_;
 
   base::ObserverList<AppListControllerObserver> observers_;
+
+  // Observed to update notification badging on app list items. Also used to get
+  // initial notification badge information when app list items are added.
+  apps::AppRegistryCache* cache_ = nullptr;
+
+  // Whether the notification indicator flag is enabled.
+  const bool is_notification_indicator_enabled_;
+
+  // Observes user profile prefs for the app list.
+  std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
+
+  // Whether the pref for notification badging is enabled.
+  base::Optional<bool> notification_badging_pref_enabled_;
+
+  // Whether quiet mode is currently enabled.
+  base::Optional<bool> quiet_mode_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListControllerImpl);
 };

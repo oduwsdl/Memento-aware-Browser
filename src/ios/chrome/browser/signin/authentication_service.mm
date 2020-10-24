@@ -22,8 +22,6 @@
 #include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/signin/authentication_service_delegate.h"
-#include "ios/chrome/browser/signin/constants.h"
-#include "ios/chrome/browser/signin/signin_util.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/system_flags.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -286,8 +284,9 @@ AuthenticationService::GetLastKnownAccountsFromForeground() {
 ChromeIdentity* AuthenticationService::GetAuthenticatedIdentity() const {
   // There is no authenticated identity if there is no signed in user or if the
   // user signed in via the client login flow.
-  if (!IsAuthenticated())
+  if (!identity_manager_->HasPrimaryAccount()) {
     return nil;
+  }
 
   std::string authenticated_gaia_id =
       identity_manager_->GetPrimaryAccountInfo().gaia;
@@ -309,7 +308,7 @@ void AuthenticationService::SignIn(ChromeIdentity* identity) {
 
   const CoreAccountId account_id = identity_manager_->PickAccountIdForAccount(
       base::SysNSStringToUTF8(identity.gaiaID),
-      GetCanonicalizedEmailForIdentity(identity));
+      base::SysNSStringToUTF8(identity.userEmail));
 
   // Load all credentials from SSO library. This must load the credentials
   // for the primary account too.
@@ -356,7 +355,7 @@ void AuthenticationService::SignOut(
     signin_metrics::ProfileSignout signout_source,
     bool force_clear_browsing_data,
     ProceduralBlock completion) {
-  if (!IsAuthenticated()) {
+  if (!identity_manager_->HasPrimaryAccount()) {
     if (completion)
       completion();
     return;
@@ -525,7 +524,7 @@ void AuthenticationService::HandleIdentityListChanged() {
 void AuthenticationService::HandleForgottenIdentity(
     ChromeIdentity* invalid_identity,
     bool should_prompt) {
-  if (!IsAuthenticated()) {
+  if (!identity_manager_->HasPrimaryAccount()) {
     // User is not signed in. Nothing to do here.
     return;
   }
@@ -560,7 +559,7 @@ void AuthenticationService::ReloadCredentialsFromIdentities(
 }
 
 bool AuthenticationService::IsAuthenticated() const {
-  return identity_manager_->HasPrimaryAccount();
+  return GetAuthenticatedIdentity() != nil;
 }
 
 bool AuthenticationService::IsAuthenticatedIdentityManaged() const {

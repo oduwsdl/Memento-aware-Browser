@@ -18,9 +18,9 @@ import android.os.Environment;
 import android.os.Looper;
 import android.provider.MediaStore;
 
-import androidx.core.util.ObjectsCompat;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -121,15 +121,12 @@ public class ShareImageFileUtilsTest extends DummyUiActivityTestCase {
     private Uri generateAnImageToClipboard(String fileExtension) throws TimeoutException {
         GenerateUriCallback imageCallback = new GenerateUriCallback();
         ShareImageFileUtils.generateTemporaryUriFromData(
-                getActivity(), TEST_IMAGE_DATA, fileExtension, imageCallback);
+                TEST_IMAGE_DATA, fileExtension, imageCallback);
         imageCallback.waitForCallback(0, 1, WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         Clipboard.getInstance().setImageUri(imageCallback.getImageUri());
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return ObjectsCompat.equals(
-                        Clipboard.getInstance().getImageUri(), imageCallback.getImageUri());
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(Clipboard.getInstance().getImageUri(),
+                    Matchers.is(imageCallback.getImageUri()));
         });
         return imageCallback.getImageUri();
     }

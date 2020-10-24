@@ -44,8 +44,9 @@
 #include "base/time/time.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include <AvailabilityMacros.h>
 #include "base/mac/foundation_util.h"
 #endif
@@ -107,7 +108,7 @@ bool VerifySpecificPathControlledByUser(const FilePath& path,
 }
 
 std::string TempFileName() {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   return StringPrintf(".%s.XXXXXX", base::mac::BaseBundleID());
 #endif
 
@@ -274,9 +275,9 @@ bool DoCopyDirectory(const FilePath& from_path,
     // source file's permissions into account. On the other platforms, we just
     // use the base::File constructor. On Chrome OS, base::File uses a different
     // set of permissions than it does on other POSIX platforms.
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
     int mode = 0600 | (stat_at_use.st_mode & 0177);
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
     int mode = 0644;
 #else
     int mode = 0600;
@@ -343,7 +344,7 @@ bool DoDeleteFile(const FilePath& path, bool recursive) {
 }
 #endif  // !defined(OS_NACL_NONSFI)
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 // Appends |mode_char| to |mode| before the optional character set encoding; see
 // https://www.gnu.org/software/libc/manual/html_node/Opening-Streams.html for
 // details.
@@ -371,12 +372,8 @@ bool DeleteFile(const FilePath& path) {
   return DoDeleteFile(path, /*recursive=*/false);
 }
 
-bool DeleteFileRecursively(const FilePath& path) {
+bool DeletePathRecursively(const FilePath& path) {
   return DoDeleteFile(path, /*recursive=*/true);
-}
-
-bool DeleteFile(const FilePath& path, bool recursive) {
-  return DoDeleteFile(path, recursive);
 }
 
 bool ReplaceFile(const FilePath& from_path,
@@ -415,7 +412,7 @@ bool CreatePipe(ScopedFD* read_fd, ScopedFD* write_fd, bool non_blocking) {
 }
 
 bool CreateLocalNonBlockingPipe(int fds[2]) {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   return pipe2(fds, O_CLOEXEC | O_NONBLOCK) == 0;
 #else
   int raw_fds[2];
@@ -472,6 +469,13 @@ bool PathExists(const FilePath& path) {
 #endif
   return access(path.value().c_str(), F_OK) == 0;
 }
+
+#if !defined(OS_NACL_NONSFI)
+bool PathIsReadable(const FilePath& path) {
+  ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
+  return access(path.value().c_str(), R_OK) == 0;
+}
+#endif  // !defined(OS_NACL_NONSFI)
 
 #if !defined(OS_NACL_NONSFI)
 bool PathIsWritable(const FilePath& path) {
@@ -531,7 +535,17 @@ bool ReadSymbolicLink(const FilePath& symlink_path, FilePath* target_path) {
   ssize_t count =
       ::readlink(symlink_path.value().c_str(), buf, base::size(buf));
 
-  if (count <= 0) {
+#if defined(OS_ANDROID) && defined(__LP64__)
+  // A few 64-bit Android L/M devices return INT_MAX instead of -1 here for
+  // errors; this is related to bionic's (incorrect) definition of ssize_t as
+  // being long int instead of int. Cast it so the compiler generates the
+  // comparison we want here. https://crbug.com/1101940
+  bool error = static_cast<int32_t>(count) <= 0;
+#else
+  bool error = count <= 0;
+#endif
+
+  if (error) {
     target_path->clear();
     return false;
   }
@@ -595,7 +609,7 @@ bool ExecutableExistsInPath(Environment* env,
 
 #endif  // !OS_FUCHSIA
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 // This is implemented in file_util_mac.mm for Mac.
 bool GetTempDir(FilePath* path) {
   const char* tmp = getenv("TMPDIR");
@@ -611,11 +625,11 @@ bool GetTempDir(FilePath* path) {
   return true;
 #endif
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_APPLE)
 
-#if !defined(OS_MACOSX)  // Mac implementation is in file_util_mac.mm.
+#if !defined(OS_APPLE)  // Mac implementation is in file_util_mac.mm.
 FilePath GetHomeDir() {
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   if (SysInfo::IsRunningOnChromeOS()) {
     // On Chrome OS chrome::DIR_USER_DATA is overridden with a primary user
     // homedir once it becomes available. Return / as the safe option.
@@ -638,7 +652,7 @@ FilePath GetHomeDir() {
   // Last resort.
   return FilePath("/tmp");
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_APPLE)
 
 File CreateAndOpenTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
   // For call to close() inside ScopedFD.
@@ -727,7 +741,7 @@ bool CreateDirectoryAndGetError(const FilePath& full_path,
     if (mkdir(i->value().c_str(), 0700) == 0)
       continue;
     // Mkdir failed, but it might have failed with EEXIST, or some other error
-    // due to the the directory appearing out of thin air. This can occur if
+    // due to the directory appearing out of thin air. This can occur if
     // two processes are trying to create the same file system tree at the same
     // time. Check to see if it exists and make sure it is a directory.
     int saved_errno = errno;
@@ -825,7 +839,7 @@ FILE* OpenFile(const FilePath& filename, const char* mode) {
       (strchr(mode, ',') != nullptr && strchr(mode, 'e') > strchr(mode, ',')));
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
   FILE* result = nullptr;
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // macOS does not provide a mode character to set O_CLOEXEC; see
   // https://developer.apple.com/legacy/library/documentation/Darwin/Reference/ManPages/man3/fopen.3.html.
   const char* the_mode = mode;
@@ -836,7 +850,7 @@ FILE* OpenFile(const FilePath& filename, const char* mode) {
   do {
     result = fopen(filename.value().c_str(), the_mode);
   } while (!result && errno == EINTR);
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // Mark the descriptor as close-on-exec.
   if (result)
     SetCloseOnExec(fileno(result));
@@ -933,11 +947,11 @@ bool AllocateFileRegion(File* file, int64_t offset, size_t size) {
   // space. It can fail because the filesystem doesn't support it. In that case,
   // use the manual method below.
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (HANDLE_EINTR(fallocate(file->GetPlatformFile(), 0, offset, size)) != -1)
     return true;
   DPLOG(ERROR) << "fallocate";
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   // MacOS doesn't support fallocate even though their new APFS filesystem
   // does support sparse files. It does, however, have the functionality
   // available via fcntl.
@@ -1059,7 +1073,7 @@ bool VerifyPathControlledByUser(const FilePath& base,
   return true;
 }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 bool VerifyPathControlledByAdmin(const FilePath& path) {
   const unsigned kRootUid = 0;
   const FilePath kFileSystemRoot("/");
@@ -1088,7 +1102,7 @@ bool VerifyPathControlledByAdmin(const FilePath& path) {
   return VerifyPathControlledByUser(
       kFileSystemRoot, path, kRootUid, allowed_group_ids);
 }
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MAC)
 
 int GetMaximumPathComponentLength(const FilePath& path) {
 #if defined(OS_FUCHSIA)
@@ -1104,9 +1118,9 @@ int GetMaximumPathComponentLength(const FilePath& path) {
 #if !defined(OS_ANDROID)
 // This is implemented in file_util_android.cc for that platform.
 bool GetShmemTempDir(bool executable, FilePath* path) {
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
   bool disable_dev_shm = false;
-#if !defined(OS_CHROMEOS)
+#if !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
   disable_dev_shm = CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kDisableDevShmUsage);
 #endif
@@ -1120,12 +1134,12 @@ bool GetShmemTempDir(bool executable, FilePath* path) {
     *path = FilePath("/dev/shm");
     return true;
   }
-#endif  // defined(OS_LINUX) || defined(OS_AIX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
   return GetTempDir(path);
 }
 #endif  // !defined(OS_ANDROID)
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 // Mac has its own implementation, this is for all other Posix systems.
 bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
@@ -1148,34 +1162,54 @@ bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
 
   return CopyFileContents(&infile, &outfile);
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_APPLE)
 
-bool PreReadFile(const FilePath& file_path,
-                 bool is_executable,
-                 int64_t max_bytes) {
+PrefetchResult PreReadFile(const FilePath& file_path,
+                           bool is_executable,
+                           int64_t max_bytes) {
   DCHECK_GE(max_bytes, 0);
 
-  // ChromeOS is also covered by OS_LINUX.
   // posix_fadvise() is only available in the Android NDK in API 21+. Older
   // versions may have the required kernel support, but don't have enough usage
   // to justify backporting.
-#if defined(OS_LINUX) || (defined(OS_ANDROID) && __ANDROID_API__ >= 21)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    (defined(OS_ANDROID) && __ANDROID_API__ >= 21)
   File file(file_path, File::FLAG_OPEN | File::FLAG_READ);
   if (!file.IsValid())
-    return false;
+    return PrefetchResult{PrefetchResultCode::kInvalidFile};
 
   if (max_bytes == 0) {
     // fadvise() pre-fetches the entire file when given a zero length.
-    return true;
+    return PrefetchResult{PrefetchResultCode::kSuccess};
   }
 
   const PlatformFile fd = file.GetPlatformFile();
   const ::off_t len = base::saturated_cast<::off_t>(max_bytes);
-  return posix_fadvise(fd, /*offset=*/0, len, POSIX_FADV_WILLNEED) == 0;
+  return posix_fadvise(fd, /*offset=*/0, len, POSIX_FADV_WILLNEED) == 0
+             ? PrefetchResult{PrefetchResultCode::kSuccess}
+             : PrefetchResult{PrefetchResultCode::kFastFailed};
+#elif defined(OS_APPLE)
+  File file(file_path, File::FLAG_OPEN | File::FLAG_READ);
+  if (!file.IsValid())
+    return PrefetchResult{PrefetchResultCode::kInvalidFile};
+
+  if (max_bytes == 0) {
+    // fcntl(F_RDADVISE) fails when given a zero length.
+    return PrefetchResult{PrefetchResultCode::kSuccess};
+  }
+
+  const PlatformFile fd = file.GetPlatformFile();
+  ::radvisory read_advise_data = {
+      .ra_offset = 0, .ra_count = base::saturated_cast<int>(max_bytes)};
+  return fcntl(fd, F_RDADVISE, &read_advise_data) != -1
+             ? PrefetchResult{PrefetchResultCode::kSuccess}
+             : PrefetchResult{PrefetchResultCode::kFastFailed};
 #else
-  // TODO(pwnall): Fall back to madvise() for macOS.
-  return internal::PreReadFileSlow(file_path, max_bytes);
-#endif  // defined(OS_LINUX) || (defined(OS_ANDROID) && __ANDROID_API__ >= 21)
+  return internal::PreReadFileSlow(file_path, max_bytes)
+             ? PrefetchResult{PrefetchResultCode::kSlowSuccess}
+             : PrefetchResult{PrefetchResultCode::kSlowFailed};
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || (defined(OS_ANDROID) &&
+        // __ANDROID_API__ >= 21)
 }
 
 // -----------------------------------------------------------------------------
@@ -1201,7 +1235,7 @@ bool MoveUnsafe(const FilePath& from_path, const FilePath& to_path) {
   if (!CopyDirectory(from_path, to_path, true))
     return false;
 
-  DeleteFileRecursively(from_path);
+  DeletePathRecursively(from_path);
   return true;
 }
 
@@ -1209,27 +1243,27 @@ bool MoveUnsafe(const FilePath& from_path, const FilePath& to_path) {
 
 #endif  // !defined(OS_NACL_NONSFI)
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 BASE_EXPORT bool IsPathExecutable(const FilePath& path) {
   bool result = false;
   FilePath tmp_file_path;
 
   ScopedFD fd = CreateAndOpenFdForTemporaryFileInDir(path, &tmp_file_path);
   if (fd.is_valid()) {
-    DeleteFile(tmp_file_path, false);
+    DeleteFile(tmp_file_path);
     long sysconf_result = sysconf(_SC_PAGESIZE);
     CHECK_GE(sysconf_result, 0);
     size_t pagesize = static_cast<size_t>(sysconf_result);
     CHECK_GE(sizeof(pagesize), sizeof(sysconf_result));
     void* mapping = mmap(nullptr, pagesize, PROT_READ, MAP_SHARED, fd.get(), 0);
     if (mapping != MAP_FAILED) {
-      if (mprotect(mapping, pagesize, PROT_READ | PROT_EXEC) == 0)
+      if (HANDLE_EINTR(mprotect(mapping, pagesize, PROT_READ | PROT_EXEC)) == 0)
         result = true;
       munmap(mapping, pagesize);
     }
   }
   return result;
 }
-#endif  // defined(OS_LINUX) || defined(OS_AIX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 
 }  // namespace base

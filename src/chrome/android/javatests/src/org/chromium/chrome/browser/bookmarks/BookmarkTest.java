@@ -7,7 +7,13 @@ package org.chromium.chrome.browser.bookmarks;
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 
 import static org.chromium.components.browser_ui.widget.highlight.ViewHighlighterTestUtils.checkHighlightOff;
 import static org.chromium.components.browser_ui.widget.highlight.ViewHighlighterTestUtils.checkHighlightPulse;
@@ -25,6 +31,7 @@ import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.hamcrest.core.IsInstanceOf;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -34,6 +41,9 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -41,42 +51,42 @@ import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmarks.BookmarkPromoHeader.PromoState;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.sync.AndroidSyncSettings;
+import org.chromium.chrome.browser.sync.AndroidSyncSettings.AndroidSyncSettingsObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.MenuUtils;
-import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
+import org.chromium.components.browser_ui.widget.RecyclerViewTestUtils;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.ViewType;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.components.sync.AndroidSyncSettings;
-import org.chromium.components.sync.test.util.MockSyncContentResolverDelegate;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -100,11 +110,13 @@ import java.util.concurrent.ExecutionException;
 public class BookmarkTest {
     // clang-format on
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
-    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+    @Rule
+    public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     private static final String TEST_PAGE_URL_GOOGLE = "/chrome/test/data/android/google.html";
     private static final String TEST_PAGE_TITLE_GOOGLE = "The Google";
@@ -124,6 +136,8 @@ public class BookmarkTest {
     private String mTestPageFoo;
     private EmbeddedTestServer mTestServer;
     private @Nullable BookmarkActivity mBookmarkActivity;
+    @Mock
+    private AndroidSyncSettings mAndroidSyncSettings;
 
     @BeforeClass
     public static void setUpBeforeActivityLaunched() {
@@ -143,6 +157,18 @@ public class BookmarkTest {
             mBookmarkModel = new BookmarkModel(Profile.fromWebContents(
                     mActivityTestRule.getActivity().getActivityTab().getWebContents()));
             mBookmarkBridge = mActivityTestRule.getActivity().getBookmarkBridgeForTesting();
+
+            // Stub AndroidSyncSettings state to make sure promos aren't suppressed.
+            when(mAndroidSyncSettings.doesMasterSyncSettingAllowChromeSync()).thenReturn(true);
+            when(mAndroidSyncSettings.isSyncEnabled()).thenReturn(false);
+            when(mAndroidSyncSettings.isChromeSyncEnabled()).thenReturn(false);
+            doNothing()
+                    .when(mAndroidSyncSettings)
+                    .registerObserver(any(AndroidSyncSettingsObserver.class));
+            doNothing()
+                    .when(mAndroidSyncSettings)
+                    .unregisterObserver(any(AndroidSyncSettingsObserver.class));
+            AndroidSyncSettings.overrideForTests(mAndroidSyncSettings);
         });
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mTestPage = mTestServer.getURL(TEST_PAGE_URL_GOOGLE);
@@ -232,7 +258,6 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @DisableIf.Build(sdk_is_less_than = 21, message = "crbug.com/807807")
     public void testAddBookmark() {
         mActivityTestRule.loadUrl(mTestPage);
         // Check partner bookmarks are lazily loaded.
@@ -263,7 +288,6 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @DisableIf.Build(sdk_is_less_than = 21, message = "crbug.com/807807")
     public void testAddBookmarkSnackbar() {
         mActivityTestRule.loadUrl(mTestPage);
         // Check partner bookmarks are lazily loaded.
@@ -296,7 +320,6 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @DisableIf.Build(sdk_is_less_than = 21, message = "crbug.com/807807")
     public void testAddBookmarkToOtherFolder() {
         mActivityTestRule.loadUrl(mTestPage);
         readPartnerBookmarks();
@@ -333,17 +356,11 @@ public class BookmarkTest {
         final View title = getViewWithText(mItemsContainer, TEST_PAGE_TITLE_GOOGLE);
         TestThreadUtils.runOnUiThreadBlocking(() -> TouchCommon.singleClickView(title));
         ChromeTabbedActivity activity = waitForTabbedActivity();
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                Tab activityTab = activity.getActivityTab();
-                String tabUrl = activityTab == null || activityTab.getUrl() == null
-                        ? ""
-                        : activityTab.getUrl().getSpec();
-                updateFailureReason(activityTab == null ? "Activity tab is null."
-                                                        : "Tab URL incorrect: " + tabUrl);
-                return mTestPage.equals(tabUrl);
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Tab activityTab = activity.getActivityTab();
+            Criteria.checkThat(activityTab, Matchers.notNullValue());
+            Criteria.checkThat(activityTab.getUrl(), Matchers.notNullValue());
+            Criteria.checkThat(activityTab.getUrl().getSpec(), Matchers.is(mTestPage));
         });
     }
 
@@ -429,11 +446,6 @@ public class BookmarkTest {
     @Test
     @MediumTest
     public void testSearchBookmarks() throws Exception {
-        // The master sync should be on in order to show the Chrome sync promo in the bookmark
-        // manager.
-        MockSyncContentResolverDelegate syncDelegate = new MockSyncContentResolverDelegate();
-        syncDelegate.setMasterSyncAutomatically(true);
-        AndroidSyncSettings.overrideForTests(syncDelegate, null);
         BookmarkPromoHeader.forcePromoStateForTests(BookmarkPromoHeader.PromoState.PROMO_SYNC);
         BookmarkId folder = addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage, folder);
@@ -616,7 +628,7 @@ public class BookmarkTest {
         BookmarkId testId = addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_TITLE_A, TEST_URL_A);
 
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         BookmarkRow test =
@@ -662,7 +674,7 @@ public class BookmarkTest {
         BookmarkId testId = addFolder(TEST_FOLDER_TITLE);
         addFolder(TEST_TITLE_A);
 
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         View searchButton = mManager.getToolbarForTests().findViewById(R.id.search_menu_id);
@@ -732,7 +744,7 @@ public class BookmarkTest {
         expected.add(aId);
         expected.add(googleId);
 
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         // Callback occurs upon changes inside of the bookmark model.
@@ -796,7 +808,7 @@ public class BookmarkTest {
         expected.add(aId);
         expected.add(testId);
 
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         // Callback occurs upon changes inside of the bookmark model.
@@ -858,7 +870,7 @@ public class BookmarkTest {
         expected.add(testId);
         expected.add(aId);
 
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         // Callback occurs upon changes inside of the bookmark model.
@@ -902,7 +914,7 @@ public class BookmarkTest {
     public void testPromoDraggability() throws Exception {
         BookmarkId testId = addFolder(TEST_FOLDER_TITLE);
 
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         ViewHolder promo = mItemsContainer.findViewHolderForAdapterPosition(0);
@@ -921,7 +933,7 @@ public class BookmarkTest {
     @MediumTest
     public void testPartnerFolderDraggability() throws Exception {
         BookmarkId testId = addFolderWithPartner(TEST_FOLDER_TITLE);
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         ViewHolder partner = mItemsContainer.findViewHolderForAdapterPosition(2);
@@ -942,7 +954,7 @@ public class BookmarkTest {
         BookmarkId aId = addBookmark("a", "http://a.com");
         addFolder(TEST_FOLDER_TITLE);
 
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         ViewHolder test = mItemsContainer.findViewHolderForAdapterPosition(1);
@@ -964,7 +976,7 @@ public class BookmarkTest {
     public void testCannotSelectPromo() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
 
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         View promo = mItemsContainer.findViewHolderForAdapterPosition(0).itemView;
@@ -979,7 +991,7 @@ public class BookmarkTest {
     @MediumTest
     public void testCannotSelectPartner() throws Exception {
         addFolderWithPartner(TEST_FOLDER_TITLE);
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         View partner = mItemsContainer.findViewHolderForAdapterPosition(2).itemView;
@@ -995,7 +1007,7 @@ public class BookmarkTest {
     public void testMoveUpMenuItem() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, TEST_URL_A);
         addFolder(TEST_FOLDER_TITLE);
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         View google = mItemsContainer.findViewHolderForAdapterPosition(2).itemView;
@@ -1021,7 +1033,7 @@ public class BookmarkTest {
     public void testMoveDownMenuItem() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, TEST_URL_A);
         addFolder(TEST_FOLDER_TITLE);
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         View testFolder = mItemsContainer.findViewHolderForAdapterPosition(1).itemView;
@@ -1047,7 +1059,7 @@ public class BookmarkTest {
     public void testMoveDownGoneForBottomElement() throws Exception {
         addBookmarkWithPartner(TEST_PAGE_TITLE_GOOGLE, TEST_URL_A);
         addFolderWithPartner(TEST_FOLDER_TITLE);
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         View google = mItemsContainer.findViewHolderForAdapterPosition(2).itemView;
@@ -1063,7 +1075,7 @@ public class BookmarkTest {
     public void testMoveUpGoneForTopElement() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, TEST_URL_A);
         addFolder(TEST_FOLDER_TITLE);
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         View testFolder = mItemsContainer.findViewHolderForAdapterPosition(1).itemView;
@@ -1102,7 +1114,7 @@ public class BookmarkTest {
     @MediumTest
     public void testMoveButtonsGoneWithOneBookmark() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         View testFolder = mItemsContainer.findViewHolderForAdapterPosition(1).itemView;
@@ -1177,9 +1189,6 @@ public class BookmarkTest {
     @MediumTest
     public void testTopLevelFolderUpdateAfterSync() throws Exception {
         // Set up the test and open the bookmark manager to the Mobile Bookmarks folder.
-        MockSyncContentResolverDelegate syncDelegate = new MockSyncContentResolverDelegate();
-        syncDelegate.setMasterSyncAutomatically(true);
-        AndroidSyncSettings.overrideForTests(syncDelegate, null);
         readPartnerBookmarks();
         openBookmarkManager();
         BookmarkItemsAdapter adapter = getReorderAdapter();
@@ -1194,18 +1203,16 @@ public class BookmarkTest {
                     mBookmarkModel.getOtherFolderId(), 0, TEST_TITLE_A, TEST_URL_A);
         });
 
-        // Dismiss promo header and simulate a sign in.
-        syncDelegate.setMasterSyncAutomatically(false);
         TestThreadUtils.runOnUiThreadBlocking(adapter::simulateSignInForTests);
-        Assert.assertEquals(
-                "Expected \"Other Bookmarks\" folder to appear!", 2, adapter.getItemCount());
+        Assert.assertEquals("Expected promo and \"Other Bookmarks\" folder to appear!", 3,
+                adapter.getItemCount());
     }
 
     @Test
     @MediumTest
     public void testShowInFolder_NoScroll() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         // Enter search mode.
@@ -1246,7 +1253,7 @@ public class BookmarkTest {
         addFolder("C");
         addFolder("D");
         addFolder("E"); // Index 1
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         // Enter search mode.
@@ -1278,7 +1285,7 @@ public class BookmarkTest {
         BookmarkId testId = addFolder(TEST_FOLDER_TITLE);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> mBookmarkModel.addBookmark(testId, 0, TEST_TITLE_A, TEST_URL_A));
-        forceSyncHeaderState();
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_SYNC);
         openBookmarkManager();
 
         // Enter search mode.
@@ -1464,6 +1471,29 @@ public class BookmarkTest {
         });
     }
 
+    @Test
+    @SmallTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
+    public void testReadingListFolderShown() throws Exception {
+        BookmarkPromoHeader.forcePromoStateForTests(PromoState.PROMO_NONE);
+        openBookmarkManager();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> mManager.openFolder(mBookmarkModel.getRootFolderId()));
+        RecyclerViewTestUtils.waitForStableRecyclerView(mItemsContainer);
+        Assert.assertEquals("Wrong number of top level folders.", 2, getAdapter().getItemCount());
+
+        // Reading list should show in the root folder.
+        View readingListRow = mItemsContainer.findViewHolderForAdapterPosition(0).itemView;
+        Assert.assertEquals("No overflow menu for reading list folder.", View.GONE,
+                readingListRow.findViewById(R.id.more).getVisibility());
+        Assert.assertEquals("The first view should be reading list.", BookmarkType.READING_LIST,
+                getIdByPosition(0).getType());
+        onView(withText("Reading list")).check(matches(isDisplayed()));
+
+        Assert.assertEquals("The second view should be a normal folder.", BookmarkType.NORMAL,
+                getIdByPosition(1).getType());
+    }
+
     /**
      * Adds a bookmark in the scenario where we have partner bookmarks.
      *
@@ -1489,16 +1519,6 @@ public class BookmarkTest {
         loadEmptyPartnerBookmarksForTesting();
         return TestThreadUtils.runOnUiThreadBlocking(
                 () -> mBookmarkModel.addFolder(mBookmarkModel.getDefaultFolder(), 0, title));
-    }
-
-    /**
-     * Ignores the Android sync settings, and forces a sync header for tests.
-     */
-    private void forceSyncHeaderState() {
-        MockSyncContentResolverDelegate syncDelegate = new MockSyncContentResolverDelegate();
-        syncDelegate.setMasterSyncAutomatically(true);
-        AndroidSyncSettings.overrideForTests(syncDelegate, null);
-        BookmarkPromoHeader.forcePromoStateForTests(BookmarkPromoHeader.PromoState.PROMO_SYNC);
     }
 
     private BookmarkItemsAdapter getReorderAdapter() {
@@ -1609,18 +1629,18 @@ public class BookmarkTest {
     }
 
     private void waitForEditActivity() {
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> Assert.assertThat(ApplicationStatus.getLastTrackedFocusedActivity(),
-                                IsInstanceOf.instanceOf(BookmarkEditActivity.class)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(ApplicationStatus.getLastTrackedFocusedActivity(),
+                    IsInstanceOf.instanceOf(BookmarkEditActivity.class));
+        });
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
     }
 
     private ChromeTabbedActivity waitForTabbedActivity() {
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> Assert.assertThat(ApplicationStatus.getLastTrackedFocusedActivity(),
-                                IsInstanceOf.instanceOf(ChromeTabbedActivity.class)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(ApplicationStatus.getLastTrackedFocusedActivity(),
+                    IsInstanceOf.instanceOf(ChromeTabbedActivity.class));
+        });
         return (ChromeTabbedActivity) ApplicationStatus.getLastTrackedFocusedActivity();
     }
 }

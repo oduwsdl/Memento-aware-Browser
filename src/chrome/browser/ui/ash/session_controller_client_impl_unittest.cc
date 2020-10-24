@@ -281,9 +281,10 @@ TEST_F(SessionControllerClientImplTest, MultiProfileDisallowedByUserPolicy) {
             SessionControllerClientImpl::GetAddUserSessionPolicy());
 }
 
-// Make sure MultiProfile disabled by primary user policy certificates.
+// Make sure MultiProfile is allowed if the primary user has used
+// policy-provided trust anchors.
 TEST_F(SessionControllerClientImplTest,
-       MultiProfileDisallowedByPolicyCertificates) {
+       MultiProfileAllowedWithPolicyCertificates) {
   InitForMultiProfile();
   user_manager()->AddUser(
       AccountId::FromUserEmailGaiaId("bb@b.b", "4444444444"));
@@ -295,14 +296,15 @@ TEST_F(SessionControllerClientImplTest,
             SessionControllerClientImpl::GetAddUserSessionPolicy());
   policy::PolicyCertServiceFactory::SetUsedPolicyCertificates(
       account_id.GetUserEmail());
-  EXPECT_EQ(ash::AddUserSessionPolicy::ERROR_NOT_ALLOWED_PRIMARY_USER,
+  EXPECT_EQ(ash::AddUserSessionPolicy::ALLOWED,
             SessionControllerClientImpl::GetAddUserSessionPolicy());
 
   // Flush tasks posted to IO.
   base::RunLoop().RunUntilIdle();
 }
 
-// Make sure MultiProfile disabled by primary user certificates in memory.
+// Make sure MultiProfile is allowed if the primary user has policy-provided
+// trust anchors in memory.
 TEST_F(SessionControllerClientImplTest,
        MultiProfileDisallowedByPrimaryUserCertificatesInMemory) {
   TestingProfile* user_profile = InitForMultiProfile();
@@ -327,7 +329,7 @@ TEST_F(SessionControllerClientImplTest,
       net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem"));
   service->SetPolicyTrustAnchorsForTesting(/*trust_anchors=*/certificates);
   EXPECT_TRUE(service->has_policy_certificates());
-  EXPECT_EQ(ash::AddUserSessionPolicy::ERROR_NOT_ALLOWED_PRIMARY_USER,
+  EXPECT_EQ(ash::AddUserSessionPolicy::ALLOWED,
             SessionControllerClientImpl::GetAddUserSessionPolicy());
 
   // Flush tasks posted to IO.
@@ -576,7 +578,7 @@ TEST_F(SessionControllerClientImplTest, SessionLengthLimit) {
 
   // Setting a session length limit in local state sends it to ash.
   const base::TimeDelta length_limit = base::TimeDelta::FromHours(1);
-  const base::TimeTicks start_time = base::TimeTicks::Now();
+  const base::Time start_time = base::Time::Now();
   PrefService* local_state = TestingBrowserProcess::GetGlobal()->local_state();
   local_state->SetInteger(prefs::kSessionLengthLimit,
                           length_limit.InMilliseconds());

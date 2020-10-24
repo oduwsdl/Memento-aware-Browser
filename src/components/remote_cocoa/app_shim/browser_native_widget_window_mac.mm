@@ -67,17 +67,19 @@
 
 // Prevent detached tabs from glitching when the window is partially offscreen.
 // See https://crbug.com/1095717 for details.
+// This is easy to get wrong so scope very tightly to only disallow large
+// vertical jumps.
 - (NSRect)constrainFrameRect:(NSRect)rect toScreen:(NSScreen*)screen {
-  NSRect screenFrame = [screen frame];
-  // Adjust if either the entire frame is offscreen, or the toolbar is
-  // cut off at the top.
-  if (NSMaxY(rect) < NSMinY(screenFrame) ||  // Below the screen.
-      NSMaxX(rect) < NSMinX(screenFrame) ||  // To the left of the screen.
-      NSMinX(rect) > NSMaxX(screenFrame) ||  // To the right of the screen.
-      NSMaxY(rect) > NSMaxY(screenFrame)) {  // Top edge above the screen.
-    return [super constrainFrameRect:rect toScreen:screen];
-  }
-  return rect;
+  NSRect proposed = [super constrainFrameRect:rect toScreen:screen];
+  // This boils down to: use the small threshold when we're not avoiding a
+  // Dock on the bottom, and the big threshold otherwise.
+  static constexpr CGFloat kBigThreshold = 200;
+  static constexpr CGFloat kSmallThreshold = 50;
+  const CGFloat yDelta = NSMaxY(proposed) - NSMaxY(rect);
+  if (yDelta > kBigThreshold ||
+      (yDelta > kSmallThreshold && NSMinY(proposed) == 0))
+    return rect;
+  return proposed;
 }
 
 // NSWindow (PrivateAPI) overrides.

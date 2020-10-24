@@ -217,34 +217,6 @@ void TranslateBubbleView::CloseBubble() {
   LocationBarBubbleDelegateView::CloseBubble();
 }
 
-base::string16 TranslateBubbleView::GetWindowTitle() const {
-  int id = 0;
-  switch (model_->GetViewState()) {
-    case TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE:
-      id = IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_TITLE;
-      break;
-    case TranslateBubbleModel::VIEW_STATE_TRANSLATING:
-      id = IDS_TRANSLATE_BUBBLE_TRANSLATING;
-      break;
-    case TranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE:
-      id = IDS_TRANSLATE_BUBBLE_TRANSLATED_TITLE;
-      break;
-    case TranslateBubbleModel::VIEW_STATE_ERROR:
-      id = IDS_TRANSLATE_BUBBLE_COULD_NOT_TRANSLATE_TITLE;
-      break;
-    // Widget title and close button does not show for tab ui.
-    // These two cases don't apply but need to be handled to avoid error.
-    case TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE:
-      id = IDS_TRANSLATE_BUBBLE_ADVANCED_TITLE;
-      break;
-    case TranslateBubbleModel::VIEW_STATE_TARGET_LANGUAGE:
-      id = IDS_TRANSLATE_BUBBLE_ADVANCED_TITLE;
-      break;
-  }
-
-  return l10n_util::GetStringUTF16(id);
-}
-
 void TranslateBubbleView::TabSelectedAt(int index) {
   // Tabbed pane is indexed from left to right starting at 0.
   if (!model_->IsPageTranslatedInCurrentLanguages() && index == 1) {
@@ -270,58 +242,8 @@ void TranslateBubbleView::Init() {
 
   UpdateChildVisibilities();
 
-  if (model_->GetViewState() == TranslateBubbleModel::VIEW_STATE_ERROR)
+  if (GetViewState() == TranslateBubbleModel::VIEW_STATE_ERROR)
     model_->ShowError(error_type_);
-}
-
-void TranslateBubbleView::ButtonPressed(views::Button* sender,
-                                        const ui::Event& event) {
-  switch (static_cast<ButtonID>(sender->GetID())) {
-    case BUTTON_ID_DONE: {
-      ConfirmAdvancedOptions();
-      break;
-    }
-    case BUTTON_ID_TRY_AGAIN: {
-      model_->Translate();
-      translate::ReportUiAction(translate::TRY_AGAIN_BUTTON_CLICKED);
-      break;
-    }
-    case BUTTON_ID_ALWAYS_TRANSLATE: {
-      views::Checkbox* always_checkbox = GetAlwaysTranslateCheckbox();
-      DCHECK(always_checkbox);
-      should_always_translate_ = always_checkbox->GetChecked();
-      // In the tab UI the always translate button should apply immediately
-      // except for in an advanced view.
-      if (model_->GetViewState() !=
-          TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE) {
-        model_->SetAlwaysTranslate(should_always_translate_);
-      }
-      translate::ReportUiAction(should_always_translate_
-                                    ? translate::ALWAYS_TRANSLATE_CHECKED
-                                    : translate::ALWAYS_TRANSLATE_UNCHECKED);
-      break;
-    }
-    case BUTTON_ID_OPTIONS_MENU: {
-      ShowOptionsMenu(sender);
-      break;
-    }
-    case BUTTON_ID_CLOSE: {
-      translate::ReportUiAction(translate::CLOSE_BUTTON_CLICKED);
-      GetWidget()->Close();
-      break;
-    }
-    case BUTTON_ID_RESET: {
-      ResetLanguage();
-      break;
-    }
-    case BUTTON_ID_RETURN: {
-      SwitchView(TranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE);
-      tabbed_pane_->SelectTabAt(1);
-      UpdateChildVisibilities();
-      SizeToContents();
-      break;
-    }
-  }
 }
 
 views::View* TranslateBubbleView::GetInitiallyFocusedView() {
@@ -337,8 +259,7 @@ bool TranslateBubbleView::ShouldShowWindowTitle() const {
 }
 
 void TranslateBubbleView::ResetLanguage() {
-  if (model_->GetViewState() ==
-      TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE) {
+  if (GetViewState() == TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE) {
     if (source_language_combobox_->GetSelectedIndex() ==
         previous_source_language_index_ + 1) {
       return;
@@ -379,7 +300,7 @@ void TranslateBubbleView::WindowClosing() {
 
 bool TranslateBubbleView::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
-  switch (model_->GetViewState()) {
+  switch (GetViewState()) {
     case TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE: {
       if (accelerator.key_code() == ui::VKEY_RETURN) {
         Translate();
@@ -388,7 +309,6 @@ bool TranslateBubbleView::AcceleratorPressed(
       break;
     }
     case TranslateBubbleModel::VIEW_STATE_TRANSLATING:
-      break;
     case TranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE: {
       if (accelerator.key_code() == ui::VKEY_RETURN) {
         ShowOriginal();
@@ -411,10 +331,6 @@ gfx::Size TranslateBubbleView::CalculatePreferredSize() const {
   for (const views::View* child : children())
     width = std::max(width, child->GetPreferredSize().width());
   return gfx::Size(width, GetCurrentView()->GetPreferredSize().height());
-}
-
-void TranslateBubbleView::OnPerformAction(views::Combobox* combobox) {
-  HandleComboboxPerformAction(static_cast<ComboboxID>(combobox->GetID()));
 }
 
 // Create the menu items for the dropdown options menu under TAB UI.
@@ -447,7 +363,7 @@ void TranslateBubbleView::ShowOptionsMenu(views::Button* source) {
                                    original_language));
   }
 
-  if (model_->CanBlacklistSite()) {
+  if (model_->CanBlocklistSite()) {
     options_menu_model_->AddCheckItem(
         OptionsMenuItem::NEVER_TRANSLATE_SITE,
         l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_SITE));
@@ -495,13 +411,13 @@ void TranslateBubbleView::ExecuteCommand(int command_id, int event_flags) {
       if (should_always_translate_) {
         should_never_translate_language_ = false;
         model_->SetNeverTranslateLanguage(should_never_translate_language_);
-        if (((model_->GetViewState() ==
-              TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE) ||
-             IsEquivalentState(model_->GetViewState()))) {
+        if (GetViewState() ==
+            TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE) {
           model_->Translate();
           SwitchView(TranslateBubbleModel::VIEW_STATE_TRANSLATING);
         }
       }
+      UpdateChildVisibilities();
       break;
 
     case OptionsMenuItem::NEVER_TRANSLATE_LANGUAGE:
@@ -579,7 +495,7 @@ TranslateBubbleView::TranslateBubbleView(
 }
 
 views::View* TranslateBubbleView::GetCurrentView() const {
-  switch (model_->GetViewState()) {
+  switch (GetViewState()) {
     case TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE:
       return translate_view_;
     case TranslateBubbleModel::VIEW_STATE_TRANSLATING:
@@ -599,11 +515,13 @@ views::View* TranslateBubbleView::GetCurrentView() const {
 
 void TranslateBubbleView::Translate() {
   model_->Translate();
+  SwitchView(TranslateBubbleModel::VIEW_STATE_TRANSLATING);
   translate::ReportUiAction(translate::TRANSLATE_BUTTON_CLICKED);
 }
 
 void TranslateBubbleView::ShowOriginal() {
   model_->RevertTranslation();
+  SwitchView(TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE);
   translate::ReportUiAction(translate::SHOW_ORIGINAL_BUTTON_CLICKED);
 }
 
@@ -627,24 +545,29 @@ void TranslateBubbleView::ConfirmAdvancedOptions() {
   translate::ReportUiAction(translate::DONE_BUTTON_CLICKED);
 }
 
-void TranslateBubbleView::HandleComboboxPerformAction(
-    TranslateBubbleView::ComboboxID sender_id) {
-  switch (sender_id) {
-    case COMBOBOX_ID_SOURCE_LANGUAGE: {
-      model_->UpdateOriginalLanguageIndex(
-          source_language_combobox_->GetSelectedIndex() - 1);
-      UpdateAdvancedView();
-      translate::ReportUiAction(translate::SOURCE_LANGUAGE_MENU_CLICKED);
-      break;
-    }
-    case COMBOBOX_ID_TARGET_LANGUAGE: {
-      model_->UpdateTargetLanguageIndex(
-          target_language_combobox_->GetSelectedIndex());
-      UpdateAdvancedView();
-      translate::ReportUiAction(translate::TARGET_LANGUAGE_MENU_CLICKED);
-      break;
-    }
-  }
+void TranslateBubbleView::SourceLanguageChanged() {
+  model_->UpdateOriginalLanguageIndex(
+      source_language_combobox_->GetSelectedIndex() - 1);
+  UpdateAdvancedView();
+  translate::ReportUiAction(translate::SOURCE_LANGUAGE_MENU_CLICKED);
+}
+
+void TranslateBubbleView::TargetLanguageChanged() {
+  model_->UpdateTargetLanguageIndex(
+      target_language_combobox_->GetSelectedIndex());
+  UpdateAdvancedView();
+  translate::ReportUiAction(translate::TARGET_LANGUAGE_MENU_CLICKED);
+}
+
+void TranslateBubbleView::AlwaysTranslatePressed() {
+  should_always_translate_ = GetAlwaysTranslateCheckbox()->GetChecked();
+  translate::ReportUiAction(should_always_translate_
+                                ? translate::ALWAYS_TRANSLATE_CHECKED
+                                : translate::ALWAYS_TRANSLATE_UNCHECKED);
+  // In the tab UI the always translate button should apply immediately
+  // except for in an advanced view.
+  if (GetViewState() != TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE)
+    model_->SetAlwaysTranslate(should_always_translate_);
 }
 
 void TranslateBubbleView::UpdateChildVisibilities() {
@@ -700,7 +623,8 @@ std::unique_ptr<views::View> TranslateBubbleView::CreateView() {
   auto tabbed_pane = std::make_unique<views::TabbedPane>();
   tabbed_pane_ = horizontal_view->AddChildView(std::move(tabbed_pane));
 
-  // NOTE: Panes must be added after |tabbed_pane| has been added to its parent.
+  // NOTE: Panes must be added after |tabbed_pane| has been added to its
+  // parent.
   tabbed_pane_->AddTab(original_language_name, CreateEmptyPane());
   tabbed_pane_->AddTab(target_language_name, CreateEmptyPane());
   tabbed_pane_->GetTabAt(0)->SetBorder(
@@ -724,7 +648,8 @@ std::unique_ptr<views::View> TranslateBubbleView::CreateView() {
         l10n_util::GetStringFUTF16(
             IDS_TRANSLATE_BUBBLE_ALWAYS_TRANSLATE_LANG,
             model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex())),
-        this);
+        base::BindRepeating(&TranslateBubbleView::AlwaysTranslatePressed,
+                            base::Unretained(this)));
     before_always_translate_checkbox->SetID(BUTTON_ID_ALWAYS_TRANSLATE);
     always_translate_checkbox_ =
         view->AddChildView(std::move(before_always_translate_checkbox));
@@ -769,10 +694,13 @@ std::unique_ptr<views::View> TranslateBubbleView::CreateView() {
 std::unique_ptr<views::View> TranslateBubbleView::CreateViewError() {
   auto translate_options_button =
       std::make_unique<views::MdTextButtonWithDownArrow>(
-          this,
+          views::Button::PressedCallback(),
           l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_OPTIONS_MENU_BUTTON));
+  translate_options_button->SetCallback(base::BindRepeating(
+      &TranslateBubbleView::ShowOptionsMenu, base::Unretained(this),
+      base::Unretained(translate_options_button.get())));
   translate_options_button->SetID(BUTTON_ID_OPTIONS_MENU);
-  translate_options_button->set_request_focus_on_press(true);
+  translate_options_button->SetRequestFocusOnPress(true);
   return CreateViewErrorNoTitle(std::move(translate_options_button));
 }
 
@@ -827,8 +755,14 @@ std::unique_ptr<views::View> TranslateBubbleView::CreateViewErrorNoTitle(
       views::GridLayout::kFixedSize, COLUMN_SET_ID_BUTTONS,
       views::GridLayout::kFixedSize,
       provider->GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
-  auto try_again_button = views::MdTextButton::Create(
-      this, l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_TRY_AGAIN));
+  auto try_again_button = std::make_unique<views::MdTextButton>(
+      base::BindRepeating(
+          [](TranslateBubbleModel* model) {
+            translate::ReportUiAction(translate::TRY_AGAIN_BUTTON_CLICKED);
+            model->Translate();
+          },
+          base::Unretained(model_.get())),
+      l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_TRY_AGAIN));
   try_again_button->SetID(BUTTON_ID_TRY_AGAIN);
   layout->AddView(std::move(try_again_button));
 
@@ -864,16 +798,20 @@ std::unique_ptr<views::View> TranslateBubbleView::CreateViewAdvancedSource() {
       model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex());
   if (!is_in_incognito_window_ && !original_language.empty()) {
     advanced_always_translate_checkbox = std::make_unique<views::Checkbox>(
-        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ALWAYS), this);
+        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ALWAYS),
+        base::BindRepeating(&TranslateBubbleView::AlwaysTranslatePressed,
+                            base::Unretained(this)));
     advanced_always_translate_checkbox->SetID(BUTTON_ID_ALWAYS_TRANSLATE);
   }
 
-  source_language_combobox->SetID(COMBOBOX_ID_SOURCE_LANGUAGE);
-  source_language_combobox->set_listener(this);
+  source_language_combobox->SetCallback(base::BindRepeating(
+      &TranslateBubbleView::SourceLanguageChanged, base::Unretained(this)));
   source_language_combobox_ = source_language_combobox.get();
 
-  auto advanced_done_button =
-      views::MdTextButton::Create(this, l10n_util::GetStringUTF16(IDS_DONE));
+  auto advanced_done_button = std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&TranslateBubbleView::ConfirmAdvancedOptions,
+                          base::Unretained(this)),
+      l10n_util::GetStringUTF16(IDS_DONE));
   advanced_done_button->SetID(BUTTON_ID_DONE);
   advanced_done_button->SetIsDefault(true);
   advanced_done_button_source_ = advanced_done_button.get();
@@ -900,12 +838,14 @@ std::unique_ptr<views::View> TranslateBubbleView::CreateViewAdvancedTarget() {
   auto target_language_combobox =
       std::make_unique<views::Combobox>(target_language_combobox_model_.get());
 
-  target_language_combobox->SetID(COMBOBOX_ID_TARGET_LANGUAGE);
-  target_language_combobox->set_listener(this);
+  target_language_combobox->SetCallback(base::BindRepeating(
+      &TranslateBubbleView::TargetLanguageChanged, base::Unretained(this)));
   target_language_combobox_ = target_language_combobox.get();
 
-  auto advanced_done_button =
-      views::MdTextButton::Create(this, l10n_util::GetStringUTF16(IDS_DONE));
+  auto advanced_done_button = std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&TranslateBubbleView::ConfirmAdvancedOptions,
+                          base::Unretained(this)),
+      l10n_util::GetStringUTF16(IDS_DONE));
   advanced_done_button->SetID(BUTTON_ID_DONE);
   advanced_done_button->SetIsDefault(true);
   advanced_done_button_target_ = advanced_done_button.get();
@@ -1039,8 +979,10 @@ std::unique_ptr<views::View> TranslateBubbleView::CreateViewAdvanced(
   layout->StartRow(views::GridLayout::kFixedSize, COLUMN_SET_ID_BUTTONS);
   layout->SkipColumns(1);
 
-  auto advanced_reset_button = views::MdTextButton::Create(
-      this, l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_RESET));
+  auto advanced_reset_button = std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&TranslateBubbleView::ResetLanguage,
+                          base::Unretained(this)),
+      l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_RESET));
   advanced_reset_button->SetID(BUTTON_ID_RESET);
   layout->AddView(std::move(advanced_reset_button));
   layout->AddView(std::move(advanced_done_button));
@@ -1064,48 +1006,78 @@ std::unique_ptr<views::ImageView> TranslateBubbleView::CreateTranslateIcon() {
 std::unique_ptr<views::Button> TranslateBubbleView::CreateOptionsMenuButton() {
   // Three dots options menu button
   auto tab_translate_options_button =
-      views::CreateVectorImageButtonWithNativeTheme(this, kBrowserToolsIcon);
+      views::CreateVectorImageButtonWithNativeTheme(
+          views::Button::PressedCallback(), kBrowserToolsIcon);
+  tab_translate_options_button->SetCallback(base::BindRepeating(
+      &TranslateBubbleView::ShowOptionsMenu, base::Unretained(this),
+      base::Unretained(tab_translate_options_button.get())));
   InstallCircleHighlightPathGenerator(tab_translate_options_button.get());
   tab_translate_options_button->SetFocusForPlatform();
   tab_translate_options_button->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_OPTIONS_MENU_BUTTON));
-  tab_translate_options_button->set_request_focus_on_press(true);
+  tab_translate_options_button->SetRequestFocusOnPress(true);
   tab_translate_options_button->SetVisible(true);
   tab_translate_options_button->SetID(BUTTON_ID_OPTIONS_MENU);
   return tab_translate_options_button;
 }
 
 std::unique_ptr<views::Button> TranslateBubbleView::CreateCloseButton() {
-  auto close_button = views::BubbleFrameView::CreateCloseButton(this);
+  auto close_button =
+      views::BubbleFrameView::CreateCloseButton(base::BindRepeating(
+          [](View* view) {
+            translate::ReportUiAction(translate::CLOSE_BUTTON_CLICKED);
+            view->GetWidget()->Close();
+          },
+          base::Unretained(this)));
   close_button->SetVisible(true);
   close_button->SetID(BUTTON_ID_CLOSE);
   return close_button;
 }
 
-bool TranslateBubbleView::IsEquivalentState(
-    TranslateBubbleModel::ViewState view_state) {
-  return view_state == TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE ||
-         view_state == TranslateBubbleModel::VIEW_STATE_TRANSLATING ||
-         view_state == TranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE;
-}
-
 views::Checkbox* TranslateBubbleView::GetAlwaysTranslateCheckbox() {
-  if (model_->GetViewState() ==
-          TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE ||
-      model_->GetViewState() ==
-          TranslateBubbleModel::VIEW_STATE_TARGET_LANGUAGE) {
+  if (GetViewState() == TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE ||
+      GetViewState() == TranslateBubbleModel::VIEW_STATE_TARGET_LANGUAGE) {
     return advanced_always_translate_checkbox_;
-  } else if (model_->GetViewState() ==
+  } else if (GetViewState() ==
                  TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE ||
-             model_->GetViewState() ==
-                 TranslateBubbleModel::VIEW_STATE_TRANSLATING ||
-             model_->GetViewState() ==
+             GetViewState() == TranslateBubbleModel::VIEW_STATE_TRANSLATING ||
+             GetViewState() ==
                  TranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE) {
     return always_translate_checkbox_;
   } else {
     NOTREACHED();
     return nullptr;
   }
+}
+
+void TranslateBubbleView::SetWindowTitle(
+    TranslateBubbleModel::ViewState view_state) {
+  switch (view_state) {
+    case TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE:
+      SetTitle(IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_TITLE);
+      break;
+    case TranslateBubbleModel::VIEW_STATE_TRANSLATING:
+      SetTitle(IDS_TRANSLATE_BUBBLE_TRANSLATING);
+      break;
+    case TranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE:
+      SetTitle(IDS_TRANSLATE_BUBBLE_TRANSLATED_TITLE);
+      break;
+    case TranslateBubbleModel::VIEW_STATE_ERROR:
+      SetTitle(IDS_TRANSLATE_BUBBLE_COULD_NOT_TRANSLATE_TITLE);
+      break;
+    case TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE:
+      SetTitle(IDS_TRANSLATE_BUBBLE_ADVANCED_SOURCE);
+      break;
+    case TranslateBubbleModel::VIEW_STATE_TARGET_LANGUAGE:
+      SetTitle(IDS_TRANSLATE_BUBBLE_ADVANCED_TARGET);
+      break;
+  }
+}
+
+void TranslateBubbleView::UpdateViewState(
+    TranslateBubbleModel::ViewState view_state) {
+  model_->SetViewState(view_state);
+  SetWindowTitle(view_state);
 }
 
 void TranslateBubbleView::SwitchView(
@@ -1121,7 +1093,7 @@ void TranslateBubbleView::SwitchView(
 
   SwitchTabForViewState(view_state);
 
-  model_->SetViewState(view_state);
+  UpdateViewState(view_state);
   if (view_state == TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE ||
       view_state == TranslateBubbleModel::VIEW_STATE_TARGET_LANGUAGE)
     UpdateAdvancedView();

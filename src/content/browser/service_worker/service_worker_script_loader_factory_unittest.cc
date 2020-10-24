@@ -6,7 +6,6 @@
 
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -32,7 +31,6 @@ class ServiceWorkerScriptLoaderFactoryTest : public testing::Test {
   void SetUp() override {
     helper_ = std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath());
     ServiceWorkerContextCore* context = helper_->context();
-    context->storage()->LazyInitializeForTest();
 
     scope_ = GURL("https://host/scope");
     script_url_ = GURL("https://host/script.js");
@@ -133,16 +131,16 @@ class ServiceWorkerScriptLoaderFactoryCopyResumeTest
 
   void SetUp() override {
     ServiceWorkerScriptLoaderFactoryTest::SetUp();
-    WriteToDiskCacheWithIdSync(helper_->context()->storage(), script_url_,
-                               kOldResourceId, kOldHeaders, kOldData,
-                               std::string());
+    WriteToDiskCacheWithIdSync(helper_->context()->GetStorageControl(),
+                               script_url_, kOldResourceId, kOldHeaders,
+                               kOldData, std::string());
   }
 
   void CheckResponse(const std::string& expected_body) {
     // The response should also be stored in the storage.
     EXPECT_TRUE(ServiceWorkerUpdateCheckTestUtils::VerifyStoredResponse(
         version_->script_cache_map()->LookupResourceId(script_url_),
-        helper_->context()->storage(), expected_body));
+        helper_->context()->GetStorageControl(), expected_body));
 
     EXPECT_TRUE(client_.has_received_response());
     EXPECT_TRUE(client_.response_body().is_valid());

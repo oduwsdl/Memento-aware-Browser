@@ -30,7 +30,7 @@
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chromeos/input_method/assistive_window_controller.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
-#include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
+#include "chrome/browser/chromeos/input_method/component_extension_ime_manager_delegate_impl.h"
 #include "chrome/browser/chromeos/input_method/ui/assistive_delegate.h"
 #include "chrome/browser/chromeos/input_method/ui/input_method_menu_item.h"
 #include "chrome/browser/chromeos/input_method/ui/input_method_menu_manager.h"
@@ -46,6 +46,7 @@
 #include "components/user_manager/user_manager.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
+#include "ui/base/ime/chromeos/component_extension_ime_manager_delegate.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/fake_ime_keyboard.h"
 #include "ui/base/ime/chromeos/ime_bridge.h"
@@ -946,7 +947,7 @@ InputMethodManagerImpl::InputMethodManagerImpl(
   }
   // Initializes the system IME list.
   std::unique_ptr<ComponentExtensionIMEManagerDelegate> comp_delegate(
-      new ComponentExtensionIMEManagerImpl());
+      new ComponentExtensionIMEManagerDelegateImpl());
   component_extension_ime_manager_->Initialize(std::move(comp_delegate));
   const InputMethodDescriptors& descriptors =
       component_extension_ime_manager_->GetAllIMEAsInputMethodDescriptor();
@@ -1145,7 +1146,7 @@ void InputMethodManagerImpl::LoadNecessaryComponentExtensions(
             unfiltered_input_method_id)) {
       // Legacy IMEs or xkb layouts are alwayes active.
       state->active_input_method_ids.push_back(unfiltered_input_method_id);
-    } else if (component_extension_ime_manager_->IsWhitelisted(
+    } else if (component_extension_ime_manager_->IsAllowlisted(
                    unfiltered_input_method_id)) {
       if (enable_extension_loading_) {
         component_extension_ime_manager_->LoadComponentExtensionIME(
@@ -1264,12 +1265,11 @@ void InputMethodManagerImpl::CandidateWindowClosed() {
 }
 
 void InputMethodManagerImpl::AssistiveWindowButtonClicked(
-    ui::ime::ButtonId id,
-    ui::ime::AssistiveWindowType type) const {
+    const ui::ime::AssistiveWindowButton& button) const {
   ui::IMEEngineHandlerInterface* engine =
       ui::IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
-    engine->AssistiveWindowButtonClicked(id, type);
+    engine->AssistiveWindowButtonClicked(button);
 }
 
 void InputMethodManagerImpl::ImeMenuActivationChanged(bool is_active) {

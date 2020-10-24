@@ -89,8 +89,9 @@ class AutofillHandler {
   void OnFormsSeen(const std::vector<FormData>& forms,
                    const base::TimeTicks timestamp);
 
-  // Invoked when focus is no longer on form.
-  virtual void OnFocusNoLongerOnForm() = 0;
+  // Invoked when focus is no longer on form. |had_interacted_form| indicates
+  // whether focus was previously on a form with which the user had interacted.
+  virtual void OnFocusNoLongerOnForm(bool had_interacted_form) = 0;
 
   // Invoked when |form| has been filled with the value given by
   // SendFormDataToRenderer.
@@ -141,12 +142,17 @@ class AutofillHandler {
 
   AutofillDriver* driver() { return driver_; }
 
-#if defined(UNIT_TEST)
+#ifdef UNIT_TEST
   // A public wrapper that calls |mutable_form_structures| for testing purposes
   // only.
   std::map<FormRendererId, std::unique_ptr<FormStructure>>*
   mutable_form_structures_for_test() {
     return mutable_form_structures();
+  }
+
+  // A public wrapper that calls |ParseForm| for testing purposes only.
+  FormStructure* ParseFormForTest(const FormData& form) {
+    return ParseForm(form, nullptr);
   }
 #endif
 
@@ -187,7 +193,7 @@ class AutofillHandler {
                                 const base::TimeTicks timestamp) = 0;
 
   // Invoked when forms from OnFormsSeen() has been parsed to |form_structures|.
-  virtual void OnFormsParsed(const std::vector<FormStructure*>& form_structures,
+  virtual void OnFormsParsed(const std::vector<const FormData*>& forms,
                              const base::TimeTicks timestamp) = 0;
 
   // Returns the number of FormStructures with the given |form_signature| and
@@ -205,6 +211,9 @@ class AutofillHandler {
   // the returned form structure to the |form_structures_|.
   FormStructure* ParseForm(const FormData& form,
                            const FormStructure* cached_form);
+
+  // Returns the page language, if available.
+  virtual std::string GetPageLanguage() const;
 
   bool value_from_dynamic_change_form_ = false;
 

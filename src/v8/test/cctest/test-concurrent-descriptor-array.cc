@@ -8,6 +8,7 @@
 #include "src/handles/local-handles-inl.h"
 #include "src/handles/persistent-handles.h"
 #include "src/heap/heap.h"
+#include "src/heap/local-heap-inl.h"
 #include "src/heap/local-heap.h"
 #include "test/cctest/cctest.h"
 #include "test/cctest/heap/heap-utils.h"
@@ -19,11 +20,11 @@ static constexpr int kNumHandles = kHandleBlockSize * 2 + kHandleBlockSize / 2;
 
 namespace {
 
-class PersistentHandlesThread final : public v8::base::Thread {
+class ConcurrentSearchThread final : public v8::base::Thread {
  public:
-  PersistentHandlesThread(Heap* heap, std::vector<Handle<JSObject>> handles,
-                          std::unique_ptr<PersistentHandles> ph,
-                          Handle<Name> name, base::Semaphore* sema_started)
+  ConcurrentSearchThread(Heap* heap, std::vector<Handle<JSObject>> handles,
+                         std::unique_ptr<PersistentHandles> ph,
+                         Handle<Name> name, base::Semaphore* sema_started)
       : v8::base::Thread(base::Thread::Options("ThreadWithLocalHeap")),
         heap_(heap),
         handles_(std::move(handles)),
@@ -32,13 +33,12 @@ class PersistentHandlesThread final : public v8::base::Thread {
         sema_started_(sema_started) {}
 
   void Run() override {
-    LocalHeap local_heap(heap_, std::move(ph_));
+    LocalHeap local_heap(heap_, ThreadKind::kBackground, std::move(ph_));
+    UnparkedScope unparked_scope(&local_heap);
     LocalHandleScope scope(&local_heap);
-    Address object = handles_[0]->ptr();
 
     for (int i = 0; i < kNumHandles; i++) {
-      handles_.push_back(
-          Handle<JSObject>::cast(local_heap.NewPersistentHandle(object)));
+      handles_.push_back(local_heap.NewPersistentHandle(handles_[0]));
     }
 
     sema_started_->Signal();
@@ -49,7 +49,7 @@ class PersistentHandlesThread final : public v8::base::Thread {
       Handle<Map> map(handle->map(), &local_heap);
 
       Handle<DescriptorArray> descriptors(
-          map->synchronized_instance_descriptors(), &local_heap);
+          map->instance_descriptors(kAcquireLoad), &local_heap);
       bool is_background_thread = true;
       InternalIndex const number =
           descriptors->Search(*name_, *map, is_background_thread);
@@ -57,11 +57,9 @@ class PersistentHandlesThread final : public v8::base::Thread {
     }
 
     CHECK_EQ(handles_.size(), kNumHandles * 2);
-
-    CHECK(!ph_);
-    ph_ = local_heap.DetachPersistentHandles();
   }
 
+ private:
   Heap* heap_;
   std::vector<Handle<JSObject>> handles_;
   std::unique_ptr<PersistentHandles> ph_;
@@ -71,8 +69,8 @@ class PersistentHandlesThread final : public v8::base::Thread {
 
 // Uses linear search on a flat object, with up to 8 elements.
 TEST(LinearSearchFlatObject) {
+  heap::EnsureFlagLocalHeapsEnabled();
   CcTest::InitializeVM();
-  FLAG_local_heaps = true;
   Isolate* isolate = CcTest::i_isolate();
 
   std::unique_ptr<PersistentHandles> ph = isolate->NewPersistentHandles();
@@ -92,17 +90,16 @@ TEST(LinearSearchFlatObject) {
                                                     NONE)
       .Check();
 
-  Address object = js_object->ptr();
   for (int i = 0; i < kNumHandles; i++) {
-    handles.push_back(Handle<JSObject>::cast(ph->NewHandle(object)));
+    handles.push_back(ph->NewHandle(js_object));
   }
 
-  Handle<Name> persistent_name = Handle<Name>::cast(ph->NewHandle(name->ptr()));
+  Handle<Name> persistent_name = ph->NewHandle(name);
 
   base::Semaphore sema_started(0);
 
   // Pass persistent handles to background thread.
-  std::unique_ptr<PersistentHandlesThread> thread(new PersistentHandlesThread(
+  std::unique_ptr<ConcurrentSearchThread> thread(new ConcurrentSearchThread(
       isolate->heap(), std::move(handles), std::move(ph), persistent_name,
       &sema_started));
   CHECK(thread->Start());
@@ -124,8 +121,8 @@ TEST(LinearSearchFlatObject) {
 
 // Uses linear search on a flat object, which has more than 8 elements.
 TEST(LinearSearchFlatObject_ManyElements) {
+  heap::EnsureFlagLocalHeapsEnabled();
   CcTest::InitializeVM();
-  FLAG_local_heaps = true;
   Isolate* isolate = CcTest::i_isolate();
 
   std::unique_ptr<PersistentHandles> ph = isolate->NewPersistentHandles();
@@ -157,17 +154,16 @@ TEST(LinearSearchFlatObject_ManyElements) {
   }
   CHECK_GT(js_object->map().NumberOfOwnDescriptors(), 8);
 
-  Address object = js_object->ptr();
   for (int i = 0; i < kNumHandles; i++) {
-    handles.push_back(Handle<JSObject>::cast(ph->NewHandle(object)));
+    handles.push_back(ph->NewHandle(js_object));
   }
 
-  Handle<Name> persistent_name = Handle<Name>::cast(ph->NewHandle(name->ptr()));
+  Handle<Name> persistent_name = ph->NewHandle(name);
 
   base::Semaphore sema_started(0);
 
   // Pass persistent handles to background thread.
-  std::unique_ptr<PersistentHandlesThread> thread(new PersistentHandlesThread(
+  std::unique_ptr<ConcurrentSearchThread> thread(new ConcurrentSearchThread(
       isolate->heap(), std::move(handles), std::move(ph), persistent_name,
       &sema_started));
   CHECK(thread->Start());

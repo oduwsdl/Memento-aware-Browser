@@ -43,6 +43,7 @@
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -51,11 +52,12 @@
 #endif
 
 namespace blink {
-namespace mojom {
-class RendererPreferences;
+namespace web_pref {
+struct WebPreferences;
 }
 struct Manifest;
 struct UserAgentOverride;
+struct RendererPreferences;
 }  // namespace blink
 
 namespace base {
@@ -146,6 +148,12 @@ class WebContents : public PageNavigator,
     // when creating a named window (e.g. <a target="foo"> or
     // window.open('', 'bar')).
     std::string main_frame_name;
+
+    // New window starts from the initial empty document. When created by an
+    // opener, the latter can request an initial navigation attempt to be made.
+    // This is the url specified in: `window.open(initial_popup_url, ...)`.
+    // This is empty otherwise.
+    GURL initial_popup_url;
 
     // True if the contents should be initially hidden.
     bool initially_hidden;
@@ -246,6 +254,12 @@ class WebContents : public PageNavigator,
   // render view host's delegate isn't a WebContents.
   CONTENT_EXPORT static WebContents* FromRenderViewHost(RenderViewHost* rvh);
 
+  // Returns the WebContents for the RenderFrameHost. It is unsafe to call this
+  // function with an invalid (e.g. destructed) `rfh`.
+  // Warning: Be careful when `rfh->IsCurrent()` is false, since this implies
+  // that `rfh` may not be visible to the user (in bfcache or pending deletion),
+  // so it should not be triggering state changes that affect the whole
+  // WebContents.
   CONTENT_EXPORT static WebContents* FromRenderFrameHost(RenderFrameHost* rfh);
 
   // Returns the WebContents associated with the |frame_tree_node_id|. This may
@@ -366,13 +380,13 @@ class WebContents : public PageNavigator,
   // handler.
   virtual void ClosePage() = 0;
 
-  // Returns the currently active fullscreen widget. If there is none, returns
-  // nullptr.
-  virtual RenderWidgetHostView* GetFullscreenRenderWidgetHostView() = 0;
-
   // Returns the theme color for the underlying content as set by the
   // theme-color meta tag if any.
   virtual base::Optional<SkColor> GetThemeColor() = 0;
+
+  // Returns the background color for the underlying content as set by CSS if
+  // any.
+  virtual base::Optional<SkColor> GetBackgroundColor() = 0;
 
   // Returns the committed WebUI if one exists, otherwise the pending one.
   virtual WebUI* GetWebUI() = 0;
@@ -414,10 +428,9 @@ class WebContents : public PageNavigator,
 
   virtual void SetAccessibilityMode(ui::AXMode mode) = 0;
 
-  virtual base::string16 DumpAccessibilityTree(
+  virtual std::string DumpAccessibilityTree(
       bool internal,
-      std::vector<content::AccessibilityTreeFormatter::PropertyFilter>
-          property_filters) = 0;
+      std::vector<ui::AXPropertyFilter> property_filters) = 0;
 
   // A callback that takes a string which contains accessibility event
   // information.
@@ -508,6 +521,9 @@ class WebContents : public PageNavigator,
                                       bool stay_hidden) = 0;
   virtual void DecrementCapturerCount(bool stay_hidden) = 0;
   virtual bool IsBeingCaptured() = 0;
+  // Returns true if there is any active capturer that called
+  // IncrementCaptureCount() with |stay_hidden|==false.
+  virtual bool IsBeingVisiblyCaptured() = 0;
 
   // Indicates/Sets whether all audio output from this WebContents is muted.
   virtual bool IsAudioMuted() = 0;
@@ -519,6 +535,10 @@ class WebContents : public PageNavigator,
   // Indicates whether any frame in the WebContents is connected to a Bluetooth
   // Device.
   virtual bool IsConnectedToBluetoothDevice() = 0;
+
+  // Indicates whether any frame in the WebContents is scanning for Bluetooth
+  // devices.
+  virtual bool IsScanningForBluetoothDevices() = 0;
 
   // Indicates whether any frame in the WebContents is connected to a serial
   // port.
@@ -574,12 +594,12 @@ class WebContents : public PageNavigator,
 
   // This function checks *all* frames in this WebContents (not just the main
   // frame) and returns true if at least one frame has either a beforeunload or
-  // an unload handler.
+  // an unload/pagehide/visibilitychange handler.
   //
   // The value of this may change over time. For example, if true and the
   // beforeunload listener is executed and allows the user to exit, then this
   // returns false.
-  virtual bool NeedToFireBeforeUnloadOrUnload() = 0;
+  virtual bool NeedToFireBeforeUnloadOrUnloadEvents() = 0;
 
   // Runs the beforeunload handler for the main frame and all its subframes.
   // See also ClosePage in RenderViewHostImpl, which runs the unload handler.
@@ -615,6 +635,10 @@ class WebContents : public PageNavigator,
   // This value may change over time due to portal activation and adoption.
   virtual bool IsPortal() = 0;
 
+  // If |IsPortal()| is true, returns this WebContents' portal host's
+  // WebContents. Otherwise, returns nullptr.
+  virtual WebContents* GetPortalHostWebContents() = 0;
+
   // Returns the outer WebContents frame, the same frame that this WebContents
   // was attached in AttachToOuterWebContentsFrame().
   virtual RenderFrameHost* GetOuterWebContentsFrame() = 0;
@@ -645,10 +669,6 @@ class WebContents : public PageNavigator,
 
   // Invoked when visible security state changes.
   virtual void DidChangeVisibleSecurityState() = 0;
-
-  // Notify this WebContents that the preferences have changed. This will send
-  // an IPC to all the renderer processes associated with this WebContents.
-  virtual void NotifyPreferencesChanged() = 0;
 
   // Sends the current preferences to all renderer processes for the current
   // page.
@@ -726,6 +746,12 @@ class WebContents : public PageNavigator,
 
   // Get the bounds of the View, relative to the parent.
   virtual gfx::Rect GetViewBounds() = 0;
+
+  // Resize a WebContents to |new_bounds|.
+  virtual void Resize(const gfx::Rect& new_bounds) = 0;
+
+  // Get the size of a WebContents.
+  virtual gfx::Size GetSize() = 0;
 
   // Returns the current drop data, if any.
   virtual DropData* GetDropData() = 0;
@@ -808,7 +834,7 @@ class WebContents : public PageNavigator,
   virtual const std::string& GetContentsMimeType() = 0;
 
   // Returns the settings which get passed to the renderer.
-  virtual blink::mojom::RendererPreferences* GetMutableRendererPrefs() = 0;
+  virtual blink::RendererPreferences* GetMutableRendererPrefs() = 0;
 
   // Tells the tab to close now. The tab will take care not to close until it's
   // out of nested run loops.
@@ -840,6 +866,10 @@ class WebContents : public PageNavigator,
   // Wrapper around GotResponseToLockMouseRequest to fit into
   // ChromeWebViewPermissionHelperDelegate's structure.
   virtual void GotLockMousePermissionResponse(bool allowed) = 0;
+
+  // Drop the mouse lock if it is currently locked, or reject an
+  // outstanding request if it is pending.
+  virtual void DropMouseLockForTesting() = 0;
 
   // Called when the response to a keyboard mouse lock request has arrived.
   // Returns false if the request is no longer valid, otherwise true.
@@ -949,7 +979,59 @@ class WebContents : public PageNavigator,
   virtual void GetManifest(GetManifestCallback callback) = 0;
 
   // Returns whether the renderer is in fullscreen mode.
-  virtual bool IsFullscreenForCurrentTab() = 0;
+  virtual bool IsFullscreen() = 0;
+
+  // Returns a copy of the current WebPreferences associated with this
+  // WebContents. If it does not exist, this will create one and send the newly
+  // computed value to all renderers.
+  // Note that this will not trigger a recomputation of WebPreferences if it
+  // already exists - this will return the last computed/set value of
+  // WebPreferences. If we want to guarantee that the value reflects the current
+  // state of the WebContents, NotifyPreferencesChanged() should be called
+  // before calling this.
+  virtual const blink::web_pref::WebPreferences&
+  GetOrCreateWebPreferences() = 0;
+
+  // Notify this WebContents that the preferences have changed, so it needs to
+  // recompute the current WebPreferences based on the current state of the
+  // WebContents, etc. This will send an IPC to all the renderer processes
+  // associated with this WebContents.
+  // Note that this will do this by creating a new WebPreferences with default
+  // values, then recomputing some of the attributes based on current states.
+  // This means if there's any value previously set through SetWebPreferences
+  // which does not have special recomputation logic in either
+  // WebContentsImpl::ComputeWebPreferences or
+  // ContentBrowserClient::OverrideWebkitPrefs, it will return back to its
+  // default value whenever this function is called.
+  virtual void NotifyPreferencesChanged() = 0;
+
+  // Sets the WebPreferences to |prefs|. This will send an IPC to all the
+  // renderer processes associated with this WebContents.
+  // Note that this is different from NotifyPreferencesChanged, which recomputes
+  // the WebPreferences based on the current state of things. Instead, we're
+  // setting this to a specific value. This also means that if we trigger a
+  // recomputation of WebPreferences after this, the WebPreferences value will
+  // be overridden. if there's any value previously set through
+  // SetWebPreferences which does not have special recomputation logic in either
+  // WebContentsImpl::ComputeWebPreferences or
+  // ContentBrowserClient::OverrideWebkitPrefs, it will return back to its
+  // default value, which might be different from the value we set it to here.
+  // If you want to use this function outside of tests, consider adding
+  // recomputation logic in either of those functions.
+  // TODO(rakina): Try to make values set through this function stick even after
+  // recomputations.
+  virtual void SetWebPreferences(
+      const blink::web_pref::WebPreferences& prefs) = 0;
+
+  // Passes current web preferences to all renderer in this WebContents after
+  // possibly recomputing them as follows: all "fast" preferences (those not
+  // requiring slow platform/device polling) are recomputed unconditionally; the
+  // remaining "slow" ones are recomputed only if they have not been computed
+  // before.
+  //
+  // This method must be called if any state that affects web preferences has
+  // changed so that it can be recomputed and sent to the renderer.
+  virtual void OnWebPreferencesChanged() = 0;
 
   // Requests the renderer to exit fullscreen.
   // |will_cause_resize| indicates whether the fullscreen change causes a
@@ -969,8 +1051,13 @@ class WebContents : public PageNavigator,
   // Otherwise, if the action should cause fullscreen to be prohibited for a
   // span of time (e.g. a UI element attached to the WebContents), keep the
   // closure alive for that duration.
-  virtual base::ScopedClosureRunner ForSecurityDropFullscreen()
-      WARN_UNUSED_RESULT = 0;
+  //
+  // If |display_id| is valid, only WebContentses on that specific screen will
+  // exit fullscreen; the scoped prohibition will still apply to all displays.
+  // This supports sites using cross-screen window placement capabilities to
+  // retain fullscreen and open or place a window on another screen.
+  virtual base::ScopedClosureRunner ForSecurityDropFullscreen(
+      int64_t display_id = display::kInvalidDisplayId) WARN_UNUSED_RESULT = 0;
 
   // Unblocks requests from renderer for a newly created window. This is
   // used in showCreatedWindow() or sometimes later in cases where
@@ -985,7 +1072,6 @@ class WebContents : public PageNavigator,
   virtual int GetCurrentlyPlayingVideoCount() = 0;
 
   virtual base::Optional<gfx::Size> GetFullscreenVideoSize() = 0;
-  virtual bool IsFullscreen() = 0;
 
   // Tells the renderer to clear the focused element (if any).
   virtual void ClearFocusedElement() = 0;

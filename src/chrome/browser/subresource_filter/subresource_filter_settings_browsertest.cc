@@ -12,7 +12,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
-#include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -24,6 +23,8 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
+#include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -127,7 +128,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
   policy.Set(policy::key::kAdsSettingForIntrusiveAdsSites,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
              policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
-             std::make_unique<base::Value>(CONTENT_SETTING_ALLOW), nullptr);
+             base::Value(CONTENT_SETTING_ALLOW), nullptr);
   UpdatePolicy(policy);
 
   ui_test_utils::NavigateToURL(browser(), url);
@@ -141,7 +142,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
   policy.Set(policy::key::kAdsSettingForIntrusiveAdsSites,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
              policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
-             std::make_unique<base::Value>(CONTENT_SETTING_BLOCK), nullptr);
+             base::Value(CONTENT_SETTING_BLOCK), nullptr);
   UpdatePolicy(policy);
 
   ui_test_utils::NavigateToURL(browser(), url);
@@ -250,8 +251,9 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
   EXPECT_TRUE(client->did_show_ui_for_navigation());
 
-  histogram_tester.ExpectBucketCount(kSubresourceFilterActionsHistogram,
-                                     SubresourceFilterAction::kUISuppressed, 0);
+  histogram_tester.ExpectBucketCount(
+      kSubresourceFilterActionsHistogram,
+      subresource_filter::SubresourceFilterAction::kUISuppressed, 0);
 
   // Second load should not trigger the UI, but should still filter content.
   ui_test_utils::NavigateToURL(browser(), a_url);
@@ -259,8 +261,9 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
 
   EXPECT_EQ(client->did_show_ui_for_navigation(), false);
 
-  histogram_tester.ExpectBucketCount(kSubresourceFilterActionsHistogram,
-                                     SubresourceFilterAction::kUISuppressed, 1);
+  histogram_tester.ExpectBucketCount(
+      kSubresourceFilterActionsHistogram,
+      subresource_filter::SubresourceFilterAction::kUISuppressed, 1);
 
   ConfigureAsPhishingURL(b_url);
 
@@ -273,13 +276,15 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
 
   // Fast forward the clock, and a_url should trigger the UI again.
   raw_clock->Advance(
-      SubresourceFilterContentSettingsManager::kDelayBeforeShowingInfobarAgain);
+      subresource_filter::SubresourceFilterContentSettingsManager::
+          kDelayBeforeShowingInfobarAgain);
   ui_test_utils::NavigateToURL(browser(), a_url);
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
   EXPECT_TRUE(client->did_show_ui_for_navigation());
 
-  histogram_tester.ExpectBucketCount(kSubresourceFilterActionsHistogram,
-                                     SubresourceFilterAction::kUISuppressed, 1);
+  histogram_tester.ExpectBucketCount(
+      kSubresourceFilterActionsHistogram,
+      subresource_filter::SubresourceFilterAction::kUISuppressed, 1);
 }
 
 }  // namespace subresource_filter

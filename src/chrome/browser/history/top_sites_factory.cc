@@ -21,7 +21,6 @@
 #include "chrome/browser/history/history_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/ntp_features.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -113,7 +112,7 @@ scoped_refptr<history::TopSites> TopSitesFactory::BuildTopSites(
                                            ServiceAccessType::EXPLICIT_ACCESS);
   scoped_refptr<history::TopSitesImpl> top_sites(new history::TopSitesImpl(
       profile->GetPrefs(), history_service, prepopulated_page_list,
-      base::Bind(CanAddURLToHistory)));
+      base::BindRepeating(CanAddURLToHistory)));
   top_sites->Init(context->GetPath().Append(history::kTopSitesFilename));
   return top_sites;
 }

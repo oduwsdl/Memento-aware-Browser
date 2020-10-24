@@ -4,10 +4,10 @@
 
 #include "base/profiler/native_unwinder_android.h"
 
+#include <sys/mman.h>
+
 #include <string>
 #include <vector>
-
-#include <sys/mman.h>
 
 #include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Elf.h"
 #include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Memory.h"
@@ -31,20 +31,21 @@
 namespace base {
 namespace {
 
-class AndroidModule : public ModuleCache::Module {
+class NonElfModule : public ModuleCache::Module {
  public:
-  AndroidModule(unwindstack::MapInfo* map_info)
+  NonElfModule(unwindstack::MapInfo* map_info)
       : start_(map_info->start),
-        size_(map_info->end - map_info->start),
-        build_id_(map_info->GetBuildID()),
-        name_(map_info->name) {}
-  ~AndroidModule() override = default;
+        size_(map_info->end - start_),
+        map_info_name_(map_info->name) {}
+  ~NonElfModule() override = default;
 
   uintptr_t GetBaseAddress() const override { return start_; }
 
-  std::string GetId() const override { return build_id_; }
+  std::string GetId() const override { return std::string(); }
 
-  FilePath GetDebugBasename() const override { return FilePath(name_); }
+  FilePath GetDebugBasename() const override {
+    return FilePath(map_info_name_);
+  }
 
   // Gets the size of the module.
   size_t GetSize() const override { return size_; }
@@ -52,10 +53,10 @@ class AndroidModule : public ModuleCache::Module {
   // True if this is a native module.
   bool IsNative() const override { return true; }
 
+ private:
   const uintptr_t start_;
   const size_t size_;
-  const std::string build_id_;
-  const std::string name_;
+  const std::string map_info_name_;
 };
 
 std::unique_ptr<unwindstack::Regs> CreateFromRegisterContext(
@@ -76,10 +77,10 @@ void CopyToRegisterContext(unwindstack::Regs* regs,
                            RegisterContext* thread_context) {
 #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
   memcpy(reinterpret_cast<void*>(&thread_context->arm_r0), regs->RawData(),
-         unwindstack::ARM_REG_LAST * sizeof(uint32_t));
+         unwindstack::ARM_REG_LAST * sizeof(uintptr_t));
 #elif defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_64_BITS)
   memcpy(reinterpret_cast<void*>(&thread_context->regs[0]), regs->RawData(),
-         unwindstack::ARM64_REG_LAST * sizeof(uint32_t));
+         unwindstack::ARM64_REG_LAST * sizeof(uintptr_t));
 #else   // #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
   NOTREACHED();
 #endif  // #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
@@ -116,18 +117,6 @@ std::unique_ptr<unwindstack::Maps> NativeUnwinderAndroid::CreateMaps() {
 std::unique_ptr<unwindstack::Memory>
 NativeUnwinderAndroid::CreateProcessMemory() {
   return unwindstack::Memory::CreateLocalProcessMemory();
-}
-
-void NativeUnwinderAndroid::AddInitialModulesFromMaps(
-    const unwindstack::Maps& memory_regions_map,
-    ModuleCache* module_cache) {
-  for (const auto& region : memory_regions_map) {
-    // Only add executable regions.
-    if (!(region->flags & PROT_EXEC))
-      continue;
-    module_cache->AddCustomNativeModule(
-        std::make_unique<AndroidModule>(region.get()));
-  }
 }
 
 NativeUnwinderAndroid::NativeUnwinderAndroid(
@@ -213,7 +202,9 @@ UnwindResult NativeUnwinderAndroid::TryUnwind(RegisterContext* thread_context,
       regs->set_dex_pc(0);
     }
 
-    // Add the frame to |stack|.
+    // Add the frame to |stack|. Must use GetModuleForAddress rather than
+    // GetExistingModuleForAddress because the unwound-to address may be in a
+    // module associated with a different unwinder.
     const ModuleCache::Module* module =
         module_cache->GetModuleForAddress(regs->pc());
     stack->emplace_back(regs->pc(), module);
@@ -224,18 +215,49 @@ UnwindResult NativeUnwinderAndroid::TryUnwind(RegisterContext* thread_context,
   return UnwindResult::UNRECOGNIZED_FRAME;
 }
 
+// static
+void NativeUnwinderAndroid::AddInitialModulesFromMaps(
+    const unwindstack::Maps& memory_regions_map,
+    ModuleCache* module_cache) {
+  // The effect of this loop is to create modules for the executable regions in
+  // the memory map. Regions composing a mapped ELF file are handled specially
+  // however: for just one module extending from the ELF base address to the
+  // *last* executable region backed by the file is implicitly created by
+  // ModuleCache. This avoids duplicate module instances covering the same
+  // in-memory module in the case that a module has multiple mmapped executable
+  // regions.
+  for (const std::unique_ptr<unwindstack::MapInfo>& region :
+       memory_regions_map) {
+    if (!(region->flags & PROT_EXEC))
+      continue;
+
+    // Use the standard ModuleCache POSIX module representation for ELF files.
+    // This call returns the containing ELF module for the region, creating it
+    // if it doesn't exist.
+    if (module_cache->GetModuleForAddress(
+            static_cast<uintptr_t>(region->start))) {
+      continue;
+    }
+
+    // Non-ELF modules are represented with NonElfModule.
+    module_cache->AddCustomNativeModule(
+        std::make_unique<NonElfModule>(region.get()));
+  }
+}
+
 void NativeUnwinderAndroid::EmitDexFrame(uintptr_t dex_pc,
                                          ModuleCache* module_cache,
                                          std::vector<Frame>* stack) const {
-  const ModuleCache::Module* module = module_cache->GetModuleForAddress(dex_pc);
+  const ModuleCache::Module* module =
+      module_cache->GetExistingModuleForAddress(dex_pc);
   if (!module) {
     // The region containing |dex_pc| may not be in |module_cache| since it's
     // usually not executable (.dex file). Since non-executable regions
     // are used much less commonly, it's lazily added here instead of from
-    // AddInitialModules().
+    // AddInitialModulesFromMaps().
     unwindstack::MapInfo* map_info = memory_regions_map_->Find(dex_pc);
     if (map_info) {
-      auto new_module = std::make_unique<AndroidModule>(map_info);
+      auto new_module = std::make_unique<NonElfModule>(map_info);
       module = new_module.get();
       module_cache->AddCustomNativeModule(std::move(new_module));
     }

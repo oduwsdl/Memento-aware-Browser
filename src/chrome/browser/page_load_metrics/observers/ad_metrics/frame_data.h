@@ -5,7 +5,12 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_AD_METRICS_FRAME_DATA_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_AD_METRICS_FRAME_DATA_H_
 
+#include <stdint.h>
+
+#include <unordered_map>
+
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
@@ -37,9 +42,14 @@ const int kMaxPeakWindowedPercent = 50;
 
 }  // namespace heavy_ad_thresholds
 
+// TODO(crbug.com/1136068): Remove inheritance/base class here in favor of
+// separate composable classes for the various types of computations that need
+// to be performed (cpu, network, memory).
+
 // Store information received for a frame on the page. FrameData is meant
-// to represent a frame along with it's entire subtree.
-class FrameData {
+// to represent a frame along with its entire subtree, FrameTreeData, or
+// an aggregation of frame data for a navigation, AggregateFrameData.
+class FrameData : public base::SupportsWeakPtr<FrameData> {
  public:
   // The origin of the ad relative to the main frame's origin.
   // Note: Logged to UMA, keep in sync with CrossOriginAdStatus in enums.xml.
@@ -51,12 +61,20 @@ class FrameData {
     kMaxValue = kCross,
   };
 
-  // Whether or not the ad frame has a display: none styling.
-  enum FrameVisibility {
-    kNonVisible = 0,
-    kVisible = 1,
-    kAnyVisibility = 2,
-    kMaxValue = kAnyVisibility,
+  // Origin status further broken down by whether the ad frame tree has a
+  // frame currently not render-throttled (i.e. is eligible to be painted).
+  // Note that since creative origin status is based on first contentful paint,
+  // only ad frame trees with unknown creative origin status can be without any
+  // frames that are eligible to be painted.
+  // Note: Logged to UMA, keep in sync with
+  // CrossOriginCreativeStatusWithThrottling in enums.xml.
+  // Add new entries to the end, and do not renumber.
+  enum class OriginStatusWithThrottling {
+    kUnknownAndUnthrottled = 0,
+    kUnknownAndThrottled = 1,
+    kSameAndUnthrottled = 2,
+    kCrossAndUnthrottled = 3,
+    kMaxValue = kCrossAndUnthrottled,
   };
 
   // The type of heavy ad this frame is classified as per the Heavy Ad
@@ -69,6 +87,27 @@ class FrameData {
     kMaxValue = kPeakCpu,
   };
 
+  // Controls what values of HeavyAdStatus will be cause an unload due to the
+  // intervention.
+  enum class HeavyAdUnloadPolicy {
+    kNetworkOnly = 0,
+    kCpuOnly = 1,
+    kAll = 2,
+  };
+
+  // Represents how a frame should be treated by the heavy ad intervention.
+  enum class HeavyAdAction {
+    // Nothing should be done, i.e. the ad is not heavy or the intervention is
+    // not enabled.
+    kNone = 0,
+    // The ad should be reported as heavy.
+    kReport = 1,
+    // The ad should be reported and unloaded.
+    kUnload = 2,
+    // The frame was ignored, i.e. the blocklist was full or page is a reload.
+    kIgnored = 3,
+  };
+
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused. For any additions, also update the
   // corresponding PageEndReason enum in enums.xml.
@@ -76,6 +115,16 @@ class FrameData {
     kNoActivation = 0,
     kReceivedActivation = 1,
     kMaxValue = kReceivedActivation,
+  };
+
+  // TODO(crbug.com/1136068): The above enums should sit in FrameTreeData.
+
+  // Whether or not the ad frame has a display: none styling.
+  enum FrameVisibility {
+    kNonVisible = 0,
+    kVisible = 1,
+    kAnyVisibility = 2,
+    kMaxValue = kAnyVisibility,
   };
 
   // High level categories of mime types for resources loaded by the frame.
@@ -111,18 +160,8 @@ class FrameData {
   static ResourceMimeType GetResourceMimeType(
       const page_load_metrics::mojom::ResourceDataUpdatePtr& resource);
 
-  // |root_frame_tree_node_id| is the root frame of the subtree that FrameData
-  // stores information for.
-  explicit FrameData(FrameTreeNodeId root_frame_tree_node_id,
-                     int heavy_ad_network_threshold_noise);
-  ~FrameData();
-
-  // Update the metadata of this frame if it is being navigated.
-  void UpdateForNavigation(content::RenderFrameHost* render_frame_host,
-                           bool frame_navigated);
-
   // Updates the number of bytes loaded in the frame given a resource load.
-  void ProcessResourceLoadInFrame(
+  virtual void ProcessResourceLoadInFrame(
       const page_load_metrics::mojom::ResourceDataUpdatePtr& resource,
       int process_id,
       const page_load_metrics::ResourceTracker& resource_tracker);
@@ -132,21 +171,9 @@ class FrameData {
   // they were loaded.
   void AdjustAdBytes(int64_t unaccounted_ad_bytes, ResourceMimeType mime_type);
 
-  // Sets the size of the frame and updates its visibility state.
-  void SetFrameSize(gfx::Size frame_size_);
-
-  // Sets the display state of the frame and updates its visibility state.
-  void SetDisplayState(bool is_display_none);
-
   // Update CPU usage information with the timing |update| that was received at
   // |update_time|.
   void UpdateCpuUsage(base::TimeTicks update_time, base::TimeDelta update);
-
-  // Returns whether the heavy ad intervention was triggered on this frame.
-  // This intervention is triggered when the frame is considered heavy, has not
-  // received user gesture, and the intervention feature is enabled. This
-  // returns true the first time the criteria is met, and false afterwards.
-  bool MaybeTriggerHeavyAdIntervention();
 
   // Get the cpu usage for the appropriate activation period.
   base::TimeDelta GetActivationCpuUsage(UserActivationStatus status) const;
@@ -154,43 +181,7 @@ class FrameData {
   // Get total cpu usage for the frame.
   base::TimeDelta GetTotalCpuUsage() const;
 
-  // Records that the sticky user activation bit has been set on the frame.
-  // Cannot be unset.  Also records the page foreground duration at that time.
-  void SetReceivedUserActivation(base::TimeDelta foreground_duration);
-
-  // Get the unactivated duration for this frame.
-  base::TimeDelta pre_activation_foreground_duration() const {
-    return pre_activation_foreground_duration_;
-  }
-
-  // Updates the max frame depth of this frames tree given the newly seen child
-  // frame.
-  void MaybeUpdateFrameDepth(content::RenderFrameHost* render_frame_host);
-
-  // Returns whether the frame should be recorded for UKMs and UMA histograms.
-  // A frame should be recorded if it has non-zero bytes or non-zero CPU usage
-  // (or both).
-  bool ShouldRecordFrameForMetrics() const;
-
-  // Construct and record an AdFrameLoad UKM event for this frame. Only records
-  // events for frames that have non-zero bytes.
-  void RecordAdFrameLoadUkmEvent(ukm::SourceId source_id) const;
-
   int peak_windowed_cpu_percent() const { return peak_windowed_cpu_percent_; }
-
-  base::Optional<base::TimeTicks> peak_window_start_time() const {
-    return peak_window_start_time_;
-  }
-
-  FrameTreeNodeId root_frame_tree_node_id() const {
-    return root_frame_tree_node_id_;
-  }
-
-  OriginStatus origin_status() const { return origin_status_; }
-
-  OriginStatus creative_origin_status() const {
-    return creative_origin_status_;
-  }
 
   size_t bytes() const { return bytes_; }
 
@@ -204,43 +195,10 @@ class FrameData {
 
   size_t GetAdNetworkBytesForMime(ResourceMimeType mime_type) const;
 
-  UserActivationStatus user_activation_status() const {
-    return user_activation_status_;
-  }
+ protected:
+  FrameData();
+  virtual ~FrameData();
 
-  bool frame_navigated() const { return frame_navigated_; }
-
-  FrameVisibility visibility() const { return visibility_; }
-
-  gfx::Size frame_size() const { return frame_size_; }
-
-  MediaStatus media_status() const { return media_status_; }
-
-  void set_media_status(MediaStatus media_status) {
-    media_status_ = media_status;
-  }
-
-  void set_timing(page_load_metrics::mojom::PageLoadTimingPtr timing) {
-    timing_ = std::move(timing);
-  }
-
-  base::Optional<base::TimeDelta> FirstContentfulPaint() const {
-    if (!timing_ || timing_->paint_timing.is_null())
-      return base::nullopt;
-    return timing_->paint_timing->first_contentful_paint;
-  }
-
-  void set_creative_origin_status(OriginStatus creative_origin_status) {
-    creative_origin_status_ = creative_origin_status;
-  }
-
-  HeavyAdStatus heavy_ad_status() const { return heavy_ad_status_; }
-
-  HeavyAdStatus heavy_ad_status_with_noise() const {
-    return heavy_ad_status_with_noise_;
-  }
-
- private:
   // Time updates for the frame with a timestamp indicating when they arrived.
   // Used for windowed cpu load reporting.
   struct CpuUpdateData {
@@ -250,32 +208,19 @@ class FrameData {
         : update_time(time), usage_info(info) {}
   };
 
-  // Updates whether or not this frame meets the criteria for visibility.
-  void UpdateFrameVisibility();
-
-  // Computes whether this frame meets the criteria for being a heavy frame for
-  // the heavy ad intervention and returns the type of threshold hit if any.
-  // If |use_network_threshold_noise| is set,
-  // |heavy_ad_network_threshold_noise_| is added to the network threshold when
-  // computing the status.
-  HeavyAdStatus ComputeHeavyAdStatus(bool use_network_threshold_noise) const;
-
-  // The frame tree node id of root frame of the subtree that |this| is
-  // tracking information for.
-  const FrameTreeNodeId root_frame_tree_node_id_;
-
-  // The most recently updated timing received for this frame.
-  page_load_metrics::mojom::PageLoadTimingPtr timing_;
-
-  // Number of resources loaded by the frame (both complete and incomplete).
-  int num_resources_ = 0;
+  // Update the peak window variables given the current update and update time.
+  void UpdatePeakWindowedPercent(
+      base::TimeDelta cpu_usage_update,
+      base::TimeTicks update_time,
+      base::TimeDelta& current_window_total,
+      base::queue<CpuUpdateData>& current_window_updates,
+      int& peak_windowed_percent);
 
   // Total bytes used to load resources in the frame, including headers.
-  size_t bytes_;
-  size_t network_bytes_;
+  size_t bytes_ = 0u;
+  size_t network_bytes_ = 0u;
 
-  // Records ad network bytes for different mime type resources loaded in the
-  // frame.
+  // Ad network bytes for different mime type resources loaded in the frame.
   size_t ad_bytes_by_mime_[static_cast<size_t>(ResourceMimeType::kMaxValue) +
                            1] = {0};
 
@@ -283,9 +228,6 @@ class FrameData {
   base::TimeDelta cpu_by_activation_period_
       [static_cast<size_t>(UserActivationStatus::kMaxValue) + 1] = {
           base::TimeDelta(), base::TimeDelta()};
-
-  // Duration of time the page spent in the foreground before activation.
-  base::TimeDelta pre_activation_foreground_duration_;
 
   // The cpu time spent in the current window.
   base::TimeDelta cpu_total_for_current_window_;
@@ -298,15 +240,6 @@ class FrameData {
   // The peak windowed cpu load during the unactivated period.
   int peak_windowed_cpu_percent_ = 0;
 
-  // The time that the peak cpu usage window started at.
-  base::Optional<base::TimeTicks> peak_window_start_time_;
-
-  // The depth of this FrameData's root frame.
-  unsigned int root_frame_depth_ = 0;
-
-  // The max depth of this frames frame tree.
-  unsigned int frame_depth_ = 0;
-
   // Tracks the number of bytes that were used to load resources which were
   // detected to be ads inside of this frame. For ad frames, these counts should
   // match |frame_bytes| and |frame_network_bytes|.
@@ -314,32 +247,316 @@ class FrameData {
   size_t ad_network_bytes_ = 0u;
 
   // The number of bytes that are same origin to the root ad frame.
-  size_t same_origin_bytes_;
-  OriginStatus origin_status_;
-  OriginStatus creative_origin_status_;
-  bool frame_navigated_;
-  UserActivationStatus user_activation_status_;
-  bool is_display_none_;
-  FrameVisibility visibility_;
+  size_t same_origin_bytes_ = 0u;
+
+  // Whether or not the frame has been activated (clicked on). Aggregated frame
+  // data should never have this set to activated.
+  UserActivationStatus user_activation_status_ =
+      UserActivationStatus::kNoActivation;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameData);
+};
+
+// FrameTreeData represents a frame along with its entire subtree, and is
+// typically used to capture an ad creative. It stores frame-specific
+// information (such as size, activation status, and origin), which is typically
+// specific to the top frame in the tree.
+class FrameTreeData : public FrameData {
+ public:
+  // |root_frame_tree_node_id| is the root frame of the subtree that FrameData
+  // stores information for.
+  explicit FrameTreeData(FrameTreeNodeId root_frame_tree_node_id,
+                         int heavy_ad_network_threshold_noise);
+  ~FrameTreeData() override;
+
+  // From FrameData
+  void ProcessResourceLoadInFrame(
+      const page_load_metrics::mojom::ResourceDataUpdatePtr& resource,
+      int process_id,
+      const page_load_metrics::ResourceTracker& resource_tracker) override;
+
+  // Update the metadata of this frame if it is being navigated.
+  void UpdateForNavigation(content::RenderFrameHost* render_frame_host,
+                           bool frame_navigated);
+
+  // Returns how the frame should be treated by the heavy ad intervention.
+  // This intervention is triggered when the frame is considered heavy, has not
+  // received user gesture, and the intervention feature is enabled. This
+  // returns an action the first time the criteria is met, and false afterwards.
+  HeavyAdAction MaybeTriggerHeavyAdIntervention();
+
+  // Updates the max frame depth of this frames tree given the newly seen child
+  // frame.
+  void MaybeUpdateFrameDepth(content::RenderFrameHost* render_frame_host);
+
+  // Updates the recorded bytes of memory used by V8 inside this ad frame tree
+  // and returns the delta in memory bytes usage.
+  int64_t UpdateMemoryUsage(FrameTreeNodeId frame_node_id,
+                            uint64_t current_bytes);
+
+  // Returns the delta in memory bytes usage due to frame deletion.
+  int64_t OnFrameDeleted(FrameTreeNodeId frame_node_id);
+
+  // Returns whether the frame should be recorded for UKMs and UMA histograms.
+  // A frame should be recorded if it has non-zero bytes or non-zero CPU usage
+  // (or both).
+  bool ShouldRecordFrameForMetrics() const;
+
+  // Construct and record an AdFrameLoad UKM event for this frame. Only records
+  // events for frames that have non-zero bytes.
+  void RecordAdFrameLoadUkmEvent(ukm::SourceId source_id) const;
+
+  // Returns the corresponding enum value to split the creative origin status
+  // by whether any frame in the ad frame tree is throttled.
+  OriginStatusWithThrottling GetCreativeOriginStatusWithThrottling() const;
+
+  FrameTreeNodeId root_frame_tree_node_id() const {
+    return root_frame_tree_node_id_;
+  }
+
+  OriginStatus origin_status() const { return origin_status_; }
+
+  OriginStatus creative_origin_status() const {
+    return creative_origin_status_;
+  }
+
+  base::Optional<base::TimeDelta> first_eligible_to_paint() const {
+    return first_eligible_to_paint_;
+  }
+
+  base::Optional<base::TimeDelta> earliest_first_contentful_paint() const {
+    return earliest_first_contentful_paint_;
+  }
+  // Sets the size of the frame and updates its visibility state.
+  void SetFrameSize(gfx::Size frame_size_);
+
+  // Sets the display state of the frame and updates its visibility state.
+  void SetDisplayState(bool is_display_none);
+
+  uint64_t v8_current_memory_bytes_used() const {
+    return v8_current_memory_bytes_used_;
+  }
+
+  uint64_t v8_max_memory_bytes_used() const {
+    return v8_max_memory_bytes_used_;
+  }
+
+  UserActivationStatus user_activation_status() const {
+    return user_activation_status_;
+  }
+
+  bool frame_navigated() const { return frame_navigated_; }
+
+  FrameVisibility visibility() const { return visibility_; }
+
+  gfx::Size frame_size() const { return frame_size_; }
+
+  bool is_display_none() const { return is_display_none_; }
+
+  MediaStatus media_status() const { return media_status_; }
+
+  void set_media_status(MediaStatus media_status) {
+    media_status_ = media_status;
+  }
+
+  // Records that the sticky user activation bit has been set on the frame.
+  // Cannot be unset.
+  void set_received_user_activation() {
+    user_activation_status_ = UserActivationStatus::kReceivedActivation;
+  }
+
+  void set_creative_origin_status(OriginStatus creative_origin_status) {
+    creative_origin_status_ = creative_origin_status;
+  }
+
+  void SetFirstEligibleToPaint(base::Optional<base::TimeDelta> time_stamp);
+
+  // Returns whether a new FCP is set.
+  bool SetEarliestFirstContentfulPaint(
+      base::Optional<base::TimeDelta> time_stamp);
+
+  HeavyAdStatus heavy_ad_status() const { return heavy_ad_status_; }
+
+  HeavyAdStatus heavy_ad_status_with_noise() const {
+    return heavy_ad_status_with_noise_;
+  }
+
+  HeavyAdStatus heavy_ad_status_with_policy() const {
+    return heavy_ad_status_with_policy_;
+  }
+
+  void set_heavy_ad_action(HeavyAdAction heavy_ad_action) {
+    heavy_ad_action_ = heavy_ad_action;
+  }
+
+ private:
+  // Updates whether or not this frame meets the criteria for visibility.
+  void UpdateFrameVisibility();
+
+  // Computes whether this frame meets the criteria for being a heavy frame for
+  // the heavy ad intervention and returns the type of threshold hit if any.
+  // If |use_network_threshold_noise| is set,
+  // |heavy_ad_network_threshold_noise_| is added to the network threshold when
+  // computing the status. |policy| controls which thresholds are used when
+  // computing the status.
+  HeavyAdStatus ComputeHeavyAdStatus(bool use_network_threshold_noise,
+                                     HeavyAdUnloadPolicy policy) const;
+
+  // The frame tree node id of root frame of the subtree that |this| is
+  // tracking information for.
+  const FrameTreeNodeId root_frame_tree_node_id_;
+
+  // Number of resources loaded by the frame (both complete and incomplete).
+  int num_resources_ = 0;
+
+  // The depth of this FrameData's root frame.
+  unsigned int root_frame_depth_ = 0;
+
+  // The max depth of this frames frame tree.
+  unsigned int frame_depth_ = 0;
+
+  // The origin status of the ad frame for the creative.
+  OriginStatus origin_status_ = OriginStatus::kUnknown;
+
+  // The origin status of the creative content.
+  OriginStatus creative_origin_status_ = OriginStatus::kUnknown;
+
+  // Whether or not the frame has been navigated, to determine if there's an
+  // ongoing request.
+  bool frame_navigated_ = false;
+
+  // Whether or not the frame is set to not display.
+  bool is_display_none_ = false;
+
+  // Whether or not a creative is large enough to be visible by the user.
+  FrameVisibility visibility_ = FrameVisibility::kVisible;
+
+  // The size of the frame.
   gfx::Size frame_size_;
-  url::Origin origin_;
+
+  // Whether or not the frame has started media playing.
   MediaStatus media_status_ = MediaStatus::kNotPlayed;
+
+  // Earliest time that any frame in the ad frame tree has reported
+  // as being eligible to paint, or null if all frames are currently
+  // render-throttled and there hasn't been a first paint. Note that this
+  // timestamp and the implied throttling status are best-effort.
+  base::Optional<base::TimeDelta> first_eligible_to_paint_;
+
+  // The smallest FCP seen for any any frame in this ad frame tree, if a
+  // frame has painted.
+  base::Optional<base::TimeDelta> earliest_first_contentful_paint_;
 
   // Indicates whether or not this frame met the criteria for the heavy ad
   // intervention.
-  HeavyAdStatus heavy_ad_status_;
+  HeavyAdStatus heavy_ad_status_ = HeavyAdStatus::kNone;
 
   // Same as |heavy_ad_status_| but uses additional additive noise for the
   // network threshold. A frame can be considered a heavy ad by
   // |heavy_ad_status_| but not |heavy_ad_status_with_noise_|. The noised
   // threshold is used when determining whether to actually trigger the
   // intervention.
-  HeavyAdStatus heavy_ad_status_with_noise_;
+  HeavyAdStatus heavy_ad_status_with_noise_ = HeavyAdStatus::kNone;
+
+  // Same as |heavy_ad_status_with_noise_| but selectively uses thresholds based
+  // on a field trial param. This status is used to control when the
+  // intervention fires.
+  HeavyAdStatus heavy_ad_status_with_policy_ = HeavyAdStatus::kNone;
+
+  // The action taken on this frame by the heavy ad intervention if any.
+  HeavyAdAction heavy_ad_action_ = HeavyAdAction::kNone;
 
   // Number of bytes of noise that should be added to the network threshold.
   const int heavy_ad_network_threshold_noise_;
 
-  DISALLOW_COPY_AND_ASSIGN(FrameData);
+  // Per-frame memory usage by V8 in bytes. Memory data is stored per subframe
+  // in the frame tree.
+  std::unordered_map<FrameTreeNodeId, uint64_t> v8_current_memory_usage_map_;
+
+  // Maximum concurrent memory usage by V8 in this ad frame tree.
+  // Tracks max value of |v8_current_memory_bytes_used_| for this frame tree.
+  uint64_t v8_max_memory_bytes_used_ = 0UL;
+
+  // Current concurrent memory usage by V8 in this ad frame tree.
+  // Computation is best-effort, as it relies on individual asynchronous
+  // per-frame measurements, some of which may be stale.
+  uint64_t v8_current_memory_bytes_used_ = 0UL;
+};
+
+// AggregateFrameData stores information in aggregate for all the frames during
+// a navigation.  It contains specific information on various types of frames
+// and their usage, such as ad vs. non-ad frames, as well as information about
+// usage across the navigation as a whole.
+class AggregateFrameData : public FrameData {
+ public:
+  AggregateFrameData();
+  ~AggregateFrameData() override;
+
+  // Update the Aggregate non-ad peak windowed cpu percent.
+  void UpdateNonAdCpuUsage(base::TimeTicks update_time, base::TimeDelta update);
+
+  int peak_windowed_non_ad_cpu_percent() const {
+    return peak_windowed_non_ad_cpu_percent_;
+  }
+
+  // TODO(crbug.com/1136068): The size_t members below should probably be of
+  // type int64.
+  struct AdDataByVisibility {
+    // The following members are aggregated when metrics are recorded for a
+    // frame on navigation.
+    size_t bytes = 0;
+    size_t network_bytes = 0;
+    size_t frames = 0;
+    base::TimeDelta cpu_time = base::TimeDelta();
+    // the following members are used for v8 memory consumption and are
+    // aggregated as memory updates are received.
+    uint64_t current_memory = 0;
+    uint64_t max_memory = 0;
+  };
+
+  // Returns the appropriate AdDataByVisibility given the |visibility|.
+  const AdDataByVisibility& get_ad_data_by_visibility(
+      FrameVisibility visibility) {
+    return ad_data_[static_cast<size_t>(visibility)];
+  }
+
+  // These functions update the various members of AdDataByVisibility given the
+  // visibility.  They all increment the current value.
+  void update_ad_bytes_by_visibility(FrameVisibility visibility, size_t bytes) {
+    ad_data_[static_cast<size_t>(visibility)].bytes += bytes;
+  }
+  void update_ad_network_bytes_by_visibility(FrameVisibility visibility,
+                                             size_t network_bytes) {
+    ad_data_[static_cast<size_t>(visibility)].network_bytes += network_bytes;
+  }
+  void update_ad_frames_by_visibility(FrameVisibility visibility,
+                                      size_t frames) {
+    ad_data_[static_cast<size_t>(visibility)].frames += frames;
+  }
+  void update_ad_cpu_time_by_visibility(FrameVisibility visibility,
+                                        base::TimeDelta cpu_time) {
+    ad_data_[static_cast<size_t>(visibility)].cpu_time += cpu_time;
+  }
+
+  // This updates the current memory and adjusts the max memory if necessary.
+  void update_ad_memory_by_visibility(FrameVisibility visibility,
+                                      int64_t memory) {
+    auto& ad_data = ad_data_[static_cast<size_t>(visibility)];
+    ad_data.current_memory += memory;
+    if (ad_data.current_memory > ad_data.max_memory)
+      ad_data.max_memory = ad_data.current_memory;
+  }
+
+ private:
+  // Stores the data for ads on a page according to visibility.
+  AdDataByVisibility
+      ad_data_[static_cast<size_t>(FrameVisibility::kMaxValue) + 1] = {};
+
+  // Since peak information cannot be computed by the difference of aggregated
+  // values, information for non-ad peak content must be retained.
+  base::TimeDelta non_ad_cpu_total_for_current_window_;
+  base::queue<CpuUpdateData> non_ad_cpu_updates_for_current_window_;
+  int peak_windowed_non_ad_cpu_percent_ = 0;
 };
 
 #endif  // CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_AD_METRICS_FRAME_DATA_H_

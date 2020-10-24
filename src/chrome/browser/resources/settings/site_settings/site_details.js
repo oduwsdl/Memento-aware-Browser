@@ -95,19 +95,10 @@ Polymer({
     },
 
     /** @private */
-    enableNativeFileSystemWriteContentSetting_: {
+    enableFontAccessContentSetting_: {
       type: Boolean,
       value() {
-        return loadTimeData.getBoolean(
-            'enableNativeFileSystemWriteContentSetting');
-      }
-    },
-
-    /** @private */
-    enableInsecureContentContentSetting_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('enableInsecureContentContentSetting');
+        return loadTimeData.getBoolean('enableFontAccessContentSetting');
       }
     },
 

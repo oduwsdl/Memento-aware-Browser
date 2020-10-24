@@ -53,7 +53,8 @@ class ContentPasswordManagerDriver
   int GetId() const override;
   void FillPasswordForm(
       const autofill::PasswordFormFillData& form_data) override;
-  void InformNoSavedCredentials() override;
+  void InformNoSavedCredentials(
+      bool should_show_popup_without_passwords) override;
   void FormEligibleForGenerationFound(
       const autofill::PasswordFormGenerationData& form) override;
   void GeneratedPasswordAccepted(const base::string16& password) override;
@@ -99,9 +100,7 @@ class ContentPasswordManagerDriver
       const std::vector<autofill::FormData>& visible_forms_data,
       bool did_stop_loading) override;
   void PasswordFormSubmitted(const autofill::FormData& form_data) override;
-  void ShowManualFallbackForSaving(
-      const autofill::FormData& form_data) override;
-  void HideManualFallbackForSaving() override;
+  void InformAboutUserInput(const autofill::FormData& form_data) override;
   void SameDocumentNavigation(autofill::mojom::SubmissionIndicatorEvent
                                   submission_indication_event) override;
   void RecordSavePasswordProgress(const std::string& log) override;

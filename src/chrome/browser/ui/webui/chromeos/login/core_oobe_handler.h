@@ -16,7 +16,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_mode_detector.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/oobe_configuration.h"
 #include "chrome/browser/chromeos/login/version_info_updater.h"
@@ -59,8 +58,6 @@ class CoreOobeView {
   virtual void ResetSignInUI(bool force_online) = 0;
   virtual void ClearUserPodPassword() = 0;
   virtual void RefocusCurrentPod() = 0;
-  virtual void SetUsageStats(bool checked) = 0;
-  virtual void SetTpmPassword(const std::string& tmp_password) = 0;
   virtual void ClearErrors() = 0;
   virtual void ReloadContent(const base::DictionaryValue& dictionary) = 0;
   virtual void ReloadEulaContent(const base::DictionaryValue& dictionary) = 0;
@@ -70,12 +67,7 @@ class CoreOobeView {
   virtual void SetDialogPaddingMode(DialogPaddingMode mode) = 0;
   virtual void ShowDeviceResetScreen() = 0;
   virtual void ShowEnableAdbSideloadingScreen() = 0;
-  virtual void ShowEnableDebuggingScreen() = 0;
-  virtual void InitDemoModeDetection() = 0;
-  virtual void StopDemoModeDetection() = 0;
   virtual void UpdateKeyboardState() = 0;
-  virtual void ShowActiveDirectoryPasswordChangeScreen(
-      const std::string& username) = 0;
 };
 
 // The core handler for Javascript messages related to the "oobe" view.
@@ -118,8 +110,8 @@ class CoreOobeHandler : public BaseWebUIHandler,
     return show_oobe_ui_;
   }
 
-  // If |reboot_on_shutdown| is true, the reboot button becomes visible
-  // and the shutdown button is hidden. Vice versa if |reboot_on_shutdown| is
+  // If `reboot_on_shutdown` is true, the reboot button becomes visible
+  // and the shutdown button is hidden. Vice versa if `reboot_on_shutdown` is
   // false.
   void UpdateShutdownAndRebootVisibility(bool reboot_on_shutdown);
 
@@ -139,8 +131,6 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void ResetSignInUI(bool force_online) override;
   void ClearUserPodPassword() override;
   void RefocusCurrentPod() override;
-  void SetUsageStats(bool checked) override;
-  void SetTpmPassword(const std::string& tmp_password) override;
   void ClearErrors() override;
   void ReloadContent(const base::DictionaryValue& dictionary) override;
   void ReloadEulaContent(const base::DictionaryValue& dictionary) override;
@@ -150,12 +140,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void SetDialogPaddingMode(CoreOobeView::DialogPaddingMode mode) override;
   void ShowDeviceResetScreen() override;
   void ShowEnableAdbSideloadingScreen() override;
-  void ShowEnableDebuggingScreen() override;
-  void ShowActiveDirectoryPasswordChangeScreen(
-      const std::string& username) override;
 
-  void InitDemoModeDetection() override;
-  void StopDemoModeDetection() override;
   void UpdateKeyboardState() override;
 
   // ash::TabletModeObserver:
@@ -168,26 +153,22 @@ class CoreOobeHandler : public BaseWebUIHandler,
   // Handlers for JS WebUI messages.
   void HandleHideOobeDialog();
   void HandleInitialized();
-  void HandleSkipUpdateEnrollAfterEula();
   void HandleUpdateCurrentScreen(const std::string& screen);
   void HandleSetDeviceRequisition(const std::string& requisition);
   void HandleSkipToLoginForTesting();
   void HandleSkipToUpdateForTesting();
   void HandleLaunchHelpApp(double help_topic_id);
   void HandleToggleResetScreen();
-  void HandleEnableDebuggingScreen();
-  void HandleSetOobeBootstrappingSlave();
   void HandleGetPrimaryDisplayNameForTesting(const base::ListValue* args);
   void GetPrimaryDisplayNameCallback(
       const base::Value& callback_id,
       std::vector<ash::mojom::DisplayUnitInfoPtr> info_list);
-  void HandleSetupDemoMode();
   // Handles demo mode setup for tests. Accepts 'online' and 'offline' as
-  // |demo_config|.
+  // `demo_config`.
   void HandleStartDemoModeSetupForTesting(const std::string& demo_config);
   void HandleUpdateOobeUIState(int state);
 
-  // Shows the reset screen if |is_reset_allowed| and updates the
+  // Shows the reset screen if `is_reset_allowed` and updates the
   // tpm_firmware_update in settings.
   void HandleToggleResetScreenCallback(
       bool is_reset_allowed,
@@ -217,8 +198,6 @@ class CoreOobeHandler : public BaseWebUIHandler,
 
   // Help application used for help dialogs.
   scoped_refptr<HelpAppLauncher> help_app_;
-
-  DemoModeDetector demo_mode_detector_;
 
   mojo::Remote<ash::mojom::CrosDisplayConfigController> cros_display_config_;
 

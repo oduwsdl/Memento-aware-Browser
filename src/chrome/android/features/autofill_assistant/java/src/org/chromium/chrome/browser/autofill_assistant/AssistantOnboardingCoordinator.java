@@ -21,11 +21,11 @@ import org.chromium.chrome.browser.autofill_assistant.metrics.OnBoarding;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayModel;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayState;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
-import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 
@@ -41,17 +41,22 @@ class AssistantOnboardingCoordinator {
     private static final String BUY_MOVIE_TICKETS_INTENT = "BUY_MOVIE_TICKET";
     private static final String RENT_CAR_INTENT = "RENT_CAR";
     private static final String FLIGHTS_INTENT = "FLIGHTS_CHECKIN";
+    private static final String PASSWORD_CHANGE_INTENT = "PASSWORD_CHANGE";
     private static final String FOOD_ORDERING_INTENT = "FOOD_ORDERING";
+    private static final String FOOD_ORDERING_PICKUP_INTENT = "FOOD_ORDERING_PICKUP";
+    private static final String FOOD_ORDERING_DELIVERY_INTENT = "FOOD_ORDERING_DELIVERY";
     private static final String VOICE_SEARCH_INTENT = "TELEPORT";
+    private static final String SHOPPING_INTENT = "SHOPPING";
+    private static final String SHOPPING_ASSISTED_CHECKOUT_INTENT = "SHOPPING_ASSISTED_CHECKOUT";
     private static final String BUY_MOVIE_TICKETS_EXPERIMENT_ID = "4363482";
 
     private final String mExperimentIds;
     private final Map<String, String> mParameters;
     private final Context mContext;
     private final BottomSheetController mController;
-    private final ChromeFullscreenManager mFullscreenManager;
+    private final BrowserControlsStateProvider mBrowserControls;
     private final CompositorViewHolder mCompositorViewHolder;
-    private final ScrimView mScrimView;
+    private final ScrimCoordinator mScrimCoordinator;
 
     @Nullable
     private AssistantOverlayCoordinator mOverlayCoordinator;
@@ -64,15 +69,15 @@ class AssistantOnboardingCoordinator {
 
     AssistantOnboardingCoordinator(String experimentIds, Map<String, String> parameters,
             Context context, BottomSheetController controller,
-            ChromeFullscreenManager fullscreenManager, CompositorViewHolder compositorViewHolder,
-            ScrimView scrimView) {
+            BrowserControlsStateProvider browserControls, CompositorViewHolder compositorViewHolder,
+            ScrimCoordinator scrim) {
         mExperimentIds = experimentIds;
         mParameters = parameters;
         mContext = context;
         mController = controller;
-        mFullscreenManager = fullscreenManager;
+        mBrowserControls = browserControls;
         mCompositorViewHolder = compositorViewHolder;
-        mScrimView = scrimView;
+        mScrimCoordinator = scrim;
     }
 
     /**
@@ -92,17 +97,25 @@ class AssistantOnboardingCoordinator {
         // If there's a tab, cover it with an overlay.
         AssistantOverlayModel overlayModel = new AssistantOverlayModel();
         mOverlayCoordinator = new AssistantOverlayCoordinator(
-                mContext, mFullscreenManager, mCompositorViewHolder, mScrimView, overlayModel);
+                mContext, mBrowserControls, mCompositorViewHolder, mScrimCoordinator, overlayModel);
         overlayModel.set(AssistantOverlayModel.STATE, AssistantOverlayState.FULL);
 
-        mContent = new AssistantBottomSheetContent(mContext, () -> {
-            onUserAction(
-                    /* accept= */ false, callback, OnBoarding.OB_NO_ANSWER,
-                    DropOutReason.ONBOARDING_BACK_BUTTON_CLICKED);
-            return true;
-        });
+        mContent =
+                new AssistantBottomSheetContent(mContext, () -> new AssistantBottomBarDelegate() {
+                    @Override
+                    public boolean onBackButtonPressed() {
+                        onUserAction(
+                                /* accept= */ false, callback, OnBoarding.OB_NO_ANSWER,
+                                DropOutReason.ONBOARDING_BACK_BUTTON_CLICKED);
+                        return true;
+                    }
+
+                    @Override
+                    public void onBottomSheetClosedWithSwipe() {}
+                });
         initContent(callback);
-        BottomSheetUtils.showContentAndExpand(mController, mContent, mAnimate);
+        BottomSheetUtils.showContentAndMaybeExpand(
+                mController, mContent, /* shouldExpand = */ true, mAnimate);
     }
 
     /**
@@ -224,6 +237,8 @@ class AssistantOnboardingCoordinator {
                 titleTextView.setText(R.string.autofill_assistant_init_message_flights_checkin);
                 break;
             case FOOD_ORDERING_INTENT:
+            case FOOD_ORDERING_PICKUP_INTENT:
+            case FOOD_ORDERING_DELIVERY_INTENT:
                 termsTextView.setText(R.string.autofill_assistant_init_message_short);
                 titleTextView.setText(R.string.autofill_assistant_init_message_food_ordering);
                 break;
@@ -234,6 +249,15 @@ class AssistantOnboardingCoordinator {
             case RENT_CAR_INTENT:
                 termsTextView.setText(R.string.autofill_assistant_init_message_short);
                 titleTextView.setText(R.string.autofill_assistant_init_message_rent_car);
+                break;
+            case PASSWORD_CHANGE_INTENT:
+                termsTextView.setText(R.string.autofill_assistant_init_message_short);
+                titleTextView.setText(R.string.autofill_assistant_init_message_password_change);
+                break;
+            case SHOPPING_INTENT:
+            case SHOPPING_ASSISTED_CHECKOUT_INTENT:
+                termsTextView.setText(R.string.autofill_assistant_init_message_short);
+                titleTextView.setText(R.string.autofill_assistant_init_message_shopping);
                 break;
             case BUY_MOVIE_TICKETS_INTENT:
                 if (Arrays.asList(mExperimentIds.split(","))

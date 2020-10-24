@@ -4,8 +4,11 @@
 
 #include "chrome/browser/installable/installable_manager.h"
 
+#include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "content/public/common/content_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
@@ -17,14 +20,10 @@ class InstallableManagerUnitTest : public testing::Test {
       : manager_(std::make_unique<InstallableManager>(nullptr)) {}
 
  protected:
-  static base::NullableString16 ToNullableUTF16(const std::string& str) {
-    return base::NullableString16(base::UTF8ToUTF16(str), false);
-  }
-
   static blink::Manifest GetValidManifest() {
     blink::Manifest manifest;
-    manifest.name = ToNullableUTF16("foo");
-    manifest.short_name = ToNullableUTF16("bar");
+    manifest.name = base::ASCIIToUTF16("foo");
+    manifest.short_name = base::ASCIIToUTF16("bar");
     manifest.start_url = GURL("http://example.com");
     manifest.display = blink::mojom::DisplayMode::kStandalone;
 
@@ -71,16 +70,16 @@ TEST_F(InstallableManagerUnitTest, CheckMinimalValidManifest) {
 TEST_F(InstallableManagerUnitTest, ManifestRequiresNameOrShortName) {
   blink::Manifest manifest = GetValidManifest();
 
-  manifest.name = base::NullableString16();
+  manifest.name = base::nullopt;
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 
-  manifest.name = ToNullableUTF16("foo");
-  manifest.short_name = base::NullableString16();
+  manifest.name = base::ASCIIToUTF16("foo");
+  manifest.short_name = base::nullopt;
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 
-  manifest.name = base::NullableString16();
+  manifest.name = base::nullopt;
   EXPECT_FALSE(IsManifestValid(manifest));
   EXPECT_EQ(MANIFEST_MISSING_NAME_OR_SHORT_NAME, GetErrorCode());
 }
@@ -88,16 +87,16 @@ TEST_F(InstallableManagerUnitTest, ManifestRequiresNameOrShortName) {
 TEST_F(InstallableManagerUnitTest, ManifestRequiresNonEmptyNameORShortName) {
   blink::Manifest manifest = GetValidManifest();
 
-  manifest.name = ToNullableUTF16("");
+  manifest.name = base::string16();
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 
-  manifest.name = ToNullableUTF16("foo");
-  manifest.short_name = ToNullableUTF16("");
+  manifest.name = base::ASCIIToUTF16("foo");
+  manifest.short_name = base::string16();
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 
-  manifest.name = ToNullableUTF16("");
+  manifest.name = base::string16();
   EXPECT_FALSE(IsManifestValid(manifest));
   EXPECT_EQ(MANIFEST_MISSING_NAME_OR_SHORT_NAME, GetErrorCode());
 }
@@ -227,7 +226,7 @@ TEST_F(InstallableManagerUnitTest,
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 
   // The icon MUST have IconPurpose::ANY or IconPurpose::Maskable.
-  manifest.icons[0].purpose[0] = IconPurpose::BADGE;
+  manifest.icons[0].purpose[0] = IconPurpose::MONOCHROME;
   EXPECT_FALSE(IsManifestValid(manifest, true, true));
   EXPECT_EQ(MANIFEST_MISSING_SUITABLE_ICON, GetErrorCode());
 
@@ -324,6 +323,56 @@ TEST_F(InstallableManagerUnitTest, ManifestDisplayModes) {
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 
   manifest.display = blink::mojom::DisplayMode::kFullscreen;
+  EXPECT_TRUE(IsManifestValid(manifest));
+  EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+}
+
+class InstallableManagerUnitTest_DisplayOverride
+    : public InstallableManagerUnitTest {
+ public:
+  InstallableManagerUnitTest_DisplayOverride() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kWebAppManifestDisplayOverride);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(InstallableManagerUnitTest_DisplayOverride, ManifestDisplayOverride) {
+  blink::Manifest manifest = GetValidManifest();
+
+  manifest.display_override.push_back(blink::mojom::DisplayMode::kMinimalUi);
+  EXPECT_TRUE(IsManifestValid(manifest));
+  EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+
+  manifest.display_override.push_back(blink::mojom::DisplayMode::kBrowser);
+  EXPECT_TRUE(IsManifestValid(manifest));
+  EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+
+  manifest.display_override.insert(manifest.display_override.begin(),
+                                   blink::mojom::DisplayMode::kStandalone);
+  EXPECT_TRUE(IsManifestValid(manifest));
+  EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+
+  manifest.display_override.insert(manifest.display_override.begin(),
+                                   blink::mojom::DisplayMode::kStandalone);
+  EXPECT_TRUE(IsManifestValid(manifest));
+  EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+
+  manifest.display_override.insert(manifest.display_override.begin(),
+                                   blink::mojom::DisplayMode::kBrowser);
+  EXPECT_TRUE(
+      IsManifestValid(manifest, false /* check_webapp_manifest_display */));
+  EXPECT_FALSE(IsManifestValid(manifest));
+  EXPECT_EQ(MANIFEST_DISPLAY_OVERRIDE_NOT_SUPPORTED, GetErrorCode());
+}
+
+TEST_F(InstallableManagerUnitTest_DisplayOverride, FallbackToBrowser) {
+  blink::Manifest manifest = GetValidManifest();
+
+  manifest.display = blink::mojom::DisplayMode::kBrowser;
+  manifest.display_override.push_back(blink::mojom::DisplayMode::kMinimalUi);
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 }

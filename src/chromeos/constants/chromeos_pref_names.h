@@ -16,6 +16,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kAssistPersonalInfoEnabled[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEmojiSuggestionEnabled[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kEmojiSuggestionEnterpriseAllowed[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kAudioDevicesMute[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kAudioDevicesGainPercent[];
@@ -28,6 +30,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kAudioDevicesState[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kEduCoexistenceId[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEduCoexistenceSecondaryAccountsInvalidationVersion[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kEduCoexistenceToSVersion[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kQuirksClientLastServerCheck[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -46,6 +50,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kLoginDisplayPasswordButtonEnabled[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kSuggestedContentEnabled[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kLauncherResultEverLaunched[];
 
 }  // namespace prefs
 }  // namespace chromeos

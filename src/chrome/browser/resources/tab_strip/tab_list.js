@@ -15,10 +15,9 @@ import {isRTL} from 'chrome://resources/js/util.m.js';
 
 import {CustomElement} from './custom_element.js';
 import {DragManager, DragManagerDelegate} from './drag_manager.js';
-import {TabElement} from './tab.js';
+import {isTabElement, TabElement} from './tab.js';
 import {isTabGroupElement, TabGroupElement} from './tab_group.js';
 import {TabStripEmbedderProxy, TabStripEmbedderProxyImpl} from './tab_strip_embedder_proxy.js';
-import {tabStripOptions} from './tab_strip_options.js';
 import {TabData, TabGroupVisualData, TabsApiProxy, TabsApiProxyImpl} from './tabs_api_proxy.js';
 
 /**
@@ -50,74 +49,81 @@ const LayoutVariable = {
 /**
  * Animates a series of elements to indicate that tabs have moved position.
  * @param {!Element} movedElement
- * @param {?Element} prevSibling, the previousElementSibling before element
- *     was moved
- * @param {?Element} nextSibling, the nextElementSibling before element was
- *     moved
+ * @param {number} prevIndex
+ * @param {number} newIndex
  */
-function animateElementMoved(movedElement, prevSibling, nextSibling) {
-  let horizontalDirection = isRTL() ? -1 : 1;
+function animateElementMoved(movedElement, prevIndex, newIndex) {
+  // Direction is -1 for moving towards a lower index, +1 for moving
+  // towards a higher index. If moving towards a lower index, the TabList needs
+  // to animate everything from the movedElement's current index to its prev
+  // index by traversing the nextElementSibling of each element because the
+  // movedElement is now at a preceding position from all the elements it has
+  // slid across. If moving towards a higher index, the TabList needs to
+  // traverse the previousElementSiblings.
+  const direction = Math.sign(newIndex - prevIndex);
 
-  let elementsToAnimateStart;
-  let elementsToAnimateEnd;
-  if (nextSibling &&
-      movedElement.compareDocumentPosition(nextSibling) &
-          Node.DOCUMENT_POSITION_PRECEDING) {
-    // Element moved towards end of tab strip.
-    elementsToAnimateStart = nextSibling;
-    elementsToAnimateEnd = movedElement.previousElementSibling;
-  } else if (
-      prevSibling &&
-      movedElement.compareDocumentPosition(prevSibling) &
-          Node.DOCUMENT_POSITION_FOLLOWING) {
-    // Element moved towards start of tab strip.
-    elementsToAnimateStart = movedElement.nextElementSibling;
-    elementsToAnimateEnd = prevSibling;
-    horizontalDirection *= -1;
-  } else {
-    // Element did not move.
-    return;
+  /**
+   * @param {!Element} element
+   * @return {?Element}
+   */
+  function getSiblingToAnimate(element) {
+    return direction === -1 ? element.nextElementSibling :
+                              element.previousElementSibling;
+  }
+  let elementToAnimate = getSiblingToAnimate(movedElement);
+  for (let i = newIndex; i !== prevIndex && elementToAnimate; i -= direction) {
+    const elementToAnimatePrevIndex = i;
+    const elementToAnimateNewIndex = i - direction;
+    slideElement(
+        elementToAnimate, elementToAnimatePrevIndex, elementToAnimateNewIndex);
+    elementToAnimate = getSiblingToAnimate(elementToAnimate);
   }
 
-  let elementToAnimate = elementsToAnimateStart;
-  let numOfTabs = 0;
-
-  // Loop through every element from elementsToAnimateStart to
-  // elementsToAnimateEnd and animate each of them.
-  while (elementToAnimate && elementsToAnimateEnd &&
-         elementToAnimate !== elementsToAnimateEnd.nextElementSibling) {
-    slideElement(elementToAnimate, horizontalDirection);
-    elementToAnimate = elementToAnimate.nextElementSibling;
-    numOfTabs++;
-  }
-
-  // Animate the moved TabElement itself the total number of tabs that it
-  // has been moved across.
-  slideElement(movedElement, -1 * horizontalDirection * numOfTabs);
+  slideElement(movedElement, prevIndex, newIndex);
 }
 
 /**
- * Animates the slide of an element across the tab strip.
+ * Animates the slide of an element across the tab strip (both vertically and
+ * horizontally for pinned tabs, and horizontally for other tabs and groups).
  * @param {!Element} element
- * @param {number} horizontalScale
+ * @param {number} prevIndex
+ * @param {number} newIndex
  */
-function slideElement(element, horizontalScale) {
+function slideElement(element, prevIndex, newIndex) {
+  let horizontalMovement = newIndex - prevIndex;
+  let verticalMovement = 0;
+
+  if (isTabElement(element) && element.tab.pinned) {
+    const pinnedTabsPerColumn = 3;
+    const columnChange = Math.floor(newIndex / pinnedTabsPerColumn) -
+        Math.floor(prevIndex / pinnedTabsPerColumn);
+    horizontalMovement = columnChange;
+    verticalMovement =
+        (newIndex - prevIndex) - (columnChange * pinnedTabsPerColumn);
+  }
+
+  horizontalMovement *= isRTL() ? -1 : 1;
+
+  const translateX = `calc(${horizontalMovement * -1} * ` +
+      '(var(--tabstrip-tab-width) + var(--tabstrip-tab-spacing)))';
+  const translateY = `calc(${verticalMovement * -1} * ` +
+      '(var(--tabstrip-tab-height) + var(--tabstrip-tab-spacing)))';
+
   element.isValidDragOverTarget = false;
   const animation = element.animate(
       [
-        {
-          transform: 'translateX(calc(' + horizontalScale + ' ' +
-              '* (var(--tabstrip-tab-width) + var(--tabstrip-tab-spacing))))',
-        },
-        {transform: 'translateX(0)'},
+        {transform: `translate(${translateX}, ${translateY})`},
+        {transform: 'translate(0, 0)'},
       ],
       {
         duration: 120,
         easing: 'ease-out',
       });
-  animation.onfinish = () => {
+  function onComplete() {
     element.isValidDragOverTarget = true;
-  };
+  }
+  animation.oncancel = onComplete;
+  animation.onfinish = onComplete;
 }
 
 /** @implements {DragManagerDelegate} */
@@ -237,16 +243,6 @@ export class TabListElement extends CustomElement {
 
     const dragManager = new DragManager(this);
     dragManager.startObserving();
-
-    if (loadTimeData.getBoolean('showDemoOptions')) {
-      this.$('#demoOptions').style.display = 'block';
-
-      const autoCloseCheckbox = this.$('#autoCloseCheckbox');
-      autoCloseCheckbox.checked = tabStripOptions.autoCloseEnabled;
-      autoCloseCheckbox.addEventListener('change', () => {
-        tabStripOptions.autoCloseEnabled = autoCloseCheckbox.checked;
-      });
-    }
   }
 
   /**
@@ -338,7 +334,9 @@ export class TabListElement extends CustomElement {
 
       this.addWebUIListener_('tab-created', tab => this.onTabCreated_(tab));
       this.addWebUIListener_(
-          'tab-moved', (tabId, newIndex) => this.onTabMoved_(tabId, newIndex));
+          'tab-moved',
+          (tabId, newIndex, pinned) =>
+              this.onTabMoved_(tabId, newIndex, pinned));
       this.addWebUIListener_('tab-removed', tabId => this.onTabRemoved_(tabId));
       this.addWebUIListener_(
           'tab-replaced', (oldId, newId) => this.onTabReplaced_(oldId, newId));
@@ -360,9 +358,6 @@ export class TabListElement extends CustomElement {
           'tab-group-visuals-changed',
           (groupId, visualData) =>
               this.onTabGroupVisualsChanged_(groupId, visualData));
-      this.addWebUIListener_(
-          'tab-group-id-replaced',
-          (oldId, newId) => this.onTabGroupIdReplaced_(oldId, newId));
     });
   }
 
@@ -592,18 +587,6 @@ export class TabListElement extends CustomElement {
   }
 
   /**
-   * @param {string} oldId
-   * @param {string} newId
-   * @private
-   */
-  onTabGroupIdReplaced_(oldId, newId) {
-    const tabGroupElement = this.findTabGroupElement_(oldId);
-    if (tabGroupElement) {
-      tabGroupElement.dataset.groupId = newId;
-    }
-  }
-
-  /**
    * @param {number} tabId
    * @param {number} index
    * @param {string} groupId
@@ -629,13 +612,13 @@ export class TabListElement extends CustomElement {
   /**
    * @param {number} tabId
    * @param {number} newIndex
+   * @param {boolean} pinned
    * @private
    */
-  onTabMoved_(tabId, newIndex) {
+  onTabMoved_(tabId, newIndex, pinned) {
     const movedTab = this.findTabElement_(tabId);
     if (movedTab) {
-      this.placeTabElement(
-          movedTab, newIndex, movedTab.tab.pinned, movedTab.tab.groupId);
+      this.placeTabElement(movedTab, newIndex, pinned, movedTab.tab.groupId);
       if (movedTab.tab.active) {
         this.scrollToTab_(movedTab);
       }
@@ -711,22 +694,14 @@ export class TabListElement extends CustomElement {
   placeTabElement(element, index, pinned, groupId) {
     const isInserting = !element.isConnected;
 
-    // TODO(johntlee): Animate pinned tabs.
-    const shouldAnimate = !pinned && !isInserting;
-
-    // Cache the previous and next element siblings as these will be needed
-    // after the placement to determine which tabs to animate.
-    let initialDomPrevSibling = null, initialDomNextSibling = null;
-    if (!isInserting) {
-      initialDomPrevSibling = element.previousElementSibling;
-      initialDomNextSibling = element.nextElementSibling;
-    }
-
+    const previousIndex = isInserting ? -1 : this.getIndexOfTab(element);
+    const previousParent = element.parentElement;
     this.updateTabElementDomPosition_(element, index, pinned, groupId);
 
-    if (shouldAnimate) {
-      animateElementMoved(
-          element, initialDomPrevSibling, initialDomNextSibling);
+    if (!isInserting && previousParent === element.parentElement) {
+      // Only animate if the tab is being moved within the same parent. Tab
+      // moves that change pinned state or grouped states do not animate.
+      animateElementMoved(element, previousIndex, index);
     }
 
     if (isInserting) {
@@ -739,6 +714,8 @@ export class TabListElement extends CustomElement {
    * @param {number} index
    */
   placeTabGroupElement(element, index) {
+    const previousDomIndex =
+        Array.from(this.unpinnedTabsElement_.children).indexOf(element);
     if (element.isConnected && element.childElementCount &&
         this.getIndexOfTab(
             /** @type {!TabElement} */ (element.firstElementChild)) < index) {
@@ -747,9 +724,6 @@ export class TabListElement extends CustomElement {
       index++;
     }
 
-    const initialDomPrevSibling = element.previousElementSibling;
-    const initialDomNextSibling = element.nextElementSibling;
-
     let elementAtIndex = this.$all('tabstrip-tab')[index];
     if (elementAtIndex && elementAtIndex.parentElement &&
         isTabGroupElement(elementAtIndex.parentElement)) {
@@ -757,7 +731,14 @@ export class TabListElement extends CustomElement {
     }
 
     this.unpinnedTabsElement_.insertBefore(element, elementAtIndex);
-    animateElementMoved(element, initialDomPrevSibling, initialDomNextSibling);
+
+    // Animating the TabGroupElement move should be treated the same as
+    // animating a TabElement. Therefore, treat indices as if they were mere
+    // tabs and do not use the group's model index as they are not as accurate
+    // in representing DOM movements.
+    animateElementMoved(
+        element, previousDomIndex,
+        Array.from(this.unpinnedTabsElement_.children).indexOf(element));
   }
 
   /** @private */

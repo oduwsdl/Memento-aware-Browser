@@ -44,6 +44,9 @@ class ProfileOAuth2TokenServiceDelegateChromeOS
   bool RefreshTokenIsAvailable(const CoreAccountId& account_id) const override;
   void UpdateAuthError(const CoreAccountId& account_id,
                        const GoogleServiceAuthError& error) override;
+  void UpdateAuthErrorInternal(const CoreAccountId& account_id,
+                               const GoogleServiceAuthError& error,
+                               bool fire_auth_error_changed = true);
   GoogleServiceAuthError GetAuthError(
       const CoreAccountId& account_id) const override;
   std::vector<CoreAccountId> GetAccounts() const override;
@@ -80,6 +83,10 @@ class ProfileOAuth2TokenServiceDelegateChromeOS
   // Callback handler for |chromeos::AccountManager::GetAccounts|.
   void OnGetAccounts(
       const std::vector<chromeos::AccountManager::Account>& accounts);
+
+  // Callback handler for |chromeos::AccountManager::HasDummyGaiaToken|.
+  void ContinueTokenUpsertProcessing(const CoreAccountId& account_id,
+                                     bool has_dummy_token);
 
   // Non-owning pointers.
   AccountTrackerService* const account_tracker_service_;

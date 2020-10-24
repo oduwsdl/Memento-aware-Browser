@@ -11,6 +11,7 @@
 
 #include "base/base_export.h"
 #include "base/macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 
 namespace base {
@@ -61,13 +62,50 @@ BASE_EXPORT void ClearCrashKeyString(CrashKeyString* crash_key);
 class BASE_EXPORT ScopedCrashKeyString {
  public:
   ScopedCrashKeyString(CrashKeyString* crash_key, base::StringPiece value);
+  ScopedCrashKeyString(ScopedCrashKeyString&& other);
   ~ScopedCrashKeyString();
 
- private:
-  CrashKeyString* const crash_key_;
+  // Disallow copy and assign.
+  ScopedCrashKeyString(const ScopedCrashKeyString&) = delete;
+  ScopedCrashKeyString& operator=(const ScopedCrashKeyString&) = delete;
 
-  DISALLOW_COPY_AND_ASSIGN(ScopedCrashKeyString);
+  // Disallow move assign to keep the time at which the crash key is cleared
+  // easy to reason about. Assigning over an existing instance would
+  // automatically clear the key instead of at the destruction of the object.
+  ScopedCrashKeyString& operator=(ScopedCrashKeyString&&) = delete;
+
+ private:
+  CrashKeyString* crash_key_;
 };
+
+// Helper macros for putting a local variable crash key on the stack before
+// causing a crash or calling CrashWithoutDumping().
+#define SCOPED_CRASH_KEY_STRING32(category, name, value)                      \
+  static base::debug::CrashKeyString* const crash_key_string_##name =         \
+      base::debug::AllocateCrashKeyString(#category "-" #name,                \
+                                          base::debug::CrashKeySize::Size32); \
+  base::debug::ScopedCrashKeyString crash_scoper_##name(                      \
+      crash_key_string_##name, (value))
+
+#define SCOPED_CRASH_KEY_STRING64(category, name, value)                      \
+  static base::debug::CrashKeyString* const crash_key_string_##name =         \
+      base::debug::AllocateCrashKeyString(#category "-" #name,                \
+                                          base::debug::CrashKeySize::Size64); \
+  base::debug::ScopedCrashKeyString crash_scoper_##name(                      \
+      crash_key_string_##name, (value))
+
+#define SCOPED_CRASH_KEY_STRING256(category, name, value)                      \
+  static base::debug::CrashKeyString* const crash_key_string_##name =          \
+      base::debug::AllocateCrashKeyString(#category "-" #name,                 \
+                                          base::debug::CrashKeySize::Size256); \
+  base::debug::ScopedCrashKeyString crash_scoper_##name(                       \
+      crash_key_string_##name, (value))
+
+#define SCOPED_CRASH_KEY_BOOL(category, name, value) \
+  SCOPED_CRASH_KEY_STRING32(category, name, (value) ? "true" : "false")
+
+#define SCOPED_CRASH_KEY_NUMBER(category, name, value) \
+  SCOPED_CRASH_KEY_STRING32(category, name, base::NumberToString(value))
 
 ////////////////////////////////////////////////////////////////////////////////
 // The following declarations are used to initialize the crash key system

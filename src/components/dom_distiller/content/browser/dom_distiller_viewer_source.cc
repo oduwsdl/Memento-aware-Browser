@@ -30,7 +30,6 @@
 #include "components/dom_distiller/core/viewer.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/back_forward_cache.h"
-#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -38,11 +37,11 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/web_preferences.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/url_util.h"
-#include "net/url_request/url_request.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace dom_distiller {
@@ -60,10 +59,6 @@ class DomDistillerViewerSource::RequestViewerHandle
   ~RequestViewerHandle() override;
 
   // content::WebContentsObserver implementation:
-#if !defined(OS_ANDROID)
-  void DidStartNavigation(
-      content::NavigationHandle* navigation_handle) override;
-#endif  // !defined(OS_ANDROID)
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
   void RenderProcessGone(base::TerminationStatus status) override;
@@ -90,11 +85,6 @@ class DomDistillerViewerSource::RequestViewerHandle
   // Temporary store of pending JavaScript if the page isn't ready to receive
   // data from distillation.
   std::string buffer_;
-
-#if !defined(OS_ANDROID)
-  bool remove_previous_navigation_ = false;
-  int last_distiller_page_index_ = -1;
-#endif  // !defined(OS_ANDROID)
 };
 
 DomDistillerViewerSource::RequestViewerHandle::RequestViewerHandle(
@@ -124,29 +114,6 @@ void DomDistillerViewerSource::RequestViewerHandle::SendJavaScript(
   }
 }
 
-#if !defined(OS_ANDROID)
-void DomDistillerViewerSource::RequestViewerHandle::DidStartNavigation(
-    content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() ||
-      navigation_handle->IsSameDocument())
-    return;
-
-  // Reader Mode should not pollute the navigation stack. To avoid this, watch
-  // for navigations and prepare to remove any that are "chrome-distiller" URLs.
-  // Note that Android handles this for non-CCT mode in ReaderModeManager.java.
-  // TODO(crbug.com/1090588): Consider combining Android implementation here,
-  // if it doesn't impact CCT mode.
-  int index = web_contents()->GetController().GetLastCommittedEntryIndex();
-  content::NavigationEntry* entry =
-      web_contents()->GetController().GetEntryAtIndex(index);
-
-  if (entry != nullptr && url_utils::IsDistilledPage(entry->GetURL())) {
-    remove_previous_navigation_ = true;
-    last_distiller_page_index_ = index;
-  }
-}
-#endif  // !defined(OS_ANDROID)
-
 void DomDistillerViewerSource::RequestViewerHandle::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() || !navigation_handle->HasCommitted())
@@ -158,17 +125,6 @@ void DomDistillerViewerSource::RequestViewerHandle::DidFinishNavigation(
     // In-page navigations, as well as the main view request can be ignored.
     return;
   }
-
-#if !defined(OS_ANDROID)
-  if (remove_previous_navigation_) {
-    remove_previous_navigation_ = false;
-    if (web_contents()->GetController().GetEntryAtIndex(
-            last_distiller_page_index_) != nullptr) {
-      web_contents()->GetController().RemoveEntryAtIndex(
-          last_distiller_page_index_);
-    }
-  }
-#endif  // !defined(OS_ANDROID)
 
   // At the moment we destroy the handle and won't be able
   // to restore the document later, so we prevent the page
@@ -255,10 +211,10 @@ void DomDistillerViewerSource::StartDataRequest(
     return;
 #if !defined(OS_ANDROID)
   // Don't allow loading of mixed content on Reader Mode pages.
-  content::WebPreferences prefs =
-      web_contents->GetRenderViewHost()->GetWebkitPreferences();
+  blink::web_pref::WebPreferences prefs =
+      web_contents->GetOrCreateWebPreferences();
   prefs.strict_mixed_content_checking = true;
-  web_contents->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
+  web_contents->SetWebPreferences(prefs);
 #endif  // !defined(OS_ANDROID)
   if (kViewerCssPath == path) {
     std::string css = viewer::GetCss();
@@ -333,12 +289,21 @@ bool DomDistillerViewerSource::ShouldServiceRequest(
   return url.SchemeIs(scheme_);
 }
 
-std::string DomDistillerViewerSource::GetContentSecurityPolicyStyleSrc() {
-  return "style-src 'self' https://fonts.googleapis.com;";
-}
+std::string DomDistillerViewerSource::GetContentSecurityPolicy(
+    network::mojom::CSPDirectiveName directive) {
+  if (directive == network::mojom::CSPDirectiveName::StyleSrc) {
+    return "style-src 'self' https://fonts.googleapis.com;";
+  } else if (directive == network::mojom::CSPDirectiveName::ChildSrc) {
+    return "child-src *;";
+  } else if (directive ==
+                 network::mojom::CSPDirectiveName::RequireTrustedTypesFor ||
+             directive == network::mojom::CSPDirectiveName::TrustedTypes) {
+    // This removes require-trusted-types-for and trusted-types directives
+    // from the CSP header.
+    return std::string();
+  }
 
-std::string DomDistillerViewerSource::GetContentSecurityPolicyChildSrc() {
-  return "child-src *;";
+  return content::URLDataSource::GetContentSecurityPolicy(directive);
 }
 
 }  // namespace dom_distiller

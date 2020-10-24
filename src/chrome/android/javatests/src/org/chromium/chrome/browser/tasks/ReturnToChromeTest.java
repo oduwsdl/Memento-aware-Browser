@@ -14,7 +14,6 @@ import static org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil.TA
 
 import android.app.Activity;
 import android.content.Intent;
-import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.support.test.InstrumentationRegistry;
 import android.text.TextUtils;
@@ -22,10 +21,10 @@ import android.text.TextUtils;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ActivityState;
@@ -58,7 +57,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.test.util.Criteria;
@@ -97,10 +95,8 @@ public class ReturnToChromeTest {
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
-    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
-
-    @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
+    public ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
     class ActivityInflationObserver implements ActivityStateListener, InflationObserver {
         @Override
@@ -142,6 +138,7 @@ public class ReturnToChromeTest {
     @CommandLineFlags.Add({BASE_PARAMS + "/" + TAB_SWITCHER_ON_RETURN_MS_PARAM + "/100000"
             + "/start_surface_variation/single/open_ntp_instead_of_start/true"})
     @DisableIf.Device(type = {UiDisableIf.TABLET}) // See https://crbug.com/1081754.
+    @DisabledTest(message="https://crbug.com/1130696")
     public void testTabSwitcherModeNotTriggeredWithinThreshold() throws Exception {
         // clang-format on
         InstantStartTest.createTabStateFile(new int[] {0, 1});
@@ -352,6 +349,7 @@ public class ReturnToChromeTest {
     // clang-format off
     @CommandLineFlags.Add({BASE_PARAMS + "/" + TAB_SWITCHER_ON_RETURN_MS_PARAM + "/0"
             + "/start_surface_variation/omniboxonly"})
+    @DisabledTest(message = "https://crbug.com/1130696")
     public void testTabSwitcherModeTriggeredBeyondThreshold() throws Exception {
         // clang-format on
         InstantStartTest.createTabStateFile(new int[] {0, 1});
@@ -385,11 +383,12 @@ public class ReturnToChromeTest {
         testTabSwitcherModeTriggeredBeyondThreshold();
 
         assertThat(mActivityTestRule.getActivity().isTablet()).isFalse();
-        CriteriaHelper.pollUiThread(Criteria.equals(1,
-                ()
-                        -> RecordHistogram.getHistogramTotalCountForTesting(
-                                ReturnToChromeExperimentsUtil
-                                        .UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    RecordHistogram.getHistogramTotalCountForTesting(
+                            ReturnToChromeExperimentsUtil.UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT),
+                    Matchers.is(1));
+        });
         assertEquals(1,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         ReturnToChromeExperimentsUtil.UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT
@@ -414,6 +413,8 @@ public class ReturnToChromeTest {
     // clang-format off
     @CommandLineFlags.Add({BASE_PARAMS + "/" + TAB_SWITCHER_ON_RETURN_MS_PARAM + "/0"
             + "/start_surface_variation/omniboxonly"})
+    @DisableIf.Build(sdk_is_less_than = VERSION_CODES.Q, sdk_is_greater_than = VERSION_CODES.O,
+            message = "crbug.com/1134361")
     public void testTabSwitcherModeTriggeredBeyondThreshold_WarmStart() throws Exception {
         // clang-format on
         testTabSwitcherModeTriggeredBeyondThreshold();
@@ -426,11 +427,8 @@ public class ReturnToChromeTest {
             Assert.assertTrue(mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
         }
 
-        CriteriaHelper.pollUiThread(Criteria.equals(true,
-                mActivityTestRule.getActivity()
-                        .getTabModelSelector()
-                        .getTabModelFilterProvider()
-                        .getCurrentTabModelFilter()::isTabModelRestored));
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
 
         assertEquals(2, mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount());
     }
@@ -452,11 +450,12 @@ public class ReturnToChromeTest {
         testTabSwitcherModeTriggeredBeyondThreshold_WarmStart();
 
         assertThat(mActivityTestRule.getActivity().isTablet()).isFalse();
-        CriteriaHelper.pollUiThread(Criteria.equals(2,
-                ()
-                        -> RecordHistogram.getHistogramTotalCountForTesting(
-                                ReturnToChromeExperimentsUtil
-                                        .UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    RecordHistogram.getHistogramTotalCountForTesting(
+                            ReturnToChromeExperimentsUtil.UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT),
+                    Matchers.is(2));
+        });
         assertEquals(1,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         ReturnToChromeExperimentsUtil.UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT
@@ -515,11 +514,12 @@ public class ReturnToChromeTest {
         testTabSwitcherModeTriggeredBeyondThreshold_NoTabs();
 
         assertThat(mActivityTestRule.getActivity().isTablet()).isFalse();
-        CriteriaHelper.pollUiThread(Criteria.equals(1,
-                ()
-                        -> RecordHistogram.getHistogramTotalCountForTesting(
-                                ReturnToChromeExperimentsUtil
-                                        .UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    RecordHistogram.getHistogramTotalCountForTesting(
+                            ReturnToChromeExperimentsUtil.UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT),
+                    Matchers.is(1));
+        });
         assertEquals(1,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         ReturnToChromeExperimentsUtil.UMA_TIME_TO_GTS_FIRST_MEANINGFUL_PAINT
@@ -550,6 +550,7 @@ public class ReturnToChromeTest {
     @CommandLineFlags.Add({BASE_PARAMS + "/" + TAB_SWITCHER_ON_RETURN_MS_PARAM + "/0"
             + "/start_surface_variation/omniboxonly"})
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @DisabledTest(message = "https://crbug.com/1063984")
     public void testInitialScrollIndex() throws Exception {
         // clang-format on
         // Instant start is not applicable since we need to create tabs and restart.
@@ -573,20 +574,11 @@ public class ReturnToChromeTest {
 
         Assert.assertTrue(mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
 
-        CriteriaHelper.pollUiThread(Criteria.equals(true,
-                mActivityTestRule.getActivity()
-                        .getTabModelSelector()
-                        .getTabModelFilterProvider()
-                        .getCurrentTabModelFilter()::isTabModelRestored));
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
 
         assertEquals(10, mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount());
         assertEquals(9, mActivityTestRule.getActivity().getCurrentTabModel().index());
-        // See crbug.com/1063619
-        mRenderTestRule.setPixelDiffThreshold(2);
-        if (Build.VERSION.SDK_INT == VERSION_CODES.P) {
-            // See crbug.com/1025241
-            mRenderTestRule.setPixelDiffThreshold(16);
-        }
         // Make sure the grid tab switcher is scrolled down to show the selected tab.
         mRenderTestRule.render(mActivityTestRule.getActivity().findViewById(
                                        org.chromium.chrome.tab_ui.R.id.tab_list_view),
@@ -621,17 +613,8 @@ public class ReturnToChromeTest {
                             -> mActivityTestRule.getActivity()
                                        .startDelayedNativeInitializationForTests());
         }
-        CriteriaHelper.pollUiThread(()
-                                            -> mActivityTestRule.getActivity()
-                                                       .getTabModelSelector()
-                                                       .getTabModelFilterProvider()
-                                                       .getCurrentTabModelFilter()
-                                != null
-                        && mActivityTestRule.getActivity()
-                                   .getTabModelSelector()
-                                   .getTabModelFilterProvider()
-                                   .getCurrentTabModelFilter()
-                                   .isTabModelRestored());
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
         Assert.assertTrue(LibraryLoader.getInstance().isInitialized());
     }
 }

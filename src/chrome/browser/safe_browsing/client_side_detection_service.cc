@@ -69,10 +69,14 @@ ClientSideDetectionService::CacheState::CacheState(bool phish, base::Time time)
     : is_phishing(phish), timestamp(time) {}
 
 ClientSideDetectionService::ClientSideDetectionService(Profile* profile)
-    : ClientSideDetectionService(profile ? profile->GetURLLoaderFactory()
-                                         : nullptr) {
-  profile_ = profile;
-
+    : profile_(profile),
+      enabled_(false),
+      extended_reporting_(false),
+      url_loader_factory_(
+          g_browser_process->safe_browsing_service()
+              ? g_browser_process->safe_browsing_service()->GetURLLoaderFactory(
+                    profile)
+              : nullptr) {
   // |profile_| can be null in unit tests
   if (!profile_)
     return;
@@ -95,19 +99,6 @@ ClientSideDetectionService::ClientSideDetectionService(Profile* profile)
   OnPrefsUpdated();
 }
 
-ClientSideDetectionService::ClientSideDetectionService(
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader)
-    : enabled_(false),
-      extended_reporting_(false),
-      url_loader_factory_(url_loader) {
-  base::Closure update_renderers =
-      base::Bind(&ClientSideDetectionService::SendModelToRenderers,
-                 base::Unretained(this));
-
-  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CREATED,
-                 content::NotificationService::AllBrowserContextsAndSources());
-}
-
 ClientSideDetectionService::~ClientSideDetectionService() {
   weak_factory_.InvalidateWeakPtrs();
 }
@@ -118,7 +109,6 @@ void ClientSideDetectionService::Shutdown() {
 
 void ClientSideDetectionService::OnPrefsUpdated() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  SendModelToRenderers();  // always refresh the renderer state
   bool enabled = IsSafeBrowsingEnabled(*profile_->GetPrefs());
   bool extended_reporting =
       IsEnhancedProtectionEnabled(*profile_->GetPrefs()) ||
@@ -136,7 +126,7 @@ void ClientSideDetectionService::OnPrefsUpdated() {
       model_loader_ = std::make_unique<ModelLoader>(
           base::BindRepeating(&ClientSideDetectionService::SendModelToRenderers,
                               base::Unretained(this)),
-          url_loader_factory_, extended_reporting_);
+          profile_->GetURLLoaderFactory(), extended_reporting_);
     }
     // Refresh the models when the service is enabled.  This can happen when
     // either of the preferences are toggled, or early during startup if
@@ -159,10 +149,12 @@ void ClientSideDetectionService::OnPrefsUpdated() {
     client_phishing_reports_.clear();
     cache_.clear();
   }
+
+  SendModelToRenderers();  // always refresh the renderer state
 }
 
 void ClientSideDetectionService::SendClientReportPhishingRequest(
-    ClientPhishingRequest* verdict,
+    std::unique_ptr<ClientPhishingRequest> verdict,
     bool is_extended_reporting,
     bool is_enhanced_reporting,
     const ClientReportPhishingRequestCallback& callback) {
@@ -171,7 +163,7 @@ void ClientSideDetectionService::SendClientReportPhishingRequest(
       FROM_HERE,
       base::BindOnce(
           &ClientSideDetectionService::StartClientReportPhishingRequest,
-          weak_factory_.GetWeakPtr(), verdict, is_extended_reporting,
+          weak_factory_.GetWeakPtr(), std::move(verdict), is_extended_reporting,
           is_enhanced_reporting, callback));
 }
 
@@ -214,42 +206,18 @@ void ClientSideDetectionService::OnURLLoaderComplete(
                         url_loader->NetError(), response_code, data);
 }
 
-void ClientSideDetectionService::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_EQ(content::NOTIFICATION_RENDERER_PROCESS_CREATED, type);
-  content::RenderProcessHost* process =
-      content::Source<content::RenderProcessHost>(source).ptr();
-  if (process->GetBrowserContext() == profile_) {
-    for (ClientSideDetectionHost* host : csd_hosts_) {
-      host->SendModelToRenderFrame(process, profile_, model_loader_.get());
-    }
-  }
-}
-
 void ClientSideDetectionService::SendModelToRenderers() {
-  for (content::RenderProcessHost::iterator i(
-           content::RenderProcessHost::AllHostsIterator());
-       !i.IsAtEnd(); i.Advance()) {
-    content::RenderProcessHost* process = i.GetCurrentValue();
-    if (process->IsInitializedAndNotDead() &&
-        process->GetBrowserContext() == profile_) {
-      for (ClientSideDetectionHost* host : csd_hosts_) {
-        host->SendModelToRenderFrame(process, profile_, model_loader_.get());
-      }
-    }
+  for (ClientSideDetectionHost* host : csd_hosts_) {
+    host->SendModelToRenderFrame();
   }
 }
 
 void ClientSideDetectionService::StartClientReportPhishingRequest(
-    ClientPhishingRequest* verdict,
+    std::unique_ptr<ClientPhishingRequest> request,
     bool is_extended_reporting,
     bool is_enhanced_reporting,
     const ClientReportPhishingRequestCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::unique_ptr<ClientPhishingRequest> request(verdict);
 
   if (!enabled_) {
     if (!callback.is_null())
@@ -455,6 +423,10 @@ ClientSideDetectionService::GetLastModelStatus() {
   // |model_loader_| can be null in tests
   return model_loader_ ? model_loader_->last_client_model_status()
                        : ModelLoader::MODEL_NEVER_FETCHED;
+}
+
+std::string ClientSideDetectionService::GetModelStr() {
+  return model_loader_ ? model_loader_->model_str() : "";
 }
 
 void ClientSideDetectionService::SetModelLoaderFactoryForTesting(

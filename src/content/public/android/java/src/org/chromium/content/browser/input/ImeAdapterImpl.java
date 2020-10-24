@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.ResultReceiver;
@@ -57,6 +56,8 @@ import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.ime.TextInputAction;
 import org.chromium.ui.base.ime.TextInputType;
+import org.chromium.ui.mojom.VirtualKeyboardPolicy;
+import org.chromium.ui.mojom.VirtualKeyboardVisibilityRequest;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
@@ -208,33 +209,29 @@ public class ImeAdapterImpl
         mCurrentConfig = new Configuration(getContainerView().getResources().getConfiguration());
 
         // CursorAnchroInfo is supported only after L.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            mCursorAnchorInfoController = CursorAnchorInfoController.create(
-                    wrapper, new CursorAnchorInfoController.ComposingTextDelegate() {
-                        @Override
-                        public CharSequence getText() {
-                            return mLastText;
-                        }
-                        @Override
-                        public int getSelectionStart() {
-                            return mLastSelectionStart;
-                        }
-                        @Override
-                        public int getSelectionEnd() {
-                            return mLastSelectionEnd;
-                        }
-                        @Override
-                        public int getComposingTextStart() {
-                            return mLastCompositionStart;
-                        }
-                        @Override
-                        public int getComposingTextEnd() {
-                            return mLastCompositionEnd;
-                        }
-                    });
-        } else {
-            mCursorAnchorInfoController = null;
-        }
+        mCursorAnchorInfoController = CursorAnchorInfoController.create(
+                wrapper, new CursorAnchorInfoController.ComposingTextDelegate() {
+                    @Override
+                    public CharSequence getText() {
+                        return mLastText;
+                    }
+                    @Override
+                    public int getSelectionStart() {
+                        return mLastSelectionStart;
+                    }
+                    @Override
+                    public int getSelectionEnd() {
+                        return mLastSelectionEnd;
+                    }
+                    @Override
+                    public int getComposingTextStart() {
+                        return mLastCompositionStart;
+                    }
+                    @Override
+                    public int getComposingTextEnd() {
+                        return mLastCompositionEnd;
+                    }
+                });
         mInputMethodManagerWrapper = wrapper;
         mNativeImeAdapterAndroid = ImeAdapterImplJni.get().init(ImeAdapterImpl.this, mWebContents);
         WindowEventObserverManager.from(mWebContents).addObserver(this);
@@ -317,9 +314,10 @@ public class ImeAdapterImpl
         }
         if (mInputConnectionFactory == null) return null;
         View containerView = getContainerView();
+        if (DEBUG_LOGS) Log.i(TAG, "Last text: " + mLastText);
         setInputConnection(mInputConnectionFactory.initializeAndGet(containerView, this,
                 mTextInputType, mTextInputFlags, mTextInputMode, mTextInputAction,
-                mLastSelectionStart, mLastSelectionEnd, outAttrs));
+                mLastSelectionStart, mLastSelectionEnd, mLastText, outAttrs));
         if (DEBUG_LOGS) Log.i(TAG, "onCreateInputConnection: " + mInputConnection);
 
         if (mCursorAnchorInfoController != null) {
@@ -427,12 +425,15 @@ public class ImeAdapterImpl
      * @param compositionEnd The character offset of the composition end, or -1 if there is no
      *                       selection.
      * @param replyToRequest True when the update was requested by IME.
+     * @param lastVkVisibilityRequest VK visibility request type if show/hide APIs are called
+     *         from JS.
+     * @param vkPolicy VK policy type whether it is manual or automatic.
      */
     @CalledByNative
     private void updateState(int textInputType, int textInputFlags, int textInputMode,
             int textInputAction, boolean showIfNeeded, boolean alwaysHide, String text,
             int selectionStart, int selectionEnd, int compositionStart, int compositionEnd,
-            boolean replyToRequest) {
+            boolean replyToRequest, int lastVkVisibilityRequest, int vkPolicy) {
         TraceEvent.begin("ImeAdapter.updateState");
         try {
             if (DEBUG_LOGS) {
@@ -491,15 +492,25 @@ public class ImeAdapterImpl
             mLastCompositionStart = compositionStart;
             mLastCompositionEnd = compositionEnd;
 
-            if (hide || alwaysHide) {
-                hideKeyboard();
-            } else {
-                if (needsRestart) restartInput();
-                if (showIfNeeded && focusedNodeAllowsSoftKeyboard()) {
-                    // There is no API for us to get notified of user's dismissal of keyboard.
-                    // Therefore, we should try to show keyboard even when text input type hasn't
-                    // changed.
+            // Check for the visibility request and policy if VK APIs are enabled.
+            if (vkPolicy == VirtualKeyboardPolicy.MANUAL) {
+                // policy is manual.
+                if (lastVkVisibilityRequest == VirtualKeyboardVisibilityRequest.SHOW) {
                     showSoftKeyboard();
+                } else if (lastVkVisibilityRequest == VirtualKeyboardVisibilityRequest.HIDE) {
+                    hideKeyboard();
+                }
+            } else {
+                if (hide || alwaysHide) {
+                    hideKeyboard();
+                } else {
+                    if (needsRestart) restartInput();
+                    if (showIfNeeded && focusedNodeAllowsSoftKeyboard()) {
+                        // There is no API for us to get notified of user's dismissal of keyboard.
+                        // Therefore, we should try to show keyboard even when text input type
+                        // hasn't changed.
+                        showSoftKeyboard();
+                    }
                 }
             }
 
@@ -839,7 +850,6 @@ public class ImeAdapterImpl
         return true;
     }
 
-    @VisibleForTesting
     boolean finishComposingText() {
         if (!isValid()) return false;
         ImeAdapterImplJni.get().finishComposingText(mNativeImeAdapterAndroid, ImeAdapterImpl.this);

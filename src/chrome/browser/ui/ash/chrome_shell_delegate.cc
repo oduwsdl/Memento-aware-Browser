@@ -13,13 +13,16 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_service_factory.h"
+#include "chrome/browser/nearby_sharing/nearby_share_delegate_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/back_gesture_contextual_nudge_delegate.h"
 #include "chrome/browser/ui/ash/chrome_accessibility_delegate.h"
+#include "chrome/browser/ui/ash/chrome_capture_mode_delegate.h"
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/session_util.h"
+#include "chrome/browser/ui/ash/tab_scrubber.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -27,9 +30,7 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
-#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_util.h"
 #include "chromeos/services/multidevice_setup/multidevice_setup_service.h"
 #include "content/public/browser/device_service.h"
@@ -67,6 +68,11 @@ bool ChromeShellDelegate::CanShowWindowForUser(
                                 base::BindRepeating(&GetActiveBrowserContext));
 }
 
+std::unique_ptr<ash::CaptureModeDelegate>
+ChromeShellDelegate::CreateCaptureModeDelegate() const {
+  return std::make_unique<ChromeCaptureModeDelegate>();
+}
+
 void ChromeShellDelegate::OpenKeyboardShortcutHelpPage() const {
   chrome::ScopedTabbedBrowserDisplayer scoped_tabbed_browser_displayer(
       ProfileManager::GetActiveUserProfile());
@@ -81,6 +87,10 @@ bool ChromeShellDelegate::CanGoBack(gfx::NativeWindow window) const {
   content::WebContents* contents =
       GetActiveWebContentsForNativeBrowserWindow(window);
   return contents ? contents->GetController().CanGoBack() : false;
+}
+
+void ChromeShellDelegate::SetTabScrubberEnabled(bool enabled) {
+  TabScrubber::GetInstance()->SetEnabled(enabled);
 }
 
 bool ChromeShellDelegate::AllowDefaultTouchActions(gfx::NativeWindow window) {
@@ -160,12 +170,6 @@ void ChromeShellDelegate::BindFingerprint(
   content::GetDeviceService().BindFingerprint(std::move(receiver));
 }
 
-void ChromeShellDelegate::BindNavigableContentsFactory(
-    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {
-  ProfileManager::GetActiveUserProfile()->BindNavigableContentsFactory(
-      std::move(receiver));
-}
-
 void ChromeShellDelegate::BindMultiDeviceSetup(
     mojo::PendingReceiver<chromeos::multidevice_setup::mojom::MultiDeviceSetup>
         receiver) {
@@ -196,8 +200,8 @@ ChromeShellDelegate::CreateBackGestureContextualNudgeDelegate(
   return std::make_unique<BackGestureContextualNudgeDelegate>(controller);
 }
 
-void ChromeShellDelegate::OpenDisplaySettings() const {
-  chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-      ProfileManager::GetActiveUserProfile(),
-      chromeos::settings::mojom::kDisplaySubpagePath);
+std::unique_ptr<ash::NearbyShareDelegate>
+ChromeShellDelegate::CreateNearbyShareDelegate(
+    ash::NearbyShareController* controller) const {
+  return std::make_unique<NearbyShareDelegateImpl>(controller);
 }

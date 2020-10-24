@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chromeos/services/assistant/public/cpp/features.h"
+#include "chromeos/constants/chromeos_features.h"
 
 #include "base/feature_list.h"
 
@@ -17,10 +18,13 @@ const base::Feature kAssistantAppSupport{"AssistantAppSupport",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAssistantBetterOnboarding{
-    "AssistantBetterOnboarding", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AssistantBetterOnboarding", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAssistantConversationStartersV2{
     "AssistantConversationStartersV2", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kAssistantDebugging{"AssistantDebugging",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kAssistantLauncherChipIntegration{
     "AssistantLauncherChipIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -32,10 +36,16 @@ const base::Feature kAssistantRoutines{"AssistantRoutines",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kAssistantTimersV2{"AssistantTimersV2",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAssistantWaitScheduling{"AssistantWaitScheduling",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kEnableBloom{"EnableBloom",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableAmbientAssistant{"EnableAmbientAssistant",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableDspHotword{"EnableDspHotword",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
@@ -59,6 +69,12 @@ const base::Feature kEnableMediaSessionIntegration{
 const base::Feature kDisableVoiceMatch{"DisableVoiceMatch",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+bool IsAmbientAssistantEnabled() {
+  return chromeos::features::IsAmbientModeEnabled() &&
+         base::FeatureList::IsEnabled(
+             assistant::features::kEnableAmbientAssistant);
+}
+
 bool IsAppSupportEnabled() {
   return base::FeatureList::IsEnabled(
       assistant::features::kAssistantAppSupport);
@@ -72,8 +88,16 @@ bool IsBetterOnboardingEnabled() {
   return base::FeatureList::IsEnabled(kAssistantBetterOnboarding);
 }
 
+bool IsBloomEnabled() {
+  return base::FeatureList::IsEnabled(kEnableBloom);
+}
+
 bool IsConversationStartersV2Enabled() {
   return base::FeatureList::IsEnabled(kAssistantConversationStartersV2);
+}
+
+bool IsAssistantDebuggingEnabled() {
+  return base::FeatureList::IsEnabled(kAssistantDebugging);
 }
 
 bool IsDspHotwordEnabled() {

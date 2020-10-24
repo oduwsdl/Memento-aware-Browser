@@ -46,7 +46,7 @@ void SetupAccessibilityDisplayOptionsNotifier() {
                 gfx::Animation::UpdatePrefersReducedMotion();
                 for (WebContentsImpl* wc :
                      WebContentsImpl::GetAllWebContents()) {
-                  wc->GetRenderViewHost()->OnWebkitPreferencesChanged();
+                  wc->OnWebPreferencesChanged();
                 }
               }];
 }
@@ -61,20 +61,11 @@ void BrowserAccessibilityStateImpl::
     UpdatePlatformSpecificHistogramsOnUIThread() {
   NSWorkspace* workspace = [NSWorkspace sharedWorkspace];
 
-  SEL sel = @selector(accessibilityDisplayShouldIncreaseContrast);
+  SEL sel = @selector(accessibilityDisplayShouldReduceTransparency);
   if ([workspace respondsToSelector:sel]) {
-    UMA_HISTOGRAM_BOOLEAN(
-        "Accessibility.Mac.DifferentiateWithoutColor",
-        workspace.accessibilityDisplayShouldDifferentiateWithoutColor);
-    UMA_HISTOGRAM_BOOLEAN("Accessibility.Mac.IncreaseContrast",
-                          workspace.accessibilityDisplayShouldIncreaseContrast);
     UMA_HISTOGRAM_BOOLEAN(
         "Accessibility.Mac.ReduceTransparency",
         workspace.accessibilityDisplayShouldReduceTransparency);
-
-    UMA_HISTOGRAM_BOOLEAN(
-        "Accessibility.Mac.FullKeyboardAccessEnabled",
-        static_cast<NSApplication*>(NSApp).fullKeyboardAccessEnabled);
   }
 
   sel = @selector(accessibilityDisplayShouldReduceMotion);

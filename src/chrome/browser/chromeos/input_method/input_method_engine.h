@@ -16,9 +16,9 @@
 #include "chrome/browser/chromeos/input_method/input_method_engine_base.h"
 #include "chrome/browser/chromeos/input_method/suggestion_handler_interface.h"
 #include "ui/base/ime/candidate_window.h"
+#include "ui/base/ime/chromeos/ime_engine_handler_interface.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
-#include "ui/base/ime/ime_engine_handler_interface.h"
 #include "url/gurl.h"
 
 namespace ui {
@@ -26,9 +26,9 @@ struct CompositionText;
 class KeyEvent;
 
 namespace ime {
-enum class AssistiveWindowType;
-enum class ButtonId;
+struct AssistiveWindowButton;
 struct InputMethodMenuItem;
+struct SuggestionDetails;
 }  // namespace ime
 }  // namespace ui
 
@@ -103,8 +103,7 @@ class InputMethodEngine : public InputMethodEngineBase,
   void PropertyActivate(const std::string& property_name) override;
   void CandidateClicked(uint32_t index) override;
   void AssistiveWindowButtonClicked(
-      const ui::ime::ButtonId& id,
-      const ui::ime::AssistiveWindowType& type) override;
+      const ui::ime::AssistiveWindowButton& button) override;
   void SetMirroringEnabled(bool mirroring_enabled) override;
   void SetCastingEnabled(bool casting_enabled) override;
   ui::InputMethodKeyboardController* GetInputMethodKeyboardController()
@@ -113,9 +112,7 @@ class InputMethodEngine : public InputMethodEngineBase,
   // SuggestionHandlerInterface overrides.
   bool DismissSuggestion(int context_id, std::string* error) override;
   bool SetSuggestion(int context_id,
-                     const base::string16& text,
-                     const size_t confirmed_length,
-                     const bool show_tab,
+                     const ui::ime::SuggestionDetails& details,
                      std::string* error) override;
   bool AcceptSuggestion(int context_id, std::string* error) override;
   void OnSuggestionsChanged(
@@ -125,13 +122,21 @@ class InputMethodEngine : public InputMethodEngineBase,
                                const std::vector<base::string16>& suggestions,
                                std::string* error) override;
 
-  bool HighlightSuggestionCandidate(int context_id,
-                                    int index,
-                                    std::string* error) override;
+  bool SetButtonHighlighted(int context_id,
+                            const ui::ime::AssistiveWindowButton& button,
+                            bool highlighted,
+                            std::string* error) override;
+
+  void ClickButton(const ui::ime::AssistiveWindowButton& button) override;
 
   bool AcceptSuggestionCandidate(int context_id,
                                  const base::string16& candidate,
                                  std::string* error) override;
+
+  bool SetAssistiveWindowProperties(
+      int context_id,
+      const AssistiveWindowProperties& assistive_window,
+      std::string* error) override;
 
   // This function returns the current property of the candidate window of the
   // corresponding engine_id. If the CandidateWindowProperty is not set for the
@@ -155,12 +160,6 @@ class InputMethodEngine : public InputMethodEngineBase,
 
   // Set the position of the cursor in the candidate window.
   bool SetCursorPosition(int context_id, int candidate_id, std::string* error);
-
-  // Show/Hide given assistive window.
-  bool SetAssistiveWindowProperties(
-      int context_id,
-      const AssistiveWindowProperties& assistive_window,
-      std::string* error);
 
   // Set the list of items that appears in the language menu when this IME is
   // active.
@@ -189,6 +188,14 @@ class InputMethodEngine : public InputMethodEngineBase,
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) override;
+  bool SetComposingRange(
+      uint32_t start,
+      uint32_t end,
+      const std::vector<ui::ImeTextSpan>& text_spans) override;
+
+  gfx::Range GetAutocorrectRange() override;
+
+  gfx::Rect GetAutocorrectCharacterBounds() override;
 
   bool SetAutocorrectRange(const base::string16& autocorrect_text,
                            uint32_t start,

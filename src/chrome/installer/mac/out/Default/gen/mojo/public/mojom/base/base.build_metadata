@@ -1,0 +1,31 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/application_state.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/big_buffer.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/big_string.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/binder.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/file.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/file_error.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/file_info.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/file_path.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/generic_pending_receiver.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/memory_allocator_dump_cross_process_uid.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/memory_pressure_level.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/message_pump_type.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/process_id.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/read_only_buffer.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/read_only_file.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/ref_counted_memory.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/shared_memory.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/string16.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/text_direction.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/thread_priority.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/time.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/token.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/unguessable_token.mojom",
+    "/Users/macuser/chromium/src/mojo/public/mojom/base/values.mojom"
+  ]
+}

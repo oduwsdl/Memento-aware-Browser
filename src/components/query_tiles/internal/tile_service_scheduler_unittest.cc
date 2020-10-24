@@ -1,7 +1,8 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-#include "components/query_tiles/internal/tile_service_scheduler.h"
+
+#include "components/query_tiles/internal/tile_service_scheduler_impl.h"
 
 #include <utility>
 #include <vector>
@@ -13,11 +14,15 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
+#include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/query_tiles/internal/black_hole_log_sink.h"
 #include "components/query_tiles/internal/tile_config.h"
 #include "components/query_tiles/internal/tile_store.h"
 #include "components/query_tiles/switches.h"
 #include "components/query_tiles/test/test_utils.h"
+#include "components/query_tiles/tile_service_prefs.h"
+#include "net/base/backoff_entry_serializer.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -55,10 +60,11 @@ class TileServiceSchedulerTest : public testing::Test {
     EXPECT_TRUE(base::Time::FromString("05/18/20 01:00:00 AM", &fake_now));
     clock_.SetNow(fake_now);
     query_tiles::RegisterPrefs(prefs()->registry());
+    log_sink_ = std::make_unique<test::BlackHoleLogSink>();
     auto policy = std::make_unique<net::BackoffEntry::Policy>(kTestPolicy);
-    tile_service_scheduler_ =
-        TileServiceScheduler::Create(&mocked_native_scheduler_, &prefs_,
-                                     &clock_, &tick_clock_, std::move(policy));
+    tile_service_scheduler_ = std::make_unique<TileServiceSchedulerImpl>(
+        &mocked_native_scheduler_, &prefs_, &clock_, &tick_clock_,
+        std::move(policy), log_sink_.get());
     EXPECT_CALL(
         *native_scheduler(),
         Cancel(static_cast<int>(background_task::TaskIds::QUERY_TILE_JOB_ID)));
@@ -97,7 +103,7 @@ class TileServiceSchedulerTest : public testing::Test {
   base::SimpleTestTickClock tick_clock_;
   TestingPrefServiceSimple prefs_;
   MockBackgroundTaskScheduler mocked_native_scheduler_;
-
+  std::unique_ptr<LogSink> log_sink_;
   std::unique_ptr<TileServiceScheduler> tile_service_scheduler_;
 };
 
@@ -228,6 +234,32 @@ TEST_F(TileServiceSchedulerTest, FirstKickoffNotOverride) {
   EXPECT_CALL(*native_scheduler(), Schedule(_)).Times(1);
   tile_service_scheduler()->OnFetchCompleted(TileInfoRequestStatus::kSuccess);
   EXPECT_EQ(prefs()->GetTime(kFirstScheduleTimeKey), base::Time());
+}
+
+TEST_F(TileServiceSchedulerTest, FirstRunFinishedAfterInstantFetchComplete) {
+  base::test::ScopedCommandLine scoped_command_line;
+  auto now = clock()->Now();
+  EXPECT_CALL(*native_scheduler(), Schedule(_)).Times(1);
+  tile_service_scheduler()->OnTileManagerInitialized(TileGroupStatus::kNoTiles);
+  EXPECT_EQ(prefs()->GetTime(kFirstScheduleTimeKey), now);
+
+  // Set instant-fetch flag to true after first-kickoff flow was marked and
+  // scheduled, expecting the mark of first flow also being reset.
+  scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
+      query_tiles::switches::kQueryTilesInstantBackgroundTask, "true");
+  EXPECT_CALL(*native_scheduler(), Schedule(_)).Times(0);
+  tile_service_scheduler()->OnFetchCompleted(TileInfoRequestStatus::kSuccess);
+  EXPECT_EQ(prefs()->GetTime(kFirstScheduleTimeKey), base::Time());
+
+  // Set instant-fetch flag to false after 2 hours. Chrome restarts with no
+  // tiles, the scheduler should start a new first kickoff flow.
+  scoped_command_line.GetProcessCommandLine()->RemoveSwitch(
+      query_tiles::switches::kQueryTilesInstantBackgroundTask);
+  auto two_hours_later = now + base::TimeDelta::FromHours(2);
+  clock()->SetNow(two_hours_later);
+  EXPECT_CALL(*native_scheduler(), Schedule(_)).Times(1);
+  tile_service_scheduler()->OnTileManagerInitialized(TileGroupStatus::kNoTiles);
+  EXPECT_EQ(prefs()->GetTime(kFirstScheduleTimeKey), two_hours_later);
 }
 
 }  // namespace

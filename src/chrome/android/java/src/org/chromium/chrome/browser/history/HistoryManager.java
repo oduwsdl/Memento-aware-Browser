@@ -27,9 +27,9 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataTabsFragment;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -43,13 +43,12 @@ import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
-import org.chromium.chrome.browser.vr.VrModeProviderImpl;
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.SearchDelegate;
@@ -88,7 +87,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
     private static Boolean sIsScrollToLoadDisabledForTests;
 
     private final Activity mActivity;
-    private final Profile mProfile;
+    private final boolean mIsIncognito;
     private final boolean mIsSeparateActivity;
     private final boolean mIsScrollToLoadDisabled;
     private final SelectableListLayout<HistoryItem> mSelectableListLayout;
@@ -120,19 +119,19 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         mActivity = activity;
         mIsSeparateActivity = isSeparateActivity;
         mSnackbarManager = snackbarManager;
-        // TODO(crbug.com/1060940) : Pass profile here instead of boolean, since the call maybe 
-        // from a non-primary OTR profile.
-        mProfile = isIncognito ? Profile.getLastUsedRegularProfile().getPrimaryOTRProfile()
-                               : Profile.getLastUsedRegularProfile();
+        mIsIncognito = isIncognito;
         mIsScrollToLoadDisabled = ChromeAccessibilityUtil.get().isAccessibilityEnabled()
                 || ChromeAccessibilityUtil.isHardwareKeyboardAttached(
                         mActivity.getResources().getConfiguration());
 
         mSelectionDelegate = new SelectionDelegate<>();
         mSelectionDelegate.addObserver(this);
+
+        // History service is not keyed for Incognito profiles and {@link HistoryServiceFactory}
+        // explicitly redirects to use regular profile for Incognito case.
+        Profile profile = Profile.getLastUsedRegularProfile();
         mHistoryAdapter = new HistoryAdapter(mSelectionDelegate, this,
-                sProviderForTests != null ? sProviderForTests
-                                          : new BrowsingHistoryBridge(isIncognito));
+                sProviderForTests != null ? sProviderForTests : new BrowsingHistoryBridge(profile));
 
         // 1. Create SelectableListLayout.
         mSelectableListLayout =
@@ -146,7 +145,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         mToolbar = (HistoryManagerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.history_toolbar, mSelectionDelegate, R.string.menu_history,
                 R.id.normal_menu_group, R.id.selection_mode_menu_group, this, true,
-                isSeparateActivity, new VrModeProviderImpl());
+                isSeparateActivity);
         mToolbar.setManager(this);
         mToolbar.initializeSearchView(this, R.string.history_manager_search, R.id.search_menu_id);
         mToolbar.setInfoMenuItem(R.id.info_menu_id);
@@ -198,7 +197,9 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
             }});
 
         // 9. Listen to changes in sign in state.
-        IdentityServicesProvider.get().getSigninManager(mProfile).addSignInStateObserver(this);
+        IdentityServicesProvider.get()
+                .getSigninManager(Profile.getLastUsedRegularProfile())
+                .addSignInStateObserver(this);
 
         // 10. Create PrefChangeRegistrar to receive notifications on preference changes.
         mPrefChangeRegistrar = new PrefChangeRegistrar();
@@ -295,7 +296,9 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         mHistoryAdapter.onDestroyed();
         mLargeIconBridge.destroy();
         mLargeIconBridge = null;
-        IdentityServicesProvider.get().getSigninManager(mProfile).removeSignInStateObserver(this);
+        IdentityServicesProvider.get()
+                .getSigninManager(Profile.getLastUsedRegularProfile())
+                .removeSignInStateObserver(this);
         mPrefChangeRegistrar.destroy();
     }
 
@@ -356,7 +359,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      * @return Whether the HistoryManager is displaying history for the incognito profile.
      */
     public boolean isIncognito() {
-        return mProfile.isOffTheRecord();
+        return mIsIncognito;
     }
 
     @VisibleForTesting

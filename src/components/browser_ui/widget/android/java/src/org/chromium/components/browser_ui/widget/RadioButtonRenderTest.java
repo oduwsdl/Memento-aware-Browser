@@ -42,8 +42,7 @@ public class RadioButtonRenderTest extends DummyUiActivityTestCase {
             new NightModeTestUtils.NightModeParams().getParameters();
 
     @Rule
-    public RenderTestRule mRenderTestRule =
-            new RenderTestRule("chrome/test/data/android/render_tests");
+    public RenderTestRule mRenderTestRule = RenderTestRule.Builder.withPublicCorpus().build();
 
     private RadioButtonWithDescriptionLayout mLayout;
 

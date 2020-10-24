@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
@@ -51,7 +52,7 @@ class PaymentRequestSpec : public PaymentOptionsProvider,
 
   // Any class call add itself as Observer via AddObserver() and receive
   // notification about spec events.
-  class Observer {
+  class Observer : public base::CheckedObserver {
    public:
     // Called when the website is notified that the user selected shipping
     // options or a shipping address. This will be followed by a call to
@@ -62,13 +63,13 @@ class PaymentRequestSpec : public PaymentOptionsProvider,
     virtual void OnSpecUpdated() = 0;
 
    protected:
-    virtual ~Observer() {}
+    ~Observer() override = default;
   };
 
   PaymentRequestSpec(mojom::PaymentOptionsPtr options,
                      mojom::PaymentDetailsPtr details,
                      std::vector<mojom::PaymentMethodDataPtr> method_data,
-                     PaymentRequestSpec::Observer* observer,
+                     base::WeakPtr<PaymentRequestSpec::Observer> observer,
                      const std::string& app_locale);
   ~PaymentRequestSpec() override;
 
@@ -118,6 +119,8 @@ class PaymentRequestSpec : public PaymentOptionsProvider,
   bool request_payer_phone() const override;
   bool request_payer_email() const override;
   PaymentShippingType shipping_type() const override;
+
+  const mojom::PaymentOptionsPtr& payment_options() const { return options_; }
 
   // Returns the query to be used for the quota on hasEnrolledInstrument()
   // calls. Generally this returns the payment method identifiers and their
@@ -196,9 +199,15 @@ class PaymentRequestSpec : public PaymentOptionsProvider,
       const;
 
   const mojom::PaymentDetails& details() const { return *details_.get(); }
+  const mojom::PaymentDetailsPtr& details_ptr() const { return details_; }
+
   const std::vector<mojom::PaymentMethodDataPtr>& method_data() const {
     return method_data_;
   }
+
+  bool IsSecurePaymentConfirmationRequested() const;
+
+  base::WeakPtr<PaymentRequestSpec> AsWeakPtr();
 
  private:
   // Returns the first applicable modifier in the Payment Request for the
@@ -275,10 +284,12 @@ class PaymentRequestSpec : public PaymentOptionsProvider,
 
   // The |observer_for_testing_| will fire after all the |observers_| have been
   // notified.
-  base::ObserverList<Observer>::Unchecked observers_;
+  base::ObserverList<Observer> observers_;
 
   base::string16 retry_error_message_;
   mojom::PayerErrorsPtr payer_errors_;
+
+  base::WeakPtrFactory<PaymentRequestSpec> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestSpec);
 };

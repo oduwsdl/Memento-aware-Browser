@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/extensions/extensions_menu_item_view.h"
 
+#include <utility>
+
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -16,6 +18,7 @@
 #include "chrome/browser/ui/views/extensions/extensions_menu_button.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/animation/ink_drop_host_view.h"
 #include "ui/views/controls/button/button.h"
@@ -36,18 +39,22 @@ constexpr int EXTENSION_PINNING = 14;
 }  // namespace
 
 // static
+constexpr gfx::Size ExtensionsMenuItemView::kIconSize;
 constexpr char ExtensionsMenuItemView::kClassName[];
 
 ExtensionsMenuItemView::ExtensionsMenuItemView(
     Browser* browser,
-    std::unique_ptr<ToolbarActionViewController> controller)
-    : primary_action_button_(
-          new ExtensionsMenuButton(browser, this, controller.get())),
+    std::unique_ptr<ToolbarActionViewController> controller,
+    bool allow_pinning)
+    : primary_action_button_(new ExtensionsMenuButton(browser,
+                                                      this,
+                                                      controller.get(),
+                                                      allow_pinning)),
       controller_(std::move(controller)),
       model_(ToolbarActionsModel::Get(browser->profile())) {
   // Set so the extension button receives enter/exit on children to retain hover
   // status when hovering child views.
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
 
   context_menu_controller_ = std::make_unique<ExtensionContextMenuController>(
       nullptr, controller_.get());
@@ -63,49 +70,37 @@ ExtensionsMenuItemView::ExtensionsMenuItemView(
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
 
-  auto pin_button = CreateBubbleMenuItem(EXTENSION_PINNING, this);
-  pin_button->SetBorder(views::CreateEmptyBorder(kSecondaryButtonInsets));
-  // Extension pinning is not available in Incognito as it leaves a trace of
-  // user activity.
-  pin_button->SetEnabled(!browser->profile()->IsOffTheRecord());
+  if (primary_action_button_->CanShowIconInToolbar()) {
+    auto pin_button = CreateBubbleMenuItem(
+        EXTENSION_PINNING,
+        base::BindRepeating(&ExtensionsMenuItemView::PinButtonPressed,
+                            base::Unretained(this)));
+    pin_button->SetBorder(views::CreateEmptyBorder(kSecondaryButtonInsets));
+    // Extension pinning is not available in Incognito as it leaves a trace of
+    // user activity.
+    pin_button->SetEnabled(!browser->profile()->IsOffTheRecord());
 
-  pin_button_ = pin_button.get();
-  AddChildView(std::move(pin_button));
+    pin_button_ = pin_button.get();
+    AddChildView(std::move(pin_button));
+  }
 
-  auto context_menu_button =
-      CreateBubbleMenuItem(EXTENSION_CONTEXT_MENU, nullptr);
+  auto context_menu_button = CreateBubbleMenuItem(
+      EXTENSION_CONTEXT_MENU, views::Button::PressedCallback());
   context_menu_button->SetBorder(
       views::CreateEmptyBorder(kSecondaryButtonInsets));
   context_menu_button->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_EXTENSIONS_MENU_CONTEXT_MENU_TOOLTIP));
   context_menu_button->SetButtonController(
       std::make_unique<views::MenuButtonController>(
-          context_menu_button.get(), this,
+          context_menu_button.get(),
+          base::BindRepeating(&ExtensionsMenuItemView::ContextMenuPressed,
+                              base::Unretained(this)),
           std::make_unique<views::Button::DefaultButtonControllerDelegate>(
               context_menu_button.get())));
-
-  context_menu_button_ = context_menu_button.get();
-  AddChildView(std::move(context_menu_button));
+  context_menu_button_ = AddChildView(std::move(context_menu_button));
 }
 
 ExtensionsMenuItemView::~ExtensionsMenuItemView() = default;
-
-void ExtensionsMenuItemView::ButtonPressed(views::Button* sender,
-                                           const ui::Event& event) {
-  if (sender->GetID() == EXTENSION_PINNING) {
-    base::RecordAction(
-        base::UserMetricsAction("Extensions.Toolbar.PinButtonPressed"));
-    model_->SetActionVisibility(controller_->GetId(), !IsPinned());
-    return;
-  } else if (sender->GetID() == EXTENSION_CONTEXT_MENU) {
-    // TODO(crbug.com/998298): Cleanup the menu source type.
-    context_menu_controller_->ShowContextMenuForViewImpl(
-        sender, sender->GetMenuPosition(),
-        ui::MenuSourceType::MENU_SOURCE_MOUSE);
-    return;
-  }
-  NOTREACHED();
-}
 
 const char* ExtensionsMenuItemView::GetClassName() const {
   return kClassName;
@@ -114,41 +109,69 @@ const char* ExtensionsMenuItemView::GetClassName() const {
 void ExtensionsMenuItemView::OnThemeChanged() {
   views::View::OnThemeChanged();
   const SkColor icon_color =
-      GetNativeTheme()->GetSystemColor(ui::NativeTheme::kColorId_MenuIconColor);
-  pin_button_->set_ink_drop_base_color(icon_color);
-  views::SetImageFromVectorIcon(context_menu_button_, kBrowserToolsIcon,
-                                kSecondaryIconSizeDp, icon_color);
+      GetAdjustedIconColor(GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_MenuIconColor));
+
+  if (pin_button_)
+    pin_button_->SetInkDropBaseColor(icon_color);
+  views::SetImageFromVectorIconWithColor(context_menu_button_,
+                                         kBrowserToolsIcon,
+                                         kSecondaryIconSizeDp, icon_color);
   UpdatePinButton();
 }
 
 void ExtensionsMenuItemView::UpdatePinButton() {
+  if (!pin_button_)
+    return;
   pin_button_->SetTooltipText(l10n_util::GetStringUTF16(
       IsPinned() ? IDS_EXTENSIONS_MENU_UNPIN_BUTTON_TOOLTIP
                  : IDS_EXTENSIONS_MENU_PIN_BUTTON_TOOLTIP));
-  SkColor unpinned_icon_color = GetNativeTheme()->ShouldUseDarkColors()
-                                    ? gfx::kGoogleGrey500
-                                    : gfx::kChromeIconGrey;
-  SkColor icon_color = IsPinned()
-                           ? GetNativeTheme()->GetSystemColor(
-                                 ui::NativeTheme::kColorId_ProminentButtonColor)
-                           : unpinned_icon_color;
-  views::SetImageFromVectorIcon(
+  SkColor unpinned_icon_color =
+      GetAdjustedIconColor(GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_MenuIconColor));
+  SkColor icon_color =
+      IsPinned() ? GetAdjustedIconColor(GetNativeTheme()->GetSystemColor(
+                       ui::NativeTheme::kColorId_ProminentButtonColor))
+                 : unpinned_icon_color;
+  views::SetImageFromVectorIconWithColor(
       pin_button_, IsPinned() ? views::kUnpinIcon : views::kPinIcon,
       kSecondaryIconSizeDp, icon_color);
 }
 
-bool ExtensionsMenuItemView::IsContextMenuRunning() {
+bool ExtensionsMenuItemView::IsContextMenuRunning() const {
   return context_menu_controller_->IsMenuRunning();
 }
 
-bool ExtensionsMenuItemView::IsPinned() {
+bool ExtensionsMenuItemView::IsPinned() const {
   // |model_| can be null in unit tests.
-  if (!model_)
-    return false;
-  return model_->IsActionPinned(controller_->GetId());
+  return model_ && model_->IsActionPinned(controller_->GetId());
+}
+
+void ExtensionsMenuItemView::ContextMenuPressed() {
+  base::RecordAction(base::UserMetricsAction(
+      "Extensions.Toolbar.MoreActionsButtonPressedFromMenu"));
+  // TODO(crbug.com/998298): Cleanup the menu source type.
+  context_menu_controller_->ShowContextMenuForViewImpl(
+      context_menu_button_, context_menu_button_->GetMenuPosition(),
+      ui::MenuSourceType::MENU_SOURCE_MOUSE);
+}
+
+void ExtensionsMenuItemView::PinButtonPressed() {
+  base::RecordAction(
+      base::UserMetricsAction("Extensions.Toolbar.PinButtonPressed"));
+  model_->SetActionVisibility(controller_->GetId(), !IsPinned());
 }
 
 ExtensionsMenuButton*
 ExtensionsMenuItemView::primary_action_button_for_testing() {
   return primary_action_button_;
+}
+
+SkColor ExtensionsMenuItemView::GetAdjustedIconColor(SkColor icon_color) const {
+  const SkColor background_color = GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_BubbleBackground);
+  if (background_color != SK_ColorTRANSPARENT) {
+    return color_utils::BlendForMinContrast(icon_color, background_color).color;
+  }
+  return icon_color;
 }

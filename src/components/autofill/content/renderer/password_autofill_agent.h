@@ -19,12 +19,11 @@
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
-#include "components/autofill/content/renderer/field_data_manager.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/form_tracker.h"
 #include "components/autofill/content/renderer/html_based_username_detector.h"
+#include "components/autofill/core/common/field_data_manager.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "content/public/renderer/render_frame_observer.h"
@@ -130,7 +129,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   // mojom::PasswordAutofillAgent:
   void FillPasswordForm(const PasswordFormFillData& form_data) override;
-  void InformNoSavedCredentials() override;
+  void InformNoSavedCredentials(
+      bool should_show_popup_without_passwords) override;
   void FillIntoFocusedField(bool is_password,
                             const base::string16& credential) override;
   void SetLoggingState(bool active) override;
@@ -241,12 +241,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
  private:
   using OnPasswordField = util::StrongAlias<class OnPasswordFieldTag, bool>;
-
-  // Ways to restrict which passwords are saved in ProvisionallySavePassword.
-  enum ProvisionallySaveRestriction {
-    RESTRICTION_NONE,
-    RESTRICTION_NON_EMPTY_PASSWORD
-  };
 
   // Enumeration representing possible Touch To Fill states. This is used to
   // make sure that Touch To Fill will only be shown in response to the first
@@ -396,14 +390,12 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void FillPasswordFieldAndSave(blink::WebInputElement* password_input,
                                 const base::string16& credential);
 
-  // Saves |form| and |input| in |provisionally_saved_form_|, as long as it
-  // satisfies |restriction|. |form| and |input| are the elements user has just
-  // been interacting with before the form save. |form| or |input| can be null
-  // but not both at the same time. For example: if the form is unowned, |form|
-  // will be null; if the user has submitted the form, |input| will be null.
-  void ProvisionallySavePassword(const blink::WebFormElement& form,
-                                 const blink::WebInputElement& input,
-                                 ProvisionallySaveRestriction restriction);
+  // |form| and |input| are the elements user has just been interacting with
+  // before the form save. |form| or |input| can be null but not both at the
+  // same time. For example: if the form is unowned, |form| will be null; if the
+  // user has submitted the form, |input| will be null.
+  void InformBrowserAboutUserInput(const blink::WebFormElement& form,
+                                   const blink::WebInputElement& input);
 
   // This function attempts to fill |username_element| and |password_element|
   // with values from |fill_data|. The |username_element| and |password_element|
@@ -469,12 +461,17 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void SetLastUpdatedFormAndField(const blink::WebFormElement& form,
                                   const blink::WebFormControlElement& input);
 
+  bool CanShowPopupWithoutPasswords(
+      const blink::WebInputElement& password_element) const;
+
   // The logins we have filled so far with their associated info.
   WebInputToPasswordInfoMap web_input_to_password_info_;
   // A (sort-of) reverse map to |web_input_to_password_info_|.
   PasswordToLoginMap password_to_username_;
   // The chronologically last insertion into |web_input_to_password_info_|.
   WebInputToPasswordInfoMap::iterator last_supplied_password_info_iter_;
+
+  bool should_show_popup_without_passwords_ = false;
 
   // Map WebFormControlElement to the pair of:
   // 1) The most recent text that user typed or PasswordManager autofilled in

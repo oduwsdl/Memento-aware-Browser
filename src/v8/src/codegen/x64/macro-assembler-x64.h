@@ -145,6 +145,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   AVX_OP(Movss, movss)
   AVX_OP(Movsd, movsd)
   AVX_OP(Movdqu, movdqu)
+  AVX_OP(Movlps, movlps)
+  AVX_OP(Movhps, movhps)
   AVX_OP(Pcmpeqb, pcmpeqb)
   AVX_OP(Pcmpeqw, pcmpeqw)
   AVX_OP(Pcmpeqd, pcmpeqd)
@@ -281,6 +283,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   AVX_OP_SSE4_1(Pmovzxbw, pmovzxbw)
   AVX_OP_SSE4_1(Pmovzxwd, pmovzxwd)
   AVX_OP_SSE4_1(Pmovzxdq, pmovzxdq)
+  AVX_OP_SSE4_1(Pextrb, pextrb)
+  AVX_OP_SSE4_1(Pextrw, pextrw)
   AVX_OP_SSE4_1(Pextrq, pextrq)
   AVX_OP_SSE4_1(Roundps, roundps)
   AVX_OP_SSE4_1(Roundpd, roundpd)
@@ -432,6 +436,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void Move(XMMRegister dst, uint64_t src);
   void Move(XMMRegister dst, float src) { Move(dst, bit_cast<uint32_t>(src)); }
   void Move(XMMRegister dst, double src) { Move(dst, bit_cast<uint64_t>(src)); }
+  void Move(XMMRegister dst, uint64_t high, uint64_t low);
 
   // Move if the registers are not identical.
   void Move(Register target, Register source);
@@ -487,6 +492,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void Call(ExternalReference ext);
   void Call(Label* target) { call(target); }
 
+  Operand EntryFromBuiltinIndexAsOperand(Builtins::Name builtin_index);
   Operand EntryFromBuiltinIndexAsOperand(Register builtin_index);
   void CallBuiltinByIndex(Register builtin_index) override;
   void CallBuiltin(int builtin_index);
@@ -506,22 +512,26 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 
   void RetpolineJump(Register reg);
 
-  void CallForDeoptimization(Address target, int deopt_id, Label* exit,
-                             DeoptimizeKind kind);
+  void CallForDeoptimization(Builtins::Name target, int deopt_id, Label* exit,
+                             DeoptimizeKind kind,
+                             Label* jump_deoptimization_entry_label);
 
   void Trap() override;
   void DebugBreak() override;
 
   // Non-SSE2 instructions.
-  void Pextrd(Register dst, XMMRegister src, int8_t imm8);
-  void Pextrw(Register dst, XMMRegister src, int8_t imm8);
-  void Pextrb(Register dst, XMMRegister src, int8_t imm8);
-  void Pinsrd(XMMRegister dst, Register src, int8_t imm8);
-  void Pinsrd(XMMRegister dst, Operand src, int8_t imm8);
-  void Pinsrw(XMMRegister dst, Register src, int8_t imm8);
-  void Pinsrw(XMMRegister dst, Operand src, int8_t imm8);
-  void Pinsrb(XMMRegister dst, Register src, int8_t imm8);
-  void Pinsrb(XMMRegister dst, Operand src, int8_t imm8);
+  void Pextrd(Register dst, XMMRegister src, uint8_t imm8);
+
+  void Pinsrb(XMMRegister dst, XMMRegister src1, Register src2, uint8_t imm8);
+  void Pinsrb(XMMRegister dst, XMMRegister src1, Operand src2, uint8_t imm8);
+  void Pinsrw(XMMRegister dst, XMMRegister src1, Register src2, uint8_t imm8);
+  void Pinsrw(XMMRegister dst, XMMRegister src1, Operand src2, uint8_t imm8);
+  void Pinsrd(XMMRegister dst, XMMRegister src1, Register src2, uint8_t imm8);
+  void Pinsrd(XMMRegister dst, XMMRegister src1, Operand src2, uint8_t imm8);
+  void Pinsrd(XMMRegister dst, Register src2, uint8_t imm8);
+  void Pinsrd(XMMRegister dst, Operand src2, uint8_t imm8);
+  void Pinsrq(XMMRegister dst, XMMRegister src1, Register src2, uint8_t imm8);
+  void Pinsrq(XMMRegister dst, XMMRegister src1, Operand src2, uint8_t imm8);
 
   void Psllq(XMMRegister dst, int imm8) { Psllq(dst, static_cast<byte>(imm8)); }
   void Psllq(XMMRegister dst, byte imm8);
@@ -685,7 +695,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 
   // Loads a field containing off-heap pointer and does necessary decoding
   // if V8 heap sandbox is enabled.
-  void LoadExternalPointerField(Register destination, Operand field_operand);
+  void LoadExternalPointerField(Register destination, Operand field_operand,
+                                ExternalPointerTag tag);
 
  protected:
   static const int kSmiShift = kSmiTagSize + kSmiShiftSize;
@@ -1043,7 +1054,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
 
   // Needs access to SafepointRegisterStackIndex for compiled frame
   // traversal.
-  friend class StandardFrame;
+  friend class CommonFrame;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(MacroAssembler);
 };

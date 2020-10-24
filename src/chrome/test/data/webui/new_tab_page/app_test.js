@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {$$, BackgroundManager, BackgroundSelectionType, BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
+import {$$, BackgroundManager, BackgroundSelectionType, BrowserProxy, ModuleRegistry, PromoBrowserCommandProxy} from 'chrome://new-tab-page/new_tab_page.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {assertNotStyle, assertStyle, createTestProxy, createTheme} from 'chrome://test/new_tab_page/test_support.js';
 import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
-import {flushTasks} from 'chrome://test/test_util.m.js';
+import {eventToPromise, flushTasks} from 'chrome://test/test_util.m.js';
 
 suite('NewTabPageAppTest', () => {
   /** @type {!AppElement} */
@@ -25,6 +26,9 @@ suite('NewTabPageAppTest', () => {
    */
   let backgroundManager;
 
+  /** @type {PromiseResolver} */
+  let moduleResolver;
+
   suiteSetup(() => {
     loadTimeData.overrideValues({
       realboxEnabled: false,
@@ -38,15 +42,13 @@ suite('NewTabPageAppTest', () => {
     testProxy.handler.setResultFor('getBackgroundCollections', Promise.resolve({
       collections: [],
     }));
-    testProxy.handler.setResultFor('getChromeThemes', Promise.resolve({
-      chromeThemes: [],
-    }));
     testProxy.handler.setResultFor('getDoodle', Promise.resolve({
       doodle: null,
     }));
     testProxy.handler.setResultFor('getOneGoogleBarParts', Promise.resolve({
       parts: null,
     }));
+    testProxy.handler.setResultFor('getPromo', Promise.resolve({promo: null}));
     testProxy.setResultMapperFor('matchMedia', () => ({
                                                  addListener() {},
                                                  removeListener() {},
@@ -57,6 +59,10 @@ suite('NewTabPageAppTest', () => {
     backgroundManager.setResultFor(
         'getBackgroundImageLoadTime', Promise.resolve(0));
     BackgroundManager.instance_ = backgroundManager;
+    const moduleRegistry = TestBrowserProxy.fromClass(ModuleRegistry);
+    moduleResolver = new PromiseResolver();
+    moduleRegistry.setResultFor('initializeModules', moduleResolver.promise);
+    ModuleRegistry.instance_ = moduleRegistry;
 
     app = document.createElement('ntp-app');
     document.body.appendChild(app);
@@ -154,7 +160,7 @@ suite('NewTabPageAppTest', () => {
     // Assert.
     assertTrue(!!app.shadowRoot.querySelector('ntp-voice-search-overlay'));
     assertEquals(
-        newTabPage.mojom.VoiceSearchAction.ACTIVATE_SEARCH_BOX,
+        newTabPage.mojom.VoiceSearchAction.kActivateSearchBox,
         await testProxy.handler.whenCalled('onVoiceSearchAction'));
   });
 
@@ -171,7 +177,7 @@ suite('NewTabPageAppTest', () => {
     // Assert.
     assertTrue(!!app.shadowRoot.querySelector('ntp-voice-search-overlay'));
     assertEquals(
-        newTabPage.mojom.VoiceSearchAction.ACTIVATE_KEYBOARD,
+        newTabPage.mojom.VoiceSearchAction.kActivateKeyboard,
         await testProxy.handler.whenCalled('onVoiceSearchAction'));
 
     // Test other shortcut doesn't close voice search.
@@ -235,7 +241,7 @@ suite('NewTabPageAppTest', () => {
     test(`setting non-default theme ${allows} doodle`, async function() {
       // Arrange.
       const theme = createTheme();
-      theme.type = newTabPage.mojom.ThemeType.CHROME;
+      theme.isDefault = false;
 
       // Act.
       testProxy.callbackRouterRemote.setTheme(theme);
@@ -388,5 +394,130 @@ suite('NewTabPageAppTest', () => {
     assertFalse(app.$.mostVisited.hasAttribute('use-title-pill'));
     await testProxy.callbackRouterRemote.$.flushForTesting();
     assertTrue(app.$.mostVisited.hasAttribute('use-title-pill'));
+  });
+
+  test('executes promo browser command', async () => {
+    const testProxy = PromoBrowserCommandProxy.getInstance();
+    testProxy.handler = TestBrowserProxy.fromClass(
+        promoBrowserCommand.mojom.CommandHandlerRemote);
+    testProxy.handler.setResultFor(
+        'executeCommand', Promise.resolve({commandExecuted: true}));
+
+    const commandId = 123;  // Unsupported command.
+    const clickInfo = {middleButton: true};
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        frameType: 'one-google-bar',
+        messageType: 'execute-browser-command',
+        data: {
+          commandId,
+          clickInfo,
+        },
+      },
+      source: window,
+      origin: window.origin,
+    }));
+
+    // Make sure the command and click information are sent to the browser.
+    const [expectedCommandId, expectedClickInfo] =
+        await testProxy.handler.whenCalled('executeCommand');
+    // Unsupported commands get resolved to the default command before being
+    // sent to the browser.
+    assertEquals(
+        promoBrowserCommand.mojom.Command.kUnknownCommand, expectedCommandId);
+    assertEquals(clickInfo, expectedClickInfo);
+
+    // Make sure the promo frame gets notified whether the command was executed.
+    const {data: commandExecuted} = await eventToPromise('message', window);
+    assertTrue(commandExecuted);
+  });
+
+  suite('modules', () => {
+    suiteSetup(() => {
+      loadTimeData.overrideValues({
+        modulesEnabled: true,
+      });
+    });
+
+    [true, false].forEach(visible => {
+      test(`modules appended to page if visibility ${visible}`, async () => {
+        // Act.
+        moduleResolver.resolve([
+          {
+            id: 'foo',
+            element: document.createElement('div'),
+            title: 'Foo Title',
+          },
+          {
+            id: 'bar',
+            element: document.createElement('div'),
+            title: 'Bar Title',
+          }
+        ]);
+        testProxy.callbackRouterRemote.setModulesVisible(visible);
+        await flushTasks();  // Wait for module descriptor resolution.
+
+        // Assert.
+        const modules = app.shadowRoot.querySelectorAll('ntp-module-wrapper');
+        assertEquals(2, modules.length);
+        assertEquals(
+            visible ? 1 : 0,
+            testProxy.handler.getCallCount('onModulesRendered'));
+        assertEquals(1, testProxy.handler.getCallCount('updateModulesVisible'));
+      });
+    });
+
+    test('modules can be dismissed and restored', async () => {
+      // Arrange.
+      let dismissCalled = false;
+      let restoreCalled = false;
+
+      // Act.
+      moduleResolver.resolve([{
+        id: 'foo',
+        element: document.createElement('div'),
+        title: 'Foo Title',
+        actions: {
+          dismiss: () => {
+            dismissCalled = true;
+            return 'Foo was removed';
+          },
+          restore: () => {
+            restoreCalled = true;
+          },
+        }
+      }]);
+      await flushTasks();  // Wait for module descriptor resolution.
+
+      // Assert.
+      const modules = app.shadowRoot.querySelectorAll('ntp-module-wrapper');
+      assertEquals(1, modules.length);
+      assertNotStyle($$(modules[0], '#dismissButton'), 'display', 'none');
+      assertFalse($$(app, '#dismissModuleToast').open);
+
+      // Act.
+      $$(modules[0], '#dismissButton').click();
+      await flushTasks();
+
+      // Assert.
+      assertTrue($$(app, '#dismissModuleToast').open);
+      assertEquals(
+          'Foo was removed',
+          $$(app, '#dismissModuleToastMessage').textContent.trim());
+      assertNotStyle($$(app, '#undoDismissModuleButton'), 'display', 'none');
+      assertTrue(dismissCalled);
+      assertEquals(
+          'foo', await testProxy.handler.whenCalled('onDismissModule'));
+
+      // Act.
+      $$(app, '#undoDismissModuleButton').click();
+      await flushTasks();
+
+      // Assert.
+      assertFalse($$(app, '#dismissModuleToast').open);
+      assertTrue(restoreCalled);
+      assertEquals(
+          'foo', await testProxy.handler.whenCalled('onRestoreModule'));
+    });
   });
 });

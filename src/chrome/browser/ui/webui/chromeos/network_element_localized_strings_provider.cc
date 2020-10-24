@@ -191,6 +191,7 @@ void AddOncLocalizedStrings(content::WebUIDataSource* html_source) {
       {"OncWiFi-Frequency", IDS_ONC_WIFI_FREQUENCY},
       {"OncWiFi-Passphrase", IDS_ONC_WIFI_PASSWORD},
       {"OncWiFi-SSID", IDS_ONC_WIFI_SSID},
+      {"OncWiFi-BSSID", IDS_ONC_WIFI_BSSID},
       {"OncWiFi-Security", IDS_ONC_WIFI_SECURITY},
       {"OncWiFi-Security_None", IDS_ONC_WIFI_SECURITY_NONE},
       {"OncWiFi-Security_WEP-PSK", IDS_ONC_WIFI_SECURITY_WEP},
@@ -200,7 +201,8 @@ void AddOncLocalizedStrings(content::WebUIDataSource* html_source) {
       {"OncWiFi-SignalStrength", IDS_ONC_WIFI_SIGNAL_STRENGTH},
       {"Oncipv4-Gateway", IDS_ONC_IPV4_GATEWAY},
       {"Oncipv4-IPAddress", IDS_ONC_IPV4_ADDRESS},
-      {"Oncipv4-RoutingPrefix", IDS_ONC_IPV4_ROUTING_PREFIX},
+      // We use 'Netmask' in the UI instead of RoutingPrefix.
+      {"Oncipv4-Netmask", IDS_ONC_IPV4_NETMASK},
       {"Oncipv6-IPAddress", IDS_ONC_IPV6_ADDRESS},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);

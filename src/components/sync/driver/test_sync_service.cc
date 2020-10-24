@@ -39,9 +39,7 @@ TestSyncService::TestSyncService()
     : user_settings_(this),
       preferred_data_types_(ModelTypeSet::All()),
       active_data_types_(ModelTypeSet::All()),
-      last_cycle_snapshot_(MakeDefaultCycleSnapshot()),
-      user_demographics_result_(UserDemographicsResult::ForStatus(
-          UserDemographicsStatus::kIneligibleDemographicsData)) {}
+      last_cycle_snapshot_(MakeDefaultCycleSnapshot()) {}
 
 TestSyncService::~TestSyncService() = default;
 
@@ -97,11 +95,6 @@ void TestSyncService::SetLastCycleSnapshot(const SyncCycleSnapshot& snapshot) {
   last_cycle_snapshot_ = snapshot;
 }
 
-void TestSyncService::SetUserDemographics(
-    const UserDemographicsResult& user_demographics_result) {
-  user_demographics_result_ = user_demographics_result;
-}
-
 void TestSyncService::SetEmptyLastCycleSnapshot() {
   SetLastCycleSnapshot(SyncCycleSnapshot());
 }
@@ -136,6 +129,10 @@ void TestSyncService::SetTrustedVaultKeyRequiredForPreferredDataTypes(
 
 void TestSyncService::SetIsUsingSecondaryPassphrase(bool enabled) {
   user_settings_.SetIsUsingSecondaryPassphrase(enabled);
+}
+
+void TestSyncService::SetCanUploadDemographicsToGoogle(bool value) {
+  can_upload_demographics_to_google_ = value;
 }
 
 void TestSyncService::FireStateChanged() {
@@ -198,10 +195,6 @@ bool TestSyncService::IsSetupInProgress() const {
   return setup_in_progress_;
 }
 
-ModelTypeSet TestSyncService::GetRegisteredDataTypes() const {
-  return ModelTypeSet::All();
-}
-
 ModelTypeSet TestSyncService::GetPreferredDataTypes() const {
   return preferred_data_types_;
 }
@@ -232,10 +225,6 @@ void TestSyncService::RemoveObserver(SyncServiceObserver* observer) {
 
 bool TestSyncService::HasObserver(const SyncServiceObserver* observer) const {
   return observers_.HasObserver(observer);
-}
-
-UserShare* TestSyncService::GetUserShare() const {
-  return nullptr;
 }
 
 SyncTokenStatus TestSyncService::GetSyncTokenStatusForDebugging() const {
@@ -287,12 +276,6 @@ void TestSyncService::AddProtocolEventObserver(
 void TestSyncService::RemoveProtocolEventObserver(
     ProtocolEventObserver* observer) {}
 
-void TestSyncService::AddTypeDebugInfoObserver(
-    TypeDebugInfoObserver* observer) {}
-
-void TestSyncService::RemoveTypeDebugInfoObserver(
-    TypeDebugInfoObserver* observer) {}
-
 base::WeakPtr<JsController> TestSyncService::GetJsController() {
   return base::WeakPtr<JsController>();
 }
@@ -307,9 +290,13 @@ void TestSyncService::AddTrustedVaultDecryptionKeysFromWeb(
     const std::vector<std::vector<uint8_t>>& keys,
     int last_key_version) {}
 
-UserDemographicsResult TestSyncService::GetUserNoisedBirthYearAndGender(
-    base::Time now) {
-  return user_demographics_result_;
+void TestSyncService::AddTrustedVaultRecoveryMethodFromWeb(
+    const std::string& gaia_id,
+    const std::vector<uint8_t>& public_key,
+    base::OnceClosure callback) {}
+
+bool TestSyncService::CanUploadDemographicsToGoogle() {
+  return can_upload_demographics_to_google_;
 }
 
 void TestSyncService::Shutdown() {}

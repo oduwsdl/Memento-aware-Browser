@@ -157,7 +157,7 @@ void ObliterateOneDirectory(const base::FilePath& current_dir,
 
     switch (action) {
       case kDelete:
-        base::DeleteFileRecursively(to_delete);
+        base::DeletePathRecursively(to_delete);
         break;
 
       case kEnqueue:
@@ -207,7 +207,7 @@ void BlockingObliteratePath(
   // root and be done with it.  Otherwise, signal garbage collection and do
   // a best-effort delete of the on-disk structures.
   if (valid_paths_to_keep.empty()) {
-    base::DeleteFileRecursively(root);
+    base::DeletePathRecursively(root);
     return;
   }
   closure_runner->PostTask(FROM_HERE, std::move(on_gc_required));
@@ -328,14 +328,9 @@ StoragePartitionImplMap::~StoragePartitionImplMap() {
 }
 
 StoragePartitionImpl* StoragePartitionImplMap::Get(
-    const std::string& partition_domain,
-    const std::string& partition_name,
-    bool in_memory,
+    const StoragePartitionConfig& partition_config,
     bool can_create) {
   // Find the previously created partition if it's available.
-  StoragePartitionConfig partition_config(
-      partition_domain, partition_name, in_memory);
-
   PartitionMap::const_iterator it = partitions_.find(partition_config);
   if (it != partitions_.end())
     return it->second.get();
@@ -343,21 +338,28 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
   if (!can_create)
     return nullptr;
 
-  base::FilePath relative_partition_path =
-      GetStoragePartitionPath(partition_domain, partition_name);
+  base::FilePath relative_partition_path = GetStoragePartitionPath(
+      partition_config.partition_domain(), partition_config.partition_name());
+
+  base::Optional<StoragePartitionConfig> fallback_config =
+      partition_config.GetFallbackForBlobUrls();
+  StoragePartitionImpl* fallback_for_blob_urls =
+      fallback_config.has_value() ? Get(*fallback_config, /*can_create=*/false)
+                                  : nullptr;
 
   std::unique_ptr<StoragePartitionImpl> partition_ptr(
-      StoragePartitionImpl::Create(browser_context_, in_memory,
-                                   relative_partition_path, partition_domain));
+      StoragePartitionImpl::Create(
+          browser_context_, partition_config.in_memory(),
+          relative_partition_path, partition_config.partition_domain()));
   StoragePartitionImpl* partition = partition_ptr.get();
   partitions_[partition_config] = std::move(partition_ptr);
-  partition->Initialize();
+  partition->Initialize(fallback_for_blob_urls);
 
   // Arm the serviceworker cookie change observation API.
   partition->GetCookieStoreContext()->ListenToCookieChanges(
       partition->GetNetworkContext(), /*success_callback=*/base::DoNothing());
 
-  PostCreateInitialization(partition, in_memory);
+  PostCreateInitialization(partition, partition_config.in_memory());
 
   return partition;
 }
@@ -377,13 +379,13 @@ void StoragePartitionImplMap::AsyncObliterate(
        it != partitions_.end();
        ++it) {
     const StoragePartitionConfig& config = it->first;
-    if (config.partition_domain == partition_domain) {
+    if (config.partition_domain() == partition_domain) {
       it->second->ClearData(
           // All except shader cache.
           ~StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE,
           StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL, GURL(),
           base::Time(), base::Time::Max(), base::DoNothing());
-      if (!config.in_memory) {
+      if (!config.in_memory()) {
         paths_to_keep.push_back(it->second->GetPath());
       }
     }
@@ -413,7 +415,7 @@ void StoragePartitionImplMap::GarbageCollect(
        it != partitions_.end();
        ++it) {
     const StoragePartitionConfig& config = it->first;
-    if (!config.in_memory)
+    if (!config.in_memory())
       active_paths->insert(it->second->GetPath());
   }
 
@@ -450,10 +452,20 @@ void StoragePartitionImplMap::PostCreateInitialization(
     InitializeResourceContext(browser_context_);
   }
 
-  partition->GetAppCacheService()->Initialize(
-      in_memory ? base::FilePath()
-                : partition->GetPath().Append(kAppCacheDirname),
-      browser_context_, browser_context_->GetSpecialStoragePolicy());
+  if (StoragePartition::IsAppCacheEnabled()) {
+    partition->GetAppCacheService()->Initialize(
+        in_memory ? base::FilePath()
+                  : partition->GetPath().Append(kAppCacheDirname),
+        browser_context_, browser_context_->GetSpecialStoragePolicy());
+  } else if (!in_memory) {
+    // If AppCache is not enabled, clean up any on disk storage.  This is the
+    // path that will execute once AppCache has been fully removed from Chrome.
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+        base::BindOnce(
+            [](const base::FilePath& dir) { base::DeletePathRecursively(dir); },
+            partition->GetPath().Append(kAppCacheDirname)));
+  }
 
   // Check first to avoid memory leak in unittests.
   if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {

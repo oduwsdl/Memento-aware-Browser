@@ -26,34 +26,32 @@ public class WebContentsFactory {
      *                        off-the-record profile or not.
      * @param initiallyHidden Whether or not the {@link WebContents} should be initially hidden.
      * @return                A newly created {@link WebContents} object.
+     *
+     * @deprecated use {@link #createWebContents(Profile, boolean)} instead.
      */
-    // TODO(pshmakov): remove static for unit-testability.
+    @Deprecated
     public static WebContents createWebContents(boolean incognito, boolean initiallyHidden) {
-        return WebContentsFactoryJni.get().createWebContents(
-                Profile.getLastUsedRegularProfile(), incognito, initiallyHidden, false);
-    }
-
-    // TODO(https://crbug.com/1033955): Remove after check discard error is fixed.
-    private static WebContents createWebContents(Profile profile, boolean incognito,
-            boolean initiallyHidden, boolean initializeRenderer) {
-        return WebContentsFactoryJni.get().createWebContents(
-                profile, incognito, initiallyHidden, initializeRenderer);
+        Profile profile = Profile.getLastUsedRegularProfile();
+        if (incognito) profile = profile.getPrimaryOTRProfile();
+        return createWebContents(profile, initiallyHidden, false);
     }
 
     /**
      * A factory method to build a {@link WebContents} object.
-     *
-     * Also creates and initializes the renderer.
-     *
-     * @param incognito       Whether or not the {@link WebContents} should be built with an
-     *                        off-the-record profile or not.
+     * @param profile         The profile with which the {@link WebContents} should be built.
      * @param initiallyHidden Whether or not the {@link WebContents} should be initially hidden.
      * @return                A newly created {@link WebContents} object.
      */
-    public WebContents createWebContentsWithWarmRenderer(
-            boolean incognito, boolean initiallyHidden) {
-        return createWebContents(
-                Profile.getLastUsedRegularProfile(), incognito, initiallyHidden, true);
+    // TODO(https://crbug.com/1099138): Remove static for unit-testability.
+    public static WebContents createWebContents(Profile profile, boolean initiallyHidden) {
+        return WebContentsFactoryJni.get().createWebContents(profile, initiallyHidden, false);
+    }
+
+    // TODO(https://crbug.com/1033955): Remove after check discard error is fixed.
+    private static WebContents createWebContents(
+            Profile profile, boolean initiallyHidden, boolean initializeRenderer) {
+        return WebContentsFactoryJni.get().createWebContents(
+                profile, initiallyHidden, initializeRenderer);
     }
 
     /**
@@ -66,12 +64,12 @@ public class WebContentsFactory {
      * @return                A newly created {@link WebContents} object.
      */
     public WebContents createWebContentsWithWarmRenderer(Profile profile, boolean initiallyHidden) {
-        return createWebContents(profile, false, initiallyHidden, true);
+        return createWebContents(profile, initiallyHidden, true);
     }
 
     @NativeMethods
     interface Natives {
-        WebContents createWebContents(Profile profile, boolean incognito, boolean initiallyHidden,
-                boolean initializeRenderer);
+        WebContents createWebContents(
+                Profile profile, boolean initiallyHidden, boolean initializeRenderer);
     }
 }

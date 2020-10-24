@@ -13,6 +13,7 @@
 #include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller.h"
+#import "ios/chrome/browser/ui/tab_grid/features.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_commands.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_consumer.h"
@@ -27,6 +28,7 @@
 #import "ios/chrome/browser/ui/tab_grid/tab_grid_top_toolbar.h"
 #import "ios/chrome/browser/ui/tab_grid/transitions/grid_transition_layout.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
@@ -138,6 +140,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     BOOL scrollViewAnimatingContentOffset;
 
 @property(nonatomic, assign) PageChangeInteraction pageChangeInteraction;
+// UIView whose background color changes to create a fade-in / fade-out effect
+// when revealing / hiding the Thumb Strip.
+@property(nonatomic, weak) UIView* foregroundView;
 @end
 
 @implementation TabGridViewController
@@ -168,6 +173,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self setupRemoteTabsViewController];
   [self setupTopToolbar];
   [self setupBottomToolbar];
+  if (IsThumbStripEnabled()) {
+    [self setupForegroundView];
+  }
 
   // Hide the toolbars and the floating button, so they can fade in the first
   // time there's a transition into this view controller.
@@ -182,31 +190,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self contentWillAppearAnimated:animated];
-  }
-  [super viewWillAppear:animated];
-}
-
-- (void)viewDidAppear:(BOOL)animated {
-  [super viewDidAppear:animated];
-  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self contentDidAppear];
-  }
-}
-
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
   // Modify Incognito and Regular Tabs Insets
   [self setInsetForGridViews];
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self contentWillDisappearAnimated:animated];
-  }
-  [super viewWillDisappear:animated];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -220,6 +207,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self scrollToPage:_currentPage animated:NO];
     [self configureViewControllerForCurrentSizeClassesAndPage];
     [self setInsetForRemoteTabs];
+    [self setInsetForGridViews];
   };
   [coordinator animateAlongsideTransition:animate completion:nil];
 }
@@ -324,9 +312,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                                    : gridViewController.selectedCellVisible;
 }
 
-- (GridTransitionLayout*)transitionLayout {
+- (GridTransitionLayout*)transitionLayout:(TabGridPage)activePage {
   GridViewController* gridViewController =
-      [self gridViewControllerForPage:self.activePage];
+      [self gridViewControllerForPage:activePage];
   if (!gridViewController)
     return nil;
 
@@ -376,11 +364,15 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
   [self broadcastIncognitoContentVisibility];
 
-  if (base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self.incognitoTabsViewController contentWillAppearAnimated:animated];
-    [self.regularTabsViewController contentWillAppearAnimated:animated];
-    self.remoteTabsViewController.preventUpdates = NO;
+  [self.incognitoTabsViewController contentWillAppearAnimated:animated];
+  [self.regularTabsViewController contentWillAppearAnimated:animated];
+
+  if (@available(iOS 13.0, *)) {
+    self.remoteTabsViewController.session =
+        self.view.window.windowScene.session;
   }
+
+  self.remoteTabsViewController.preventUpdates = NO;
 }
 
 - (void)contentDidAppear {
@@ -404,11 +396,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
   self.viewVisible = NO;
 
-  if (base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self.incognitoTabsViewController contentWillDisappear];
-    [self.regularTabsViewController contentWillDisappear];
-    self.remoteTabsViewController.preventUpdates = YES;
-  }
+  [self.incognitoTabsViewController contentWillDisappear];
+  [self.regularTabsViewController contentWillDisappear];
+  self.remoteTabsViewController.preventUpdates = YES;
 }
 
 #pragma mark - Public Properties
@@ -445,7 +435,74 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   _activePage = activePage;
 }
 
+#pragma mark - LayoutSwitcherProvider
+
+- (id<LayoutSwitcher>)layoutSwitcher {
+  return [self gridViewControllerForPage:self.activePage];
+}
+
+#pragma mark - ViewRevealingAnimatee
+
+- (void)willAnimateViewReveal:(ViewRevealState)currentViewRevealState {
+  self.scrollView.scrollEnabled = NO;
+  switch (currentViewRevealState) {
+    case ViewRevealState::Hidden:
+      self.topToolbar.transform = CGAffineTransformMakeTranslation(
+          0, [self hiddenTopToolbarYTranslation]);
+      [self gridViewControllerForPage:self.currentPage].gridView.transform =
+          CGAffineTransformMakeTranslation(0, kThumbStripSlideInHeight);
+      break;
+    case ViewRevealState::Peeked:
+      break;
+    case ViewRevealState::Revealed:
+      break;
+  }
+}
+
+- (void)animateViewReveal:(ViewRevealState)nextViewRevealState {
+  switch (nextViewRevealState) {
+    case ViewRevealState::Hidden:
+      self.foregroundView.alpha = 1;
+      self.topToolbar.transform = CGAffineTransformMakeTranslation(
+          0, [self hiddenTopToolbarYTranslation]);
+      [self gridViewControllerForPage:self.currentPage].gridView.transform =
+          CGAffineTransformMakeTranslation(0, kThumbStripSlideInHeight);
+      self.topToolbar.alpha = 0;
+      break;
+    case ViewRevealState::Peeked:
+      self.foregroundView.alpha = 0;
+      self.topToolbar.transform = CGAffineTransformMakeTranslation(
+          0, [self hiddenTopToolbarYTranslation]);
+      [self gridViewControllerForPage:self.currentPage].gridView.transform =
+          CGAffineTransformIdentity;
+      self.topToolbar.alpha = 0;
+      break;
+    case ViewRevealState::Revealed:
+      self.foregroundView.alpha = 0;
+      self.topToolbar.transform = CGAffineTransformIdentity;
+      [self gridViewControllerForPage:self.currentPage].gridView.transform =
+          CGAffineTransformMakeTranslation(
+              0, self.topToolbar.intrinsicContentSize.height);
+      [self contentWillAppearAnimated:YES];
+      self.topToolbar.alpha = 1;
+      break;
+  }
+}
+
+- (void)didAnimateViewReveal:(ViewRevealState)viewRevealState {
+  if (viewRevealState == ViewRevealState::Revealed) {
+    self.scrollView.scrollEnabled = YES;
+  }
+}
+
 #pragma mark - Private
+
+// Returns the ammount by which the top toolbar should be translated in the y
+// direction when hidden. Used for the slide-in animation.
+- (CGFloat)hiddenTopToolbarYTranslation {
+  return -self.topToolbar.frame.size.height -
+         self.scrollView.safeAreaInsets.top;
+}
 
 // Sets the proper insets for the Remote Tabs ViewController to accomodate for
 // the safe area, toolbar, and status bar.
@@ -493,8 +550,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   CGFloat bottomInset = self.configuration == TabGridConfigurationBottomToolbar
                             ? self.bottomToolbar.intrinsicContentSize.height
                             : 0;
-  UIEdgeInsets inset = UIEdgeInsetsMake(
-      self.topToolbar.intrinsicContentSize.height, 0, bottomInset, 0);
+  if (IsThumbStripEnabled()) {
+    bottomInset += self.topToolbar.intrinsicContentSize.height;
+  }
+  CGFloat topInset =
+      IsThumbStripEnabled() ? 0 : self.topToolbar.intrinsicContentSize.height;
+  UIEdgeInsets inset = UIEdgeInsetsMake(topInset, 0, bottomInset, 0);
   inset.left = self.scrollView.safeAreaInsets.left;
   inset.right = self.scrollView.safeAreaInsets.right;
   inset.top += self.scrollView.safeAreaInsets.top;
@@ -622,6 +683,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.scrollContentView = contentView;
   self.scrollView = scrollView;
   self.scrollView.accessibilityIdentifier = kTabGridScrollViewIdentifier;
+  if (IsThumbStripEnabled()) {
+    self.scrollView.scrollEnabled = NO;
+  }
   NSArray* constraints = @[
     [contentView.topAnchor constraintEqualToAnchor:scrollView.topAnchor],
     [contentView.bottomAnchor constraintEqualToAnchor:scrollView.bottomAnchor],
@@ -766,7 +830,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self.view addSubview:topToolbar];
 
   topToolbar.leadingButton.target = self;
-  topToolbar.leadingButton.action = @selector(closeAllButtonTapped:);
+  if (base::FeatureList::IsEnabled(kEnableCloseAllTabsConfirmation)) {
+    topToolbar.leadingButton.action =
+        @selector(closeAllButtonTappedShowConfirmation:);
+  } else {
+    topToolbar.leadingButton.action = @selector(closeAllButtonTapped:);
+  }
   topToolbar.trailingButton.title =
       l10n_util::GetNSString(IDS_IOS_TAB_GRID_DONE_BUTTON);
   topToolbar.trailingButton.accessibilityIdentifier =
@@ -805,7 +874,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   ]];
 
   bottomToolbar.leadingButton.target = self;
-  bottomToolbar.leadingButton.action = @selector(closeAllButtonTapped:);
+  if (base::FeatureList::IsEnabled(kEnableCloseAllTabsConfirmation)) {
+    bottomToolbar.leadingButton.action =
+        @selector(closeAllButtonTappedShowConfirmation:);
+  } else {
+    bottomToolbar.leadingButton.action = @selector(closeAllButtonTapped:);
+  }
   bottomToolbar.trailingButton.title =
       l10n_util::GetNSString(IDS_IOS_TAB_GRID_DONE_BUTTON);
   bottomToolbar.trailingButton.accessibilityIdentifier =
@@ -815,6 +889,17 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
   [bottomToolbar setNewTabButtonTarget:self
                                 action:@selector(newTabButtonTapped:)];
+}
+
+// Adds the foreground view and sets constraints.
+- (void)setupForegroundView {
+  UIView* foregroundView = [[UIView alloc] init];
+  self.foregroundView = foregroundView;
+  foregroundView.translatesAutoresizingMaskIntoConstraints = NO;
+  foregroundView.userInteractionEnabled = NO;
+  foregroundView.backgroundColor = [UIColor blackColor];
+  [self.view addSubview:foregroundView];
+  AddSameConstraints(foregroundView, self.view);
 }
 
 - (void)configureViewControllerForCurrentSizeClassesAndPage {
@@ -1147,6 +1232,17 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
+- (void)didTapPlusSignInGridViewController:
+    (GridViewController*)gridViewController {
+  if (gridViewController == self.regularTabsViewController) {
+    [self.regularTabsDelegate addNewItem];
+    // TODO(crbug.com/1135329): Record when a new regular tab is opened.
+  } else if (gridViewController == self.incognitoTabsViewController) {
+    [self.incognitoTabsDelegate addNewItem];
+    // TODO(crbug.com/1135329): Record when a new incognito tab is opened.
+  }
+}
+
 - (void)gridViewController:(GridViewController*)gridViewController
          didMoveItemWithID:(NSString*)itemID
                    toIndex:(NSUInteger)destinationIndex {
@@ -1159,6 +1255,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)gridViewController:(GridViewController*)gridViewController
         didChangeItemCount:(NSUInteger)count {
+  if (count > 0) {
+    // Undo is only available when the tab grid is empty.
+    self.undoCloseAllAvailable = NO;
+  }
   [self configureButtonsForActiveAndCurrentPage];
   if (gridViewController == self.regularTabsViewController) {
     self.topToolbar.pageControl.regularTabCount = count;
@@ -1222,26 +1322,39 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
+// Shows an action sheet that asks for confirmation when 'Close All' button is
+// tapped.
+- (void)closeAllButtonTappedShowConfirmation:(UIBarButtonItem*)button {
+  switch (self.currentPage) {
+    case TabGridPageIncognitoTabs:
+      [self.incognitoTabsDelegate
+          showCloseAllConfirmationActionSheetWithAnchor:button];
+      break;
+    case TabGridPageRegularTabs:
+      [self.regularTabsDelegate
+          showCloseAllConfirmationActionSheetWithAnchor:button];
+      break;
+    case TabGridPageRemoteTabs:
+      NOTREACHED() << "It is invalid to call close all tabs on remote tabs.";
+      break;
+  }
+}
+
 - (void)closeAllButtonTapped:(id)sender {
   switch (self.currentPage) {
     case TabGridPageIncognitoTabs:
-      base::RecordAction(
-          base::UserMetricsAction("MobileTabGridCloseAllIncognitoTabs"));
       [self.incognitoTabsDelegate closeAllItems];
       break;
     case TabGridPageRegularTabs:
       DCHECK_EQ(self.undoCloseAllAvailable,
                 self.regularTabsViewController.gridEmpty);
       if (self.undoCloseAllAvailable) {
-        base::RecordAction(
-            base::UserMetricsAction("MobileTabGridUndoCloseAllRegularTabs"));
         [self.regularTabsDelegate undoCloseAllItems];
+        self.undoCloseAllAvailable = NO;
       } else {
-        base::RecordAction(
-            base::UserMetricsAction("MobileTabGridCloseAllRegularTabs"));
         [self.regularTabsDelegate saveAndCloseAllItems];
+        self.undoCloseAllAvailable = YES;
       }
-      self.undoCloseAllAvailable = !self.undoCloseAllAvailable;
       [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
       break;
     case TabGridPageRemoteTabs:
@@ -1309,23 +1422,23 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (NSArray*)keyCommands {
   UIKeyCommand* newWindowShortcut = [UIKeyCommand
-       keyCommandWithInput:@"n"
-             modifierFlags:UIKeyModifierCommand
-                    action:@selector(openNewRegularTabForKeyboardCommand)
-      discoverabilityTitle:l10n_util::GetNSStringWithFixup(
-                               IDS_IOS_TOOLS_MENU_NEW_TAB)];
+      keyCommandWithInput:@"n"
+            modifierFlags:UIKeyModifierCommand
+                   action:@selector(openNewRegularTabForKeyboardCommand)];
+  newWindowShortcut.discoverabilityTitle =
+      l10n_util::GetNSStringWithFixup(IDS_IOS_TOOLS_MENU_NEW_TAB);
   UIKeyCommand* newIncognitoWindowShortcut = [UIKeyCommand
-       keyCommandWithInput:@"n"
-             modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
-                    action:@selector(openNewIncognitoTabForKeyboardCommand)
-      discoverabilityTitle:l10n_util::GetNSStringWithFixup(
-                               IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB)];
+      keyCommandWithInput:@"n"
+            modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
+                   action:@selector(openNewIncognitoTabForKeyboardCommand)];
+  newIncognitoWindowShortcut.discoverabilityTitle =
+      l10n_util::GetNSStringWithFixup(IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB);
   UIKeyCommand* newTabShortcut = [UIKeyCommand
-       keyCommandWithInput:@"t"
-             modifierFlags:UIKeyModifierCommand
-                    action:@selector(openNewTabInCurrentPageForKeyboardCommand)
-      discoverabilityTitle:l10n_util::GetNSStringWithFixup(
-                               IDS_IOS_TOOLS_MENU_NEW_TAB)];
+      keyCommandWithInput:@"t"
+            modifierFlags:UIKeyModifierCommand
+                   action:@selector(openNewTabInCurrentPageForKeyboardCommand)];
+  newTabShortcut.discoverabilityTitle =
+      l10n_util::GetNSStringWithFixup(IDS_IOS_TOOLS_MENU_NEW_TAB);
   return @[ newWindowShortcut, newIncognitoWindowShortcut, newTabShortcut ];
 }
 

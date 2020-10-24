@@ -83,6 +83,10 @@ void LegacyRenderWidgetHostHWND::UpdateParent(HWND parent) {
   direct_manipulation_helper_ = DirectManipulationHelper::CreateInstance(
       hwnd(), host_->GetNativeView()->GetHost()->compositor(),
       GetWindowEventTarget(GetParent()));
+
+  // Reset tooltips when parent changed; otherwise tooltips could stay open as
+  // the former parent wouldn't be forwarded any mouse leave messages.
+  host_->DisplayTooltipText(base::string16());
 }
 
 HWND LegacyRenderWidgetHostHWND::GetParent() {
@@ -110,7 +114,7 @@ void LegacyRenderWidgetHostHWND::SetBounds(const gfx::Rect& bounds) {
 void LegacyRenderWidgetHostHWND::OnFinalMessage(HWND hwnd) {
   if (host_) {
     host_->OnLegacyWindowDestroyed();
-    host_ = NULL;
+    host_ = nullptr;
   }
 
   // Re-enable flicks for just a moment

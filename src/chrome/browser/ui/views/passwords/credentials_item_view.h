@@ -22,19 +22,19 @@ namespace network {
 namespace mojom {
 class URLLoaderFactory;
 }
-}
+}  // namespace network
 
 namespace views {
 class ImageView;
 class Label;
-}
+}  // namespace views
 
 // CredentialsItemView represents a credential view in the account chooser
 // bubble.
 class CredentialsItemView : public AccountAvatarFetcherDelegate,
                             public views::Button {
  public:
-  CredentialsItemView(views::ButtonListener* button_listener,
+  CredentialsItemView(PressedCallback callback,
                       const base::string16& upper_text,
                       const base::string16& lower_text,
                       const autofill::PasswordForm* form,
@@ -47,8 +47,6 @@ class CredentialsItemView : public AccountAvatarFetcherDelegate,
   // to the view. If |store| is kProfileStore, removes any existing icon.
   void SetStoreIndicatorIcon(autofill::PasswordForm::Store store);
 
-  const autofill::PasswordForm* form() const { return form_; }
-
   // AccountAvatarFetcherDelegate:
   void UpdateAvatar(const gfx::ImageSkia& image) override;
 
@@ -58,15 +56,11 @@ class CredentialsItemView : public AccountAvatarFetcherDelegate,
   // views::View:
   void OnPaintBackground(gfx::Canvas* canvas) override;
 
-  const autofill::PasswordForm* form_;
-
   views::ImageView* image_view_;
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // Optional right-aligned icon to distinguish account store credentials and
   // profile store ones.
   views::ImageView* store_indicator_icon_view_ = nullptr;
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   views::Label* upper_label_ = nullptr;
   views::Label* lower_label_ = nullptr;

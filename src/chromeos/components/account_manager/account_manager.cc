@@ -9,6 +9,8 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback_forward.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/location.h"
@@ -93,7 +95,9 @@ class AccountManager::GaiaTokenRevocationRequest : public GaiaAuthConsumer {
         &GaiaTokenRevocationRequest::Start, weak_factory_.GetWeakPtr());
     delay_network_call_runner.Run(std::move(start_revoke_token));
   }
-
+  GaiaTokenRevocationRequest(const GaiaTokenRevocationRequest&) = delete;
+  GaiaTokenRevocationRequest& operator=(const GaiaTokenRevocationRequest&) =
+      delete;
   ~GaiaTokenRevocationRequest() override = default;
 
   // GaiaAuthConsumer overrides.
@@ -124,7 +128,6 @@ class AccountManager::GaiaTokenRevocationRequest : public GaiaAuthConsumer {
   std::string refresh_token_;
 
   base::WeakPtrFactory<GaiaTokenRevocationRequest> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(GaiaTokenRevocationRequest);
 };
 
 bool AccountManager::AccountKey::IsValid() const {
@@ -152,7 +155,7 @@ AccountManager::Observer::Observer() = default;
 
 AccountManager::Observer::~Observer() = default;
 
-AccountManager::AccountManager() {}
+AccountManager::AccountManager() = default;
 
 // static
 void AccountManager::RegisterPrefs(PrefRegistrySimple* registry) {
@@ -164,6 +167,23 @@ void AccountManager::RegisterPrefs(PrefRegistrySimple* registry) {
 void AccountManager::SetPrefService(PrefService* pref_service) {
   DCHECK(pref_service);
   pref_service_ = pref_service;
+}
+
+void AccountManager::InitializeInEphemeralMode(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  InitializeInEphemeralMode(url_loader_factory,
+                            /* initialization_callback= */
+                            base::DoNothing());
+}
+
+void AccountManager::InitializeInEphemeralMode(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    base::OnceClosure initialization_callback) {
+  Initialize(/* home_dir= */ base::FilePath(), url_loader_factory,
+             /* delay_network_call_runner= */
+             base::BindRepeating(
+                 [](base::OnceClosure closure) { std::move(closure).Run(); }),
+             /* task_runner= */ nullptr, std::move(initialization_callback));
 }
 
 void AccountManager::Initialize(
@@ -201,25 +221,40 @@ void AccountManager::Initialize(
     // conditions, check whether the |home_dir| parameter provided by the first
     // invocation of |Initialize| matches the one it is currently being called
     // with.
-    DCHECK_EQ(home_dir, writer_->path().DirName());
-    std::move(initialization_callback).Run();
+    DCHECK_EQ(home_dir, home_dir_);
+    RunOnInitialization(std::move(initialization_callback));
     return;
   }
 
+  home_dir_ = home_dir;
   init_state_ = InitializationState::kInProgress;
   url_loader_factory_ = url_loader_factory;
   delay_network_call_runner_ = std::move(delay_network_call_runner);
   task_runner_ = task_runner;
-  writer_ = std::make_unique<base::ImportantFileWriter>(
-      home_dir.Append(kTokensFileName), task_runner_);
+
+  base::FilePath tokens_file_path;
+  if (!IsEphemeralMode()) {
+    DCHECK(task_runner_);
+    tokens_file_path = home_dir_.Append(kTokensFileName);
+    writer_ = std::make_unique<base::ImportantFileWriter>(tokens_file_path,
+                                                          task_runner_);
+  }
   initialization_callbacks_.emplace_back(std::move(initialization_callback));
 
-  PostTaskAndReplyWithResult(
-      task_runner_.get(), FROM_HERE,
-      base::BindOnce(&AccountManager::LoadAccountsFromDisk, writer_->path()),
-      base::BindOnce(
-          &AccountManager::InsertAccountsAndRunInitializationCallbacks,
-          weak_factory_.GetWeakPtr(), initialization_start_time));
+  if (!IsEphemeralMode()) {
+    DCHECK(task_runner_);
+    PostTaskAndReplyWithResult(
+        task_runner_.get(), FROM_HERE,
+        base::BindOnce(&AccountManager::LoadAccountsFromDisk, tokens_file_path),
+        base::BindOnce(
+            &AccountManager::InsertAccountsAndRunInitializationCallbacks,
+            weak_factory_.GetWeakPtr(), initialization_start_time));
+  } else {
+    // We are running in ephemeral mode. There is nothing to load from disk.
+    RecordTokenLoadStatus(TokenLoadStatus::kSuccess);
+    InsertAccountsAndRunInitializationCallbacks(initialization_start_time,
+                                                /* accounts= */ AccountMap{});
+  }
 }
 
 // static
@@ -228,6 +263,12 @@ AccountManager::AccountMap AccountManager::LoadAccountsFromDisk(
   AccountManager::AccountMap accounts;
 
   VLOG(1) << "AccountManager::LoadTokensFromDisk";
+
+  if (tokens_file_path.empty()) {
+    RecordTokenLoadStatus(TokenLoadStatus::kSuccess);
+    return accounts;
+  }
+
   std::string token_file_data;
   bool success = base::ReadFileToStringWithMaxSize(
       tokens_file_path, &token_file_data, kTokensFileMaxSizeInBytes);
@@ -293,9 +334,8 @@ void AccountManager::InsertAccountsAndRunInitializationCallbacks(
   RecordNumAccountsMetric(accounts_.size());
 }
 
-AccountManager::~AccountManager() {
-  // AccountManager is supposed to be used as a leaky global.
-}
+// AccountManager is supposed to be used as a leaky global.
+AccountManager::~AccountManager() = default;
 
 bool AccountManager::IsInitialized() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -348,6 +388,7 @@ void AccountManager::GetAccountEmailInternal(
   auto it = accounts_.find(account_key);
   if (it == accounts_.end()) {
     std::move(callback).Run(std::string());
+    return;
   }
 
   std::move(callback).Run(it->second.raw_email);
@@ -507,7 +548,12 @@ void AccountManager::UpsertAccountInternal(const AccountKey& account_key,
 }
 
 void AccountManager::PersistAccountsAsync() {
+  if (IsEphemeralMode()) {
+    return;
+  }
+
   // Schedule (immediately) a non-blocking write.
+  DCHECK(writer_);
   writer_->WriteNow(std::make_unique<std::string>(GetSerializedAccounts()));
 }
 
@@ -562,12 +608,6 @@ void AccountManager::RemoveObserver(AccountManager::Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-scoped_refptr<network::SharedURLLoaderFactory>
-AccountManager::GetUrlLoaderFactory() {
-  DCHECK(url_loader_factory_);
-  return url_loader_factory_;
-}
-
 void AccountManager::SetUrlLoaderFactoryForTests(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   url_loader_factory_ = url_loader_factory;
@@ -576,7 +616,6 @@ void AccountManager::SetUrlLoaderFactoryForTests(
 std::unique_ptr<OAuth2AccessTokenFetcher>
 AccountManager::CreateAccessTokenFetcher(
     const AccountKey& account_key,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     OAuth2AccessTokenConsumer* consumer) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -586,7 +625,7 @@ AccountManager::CreateAccessTokenFetcher(
   }
 
   return std::make_unique<OAuth2AccessTokenFetcherImpl>(
-      consumer, url_loader_factory, it->second.token);
+      consumer, url_loader_factory_, it->second.token);
 }
 
 bool AccountManager::IsTokenAvailable(const AccountKey& account_key) const {
@@ -597,12 +636,36 @@ bool AccountManager::IsTokenAvailable(const AccountKey& account_key) const {
          it->second.token != kActiveDirectoryDummyToken;
 }
 
-bool AccountManager::HasDummyGaiaToken(const AccountKey& account_key) const {
+void AccountManager::HasDummyGaiaToken(
+    const AccountKey& account_key,
+    base::OnceCallback<void(bool)> callback) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // TODO(https://crbug.com/1135980): Remove this DCHECK and call
+  // |RunOnInitialization| instead.
   DCHECK_EQ(init_state_, InitializationState::kInitialized);
 
   auto it = accounts_.find(account_key);
-  return it != accounts_.end() && it->second.token == kInvalidToken;
+  std::move(callback).Run(it != accounts_.end() &&
+                          it->second.token == kInvalidToken);
+}
+
+void AccountManager::CheckDummyGaiaTokenForAllAccounts(
+    base::OnceCallback<void(const std::vector<std::pair<Account, bool>>&)>
+        callback) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // TODO(https://crbug.com/1135980): Remove this DCHECK and call
+  // |RunOnInitialization| instead.
+  DCHECK_EQ(init_state_, InitializationState::kInitialized);
+
+  std::vector<std::pair<Account, bool>> accounts_list;
+  accounts_list.reserve(accounts_.size());
+
+  for (const auto& key_val : accounts_) {
+    accounts_list.emplace_back(Account{key_val.first, key_val.second.raw_email},
+                               key_val.second.token == kInvalidToken);
+  }
+
+  std::move(callback).Run(accounts_list);
 }
 
 void AccountManager::MaybeRevokeTokenOnServer(const AccountKey& account_key,
@@ -619,7 +682,7 @@ void AccountManager::RevokeGaiaTokenOnServer(const std::string& refresh_token) {
 
   pending_token_revocation_requests_.emplace_back(
       std::make_unique<GaiaTokenRevocationRequest>(
-          GetUrlLoaderFactory(), delay_network_call_runner_, refresh_token,
+          url_loader_factory_, delay_network_call_runner_, refresh_token,
           weak_factory_.GetWeakPtr()));
 }
 
@@ -637,6 +700,10 @@ void AccountManager::DeletePendingTokenRevocationRequest(
   if (it != pending_token_revocation_requests_.end()) {
     pending_token_revocation_requests_.erase(it);
   }
+}
+
+bool AccountManager::IsEphemeralMode() const {
+  return home_dir_.empty();
 }
 
 COMPONENT_EXPORT(ACCOUNT_MANAGER)

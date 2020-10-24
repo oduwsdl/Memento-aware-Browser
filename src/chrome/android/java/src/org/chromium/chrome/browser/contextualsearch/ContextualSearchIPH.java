@@ -8,6 +8,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.text.TextUtils;
 import android.view.View;
+import android.widget.PopupWindow.OnDismissListener;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
@@ -19,21 +20,26 @@ import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.feature_engagement.TriggerState;
+import org.chromium.ui.widget.AnchoredPopupWindow;
 import org.chromium.ui.widget.RectProvider;
 
 /**
  * Helper class for displaying In-Product Help UI for Contextual Search.
  */
 public class ContextualSearchIPH {
+    private static final int FLOATING_BUBBLE_SPACING_FACTOR = 10;
     private View mParentView;
     private ContextualSearchPanel mSearchPanel;
     private TextBubble mHelpBubble;
     private RectProvider mRectProvider;
     private String mFeatureName;
     private boolean mIsShowing;
+    private boolean mDidShow;
     private boolean mIsPositionedByPanel;
     private boolean mHasUserEverEngaged;
     private Point mFloatingBubbleAnchorPoint;
+    private OnDismissListener mDismissListener;
+    private boolean mDidUserOptIn;
 
     /**
      * Constructs the helper class.
@@ -72,8 +78,29 @@ public class ContextualSearchIPH {
      * @param profile The {@link Profile} used for {@link TrackerFactory}.
      */
     void onEntityDataReceived(boolean wasActivatedByTap, Profile profile) {
+        Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
+        tracker.notifyEvent(EventConstants.CONTEXTUAL_SEARCH_ENTITY_RESULT);
         if (wasActivatedByTap) {
             maybeShow(FeatureConstants.CONTEXTUAL_SEARCH_PROMOTE_PANEL_OPEN_FEATURE, profile);
+        }
+    }
+
+    /**
+     * Called when the Search Panel is shown.
+     * @param wasActivatedByTap Whether Contextual Search was activated by tapping.
+     * @param profile The {@link Profile} used for {@link TrackerFactory}.
+     */
+    void onSearchPanelShown(boolean wasActivatedByTap, Profile profile) {
+        Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
+        tracker.notifyEvent(wasActivatedByTap
+                        ? EventConstants.CONTEXTUAL_SEARCH_TRIGGERED_BY_TAP
+                        : EventConstants.CONTEXTUAL_SEARCH_TRIGGERED_BY_LONGPRESS);
+
+        // Log whether IPH for tapping has been shown before.
+        if (wasActivatedByTap) {
+            ContextualSearchUma.logTapIPH(
+                    tracker.getTriggerState(FeatureConstants.CONTEXTUAL_SEARCH_PROMOTE_TAP_FEATURE)
+                    == TriggerState.HAS_BEEN_DISPLAYED);
         }
     }
 
@@ -83,12 +110,24 @@ public class ContextualSearchIPH {
      * @param bubbleAnchorPoint The point where the bubble arrow should be positioned.
      * @param hasUserEverEngaged Whether the user has ever engaged Contextual Search by opening
      *        the panel.
+     * @param dismissListener An {@link OnDismissListener} to call when the bubble is dismissed.
      */
-    void onNonTriggeringTap(Profile profile, Point bubbleAnchorPoint, boolean hasUserEverEngaged) {
+    void onNonTriggeringTap(Profile profile, Point bubbleAnchorPoint, boolean hasUserEverEngaged,
+            OnDismissListener dismissListener) {
         mFloatingBubbleAnchorPoint = bubbleAnchorPoint;
         mHasUserEverEngaged = hasUserEverEngaged;
+        mDismissListener = dismissListener;
         maybeShow(FeatureConstants.CONTEXTUAL_SEARCH_TAPPED_BUT_SHOULD_LONGPRESS_FEATURE, profile,
                 false);
+    }
+
+    /**
+     * Should be called when the panel is shown and a Translation is needed but the user has
+     * not yet Opted-in.
+     * @param profile The {@link Profile} used for {@link TrackerFactory}.
+     */
+    void onTranslationNeeded(Profile profile) {
+        maybeShow(FeatureConstants.CONTEXTUAL_SEARCH_TRANSLATION_ENABLE_FEATURE, profile);
     }
 
     /**
@@ -150,6 +189,9 @@ public class ContextualSearchIPH {
                     stringId = R.string.contextual_search_iph_touch_and_hold;
                 }
                 break;
+            case FeatureConstants.CONTEXTUAL_SEARCH_TRANSLATION_ENABLE_FEATURE:
+                stringId = R.string.contextual_search_iph_enable;
+                break;
         }
 
         assert stringId != 0;
@@ -158,15 +200,22 @@ public class ContextualSearchIPH {
         mHelpBubble = new TextBubble(mParentView.getContext(), mParentView, stringId, stringId,
                 mRectProvider, ChromeAccessibilityUtil.get().isAccessibilityEnabled());
 
+        // Set the dismiss logic.
         mHelpBubble.setDismissOnTouchInteraction(true);
         mHelpBubble.addOnDismissListener(() -> {
             tracker.dismissed(mFeatureName);
             mIsShowing = false;
             mHelpBubble = null;
         });
+        if (mDismissListener != null) {
+            mHelpBubble.addOnDismissListener(mDismissListener);
+            mDismissListener = null;
+        }
 
+        maybeSetPreferredOrientation();
         mHelpBubble.show();
         mIsShowing = true;
+        mDidShow = true;
     }
 
     /**
@@ -185,8 +234,13 @@ public class ContextualSearchIPH {
         int yInsetPx = mParentView.getResources().getDimensionPixelOffset(
                 R.dimen.contextual_search_bubble_y_inset);
         if (!mIsPositionedByPanel) {
-            return new Rect(mFloatingBubbleAnchorPoint.x, mFloatingBubbleAnchorPoint.y,
-                    mFloatingBubbleAnchorPoint.x, mFloatingBubbleAnchorPoint.y);
+            // Position the bubble to point to an adjusted tap location, since there's no panel,
+            // just a selected word.  It would be better to point to the rectangle of the selected
+            // word, but that's not easy to get.
+            int adjustFactor = shouldPositionBubbleBelowArrow() ? -1 : 1;
+            int yAdjust = FLOATING_BUBBLE_SPACING_FACTOR * yInsetPx * adjustFactor;
+            return new Rect(mFloatingBubbleAnchorPoint.x, mFloatingBubbleAnchorPoint.y + yAdjust,
+                    mFloatingBubbleAnchorPoint.x, mFloatingBubbleAnchorPoint.y + yAdjust);
         }
 
         Rect anchorRect = mSearchPanel.getPanelRect();
@@ -194,15 +248,41 @@ public class ContextualSearchIPH {
         return anchorRect;
     }
 
+    /** Overrides the preferred orientation if the bubble is not anchored to the panel. */
+    private void maybeSetPreferredOrientation() {
+        if (mIsPositionedByPanel) return;
+
+        mHelpBubble.setPreferredVerticalOrientation(shouldPositionBubbleBelowArrow()
+                        ? AnchoredPopupWindow.VerticalOrientation.BELOW
+                        : AnchoredPopupWindow.VerticalOrientation.ABOVE);
+    }
+
+    /** @return whether the bubble should be positioned below it's arrow pointer. */
+    private boolean shouldPositionBubbleBelowArrow() {
+        // The bubble looks best when above the arrow, so we use that for most of the screen,
+        // but needs to appear below the arrow near the top.
+        return mFloatingBubbleAnchorPoint.y < mParentView.getHeight() / 3;
+    }
+
     /**
-     * Dismisses the In-Product Help UI.
+     * Notifies that the search has completed so we can dismiss the In-Product Help UI, etc.
      */
-    void dismiss() {
+    void onCloseContextualSearch() {
+        recordOptedInOutcome();
         if (!mIsShowing || TextUtils.isEmpty(mFeatureName)) return;
 
         mHelpBubble.dismiss();
 
         mIsShowing = false;
+    }
+
+    /**
+     * @return whether the bubble is currently showing for the tap-where-longpress-needed promo.
+     */
+    boolean isShowingForTappedButShouldLongpress() {
+        return mIsShowing
+                && FeatureConstants.CONTEXTUAL_SEARCH_TAPPED_BUT_SHOULD_LONGPRESS_FEATURE.equals(
+                        mFeatureName);
     }
 
     /**
@@ -236,5 +316,35 @@ public class ContextualSearchIPH {
         if (wasContextualCardsDataShown) {
             tracker.notifyEvent(EventConstants.CONTEXTUAL_SEARCH_PANEL_OPENED_FOR_ENTITY);
         }
+
+        // Log whether a Translation Opt-in suggestion IPH was ever shown.
+        ContextualSearchUma.logTranslationsOptInIPHShown(
+                tracker.getTriggerState(
+                        FeatureConstants.CONTEXTUAL_SEARCH_TRANSLATION_ENABLE_FEATURE)
+                == TriggerState.HAS_BEEN_DISPLAYED);
+    }
+
+    /**
+     * Notifies the Feature Engagement backend and logs UMA metrics when the user Opted-in.
+     * @param profile The current user {@link Profile}.
+     */
+    void doUserOptedInNotifications(Profile profile) {
+        Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
+        tracker.notifyEvent(EventConstants.CONTEXTUAL_SEARCH_ENABLED_OPT_IN);
+        mDidUserOptIn = true;
+    }
+
+    /**
+     * Records UMA metrics inidcated whether the user Opted-in.
+     */
+    private void recordOptedInOutcome() {
+        // If we showed the suggestion to Opt-in for Translations, Log whether the user did or not.
+        if (mDidShow
+                && mFeatureName.equals(
+                        FeatureConstants.CONTEXTUAL_SEARCH_TRANSLATION_ENABLE_FEATURE)) {
+            ContextualSearchUma.logTranslationsOptInIPHWorked(mDidUserOptIn);
+        }
+        mDidShow = false;
+        mDidUserOptIn = false;
     }
 }

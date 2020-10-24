@@ -291,7 +291,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTestWithGooglePayEnabled,
   EXPECT_TRUE(billing_address_combobox->GetEnabled());
   autofill::AddressComboboxModel* model =
       static_cast<autofill::AddressComboboxModel*>(
-          billing_address_combobox->model());
+          billing_address_combobox->GetModel());
   EXPECT_EQ(
       billing_profile.guid(),
       model->GetItemIdentifierAt(billing_address_combobox->GetSelectedIndex()));
@@ -356,7 +356,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTestWithGooglePayEnabled,
   EXPECT_TRUE(styled_label);
 
   content::WebContentsAddedObserver web_contents_added_observer;
-  styled_label->LinkClicked(nullptr, ui::EF_NONE);
+  styled_label->ClickLinkForTesting();
   content::WebContents* new_tab_contents =
       web_contents_added_observer.GetWebContents();
 

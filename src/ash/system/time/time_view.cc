@@ -106,6 +106,13 @@ void TimeView::SetTextFont(const gfx::FontList& font_list) {
   vertical_label_minutes_->SetFontList(font_list);
 }
 
+void TimeView::SetTextShadowValues(const gfx::ShadowValues& shadows) {
+  horizontal_label_->SetShadows(shadows);
+
+  vertical_label_hours_->SetShadows(shadows);
+  vertical_label_minutes_->SetShadows(shadows);
+}
+
 void TimeView::OnDateFormatChanged() {
   UpdateTimeFormat();
 }
@@ -210,6 +217,8 @@ void TimeView::UpdateTextInternal(const base::Time& now) {
 void TimeView::SetupSubviews(ClockLayout clock_layout) {
   horizontal_view_ = std::make_unique<View>();
   horizontal_view_->SetLayoutManager(std::make_unique<views::FillLayout>());
+  horizontal_view_->SetBorder(views::CreateEmptyBorder(
+      kUnifiedTrayTextTopPadding, kUnifiedTrayTimeLeftPadding, 0, 0));
   horizontal_label_ =
       horizontal_view_->AddChildView(std::make_unique<views::Label>());
   SetupLabel(horizontal_label_);

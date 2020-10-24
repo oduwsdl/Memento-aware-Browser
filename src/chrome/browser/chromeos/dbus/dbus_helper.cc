@@ -9,9 +9,12 @@
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_client.h"
 #include "chrome/common/chrome_paths.h"
+#include "chromeos/components/chromebox_for_meetings/buildflags/buildflags.h"  // PLATFORM_CFM
 #include "chromeos/constants/chromeos_paths.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
-#include "chromeos/dbus/arc_camera_client.h"
+#include "chromeos/dbus/arc/arc_camera_client.h"
+#include "chromeos/dbus/arc/arc_sensor_service_client.h"
+#include "chromeos/dbus/attestation/attestation_client.h"
 #include "chromeos/dbus/audio/cras_audio_client.h"
 #include "chromeos/dbus/authpolicy/authpolicy_client.h"
 #include "chromeos/dbus/biod/biod_client.h"
@@ -34,6 +37,10 @@
 #include "chromeos/dbus/upstart/upstart_client.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
+
+#if BUILDFLAG(PLATFORM_CFM)
+#include "chromeos/dbus/chromebox_for_meetings/cfm_hotline_client.h"
+#endif
 
 namespace {
 
@@ -63,6 +70,8 @@ void InitializeDBus() {
   // NOTE: base::Feature is not initialized yet, so any non MultiProcessMash
   // dbus client initialization for Ash should be done in Shell::Init.
   InitializeDBusClient<ArcCameraClient>(bus);
+  InitializeDBusClient<ArcSensorServiceClient>(bus);
+  InitializeDBusClient<AttestationClient>(bus);
   InitializeDBusClient<AuthPolicyClient>(bus);
   InitializeDBusClient<BiodClient>(bus);  // For device::Fingerprint.
   InitializeDBusClient<CdmFactoryDaemonClient>(bus);
@@ -93,6 +102,9 @@ void InitializeDBus() {
 void InitializeFeatureListDependentDBus() {
   dbus::Bus* bus = DBusThreadManager::Get()->GetSystemBus();
   InitializeDBusClient<bluez::BluezDBusManager>(bus);
+#if BUILDFLAG(PLATFORM_CFM)
+  InitializeDBusClient<CfmHotlineClient>(bus);
+#endif
   InitializeDBusClient<WilcoDtcSupportdClient>(bus);
 }
 
@@ -100,6 +112,9 @@ void ShutdownDBus() {
   // Feature list-dependent D-Bus clients are shut down first because we try to
   // shut down in reverse order of initialization (in case of dependencies).
   WilcoDtcSupportdClient::Shutdown();
+#if BUILDFLAG(PLATFORM_CFM)
+  CfmHotlineClient::Shutdown();
+#endif
   bluez::BluezDBusManager::Shutdown();
 
   // Other D-Bus clients are shut down, also in reverse order of initialization.
@@ -122,6 +137,7 @@ void ShutdownDBus() {
   CdmFactoryDaemonClient::Shutdown();
   BiodClient::Shutdown();
   AuthPolicyClient::Shutdown();
+  AttestationClient::Shutdown();
   ArcCameraClient::Shutdown();
 
   DBusThreadManager::Shutdown();

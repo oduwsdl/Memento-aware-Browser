@@ -4,7 +4,8 @@
 
 #include "chrome/browser/prerender/isolated/isolated_prerender_subresource_manager.h"
 
-#include "chrome/browser/prerender/isolated/isolated_prerender_proxying_url_loader_factory.h"
+#include "base/metrics/histogram_macros.h"
+#include "chrome/browser/prerender/isolated/isolated_prerender_prefetch_metrics_collector.h"
 #include "chrome/browser/prerender/isolated/prefetched_mainframe_response_container.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
@@ -18,9 +19,11 @@ IsolatedPrerenderSubresourceManager::IsolatedPrerenderSubresourceManager(
 
 IsolatedPrerenderSubresourceManager::~IsolatedPrerenderSubresourceManager() {
   if (nsp_handle_) {
-    nsp_handle_->OnCancel();
     nsp_handle_->SetObserver(nullptr);
+    nsp_handle_->OnCancel();
   }
+  UMA_HISTOGRAM_COUNTS_100("IsolatedPrerender.Prefetch.Subresources.Quantity",
+                           successfully_loaded_subresources_.size());
 }
 
 void IsolatedPrerenderSubresourceManager::ManageNoStatePrefetch(
@@ -131,7 +134,7 @@ bool IsolatedPrerenderSubresourceManager::MaybeProxyURLLoaderFactory(
       frame->GetIsolationInfoForSubresources());
 
   auto proxy = std::make_unique<IsolatedPrerenderProxyingURLLoaderFactory>(
-      frame->GetFrameTreeNodeId(), std::move(proxied_receiver),
+      this, frame->GetFrameTreeNodeId(), std::move(proxied_receiver),
       std::move(network_process_factory_remote),
       std::move(isolated_factory_remote),
       base::BindOnce(
@@ -155,9 +158,57 @@ void IsolatedPrerenderSubresourceManager::OnSubresourceLoadSuccessful(
   successfully_loaded_subresources_.emplace(url);
 }
 
+void IsolatedPrerenderSubresourceManager::NotifyProbeFailed() {
+  successfully_loaded_subresources_.clear();
+}
+
 void IsolatedPrerenderSubresourceManager::RemoveProxiedURLLoaderFactory(
     IsolatedPrerenderProxyingURLLoaderFactory* factory) {
   auto it = proxied_loader_factories_.find(factory);
   DCHECK(it != proxied_loader_factories_.end());
   proxied_loader_factories_.erase(it);
+}
+
+void IsolatedPrerenderSubresourceManager::SetPrefetchMetricsCollector(
+    scoped_refptr<IsolatedPrerenderPrefetchMetricsCollector> collector) {
+  metrics_collector_ = collector;
+}
+
+void IsolatedPrerenderSubresourceManager::OnResourceFetchComplete(
+    const GURL& url,
+    network::mojom::URLResponseHeadPtr head,
+    const network::URLLoaderCompletionStatus& status) {
+  if (!metrics_collector_)
+    return;
+
+  metrics_collector_->OnSubresourcePrefetched(
+      /*mainframe_url=*/url_,
+      /*subresource_url=*/url, std::move(head), status);
+}
+
+void IsolatedPrerenderSubresourceManager::OnResourceNotEligible(
+    const GURL& url,
+    IsolatedPrerenderPrefetchStatus status) {
+  if (!metrics_collector_)
+    return;
+  metrics_collector_->OnSubresourceNotEligible(
+      /*mainframe_url=*/url_,
+      /*subresource_url=*/url, status);
+}
+
+void IsolatedPrerenderSubresourceManager::OnResourceThrottled(const GURL& url) {
+  if (!metrics_collector_)
+    return;
+  metrics_collector_->OnSubresourceNotEligible(
+      /*mainframe_url=*/url_,
+      /*subresource_url=*/url,
+      IsolatedPrerenderPrefetchStatus::kSubresourceThrottled);
+}
+
+void IsolatedPrerenderSubresourceManager::OnResourceUsedFromCache(
+    const GURL& url) {
+  if (!metrics_collector_)
+    return;
+  metrics_collector_->OnCachedSubresourceUsed(/*mainframe_url=*/url_,
+                                              /*subresource_url=*/url);
 }

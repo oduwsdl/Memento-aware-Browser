@@ -9,6 +9,7 @@
 
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/services/network_config/in_process_instance.h"
+#include "chromeos/services/network_config/public/cpp/cros_network_config_util.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "chromeos/services/network_health/public/mojom/network_health.mojom.h"
 
@@ -69,6 +70,11 @@ mojom::NetworkPtr CreateNetwork(
     net->state = ConnectionStateToNetworkState(net_prop->connection_state);
     net->name = net_prop->name;
     net->guid = net_prop->guid;
+    if (chromeos::network_config::NetworkTypeMatchesType(
+            net_prop->type, network_config::mojom::NetworkType::kWireless)) {
+      net->signal_strength = network_health::mojom::UInt32Value::New(
+          network_config::GetWirelessSignalStrength(net_prop.get()));
+    }
   } else {
     net->state = DeviceStateToNetworkState(device_prop->device_state);
   }
@@ -87,6 +93,54 @@ NetworkHealth::NetworkHealth() {
 }
 
 NetworkHealth::~NetworkHealth() = default;
+
+void NetworkHealth::BindReceiver(
+    mojo::PendingReceiver<mojom::NetworkHealthService> receiver) {
+  receivers_.Add(this, std::move(receiver));
+}
+
+const mojom::NetworkHealthStatePtr NetworkHealth::GetNetworkHealthState() {
+  NET_LOG(EVENT) << "Network Health State Requested";
+  return network_health_state_.Clone();
+}
+
+void NetworkHealth::GetNetworkList(GetNetworkListCallback callback) {
+  std::move(callback).Run(mojo::Clone(network_health_state_.networks));
+}
+
+void NetworkHealth::GetHealthSnapshot(GetHealthSnapshotCallback callback) {
+  std::move(callback).Run(network_health_state_.Clone());
+}
+
+void NetworkHealth::OnNetworkStateListChanged() {
+  RequestNetworkStateList();
+}
+
+void NetworkHealth::OnDeviceStateListChanged() {
+  RequestDeviceStateList();
+}
+
+void NetworkHealth::OnActiveNetworksChanged(
+    std::vector<network_config::mojom::NetworkStatePropertiesPtr>) {}
+
+void NetworkHealth::OnNetworkStateChanged(
+    network_config::mojom::NetworkStatePropertiesPtr) {}
+
+void NetworkHealth::OnVpnProvidersChanged() {}
+
+void NetworkHealth::OnNetworkCertificatesChanged() {}
+
+void NetworkHealth::OnNetworkStateListReceived(
+    std::vector<network_config::mojom::NetworkStatePropertiesPtr> props) {
+  network_properties_.swap(props);
+  CreateNetworkHealthState();
+}
+
+void NetworkHealth::OnDeviceStateListReceived(
+    std::vector<network_config::mojom::DeviceStatePropertiesPtr> props) {
+  device_properties_.swap(props);
+  CreateNetworkHealthState();
+}
 
 void NetworkHealth::CreateNetworkHealthState() {
   // If the device information has not been collected, the NetworkHealthState
@@ -135,46 +189,8 @@ void NetworkHealth::CreateNetworkHealthState() {
   }
 }
 
-void NetworkHealth::BindRemote(
-    mojo::PendingReceiver<mojom::NetworkHealthService> receiver) {
-  receivers_.Add(this, std::move(receiver));
-}
-
-const mojom::NetworkHealthStatePtr NetworkHealth::GetNetworkHealthState() {
-  NET_LOG(EVENT) << "Network Health State Requested";
-  return network_health_state_.Clone();
-}
-
 void NetworkHealth::RefreshNetworkHealthState() {
   RequestNetworkStateList();
-  RequestDeviceStateList();
-}
-
-void NetworkHealth::GetNetworkList(GetNetworkListCallback callback) {
-  std::move(callback).Run(mojo::Clone(network_health_state_.networks));
-}
-
-void NetworkHealth::GetHealthSnapshot(GetHealthSnapshotCallback callback) {
-  std::move(callback).Run(network_health_state_.Clone());
-}
-
-void NetworkHealth::OnNetworkStateListReceived(
-    std::vector<network_config::mojom::NetworkStatePropertiesPtr> props) {
-  network_properties_.swap(props);
-  CreateNetworkHealthState();
-}
-
-void NetworkHealth::OnDeviceStateListReceived(
-    std::vector<network_config::mojom::DeviceStatePropertiesPtr> props) {
-  device_properties_.swap(props);
-  CreateNetworkHealthState();
-}
-
-void NetworkHealth::OnNetworkStateListChanged() {
-  RequestNetworkStateList();
-}
-
-void NetworkHealth::OnDeviceStateListChanged() {
   RequestDeviceStateList();
 }
 

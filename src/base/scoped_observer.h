@@ -7,11 +7,10 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <vector>
 
-#include "base/logging.h"
-#include "base/macros.h"
+#include "base/check.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 
 // ScopedObserver is used to keep track of the set of sources an object has
@@ -43,7 +42,8 @@ template <class Source,
 class ScopedObserver {
  public:
   explicit ScopedObserver(Observer* observer) : observer_(observer) {}
-
+  ScopedObserver(const ScopedObserver&) = delete;
+  ScopedObserver& operator=(const ScopedObserver&) = delete;
   ~ScopedObserver() {
     RemoveAll();
   }
@@ -56,7 +56,7 @@ class ScopedObserver {
 
   // Remove the object passed to the constructor as an observer from |source|.
   void Remove(Source* source) {
-    auto it = std::find(sources_.begin(), sources_.end(), source);
+    auto it = base::ranges::find(sources_, source);
     DCHECK(it != sources_.end());
     sources_.erase(it);
     (source->*RemoveObsFn)(observer_);
@@ -80,8 +80,6 @@ class ScopedObserver {
   Observer* observer_;
 
   std::vector<Source*> sources_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedObserver);
 };
 
 #endif  // BASE_SCOPED_OBSERVER_H_

@@ -1,4 +1,5 @@
-Builders switching from make to ninja will clobber on this.
+Switching from bundle to unbundled dylib (issue 14743002).
+Improper dependency for create_nmf.py broke in r240802, fixed in r240860.
 Need to clobber everything due to an IDL change in r154579 (blink)
 Need to clobber everything due to gen file moves in r175513 (Blink)
 Clobber to get rid of obselete test plugin after r248358
@@ -12,6 +13,8 @@ Clobber to fix missing NaCl gyp dependencies (crbug.com/427427).
 Another clobber for missing NaCl gyp deps (crbug.com/427427).
 Clobber to fix GN not picking up increased ID range (crbug.com/444902)
 Remove NaCl toolchains from the output dir (crbug.com/456902)
+Clobber to get rid of evil libsqlite3.dylib (crbug.com/526208)
+Clobber to remove libsystem.dylib. See crbug.com/620075
+Clobber to get past mojo gen build error (crbug.com/679607)
 CLobber all to fix GN breakage (crbug.com/736215)
 The Great Blink mv for source files (crbug.com/768828)
-Clobber to workaround buggy .ninja_deps cycle (crbug.com/934404)

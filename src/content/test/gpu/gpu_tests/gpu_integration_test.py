@@ -10,6 +10,7 @@ from telemetry.testing import serially_executed_browser_test_case
 from telemetry.util import screenshot
 from typ import json_results
 
+from gpu_tests import common_browser_args as cba
 from gpu_tests import gpu_helper
 
 _START_BROWSER_RETRIES = 3
@@ -67,14 +68,72 @@ class GpuIntegrationTest(
         help='Disables uploads of logs to cloud storage')
 
   @classmethod
-  def CustomizeBrowserArgs(cls, browser_args):
-    """Customizes the browser's command line arguments.
+  def GenerateBrowserArgs(cls, additional_args):
+    """Generates the browser args to use for the next browser startup.
+
+    Child classes are expected to override this and add any additional default
+    arguments that make sense for that particular class in addition to
+    the args returned by the parent's implementation.
+
+    Args:
+      additional_args: A list of strings containing any additional, non-default
+          args to use for the next browser startup.
+
+    Returns:
+      A list of strings containing all the browser arguments to use for the next
+      browser startup.
+    """
+    default_args = [
+        '--disable-metal-test-shaders',
+    ]
+    return default_args + additional_args
+
+  @classmethod
+  def CustomizeBrowserArgs(cls, additional_args=None):
+    """Customizes the browser's command line arguments for the next startup.
 
     NOTE that redefining this method in subclasses will NOT do what
     you expect! Do not attempt to redefine this method!
+
+    Args:
+      additional_args: A list of strings containing any additional, non-default
+          args to use for the next browser startup. See the child class'
+          GenerateBrowserArgs implementation for default arguments.
     """
-    if not browser_args:
-      browser_args = []
+    cls._SetBrowserArgsForNextStartup(
+        cls._GenerateAndSanitizeBrowserArgs(additional_args))
+
+  @classmethod
+  def _GenerateAndSanitizeBrowserArgs(cls, additional_args=None):
+    """Generates browser arguments and sanitizes invalid arguments.
+
+    Args:
+      additional_args: A list of strings containing any additional, non-default
+          args to use for the next browser startup. See the child class'
+          GenerateBrowserArgs implementation for default arguments.
+
+    Returns:
+      A list of strings containing all the browser arguments to use for the
+      next browser startup with invalid arguments removed.
+    """
+    additional_args = additional_args or []
+    browser_args = cls.GenerateBrowserArgs(additional_args)
+    if cba.DISABLE_GPU in browser_args:
+      # Some platforms require GPU process, so browser fails to launch with
+      # --disable-gpu mode, therefore, even test expectations fail to evaluate.
+      os_name = cls.browser.platform.GetOSName()
+      if os_name == 'android' or os_name == 'chromeos':
+        browser_args.remove(cba.DISABLE_GPU)
+    return browser_args
+
+  @classmethod
+  def _SetBrowserArgsForNextStartup(cls, browser_args):
+    """Sets the browser arguments to use for the next browser startup.
+
+    Args:
+      browser_args: A list of strings containing the browser arguments to use
+          for the next browser startup.
+    """
     cls._finder_options = cls.GetOriginalFinderOptions().Copy()
     browser_options = cls._finder_options.browser_options
 
@@ -88,25 +147,33 @@ class GpuIntegrationTest(
     cls.SetBrowserOptions(cls._finder_options)
 
   @classmethod
-  def RestartBrowserIfNecessaryWithArgs(cls, browser_args, force_restart=False):
-    if not browser_args:
-      browser_args = []
-    elif '--disable-gpu' in browser_args:
-      # Some platforms require GPU process, so browser fails to launch with
-      # --disable-gpu mode, therefore, even test expectations fail to evaluate.
-      browser_args = list(browser_args)
-      os_name = cls.browser.platform.GetOSName()
-      if os_name == 'android' or os_name == 'chromeos':
-        browser_args.remove('--disable-gpu')
-    if force_restart or set(browser_args) != cls._last_launched_browser_args:
-      logging.info('Restarting browser with arguments: ' + str(browser_args))
+  def RestartBrowserIfNecessaryWithArgs(cls,
+                                        additional_args=None,
+                                        force_restart=False):
+    """Restarts the browser if it is determined to be necessary.
+
+    A restart is necessary if restarting would cause the browser to run with
+    different arguments or if it is explicitly forced.
+
+    Args:
+      additional_args: A list of strings containing any additional, non-default
+          args to use for the next browser startup. See the child class'
+          GenerateBrowserArgs implementation for default arguments.
+      force_restart: True to force the browser to restart even if restarting
+          the browser would not change any browser arguments.
+    """
+    new_browser_args = cls._GenerateAndSanitizeBrowserArgs(additional_args)
+    if force_restart or set(
+        new_browser_args) != cls._last_launched_browser_args:
+      logging.info('Restarting browser with arguments: ' +
+                   str(new_browser_args))
       cls.StopBrowser()
-      cls.CustomizeBrowserArgs(browser_args)
+      cls._SetBrowserArgsForNextStartup(new_browser_args)
       cls.StartBrowser()
 
   @classmethod
-  def RestartBrowserWithArgs(cls, browser_args):
-    cls.RestartBrowserIfNecessaryWithArgs(browser_args, force_restart=True)
+  def RestartBrowserWithArgs(cls, additional_args=None):
+    cls.RestartBrowserIfNecessaryWithArgs(additional_args, force_restart=True)
 
   # The following is the rest of the framework for the GPU integration tests.
 
@@ -128,7 +195,7 @@ class GpuIntegrationTest(
         super(GpuIntegrationTest, cls).StartBrowser()
         cls.tab = cls.browser.tabs[0]
         return
-      except Exception:
+      except Exception:  # pylint: disable=broad-except
         logging.exception('Browser start failed (attempt %d of %d). Backtrace:',
                           x, _START_BROWSER_RETRIES)
         # If we are on the last try and there is an exception take a screenshot
@@ -175,6 +242,11 @@ class GpuIntegrationTest(
       if len(args) == 1 and isinstance(args[0], tuple):
         args = args[0]
       expected_crashes = self.GetExpectedCrashes(args)
+      os_name = self.browser.platform.GetOSName()
+      # The GPU tests don't function correctly if the screen is not on, so
+      # ensure that this is the case.
+      if os_name == 'android':
+        self.browser.platform.android_action_runner.TurnScreenOn()
       self.RunActualGpuTest(url, *args)
     except Exception:
       if ResultType.Failure in expected_results or should_retry_on_failure:
@@ -352,8 +424,10 @@ class GpuIntegrationTest(
     assert gpu_vendor_id in _SUPPORTED_WIN_GPU_VENDORS
     if os_version in _SUPPORTED_WIN_VERSIONS_WITH_DIRECT_COMPOSITION:
       config['direct_composition'] = True
+      config['supports_overlays'] = True
+      config['yuy2_overlay_support'] = 'SOFTWARE'
+      config['nv12_overlay_support'] = 'SOFTWARE'
       if gpu_vendor_id == 0x8086:
-        config['supports_overlays'] = True
         assert gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS
         if gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS:
           config['yuy2_overlay_support'] = 'SCALING'
@@ -397,18 +471,6 @@ class GpuIntegrationTest(
     return config
 
   @classmethod
-  def GenerateTags(cls, finder_options, possible_browser):
-    # If no expectations file paths are returned from cls.ExpectationsFiles()
-    # then an empty list will be returned from this function. If tags are
-    # returned and there are no expectations files, then Typ will raise
-    # an exception.
-    if not cls.ExpectationsFiles():
-      return []
-    with possible_browser.BrowserSession(
-        finder_options.browser_options) as browser:
-      return cls.GetPlatformTags(browser)
-
-  @classmethod
   def GetPlatformTags(cls, browser):
     """This function will take a Browser instance as an argument.
     It will call the super classes implementation of GetPlatformTags() to get
@@ -447,19 +509,10 @@ class GpuIntegrationTest(
       tags.extend([re.sub('[ _]', '-', tag) for tag in gpu_tags])
 
       # Add tags based on GPU feature status.
-      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info.feature_status)
+      startup_args = getattr(browser, 'startup_args', None)
+      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info.feature_status,
+                                                 startup_args)
       tags.append(skia_renderer)
-      use_vulkan = gpu_helper.GetVulkan(gpu_info.feature_status)
-      tags.append(use_vulkan)
-
-    # If additional options have been set via '--extra-browser-args' check for
-    # those which map to expectation tags. The '_browser_backend' attribute may
-    # not exist in unit tests.
-    if hasattr(browser, 'startup_args'):
-      use_gl = gpu_helper.GetGL(browser.startup_args)
-      tags.append(use_gl)
-      use_skia_dawn = gpu_helper.GetSkiaDawn(browser.startup_args)
-      tags.append(use_skia_dawn)
     return tags
 
   @classmethod
@@ -493,6 +546,44 @@ class GpuIntegrationTest(
   @staticmethod
   def GetJSONResultsDelimiter():
     return '/'
+
+  @classmethod
+  def IgnoredTags(cls):
+    return [
+        # We only ever use android-webview-instrumentation if we want to specify
+        # that an expectation applies to Webview.
+        'android-webview',
+        'android-not-webview',
+        # These GPUs are analogous to a particular device, and specifying the
+        # device name is clearer.
+        'arm-mali-t860',  # chromeos-board-kevin
+        'qualcomm-adreno-(tm)-330',  # android-nexus-5
+        'qualcomm-adreno-(tm)-418',  # android-nexus-5x
+        'qualcomm-adreno-(tm)-420',  # android-nexus-6
+        'qualcomm-adreno-(tm)-430',  # android-nexus-6p
+        'qualcomm-adreno-(tm)-540',  # android-pixel-2
+        'nvidia-nvidia-tegra',  # android-nexus-9 and android-shield-android-tv
+        'vmware',  # VMs
+        'vmware,-0x1050',  # ChromeOS VMs
+        # Fuchsia VMs
+        ('google-angle-(vulkan-1.1.0(swiftshader-device-('
+         'llvm-7.0.1)-(0x0000c0de)))'),
+        # These browsers are analogous to a particular OS, and specifying the
+        # OS name is clearer.
+        'cros-chrome',  # ChromeOS
+        'web-engine-shell',  # Fuchsia
+        # WebGL version is already handled by having expectations in separate
+        # files.
+        # TODO(crbug.com/1140283): Consider merging the two files and using
+        # these tags once stale expectations are removed and the files are more
+        # reasonably sized.
+        'webgl-version-1',
+        'webgl-version-2',
+        # GPU tests are always run in remote mode on the bots, and it shouldn't
+        # make a difference to these tests anyways.
+        'chromeos-local',
+        'chromeos-remote',
+    ]
 
 
 def LoadAllTestsInModule(module):

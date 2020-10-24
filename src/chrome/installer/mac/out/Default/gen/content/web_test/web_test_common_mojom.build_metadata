@@ -1,0 +1,17 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/skia/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/third_party/blink/public/mojom/mojom_platform.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/ui/accessibility/ax_enums_mojo.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/content/web_test/common/fake_bluetooth_chooser.mojom",
+    "/Users/macuser/chromium/src/content/web_test/common/mojo_echo.mojom",
+    "/Users/macuser/chromium/src/content/web_test/common/web_test.mojom",
+    "/Users/macuser/chromium/src/content/web_test/common/web_test_bluetooth_fake_adapter_setter.mojom"
+  ]
+}

@@ -30,9 +30,6 @@ const char kEnableLocalFileAccesses[] = "enable-local-file-accesses";
 // Override the URL to which metrics logs are sent for debugging.
 const char kOverrideMetricsUploadUrl[] = "override-metrics-upload-url";
 
-// Disable features that require WiFi management.
-const char kNoWifi[] = "no-wifi";
-
 // Only connect to WLAN interfaces.
 const char kRequireWlan[] = "require-wlan";
 
@@ -203,6 +200,10 @@ extern const char kCastMemoryPressureModerateFraction[] =
 // to the default renderer within content_renderer. Does not change the behavior
 // of the media service.
 const char kDisableMojoRenderer[] = "disable-mojo-renderer";
+
+// Per-product customization of force update UI remote url, also used in
+// testing.
+const char kForceUpdateRemoteUrl[] = "force-update-remote-url";
 
 // System info file path. Default is an empty string, which
 // means that dummy info will be used.

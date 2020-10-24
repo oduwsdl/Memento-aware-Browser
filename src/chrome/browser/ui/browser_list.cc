@@ -93,10 +93,10 @@ void BrowserList::AddBrowser(Browser* browser) {
   if (browser->window()->IsActive())
     SetLastActive(browser);
 
-  if (browser->profile()->IsGuestSession()) {
-    base::UmaHistogramCounts100(
-        "Browser.WindowCount.Guest",
-        GetOffTheRecordBrowsersActiveForProfile(browser->profile()));
+  if (browser->profile()->IsGuestSession() ||
+      browser->profile()->IsEphemeralGuestProfile()) {
+    base::UmaHistogramCounts100("Browser.WindowCount.Guest",
+                                GetGuestBrowserCount());
   } else if (browser->profile()->IsIncognitoProfile()) {
     base::UmaHistogramCounts100(
         "Browser.WindowCount.Incognito",
@@ -333,7 +333,7 @@ bool BrowserList::IsOffTheRecordBrowserActive() {
 int BrowserList::GetOffTheRecordBrowsersActiveForProfile(Profile* profile) {
   BrowserList* list = BrowserList::GetInstance();
   return std::count_if(list->begin(), list->end(), [profile](Browser* browser) {
-    return browser->profile()->IsSameProfile(profile) &&
+    return browser->profile()->IsSameOrParent(profile) &&
            browser->profile()->IsOffTheRecord() && !browser->is_type_devtools();
   });
 }
@@ -348,10 +348,20 @@ size_t BrowserList::GetIncognitoBrowserCount() {
 }
 
 // static
+size_t BrowserList::GetGuestBrowserCount() {
+  BrowserList* list = BrowserList::GetInstance();
+  return std::count_if(list->begin(), list->end(), [](Browser* browser) {
+    return (browser->profile()->IsGuestSession() ||
+            browser->profile()->IsEphemeralGuestProfile()) &&
+           !browser->is_type_devtools();
+  });
+}
+
+// static
 bool BrowserList::IsOffTheRecordBrowserInUse(Profile* profile) {
   BrowserList* list = BrowserList::GetInstance();
   return std::any_of(list->begin(), list->end(), [profile](Browser* browser) {
-    return browser->profile()->IsSameProfile(profile) &&
+    return browser->profile()->IsSameOrParent(profile) &&
            browser->profile()->IsOffTheRecord();
   });
 }

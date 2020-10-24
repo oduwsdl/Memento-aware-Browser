@@ -43,7 +43,9 @@
 #include "chrome/browser/win/conflicts/module_database.h"
 #include "chrome/browser/win/conflicts/module_event_sink_impl.h"
 #elif defined(OS_CHROMEOS)
+#include "chrome/browser/performance_manager/mechanisms/userspace_swap_chromeos.h"
 #include "chromeos/components/cdm_factory_daemon/cdm_factory_daemon_proxy.h"
+#include "components/performance_manager/public/performance_manager.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -115,8 +117,8 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
   // message after a time delay, in order to rate limit. The association
   // protects against the render process host ID being recycled in that time
   // gap between the preparation and the execution of that IPC.
-  associated_registry->AddInterface(
-      base::Bind(&CacheStatsRecorder::Create, render_process_host->GetID()));
+  associated_registry->AddInterface(base::BindRepeating(
+      &CacheStatsRecorder::Create, render_process_host->GetID()));
 
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
       content::GetUIThreadTaskRunner({});
@@ -179,6 +181,17 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
       base::BindRepeating(&android::AvailableOfflineContentProvider::Create,
                           profile),
       content::GetUIThreadTaskRunner({}));
+#endif
+
+#if defined(OS_CHROMEOS)
+  if (performance_manager::mechanism::userspace_swap::
+          UserspaceSwapInitializationImpl::UserspaceSwapSupportedAndEnabled()) {
+    registry->AddInterface(
+        base::BindRepeating(&performance_manager::mechanism::userspace_swap::
+                                UserspaceSwapInitializationImpl::Create,
+                            render_process_host->GetID()),
+        performance_manager::PerformanceManager::GetTaskRunner());
+  }
 #endif
 
   for (auto* ep : extra_parts_) {

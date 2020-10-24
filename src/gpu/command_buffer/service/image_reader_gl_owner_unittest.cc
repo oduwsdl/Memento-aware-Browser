@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/android/android_image_reader_compat.h"
 #include "base/test/task_environment.h"
 #include "gpu/command_buffer/service/abstract_texture.h"
 #include "gpu/command_buffer/service/image_reader_gl_owner.h"
@@ -141,14 +142,16 @@ TEST_F(ImageReaderGLOwnerTest, DestructionWorksWithWrongContext) {
   new_surface = nullptr;
 }
 
-// The max number of images used by the ImageReader must be 1 for non-Surface
-// control.
+// The max number of images used by the ImageReader must be 2 for non-Surface
+// control except for certain devices for which it is limited to 1.
 TEST_F(ImageReaderGLOwnerTest, MaxImageExpectation) {
   if (!IsImageReaderSupported())
     return;
   EXPECT_EQ(static_cast<ImageReaderGLOwner*>(image_reader_.get())
                 ->max_images_for_testing(),
-            1);
+            base::android::AndroidImageReader::LimitAImageReaderMaxSizeToOne()
+                ? 1
+                : 2);
 }
 
 class ImageReaderGLOwnerSecureSurfaceControlTest

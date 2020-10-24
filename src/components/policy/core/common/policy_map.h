@@ -102,6 +102,11 @@ class POLICY_EXPORT PolicyMap {
     void SetIgnoredByPolicyAtomicGroup();
     bool IsIgnoredByAtomicGroup() const;
 
+    // Sets that the policy's value is a default value set by the policy
+    // provider.
+    void SetIsDefaultValue();
+    bool IsDefaultValue() const;
+
     // Callback used to look up a localized string given its l10n message ID. It
     // should return a UTF-16 string.
     typedef base::RepeatingCallback<base::string16(int message_id)>
@@ -118,6 +123,7 @@ class POLICY_EXPORT PolicyMap {
    private:
     base::Optional<base::Value> value_;
     bool ignored_ = false;
+    bool is_default_value_ = false;
     std::string error_strings_;
     std::set<int> error_message_ids_;
     std::set<int> warning_message_ids_;
@@ -143,16 +149,6 @@ class POLICY_EXPORT PolicyMap {
 
   // Overwrites any existing information stored in the map for the key |policy|.
   // Resets the error for that policy to the empty string.
-  // DEPRECATED: Use the other version that takes base::Optional<base::Value>
-  // below.
-  // TODO(crbug.com/1092469): Migrate the existing usages and delete this
-  // method.
-  void Set(const std::string& policy,
-           PolicyLevel level,
-           PolicyScope scope,
-           PolicySource source,
-           std::unique_ptr<base::Value> value,
-           std::unique_ptr<ExternalDataFetcher> external_data_fetcher);
   void Set(const std::string& policy,
            PolicyLevel level,
            PolicyScope scope,

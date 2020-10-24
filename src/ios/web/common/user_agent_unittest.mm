@@ -37,8 +37,12 @@ using UserAgentTest = PlatformTest;
 
 // Tests conversions between UserAgentType values and their descriptions
 TEST_F(UserAgentTest, UserAgentTypeDescription) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kUseDefaultUserAgentInWebClient);
+
   const std::string kMobileDescription("MOBILE");
   const std::string kDesktopDescription("DESKTOP");
+  const std::string kAutomaticDescription("AUTOMATIC");
   const std::string kNoneDescription("NONE");
   const std::string kInvalidDescription(
       "not returned by GetUserAgentTypeDescription()");
@@ -55,6 +59,14 @@ TEST_F(UserAgentTest, UserAgentTypeDescription) {
             GetUserAgentTypeWithDescription(kNoneDescription));
   EXPECT_EQ(UserAgentType::NONE,
             GetUserAgentTypeWithDescription(kInvalidDescription));
+
+  // The kUseDefaultUserAgentInWebClient feature is only available on iOS 13+.
+  if (@available(iOS 13, *)) {
+    EXPECT_EQ(kAutomaticDescription,
+              GetUserAgentTypeDescription(UserAgentType::AUTOMATIC));
+    EXPECT_EQ(UserAgentType::AUTOMATIC,
+              GetUserAgentTypeWithDescription(kAutomaticDescription));
+  }
 }
 
 // Tests the mobile user agent returned for a specific product.

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/debug/alias.h"
 #include "content/renderer/accessibility/render_accessibility_impl.h"
 #include "content/renderer/render_frame_impl.h"
 
@@ -65,6 +66,9 @@ void RenderAccessibilityManager::SetMode(uint32_t ax_mode) {
 }
 
 void RenderAccessibilityManager::FatalError() {
+  // Prevent code folding.
+  const int line_number = __LINE__;
+  base::debug::Alias(&line_number);
   CHECK(false) << "Invalid accessibility tree.";
 }
 
@@ -89,7 +93,7 @@ void RenderAccessibilityManager::Reset(int32_t reset_token) {
 }
 
 void RenderAccessibilityManager::HandleAccessibilityEvents(
-    const std::vector<AXContentTreeUpdate>& updates,
+    const std::vector<ui::AXTreeUpdate>& updates,
     const std::vector<ui::AXEvent>& events,
     int32_t reset_token,
     mojom::RenderAccessibilityHost::HandleAXEventsCallback callback) {

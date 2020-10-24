@@ -35,14 +35,13 @@ namespace IPC {
 class MessageFilter;
 class SyncChannel;
 class SyncMessageFilter;
-}
+}  // namespace IPC
 
 namespace v8 {
 class Extension;
-}
+}  // namespace v8
 
 namespace content {
-
 class RenderThreadObserver;
 class ResourceDispatcherDelegate;
 

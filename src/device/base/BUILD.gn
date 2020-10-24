@@ -10,10 +10,6 @@ component("base") {
 
   sources = [
     "device_base_export.h",
-    "device_info_query_win.cc",
-    "device_info_query_win.h",
-    "device_monitor_win.cc",
-    "device_monitor_win.h",
     "features.cc",
     "features.h",
   ]
@@ -35,6 +31,12 @@ component("base") {
   }
 
   if (is_win) {
+    sources += [
+      "device_info_query_win.cc",
+      "device_info_query_win.h",
+      "device_monitor_win.cc",
+      "device_monitor_win.h",
+    ]
     libs = [ "setupapi.lib" ]
   }
 }

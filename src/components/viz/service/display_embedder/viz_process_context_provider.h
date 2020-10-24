@@ -22,7 +22,7 @@
 #include "gpu/ipc/gpu_task_scheduler_helper.h"
 #include "ui/gfx/native_widget_types.h"
 
-class GrContext;
+class GrDirectContext;
 
 namespace gpu {
 namespace gles2 {
@@ -69,7 +69,7 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
   gpu::ContextResult BindToCurrentThread() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   gpu::ContextSupport* ContextSupport() override;
-  class GrContext* GrContext() override;
+  class GrDirectContext* GrContext() override;
   gpu::SharedImageInterface* SharedImageInterface() override;
   ContextCacheController* CacheController() override;
   base::Lock* GetLock() override;
@@ -91,6 +91,8 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
   virtual uint32_t GetCopyTextureInternalFormat();
 
   virtual base::ScopedClosureRunner GetCacheBackBufferCb();
+
+  void SetNeedsMeasureNextDrawLatency();
 
  protected:
   friend class base::RefCountedThreadSafe<VizProcessContextProvider>;

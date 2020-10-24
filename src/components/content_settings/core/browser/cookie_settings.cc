@@ -7,12 +7,12 @@
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/feature_list.h"
+#include "build/build_config.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
-#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -20,7 +20,9 @@
 #include "net/cookies/cookie_util.h"
 #include "url/gurl.h"
 
-#if !defined(OS_IOS)
+#if defined(OS_IOS)
+#include "components/content_settings/core/common/features.h"
+#else
 #include "third_party/blink/public/common/features.h"
 #endif
 
@@ -37,10 +39,6 @@ CookieSettings::CookieSettings(
       block_third_party_cookies_(false) {
   content_settings_observer_.Add(host_content_settings_map_.get());
   pref_change_registrar_.Init(prefs);
-  pref_change_registrar_.Add(
-      prefs::kBlockThirdPartyCookies,
-      base::BindRepeating(&CookieSettings::OnCookiePreferencesChanged,
-                          base::Unretained(this)));
   pref_change_registrar_.Add(
       prefs::kCookieControlsMode,
       base::BindRepeating(&CookieSettings::OnCookiePreferencesChanged,
@@ -62,14 +60,9 @@ void CookieSettings::GetCookieSettings(
 
 void CookieSettings::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(
-      prefs::kBlockThirdPartyCookies, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterIntegerPref(
       prefs::kCookieControlsMode,
-      static_cast<int>(kImprovedCookieControlsDefaultInIncognito.Get()
-                           ? CookieControlsMode::kIncognitoOnly
-                           : CookieControlsMode::kOff),
+      static_cast<int>(CookieControlsMode::kIncognitoOnly),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
@@ -244,16 +237,13 @@ void CookieSettings::GetCookieSettingInternal(
 
 CookieSettings::~CookieSettings() = default;
 
-bool CookieSettings::IsCookieControlsEnabled() {
-  if (base::FeatureList::IsEnabled(
-          kImprovedCookieControlsForThirdPartyCookieBlocking) &&
-      pref_change_registrar_.prefs()->GetBoolean(
-          prefs::kBlockThirdPartyCookies)) {
-    return true;
-  }
+bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() {
+  DCHECK(thread_checker_.CalledOnValidThread());
 
+#if defined(OS_IOS)
   if (!base::FeatureList::IsEnabled(kImprovedCookieControls))
     return false;
+#endif
 
   CookieControlsMode mode = static_cast<CookieControlsMode>(
       pref_change_registrar_.prefs()->GetInteger(prefs::kCookieControlsMode));
@@ -283,10 +273,7 @@ void CookieSettings::OnContentSettingChanged(
 void CookieSettings::OnCookiePreferencesChanged() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  bool new_block_third_party_cookies =
-      pref_change_registrar_.prefs()->GetBoolean(
-          prefs::kBlockThirdPartyCookies) ||
-      IsCookieControlsEnabled();
+  bool new_block_third_party_cookies = ShouldBlockThirdPartyCookiesInternal();
 
   // Safe to read |block_third_party_cookies_| without locking here because the
   // only place that writes to it is this method and it will always be run on

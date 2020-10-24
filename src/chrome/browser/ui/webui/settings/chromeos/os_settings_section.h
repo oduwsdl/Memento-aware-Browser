@@ -10,6 +10,7 @@
 
 #include "base/containers/span.h"
 #include "base/strings/string16.h"
+#include "base/values.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/setting.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search.mojom.h"
@@ -64,7 +65,7 @@ class OsSettingsSection {
         mojom::SearchResultDefaultRank default_rank,
         const std::string& url_path_with_parameters) = 0;
 
-    // Registers a subpage whose paernt is another subpage in this section.
+    // Registers a subpage whose parent is another subpage in this section.
     virtual void RegisterNestedSubpage(
         int name_message_id,
         mojom::Subpage subpage,
@@ -118,6 +119,10 @@ class OsSettingsSection {
   // Provides the path for this section.
   virtual std::string GetSectionPath() const = 0;
 
+  // Logs metrics for the updated |setting| with optional |value|. Returns
+  // whether the setting change was logged.
+  virtual bool LogMetric(mojom::Setting setting, base::Value& value) const = 0;
+
   // Registers the subpages and/or settings which reside in this section.
   virtual void RegisterHierarchy(HierarchyGenerator* generator) const = 0;
 
@@ -154,6 +159,22 @@ class OsSettingsSection {
   SearchTagRegistry* registry() { return search_tag_registry_; }
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(OsSettingsSectionTest, SectionWithFlag);
+  FRIEND_TEST_ALL_PREFIXES(OsSettingsSectionTest, SectionNoFlag);
+  FRIEND_TEST_ALL_PREFIXES(OsSettingsSectionTest, SubpageWithFlag);
+  FRIEND_TEST_ALL_PREFIXES(OsSettingsSectionTest, SubpageNoFlag);
+  FRIEND_TEST_ALL_PREFIXES(OsSettingsSectionTest, SettingWithFlag);
+  FRIEND_TEST_ALL_PREFIXES(OsSettingsSectionTest, SettingExistingQueryWithFlag);
+  FRIEND_TEST_ALL_PREFIXES(OsSettingsSectionTest, SettingNoFlag);
+
+  static constexpr char kSettingIdUrlParam[] = "settingId";
+
+  // If type is Setting, adds the kSettingIdUrlParam to the query parameter
+  // and returns the deep linked url. Doesn't modify url otherwise.
+  static std::string GetDefaultModifiedUrl(mojom::SearchResultType type,
+                                           OsSettingsIdentifier id,
+                                           const std::string& url_to_modify);
+
   Profile* profile_;
   SearchTagRegistry* search_tag_registry_;
 };

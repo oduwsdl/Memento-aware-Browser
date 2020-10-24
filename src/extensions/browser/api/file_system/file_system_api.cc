@@ -57,7 +57,7 @@
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "url/origin.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <CoreFoundation/CoreFoundation.h>
 #include "base/mac/foundation_util.h"
 #endif
@@ -177,18 +177,18 @@ const int kGraylistedPaths[] = {
 #endif
 };
 
-typedef base::Callback<void(std::unique_ptr<base::File::Info>)>
-    FileInfoOptCallback;
+using FileInfoOptCallback =
+    base::OnceCallback<void(std::unique_ptr<base::File::Info>)>;
 
 // Passes optional file info to the UI thread depending on |result| and |info|.
-void PassFileInfoToUIThread(const FileInfoOptCallback& callback,
+void PassFileInfoToUIThread(FileInfoOptCallback callback,
                             base::File::Error result,
                             const base::File::Info& info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   std::unique_ptr<base::File::Info> file_info(
       result == base::File::FILE_OK ? new base::File::Info(info) : NULL);
   content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(callback, std::move(file_info)));
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(file_info)));
 }
 
 // Gets a WebContents instance handle for a platform app hosted in
@@ -246,8 +246,7 @@ ExtensionFunction::ResponseAction FileSystemGetDisplayPathFunction::Run() {
   }
 
   file_path = path_util::PrettifyPath(file_path);
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(file_path.value())));
+  return RespondNow(OneArgument(base::Value(file_path.value())));
 }
 
 FileSystemEntryFunction::FileSystemEntryFunction()
@@ -280,7 +279,7 @@ void FileSystemEntryFunction::RegisterFileSystemsAndSendResponse(
   std::unique_ptr<base::DictionaryValue> result = CreateResult();
   for (const auto& path : paths)
     AddEntryToResult(path, std::string(), result.get());
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 std::unique_ptr<base::DictionaryValue> FileSystemEntryFunction::CreateResult() {
@@ -377,7 +376,7 @@ ExtensionFunction::ResponseAction FileSystemIsWritableEntryFunction::Run() {
   bool is_writable =
       policy->CanReadWriteFileSystem(source_process_id(), filesystem_id);
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(is_writable)));
+  return RespondNow(OneArgument(base::Value(is_writable)));
 }
 
 void FileSystemChooseEntryFunction::ShowPicker(
@@ -497,9 +496,16 @@ void FileSystemChooseEntryFunction::FilesSelected(
   } else {
     last_choose_directory = paths[0].DirName();
   }
-  file_system_api::SetLastChooseEntryDirectory(
-      ExtensionPrefs::Get(browser_context()), extension()->id(),
-      last_choose_directory);
+
+  if (extension_->is_extension()) {
+    ExtensionsBrowserClient::Get()->SetLastSaveFilePath(browser_context(),
+                                                        last_choose_directory);
+  } else {
+    file_system_api::SetLastChooseEntryDirectory(
+        ExtensionPrefs::Get(browser_context()), extension()->id(),
+        last_choose_directory);
+  }
+
   if (is_directory_) {
     // Get the WebContents for the app window to be the parent window of the
     // confirmation dialog if necessary.
@@ -618,10 +624,10 @@ void FileSystemChooseEntryFunction::BuildFileTypeInfo(
     ui::SelectFileDialog::FileTypeInfo* file_type_info,
     const base::FilePath::StringType& suggested_extension,
     const AcceptOptions* accepts,
-    const bool* acceptsAllTypes) {
+    const bool* accepts_all_types) {
   file_type_info->include_all_files = true;
-  if (acceptsAllTypes)
-    file_type_info->include_all_files = *acceptsAllTypes;
+  if (accepts_all_types)
+    file_type_info->include_all_files = *accepts_all_types;
 
   bool need_suggestion =
       !file_type_info->include_all_files && !suggested_extension.empty();
@@ -744,8 +750,14 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
 
   file_type_info.allowed_paths = ui::SelectFileDialog::FileTypeInfo::ANY_PATH;
 
-  base::FilePath previous_path = file_system_api::GetLastChooseEntryDirectory(
-      ExtensionPrefs::Get(browser_context()), extension()->id());
+  base::FilePath previous_path;
+  if (extension_->is_extension()) {
+    previous_path =
+        ExtensionsBrowserClient::Get()->GetSaveFilePath(browser_context());
+  } else {
+    previous_path = file_system_api::GetLastChooseEntryDirectory(
+        ExtensionPrefs::Get(browser_context()), extension()->id());
+  }
 
   if (previous_path.empty()) {
     SetInitialPathAndShowPicker(previous_path, suggested_name, file_type_info,
@@ -815,10 +827,10 @@ ExtensionFunction::ResponseAction FileSystemRetainEntryFunction::Run() {
         util::GetStoragePartitionForExtensionId(extension_id(),
                                                 browser_context())
             ->GetFileSystemContext();
-    const GURL origin =
-        util::GetSiteForExtensionId(extension_id(), browser_context());
+
     const storage::FileSystemURL url = context->CreateCrackedFileSystemURL(
-        url::Origin::Create(origin), storage::kFileSystemTypeIsolated,
+        url::Origin::Create(extension()->url()),
+        storage::kFileSystemTypeIsolated,
         storage::IsolatedContext::GetInstance()
             ->CreateVirtualRootPath(filesystem_id)
             .Append(base::FilePath::FromUTF8Unsafe(filesystem_path)));
@@ -832,10 +844,10 @@ ExtensionFunction::ResponseAction FileSystemRetainEntryFunction::Run() {
                 &storage::FileSystemOperationRunner::GetMetadata),
             base::Unretained(context->operation_runner()), url,
             storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY,
-            base::Bind(
+            base::BindOnce(
                 &PassFileInfoToUIThread,
-                base::Bind(&FileSystemRetainEntryFunction::RetainFileEntry,
-                           this, entry_id, path))));
+                base::BindOnce(&FileSystemRetainEntryFunction::RetainFileEntry,
+                               this, entry_id, path))));
     return RespondLater();
   }
 
@@ -877,7 +889,7 @@ ExtensionFunction::ResponseAction FileSystemIsRestorableFunction::Run() {
       delegate->GetSavedFilesService(browser_context());
   DCHECK(saved_files_service);
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
+  return RespondNow(OneArgument(base::Value(
       saved_files_service->IsRegistered(extension_->id(), entry_id))));
 }
 
@@ -907,7 +919,8 @@ ExtensionFunction::ResponseAction FileSystemRestoreEntryFunction::Run() {
     is_directory_ = file->is_directory;
     std::unique_ptr<base::DictionaryValue> result = CreateResult();
     AddEntryToResult(file->path, file->id, result.get());
-    return RespondNow(OneArgument(std::move(result)));
+    return RespondNow(
+        OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
   }
   return RespondNow(NoArguments());
 }
@@ -951,8 +964,9 @@ ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   delegate->RequestFileSystem(
       browser_context(), this, *extension(), params->options.volume_id,
       params->options.writable.get() && *params->options.writable.get(),
-      base::Bind(&FileSystemRequestFileSystemFunction::OnGotFileSystem, this),
-      base::Bind(&FileSystemRequestFileSystemFunction::OnError, this));
+      base::BindOnce(&FileSystemRequestFileSystemFunction::OnGotFileSystem,
+                     this),
+      base::BindOnce(&FileSystemRequestFileSystemFunction::OnError, this));
 
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
@@ -963,7 +977,7 @@ void FileSystemRequestFileSystemFunction::OnGotFileSystem(
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("file_system_id", id);
   dict->SetString("file_system_path", path);
-  Respond(OneArgument(std::move(dict)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 void FileSystemRequestFileSystemFunction::OnError(const std::string& error) {
@@ -988,8 +1002,8 @@ ExtensionFunction::ResponseAction FileSystemGetVolumeListFunction::Run() {
 
   delegate->GetVolumeList(
       browser_context(), *extension(),
-      base::Bind(&FileSystemGetVolumeListFunction::OnGotVolumeList, this),
-      base::Bind(&FileSystemGetVolumeListFunction::OnError, this));
+      base::BindOnce(&FileSystemGetVolumeListFunction::OnGotVolumeList, this),
+      base::BindOnce(&FileSystemGetVolumeListFunction::OnError, this));
 
   return did_respond() ? AlreadyResponded() : RespondLater();
 }

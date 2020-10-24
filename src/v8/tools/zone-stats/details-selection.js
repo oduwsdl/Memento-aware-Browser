@@ -12,6 +12,7 @@ export const VIEW_BY_ZONE_CATEGORY = 'by-zone-category';
 
 export const KIND_ALLOCATED_MEMORY = 'kind-detailed-allocated';
 export const KIND_USED_MEMORY = 'kind-detailed-used';
+export const KIND_FREED_MEMORY = 'kind-detailed-freed';
 
 defineCustomElement('details-selection', (templateText) =>
  class DetailsSelection extends HTMLElement {
@@ -175,6 +176,7 @@ defineCustomElement('details-selection', (templateText) =>
       '#data-kind-select', [
         [KIND_ALLOCATED_MEMORY, 'Allocated memory per zone'],
         [KIND_USED_MEMORY, 'Used memory per zone'],
+        [KIND_FREED_MEMORY, 'Freed memory per zone'],
       ],
       (key, label) => label, KIND_ALLOCATED_MEMORY);
 
@@ -260,14 +262,10 @@ defineCustomElement('details-selection', (templateText) =>
       const zone_name = checkbox.value;
       const zone_data = zones_data.get(zone_name);
       const zone_allocated = zone_data === undefined ? 0 : zone_data.allocated;
-      if (zone_allocated == 0) {
-        checkbox.parentNode.style.display = 'none';
-      } else {
-        const percents = zone_allocated / total_allocated;
-        const percent_div = checkbox.parentNode.querySelector('.percentBackground');
-        percent_div.style.left = (percents * 100) + '%';
-        checkbox.parentNode.style.display = 'block';
-      }
+      const percents = zone_allocated / total_allocated;
+      const percent_div = checkbox.parentNode.querySelector('.percentBackground');
+      percent_div.style.left = (percents * 100) + '%';
+      checkbox.parentNode.style.display = 'block';
     });
   }
 

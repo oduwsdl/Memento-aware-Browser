@@ -15,11 +15,10 @@ namespace base {
 
 namespace subtle {
 Time TimeNowIgnoringOverride() {
-  zx_time_t nanos_since_unix_epoch;
-  zx_status_t status = zx_clock_get(ZX_CLOCK_UTC, &nanos_since_unix_epoch);
-  ZX_CHECK(status == ZX_OK, status);
-  // The following expression will overflow in the year 289938 A.D.:
-  return Time::FromZxTime(nanos_since_unix_epoch);
+  timespec ts;
+  int status = timespec_get(&ts, TIME_UTC);
+  CHECK(status != 0);
+  return Time::FromTimeSpec(ts);
 }
 
 Time TimeNowFromSystemTimeIgnoringOverride() {
@@ -33,7 +32,7 @@ Time TimeNowFromSystemTimeIgnoringOverride() {
 namespace subtle {
 TimeTicks TimeTicksNowIgnoringOverride() {
   const zx_time_t nanos_since_boot = zx_clock_get_monotonic();
-  CHECK(nanos_since_boot != 0);
+  CHECK_NE(0, nanos_since_boot);
   return TimeTicks::FromZxTime(nanos_since_boot);
 }
 }  // namespace subtle
@@ -49,11 +48,11 @@ zx_duration_t TimeDelta::ToZxDuration() const {
 
 // static
 Time Time::FromZxTime(zx_time_t nanos_since_unix_epoch) {
-  return Time::UnixEpoch() + TimeDelta::FromNanoseconds(nanos_since_unix_epoch);
+  return UnixEpoch() + TimeDelta::FromNanoseconds(nanos_since_unix_epoch);
 }
 
 zx_time_t Time::ToZxTime() const {
-  return (*this - Time::UnixEpoch()).InNanoseconds();
+  return (*this - UnixEpoch()).InNanoseconds();
 }
 
 // static

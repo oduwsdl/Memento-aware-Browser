@@ -26,7 +26,6 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -41,12 +40,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/bookmarks/browser/startup_task_runner_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -55,10 +52,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
-#include "extensions/browser/extension_registry.h"
-#include "extensions/common/extension.h"
-#include "extensions/common/extension_builder.h"
-#include "extensions/common/value_builder.h"
+#include "extensions/buildflags/buildflags.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
@@ -75,6 +70,14 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chromeos/constants/chromeos_switches.h"
+#endif
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/extension_protocols.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/common/extension.h"
+#include "extensions/common/extension_builder.h"
+#include "extensions/common/value_builder.h"
 #endif
 
 namespace {
@@ -144,17 +147,21 @@ class ProfileDestructionWatcher : public ProfileObserver {
 
   void Watch(Profile* profile) { observed_profiles_.Add(profile); }
 
+  bool destroyed() const { return destroyed_; }
+
+  void WaitForDestruction() { run_loop_.Run(); }
+
+ private:
   // ProfileObserver:
   void OnProfileWillBeDestroyed(Profile* profile) override {
     DCHECK(!destroyed_) << "Double profile destruction";
     destroyed_ = true;
+    run_loop_.Quit();
     observed_profiles_.Remove(profile);
   }
 
-  bool destroyed() const { return destroyed_; }
-
- private:
   bool destroyed_ = false;
+  base::RunLoop run_loop_;
   ScopedObserver<Profile, ProfileObserver> observed_profiles_{this};
 
   DISALLOW_COPY_AND_ASSIGN(ProfileDestructionWatcher);
@@ -584,7 +591,6 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
 
 // The following tests make sure that it's safe to shut down while one of the
 // Profile's URLLoaderFactories is in use by a SimpleURLLoader.
-
 IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
                        SimpleURLLoaderUsingMainContextDuringShutdown) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -596,7 +602,6 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
 
 // The following tests make sure that it's safe to destroy an incognito profile
 // while one of the its URLLoaderFactory is in use by a SimpleURLLoader.
-
 IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
                        SimpleURLLoaderUsingMainContextDuringIncognitoTeardown) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -610,7 +615,64 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
           .get());
 }
 
-// Verifies the cache directory supports multiple profiles when it's overriden
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+// Regression test for https://crbug.com/1136214 - verification that
+// ExtensionURLLoaderFactory won't hit a use-after-free bug when used after
+// a Profile has been torn down already.
+IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
+                       ExtensionURLLoaderFactoryAfterIncognitoTeardown) {
+  // Create a mojo::Remote to ExtensionURLLoaderFactory for the incognito
+  // profile.
+  Browser* incognito_browser =
+      OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
+  Profile* incognito_profile = incognito_browser->profile();
+  mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory;
+  url_loader_factory.Bind(extensions::CreateExtensionNavigationURLLoaderFactory(
+      incognito_profile, base::kInvalidUkmSourceId,
+      false /* is_web_view_request */));
+
+  // Verify that the factory works fine while the profile is still alive.
+  // We don't need to test with a real extension URL - it is sufficient to
+  // verify that the factory responds with ERR_BLOCKED_BY_CLIENT that indicates
+  // a missing extension.
+  GURL missing_extension_url("chrome-extension://no-such-extension/blah");
+  {
+    SimpleURLLoaderHelper simple_loader_helper(url_loader_factory.get(),
+                                               missing_extension_url,
+                                               net::ERR_BLOCKED_BY_CLIENT);
+    simple_loader_helper.WaitForCompletion();
+  }
+
+  {
+    // Start monitoring |incognito_profile| for shutdown.
+    ProfileManager* profile_manager = g_browser_process->profile_manager();
+    EXPECT_TRUE(profile_manager->IsValidProfile(incognito_profile));
+    ProfileDestructionWatcher watcher;
+    watcher.Watch(incognito_profile);
+
+    // Close all incognito tabs, starting profile shutdown.
+    incognito_browser->tab_strip_model()->CloseAllTabs();
+
+    // ProfileDestructionWatcher waits for
+    // BrowserContext::NotifyWillBeDestroyed, but after the RunLoop unwinds, the
+    // profile should already be gone - let's assert this below (since this
+    // ensures that |simple_loader_helper2| really tests what needs to be
+    // tested).
+    watcher.WaitForDestruction();
+    EXPECT_FALSE(profile_manager->IsValidProfile(incognito_profile));
+  }
+
+  // Verify that the factory doesn't crash (https://crbug.com/1136214), but
+  // instead SimpleURLLoaderImpl::OnMojoDisconnect reports net::ERR_FAILED.
+  {
+    SimpleURLLoaderHelper simple_loader_helper2(
+        url_loader_factory.get(), missing_extension_url, net::ERR_FAILED);
+    simple_loader_helper2.WaitForCompletion();
+  }
+}
+#endif
+
+// Verifies the cache directory supports multiple profiles when it's overridden
 // by group policy or command line switches.
 IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, DiskCacheDirOverride) {
   base::ScopedAllowBlockingForTesting allow_blocking;
@@ -819,8 +881,8 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestGetAllOffTheRecordProfiles) {
   EXPECT_TRUE(base::Contains(all_otrs, incognito_profile));
 }
 
-// Tests Profile::IsSameProfile
-IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestIsSameProfile) {
+// Tests Profile::IsSameOrParent
+IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestIsSameOrParent) {
   Profile::OTRProfileID otr_profile_id("profile::otr");
 
   Profile* regular_profile = browser()->profile();
@@ -828,12 +890,25 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestIsSameProfile) {
       regular_profile->GetOffTheRecordProfile(otr_profile_id);
   Profile* incognito_profile = regular_profile->GetPrimaryOTRProfile();
 
-  EXPECT_TRUE(regular_profile->IsSameProfile(otr_profile));
-  EXPECT_TRUE(otr_profile->IsSameProfile(regular_profile));
+  EXPECT_TRUE(regular_profile->IsSameOrParent(otr_profile));
+  EXPECT_TRUE(otr_profile->IsSameOrParent(regular_profile));
 
-  EXPECT_TRUE(regular_profile->IsSameProfile(incognito_profile));
-  EXPECT_TRUE(incognito_profile->IsSameProfile(regular_profile));
+  EXPECT_TRUE(regular_profile->IsSameOrParent(incognito_profile));
+  EXPECT_TRUE(incognito_profile->IsSameOrParent(regular_profile));
 
-  EXPECT_FALSE(incognito_profile->IsSameProfile(otr_profile));
-  EXPECT_FALSE(otr_profile->IsSameProfile(incognito_profile));
+  EXPECT_FALSE(incognito_profile->IsSameOrParent(otr_profile));
+  EXPECT_FALSE(otr_profile->IsSameOrParent(incognito_profile));
+}
+
+// Tests if browser creation using non primary OTRs is blocked.
+IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
+                       TestCreatingBrowserUsingNonPrimaryOffTheRecordProfile) {
+  Profile::OTRProfileID otr_profile_id("profile::otr");
+  Profile* otr_profile =
+      browser()->profile()->GetOffTheRecordProfile(otr_profile_id);
+
+  EXPECT_EQ(nullptr, Browser::Create(Browser::CreateParams(
+                         otr_profile, /* user_gesture = */ true)));
+  EXPECT_EQ(nullptr, Browser::Create(Browser::CreateParams(
+                         otr_profile, /* user_gesture = */ false)));
 }

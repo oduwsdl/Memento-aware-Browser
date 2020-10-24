@@ -13,20 +13,25 @@
 
 namespace {
 
-// Inset for the text content.
-constexpr CGFloat kInsetValue = 20;
+// Vertical inset for the text content.
+constexpr CGFloat kVerticalInsetValue = 20;
+// Horizontal inset for the text content.
+constexpr CGFloat kHorizontalInsetValue = 16;
 // Desired percentage of the width of the presented view controller.
 constexpr CGFloat kWidthProportion = 0.75;
+// Max width for the popover.
+constexpr CGFloat kMaxWidth = 300;
 // Distance between the primary text label and the secondary text label.
 constexpr CGFloat kVerticalDistance = 24;
 
 }  // namespace
 
 @interface PopoverLabelViewController () <
-    UIPopoverPresentationControllerDelegate>
+    UIPopoverPresentationControllerDelegate,
+    UITextViewDelegate>
 
-// The main message being presented.
-@property(nonatomic, strong, readonly) NSString* message;
+// UIScrollView which is used for size calculation.
+@property(nonatomic, strong) UIScrollView* scrollView;
 
 // The attributed string being presented as primary text.
 @property(nonatomic, strong, readonly)
@@ -41,13 +46,16 @@ constexpr CGFloat kVerticalDistance = 24;
 @implementation PopoverLabelViewController
 
 - (instancetype)initWithMessage:(NSString*)message {
-  self = [super initWithNibName:nil bundle:nil];
-  if (self) {
-    _message = message;
-    self.modalPresentationStyle = UIModalPresentationPopover;
-    self.popoverPresentationController.delegate = self;
-  }
-  return self;
+  NSDictionary* generalAttributes = @{
+    NSForegroundColorAttributeName : [UIColor colorNamed:kTextPrimaryColor],
+    NSFontAttributeName : [UIFont preferredFontForTextStyle:UIFontTextStyleBody]
+  };
+
+  NSAttributedString* attributedString =
+      [[NSAttributedString alloc] initWithString:message
+                                      attributes:generalAttributes];
+  return [self initWithPrimaryAttributedString:attributedString
+                     secondaryAttributedString:nil];
 }
 
 - (instancetype)initWithPrimaryAttributedString:
@@ -71,49 +79,107 @@ constexpr CGFloat kVerticalDistance = 24;
 
   self.view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
 
-  UIScrollView* scrollView = [[UIScrollView alloc] init];
-  scrollView.backgroundColor = UIColor.clearColor;
-  scrollView.delaysContentTouches = NO;
-  scrollView.showsVerticalScrollIndicator = YES;
-  scrollView.showsHorizontalScrollIndicator = NO;
-  scrollView.translatesAutoresizingMaskIntoConstraints = NO;
-  [self.view addSubview:scrollView];
-  AddSameConstraints(self.view.layoutMarginsGuide, scrollView);
+  _scrollView = [[UIScrollView alloc] init];
+  _scrollView.backgroundColor = UIColor.clearColor;
+  _scrollView.delaysContentTouches = NO;
+  _scrollView.showsVerticalScrollIndicator = YES;
+  _scrollView.showsHorizontalScrollIndicator = NO;
+  _scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.view addSubview:_scrollView];
 
-  UILayoutGuide* textLayoutGuide = [[UILayoutGuide alloc] init];
-  [self.view addLayoutGuide:textLayoutGuide];
-  AddSameConstraints(textLayoutGuide, scrollView);
+  AddSameConstraints(self.view.safeAreaLayoutGuide, _scrollView);
 
-  UILabel* primaryLabel = [[UILabel alloc] init];
-  primaryLabel.numberOfLines = 0;
-  primaryLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
-  primaryLabel.textAlignment = NSTextAlignmentNatural;
-  primaryLabel.adjustsFontForContentSizeCategory = YES;
-  if (self.message) {
-    primaryLabel.text = self.message;
-  } else if (self.primaryAttributedString) {
-    primaryLabel.attributedText = self.primaryAttributedString;
+  // TODO(crbug.com/1100884): Remove the following workaround:
+  // Using a UIView instead of UILayoutGuide as the later behaves weirdly with
+  // the scroll view.
+  UIView* textContainerView = [[UIView alloc] init];
+  textContainerView.translatesAutoresizingMaskIntoConstraints = NO;
+  [_scrollView addSubview:textContainerView];
+  AddSameConstraints(textContainerView, _scrollView);
+
+  UITextView* textView = [[UITextView alloc] init];
+  textView.scrollEnabled = NO;
+  textView.editable = NO;
+  textView.delegate = self;
+  textView.backgroundColor = [UIColor clearColor];
+  textView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+  textView.adjustsFontForContentSizeCategory = YES;
+  textView.translatesAutoresizingMaskIntoConstraints = NO;
+  textView.textColor = [UIColor colorNamed:kTextSecondaryColor];
+  textView.linkTextAttributes =
+      @{NSForegroundColorAttributeName : [UIColor colorNamed:kBlueColor]};
+
+  if (self.primaryAttributedString) {
+    textView.attributedText = self.primaryAttributedString;
   }
-  primaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  primaryLabel.font =
-      [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-  [scrollView addSubview:primaryLabel];
 
-  UILabel* secondaryLabel = [[UILabel alloc] init];
-  secondaryLabel.numberOfLines = 0;
-  secondaryLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
-  secondaryLabel.textAlignment = NSTextAlignmentNatural;
-  secondaryLabel.adjustsFontForContentSizeCategory = YES;
-  if (self.secondaryAttributedString) {
-    secondaryLabel.attributedText = self.secondaryAttributedString;
+  [_scrollView addSubview:textView];
+
+  // Only create secondary TextView when |secondaryAttributedString| is not nil
+  // or empty. Set the constraint accordingly.
+  if (self.secondaryAttributedString.length) {
+    UITextView* secondaryTextView = [[UITextView alloc] init];
+    secondaryTextView.scrollEnabled = NO;
+    secondaryTextView.editable = NO;
+    secondaryTextView.delegate = self;
+    secondaryTextView.backgroundColor = [UIColor clearColor];
+    secondaryTextView.font =
+        [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    secondaryTextView.adjustsFontForContentSizeCategory = YES;
+    secondaryTextView.translatesAutoresizingMaskIntoConstraints = NO;
+    secondaryTextView.textColor = [UIColor colorNamed:kTextSecondaryColor];
+    secondaryTextView.linkTextAttributes =
+        @{NSForegroundColorAttributeName : [UIColor colorNamed:kBlueColor]};
+    secondaryTextView.attributedText = self.secondaryAttributedString;
+
+    [_scrollView addSubview:secondaryTextView];
+
+    [NSLayoutConstraint activateConstraints:@[
+      [textContainerView.widthAnchor
+          constraintEqualToAnchor:_scrollView.widthAnchor],
+      [textContainerView.leadingAnchor
+          constraintEqualToAnchor:textView.leadingAnchor
+                         constant:-kHorizontalInsetValue],
+      [textContainerView.leadingAnchor
+          constraintEqualToAnchor:secondaryTextView.leadingAnchor
+                         constant:-kHorizontalInsetValue],
+      [textContainerView.trailingAnchor
+          constraintEqualToAnchor:textView.trailingAnchor
+                         constant:kHorizontalInsetValue],
+      [textContainerView.trailingAnchor
+          constraintEqualToAnchor:secondaryTextView.trailingAnchor
+                         constant:kHorizontalInsetValue],
+      [textView.bottomAnchor constraintEqualToAnchor:secondaryTextView.topAnchor
+                                            constant:-kVerticalDistance],
+      [textContainerView.topAnchor
+          constraintEqualToAnchor:textView.topAnchor
+                         constant:-kVerticalInsetValue],
+      [textContainerView.bottomAnchor
+          constraintEqualToAnchor:secondaryTextView.bottomAnchor
+                         constant:kVerticalInsetValue],
+    ]];
+  } else {
+    // Constraints used when only have primary TextView.
+    [NSLayoutConstraint activateConstraints:@[
+      [textContainerView.widthAnchor
+          constraintEqualToAnchor:_scrollView.widthAnchor],
+      [textContainerView.leadingAnchor
+          constraintEqualToAnchor:textView.leadingAnchor
+                         constant:-kHorizontalInsetValue],
+      [textContainerView.trailingAnchor
+          constraintEqualToAnchor:textView.trailingAnchor
+                         constant:kHorizontalInsetValue],
+      [textContainerView.topAnchor
+          constraintEqualToAnchor:textView.topAnchor
+                         constant:-kVerticalInsetValue],
+      [textContainerView.bottomAnchor
+          constraintEqualToAnchor:textView.bottomAnchor
+                         constant:kVerticalInsetValue],
+    ]];
   }
-  secondaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  secondaryLabel.font =
-      [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-  [scrollView addSubview:secondaryLabel];
 
-  NSLayoutConstraint* heightConstraint = [scrollView.heightAnchor
-      constraintEqualToAnchor:scrollView.contentLayoutGuide.heightAnchor
+  NSLayoutConstraint* heightConstraint = [_scrollView.heightAnchor
+      constraintEqualToAnchor:_scrollView.contentLayoutGuide.heightAnchor
                    multiplier:1];
 
   // UILayoutPriorityDefaultHigh is the default priority for content
@@ -121,42 +187,6 @@ constexpr CGFloat kVerticalDistance = 24;
   // scroll view.
   heightConstraint.priority = UILayoutPriorityDefaultHigh - 1;
   heightConstraint.active = YES;
-
-  // Set the compression resistance to high priority to avoid the text
-  // being trimmed when using large font size. Set the primary text with higher
-  // priority so if the space can't contain both text, the secondary text will
-  // be trimmed.
-  [primaryLabel
-      setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh + 2
-                                      forAxis:UILayoutConstraintAxisVertical];
-  [secondaryLabel
-      setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh + 1
-                                      forAxis:UILayoutConstraintAxisVertical];
-
-  CGFloat verticalOffset =
-      (secondaryLabel.attributedText) ? -kVerticalDistance : 0;
-  NSLayoutConstraint* verticalConstraint = [primaryLabel.bottomAnchor
-      constraintEqualToAnchor:secondaryLabel.topAnchor
-                     constant:verticalOffset];
-
-  [NSLayoutConstraint activateConstraints:@[
-    [textLayoutGuide.widthAnchor
-        constraintEqualToAnchor:scrollView.widthAnchor],
-    [textLayoutGuide.leadingAnchor
-        constraintEqualToAnchor:primaryLabel.leadingAnchor],
-    [textLayoutGuide.leadingAnchor
-        constraintEqualToAnchor:secondaryLabel.leadingAnchor],
-    [textLayoutGuide.trailingAnchor
-        constraintEqualToAnchor:primaryLabel.trailingAnchor],
-    [textLayoutGuide.trailingAnchor
-        constraintEqualToAnchor:secondaryLabel.trailingAnchor],
-    verticalConstraint,
-    [textLayoutGuide.topAnchor constraintEqualToAnchor:primaryLabel.topAnchor
-                                              constant:-kInsetValue],
-    [textLayoutGuide.bottomAnchor
-        constraintEqualToAnchor:secondaryLabel.bottomAnchor
-                       constant:kInsetValue],
-  ]];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -189,13 +219,34 @@ constexpr CGFloat kVerticalDistance = 24;
 // Updates the preferred content size according to the presenting view size and
 // the layout size of the view.
 - (void)updatePreferredContentSize {
+  // Expected width of the |self.scrollView|.
   CGFloat width =
       self.presentingViewController.view.bounds.size.width * kWidthProportion;
-
-  CGSize size = [self.view systemLayoutSizeFittingSize:CGSizeMake(width, 0)
-                         withHorizontalFittingPriority:UILayoutPriorityRequired
-                               verticalFittingPriority:500];
+  // Cap max width at 300pt.
+  if (width > kMaxWidth) {
+    width = kMaxWidth;
+  }
+  // |scrollView| is used here instead of |self.view|, because |self.view|
+  // includes arrow size during calculation although it's being added to the
+  // result size anyway.
+  CGSize size =
+      [self.scrollView systemLayoutSizeFittingSize:CGSizeMake(width, 0)
+                     withHorizontalFittingPriority:UILayoutPriorityRequired
+                           verticalFittingPriority:500];
   self.preferredContentSize = size;
+}
+
+#pragma mark - UITextViewDelegate
+
+- (BOOL)textView:(UITextView*)textView
+    shouldInteractWithURL:(NSURL*)URL
+                  inRange:(NSRange)characterRange
+              interaction:(UITextItemInteraction)interaction {
+  if (URL) {
+    [self.delegate didTapLinkURL:URL];
+  }
+  // Returns NO as the app is handling the opening of the URL.
+  return NO;
 }
 
 @end

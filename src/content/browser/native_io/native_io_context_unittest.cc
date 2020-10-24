@@ -12,6 +12,7 @@
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
 #include "content/browser/native_io/native_io_context.h"
+#include "content/test/fake_mojo_message_dispatch_context.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
@@ -110,6 +111,21 @@ class NativeIOFileHostSync {
     file_host_->Close(run_loop.QuitClosure());
     run_loop.Run();
     return;
+  }
+
+  std::pair<bool, base::File> SetLength(const int64_t length, base::File file) {
+    bool success;
+    base::RunLoop run_loop;
+    file_host_->SetLength(
+        length, std::move(file),
+        base::BindLambdaForTesting(
+            [&](bool backend_success, base::File backend_file) {
+              success = backend_success;
+              file = std::move(backend_file);
+              run_loop.Quit();
+            }));
+    run_loop.Run();
+    return {success, std::move(file)};
   }
 
  private:
@@ -327,6 +343,18 @@ TEST_F(NativeIOContextTest, RenameFile_BadNames) {
   }
 }
 
+TEST_F(NativeIOContextTest, SetLength_NegativeLength) {
+  mojo::Remote<blink::mojom::NativeIOFileHost> file_host_remote;
+  base::File file = example_host_->OpenFile(
+      "test_file", file_host_remote.BindNewPipeAndPassReceiver());
+  NativeIOFileHostSync file_host(file_host_remote.get());
+  std::pair<bool, base::File> res = file_host.SetLength(-5, std::move(file));
+  EXPECT_FALSE(res.first) << "A file can have no negative length.";
+
+  res.second.Close();
+  file_host.Close();
+}
+
 TEST_F(NativeIOContextTest, OriginIsolation) {
   const std::string kTestData("Test Data");
 
@@ -352,6 +380,18 @@ TEST_F(NativeIOContextTest, OriginIsolation) {
   EXPECT_TRUE(same_file.IsValid());
   char read_buffer[kTestData.size()];
   EXPECT_EQ(0, same_file.Read(0, read_buffer, kTestData.size()));
+}
+
+TEST_F(NativeIOContextTest, BindReceiver_UntrustworthyOrigin) {
+  mojo::Remote<blink::mojom::NativeIOHost> insecure_host_remote_;
+
+  // Create a fake dispatch context to trigger a bad message in.
+  FakeMojoMessageDispatchContext fake_dispatch_context;
+  mojo::test::BadMessageObserver bad_message_observer;
+  context_->BindReceiver(url::Origin::Create(GURL("http://insecure.com")),
+                         insecure_host_remote_.BindNewPipeAndPassReceiver());
+  EXPECT_EQ("Called NativeIO from an insecure context",
+            bad_message_observer.WaitForBadMessage());
 }
 
 }  // namespace

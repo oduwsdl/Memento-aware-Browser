@@ -12,7 +12,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -197,10 +196,6 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   // MetricsService. Has the same lifetime as |metrics_service_|.
   PluginMetricsProvider* plugin_metrics_provider_ = nullptr;
 #endif
-
-  // Callback to determine whether or not a cellular network is currently being
-  // used.
-  base::Callback<void(bool*)> cellular_callback_;
 
   // Subscription for receiving callbacks that a URL was opened from the
   // omnibox.

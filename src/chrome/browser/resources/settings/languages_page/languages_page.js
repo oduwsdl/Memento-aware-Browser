@@ -50,6 +50,10 @@ import {PrefsBehavior} from '../prefs/prefs_behavior.m.js';
 import {routes} from '../route.js';
 import {Route, Router} from '../router.m.js';
 
+// <if expr="chromeos">
+import {LanguagesMetricsProxy, LanguagesMetricsProxyImpl, LanguagesPageInteraction} from './languages_metrics_proxy.js';
+// </if>
+
 /**
  * @type {number} Millisecond delay that can be used when closing an action
  *      menu to keep it briefly on-screen.
@@ -102,9 +106,6 @@ Polymer({
         return [];
       },
     },
-
-    /** @private {string|undefined} */
-    languageSyncedWithBrowserEnableSpellchecking_: String,
     // </if>
 
     /**
@@ -154,8 +155,34 @@ Polymer({
         return loadTimeData.getBoolean('isGuest');
       },
     },
+
+    /** @private */
+    isChromeOSLanguagesSettingsUpdate_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isChromeOSLanguagesSettingsUpdate');
+      },
+    },
     // </if>
   },
+
+  // <if expr="chromeos">
+  /** @private {?LanguagesMetricsProxy} */
+  languagesMetricsProxy_: null,
+
+  /** @override */
+  created() {
+    this.languagesMetricsProxy_ = LanguagesMetricsProxyImpl.getInstance();
+  },
+
+  /** @private */
+  onOpenChromeOSLanguagesSettingsClick_() {
+    const chromeOSLanguagesSettingsPath =
+        loadTimeData.getString('chromeOSLanguagesSettingsPath');
+    window.location.href =
+        `chrome://os-settings/${chromeOSLanguagesSettingsPath}`;
+  },
+  // </if>
 
   // <if expr="not is_macosx">
   observers: [
@@ -193,13 +220,16 @@ Polymer({
    */
   onAddLanguagesTap_(e) {
     e.preventDefault();
+    // <if expr="chromeos">
+    this.languagesMetricsProxy_.recordAddLanguages();
+    // </if>
     this.showAddLanguagesDialog_ = true;
   },
 
   /** @private */
   onAddLanguagesDialogClose_() {
     this.showAddLanguagesDialog_ = false;
-    focusWithoutInk(assert(this.$.addLanguages));
+    focusWithoutInk(assert(this.$$('#addLanguages')));
   },
 
   /**
@@ -316,6 +346,22 @@ Polymer({
       menu.querySelector('#uiLanguageItem').hidden = true;
     }
   },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onTranslateToggleChange_(e) {
+    this.languagesMetricsProxy_.recordToggleTranslate(e.target.checked);
+  },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onSpellcheckToggleChange_(e) {
+    this.languagesMetricsProxy_.recordToggleSpellCheck(e.target.checked);
+  },
   // </if>
 
   // <if expr="chromeos or is_win">
@@ -400,6 +446,10 @@ Polymer({
     // We don't support unchecking this checkbox. TODO(michaelpg): Ask for a
     // simpler widget.
     assert(e.target.checked);
+    // <if expr="chromeos">
+    this.languagesMetricsProxy_.recordInteraction(
+        LanguagesPageInteraction.SWITCH_SYSTEM_LANGUAGE);
+    // </if>
     this.isChangeInProgress_ = true;
     this.languageHelper.setProspectiveUILanguage(
         this.detailLanguage_.language.code);
@@ -438,6 +488,8 @@ Polymer({
    */
   onRestartTap_() {
     // <if expr="chromeos">
+    this.languagesMetricsProxy_.recordInteraction(
+        LanguagesPageInteraction.RESTART);
     LifetimeBrowserProxyImpl.getInstance().signOutAndRestart();
     // </if>
     // <if expr="is_win">
@@ -479,6 +531,10 @@ Polymer({
       this.languageHelper.disableTranslateLanguage(
           this.detailLanguage_.language.code);
     }
+    // <if expr="chromeos">
+    this.languagesMetricsProxy_.recordTranslateCheckboxChanged(
+        e.target.checked);
+    // </if>
     this.closeMenuSoon_();
   },
 
@@ -500,7 +556,7 @@ Polymer({
    * @private
    */
   onMoveToTopTap_() {
-    /** @type {!CrActionMenuElement} */ (this.$.menu.get()).close();
+    /** @type {!CrActionMenuElement} */ (this.$$('#menu').get()).close();
     this.languageHelper.moveLanguageToFront(this.detailLanguage_.language.code);
   },
 
@@ -509,7 +565,7 @@ Polymer({
    * @private
    */
   onMoveUpTap_() {
-    /** @type {!CrActionMenuElement} */ (this.$.menu.get()).close();
+    /** @type {!CrActionMenuElement} */ (this.$$('#menu').get()).close();
     this.languageHelper.moveLanguage(
         this.detailLanguage_.language.code, true /* upDirection */);
   },
@@ -519,7 +575,7 @@ Polymer({
    * @private
    */
   onMoveDownTap_() {
-    /** @type {!CrActionMenuElement} */ (this.$.menu.get()).close();
+    /** @type {!CrActionMenuElement} */ (this.$$('#menu').get()).close();
     this.languageHelper.moveLanguage(
         this.detailLanguage_.language.code, false /* upDirection */);
   },
@@ -529,7 +585,7 @@ Polymer({
    * @private
    */
   onRemoveLanguageTap_() {
-    /** @type {!CrActionMenuElement} */ (this.$.menu.get()).close();
+    /** @type {!CrActionMenuElement} */ (this.$$('#menu').get()).close();
     this.languageHelper.disableLanguage(this.detailLanguage_.language.code);
   },
 
@@ -602,29 +658,12 @@ Polymer({
 
       // Hide list of spell check languages if there is only 1 language
       // and we don't need to display any errors for that language
+
+      // TODO(crbug/1124888): Make hideSpellCheckLanugages_ a computed property
       this.hideSpellCheckLanguages_ = !singleLanguage.isManaged &&
           singleLanguage.downloadDictionaryFailureCount === 0;
-
-      // Turn off spell check if spell check for the 1 remaining language is
-      // off
-      if (!singleLanguage.spellCheckEnabled) {
-        this.setPrefValue('browser.enable_spellchecking', false);
-        this.languageSyncedWithBrowserEnableSpellchecking_ =
-            singleLanguage.language.code;
-      }
-
-      // Undo the sync if spell check appeared as turned off for the language
-      // because a download was still in progress. This only occurs when
-      // Settings is loaded for the very first time and dictionaries have not
-      // been downloaded yet.
-      if (this.languageSyncedWithBrowserEnableSpellchecking_ ===
-              singleLanguage.language.code &&
-          singleLanguage.spellCheckEnabled) {
-        this.setPrefValue('browser.enable_spellchecking', true);
-      }
     } else {
       this.hideSpellCheckLanguages_ = false;
-      this.languageSyncedWithBrowserEnableSpellchecking_ = undefined;
     }
   },
 
@@ -644,17 +683,6 @@ Polymer({
           this.spellCheckLanguages_[0].language.code,
           !!this.getPref('browser.enable_spellchecking').value);
     }
-
-    // <if expr="_google_chrome">
-    // When spell check is disabled, automatically disable using the spelling
-    // service. This resets the spell check option to 'Use basic spell check'
-    // when spell check is turned off. This check is in an observer so that it
-    // can also correct any users who land on the Settings page and happen
-    // to have spelling service enabled but spell check disabled.
-    if (!this.getPref('browser.enable_spellchecking').value) {
-      this.setPrefValue('spellcheck.use_spelling_service', false);
-    }
-    // </if>
   },
 
   /**
@@ -662,6 +690,10 @@ Polymer({
    * @private
    */
   onEditDictionaryTap_() {
+    // <if expr="chromeos">
+    this.languagesMetricsProxy_.recordInteraction(
+        LanguagesPageInteraction.OPEN_CUSTOM_SPELL_CHECK);
+    // </if>
     Router.getInstance().navigateTo(
         /** @type {!Route} */ (routes.EDIT_DICTIONARY));
   },
@@ -757,9 +789,9 @@ Polymer({
 
     // Ensure the template has been stamped.
     let menu =
-        /** @type {?CrActionMenuElement} */ (this.$.menu.getIfExists());
+        /** @type {?CrActionMenuElement} */ (this.$$('#menu').getIfExists());
     if (!menu) {
-      menu = /** @type {!CrActionMenuElement} */ (this.$.menu.get());
+      menu = /** @type {!CrActionMenuElement} */ (this.$$('#menu').get());
       // <if expr="chromeos">
       this.tweakMenuForCrOS_(menu);
       // </if>
@@ -787,7 +819,7 @@ Polymer({
    * @private
    */
   closeMenuSoon_() {
-    const menu = /** @type {!CrActionMenuElement} */ (this.$.menu.get());
+    const menu = /** @type {!CrActionMenuElement} */ (this.$$('#menu').get());
     setTimeout(function() {
       if (menu.open) {
         menu.close();

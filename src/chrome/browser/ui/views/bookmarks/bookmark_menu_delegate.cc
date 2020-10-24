@@ -53,7 +53,7 @@ namespace {
 const int kMaxMenuWidth = 400;
 
 SkColor TextColorForMenu(MenuItemView* menu, views::Widget* widget) {
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // macOS incognito currently has a light on dark bookmark bar, but
   // dark on light menus, so using the theme color in the folders is
   // incorrect.
@@ -193,9 +193,16 @@ void BookmarkMenuDelegate::ExecuteCommand(int id, int mouse_event_flags) {
 bool BookmarkMenuDelegate::ShouldExecuteCommandWithoutClosingMenu(
     int id,
     const ui::Event& event) {
-  return (event.flags() & ui::EF_LEFT_MOUSE_BUTTON) &&
-         ui::DispositionFromEventFlags(event.flags()) ==
-             WindowOpenDisposition::NEW_BACKGROUND_TAB;
+  if ((event.flags() & ui::EF_LEFT_MOUSE_BUTTON) &&
+      ui::DispositionFromEventFlags(event.flags()) ==
+          WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+    DCHECK(menu_id_to_node_map_.find(id) != menu_id_to_node_map_.end());
+    const BookmarkNode* node = menu_id_to_node_map_[id];
+    // Close the menu before opening a folder since this may pop up a dialog
+    // over the menu. See https://crbug.com/1105587 for details.
+    return node->type() != BookmarkNode::FOLDER;
+  }
+  return false;
 }
 
 bool BookmarkMenuDelegate::GetDropFormats(
@@ -508,7 +515,7 @@ void BookmarkMenuDelegate::BuildMenusForPermanentNodes(
 }
 
 void BookmarkMenuDelegate::BuildMenuForPermanentNode(const BookmarkNode* node,
-                                                     const gfx::ImageSkia& icon,
+                                                     const ui::ImageModel& icon,
                                                      MenuItemView* menu,
                                                      bool* added_separator) {
   if (!node->IsVisible() || node->GetTotalNodeCount() == 1)
@@ -519,9 +526,10 @@ void BookmarkMenuDelegate::BuildMenuForPermanentNode(const BookmarkNode* node,
     menu->AppendSeparator();
   }
 
-  AddMenuToMaps(menu->AppendSubMenu(next_menu_id_++,
-                                    MaybeEscapeLabel(node->GetTitle()), icon),
-                node);
+  AddMenuToMaps(
+      menu->AppendSubMenu(next_menu_id_++, MaybeEscapeLabel(node->GetTitle()),
+                          *icon.GetImage().ToImageSkia()),
+      node);
 }
 
 void BookmarkMenuDelegate::BuildMenuForManagedNode(MenuItemView* menu) {
@@ -539,7 +547,7 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
                                      MenuItemView* menu) {
   DCHECK_LE(start_child_index, parent->children().size());
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-  const gfx::ImageSkia folder_icon =
+  const ui::ImageModel folder_icon =
       chrome::GetBookmarkFolderIcon(TextColorForMenu(menu, parent_));
   for (auto i = parent->children().cbegin() + start_child_index;
        i != parent->children().cend(); ++i) {
@@ -558,8 +566,9 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
               net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
     } else {
       DCHECK(node->is_folder());
-      child_menu_item = menu->AppendSubMenu(
-          id, MaybeEscapeLabel(node->GetTitle()), folder_icon);
+      child_menu_item =
+          menu->AppendSubMenu(id, MaybeEscapeLabel(node->GetTitle()),
+                              *folder_icon.GetImage().ToImageSkia());
       child_menu_item->GetViewAccessibility().OverrideDescription("");
     }
     AddMenuToMaps(child_menu_item, node);

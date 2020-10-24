@@ -5,12 +5,21 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_AHARDWAREBUFFER_UTILS_H_
 #define GPU_COMMAND_BUFFER_SERVICE_AHARDWAREBUFFER_UTILS_H_
 
+#include <memory>
+
+#include "base/memory/scoped_refptr.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "gpu/gpu_gles2_export.h"
 
 extern "C" typedef struct AHardwareBuffer AHardwareBuffer;
 
 typedef unsigned int GLenum;
+
+namespace base {
+namespace android {
+class ScopedHardwareBufferHandle;
+}  // namespace android
+}  // namespace base
 
 namespace gfx {
 class ColorSpace;
@@ -19,8 +28,12 @@ class Size;
 }  // namespace gfx
 
 namespace gpu {
+class SharedContextState;
+class VulkanImage;
+
 namespace gles2 {
 class Texture;
+class TexturePassthrough;
 }  // namespace gles2
 
 // TODO(vikassoni): In future we will need to expose the set of formats and
@@ -45,7 +58,25 @@ gles2::Texture* GenGLTexture(AHardwareBuffer* buffer,
                              GLenum target,
                              const gfx::ColorSpace& color_space,
                              const gfx::Size& size,
+                             const size_t estimated_size,
                              const gfx::Rect& cleared_rect);
+
+// Generates a passthrough texture from AHB. This method must be called with a
+// current GLContext which will be used to create the Texture.
+scoped_refptr<gles2::TexturePassthrough> GenGLTexturePassthrough(
+    AHardwareBuffer* buffer,
+    GLenum target,
+    const gfx::ColorSpace& color_space,
+    const gfx::Size& size,
+    const size_t estimated_size,
+    const gfx::Rect& cleared_rect);
+
+// Create a vulkan image from the AHB handle.
+std::unique_ptr<VulkanImage> CreateVkImageFromAhbHandle(
+    base::android::ScopedHardwareBufferHandle ahb_handle,
+    SharedContextState* context_state,
+    const gfx::Size& size,
+    const viz::ResourceFormat& format);
 
 }  // namespace gpu
 

@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/content/public/test/test_service.mojom",
+    "/Users/macuser/chromium/src/content/test/frame_host_test_interface.mojom",
+    "/Users/macuser/chromium/src/content/test/test_browser_associated_interfaces.mojom"
+  ]
+}

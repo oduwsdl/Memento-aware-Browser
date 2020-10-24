@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
-#include "ash/public/cpp/window_state_type.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
 #include "base/compiler_specific.h"
 #include "base/optional.h"
@@ -21,6 +21,7 @@
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom-forward.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
+#include "chromeos/ui/base/window_state_type.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -210,6 +211,17 @@ class AutotestPrivateGetVisibleNotificationsFunction
   ResponseAction Run() override;
 };
 
+class AutotestPrivateRemoveAllNotificationsFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateRemoveAllNotificationsFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.removeAllNotifications",
+                             AUTOTESTPRIVATE_REMOVEALLNOTIFICATIONS)
+
+ private:
+  ~AutotestPrivateRemoveAllNotificationsFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateGetPlayStoreStateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.getPlayStoreState",
@@ -291,6 +303,31 @@ class AutotestPrivateGetArcPackageFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class AutotestPrivateWaitForSystemWebAppsInstallFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateWaitForSystemWebAppsInstallFunction();
+  DECLARE_EXTENSION_FUNCTION(
+      "autotestPrivate.waitForSystemWebAppsInstall",
+      AUTOTESTPRIVATE_WAITFORSYSTEMWEBAPPSINSTALLFUNCTION)
+
+ private:
+  ~AutotestPrivateWaitForSystemWebAppsInstallFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateGetRegisteredSystemWebAppsFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateGetRegisteredSystemWebAppsFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getRegisteredSystemWebApps",
+                             AUTOTESTPRIVATE_GETREGISTEREDSYSTEMWEBAPPSFUNCTION)
+
+ private:
+  ~AutotestPrivateGetRegisteredSystemWebAppsFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateLaunchArcAppFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.launchArcApp",
@@ -308,6 +345,16 @@ class AutotestPrivateLaunchAppFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateLaunchAppFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateLaunchSystemWebAppFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.launchSystemWebApp",
+                             AUTOTESTPRIVATE_LAUNCHSYSTEMWEBAPP)
+
+ private:
+  ~AutotestPrivateLaunchSystemWebAppFunction() override;
   ResponseAction Run() override;
 };
 
@@ -397,18 +444,6 @@ class AutotestPrivateImportCrostiniFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void CrostiniImported(crostini::CrostiniResult);
-};
-
-class AutotestPrivateInstallPluginVMFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("autotestPrivate.installPluginVM",
-                             AUTOTESTPRIVATE_INSTALLPLUGINVM)
-
- private:
-  ~AutotestPrivateInstallPluginVMFunction() override;
-  ResponseAction Run() override;
-
-  void OnInstallFinished(bool success);
 };
 
 class AutotestPrivateSetPluginVMPolicyFunction : public ExtensionFunction {
@@ -924,22 +959,29 @@ class AutotestPrivateSwapWindowsInSplitViewFunction : public ExtensionFunction {
 
 class AutotestPrivateWaitForDisplayRotationFunction
     : public ExtensionFunction,
-      public ash::ScreenRotationAnimatorObserver {
+      public ash::ScreenRotationAnimatorObserver,
+      public ash::ScreenOrientationController::Observer {
  public:
   AutotestPrivateWaitForDisplayRotationFunction();
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.waitForDisplayRotation",
                              AUTOTESTPRIVATE_WAITFORDISPLAYROTATION)
 
+  // ash::ScreenRotationAnimatorObserver:
   void OnScreenCopiedBeforeRotation() override;
   void OnScreenRotationAnimationFinished(ash::ScreenRotationAnimator* animator,
                                          bool canceled) override;
+
+  // ash::ScreenOrientationController::Observer:
+  void OnUserRotationLockChanged() override;
 
  private:
   ~AutotestPrivateWaitForDisplayRotationFunction() override;
   ResponseAction Run() override;
 
+  ResponseValue CheckScreenRotationAnimation();
+
   int64_t display_id_ = display::kInvalidDisplayId;
-  display::Display::Rotation target_rotation_ = display::Display::ROTATE_0;
+  base::Optional<display::Display::Rotation> target_rotation_;
   // A reference to keep the instance alive while waiting for rotation.
   scoped_refptr<ExtensionFunction> self_;
 };
@@ -965,7 +1007,8 @@ class AutotestPrivateSetAppWindowStateFunction : public ExtensionFunction {
   ~AutotestPrivateSetAppWindowStateFunction() override;
   ResponseAction Run() override;
 
-  void WindowStateChanged(ash::WindowStateType expected_type, bool success);
+  void WindowStateChanged(chromeos::WindowStateType expected_type,
+                          bool success);
 
   std::unique_ptr<WindowStateChangeObserver> window_state_observer_;
 };
@@ -1061,6 +1104,21 @@ class AutotestPrivateRemoveActiveDeskFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateRemoveActiveDeskFunction() override;
+  ResponseAction Run() override;
+
+  void OnAnimationComplete();
+};
+
+class AutotestPrivateActivateAdjacentDesksToTargetIndexFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateActivateAdjacentDesksToTargetIndexFunction();
+  DECLARE_EXTENSION_FUNCTION(
+      "autotestPrivate.activateAdjacentDesksToTargetIndex",
+      AUTOTESTPRIVATE_ACTIVATEADJACENTDESKSTOTARGETINDEX)
+
+ private:
+  ~AutotestPrivateActivateAdjacentDesksToTargetIndexFunction() override;
   ResponseAction Run() override;
 
   void OnAnimationComplete();
@@ -1244,7 +1302,7 @@ class AutotestPrivateStopSmoothnessTrackingFunction : public ExtensionFunction {
   ~AutotestPrivateStopSmoothnessTrackingFunction() override;
   ResponseAction Run() override;
 
-  void OnReportSmoothness(int smoothness);
+  void OnReportData(const cc::FrameSequenceMetrics::CustomReportData& data);
 };
 
 class AutotestPrivateWaitForAmbientPhotoAnimationFunction
@@ -1277,6 +1335,43 @@ class AutotestPrivateDisableSwitchAccessDialogFunction
 
  private:
   ~AutotestPrivateDisableSwitchAccessDialogFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateDisableAutomationFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateDisableAutomationFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.disableAutomation",
+                             AUTOTESTPRIVATE_DISABLEAUTOMATION)
+
+ private:
+  ~AutotestPrivateDisableAutomationFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateStartThroughputTrackerDataCollectionFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateStartThroughputTrackerDataCollectionFunction();
+  DECLARE_EXTENSION_FUNCTION(
+      "autotestPrivate.startThroughputTrackerDataCollection",
+      AUTOTESTPRIVATE_STARTTHROUGHPUTTRACKERDATACOLLECTION)
+
+ private:
+  ~AutotestPrivateStartThroughputTrackerDataCollectionFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateStopThroughputTrackerDataCollectionFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateStopThroughputTrackerDataCollectionFunction();
+  DECLARE_EXTENSION_FUNCTION(
+      "autotestPrivate.stopThroughputTrackerDataCollection",
+      AUTOTESTPRIVATE_STOPTHROUGHPUTTRACKERDATACOLLECTION)
+
+ private:
+  ~AutotestPrivateStopThroughputTrackerDataCollectionFunction() override;
   ResponseAction Run() override;
 };
 

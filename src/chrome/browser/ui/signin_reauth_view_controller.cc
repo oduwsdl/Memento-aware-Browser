@@ -8,20 +8,29 @@
 #include <string>
 
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/optional.h"
 #include "base/task_runner.h"
+#include "base/time/time.h"
+#include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/reauth_result.h"
 #include "chrome/browser/signin/reauth_tab_helper.h"
 #include "chrome/browser/signin/signin_features.h"
+#include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/webui/signin/signin_reauth_ui.h"
+#include "components/consent_auditor/consent_auditor.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom.h"
 
 namespace {
 
@@ -56,18 +65,11 @@ SigninReauthViewController::SigninReauthViewController(
     base::OnceCallback<void(signin::ReauthResult)> reauth_callback)
     : browser_(browser),
       account_id_(account_id),
+      access_point_(access_point),
       reauth_callback_(std::move(reauth_callback)) {
   // Show the confirmation dialog unconditionally for now. We may decide to only
   // show it in some cases in the future.
   ShowReauthConfirmationDialog();
-
-  if (!base::FeatureList::IsEnabled(kSigninReauthPrompt)) {
-    // Approve reauth automatically.
-    gaia_reauth_page_state_ = GaiaReauthPageState::kDone;
-    gaia_reauth_page_result_ = signin::ReauthResult::kSuccess;
-    OnStateChanged();
-    return;
-  }
 
   // Navigate to the Gaia reauth challenge page in background.
   reauth_web_contents_ =
@@ -86,7 +88,10 @@ SigninReauthViewController::SigninReauthViewController(
       reauth_web_contents_.get(), this);
 }
 
-SigninReauthViewController::~SigninReauthViewController() = default;
+SigninReauthViewController::~SigninReauthViewController() {
+  for (auto& observer : observer_list_)
+    observer.OnReauthControllerDestroyed();
+}
 
 void SigninReauthViewController::CloseModalSignin() {
   CompleteReauth(signin::ReauthResult::kCancelled);
@@ -113,18 +118,33 @@ void SigninReauthViewController::SetWebContents(
 void SigninReauthViewController::OnModalSigninClosed() {
   dialog_delegate_observer_.Remove(dialog_delegate_);
   dialog_delegate_ = nullptr;
+
+  DCHECK(ui_state_ == UIState::kConfirmationDialog ||
+         ui_state_ == UIState::kGaiaReauthDialog);
+  UserAction action = ui_state_ == UIState::kConfirmationDialog
+                          ? UserAction::kCloseConfirmationDialog
+                          : UserAction::kCloseGaiaReauthDialog;
+  signin_ui_util::RecordTransactionalReauthUserAction(access_point_, action);
+
   CompleteReauth(signin::ReauthResult::kDismissedByUser);
 }
 
-void SigninReauthViewController::OnReauthConfirmed() {
+void SigninReauthViewController::OnReauthConfirmed(
+    sync_pb::UserConsentTypes::AccountPasswordsConsent consent) {
   if (user_confirmed_reauth_)
     return;
 
+  // Cache the consent. It will be actually recorded later, in CompleteReauth(),
+  // if the user successfully completed the reauth.
+  consent_ = consent;
+
   user_confirmed_reauth_ = true;
+  user_confirmed_reauth_time_ = base::TimeTicks::Now();
   OnStateChanged();
 }
 
 void SigninReauthViewController::OnReauthDismissed() {
+  RecordClickOnce(UserAction::kClickCancelButton);
   CompleteReauth(signin::ReauthResult::kDismissedByUser);
 }
 
@@ -132,6 +152,12 @@ void SigninReauthViewController::OnGaiaReauthPageNavigated() {
   if (gaia_reauth_page_state_ >= GaiaReauthPageState::kNavigated)
     return;
 
+  signin::ReauthTabHelper* tab_helper = GetReauthTabHelper();
+  DCHECK(tab_helper);
+  OnGaiaReauthTypeDetermined(tab_helper->is_within_reauth_origin()
+                                 ? GaiaReauthType::kEmbeddedFlow
+                                 : GaiaReauthType::kSAMLFlow);
+  RecordGaiaNavigationDuration();
   gaia_reauth_page_state_ = GaiaReauthPageState::kNavigated;
   OnStateChanged();
 }
@@ -141,17 +167,55 @@ void SigninReauthViewController::OnGaiaReauthPageComplete(
   // Should be called only once.
   DCHECK(gaia_reauth_page_state_ < GaiaReauthPageState::kDone);
   DCHECK(!gaia_reauth_page_result_);
+  // |kNavigated| state will be skipped if the first navigation completes Gaia
+  // reauth.
+  if (gaia_reauth_page_state_ < GaiaReauthPageState::kNavigated) {
+    OnGaiaReauthTypeDetermined(GaiaReauthType::kAutoApproved);
+    RecordGaiaNavigationDuration();
+  }
   gaia_reauth_page_state_ = GaiaReauthPageState::kDone;
   gaia_reauth_page_result_ = result;
+
+  if (ui_state_ == UIState::kGaiaReauthDialog ||
+      ui_state_ == UIState::kGaiaReauthTab) {
+    base::Optional<UserAction> action;
+    if (gaia_reauth_page_result_ == signin::ReauthResult::kSuccess) {
+      action = UserAction::kPassGaiaReauth;
+    }
+    if (gaia_reauth_page_result_ == signin::ReauthResult::kDismissedByUser) {
+      action = ui_state_ == UIState::kGaiaReauthDialog
+                   ? UserAction::kCloseGaiaReauthDialog
+                   : UserAction::kCloseGaiaReauthTab;
+    }
+
+    if (action) {
+      signin_ui_util::RecordTransactionalReauthUserAction(access_point_,
+                                                          *action);
+    }
+  }
+
   OnStateChanged();
 }
 
-void SigninReauthViewController::SetObserverForTesting(
-    Observer* test_observer) {
-  test_observer_ = test_observer;
+void SigninReauthViewController::AddObserver(Observer* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void SigninReauthViewController::RemoveObserver(Observer* observer) {
+  observer_list_.RemoveObserver(observer);
 }
 
 void SigninReauthViewController::CompleteReauth(signin::ReauthResult result) {
+  signin::ReauthTabHelper* tab_helper = GetReauthTabHelper();
+  if (tab_helper && tab_helper->has_last_committed_error_page() &&
+      result != signin::ReauthResult::kSuccess &&
+      (ui_state_ == UIState::kGaiaReauthDialog ||
+       ui_state_ == UIState::kGaiaReauthTab)) {
+    // Override a non-successful result with |kLoadFailed| if the error page was
+    // last displayed to the user.
+    result = signin::ReauthResult::kLoadFailed;
+  }
+
   if (dialog_delegate_) {
     dialog_delegate_observer_.Remove(dialog_delegate_);
     dialog_delegate_->CloseModalSignin();
@@ -164,20 +228,29 @@ void SigninReauthViewController::CompleteReauth(signin::ReauthResult result) {
     raw_reauth_web_contents_ = nullptr;
   }
 
+  if (result == signin::ReauthResult::kSuccess) {
+    CHECK(consent_.has_value());
+    ConsentAuditorFactory::GetForProfile(browser_->profile())
+        ->RecordAccountPasswordsConsent(account_id_, *consent_);
+  }
+
+  signin_ui_util::RecordTransactionalReauthResult(access_point_, result);
   if (reauth_callback_)
     std::move(reauth_callback_).Run(result);
 
-  // NotifyModalSigninClosed() will destroy |this|. But since this function can
-  // be triggered from |reauth_web_contents_|'s observer method, we cannot
-  // destroy |reauth_web_contents_| right now.
-  content::GetUIThreadTaskRunner({})->DeleteSoon(
-      FROM_HERE, reauth_web_contents_.release());
   NotifyModalSigninClosed();
+
+  // Schedules an asynchronous deletion of the current instance.
+  // We cannot destroy |this| and in particular |reauth_web_contents_| right now
+  // because this function can be triggered from |reauth_web_contents_|'s
+  // observer method.
+  content::GetUIThreadTaskRunner({})->DeleteSoon(FROM_HERE, this);
 }
 
 void SigninReauthViewController::OnStateChanged() {
   if (user_confirmed_reauth_ &&
       gaia_reauth_page_state_ == GaiaReauthPageState::kNavigated) {
+    RecordClickOnce(UserAction::kClickNextButton);
     ShowGaiaReauthPage();
     return;
   }
@@ -185,41 +258,93 @@ void SigninReauthViewController::OnStateChanged() {
   if (user_confirmed_reauth_ &&
       gaia_reauth_page_state_ == GaiaReauthPageState::kDone) {
     DCHECK(gaia_reauth_page_result_);
-    // TODO(https://crbug.com/1085026): display an error if the page load has
-    // failed.
+    RecordClickOnce(UserAction::kClickConfirmButton);
     CompleteReauth(*gaia_reauth_page_result_);
     return;
   }
 }
 
+void SigninReauthViewController::OnGaiaReauthTypeDetermined(
+    GaiaReauthType reauth_type) {
+  DCHECK_EQ(gaia_reauth_type_, GaiaReauthType::kUnknown);
+  DCHECK_NE(reauth_type, GaiaReauthType::kUnknown);
+  gaia_reauth_type_ = reauth_type;
+  for (auto& observer : observer_list_)
+    observer.OnGaiaReauthTypeDetermined(reauth_type);
+}
+
+void SigninReauthViewController::RecordClickOnce(UserAction click_action) {
+  if (has_recorded_click_)
+    return;
+
+  signin_ui_util::RecordTransactionalReauthUserAction(access_point_,
+                                                      click_action);
+  has_recorded_click_ = true;
+}
+
+signin::ReauthTabHelper* SigninReauthViewController::GetReauthTabHelper() {
+  content::WebContents* web_contents = reauth_web_contents_
+                                           ? reauth_web_contents_.get()
+                                           : raw_reauth_web_contents_;
+  if (!web_contents)
+    return nullptr;
+
+  return signin::ReauthTabHelper::FromWebContents(web_contents);
+}
+
+void SigninReauthViewController::RecordGaiaNavigationDuration() {
+  base::TimeTicks navigation_time = base::TimeTicks::Now();
+
+  base::UmaHistogramTimes(
+      "Signin.TransactionalReauthGaiaNavigationDuration.FromReauthStart",
+      navigation_time - reauth_start_time_);
+  base::UmaHistogramTimes(
+      "Signin.TransactionalReauthGaiaNavigationDuration.FromConfirmClick",
+      navigation_time - user_confirmed_reauth_time_);
+}
+
 void SigninReauthViewController::ShowReauthConfirmationDialog() {
+  DCHECK_EQ(ui_state_, UIState::kNone);
+  ui_state_ = UIState::kConfirmationDialog;
   dialog_delegate_ =
       SigninViewControllerDelegate::CreateReauthConfirmationDelegate(
-          browser_, account_id_);
+          browser_, account_id_, access_point_);
   dialog_delegate_observer_.Add(dialog_delegate_);
+
+  // Gaia Reauth page doesn't support dark mode. Force the confirmation dialog
+  // to use the light mode as well to match the style.
+  auto* web_contents = dialog_delegate_->GetWebContents();
+  auto prefs = web_contents->GetOrCreateWebPreferences();
+  prefs.preferred_color_scheme = blink::mojom::PreferredColorScheme::kLight;
+  web_contents->SetWebPreferences(prefs);
+
+  SigninReauthUI* web_dialog_ui =
+      web_contents->GetWebUI()->GetController()->GetAs<SigninReauthUI>();
+  web_dialog_ui->InitializeMessageHandlerWithReauthController(this);
 }
 
 void SigninReauthViewController::ShowGaiaReauthPage() {
-  signin::ReauthTabHelper* tab_helper =
-      signin::ReauthTabHelper::FromWebContents(reauth_web_contents_.get());
-  DCHECK(tab_helper);
-
-  if (tab_helper->is_within_reauth_origin()) {
+  if (gaia_reauth_type_ == GaiaReauthType::kEmbeddedFlow) {
     ShowGaiaReauthPageInDialog();
   } else {
     // This corresponds to a SAML account.
+    DCHECK_EQ(gaia_reauth_type_, GaiaReauthType::kSAMLFlow);
     ShowGaiaReauthPageInNewTab();
   }
 
-  if (test_observer_)
-    test_observer_->OnGaiaReauthPageShown();
+  for (auto& observer : observer_list_)
+    observer.OnGaiaReauthPageShown();
 }
 
 void SigninReauthViewController::ShowGaiaReauthPageInDialog() {
+  DCHECK_EQ(ui_state_, UIState::kConfirmationDialog);
+  ui_state_ = UIState::kGaiaReauthDialog;
   dialog_delegate_->SetWebContents(reauth_web_contents_.get());
 }
 
 void SigninReauthViewController::ShowGaiaReauthPageInNewTab() {
+  DCHECK_EQ(ui_state_, UIState::kConfirmationDialog);
+  ui_state_ = UIState::kGaiaReauthTab;
   // Remove the observer to not trigger OnModalSigninClosed() that will abort
   // the reauth flow.
   dialog_delegate_observer_.Remove(dialog_delegate_);

@@ -217,10 +217,10 @@ void PageTimingMetricsSender::DidLoadResourceFromMemoryCache(
   modified_resources_.insert(resource_it.first->second.get());
 }
 
-void PageTimingMetricsSender::OnMainFrameDocumentIntersectionChanged(
-    const blink::WebRect& main_frame_document_intersection) {
-  metadata_->intersection_update = mojom::FrameIntersectionUpdate::New(
-      gfx::Rect(main_frame_document_intersection));
+void PageTimingMetricsSender::OnMainFrameIntersectionChanged(
+    const blink::WebRect& main_frame_intersection) {
+  metadata_->intersection_update =
+      mojom::FrameIntersectionUpdate::New(gfx::Rect(main_frame_intersection));
   EnsureSendTimer();
 }
 
@@ -244,6 +244,11 @@ void PageTimingMetricsSender::UpdateResourceMetadata(
     it->second->SetCompletedBeforeFCP(completed_before_fcp);
 
   it->second->SetIsMainFrameResource(is_main_frame_resource);
+}
+
+void PageTimingMetricsSender::SetUpSmoothnessReporting(
+    base::ReadOnlySharedMemoryRegion shared_memory) {
+  sender_->SetUpSmoothnessReporting(std::move(shared_memory));
 }
 
 void PageTimingMetricsSender::Update(

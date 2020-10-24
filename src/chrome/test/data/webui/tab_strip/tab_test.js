@@ -398,19 +398,6 @@ suite('Tab', function() {
         tabElement.shadowRoot.querySelector('#dragImage'));
   });
 
-  test('has custom context menu', async () => {
-    let event = new Event('contextmenu');
-    event.clientX = 1;
-    event.clientY = 2;
-    tabElement.shadowRoot.querySelector('#tab').dispatchEvent(event);
-
-    const contextMenuArgs =
-        await testTabStripEmbedderProxy.whenCalled('showTabContextMenu');
-    assertEquals(contextMenuArgs[0], tabElement.tab.id);
-    assertEquals(contextMenuArgs[1], 1);
-    assertEquals(contextMenuArgs[2], 2);
-  });
-
   test('activating closes WebUI container', () => {
     assertEquals(testTabStripEmbedderProxy.getCallCount('closeContainer'), 0);
     tabElement.shadowRoot.querySelector('#tab').click();
@@ -469,5 +456,19 @@ suite('Tab', function() {
     // flakiness caused by comparing float values.
     assertEquals(
         Math.floor(originalAspectRatio), Math.floor(dragImageAspectRatio));
+  });
+
+  test('RightClickOpensContextMenu', async () => {
+    tabElement.$('#tab').dispatchEvent(new PointerEvent('pointerup', {
+      pointerType: 'mouse',
+      button: 2,
+      clientX: 50,
+      clientY: 100,
+    }));
+    const [id, x, y] =
+        await testTabStripEmbedderProxy.whenCalled('showTabContextMenu');
+    assertEquals(tab.id, id);
+    assertEquals(50, x);
+    assertEquals(100, y);
   });
 });

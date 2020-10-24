@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/autofill_assistant/browser/web/web_controller.h"
+
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/strcat.h"
@@ -9,7 +11,7 @@
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/string_conversions_util.h"
 #include "components/autofill_assistant/browser/top_padding.h"
-#include "components/autofill_assistant/browser/web/web_controller.h"
+#include "components/autofill_assistant/browser/web/element_finder.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -137,19 +139,80 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
     }
   }
 
-  void ClickElementCallback(base::OnceClosure done_callback,
-                            const ClientStatus& status) {
-    EXPECT_EQ(ACTION_APPLIED, status.proto_status());
+  void ElementRetainingCallback(std::unique_ptr<ElementFinder::Result> element,
+                                base::OnceClosure done_callback,
+                                ClientStatus* result_output,
+                                const ClientStatus& status) {
+    EXPECT_TRUE(element != nullptr);
+    *result_output = status;
+    std::move(done_callback).Run();
+  }
+
+  void ElementRetainingStringCallback(
+      std::unique_ptr<ElementFinder::Result> element,
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      std::string* result,
+      const ClientStatus& status,
+      const std::string& value) {
+    EXPECT_TRUE(element != nullptr);
+    *result_output = status;
+    result->assign(value);
     std::move(done_callback).Run();
   }
 
   void ClickOrTapElement(const Selector& selector, ClickType click_type) {
     base::RunLoop run_loop;
-    web_controller_->ClickOrTapElement(
-        selector, click_type,
-        base::BindOnce(&WebControllerBrowserTest::ClickElementCallback,
-                       base::Unretained(this), run_loop.QuitClosure()));
+    ClientStatus result_output;
+
+    web_controller_->FindElement(
+        selector, /* strict_mode= */ true,
+        base::BindOnce(&WebControllerBrowserTest::FindClickOrTapElementCallback,
+                       base::Unretained(this), click_type,
+                       run_loop.QuitClosure(), &result_output));
+
     run_loop.Run();
+    EXPECT_EQ(ACTION_APPLIED, result_output.proto_status());
+  }
+
+  void FindClickOrTapElementCallback(
+      ClickType click_type,
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      const ClientStatus& status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    EXPECT_EQ(ACTION_APPLIED, status.proto_status());
+    ASSERT_TRUE(element_result != nullptr);
+    PerformClickOrTap(
+        click_type, *element_result,
+        base::BindOnce(&WebControllerBrowserTest::ElementRetainingCallback,
+                       base::Unretained(this), std::move(element_result),
+                       std::move(done_callback), result_output));
+  }
+
+  void PerformClickOrTap(
+      ClickType click_type,
+      const ElementFinder::Result& element,
+      base::OnceCallback<void(const ClientStatus&)> callback) {
+    web_controller_->ScrollIntoView(
+        element,
+        base::BindOnce(&WebControllerBrowserTest::OnScrollIntoViewForClickOrTap,
+                       base::Unretained(this), click_type, element,
+                       std::move(callback)));
+  }
+
+  void OnScrollIntoViewForClickOrTap(
+      ClickType click_type,
+      const ElementFinder::Result& element,
+      base::OnceCallback<void(const ClientStatus&)> callback,
+      const ClientStatus& scroll_status) {
+    if (!scroll_status.ok()) {
+      std::move(callback).Run(scroll_status);
+      return;
+    }
+
+    web_controller_->ClickOrTapElement(element, click_type,
+                                       std::move(callback));
   }
 
   void WaitForElementRemove(const Selector& selector) {
@@ -171,19 +234,40 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
     }
   }
 
-  void FocusElement(const Selector& selector, const TopPadding top_padding) {
+  void ScrollToElementPosition(const Selector& selector,
+                               const TopPadding& top_padding) {
     base::RunLoop run_loop;
-    web_controller_->FocusElement(
-        selector, top_padding,
-        base::BindOnce(&WebControllerBrowserTest::OnFocusElement,
-                       base::Unretained(this), run_loop.QuitClosure()));
+    ClientStatus result;
+
+    web_controller_->FindElement(
+        selector, /* strict_mode= */ true,
+        base::BindOnce(
+            &WebControllerBrowserTest::FindScrollToElementPositionCallback,
+            base::Unretained(this), top_padding, run_loop.QuitClosure(),
+            &result));
+
     run_loop.Run();
+    EXPECT_EQ(ACTION_APPLIED, result.proto_status());
   }
 
-  void OnFocusElement(base::OnceClosure done_callback,
-                      const ClientStatus& status) {
-    EXPECT_EQ(ACTION_APPLIED, status.proto_status());
-    std::move(done_callback).Run();
+  void FindScrollToElementPositionCallback(
+      const TopPadding& top_padding,
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      const ClientStatus& status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    if (!status.ok()) {
+      *result_output = status;
+      std::move(done_callback).Run();
+      return;
+    }
+
+    ASSERT_TRUE(element_result != nullptr);
+    web_controller_->ScrollToElementPosition(
+        *element_result, top_padding,
+        base::BindOnce(&WebControllerBrowserTest::ElementRetainingCallback,
+                       base::Unretained(this), std::move(element_result),
+                       std::move(done_callback), result_output));
   }
 
   ClientStatus SelectOption(const Selector& selector,
@@ -191,13 +275,37 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
                             DropdownSelectStrategy select_strategy) {
     base::RunLoop run_loop;
     ClientStatus result;
-    web_controller_->SelectOption(
-        selector, value, select_strategy,
-        base::BindOnce(&WebControllerBrowserTest::OnClientStatus,
-                       base::Unretained(this), run_loop.QuitClosure(),
-                       &result));
+
+    web_controller_->FindElement(
+        selector, /* strict_mode= */ true,
+        base::BindOnce(
+            &WebControllerBrowserTest::FindSelectOptionElementCallback,
+            base::Unretained(this), value, select_strategy,
+            run_loop.QuitClosure(), &result));
+
     run_loop.Run();
     return result;
+  }
+
+  void FindSelectOptionElementCallback(
+      const std::string& value,
+      DropdownSelectStrategy select_strategy,
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      const ClientStatus& status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    if (!status.ok()) {
+      *result_output = status;
+      std::move(done_callback).Run();
+      return;
+    }
+
+    ASSERT_TRUE(element_result != nullptr);
+    web_controller_->SelectOption(
+        *element_result, value, select_strategy,
+        base::BindOnce(&WebControllerBrowserTest::ElementRetainingCallback,
+                       base::Unretained(this), std::move(element_result),
+                       std::move(done_callback), result_output));
   }
 
   void OnClientStatus(base::OnceClosure done_callback,
@@ -220,58 +328,100 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
   ClientStatus HighlightElement(const Selector& selector) {
     base::RunLoop run_loop;
     ClientStatus result;
-    web_controller_->HighlightElement(
-        selector, base::BindOnce(&WebControllerBrowserTest::OnClientStatus,
-                                 base::Unretained(this), run_loop.QuitClosure(),
-                                 &result));
+
+    web_controller_->FindElement(
+        selector, /* strict_mode= */ true,
+        base::BindOnce(&WebControllerBrowserTest::FindHighlightElementCallback,
+                       base::Unretained(this), run_loop.QuitClosure(),
+                       &result));
+
     run_loop.Run();
     return result;
+  }
+
+  void FindHighlightElementCallback(
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      const ClientStatus& status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    if (!status.ok()) {
+      *result_output = status;
+      std::move(done_callback).Run();
+      return;
+    }
+
+    ASSERT_TRUE(element_result != nullptr);
+    web_controller_->HighlightElement(
+        *element_result,
+        base::BindOnce(&WebControllerBrowserTest::ElementRetainingCallback,
+                       base::Unretained(this), std::move(element_result),
+                       std::move(done_callback), result_output));
   }
 
   ClientStatus GetOuterHtml(const Selector& selector,
                             std::string* html_output) {
     base::RunLoop run_loop;
     ClientStatus result;
-    web_controller_->GetOuterHtml(
-        selector, base::BindOnce(&WebControllerBrowserTest::OnGetOuterHtml,
-                                 base::Unretained(this), run_loop.QuitClosure(),
-                                 &result, html_output));
+
+    web_controller_->FindElement(
+        selector, /* strict= */ true,
+        base::BindOnce(
+            &WebControllerBrowserTest::FindGetOuterHtmlElementCallback,
+            base::Unretained(this), run_loop.QuitClosure(), &result,
+            html_output));
+
     run_loop.Run();
+    EXPECT_EQ(ACTION_APPLIED, result.proto_status());
     return result;
   }
 
-  void OnGetOuterHtml(base::OnceClosure done_callback,
-                      ClientStatus* successful_output,
-                      std::string* html_output,
-                      const ClientStatus& status,
-                      const std::string& html) {
-    EXPECT_EQ(ACTION_APPLIED, status.proto_status());
-    *successful_output = status;
-    *html_output = html;
-    std::move(done_callback).Run();
+  void FindGetOuterHtmlElementCallback(
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      std::string* html_output,
+      const ClientStatus& element_status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    EXPECT_EQ(ACTION_APPLIED, element_status.proto_status());
+    ASSERT_TRUE(element_result != nullptr);
+    web_controller_->GetOuterHtml(
+        *element_result,
+        base::BindOnce(
+            &WebControllerBrowserTest::ElementRetainingStringCallback,
+            base::Unretained(this), std::move(element_result),
+            std::move(done_callback), result_output, html_output));
   }
 
   ClientStatus GetElementTag(const Selector& selector,
                              std::string* element_tag_output) {
     base::RunLoop run_loop;
     ClientStatus result;
-    web_controller_->GetElementTag(
-        selector, base::BindOnce(&WebControllerBrowserTest::OnGetElementTag,
-                                 base::Unretained(this), run_loop.QuitClosure(),
-                                 &result, element_tag_output));
+
+    web_controller_->FindElement(
+        selector, /* strict= */ true,
+        base::BindOnce(
+            &WebControllerBrowserTest::FindGetElementTagElementCallback,
+            base::Unretained(this), run_loop.QuitClosure(), &result,
+            element_tag_output));
+
     run_loop.Run();
+    EXPECT_EQ(ACTION_APPLIED, result.proto_status());
     return result;
   }
 
-  void OnGetElementTag(base::OnceClosure done_callback,
-                       ClientStatus* successful_output,
-                       std::string* element_tag_output,
-                       const ClientStatus& status,
-                       const std::string& element_tag) {
-    EXPECT_EQ(ACTION_APPLIED, status.proto_status());
-    *successful_output = status;
-    *element_tag_output = element_tag;
-    std::move(done_callback).Run();
+  void FindGetElementTagElementCallback(
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      std::string* element_tag_output,
+      const ClientStatus& element_status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    EXPECT_EQ(ACTION_APPLIED, element_status.proto_status());
+    ASSERT_TRUE(element_result != nullptr);
+    web_controller_->GetElementTag(
+        *element_result,
+        base::BindOnce(
+            &WebControllerBrowserTest::ElementRetainingStringCallback,
+            base::Unretained(this), std::move(element_result),
+            std::move(done_callback), result_output, element_tag_output));
   }
 
   void FindElement(const Selector& selector,
@@ -301,8 +451,7 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
       *result_out = *result;
   }
 
-  void FindElementAndCheck(const Selector& selector,
-                           bool is_main_frame) {
+  void FindElementAndCheck(const Selector& selector, bool is_main_frame) {
     SCOPED_TRACE(::testing::Message() << selector << " strict");
     ClientStatus status;
     ElementFinder::Result result;
@@ -334,28 +483,84 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
     EXPECT_FALSE(result.object_id.empty());
   }
 
+  ClientStatus GetStringAttribute(const Selector& selector,
+                                  const std::vector<std::string>& attributes,
+                                  std::string* value) {
+    base::RunLoop run_loop;
+    ClientStatus result;
+
+    web_controller_->FindElement(
+        selector, /* strict= */ true,
+        base::BindOnce(
+            &WebControllerBrowserTest::FindGetStringAttributeElementCallback,
+            base::Unretained(this), attributes, run_loop.QuitClosure(), &result,
+            value));
+
+    run_loop.Run();
+    return result;
+  }
+
+  void FindGetStringAttributeElementCallback(
+      const std::vector<std::string>& attributes,
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      std::string* value,
+      const ClientStatus& element_status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    EXPECT_EQ(ACTION_APPLIED, element_status.proto_status());
+    ASSERT_TRUE(element_result != nullptr);
+    web_controller_->GetStringAttribute(
+        *element_result, attributes,
+        base::BindOnce(
+            &WebControllerBrowserTest::ElementRetainingStringCallback,
+            base::Unretained(this), std::move(element_result),
+            std::move(done_callback), result_output, value));
+  }
+
   void GetFieldsValue(const std::vector<Selector>& selectors,
                       const std::vector<std::string>& expected_values) {
     base::RunLoop run_loop;
     ASSERT_EQ(selectors.size(), expected_values.size());
     size_t pending_number_of_checks = selectors.size();
     for (size_t i = 0; i < selectors.size(); i++) {
-      web_controller_->GetFieldValue(
-          selectors[i],
-          base::BindOnce(&WebControllerBrowserTest::OnGetFieldValue,
-                         base::Unretained(this), run_loop.QuitClosure(),
-                         &pending_number_of_checks, expected_values[i]));
+      web_controller_->FindElement(
+          selectors[i], /* strict= */ true,
+          base::BindOnce(
+              &WebControllerBrowserTest::GetFieldValueElementCallback,
+              base::Unretained(this), run_loop.QuitClosure(),
+              &pending_number_of_checks, expected_values[i]));
     }
     run_loop.Run();
   }
 
-  void OnGetFieldValue(base::OnceClosure done_callback,
+  void GetFieldValueElementCallback(
+      base::OnceClosure done_callback,
+      size_t* pending_number_of_checks_output,
+      const std::string& expected_value,
+      const ClientStatus& element_status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    if (!element_status.ok()) {
+      OnGetFieldValue(nullptr, std::move(done_callback),
+                      pending_number_of_checks_output, expected_value,
+                      element_status, std::string());
+      return;
+    }
+    web_controller_->GetFieldValue(
+        *element_result,
+        base::BindOnce(&WebControllerBrowserTest::OnGetFieldValue,
+                       base::Unretained(this), std::move(element_result),
+                       std::move(done_callback),
+                       pending_number_of_checks_output, expected_value));
+  }
+
+  void OnGetFieldValue(std::unique_ptr<ElementFinder::Result> element,
+                       base::OnceClosure done_callback,
                        size_t* pending_number_of_checks_output,
                        const std::string& expected_value,
                        const ClientStatus& status,
                        const std::string& value) {
-    // Don't use ASSERT_EQ here: if the check fails, this would result in
-    // an endless loop without meaningful test results.
+    // Don't use ASSERT: If the check fails, this would result in an endless
+    // loop without meaningful test results.
     EXPECT_EQ(expected_value, value);
     *pending_number_of_checks_output -= 1;
     if (*pending_number_of_checks_output == 0) {
@@ -368,90 +573,245 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
                              KeyboardValueFillStrategy fill_strategy) {
     base::RunLoop run_loop;
     ClientStatus result;
-    web_controller_->SetFieldValue(
-        selector, value, fill_strategy, /* key_press_delay_in_millisecond= */ 0,
-        base::BindOnce(&WebControllerBrowserTest::OnSetFieldValue,
-                       base::Unretained(this), run_loop.QuitClosure(),
-                       &result));
+    web_controller_->FindElement(
+        selector, /* strict_mode= */ true,
+        base::BindOnce(
+            &WebControllerBrowserTest::FindSetFieldValueElementCallback,
+            base::Unretained(this), value, fill_strategy,
+            run_loop.QuitClosure(), &result));
     run_loop.Run();
     return result;
   }
 
-  void OnSetFieldValue(base::OnceClosure done_callback,
-                       ClientStatus* result_output,
-                       const ClientStatus& status) {
-    *result_output = status;
-    std::move(done_callback).Run();
+  void FindSetFieldValueElementCallback(
+      const std::string& value,
+      KeyboardValueFillStrategy fill_strategy,
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      const ClientStatus& element_status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    if (!element_status.ok()) {
+      *result_output = element_status;
+      std::move(done_callback).Run();
+      return;
+    }
+
+    EXPECT_EQ(ACTION_APPLIED, element_status.proto_status());
+    ASSERT_TRUE(element_result != nullptr);
+    PerformSetFieldValue(
+        value, fill_strategy, *element_result,
+        base::BindOnce(&WebControllerBrowserTest::ElementRetainingCallback,
+                       base::Unretained(this), std::move(element_result),
+                       std::move(done_callback), result_output));
+  }
+
+  void PerformSetFieldValue(
+      const std::string& value,
+      KeyboardValueFillStrategy fill_strategy,
+      const ElementFinder::Result& element,
+      base::OnceCallback<void(const ClientStatus&)> callback) {
+    if (value.empty()) {
+      web_controller_->SetValueAttribute(element, value, std::move(callback));
+      return;
+    }
+
+    switch (fill_strategy) {
+      case SET_VALUE:
+        web_controller_->SetValueAttribute(element, value, std::move(callback));
+        return;
+      case SIMULATE_KEY_PRESSES:
+        web_controller_->SetValueAttribute(
+            element, /* value= */ std::string(),
+            base::BindOnce(
+                &WebControllerBrowserTest::OnSetValueAttributeForSetFieldValue,
+                base::Unretained(this), value, false, element,
+                std::move(callback)));
+        return;
+      case SIMULATE_KEY_PRESSES_SELECT_VALUE:
+        web_controller_->SelectFieldValue(
+            element,
+            base::BindOnce(
+                &WebControllerBrowserTest::OnSelectFieldValueForSetFieldValue,
+                base::Unretained(this), value, element, std::move(callback)));
+        return;
+      case SIMULATE_KEY_PRESSES_FOCUS:
+        web_controller_->SetValueAttribute(
+            element, /* value= */ std::string(),
+            base::BindOnce(
+                &WebControllerBrowserTest::OnSetValueAttributeForSetFieldValue,
+                base::Unretained(this), value, true, element,
+                std::move(callback)));
+        return;
+      case UNSPECIFIED_KEYBAORD_STRATEGY:
+        std::move(callback).Run(ClientStatus(INVALID_ACTION));
+    }
+  }
+
+  void OnSetValueAttributeForSetFieldValue(
+      const std::string& value,
+      bool use_js_focus,
+      const ElementFinder::Result& element,
+      base::OnceCallback<void(const ClientStatus&)> callback,
+      const ClientStatus& status) {
+    if (!status.ok()) {
+      std::move(callback).Run(status);
+      return;
+    }
+    PerformSendKeyboardInput(UTF8ToUnicode(value), /* delay_in_milli= */ 0,
+                             use_js_focus, element, std::move(callback));
+  }
+
+  void OnSelectFieldValueForSetFieldValue(
+      const std::string& value,
+      const ElementFinder::Result& element,
+      base::OnceCallback<void(const ClientStatus&)> callback,
+      const ClientStatus& status) {
+    if (!status.ok()) {
+      std::move(callback).Run(status);
+      return;
+    }
+    web_controller_->SendKeyboardInput(element, UTF8ToUnicode(value),
+                                       /* delay_in_milli= */ 0,
+                                       std::move(callback));
   }
 
   ClientStatus SendKeyboardInput(const Selector& selector,
                                  const std::vector<UChar32>& codepoints,
-                                 int delay_in_milli) {
+                                 int delay_in_milli,
+                                 bool use_js_focus) {
     base::RunLoop run_loop;
     ClientStatus result;
-    web_controller_->SendKeyboardInput(
-        selector, codepoints, delay_in_milli,
-        base::BindOnce(&WebControllerBrowserTest::OnSendKeyboardInput,
-                       base::Unretained(this), run_loop.QuitClosure(),
-                       &result));
+
+    web_controller_->FindElement(
+        selector, /* strict_mode= */ true,
+        base::BindOnce(
+            &WebControllerBrowserTest::FindSendKeyboardInputElementCallback,
+            base::Unretained(this), codepoints, delay_in_milli, use_js_focus,
+            run_loop.QuitClosure(), &result));
+
     run_loop.Run();
     return result;
   }
 
   ClientStatus SendKeyboardInput(const Selector& selector,
                                  const std::vector<UChar32>& codepoints) {
-    return SendKeyboardInput(selector, codepoints, -1);
+    return SendKeyboardInput(selector, codepoints, -1, false);
   }
 
-  void OnSendKeyboardInput(base::OnceClosure done_callback,
-                           ClientStatus* result_output,
-                           const ClientStatus& status) {
-    *result_output = status;
-    std::move(done_callback).Run();
+  void FindSendKeyboardInputElementCallback(
+      const std::vector<UChar32>& codepoints,
+      int delay_in_milli,
+      bool use_js_focus,
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      const ClientStatus& element_status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    EXPECT_EQ(ACTION_APPLIED, element_status.proto_status());
+    ASSERT_TRUE(element_result != nullptr);
+    PerformSendKeyboardInput(
+        codepoints, delay_in_milli, use_js_focus, *element_result,
+        base::BindOnce(&WebControllerBrowserTest::ElementRetainingCallback,
+                       base::Unretained(this), std::move(element_result),
+                       std::move(done_callback), result_output));
+  }
+
+  void PerformSendKeyboardInput(
+      const std::vector<UChar32>& codepoints,
+      int delay_in_milli,
+      bool use_js_focus,
+      const ElementFinder::Result& element,
+      base::OnceCallback<void(const ClientStatus&)> callback) {
+    if (use_js_focus) {
+      web_controller_->FocusField(
+          element,
+          base::BindOnce(
+              &WebControllerBrowserTest::OnFieldFocussedForSendKeyboardInput,
+              base::Unretained(this), codepoints, delay_in_milli, element,
+              std::move(callback)));
+      return;
+    }
+
+    PerformClickOrTap(
+        ClickType::CLICK, element,
+        base::BindOnce(
+            &WebControllerBrowserTest::OnFieldFocussedForSendKeyboardInput,
+            base::Unretained(this), codepoints, delay_in_milli, element,
+            std::move(callback)));
+  }
+
+  void OnFieldFocussedForSendKeyboardInput(
+      const std::vector<UChar32>& codepoints,
+      int delay_in_milli,
+      const ElementFinder::Result& element,
+      base::OnceCallback<void(const ClientStatus&)> callback,
+      const ClientStatus& click_status) {
+    if (!click_status.ok()) {
+      std::move(callback).Run(click_status);
+      return;
+    }
+
+    web_controller_->SendKeyboardInput(element, codepoints, delay_in_milli,
+                                       std::move(callback));
   }
 
   ClientStatus SetAttribute(const Selector& selector,
-                            const std::vector<std::string>& attribute,
+                            const std::vector<std::string>& attributes,
                             const std::string& value) {
     base::RunLoop run_loop;
     ClientStatus result;
+
+    web_controller_->FindElement(
+        selector, /* strict_mode= */ true,
+        base::BindOnce(
+            &WebControllerBrowserTest::FindSetAttributeElementCallback,
+            base::Unretained(this), attributes, value, run_loop.QuitClosure(),
+            &result));
+
+    run_loop.Run();
+    return result;
+  }
+
+  void FindSetAttributeElementCallback(
+      const std::vector<std::string>& attributes,
+      const std::string& value,
+      base::OnceClosure done_callback,
+      ClientStatus* result_output,
+      const ClientStatus& status,
+      std::unique_ptr<ElementFinder::Result> element_result) {
+    if (!status.ok()) {
+      *result_output = status;
+      std::move(done_callback).Run();
+      return;
+    }
+
+    ASSERT_TRUE(element_result != nullptr);
     web_controller_->SetAttribute(
-        selector, attribute, value,
-        base::BindOnce(&WebControllerBrowserTest::OnSetAttribute,
-                       base::Unretained(this), run_loop.QuitClosure(),
-                       &result));
-    run_loop.Run();
-    return result;
+        *element_result, attributes, value,
+        base::BindOnce(&WebControllerBrowserTest::ElementRetainingCallback,
+                       base::Unretained(this), std::move(element_result),
+                       std::move(done_callback), result_output));
   }
 
-  void OnSetAttribute(base::OnceClosure done_callback,
-                      ClientStatus* result_output,
-                      const ClientStatus& status) {
-    *result_output = status;
-    std::move(done_callback).Run();
-  }
-
-  bool GetElementPosition(const Selector& selector, RectF* rect_output) {
+  ClientStatus GetElementRect(const Selector& selector, RectF* rect_output) {
     base::RunLoop run_loop;
-    bool result;
-    web_controller_->GetElementPosition(
-        selector,
-        base::BindOnce(&WebControllerBrowserTest::OnGetElementPosition,
-                       base::Unretained(this), run_loop.QuitClosure(), &result,
-                       rect_output));
+    ClientStatus result;
+    web_controller_->GetElementRect(
+        selector, base::BindOnce(&WebControllerBrowserTest::OnGetElementRect,
+                                 base::Unretained(this), run_loop.QuitClosure(),
+                                 &result, rect_output));
     run_loop.Run();
     return result;
   }
 
-  void OnGetElementPosition(base::OnceClosure done_callback,
-                            bool* result_output,
-                            RectF* rect_output,
-                            bool non_empty,
-                            const RectF& rect) {
-    if (non_empty) {
+  void OnGetElementRect(base::OnceClosure done_callback,
+                        ClientStatus* result_output,
+                        RectF* rect_output,
+                        const ClientStatus& rect_status,
+                        const RectF& rect) {
+    if (rect_status.ok()) {
       *rect_output = rect;
     }
-    *result_output = non_empty;
+    *result_output = rect_status;
     std::move(done_callback).Run();
   }
 
@@ -493,7 +853,7 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
     ScrollContainerTo(initial_window_scroll_y);
 
     TopPadding top_padding{0.25, TopPadding::Unit::RATIO};
-    FocusElement(selector, top_padding);
+    ScrollToElementPosition(selector, top_padding);
     base::ListValue eval_result = content::EvalJs(shell(), R"(
       let item = document.querySelector("#scroll_item_5");
       let itemRect = item.getBoundingClientRect();
@@ -527,11 +887,11 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
 
  protected:
   std::unique_ptr<WebController> web_controller_;
+  ClientSettings settings_;
 
  private:
   std::unique_ptr<net::EmbeddedTestServer> http_server_;
   std::unique_ptr<net::EmbeddedTestServer> http_server_iframe_;
-  ClientSettings settings_;
 
   DISALLOW_COPY_AND_ASSIGN(WebControllerBrowserTest);
 };
@@ -1118,7 +1478,7 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, FindElementErrorStatus) {
   EXPECT_EQ(TOO_MANY_ELEMENTS, status.proto_status());
 }
 
-IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, FocusElement) {
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, ScrollToElementPosition) {
   Selector selector({"#iframe", "#focus"});
 
   const std::string checkVisibleScript = R"(
@@ -1130,24 +1490,24 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, FocusElement) {
   )";
   EXPECT_EQ(false, content::EvalJs(shell(), checkVisibleScript));
   TopPadding top_padding;
-  FocusElement(selector, top_padding);
+  ScrollToElementPosition(selector, top_padding);
   EXPECT_EQ(true, content::EvalJs(shell(), checkVisibleScript));
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
-                       FocusElementWithScrollIntoViewNeeded) {
+                       ScrollToElementPosition_WithScrollIntoViewNeeded) {
   TestScrollIntoView(/* initial_window_scroll_y= */ 0,
                      /* initial_container_scroll_y=*/0);
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
-                       FocusElementWithScrollIntoViewNotNeeded) {
+                       ScrollToElementPosition_WithScrollIntoViewNotNeeded) {
   TestScrollIntoView(/* initial_window_scroll_y= */ 0,
                      /* initial_container_scroll_y=*/200);
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
-                       FocusElement_WithPaddingInPixels) {
+                       ScrollToElementPosition_WithPaddingInPixels) {
   Selector selector({"#scroll-me"});
 
   const std::string checkScrollDifferentThanTargetScript = R"(
@@ -1162,7 +1522,7 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
 
   // Scroll 360px from the top.
   TopPadding top_padding{/* value= */ 360, TopPadding::Unit::PIXELS};
-  FocusElement(selector, top_padding);
+  ScrollToElementPosition(selector, top_padding);
 
   double eval_result = content::EvalJs(shell(), R"(
       let scrollTarget = document.querySelector("#scroll-me");
@@ -1175,7 +1535,7 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
-                       FocusElement_WithPaddingInRatio) {
+                       ScrollToElementPosition_WithPaddingInRatio) {
   Selector selector({"#scroll-me"});
 
   const std::string checkScrollDifferentThanTargetScript = R"(
@@ -1191,7 +1551,7 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
 
   // Scroll 70% from the top.
   TopPadding top_padding{/* value= */ 0.7, TopPadding::Unit::RATIO};
-  FocusElement(selector, top_padding);
+  ScrollToElementPosition(selector, top_padding);
 
   base::ListValue eval_result = content::EvalJs(shell(), R"(
       let scrollTarget = document.querySelector("#scroll-me");
@@ -1241,7 +1601,6 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, SelectOption) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, SelectOptionInIFrame) {
-
   // IFrame.
   Selector select_selector({"#iframe", "select[name=state]"});
   EXPECT_EQ(
@@ -1347,9 +1706,9 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetAndSetFieldValue) {
   expected_values.clear();
   expected_values.emplace_back("helloworld2");
   GetFieldsValue(selectors, expected_values);
-  EXPECT_EQ(ACTION_APPLIED,
-            SetFieldValue(a_selector, /* value= */ "", SIMULATE_KEY_PRESSES)
-                .proto_status());
+  EXPECT_EQ(
+      ACTION_APPLIED,
+      SetFieldValue(a_selector, /* value= */ "", SET_VALUE).proto_status());
   expected_values.clear();
   expected_values.emplace_back("");
   GetFieldsValue(selectors, expected_values);
@@ -1360,11 +1719,37 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetAndSetFieldValue) {
   expected_values.clear();
   expected_values.emplace_back("helloworld3");
   GetFieldsValue(selectors, expected_values);
-  EXPECT_EQ(ACTION_APPLIED, SetFieldValue(a_selector, /* value= */ "",
+  EXPECT_EQ(ACTION_APPLIED,
+            SetFieldValue(a_selector, "new value", SIMULATE_KEY_PRESSES)
+                .proto_status());
+  expected_values.clear();
+  expected_values.emplace_back("new value");
+  GetFieldsValue(selectors, expected_values);
+
+  selectors.clear();
+  a_selector = Selector({"#input4"});
+  selectors.emplace_back(a_selector);
+  expected_values.clear();
+  expected_values.emplace_back("helloworld4");
+  GetFieldsValue(selectors, expected_values);
+  EXPECT_EQ(ACTION_APPLIED, SetFieldValue(a_selector, "new value",
                                           SIMULATE_KEY_PRESSES_SELECT_VALUE)
                                 .proto_status());
   expected_values.clear();
-  expected_values.emplace_back("");
+  expected_values.emplace_back("new value");
+  GetFieldsValue(selectors, expected_values);
+
+  selectors.clear();
+  a_selector = Selector({"#input5"});
+  selectors.emplace_back(a_selector);
+  expected_values.clear();
+  expected_values.emplace_back("helloworld5");
+  GetFieldsValue(selectors, expected_values);
+  EXPECT_EQ(ACTION_APPLIED,
+            SetFieldValue(a_selector, "new value", SIMULATE_KEY_PRESSES_FOCUS)
+                .proto_status());
+  expected_values.clear();
+  expected_values.emplace_back("new value");
   GetFieldsValue(selectors, expected_values);
 
   selectors.clear();
@@ -1373,13 +1758,11 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetAndSetFieldValue) {
   expected_values.clear();
   expected_values.emplace_back("");
   GetFieldsValue(selectors, expected_values);
-
   EXPECT_EQ(ELEMENT_RESOLUTION_FAILED,
             SetFieldValue(a_selector, "foobar", SET_VALUE).proto_status());
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetAndSetFieldValueInIFrame) {
-
   // IFrame.
   Selector a_selector({"#iframe", "#input"});
   EXPECT_EQ(ACTION_APPLIED,
@@ -1402,7 +1785,13 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, SendKeyboardInput) {
   selectors.emplace_back(a_selector);
   EXPECT_EQ(ACTION_APPLIED,
             SendKeyboardInput(a_selector, input).proto_status());
-  GetFieldsValue(selectors, {expected_output});
+  Selector b_selector({"#input7"});
+  selectors.emplace_back(b_selector);
+  EXPECT_EQ(ACTION_APPLIED,
+            SendKeyboardInput(b_selector, input, /* delay_in_milli= */ -1,
+                              /* use_js_focus= */ true)
+                .proto_status());
+  GetFieldsValue(selectors, {expected_output, expected_output});
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
@@ -1431,7 +1820,8 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
   Selector a_selector({"#input_js_event_with_timeout"});
   selectors.emplace_back(a_selector);
   EXPECT_EQ(ACTION_APPLIED,
-            SendKeyboardInput(a_selector, input, /*delay_in_milli*/ 100)
+            SendKeyboardInput(a_selector, input, /* delay_in_milli= */ 100,
+                              /* use_js_focus= */ false)
                 .proto_status());
   GetFieldsValue(selectors, {expected_output});
 }
@@ -1483,7 +1873,7 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, NavigateToUrl) {
   EXPECT_EQ(kTargetWebsitePath,
             shell()->web_contents()->GetLastCommittedURL().path());
   web_controller_->LoadURL(GURL(url::kAboutBlankURL));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(url::kAboutBlankURL,
             shell()->web_contents()->GetLastCommittedURL().spec());
 }
@@ -1563,28 +1953,283 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
               AnyOf(DOCUMENT_LOADED, DOCUMENT_INTERACTIVE, DOCUMENT_COMPLETE));
 }
 
-IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetElementPosition) {
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetElementRect) {
   RectF document_element_rect;
   Selector document_element({"#full_height_section"});
-  EXPECT_TRUE(GetElementPosition(document_element, &document_element_rect));
+  EXPECT_EQ(
+      ACTION_APPLIED,
+      GetElementRect(document_element, &document_element_rect).proto_status());
 
   // The iFrame must be after the #full_height_section element to check that
   // the resulting rect is global.
   RectF iframe_element_rect;
   Selector iframe_element({"#iframe", "#touch_area_1"});
-  EXPECT_TRUE(GetElementPosition(iframe_element, &iframe_element_rect));
+  EXPECT_EQ(
+      ACTION_APPLIED,
+      GetElementRect(iframe_element, &iframe_element_rect).proto_status());
 
   EXPECT_GT(iframe_element_rect.top, document_element_rect.bottom);
 
   // Make sure the element is within the iframe.
   RectF iframe_rect;
   Selector iframe({"#iframe"});
-  EXPECT_TRUE(GetElementPosition(iframe, &iframe_rect));
+  EXPECT_EQ(ACTION_APPLIED,
+            GetElementRect(iframe, &iframe_rect).proto_status());
 
   EXPECT_GT(iframe_element_rect.left, iframe_rect.left);
   EXPECT_LT(iframe_element_rect.right, iframe_rect.right);
   EXPECT_GT(iframe_element_rect.top, iframe_rect.top);
   EXPECT_LT(iframe_element_rect.bottom, iframe_rect.bottom);
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetElementByProximity) {
+  Selector input1_selector({"input"});
+  auto* input1_closest = input1_selector.proto.add_filters()->mutable_closest();
+  input1_closest->add_target()->set_css_selector("label");
+  input1_closest->add_target()->mutable_inner_text()->set_re2("Input1");
+
+  GetFieldsValue({input1_selector}, {"helloworld1"});
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
+                       GetElementByProximityWithTooManyCandidates) {
+  Selector selector({"input.pairs"});
+  auto* closest = selector.proto.add_filters()->mutable_closest();
+  closest->add_target()->set_css_selector("label.pairs");
+  closest->set_max_pairs(24);
+
+  ClientStatus status;
+  ElementFinder::Result result;
+  FindElement(selector, &status, &result);
+  EXPECT_EQ(TOO_MANY_CANDIDATES, status.proto_status());
+
+  closest->set_max_pairs(25);
+  FindElement(selector, &status, &result);
+  EXPECT_EQ(ACTION_APPLIED, status.proto_status());
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, ProximityRelative_Position) {
+  Selector selector({"#at_center"});
+  auto* closest = selector.proto.add_filters()->mutable_closest();
+  closest->add_target()->set_css_selector("table.proximity td");
+  auto* inner_text = closest->add_target()->mutable_inner_text();
+
+  // The cells of the table look like the following:
+  //
+  // One    Two     Three
+  // Four   Center  Five
+  // Six    Seven   Eight
+  //
+  // The element is "Center", the target is "One" to "Eight". The
+  // relative_position specify that the element should be below|above|... the
+  // target.
+
+  closest->set_relative_position(SelectorProto::ProximityFilter::BELOW);
+  inner_text->set_re2("One");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Two");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Three");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Four");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Five");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Six");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Seven");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Eight");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Center");
+  RunStrictElementCheck(selector, false);
+
+  closest->set_relative_position(SelectorProto::ProximityFilter::ABOVE);
+  inner_text->set_re2("One");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Two");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Three");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Four");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Five");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Six");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Seven");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Eight");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Center");
+  RunStrictElementCheck(selector, false);
+
+  closest->set_relative_position(SelectorProto::ProximityFilter::LEFT);
+  inner_text->set_re2("One");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Two");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Three");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Four");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Five");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Six");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Seven");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Eight");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Center");
+  RunStrictElementCheck(selector, false);
+
+  closest->set_relative_position(SelectorProto::ProximityFilter::RIGHT);
+  inner_text->set_re2("One");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Two");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Three");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Four");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Five");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Six");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Seven");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Eight");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Center");
+  RunStrictElementCheck(selector, false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, ProximityAlignment) {
+  Selector selector({"#at_center"});
+  auto* closest = selector.proto.add_filters()->mutable_closest();
+  closest->add_target()->set_css_selector("table.proximity td");
+  auto* inner_text = closest->add_target()->mutable_inner_text();
+
+  closest->set_in_alignment(true);
+  inner_text->set_re2("One");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Two");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Three");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Four");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Five");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Six");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Seven");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Eight");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Center");
+  RunStrictElementCheck(selector, true);
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
+                       ProximityAlignmentWithPosition) {
+  Selector selector({"#at_center"});
+  auto* closest = selector.proto.add_filters()->mutable_closest();
+  closest->add_target()->set_css_selector("table.proximity td");
+  auto* inner_text = closest->add_target()->mutable_inner_text();
+
+  closest->set_in_alignment(true);
+  closest->set_relative_position(SelectorProto::ProximityFilter::LEFT);
+
+  inner_text->set_re2("One");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Two");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Three");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Four");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Five");
+  RunStrictElementCheck(selector, true);
+  inner_text->set_re2("Six");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Seven");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Eight");
+  RunStrictElementCheck(selector, false);
+  inner_text->set_re2("Center");
+  RunStrictElementCheck(selector, false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
+                       FindPseudoElementToClickByProximity) {
+  const std::string javascript = R"(
+    document.querySelector("#terms-and-conditions").checked;
+  )";
+  EXPECT_FALSE(content::EvalJs(shell(), javascript).ExtractBool());
+
+  // This test clicks on the before pseudo-element that's closest to
+  // #terms-and-conditions - this has the same effect as clicking on
+  // #terms-and-conditions. This checks that pseudo-elements have positions and
+  // that we can go through an array of pseudo-elements and choose the closest
+  // one.
+  Selector selector({"label, span"});
+  selector.SetPseudoType(PseudoType::BEFORE);
+  auto* closest = selector.proto.add_filters()->mutable_closest();
+  closest->add_target()->set_css_selector("#terms-and-conditions");
+
+  ClickOrTapElement(selector, ClickType::CLICK);
+  EXPECT_TRUE(content::EvalJs(shell(), javascript).ExtractBool());
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
+                       GetElementByProximityDifferentFrames) {
+  Selector selector({"input"});
+  auto* closest = selector.proto.add_filters()->mutable_closest();
+  closest->add_target()->set_css_selector("#iframe");
+  closest->add_target()->mutable_pick_one();
+  closest->add_target()->mutable_enter_frame();
+  closest->add_target()->set_css_selector("div");
+
+  // Cannot compare position of elements on different frames.
+  ClientStatus status;
+  FindElement(Selector(SelectorProto::default_instance()), &status, nullptr);
+  EXPECT_EQ(INVALID_SELECTOR, status.proto_status());
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
+                       GetElementByProximitySameFrame) {
+  Selector selector({"#iframe", "input[name='email']"});
+
+  // The target is searched within #iframe.
+  auto* closest = selector.proto.add_filters()->mutable_closest();
+  closest->add_target()->set_css_selector("span");
+  closest->add_target()->mutable_inner_text()->set_re2("Email");
+
+  RunLaxElementCheck(selector, true);
+  GetFieldsValue({selector}, {"email@example.com"});
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetStringAttribute) {
+  std::string value;
+
+  std::vector<std::string> inner_text_attribute = {"innerText"};
+  ASSERT_EQ(ACTION_APPLIED, GetStringAttribute(Selector({"#testOuterHtml p"}),
+                                               inner_text_attribute, &value)
+                                .proto_status());
+  EXPECT_EQ("Paragraph", value);
+
+  std::vector<std::string> option_label_attribute = {"options", "2", "label"};
+  ASSERT_EQ(ACTION_APPLIED, GetStringAttribute(Selector({"#select"}),
+                                               option_label_attribute, &value)
+                                .proto_status());
+  EXPECT_EQ("Three", value);
+
+  std::vector<std::string> bad_access = {"none", "none"};
+  ASSERT_EQ(UNEXPECTED_JS_ERROR,
+            GetStringAttribute(Selector({"#button"}), bad_access, &value)
+                .proto_status());
 }
 
 }  // namespace autofill_assistant

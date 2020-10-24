@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_window_property_manager_win.h"
 #include "chrome/browser/ui/views/frame/system_menu_insertion_delegate_win.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/win/app_icon.h"
 #include "chrome/browser/win/titlebar_config.h"
@@ -63,8 +64,6 @@ class VirtualDesktopHelper
   bool GetInitialWorkspaceRemembered() const;
 
   void SetInitialWorkspaceRemembered(bool remembered);
-
-  base::WeakPtr<VirtualDesktopHelper> AsWeakPtr();
 
  private:
   friend class base::RefCountedDeleteOnSequence<VirtualDesktopHelper>;
@@ -135,7 +134,7 @@ void VirtualDesktopHelper::UpdateWindowDesktopId(
       FROM_HERE,
       base::BindOnce(&VirtualDesktopHelper::GetWindowDesktopIdImpl, hwnd,
                      virtual_desktop_manager_),
-      base::BindOnce(&VirtualDesktopHelper::SetWorkspace, AsWeakPtr(),
+      base::BindOnce(&VirtualDesktopHelper::SetWorkspace, this,
                      base::Passed(std::move(callback))));
 }
 
@@ -145,10 +144,6 @@ bool VirtualDesktopHelper::GetInitialWorkspaceRemembered() const {
 
 void VirtualDesktopHelper::SetInitialWorkspaceRemembered(bool remembered) {
   initial_workspace_remembered_ = remembered;
-}
-
-base::WeakPtr<VirtualDesktopHelper> VirtualDesktopHelper::AsWeakPtr() {
-  return weak_factory_.GetWeakPtr();
 }
 
 void VirtualDesktopHelper::SetWorkspace(WorkspaceChangedCallback callback,
@@ -348,8 +343,8 @@ bool BrowserDesktopWindowTreeHostWin::GetDwmFrameInsetsInPixels(
   } else {
     // The glass should extend to the bottom of the tabstrip.
     HWND hwnd = GetHWND();
-    gfx::Rect tabstrip_region_bounds(
-        browser_frame_->GetBoundsForTabStripRegion(browser_view_->tabstrip()));
+    gfx::Rect tabstrip_region_bounds(browser_frame_->GetBoundsForTabStripRegion(
+        browser_view_->tab_strip_region_view()->GetMinimumSize()));
     tabstrip_region_bounds =
         display::win::ScreenWin::DIPToClientRect(hwnd, tabstrip_region_bounds);
 
@@ -574,8 +569,6 @@ SkBitmap GetBadgedIconBitmapForProfile(Profile* profile) {
   if (app_icon_bitmap.isNull())
     return SkBitmap();
 
-  SkBitmap avatar_bitmap_1x;
-  SkBitmap avatar_bitmap_2x;
 
   ProfileAttributesEntry* entry = nullptr;
   if (!g_browser_process->profile_manager()
@@ -583,9 +576,9 @@ SkBitmap GetBadgedIconBitmapForProfile(Profile* profile) {
            .GetProfileAttributesWithPath(profile->GetPath(), &entry))
     return SkBitmap();
 
-  profiles::GetWinAvatarImages(entry, &avatar_bitmap_1x, &avatar_bitmap_2x);
+  SkBitmap avatar_bitmap_2x = profiles::GetWin2xAvatarImage(entry);
   return profiles::GetBadgedWinIconBitmapForAvatar(app_icon_bitmap,
-                                                   avatar_bitmap_1x, 1);
+                                                   avatar_bitmap_2x);
 }
 
 void BrowserDesktopWindowTreeHostWin::SetWindowIcon(bool badged) {

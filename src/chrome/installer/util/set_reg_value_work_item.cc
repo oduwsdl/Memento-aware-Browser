@@ -4,8 +4,10 @@
 
 #include "chrome/installer/util/set_reg_value_work_item.h"
 
+#include "base/debug/alias.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
 #include "chrome/installer/util/logging_installer.h"
 
@@ -147,10 +149,17 @@ bool SetRegValueWorkItem::DoImpl() {
   }
 
   // If there's something to be saved, save it.
-  if (result == ERROR_SUCCESS) {
+  if (result == ERROR_SUCCESS && (rollback_enabled() || get_value_callback_)) {
     if (!size) {
       previous_type_ = type;
     } else {
+      // TODO(crbug.com/1106328): Remove after bug is resolved.
+      DEBUG_ALIAS_FOR_CSTR(key_path_copy, base::WideToUTF8(key_path_).c_str(),
+                           255);
+      DEBUG_ALIAS_FOR_CSTR(value_name_copy,
+                           base::WideToUTF8(value_name_).c_str(), 200);
+      base::debug::Alias(&size);
+      base::debug::Alias(&type);
       previous_value_.resize(size);
       result = key.ReadValue(value_name_.c_str(), &previous_value_[0], &size,
                              &previous_type_);

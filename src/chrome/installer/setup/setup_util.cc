@@ -49,10 +49,10 @@
 #include "chrome/installer/setup/user_hive_visitor.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "chrome/installer/util/initial_preferences.h"
+#include "chrome/installer/util/initial_preferences_constants.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item.h"
 #include "chrome/installer/util/work_item_list.h"
@@ -597,7 +597,8 @@ void DeleteRegistryKeyPartial(
 
 bool IsDowngradeAllowed(const MasterPreferences& prefs) {
   bool allow_downgrade = false;
-  return prefs.GetBool(master_preferences::kAllowDowngrade, &allow_downgrade) &&
+  return prefs.GetBool(initial_preferences::kAllowDowngrade,
+                       &allow_downgrade) &&
          allow_downgrade;
 }
 

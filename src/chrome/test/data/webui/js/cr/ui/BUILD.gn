@@ -1,0 +1,18 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//ui/webui/resources/js/cr.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+
+js_modulizer("modulize") {
+  input_files = [
+    "grid_test.js",
+    "array_data_model_test.js",
+    "command_test.js",
+    "context_menu_handler_test.js",
+    "list_test.js",
+  ]
+
+  namespace_rewrites = cr_namespace_rewrites
+}

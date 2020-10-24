@@ -32,7 +32,6 @@ class COMPONENT_EXPORT(DEVICE_VR_BASE) VRDeviceBase : public mojom::XRRuntime {
   void ListenToDeviceChanges(
       mojo::PendingAssociatedRemote<mojom::XRRuntimeEventListener> listener,
       mojom::XRRuntime::ListenToDeviceChangesCallback callback) final;
-  void SetInlinePosesEnabled(bool enable) override;
   void ShutdownSession(mojom::XRRuntime::ShutdownSessionCallback) override;
 
   device::mojom::XRDeviceId GetId() const;
@@ -63,13 +62,12 @@ class COMPONENT_EXPORT(DEVICE_VR_BASE) VRDeviceBase : public mojom::XRRuntime {
   bool IsPresenting() { return presenting_; }  // Exposed for test.
   void SetVRDisplayInfo(mojom::VRDisplayInfoPtr display_info);
   void OnVisibilityStateChanged(mojom::XRVisibilityState visibility_state);
+  void SetArBlendModeSupported(bool is_ar_blend_mode_supported);
 #if defined(OS_WIN)
   void SetLuid(const LUID& luid);
 #endif
 
   mojom::VRDisplayInfoPtr display_info_;
-
-  bool inline_poses_enabled_ = true;
 
  private:
   mojo::AssociatedRemote<mojom::XRRuntimeEventListener> listener_;

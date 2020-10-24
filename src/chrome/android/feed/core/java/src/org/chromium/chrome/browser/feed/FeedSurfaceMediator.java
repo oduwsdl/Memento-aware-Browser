@@ -14,20 +14,23 @@ import android.widget.ScrollView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.MemoryPressureListener;
 import org.chromium.base.memory.MemoryPressureCallback;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.feed.shared.FeedFeatures;
 import org.chromium.chrome.browser.feed.shared.stream.Stream;
 import org.chromium.chrome.browser.feed.shared.stream.Stream.ContentChangedListener;
 import org.chromium.chrome.browser.feed.shared.stream.Stream.ScrollListener;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.native_page.NativePageNavigationDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPageLayout;
 import org.chromium.chrome.browser.ntp.SnapScrollHelper;
 import org.chromium.chrome.browser.ntp.cards.SignInPromo;
 import org.chromium.chrome.browser.ntp.cards.promo.HomepagePromoController.HomepagePromoStateListener;
+import org.chromium.chrome.browser.ntp.cards.promo.HomepagePromoVariationManager;
+import org.chromium.chrome.browser.ntp.cards.promo.enhanced_protection.EnhancedProtectionPromoController.EnhancedProtectionPromoStateListener;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeader;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
@@ -36,8 +39,10 @@ import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.signin.SigninManager;
+import org.chromium.chrome.browser.signin.SigninPromoController;
 import org.chromium.chrome.browser.signin.SigninPromoUtil;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetrics;
+import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
 import org.chromium.components.feature_engagement.Tracker;
@@ -45,20 +50,27 @@ import org.chromium.components.prefs.PrefService;
 import org.chromium.components.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
+import java.util.Locale;
+
 /**
  * A mediator for the {@link FeedSurfaceCoordinator} responsible for interacting with the
  * native library and handling business logic.
  */
-class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
-                                     ContextMenuManager.TouchEnabledDelegate,
-                                     TemplateUrlServiceObserver, ListMenu.Delegate,
-                                     HomepagePromoStateListener, IdentityManager.Observer {
+@VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+public class FeedSurfaceMediator
+        implements NewTabPageLayout.ScrollDelegate, ContextMenuManager.TouchEnabledDelegate,
+                   TemplateUrlServiceObserver, ListMenu.Delegate, HomepagePromoStateListener,
+                   EnhancedProtectionPromoStateListener, IdentityManager.Observer {
+    @VisibleForTesting
+    public static final String FEED_CONTENT_FIRST_LOADED_TIME_MS_UMA = "FeedContentFirstLoadedTime";
+
     private static final float IPH_TRIGGER_BAR_TRANSITION_FRACTION = 1.0f;
     private static final float IPH_STREAM_MIN_SCROLL_FRACTION = 0.10f;
     private static final float IPH_FEED_HEADER_MAX_POS_FRACTION = 0.35f;
@@ -84,7 +96,17 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
     private int mThumbnailWidth;
     private int mThumbnailHeight;
     private int mThumbnailScrollY;
+
+    /** Whether the Feed content is loading. */
+    private boolean mIsLoadingFeed;
+    /** Cached parameters for recording the histogram of "FeedContentFirstLoadedTime". */
+    private boolean mIsInstantStart;
+    private long mActivityCreationTimeMs;
     private long mContentFirstAvailableTimeMs;
+    // Whether missing a histogram record when onOverviewShownAtLaunch() is called. It is possible
+    // that Feed content is still loading at that time and the {@link mContentFirstAvailableTimeMs}
+    // hasn't been set yet.
+    private boolean mHasPendingUmaRecording;
 
     /**
      * @param coordinator The {@link FeedSurfaceCoordinator} that interacts with this class.
@@ -97,13 +119,14 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
             @Nullable NativePageNavigationDelegate pageNavigationDelegate) {
         mCoordinator = coordinator;
         mSnapScrollHelper = snapScrollHelper;
-        mSigninManager = IdentityServicesProvider.get().getSigninManager();
+        mSigninManager = IdentityServicesProvider.get().getSigninManager(
+                Profile.getLastUsedRegularProfile());
         mPageNavigationDelegate = pageNavigationDelegate;
 
         mPrefChangeRegistrar = new PrefChangeRegistrar();
         mHasHeader = mCoordinator.getSectionHeaderView() != null;
         mPrefChangeRegistrar.addObserver(Pref.ENABLE_SNIPPETS, this::updateContent);
-        mHasHeaderMenu = ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS);
+        mHasHeaderMenu = FeedFeatures.isReportingUserActions();
 
         // Check that there is a navigation delegate when using the feed header menu.
         if (mPageNavigationDelegate == null && mHasHeaderMenu) {
@@ -121,6 +144,10 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
         mPrefChangeRegistrar.destroy();
         TemplateUrlServiceFactory.get().removeObserver(this);
     }
+    @VisibleForTesting
+    public void destroyForTesting() {
+        destroy();
+    }
 
     private void initialize() {
         if (mSnapScrollHelper == null) return;
@@ -136,13 +163,14 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
 
     /** Update the content based on supervised user or enterprise policy. */
     private void updateContent() {
-        mFeedEnabled = FeedProcessScopeFactory.isFeedProcessEnabled();
+        mFeedEnabled = FeedFeatures.isFeedEnabled();
         if ((mFeedEnabled && mCoordinator.getStream() != null)
                 || (!mFeedEnabled && mCoordinator.getScrollViewForPolicy() != null)) {
             return;
         }
 
         if (mFeedEnabled) {
+            mIsLoadingFeed = true;
             mCoordinator.createStream();
             if (mSnapScrollHelper != null) {
                 mSnapScrollHelper.setView(mCoordinator.getStream().getView());
@@ -187,8 +215,34 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
 
             @Override
             public void onAddFinished() {
+                // After first batch of articles are loaded, set recyclerView back to
+                // non-transparent.
+                stream.getView().getBackground().setAlpha(255);
                 if (mContentFirstAvailableTimeMs == 0) {
                     mContentFirstAvailableTimeMs = SystemClock.elapsedRealtime();
+                    if (mHasPendingUmaRecording) {
+                        maybeRecordContentLoadingTime();
+                        mHasPendingUmaRecording = false;
+                    }
+                }
+                mIsLoadingFeed = false;
+            }
+
+            @Override
+            public void onAddStarting() {
+                if (!mCoordinator.isPlaceholderShown()) {
+                    return;
+                }
+                // If the placeholder is shown, set sign-in box visible back.
+                RecyclerView recyclerView = (RecyclerView) stream.getView();
+                if (recyclerView != null) {
+                    View signInView = recyclerView.findViewById(R.id.signin_promo_view_container);
+                    if (signInView != null) {
+                        signInView.setAlpha(0f);
+                        signInView.setVisibility(View.VISIBLE);
+                        signInView.animate().alpha(1f).setDuration(
+                                recyclerView.getItemAnimator().getAddDuration());
+                    }
                 }
             }
         };
@@ -252,15 +306,78 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
         // This is currently only relevant for the two panes start surface.
         stream.setStreamContentVisibility(mHasHeader ? mSectionHeader.isExpanded() : true);
 
-        if (SignInPromo.shouldCreatePromo()) {
-            mSignInPromo = new FeedSignInPromo(mSigninManager);
-            mSignInPromo.setCanShowPersonalizedSuggestions(suggestionsVisible);
-        }
-
-        mCoordinator.updateHeaderViews(mSignInPromo != null && mSignInPromo.isVisible());
+        initStreamHeaderViews();
 
         mMemoryPressureCallback = pressure -> mCoordinator.getStream().trim();
         MemoryPressureListener.addCallback(mMemoryPressureCallback);
+    }
+
+    private void initStreamHeaderViews() {
+        View homepagePromoView = null;
+        boolean signInPromoVisible = false;
+
+        if (!HomepagePromoVariationManager.getInstance().isSuppressingSignInPromo()) {
+            signInPromoVisible = createSignInPromoIfNeeded();
+            if (!signInPromoVisible) homepagePromoView = createHomepagePromoIfNeeded();
+        } else {
+            homepagePromoView = createHomepagePromoIfNeeded();
+            if (homepagePromoView == null) signInPromoVisible = createSignInPromoIfNeeded();
+        }
+
+        // Post processing - if HomepagePromo is showing, then we set the SignInPromo to null.
+        if (homepagePromoView != null && mSignInPromo != null) {
+            mSignInPromo.destroy();
+            mSignInPromo = null;
+        }
+
+        View enhancedProtectionPromoView = null;
+        if (homepagePromoView == null && !signInPromoVisible) {
+            enhancedProtectionPromoView = createEnhancedProtectionPromoIfNeeded();
+        }
+        // We are not going to show two promos at the same time.
+        mCoordinator.updateHeaderViews(
+                signInPromoVisible, homepagePromoView, enhancedProtectionPromoView);
+    }
+
+    /**
+     * Create and setup the SignInPromo if necessary.
+     * @return Whether the SignPromo is visible.
+     */
+    private boolean createSignInPromoIfNeeded() {
+        if (!SignInPromo.shouldCreatePromo()
+                || !SigninPromoController.hasNotReachedImpressionLimit(
+                        SigninAccessPoint.NTP_CONTENT_SUGGESTIONS)) {
+            return false;
+        }
+        if (mSignInPromo == null) {
+            boolean suggestionsVisible = getPrefService().getBoolean(Pref.ARTICLES_LIST_VISIBLE);
+
+            mSignInPromo = new FeedSignInPromo(mSigninManager);
+            mSignInPromo.setCanShowPersonalizedSuggestions(suggestionsVisible);
+        }
+        return mSignInPromo.isVisible();
+    }
+
+    private View createHomepagePromoIfNeeded() {
+        if (mCoordinator.getHomepagePromoController() == null) return null;
+
+        View homepagePromoView = mCoordinator.getHomepagePromoController().getPromoView();
+        if (homepagePromoView != null) {
+            mCoordinator.getHomepagePromoController().setHomepagePromoStateListener(this);
+        }
+        return homepagePromoView;
+    }
+
+    private View createEnhancedProtectionPromoIfNeeded() {
+        if (mCoordinator.getEnhancedProtectionPromoController() == null) return null;
+
+        View enhancedProtectionPromoView =
+                mCoordinator.getEnhancedProtectionPromoController().getPromoView();
+        if (enhancedProtectionPromoView != null) {
+            mCoordinator.getEnhancedProtectionPromoController()
+                    .setEnhancedProtectionPromoStateListener(this);
+        }
+        return enhancedProtectionPromoView;
     }
 
     /** Clear any dependencies related to the {@link Stream}. */
@@ -500,14 +617,23 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
             FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_TOGGLED_FEED);
             SuggestionsMetrics.recordArticlesListVisible();
         } else {
-            assert false
-                : String.format("Cannot handle action for item in the menu with id %d", itemId);
+            assert false : String.format(Locale.ENGLISH,
+                                   "Cannot handle action for item in the menu with id %d", itemId);
         }
     }
 
     @Override
     public void onHomepagePromoStateChange() {
-        mCoordinator.updateHeaderViews(mSignInPromo != null && mSignInPromo.isVisible());
+        // If the homepage has status update, we'll not show the HomepagePromo again.
+        // There are cases where the user has their homepage reset to default. This is an edge case
+        // and we don't have to reflect that change immediately.
+        mCoordinator.updateHeaderViews(false, null, null);
+    }
+
+    @Override
+    public void onEnhancedProtectionPromoStateChange() {
+        // If the enhanced protection promo has been dismissed, delete it.
+        mCoordinator.updateHeaderViews(false, null, null);
     }
 
     // IdentityManager.Delegate interface.
@@ -520,10 +646,6 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
     @Override
     public void onPrimaryAccountCleared(CoreAccountInfo account) {
         updateSectionHeader();
-    }
-
-    long getContentFirstAvailableTimeMs() {
-        return mContentFirstAvailableTimeMs;
     }
 
     /**
@@ -541,7 +663,7 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
             if (isVisible() == visible) return;
 
             super.setVisibilityInternal(visible);
-            mCoordinator.updateHeaderViews(visible);
+            mCoordinator.updateHeaderViews(visible, null, null);
             maybeUpdateSignInPromo();
         }
 
@@ -556,19 +678,42 @@ class FeedSurfaceMediator implements NewTabPageLayout.ScrollDelegate,
             // blocking the UI thread for several seconds if the accounts cache is not populated
             // yet.
             if (!isVisible()) return;
-            SigninPromoUtil.setupPromoViewFromCache(mSigninPromoController, mProfileDataCache,
-                    mCoordinator.getSigninPromoView(), null);
+            if (isUserSignedInButNotSyncing()) {
+                SigninPromoUtil.setupSyncPromoViewFromCache(mSigninPromoController,
+                        mProfileDataCache, mCoordinator.getSigninPromoView(), null);
+            } else {
+                SigninPromoUtil.setupSigninPromoViewFromCache(mSigninPromoController,
+                        mProfileDataCache, mCoordinator.getSigninPromoView(), null);
+            }
         }
     }
 
     // TODO(huayinz): Return the Model for testing in Coordinator instead once a Model is created.
     @VisibleForTesting
-    SectionHeader getSectionHeaderForTesting() {
+    public SectionHeader getSectionHeaderForTesting() {
         return mSectionHeader;
     }
 
     @VisibleForTesting
-    SignInPromo getSignInPromoForTesting() {
+    public SignInPromo getSignInPromoForTesting() {
         return mSignInPromo;
+    }
+
+    void onOverviewShownAtLaunch(long activityCreationTimeMs, boolean isInstantStart) {
+        assert mActivityCreationTimeMs == 0;
+        mActivityCreationTimeMs = activityCreationTimeMs;
+        mIsInstantStart = isInstantStart;
+
+        if (!maybeRecordContentLoadingTime() && mIsLoadingFeed) {
+            mHasPendingUmaRecording = true;
+        }
+    }
+
+    private boolean maybeRecordContentLoadingTime() {
+        if (mActivityCreationTimeMs == 0 || mContentFirstAvailableTimeMs == 0) return false;
+
+        StartSurfaceConfiguration.recordHistogram(FEED_CONTENT_FIRST_LOADED_TIME_MS_UMA,
+                mContentFirstAvailableTimeMs - mActivityCreationTimeMs, mIsInstantStart);
+        return true;
     }
 }

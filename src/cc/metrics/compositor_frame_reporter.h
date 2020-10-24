@@ -7,13 +7,14 @@
 
 #include <bitset>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/optional.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
-#include "cc/base/base_export.h"
+#include "cc/base/devtools_instrumentation.h"
 #include "cc/cc_export.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
 #include "cc/metrics/event_metrics.h"
@@ -27,6 +28,7 @@ struct FrameTimingDetails;
 }
 
 namespace cc {
+class DroppedFrameCounter;
 class LatencyUkmReporter;
 
 // This is used for tracing and reporting the duration of pipeline stages within
@@ -94,6 +96,13 @@ class CC_EXPORT CompositorFrameReporter {
     kStartDrawToSwapStart = 2,
     kSwapStartToSwapEnd = 3,
     kSwapEndToPresentationCompositorFrame = 4,
+
+    // This is a breakdown of SwapStartToSwapEnd stage which is optionally
+    // recorded if querying these timestamps is supported by the platform.
+    kSwapStartToBufferAvailable = 5,
+    kBufferAvailableToBufferReady = 6,
+    kBufferReadyToLatch = 7,
+    kLatchToSwapEnd = 8,
     kBreakdownCount
   };
 
@@ -103,9 +112,9 @@ class CC_EXPORT CompositorFrameReporter {
     kStyleUpdate = 2,
     kLayoutUpdate = 3,
     kPrepaint = 4,
-    kComposite = 5,
-    kPaint = 6,
-    kScrollingCoordinator = 7,
+    kCompositingInputs = 5,
+    kCompositingAssignments = 6,
+    kPaint = 7,
     kCompositeCommit = 8,
     kUpdateLayers = 9,
     kBeginMainSentToStarted = 10,
@@ -124,20 +133,29 @@ class CC_EXPORT CompositorFrameReporter {
     ~StageData();
   };
 
+  enum SmoothThread {
+    kSmoothNone,
+    kSmoothCompositor,
+    kSmoothMain,
+    kSmoothBoth
+  };
+
   using ActiveTrackers =
       std::bitset<static_cast<size_t>(FrameSequenceTrackerType::kMaxType)>;
 
   CompositorFrameReporter(const ActiveTrackers& active_trackers,
                           const viz::BeginFrameArgs& args,
                           LatencyUkmReporter* latency_ukm_reporter,
-                          bool should_report_metrics);
+                          bool should_report_metrics,
+                          SmoothThread smooth_thread,
+                          int layer_tree_host_id);
   ~CompositorFrameReporter();
 
   CompositorFrameReporter(const CompositorFrameReporter& reporter) = delete;
   CompositorFrameReporter& operator=(const CompositorFrameReporter& reporter) =
       delete;
 
-  std::unique_ptr<CompositorFrameReporter> CopyReporterAtBeginImplStage() const;
+  std::unique_ptr<CompositorFrameReporter> CopyReporterAtBeginImplStage();
 
   // Note that the started stage may be reported to UMA. If the histogram is
   // intended to be reported then the histograms.xml file must be updated too.
@@ -181,7 +199,28 @@ class CC_EXPORT CompositorFrameReporter {
     tick_clock_ = tick_clock;
   }
 
+  void SetDroppedFrameCounter(DroppedFrameCounter* counter) {
+    dropped_frame_counter_ = counter;
+  }
+
+  bool has_partial_update() const { return has_partial_update_; }
+  void set_has_partial_update(bool has_partial_update) {
+    has_partial_update_ = has_partial_update;
+  }
+
   const viz::BeginFrameId& frame_id() const { return args_.frame_id; }
+
+  // Adopts |cloned_reporter|, i.e. keeps |cloned_reporter| alive until after
+  // this reporter terminates. Note that the |cloned_reporter| must have been
+  // created from this reporter using |CopyReporterAtBeginImplStage()|.
+  void AdoptReporter(std::unique_ptr<CompositorFrameReporter> cloned_reporter);
+
+  // If this is a cloned reporter, then this returns a weak-ptr to the original
+  // reporter this was cloned from (using |CopyReporterAtBeginImplStage()|).
+  base::WeakPtr<CompositorFrameReporter> cloned_from() { return cloned_from_; }
+
+ protected:
+  base::WeakPtr<CompositorFrameReporter> GetWeakPtr();
 
  private:
   void TerminateReporter();
@@ -231,6 +270,8 @@ class CC_EXPORT CompositorFrameReporter {
 
   base::TimeTicks Now() const;
 
+  bool IsDroppedFrameAffectingSmoothness() const;
+
   const bool should_report_metrics_;
   const viz::BeginFrameArgs args_;
 
@@ -279,6 +320,27 @@ class CC_EXPORT CompositorFrameReporter {
   base::Optional<base::TimeTicks> main_frame_abort_time_;
 
   const base::TickClock* tick_clock_ = base::DefaultTickClock::GetInstance();
+
+  DroppedFrameCounter* dropped_frame_counter_ = nullptr;
+  bool has_partial_update_ = false;
+
+  const SmoothThread smooth_thread_;
+  const int layer_tree_host_id_;
+
+  // If this is a cloned pointer, then |cloned_from_| is a weak pointer to the
+  // original reporter this was cloned from.
+  base::WeakPtr<CompositorFrameReporter> cloned_from_;
+
+  // If this reporter was cloned, then |cloned_to_| is a weak pointer to the
+  // cloned repoter.
+  base::WeakPtr<CompositorFrameReporter> cloned_to_;
+
+  // A cloned reporter is not originally owned by the original reporter.
+  // However, it can 'adopt' it (using |AdoptReporter()| if the cloned reporter
+  // needs to stay alive until the original reporter terminates.
+  std::unique_ptr<CompositorFrameReporter> own_cloned_to_;
+
+  base::WeakPtrFactory<CompositorFrameReporter> weak_factory_{this};
 };
 
 }  // namespace cc

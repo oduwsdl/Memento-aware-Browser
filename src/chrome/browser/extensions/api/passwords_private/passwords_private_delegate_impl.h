@@ -29,6 +29,7 @@
 #include "components/password_manager/core/browser/password_account_storage_settings_watcher.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "components/password_manager/core/browser/ui/export_progress_status.h"
+#include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "extensions/browser/extension_function.h"
 
 class Profile;
@@ -49,10 +50,9 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // PasswordsPrivateDelegate implementation.
   void GetSavedPasswordsList(UiEntriesCallback callback) override;
   void GetPasswordExceptionsList(ExceptionEntriesCallback callback) override;
-  void ChangeSavedPassword(
-      int id,
-      base::string16 new_username,
-      base::Optional<base::string16> new_password) override;
+  bool ChangeSavedPassword(const std::vector<int>& ids,
+                           const base::string16& new_username,
+                           const base::string16& new_password) override;
   void RemoveSavedPasswords(const std::vector<int>& ids) override;
   void RemovePasswordExceptions(const std::vector<int>& ids) override;
   void UndoRemoveSavedPasswordOrException() override;
@@ -60,7 +60,7 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
                                 api::passwords_private::PlaintextReason reason,
                                 PlaintextPasswordCallback callback,
                                 content::WebContents* web_contents) override;
-  void MovePasswordToAccount(int id,
+  void MovePasswordToAccount(const std::vector<int>& ids,
                              content::WebContents* web_contents) override;
   void ImportPasswords(content::WebContents* web_contents) override;
   void ExportPasswords(base::OnceCallback<void(const std::string&)> accepted,
@@ -69,24 +69,28 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   api::passwords_private::ExportProgressStatus GetExportProgressStatus()
       override;
   bool IsOptedInForAccountStorage() override;
-  // TODO(crbug.com/1049141): Mimic the signature in PasswordFeatureManager.
+  // TODO(crbug.com/1102294): Mimic the signature in PasswordFeatureManager.
   void SetAccountStorageOptIn(bool opt_in,
                               content::WebContents* web_contents) override;
-  std::vector<api::passwords_private::CompromisedCredential>
+  std::vector<api::passwords_private::InsecureCredential>
   GetCompromisedCredentials() override;
-  void GetPlaintextCompromisedPassword(
-      api::passwords_private::CompromisedCredential credential,
+  std::vector<api::passwords_private::InsecureCredential> GetWeakCredentials()
+      override;
+  void GetPlaintextInsecurePassword(
+      api::passwords_private::InsecureCredential credential,
       api::passwords_private::PlaintextReason reason,
       content::WebContents* web_contents,
-      PlaintextCompromisedPasswordCallback callback) override;
-  bool ChangeCompromisedCredential(
-      const api::passwords_private::CompromisedCredential& credential,
+      PlaintextInsecurePasswordCallback callback) override;
+  bool ChangeInsecureCredential(
+      const api::passwords_private::InsecureCredential& credential,
       base::StringPiece new_password) override;
-  bool RemoveCompromisedCredential(
-      const api::passwords_private::CompromisedCredential& credential) override;
+  bool RemoveInsecureCredential(
+      const api::passwords_private::InsecureCredential& credential) override;
   void StartPasswordCheck(StartPasswordCheckCallback callback) override;
   void StopPasswordCheck() override;
   api::passwords_private::PasswordCheckStatus GetPasswordCheckStatus() override;
+  password_manager::InsecureCredentialsManager* GetInsecureCredentialsManager()
+      override;
 
   // PasswordUIView implementation.
   Profile* GetProfile() override;
@@ -144,6 +148,9 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
 
   // Used to communicate with the password store.
   std::unique_ptr<PasswordManagerPresenter> password_manager_presenter_;
+
+  // Used to edit passwords and to create |password_check_delegate_|.
+  password_manager::SavedPasswordsPresenter saved_passwords_presenter_;
 
   // Used to control the export and import flows.
   std::unique_ptr<PasswordManagerPorter> password_manager_porter_;

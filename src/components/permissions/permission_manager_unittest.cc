@@ -8,8 +8,8 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/permissions/features.h"
@@ -88,6 +88,10 @@ PermissionManager::PermissionContextMap CreatePermissionContexts(
       std::make_unique<FakePermissionContextAlwaysAllow>(
           browser_context, ContentSettingsType::MIDI,
           blink::mojom::FeaturePolicyFeature::kMidiFeature);
+  permission_contexts[ContentSettingsType::STORAGE_ACCESS] =
+      std::make_unique<FakePermissionContextAlwaysAllow>(
+          browser_context, ContentSettingsType::STORAGE_ACCESS,
+          blink::mojom::FeaturePolicyFeature::kStorageAccessAPI);
 #if defined(OS_ANDROID)
   permission_contexts[ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER] =
       std::make_unique<FakePermissionContext>(
@@ -206,10 +210,20 @@ class PermissionManagerTest : public content::RenderViewHostTestHarness {
     *rfh = current;
   }
 
-  content::RenderFrameHost* AddChildRFH(content::RenderFrameHost* parent,
-                                        const char* origin) {
+  content::RenderFrameHost* AddChildRFH(
+      content::RenderFrameHost* parent,
+      const char* origin,
+      blink::mojom::FeaturePolicyFeature feature =
+          blink::mojom::FeaturePolicyFeature::kNotFound) {
+    blink::ParsedFeaturePolicy frame_policy = {};
+    if (feature != blink::mojom::FeaturePolicyFeature::kNotFound) {
+      frame_policy.push_back(
+          {feature, std::vector<url::Origin>{url::Origin::Create(GURL(origin))},
+           false, false});
+    }
     content::RenderFrameHost* result =
-        content::RenderFrameHostTester::For(parent)->AppendChild("");
+        content::RenderFrameHostTester::For(parent)->AppendChildWithPolicy(
+            "", frame_policy);
     content::RenderFrameHostTester::For(result)
         ->InitializeRenderFrameIfNeeded();
     SimulateNavigation(&result, GURL(origin));
@@ -422,12 +436,12 @@ TEST_F(PermissionManagerTest, DifferentPrimaryUrlDoesNotNotify) {
 TEST_F(PermissionManagerTest, DifferentSecondaryUrlDoesNotNotify) {
   int subscription_id =
       GetPermissionControllerDelegate()->SubscribePermissionStatusChange(
-          PermissionType::GEOLOCATION, main_rfh(), url(),
+          PermissionType::STORAGE_ACCESS_GRANT, main_rfh(), url(),
           base::Bind(&PermissionManagerTest::OnPermissionChange,
                      base::Unretained(this)));
 
   GetHostContentSettingsMap()->SetContentSettingDefaultScope(
-      url(), other_url(), ContentSettingsType::GEOLOCATION, std::string(),
+      url(), other_url(), ContentSettingsType::STORAGE_ACCESS, std::string(),
       CONTENT_SETTING_ALLOW);
 
   EXPECT_FALSE(callback_called());
@@ -694,9 +708,6 @@ TEST_F(PermissionManagerTest, GetPermissionStatusDelegation) {
   const char* kOrigin1 = "https://example.com";
   const char* kOrigin2 = "https://google.com";
 
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kPermissionDelegation);
-
   NavigateAndCommit(GURL(kOrigin1));
   content::RenderFrameHost* parent = main_rfh();
 
@@ -715,10 +726,8 @@ TEST_F(PermissionManagerTest, GetPermissionStatusDelegation) {
                 .content_setting);
 
   // Enabling geolocation by FP should allow the child to request access also.
-  RefreshPageAndSetHeaderPolicy(
-      &parent, blink::mojom::FeaturePolicyFeature::kGeolocation,
-      {kOrigin1, kOrigin2});
-  child = AddChildRFH(parent, kOrigin2);
+  child = AddChildRFH(parent, kOrigin2,
+                      blink::mojom::FeaturePolicyFeature::kGeolocation);
 
   EXPECT_EQ(CONTENT_SETTING_ASK,
             GetPermissionControllerDelegate()
@@ -789,9 +798,6 @@ TEST_F(PermissionManagerTest, SubscribeWithPermissionDelegation) {
   const char* kOrigin1 = "https://example.com";
   const char* kOrigin2 = "https://google.com";
 
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kPermissionDelegation);
-
   NavigateAndCommit(GURL(kOrigin1));
   content::RenderFrameHost* parent = main_rfh();
   content::RenderFrameHost* child = AddChildRFH(parent, kOrigin2);
@@ -825,10 +831,8 @@ TEST_F(PermissionManagerTest, SubscribeWithPermissionDelegation) {
   EXPECT_FALSE(callback_called());
 
   // Enabling geolocation by FP should allow the child to request access also.
-  RefreshPageAndSetHeaderPolicy(
-      &parent, blink::mojom::FeaturePolicyFeature::kGeolocation,
-      {kOrigin1, kOrigin2});
-  child = AddChildRFH(parent, kOrigin2);
+  child = AddChildRFH(parent, kOrigin2,
+                      blink::mojom::FeaturePolicyFeature::kGeolocation);
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             GetPermissionControllerDelegate()

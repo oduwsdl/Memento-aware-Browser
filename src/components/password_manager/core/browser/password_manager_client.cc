@@ -25,12 +25,13 @@ bool PasswordManagerClient::IsFillingFallbackEnabled(const GURL& url) const {
   return true;
 }
 
-void PasswordManagerClient::PostHSTSQueryForHost(const url::Origin& origin,
-                                                 HSTSCallback callback) const {
-  std::move(callback).Run(HSTSResult::kError);
+bool PasswordManagerClient::RequiresReauthToFill() {
+  return false;
 }
 
 void PasswordManagerClient::ShowTouchToFill(PasswordManagerDriver* driver) {}
+
+void PasswordManagerClient::OnPasswordSelected(const base::string16& text) {}
 
 BiometricAuthenticator* PasswordManagerClient::GetBiometricAuthenticator() {
   return nullptr;
@@ -40,20 +41,21 @@ void PasswordManagerClient::GeneratePassword() {}
 
 void PasswordManagerClient::UpdateCredentialCache(
     const url::Origin& origin,
-    const std::vector<const autofill::PasswordForm*>& best_matches,
+    const std::vector<const PasswordForm*>& best_matches,
     bool is_blacklisted) {}
 
 void PasswordManagerClient::PasswordWasAutofilled(
-    const std::vector<const autofill::PasswordForm*>& best_matches,
+    const std::vector<const PasswordForm*>& best_matches,
     const url::Origin& origin,
-    const std::vector<const autofill::PasswordForm*>* federated_matches) {}
+    const std::vector<const PasswordForm*>* federated_matches) {}
 
 void PasswordManagerClient::AutofillHttpAuth(
-    const autofill::PasswordForm& preferred_match,
+    const PasswordForm& preferred_match,
     const PasswordFormManagerForUI* form_manager) {}
 
 void PasswordManagerClient::NotifyUserCredentialsWereLeaked(
     password_manager::CredentialLeakType leak_type,
+    password_manager::CompromisedSitesCount saved_sites,
     const GURL& origin,
     const base::string16& username) {}
 
@@ -141,8 +143,12 @@ favicon::FaviconService* PasswordManagerClient::GetFaviconService() {
   return nullptr;
 }
 
+network::mojom::NetworkContext* PasswordManagerClient::GetNetworkContext()
+    const {
+  return nullptr;
+}
+
 bool PasswordManagerClient::IsUnderAdvancedProtection() const {
   return false;
 }
-
 }  // namespace password_manager

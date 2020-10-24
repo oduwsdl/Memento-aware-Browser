@@ -34,10 +34,17 @@
 // UIButton displayed aligned to the trailing of the view.
 @property(nonatomic, readonly, strong) UIButton* trailingButton;
 
-// Sets the image that should be displayed at the leading edge of the cell. If
-// set to nil, the icon will be hidden and the remaining content will expand to
-// fill the full width of the cell.
-- (void)setIconImage:(UIImage*)image;
+// The customized accessibility hint text string.
+@property(nonatomic, copy) NSString* customizedAccessibilityHint;
+
+// Sets the icon |image| and tint |color| for it that should be displayed at the
+// leading edge of the cell. If set to nil, the icon will be hidden and the
+// remaining content will expand to fill the full width of the cell.
+- (void)setIconImage:(UIImage*)image withTintColor:(UIColor*)color;
+
+// Updates the padding constraints based on how many vertical text labels are
+// shown. The padding will be updated only if |hasDetailText| is YES.
+- (void)updatePaddingForDetailText:(BOOL)hasDetailText;
 
 @end
 

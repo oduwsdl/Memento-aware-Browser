@@ -12,6 +12,7 @@
 #include "base/test/test_suite.h"
 #include "build/build_config.h"
 #include "content/browser/network_service_instance_impl.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/test/test_host_resolver.h"
 #include "content/test/test_blink_web_unit_test_support.h"
@@ -23,6 +24,7 @@
 #endif
 
 #if defined(USE_X11)
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/x/x11.h"  // nogncheck
 #endif
 
@@ -81,6 +83,7 @@ UnitTestTestSuite::UnitTestTestSuite(base::TestSuite* test_suite)
       command_line->GetSwitchValueASCII(switches::kDisableFeatures);
 
   ForceCreateNetworkServiceDirectlyForTesting();
+  StoragePartitionImpl::ForceInProcessStorageServiceForTesting();
 
   testing::TestEventListeners& listeners =
       testing::UnitTest::GetInstance()->listeners();
@@ -103,7 +106,8 @@ UnitTestTestSuite::UnitTestTestSuite(base::TestSuite* test_suite)
 #endif
 
 #if defined(USE_X11)
-  XInitThreads();
+  if (!features::IsUsingOzonePlatform())
+    XInitThreads();
 #endif
   DCHECK(test_suite);
   blink_test_support_.reset(new TestBlinkWebUnitTestSupport);

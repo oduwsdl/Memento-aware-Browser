@@ -21,6 +21,7 @@
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 
 namespace base {
+class Time;
 class TimeDelta;
 struct Feature;
 }
@@ -157,12 +158,11 @@ void GetActiveSuggestFieldTrialHashes(std::vector<uint32_t>* field_trial_hash);
 base::TimeDelta StopTimerFieldTrialDuration();
 
 // ---------------------------------------------------------
-// For the ZeroSuggestProvider field trial.
+// For the OmniboxLocalZeroSuggestAgeThreshold field trial.
 
-// Returns the configured "ZeroSuggestVariant" parameter values for
-// |page_classification|.
-std::vector<std::string> GetZeroSuggestVariants(
-    metrics::OmniboxEventProto::PageClassification page_classification);
+// Returns the age threshold since the last visit in order to consider a
+// normalized keyword search term as a zero-prefix suggestion.
+base::Time GetLocalHistoryZeroSuggestAgeThreshold();
 
 // ---------------------------------------------------------
 // For the ShortcutsScoringMaxRelevance experiment that's part of the
@@ -212,12 +212,21 @@ void GetDemotionsByType(
     DemotionMultipliers* demotions_by_type);
 
 // ---------------------------------------------------------
-// For the UIMaxAutocompleteMatchesByProvider experiment that's part of the
-// bundled omnibox field trial.
+// For experiments related to the number of suggestions shown.
 
 // If the user is in an experiment group that specifies the max results for a
 // particular provider, returns the limit. Otherwise returns the default limit.
 size_t GetProviderMaxMatches(AutocompleteProvider::Type provider);
+
+// Returns whether the feature to limit the number of shown URL matches
+// is enabled.
+bool IsMaxURLMatchesFeatureEnabled();
+
+// Returns the maximum number of URL matches that should be allowed within
+// the Omnibox if there are search-type matches available to replace them.
+// If the capping feature is not enabled, or the parameter cannot be
+// parsed, it returns 0.
+size_t GetMaxURLMatches();
 
 // ---------------------------------------------------------
 // For the HistoryURL provider new scoring experiment that is part of the
@@ -368,17 +377,8 @@ int KeywordScoreForSufficientlyCompleteMatch();
 EmphasizeTitlesCondition GetEmphasizeTitlesConditionForInput(
     const AutocompleteInput& input);
 
-// Returns the maximum number of URL matches that should be allowed within
-// the Omnibox if there are search-type matches available to replace them.
-// If the capping feature is not enabled, or the parameter cannot be
-// parsed, it returns 0.
-size_t GetMaxURLMatches();
-
 // ---------------------------------------------------------
 // For UI experiments.
-
-// Returns true if the reverse answers flag is enabled.
-bool IsReverseAnswersEnabled();
 
 // Returns true if the short bookmark suggestions flag is enabled.
 bool IsShortBookmarkSuggestionsEnabled();
@@ -387,40 +387,36 @@ bool IsShortBookmarkSuggestionsEnabled();
 // elements like keywords, tab-switch buttons, and Pedals.
 bool IsSuggestionButtonRowEnabled();
 
-// Returns true if either the tab switch suggestions flag is enabled.
+// Returns true if the tab switch suggestions flag is enabled.
 bool IsTabSwitchSuggestionsEnabled();
 
-// Returns true if dedicated rows for tab switch suggestions is enabled.
-bool IsTabSwitchSuggestionsDedicatedRowEnabled();
-
-// Returns true if feature is enabled to not count submatches towards the
-// max suggestion limit.
-bool IsLooseMaxLimitOnDedicatedRowsEnabled();
-
-// Returns true if the #omnibox-pedal-suggestions feature is enabled.
+// Returns true if the Pedals and suggestion button row features are enabled.
 bool IsPedalSuggestionsEnabled();
 
-// Returns true if either the steady-state elision flag for scheme is enabled.
-bool IsHideSteadyStateUrlSchemeEnabled();
-
-// Returns true if either the steady-state elision flag for trivial
-// subdomains is enabled.
-bool IsHideSteadyStateUrlTrivialSubdomainsEnabled();
+// Returns true if the keyword button and suggestion button row features are
+// enabled.
+bool IsKeywordSearchButtonEnabled();
 
 // Simply a convenient wrapper for testing a flag. Used downstream for an
 // assortment of keyword mode experiments.
 bool IsExperimentalKeywordModeEnabled();
 
-// Returns whether the feature to limit the number of shown URL matches
-// is enabled.
-bool IsMaxURLMatchesFeatureEnabled();
+// Returns true if the new focus UI is enabled.
+bool IsRefinedFocusStateEnabled();
 
 // Rich autocompletion.
 bool IsRichAutocompletionEnabled();
 bool RichAutocompletionAutocompleteTitles();
+size_t RichAutocompletionAutocompleteTitlesMinChar();
 bool RichAutocompletionTwoLineOmnibox();
 bool RichAutocompletionShowTitles();
-bool RichAutocompletionAutocompleteNonPrefix();
+bool RichAutocompletionAutocompleteNonPrefixAll();
+bool RichAutocompletionAutocompleteNonPrefixShortcutProvider();
+size_t RichAutocompletionAutocompleteNonPrefixMinChar();
+bool RichAutocompletionShowAdditionalText();
+bool RichAutocompletionSplitTitleCompletion();
+bool RichAutocompletionSplitUrlCompletion();
+size_t RichAutocompletionSplitCompletionMinChar();
 
 // On Device Head Suggestions feature and its helper functions.
 bool IsOnDeviceHeadSuggestEnabledForIncognito();
@@ -435,11 +431,13 @@ int OnDeviceHeadSuggestDelaySuggestRequestMs(bool is_incognito);
 // Function only works in non-incognito when server suggestions are available.
 std::string OnDeviceHeadSuggestDemoteMode();
 
-// Experiment to hide the path, query, and ref in the steady state.
-bool IsHidePathQueryRefEnabled();
+// Experiment to hide components of the URL in the steady state.
 bool ShouldRevealPathQueryRefOnHover();
 bool ShouldHidePathQueryRefOnInteraction();
-int RevealPathQueryRefOnHoverThresholdMs();
+// If true, the above two features elide subdomains beyond the registrable
+// domain, as well as the path, query, and ref.
+bool ShouldMaybeElideToRegistrableDomain();
+int UnelideURLOnHoverThresholdMs();
 
 // ---------------------------------------------------------
 // Clipboard URL suggestions:
@@ -463,7 +461,6 @@ extern const char kHQPBookmarkValueRule[];
 extern const char kHQPTypedValueRule[];
 extern const char kHQPAllowMatchInTLDRule[];
 extern const char kHQPAllowMatchInSchemeRule[];
-extern const char kZeroSuggestVariantRule[];
 extern const char kMeasureSuggestPollingDelayFromLastKeystrokeRule[];
 extern const char kSuggestPollingDelayMsRule[];
 extern const char kHQPMaxVisitsToScoreRule[];
@@ -497,11 +494,33 @@ extern const char kHQPExperimentalScoringTopicalityThresholdParam[];
 extern const char kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevicesParam[];
 extern const char kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevicesParam[];
 
+// Parameter name determining the age threshold for local zero-prefix
+// suggestions. The value of this parameter should be parsable as an unsigned
+// integer, which will be used to specify the age threshold in days.
+extern const char kOmniboxLocalZeroSuggestAgeThresholdParam[];
+
 // Parameter names used by num suggestion experiments.
 extern const char kMaxZeroSuggestMatchesParam[];
 extern const char kOmniboxMaxURLMatchesParam[];
 extern const char kUIMaxAutocompleteMatchesByProviderParam[];
 extern const char kUIMaxAutocompleteMatchesParam[];
+// The URL cutoff and increased limit for dynamic max autocompletion.
+// - When dynamic max autocompletion is disabled, the omnibox allows
+//   UIMaxAutocompleteMatches suggestions.
+// - When dynamic max autocompletion is enabled, the omnibox allows
+//   suggestions up to the increased limit if doing so has URL cutoff or less
+//   URL suggestions.
+// E.g. a UIMaxAutocompleteMatches of 8, URL cutoff of 2, and increased limit of
+// 10 translates to "show 10 or 9 suggestions if doing so includes at most 2
+// URLs; otherwise show 8 suggestions.
+extern const char kDynamicMaxAutocompleteUrlCutoffParam[];
+extern const char kDynamicMaxAutocompleteIncreasedLimitParam[];
+
+// Parameters used for ranking.
+extern const char kBubbleUrlSuggestionsAbsoluteGapParam[];
+extern const char kBubbleUrlSuggestionsRelativeGapParam[];
+extern const char kBubbleUrlSuggestionsAbsoluteBufferParam[];
+extern const char kBubbleUrlSuggestionsRelativeBufferParam[];
 
 // Parameter names used by on device head provider.
 // These four parameters are shared by both non-incognito and incognito.
@@ -520,17 +539,39 @@ extern int kDefaultMinimumTimeBetweenSuggestQueriesMs;
 
 // Parameter names used for rich autocompletion variations.
 extern const char kRichAutocompletionAutocompleteTitlesParam[];
+extern const char kRichAutocompletionAutocompleteTitlesMinCharParam[];
 extern const char kRichAutocompletionTwoLineOmniboxParam[];
 extern const char kRichAutocompletionShowTitlesParam[];
-extern const char kRichAutocompletionAutocompleteNonPrefix[];
+extern const char kRichAutocompletionAutocompleteNonPrefixAllParam[];
+extern const char
+    kRichAutocompletionAutocompleteNonPrefixShortcutProviderParam[];
+extern const char kRichAutocompletionAutocompleteNonPrefixMinCharParam[];
+extern const char kRichAutocompletionShowAdditionalTextParam[];
+extern const char kRichAutocompletionSplitTitleCompletionParam[];
+extern const char kRichAutocompletionSplitUrlCompletionParam[];
+extern const char kRichAutocompletionSplitCompletionMinCharParam[];
 
 // Parameter names used by image search experiment that shows thumbnail in front
 // of the Omnibox clipboard image search suggestion.
 extern const char kImageSearchSuggestionThumbnail[];
 
-// Parameter names used by omnibox experiments that hide the path in the steady
-// state.
-extern const char kOmniboxUIRevealPathQueryAndRefOnHoverThresholdMsParam[];
+// Parameter names used by omnibox experiments that hide the path (and
+// optionally subdomains) in the steady state.
+extern const char kOmniboxUIUnelideURLOnHoverThresholdMsParam[];
+
+// Parameter names used by entity variations. Enabling 'shared decoder' will
+// share a decoder for all suggestion images. Enabling 'shared decoder without
+// timeout' will prevent the decoder from resetting while idle for 5 seconds.
+// Enabling the latter will implicitly enable the former.
+extern const char kEntitySuggestionsReduceLatencyDecoderTimeoutParam[];
+extern const char kEntitySuggestionsReduceLatencyDecoderWakeupParam[];
+
+// Parameter names used for bookmark path variations that determine whether
+// bookmark suggestion texts will contain the title, URL, and/or path.
+extern const char kBookmarkPathsUiReplaceTitle[];
+extern const char kBookmarkPathsUiReplaceUrl[];
+extern const char kBookmarkPathsUiAppendAfterTitle[];
+extern const char kBookmarkPathsUiDynamicReplaceUrl[];
 
 namespace internal {
 // The bundled omnibox experiment comes with a set of parameters

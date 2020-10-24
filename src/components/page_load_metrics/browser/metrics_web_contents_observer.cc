@@ -106,6 +106,7 @@ void MetricsWebContentsObserver::WebContentsDestroyed() {
   // PageLoadMetricsObservers can cause code to execute that wants to be able to
   // access the current WebContents.
   committed_load_ = nullptr;
+  ukm_smoothness_data_ = {};
   provisional_loads_.clear();
   aborted_provisional_loads_.clear();
 
@@ -461,9 +462,8 @@ void MetricsWebContentsObserver::DidFinishNavigation(
       navigation_handle->IsSameDocument()) {
     if (navigation_handle_tracker)
       navigation_handle_tracker->StopTracking();
-    if (committed_load_) {
+    if (committed_load_)
       committed_load_->DidCommitSameDocumentNavigation(navigation_handle);
-    }
     return;
   }
 
@@ -548,6 +548,17 @@ void MetricsWebContentsObserver::HandleCommittedNavigationForTrackedLoad(
 
   for (auto& observer : testing_observers_)
     observer.OnCommit(committed_load_.get());
+
+  if (ukm_smoothness_data_.IsValid()) {
+    auto* render_frame_host = navigation_handle->GetRenderFrameHost();
+    const bool is_main_frame =
+        render_frame_host && render_frame_host->GetParent() == nullptr;
+    if (is_main_frame) {
+      committed_load_->metrics_update_dispatcher()
+          ->SetUpSharedMemoryForSmoothness(render_frame_host,
+                                           std::move(ukm_smoothness_data_));
+    }
+  }
 }
 
 void MetricsWebContentsObserver::MaybeStorePageLoadTrackerForBackForwardCache(
@@ -856,15 +867,23 @@ void MetricsWebContentsObserver::UpdateTiming(
                   std::move(input_timing_delta));
 }
 
-void MetricsWebContentsObserver::SubmitThroughputData(
-    mojom::ThroughputUkmDataPtr throughput_data) {
-  if (DoesTimingUpdateHaveError())
-    return;
-
+void MetricsWebContentsObserver::SetUpSharedMemoryForSmoothness(
+    base::ReadOnlySharedMemoryRegion shared_memory) {
   content::RenderFrameHost* render_frame_host =
       page_load_metrics_receiver_.GetCurrentTargetFrame();
-  committed_load_->metrics_update_dispatcher()->UpdateThroughput(
-      render_frame_host, std::move(throughput_data));
+  const bool is_main_frame = render_frame_host->GetParent() == nullptr;
+  if (!is_main_frame) {
+    // TODO(1115136): Merge smoothness metrics from OOPIFs with the main-frame.
+    return;
+  }
+
+  if (committed_load_) {
+    committed_load_->metrics_update_dispatcher()
+        ->SetUpSharedMemoryForSmoothness(render_frame_host,
+                                         std::move(shared_memory));
+  } else {
+    ukm_smoothness_data_ = std::move(shared_memory);
+  }
 }
 
 bool MetricsWebContentsObserver::ShouldTrackMainFrameNavigation(

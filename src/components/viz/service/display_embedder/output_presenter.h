@@ -5,13 +5,21 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_OUTPUT_PRESENTER_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_OUTPUT_PRESENTER_H_
 
+#include <memory>
+#include <vector>
+
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
 #include "components/viz/service/display/skia_output_surface.h"
 #include "components/viz/service/viz_service_export.h"
-#include "gpu/command_buffer/service/shared_image_factory.h"
+#include "gpu/command_buffer/service/shared_image_representation.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/swap_result.h"
+
+namespace gpu {
+class SharedImageFactory;
+class SharedImageRepresentationFactory;
+}  // namespace gpu
 
 namespace viz {
 
@@ -41,10 +49,11 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
     SkSurface* sk_surface();
     std::vector<GrBackendSemaphore> TakeEndWriteSkiaSemaphores();
     void EndWriteSkia();
+    void PreGrContextSubmit();
 
     virtual void BeginPresent() = 0;
     virtual void EndPresent() = 0;
-    virtual int present_count() = 0;
+    virtual int present_count() const = 0;
 
     base::WeakPtr<Image> GetWeakPtr() { return weak_ptr_factory_.GetWeakPtr(); }
 
@@ -56,22 +65,6 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
 
     std::vector<GrBackendSemaphore> end_semaphores_;
     base::WeakPtrFactory<Image> weak_ptr_factory_{this};
-  };
-
-  class OverlayData {
-   public:
-    OverlayData(
-        std::unique_ptr<gpu::SharedImageRepresentationOverlay> representation,
-        std::unique_ptr<gpu::SharedImageRepresentationOverlay::ScopedReadAccess>
-            scoped_read_access);
-    OverlayData(OverlayData&&);
-    ~OverlayData();
-    OverlayData& operator=(OverlayData&&);
-
-   private:
-    std::unique_ptr<gpu::SharedImageRepresentationOverlay> representation_;
-    std::unique_ptr<gpu::SharedImageRepresentationOverlay::ScopedReadAccess>
-        scoped_read_access_;
   };
 
   OutputPresenter() = default;
@@ -93,6 +86,9 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
       gfx::ColorSpace color_space,
       gfx::Size image_size,
       size_t num_images) = 0;
+  virtual std::unique_ptr<Image> AllocateBackgroundImage(
+      gfx::ColorSpace color_space,
+      gfx::Size image_size);
   virtual void SwapBuffers(SwapCompletionCallback completion_callback,
                            BufferPresentedCallback presentation_callback) = 0;
   virtual void PostSubBuffer(const gfx::Rect& rect,
@@ -100,14 +96,16 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
                              BufferPresentedCallback presentation_callback) = 0;
   virtual void CommitOverlayPlanes(
       SwapCompletionCallback completion_callback,
-      BufferPresentedCallback presentation_callback,
-      std::vector<ui::LatencyInfo> latency_info) = 0;
+      BufferPresentedCallback presentation_callback) = 0;
   virtual void SchedulePrimaryPlane(
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane,
       Image* image,
       bool is_submitted) = 0;
-  virtual std::vector<OverlayData> ScheduleOverlays(
-      SkiaOutputSurface::OverlayList overlays) = 0;
+  using ScopedOverlayAccess =
+      gpu::SharedImageRepresentationOverlay::ScopedReadAccess;
+  virtual void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays,
+                                std::vector<ScopedOverlayAccess*> accesses) = 0;
+  virtual void ScheduleBackground(Image* image);
 };
 
 }  // namespace viz

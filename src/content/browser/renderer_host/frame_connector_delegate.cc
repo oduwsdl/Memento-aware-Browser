@@ -7,7 +7,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_switches_internal.h"
-#include "content/common/frame_visual_properties.h"
+#include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom.h"
 
 namespace content {
@@ -26,11 +26,13 @@ FrameConnectorDelegate::GetRootRenderWidgetHostView() {
   return nullptr;
 }
 
+void FrameConnectorDelegate::SendIntrinsicSizingInfoToParent(
+    blink::mojom::IntrinsicSizingInfoPtr) {}
+
 void FrameConnectorDelegate::SynchronizeVisualProperties(
-    const viz::FrameSinkId& frame_sink_id,
-    const FrameVisualProperties& visual_properties) {
+    const blink::FrameVisualProperties& visual_properties) {
   screen_info_ = visual_properties.screen_info;
-  local_surface_id_allocation_ = visual_properties.local_surface_id_allocation;
+  local_surface_id_ = visual_properties.local_surface_id;
 
   capture_sequence_number_ = visual_properties.capture_sequence_number;
 
@@ -149,5 +151,7 @@ void FrameConnectorDelegate::SetScreenSpaceRect(
 FrameConnectorDelegate::FrameConnectorDelegate(
     bool use_zoom_for_device_scale_factor)
     : use_zoom_for_device_scale_factor_(use_zoom_for_device_scale_factor) {}
+
+FrameConnectorDelegate::~FrameConnectorDelegate() = default;
 
 }  // namespace content

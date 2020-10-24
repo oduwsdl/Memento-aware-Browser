@@ -10,9 +10,8 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/accessibility/autoclick_menu_bubble_controller.h"
+#include "ash/system/accessibility/floating_menu_button.h"
 #include "ash/system/unified/custom_shape_button.h"
-#include "ash/system/unified/top_shortcut_button.h"
-#include "ash/system/unified/unified_system_tray_view.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/timer/timer.h"
@@ -27,7 +26,6 @@
 namespace ash {
 
 using ContentLayerType = AshColorProvider::ContentLayerType;
-using AshColorMode = AshColorProvider::AshColorMode;
 
 namespace {
 
@@ -39,30 +37,26 @@ constexpr int kScrollPadIconPadding = 30;
 
 SkColor HoveredButtonColor() {
   const AshColorProvider::RippleAttributes attributes =
-      AshColorProvider::Get()->GetRippleAttributes(
-          UnifiedSystemTrayView::GetBackgroundColor());
+      AshColorProvider::Get()->GetRippleAttributes();
   return SkColorSetA(attributes.base_color, 255 * attributes.highlight_opacity);
 }
 
 }  // namespace
 
 // The close button for the automatic clicks scroll bubble.
-class AutoclickScrollCloseButton : public TopShortcutButton,
+class AutoclickScrollCloseButton : public FloatingMenuButton,
                                    public views::ButtonListener {
  public:
-  explicit AutoclickScrollCloseButton()
-      : TopShortcutButton(this, IDS_ASH_AUTOCLICK_SCROLL_CLOSE) {
+  AutoclickScrollCloseButton()
+      : FloatingMenuButton(this,
+                           kAutoclickCloseIcon,
+                           IDS_ASH_AUTOCLICK_SCROLL_CLOSE,
+                           /*flip_for_rtl=*/false,
+                           kScrollButtonCloseSizeDips,
+                           /*draw_highlight=*/false,
+                           /*is_a11y_togglable=*/false) {
     views::View::SetID(
         static_cast<int>(AutoclickScrollView::ButtonId::kCloseScroll));
-    EnableCanvasFlippingForRTLUI(false);
-    SetPreferredSize(
-        gfx::Size(kScrollButtonCloseSizeDips, kScrollButtonCloseSizeDips));
-    SetImage(
-        views::Button::STATE_NORMAL,
-        gfx::CreateVectorIcon(
-            kAutoclickCloseIcon,
-            AshColorProvider::Get()->GetContentLayerColor(
-                ContentLayerType::kIconColorPrimary, AshColorMode::kDark)));
   }
 
   ~AutoclickScrollCloseButton() override = default;
@@ -86,7 +80,7 @@ class AutoclickScrollCloseButton : public TopShortcutButton,
     SchedulePaint();
   }
 
-  // TopShortcutButton:
+  // FloatingMenuButton:
   void PaintButtonContents(gfx::Canvas* canvas) override {
     if (hovered_) {
       gfx::Rect rect(GetContentsBounds());
@@ -126,7 +120,7 @@ class AutoclickScrollButton : public CustomShapeButton,
     SetTooltipText(l10n_util::GetStringUTF16(accessible_name_id));
     // Disable canvas flipping, as scroll left should always be left no matter
     // the language orientation.
-    EnableCanvasFlippingForRTLUI(false);
+    SetFlipCanvasOnPaintForRTLUI(false);
     scroll_hover_timer_ = std::make_unique<base::RetainingOneShotTimer>(
         FROM_HERE,
         base::TimeDelta::FromMilliseconds(
@@ -136,8 +130,7 @@ class AutoclickScrollButton : public CustomShapeButton,
     SetImage(views::Button::STATE_NORMAL,
              gfx::CreateVectorIcon(
                  icon, AshColorProvider::Get()->GetContentLayerColor(
-                           ContentLayerType::kIconColorPrimary,
-                           AshColorMode::kDark)));
+                           ContentLayerType::kIconColorPrimary)));
     if (action_ == AutoclickController::ScrollPadAction::kScrollLeft ||
         action_ == AutoclickController::ScrollPadAction::kScrollRight) {
       size_ = gfx::Size(kScrollPadButtonHypotenuseDips / 2,
@@ -258,7 +251,7 @@ class AutoclickScrollButton : public CustomShapeButton,
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(kScrollpadStrokeWidthDips);
     flags.setColor(AshColorProvider::Get()->GetContentLayerColor(
-        ContentLayerType::kSeparatorColor, AshColorMode::kDark));
+        ContentLayerType::kSeparatorColor));
     canvas->DrawPath(ComputePath(false /* only drawn edges */), flags);
 
     gfx::ImageSkia img = GetImageToPaint();

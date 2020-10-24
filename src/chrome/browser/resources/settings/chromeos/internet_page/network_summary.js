@@ -125,6 +125,17 @@ Polymer({
     this.getNetworkLists_();
   },
 
+  /*
+   * Returns the network-summary-item element corresponding to the
+   * |networkType|.
+   * @param {!chromeos.networkConfig.mojom.NetworkType} networkType
+   * @return {?NetworkSummaryItemElement}
+   */
+  getNetworkRow(networkType) {
+    const networkTypeString = OncMojo.getNetworkTypeString(networkType);
+    return this.$$(`#${networkTypeString}`);
+  },
+
   /**
    * Requests the list of device states and network states from Chrome.
    * Updates deviceStates, activeNetworkStates, and networkStateLists once the
@@ -205,13 +216,6 @@ Polymer({
 
     this.defaultNetwork = firstConnectedNetwork;
 
-    // Create a VPN entry in deviceStates if there are any VPN networks.
-    if (newNetworkStateLists[mojom.NetworkType.kVPN].length > 0) {
-      newDeviceStates[mojom.NetworkType.kVPN] = {
-        type: mojom.NetworkType.kVPN,
-        deviceState: chromeos.networkConfig.mojom.DeviceStateType.kEnabled,
-      };
-    }
 
     // Push the active networks onto newActiveNetworkStates in order based on
     // device priority, creating an empty state for devices with no networks.
@@ -221,6 +225,14 @@ Polymer({
       const device = newDeviceStates[type];
       if (!device) {
         continue;  // The technology for this device type is unavailable.
+      }
+
+      // A VPN device state will always exist in |deviceStateList| even if there
+      // is no active VPN. This check is to add the VPN network summary item
+      // only if there is at least one active VPN.
+      if (device.type === mojom.NetworkType.kVPN &&
+          !activeNetworkStatesByType.has(device.type)) {
+        continue;
       }
 
       // If both 'Tether' and 'Cellular' technologies exist, merge the network
@@ -252,6 +264,7 @@ Polymer({
     this.networkStateLists_ = newNetworkStateLists;
     // Set activeNetworkStates last to rebuild the dom-repeat.
     this.activeNetworkStates_ = newActiveNetworkStates;
+    this.fire('active-networks-updated');
   },
 
   /**

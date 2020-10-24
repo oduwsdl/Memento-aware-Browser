@@ -11,7 +11,9 @@
 
 namespace device {
 
-VRDeviceBase::VRDeviceBase(mojom::XRDeviceId id) : id_(id) {}
+VRDeviceBase::VRDeviceBase(mojom::XRDeviceId id) : id_(id) {
+  device_data_.is_ar_blend_mode_supported = false;
+}
 
 VRDeviceBase::~VRDeviceBase() = default;
 
@@ -66,7 +68,6 @@ void VRDeviceBase::ListenToDeviceChanges(
 
 void VRDeviceBase::SetVRDisplayInfo(mojom::VRDisplayInfoPtr display_info) {
   DCHECK(display_info);
-  DCHECK(display_info->id == id_);
   display_info_ = std::move(display_info);
 
   if (listener_)
@@ -77,6 +78,10 @@ void VRDeviceBase::OnVisibilityStateChanged(
     mojom::XRVisibilityState visibility_state) {
   if (listener_)
     listener_->OnVisibilityStateChanged(visibility_state);
+}
+
+void VRDeviceBase::SetArBlendModeSupported(bool is_ar_blend_mode_supported) {
+  device_data_.is_ar_blend_mode_supported = is_ar_blend_mode_supported;
 }
 
 #if defined(OS_WIN)
@@ -91,10 +96,6 @@ void VRDeviceBase::SetLuid(const LUID& luid) {
 mojo::PendingRemote<mojom::XRRuntime> VRDeviceBase::BindXRRuntime() {
   DVLOG(2) << __func__;
   return runtime_receiver_.BindNewPipeAndPassRemote();
-}
-
-void VRDeviceBase::SetInlinePosesEnabled(bool enable) {
-  inline_poses_enabled_ = enable;
 }
 
 void LogViewerType(VrViewerType type) {

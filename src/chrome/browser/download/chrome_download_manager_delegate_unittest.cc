@@ -43,6 +43,7 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/download/public/common/download_features.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/mock_download_item.h"
 #include "components/prefs/pref_service.h"
@@ -327,6 +328,12 @@ void ChromeDownloadManagerDelegateTest::SetUp() {
 #if defined(OS_ANDROID)
   pref_service_->SetInteger(prefs::kPromptForDownloadAndroid,
                             static_cast<int>(DownloadPromptStatus::DONT_SHOW));
+
+  if (base::FeatureList::IsEnabled(download::features::kDownloadLater)) {
+    pref_service_->SetInteger(
+        prefs::kDownloadLaterPromptStatus,
+        static_cast<int>(DownloadLaterPromptStatus::kDontShow));
+  }
 #endif
 }
 
@@ -862,6 +869,11 @@ TEST_F(ChromeDownloadManagerDelegateTest, InterceptDownloadByOfflinePages) {
 
   should_intercept = delegate()->InterceptDownloadIfApplicable(
       kUrl, "", "", mime_type, "", 10, true /*is_transient*/, nullptr);
+  EXPECT_FALSE(should_intercept);
+
+  should_intercept = delegate()->InterceptDownloadIfApplicable(
+      kUrl, "", "attachment" /*content_disposition*/, mime_type, "", 10,
+      false /*is_transient*/, nullptr);
   EXPECT_FALSE(should_intercept);
 }
 #endif
@@ -1699,6 +1711,7 @@ class TestDownloadDialogBridge : public DownloadDialogBridge {
                   int64_t total_bytes,
                   DownloadLocationDialogType dialog_type,
                   const base::FilePath& suggested_path,
+                  bool supports_later_dialog,
                   DownloadDialogBridge::DialogCallback callback) override {
     dialog_shown_count_++;
     dialog_type_ = dialog_type;

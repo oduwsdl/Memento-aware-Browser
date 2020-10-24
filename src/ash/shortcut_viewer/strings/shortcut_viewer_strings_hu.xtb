@@ -5,7 +5,7 @@
 <translation id="104962181688258143">A Fájlok alkalmazás megnyitása</translation>
 <translation id="1122869341872663659"><ph name="N" /> keresési találat megjelenítve a következőre: <ph name="QUERY" /></translation>
 <translation id="1195667586424773550">A link húzása a lap címsávjára</translation>
-<translation id="1204450209689312104">Új ablak megnyitása inkognitómódban</translation>
+<translation id="1204450209689312104">Új ablak megnyitása inkognitó módban</translation>
 <translation id="1251638888133819822">A teljes képernyős nagyító be- vagy kikapcsolása</translation>
 <translation id="1290373024480130896"><ph name="MODIFIER1" /><ph name="SEPARATOR1" /><ph name="MODIFIER2" /><ph name="SEPARATOR2" /><ph name="MODIFIER3" /><ph name="SEPARATOR3" /><ph name="KEY" /></translation>
 <translation id="1293699935367580298">Esc</translation>
@@ -47,6 +47,7 @@
 <translation id="2488661730534396940">A bal oldali asztal aktiválása</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2530339807289914946">A weboldal lefelé görgetése</translation>
+<translation id="2530896289327917474">A billentyűzettel böngészés be- vagy kikapcsolása</translation>
 <translation id="2574014812750545982">Nagyítási szint visszaállítása az oldalon</translation>
 <translation id="2596078834055697711">Képernyőkép készítése az ablakról</translation>
 <translation id="2685170433750953446"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" />, majd <ph name="TAB" /> vagy <ph name="RIGHT" /></translation>
@@ -185,6 +186,7 @@
 <translation id="8234414138295101081">Képernyő elforgatása 90 fokkal</translation>
 <translation id="8241665785394195545">jobb oldali szögletes zárójel</translation>
 <translation id="8264941229485248811">A Fejlesztői eszközök ellenőrző panelének megjelenítése vagy elrejtése</translation>
+<translation id="8322502972606429618">A vágólapra másolt legutóbbi néhány elem megjelenítése</translation>
 <translation id="836869401750819675">A Letöltések oldal megnyitása</translation>
 <translation id="8388247778047144397">A link húzása a lapsor egy üres területére</translation>
 <translation id="8389638407792712197">Új ablak megnyitása</translation>

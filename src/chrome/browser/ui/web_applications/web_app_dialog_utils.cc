@@ -23,7 +23,6 @@
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "content/public/browser/navigation_entry.h"
 
@@ -96,7 +95,7 @@ bool CanCreateWebApp(const Browser* browser) {
 
 bool CanPopOutWebApp(Profile* profile) {
   return AreWebAppsEnabled(profile) && !profile->IsGuestSession() &&
-         !profile->IsOffTheRecord();
+         !profile->IsEphemeralGuestProfile() && !profile->IsOffTheRecord();
 }
 
 void CreateWebAppFromCurrentWebContents(Browser* browser,
@@ -108,8 +107,9 @@ void CreateWebAppFromCurrentWebContents(Browser* browser,
   auto* provider = WebAppProvider::GetForWebContents(web_contents);
   DCHECK(provider);
 
-  WebappInstallSource install_source =
-      InstallableMetrics::GetInstallSource(web_contents, InstallTrigger::MENU);
+  WebappInstallSource install_source = InstallableMetrics::GetInstallSource(
+      web_contents, force_shortcut_app ? InstallTrigger::CREATE_SHORTCUT
+                                       : InstallTrigger::MENU);
 
   WebAppInstalledCallback callback = base::DoNothing();
 
@@ -120,6 +120,7 @@ void CreateWebAppFromCurrentWebContents(Browser* browser,
 }
 
 bool CreateWebAppFromManifest(content::WebContents* web_contents,
+                              bool bypass_service_worker_check,
                               WebappInstallSource install_source,
                               WebAppInstalledCallback installed_callback) {
   auto* provider = WebAppProvider::GetForWebContents(web_contents);
@@ -127,7 +128,7 @@ bool CreateWebAppFromManifest(content::WebContents* web_contents,
     return false;
 
   provider->install_manager().InstallWebAppFromManifest(
-      web_contents, install_source,
+      web_contents, bypass_service_worker_check, install_source,
       base::BindOnce(WebAppInstallDialogCallback, install_source),
       base::BindOnce(OnWebAppInstalled, std::move(installed_callback)));
   return true;

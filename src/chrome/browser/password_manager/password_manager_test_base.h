@@ -7,11 +7,11 @@
 
 #include <memory>
 
-#include "base/callback_list.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/ssl/cert_verifier_browser_test.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -96,10 +96,6 @@ class BubbleObserver {
   // checks that the prompt is no longer visible afterwards.
   void AcceptUpdatePrompt() const;
 
-  // Expecting that the prompt is available, saves the unsynced credentials.
-  // At the end, checks that the prompt is no longer visible afterwards.
-  void AcceptSaveUnsyncedCredentialsPrompt() const;
-
   // Returns once the account chooser pops up or it's already shown.
   // |web_contents| must be the custom one returned by
   // PasswordManagerBrowserTestBase.
@@ -151,14 +147,15 @@ class PasswordStoreResultsObserver
   ~PasswordStoreResultsObserver() override;
 
   // Waits for OnGetPasswordStoreResults() and returns the result.
-  std::vector<std::unique_ptr<autofill::PasswordForm>> WaitForResults();
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> WaitForResults();
 
  private:
   void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+      std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
+      override;
 
   base::RunLoop run_loop_;
-  std::vector<std::unique_ptr<autofill::PasswordForm>> results_;
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> results_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordStoreResultsObserver);
 };
@@ -172,15 +169,6 @@ class PasswordManagerBrowserTestBase : public CertVerifierBrowserTest {
   void SetUpInProcessBrowserTestFixture() override;
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
-
-  // Bring up a new Chrome tab set up with password manager test hooks.
-  // @param[in] browser the browser running the password manager test, upon
-  // which this function will perform the setup steps.
-  // @param[out] a new tab on the browser set up with password manager test
-  // hooks.
-  static void SetUpOnMainThreadAndGetNewTab(
-      Browser* browser,
-      content::WebContents** web_contents);
 
   // Creates a new tab with all the password manager test hooks and returns it
   // in |web_contents|.
@@ -252,16 +240,13 @@ class PasswordManagerBrowserTestBase : public CertVerifierBrowserTest {
   net::EmbeddedTestServer& https_test_server() { return https_test_server_; }
 
  private:
-  static void OnWillCreateBrowserContextServices(
-      content::BrowserContext* context);
-
   net::EmbeddedTestServer https_test_server_;
   // A tab with some hooks injected.
   content::WebContents* web_contents_;
 
   std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
+      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
+      create_services_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerBrowserTestBase);
 };

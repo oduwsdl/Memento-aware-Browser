@@ -42,7 +42,21 @@ int StackTraceFrame::GetOneBasedColumnNumber(Handle<StackTraceFrame> frame) {
 
 // static
 int StackTraceFrame::GetScriptId(Handle<StackTraceFrame> frame) {
-  int id = GetFrameInfo(frame)->script_id();
+  Isolate* isolate = frame->GetIsolate();
+
+  // Use FrameInfo if it's already there, but avoid initializing it for just
+  // the script id, as it is much more expensive than just getting this
+  // directly. See GetScriptNameOrSourceUrl() for more detail.
+  int id;
+  if (!frame->frame_info().IsUndefined()) {
+    id = GetFrameInfo(frame)->script_id();
+  } else {
+    FrameArrayIterator it(
+        isolate, handle(FrameArray::cast(frame->frame_array()), isolate),
+        frame->frame_index());
+    DCHECK(it.HasFrame());
+    id = it.Frame()->GetScriptId();
+  }
   return id != StackFrameBase::kNone ? id : Message::kNoScriptIdInfo;
 }
 
@@ -182,6 +196,9 @@ Handle<StackFrameInfo> StackTraceFrame::GetFrameInfo(
 
 // static
 void StackTraceFrame::InitializeFrameInfo(Handle<StackTraceFrame> frame) {
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("v8.stack_trace"),
+               "SymbolizeStackFrame", "frameIndex", frame->frame_index());
+
   Isolate* isolate = frame->GetIsolate();
   Handle<StackFrameInfo> frame_info = isolate->factory()->NewStackFrameInfo(
       handle(FrameArray::cast(frame->frame_array()), isolate),

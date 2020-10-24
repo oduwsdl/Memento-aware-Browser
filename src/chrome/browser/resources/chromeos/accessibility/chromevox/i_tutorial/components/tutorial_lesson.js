@@ -2,15 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/**
+ * @fileoverview Defines a custom Polymer component for a lesson in the
+ * ChromeVox interactive tutorial.
+ */
+
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {TutorialCommon} from './tutorial_common.js';
 
 export const TutorialLesson = Polymer({
   is: 'tutorial-lesson',
 
   _template: html`{__html_template__}`,
+
+  behaviors: [TutorialCommon],
 
   properties: {
     lessonNum: {type: Number},
@@ -23,45 +31,60 @@ export const TutorialLesson = Polymer({
 
     curriculums: {type: Array},
 
-    testAreaTitle: {type: String},
+    practiceTitle: {type: String},
 
-    testAreaInstructions: {type: String},
+    practiceInstructions: {type: String},
 
-    testAreaFile: {type: String},
+    practiceFile: {type: String},
 
-    testAreaState: {type: Object},
+    practiceState: {type: Object},
 
     events: {type: Array},
 
-    hints: {type: Array},
-
-    hintCounter: {type: Number, value: 0},
-
-    hintIntervalId: {type: Number},
-
     goalStateReached: {type: Boolean, value: false},
+
+    actions: {type: Array},
+
+    autoInteractive: {type: Boolean, value: false},
 
     // Observed properties.
 
-    activeLessonNum: {type: Number, observer: '_setVisibility'},
+    activeLessonNum: {type: Number, observer: 'setVisibility'},
   },
 
   /** @override */
   ready() {
-    if (this.testAreaFile) {
-      this.populateTestArea_();
+    this.$.contentTemplate.addEventListener('dom-change', (evt) => {
+      this.dispatchEvent(new CustomEvent('lessonready', {composed: true}));
+    });
+
+
+    if (this.practiceFile) {
+      this.populatePracticeContent();
       for (const evt of this.events) {
-        this.$.testArea.addEventListener(
-            evt, this.onTestAreaEvent.bind(this), true);
+        this.$.practiceContent.addEventListener(
+            evt, this.onPracticeEvent.bind(this), true);
       }
+      this.$.practiceContent.addEventListener('focus', (evt) => {
+        // The practice area has the potential to overflow, so ensure elements
+        // are scrolled into view when focused.
+        evt.target.scrollIntoView();
+      }, true);
+      this.$.practiceContent.addEventListener('click', (evt) => {
+        // Intercept click events. For example, clicking a link will exit the
+        // tutorial without this listener.
+        evt.preventDefault();
+        evt.stopPropagation();
+      }, true);
     }
   },
 
   /**
    * Updates this lessons visibility whenever the active lesson of the tutorial
    * changes.
+   * @private
    */
-  _setVisibility() {
+  setVisibility() {
     if (this.lessonNum === this.activeLessonNum) {
       this.show();
     } else {
@@ -69,63 +92,100 @@ export const TutorialLesson = Polymer({
     }
   },
 
+  /** @private */
   show() {
-    this.$.lessonContainer.hidden = false;
-    this.$.lessonTitle.focus();
+    this.$.container.hidden = false;
+    let focus;
+    if (this.autoInteractive) {
+      // Auto interactive lessons immediately initialize the UserActionMonitor,
+      // which will block ChromeVox execution until a desired key sequence is
+      // pressed. To ensure users hear instructions for these lessons, place
+      // focus on the first piece of text content.
+      // Shorthand for Polymer.dom(this.root).querySelector(...).
+      focus = this.$$('p');
+    } else {
+      // Otherwise, we can place focus on the lesson title.
+      focus = this.$$('h1');
+    }
+    if (!focus) {
+      throw new Error('A lesson must have an element to focus.');
+    }
+    focus.focus();
+    if (!focus.isEqualNode(this.shadowRoot.activeElement)) {
+      // Call show() again if we weren't able to focus the target element.
+      setTimeout(this.show.bind(this), 500);
+    }
   },
 
+  /** @private */
   hide() {
-    this.$.lessonContainer.hidden = true;
+    this.$.container.hidden = true;
   },
 
 
-  // Methods for managing the test area.
+  // Methods for managing the practice area.
 
 
   /**
-   * Asynchronously populates test area.
+   * Asynchronously populates practice area.
    * @private
    */
-  populateTestArea_() {
-    const path = '../i_tutorial/lessons/' + this.testAreaFile + '.html';
+  populatePracticeContent() {
+    const path = '../i_tutorial/lessons/' + this.practiceFile + '.html';
     const xhr = new XMLHttpRequest();
     xhr.open('GET', path, true);
     xhr.onload = (evt) => {
       if (xhr.readyState === 4 && xhr.status === 200) {
-        this.$.testArea.innerHTML = xhr.responseText;
+        this.$.practiceContent.innerHTML = xhr.responseText;
       } else {
         console.error(xhr.statusText);
       }
     };
     xhr.onerror = function(evt) {
-      console.error('Failed to open test area file: ' + path);
+      console.error('Failed to open practice file: ' + path);
       console.error(xhr.statusText);
     };
     xhr.send(null);
   },
 
-  showTestArea() {
-    this.$.testAreaContainer.showModal();
-    this.startHints();
+  /** @private */
+  startPractice() {
+    this.notifyStartPractice();
+    this.$.practice.showModal();
+    this.$.practiceTitle.focus();
   },
 
-  closeTestArea() {
-    this.stopHints();
-    this.$.showTestArea.focus();
+  /** @private */
+  endPractice() {
+    this.notifyEndPractice();
+    this.$.startPractice.focus();
+  },
+
+  /** @private */
+  notifyStartPractice() {
+    this.dispatchEvent(new CustomEvent('startpractice', {composed: true}));
+  },
+
+  /** @private */
+  notifyEndPractice() {
+    this.dispatchEvent(new CustomEvent('endpractice', {composed: true}));
   },
 
 
-  // Methods for tracking the state of the test area.
+  // Methods for tracking the state of the practice area.
 
 
-  /** @param {Event} event */
-  onTestAreaEvent(event) {
+  /**
+   * @param {Event} event
+   * @private
+   */
+  onPracticeEvent(event) {
     const elt = event.target.id;
     const type = event.type;
     // Maybe update goal state.
-    if (elt in this.testAreaState) {
-      if (type in this.testAreaState[elt]) {
-        this.testAreaState[elt][type] = true;
+    if (elt in this.practiceState) {
+      if (type in this.practiceState[elt]) {
+        this.practiceState[elt][type] = true;
       }
     }
 
@@ -134,13 +194,20 @@ export const TutorialLesson = Polymer({
     }
   },
 
-  /** @return {boolean} */
+  /**
+   * @return {boolean}
+   * @private
+   */
   isGoalStateReached() {
+    if (!this.practiceState) {
+      return false;
+    }
+
     if (this.goalStateReached === true) {
       return true;
     }
 
-    for (const [elt, state] of Object.entries(this.testAreaState)) {
+    for (const [elt, state] of Object.entries(this.practiceState)) {
       for (const [evt, performed] of Object.entries(state)) {
         if (performed == false) {
           return false;
@@ -150,40 +217,17 @@ export const TutorialLesson = Polymer({
     return true;
   },
 
+  /** @private */
   onGoalStateReached() {
     const previousState = this.goalStateReached;
     this.goalStateReached = true;
     if (previousState === false) {
       // Only perform when crossing the threshold from not reached to reached.
-      this.stopHints();
       this.requestSpeech(
-          'You have passed this tutorial lesson. Find and press the close ' +
-          'test area button to continue');
+          'You have passed this tutorial lesson. Find and press the exit ' +
+          'practice area button to continue');
     }
   },
-
-
-  // Methods for managing hints.
-
-
-  startHints() {
-    this.hintCounter = 0;
-    this.hintIntervalId = setInterval(() => {
-      if (this.hintCounter >= this.hints.length) {
-        this.stopHints();
-        return;
-      }
-      this.requestSpeech(this.hints[this.hintCounter]);
-      this.hintCounter += 1;
-    }, 20000);
-  },
-
-  stopHints() {
-    if (this.hintIntervalId) {
-      clearInterval(this.hintIntervalId);
-    }
-  },
-
 
   // Miscellaneous methods.
 
@@ -201,20 +245,35 @@ export const TutorialLesson = Polymer({
   },
 
   /**
-   * Requests speech from the Panel.
    * @param {string} text
+   * @private
    */
   requestSpeech(text) {
+    // TODO (akihiroota): Migrate this to i_tutorial.js so that the tutorial
+    // engine controls all speech requests.
     this.dispatchEvent(
-        new CustomEvent('request-speech', {composed: true, detail: {text}}));
+        new CustomEvent('requestspeech', {composed: true, detail: {text}}));
   },
 
-  /** @return {boolean} */
-  shouldHideTestAreaButton_() {
-    if (!this.testAreaFile) {
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldHidePracticeButton() {
+    if (!this.practiceFile) {
       return true;
     }
 
     return false;
   },
+
+  /** @return {Element} */
+  get contentDiv() {
+    return this.$.content;
+  },
+
+  /** @return {string} */
+  getTitleText() {
+    return this.$.title.textContent;
+  }
 });

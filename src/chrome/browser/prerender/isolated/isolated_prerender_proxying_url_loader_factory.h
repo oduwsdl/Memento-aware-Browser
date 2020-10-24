@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "chrome/browser/prerender/isolated/isolated_prerender_tab_helper.h"
+#include "chrome/browser/prerender/isolated/isolated_prerender_prefetch_status.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -22,6 +22,8 @@
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
+
+class Profile;
 
 // This class is an intermediary URLLoaderFactory between the renderer and
 // network process, AKA proxy which should not be confused with a proxy server.
@@ -33,6 +35,27 @@
 class IsolatedPrerenderProxyingURLLoaderFactory
     : public network::mojom::URLLoaderFactory {
  public:
+  class ResourceMetricsObserver {
+   public:
+    // Called when the resource finishes, either in failure or success.
+    virtual void OnResourceFetchComplete(
+        const GURL& url,
+        network::mojom::URLResponseHeadPtr head,
+        const network::URLLoaderCompletionStatus& status) = 0;
+
+    // Called when a subresource load exceeds the experimental maximum and the
+    // load is aborted before going to the network.
+    virtual void OnResourceThrottled(const GURL& url) = 0;
+
+    // Called when a subresource is not eligible to be prefetched.
+    virtual void OnResourceNotEligible(
+        const GURL& url,
+        IsolatedPrerenderPrefetchStatus status) = 0;
+
+    // Called when a previously prefetched subresource is loaded from the cache.
+    virtual void OnResourceUsedFromCache(const GURL& url) = 0;
+  };
+
   using DisconnectCallback =
       base::OnceCallback<void(IsolatedPrerenderProxyingURLLoaderFactory*)>;
 
@@ -40,6 +63,7 @@ class IsolatedPrerenderProxyingURLLoaderFactory
       base::RepeatingCallback<void(const GURL& url)>;
 
   IsolatedPrerenderProxyingURLLoaderFactory(
+      ResourceMetricsObserver* metrics_observer,
       int frame_tree_node_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
@@ -74,6 +98,7 @@ class IsolatedPrerenderProxyingURLLoaderFactory
                             public network::mojom::URLLoaderClient {
    public:
     InProgressRequest(
+        Profile* profile,
         IsolatedPrerenderProxyingURLLoaderFactory* parent_factory,
         network::mojom::URLLoaderFactory* target_factory,
         ResourceLoadSuccessfulCallback on_resource_load_successful,
@@ -85,6 +110,14 @@ class IsolatedPrerenderProxyingURLLoaderFactory
         mojo::PendingRemote<network::mojom::URLLoaderClient> client,
         const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
     ~InProgressRequest() override;
+
+    // Sets a callback that will be run during |OnComplete| to record metrics.
+    using OnCompleteRecordMetricsCallback = base::OnceCallback<void(
+        const GURL& url,
+        network::mojom::URLResponseHeadPtr head,
+        const network::URLLoaderCompletionStatus& status)>;
+    void SetOnCompleteRecordMetricsCallback(
+        OnCompleteRecordMetricsCallback callback);
 
     // network::mojom::URLLoader:
     void FollowRedirect(
@@ -118,14 +151,19 @@ class IsolatedPrerenderProxyingURLLoaderFactory
     void MaybeReportResourceLoadSuccess(
         const network::URLLoaderCompletionStatus& status);
 
+    Profile* profile_;
+
     // Back pointer to the factory which owns this class.
     IsolatedPrerenderProxyingURLLoaderFactory* const parent_factory_;
+
+    // Callback for recording metrics during |OnComplete|. Not always set.
+    OnCompleteRecordMetricsCallback on_complete_metrics_callback_;
 
     // This should be run on destruction of |this|.
     base::OnceClosure destruction_callback_;
 
-    // Records the HTTP response code in |OnReceiveResponse|.
-    base::Optional<int> http_response_code_;
+    // Holds onto the response head for reporting to the metrics callback.
+    network::mojom::URLResponseHeadPtr head_;
 
     // All urls loaded by |this| in order of redirects. The first element is the
     // requested url and the last element is the final loaded url. Always has
@@ -138,21 +176,54 @@ class IsolatedPrerenderProxyingURLLoaderFactory
     // There are the mojo pipe endpoints between this proxy and the renderer.
     // Messages received by |client_receiver_| are forwarded to
     // |target_client_|.
-    mojo::Receiver<network::mojom::URLLoaderClient> client_receiver_{this};
     mojo::Remote<network::mojom::URLLoaderClient> target_client_;
+    mojo::Receiver<network::mojom::URLLoader> loader_receiver_;
 
     // These are the mojo pipe endpoints between this proxy and the network
     // process. Messages received by |loader_receiver_| are forwarded to
     // |target_loader_|.
-    mojo::Receiver<network::mojom::URLLoader> loader_receiver_;
     mojo::Remote<network::mojom::URLLoader> target_loader_;
+    mojo::Receiver<network::mojom::URLLoaderClient> client_receiver_{this};
 
     DISALLOW_COPY_AND_ASSIGN(InProgressRequest);
+  };
+
+  // Terminates the request when constructed.
+  class AbortRequest : public network::mojom::URLLoader {
+   public:
+    AbortRequest(
+        mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
+        mojo::PendingRemote<network::mojom::URLLoaderClient> client);
+    ~AbortRequest() override;
+
+    // network::mojom::URLLoader:
+    void FollowRedirect(
+        const std::vector<std::string>& removed_headers,
+        const net::HttpRequestHeaders& modified_headers,
+        const net::HttpRequestHeaders& modified_cors_exempt_headers,
+        const base::Optional<GURL>& new_url) override;
+    void SetPriority(net::RequestPriority priority,
+                     int32_t intra_priority_value) override;
+    void PauseReadingBodyFromNet() override;
+    void ResumeReadingBodyFromNet() override;
+
+   private:
+    void OnBindingClosed();
+    void Abort();
+
+    // There are the mojo pipe endpoints between this proxy and the renderer.
+    mojo::Remote<network::mojom::URLLoaderClient> target_client_;
+    mojo::Receiver<network::mojom::URLLoader> loader_receiver_;
+
+    base::WeakPtrFactory<AbortRequest> weak_factory_{this};
+
+    DISALLOW_COPY_AND_ASSIGN(AbortRequest);
   };
 
   // Used as a callback for determining the eligibility of a resource to be
   // cached during prerender.
   void OnEligibilityResult(
+      Profile* profile,
       mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
       int32_t routing_id,
       int32_t request_id,
@@ -162,7 +233,17 @@ class IsolatedPrerenderProxyingURLLoaderFactory
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
       const GURL& url,
       bool eligible,
-      base::Optional<IsolatedPrerenderTabHelper::PrefetchStatus> not_used);
+      base::Optional<IsolatedPrerenderPrefetchStatus> status);
+
+  void RecordSubresourceMetricsDuringPrerender(
+      const GURL& url,
+      network::mojom::URLResponseHeadPtr head,
+      const network::URLLoaderCompletionStatus& status);
+
+  void RecordSubresourceMetricsAfterClick(
+      const GURL& url,
+      network::mojom::URLResponseHeadPtr head,
+      const network::URLLoaderCompletionStatus& status);
 
   // Returns true when this factory was created during a NoStatePrefetch.
   // Internally, this means |NotifyPageNavigatedToAfterSRP| has not been called.
@@ -174,6 +255,8 @@ class IsolatedPrerenderProxyingURLLoaderFactory
   void RemoveRequest(InProgressRequest* request);
   void MaybeDestroySelf();
 
+  // Must outlive |this|.
+  ResourceMetricsObserver* metrics_observer_;
   // For getting the web contents.
   const int frame_tree_node_id_;
 
@@ -191,6 +274,10 @@ class IsolatedPrerenderProxyingURLLoaderFactory
   // All active network requests handled by this factory.
   std::set<std::unique_ptr<InProgressRequest>, base::UniquePtrComparator>
       requests_;
+
+  // Tracks how many requests the prerender has made in order to limit the
+  // number of subresources that can be prefetched by one page.
+  size_t request_count_ = 0;
 
   // The network process URLLoaderFactory.
   mojo::Remote<network::mojom::URLLoaderFactory> network_process_factory_;

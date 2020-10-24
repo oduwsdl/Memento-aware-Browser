@@ -39,6 +39,7 @@ cr.define('settings.display', function() {
     is: 'settings-display',
 
     behaviors: [
+      DeepLinkingBehavior,
       I18nBehavior,
       PrefsBehavior,
       settings.RouteObserverBehavior,
@@ -213,6 +214,38 @@ cr.define('settings.display', function() {
 
       /** @private */
       selectedTab_: Number,
+
+      /**
+       * Contains the settingId of any deep link that wasn't able to be shown,
+       * null otherwise.
+       * @private {?chromeos.settings.mojom.Setting}
+       */
+      pendingSettingId_: {
+        type: Number,
+        value: null,
+      },
+
+      /**
+       * Used by DeepLinkingBehavior to focus this page's deep links.
+       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       */
+      supportedSettingIds: {
+        type: Object,
+        value: () => new Set([
+          chromeos.settings.mojom.Setting.kDisplaySize,
+          chromeos.settings.mojom.Setting.kNightLight,
+          chromeos.settings.mojom.Setting.kDisplayOrientation,
+          chromeos.settings.mojom.Setting.kDisplayArrangement,
+          chromeos.settings.mojom.Setting.kDisplayResolution,
+          chromeos.settings.mojom.Setting.kDisplayRefreshRate,
+          chromeos.settings.mojom.Setting.kDisplayMirroring,
+          chromeos.settings.mojom.Setting.kAllowWindowsToSpanDisplays,
+          chromeos.settings.mojom.Setting.kAmbientColors,
+          chromeos.settings.mojom.Setting.kTouchscreenCalibration,
+          chromeos.settings.mojom.Setting.kNightLightColorTemperature,
+          chromeos.settings.mojom.Setting.kDisplayOverscan,
+        ]),
+      },
     },
 
     observers: [
@@ -302,6 +335,23 @@ cr.define('settings.display', function() {
     },
 
     /**
+     * Overridden from DeepLinkingBehavior.
+     * @param {!chromeos.settings.mojom.Setting} settingId
+     * @return {boolean}
+     */
+    beforeDeepLinkAttempt(settingId) {
+      if (!this.displays) {
+        // On initial page load, displays will not be loaded and deep link
+        // attempt will fail. Suppress warnings by exiting early and try again
+        // in updateDisplayInfo_.
+        return false;
+      }
+
+      // Continue with deep link attempt.
+      return true;
+    },
+
+    /**
      * @param {!settings.Route|undefined} opt_newRoute
      * @param {!settings.Route|undefined} opt_oldRoute
      */
@@ -319,12 +369,19 @@ cr.define('settings.display', function() {
         return;
       }
 
-      // When navigating back into the display page, re-select a display.
-      if (this.selectedDisplay && opt_newRoute == settings.routes.DISPLAY &&
-          opt_oldRoute != settings.routes.DISPLAY) {
-        // setSelectedDisplay_ doesn't trigger again if it is not reattaching.
-        this.browserProxy_.highlightDisplay(this.selectedDisplay.id);
+      // Does not apply to this page.
+      if (opt_newRoute !== settings.routes.DISPLAY) {
+        this.pendingSettingId_ = null;
+        return;
       }
+
+      this.attemptDeepLink().then(result => {
+        if (!result.deepLinkShown && result.pendingSettingId) {
+          // Store any deep link settingId that wasn't shown so we can try again
+          // in updateDisplayInfo_.
+          this.pendingSettingId_ = result.pendingSettingId;
+        }
+      });
     },
 
     /**
@@ -516,6 +573,15 @@ cr.define('settings.display', function() {
           modes.get(mode.width).set(mode.height, new Map());
         }
 
+        // Prefer the first native mode we find, for consistency.
+        if (modes.get(mode.width).get(mode.height).has(mode.refreshRate)) {
+          const existingModeIndex =
+              modes.get(mode.width).get(mode.height).get(mode.refreshRate);
+          const existingMode = selectedDisplay.modes[existingModeIndex];
+          if (existingMode.isNative || !mode.isNative) {
+            continue;
+          }
+        }
         modes.get(mode.width).get(mode.height).set(mode.refreshRate, i);
       }
       return modes;
@@ -555,8 +621,8 @@ cr.define('settings.display', function() {
           // (resolution) is the default and therefore the "parent" mode.
           const height = heightArr[j];
           const refreshRates = heightsMap.get(height);
-
-          this.addResolution_(width, height, refreshRates);
+          const parentModeIndex = this.getParentModeIndex_(refreshRates);
+          this.addResolution_(parentModeIndex, width, height);
 
           // For each of the refresh rates at a given resolution, add an entry
           // to |parentModeToRefreshRateMap_|. This allows us to retrieve a
@@ -564,7 +630,6 @@ cr.define('settings.display', function() {
           // parentModeIndex.
           const refreshRatesArr = Array.from(refreshRates.keys());
           for (let k = 0; k < refreshRatesArr.length; k++) {
-            const parentModeIndex = Array.from(refreshRates.values())[0];
             const rate = refreshRatesArr[k];
             const modeIndex = refreshRates.get(rate);
             const isInterlaced = selectedDisplay.modes[modeIndex].isInterlaced;
@@ -575,25 +640,44 @@ cr.define('settings.display', function() {
         }
       }
 
+      // Construct mode->parentMode map so we can get parent modes later.
+      for (let i = 0; i < selectedDisplay.modes.length; i++) {
+        const mode = selectedDisplay.modes[i];
+        const parentModeIndex =
+            this.getParentModeIndex_(modes.get(mode.width).get(mode.height));
+        this.modeToParentModeMap_.set(i, parentModeIndex);
+      }
+      assert(this.modeToParentModeMap_.size == selectedDisplay.modes.length);
+
       // Use the new sort order.
       this.sortResolutionList_();
     },
 
     /**
-     * Adds a an entry in |displayModeList_| for the resolution represented by
-     * |width| and |height| and possible |refreshRates|.
-     * @param {number} width
-     * @param {number} height
-     * @param {Map<number,number>} refreshRates each possible refresh rate for
-     *   the resolution mapped to the corresponding modeIndex.
+     * Picks the appropriate parent mode from a refresh rate -> mode index map.
+     * Currently this chooses the mode with the highest refresh rate.
+     * @param {Map<number,number>} refreshRates each possible refresh rate
+     *   mapped to the corresponding mode index.
      * @private
      */
-    addResolution_(width, height, refreshRates) {
+    getParentModeIndex_(refreshRates) {
+      const maxRefreshRate = Math.max(...refreshRates.keys());
+      return refreshRates.get(maxRefreshRate);
+    },
+
+    /**
+     * Adds a an entry in |displayModeList_| for the resolution represented by
+     * |width| and |height| and possible |refreshRates|.
+     * @param {number} parentModeIndex
+     * @param {number} width
+     * @param {number} height
+     * @private
+     */
+    addResolution_(parentModeIndex, width, height) {
       assert(this.listAllDisplayModes_);
-      const parentModeIndex = Array.from(refreshRates.values())[0];
 
       // Add an entry in the outer map for |parentModeIndex|. The inner
-      // array (the value at |parentModeIndex) will be populated with all
+      // array (the value at |parentModeIndex|) will be populated with all
       // possible refresh rates for the given resolution.
       this.parentModeToRefreshRateMap_.set(parentModeIndex, new Array());
 
@@ -619,9 +703,6 @@ cr.define('settings.display', function() {
      */
     addRefreshRate_(parentModeIndex, modeIndex, rate, isInterlaced) {
       assert(this.listAllDisplayModes_);
-      // Maintain a mapping from a given |modeIndex| back to the
-      // corresponding |parentModeIndex|.
-      this.modeToParentModeMap_.set(modeIndex, parentModeIndex);
 
       // Truncate at two decimal places for display. If the refresh rate
       // is a whole number, remove the mantissa.
@@ -742,12 +823,6 @@ cr.define('settings.display', function() {
       this.set(
           'selectedZoomPref_.value',
           this.getSelectedDisplayZoom_(selectedDisplay));
-
-      if (this.allowDisplayIdentificationApi_ &&
-          this.selectedDisplay != selectedDisplay &&
-          this.currentRoute_ == settings.routes.DISPLAY) {
-        this.browserProxy_.highlightDisplay(selectedDisplay.id);
-      }
 
       this.updateDisplayModeStructures_(selectedDisplay);
 
@@ -1352,6 +1427,17 @@ cr.define('settings.display', function() {
       this.setSelectedDisplay_(selectedDisplay);
 
       this.unifiedDesktopMode_ = !!primaryDisplay && primaryDisplay.isUnified;
+
+      // Check if we have yet to focus a deep-linked element.
+      if (!this.pendingSettingId_) {
+        return;
+      }
+
+      this.showDeepLink(this.pendingSettingId_).then(result => {
+        if (result.deepLinkShown) {
+          this.pendingSettingId_ = null;
+        }
+      });
     },
 
     /** @private */

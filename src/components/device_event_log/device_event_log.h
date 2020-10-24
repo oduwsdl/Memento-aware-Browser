@@ -65,6 +65,12 @@
 #define PRINTER_LOG(level)                         \
   DEVICE_LOG(::device_event_log::LOG_TYPE_PRINTER, \
              ::device_event_log::LOG_LEVEL_##level)
+#define SERIAL_LOG(level)                         \
+  DEVICE_LOG(::device_event_log::LOG_TYPE_SERIAL, \
+             ::device_event_log::LOG_LEVEL_##level)
+#define SERIAL_PLOG(level)                         \
+  DEVICE_PLOG(::device_event_log::LOG_TYPE_SERIAL, \
+              ::device_event_log::LOG_LEVEL_##level)
 
 #if defined(OS_ANDROID) && defined(OFFICIAL_BUILD)
 // FIDO_LOG is discarded for release Android builds in order to reduce binary
@@ -80,7 +86,8 @@
 
 #define DEVICE_LOG(type, level)                                            \
   ::device_event_log::internal::DeviceEventLogInstance(__FILE__, __LINE__, \
-                                                       type, level).stream()
+                                                       type, level)        \
+      .stream()
 #define DEVICE_PLOG(type, level)                                            \
   ::device_event_log::internal::DeviceEventSystemErrorLogInstance(          \
       __FILE__, __LINE__, type, level, ::logging::GetLastSystemErrorCode()) \
@@ -120,8 +127,10 @@ enum LogType {
   LOG_TYPE_PRINTER = 7,
   // Security key events.
   LOG_TYPE_FIDO = 8,
+  // Serial port related events (i.e. services/device/serial).
+  LOG_TYPE_SERIAL = 9,
   // Used internally, must be the last type (may be changed).
-  LOG_TYPE_UNKNOWN = 9
+  LOG_TYPE_UNKNOWN = 10
 };
 
 // Used to specify the detail level for logging. In GetAsString, used to
@@ -191,6 +200,8 @@ void DEVICE_EVENT_LOG_EXPORT Clear(const base::Time& begin,
                                    const base::Time& end);
 
 DEVICE_EVENT_LOG_EXPORT extern const LogLevel kDefaultLogLevel;
+
+int DEVICE_EVENT_LOG_EXPORT GetCountByLevelForTesting(LogLevel level);
 
 namespace internal {
 

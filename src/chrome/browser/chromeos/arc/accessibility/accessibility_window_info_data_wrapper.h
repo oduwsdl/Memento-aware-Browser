@@ -31,11 +31,13 @@ class AccessibilityWindowInfoDataWrapper : public AccessibilityInfoDataWrapper {
   bool IsVisibleToUser() const override;
   bool IsVirtualNode() const override;
   bool IsIgnored() const override;
+  bool IsImportantInAndroid() const override;
   bool CanBeAccessibilityFocused() const override;
   bool IsAccessibilityFocusableContainer() const override;
   void PopulateAXRole(ui::AXNodeData* out_data) const override;
   void PopulateAXState(ui::AXNodeData* out_data) const override;
   void Serialize(ui::AXNodeData* out_data) const override;
+  std::string ComputeAXName(bool do_recursive) const override;
   void GetChildren(
       std::vector<AccessibilityInfoDataWrapper*>* children) const override;
 

@@ -8,7 +8,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "build/build_config.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/form_parsing/form_parser.h"
@@ -17,6 +16,7 @@
 #include "components/password_manager/core/browser/leak_detection_delegate_helper.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/browser/password_feature_manager.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -46,7 +46,7 @@ LeakDetectionDelegate::LeakDetectionDelegate(PasswordManagerClient* client)
 
 LeakDetectionDelegate::~LeakDetectionDelegate() = default;
 
-void LeakDetectionDelegate::StartLeakCheck(const autofill::PasswordForm& form) {
+void LeakDetectionDelegate::StartLeakCheck(const PasswordForm& form) {
   if (client_->IsIncognito())
     return;
 
@@ -86,7 +86,7 @@ void LeakDetectionDelegate::OnLeakDetectionDone(bool is_leaked,
     // Otherwise query the helper to asynchronously determine the
     // |CredentialLeakType|.
     helper_ = std::make_unique<LeakDetectionDelegateHelper>(
-        client_->GetProfilePasswordStore(),
+        client_->GetProfilePasswordStore(), client_->GetAccountPasswordStore(),
         base::BindOnce(&LeakDetectionDelegate::OnShowLeakDetectionNotification,
                        base::Unretained(this)));
     helper_->ProcessLeakedPassword(std::move(url), std::move(username),
@@ -98,7 +98,8 @@ void LeakDetectionDelegate::OnShowLeakDetectionNotification(
     IsSaved is_saved,
     IsReused is_reused,
     GURL url,
-    base::string16 username) {
+    base::string16 username,
+    CompromisedSitesCount saved_sites) {
   bool force_dialog_for_testing = base::GetFieldTrialParamByFeatureAsBool(
       password_manager::features::kPasswordChange,
       password_manager::features::
@@ -111,7 +112,8 @@ void LeakDetectionDelegate::OnShowLeakDetectionNotification(
         CreateLeakType(is_saved, IsReused(false),
                        IsSyncing(client_->GetPasswordSyncState() ==
                                  SYNCING_NORMAL_ENCRYPTION));
-    client_->NotifyUserCredentialsWereLeaked(leak_type, url, username);
+    client_->NotifyUserCredentialsWereLeaked(leak_type, saved_sites, url,
+                                             username);
     return;
   }
 
@@ -128,7 +130,8 @@ void LeakDetectionDelegate::OnShowLeakDetectionNotification(
                             IsPasswordUsedOnOtherSites(leak_type));
   base::UmaHistogramBoolean("PasswordManager.LeakDetection.IsSyncing",
                             IsSyncingPasswordsNormally(leak_type));
-  client_->NotifyUserCredentialsWereLeaked(leak_type, url, username);
+  client_->NotifyUserCredentialsWereLeaked(leak_type, saved_sites, url,
+                                           username);
 }
 
 void LeakDetectionDelegate::OnError(LeakDetectionError error) {

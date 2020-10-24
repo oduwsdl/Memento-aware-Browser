@@ -218,6 +218,8 @@ DeskPreviewView::DeskPreviewView(DeskMiniView* mini_view)
 
   SetFocusPainter(nullptr);
   SetInkDropMode(InkDropMode::OFF);
+  DCHECK_EQ(views::View::FocusBehavior::ACCESSIBLE_ONLY, GetFocusBehavior());
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
 
   SetPaintToLayer(ui::LAYER_TEXTURED);
   layer()->SetFillsBoundsOpaquely(false);
@@ -271,7 +273,7 @@ void DeskPreviewView::OnRemovingDesk() {
   // Since the mini view has a remove animation, we don't want this desk preview
   // to be pressed while it's animating. The desk will have already be removed
   // after this.
-  listener_ = nullptr;
+  SetCallback(views::Button::PressedCallback());
 }
 
 void DeskPreviewView::RecreateDeskContentsMirrorLayers() {

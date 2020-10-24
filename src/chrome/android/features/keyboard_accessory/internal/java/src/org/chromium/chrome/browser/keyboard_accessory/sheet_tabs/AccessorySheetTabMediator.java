@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.keyboard_accessory.sheet_tabs;
 
 import androidx.annotation.CallSuper;
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.keyboard_accessory.AccessoryAction;
@@ -24,8 +25,6 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.annotation.Nullable;
-
 /**
  * This class contains the logic for the simple accessory sheets. Changes to its internal
  * {@link PropertyModel} are observed by a {@link PropertyModelChangeProcessor} and affect the
@@ -40,6 +39,9 @@ class AccessorySheetTabMediator implements Provider.Observer<AccessorySheetData>
 
     /**
      * Can be used to handle changes coming from the {@link OptionToggle}.
+     *
+     * TODO(crbug.com/1099301): Remove the interface and the delegate field from this class and
+     * handle the toggle changes via the PasswordAccessorySheetMediator.
      */
     public interface ToggleChangeDelegate {
         /**

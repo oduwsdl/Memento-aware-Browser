@@ -362,7 +362,7 @@ cursors.Cursor = class {
             }
             let start, end;
             for (let i = 0; i < wordStarts.length; i++) {
-              if (newIndex >= wordStarts[i] && newIndex <= wordEnds[i]) {
+              if (newIndex >= wordStarts[i] && newIndex < wordEnds[i]) {
                 start = wordStarts[i];
                 end = wordEnds[i];
                 break;
@@ -384,10 +384,12 @@ cursors.Cursor = class {
             }
             // Go to the next word stop in the same piece of text.
             for (let i = 0; i < wordStarts.length; i++) {
-              if (newIndex >= wordStarts[i] && newIndex <= wordEnds[i]) {
-                const nextIndex = dir == Dir.FORWARD ? i + 1 : i - 1;
-                start = wordStarts[nextIndex];
-                break;
+              if ((dir == Dir.FORWARD && newIndex < wordStarts[i]) ||
+                  (dir == Dir.BACKWARD && newIndex >= wordEnds[i])) {
+                start = wordStarts[i];
+                if (dir == Dir.FORWARD) {
+                  break;
+                }
               }
             }
             if (goog.isDef(start)) {
@@ -435,7 +437,6 @@ cursors.Cursor = class {
         }
         break;
       case cursors.Unit.LINE:
-        newIndex = 0;
         switch (movement) {
           case cursors.Movement.BOUND:
             newNode = AutomationUtil.findNodeUntil(
@@ -447,6 +448,9 @@ cursors.Cursor = class {
           case cursors.Movement.DIRECTIONAL:
             newNode = AutomationUtil.findNodeUntil(
                 newNode, dir, AutomationPredicate.linebreak);
+            if (newNode) {
+              newIndex = 0;
+            }
             break;
         }
         break;
@@ -454,7 +458,7 @@ cursors.Cursor = class {
         throw Error('Unrecognized unit: ' + unit);
     }
     newNode = newNode || originalNode;
-    newIndex = goog.isDef(newIndex) ? newIndex : this.index_;
+    newIndex = (newIndex !== undefined) ? newIndex : this.index_;
     return new cursors.Cursor(newNode, newIndex);
   }
 
@@ -560,7 +564,7 @@ cursors.Cursor = class {
       newIndex = cursors.NODE_INDEX;
     }
 
-    return new cursors.Cursor(newNode, newIndex);
+    return new this.constructor(newNode, newIndex);
   }
 
   /**

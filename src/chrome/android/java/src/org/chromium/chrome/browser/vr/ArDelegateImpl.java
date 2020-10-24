@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.vr;
 
-import android.app.Activity;
-
 import org.chromium.base.annotations.UsedByReflection;
 
 /**
@@ -19,12 +17,7 @@ public class ArDelegateImpl implements ArDelegate {
 
     @Override
     public void init() {
-        ArCoreInstallUtils.installArCoreDeviceProviderFactory();
-    }
-
-    @Override
-    public void registerOnResumeActivity(Activity activity) {
-        ArCoreInstallUtils.onResumeActivityWithNative(activity);
+        ArCoreDeviceUtils.installArCoreDeviceProviderFactory();
     }
 
     @Override

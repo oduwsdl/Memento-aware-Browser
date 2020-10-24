@@ -26,8 +26,8 @@ class TestPermissionRequestOwner {
     bool user_gesture = true;
     auto decided = [](ContentSetting) {};
     request_ = std::make_unique<permissions::PermissionRequestImpl>(
-        GURL("https://embedder_example.test"), GURL("https://example.com"), type,
-        user_gesture, base::BindOnce(decided),
+        GURL("https://example.com"), type, user_gesture,
+        base::BindOnce(decided),
         base::BindOnce(&TestPermissionRequestOwner::DeleteThis,
                        base::Unretained(this)));
   }
@@ -55,10 +55,11 @@ PermissionRequestManagerTestApi::PermissionRequestManagerTestApi(
               browser->tab_strip_model()->GetActiveWebContents())) {}
 
 void PermissionRequestManagerTestApi::AddSimpleRequest(
+    content::RenderFrameHost* source_frame,
     ContentSettingsType type) {
   TestPermissionRequestOwner* request_owner =
       new TestPermissionRequestOwner(type);
-  manager_->AddRequest(request_owner->request());
+  manager_->AddRequest(source_frame, request_owner->request());
 }
 
 views::Widget* PermissionRequestManagerTestApi::GetPromptWindow() {

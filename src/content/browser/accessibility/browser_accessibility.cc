@@ -90,6 +90,9 @@ int GetBoundaryTextOffsetInsideBaseAnchor(
   // If the position is outside the anchor of the base position, then return
   // the first or last position in the same direction.
   switch (direction) {
+    case ax::mojom::MoveDirection::kNone:
+      NOTREACHED();
+      return position->text_offset();
     case ax::mojom::MoveDirection::kBackward:
       return base->CreatePositionAtStartOfAnchor()->text_offset();
     case ax::mojom::MoveDirection::kForward:
@@ -112,10 +115,6 @@ bool BrowserAccessibility::PlatformIsLeaf() const {
   return IsLeaf();
 }
 
-bool BrowserAccessibility::PlatformIsLeafIncludingIgnored() const {
-  return node()->IsLeafIncludingIgnored();
-}
-
 bool BrowserAccessibility::CanFireEvents() const {
   // Allow events unless this object would be trimmed away.
   return !IsChildOfLeaf();
@@ -128,13 +127,9 @@ ui::AXPlatformNode* BrowserAccessibility::GetAXPlatformNode() const {
 }
 
 uint32_t BrowserAccessibility::PlatformChildCount() const {
-  if (HasStringAttribute(ax::mojom::StringAttribute::kChildTreeId)) {
-    if (PlatformGetRootOfChildTree())
-      return 1;
+  if (PlatformIsLeaf())
     return 0;
-  }
-
-  return PlatformIsLeaf() ? 0 : InternalChildCount();
+  return PlatformGetRootOfChildTree() ? 1 : InternalChildCount();
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetParent() const {
@@ -150,10 +145,8 @@ BrowserAccessibility* BrowserAccessibility::PlatformGetFirstChild() const {
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetLastChild() const {
-  BrowserAccessibility* last_unignored_child = InternalGetLastChild();
-  if (!last_unignored_child)
-    last_unignored_child = PlatformGetRootOfChildTree();
-  return last_unignored_child;
+  BrowserAccessibility* child_tree_root = PlatformGetRootOfChildTree();
+  return child_tree_root ? child_tree_root : InternalGetLastChild();
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetNextSibling() const {
@@ -207,30 +200,18 @@ bool BrowserAccessibility::IsIgnored() const {
   return node()->IsIgnored();
 }
 
-bool BrowserAccessibility::IsTextOnlyObject() const {
-  return node()->IsText();
-}
-
 bool BrowserAccessibility::IsLineBreakObject() const {
   return node()->IsLineBreak();
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetChild(
     uint32_t child_index) const {
-  BrowserAccessibility* result = nullptr;
-
-  if (HasStringAttribute(ax::mojom::StringAttribute::kChildTreeId)) {
-    DCHECK_EQ(node_->children().size(), 0u)
-        << "A node should not have both children and a child tree.";
-
-    // child_trees do not have siblings.
-    if (child_index == 0)
-      result = PlatformGetRootOfChildTree();
-  } else {
-    result = InternalGetChild(child_index);
+  BrowserAccessibility* child_tree_root = PlatformGetRootOfChildTree();
+  if (child_tree_root) {
+    // A node with a child tree has only one child.
+    return child_index ? nullptr : child_tree_root;
   }
-
-  return result;
+  return InternalGetChild(child_index);
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetClosestPlatformObject()
@@ -556,11 +537,11 @@ gfx::Rect BrowserAccessibility::GetRootFrameHypertextRangeBoundsRect(
       // Child objects are of length one, since they are represented by a single
       // embedded object character. The exception is text-only objects.
       int child_length_in_parent = 1;
-      if (child->IsTextOnlyObject())
+      if (child->IsText())
         child_length_in_parent = static_cast<int>(child->GetHypertext().size());
       if (start < child_length_in_parent) {
         gfx::Rect child_rect;
-        if (child->IsTextOnlyObject()) {
+        if (child->IsText()) {
           child_rect = child->GetRootFrameHypertextRangeBoundsRect(
               start, len, clipping_behavior, offscreen_result);
         } else {
@@ -668,25 +649,25 @@ gfx::Rect BrowserAccessibility::GetRootFrameHypertextBoundsPastEndOfText(
   }
 
   // Step 2: correct for the thickness of the caret.
-  auto text_direction = static_cast<ax::mojom::TextDirection>(
+  auto text_direction = static_cast<ax::mojom::WritingDirection>(
       GetIntAttribute(ax::mojom::IntAttribute::kTextDirection));
   constexpr int kCaretThickness = 1;
   switch (text_direction) {
-    case ax::mojom::TextDirection::kNone:
-    case ax::mojom::TextDirection::kLtr: {
+    case ax::mojom::WritingDirection::kNone:
+    case ax::mojom::WritingDirection::kLtr: {
       bounds.set_width(kCaretThickness);
       break;
     }
-    case ax::mojom::TextDirection::kRtl: {
+    case ax::mojom::WritingDirection::kRtl: {
       bounds.set_x(bounds.right() - kCaretThickness);
       bounds.set_width(kCaretThickness);
       break;
     }
-    case ax::mojom::TextDirection::kTtb: {
+    case ax::mojom::WritingDirection::kTtb: {
       bounds.set_height(kCaretThickness);
       break;
     }
-    case ax::mojom::TextDirection::kBtt: {
+    case ax::mojom::WritingDirection::kBtt: {
       bounds.set_y(bounds.bottom() - kCaretThickness);
       bounds.set_height(kCaretThickness);
       break;
@@ -719,12 +700,6 @@ gfx::Rect BrowserAccessibility::GetInnerTextRangeBoundsRectInSubtree(
     ui::AXOffscreenResult* offscreen_result) const {
   if (GetRole() == ax::mojom::Role::kInlineTextBox) {
     return RelativeToAbsoluteBounds(
-        GetInlineTextRect(start_offset, end_offset, GetInnerText().length()),
-        coordinate_system, clipping_behavior, offscreen_result);
-  }
-
-  if (IsPlainTextField() && InternalChildCount() == 1) {
-    return GetTextContainerForPlainTextField(*this)->RelativeToAbsoluteBounds(
         GetInlineTextRect(start_offset, end_offset, GetInnerText().length()),
         coordinate_system, clipping_behavior, offscreen_result);
   }
@@ -795,25 +770,25 @@ gfx::RectF BrowserAccessibility::GetInlineTextRect(const int start_offset,
   const int location_height = location.height();
 
   gfx::RectF bounds;
-  switch (static_cast<ax::mojom::TextDirection>(
+  switch (static_cast<ax::mojom::WritingDirection>(
       GetIntAttribute(ax::mojom::IntAttribute::kTextDirection))) {
-    case ax::mojom::TextDirection::kNone:
-    case ax::mojom::TextDirection::kLtr:
+    case ax::mojom::WritingDirection::kNone:
+    case ax::mojom::WritingDirection::kLtr:
       bounds =
           gfx::RectF(start_pixel_offset, 0,
                      end_pixel_offset - start_pixel_offset, location_height);
       break;
-    case ax::mojom::TextDirection::kRtl: {
+    case ax::mojom::WritingDirection::kRtl: {
       const int left = max_pixel_offset - end_pixel_offset;
       const int right = max_pixel_offset - start_pixel_offset;
       bounds = gfx::RectF(left, 0, right - left, location_height);
       break;
     }
-    case ax::mojom::TextDirection::kTtb:
+    case ax::mojom::WritingDirection::kTtb:
       bounds = gfx::RectF(0, start_pixel_offset, location_width,
                           end_pixel_offset - start_pixel_offset);
       break;
-    case ax::mojom::TextDirection::kBtt: {
+    case ax::mojom::WritingDirection::kBtt: {
       const int top = max_pixel_offset - end_pixel_offset;
       const int bottom = max_pixel_offset - start_pixel_offset;
       bounds = gfx::RectF(0, top, location_width, bottom - top);
@@ -822,17 +797,6 @@ gfx::RectF BrowserAccessibility::GetInlineTextRect(const int start_offset,
   }
 
   return bounds;
-}
-
-base::string16 BrowserAccessibility::GetValue() const {
-  base::string16 value =
-      GetString16Attribute(ax::mojom::StringAttribute::kValue);
-  // Some screen readers like Jaws and VoiceOver require a value to be set in
-  // text fields with rich content, even though the same information is
-  // available on the children.
-  if (value.empty() && IsRichTextField())
-    return BrowserAccessibility::GetInnerText();
-  return value;
 }
 
 BrowserAccessibility* BrowserAccessibility::ApproximateHitTest(
@@ -1044,30 +1008,6 @@ bool BrowserAccessibility::HasExplicitlyEmptyName() const {
          ax::mojom::NameFrom::kAttributeExplicitlyEmpty;
 }
 
-std::string BrowserAccessibility::ComputeAccessibleNameFromDescendants() const {
-  std::string name;
-  for (InternalChildIterator it = InternalChildrenBegin();
-       it != InternalChildrenEnd(); ++it) {
-    const BrowserAccessibility* child = it.get();
-    std::string child_name;
-    if (child->GetStringAttribute(ax::mojom::StringAttribute::kName,
-                                  &child_name)) {
-      if (!name.empty())
-        name += " ";
-      name += child_name;
-    } else if (!child->HasState(ax::mojom::State::kFocusable)) {
-      child_name = child->ComputeAccessibleNameFromDescendants();
-      if (!child_name.empty()) {
-        if (!name.empty())
-          name += " ";
-        name += child_name;
-      }
-    }
-  }
-
-  return name;
-}
-
 std::string BrowserAccessibility::GetLiveRegionText() const {
   if (IsIgnored())
     return "";
@@ -1148,6 +1088,10 @@ base::string16 BrowserAccessibility::GetInnerText() const {
   return base::UTF8ToUTF16(node()->GetInnerText());
 }
 
+base::string16 BrowserAccessibility::GetValueForControl() const {
+  return base::UTF8ToUTF16(node()->GetValueForControl());
+}
+
 gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
     gfx::RectF bounds,
     const ui::AXCoordinateSystem coordinate_system,
@@ -1226,6 +1170,10 @@ bool BrowserAccessibility::IsOffscreen() const {
 
 bool BrowserAccessibility::IsMinimized() const {
   return false;
+}
+
+bool BrowserAccessibility::IsText() const {
+  return node()->IsText();
 }
 
 bool BrowserAccessibility::IsWebContent() const {
@@ -1370,6 +1318,7 @@ base::Optional<int> BrowserAccessibility::FindTextBoundary(
   // On Windows and Linux ATK, it is standard text navigation behavior to stop
   // if we are searching in the backwards direction and the current position is
   // already at the required text boundary.
+  DCHECK_NE(direction, ax::mojom::MoveDirection::kNone);
   if (direction == ax::mojom::MoveDirection::kBackward)
     boundary_behavior = ui::AXBoundaryBehavior::StopIfAlreadyAtBoundary;
 
@@ -1500,6 +1449,10 @@ gfx::NativeViewAccessible BrowserAccessibility::ChildAtIndex(int index) {
   return child->GetNativeViewAccessible();
 }
 
+bool BrowserAccessibility::HasModalDialog() const {
+  return false;
+}
+
 gfx::NativeViewAccessible BrowserAccessibility::GetFirstChild() {
   BrowserAccessibility* child = PlatformGetFirstChild();
   if (!child)
@@ -1549,15 +1502,19 @@ bool BrowserAccessibility::IsLeaf() const {
   // children. The only exception to enforce leafiness is when the button has
   // a single text child and to prevent screen readers from double speak.
   if (GetRole() == ax::mojom::Role::kButton) {
-    return InternalChildCount() == 1 &&
-           InternalGetFirstChild()->IsTextOnlyObject();
+    uint32_t child_count = InternalChildCount();
+    return !child_count ||
+           (child_count == 1 && InternalGetFirstChild()->IsText());
   }
-  return node()->IsLeaf();
+  return PlatformGetRootOfChildTree() ? false : node()->IsLeaf();
 }
 
-bool BrowserAccessibility::IsChildOfPlainTextField() const {
-  ui::AXNode* textfield_node = node()->GetTextFieldAncestor();
-  return textfield_node && textfield_node->data().IsPlainTextField();
+bool BrowserAccessibility::IsToplevelBrowserWindow() {
+  return false;
+}
+
+bool BrowserAccessibility::IsDescendantOfPlainTextField() const {
+  return node()->IsDescendantOfPlainTextField();
 }
 
 gfx::NativeViewAccessible BrowserAccessibility::GetClosestPlatformObject()
@@ -2123,8 +2080,14 @@ BrowserAccessibility::GetCollapsedMenuListPopUpButtonAncestor() const {
   ui::AXNode* popup_button = node()->GetCollapsedMenuListPopUpButtonAncestor();
   if (!popup_button)
     return nullptr;
-
   return manager()->GetFromAXNode(popup_button);
+}
+
+BrowserAccessibility* BrowserAccessibility::GetTextFieldAncestor() const {
+  ui::AXNode* text_field_ancestor = node()->GetTextFieldAncestor();
+  if (!text_field_ancestor)
+    return nullptr;
+  return manager()->GetFromAXNode(text_field_ancestor);
 }
 
 std::string BrowserAccessibility::ToString() const {
@@ -2140,15 +2103,18 @@ bool BrowserAccessibility::SetHypertextSelection(int start_offset,
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetRootOfChildTree() const {
-  if (!HasStringAttribute(ax::mojom::StringAttribute::kChildTreeId))
+  std::string child_tree_id;
+  if (!GetStringAttribute(ax::mojom::StringAttribute::kChildTreeId,
+                          &child_tree_id)) {
     return nullptr;
-  AXTreeID child_tree_id = AXTreeID::FromString(
-      GetStringAttribute(ax::mojom::StringAttribute::kChildTreeId));
+  }
+  DCHECK_EQ(node_->children().size(), 0u)
+      << "A node should not have both children and a child tree.";
+
   BrowserAccessibilityManager* child_manager =
-      BrowserAccessibilityManager::FromID(child_tree_id);
+      BrowserAccessibilityManager::FromID(AXTreeID::FromString(child_tree_id));
   if (child_manager && child_manager->GetRoot()->PlatformGetParent() == this)
     return child_manager->GetRoot();
-
   return nullptr;
 }
 
@@ -2163,7 +2129,7 @@ std::string BrowserAccessibility::GetInheritedFontFamilyName() const {
 ui::TextAttributeMap BrowserAccessibility::GetSpellingAndGrammarAttributes()
     const {
   ui::TextAttributeMap spelling_attributes;
-  if (IsTextOnlyObject()) {
+  if (IsText()) {
     const std::vector<int32_t>& marker_types =
         GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerTypes);
     const std::vector<int>& marker_starts =
@@ -2263,6 +2229,8 @@ ui::TextAttributeMap BrowserAccessibility::ComputeTextAttributeMap(
     return attributes_map;
   }
 
+  DCHECK(PlatformChildCount());
+
   int start_offset = 0;
   for (BrowserAccessibility::PlatformChildIterator it = PlatformChildrenBegin();
        it != PlatformChildrenEnd(); ++it) {
@@ -2286,7 +2254,7 @@ ui::TextAttributeMap BrowserAccessibility::ComputeTextAttributeMap(
       }
     }
 
-    if (child->IsTextOnlyObject()) {
+    if (child->IsText()) {
       const ui::TextAttributeMap spelling_attributes =
           child->GetSpellingAndGrammarAttributes();
       MergeSpellingAndGrammarIntoTextAttributes(spelling_attributes,

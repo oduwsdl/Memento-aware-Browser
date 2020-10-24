@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/test/pixel_test_utils.h"
 #include "components/viz/common/features.h"
 #include "content/browser/media/capture/content_capture_device_browsertest_base.h"
@@ -400,8 +401,15 @@ INSTANTIATE_TEST_SUITE_P(
 // whether the browser is running with software compositing or GPU-accelerated
 // compositing, whether the WebContents is visible/hidden or occluded/unoccluded
 // and whether the main document contains a cross-site iframe.
+
+// Fails on LACROS for Chrome OS and linux. http://crbug.com/1108205
+#if BUILDFLAG(IS_LACROS) || defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_CapturesContentChanges DISABLED_CapturesContentChanges
+#else
+#define MAYBE_CapturesContentChanges CapturesContentChanges
+#endif
 IN_PROC_BROWSER_TEST_P(WebContentsVideoCaptureDeviceBrowserTestP,
-                       CapturesContentChanges) {
+                       MAYBE_CapturesContentChanges) {
   SCOPED_TRACE(testing::Message()
                << "Test parameters: "
                << (IsSoftwareCompositingTest() ? "Software Compositing"

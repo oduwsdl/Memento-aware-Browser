@@ -107,6 +107,7 @@ function fireSafetyCheckChromeCleanerEvent(state) {
  *   buttonAriaLabel: (string|undefined),
  *   buttonClass: (string|undefined),
  *   managedIcon: (boolean|undefined),
+ *   rowClickable: (boolean|undefined),
  * }} destructured1
  */
 function assertSafetyCheckChild({
@@ -116,7 +117,8 @@ function assertSafetyCheckChild({
   buttonLabel,
   buttonAriaLabel,
   buttonClass,
-  managedIcon
+  managedIcon,
+  rowClickable
 }) {
   const safetyCheckChild = page.$$('#safetyCheckChild');
   assertTrue(safetyCheckChild.iconStatus === iconStatus);
@@ -127,6 +129,7 @@ function assertSafetyCheckChild({
       !buttonAriaLabel || safetyCheckChild.buttonAriaLabel === buttonAriaLabel);
   assertTrue(!buttonClass || safetyCheckChild.buttonClass === buttonClass);
   assertTrue(!!managedIcon === !!safetyCheckChild.managedIcon);
+  assertTrue(!!rowClickable === !!safetyCheckChild.rowClickable);
 }
 
 /** @implements {SafetyCheckBrowserProxy} */
@@ -210,6 +213,14 @@ suite('SafetyCheckPageUiTests', function() {
     // Ensure the browser proxy call is done.
     await safetyCheckBrowserProxy.whenCalled('runSafetyCheck');
 
+    // Mock all incoming messages that indicate safety check is running.
+    fireSafetyCheckUpdatesEvent(SafetyCheckUpdatesStatus.CHECKING);
+    fireSafetyCheckPasswordsEvent(SafetyCheckPasswordsStatus.CHECKING);
+    fireSafetyCheckSafeBrowsingEvent(SafetyCheckSafeBrowsingStatus.CHECKING);
+    fireSafetyCheckExtensionsEvent(SafetyCheckExtensionsStatus.CHECKING);
+    fireSafetyCheckChromeCleanerEvent(SafetyCheckChromeCleanerStatus.CHECKING);
+    fireSafetyCheckParentEvent(SafetyCheckParentStatus.CHECKING);
+
     flush();
     // Only the icon button is present.
     assertFalse(!!page.$$('#safetyCheckParentButton'));
@@ -224,8 +235,7 @@ suite('SafetyCheckPageUiTests', function() {
         SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD);
     fireSafetyCheckExtensionsEvent(
         SafetyCheckExtensionsStatus.NO_BLOCKLISTED_EXTENSIONS);
-    fireSafetyCheckChromeCleanerEvent(
-        SafetyCheckChromeCleanerStatus.REPORTER_FOUND_NOTHING);
+    fireSafetyCheckChromeCleanerEvent(SafetyCheckChromeCleanerStatus.INFECTED);
     fireSafetyCheckParentEvent(SafetyCheckParentStatus.AFTER);
 
     flush();
@@ -362,6 +372,30 @@ suite('SafetyCheckChildTests', function() {
   test('testNoManagedIcon', function() {
     // Managed icon not set -> no managed icon.
     assertFalse(!!page.$$('#managedIcon'));
+  });
+
+  test('testRowClickableIndicator', function() {
+    page.rowClickable = true;
+    flush();
+    assertTrue(!!page.$$('#rowClickableIndicator'));
+    assertEquals(
+        'cr:arrow-right',
+        page.$$('#rowClickableIndicator').getAttribute('iron-icon'));
+  });
+
+  test('testExternalRowClickableIndicator', function() {
+    page.rowClickable = true;
+    page.external = true;
+    flush();
+    assertTrue(!!page.$$('#rowClickableIndicator'));
+    assertEquals(
+        'cr:open-in-new',
+        page.$$('#rowClickableIndicator').getAttribute('iron-icon'));
+  });
+
+  test('testNoRowClickableIndicator', function() {
+    // rowClickable not set -> no RowClickableIndicator.
+    assertFalse(!!page.$$('#rowClickableIndicator'));
   });
 });
 
@@ -510,6 +544,7 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
 
   teardown(function() {
     page.remove();
+    Router.getInstance().navigateTo(routes.BASIC);
   });
 
   test('passwordCheckingUiTest', function() {
@@ -522,14 +557,30 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
     });
   });
 
-  test('passwordSafeUiTest', function() {
+  test('passwordSafeUiTest', async function() {
     fireSafetyCheckPasswordsEvent(SafetyCheckPasswordsStatus.SAFE);
     flush();
     assertSafetyCheckChild({
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Passwords',
+      rowClickable: true,
     });
+
+    // User clicks the row.
+    page.$$('#safetyCheckChild').click();
+    // Ensure UMA is logged.
+    assertEquals(
+        SafetyCheckInteractions
+            .SAFETY_CHECK_PASSWORDS_MANAGE_THROUGH_CARET_NAVIGATION,
+        await metricsBrowserProxy.whenCalled(
+            'recordSafetyCheckInteractionHistogram'));
+    assertEquals(
+        'Settings.SafetyCheck.ManagePasswordsThroughCaretNavigation',
+        await metricsBrowserProxy.whenCalled('recordAction'));
+    // Ensure the correct Settings page is shown.
+    assertEquals(
+        routes.CHECK_PASSWORDS, Router.getInstance().getCurrentRoute());
   });
 
   test('passwordCompromisedUiTest', async function() {
@@ -544,7 +595,6 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
       buttonClass: 'action-button',
     });
 
-    loadTimeData.overrideValues({enablePasswordCheck: true});
     const passwordManager = new TestPasswordManagerProxy();
     PasswordManagerImpl.instance_ = passwordManager;
 
@@ -580,13 +630,20 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
         case SafetyCheckPasswordsStatus.OFFLINE:
         case SafetyCheckPasswordsStatus.NO_PASSWORDS:
         case SafetyCheckPasswordsStatus.SIGNED_OUT:
-        case SafetyCheckPasswordsStatus.QUOTA_LIMIT:
-        case SafetyCheckPasswordsStatus.ERROR:
         case SafetyCheckPasswordsStatus.FEATURE_UNAVAILABLE:
           assertSafetyCheckChild({
             page: page,
             iconStatus: SafetyCheckIconStatus.INFO,
             label: 'Passwords',
+          });
+          break;
+        case SafetyCheckPasswordsStatus.QUOTA_LIMIT:
+        case SafetyCheckPasswordsStatus.ERROR:
+          assertSafetyCheckChild({
+            page: page,
+            iconStatus: SafetyCheckIconStatus.INFO,
+            label: 'Passwords',
+            rowClickable: true,
           });
           break;
         default:
@@ -617,6 +674,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
 
   teardown(function() {
     page.remove();
+    Router.getInstance().navigateTo(routes.BASIC);
   });
 
   test('safeBrowsingCheckingUiTest', function() {
@@ -629,7 +687,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
     });
   });
 
-  test('safeBrowsingEnabledStandardUiTest', function() {
+  test('safeBrowsingEnabledStandardUiTest', async function() {
     fireSafetyCheckSafeBrowsingEvent(
         SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD);
     flush();
@@ -637,6 +695,33 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Safe Browsing',
+      rowClickable: true,
+    });
+
+    // User clicks the row.
+    page.$$('#safetyCheckChild').click();
+    // Ensure UMA is logged.
+    assertEquals(
+        SafetyCheckInteractions
+            .SAFETY_CHECK_SAFE_BROWSING_MANAGE_THROUGH_CARET_NAVIGATION,
+        await metricsBrowserProxy.whenCalled(
+            'recordSafetyCheckInteractionHistogram'));
+    assertEquals(
+        'Settings.SafetyCheck.ManageSafeBrowsingThroughCaretNavigation',
+        await metricsBrowserProxy.whenCalled('recordAction'));
+    // Ensure the correct Settings page is shown.
+    assertEquals(routes.SECURITY, Router.getInstance().getCurrentRoute());
+  });
+
+  test('safeBrowsingEnabledStandardAvailableEnhancedUiTest', function() {
+    fireSafetyCheckSafeBrowsingEvent(
+        SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD_AVAILABLE_ENHANCED);
+    flush();
+    assertSafetyCheckChild({
+      page: page,
+      iconStatus: SafetyCheckIconStatus.SAFE,
+      label: 'Safe Browsing',
+      rowClickable: true,
     });
   });
 
@@ -648,6 +733,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Safe Browsing',
+      rowClickable: true,
     });
   });
 
@@ -686,6 +772,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Safe Browsing',
       managedIcon: true,
+      rowClickable: true,
     });
   });
 
@@ -698,6 +785,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Safe Browsing',
       managedIcon: true,
+      rowClickable: true,
     });
   });
 });
@@ -763,10 +851,11 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Extensions',
+      rowClickable: true,
     });
   });
 
-  test('extensionsSafeUiTest', function() {
+  test('extensionsSafeUiTest', async function() {
     fireSafetyCheckExtensionsEvent(
         SafetyCheckExtensionsStatus.NO_BLOCKLISTED_EXTENSIONS);
     flush();
@@ -774,10 +863,26 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Extensions',
+      rowClickable: true,
     });
+
+    // User clicks the row.
+    page.$$('#safetyCheckChild').click();
+    // Ensure UMA is logged.
+    assertEquals(
+        SafetyCheckInteractions
+            .SAFETY_CHECK_EXTENSIONS_REVIEW_THROUGH_CARET_NAVIGATION,
+        await metricsBrowserProxy.whenCalled(
+            'recordSafetyCheckInteractionHistogram'));
+    assertEquals(
+        'Settings.SafetyCheck.ReviewExtensionsThroughCaretNavigation',
+        await metricsBrowserProxy.whenCalled('recordAction'));
+    // Ensure the browser proxy call is done.
+    const url = await openWindowProxy.whenCalled('openURL');
+    assertEquals('chrome://extensions', url);
   });
 
-  test('extensionsBlocklistedOffUiTest', function() {
+  test('extensionsBlocklistedOffUiTest', async function() {
     fireSafetyCheckExtensionsEvent(
         SafetyCheckExtensionsStatus.BLOCKLISTED_ALL_DISABLED);
     flush();
@@ -785,10 +890,14 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Extensions',
-      buttonLabel: 'Review',
-      buttonAriaLabel: 'Review extensions',
+      rowClickable: true,
     });
-    return expectExtensionsButtonClickActions();
+
+    // User clicks the row.
+    page.$$('#safetyCheckChild').click();
+    // Ensure the browser proxy call is done.
+    const url = await openWindowProxy.whenCalled('openURL');
+    assertEquals('chrome://extensions', url);
   });
 
   test('extensionsBlocklistedOnAllUserUiTest', function() {
@@ -831,6 +940,7 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Extensions',
       managedIcon: true,
+      rowClickable: true,
     });
   });
 });

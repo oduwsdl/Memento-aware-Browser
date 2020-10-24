@@ -39,21 +39,21 @@ class ForceInstalledMetrics : public ForceInstalledTracker::Observer {
   // Type of session for current user. This enum is required as UserType enum
   // doesn't support new regular users. See user_manager::UserType enum for
   // description of session types other than new and existing regular users.
-  enum class SessionType {
+  enum class UserType {
     // Session with Regular existing user, which has a user name and password.
-    SESSION_TYPE_REGULAR_EXISTING = 0,
-    SESSION_TYPE_GUEST = 1,
+    USER_TYPE_REGULAR_EXISTING = 0,
+    USER_TYPE_GUEST = 1,
     // Session with Regular new user, which has a user name and password.
-    SESSION_TYPE_REGULAR_NEW = 2,
-    SESSION_TYPE_PUBLIC_ACCOUNT = 3,
-    SESSION_TYPE_SUPERVISED = 4,
-    SESSION_TYPE_KIOSK_APP = 5,
-    SESSION_TYPE_CHILD = 6,
-    SESSION_TYPE_ARC_KIOSK_APP = 7,
-    SESSION_TYPE_ACTIVE_DIRECTORY = 8,
-    SESSION_TYPE_WEB_KIOSK_APP = 9,
+    USER_TYPE_REGULAR_NEW = 2,
+    USER_TYPE_PUBLIC_ACCOUNT = 3,
+    USER_TYPE_SUPERVISED = 4,
+    USER_TYPE_KIOSK_APP = 5,
+    USER_TYPE_CHILD = 6,
+    USER_TYPE_ARC_KIOSK_APP = 7,
+    USER_TYPE_ACTIVE_DIRECTORY = 8,
+    USER_TYPE_WEB_KIOSK_APP = 9,
     // Maximum histogram value.
-    kMaxValue = SESSION_TYPE_WEB_KIOSK_APP
+    kMaxValue = USER_TYPE_WEB_KIOSK_APP
   };
 
   // ForceInstalledTracker::Observer overrides:
@@ -63,23 +63,19 @@ class ForceInstalledMetrics : public ForceInstalledTracker::Observer {
   // observers.
   void OnForceInstalledExtensionsLoaded() override;
 
+  // Calls ReportMetricsOnExtensionsReady method if there is a non-empty list of
+  // force-installed extensions.
+  void OnForceInstalledExtensionsReady() override;
+
   // Reports cache status for the force installed extensions.
   void OnExtensionDownloadCacheStatusRetrieved(
       const ExtensionId& id,
       ExtensionDownloaderDelegate::CacheStatus cache_status) override;
 
  private:
-  // Returns true only in case of some well-known misconfigurations which are
-  // easy to detect. Can return false for misconfigurations which are hard to
-  // distinguish with other errors.
-  bool IsMisconfiguration(
-      const InstallStageTracker::InstallationData& installation_data,
-      const ExtensionId& id);
-
-#if defined(OS_CHROMEOS)
-  // Returns Session Type in case extension fails to install.
-  SessionType GetSessionType();
-#endif  // defined(OS_CHROMEOS)
+  // Returns false if the extension status corresponds to a missing extension
+  // which is not yet installed or loaded.
+  bool IsStatusGood(ForceInstalledTracker::ExtensionStatus status);
 
   // Reports disable reasons for the extensions which are installed but not
   // loaded.
@@ -90,6 +86,10 @@ class ForceInstalledMetrics : public ForceInstalledTracker::Observer {
   // why they were not installed.
   void ReportMetrics();
 
+  // Reports metrics for sessions when all force installed extensions are ready
+  // for use.
+  void ReportMetricsOnExtensionsReady();
+
   ExtensionRegistry* const registry_;
   Profile* const profile_;
   ForceInstalledTracker* const tracker_;
@@ -97,8 +97,12 @@ class ForceInstalledMetrics : public ForceInstalledTracker::Observer {
   // Moment when the class was initialized.
   base::Time start_time_;
 
-  // Tracks whether stats were already reported for the session.
-  bool reported_ = false;
+  // Tracks whether extensions load stats were already for the session.
+  bool load_reported_ = false;
+
+  // Tracks whether extensions ready stats were already reported for the
+  // session.
+  bool ready_reported_ = false;
 
   ScopedObserver<ForceInstalledTracker, ForceInstalledTracker::Observer>
       tracker_observer_{this};

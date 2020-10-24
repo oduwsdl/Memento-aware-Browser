@@ -177,8 +177,7 @@ GuestViewBase::GuestViewBase(WebContents* owner_web_contents)
       is_being_destroyed_(false),
       guest_host_(nullptr),
       auto_size_enabled_(false),
-      is_full_page_plugin_(false),
-      guest_proxy_routing_id_(MSG_ROUTING_NONE) {
+      is_full_page_plugin_(false) {
   SetOwnerHost();
 }
 
@@ -244,14 +243,6 @@ void GuestViewBase::InitWithWebContents(
 
   // Give the derived class an opportunity to perform additional initialization.
   DidInitialize(create_params);
-}
-
-void GuestViewBase::LoadURLWithParams(
-      const content::NavigationController::LoadURLParams& load_params) {
-  int guest_proxy_routing_id = host()->LoadURLWithParams(load_params);
-  DCHECK(guest_proxy_routing_id_ == MSG_ROUTING_NONE ||
-         guest_proxy_routing_id == guest_proxy_routing_id_);
-  guest_proxy_routing_id_ = guest_proxy_routing_id;
 }
 
 void GuestViewBase::DispatchOnResizeEvent(const gfx::Size& old_size,
@@ -408,10 +399,6 @@ void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
   // Clear this flag here, as functions called below may check attached().
   attach_in_progress_ = false;
 
-  DCHECK(guest_proxy_routing_id_ == MSG_ROUTING_NONE ||
-         guest_proxy_routing_id == guest_proxy_routing_id_);
-  guest_proxy_routing_id_ = guest_proxy_routing_id;
-
   opener_lifetime_observer_.reset();
 
   SetUpSizing(*attach_params());
@@ -541,6 +528,8 @@ void GuestViewBase::WillAttach(WebContents* embedder_web_contents,
   is_full_page_plugin_ = is_full_page_plugin;
 
   WillAttachToEmbedder();
+
+  web_contents()->ResumeLoadingCreatedWebContents();
 
   owner_web_contents_->AttachInnerWebContents(
       base::WrapUnique<WebContents>(web_contents()), outer_contents_frame,
@@ -674,7 +663,7 @@ void GuestViewBase::ResizeDueToAutoResize(WebContents* web_contents,
 
 void GuestViewBase::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
   if (!attached() || !embedder_web_contents()->GetDelegate()) {
     listener->FileSelectionCanceled();
@@ -725,6 +714,9 @@ void GuestViewBase::UpdateTargetURL(WebContents* source, const GURL& url) {
 }
 
 bool GuestViewBase::ShouldResumeRequestsForCreatedWindow() {
+  // Delay so that the embedder page has a chance to call APIs such as
+  // webRequest in time to be applied to the initial navigation in the new guest
+  // contents. We resume during WillAttach.
   return false;
 }
 
@@ -934,6 +926,10 @@ void GuestViewBase::SetOwnerHost() {
   owner_host_ = manager->IsOwnedByExtension(this)
                     ? owner_web_contents()->GetLastCommittedURL().host()
                     : std::string();
+}
+
+bool GuestViewBase::CanBeEmbeddedInsideCrossProcessFrames() {
+  return false;
 }
 
 }  // namespace guest_view

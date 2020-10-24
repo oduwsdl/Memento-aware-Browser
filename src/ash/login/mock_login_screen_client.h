@@ -96,14 +96,17 @@ class MockLoginScreenClient : public LoginScreenClient {
               RequestPublicSessionKeyboardLayouts,
               (const AccountId& account_id, const std::string& locale),
               (override));
-  MOCK_METHOD(void, ShowFeedback, (), (override));
-  MOCK_METHOD(void, ShowResetScreen, (), (override));
+  MOCK_METHOD(void,
+              HandleAccelerator,
+              (ash::LoginAcceleratorAction action),
+              (override));
   MOCK_METHOD(void, ShowAccountAccessHelpApp, (gfx::NativeWindow), (override));
   MOCK_METHOD(void, ShowParentAccessHelpApp, (gfx::NativeWindow), (override));
   MOCK_METHOD(void, ShowLockScreenNotificationSettings, (), (override));
   MOCK_METHOD(void, FocusOobeDialog, (), (override));
   MOCK_METHOD(void, OnFocusLeavingSystemTray, (bool reverse), (override));
   MOCK_METHOD(void, OnUserActivity, (), (override));
+  MOCK_METHOD(void, OnLoginScreenShown, (), (override));
 
  private:
   bool authenticate_user_callback_result_ = true;

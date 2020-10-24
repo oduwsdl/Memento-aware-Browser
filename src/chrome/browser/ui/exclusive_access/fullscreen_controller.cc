@@ -21,7 +21,6 @@
 #include "chrome/browser/ui/exclusive_access/fullscreen_within_tab_helper.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/web_contents_sizer.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/permissions/permission_manager.h"
@@ -34,7 +33,7 @@
 #include "extensions/common/extension.h"
 #include "ui/display/types/display_constants.h"
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #endif
@@ -240,11 +239,7 @@ void FullscreenController::OnTabDetachedFromView(WebContents* old_contents) {
     return;
   }
 
-  content::RenderWidgetHostView* const current_fs_view =
-      old_contents->GetFullscreenRenderWidgetHostView();
-  if (current_fs_view)
-    current_fs_view->SetSize(old_contents->GetPreferredSize());
-  ResizeWebContents(old_contents, gfx::Rect(old_contents->GetPreferredSize()));
+  old_contents->Resize(gfx::Rect(old_contents->GetPreferredSize()));
 }
 
 void FullscreenController::OnTabClosing(WebContents* web_contents) {
@@ -348,7 +343,7 @@ void FullscreenController::ToggleFullscreenModeInternal(
   if (chrome::IsRunningInAppMode() && exclusive_access_context->IsFullscreen())
     return;
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // Do not enter fullscreen mode if disallowed by pref. This prevents the user
   // from manually entering fullscreen mode and also disables kiosk mode on
   // desktop platforms.
@@ -414,7 +409,7 @@ void FullscreenController::EnterFullscreenModeInternal(
 void FullscreenController::ExitFullscreenModeInternal() {
   RecordExitingUMA();
   toggled_into_fullscreen_ = false;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Mac windows report a state change instantly, and so we must also clear
   // state_prior_to_tab_fullscreen_ to match them else other logic using
   // state_prior_to_tab_fullscreen_ will be incorrect.
@@ -427,23 +422,11 @@ void FullscreenController::ExitFullscreenModeInternal() {
       ExclusiveAccessBubbleHideCallback());
 }
 
-bool FullscreenController::IsPrivilegedFullscreenForTab() const {
-  const bool embedded_widget_present =
-      exclusive_access_tab() &&
-      exclusive_access_tab()->GetFullscreenRenderWidgetHostView();
-  return embedded_widget_present || is_privileged_fullscreen_for_testing_;
-}
-
-void FullscreenController::SetPrivilegedFullscreenForTesting(
-    bool is_privileged) {
-  is_privileged_fullscreen_for_testing_ = is_privileged;
-}
-
 bool FullscreenController::MaybeToggleFullscreenWithinTab(
     WebContents* web_contents,
     bool enter_fullscreen) {
   if (enter_fullscreen) {
-    if (web_contents->IsBeingCaptured()) {
+    if (web_contents->IsBeingVisiblyCaptured()) {
       FullscreenWithinTabHelper::CreateForWebContents(web_contents);
       FullscreenWithinTabHelper::FromWebContents(web_contents)
           ->SetIsFullscreenWithinTab(true);

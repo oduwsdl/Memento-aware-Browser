@@ -19,7 +19,6 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/system/user/rounded_image_view.h"
 #include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -187,7 +186,7 @@ class LoginUserView::UserImage : public NonAccessibleView {
     }
 
     bool is_managed =
-        user.user_enterprise_domain ||
+        user.user_account_manager ||
         user.basic_user_info.type == user_manager::USER_TYPE_PUBLIC_ACCOUNT;
     enterprise_icon_->SetVisible(is_managed);
   }
@@ -415,7 +414,7 @@ LoginUserView::LoginUserView(
   user_label_ = new UserLabel(style, label_width);
   if (show_dropdown) {
     dropdown_ = new LoginButton(this);
-    dropdown_->set_has_ink_drop_action_on_click(false);
+    dropdown_->SetHasInkDropActionOnClick(false);
     dropdown_->SetPreferredSize(
         gfx::Size(kDropdownIconSizeDp, kDropdownIconSizeDp));
     dropdown_->SetImage(
@@ -598,7 +597,7 @@ void LoginUserView::OnHover(bool has_hover) {
 void LoginUserView::UpdateCurrentUserState() {
   base::string16 accessible_name;
   auto email = base::UTF8ToUTF16(current_user_.basic_user_info.display_email);
-  if (current_user_.user_enterprise_domain) {
+  if (current_user_.user_account_manager) {
     accessible_name = l10n_util::GetStringFUTF16(
         IDS_ASH_LOGIN_POD_MANAGED_ACCESSIBLE_NAME, email);
   } else if (current_user_.basic_user_info.type ==

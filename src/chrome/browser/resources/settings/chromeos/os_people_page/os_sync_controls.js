@@ -27,6 +27,7 @@ Polymer({
   is: 'os-sync-controls',
 
   behaviors: [
+    DeepLinkingBehavior,
     I18nBehavior,
     settings.RouteObserverBehavior,
     WebUIListenerBehavior,
@@ -87,6 +88,15 @@ Polymer({
       computed: `computeDataTypeTogglesDisabled_(osSyncFeatureEnabled,
           osSyncPrefs.syncAllOsTypes)`,
     },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([chromeos.settings.mojom.Setting.kSplitSyncOnOff]),
+    },
   },
 
   /** @private {?settings.OsSyncBrowserProxy} */
@@ -119,6 +129,7 @@ Polymer({
   currentRouteChanged(newRoute, oldRoute) {
     if (newRoute == settings.routes.OS_SYNC) {
       this.browserProxy_.didNavigateToOsSyncPage();
+      this.attemptDeepLink();
     }
     if (oldRoute == settings.routes.OS_SYNC) {
       this.browserProxy_.didNavigateAwayFromOsSyncPage();
@@ -148,6 +159,17 @@ Polymer({
     return this.osSyncFeatureEnabled && !this.syncStatus.hasError ?
         this.i18n('syncingTo', this.profileEmail) :
         this.profileEmail;
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getSyncOnOffButtonLabel_() {
+    if (!this.osSyncFeatureEnabled) {
+      return this.i18n('osSyncTurnOn');
+    }
+    return this.i18n('osSyncTurnOff');
   },
 
   /**
@@ -216,14 +238,8 @@ Polymer({
   },
 
   /** @private */
-  onTurnOnSyncButtonClick_() {
-    this.browserProxy_.setOsSyncFeatureEnabled(true);
-    settings.recordSettingChange();
-  },
-
-  /** @private */
-  onTurnOffSyncButtonClick_() {
-    this.browserProxy_.setOsSyncFeatureEnabled(false);
+  onSyncOnOffButtonClick_() {
+    this.browserProxy_.setOsSyncFeatureEnabled(!this.osSyncFeatureEnabled);
     settings.recordSettingChange();
   },
 

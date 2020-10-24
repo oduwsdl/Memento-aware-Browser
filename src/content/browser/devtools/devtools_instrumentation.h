@@ -33,7 +33,6 @@ struct UserAgentMetadata;
 namespace net {
 class SSLInfo;
 class X509Certificate;
-struct CookieWithStatus;
 struct QuicTransportError;
 }  // namespace net
 
@@ -142,7 +141,7 @@ void OnResponseReceivedExtraInfo(
     int process_id,
     int routing_id,
     const std::string& devtools_request_id,
-    const net::CookieAndLineStatusList& response_cookie_list,
+    const net::CookieAndLineAccessResultList& response_cookie_list,
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& response_headers,
     const base::Optional<std::string>& response_headers_text);
 void OnCorsPreflightRequest(int32_t process_id,
@@ -181,7 +180,7 @@ void PortalActivated(RenderFrameHostImpl* render_frame_host_impl);
 
 void ReportSameSiteCookieIssue(
     RenderFrameHostImpl* render_frame_host_impl,
-    const net::CookieWithStatus& excluded_cookie,
+    const net::CookieWithAccessResult& excluded_cookie,
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
     blink::mojom::SameSiteCookieOperation operation,
@@ -195,8 +194,15 @@ void ReportSameSiteCookieIssue(
 //
 // DevTools must be attached, otherwise issues reported through
 // |ReportBrowserInitiatedIssue| are lost.
-void ReportBrowserInitiatedIssue(RenderFrameHostImpl* frame,
-                                 protocol::Audits::InspectorIssue* issue);
+void CONTENT_EXPORT
+ReportBrowserInitiatedIssue(RenderFrameHostImpl* frame,
+                            protocol::Audits::InspectorIssue* issue);
+
+// Produces a Heavy Ad Issue based on the parameters passed in.
+std::unique_ptr<protocol::Audits::InspectorIssue> GetHeavyAdIssue(
+    RenderFrameHostImpl* frame,
+    blink::mojom::HeavyAdResolutionStatus resolution,
+    blink::mojom::HeavyAdReason reason);
 
 void OnQuicTransportHandshakeFailed(
     RenderFrameHostImpl* frame_host,

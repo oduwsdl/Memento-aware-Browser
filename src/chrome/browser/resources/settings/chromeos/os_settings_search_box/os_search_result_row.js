@@ -12,8 +12,9 @@ cr.define('settings', function() {
    *
    * @param {string} string1 The first case sensitive string to be compared.
    * @param {string} string2 The second case sensitive string to be compared.
-   * @return {!Array<string>} An array of the longest common substrings, all of
-   *     which have the same length. Returns empty array if there are none.
+   * @return {!Array<string>} An array of the longest common substrings starting
+   *     from the earliest to latest match, all of which have the same length.
+   *     Returns empty array if there are none.
    */
   function longestCommonSubstrings(string1, string2) {
     let maxLength = 0;
@@ -29,7 +30,7 @@ cr.define('settings', function() {
         }
         dp[i][j] = dp[i + 1][j + 1] + 1;
         if (maxLength === dp[i][j]) {
-          string1StartingIndices.push(i);
+          string1StartingIndices.unshift(i);
         }
         if (maxLength < dp[i][j]) {
           maxLength = dp[i][j];
@@ -42,6 +43,13 @@ cr.define('settings', function() {
       return string1.substr(idx, maxLength);
     });
   }
+
+  /**
+   * Used to locate matches such that the query text omits a hyphen when the
+   * matching result text contains a hyphen.
+   * @type {string}
+   */
+  const DELOCALIZED_HYPHEN = '-';
 
   /**
    * A list of hyphens in all languages that will be ignored during the
@@ -281,7 +289,7 @@ cr.define('settings', function() {
      * are only one character long are ignored.
      * @param {string} normalizedQuery A lowercased query which does not contain
      *     hyphens or accents.
-     * @return {!Array<string>} queryTokens QueryTokens that do not contain
+     * @return {!Array<string>} QueryTokens that do not contain
      *     blankspaces and are substrings of the normalized result text
      * @private
      */
@@ -307,7 +315,7 @@ cr.define('settings', function() {
       // (longest common substring for "Assistant") and "an" (longest common
       // substring for "and"). Only the queryToken "ssistan" should be kept
       // since it's the longest queryToken.
-      const getLongestTokens = ([querySegment, queryTokens]) => {
+      const getLongestTokensPerSegment = ([querySegment, queryTokens]) => {
         // If there are no queryTokens, return none.
         // Example: |normalizedResultText| = "search and assistant"
         //          |normalizedQuery| = "hi goog"
@@ -341,7 +349,96 @@ cr.define('settings', function() {
         return queryTokens.filter(
             queryToken => queryToken.length === maxLengthQueryToken);
       };
-      return Array.from(segmentToTokenMap).map(getLongestTokens).flat();
+
+      // A 2D array such that each array contains queryTokens of a querySegment.
+      // Note that the order of key value pairs is maintained in the
+      // |segmentToTokenMap| relative to the |normalizedQuery|, and the order
+      // of the queryTokens within each inner array is also maintained relative
+      // to the |normalizedQuery|.
+      const inOrderTokenGroups =
+          Array.from(segmentToTokenMap).map(getLongestTokensPerSegment);
+
+      // Flatten the 2D |inOrderTokenGroups|, and remove duplicate queryTokens.
+      // Note that even though joining |inOrderTokens| will always form a
+      // subsequence of |normalizedQuery|, it will not be a subsequence of
+      // |normalizedResultText|.
+      // Example: |this.resultText| = "Touchpad tap-to-click"
+      //          |normalizedResultText| = "touchpad taptoclick"
+      //          |normalizedQuery| = "tap to cli"
+      //          |inOrderTokenGroups| = [['tap']. ['to', 'to']. ['cli']]
+      //          |inOrderTokens| = ['tap', 'to', 'cli']
+      // |inOrderTokenGroups| contains an inner array of two 'to's because
+      // the |querySegment| = 'to' matches with 'touchpad' and 'taptoclick'.
+      // Duplicate entries are removed in |inOrderTokens| because
+      // if a |queryToken| is merged to form a compound worded queryToken, it
+      // should not be used to bold another |resultText| word. In the fictitious
+      // case that |inOrderTokenGroups| is [['tap']. ['to', 'xy']. ['cli']],
+      // |inOrderTokens| will be ['tap', 'to', 'xy', 'cli'], and only 'Tap-to'
+      // will be bolded. This is fine because 'toxy' is a subsequence of a
+      // |querySegment| the user inputted, and the order of bolding
+      // will prefer the user's input in these extenuating circumstances.
+      const inOrderTokens = [...new Set(inOrderTokenGroups.flat())];
+      return this.mergeValidTokensToCompounded_(inOrderTokens);
+    },
+
+    /**
+     * Possibly merges costituent queryTokens in |inOrderQueryTokens| to form
+     * new, longer, valid queryTokens that match with normalized compounded
+     * words in |this.resultText|.
+     * @param {!Array<string>} inOrderQueryTokens An array of valid queryTokens
+     *     that do not contain dups.
+     * @return {!Array<string>} An array of queryTokens of equal or lesser size
+     *     than |inOrderQueryTokens|, each of which do not contain blankspaces
+     *     and are substrings of the normalized result text.
+     * @private
+     */
+    mergeValidTokensToCompounded_(inOrderQueryTokens) {
+      // If |this.resultToken| does not contain any hyphens, this will be
+      // be the same as |inOrderQueryTokens|.
+      const longestCompoundWordTokens = [];
+
+      // Instead of stripping all hyphen as would be the case if the result
+      // text were normalized, convert all hyphens to |DELOCALIZED_HYPHEN|. This
+      // string will be compared with compound query tokens to find query tokens
+      // that are compound substrings longer than the constituent query tokens.
+      const hyphenatedResultText =
+          removeAccents(this.resultText_)
+              .replace(HYPHENS_REGEX, DELOCALIZED_HYPHEN);
+
+      // Create the longest combined tokens delimited by |DELOCALIZED_HYPHEN|s
+      // that are a substrings of |hyphenatedResultText|. Worst case visit each
+      // token twice. Note that if a token is used to form a compound word, it
+      // will no longer be present for other words.
+      // Example: |this.resultText| = "Touchpad tap-to-click"
+      //          |this.searchQuery| = "tap to clic"
+      // The token "to" will fail to highlight "To" in "Touchpad", and instead
+      // will be combined with "tap" and "clic" to bold "tap-to-click".
+      let i = 0;
+      while (i < inOrderQueryTokens.length) {
+        let prefixToken = inOrderQueryTokens[i];
+        i++;
+        while (i < inOrderQueryTokens.length) {
+          // Create a compound token with the next token within
+          // |inOrderQueryTokens|.
+          const compoundToken =
+              prefixToken + DELOCALIZED_HYPHEN + inOrderQueryTokens[i];
+
+          // If the constructed compoundToken from valid queryTokens is not a
+          // substring of the |hyphenatedResultText|, break from the inner loop
+          // and set the outer loop to start with the token that broke the
+          // compounded match.
+          if (!hyphenatedResultText.includes(compoundToken)) {
+            break;
+          }
+
+          prefixToken = compoundToken;
+          i++;
+        }
+        longestCompoundWordTokens.push(prefixToken);
+      }
+
+      // Normalize the compound tokens that include |DELOCALIZED_HYPHEN|s.
+      return longestCompoundWordTokens.map(token => normalizeString(token));
     },
 
     /**
@@ -395,6 +492,10 @@ cr.define('settings', function() {
      * @private
      */
     getResultInnerHtml_() {
+      if (!this.searchResult.wasGeneratedFromTextMatch) {
+        return this.resultText_;
+      }
+
       if (this.resultText_.match(/\s/) ||
           this.resultText_.toLocaleLowerCase() !=
               this.resultText_.toLocaleUpperCase()) {
@@ -551,7 +652,7 @@ cr.define('settings', function() {
         case Icon.kMouse:
           return 'os-settings:mouse';
         case Icon.kNearbyShare:
-          return 'settings:nearby-share';
+          return 'os-settings:nearby-share';
         case Icon.kPaintbrush:
           return 'os-settings:paint-brush';
         case Icon.kPenguin:

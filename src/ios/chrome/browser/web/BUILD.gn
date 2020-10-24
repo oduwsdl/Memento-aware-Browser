@@ -57,6 +57,7 @@ source_set("web") {
     "//ios/components/ui_util",
     "//ios/components/webui:url_constants",
     "//ios/net",
+    "//ios/public/provider/chrome/browser:browser",
     "//ios/web",
     "//ios/web/common",
     "//ios/web/public/js_messaging",
@@ -186,11 +187,6 @@ js_compile_bundle("chrome_bundle_main_frame") {
     "resources/chrome_bundle_main_frame.js",
     "resources/image_fetch.js",
   ]
-  deps = [ ":credential_manager" ]
-}
-
-js_compile_checked("credential_manager") {
-  sources = [ "resources/credential_manager.js" ]
 }
 
 js_compile_checked("accessibility") {
@@ -215,7 +211,7 @@ source_set("java_script_console") {
     "//ios/web/public",
     "//ios/web/public/js_messaging",
   ]
-  libs = [ "Foundation.framework" ]
+  frameworks = [ "Foundation.framework" ]
 }
 
 source_set("web_internal") {
@@ -257,12 +253,14 @@ source_set("web_internal") {
     "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/elements",
-    "//ios/chrome/browser/ui/infobars:feature_flags",
     "//ios/chrome/browser/ui/infobars/coordinators",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/web:feature_flags",
     "//ios/components/security_interstitials",
+    "//ios/components/security_interstitials/legacy_tls",
+    "//ios/components/security_interstitials/lookalikes",
     "//ios/components/webui:url_constants",
+    "//ios/net",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/voice",
     "//ios/web",
@@ -271,12 +269,13 @@ source_set("web_internal") {
     "//ios/web/public",
     "//ios/web/public/js_messaging",
     "//net",
+    "//services/metrics/public/cpp:metrics_cpp",
     "//ui/base",
     "//ui/gfx",
     "//url",
   ]
   public_deps = [ ":java_script_console" ]
-  libs = [
+  frameworks = [
     "UIKit.framework",
     "Foundation.framework",
   ]
@@ -313,8 +312,10 @@ source_set("unit_tests_internal") {
     ":web_internal",
     "//base",
     "//base/test:test_support",
+    "//components/captive_portal/core",
     "//components/content_settings/core/browser",
     "//components/infobars/core",
+    "//components/lookalikes/core",
     "//components/payments/core",
     "//components/safe_browsing/ios/browser:allow_list",
     "//components/security_interstitials/core:unsafe_resource",
@@ -327,15 +328,20 @@ source_set("unit_tests_internal") {
     "//ios/chrome/browser/infobars:public",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/safe_browsing",
+    "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/web",
     "//ios/chrome/test/fakes",
     "//ios/components/security_interstitials",
+    "//ios/components/security_interstitials/legacy_tls",
+    "//ios/components/security_interstitials/lookalikes",
+    "//ios/net",
     "//ios/web/common:features",
     "//ios/web/common:web_view_creation_util",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
     "//net",
     "//net:test_support",
+    "//services/network:test_support",
     "//testing/gtest",
     "//third_party/ocmock",
     "//ui/base",
@@ -343,82 +349,11 @@ source_set("unit_tests_internal") {
   ]
 }
 
-source_set("earl_grey_support") {
+source_set("constants") {
   configs += [ "//build/config/compiler:enable_arc" ]
-  defines = [ "CHROME_EARL_GREY_1" ]
-  testonly = true
   sources = [
-    "progress_indicator_app_interface.h",
-    "progress_indicator_app_interface.mm",
-  ]
-  deps = [
-    "//base",
-    "//ios/testing/earl_grey:earl_grey_support",
-    "//ios/third_party/earl_grey:earl_grey+link",
-    "//ios/third_party/material_components_ios",
-  ]
-}
-
-source_set("eg_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  defines = [ "CHROME_EARL_GREY_1" ]
-  testonly = true
-  sources = [
-    "browsing_egtest.mm",
-    "browsing_prevent_default_egtest.mm",
-    "cache_egtest.mm",
-    "child_window_open_by_dom_egtest.mm",
-    "content_mode_egtest.mm",
-    "error_page_egtest.mm",
-    "forms_egtest.mm",
-    "http_auth_egtest.mm",
-    "js_print_egtest.mm",
-    "navigation_egtest.mm",
-    "progress_indicator_egtest.mm",
-    "push_and_replace_state_navigation_egtest.mm",
-    "restore_egtest.mm",
-    "ssl_egtest.mm",
-    "stop_loading_egtest.mm",
-    "tab_order_egtest.mm",
-    "visible_url_egtest.mm",
-    "window_open_by_dom_egtest.mm",
-  ]
-  deps = [
-    ":earl_grey_support",
-    "//base",
-    "//base/test:test_support",
-    "//components/content_settings/core/common",
-    "//components/strings",
-    "//components/url_formatter",
-    "//components/version_info:version_info",
-    "//ios/chrome/app/strings",
-    "//ios/chrome/browser",
-    "//ios/chrome/browser/browser_state",
-    "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/popup_menu:constants",
-    "//ios/chrome/browser/ui/util",
-    "//ios/chrome/test:eg_test_support",
-    "//ios/chrome/test:test_support",
-    "//ios/chrome/test/app:test_support",
-    "//ios/chrome/test/earl_grey:test_support",
-    "//ios/net:test_support",
-    "//ios/testing:embedded_test_server_support",
-    "//ios/testing/earl_grey:earl_grey_support",
-    "//ios/third_party/earl_grey:earl_grey+link",
-    "//ios/third_party/material_components_ios",
-    "//ios/web:earl_grey_test_support",
-    "//ios/web/common",
-    "//ios/web/public/test",
-    "//ios/web/public/test:element_selector",
-    "//ios/web/public/test/http_server",
-    "//net",
-    "//net:test_support",
-    "//ui/base",
-    "//url",
-  ]
-  libs = [
-    "UIKit.framework",
-    "XCTest.framework",
+    "lookalike_url_constants.h",
+    "lookalike_url_constants.mm",
   ]
 }
 
@@ -430,7 +365,10 @@ source_set("eg_test_support+eg2") {
   ]
   testonly = true
 
-  sources = [ "progress_indicator_app_interface.h" ]
+  sources = [
+    "lookalike_url_app_interface.h",
+    "progress_indicator_app_interface.h",
+  ]
 
   deps = [
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
@@ -447,15 +385,23 @@ source_set("eg_app_support+eg2") {
   defines = [ "CHROME_EARL_GREY_2" ]
 
   sources = [
+    "lookalike_url_app_interface.h",
+    "lookalike_url_app_interface.mm",
     "progress_indicator_app_interface.h",
     "progress_indicator_app_interface.mm",
   ]
 
   deps = [
+    ":constants",
     "//base",
+    "//components/lookalikes/core",
+    "//ios/chrome/test/app:test_support",
+    "//ios/components/security_interstitials/lookalikes",
     "//ios/testing/earl_grey:eg_app_support+eg2",
     "//ios/third_party/earl_grey2:app_framework+link",
     "//ios/third_party/material_components_ios",
+    "//ios/web/public",
+    "//net",
   ]
 }
 
@@ -477,6 +423,8 @@ source_set("eg2_tests") {
     "forms_egtest.mm",
     "http_auth_egtest.mm",
     "js_print_egtest.mm",
+    "legacy_tls_egtest.mm",
+    "lookalike_url_egtest.mm",
     "navigation_egtest.mm",
     "progress_indicator_egtest.mm",
     "push_and_replace_state_navigation_egtest.mm",
@@ -485,10 +433,12 @@ source_set("eg2_tests") {
     "stop_loading_egtest.mm",
     "tab_order_egtest.mm",
     "visible_url_egtest.mm",
+    "web_share_egtest.mm",
     "window_open_by_dom_egtest.mm",
   ]
 
   deps = [
+    ":constants",
     ":eg_test_support+eg2",
     "//components/content_settings/core/common",
     "//components/strings",
@@ -496,6 +446,7 @@ source_set("eg2_tests") {
     "//components/version_info:version_info",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser:chrome_url_constants",
+    "//ios/chrome/browser/ui/infobars/banners:public",
     "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/test:eg_test_support+eg2",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
@@ -511,7 +462,7 @@ source_set("eg2_tests") {
     "//url",
   ]
 
-  libs = [ "UIKit.framework" ]
+  frameworks = [ "UIKit.framework" ]
 }
 
 source_set("perf_tests") {

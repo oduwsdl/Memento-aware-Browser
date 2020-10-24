@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {$$, BrowserProxy, hexColorToSkColor} from 'chrome://new-tab-page/new_tab_page.js';
+import {$$, BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
+import {hexColorToSkColor, skColorToRgba} from 'chrome://resources/js/color_utils.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {assertNotStyle, assertStyle, createTestProxy, keydown} from 'chrome://test/new_tab_page/test_support.js';
 import {eventToPromise, flushTasks} from 'chrome://test/test_util.m.js';
 
@@ -26,13 +28,15 @@ function getRelativePosition(element, reference) {
 /**
  * @param {number} width
  * @param {number} height
+ * @param {string} color
  * @return {string}
  */
-function createImageDataUrl(width, height) {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  return canvas.toDataURL('image/png');
+function createImageDataUrl(width, height, color) {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" ' +
+      `width="${width}" height="${height}">` +
+      `<rect width="100%" height="100%" fill="${color}"/>` +
+      '</svg>';
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
 /**
@@ -44,21 +48,34 @@ function createImageDoodle(width, height) {
   width = width || 500;
   height = height || 200;
   return {
-    content: {
-      imageDoodle: {
-        imageUrl: {url: createImageDataUrl(width, height)},
-        onClickUrl: {url: 'https://foo.com'},
+    image: {
+      light: {
+        imageUrl: {url: createImageDataUrl(width, height, 'red')},
         shareButton: {
-          backgroundColor: {value: 0xFFFF0000},
-          x: 0,
-          y: 0,
+          backgroundColor: {value: 0xddff0000},
+          x: 10,
+          y: 20,
           iconUrl: {url: 'data:bar'},
         },
-        imageImpressionLogUrl: {url: 'https://log.com'},
         width,
         height,
         backgroundColor: {value: 0xffffffff},
-      }
+        imageImpressionLogUrl: {url: 'https://log.com'},
+      },
+      dark: {
+        imageUrl: {url: createImageDataUrl(width, height, 'blue')},
+        shareButton: {
+          backgroundColor: {value: 0xee00ff00},
+          x: 30,
+          y: 40,
+          iconUrl: {url: 'data:foo'},
+        },
+        width,
+        height,
+        backgroundColor: {value: 0x000000ff},
+        imageImpressionLogUrl: {url: 'https://dark_log.com'},
+      },
+      onClickUrl: {url: 'https://foo.com'},
     }
   };
 }
@@ -97,45 +114,63 @@ function createSuite(themeModeDoodlesEnabled) {
     BrowserProxy.instance_ = testProxy;
   });
 
-  test('setting simple doodle shows image', async () => {
-    // Arrange.
-    const doodle = createImageDoodle(/*width=*/ 500, /*height=*/ 200);
-    doodle.content.imageDoodle.shareButton = {
-      backgroundColor: {value: 0xFFFF0000},
-      x: 10,
-      y: 20,
-      iconUrl: {url: 'data:bar'},
-    };
+  [true, false].forEach(dark => {
+    const darkStr = dark ? 'dark' : 'light';
+    test(`setting ${darkStr} simple doodle shows image`, async () => {
+      // Arrange.
+      const doodle = createImageDoodle(/*width=*/ 500, /*height=*/ 200);
+      const imageDoodle = dark ? doodle.image.dark : doodle.image.light;
+      const shareButton = imageDoodle.shareButton;
 
-    // Act.
-    const logo = await createLogo(doodle);
+      // Act.
+      const logo = await createLogo(doodle);
+      logo.dark = dark;
+      logo.backgroundColor = imageDoodle.backgroundColor;
 
-    // Assert.
-    assertNotStyle($$(logo, '#doodle'), 'display', 'none');
-    assertEquals($$(logo, '#logo'), null);
-    assertEquals(
-        $$(logo, '#image').src, doodle.content.imageDoodle.imageUrl.url);
-    assertNotStyle($$(logo, '#image'), 'display', 'none');
-    assertEquals(500, $$(logo, '#image').offsetWidth);
-    assertEquals(200, $$(logo, '#image').offsetHeight);
-    assertNotStyle($$(logo, '#shareButton'), 'display', 'none');
-    assertStyle($$(logo, '#shareButton'), 'background-color', 'rgb(255, 0, 0)');
-    const shareButtonPosition =
-        getRelativePosition($$(logo, '#shareButton'), $$(logo, '#image'));
-    assertEquals(10, shareButtonPosition.left);
-    assertEquals(20, shareButtonPosition.top);
-    assertEquals(26, $$(logo, '#shareButton').offsetWidth);
-    assertEquals(26, $$(logo, '#shareButton').offsetHeight);
-    assertEquals($$(logo, '#shareButtonImage').src, 'data:bar');
-    assertStyle($$(logo, '#animation'), 'display', 'none');
-    assertFalse(!!$$(logo, '#iframe'));
+      // Assert.
+      const el = selector => $$(logo, selector);
+      assertNotStyle(el('#doodle'), 'display', 'none');
+      assertFalse(!!el('#logo'));
+      assertEquals(imageDoodle.imageUrl.url, el('#image').src);
+      assertNotStyle(el('#image'), 'none');
+      assertEquals(500, el('#image').offsetWidth);
+      assertEquals(200, el('#image').offsetHeight);
+      assertNotStyle(el('#shareButton'), 'display', 'none');
+      assertStyle(
+          el('#shareButton'), 'background-color',
+          skColorToRgba(shareButton.backgroundColor));
+      const buttonPos = getRelativePosition(el('#shareButton'), el('#image'));
+      assertEquals(shareButton.x, buttonPos.left);
+      assertEquals(shareButton.y, buttonPos.top);
+      assertEquals(26, el('#shareButton').offsetWidth);
+      assertEquals(26, el('#shareButton').offsetHeight);
+      assertEquals(shareButton.iconUrl.url, el('#shareButtonImage').src);
+      assertStyle(el('#animation'), 'display', 'none');
+      assertFalse(!!el('#iframe'));
+    });
+  });
+
+  [true, false].forEach(dark => {
+    test(`hide share button in ${dark ? 'dark' : 'light'} mode`, async () => {
+      // Arrange.
+      const doodle = createImageDoodle();
+      const imageDoodle = dark ? doodle.image.dark : doodle.image.light;
+      delete imageDoodle.shareButton;
+
+      // Act.
+      const logo = await createLogo(doodle);
+      logo.dark = dark;
+
+      // Assert.
+      assertStyle($$(logo, '#shareButton'), 'display', 'none');
+    });
   });
 
   [null, '#ff0000'].forEach(color => {
     test(`${color || 'no'} background color shows box`, async () => {
       // Arrange.
       const doodle = createImageDoodle();
-      doodle.content.imageDoodle.backgroundColor.value = 0xff0000ff;
+      doodle.image.light.backgroundColor.value = 0xff0000ff;
 
       // Act.
       const logo = await createLogo(doodle);
@@ -148,31 +183,76 @@ function createSuite(themeModeDoodlesEnabled) {
     });
   });
 
+  [[1000, 500] /* too large */,
+   [100, 50] /* too small */,
+  ].forEach(([width, height]) => {
+    test(`${width}x${height} doodle aligned correctly`, async () => {
+      // Act.
+      const logo = await createLogo(createImageDoodle(width, height));
+      logo.backgroundColor = {value: 0xffffffff};
+
+      // Assert.
+      assertEquals(200, logo.offsetHeight);
+      assertGE(200, $$(logo, '#image').offsetHeight);
+      const pos = getRelativePosition($$(logo, '#imageDoodle'), logo);
+      assertLE(0, pos.top);
+      assertEquals(0, pos.bottom);
+    });
+
+    test(`${width}x${height} boxed doodle aligned correctly`, async () => {
+      // Act.
+      const logo = await createLogo(createImageDoodle(width, height));
+      logo.dark = true;
+      logo.backgroundColor = {value: 0xff0000ff};
+
+      // Assert.
+      assertEquals(200, logo.offsetHeight);
+      assertGE(160, $$(logo, '#image').offsetHeight);
+      const pos = getRelativePosition($$(logo, '#imageDoodle'), logo);
+      assertGE(pos.top, 8);
+      assertEquals(0, pos.bottom);
+    });
+  });
+
+  test('dark mode and no dark doodle shows logo', async () => {
+    // Arrange.
+    const doodle = createImageDoodle();
+    delete doodle.image.dark;
+
+    // Act.
+    const logo = await createLogo(doodle);
+    logo.dark = true;
+
+    // Assert.
+    assertTrue(!!$$(logo, '#doodle'));
+    assertFalse(!!$$(logo, '#logo'));
+  });
+
   test('setting too large image doodle resizes image', async () => {
     // Arrange.
     const doodle = createImageDoodle(/*width=*/ 1000, /*height=*/ 500);
-    doodle.content.imageDoodle.shareButton.x = 10;
-    doodle.content.imageDoodle.shareButton.y = 20;
+    doodle.image.light.shareButton.x = 10;
+    doodle.image.light.shareButton.y = 20;
 
     // Act.
     const logo = await createLogo(doodle);
 
     // Assert.
-    assertEquals(460, $$(logo, '#image').offsetWidth);
-    assertEquals(230, $$(logo, '#image').offsetHeight);
+    assertEquals(400, $$(logo, '#image').offsetWidth);
+    assertEquals(200, $$(logo, '#image').offsetHeight);
     const shareButtonPosition =
         getRelativePosition($$(logo, '#shareButton'), $$(logo, '#image'));
-    assertEquals(5, Math.round(shareButtonPosition.left));
-    assertEquals(9, Math.round(shareButtonPosition.top));
-    assertEquals(12, $$(logo, '#shareButton').offsetWidth);
-    assertEquals(12, $$(logo, '#shareButton').offsetHeight);
+    assertEquals(4, Math.round(shareButtonPosition.left));
+    assertEquals(8, Math.round(shareButtonPosition.top));
+    assertEquals(10, $$(logo, '#shareButton').offsetWidth);
+    assertEquals(10, $$(logo, '#shareButton').offsetHeight);
   });
 
   test('setting animated doodle shows image', async () => {
     // Arrange.
     const doodle = createImageDoodle();
-    doodle.content.imageDoodle.imageUrl = {url: 'data:foo'};
-    doodle.content.imageDoodle.animationUrl = {url: 'https://foo.com'};
+    doodle.image.light.imageUrl = {url: 'data:foo'};
+    doodle.image.light.animationUrl = {url: 'https://foo.com'};
 
     // Act.
     const logo = await createLogo(doodle);
@@ -189,12 +269,10 @@ function createSuite(themeModeDoodlesEnabled) {
   test('setting interactive doodle shows iframe', async () => {
     // Act.
     const logo = await createLogo({
-      content: {
-        interactiveDoodle: {
-          url: {url: 'https://foo.com'},
-          width: 200,
-          height: 100,
-        }
+      interactive: {
+        url: {url: 'https://foo.com'},
+        width: 200,
+        height: 100,
       }
     });
     logo.dark = false;
@@ -212,7 +290,7 @@ function createSuite(themeModeDoodlesEnabled) {
       assertEquals(1, testProxy.getCallCount('postMessage'));
       const [iframe, {cmd, dark}, origin] =
           await testProxy.whenCalled('postMessage');
-      assertEquals($$(logo, '#iframe'), iframe);
+      assertEquals($$($$(logo, '#iframe'), '#iframe'), iframe);
       assertEquals('changeMode', cmd);
       assertEquals(false, dark);
       assertEquals('https://foo.com', origin);
@@ -224,12 +302,10 @@ function createSuite(themeModeDoodlesEnabled) {
   test('message only after mode has been set', async () => {
     // Act (no mode).
     const logo = await createLogo({
-      content: {
-        interactiveDoodle: {
-          url: {url: 'https://foo.com'},
-          width: 200,
-          height: 100,
-        }
+      interactive: {
+        url: {url: 'https://foo.com'},
+        width: 200,
+        height: 100,
       }
     });
 
@@ -244,7 +320,7 @@ function createSuite(themeModeDoodlesEnabled) {
       assertEquals(1, testProxy.getCallCount('postMessage'));
       const [iframe, {cmd, dark}, origin] =
           await testProxy.whenCalled('postMessage');
-      assertEquals($$(logo, '#iframe'), iframe);
+      assertEquals($$($$(logo, '#iframe'), '#iframe'), iframe);
       assertEquals('changeMode', cmd);
       assertEquals(true, dark);
       assertEquals('https://foo.com', origin);
@@ -291,8 +367,9 @@ function createSuite(themeModeDoodlesEnabled) {
     const logo = await createLogo();
 
     // Assert.
-    assertNotStyle($$(logo, '#multiColoredLogo'), 'display', 'none');
-    assertStyle($$(logo, '#singleColoredLogo'), 'display', 'none');
+    assertNotStyle($$(logo, '#logo'), 'background-image', '');
+    assertStyle($$(logo, '#logo'), '-webkit-mask-image', 'none');
+    assertStyle($$(logo, '#logo'), 'background-color', 'rgba(0, 0, 0, 0)');
   });
 
   test('setting single-colored shows single-colored logo', async () => {
@@ -302,17 +379,56 @@ function createSuite(themeModeDoodlesEnabled) {
     logo.style.setProperty('--ntp-logo-color', 'red');
 
     // Assert.
-    assertNotStyle($$(logo, '#singleColoredLogo'), 'display', 'none');
-    assertStyle(
-        $$(logo, '#singleColoredLogo'), 'background-color', 'rgb(255, 0, 0)');
-    assertStyle($$(logo, '#multiColoredLogo'), 'display', 'none');
+    assertNotStyle($$(logo, '#logo'), '-webkit-mask-image', 'none');
+    assertStyle($$(logo, '#logo'), 'background-color', 'rgb(255, 0, 0)');
+    assertStyle($$(logo, '#logo'), 'background-image', 'none');
   });
 
-  // Disabled for flakiness, see https://crbug.com/1065812.
-  test.skip('receiving resize message resizes doodle', async () => {
+  test('logo aligned correctly', async () => {
+    // Act.
+    const logo = await createLogo();
+
+    // Assert.
+    const pos = getRelativePosition($$(logo, '#logo'), logo);
+    assertEquals(0, pos.bottom);
+    assertEquals(92, $$(logo, '#logo').offsetHeight);
+  });
+
+  test('doodle aligned correctly', async () => {
+    // Act.
+    const logo = await createLogo(createImageDoodle());
+
+    // Assert.
+    const pos = getRelativePosition($$(logo, '#doodle'), logo);
+    assertEquals(0, pos.bottom);
+  });
+
+  test('too large interactive doodle sized correctly', async () => {
     // Arrange.
-    const logo = await createLogo(
-        {content: {interactiveDoodle: {url: {url: 'https://foo.com'}}}});
+    const logo = await createLogo({
+      interactive: {
+        url: {url: 'https://foo.com'},
+        width: 1000,
+        height: 500,
+      }
+    });
+
+    // Assert.
+    assertEquals(200, logo.offsetHeight);
+    assertEquals(200, $$(logo, '#iframe').offsetHeight);
+    const pos = getRelativePosition($$(logo, '#doodle'), logo);
+    assertEquals(0, pos.bottom);
+  });
+
+  test('receiving resize message resizes doodle', async () => {
+    // Arrange.
+    const logo = await createLogo({
+      interactive: {
+        url: {url: 'https://foo.com'},
+        width: 200,
+        height: 100,
+      }
+    });
     const transitionend = eventToPromise('transitionend', $$(logo, '#iframe'));
 
     // Act.
@@ -343,8 +459,13 @@ function createSuite(themeModeDoodlesEnabled) {
 
   test('receiving other message does not resize doodle', async () => {
     // Arrange.
-    const logo = await createLogo(
-        {content: {interactiveDoodle: {url: {url: 'https://foo.com'}}}});
+    const logo = await createLogo({
+      interactive: {
+        url: {url: 'https://foo.com'},
+        width: 200,
+        height: 100,
+      }
+    });
     const height = $$(logo, '#iframe').offsetHeight;
     const width = $$(logo, '#iframe').offsetWidth;
 
@@ -366,8 +487,8 @@ function createSuite(themeModeDoodlesEnabled) {
 
   test('receiving mode message sends mode', async () => {
     // Arrange.
-    const logo = await createLogo(
-        {content: {interactiveDoodle: {url: {url: 'https://foo.com'}}}});
+    const logo =
+        await createLogo({interactive: {url: {url: 'https://foo.com'}}});
     logo.dark = false;
     testProxy.resetResolver('postMessage');
 
@@ -391,7 +512,7 @@ function createSuite(themeModeDoodlesEnabled) {
   test('clicking simple doodle opens link', async () => {
     // Arrange.
     const doodle = createImageDoodle();
-    doodle.content.imageDoodle.onClickUrl = {url: 'https://foo.com'};
+    doodle.image.onClickUrl = {url: 'https://foo.com'};
     const logo = await createLogo(doodle);
 
     // Act.
@@ -406,7 +527,7 @@ function createSuite(themeModeDoodlesEnabled) {
     test(`pressing ${key} on simple doodle opens link`, async () => {
       // Arrange.
       const doodle = createImageDoodle();
-      doodle.content.imageDoodle.onClickUrl = {url: 'https://foo.com'};
+      doodle.image.onClickUrl = {url: 'https://foo.com'};
       const logo = await createLogo(doodle);
 
       // Act.
@@ -418,30 +539,39 @@ function createSuite(themeModeDoodlesEnabled) {
     });
   });
 
-  test('clicking image of animated doodle starts animation', async () => {
+  test('animated doodle starts and stops', async () => {
     // Arrange.
     const doodle = createImageDoodle();
-    doodle.content.imageDoodle.animationUrl = {url: 'https://foo.com'};
+    doodle.image.light.animationUrl = {url: 'https://foo.com'};
     const logo = await createLogo(doodle);
 
-    // Act.
+    // Act (start animation).
     $$(logo, '#image').click();
 
-    // Assert.
+    // Assert (animation started).
     assertEquals(testProxy.getCallCount('open'), 0);
     assertNotStyle($$(logo, '#image'), 'display', 'none');
     assertNotStyle($$(logo, '#animation'), 'display', 'none');
-    assertEquals($$(logo, '#animation').path, 'image?https://foo.com');
+    assertEquals(
+        $$(logo, '#animation').src,
+        'chrome-untrusted://new-tab-page/image?https://foo.com');
     assertDeepEquals(
         $$(logo, '#image').getBoundingClientRect(),
         $$(logo, '#animation').getBoundingClientRect());
+
+    // Act (switch mode).
+    logo.dark = true;
+
+    // Assert (animation stopped).
+    assertNotStyle($$(logo, '#image'), 'display', 'none');
+    assertStyle($$(logo, '#animation'), 'display', 'none');
   });
 
   test('clicking animation of animated doodle opens link', async () => {
     // Arrange.
     const doodle = createImageDoodle();
-    doodle.content.imageDoodle.animationUrl = {url: 'https://foo.com'};
-    doodle.content.imageDoodle.onClickUrl = {url: 'https://bar.com'};
+    doodle.image.light.animationUrl = {url: 'https://foo.com'};
+    doodle.image.onClickUrl = {url: 'https://bar.com'};
     const logo = await createLogo(doodle);
     $$(logo, '#image').click();
 
@@ -488,121 +618,142 @@ function createSuite(themeModeDoodlesEnabled) {
     assertFalse(!!logo.shadowRoot.querySelector('ntp-doodle-share-dialog'));
   });
 
-  test('simple doodle logging flow', async () => {
-    // Arrange.
-    const doodle = createImageDoodle();
-    doodle.content.imageDoodle.onClickUrl = {url: 'https://click.com?ct=supi'};
-    doodle.content.imageDoodle.imageImpressionLogUrl = {url: 'https://log.com'};
-    const logo = await createLogo(doodle);
-    testProxy.handler.setResultFor('onDoodleImageRendered', Promise.resolve({
-      imageClickParams: 'foo=bar&hello=world',
-      interactionLogUrl: null,
-      shareId: '123',
-    }));
+  [true, false].forEach(dark => {
+    const darkStr = dark ? 'dark' : 'light';
+    test(`${darkStr} simple doodle logging flow`, async () => {
+      // Arrange.
+      const doodleResolver = new PromiseResolver();
+      testProxy.handler.setResultFor('getDoodle', doodleResolver.promise);
+      const logo = document.createElement('ntp-logo');
+      document.body.appendChild(logo);
+      logo.dark = dark;
+      testProxy.handler.setResultFor('onDoodleImageRendered', Promise.resolve({
+        imageClickParams: 'foo=bar&hello=world',
+        interactionLogUrl: null,
+        shareId: '123',
+      }));
+      const doodle = createImageDoodle();
+      doodle.image.onClickUrl = {url: 'https://click.com?ct=supi'};
+      const imageDoodle = dark ? doodle.image.dark : doodle.image.light;
 
-    // Act (load).
-    $$(logo, '#image').dispatchEvent(new Event('load'));
+      // Act (load).
+      doodleResolver.resolve({doodle});
+      await flushTasks();
 
-    // Assert (load).
-    const [type, _, logUrl] =
-        await testProxy.handler.whenCalled('onDoodleImageRendered');
-    assertEquals(newTabPage.mojom.DoodleImageType.STATIC, type);
-    assertEquals('https://log.com', logUrl.url);
+      // Assert (load).
+      const [type, _, logUrl] =
+          await testProxy.handler.whenCalled('onDoodleImageRendered');
+      assertEquals(newTabPage.mojom.DoodleImageType.kStatic, type);
+      assertEquals(imageDoodle.imageImpressionLogUrl.url, logUrl.url);
 
-    // Act (click).
-    $$(logo, '#image').click();
+      // Act (click).
+      $$(logo, '#image').click();
 
-    // Assert (click).
-    const [type2] = await testProxy.handler.whenCalled('onDoodleImageClicked');
-    const onClickUrl = await testProxy.whenCalled('open');
-    assertEquals(newTabPage.mojom.DoodleImageType.STATIC, type2);
-    assertEquals('https://click.com/?ct=supi&foo=bar&hello=world', onClickUrl);
+      // Assert (click).
+      const [type2] =
+          await testProxy.handler.whenCalled('onDoodleImageClicked');
+      const onClickUrl = await testProxy.whenCalled('open');
+      assertEquals(newTabPage.mojom.DoodleImageType.kStatic, type2);
+      assertEquals(
+          'https://click.com/?ct=supi&foo=bar&hello=world', onClickUrl);
 
-    // Act (share).
-    $$(logo, '#shareButton').click();
-    await flushTasks();
-    $$(logo, 'ntp-doodle-share-dialog').dispatchEvent(new CustomEvent('share', {
-      detail: newTabPage.mojom.DoodleShareChannel.FACEBOOK
-    }));
+      // Act (share).
+      $$(logo, '#shareButton').click();
+      await flushTasks();
+      $$(logo, 'ntp-doodle-share-dialog')
+          .dispatchEvent(new CustomEvent(
+              'share',
+              {detail: newTabPage.mojom.DoodleShareChannel.kFacebook}));
 
-    // Assert (share).
-    const [channel, doodleId, shareId] =
-        await testProxy.handler.whenCalled('onDoodleShared');
-    assertEquals(newTabPage.mojom.DoodleShareChannel.FACEBOOK, channel);
-    assertEquals('supi', doodleId);
-    assertEquals('123', shareId);
-  });
+      // Assert (share).
+      const [channel, doodleId, shareId] =
+          await testProxy.handler.whenCalled('onDoodleShared');
+      assertEquals(newTabPage.mojom.DoodleShareChannel.kFacebook, channel);
+      assertEquals('supi', doodleId);
+      assertEquals('123', shareId);
+    });
 
-  test('animated doodle logging flow', async () => {
-    // Arrange.
-    const doodle = createImageDoodle();
-    doodle.content.imageDoodle.onClickUrl = {url: 'https://click.com?ct=supi'};
-    doodle.content.imageDoodle.imageImpressionLogUrl = {url: 'https://log.com'};
-    doodle.content.imageDoodle.animationUrl = {url: 'https://animation.com'};
-    doodle.content.imageDoodle.animationImpressionLogUrl = {
-      url: 'https://animation_log.com'
-    };
-    const logo = await createLogo(doodle);
-    testProxy.handler.setResultFor('onDoodleImageRendered', Promise.resolve({
-      imageClickParams: '',
-      interactionLogUrl: {url: 'https://interaction.com'},
-      shareId: '',
-    }));
+    test(`${darkStr} animated doodle logging flow`, async () => {
+      // Arrange.
+      const doodleResolver = new PromiseResolver();
+      testProxy.handler.setResultFor('getDoodle', doodleResolver.promise);
+      const logo = document.createElement('ntp-logo');
+      document.body.appendChild(logo);
+      logo.dark = dark;
+      testProxy.handler.setResultFor('onDoodleImageRendered', Promise.resolve({
+        imageClickParams: '',
+        interactionLogUrl: {url: 'https://interaction.com'},
+        shareId: '',
+      }));
+      const doodle = createImageDoodle();
+      doodle.image.onClickUrl = {url: 'https://click.com?ct=supi'};
+      doodle.image.light.animationUrl = {url: 'https://animation.com'};
+      doodle.image.dark.animationUrl = {url: 'https://dark_animation.com'};
+      doodle.image.light.animationImpressionLogUrl = {
+        url: 'https://animation_log.com'
+      };
+      doodle.image.dark.animationImpressionLogUrl = {
+        url: 'https://dark_animation_log.com'
+      };
+      const imageDoodle = dark ? doodle.image.dark : doodle.image.light;
 
-    // Act (CTA load).
-    $$(logo, '#image').dispatchEvent(new Event('load'));
+      // Act (CTA load).
+      doodleResolver.resolve({doodle});
+      await flushTasks();
 
-    // Assert (CTA load).
-    const [type, _, logUrl] =
-        await testProxy.handler.whenCalled('onDoodleImageRendered');
-    assertEquals(newTabPage.mojom.DoodleImageType.CTA, type);
-    assertEquals('https://log.com', logUrl.url);
+      // Assert (CTA load).
+      const [type, _, logUrl] =
+          await testProxy.handler.whenCalled('onDoodleImageRendered');
+      assertEquals(newTabPage.mojom.DoodleImageType.kCta, type);
+      assertEquals(imageDoodle.imageImpressionLogUrl.url, logUrl.url);
 
-    // Act (CTA click).
-    testProxy.handler.resetResolver('onDoodleImageRendered');
-    testProxy.handler.setResultFor('onDoodleImageRendered', Promise.resolve({
-      imageClickParams: 'foo=bar&hello=world',
-      interactionLogUrl: null,
-      shareId: '123',
-    }));
-    $$(logo, '#image').click();
+      // Act (CTA click).
+      testProxy.handler.resetResolver('onDoodleImageRendered');
+      testProxy.handler.setResultFor('onDoodleImageRendered', Promise.resolve({
+        imageClickParams: 'foo=bar&hello=world',
+        interactionLogUrl: null,
+        shareId: '123',
+      }));
+      $$(logo, '#image').click();
 
-    // Assert (CTA click).
-    const [type2, interactionLogUrl] =
-        await testProxy.handler.whenCalled('onDoodleImageClicked');
-    assertEquals(newTabPage.mojom.DoodleImageType.CTA, type2);
-    assertEquals('https://interaction.com', interactionLogUrl.url);
+      // Assert (CTA click).
+      const [type2, interactionLogUrl] =
+          await testProxy.handler.whenCalled('onDoodleImageClicked');
+      assertEquals(newTabPage.mojom.DoodleImageType.kCta, type2);
+      assertEquals('https://interaction.com', interactionLogUrl.url);
 
-    // Assert (animation load). Also triggered by clicking #image.
-    const [type3, __, logUrl2] =
-        await testProxy.handler.whenCalled('onDoodleImageRendered');
-    assertEquals(newTabPage.mojom.DoodleImageType.ANIMATION, type3);
-    assertEquals('https://animation_log.com', logUrl2.url);
+      // Assert (animation load). Also triggered by clicking #image.
+      const [type3, __, logUrl2] =
+          await testProxy.handler.whenCalled('onDoodleImageRendered');
+      assertEquals(newTabPage.mojom.DoodleImageType.kAnimation, type3);
+      assertEquals(imageDoodle.animationImpressionLogUrl.url, logUrl2.url);
 
-    // Act (animation click).
-    testProxy.handler.resetResolver('onDoodleImageClicked');
-    $$(logo, '#animation').click();
+      // Act (animation click).
+      testProxy.handler.resetResolver('onDoodleImageClicked');
+      $$(logo, '#animation').click();
 
-    // Assert (animation click).
-    const [type4, ___] =
-        await testProxy.handler.whenCalled('onDoodleImageClicked');
-    const onClickUrl = await testProxy.whenCalled('open');
-    assertEquals(newTabPage.mojom.DoodleImageType.ANIMATION, type4);
-    assertEquals('https://click.com/?ct=supi&foo=bar&hello=world', onClickUrl);
+      // Assert (animation click).
+      const [type4, ___] =
+          await testProxy.handler.whenCalled('onDoodleImageClicked');
+      const onClickUrl = await testProxy.whenCalled('open');
+      assertEquals(newTabPage.mojom.DoodleImageType.kAnimation, type4);
+      assertEquals(
+          'https://click.com/?ct=supi&foo=bar&hello=world', onClickUrl);
 
-    // Act (share).
-    $$(logo, '#shareButton').click();
-    await flushTasks();
-    $$(logo, 'ntp-doodle-share-dialog').dispatchEvent(new CustomEvent('share', {
-      detail: newTabPage.mojom.DoodleShareChannel.TWITTER
-    }));
+      // Act (share).
+      $$(logo, '#shareButton').click();
+      await flushTasks();
+      $$(logo, 'ntp-doodle-share-dialog')
+          .dispatchEvent(new CustomEvent(
+              'share', {detail: newTabPage.mojom.DoodleShareChannel.kTwitter}));
 
-    // Assert (share).
-    const [channel, doodleId, shareId] =
-        await testProxy.handler.whenCalled('onDoodleShared');
-    assertEquals(newTabPage.mojom.DoodleShareChannel.TWITTER, channel);
-    assertEquals('supi', doodleId);
-    assertEquals('123', shareId);
+      // Assert (share).
+      const [channel, doodleId, shareId] =
+          await testProxy.handler.whenCalled('onDoodleShared');
+      assertEquals(newTabPage.mojom.DoodleShareChannel.kTwitter, channel);
+      assertEquals('supi', doodleId);
+      assertEquals('123', shareId);
+    });
   });
 }
 

@@ -8,6 +8,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -18,15 +19,13 @@ import org.chromium.base.Callback;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -43,8 +42,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class ChromeHttpAuthHandlerTest {
     @Rule
-    public ChromeActivityTestRule<? extends ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule(ChromeTabbedActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
     public CustomTabActivityTestRule mCustomTabActivityTestRule = new CustomTabActivityTestRule();
@@ -141,6 +139,6 @@ public class ChromeHttpAuthHandlerTest {
 
     private void verifyAuthDialogVisibility(ChromeHttpAuthHandler handler, boolean isVisible) {
         CriteriaHelper.pollUiThread(
-                Criteria.equals(isVisible, () -> handler.isShowingAuthDialog()));
+                () -> Criteria.checkThat(handler.isShowingAuthDialog(), Matchers.is(isVisible)));
     }
 }

@@ -18,7 +18,9 @@
 #include "ash/system/message_center/fullscreen_notification_blocker.h"
 #include "ash/system/message_center/inactive_user_notification_blocker.h"
 #include "ash/system/message_center/session_state_notification_blocker.h"
+#include "ash/system/phonehub/phone_hub_notification_controller.h"
 #include "base/command_line.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -41,6 +43,9 @@ void MessageCenterController::RegisterProfilePrefs(
   registry->RegisterStringPref(
       prefs::kMessageCenterLockScreenMode,
       prefs::kMessageCenterLockScreenModeHide,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kAppNotificationBadgingEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 }
 
@@ -94,6 +99,11 @@ MessageCenterController::MessageCenterController() {
         std::make_unique<PopupNotificationBlocker>(MessageCenter::Get());
   }
 
+  if (chromeos::features::IsPhoneHubEnabled()) {
+    phone_hub_notification_controller_ =
+        std::make_unique<PhoneHubNotificationController>();
+  }
+
   // Set the system notification source display name ("Chrome OS" or "Chromium
   // OS").
   message_center::MessageCenter::Get()->SetSystemNotificationAppName(
@@ -131,6 +141,11 @@ void MessageCenterController::SetArcNotificationManagerInstance(
 
   for (auto& observer : observers_)
     observer.OnSetArcNotificationsInstance(arc_notification_manager_.get());
+}
+
+ArcNotificationManagerBase*
+MessageCenterController::GetArcNotificationManagerInstance() {
+  return arc_notification_manager_.get();
 }
 
 void MessageCenterController::AddObserver(Observer* observer) {

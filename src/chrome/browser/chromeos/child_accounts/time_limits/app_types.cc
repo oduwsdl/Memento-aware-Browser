@@ -35,6 +35,10 @@ std::string AppTypeToString(apps::mojom::AppType app_type) {
       return "Plugin VM";
     case apps::mojom::AppType::kLacros:
       return "LaCrOS";
+    case apps::mojom::AppType::kRemote:
+      return "Remote";
+    case apps::mojom::AppType::kBorealis:
+      return "Borealis";
   }
   NOTREACHED();
 }

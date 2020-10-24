@@ -14,78 +14,13 @@
 
 namespace cc {
 
-TEST(FrameSequenceMetricsTest, AggregatedThroughput) {
-  FrameSequenceMetrics first(FrameSequenceTrackerType::kTouchScroll, nullptr);
-  first.impl_throughput().frames_expected = 200u;
-  first.impl_throughput().frames_produced = 190u;
-  first.main_throughput().frames_expected = 100u;
-  first.main_throughput().frames_produced = 50u;
-
-  // The aggregated throughput is computed at ReportMetrics().
-  first.ComputeAggregatedThroughputForTesting();
-  EXPECT_EQ(first.aggregated_throughput().frames_expected, 200u);
-}
-
-TEST(FrameSequenceMetricsTest, AggregatedThroughputClearedAfterReport) {
-  FrameSequenceMetrics first(FrameSequenceTrackerType::kCompositorAnimation,
-                             nullptr);
-  first.impl_throughput().frames_expected = 200u;
-  first.impl_throughput().frames_produced = 190u;
-  first.aggregated_throughput().frames_expected = 170u;
-  first.aggregated_throughput().frames_produced = 150u;
-
-  first.ReportMetrics();
-  EXPECT_EQ(first.aggregated_throughput().frames_expected, 0u);
-  EXPECT_EQ(first.aggregated_throughput().frames_produced, 0u);
-}
-
-// Test that ThroughputUkmReporter::ComputeUniversalThroughput is called when
-// an object of FrameSequenceMetrics is destroyed.
-TEST(FrameSequenceMetricsTest, ComputeUniversalThroughputAtDestruction) {
-  auto recorder = std::make_unique<ukm::TestUkmRecorder>();
-  auto ukm_manager = std::make_unique<UkmManager>(std::move(recorder));
-  ThroughputUkmReporter reporter(ukm_manager.get());
-  auto metric = std::make_unique<FrameSequenceMetrics>(
-      FrameSequenceTrackerType::kUniversal, &reporter);
-
-  metric->impl_throughput().frames_expected = 200u;
-  metric->impl_throughput().frames_produced = 190u;
-  metric->aggregated_throughput().frames_expected = 170u;
-  metric->aggregated_throughput().frames_produced = 150u;
-
-  metric = nullptr;
-  DCHECK(reporter.current_universal_throughput().has_value());
-  EXPECT_EQ(reporter.current_universal_throughput().value(), 88);
-}
-
-// Test that ThroughputUkmReporter::ReportThroughputUkm isn't called for the
-// kUniversal tracker.
-TEST(FrameSequenceMetricsTest, UniversalNotReportUkmAtRenderer) {
-  auto recorder = std::make_unique<ukm::TestUkmRecorder>();
-  auto ukm_manager = std::make_unique<UkmManager>(std::move(recorder));
-  ThroughputUkmReporter reporter(ukm_manager.get());
-  auto metric = std::make_unique<FrameSequenceMetrics>(
-      FrameSequenceTrackerType::kUniversal, &reporter);
-
-  metric->impl_throughput().frames_expected = 200u;
-  metric->impl_throughput().frames_produced = 190u;
-  metric->aggregated_throughput().frames_expected = 170u;
-  metric->aggregated_throughput().frames_produced = 150u;
-  metric->ReportMetrics();
-
-  // The corresponding |samples_to_next_event_| element is 0 if the
-  // ReportThroughputUkm isn't called.
-  EXPECT_EQ(reporter.GetSamplesToNextEventForTesting(
-                static_cast<int>(FrameSequenceTrackerType::kUniversal)),
-            1u);
-}
-
 TEST(FrameSequenceMetricsTest, MergeMetrics) {
   // Create a metric with only a small number of frames. It shouldn't report any
   // metrics.
   FrameSequenceMetrics first(FrameSequenceTrackerType::kTouchScroll, nullptr);
   first.impl_throughput().frames_expected = 20;
   first.impl_throughput().frames_produced = 10;
+  first.impl_throughput().frames_ontime = 5;
   EXPECT_FALSE(first.HasEnoughDataForReporting());
 
   // Create a second metric with too few frames to report any metrics.
@@ -93,6 +28,7 @@ TEST(FrameSequenceMetricsTest, MergeMetrics) {
       FrameSequenceTrackerType::kTouchScroll, nullptr);
   second->impl_throughput().frames_expected = 90;
   second->impl_throughput().frames_produced = 60;
+  second->impl_throughput().frames_ontime = 50;
   EXPECT_FALSE(second->HasEnoughDataForReporting());
 
   // Merge the two metrics. The result should have enough frames to report
@@ -107,16 +43,33 @@ TEST(FrameSequenceMetricsTest, ScrollingThreadMergeMetrics) {
   first.SetScrollingThread(FrameSequenceMetrics::ThreadType::kCompositor);
   first.impl_throughput().frames_expected = 20;
   first.impl_throughput().frames_produced = 10;
+  first.impl_throughput().frames_ontime = 10;
 
   auto second = std::make_unique<FrameSequenceMetrics>(
       FrameSequenceTrackerType::kTouchScroll, nullptr);
   second->SetScrollingThread(FrameSequenceMetrics::ThreadType::kMain);
   second->main_throughput().frames_expected = 50;
   second->main_throughput().frames_produced = 10;
+  second->main_throughput().frames_ontime = 10;
 
   ASSERT_DEATH(first.Merge(std::move(second)), "");
 }
 #endif  // DCHECK_IS_ON()
+
+TEST(FrameSequenceMetricsTest, VideoReportsOnImplOnly) {
+  base::HistogramTester histograms;
+
+  FrameSequenceMetrics first(FrameSequenceTrackerType::kVideo, nullptr);
+  first.impl_throughput().frames_expected = 120;
+  first.impl_throughput().frames_produced = 80;
+  first.impl_throughput().frames_ontime = 80;
+  first.main_throughput().frames_expected = 0;
+  first.main_throughput().frames_produced = 0;
+  first.main_throughput().frames_ontime = 0;
+  first.ReportMetrics();
+  histograms.ExpectTotalCount("Graphics.Smoothness.FrameSequenceLength.Video",
+                              1u);
+}
 
 TEST(FrameSequenceMetricsTest, AllMetricsReported) {
   base::HistogramTester histograms;
@@ -126,8 +79,10 @@ TEST(FrameSequenceMetricsTest, AllMetricsReported) {
   FrameSequenceMetrics first(FrameSequenceTrackerType::kTouchScroll, nullptr);
   first.impl_throughput().frames_expected = 120;
   first.impl_throughput().frames_produced = 80;
+  first.impl_throughput().frames_ontime = 60;
   first.main_throughput().frames_expected = 20;
   first.main_throughput().frames_produced = 10;
+  first.main_throughput().frames_ontime = 5;
   EXPECT_TRUE(first.HasEnoughDataForReporting());
   first.ReportMetrics();
 
@@ -138,6 +93,13 @@ TEST(FrameSequenceMetricsTest, AllMetricsReported) {
       1u);
   histograms.ExpectTotalCount(
       "Graphics.Smoothness.PercentDroppedFrames.MainThread.TouchScroll", 0u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.CompositorThread."
+      "TouchScroll",
+      1u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.MainThread.TouchScroll",
+      0u);
 
   // There should still be data left over for the main-thread.
   EXPECT_TRUE(first.HasDataLeftForReporting());
@@ -146,7 +108,9 @@ TEST(FrameSequenceMetricsTest, AllMetricsReported) {
       FrameSequenceTrackerType::kTouchScroll, nullptr);
   second->impl_throughput().frames_expected = 110;
   second->impl_throughput().frames_produced = 100;
+  second->impl_throughput().frames_ontime = 80;
   second->main_throughput().frames_expected = 90;
+  second->main_throughput().frames_ontime = 70;
   first.Merge(std::move(second));
   EXPECT_TRUE(first.HasEnoughDataForReporting());
   first.ReportMetrics();
@@ -155,22 +119,15 @@ TEST(FrameSequenceMetricsTest, AllMetricsReported) {
       2u);
   histograms.ExpectTotalCount(
       "Graphics.Smoothness.PercentDroppedFrames.MainThread.TouchScroll", 1u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.CompositorThread."
+      "TouchScroll",
+      2u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.MainThread.TouchScroll",
+      1u);
   // All the metrics have now been reported. No data should be left over.
   EXPECT_FALSE(first.HasDataLeftForReporting());
-
-  FrameSequenceMetrics third(FrameSequenceTrackerType::kUniversal, nullptr);
-  third.impl_throughput().frames_expected = 120;
-  third.impl_throughput().frames_produced = 80;
-  third.main_throughput().frames_expected = 120;
-  third.main_throughput().frames_produced = 80;
-  EXPECT_TRUE(third.HasEnoughDataForReporting());
-  third.ReportMetrics();
-
-  histograms.ExpectTotalCount(
-      "Graphics.Smoothness.PercentDroppedFrames.CompositorThread.Universal",
-      1u);
-  histograms.ExpectTotalCount(
-      "Graphics.Smoothness.PercentDroppedFrames.MainThread.Universal", 1u);
 }
 
 TEST(FrameSequenceMetricsTest, IrrelevantMetricsNotReported) {
@@ -182,8 +139,10 @@ TEST(FrameSequenceMetricsTest, IrrelevantMetricsNotReported) {
                              nullptr);
   first.impl_throughput().frames_expected = 120;
   first.impl_throughput().frames_produced = 80;
+  first.impl_throughput().frames_ontime = 70;
   first.main_throughput().frames_expected = 120;
   first.main_throughput().frames_produced = 80;
+  first.main_throughput().frames_ontime = 70;
   EXPECT_TRUE(first.HasEnoughDataForReporting());
   first.ReportMetrics();
 
@@ -200,18 +159,34 @@ TEST(FrameSequenceMetricsTest, IrrelevantMetricsNotReported) {
       "Graphics.Smoothness.PercentDroppedFrames.SlowerThread."
       "CompositorAnimation",
       0u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.CompositorThread."
+      "CompositorAnimation",
+      1u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.MainThread."
+      "CompositorAnimation",
+      0u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.SlowerThread."
+      "CompositorAnimation",
+      0u);
 
   // Not reported, but the data should be reset.
   EXPECT_EQ(first.impl_throughput().frames_expected, 0u);
   EXPECT_EQ(first.impl_throughput().frames_produced, 0u);
+  EXPECT_EQ(first.impl_throughput().frames_ontime, 0u);
   EXPECT_EQ(first.main_throughput().frames_expected, 0u);
   EXPECT_EQ(first.main_throughput().frames_produced, 0u);
+  EXPECT_EQ(first.main_throughput().frames_ontime, 0u);
 
   FrameSequenceMetrics second(FrameSequenceTrackerType::kRAF, nullptr);
   second.impl_throughput().frames_expected = 120;
   second.impl_throughput().frames_produced = 80;
+  second.impl_throughput().frames_ontime = 70;
   second.main_throughput().frames_expected = 120;
   second.main_throughput().frames_produced = 80;
+  second.main_throughput().frames_ontime = 70;
   EXPECT_TRUE(second.HasEnoughDataForReporting());
   second.ReportMetrics();
 
@@ -223,6 +198,13 @@ TEST(FrameSequenceMetricsTest, IrrelevantMetricsNotReported) {
       "Graphics.Smoothness.PercentDroppedFrames.MainThread.RAF", 1u);
   histograms.ExpectTotalCount(
       "Graphics.Smoothness.PercentDroppedFrames.SlowerThread.RAF", 0u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.CompositorThread.RAF",
+      0u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.MainThread.RAF", 1u);
+  histograms.ExpectTotalCount(
+      "Graphics.Smoothness.PercentMissedDeadlineFrames.SlowerThread.RAF", 0u);
 }
 
 TEST(FrameSequenceMetricsTest, ScrollingThreadMetricsReportedForInteractions) {
@@ -231,8 +213,10 @@ TEST(FrameSequenceMetricsTest, ScrollingThreadMetricsReportedForInteractions) {
         FrameSequenceTrackerType::kTouchScroll, nullptr);
     metrics->impl_throughput().frames_expected = 100;
     metrics->impl_throughput().frames_produced = 80;
+    metrics->impl_throughput().frames_ontime = 70;
     metrics->main_throughput().frames_expected = 100;
     metrics->main_throughput().frames_produced = 60;
+    metrics->main_throughput().frames_ontime = 50;
     return metrics;
   };
 

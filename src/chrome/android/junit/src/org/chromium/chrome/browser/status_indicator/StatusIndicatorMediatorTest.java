@@ -46,6 +46,10 @@ public class StatusIndicatorMediatorTest {
     @Mock
     StatusIndicatorCoordinator.StatusIndicatorObserver mObserver;
     @Mock
+    Runnable mRegisterResource;
+    @Mock
+    Runnable mUnregisterResource;
+    @Mock
     Supplier<Boolean> mCanAnimateNativeBrowserControls;
     @Mock
     Callback<Runnable> mInvalidateCompositorView;
@@ -58,6 +62,8 @@ public class StatusIndicatorMediatorTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        doNothing().when(mRegisterResource).run();
+        doNothing().when(mUnregisterResource).run();
         when(mCanAnimateNativeBrowserControls.get()).thenReturn(true);
         doNothing().when(mInvalidateCompositorView).onResult(any(Runnable.class));
         doNothing().when(mRequestLayout).run();
@@ -65,9 +71,10 @@ public class StatusIndicatorMediatorTest {
                          .with(StatusIndicatorProperties.ANDROID_VIEW_VISIBILITY, View.GONE)
                          .with(StatusIndicatorProperties.COMPOSITED_VIEW_VISIBLE, false)
                          .build();
-        mMediator = new StatusIndicatorMediator(mModel, mBrowserControlsStateProvider,
-                () -> Color.WHITE, mCanAnimateNativeBrowserControls, mInvalidateCompositorView,
-                mRequestLayout);
+        mMediator = new StatusIndicatorMediator(
+                mBrowserControlsStateProvider, () -> Color.WHITE, mCanAnimateNativeBrowserControls);
+        mMediator.initialize(mModel, mRegisterResource, mUnregisterResource,
+                mInvalidateCompositorView, mRequestLayout);
     }
 
     @Test
@@ -153,22 +160,25 @@ public class StatusIndicatorMediatorTest {
     }
 
     @Test
-    public void testSkipAnimationIfCannotAnimateNativeBrowserControls() {
-        // Assume we can't animate the native browser controls.
+    public void testHeightChangeToZeroKeepsAndroidViewVisibleIfCannotAnimateNativeControls() {
+        // Assume we can't animate native controls.
         when(mCanAnimateNativeBrowserControls.get()).thenReturn(false);
-
-        // Show the indicator.
-        setViewHeight(50);
+        // Show the status indicator.
+        setViewHeight(70);
         mMediator.onLayoutChange(mStatusIndicatorView, 0, 0, 0, 0, 0, 0, 0, 0);
-        // The indicator should be visible immediately.
+        mMediator.onControlsOffsetChanged(0, 70, 0, 0, false);
+        // The Android view should be visible at this point.
         assertEquals(View.VISIBLE, mModel.get(StatusIndicatorProperties.ANDROID_VIEW_VISIBILITY));
-        assertTrue(mModel.get(StatusIndicatorProperties.COMPOSITED_VIEW_VISIBLE));
-
-        // Hide the indicator.
+        // Now hide it.
         mMediator.updateVisibilityForTesting(true);
-        // The indicator should hide immediately.
+        // The hiding animation...
+        mMediator.onControlsOffsetChanged(0, 30, 0, 0, false);
+        // Android view will be VISIBLE during the animation.
+        assertEquals(View.VISIBLE, mModel.get(StatusIndicatorProperties.ANDROID_VIEW_VISIBILITY));
+        mMediator.onControlsOffsetChanged(0, 0, 0, 0, false);
+        // The view will be GONE once the animation ends and the indicator is completely out of
+        // screen bounds.
         assertEquals(View.GONE, mModel.get(StatusIndicatorProperties.ANDROID_VIEW_VISIBILITY));
-        assertFalse(mModel.get(StatusIndicatorProperties.COMPOSITED_VIEW_VISIBLE));
     }
 
     private void setViewHeight(int height) {

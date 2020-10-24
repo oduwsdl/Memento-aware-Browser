@@ -15,7 +15,6 @@
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/chrome_extensions_browser_client.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_action_test_util.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -32,6 +31,7 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/notification_types.h"
@@ -128,7 +128,7 @@ class ExtensionActionViewControllerUnitTest
   }
 
   // Sets whether the given |action| wants to run on the |web_contents|.
-  void SetActionWantsToRunOnTab(ExtensionAction* action,
+  void SetActionWantsToRunOnTab(extensions::ExtensionAction* action,
                                 content::WebContents* web_contents,
                                 bool wants_to_run) {
     action->SetIsVisible(
@@ -166,6 +166,9 @@ class ExtensionActionViewControllerUnitTest
     return extension_service_;
   }
   ToolbarActionsModel* toolbar_model() { return toolbar_model_; }
+  ExtensionsContainer* container() {
+    return test_util_->GetExtensionsContainer();
+  }
   const gfx::Size& view_size() const { return view_size_; }
 
  private:
@@ -533,8 +536,19 @@ TEST_P(ExtensionsMenuExtensionActionViewControllerUnitTest,
 
   // Default state: unpinned.
   check_visibility_string(action, IDS_EXTENSIONS_PIN_TO_TOOLBAR);
+
+  // Pin the extension; re-check.
   toolbar_model()->SetActionVisibility(id, true);
   check_visibility_string(action, IDS_EXTENSIONS_UNPIN_FROM_TOOLBAR);
+
+  // Unpin the extension and ephemerally pop it out.
+  toolbar_model()->SetActionVisibility(id, false);
+  EXPECT_FALSE(container()->IsActionVisibleOnToolbar(action));
+  base::RunLoop run_loop;
+  container()->PopOutAction(action, false, run_loop.QuitClosure());
+  EXPECT_TRUE(container()->IsActionVisibleOnToolbar(action));
+  // The string should still just be "pin".
+  check_visibility_string(action, IDS_EXTENSIONS_PIN_TO_TOOLBAR);
 }
 
 class ExtensionActionViewControllerGrayscaleTest
@@ -639,7 +653,7 @@ void ExtensionActionViewControllerGrayscaleTest::RunGrayscaleTest(
       GetViewControllerForId(extension->id());
   ASSERT_TRUE(controller);
   content::WebContents* web_contents = GetActiveWebContents();
-  ExtensionAction* extension_action =
+  extensions::ExtensionAction* extension_action =
       extensions::ExtensionActionManager::Get(profile())->GetExtensionAction(
           *extension);
   extensions::ExtensionActionRunner* action_runner =

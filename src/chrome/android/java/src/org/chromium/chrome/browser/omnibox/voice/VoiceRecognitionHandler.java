@@ -9,10 +9,12 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.speech.RecognizerIntent;
 import android.text.TextUtils;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ThreadUtils;
@@ -29,6 +31,7 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.PermissionCallback;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,8 +44,13 @@ public class VoiceRecognitionHandler {
     // response (as opposed to treating it like a typed string in the Omnibox).
     @VisibleForTesting
     public static final float VOICE_SEARCH_CONFIDENCE_NAVIGATE_THRESHOLD = 0.9f;
+    // Extra containing the languages for the returned voice transcriptions (ArrayList<String>).
+    // This language is only returned for queries handled by Assistant.
+    @VisibleForTesting
+    static final String VOICE_QUERY_RESULT_LANGUAGES = "android.speech.extra.LANGUAGE";
 
     private final Delegate mDelegate;
+    private Long mQueryStartTimeMs;
     private WebContentsObserver mVoiceSearchWebContentsObserver;
     private AssistantVoiceSearchService mAssistantVoiceSearchService;
 
@@ -110,15 +118,23 @@ public class VoiceRecognitionHandler {
     public static class VoiceResult {
         private final String mMatch;
         private final float mConfidence;
+        @Nullable
+        private final String mLanguage;
+
+        public VoiceResult(String match, float confidence) {
+            this(match, confidence, null);
+        }
 
         /**
          * Creates an instance of a VoiceResult.
          * @param match The text match from the voice recognition.
          * @param confidence The confidence value of the recognition that should go from 0.0 to 1.0.
+         * @param language The language of the returned query.
          */
-        public VoiceResult(String match, float confidence) {
+        public VoiceResult(String match, float confidence, @Nullable String language) {
             mMatch = match;
             mConfidence = confidence;
+            mLanguage = language;
         }
 
         /**
@@ -133,6 +149,13 @@ public class VoiceRecognitionHandler {
          */
         public float getConfidence() {
             return mConfidence;
+        }
+
+        /**
+         * @return The IETF language tag for this result.
+         */
+        public @Nullable String getLanguage() {
+            return mLanguage;
         }
     }
 
@@ -163,7 +186,7 @@ public class VoiceRecognitionHandler {
          * @param url The URL for the navigation that started, so we can ensure that what we're
          * navigating to is actually a SRP.
          */
-        private void setReceivedUserGesture(String url) {
+        private void setReceivedUserGesture(GURL url) {
             WebContents webContents = mWebContents.get();
             if (webContents == null) return;
 
@@ -191,6 +214,8 @@ public class VoiceRecognitionHandler {
         @VoiceInteractionSource
         private final int mSource;
 
+        private boolean mCallbackComplete;
+
         public VoiceRecognitionCompleteCallback(@VoiceInteractionSource int source) {
             mSource = source;
         }
@@ -198,6 +223,12 @@ public class VoiceRecognitionHandler {
         // WindowAndroid.IntentCallback implementation:
         @Override
         public void onIntentCompleted(WindowAndroid window, int resultCode, Intent data) {
+            if (mCallbackComplete) {
+                recordVoiceSearchUnexpectedResultSource(mSource);
+                return;
+            }
+
+            mCallbackComplete = true;
             if (resultCode != Activity.RESULT_OK || data.getExtras() == null) {
                 if (resultCode == Activity.RESULT_CANCELED) {
                     recordVoiceSearchDismissedEventSource(mSource);
@@ -207,6 +238,8 @@ public class VoiceRecognitionHandler {
                 return;
             }
 
+            // Only record query duration on success.
+            stopTrackingAndRecordQueryDuration();
             AutocompleteCoordinator autocompleteCoordinator =
                     mDelegate.getAutocompleteCoordinator();
             assert autocompleteCoordinator != null;
@@ -241,6 +274,16 @@ public class VoiceRecognitionHandler {
                 url = TemplateUrlServiceFactory.get()
                               .getUrlForVoiceSearchQuery(topResultQuery)
                               .getSpec();
+
+                // If a language was returned to us from voice recognition, then use it. Currently,
+                // this is only returned when Google is the search engine. Since Google always has
+                // the query as a url parameter so appending this param will always be safe.
+                if (topResult.getLanguage() != null) {
+                    // TODO(crbug.com/1117271): Cleanup these assertions when Assistant launches.
+                    assert url.contains("?") : "URL must contain at least one URL param.";
+                    assert !url.contains("#") : "URL must not contain a fragment.";
+                    url += "&hl=" + topResult.getLanguage();
+                }
             }
 
             // Since voice was used, we need to let the frame know that there was a user gesture.
@@ -267,9 +310,12 @@ public class VoiceRecognitionHandler {
 
         ArrayList<String> strings = extras.getStringArrayList(RecognizerIntent.EXTRA_RESULTS);
         float[] confidences = extras.getFloatArray(RecognizerIntent.EXTRA_CONFIDENCE_SCORES);
+        ArrayList<String> languages = extras.getStringArrayList(VOICE_QUERY_RESULT_LANGUAGES);
 
         if (strings == null || confidences == null) return null;
         if (strings.size() != confidences.length) return null;
+        // Langues is optional, so only check the size when it's non-null.
+        if (languages != null && languages.size() != strings.size()) return null;
 
         AutocompleteCoordinator autocompleteCoordinator = mDelegate.getAutocompleteCoordinator();
         assert autocompleteCoordinator != null;
@@ -284,8 +330,9 @@ public class VoiceRecognitionHandler {
             // the voice engine.
             String culledString = strings.get(i).replaceAll(" ", "");
             String url = autocompleteCoordinator.qualifyPartialURLQuery(culledString);
-            results.add(
-                    new VoiceResult(url == null ? strings.get(i) : culledString, confidences[i]));
+            String language = languages == null ? null : languages.get(i);
+            results.add(new VoiceResult(
+                    url == null ? strings.get(i) : culledString, confidences[i], language));
         }
         return results;
     }
@@ -297,20 +344,23 @@ public class VoiceRecognitionHandler {
      */
     public void startVoiceRecognition(@VoiceInteractionSource int source) {
         ThreadUtils.assertOnUiThread();
+        startTrackingQueryDuration();
 
         WindowAndroid windowAndroid = mDelegate.getWindowAndroid();
         if (windowAndroid == null) return;
         Activity activity = windowAndroid.getActivity().get();
         if (activity == null) return;
 
-        // Check if this can be handled by Assistant Voice Search, if so let it handle the search.
-        if (mAssistantVoiceSearchService != null
-                && mAssistantVoiceSearchService.shouldRequestAssistantVoiceSearch()) {
-            AssistantVoiceSearchService.reportUserEligibility(true);
-            startAGSAForAssistantVoiceSearch(windowAndroid, source);
-            return;
+        if (mAssistantVoiceSearchService != null) {
+            // Report the client's eligibility for Assistant voice search.
+            mAssistantVoiceSearchService.reportUserEligibility();
+
+            if (mAssistantVoiceSearchService.shouldRequestAssistantVoiceSearch()) {
+                startAGSAForAssistantVoiceSearch(windowAndroid, source);
+                return;
+            }
         }
-        AssistantVoiceSearchService.reportUserEligibility(false);
+
         // Check if we need to request audio permissions. If we don't, then trigger a permissions
         // prompt will appear and startVoiceRecognition will be called again.
         if (!ensureAudioPermissionGranted(windowAndroid, source)) return;
@@ -414,6 +464,23 @@ public class VoiceRecognitionHandler {
         return activity != null && isRecognitionIntentPresent(true);
     }
 
+    /** Start tracking query duration by capturing when it started */
+    private void startTrackingQueryDuration() {
+        mQueryStartTimeMs = SystemClock.elapsedRealtime();
+    }
+
+    /** Calculate the query duration and report it and cleanup afterwards. */
+    @VisibleForTesting
+    void stopTrackingAndRecordQueryDuration() {
+        // Defensive check to guard against onIntentResult being called more than once. This only
+        // happens with assistant experiments. See crbug.com/1116927 for details.
+        if (mQueryStartTimeMs == null) return;
+
+        long elapsedTimeMs = SystemClock.elapsedRealtime() - mQueryStartTimeMs;
+        recordVoiceSearchOpenDuration(elapsedTimeMs);
+        mQueryStartTimeMs = null;
+    }
+
     /**
      * Records the source of a voice search initiation.
      * @param source The source of the voice search, such as NTP or omnibox. Values taken from the
@@ -459,6 +526,17 @@ public class VoiceRecognitionHandler {
     }
 
     /**
+     * Records the source of an unexpected voice search result. Ideally this will always be 0.
+     * @param source The source of the voice search, such as NTP or omnibox. Values taken from the
+     *        enum VoiceInteractionEventSource in enums.xml.
+     */
+    @VisibleForTesting
+    protected void recordVoiceSearchUnexpectedResultSource(@VoiceInteractionSource int source) {
+        RecordHistogram.recordEnumeratedHistogram("VoiceInteraction.UnexpectedResultSource", source,
+                VoiceInteractionSource.HISTOGRAM_BOUNDARY);
+    }
+
+    /**
      * Records the result of a voice search.
      * @param result The result of a voice search, true if results were successfully returned.
      */
@@ -479,6 +557,12 @@ public class VoiceRecognitionHandler {
                 "VoiceInteraction.VoiceResultConfidenceValue", percentage);
     }
 
+    /** Records the end-to-end voice search duration. */
+    private void recordVoiceSearchOpenDuration(long openDurationMs) {
+        RecordHistogram.recordMediumTimesHistogram(
+                "VoiceInteraction.QueryDuration.Android", openDurationMs);
+    }
+
     /**
      * Calls into {@link VoiceRecognitionUtil} to determine whether or not the
      * {@link RecognizerIntent#ACTION_RECOGNIZE_SPEECH} {@link Intent} is handled by any
@@ -490,5 +574,10 @@ public class VoiceRecognitionHandler {
     @VisibleForTesting
     protected boolean isRecognitionIntentPresent(boolean useCachedValue) {
         return VoiceRecognitionUtil.isRecognitionIntentPresent(useCachedValue);
+    }
+
+    /** Sets the start time for testing. */
+    void setQueryStartTimeForTesting(Long queryStartTimeMs) {
+        mQueryStartTimeMs = queryStartTimeMs;
     }
 }

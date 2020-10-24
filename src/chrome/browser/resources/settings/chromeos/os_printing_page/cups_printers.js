@@ -13,6 +13,7 @@ Polymer({
   is: 'settings-cups-printers',
 
   behaviors: [
+    DeepLinkingBehavior,
     NetworkListenerBehavior,
     settings.RouteObserverBehavior,
     WebUIListenerBehavior,
@@ -33,6 +34,12 @@ Polymer({
       notify: true,
     },
 
+    /** @private {?WebUIListener} */
+    onPrintersChangedListener_: {
+      type: Object,
+      value: null,
+    },
+
     searchTerm: {
       type: String,
     },
@@ -50,6 +57,12 @@ Polymer({
     savedPrinters_: {
       type: Array,
       value: () => [],
+    },
+
+    /** @private */
+    attemptedLoadingPrinters_: {
+      type: Boolean,
+      value: false,
     },
 
     /** @private */
@@ -78,6 +91,18 @@ Polymer({
     savedPrinterCount_: {
       type: Number,
       value: 0,
+    },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kAddPrinter,
+        chromeos.settings.mojom.Setting.kSavedPrinters,
+      ]),
     },
   },
 
@@ -122,21 +147,53 @@ Polymer({
   },
 
   /**
+   * Overridden from DeepLinkingBehavior.
+   * @param {!chromeos.settings.mojom.Setting} settingId
+   * @return {boolean}
+   */
+  beforeDeepLinkAttempt(settingId) {
+    // Manually show the deep links for settings nested within elements.
+    if (settingId !== chromeos.settings.mojom.Setting.kSavedPrinters) {
+      // Continue with deep link attempt.
+      return true;
+    }
+
+    Polymer.RenderStatus.afterNextRender(this, () => {
+      const savedPrinters = this.$$('#savedPrinters');
+      const printerEntry =
+          savedPrinters && savedPrinters.$$('settings-cups-printers-entry');
+      const deepLinkElement = printerEntry && printerEntry.$$('#moreActions');
+      if (!deepLinkElement || deepLinkElement.hidden) {
+        console.warn(`Element with deep link id ${settingId} not focusable.`);
+        return;
+      }
+      this.showDeepLinkElement(deepLinkElement);
+    });
+    // Stop deep link attempt since we completed it manually.
+    return false;
+  },
+
+  /**
    * settings.RouteObserverBehavior
    * @param {!settings.Route} route
    * @protected
    */
   currentRouteChanged(route) {
     if (route != settings.routes.CUPS_PRINTERS) {
-      cr.removeWebUIListener('on-printers-changed');
+      if (this.onPrintersChangedListener_) {
+        cr.removeWebUIListener(
+            /** @type {WebUIListener} */ (this.onPrintersChangedListener_));
+        this.onPrintersChangedListener_ = null;
+      }
       this.entryManager_.removeWebUIListeners();
       return;
     }
 
     this.entryManager_.addWebUIListeners();
-    cr.addWebUIListener(
+    this.onPrintersChangedListener_ = cr.addWebUIListener(
         'on-printers-changed', this.onPrintersChanged_.bind(this));
     this.updateCupsPrintersList_();
+    this.attemptDeepLink();
   },
 
   /**
@@ -232,6 +289,9 @@ Polymer({
         printer => /** @type {!PrinterListEntry} */ (
             {printerInfo: printer, printerType: PrinterType.SAVED}));
     this.entryManager_.setSavedPrintersList(this.savedPrinters_);
+    // Used to delay rendering nearby and add printer sections to prevent
+    // "Add Printer" flicker when clicking "Printers" in settings page.
+    this.attemptedLoadingPrinters_ = true;
   },
 
   /** @private */
@@ -272,13 +332,13 @@ Polymer({
   /**
    * @param {boolean} connectedToNetwork Whether the device is connected to
          a network.
-   * @param {boolean} userNativePrintersAllowed Whether users are allowed to
+   * @param {boolean} userPrintersAllowed Whether users are allowed to
          configure their own native printers.
    * @return {boolean} Whether the 'Add Printer' button is active.
    * @private
    */
-  addPrinterButtonActive_(connectedToNetwork, userNativePrintersAllowed) {
-    return connectedToNetwork && userNativePrintersAllowed;
+  addPrinterButtonActive_(connectedToNetwork, userPrintersAllowed) {
+    return connectedToNetwork && userPrintersAllowed;
   },
 
   /**

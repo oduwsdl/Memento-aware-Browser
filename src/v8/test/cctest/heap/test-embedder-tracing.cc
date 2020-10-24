@@ -326,7 +326,7 @@ void TracedGlobalTest(v8::Isolate* isolate,
 
   v8::TracedGlobal<v8::Object> global;
   construct_function(isolate, context, &global);
-  CHECK(InYoungGeneration(isolate, global));
+  CHECK(InCorrectGeneration(isolate, global));
   modifier_function(global);
   gc_function();
   CHECK_IMPLIES(survives == SurvivalMode::kSurvives, !global.IsEmpty());
@@ -455,7 +455,7 @@ TEST(TracedGlobalToUnmodifiedJSObjectDiesOnMarkSweep) {
   CcTest::InitializeVM();
   TracedGlobalTest(
       CcTest::isolate(), ConstructJSObject,
-      [](const TracedGlobal<v8::Object>& global) {}, InvokeMarkSweep,
+      [](const TracedGlobal<v8::Object>& global) {}, [] { InvokeMarkSweep(); },
       SurvivalMode::kDies);
 }
 
@@ -469,19 +469,21 @@ TEST(TracedGlobalToUnmodifiedJSObjectSurvivesMarkSweepWhenHeldAliveOtherwise) {
         v8::HandleScope scope(isolate);
         strong_global = v8::Global<v8::Object>(isolate, global.Get(isolate));
       },
-      InvokeMarkSweep, SurvivalMode::kSurvives);
+      []() { InvokeMarkSweep(); }, SurvivalMode::kSurvives);
 }
 
 TEST(TracedGlobalToUnmodifiedJSObjectSurvivesScavenge) {
+  if (FLAG_single_generation) return;
   ManualGCScope manual_gc;
   CcTest::InitializeVM();
   TracedGlobalTest(
       CcTest::isolate(), ConstructJSObject,
-      [](const TracedGlobal<v8::Object>& global) {}, InvokeScavenge,
+      [](const TracedGlobal<v8::Object>& global) {}, []() { InvokeScavenge(); },
       SurvivalMode::kSurvives);
 }
 
 TEST(TracedGlobalToUnmodifiedJSObjectSurvivesScavengeWhenExcludedFromRoots) {
+  if (FLAG_single_generation) return;
   ManualGCScope manual_gc;
   CcTest::InitializeVM();
   v8::Isolate* isolate = CcTest::isolate();
@@ -490,11 +492,12 @@ TEST(TracedGlobalToUnmodifiedJSObjectSurvivesScavengeWhenExcludedFromRoots) {
   tracer.ConsiderTracedGlobalAsRoot(false);
   TracedGlobalTest(
       CcTest::isolate(), ConstructJSObject,
-      [](const TracedGlobal<v8::Object>& global) {}, InvokeScavenge,
+      [](const TracedGlobal<v8::Object>& global) {}, []() { InvokeScavenge(); },
       SurvivalMode::kSurvives);
 }
 
 TEST(TracedGlobalToUnmodifiedJSApiObjectSurvivesScavengePerDefault) {
+  if (FLAG_single_generation) return;
   ManualGCScope manual_gc;
   CcTest::InitializeVM();
   v8::Isolate* isolate = CcTest::isolate();
@@ -503,11 +506,12 @@ TEST(TracedGlobalToUnmodifiedJSApiObjectSurvivesScavengePerDefault) {
   tracer.ConsiderTracedGlobalAsRoot(true);
   TracedGlobalTest(
       CcTest::isolate(), ConstructJSApiObject<TracedGlobal<v8::Object>>,
-      [](const TracedGlobal<v8::Object>& global) {}, InvokeScavenge,
+      [](const TracedGlobal<v8::Object>& global) {}, []() { InvokeScavenge(); },
       SurvivalMode::kSurvives);
 }
 
 TEST(TracedGlobalToUnmodifiedJSApiObjectDiesOnScavengeWhenExcludedFromRoots) {
+  if (FLAG_single_generation) return;
   ManualGCScope manual_gc;
   CcTest::InitializeVM();
   v8::Isolate* isolate = CcTest::isolate();
@@ -516,7 +520,7 @@ TEST(TracedGlobalToUnmodifiedJSApiObjectDiesOnScavengeWhenExcludedFromRoots) {
   tracer.ConsiderTracedGlobalAsRoot(false);
   TracedGlobalTest(
       CcTest::isolate(), ConstructJSApiObject<TracedGlobal<v8::Object>>,
-      [](const TracedGlobal<v8::Object>& global) {}, InvokeScavenge,
+      [](const TracedGlobal<v8::Object>& global) {}, []() { InvokeScavenge(); },
       SurvivalMode::kDies);
 }
 
@@ -656,6 +660,7 @@ void FinalizationCallback(const WeakCallbackInfo<void>& data) {
 }  // namespace
 
 TEST(TracedGlobalSetFinalizationCallbackScavenge) {
+  if (FLAG_single_generation) return;
   ManualGCScope manual_gc;
   CcTest::InitializeVM();
   v8::Isolate* isolate = CcTest::isolate();
@@ -863,6 +868,7 @@ void SetupOptimizedAndNonOptimizedHandle(v8::Isolate* isolate,
 }  // namespace
 
 TEST(TracedGlobalDestructorReclaimedOnScavenge) {
+  if (FLAG_single_generation) return;
   ManualGCScope manual_gc;
   CcTest::InitializeVM();
   v8::Isolate* isolate = CcTest::isolate();
@@ -888,6 +894,7 @@ TEST(TracedGlobalDestructorReclaimedOnScavenge) {
 }
 
 TEST(TracedGlobalNoDestructorReclaimedOnScavenge) {
+  if (FLAG_single_generation) return;
   ManualGCScope manual_gc;
   CcTest::InitializeVM();
   v8::Isolate* isolate = CcTest::isolate();
@@ -990,8 +997,9 @@ V8_NOINLINE void StackToHeapTest(TestEmbedderHeapTracer* tracer, Operation op,
     v8::HandleScope scope(isolate);
     v8::Local<v8::Object> to_object(ConstructTraceableJSApiObject(
         isolate->GetCurrentContext(), nullptr, nullptr));
-    CHECK(i::Heap::InYoungGeneration(*v8::Utils::OpenHandle(*to_object)));
-    if (target_handling == TargetHandling::kInitializedOldGen) {
+    CHECK(InCorrectGeneration(*v8::Utils::OpenHandle(*to_object)));
+    if (!FLAG_single_generation &&
+        target_handling == TargetHandling::kInitializedOldGen) {
       heap::InvokeScavenge();
       heap::InvokeScavenge();
       CHECK(!i::Heap::InYoungGeneration(*v8::Utils::OpenHandle(*to_object)));
@@ -1030,8 +1038,9 @@ V8_NOINLINE void HeapToStackTest(TestEmbedderHeapTracer* tracer, Operation op,
     v8::HandleScope scope(isolate);
     v8::Local<v8::Object> to_object(ConstructTraceableJSApiObject(
         isolate->GetCurrentContext(), nullptr, nullptr));
-    CHECK(i::Heap::InYoungGeneration(*v8::Utils::OpenHandle(*to_object)));
-    if (target_handling == TargetHandling::kInitializedOldGen) {
+    CHECK(InCorrectGeneration(*v8::Utils::OpenHandle(*to_object)));
+    if (!FLAG_single_generation &&
+        target_handling == TargetHandling::kInitializedOldGen) {
       heap::InvokeScavenge();
       heap::InvokeScavenge();
       CHECK(!i::Heap::InYoungGeneration(*v8::Utils::OpenHandle(*to_object)));
@@ -1070,8 +1079,9 @@ V8_NOINLINE void StackToStackTest(TestEmbedderHeapTracer* tracer, Operation op,
     v8::HandleScope scope(isolate);
     v8::Local<v8::Object> to_object(ConstructTraceableJSApiObject(
         isolate->GetCurrentContext(), nullptr, nullptr));
-    CHECK(i::Heap::InYoungGeneration(*v8::Utils::OpenHandle(*to_object)));
-    if (target_handling == TargetHandling::kInitializedOldGen) {
+    CHECK(InCorrectGeneration(*v8::Utils::OpenHandle(*to_object)));
+    if (!FLAG_single_generation &&
+        target_handling == TargetHandling::kInitializedOldGen) {
       heap::InvokeScavenge();
       heap::InvokeScavenge();
       CHECK(!i::Heap::InYoungGeneration(*v8::Utils::OpenHandle(*to_object)));

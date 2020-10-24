@@ -5,6 +5,7 @@
 #include "ios/web/js_messaging/web_frames_manager_impl.h"
 
 #include "base/base64.h"
+#include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "crypto/symmetric_key.h"
@@ -118,7 +119,8 @@ void WebFramesManagerImpl::AddFrame(std::unique_ptr<WebFrame> frame) {
   DCHECK(frame);
   DCHECK(!frame->GetFrameId().empty());
   if (frame->IsMainFrame()) {
-    DCHECK(!main_web_frame_);
+    DCHECK(!main_web_frame_ ||
+           (main_web_frame_->GetFrameId() == frame->GetFrameId()));
     main_web_frame_ = frame.get();
   }
   DCHECK(web_frames_.count(frame->GetFrameId()) == 0);
@@ -161,6 +163,14 @@ void WebFramesManagerImpl::OnFrameBecameAvailable(WKScriptMessage* message) {
 
   std::string frame_id = base::SysNSStringToUTF8(message.body[@"crwFrameId"]);
   if (!GetFrameWithId(frame_id)) {
+    // Validate |frame_id| is a proper hex string.
+    for (const char& c : frame_id) {
+      if (!base::IsHexDigit(c)) {
+        // Ignore frame if |frame_id| is malformed.
+        return;
+      }
+    }
+
     GURL message_frame_origin =
         web::GURLOriginWithWKSecurityOrigin(message.frameInfo.securityOrigin);
 

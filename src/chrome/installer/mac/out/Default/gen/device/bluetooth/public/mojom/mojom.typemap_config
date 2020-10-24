@@ -1,0 +1,16 @@
+[
+  {
+    "traits_headers": [
+      "device/bluetooth/public/mojom/uuid_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//device/bluetooth/public/cpp"
+    ],
+    "types": [
+      {
+        "cpp": "::device::BluetoothUUID",
+        "mojom": "bluetooth.mojom.UUID"
+      }
+    ]
+  }
+]

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "base/bind.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/process/process_handle.h"
@@ -15,13 +16,22 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_local.h"
 #include "build/build_config.h"
+#include "build/config/compiler/compiler_buildflags.h"
 #include "content/child/child_thread_impl.h"
 #include "content/common/android/cpu_time_metrics.h"
 #include "content/common/mojo_core_library_support.h"
 #include "mojo/public/cpp/system/dynamic_library_support.h"
-#include "services/service_manager/sandbox/sandbox_type.h"
+#include "sandbox/policy/sandbox_type.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "third_party/blink/public/common/features.h"
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+#include "base/test/clang_profiling.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "content/common/android/cpu_affinity.h"
+#endif
 
 namespace content {
 
@@ -41,7 +51,7 @@ ChildProcess::ChildProcess(base::ThreadPriority io_thread_priority,
   DCHECK(!g_lazy_child_process_tls.Pointer()->Get());
   g_lazy_child_process_tls.Pointer()->Set(this);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (IsMojoCoreSharedLibraryEnabled()) {
@@ -50,8 +60,8 @@ ChildProcess::ChildProcess(base::ThreadPriority io_thread_priority,
     // have already loaded the library via |mojo::LoadCoreLibrary()|, rendering
     // this call safe even from within a strict sandbox.
     MojoInitializeFlags flags = MOJO_INITIALIZE_FLAG_NONE;
-    if (service_manager::IsUnsandboxedSandboxType(
-            service_manager::SandboxTypeFromCommandLine(command_line))) {
+    if (sandbox::policy::IsUnsandboxedSandboxType(
+            sandbox::policy::SandboxTypeFromCommandLine(command_line))) {
       flags |= MOJO_INITIALIZE_FLAG_FORCE_DIRECT_SHARED_MEMORY_ALLOCATION;
     }
     CHECK_EQ(MOJO_RESULT_OK, mojo::InitializeCoreLibrary(flags));
@@ -78,6 +88,10 @@ ChildProcess::ChildProcess(base::ThreadPriority io_thread_priority,
 
 #if defined(OS_ANDROID)
   SetupCpuTimeMetrics();
+  // For child processes, this requires allowing of the sched_setaffinity()
+  // syscall in the sandbox (baseline_policy_android.cc). When this call is
+  // removed, the sandbox allowlist should be updated too.
+  SetupCpuAffinityPollingOnce();
 #endif
 
   // We can't recover from failing to start the IO thread.
@@ -121,6 +135,13 @@ ChildProcess::~ChildProcess() {
     DCHECK(base::ThreadPoolInstance::Get());
     base::ThreadPoolInstance::Get()->Shutdown();
   }
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX) && BUILDFLAG(CLANG_PGO)
+  // Flush the profiling data to disk. Doing this manually (vs relying on this
+  // being done automatically when the process exits) will ensure that this data
+  // doesn't get lost if the process is fast killed.
+  base::WriteClangProfilingProfile();
+#endif
 }
 
 ChildThreadImpl* ChildProcess::main_thread() {

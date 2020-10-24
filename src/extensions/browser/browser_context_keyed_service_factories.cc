@@ -39,13 +39,14 @@
 #include "extensions/browser/event_router_factory.h"
 #include "extensions/browser/extension_message_filter.h"
 #include "extensions/browser/extension_prefs_factory.h"
+#include "extensions/browser/extension_protocols.h"
+#include "extensions/browser/guest_view/extensions_guest_view_message_filter.h"
 #include "extensions/browser/process_manager_factory.h"
 #include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/updater/update_service_factory.h"
 
 #if defined(OS_CHROMEOS)
 #include "extensions/browser/api/clipboard/clipboard_api.h"
-#include "extensions/browser/api/networking_config/networking_config_service_factory.h"
 #include "extensions/browser/api/system_power_source/system_power_source_api.h"
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_private_api.h"
 #include "extensions/browser/api/vpn_provider/vpn_service_factory.h"
@@ -82,17 +83,17 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   declarative_net_request::RulesMonitorService::GetFactoryInstance();
   DeclarativeUserScriptManagerFactory::GetInstance();
   DisplaySourceEventRouterFactory::GetInstance();
+  EnsureExtensionURLLoaderFactoryShutdownNotifierFactoryBuilt();
   EventRouterFactory::GetInstance();
   ExtensionMessageFilter::EnsureShutdownNotifierFactoryBuilt();
+  ExtensionsGuestViewMessageFilter::EnsureShutdownNotifierFactoryBuilt();
   ExtensionPrefsFactory::GetInstance();
   FeedbackPrivateAPI::GetFactoryInstance();
   HidDeviceManager::GetFactoryInstance();
   IdleManagerFactory::GetInstance();
   ManagementAPI::GetFactoryInstance();
-#if defined(OS_CHROMEOS)
-  NetworkingConfigServiceFactory::GetInstance();
-#endif
-#if defined(OS_LINUX) || defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN) || \
+    defined(OS_MAC)
   NetworkingPrivateEventRouterFactory::GetInstance();
 #endif
   PowerAPI::GetFactoryInstance();

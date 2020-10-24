@@ -12,7 +12,8 @@
 #include "components/exo/surface_tree_host.h"
 #include "components/exo/wm_helper.h"
 #include "ui/aura/client/drag_drop_client_observer.h"
-#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
+#include "ui/gfx/geometry/point_f.h"
 
 namespace ash {
 class DragDropController;
@@ -50,8 +51,8 @@ class DragDropOperation : public DataSourceObserver,
       DataSource* source,
       Surface* origin,
       Surface* icon,
-      const gfx::Point& drag_start_point,
-      ui::DragDropTypes::DragEventSource event_source);
+      const gfx::PointF& drag_start_point,
+      ui::mojom::DragEventSource event_source);
 
   // Abort the operation if it hasn't been started yet, otherwise do nothing.
   void AbortIfPending();
@@ -78,8 +79,8 @@ class DragDropOperation : public DataSourceObserver,
   DragDropOperation(DataSource* source,
                     Surface* origin,
                     Surface* icon,
-                    const gfx::Point& drag_start_point,
-                    ui::DragDropTypes::DragEventSource event_source);
+                    const gfx::PointF& drag_start_point,
+                    ui::mojom::DragEventSource event_source);
   ~DragDropOperation() override;
 
   void CaptureDragIcon();
@@ -97,7 +98,7 @@ class DragDropOperation : public DataSourceObserver,
   std::unique_ptr<ScopedDataSource> source_;
   std::unique_ptr<ScopedSurface> icon_;
   std::unique_ptr<ScopedSurface> origin_;
-  gfx::Point drag_start_point_;
+  gfx::PointF drag_start_point_;
   std::unique_ptr<ui::OSExchangeData> os_exchange_data_;
 #if defined(OS_CHROMEOS)
   ash::DragDropController* drag_drop_controller_;
@@ -119,7 +120,7 @@ class DragDropOperation : public DataSourceObserver,
   // change in the future.
   std::string mime_type_;
 
-  ui::DragDropTypes::DragEventSource event_source_;
+  ui::mojom::DragEventSource event_source_;
 
   base::WeakPtrFactory<DragDropOperation> weak_ptr_factory_;
 

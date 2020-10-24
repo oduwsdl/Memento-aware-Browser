@@ -8,9 +8,12 @@
 #include <memory>
 #include <set>
 
+#include "include/cppgc/heap.h"
 #include "include/cppgc/internal/persistent-node.h"
 #include "include/cppgc/macros.h"
 #include "src/base/macros.h"
+#include "src/heap/cppgc/compactor.h"
+#include "src/heap/cppgc/marker.h"
 #include "src/heap/cppgc/object-allocator.h"
 #include "src/heap/cppgc/raw-heap.h"
 #include "src/heap/cppgc/sweeper.h"
@@ -18,6 +21,12 @@
 #if defined(CPPGC_CAGED_HEAP)
 #include "src/heap/cppgc/caged-heap.h"
 #endif
+
+namespace heap {
+namespace base {
+class Stack;
+}  // namespace base
+}  // namespace heap
 
 namespace cppgc {
 
@@ -27,24 +36,24 @@ namespace internal {
 
 namespace testing {
 class TestWithHeap;
-}
+}  // namespace testing
 
-class Marker;
 class PageBackend;
 class PreFinalizerHandler;
-class Stack;
 class StatsCollector;
 
 // Base class for heap implementations.
 class V8_EXPORT_PRIVATE HeapBase {
  public:
+  using StackSupport = cppgc::Heap::StackSupport;
+
   // NoGCScope allows going over limits and avoids triggering garbage
   // collection triggered through allocations or even explicitly.
   class V8_EXPORT_PRIVATE NoGCScope final {
     CPPGC_STACK_ALLOCATED();
 
    public:
-    explicit NoGCScope(HeapBase& heap);  // NOLINT(runtime/references)
+    explicit NoGCScope(HeapBase& heap);
     ~NoGCScope();
 
     NoGCScope(const NoGCScope&) = delete;
@@ -54,7 +63,9 @@ class V8_EXPORT_PRIVATE HeapBase {
     HeapBase& heap_;
   };
 
-  HeapBase(std::shared_ptr<cppgc::Platform> platform, size_t custom_spaces);
+  HeapBase(std::shared_ptr<cppgc::Platform> platform,
+           const std::vector<std::unique_ptr<CustomSpaceBase>>& custom_spaces,
+           StackSupport stack_support);
   virtual ~HeapBase();
 
   HeapBase(const HeapBase&) = delete;
@@ -79,13 +90,15 @@ class V8_EXPORT_PRIVATE HeapBase {
   const CagedHeap& caged_heap() const { return caged_heap_; }
 #endif
 
-  Stack* stack() { return stack_.get(); }
+  heap::base::Stack* stack() { return stack_.get(); }
 
   PreFinalizerHandler* prefinalizer_handler() {
     return prefinalizer_handler_.get();
   }
 
-  Marker* marker() const { return marker_.get(); }
+  MarkerBase* marker() const { return marker_.get(); }
+
+  Compactor& compactor() { return compactor_; }
 
   ObjectAllocator& object_allocator() { return object_allocator_; }
 
@@ -103,6 +116,18 @@ class V8_EXPORT_PRIVATE HeapBase {
   const PersistentRegion& GetWeakPersistentRegion() const {
     return weak_persistent_region_;
   }
+  PersistentRegion& GetStrongCrossThreadPersistentRegion() {
+    return strong_cross_thread_persistent_region_;
+  }
+  const PersistentRegion& GetStrongCrossThreadPersistentRegion() const {
+    return strong_cross_thread_persistent_region_;
+  }
+  PersistentRegion& GetWeakCrossThreadPersistentRegion() {
+    return weak_cross_thread_persistent_region_;
+  }
+  const PersistentRegion& GetWeakCrossThreadPersistentRegion() const {
+    return weak_cross_thread_persistent_region_;
+  }
 
 #if defined(CPPGC_YOUNG_GENERATION)
   std::set<void*>& remembered_slots() { return remembered_slots_; }
@@ -110,7 +135,14 @@ class V8_EXPORT_PRIVATE HeapBase {
 
   size_t ObjectPayloadSize() const;
 
+  StackSupport stack_support() const { return stack_support_; }
+
+  void AdvanceIncrementalGarbageCollectionOnAllocationIfNeeded();
+
  protected:
+  virtual void FinalizeIncrementalGarbageCollectionIfNeeded(
+      cppgc::Heap::StackState) = 0;
+
   bool in_no_gc_scope() const { return no_gc_scope_ > 0; }
 
   RawHeap raw_heap_;
@@ -121,15 +153,18 @@ class V8_EXPORT_PRIVATE HeapBase {
   std::unique_ptr<PageBackend> page_backend_;
 
   std::unique_ptr<StatsCollector> stats_collector_;
-  std::unique_ptr<Stack> stack_;
+  std::unique_ptr<heap::base::Stack> stack_;
   std::unique_ptr<PreFinalizerHandler> prefinalizer_handler_;
-  std::unique_ptr<Marker> marker_;
+  std::unique_ptr<MarkerBase> marker_;
 
+  Compactor compactor_;
   ObjectAllocator object_allocator_;
   Sweeper sweeper_;
 
   PersistentRegion strong_persistent_region_;
   PersistentRegion weak_persistent_region_;
+  PersistentRegion strong_cross_thread_persistent_region_;
+  PersistentRegion weak_cross_thread_persistent_region_;
 
 #if defined(CPPGC_YOUNG_GENERATION)
   std::set<void*> remembered_slots_;
@@ -137,6 +172,9 @@ class V8_EXPORT_PRIVATE HeapBase {
 
   size_t no_gc_scope_ = 0;
 
+  const StackSupport stack_support_;
+
+  friend class MarkerBase::IncrementalMarkingTask;
   friend class testing::TestWithHeap;
 };
 

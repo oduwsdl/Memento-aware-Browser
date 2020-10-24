@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.tasks.tab_management.suggestions;
 
+import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -20,6 +21,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -28,12 +30,14 @@ import org.mockito.stubbing.Answer;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.browser.complex_tasks.endpoint_fetcher.EndpointFetcher;
-import org.chromium.chrome.browser.complex_tasks.endpoint_fetcher.EndpointFetcherJni;
-import org.chromium.chrome.browser.complex_tasks.endpoint_fetcher.EndpointResponse;
+import org.chromium.chrome.browser.endpoint_fetcher.EndpointFetcher;
+import org.chromium.chrome.browser.endpoint_fetcher.EndpointFetcherJni;
+import org.chromium.chrome.browser.endpoint_fetcher.EndpointResponse;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.chromium.chrome.test.util.browser.Features;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,11 +47,15 @@ import java.util.List;
 /**
  * Tests for {@link TabSuggestionsServerFetcher}
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
 public class TabSuggestionsServerFetcherUnitTest {
     @Rule
     public JniMocker mMocker = new JniMocker();
+
+    @Rule
+    public TestRule mProcessor = new Features.JUnitProcessor();
 
     private static final TabContext.TabInfo TAB_INFO_YANDEX = new TabContext.TabInfo(
             0, "Yandex", "https://www.yandex.com", "", "", 1588817215266L, "");
@@ -57,6 +65,8 @@ public class TabSuggestionsServerFetcherUnitTest {
             2, "Amazon.com", "https://www.amazon.com", "", "", 1588817215266L, "");
     private static final TabContext.TabInfo TAB_INFO_GOOGLE = new TabContext.TabInfo(
             3, "Google", "https://www.google.com", "", "", 1588817256727L, "");
+    private static final TabContext.TabInfo TAB_INFO_INCOGNITO = new TabContext.TabInfo(
+            4, "Incognito site", "https://www.incognito.com", "", "", 158881926727L, "");
     private static final TabContext TAB_CONTEXT_GROUP_ALL =
             new TabContext(Arrays.asList(TAB_INFO_YANDEX, TAB_INFO_BING, TAB_INFO_GOOGLE),
                     Collections.emptyList());
@@ -210,5 +220,23 @@ public class TabSuggestionsServerFetcherUnitTest {
                 }
             }
         }
+    }
+
+    @Test
+    @Features.DisableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
+    public void testServerFetcherDisabledWithDisableGroup() {
+        TabSuggestionsServerFetcher fetcher = spy(new TabSuggestionsServerFetcher());
+        doReturn(true).when(fetcher).isSignedIn();
+        doReturn(true).when(fetcher).isServerFetcherFlagEnabled();
+        Assert.assertThat("The Fetcher is enabled", fetcher.isEnabled(), is(false));
+    }
+
+    @Test
+    public void testServerFetcherDisabledIncognito() throws InterruptedException {
+        TabContext tabContext =
+                new TabContext(Arrays.asList(TAB_INFO_INCOGNITO), Collections.emptyList());
+        mTabSuggestionsServerFetcher.fetch(tabContext, (fetcherResults) -> {
+            Assert.assertTrue(fetcherResults.tabSuggestions.isEmpty());
+        });
     }
 }

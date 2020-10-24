@@ -6,47 +6,31 @@
 #define ASH_HUD_DISPLAY_HUD_DISPLAY_H_
 
 #include "base/sequence_checker.h"
-#include "ui/views/controls/button/button.h"
+#include "ui/views/view.h"
 #include "ui/views/widget/widget_delegate.h"
-
-namespace views {
-class ImageButton;
-}
 
 namespace ash {
 namespace hud_display {
 
+enum class DisplayMode;
 class GraphsContainerView;
+class HUDHeaderView;
 class HUDSettingsView;
 
 // HUDDisplayView class can be used to display a system monitoring overview.
-class HUDDisplayView : public views::WidgetDelegateView,
-                       public views::ButtonListener {
+class HUDDisplayView : public views::WidgetDelegateView {
  public:
   METADATA_HEADER(HUDDisplayView);
 
-  // Default HUDDisplayView height.
-  static constexpr size_t kDefaultHUDHeight = 300;
-
-  // Border width inside the HUDDisplayView rectangle around contents.
-  static constexpr size_t kHUDInset = 5;
-
   HUDDisplayView();
-  ~HUDDisplayView() override;
-
   HUDDisplayView(const HUDDisplayView&) = delete;
   HUDDisplayView& operator=(const HUDDisplayView&) = delete;
 
-  // view::
-  void OnMouseEntered(const ui::MouseEvent& event) override;
-  void OnMouseExited(const ui::MouseEvent& event) override;
+  ~HUDDisplayView() override;
 
   // WidgetDelegate:
   views::ClientView* CreateClientView(views::Widget* widget) override;
   void OnWidgetInitialized() override;
-
-  // views::ButtonListener
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // Destroys global instance.
   static void Destroy();
@@ -58,10 +42,16 @@ class HUDDisplayView : public views::WidgetDelegateView,
   // of the children.
   int NonClientHitTest(const gfx::Point& point);
 
+  // Changes UI display mode.
+  void SetDisplayMode(const DisplayMode display_mode);
+
+  // Callback from SettingsButton.
+  void OnSettingsToggle();
+
  private:
-  GraphsContainerView* graphs_container_ = nullptr;        // not owned
-  HUDSettingsView* settings_view_ = nullptr;               // not owned
-  views::ImageButton* settings_trigger_button_ = nullptr;  // not owned
+  HUDHeaderView* header_view_ = nullptr;             // not owned
+  GraphsContainerView* graphs_container_ = nullptr;  // not owned
+  HUDSettingsView* settings_view_ = nullptr;         // not owned
 
   SEQUENCE_CHECKER(ui_sequence_checker_);
 };

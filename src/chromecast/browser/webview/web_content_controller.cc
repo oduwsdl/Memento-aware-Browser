@@ -11,7 +11,9 @@
 #include "chromecast/base/version.h"
 #include "chromecast/browser/cast_web_contents.h"
 #include "chromecast/browser/webview/proto/webview.pb.h"
+#include "chromecast/browser/webview/webview_input_method_observer.h"
 #include "chromecast/browser/webview/webview_navigation_throttle.h"
+#include "chromecast/graphics/cast_focus_client_aura.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/navigation_handle.h"
@@ -21,13 +23,42 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/web_preferences.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/base/ime/constants.h"
 #include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 
 namespace chromecast {
+
+WebContentController::WebviewWindowVisibilityObserver::
+    WebviewWindowVisibilityObserver(aura::Window* window,
+                                    WebContentController* controller)
+    : window_(window), controller_(controller) {
+  DCHECK(window_);
+  DCHECK(controller_);
+  window_->AddObserver(this);
+}
+
+void WebContentController::WebviewWindowVisibilityObserver::
+    OnWindowVisibilityChanged(aura::Window* window, bool visible) {
+  if (window == window_ && visible && window->CanFocus())
+    controller_->OnVisible(window);
+}
+
+void WebContentController::WebviewWindowVisibilityObserver::OnWindowDestroyed(
+    aura::Window* window) {
+  if (window == window_)
+    window_ = nullptr;
+}
+
+WebContentController::WebviewWindowVisibilityObserver::
+    ~WebviewWindowVisibilityObserver() {
+  if (window_)
+    window_->RemoveObserver(this);
+}
 
 WebContentController::WebContentController(Client* client) : client_(client) {
   js_channels_ = std::make_unique<WebContentJsChannels>(client_);
@@ -131,15 +162,6 @@ void WebContentController::ProcessRequest(
       HandleGetTitle(request.id());
       break;
 
-    case webview::WebviewRequest::kSetAutoMediaPlaybackPolicy:
-      if (request.has_set_auto_media_playback_policy()) {
-        HandleSetAutoMediaPlaybackPolicy(
-            request.set_auto_media_playback_policy());
-      } else {
-        client_->OnError("set_auto_media_playback_policy() not supplied");
-      }
-      break;
-
     case webview::WebviewRequest::kResize:
       if (request.has_resize()) {
         HandleResize(
@@ -156,6 +178,11 @@ void WebContentController::ProcessRequest(
 }
 
 void WebContentController::AttachTo(aura::Window* window, int window_id) {
+  // Register our observer on the window so we can act later once it
+  // becomes visible.
+  window_visibility_observer_ =
+      std::make_unique<WebviewWindowVisibilityObserver>(window, this);
+
   content::WebContents* contents = GetWebContents();
   auto* contents_window = contents->GetNativeView();
   contents_window->set_id(window_id);
@@ -177,17 +204,35 @@ void WebContentController::AttachTo(aura::Window* window, int window_id) {
   HandleResize(contents_window->bounds().size());
 }
 
+void WebContentController::OnVisible(aura::Window* window) {
+  // Acquire initial focus.
+  GetWebContents()->SetInitialFocus();
+
+  // Register for IME events
+  input_method_observer_ = std::make_unique<WebviewInputMethodObserver>(
+      client_, window->GetHost()->GetInputMethod());
+}
+
 void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {
   content::WebContents* contents = GetWebContents();
   DCHECK(contents);
-  DCHECK(contents->GetNativeView());
-  if (!contents->GetNativeView()->CanFocus())
-    return;
-  // Ensure this web contents has focus before sending it input.
-  if (!contents->GetNativeView()->HasFocus())
-    contents->GetNativeView()->Focus();
 
+  // Ensure this web contents has focus before sending it input.
+  // Focus at this level is necessary, or else Blink will ignore
+  // attempts to focus any elements in the contents.
+  //
+  // Via b/156123509: The aura::Window given by |contents->GetNativeView()|
+  // is not suitable for this purpose, because it has no OnWindowFocused
+  // observer. The |window| used here is the same one whose |delegate|
+  // is the EventHandler for this input event.
   content::RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView();
+  aura::Window* window = rwhv->GetNativeView();
+  DCHECK(window == contents->GetContentNativeView());
+  if (!window->CanFocus())
+    return;
+  if (!window->HasFocus())
+    window->Focus();
+
   ui::EventHandler* handler = rwhv->GetNativeView()->delegate();
   ui::EventType type = static_cast<ui::EventType>(ev.event_type());
   switch (type) {
@@ -270,6 +315,28 @@ void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {
         client_->OnError("mouse() not supplied for mouse event");
       }
       break;
+    case ui::ET_KEY_PRESSED:
+    case ui::ET_KEY_RELEASED:
+      if (ev.has_key()) {
+        ui::KeyEvent evt(
+            type, static_cast<ui::KeyboardCode>(ev.key().key_code()),
+            static_cast<ui::DomCode>(ev.key().dom_code()),
+            ev.flags() | ui::EF_IS_SYNTHESIZED, ui::DomKey(ev.key().dom_key()),
+            base::TimeTicks() +
+                base::TimeDelta::FromMicroseconds(ev.timestamp()),
+            ev.key().is_char());
+
+        // Marks the simulated key event is from a Virtual Keyboard.
+        ui::Event::Properties properties;
+        properties[ui::kPropertyFromVK] =
+            std::vector<uint8_t>(ui::kPropertyFromVKSize);
+        evt.SetProperties(properties);
+
+        handler->OnKeyEvent(&evt);
+      } else {
+        client_->OnError("key() not supplied for key event");
+      }
+      break;
     default:
       break;
   }
@@ -278,8 +345,11 @@ void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {
 void WebContentController::RegisterRenderWidgetInputObserverFromRenderFrameHost(
     WebContentController* web_content_controller,
     content::RenderFrameHost* render_frame_host) {
-  web_content_controller->RegisterRenderWidgetInputObserver(
-      render_frame_host->GetView()->GetRenderWidgetHost());
+  content::RenderWidgetHostView* view = render_frame_host->GetView();
+  if (view) {
+    web_content_controller->RegisterRenderWidgetInputObserver(
+        view->GetRenderWidgetHost());
+  }
 }
 
 void WebContentController::RegisterRenderWidgetInputObserver(
@@ -414,17 +484,6 @@ void WebContentController::HandleGetTitle(int64_t id) {
   client_->EnqueueSend(std::move(response));
 }
 
-void WebContentController::HandleSetAutoMediaPlaybackPolicy(
-    const webview::SetAutoMediaPlaybackPolicyRequest& request) {
-  content::WebContents* contents = GetWebContents();
-  content::WebPreferences prefs =
-      contents->GetRenderViewHost()->GetWebkitPreferences();
-  prefs.autoplay_policy = request.require_user_gesture()
-                              ? content::AutoplayPolicy::kUserGestureRequired
-                              : content::AutoplayPolicy::kNoUserGestureRequired;
-  contents->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
-}
-
 void WebContentController::HandleResize(const gfx::Size& size) {
   LOG(INFO) << "Sizing web content to " << size.ToString();
   GetWebContents()->GetNativeView()->SetBounds(gfx::Rect(size));
@@ -443,8 +502,7 @@ viz::SurfaceId WebContentController::GetSurfaceId() {
   if (!rwhv)
     return viz::SurfaceId();
   auto frame_sink_id = rwhv->GetRenderWidgetHost()->GetFrameSinkId();
-  auto local_surface_id =
-      rwhv->GetNativeView()->GetLocalSurfaceIdAllocation().local_surface_id();
+  auto local_surface_id = rwhv->GetNativeView()->GetLocalSurfaceId();
   return viz::SurfaceId(frame_sink_id, local_surface_id);
 }
 
@@ -482,8 +540,10 @@ void WebContentController::RenderFrameCreated(
   // it later on.
   if (instance)
     SendInitialChannelSet(instance);
-  RegisterRenderWidgetInputObserver(
-      render_frame_host->GetView()->GetRenderWidgetHost());
+  content::RenderWidgetHostView* view = render_frame_host->GetView();
+  if (view) {
+    RegisterRenderWidgetInputObserver(view->GetRenderWidgetHost());
+  }
 }
 
 void WebContentController::RenderFrameDeleted(

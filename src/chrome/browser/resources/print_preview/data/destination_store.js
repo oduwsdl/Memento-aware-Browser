@@ -13,7 +13,7 @@ import {Metrics, MetricsContext} from '../metrics.js';
 import {CapabilitiesResponse, LocalDestinationInfo, NativeLayer, NativeLayerImpl, PrinterSetupResponse, PrivetPrinterDescription, ProvisionalDestinationInfo} from '../native_layer.js';
 
 import {Cdd, CloudOrigins, createDestinationKey, createRecentDestinationKey, Destination, DestinationConnectionStatus, DestinationOrigin, DestinationProvisionalType, DestinationType, RecentDestination} from './destination.js';
-import {DestinationMatch, originToType, PrinterType} from './destination_match.js';
+import {DestinationMatch, getPrinterTypeForDestination, originToType, PrinterType} from './destination_match.js';
 import {parseDestination, parseExtensionDestination} from './local_parsers.js';
 
 /**
@@ -279,6 +279,11 @@ export class DestinationStore extends EventTarget {
     this.useSystemDefaultAsDefault_ =
         loadTimeData.getBoolean('useSystemDefaultPrinter');
 
+    // <if expr="chromeos">
+    /** @private */
+    this.saveToDriveFlagEnabled_ = loadTimeData.getBoolean('printSaveToDrive');
+    // </if>
+
     addListenerCallback('printers-added', this.onPrintersAdded_.bind(this));
   }
 
@@ -335,6 +340,8 @@ export class DestinationStore extends EventTarget {
    * will be automatically selected.
    * @param {boolean} pdfPrinterDisabled Whether the PDF print destination is
    *     disabled in print preview.
+   * @param {boolean} isDriveMounted Whether Google Drive is mounted. Only used
+        on Chrome OS.
    * @param {string} systemDefaultDestinationId ID of the system default
    *     destination.
    * @param {?string} serializedDefaultDestinationSelectionRulesStr Serialized
@@ -343,11 +350,16 @@ export class DestinationStore extends EventTarget {
    *     recentDestinations The recent print destinations.
    */
   init(
-      pdfPrinterDisabled, systemDefaultDestinationId,
+      pdfPrinterDisabled, isDriveMounted, systemDefaultDestinationId,
       serializedDefaultDestinationSelectionRulesStr, recentDestinations) {
     this.pdfPrinterEnabled_ = !pdfPrinterDisabled;
     this.systemDefaultDestinationId_ = systemDefaultDestinationId;
     this.createLocalPdfPrintDestination_();
+    // <if expr="chromeos">
+    if (this.saveToDriveFlagEnabled_ && isDriveMounted) {
+      this.createLocalDrivePrintDestination_();
+    }
+    // </if>
 
     let destinationSelected = false;
     // System default printer policy takes priority.
@@ -404,8 +416,7 @@ export class DestinationStore extends EventTarget {
 
     const serializedSystemDefault = {
       id: this.systemDefaultDestinationId_,
-      origin: this.systemDefaultDestinationId_ ===
-              Destination.GooglePromotedId.SAVE_AS_PDF ?
+      origin: this.isDestinationLocal_(this.systemDefaultDestinationId_) ?
           DestinationOrigin.LOCAL :
           this.platformOrigin_,
       account: '',
@@ -424,6 +435,20 @@ export class DestinationStore extends EventTarget {
 
     return this.fetchPreselectedDestination_(
         serializedSystemDefault, /*autoselect=*/ true);
+  }
+
+  /**
+   * @param {?string} destinationId
+   * @return {boolean}
+   */
+  isDestinationLocal_(destinationId) {
+    // <if expr="chromeos">
+    if (destinationId === Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS) {
+      return true;
+    }
+    // </if>
+
+    return destinationId === Destination.GooglePromotedId.SAVE_AS_PDF;
   }
 
   /** Removes all events being tracked from the tracker. */
@@ -457,7 +482,7 @@ export class DestinationStore extends EventTarget {
     }
 
     let error = false;
-    const type = originToType(origin);
+    const type = getPrinterTypeForDestination(serializedDestination);
     switch (type) {
       case PrinterType.LOCAL_PRINTER:
         this.nativeLayer_.getPrinterCapabilities(id, type).then(
@@ -730,7 +755,7 @@ export class DestinationStore extends EventTarget {
     // Request destination capabilities from backend, since they are not
     // known yet.
     if (destination.capabilities === null) {
-      const type = originToType(destination.origin);
+      const type = getPrinterTypeForDestination(destination);
       if (type !== PrinterType.CLOUD_PRINTER) {
         this.nativeLayer_.getPrinterCapabilities(destination.id, type)
             .then(
@@ -1127,6 +1152,19 @@ export class DestinationStore extends EventTarget {
     }
   }
 
+  // <if expr="chromeos">
+  /**
+   * Creates a local Drive print destination.
+   * @private
+   */
+  createLocalDrivePrintDestination_() {
+    this.insertDestination_(new Destination(
+        Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS, DestinationType.LOCAL,
+        DestinationOrigin.LOCAL, loadTimeData.getString('printToGoogleDrive'),
+        DestinationConnectionStatus.ONLINE));
+  }
+  // </if>
+
   /**
    * Starts a timeout to select the default destination.
    * @private
@@ -1135,7 +1173,7 @@ export class DestinationStore extends EventTarget {
     clearTimeout(this.autoSelectTimeout_);
     this.autoSelectTimeout_ = setTimeout(
         this.selectDefaultDestination.bind(this),
-        DestinationStore.AUTO_SELECT_TIMEOUT_);
+        DestinationStore.AUTO_SELECT_TIMEOUT);
   }
 
   /**
@@ -1370,10 +1408,10 @@ DestinationStore.EventType = {
  * Delay in milliseconds before the destination store ignores the initial
  * destination ID and just selects any printer (since the initial destination
  * was not found).
- * @private {number}
- * @const
+ * Public and non-const so that it can be overridden in tests.
+ * @type {number}
  */
-DestinationStore.AUTO_SELECT_TIMEOUT_ = 15000;
+DestinationStore.AUTO_SELECT_TIMEOUT = 15000;
 
 /**
  * Maximum amount of time spent searching for extension destinations, in

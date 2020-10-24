@@ -34,6 +34,11 @@ class CONTENT_EXPORT NativeFileSystemPermissionGrant
 
   virtual PermissionStatus GetStatus() = 0;
 
+  // Returns the path this permission grant is associated with. Can return an
+  // empty FilePath if the permission grant isn't associated with any specific
+  // path.
+  virtual base::FilePath GetPath() = 0;
+
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
   enum class PermissionRequestOutcome {
@@ -49,11 +54,16 @@ class CONTENT_EXPORT NativeFileSystemPermissionGrant
     kMaxValue = kGrantedByContentSetting
   };
 
+  // Passed to |RequestPermission| to indicate if for this particular permission
+  // request user activation is required or not.
+  enum class UserActivationState { kRequired, kNotRequired };
+
   // Call this method to request permission for this grant. The |callback|
   // should be called after the status of this grant has been updated with
   // the outcome of the request.
   virtual void RequestPermission(
       GlobalFrameRoutingId frame_id,
+      UserActivationState user_activation_state,
       base::OnceCallback<void(PermissionRequestOutcome)> callback) = 0;
 
   // This observer can be used to be notified of changes to the permission

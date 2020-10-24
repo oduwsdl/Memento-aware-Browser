@@ -5,8 +5,11 @@
 #ifndef BASE_STRINGS_STRING_UTIL_INTERNAL_H_
 #define BASE_STRINGS_STRING_UTIL_INTERNAL_H_
 
+#include <algorithm>
+
 #include "base/logging.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
 #include "base/third_party/icu/icu_utf.h"
 
@@ -130,7 +133,7 @@ BasicStringPiece<Str> TrimStringPieceT(BasicStringPiece<Str> input,
   size_t end = (positions & TRIM_TRAILING)
                    ? input.find_last_not_of(trim_chars) + 1
                    : input.size();
-  return input.substr(begin, end - begin);
+  return input.substr(std::min(begin, input.size()), end - begin);
 }
 
 template <typename STR>
@@ -578,8 +581,7 @@ StringType DoReplaceStringPlaceholders(
             ReplacementOffset r_offset(index,
                                        static_cast<int>(formatted.size()));
             r_offsets.insert(
-                std::upper_bound(r_offsets.begin(), r_offsets.end(), r_offset,
-                                 &CompareParameter),
+                ranges::upper_bound(r_offsets, r_offset, &CompareParameter),
                 r_offset);
           }
           if (index < substitutions)

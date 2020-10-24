@@ -14,9 +14,9 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/renderer_id.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
@@ -28,14 +28,13 @@
 using autofill::FieldRendererId;
 using autofill::FormData;
 using autofill::FormRendererId;
-using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
 using base::ASCIIToUTF16;
 using base::UTF16ToASCII;
 using testing::_;
 using testing::Return;
 using testing::SaveArg;
-using Store = autofill::PasswordForm::Store;
+using Store = password_manager::PasswordForm::Store;
 
 namespace password_manager {
 namespace {
@@ -57,7 +56,7 @@ class MockPasswordManagerDriver : public StubPasswordManagerDriver {
               FillPasswordForm,
               (const PasswordFormFillData&),
               (override));
-  MOCK_METHOD(void, InformNoSavedCredentials, (), (override));
+  MOCK_METHOD(void, InformNoSavedCredentials, (bool), (override));
 };
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
@@ -146,7 +145,7 @@ class PasswordFormFillingTest : public testing::Test {
 TEST_F(PasswordFormFillingTest, NoSavedCredentials) {
   std::vector<const PasswordForm*> best_matches;
 
-  EXPECT_CALL(driver_, InformNoSavedCredentials());
+  EXPECT_CALL(driver_, InformNoSavedCredentials(_));
   EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
 
   LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
@@ -163,7 +162,7 @@ TEST_F(PasswordFormFillingTest, Autofill) {
   another_saved_match.password_value += ASCIIToUTF16("1");
   best_matches.push_back(&another_saved_match);
 
-  EXPECT_CALL(driver_, InformNoSavedCredentials()).Times(0);
+  EXPECT_CALL(driver_, InformNoSavedCredentials(_)).Times(0);
   PasswordFormFillData fill_data;
   EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
   EXPECT_CALL(client_, PasswordWasAutofilled);
@@ -171,12 +170,19 @@ TEST_F(PasswordFormFillingTest, Autofill) {
   LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
       &client_, &driver_, observed_form_, best_matches, federated_matches_,
       &saved_match_, metrics_recorder_.get());
+
+  // On Android Touch To Fill will prevent autofilling credentials on page load.
+#if defined(OS_ANDROID)
+  EXPECT_EQ(LikelyFormFilling::kFillOnAccountSelect, likely_form_filling);
+  EXPECT_TRUE(fill_data.wait_for_username);
+#else
   EXPECT_EQ(LikelyFormFilling::kFillOnPageLoad, likely_form_filling);
+  EXPECT_FALSE(fill_data.wait_for_username);
+#endif
 
   // Check that the message to the renderer (i.e. |fill_data|) is filled
   // correctly.
   EXPECT_EQ(observed_form_.url, fill_data.url);
-  EXPECT_FALSE(fill_data.wait_for_username);
   EXPECT_EQ(observed_form_.username_element, fill_data.username_field.name);
   EXPECT_EQ(saved_match_.username_value, fill_data.username_field.value);
   EXPECT_EQ(observed_form_.password_element, fill_data.password_field.name);
@@ -240,17 +246,85 @@ TEST_F(PasswordFormFillingTest, TestFillOnLoadSuggestion) {
     // In all cases where a current password exists, fill on load should be
     // permitted. Otherwise, the renderer will not fill anyway and return
     // kFillOnAccountSelect.
-    if (test_case.current_password_present)
-      EXPECT_EQ(LikelyFormFilling::kFillOnPageLoad, likely_form_filling);
-    else
+    if (test_case.current_password_present) {
+      // On Android Touch To Fill will prevent autofilling credentials on page
+      // load.
+#if defined(OS_ANDROID)
       EXPECT_EQ(LikelyFormFilling::kFillOnAccountSelect, likely_form_filling);
+#else
+      EXPECT_EQ(LikelyFormFilling::kFillOnPageLoad, likely_form_filling);
+#endif
+    } else {
+      EXPECT_EQ(LikelyFormFilling::kFillOnAccountSelect, likely_form_filling);
+    }
   }
 }
+
+// Test autofill when username and password are prefilled. Overwrite password
+// if server side classification thought the username was a placeholder or the
+// classification failed. Do not overwrite if username doesn't look like a
+// placeholder.
+// Skip for Android since it uses touch to fill (kAutofillTouchToFill), meaning
+// placeholders will never be overwritten.
+#if !defined(OS_ANDROID)
+TEST_F(PasswordFormFillingTest, TestFillOnLoadSuggestionWithPrefill) {
+  const struct {
+    const char* description;
+    bool username_may_use_prefilled_placeholder;
+    bool server_side_classification_successful;
+    LikelyFormFilling likely_form_filling;
+  } kTestCases[] = {
+      {
+          .description = "Username not placeholder",
+          .username_may_use_prefilled_placeholder = false,
+          .server_side_classification_successful = true,
+          .likely_form_filling = LikelyFormFilling::kFillOnAccountSelect,
+      },
+      {
+          .description = "Username is placeholder",
+          .username_may_use_prefilled_placeholder = true,
+          .server_side_classification_successful = true,
+          .likely_form_filling = LikelyFormFilling::kFillOnPageLoad,
+      },
+      {
+          .description = "No server classification",
+          .username_may_use_prefilled_placeholder = false,
+          .server_side_classification_successful = false,
+          .likely_form_filling = LikelyFormFilling::kFillOnPageLoad,
+      },
+  };
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(test_case.description);
+    PasswordForm preferred_match = saved_match_;
+    std::vector<const PasswordForm*> best_matches = {&preferred_match};
+
+    PasswordForm observed_form = observed_form_;
+    // Set username to match preferred match
+    observed_form.username_value = preferred_match.username_value;
+    // Set a different password than saved
+    observed_form.password_value = ASCIIToUTF16("New Passwd");
+    // Set classification results
+    observed_form.server_side_classification_successful =
+        test_case.server_side_classification_successful;
+    observed_form.username_may_use_prefilled_placeholder =
+        test_case.username_may_use_prefilled_placeholder;
+
+    EXPECT_CALL(driver_, FillPasswordForm);
+    EXPECT_CALL(client_, PasswordWasAutofilled);
+
+    LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
+        &client_, &driver_, observed_form, best_matches, federated_matches_,
+        &preferred_match, metrics_recorder_.get());
+
+    EXPECT_EQ(test_case.likely_form_filling, likely_form_filling);
+  }
+}
+#endif
 
 TEST_F(PasswordFormFillingTest, AutofillPSLMatch) {
   std::vector<const PasswordForm*> best_matches = {&psl_saved_match_};
 
-  EXPECT_CALL(driver_, InformNoSavedCredentials()).Times(0);
+  EXPECT_CALL(driver_, InformNoSavedCredentials(_)).Times(0);
   PasswordFormFillData fill_data;
   EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
   EXPECT_CALL(client_, PasswordWasAutofilled);
@@ -521,6 +595,7 @@ TEST(PasswordFormFillDataTest, RendererIDs) {
   form_on_page.username_element = ASCIIToUTF16("username");
   form_on_page.password_element = ASCIIToUTF16("password");
   form_on_page.username_may_use_prefilled_placeholder = true;
+  form_on_page.server_side_classification_successful = true;
 
   // Create an exact match in the database.
   PasswordForm preferred_match = form_on_page;
@@ -532,7 +607,6 @@ TEST(PasswordFormFillDataTest, RendererIDs) {
   form_data.unique_renderer_id = FormRendererId(42);
   form_data.is_form_tag = true;
   form_on_page.form_data = form_data;
-  form_on_page.has_renderer_ids = true;
   form_on_page.username_element_renderer_id = FieldRendererId(123);
   form_on_page.password_element_renderer_id = FieldRendererId(456);
 
@@ -540,7 +614,6 @@ TEST(PasswordFormFillDataTest, RendererIDs) {
       CreatePasswordFormFillData(form_on_page, {}, preferred_match, true);
 
   EXPECT_EQ(form_data.unique_renderer_id, result.form_renderer_id);
-  EXPECT_EQ(form_on_page.has_renderer_ids, result.has_renderer_ids);
   EXPECT_EQ(form_on_page.username_element_renderer_id,
             result.username_field.unique_renderer_id);
   EXPECT_EQ(form_on_page.password_element_renderer_id,
@@ -554,7 +627,6 @@ TEST(PasswordFormFillDataTest, NoPasswordElement) {
   // Create the current form on the page.
   PasswordForm form_on_page;
   form_on_page.url = GURL("https://foo.com/");
-  form_on_page.has_renderer_ids = true;
   form_on_page.username_element_renderer_id = FieldRendererId(123);
   // Set no password element.
   form_on_page.password_element_renderer_id = FieldRendererId();
@@ -574,7 +646,6 @@ TEST(PasswordFormFillDataTest, NoPasswordElement) {
       form_on_page, {} /* matches */, preferred_match, true);
 
   // Check that nor username nor password fields are set.
-  EXPECT_EQ(true, result.has_renderer_ids);
   EXPECT_TRUE(result.username_field.unique_renderer_id.is_null());
   EXPECT_TRUE(result.password_field.unique_renderer_id.is_null());
 }
@@ -628,4 +699,5 @@ TEST(PasswordFormFillDataTest, DeduplicatesFillData) {
           IsLogin(kDuplicateLocalUsername, kDuplicateLocalPassword, false),
           IsLogin(kSyncedUsername, kSyncedPassword, true)));
 }
+
 }  // namespace password_manager

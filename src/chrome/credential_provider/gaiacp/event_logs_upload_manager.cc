@@ -15,7 +15,6 @@
 #include "chrome/credential_provider/gaiacp/gcp_utils.h"
 #include "chrome/credential_provider/gaiacp/gcpw_strings.h"
 #include "chrome/credential_provider/gaiacp/logging.h"
-#include "chrome/credential_provider/gaiacp/mdm_utils.h"
 #include "chrome/credential_provider/gaiacp/reg_utils.h"
 #include "chrome/credential_provider/gaiacp/win_http_url_fetcher.h"
 
@@ -391,7 +390,7 @@ EventLogsUploadManager::EventLogsUploadManager()
 EventLogsUploadManager::~EventLogsUploadManager() = default;
 
 GURL EventLogsUploadManager::GetGcpwServiceUploadEventViewerLogsUrl() {
-  GURL gcpw_service_url = GURL(base::UTF16ToUTF8(kDefaultGcpwServiceUrl));
+  GURL gcpw_service_url = GetGcpwServiceUrl();
 
   return gcpw_service_url.Resolve(kGcpwServiceUploadEventLogsPath);
 }

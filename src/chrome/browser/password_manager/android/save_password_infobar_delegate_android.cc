@@ -8,8 +8,11 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/scoped_observer.h"
+#include "base/values.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/android/infobars/save_password_infobar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
@@ -19,6 +22,8 @@
 #include "components/infobars/core/infobar_manager.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
+#include "components/signin/public/identity_manager/account_info.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/driver/sync_service.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -32,18 +37,33 @@ void SavePasswordInfoBarDelegate::Create(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile);
+  CoreAccountId account_id =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSync);
+  base::Optional<AccountInfo> account_info =
+      identity_manager
+          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
+              account_id);
+
+  // is_smartlock_branding_enabled indicates whether the user is syncing
+  // passwords to their Google Account.
   bool is_smartlock_branding_enabled =
       password_bubble_experiment::IsSmartLockUser(sync_service);
   InfoBarService* infobar_service =
       InfoBarService::FromWebContents(web_contents);
-  infobar_service->AddInfoBar(
-      std::make_unique<SavePasswordInfoBar>(base::WrapUnique(
+  infobar_service->AddInfoBar(std::make_unique<SavePasswordInfoBar>(
+      base::WrapUnique(
           new SavePasswordInfoBarDelegate(web_contents, std::move(form_to_save),
-                                          is_smartlock_branding_enabled))));
+                                          is_smartlock_branding_enabled)),
+      is_smartlock_branding_enabled && account_info.has_value()
+          ? account_info.value()
+          : AccountInfo()));
 }
 
 SavePasswordInfoBarDelegate::~SavePasswordInfoBarDelegate() {
-  password_manager::metrics_util::LogSaveUIDismissalReason(infobar_response_);
+  password_manager::metrics_util::LogSaveUIDismissalReason(
+      infobar_response_, /*user_state=*/base::nullopt);
   if (form_to_save_->WasUnblacklisted()) {
     password_manager::metrics_util::LogSaveUIDismissalReasonAfterUnblacklisting(
         infobar_response_);
@@ -94,13 +114,13 @@ base::string16 SavePasswordInfoBarDelegate::GetButtonLabel(
     InfoBarButton button) const {
   return l10n_util::GetStringUTF16((button == BUTTON_OK)
                                        ? IDS_PASSWORD_MANAGER_SAVE_BUTTON
-                                       : IDS_PASSWORD_MANAGER_BLACKLIST_BUTTON);
+                                       : IDS_PASSWORD_MANAGER_BLOCKLIST_BUTTON);
 }
 
 bool SavePasswordInfoBarDelegate::Accept() {
   DCHECK(form_to_save_.get());
   form_to_save_->Save();
-  infobar_response_ = password_manager::metrics_util::CLICKED_SAVE;
+  infobar_response_ = password_manager::metrics_util::CLICKED_ACCEPT;
   return true;
 }
 

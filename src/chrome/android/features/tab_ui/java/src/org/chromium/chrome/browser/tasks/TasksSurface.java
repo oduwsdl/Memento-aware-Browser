@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
@@ -47,6 +48,12 @@ public interface TasksSurface {
     TabSwitcher.TabListDelegate getTabListDelegate();
 
     /**
+     * @return {@link Supplier} that provides dialog visibility.
+     */
+    @Nullable
+    Supplier<Boolean> getTabGridDialogVisibilitySupplier();
+
+    /**
      * Get the view container {@link ViewGroup} of the tasks surface body.
      * @return The tasks surface body view container {@link ViewGroup}.
      */
@@ -57,6 +64,11 @@ public interface TasksSurface {
      * @return The surface's container {@link View}.
      */
     View getView();
+
+    /**
+     * Get the view {@link View} of the top transparent placeholder on start surface.
+     */
+    View getTopToolbarPlaceholderView();
 
     /**
      * Called when the native initialization is completed. Anything to construct a TasksSurface but

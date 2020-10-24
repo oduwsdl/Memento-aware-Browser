@@ -43,8 +43,6 @@ def erase_all_simulators(path=None):
 
   Args:
     path: (str) A path with simulators
-
-  Fix for DVTCoreSimulatorAdditionsErrorDomain error.
   """
   command = ['xcrun', 'simctl']
   if path:
@@ -52,16 +50,23 @@ def erase_all_simulators(path=None):
     LOGGER.info('Erasing all simulators from folder %s.' % path)
   else:
     LOGGER.info('Erasing all simulators.')
-  subprocess.call(command + ['erase', 'all'])
+
+  try:
+    subprocess.check_call(command + ['erase', 'all'])
+  except subprocess.CalledProcessError as e:
+    # Logging error instead of throwing so we don't cause failures in case
+    # this was indeed failing to clean up.
+    message = 'Failed to erase all simulators. Error: %s' % e.output
+    LOGGER.error(message)
 
 
 def shutdown_all_simulators(path=None):
   """Shutdown all simulator devices.
 
+  Fix for DVTCoreSimulatorAdditionsErrorDomain error.
+
   Args:
     path: (str) A path with simulators
-
-  Fix for DVTCoreSimulatorAdditionsErrorDomain error.
   """
   command = ['xcrun', 'simctl']
   if path:
@@ -69,7 +74,14 @@ def shutdown_all_simulators(path=None):
     LOGGER.info('Shutdown all simulators from folder %s.' % path)
   else:
     LOGGER.info('Shutdown all simulators.')
-  subprocess.call(command + ['shutdown', 'all'])
+
+  try:
+    subprocess.check_call(command + ['shutdown', 'all'])
+  except subprocess.CalledProcessError as e:
+    # Logging error instead of throwing so we don't cause failures in case
+    # this was indeed failing to clean up.
+    message = 'Failed to shutdown all simulators. Error: %s' % e.output
+    LOGGER.error(message)
 
 
 def terminate_process(proc):
@@ -83,7 +95,7 @@ def terminate_process(proc):
   try:
     proc.terminate()
   except OSError as ex:
-    LOGGER.info('Error while killing a process: %s' % ex)
+    LOGGER.error('Error while killing a process: %s' % ex)
 
 
 class LaunchCommand(object):
@@ -220,7 +232,6 @@ class LaunchCommand(object):
           if failure:
             LOGGER.info('Failure for passed tests %s: %s' % (status, failure))
         break
-      self._log_parser.copy_screenshots(outdir_attempt)
 
       # If tests are not completed(interrupted or did not start)
       # re-run them with the same number of shards,
@@ -375,6 +386,10 @@ class SimulatorParallelTestRunner(test_runner.SimulatorTestRunner):
                                              launch_commands):
       attempts_results.append(result['test_results']['attempts'])
 
+    # Deletes simulator used in the tests after tests end.
+    if iossim_util.is_device_with_udid_simulator(self.udid):
+      iossim_util.delete_simulator_by_udid(self.udid)
+
     # Gets passed tests
     self.logs['passed tests'] = []
     for shard_attempts in attempts_results:
@@ -386,6 +401,12 @@ class SimulatorParallelTestRunner(test_runner.SimulatorTestRunner):
     for shard_attempts in attempts_results:
       if shard_attempts[-1]['failed']:
         self.logs['failed tests'].extend(shard_attempts[-1]['failed'].keys())
+
+    # Gets disabled tests from test app object if any.
+    self.logs['disabled tests'] = []
+    for launch_command in launch_commands:
+      self.logs['disabled tests'].extend(
+          launch_command.egtests_app.disabled_tests)
 
     # Gets all failures/flakes and lists them in bot summary
     all_failures = set()
@@ -433,7 +454,8 @@ class SimulatorParallelTestRunner(test_runner.SimulatorTestRunner):
       for attempt, attempt_results in enumerate(shard_attempts):
 
         for test in attempt_results['failed'].keys():
-          output.mark_failed(test)
+          output.mark_failed(
+              test, test_log='\n'.join(self.logs.get(test, [])).encode('utf8'))
 
         # 'aborted tests' in logs is an array of strings, each string defined
         # as "{TestCase}/{testMethod}"
@@ -442,6 +464,8 @@ class SimulatorParallelTestRunner(test_runner.SimulatorTestRunner):
 
         for test in attempt_results['passed']:
           output.mark_passed(test)
+
+    output.mark_all_skipped(self.logs['disabled tests'])
 
     self.test_results['tests'] = output.tests
 

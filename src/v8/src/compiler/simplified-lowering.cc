@@ -183,10 +183,16 @@ void ReplaceEffectControlUses(Node* node, Node* effect, Node* control) {
 }
 
 bool CanOverflowSigned32(const Operator* op, Type left, Type right,
-                         Zone* type_zone) {
-  // We assume the inputs are checked Signed32 (or known statically
-  // to be Signed32). Technically, the inputs could also be minus zero, but
-  // that cannot cause overflow.
+                         TypeCache const* type_cache, Zone* type_zone) {
+  // We assume the inputs are checked Signed32 (or known statically to be
+  // Signed32). Technically, the inputs could also be minus zero, which we treat
+  // as 0 for the purpose of this function.
+  if (left.Maybe(Type::MinusZero())) {
+    left = Type::Union(left, type_cache->kSingletonZero, type_zone);
+  }
+  if (right.Maybe(Type::MinusZero())) {
+    right = Type::Union(right, type_cache->kSingletonZero, type_zone);
+  }
   left = Type::Intersect(left, Type::Signed32(), type_zone);
   right = Type::Intersect(right, Type::Signed32(), type_zone);
   if (left.IsNone() || right.IsNone()) return false;
@@ -1199,8 +1205,7 @@ class RepresentationSelector {
     } else if (lower<T>()) {
       Zone* zone = jsgraph_->zone();
       ZoneVector<MachineType>* types =
-          new (zone->New(sizeof(ZoneVector<MachineType>)))
-              ZoneVector<MachineType>(node->InputCount(), zone);
+          zone->New<ZoneVector<MachineType>>(node->InputCount(), zone);
       for (int i = 0; i < node->InputCount(); i++) {
         Node* input = node->InputAt(i);
         // TODO(nicohartmann): Remove, once the deoptimizer can rematerialize
@@ -1250,8 +1255,7 @@ class RepresentationSelector {
         node->ReplaceInput(2, jsgraph_->SingleDeadTypedStateValues());
       } else {
         ZoneVector<MachineType>* types =
-            new (zone->New(sizeof(ZoneVector<MachineType>)))
-                ZoneVector<MachineType>(1, zone);
+            zone->New<ZoneVector<MachineType>>(1, zone);
         (*types)[0] = DeoptMachineTypeOf(GetInfo(accumulator)->representation(),
                                          TypeOf(accumulator));
 
@@ -1283,8 +1287,7 @@ class RepresentationSelector {
     } else if (lower<T>()) {
       Zone* zone = jsgraph_->zone();
       ZoneVector<MachineType>* types =
-          new (zone->New(sizeof(ZoneVector<MachineType>)))
-              ZoneVector<MachineType>(node->InputCount(), zone);
+          zone->New<ZoneVector<MachineType>>(node->InputCount(), zone);
       for (int i = 0; i < node->InputCount(); i++) {
         Node* input = node->InputAt(i);
         (*types)[i] =
@@ -1487,7 +1490,8 @@ class RepresentationSelector {
     if (lower<T>()) {
       if (truncation.IsUsedAsWord32() ||
           !CanOverflowSigned32(node->op(), left_feedback_type,
-                               right_feedback_type, graph_zone())) {
+                               right_feedback_type, type_cache_,
+                               graph_zone())) {
         ChangeToPureOp(node, Int32Op(node));
 
       } else {
@@ -1712,7 +1716,7 @@ class RepresentationSelector {
   static MachineType MachineTypeFor(CTypeInfo::Type type) {
     switch (type) {
       case CTypeInfo::Type::kVoid:
-        return MachineType::Int32();
+        return MachineType::AnyTagged();
       case CTypeInfo::Type::kBool:
         return MachineType::Bool();
       case CTypeInfo::Type::kInt32:
@@ -1727,8 +1731,8 @@ class RepresentationSelector {
         return MachineType::Float32();
       case CTypeInfo::Type::kFloat64:
         return MachineType::Float64();
-      case CTypeInfo::Type::kUnwrappedApiObject:
-        return MachineType::Pointer();
+      case CTypeInfo::Type::kV8Value:
+        return MachineType::AnyTagged();
     }
   }
 
@@ -1741,69 +1745,65 @@ class RepresentationSelector {
         return UseInfo::Bool();
       case CTypeInfo::Type::kInt32:
       case CTypeInfo::Type::kUint32:
-      case CTypeInfo::Type::kFloat32:
         return UseInfo::CheckedNumberAsWord32(feedback);
+      // TODO(mslekova): We deopt for unsafe integers, but ultimately we want
+      // to make this less restrictive in order to stay on the fast path.
       case CTypeInfo::Type::kInt64:
-        return UseInfo::CheckedSigned64AsWord64(kIdentifyZeros, feedback);
-      case CTypeInfo::Type::kFloat64:
-        return UseInfo::CheckedNumberAsFloat64(kIdentifyZeros, feedback);
-      // UseInfo::Word64 does not propagate any TypeCheckKind, so it relies
-      // on the implicit assumption that Word64 representation only holds
-      // Numbers, which is already no longer true with BigInts. By now,
-      // BigInts are handled in a very conservative way to make sure they don't
-      // fall into that pit, but future changes may break this here.
       case CTypeInfo::Type::kUint64:
-        return UseInfo::Word64();
-      case CTypeInfo::Type::kUnwrappedApiObject:
-        return UseInfo::Word();
+        return UseInfo::CheckedSigned64AsWord64(kIdentifyZeros, feedback);
+      case CTypeInfo::Type::kFloat32:
+      case CTypeInfo::Type::kFloat64:
+        return UseInfo::CheckedNumberAsFloat64(kDistinguishZeros, feedback);
+      case CTypeInfo::Type::kV8Value:
+        return UseInfo::AnyTagged();
     }
   }
 
   static constexpr int kInitialArgumentsCount = 10;
 
   template <Phase T>
-  void VisitFastApiCall(Node* node) {
-    FastApiCallParameters const& params = FastApiCallParametersOf(node->op());
-    const CFunctionInfo* c_signature = params.signature();
-    int c_arg_count = c_signature->ArgumentCount();
-    int value_input_count = node->op()->ValueInputCount();
-    // function, ... C args
-    CHECK_EQ(c_arg_count + 1, value_input_count);
+  void VisitFastApiCall(Node* node, SimplifiedLowering* lowering) {
+    FastApiCallParameters const& op_params =
+        FastApiCallParametersOf(node->op());
+    const CFunctionInfo* c_signature = op_params.signature();
+    const int c_arg_count = c_signature->ArgumentCount();
+    CallDescriptor* call_descriptor = op_params.descriptor();
+    int js_arg_count = static_cast<int>(call_descriptor->ParameterCount());
+    const int value_input_count = node->op()->ValueInputCount();
+    CHECK_EQ(FastApiCallNode::ArityForArgc(c_arg_count, js_arg_count),
+             value_input_count);
 
     base::SmallVector<UseInfo, kInitialArgumentsCount> arg_use_info(
         c_arg_count);
+    // The target of the fast call.
     ProcessInput<T>(node, 0, UseInfo::Word());
     // Propagate representation information from TypeInfo.
     for (int i = 0; i < c_arg_count; i++) {
       arg_use_info[i] = UseInfoForFastApiCallArgument(
-          c_signature->ArgumentInfo(i).GetType(), params.feedback());
-      ProcessInput<T>(node, i + 1, arg_use_info[i]);
+          c_signature->ArgumentInfo(i).GetType(), op_params.feedback());
+      ProcessInput<T>(node, i + FastApiCallNode::kFastTargetInputCount,
+                      arg_use_info[i]);
     }
+
+    // The call code for the slow call.
+    ProcessInput<T>(node, c_arg_count + FastApiCallNode::kFastTargetInputCount,
+                    UseInfo::AnyTagged());
+    for (int i = 1; i <= js_arg_count; i++) {
+      ProcessInput<T>(node,
+                      c_arg_count + FastApiCallNode::kFastTargetInputCount + i,
+                      TruncatingUseInfoFromRepresentation(
+                          call_descriptor->GetInputType(i).representation()));
+    }
+    for (int i = c_arg_count + FastApiCallNode::kFastTargetInputCount +
+                 js_arg_count;
+         i < value_input_count; ++i) {
+      ProcessInput<T>(node, i, UseInfo::AnyTagged());
+    }
+    ProcessRemainingInputs<T>(node, value_input_count);
 
     MachineType return_type =
         MachineTypeFor(c_signature->ReturnInfo().GetType());
     SetOutput<T>(node, return_type.representation());
-
-    if (lower<T>()) {
-      MachineSignature::Builder builder(graph()->zone(), 1, c_arg_count);
-      builder.AddReturn(return_type);
-      for (int i = 0; i < c_arg_count; ++i) {
-        MachineType machine_type =
-            MachineTypeFor(c_signature->ArgumentInfo(i).GetType());
-        // Here the arg_use_info are indexed starting from 1 because of the
-        // function input, while this loop is only over the actual arguments.
-        DCHECK_EQ(arg_use_info[i].representation(),
-                  machine_type.representation());
-        builder.AddParam(machine_type);
-      }
-
-      CallDescriptor* call_descriptor = Linkage::GetSimplifiedCDescriptor(
-          graph()->zone(), builder.Build(), CallDescriptor::kNoFlags);
-
-      call_descriptor->SetCFunctionInfo(c_signature);
-
-      NodeProperties::ChangeOp(node, common()->Call(call_descriptor));
-    }
   }
 
   // Dispatching routine for visiting the node {node} with the usage {use}.
@@ -1811,7 +1811,7 @@ class RepresentationSelector {
   template <Phase T>
   void VisitNode(Node* node, Truncation truncation,
                  SimplifiedLowering* lowering) {
-    tick_counter_->DoTick();
+    tick_counter_->TickAndMaybeEnterSafepoint();
 
     // Unconditionally eliminate unused pure nodes (only relevant if there's
     // a pure operation in between two effectful ones, where the last one
@@ -1819,9 +1819,8 @@ class RepresentationSelector {
     // Note: We must not do this for constants, as they are cached and we
     // would thus kill the cached {node} during lowering (i.e. replace all
     // uses with Dead), but at that point some node lowering might have
-    // already taken the constant {node} from the cache (while it was in
-    // a sane state still) and we would afterwards replace that use with
-    // Dead as well.
+    // already taken the constant {node} from the cache (while it was not
+    // yet killed) and we would afterwards replace that use with Dead as well.
     if (node->op()->ValueInputCount() > 0 &&
         node->op()->HasProperty(Operator::kPure) && truncation.IsUnused()) {
       return VisitUnused<T>(node);
@@ -2829,6 +2828,13 @@ class RepresentationSelector {
         return VisitUnop<T>(node, UseInfo::AnyTagged(),
                             MachineRepresentation::kTaggedPointer);
       }
+      case IrOpcode::kTierUpCheck:
+      case IrOpcode::kUpdateInterruptBudget: {
+        ProcessInput<T>(node, 0, UseInfo::AnyTagged());
+        ProcessRemainingInputs<T>(node, 1);
+        SetOutput<T>(node, MachineRepresentation::kNone);
+        return;
+      }
       case IrOpcode::kNewConsString: {
         ProcessInput<T>(node, 0, UseInfo::TruncatingWord32());  // length
         ProcessInput<T>(node, 1, UseInfo::AnyTagged());         // first
@@ -3515,7 +3521,8 @@ class RepresentationSelector {
         SetOutput<T>(node, MachineType::PointerRepresentation());
         return;
       }
-      case IrOpcode::kArgumentsLength: {
+      case IrOpcode::kArgumentsLength:
+      case IrOpcode::kRestLength: {
         VisitUnop<T>(node, UseInfo::Word(),
                      MachineRepresentation::kTaggedSigned);
         return;
@@ -3604,6 +3611,11 @@ class RepresentationSelector {
             node, UseInfo::CheckedHeapObjectAsTaggedPointer(p.feedback()),
             MachineRepresentation::kNone);
       }
+      case IrOpcode::kDynamicCheckMaps: {
+        return VisitUnop<T>(
+            node, UseInfo::CheckedHeapObjectAsTaggedPointer(FeedbackSource()),
+            MachineRepresentation::kNone);
+      }
       case IrOpcode::kTransitionElementsKind: {
         return VisitUnop<T>(
             node, UseInfo::CheckedHeapObjectAsTaggedPointer(FeedbackSource()),
@@ -3690,7 +3702,7 @@ class RepresentationSelector {
       }
 
       case IrOpcode::kFastApiCall: {
-        VisitFastApiCall<T>(node);
+        VisitFastApiCall<T>(node, lowering);
         return;
       }
 
@@ -3718,7 +3730,7 @@ class RepresentationSelector {
       case IrOpcode::kUnreachable:
       case IrOpcode::kRuntimeAbort:
 // All JavaScript operators except JSToNumber have uniform handling.
-#define OPCODE_CASE(name) case IrOpcode::k##name:
+#define OPCODE_CASE(name, ...) case IrOpcode::k##name:
         JS_SIMPLE_BINOP_LIST(OPCODE_CASE)
         JS_OBJECT_OP_LIST(OPCODE_CASE)
         JS_CONTEXT_OP_LIST(OPCODE_CASE)

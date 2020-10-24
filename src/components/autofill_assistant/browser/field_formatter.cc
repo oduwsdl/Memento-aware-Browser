@@ -10,14 +10,16 @@
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/geo/state_names.h"
 #include "components/autofill_assistant/browser/generic_ui.pb.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "third_party/re2/src/re2/stringpiece.h"
 
 namespace {
 // Regex to find placeholders of the form ${key}, where key is an arbitrary
-// string that does not contain curly braces.
-const char kPlaceholderExtractor[] = R"re(\$\{([^{}]+)\})re";
+// string that does not contain curly braces. The first capture group is for
+// the prefix before the key, the second for the key itself.
+const char kPlaceholderExtractor[] = R"re(([^$]*)\$\{([^{}]+)\})re";
 
 base::Optional<std::string> GetFieldValue(
     const std::map<std::string, std::string>& mappings,
@@ -50,24 +52,32 @@ namespace field_formatter {
 
 base::Optional<std::string> FormatString(
     const std::string& pattern,
-    const std::map<std::string, std::string>& mappings) {
+    const std::map<std::string, std::string>& mappings,
+    bool strict) {
   if (pattern.empty()) {
     return std::string();
   }
 
-  std::string key;
-  std::string out = pattern;
+  std::string out;
   re2::StringPiece input(pattern);
-  while (re2::RE2::FindAndConsume(&input, kPlaceholderExtractor, &key)) {
+  std::string prefix;
+  std::string key;
+  while (
+      re2::RE2::FindAndConsume(&input, kPlaceholderExtractor, &prefix, &key)) {
     auto rewrite_value = GetFieldValue(mappings, key);
     if (!rewrite_value.has_value()) {
-      VLOG(2) << "No value for " << key << " in " << pattern;
-      return base::nullopt;
+      if (strict) {
+        VLOG(2) << "No value for " << key << " in " << pattern;
+        return base::nullopt;
+      }
+      // Leave placeholder unchanged.
+      rewrite_value = "${" + key + "}";
     }
 
-    re2::RE2::Replace(&out, kPlaceholderExtractor,
-                      re2::StringPiece(rewrite_value.value()));
+    out = out + prefix + *rewrite_value;
   }
+  // Append remaining unmatched suffix (if any).
+  out = out + input.ToString();
 
   return out;
 }
@@ -77,7 +87,25 @@ std::map<std::string, std::string>
 CreateAutofillMappings<autofill::AutofillProfile>(
     const autofill::AutofillProfile& profile,
     const std::string& locale) {
-  return CreateFormGroupMappings(profile, locale);
+  auto mappings = CreateFormGroupMappings(profile, locale);
+
+  auto state = profile.GetInfo(
+      autofill::AutofillType(autofill::ADDRESS_HOME_STATE), locale);
+  if (!state.empty()) {
+    // TODO(b/159309560): Capitalize first letter of the state name.
+    auto state_name =
+        base::UTF16ToUTF8(autofill::state_names::GetNameForAbbreviation(state));
+    if (state_name.empty()) {
+      mappings[base::NumberToString(
+          static_cast<int>(AutofillFormatProto::ADDRESS_HOME_STATE_NAME))] =
+          base::UTF16ToUTF8(state);
+    } else {
+      mappings[base::NumberToString(static_cast<int>(
+          AutofillFormatProto::ADDRESS_HOME_STATE_NAME))] = state_name;
+    }
+  }
+
+  return mappings;
 }
 
 template <>
@@ -104,6 +132,14 @@ std::map<std::string, std::string> CreateAutofillMappings<autofill::CreditCard>(
     mappings[base::NumberToString(static_cast<int>(
         AutofillFormatProto::CREDIT_CARD_NUMBER_LAST_FOUR_DIGITS))] =
         last_four_digits;
+  }
+  int month;
+  if (base::StringToInt(
+          credit_card.GetInfo(autofill::CREDIT_CARD_EXP_MONTH, locale),
+          &month)) {
+    mappings[base::NumberToString(static_cast<int>(
+        AutofillFormatProto::CREDIT_CARD_NON_PADDED_EXP_MONTH))] =
+        base::NumberToString(month);
   }
 
   return mappings;

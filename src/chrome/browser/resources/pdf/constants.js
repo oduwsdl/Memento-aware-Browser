@@ -3,6 +3,21 @@
 // found in the LICENSE file.
 
 /**
+ * @typedef {{
+ *   name: string,
+ *   size: number,
+ *   readable: boolean,
+ * }}
+ */
+export let Attachment;
+
+/** @enum {string} */
+export const DisplayAnnotationsAction = {
+  DISPLAY_ANNOTATIONS: 'display-annotations',
+  HIDE_ANNOTATIONS: 'hide-annotations',
+};
+
+/**
  * Enumeration of page fitting types.
  * @enum {string}
  */
@@ -14,13 +29,13 @@ export const FittingType = {
 };
 
 /**
- * Enumeration of two up view actions.
- * @enum {string}
+ * @typedef {{
+ *   messageId: string,
+ *   namedDestinationView: (string|undefined),
+ *   pageNumber: number,
+ * }}
  */
-export const TwoUpViewAction = {
-  TWO_UP_VIEW_ENABLE: 'two-up-view-enable',
-  TWO_UP_VIEW_DISABLE: 'two-up-view-disable',
-};
+export let NamedDestinationMessageData;
 
 /**
  * Enumeration of save message request types. Must Match SaveRequestType in
@@ -32,3 +47,6 @@ export const SaveRequestType = {
   ORIGINAL: 1,
   EDITED: 2,
 };
+
+/** @typedef {{x: number, y: number}} */
+export let Point;

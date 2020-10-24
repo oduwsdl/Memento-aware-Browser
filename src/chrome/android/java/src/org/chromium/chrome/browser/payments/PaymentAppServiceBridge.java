@@ -35,6 +35,7 @@ public class PaymentAppServiceBridge implements PaymentAppFactoryInterface {
     // PaymentAppFactoryInterface implementation.
     @Override
     public void create(PaymentAppFactoryDelegate delegate) {
+        if (delegate.getParams().hasClosed()) return;
         assert delegate.getParams().getPaymentRequestOrigin().equals(
                 UrlFormatter.formatUrlForSecurityDisplay(
                         delegate.getParams().getRenderFrameHost().getLastCommittedURL()));
@@ -43,7 +44,8 @@ public class PaymentAppServiceBridge implements PaymentAppFactoryInterface {
 
         PaymentAppServiceBridgeJni.get().create(delegate.getParams().getRenderFrameHost(),
                 delegate.getParams().getTopLevelOrigin(), delegate.getParams().getSpec(),
-                delegate.getParams().getMayCrawl(), callback);
+                delegate.getParams().getTwaPackageName(), delegate.getParams().getMayCrawl(),
+                callback);
     }
 
     /** Handles callbacks from native PaymentAppService. */
@@ -89,8 +91,21 @@ public class PaymentAppServiceBridge implements PaymentAppFactoryInterface {
 
     @NativeMethods
     /* package */ interface Natives {
+        /**
+         * Creates a native payment app service.
+         * @param initiatorRenderFrameHost The host of the render frame where PaymentRequest API was
+         * invoked.
+         * @param topOrigin The (scheme, host, port) tuple of top level context where
+         * PaymentRequest API was invoked.
+         * @param spec The parameters passed into the PaymentRequest API.
+         * @param twaPackageName The Android package name of the Trusted Web Activity that invoked
+         * Chrome. If not running in TWA mode, then this string is null or empty.
+         * @param mayCrawlForInstallablePaymentApps Whether crawling for just-in-time installable
+         * payment apps is allowed.
+         * @param callback The callback that receives the discovered payment apps.
+         */
         void create(RenderFrameHost initiatorRenderFrameHost, String topOrigin,
-                PaymentRequestSpec spec, boolean mayCrawlForInstallablePaymentApps,
-                PaymentAppServiceCallback callback);
+                PaymentRequestSpec spec, String twaPackageName,
+                boolean mayCrawlForInstallablePaymentApps, PaymentAppServiceCallback callback);
     }
 }

@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/time/time.h"
-#include "components/page_load_metrics/browser/observers/largest_contentful_paint_handler.h"
+#include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
 #include "components/page_load_metrics/browser/page_load_metrics_update_dispatcher.h"
@@ -204,7 +204,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   void OnFrameIntersectionUpdate(
       content::RenderFrameHost* rfh,
       const mojom::FrameIntersectionUpdate& frame_intersection_update) override;
-  void UpdateThroughput(mojom::ThroughputUkmDataPtr throughput_data) override;
+  void SetUpSharedMemoryForSmoothness(
+      base::ReadOnlySharedMemoryRegion shared_memory) override;
 
   // PageLoadMetricsObserverDelegate implementation:
   content::WebContents* GetWebContents() const override;
@@ -213,10 +214,9 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
       const override;
   const base::Optional<base::TimeDelta>& GetFirstForegroundTime()
       const override;
-  const base::Optional<base::TimeDelta>&
-  GetFirstBackgroundTimeAfterBackForwardCacheRestore() const override;
+  const BackForwardCacheRestore& GetBackForwardCacheRestore(
+      size_t index) const override;
   bool StartedInForeground() const override;
-  bool LastBackForwardCacheRestoreWasInForeground() const override;
   const UserInitiatedInfo& GetUserInitiatedInfo() const override;
   const GURL& GetUrl() const override;
   const GURL& GetStartUrl() const override;
@@ -235,7 +235,7 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
       const override;
   const LargestContentfulPaintHandler&
   GetExperimentalLargestContentfulPaintHandler() const override;
-  ukm::SourceId GetSourceId() const override;
+  ukm::SourceId GetPageUkmSourceId() const override;
   bool IsFirstNavigationInWebContents() const override;
 
   void Redirect(content::NavigationHandle* navigation_handle);
@@ -442,10 +442,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   // when they occur in the background.
   base::Optional<base::TimeDelta> first_background_time_;
   base::Optional<base::TimeDelta> first_foreground_time_;
-  base::Optional<base::TimeDelta>
-      first_background_time_after_back_forward_cache_restore_;
+  std::vector<BackForwardCacheRestore> back_forward_cache_restores_;
   const bool started_in_foreground_;
-  bool last_back_forward_cache_restore_was_in_foreground_ = false;
 
   mojom::PageLoadTimingPtr last_dispatched_merged_page_timing_;
 

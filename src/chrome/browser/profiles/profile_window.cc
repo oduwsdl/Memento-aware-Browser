@@ -34,7 +34,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
-#include "chrome/common/chrome_features.h"
+#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
@@ -177,8 +177,10 @@ void FindOrCreateNewWindowForProfile(
   base::RecordAction(UserMetricsAction("NewWindow"));
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   StartupBrowserCreator browser_creator;
-  browser_creator.LaunchBrowser(
-      command_line, profile, base::FilePath(), process_startup, is_first_run);
+  // This is not a browser launch from the user; don't record the launch mode.
+  browser_creator.LaunchBrowser(command_line, profile, base::FilePath(),
+                                process_startup, is_first_run,
+                                /*launch_mode_recorder=*/nullptr);
 }
 
 void OpenBrowserWindowForProfile(ProfileManager::CreateCallback callback,
@@ -203,7 +205,7 @@ void OpenBrowserWindowForProfile(ProfileManager::CreateCallback callback,
   }
 
 #if !defined(OS_CHROMEOS)
-  if (!profile->IsGuestSession()) {
+  if (!profile->IsGuestSession() && !profile->IsEphemeralGuestProfile()) {
     ProfileAttributesEntry* entry;
     if (g_browser_process->profile_manager()->GetProfileAttributesStorage().
             GetProfileAttributesWithPath(profile->GetPath(), &entry) &&
@@ -258,8 +260,8 @@ void OpenBrowserWindowForProfile(ProfileManager::CreateCallback callback,
 void LoadProfileAsync(const base::FilePath& path,
                       ProfileManager::CreateCallback callback) {
   g_browser_process->profile_manager()->CreateProfileAsync(
-      path, base::Bind(&ProfileLoadedCallback, callback), base::string16(),
-      std::string());
+      path, base::BindRepeating(&ProfileLoadedCallback, callback),
+      base::string16(), std::string());
 }
 
 void SwitchToProfile(const base::FilePath& path,
@@ -267,22 +269,23 @@ void SwitchToProfile(const base::FilePath& path,
                      ProfileManager::CreateCallback callback) {
   g_browser_process->profile_manager()->CreateProfileAsync(
       path,
-      base::Bind(&profiles::OpenBrowserWindowForProfile, callback,
-                 always_create, false, false),
+      base::BindRepeating(&profiles::OpenBrowserWindowForProfile, callback,
+                          always_create, false, false),
       base::string16(), std::string());
 }
 
 void SwitchToGuestProfile(ProfileManager::CreateCallback callback) {
   g_browser_process->profile_manager()->CreateProfileAsync(
       ProfileManager::GetGuestProfilePath(),
-      base::Bind(&profiles::OpenBrowserWindowForProfile, callback, false, false,
-                 false),
+      base::BindRepeating(&profiles::OpenBrowserWindowForProfile, callback,
+                          false, false, false),
       base::string16(), std::string());
 }
 #endif
 
 bool HasProfileSwitchTargets(Profile* profile) {
-  size_t min_profiles = profile->IsGuestSession() ? 1 : 2;
+  size_t min_profiles =
+      (profile->IsGuestSession() || profile->IsEphemeralGuestProfile()) ? 1 : 2;
   size_t number_of_profiles =
       g_browser_process->profile_manager()->GetNumberOfProfiles();
   return number_of_profiles >= min_profiles;
@@ -297,8 +300,8 @@ void CreateAndSwitchToNewProfile(ProfileManager::CreateCallback callback,
   ProfileManager::CreateMultiProfileAsync(
       storage.ChooseNameForNewProfile(placeholder_avatar_index),
       profiles::GetDefaultAvatarIconUrl(placeholder_avatar_index),
-      base::Bind(&profiles::OpenBrowserWindowForProfile, callback, true, true,
-                 false));
+      base::BindRepeating(&profiles::OpenBrowserWindowForProfile, callback,
+                          true, true, false));
   ProfileMetrics::LogProfileAddNewUser(metric);
 }
 
@@ -352,8 +355,10 @@ void LockProfile(Profile* profile) {
 
 bool IsLockAvailable(Profile* profile) {
   DCHECK(profile);
-  if (profile->IsGuestSession() || profile->IsSystemProfile())
+  if (profile->IsGuestSession() || profile->IsSystemProfile() ||
+      profile->IsEphemeralGuestProfile()) {
     return false;
+  }
 
   std::string hosted_domain = profile->GetPrefs()->
       GetString(prefs::kGoogleServicesHostedDomain);
@@ -403,12 +408,9 @@ void CreateSystemProfileForUserManager(
   // from the system profile.
   g_browser_process->profile_manager()->CreateProfileAsync(
       ProfileManager::GetSystemProfilePath(),
-      base::Bind(&OnUserManagerSystemProfileCreated,
-                 profile_path_to_focus,
-                 user_manager_action,
-                 callback),
-      base::string16(),
-      std::string());
+      base::BindRepeating(&OnUserManagerSystemProfileCreated,
+                          profile_path_to_focus, user_manager_action, callback),
+      base::string16(), std::string());
 }
 
 void BubbleViewModeFromAvatarBubbleMode(BrowserWindow::AvatarBubbleMode mode,

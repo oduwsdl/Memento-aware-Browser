@@ -88,10 +88,21 @@ Polymer({
     },
 
     /** @private */
+    dataEncrypted_: {
+      type: Boolean,
+      computed: 'computeDataEncrypted_(syncPrefs.encryptAllData)'
+    },
+
+    /** @private */
     encryptionExpanded_: {
       type: Boolean,
       value: false,
-      computed: 'computeEncryptionExpanded_(syncPrefs.encryptAllData)',
+    },
+
+    /** If true, override |encryptionExpanded_| to be true. */
+    forceEncryptionExpanded: {
+      type: Boolean,
+      value: false,
     },
 
     /**
@@ -132,18 +143,11 @@ Polymer({
       type: Boolean,
       value: false,
     },
-
-    /**
-     * If sync page friendly settings is enabled.
-     * @private
-     */
-    syncSetupFriendlySettings_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('syncSetupFriendlySettings');
-      }
-    },
   },
+
+  observers: [
+    'expandEncryptionIfNeeded_(dataEncrypted_, forceEncryptionExpanded)',
+  ],
 
   /** @private {?settings.SyncBrowserProxy} */
   browserProxy_: null,
@@ -223,6 +227,24 @@ Polymer({
       window.removeEventListener('unload', this.unloadCallback_);
       this.unloadCallback_ = null;
     }
+  },
+
+  /**
+   * Returns the encryption options SettingsSyncEncryptionOptionsElement.
+   * @return {?SettingsSyncEncryptionOptionsElement}
+   */
+  getEncryptionOptions() {
+    return /** @type {?SettingsSyncEncryptionOptionsElement} */ (
+        this.$$('settings-sync-encryption-options'));
+  },
+
+  /**
+   * Returns the encryption options SettingsPersonalizationOptionsElement.
+   * @return {?SettingsPersonalizationOptionsElement}
+   */
+  getPersonalizationOptions() {
+    return /** @type {?SettingsPersonalizationOptionsElement} */ (
+        this.$$('settings-personalization-options'));
   },
 
   /**
@@ -425,12 +447,26 @@ Polymer({
   },
 
   /**
-   * Whether the encryption dropdown should be expanded by default.
    * @return {boolean}
    * @private
    */
-  computeEncryptionExpanded_() {
+  computeDataEncrypted_() {
     return !!this.syncPrefs && this.syncPrefs.encryptAllData;
+  },
+
+  /**
+   * Whether the encryption dropdown should be expanded by default.
+   * @private
+   */
+  expandEncryptionIfNeeded_() {
+    // Force the dropdown to expand.
+    if (this.forceEncryptionExpanded) {
+      this.forceEncryptionExpanded = false;
+      this.encryptionExpanded_ = true;
+      return;
+    }
+
+    this.encryptionExpanded_ = this.dataEncrypted_;
   },
 
   /**
@@ -514,16 +550,6 @@ Polymer({
       // checkboxes or radio buttons won't change the value.
       event.stopPropagation();
     }
-  },
-
-  /**
-   * When there is a sync passphrase, some items have an additional line for the
-   * passphrase reset hint, making them three lines rather than two.
-   * @return {string}
-   * @private
-   */
-  getPassphraseHintLines_() {
-    return this.syncPrefs.encryptAllData ? 'three-line' : 'two-line';
   },
 
   /**

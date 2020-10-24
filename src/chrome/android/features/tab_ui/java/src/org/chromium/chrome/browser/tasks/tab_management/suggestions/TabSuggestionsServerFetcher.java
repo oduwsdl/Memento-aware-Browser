@@ -12,11 +12,12 @@ import org.json.JSONObject;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.complex_tasks.endpoint_fetcher.EndpointFetcher;
-import org.chromium.chrome.browser.complex_tasks.endpoint_fetcher.EndpointResponse;
+import org.chromium.chrome.browser.endpoint_fetcher.EndpointFetcher;
+import org.chromium.chrome.browser.endpoint_fetcher.EndpointResponse;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 
 import java.util.Collections;
 import java.util.LinkedList;
@@ -63,6 +64,13 @@ public class TabSuggestionsServerFetcher implements TabSuggestionsFetcher {
     @Override
     public void fetch(TabContext tabContext, Callback<TabSuggestionsFetcherResults> callback) {
         try {
+            for (TabContext.TabInfo tabInfo : tabContext.getUngroupedTabs()) {
+                if (tabInfo.isIncognito) {
+                    callback.onResult(
+                            new TabSuggestionsFetcherResults(Collections.emptyList(), tabContext));
+                    return;
+                }
+            }
             EndpointFetcher.fetchUsingChromeAPIKey(res
                     -> { fetchCallback(res, callback, tabContext); },
                     mProfileForTesting == null ? Profile.getLastUsedRegularProfile()
@@ -127,12 +135,19 @@ public class TabSuggestionsServerFetcher implements TabSuggestionsFetcher {
 
     @Override
     public boolean isEnabled() {
-        return isSignedIn() && isServerFetcherFlagEnabled();
+        // TODO(crbug.com/1141722): Currently this Fetcher is only used for grouping suggestion,
+        //  avoid fetching server if the TabGroupsAndroid flag is disabled. We need to move this
+        //  flag checking logic to somewhere if this server fetcher supports suggestions other than
+        //  grouping in the future.
+        return isSignedIn() && isServerFetcherFlagEnabled()
+                && TabUiFeatureUtilities.isTabGroupsAndroidEnabled();
     }
 
     @VisibleForTesting
     protected boolean isSignedIn() {
-        return ChromeSigninController.get().isSignedIn();
+        return IdentityServicesProvider.get()
+                .getIdentityManager(Profile.getLastUsedRegularProfile())
+                .hasPrimaryAccount();
     }
 
     @VisibleForTesting

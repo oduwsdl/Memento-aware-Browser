@@ -19,6 +19,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/client_native_pixmap_factory.h"
 
+#if defined(USE_OZONE) || defined(USE_X11)
+#include "ui/base/ui_base_features.h"  // nogncheck
+#endif
+
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
@@ -172,7 +176,7 @@ class TestGpuService : public mojom::GpuService {
       base::MemoryPressureListener::MemoryPressureLevel level) override {}
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   void BeginCATransaction() override {}
 
   void CommitCATransaction(CommitCATransactionCallback callback) override {}
@@ -229,7 +233,8 @@ class HostGpuMemoryBufferManagerTest : public ::testing::Test {
         base::ThreadTaskRunnerHandle::Get());
 #if defined(USE_X11)
     // X11 requires GPU process initialization to determine GMB support.
-    gpu_memory_buffer_manager_->native_configurations_initialized_.Signal();
+    if (!features::IsUsingOzonePlatform())
+      gpu_memory_buffer_manager_->native_configurations_initialized_.Signal();
 #endif
   }
 
@@ -238,13 +243,15 @@ class HostGpuMemoryBufferManagerTest : public ::testing::Test {
   bool IsNativePixmapConfigSupported() {
     bool native_pixmap_supported = false;
 #if defined(USE_OZONE)
-    native_pixmap_supported =
-        ui::OzonePlatform::GetInstance()->IsNativePixmapConfigSupported(
-            gfx::BufferFormat::RGBA_8888, gfx::BufferUsage::GPU_READ);
+    if (features::IsUsingOzonePlatform()) {
+      native_pixmap_supported =
+          ui::OzonePlatform::GetInstance()->IsNativePixmapConfigSupported(
+              gfx::BufferFormat::RGBA_8888, gfx::BufferUsage::GPU_READ);
+    }
 #elif defined(OS_ANDROID)
     native_pixmap_supported =
         base::AndroidHardwareBufferCompat::IsSupportAvailable();
-#elif defined(OS_MACOSX) || defined(OS_WIN)
+#elif defined(OS_APPLE) || defined(OS_WIN)
     native_pixmap_supported = true;
 #endif
 

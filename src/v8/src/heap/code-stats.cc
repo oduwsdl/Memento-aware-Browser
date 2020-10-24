@@ -6,6 +6,7 @@
 
 #include "src/codegen/code-comments.h"
 #include "src/codegen/reloc-info.h"
+#include "src/heap/heap-inl.h"
 #include "src/heap/large-spaces.h"
 #include "src/heap/paged-spaces-inl.h"  // For PagedSpaceObjectIterator.
 #include "src/objects/objects-inl.h"
@@ -40,7 +41,7 @@ void CodeStatistics::RecordCodeAndMetadataStatistics(HeapObject object,
 
 #ifdef DEBUG
     // Record code kind and code comment statistics.
-    isolate->code_kind_statistics()[abstract_code.kind()] +=
+    isolate->code_kind_statistics()[static_cast<int>(abstract_code.kind())] +=
         abstract_code.Size();
     CodeStatistics::CollectCodeCommentStatistics(object, isolate);
 #endif
@@ -85,10 +86,10 @@ void CodeStatistics::ReportCodeStatistics(Isolate* isolate) {
   // Report code kind statistics
   int* code_kind_statistics = isolate->code_kind_statistics();
   PrintF("\n   Code kind histograms: \n");
-  for (int i = 0; i < AbstractCode::NUMBER_OF_KINDS; i++) {
+  for (int i = 0; i < kCodeKindCount; i++) {
     if (code_kind_statistics[i] > 0) {
       PrintF("     %-20s: %10d bytes\n",
-             AbstractCode::Kind2String(static_cast<AbstractCode::Kind>(i)),
+             CodeKindToString(static_cast<CodeKind>(i)),
              code_kind_statistics[i]);
     }
   }
@@ -123,7 +124,7 @@ void CodeStatistics::ReportCodeStatistics(Isolate* isolate) {
 void CodeStatistics::ResetCodeStatistics(Isolate* isolate) {
   // Clear code kind statistics
   int* code_kind_statistics = isolate->code_kind_statistics();
-  for (int i = 0; i < AbstractCode::NUMBER_OF_KINDS; i++) {
+  for (int i = 0; i < kCodeKindCount; i++) {
     code_kind_statistics[i] = 0;
   }
 
@@ -193,14 +194,12 @@ void CodeStatistics::CollectCommentStatistics(Isolate* isolate,
   EnterComment(isolate, comment_txt, flat_delta);
 }
 
-// Collects code comment statistics
+// Collects code comment statistics.
 void CodeStatistics::CollectCodeCommentStatistics(HeapObject obj,
                                                   Isolate* isolate) {
   // Bytecode objects do not contain RelocInfo. Only process code objects
   // for code comment statistics.
-  if (!obj.IsCode()) {
-    return;
-  }
+  if (!obj.IsCode()) return;
 
   Code code = Code::cast(obj);
   CodeCommentsIterator cit(code.code_comments(), code.code_comments_size());
@@ -213,8 +212,11 @@ void CodeStatistics::CollectCodeCommentStatistics(HeapObject obj,
     cit.Next();
   }
 
-  DCHECK(0 <= prev_pc_offset && prev_pc_offset <= code.raw_instruction_size());
-  delta += static_cast<int>(code.raw_instruction_size() - prev_pc_offset);
+  // TODO(jgruber,v8:11036): Revisit this when separating instruction- and
+  // metadata areas. The logic will become a bit more complex since these areas
+  // will no longer be adjacent in some cases.
+  DCHECK(0 <= prev_pc_offset && prev_pc_offset <= code.raw_body_size());
+  delta += static_cast<int>(code.raw_body_size() - prev_pc_offset);
   EnterComment(isolate, "NoComment", delta);
 }
 #endif

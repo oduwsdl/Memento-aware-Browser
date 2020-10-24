@@ -25,7 +25,8 @@ namespace compiler {
 class JSTypedLoweringTester : public HandleAndZoneScope {
  public:
   explicit JSTypedLoweringTester(int num_parameters = 0)
-      : isolate(main_isolate()),
+      : HandleAndZoneScope(kCompressGraphZone),
+        isolate(main_isolate()),
         canonical(isolate),
         js_heap_broker(isolate, main_zone()),
         binop(nullptr),
@@ -92,8 +93,8 @@ class JSTypedLoweringTester : public HandleAndZoneScope {
     CHECK(!heap_copy_reducer.Reduce(node).Changed());
     JSGraph jsgraph(main_isolate(), &graph, &common, &javascript, &simplified,
                     &machine);
-    // TODO(titzer): mock the GraphReducer here for better unit testing.
-    GraphReducer graph_reducer(main_zone(), &graph, &tick_counter);
+    GraphReducer graph_reducer(main_zone(), &graph, &tick_counter,
+                               &js_heap_broker);
     JSTypedLowering reducer(&graph_reducer, &jsgraph, &js_heap_broker,
                             main_zone());
     Reduction reduction = reducer.Reduce(node);
@@ -133,6 +134,9 @@ class JSTypedLoweringTester : public HandleAndZoneScope {
     std::vector<Node*> inputs;
     inputs.push_back(left);
     inputs.push_back(right);
+    if (JSOperator::IsBinaryWithFeedback(op->opcode())) {
+      inputs.push_back(UndefinedConstant());  // Feedback vector.
+    }
     if (OperatorProperties::HasContextInput(op)) {
       inputs.push_back(context());
     }
@@ -150,6 +154,7 @@ class JSTypedLoweringTester : public HandleAndZoneScope {
   }
 
   Node* Unop(const Operator* op, Node* input) {
+    DCHECK(!JSOperator::IsUnaryWithFeedback(op->opcode()));
     // JS unops also require context, effect, and control
     if (OperatorProperties::GetFrameStateInputCount(op) > 0) {
       CHECK_EQ(1, OperatorProperties::GetFrameStateInputCount(op));
@@ -703,6 +708,7 @@ TEST(RemoveToNumberEffects) {
   JSTypedLoweringTester R;
 
   FeedbackSource feedback_source = FeedbackSourceWithOneBinarySlot(&R);
+  Node* feedback = R.UndefinedConstant();
   Node* effect_use = nullptr;
   Node* zero = R.graph.NewNode(R.common.NumberConstant(0));
   for (int i = 0; i < 10; i++) {
@@ -730,11 +736,12 @@ TEST(RemoveToNumberEffects) {
       case 3:
         effect_use =
             R.graph.NewNode(R.javascript.Add(feedback_source), ton, ton,
-                            R.context(), frame_state, ton, R.start());
+                            feedback, R.context(), frame_state, ton, R.start());
         break;
       case 4:
-        effect_use = R.graph.NewNode(R.javascript.Add(feedback_source), p0, p0,
-                                     R.context(), frame_state, ton, R.start());
+        effect_use =
+            R.graph.NewNode(R.javascript.Add(feedback_source), p0, p0, feedback,
+                            R.context(), frame_state, ton, R.start());
         break;
       case 5:
         effect_use =

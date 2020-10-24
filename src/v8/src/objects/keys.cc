@@ -18,6 +18,7 @@
 #include "src/objects/property-descriptor.h"
 #include "src/objects/prototype.h"
 #include "src/utils/identity-map.h"
+#include "src/zone/zone-hashmap.h"
 
 namespace v8 {
 namespace internal {
@@ -66,7 +67,8 @@ static Handle<FixedArray> CombineKeys(Isolate* isolate,
   int nof_descriptors = map.NumberOfOwnDescriptors();
   if (nof_descriptors == 0 && !may_have_elements) return prototype_chain_keys;
 
-  Handle<DescriptorArray> descs(map.instance_descriptors(), isolate);
+  Handle<DescriptorArray> descs(map.instance_descriptors(kRelaxedLoad),
+                                isolate);
   int own_keys_length = own_keys.is_null() ? 0 : own_keys->length();
   Handle<FixedArray> combined_keys = isolate->factory()->NewFixedArray(
       own_keys_length + prototype_chain_keys_length);
@@ -368,8 +370,8 @@ Handle<FixedArray> ReduceFixedArrayTo(Isolate* isolate,
 Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
                                            Handle<JSObject> object) {
   Handle<Map> map(object->map(), isolate);
-  Handle<FixedArray> keys(map->instance_descriptors().enum_cache().keys(),
-                          isolate);
+  Handle<FixedArray> keys(
+      map->instance_descriptors(kRelaxedLoad).enum_cache().keys(), isolate);
 
   // Check if the {map} has a valid enum length, which implies that it
   // must have a valid enum cache as well.
@@ -394,7 +396,7 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   }
 
   Handle<DescriptorArray> descriptors =
-      Handle<DescriptorArray>(map->instance_descriptors(), isolate);
+      Handle<DescriptorArray>(map->instance_descriptors(kRelaxedLoad), isolate);
   isolate->counters()->enum_cache_misses()->Increment();
 
   // Create the keys array.
@@ -839,8 +841,8 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
       if (enum_keys->length() != nof_descriptors) {
         if (map.prototype(isolate_) != ReadOnlyRoots(isolate_).null_value()) {
           AllowHeapAllocation allow_gc;
-          Handle<DescriptorArray> descs =
-              Handle<DescriptorArray>(map.instance_descriptors(), isolate_);
+          Handle<DescriptorArray> descs = Handle<DescriptorArray>(
+              map.instance_descriptors(kRelaxedLoad), isolate_);
           for (InternalIndex i : InternalIndex::Range(nof_descriptors)) {
             PropertyDetails details = descs->GetDetails(i);
             if (!details.IsDontEnum()) continue;
@@ -872,8 +874,8 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
   } else {
     if (object->HasFastProperties()) {
       int limit = object->map().NumberOfOwnDescriptors();
-      Handle<DescriptorArray> descs(object->map().instance_descriptors(),
-                                    isolate_);
+      Handle<DescriptorArray> descs(
+          object->map().instance_descriptors(kRelaxedLoad), isolate_);
       // First collect the strings,
       base::Optional<int> first_symbol =
           CollectOwnPropertyNamesInternal<true>(object, this, descs, 0, limit);
@@ -901,8 +903,8 @@ ExceptionStatus KeyAccumulator::CollectPrivateNames(Handle<JSReceiver> receiver,
   DCHECK_EQ(mode_, KeyCollectionMode::kOwnOnly);
   if (object->HasFastProperties()) {
     int limit = object->map().NumberOfOwnDescriptors();
-    Handle<DescriptorArray> descs(object->map().instance_descriptors(),
-                                  isolate_);
+    Handle<DescriptorArray> descs(
+        object->map().instance_descriptors(kRelaxedLoad), isolate_);
     CollectOwnPropertyNamesInternal<false>(object, this, descs, 0, limit);
   } else if (object->IsJSGlobalObject()) {
     RETURN_FAILURE_IF_NOT_SUCCESSFUL(GlobalDictionary::CollectKeysTo(
@@ -949,7 +951,7 @@ Maybe<bool> KeyAccumulator::CollectOwnKeys(Handle<JSReceiver> receiver,
     if (mode_ == KeyCollectionMode::kIncludePrototypes) {
       return Just(false);
     }
-    // ...whereas [[OwnPropertyKeys]] shall return whitelisted properties.
+    // ...whereas [[OwnPropertyKeys]] shall return allowlisted properties.
     DCHECK_EQ(KeyCollectionMode::kOwnOnly, mode_);
     Handle<AccessCheckInfo> access_check_info;
     {
@@ -1067,17 +1069,19 @@ Maybe<bool> KeyAccumulator::CollectOwnJSProxyKeys(Handle<JSReceiver> receiver,
   // exception. Combine with step 18
   // 18. Let uncheckedResultKeys be a new List which is a copy of trapResult.
   Zone set_zone(isolate_->allocator(), ZONE_NAME);
-  ZoneAllocationPolicy alloc(&set_zone);
+
   const int kPresent = 1;
   const int kGone = 0;
-  base::TemplateHashMapImpl<Handle<Name>, int, NameComparator,
-                            ZoneAllocationPolicy>
-      unchecked_result_keys(ZoneHashMap::kDefaultHashMapCapacity,
-                            NameComparator(isolate_), alloc);
+  using ZoneHashMapImpl =
+      base::TemplateHashMapImpl<Handle<Name>, int, NameComparator,
+                                ZoneAllocationPolicy>;
+  ZoneHashMapImpl unchecked_result_keys(
+      ZoneHashMapImpl::kDefaultHashMapCapacity, NameComparator(isolate_),
+      ZoneAllocationPolicy(&set_zone));
   int unchecked_result_keys_size = 0;
   for (int i = 0; i < trap_result->length(); ++i) {
     Handle<Name> key(Name::cast(trap_result->get(i)), isolate_);
-    auto entry = unchecked_result_keys.LookupOrInsert(key, key->Hash(), alloc);
+    auto entry = unchecked_result_keys.LookupOrInsert(key, key->Hash());
     if (entry->value != kPresent) {
       entry->value = kPresent;
       unchecked_result_keys_size++;

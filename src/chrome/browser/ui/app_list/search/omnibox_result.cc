@@ -7,9 +7,12 @@
 #include <stddef.h>
 
 #include "ash/public/cpp/app_list/app_list_config.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -116,12 +119,23 @@ const gfx::VectorIcon& TypeToVectorIcon(AutocompleteMatchType::Type type) {
 
     case AutocompleteMatchType::EXTENSION_APP_DEPRECATED:
     case AutocompleteMatchType::TILE_SUGGESTION:
+    case AutocompleteMatchType::TILE_NAVSUGGEST:
     case AutocompleteMatchType::NUM_TYPES:
       NOTREACHED();
       break;
   }
   NOTREACHED();
   return ash::kDomainIcon;
+}
+
+base::string16 ImageLineToString16(const SuggestionAnswer::ImageLine& line) {
+  std::vector<base::string16> text;
+  for (const auto& text_field : line.text_fields()) {
+    text.push_back(text_field.text());
+  }
+  // TODO(crbug.com/1130372): Use placeholders or a l10n-friendly way to
+  // construct this string instead of concatenation.
+  return base::JoinString(text, base::ASCIIToUTF16(" "));
 }
 
 }  // namespace
@@ -137,13 +151,22 @@ OmniboxResult::OmniboxResult(Profile* profile,
       match_(match),
       is_zero_suggestion_(is_zero_suggestion) {
   if (match_.search_terms_args && autocomplete_controller_) {
-    match_.search_terms_args->from_app_list = true;
+    match_.search_terms_args->request_source = TemplateURLRef::CROS_APP_LIST;
     autocomplete_controller_->UpdateMatchDestinationURL(
         *match_.search_terms_args, &match_);
   }
   set_id(match_.stripped_destination_url.spec());
   SetResultType(ash::AppListSearchResultType::kOmnibox);
   set_result_subtype(static_cast<int>(match_.type));
+  SetMetricsType(GetSearchResultType());
+
+  if (app_list_features::IsOmniboxRichEntitiesEnabled()) {
+    SetIsAnswer(match_.answer.has_value());
+    if (is_answer()) {
+      // The answer subtype overrides the match subtype.
+      set_result_subtype(static_cast<int>(match_.answer->type()));
+    }
+  }
 
   // Derive relevance from omnibox relevance and normalize it to [0, 1].
   // The magic number 1500 is the highest score of an omnibox result.
@@ -206,6 +229,8 @@ ash::SearchResultType OmniboxResult::GetSearchResultType() const {
       return ash::OMNIBOX_SEARCH_SUGGEST;
     case AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED:
       return ash::OMNIBOX_SUGGEST_PERSONALIZED;
+    case AutocompleteMatchType::BOOKMARK_TITLE:
+      return ash::OMNIBOX_BOOKMARK;
 
     case AutocompleteMatchType::HISTORY_KEYWORD:
     case AutocompleteMatchType::NAVSUGGEST:
@@ -214,7 +239,6 @@ ash::SearchResultType OmniboxResult::GetSearchResultType() const {
     case AutocompleteMatchType::SEARCH_SUGGEST_PROFILE:
     case AutocompleteMatchType::SEARCH_OTHER_ENGINE:
     case AutocompleteMatchType::CONTACT_DEPRECATED:
-    case AutocompleteMatchType::BOOKMARK_TITLE:
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED:
     case AutocompleteMatchType::CALCULATOR:
     case AutocompleteMatchType::CLIPBOARD_URL:
@@ -229,8 +253,10 @@ ash::SearchResultType OmniboxResult::GetSearchResultType() const {
     case AutocompleteMatchType::CLIPBOARD_IMAGE:
     case AutocompleteMatchType::HISTORY_BODY:
     case AutocompleteMatchType::TILE_SUGGESTION:
+    case AutocompleteMatchType::TILE_NAVSUGGEST:
     case AutocompleteMatchType::NUM_TYPES:
-      NOTREACHED();
+      // TODO(crbug.com/1028447): Add a NOTREACHED here once we are confident we
+      // know all possible types for this result.
       return ash::SEARCH_RESULT_TYPE_BOUNDARY;
   }
 }
@@ -258,7 +284,19 @@ void OmniboxResult::UpdateTitleAndDetails() {
   // details.
   const bool use_directly = !IsUrlResultWithDescription();
   ChromeSearchResult::Tags title_tags;
-  if (use_directly) {
+  if (ShouldDisplayAsAnswer()) {
+    const auto* additional_text = match_.answer->first_line().additional_text();
+    const bool has_additional_text =
+        additional_text && !additional_text->text().empty();
+    // TODO(crbug.com/1130372): Use placeholders or a l10n-friendly way to
+    // construct this string instead of concatenation.
+    SetTitle(has_additional_text
+                 ? base::StrCat({match_.contents, base::ASCIIToUTF16(" "),
+                                 additional_text->text()})
+                 : match_.contents);
+    ACMatchClassificationsToTags(match_.contents, match_.contents_class,
+                                 &title_tags);
+  } else if (use_directly) {
     SetTitle(match_.contents);
     ACMatchClassificationsToTags(match_.contents, match_.contents_class,
                                  &title_tags);
@@ -270,7 +308,10 @@ void OmniboxResult::UpdateTitleAndDetails() {
   SetTitleTags(title_tags);
 
   ChromeSearchResult::Tags details_tags;
-  if (use_directly) {
+  if (ShouldDisplayAsAnswer()) {
+    // Answer results will contain the answer in the second line.
+    SetDetails(ImageLineToString16(match_.answer->second_line()));
+  } else if (use_directly) {
     if (AutocompleteMatch::IsSearchType(match_.type)) {
       SetAccessibleName(l10n_util::GetStringFUTF16(
           IDS_APP_LIST_QUERY_SEARCH_ACCESSIBILITY_NAME, title(),
@@ -336,6 +377,10 @@ void OmniboxResult::RecordOmniboxResultHistogram() {
                             is_zero_suggestion_
                                 ? OmniboxResultType::kZeroStateSuggestion
                                 : OmniboxResultType::kQuerySuggestion);
+}
+
+bool OmniboxResult::ShouldDisplayAsAnswer() {
+  return app_list_features::IsOmniboxRichEntitiesEnabled() && is_answer();
 }
 
 }  // namespace app_list

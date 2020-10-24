@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/base_export.h"
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/profiler/sampling_profiler_thread_token.h"
 #include "base/threading/platform_thread.h"
@@ -26,6 +27,10 @@ class StackSamplerTestDelegate;
 // for a given thread.
 class BASE_EXPORT StackSampler {
  public:
+  // Factory for generating a set of Unwinders for use by the profiler.
+  using UnwindersFactory =
+      OnceCallback<std::vector<std::unique_ptr<Unwinder>>()>;
+
   virtual ~StackSampler();
 
   // Creates a stack sampler that records samples for thread with
@@ -36,7 +41,8 @@ class BASE_EXPORT StackSampler {
   static std::unique_ptr<StackSampler> Create(
       SamplingProfilerThreadToken thread_token,
       ModuleCache* module_cache,
-      std::vector<std::unique_ptr<Unwinder>> core_unwinders,
+      UnwindersFactory core_unwinders_factory,
+      RepeatingClosure record_sample_callback,
       StackSamplerTestDelegate* test_delegate);
 
   // Gets the required size of the stack buffer.
@@ -48,6 +54,9 @@ class BASE_EXPORT StackSampler {
 
   // The following functions are all called on the SamplingThread (not the
   // thread being sampled).
+
+  // Performs post-construction initialization on the SamplingThread.
+  virtual void Initialize() {}
 
   // Adds an auxiliary unwinder to handle additional, non-native-code unwind
   // scenarios. Unwinders must be inserted in increasing priority, following

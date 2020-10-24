@@ -7,21 +7,17 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/common/autofill_features.h"
-#include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/sync/base/sync_util.h"
 #include "components/sync/driver/profile_sync_service.h"
-#include "components/sync/driver/startup_controller.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_util.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -42,6 +38,7 @@
 #include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 #include "ios/chrome/browser/sync/model_type_store_service_factory.h"
 #include "ios/chrome/browser/sync/session_sync_service_factory.h"
+#include "ios/chrome/browser/sync/sync_invalidations_service_factory.h"
 #include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "ios/chrome/browser/webdata_services/web_data_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
@@ -138,6 +135,7 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(ModelTypeStoreServiceFactory::GetInstance());
   DependsOn(ReadingListModelFactory::GetInstance());
   DependsOn(SessionSyncServiceFactory::GetInstance());
+  DependsOn(SyncInvalidationsServiceFactory::GetInstance());
 }
 
 ProfileSyncServiceFactory::~ProfileSyncServiceFactory() {}
@@ -169,9 +167,6 @@ ProfileSyncServiceFactory::BuildServiceInstanceFor(
       GetApplicationContext()->GetNetworkConnectionTracker();
   init_params.channel = ::GetChannel();
   init_params.debug_identifier = browser_state->GetDebugName();
-  init_params.autofill_enable_account_wallet_storage =
-      base::FeatureList::IsEnabled(
-          autofill::features::kAutofillEnableAccountWalletStorage);
 
   auto* fcm_invalidation_provider =
       IOSChromeProfileInvalidationProviderFactory::GetForBrowserState(

@@ -11,9 +11,8 @@
 #include "chrome/browser/banners/test_app_banner_manager_desktop.h"
 #include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -22,15 +21,7 @@
 
 namespace web_app {
 
-WebAppControllerBrowserTestBase::WebAppControllerBrowserTestBase() {
-  if (GetParam() == ProviderType::kWebApps) {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kDesktopPWAsWithoutExtensions}, {});
-  } else {
-    scoped_feature_list_.InitWithFeatures(
-        {}, {features::kDesktopPWAsWithoutExtensions});
-  }
-}
+WebAppControllerBrowserTestBase::WebAppControllerBrowserTestBase() = default;
 
 WebAppControllerBrowserTestBase::~WebAppControllerBrowserTestBase() = default;
 
@@ -40,10 +31,10 @@ WebAppProviderBase& WebAppControllerBrowserTestBase::provider() {
   return *provider;
 }
 
-AppId WebAppControllerBrowserTestBase::InstallPWA(const GURL& app_url) {
+AppId WebAppControllerBrowserTestBase::InstallPWA(const GURL& start_url) {
   auto web_app_info = std::make_unique<WebApplicationInfo>();
-  web_app_info->app_url = app_url;
-  web_app_info->scope = app_url.GetWithoutFilename();
+  web_app_info->start_url = start_url;
+  web_app_info->scope = start_url.GetWithoutFilename();
   web_app_info->open_as_window = true;
   web_app_info->title = base::ASCIIToUTF16("A Web App");
   return web_app::InstallWebApp(profile(), std::move(web_app_info));
@@ -106,8 +97,8 @@ base::Optional<AppId> WebAppControllerBrowserTestBase::FindAppWithUrlInScope(
 
 WebAppControllerBrowserTest::WebAppControllerBrowserTest()
     : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
-  scoped_feature_list_.InitWithFeatures(
-      {}, {predictors::kSpeculativePreconnectFeature});
+  scoped_feature_list_.InitAndDisableFeature(
+      predictors::kSpeculativePreconnectFeature);
 }
 
 WebAppControllerBrowserTest::~WebAppControllerBrowserTest() = default;
@@ -122,7 +113,7 @@ void WebAppControllerBrowserTest::SetUp() {
 content::WebContents* WebAppControllerBrowserTest::OpenApplication(
     const AppId& app_id) {
   ui_test_utils::UrlLoadObserver url_observer(
-      provider().registrar().GetAppLaunchURL(app_id),
+      provider().registrar().GetAppStartUrl(app_id),
       content::NotificationService::AllSources());
 
   apps::AppLaunchParams params(
@@ -132,7 +123,7 @@ content::WebContents* WebAppControllerBrowserTest::OpenApplication(
   content::WebContents* contents =
       apps::AppServiceProxyFactory::GetForProfile(profile())
           ->BrowserAppLauncher()
-          .LaunchAppWithParams(params);
+          ->LaunchAppWithParams(params);
   url_observer.Wait();
   return contents;
 }
@@ -172,7 +163,7 @@ void WebAppControllerBrowserTest::SetUpOnMainThread() {
   // By default, all SSL cert checks are valid. Can be overridden in tests.
   cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
 
-  provider().shortcut_manager().SuppressShortcutsForTesting();
+  provider().os_integration_manager().SuppressOsHooksForTesting();
 }
 
 }  // namespace web_app

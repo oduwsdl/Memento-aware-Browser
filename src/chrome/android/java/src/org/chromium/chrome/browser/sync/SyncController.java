@@ -12,17 +12,12 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.task.PostTask;
-import org.chromium.chrome.browser.identity.UniqueIdentificationGenerator;
-import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.SigninManager;
-import org.chromium.components.sync.AndroidSyncSettings;
+import org.chromium.chrome.browser.uid.UniqueIdentificationGenerator;
+import org.chromium.chrome.browser.uid.UniqueIdentificationGeneratorFactory;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.PassphraseType;
 import org.chromium.components.sync.StopSource;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 /**
  * SyncController handles the coordination of sync state between the invalidation controller,
@@ -74,17 +69,6 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
         mProfileSyncService.addSyncStateChangedListener(mSyncNotificationController);
 
         updateSyncStateFromAndroid();
-
-        IdentityServicesProvider.get().getSigninManager().addSignInStateObserver(
-                new SigninManager.SignInStateObserver() {
-                    @Override
-                    public void onSignedIn() {
-                        mProfileSyncService.requestStart();
-                    }
-
-                    @Override
-                    public void onSignedOut() {}
-                });
     }
 
     /**
@@ -114,7 +98,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
         // TODO(crbug.com/921025): Don't mix these two concepts.
 
         mProfileSyncService.setSyncAllowedByPlatform(
-                AndroidSyncSettings.get().isMasterSyncEnabled());
+                AndroidSyncSettings.get().doesMasterSyncSettingAllowChromeSync());
 
         boolean isSyncEnabled = AndroidSyncSettings.get().isSyncEnabled();
         if (isSyncEnabled == mProfileSyncService.isSyncRequested()) return;
@@ -127,7 +111,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
                 // prefs (here and in the Sync customization UI).
                 AndroidSyncSettings.get().enableChromeSync();
             } else {
-                if (AndroidSyncSettings.get().isMasterSyncEnabled()) {
+                if (AndroidSyncSettings.get().doesMasterSyncSettingAllowChromeSync()) {
                     RecordHistogram.recordEnumeratedHistogram("Sync.StopSource",
                             StopSource.ANDROID_CHROME_SYNC, StopSource.STOP_SOURCE_LIMIT);
                 } else {
@@ -169,7 +153,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
      */
     @Override
     public void androidSyncSettingsChanged() {
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> { updateSyncStateFromAndroid(); });
+        updateSyncStateFromAndroid();
     }
 
     /**

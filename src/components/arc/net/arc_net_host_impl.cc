@@ -135,41 +135,32 @@ arc::mojom::NetworkType TranslateNetworkType(const std::string& type) {
   return arc::mojom::NetworkType::ETHERNET;
 }
 
-// Parse a shill IPConfig dictionary and appends the resulting mojo
-// IPConfiguration object to the given |ip_configs| vector, only if the
-// IPConfig dictionary contains an address and a gateway property.
-// TODO(b/143258259) Stop setting IPConfiguration objects once ARC has
-// migrated to the new IP configuration fields introduced in Change-Id
-// I08dfd5daa9ba2946a847e555bb94a01da3866eb9.
+// Parses a shill IPConfig dictionary and adds the relevant fields to
+// the given |network| NetworkConfiguration object.
 void AddIpConfiguration(arc::mojom::NetworkConfiguration* network,
                         const base::Value* shill_ipconfig) {
   if (!shill_ipconfig || !shill_ipconfig->is_dict())
     return;
 
-  auto ip_config = arc::mojom::IPConfiguration::New();
-  if (const auto* address_property =
-          shill_ipconfig->FindStringPath(shill::kAddressProperty)) {
-    ip_config->ip_address = *address_property;
-  }
-
-  if (ip_config->ip_address.empty())
-    return;
-
-  if (const auto* gateway_property =
-          shill_ipconfig->FindStringPath(shill::kGatewayProperty)) {
-    ip_config->gateway = *gateway_property;
-  }
-
-  if (ip_config->gateway.empty())
-    return;
-
-  ip_config->routing_prefix =
+  // Only set the IP address and gateway if both are defined and non empty.
+  const auto* address = shill_ipconfig->FindStringPath(shill::kAddressProperty);
+  const auto* gateway = shill_ipconfig->FindStringPath(shill::kGatewayProperty);
+  const int prefixlen =
       shill_ipconfig->FindIntPath(shill::kPrefixlenProperty).value_or(0);
+  if (address && !address->empty() && gateway && !gateway->empty()) {
+    if (prefixlen < 64) {
+      network->host_ipv4_prefix_length = prefixlen;
+      network->host_ipv4_address = *address;
+      network->host_ipv4_gateway = *gateway;
+    } else {
+      network->host_ipv6_prefix_length = prefixlen;
+      network->host_ipv6_global_addresses->push_back(*address);
+      network->host_ipv6_gateway = *gateway;
+    }
+  }
 
-  ip_config->type = (ip_config->routing_prefix < 64)
-                        ? arc::mojom::IPAddressType::IPV4
-                        : arc::mojom::IPAddressType::IPV6;
-
+  // If the user has overridden DNS with the "Google nameservers" UI options,
+  // the kStaticIPConfigProperty object will be empty except for DNS addresses.
   if (const auto* dns_list =
           shill_ipconfig->FindListKey(shill::kNameServersProperty)) {
     for (const auto& dns_value : dns_list->GetList()) {
@@ -182,27 +173,7 @@ void AddIpConfiguration(arc::mojom::NetworkConfiguration* network,
       if (dns == "0.0.0.0")
         continue;
 
-      ip_config->name_servers.push_back(dns);
       network->host_dns_addresses->push_back(dns);
-    }
-  }
-
-  switch (ip_config->type) {
-    case arc::mojom::IPAddressType::IPV4: {
-      network->host_ipv4_prefix_length = ip_config->routing_prefix;
-      network->host_ipv4_address = ip_config->ip_address;
-      network->host_ipv4_gateway = ip_config->gateway;
-      break;
-    }
-    case arc::mojom::IPAddressType::IPV6: {
-      network->host_ipv6_prefix_length = ip_config->routing_prefix;
-      network->host_ipv6_global_addresses->push_back(ip_config->ip_address);
-      network->host_ipv6_gateway = ip_config->gateway;
-      break;
-    }
-    default: {
-      NOTREACHED() << "No IPAddressType defined";
-      break;
     }
   }
 
@@ -217,8 +188,6 @@ void AddIpConfiguration(arc::mojom::NetworkConfiguration* network,
   const int mtu = shill_ipconfig->FindIntPath(shill::kMtuProperty).value_or(0);
   if (mtu > 0)
     network->host_mtu = mtu;
-
-  network->ip_configs->push_back(std::move(ip_config));
 }
 
 arc::mojom::NetworkConfigurationPtr TranslateNetworkProperties(
@@ -226,7 +195,6 @@ arc::mojom::NetworkConfigurationPtr TranslateNetworkProperties(
     const base::Value* shill_dict) {
   auto mojo = arc::mojom::NetworkConfiguration::New();
   // Initialize optional array fields to avoid null guards both here and in ARC.
-  mojo->ip_configs = std::vector<arc::mojom::IPConfigurationPtr>();
   mojo->host_ipv6_global_addresses = std::vector<std::string>();
   mojo->host_search_domains = std::vector<std::string>();
   mojo->host_dns_addresses = std::vector<std::string>();
@@ -264,11 +232,7 @@ arc::mojom::NetworkConfigurationPtr TranslateNetworkProperties(
 
   if (shill_dict) {
     for (const auto* property :
-         {shill::kIPConfigProperty, shill::kStaticIPConfigProperty,
-          shill::kSavedIPConfigProperty}) {
-      if (!mojo->ip_configs->empty())
-        break;
-
+         {shill::kStaticIPConfigProperty, shill::kSavedIPConfigProperty}) {
       AddIpConfiguration(mojo.get(), shill_dict->FindKey(property));
     }
   }
@@ -458,8 +422,8 @@ void ArcNetHostImpl::OnConnectionReady() {
   if (default_network && default_network->type() == shill::kTypeVPN &&
       default_network->GetVpnProviderType() == shill::kProviderArcVpn) {
     GetNetworkConnectionHandler()->DisconnectNetwork(
-        default_network->path(), base::Bind(&ArcVpnSuccessCallback),
-        base::Bind(&ArcVpnErrorCallback, "disconnecting stale ARC VPN"));
+        default_network->path(), base::BindOnce(&ArcVpnSuccessCallback),
+        base::BindOnce(&ArcVpnErrorCallback, "disconnecting stale ARC VPN"));
   }
 }
 
@@ -570,10 +534,10 @@ void ArcNetHostImpl::CreateNetwork(mojom::WifiConfigurationPtr cfg,
       base::AdaptCallbackForRepeating(std::move(callback));
   GetManagedConfigurationHandler()->CreateConfiguration(
       user_id_hash, *properties,
-      base::Bind(&ArcNetHostImpl::CreateNetworkSuccessCallback,
-                 weak_factory_.GetWeakPtr(), repeating_callback),
-      base::Bind(&ArcNetHostImpl::CreateNetworkFailureCallback,
-                 weak_factory_.GetWeakPtr(), repeating_callback));
+      base::BindOnce(&ArcNetHostImpl::CreateNetworkSuccessCallback,
+                     weak_factory_.GetWeakPtr(), repeating_callback),
+      base::BindOnce(&ArcNetHostImpl::CreateNetworkFailureCallback,
+                     weak_factory_.GetWeakPtr(), repeating_callback));
 }
 
 bool ArcNetHostImpl::GetNetworkPathFromGuid(const std::string& guid,
@@ -614,8 +578,8 @@ void ArcNetHostImpl::ForgetNetwork(const std::string& guid,
   auto repeating_callback =
       base::AdaptCallbackForRepeating(std::move(callback));
   GetManagedConfigurationHandler()->RemoveConfiguration(
-      path, base::Bind(&ForgetNetworkSuccessCallback, repeating_callback),
-      base::Bind(&ForgetNetworkFailureCallback, repeating_callback));
+      path, base::BindOnce(&ForgetNetworkSuccessCallback, repeating_callback),
+      base::BindOnce(&ForgetNetworkFailureCallback, repeating_callback));
 }
 
 void ArcNetHostImpl::StartConnect(const std::string& guid,
@@ -632,8 +596,8 @@ void ArcNetHostImpl::StartConnect(const std::string& guid,
   auto repeating_callback =
       base::AdaptCallbackForRepeating(std::move(callback));
   GetNetworkConnectionHandler()->ConnectToNetwork(
-      path, base::Bind(&StartConnectSuccessCallback, repeating_callback),
-      base::Bind(&StartConnectFailureCallback, repeating_callback),
+      path, base::BindOnce(&StartConnectSuccessCallback, repeating_callback),
+      base::BindOnce(&StartConnectFailureCallback, repeating_callback),
       false /* check_error_state */, chromeos::ConnectCallbackMode::ON_STARTED);
 }
 
@@ -651,8 +615,8 @@ void ArcNetHostImpl::StartDisconnect(const std::string& guid,
   auto repeating_callback =
       base::AdaptCallbackForRepeating(std::move(callback));
   GetNetworkConnectionHandler()->DisconnectNetwork(
-      path, base::Bind(&StartDisconnectSuccessCallback, repeating_callback),
-      base::Bind(&StartDisconnectFailureCallback, repeating_callback));
+      path, base::BindOnce(&StartDisconnectSuccessCallback, repeating_callback),
+      base::BindOnce(&StartDisconnectFailureCallback, repeating_callback));
 }
 
 void ArcNetHostImpl::GetWifiEnabledState(GetWifiEnabledStateCallback callback) {
@@ -727,8 +691,8 @@ void ArcNetHostImpl::ConnectArcVpn(const std::string& service_path,
   arc_vpn_service_path_ = service_path;
 
   GetNetworkConnectionHandler()->ConnectToNetwork(
-      service_path, base::Bind(&ArcVpnSuccessCallback),
-      base::Bind(&ArcVpnErrorCallback, "connecting ARC VPN"),
+      service_path, base::BindOnce(&ArcVpnSuccessCallback),
+      base::BindOnce(&ArcVpnErrorCallback, "connecting ARC VPN"),
       false /* check_error_state */,
       chromeos::ConnectCallbackMode::ON_COMPLETED);
 }
@@ -807,18 +771,19 @@ void ArcNetHostImpl::AndroidVpnConnected(
   if (!service_path.empty()) {
     GetManagedConfigurationHandler()->SetProperties(
         service_path, *properties,
-        base::Bind(&ArcNetHostImpl::ConnectArcVpn, weak_factory_.GetWeakPtr(),
-                   service_path, std::string()),
-        base::Bind(&ArcVpnErrorCallback,
-                   "reconnecting ARC VPN " + service_path));
+        base::BindOnce(&ArcNetHostImpl::ConnectArcVpn,
+                       weak_factory_.GetWeakPtr(), service_path, std::string()),
+        base::BindOnce(&ArcVpnErrorCallback,
+                       "reconnecting ARC VPN " + service_path));
     return;
   }
 
   std::string user_id_hash = chromeos::LoginState::Get()->primary_user_hash();
   GetManagedConfigurationHandler()->CreateConfiguration(
       user_id_hash, *properties,
-      base::Bind(&ArcNetHostImpl::ConnectArcVpn, weak_factory_.GetWeakPtr()),
-      base::Bind(&ArcVpnErrorCallback, "connecting new ARC VPN"));
+      base::BindOnce(&ArcNetHostImpl::ConnectArcVpn,
+                     weak_factory_.GetWeakPtr()),
+      base::BindOnce(&ArcVpnErrorCallback, "connecting new ARC VPN"));
 }
 
 void ArcNetHostImpl::AndroidVpnStateChanged(mojom::ConnectionStateType state) {
@@ -834,8 +799,8 @@ void ArcNetHostImpl::AndroidVpnStateChanged(mojom::ConnectionStateType state) {
   arc_vpn_service_path_.clear();
 
   GetNetworkConnectionHandler()->DisconnectNetwork(
-      service_path, base::Bind(&ArcVpnSuccessCallback),
-      base::Bind(&ArcVpnErrorCallback, "disconnecting ARC VPN"));
+      service_path, base::BindOnce(&ArcVpnSuccessCallback),
+      base::BindOnce(&ArcVpnErrorCallback, "disconnecting ARC VPN"));
 }
 
 void ArcNetHostImpl::SetAlwaysOnVpn(const std::string& vpn_package,
@@ -885,14 +850,6 @@ void ArcNetHostImpl::NetworkConnectionStateChanged(
   DisconnectArcVpn();
 }
 
-void ReceiveShillPropertiesFailure(
-    const std::string& service_path,
-    const std::string& error_name,
-    std::unique_ptr<base::DictionaryValue> error_data) {
-  LOG(ERROR) << "Failed to get shill Service properties for " << service_path
-             << ": " << error_name;
-}
-
 void ArcNetHostImpl::NetworkPropertiesUpdated(
     const chromeos::NetworkState* network) {
   if (!IsActiveNetworkState(network))
@@ -903,20 +860,24 @@ void ArcNetHostImpl::NetworkPropertiesUpdated(
       ->GetShillProperties(
           network->path(),
           base::BindOnce(&ArcNetHostImpl::ReceiveShillProperties,
-                         weak_factory_.GetWeakPtr()),
-          base::Bind(&ReceiveShillPropertiesFailure, network->path()));
+                         weak_factory_.GetWeakPtr()));
 }
 
 void ArcNetHostImpl::ReceiveShillProperties(
     const std::string& service_path,
-    const base::DictionaryValue& shill_properties) {
+    base::Optional<base::Value> shill_properties) {
+  if (!shill_properties) {
+    LOG(ERROR) << "Failed to get shill Service properties for " << service_path;
+    return;
+  }
+
   // Ignore properties received after the network has disconnected.
   const auto* network = GetStateHandler()->GetNetworkState(service_path);
   if (!IsActiveNetworkState(network))
     return;
 
   base::InsertOrAssign(shill_network_properties_, service_path,
-                       shill_properties.Clone());
+                       std::move(*shill_properties));
   UpdateActiveNetworks();
 }
 
@@ -936,7 +897,14 @@ void ArcNetHostImpl::NetworkListChanged() {
     return !IsActiveNetworkState(
         GetStateHandler()->GetNetworkState(entry.first));
   });
-  for (const auto* network : GetActiveNetworks())
+  const auto active_networks = GetActiveNetworks();
+  // If there is no active networks, send an explicit ActiveNetworksChanged
+  // event to ARC and skip updating Shill properties.
+  if (active_networks.empty()) {
+    UpdateActiveNetworks();
+    return;
+  }
+  for (const auto* network : active_networks)
     NetworkPropertiesUpdated(network);
 }
 

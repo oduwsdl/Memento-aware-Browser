@@ -12,6 +12,7 @@
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/scoped_animation_disabler.h"
 #include "ash/screen_util.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -46,6 +47,8 @@
 namespace ash {
 
 namespace {
+
+using ::chromeos::WindowStateType;
 
 constexpr double kMinHorizVelocityForWindowSwipe = 1100;
 constexpr double kMinVertVelocityForWindowMinimize = 1000;
@@ -88,6 +91,19 @@ constexpr char kTabDraggingInClamshellModeHistogram[] =
 constexpr char kTabDraggingInClamshellModeMaxLatencyHistogram[] =
     "Ash.WorkspaceWindowResizer.TabDragging.PresentationTime.MaxLatency."
     "ClamshellMode";
+
+// Name of smoothness histograms of the cross fade animation that happens when
+// dragging a maximized window to maximize or unmaximize. Note that for drag
+// maximize, this only applies when the window's pre drag state is maximized.
+// For dragging from normal state to maximize, we use the regular cross fade
+// histogram as its not expected to perform differently. These are measured
+// separately from the regular cross fade animation because they have a shorter
+// duration and in the case of drag unmaximize, the window bounds are changing
+// while animating.
+constexpr char kDragUnmaximizeSmoothness[] =
+    "Ash.Window.AnimationSmoothness.CrossFade.DragUnmaximize";
+constexpr char kDragMaximizeSmoothness[] =
+    "Ash.Window.AnimationSmoothness.CrossFade.DragMaximize";
 
 // Duration of the cross fade animation used when dragging to unmaximize or
 // dragging to snap maximize.
@@ -312,7 +328,9 @@ int GetDraggingThreshold(const DragDetails& details) {
 
   // Snapped and maximized windows need to be dragged a certain amount before
   // bounds start changing.
-  return IsNormalWindowStateType(state) ? 0 : kResizeRestoreDragThresholdDp;
+  return chromeos::IsNormalWindowStateType(state)
+             ? 0
+             : kResizeRestoreDragThresholdDp;
 }
 
 void ResetFrameRestoreLookKey(WindowState* window_state) {
@@ -352,9 +370,15 @@ WorkspaceWindowResizer::SnapType GetSnapType(
   return WorkspaceWindowResizer::SnapType::kNone;
 }
 
-void CrossFadeAnimation(aura::Window* window, const gfx::Rect& target_bounds) {
-  CrossFadeAnimationAnimateNewLayerOnly(window, target_bounds,
-                                        kCrossFadeDuration, gfx::Tween::LINEAR);
+// If |maximize| is true, this is an animation to maximized bounds and an
+// animation from maximized bounds otherwise. This is used to determine which
+// metric to record.
+void CrossFadeAnimation(aura::Window* window,
+                        const gfx::Rect& target_bounds,
+                        bool maximize) {
+  CrossFadeAnimationAnimateNewLayerOnly(
+      window, target_bounds, kCrossFadeDuration, gfx::Tween::LINEAR,
+      maximize ? kDragMaximizeSmoothness : kDragUnmaximizeSmoothness);
 }
 
 }  // namespace
@@ -396,8 +420,19 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
   if (!window_state->CanResize() && window_component != HTCAPTION)
     return nullptr;
 
-  if (!window_state->IsNormalOrSnapped() && !window_state->IsMaximized())
+  const bool maximized = window_state->IsMaximized();
+  if (!window_state->IsNormalOrSnapped() && !maximized)
     return nullptr;
+
+  // TODO(https://crbug.com/1084695): Disable dragging maximized and snapped ARC
+  // windows from the caption. This is because ARC does not currently handle
+  // setting bounds on a maximized or snapped window well.
+  if ((maximized || window_state->IsSnapped()) &&
+      window_state->window()->GetProperty(aura::client::kAppType) ==
+          static_cast<int>(AppType::ARC_APP) &&
+      window_component == HTCAPTION) {
+    return nullptr;
+  }
 
   int bounds_change =
       WindowResizer::GetBoundsChangeForWindowComponent(window_component);
@@ -541,7 +576,8 @@ void WorkspaceWindowResizer::Drag(const gfx::PointF& location_in_parent,
           // restored (i.e. update the caption buttons and height of the browser
           // frame).
           window_state()->window()->SetProperty(kFrameRestoreLookKey, true);
-          CrossFadeAnimation(window_state()->window(), bounds);
+          CrossFadeAnimation(window_state()->window(), bounds,
+                             /*maximize=*/false);
         }
       }
       RestackWindows();
@@ -641,7 +677,8 @@ void WorkspaceWindowResizer::CompleteDrag() {
         if (window_state()->IsMaximized()) {
           aura::Window* window = window_state()->window();
           CrossFadeAnimation(
-              window, screen_util::GetMaximizedWindowBoundsInParent(window));
+              window, screen_util::GetMaximizedWindowBoundsInParent(window),
+              /*maximize=*/true);
         }
         break;
       default:
@@ -669,6 +706,11 @@ void WorkspaceWindowResizer::CompleteDrag() {
       // window at the bounds that the user has moved/resized the
       // window to.
       window_state()->SaveCurrentBoundsForRestore();
+
+      // Since we saved the current bounds to the restore bounds, the restore
+      // animation will use the current bounds as the target bounds, so we can
+      // disable the animation here.
+      ScopedAnimationDisabler disabler(window_state()->window());
       window_state()->Restore();
     }
     return;
@@ -678,7 +720,17 @@ void WorkspaceWindowResizer::CompleteDrag() {
   // window here.
   if (window_state()->IsMaximized()) {
     DCHECK_EQ(HTCAPTION, details().window_component);
+    // Reaching here the only running animation should be the drag to
+    // unmaximize animation. Stop animating so that animations that might come
+    // after because of a gesture swipe or fling look smoother.
+    window_state()->window()->layer()->GetAnimator()->StopAnimating();
+
     window_state()->SaveCurrentBoundsForRestore();
+
+    // Since we saved the current bounds to the restore bounds, the restore
+    // animation will use the current bounds as the target bounds, so we can
+    // disable the animation here.
+    ScopedAnimationDisabler disabler(window_state()->window());
     window_state()->Restore();
     return;
   }

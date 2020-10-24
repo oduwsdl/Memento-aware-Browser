@@ -40,7 +40,6 @@ import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
-import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
@@ -64,19 +63,19 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testSyncSwitch() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         SyncTestUtil.waitForSyncActive();
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         final ChromeSwitchPreference syncSwitch = getSyncSwitch(fragment);
 
         Assert.assertTrue(syncSwitch.isChecked());
-        Assert.assertTrue(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
         mSyncTestRule.togglePreference(syncSwitch);
         Assert.assertFalse(syncSwitch.isChecked());
-        Assert.assertFalse(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertFalse(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
         mSyncTestRule.togglePreference(syncSwitch);
         Assert.assertTrue(syncSwitch.isChecked());
-        Assert.assertTrue(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
     }
 
     /**
@@ -86,11 +85,11 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testOpeningSettingsDoesntEnableSync() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.stopSync();
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         closeFragment(fragment);
-        Assert.assertFalse(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertFalse(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
     }
 
     /**
@@ -100,7 +99,7 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testOpeningSettingsDoesntStartEngine() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.stopSync();
         startSyncAndServicesPreferences();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -112,7 +111,7 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testDefaultControlStatesWithSyncOffThenOn() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.stopSync();
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         assertSyncOffState(fragment);
@@ -125,7 +124,7 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testDefaultControlStatesWithSyncOnThenOff() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         SyncTestUtil.waitForSyncActive();
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         assertSyncOnState(fragment);
@@ -138,7 +137,7 @@ public class SyncAndServicesSettingsTest {
     @Feature({"Sync", "Preferences"})
     @DisabledTest(message = "https://crbug.com/991135")
     public void testSyncSwitchClearsServerAutofillCreditCards() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.setPaymentsIntegrationEnabled(true);
 
         Assert.assertFalse(
@@ -147,15 +146,15 @@ public class SyncAndServicesSettingsTest {
         Assert.assertTrue(
                 "There should be server cards", mSyncTestRule.hasServerAutofillCreditCards());
 
-        Assert.assertTrue(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         assertSyncOnState(fragment);
         ChromeSwitchPreference syncSwitch = getSyncSwitch(fragment);
         Assert.assertTrue(syncSwitch.isChecked());
-        Assert.assertTrue(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
         mSyncTestRule.togglePreference(syncSwitch);
         Assert.assertFalse(syncSwitch.isChecked());
-        Assert.assertFalse(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertFalse(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
 
         closeFragment(fragment);
 
@@ -209,7 +208,7 @@ public class SyncAndServicesSettingsTest {
         fragment = startSyncAndServicesPreferences();
         Assert.assertNull("Sync error card should not be shown", getSyncErrorCard(fragment));
         assertSyncOffState(fragment);
-        Assert.assertFalse(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertFalse(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
     }
 
     @Test
@@ -227,7 +226,7 @@ public class SyncAndServicesSettingsTest {
         fragment = startSyncAndServicesPreferences();
         Assert.assertNull("Sync error card should not be shown", getSyncErrorCard(fragment));
         assertSyncOffState(fragment);
-        Assert.assertFalse(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertFalse(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
     }
 
     @Test
@@ -241,7 +240,7 @@ public class SyncAndServicesSettingsTest {
         ChromeSwitchPreference syncSwitch = getSyncSwitch(fragment);
         mSyncTestRule.togglePreference(syncSwitch);
         Assert.assertTrue(syncSwitch.isChecked());
-        Assert.assertTrue(AndroidSyncSettings.get().isChromeSyncEnabled());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
         // FirstSetupComplete should be set.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { Assert.assertTrue(ProfileSyncService.get().isFirstSetupComplete()); });
@@ -338,6 +337,56 @@ public class SyncAndServicesSettingsTest {
                     (ChromeSwitchPreference) syncAndServicesSettings.findPreference(
                             SyncAndServicesSettings.PREF_AUTOFILL_ASSISTANT);
             Assert.assertFalse(autofillAssistantSwitch.isChecked());
+        });
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Preference"})
+    @EnableFeatures(ChromeFeatureList.SAFE_BROWSING_SECTION_UI)
+    public void testSafeBrowsingSafeBrowsingSectionUiFlagOn() {
+        final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertNull("Safe Browsing should be null when Safe Browsing section is enabled.",
+                    syncAndServicesSettings.findPreference(
+                            SyncAndServicesSettings.PREF_SAFE_BROWSING));
+            Assert.assertNull(
+                    "Password leak detection should be null when Safe Browsing section is enabled.",
+                    syncAndServicesSettings.findPreference(
+                            SyncAndServicesSettings.PREF_PASSWORD_LEAK_DETECTION));
+            Assert.assertNull(
+                    "Safe Browsing scout should be null when Safe Browsing section is enabled.",
+                    syncAndServicesSettings.findPreference(
+                            SyncAndServicesSettings.PREF_SAFE_BROWSING_SCOUT_REPORTING));
+        });
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Preference"})
+    @DisableFeatures(ChromeFeatureList.METRICS_SETTINGS_ANDROID)
+    public void testMetricsSettingsHiddenFlagOff() {
+        final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertNull("Metrics settings should be null when the flag is off.",
+                    syncAndServicesSettings.findPreference(
+                            SyncAndServicesSettings.PREF_METRICS_SETTINGS));
+        });
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Preference"})
+    @EnableFeatures(ChromeFeatureList.METRICS_SETTINGS_ANDROID)
+    public void testMetricsSettingsShownFlagOn() {
+        final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertNotNull("Metrics settings should exist when the flag is on.",
+                    syncAndServicesSettings.findPreference(
+                            SyncAndServicesSettings.PREF_METRICS_SETTINGS));
         });
     }
 

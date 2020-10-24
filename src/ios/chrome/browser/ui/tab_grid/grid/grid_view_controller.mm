@@ -21,7 +21,10 @@
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_image_data_source.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_item.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_layout.h"
+#import "ios/chrome/browser/ui/tab_grid/grid/horizontal_layout.h"
+#import "ios/chrome/browser/ui/tab_grid/grid/plus_sign_cell.h"
 #import "ios/chrome/browser/ui/tab_grid/transitions/grid_transition_layout.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -32,6 +35,7 @@
 
 namespace {
 NSString* const kCellIdentifier = @"GridCellIdentifier";
+NSString* const kPlusSignCellIdentifier = @"PlusSignCellIdentifier";
 // Creates an NSIndexPath with |index| in section 0.
 NSIndexPath* CreateIndexPath(NSInteger index) {
   return [NSIndexPath indexPathForItem:index inSection:0];
@@ -48,11 +52,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                   UICollectionViewDelegate,
                                   UICollectionViewDragDelegate,
                                   UICollectionViewDropDelegate>
-// There is no need to update the collection view when other view controllers
-// are obscuring the collection view. Bookkeeping is based on |-viewWillAppear:|
-// and |-viewWillDisappear methods. Note that the |Did| methods are not reliably
-// called (e.g., edge case in multitasking).
-@property(nonatomic, assign) BOOL updatesCollectionView;
 // A collection view of items in a grid format.
 @property(nonatomic, weak) UICollectionView* collectionView;
 // The local model backing the collection view.
@@ -76,10 +75,16 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 @property(nonatomic, assign) CGPoint itemReorderTouchPoint;
 // Animator to show or hide the empty state.
 @property(nonatomic, strong) UIViewPropertyAnimator* emptyStateAnimator;
-// The default layout for the tab grid.
-@property(nonatomic, strong) GridLayout* defaultLayout;
+// The current layout for the tab switcher.
+@property(nonatomic, strong) FlowLayout* currentLayout;
+// The layout for the tab grid.
+@property(nonatomic, strong) GridLayout* gridLayout;
+// The layout for the thumb strip.
+@property(nonatomic, strong) HorizontalLayout* horizontalLayout;
 // The layout used while the grid is being reordered.
 @property(nonatomic, strong) UICollectionViewLayout* reorderingLayout;
+// The layout used while the thumb strip is being reordered.
+@property(nonatomic, strong) UICollectionViewLayout* horizontalReorderingLayout;
 // YES if, when reordering is enabled, the order of the cells has changed.
 @property(nonatomic, assign) BOOL hasChangedOrder;
 #if defined(__IPHONE_13_4)
@@ -90,6 +95,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     NSHashTable<UICollectionViewCell*>* pointerInteractionCells API_AVAILABLE(
         ios(13.4));
 #endif  // defined(__IPHONE_13_4)
+// The transition layout either from grid to horizontal layout or from
+// horizontal to grid layout.
+@property(nonatomic, strong)
+    UICollectionViewTransitionLayout* gridHorizontalTransitionLayout;
 @end
 
 @implementation GridViewController
@@ -105,12 +114,21 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 #pragma mark - UIViewController
 
 - (void)loadView {
-  self.defaultLayout = [[GridLayout alloc] init];
+  self.horizontalLayout = [[HorizontalLayout alloc] init];
+  self.gridLayout = [[GridLayout alloc] init];
+  if (IsThumbStripEnabled()) {
+    self.currentLayout = self.horizontalLayout;
+  } else {
+    self.currentLayout = self.gridLayout;
+  }
+
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
-                         collectionViewLayout:self.defaultLayout];
+                         collectionViewLayout:self.currentLayout];
   [collectionView registerClass:[GridCell class]
       forCellWithReuseIdentifier:kCellIdentifier];
+  [collectionView registerClass:[PlusSignCell class]
+      forCellWithReuseIdentifier:kPlusSignCellIdentifier];
   collectionView.dataSource = self;
   collectionView.delegate = self;
   collectionView.backgroundView = [[UIView alloc] init];
@@ -138,6 +156,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     collectionView.dragInteractionEnabled = YES;
   } else {
     self.reorderingLayout = [[GridReorderingLayout alloc] init];
+    if (IsThumbStripEnabled()) {
+      self.horizontalReorderingLayout =
+          [[HorizontalReorderingLayout alloc] init];
+    }
     self.itemReorderRecognizer = [[UILongPressGestureRecognizer alloc]
         initWithTarget:self
                 action:@selector(handleItemReorderingWithGesture:)];
@@ -265,12 +287,11 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (void)prepareForDismissal {
   // Stop animating the collection view to prevent the insertion animation from
   // interfering with the tab presentation animation.
-  self.defaultLayout.animatesItemUpdates = NO;
+  self.currentLayout.animatesItemUpdates = NO;
 }
 
 - (void)contentWillAppearAnimated:(BOOL)animated {
-  self.updatesCollectionView = YES;
-  self.defaultLayout.animatesItemUpdates = YES;
+  self.currentLayout.animatesItemUpdates = YES;
   [self.collectionView reloadData];
   // Selection is invalid if there are no items.
   if (self.items.count == 0) {
@@ -287,40 +308,56 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (void)contentWillDisappear {
-  self.updatesCollectionView = NO;
 }
 
 #pragma mark - UICollectionViewDataSource
 
 - (NSInteger)collectionView:(UICollectionView*)collectionView
      numberOfItemsInSection:(NSInteger)section {
+  if (IsThumbStripEnabled()) {
+    // The PlusSignCell (new item button) is always appended at the end of the
+    // collection.
+    return base::checked_cast<NSInteger>(self.items.count + 1);
+  }
   return base::checked_cast<NSInteger>(self.items.count);
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
                  cellForItemAtIndexPath:(NSIndexPath*)indexPath {
-  GridCell* cell = base::mac::ObjCCastStrict<GridCell>([collectionView
-      dequeueReusableCellWithReuseIdentifier:kCellIdentifier
-                                forIndexPath:indexPath]);
-  cell.accessibilityIdentifier =
-      [NSString stringWithFormat:@"%@%ld", kGridCellIdentifierPrefix,
-                                 base::checked_cast<long>(indexPath.item)];
+  NSUInteger itemIndex = base::checked_cast<NSUInteger>(indexPath.item);
+  UICollectionViewCell* cell;
 
-  // In some cases this is called with an indexPath.item that's beyond (by 1)
-  // the bounds of self.items -- see crbug.com/1068136. Presumably this is a
-  // race condition where an item has been deleted at the same time as the
-  // collection is doing layout (potentially during rotation?). DCHECK to
-  // catch this in debug, and then in production fudge by duplicating the last
-  // cell. The assumption is that there will be another, correct layout shortly
-  // after the incorrect one.
-  NSUInteger itemIndex = indexPath.item;
-  DCHECK(itemIndex < self.items.count);
-  // Outside of debug builds, keep array bounds valid.
-  if (itemIndex >= self.items.count)
-    itemIndex = self.items.count - 1;
+  if ([self isIndexPathForPlusSignCell:indexPath]) {
+    cell = [collectionView
+        dequeueReusableCellWithReuseIdentifier:kPlusSignCellIdentifier
+                                  forIndexPath:indexPath];
+    PlusSignCell* plusSignCell = base::mac::ObjCCastStrict<PlusSignCell>(cell);
+    plusSignCell.theme = self.theme;
+  } else {
+    // In some cases this is called with an indexPath.item that's beyond (by 1)
+    // the bounds of self.items -- see crbug.com/1068136. Presumably this is a
+    // race condition where an item has been deleted at the same time as the
+    // collection is doing layout (potentially during rotation?). DCHECK to
+    // catch this in debug, and then in production fudge by duplicating the last
+    // cell. The assumption is that there will be another, correct layout
+    // shortly after the incorrect one.
+    DCHECK_LT(itemIndex, self.items.count);
+    // Outside of debug builds, keep array bounds valid.
+    if (itemIndex >= self.items.count)
+      itemIndex = self.items.count - 1;
 
-  GridItem* item = self.items[itemIndex];
-  [self configureCell:cell withItem:item];
+    GridItem* item = self.items[itemIndex];
+    cell =
+        [collectionView dequeueReusableCellWithReuseIdentifier:kCellIdentifier
+                                                  forIndexPath:indexPath];
+    cell.accessibilityIdentifier = [NSString
+        stringWithFormat:@"%@%ld", kGridCellIdentifierPrefix, itemIndex];
+    GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(cell);
+    [self configureCell:gridCell withItem:item];
+  }
+  // Set the z index of cells so that lower rows are superposed during
+  // transitions between grid and horizontal layouts.
+  cell.layer.zPosition = itemIndex;
 
 #if defined(__IPHONE_13_4)
   if (@available(iOS 13.4, *)) {
@@ -340,6 +377,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (BOOL)collectionView:(UICollectionView*)collectionView
     canMoveItemAtIndexPath:(NSIndexPath*)indexPath {
+  if ([self isIndexPathForPlusSignCell:indexPath]) {
+    // The PlusSignCell is at the end of the collection and should not be moved.
+    return NO;
+  }
   return indexPath && self.items.count > 1;
 }
 
@@ -361,6 +402,17 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 #pragma mark - UICollectionViewDelegate
+
+// This prevents the user from dragging a cell past the plus sign cell (the last
+// cell in the collection view).
+- (NSIndexPath*)collectionView:(UICollectionView*)collectionView
+    targetIndexPathForMoveFromItemAtIndexPath:(NSIndexPath*)originalIndexPath
+                          toProposedIndexPath:(NSIndexPath*)proposedIndexPath {
+  if ([self isIndexPathForPlusSignCell:proposedIndexPath]) {
+    return CreateIndexPath(proposedIndexPath.item - 1);
+  }
+  return proposedIndexPath;
+}
 
 // This method is used instead of -didSelectItemAtIndexPath, because any
 // selection events will be signalled through the model layer and handled in
@@ -405,6 +457,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (NSArray<UIDragItem*>*)collectionView:(UICollectionView*)collectionView
            itemsForBeginningDragSession:(id<UIDragSession>)session
                             atIndexPath:(NSIndexPath*)indexPath {
+  if ([self isIndexPathForPlusSignCell:indexPath]) {
+    // Return an empty array because the plus sign cell should not be dragged.
+    return @[];
+  }
   GridItem* item = self.items[indexPath.item];
   return @[ [self.dragDropHandler dragItemForItemWithID:item.identifier] ];
 }
@@ -420,11 +476,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (UIDragPreviewParameters*)collectionView:(UICollectionView*)collectionView
     dragPreviewParametersForItemAtIndexPath:(NSIndexPath*)indexPath {
-  UIDragPreviewParameters* params = [[UIDragPreviewParameters alloc] init];
-  GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
+  if ([self isIndexPathForPlusSignCell:indexPath]) {
+    // Return nil so that the plus sign cell doesn't superpose the dragged cell.
+    return nil;
+  }
+  GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(
       [self.collectionView cellForItemAtIndexPath:indexPath]);
-  params.visiblePath = cell.visiblePath;
-  return params;
+  return gridCell.dragPreviewParameters;
 }
 
 #pragma mark - UICollectionViewDropDelegate
@@ -452,16 +510,65 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     performDropWithCoordinator:
         (id<UICollectionViewDropCoordinator>)coordinator {
   id<UICollectionViewDropItem> item = coordinator.items.firstObject;
-  NSUInteger destinationIndex =
-      base::checked_cast<NSUInteger>(coordinator.destinationIndexPath.item);
-  [coordinator dropItem:item.dragItem
-      toItemAtIndexPath:coordinator.destinationIndexPath];
 
-  // TODO(crbug.com/1095200): Handle the edge case that two windows are
-  // simultaneously dragging and dropping.
-  [self.dragDropHandler dropItem:item.dragItem
-                         toIndex:destinationIndex
-              fromSameCollection:collectionView.hasActiveDrag];
+  // Append to the end of the collection, unless drop index is specified.
+  // The sourceIndexPath is nil if the drop item is not from the same
+  // collection view. Set the destinationIndex to reflect the addition of an
+  // item.
+  NSUInteger destinationIndex =
+      item.sourceIndexPath ? self.items.count - 1 : self.items.count;
+  if (coordinator.destinationIndexPath) {
+    destinationIndex =
+        base::checked_cast<NSUInteger>(coordinator.destinationIndexPath.item);
+  }
+  if (IsThumbStripEnabled()) {
+    // The sourceIndexPath is nil if the drop item is not from the same
+    // collection view.
+    NSUInteger plusSignCellIndex =
+        item.sourceIndexPath ? self.items.count : self.items.count + 1;
+    // Can't use [self isIndexPathForPlusSignCell:] here because the index of
+    // the plus sign cell in this point in code depends on
+    // |item.sourceIndexPath|.
+    // I.e., in this point in code, |collectionView.numberOfItemsInSection| is
+    // equal to |self.items.count + 1|.
+    if (destinationIndex == plusSignCellIndex) {
+      // Prevent the cell from being dropped where the plus sign cell is.
+      destinationIndex = plusSignCellIndex - 1;
+    }
+  }
+  NSIndexPath* dropIndexPath = CreateIndexPath(destinationIndex);
+
+  // Drop synchronously if local object is available.
+  if (item.dragItem.localObject) {
+    [coordinator dropItem:item.dragItem toItemAtIndexPath:dropIndexPath];
+    // The sourceIndexPath is non-nil if the drop item is from this same
+    // collection view.
+    [self.dragDropHandler dropItem:item.dragItem
+                           toIndex:destinationIndex
+                fromSameCollection:(item.sourceIndexPath != nil)];
+    return;
+  }
+
+  // Drop asynchronously if local object is not available.
+  UICollectionViewDropPlaceholder* placeholder =
+      [[UICollectionViewDropPlaceholder alloc]
+          initWithInsertionIndexPath:dropIndexPath
+                     reuseIdentifier:kCellIdentifier];
+  placeholder.cellUpdateHandler = ^(UICollectionViewCell* placeholderCell) {
+    GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(placeholderCell);
+    gridCell.theme = self.theme;
+  };
+  placeholder.previewParametersProvider =
+      ^UIDragPreviewParameters*(UICollectionViewCell* placeholderCell) {
+    GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(placeholderCell);
+    return gridCell.dragPreviewParameters;
+  };
+
+  id<UICollectionViewDropPlaceholderContext> context =
+      [coordinator dropItem:item.dragItem toPlaceholder:placeholder];
+  [self.dragDropHandler dropItemFromProvider:item.dragItem.itemProvider
+                                     toIndex:destinationIndex
+                          placeholderContext:context];
 }
 
 #pragma mark - UIScrollViewDelegate
@@ -505,12 +612,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   self.items = [items mutableCopy];
   self.selectedItemID = selectedItemID;
-  if ([self updatesCollectionView]) {
-    [self.collectionView reloadData];
-    [self.collectionView
-        selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                     animated:YES
-               scrollPosition:UICollectionViewScrollPositionTop];
+  [self.collectionView reloadData];
+  [self.collectionView selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
+                                    animated:YES
+                              scrollPosition:UICollectionViewScrollPositionTop];
+  if (self.items.count > 0) {
+    [self removeEmptyStateAnimated:YES];
+  } else {
+    [self animateEmptyStateIn];
   }
   // Whether the view is visible or not, the delegate must be updated.
   [self.delegate gridViewController:self didChangeItemCount:self.items.count];
@@ -532,7 +641,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     [self removeEmptyStateAnimated:YES];
     [self.collectionView insertItemsAtIndexPaths:@[ CreateIndexPath(index) ]];
   };
+  NSString* previouslySelectedItemID = self.selectedItemID;
   auto completion = ^(BOOL finished) {
+    [self.collectionView
+        deselectItemAtIndexPath:CreateIndexPath([self
+                                    indexOfItemWithID:previouslySelectedItemID])
+                       animated:YES];
     [self.collectionView
         selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                      animated:YES
@@ -584,9 +698,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (void)selectItemWithID:(NSString*)selectedItemID {
-  self.selectedItemID = selectedItemID;
-  if (!([self updatesCollectionView] && self.showsSelectionUpdates))
+  if (self.selectedItemID == selectedItemID)
     return;
+
+  [self.collectionView
+      deselectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
+                     animated:YES];
+  self.selectedItemID = selectedItemID;
   [self.collectionView
       selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                    animated:YES
@@ -601,8 +719,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
          [self indexOfItemWithID:item.identifier] == NSNotFound);
   NSUInteger index = [self indexOfItemWithID:itemID];
   self.items[index] = item;
-  if (![self updatesCollectionView])
-    return;
   GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
       [self.collectionView cellForItemAtIndexPath:CreateIndexPath(index)]);
   // |cell| may be nil if it is scrolled offscreen.
@@ -635,6 +751,46 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       collectionViewUpdatesCompletion:completion];
 }
 
+#pragma mark - LayoutSwitcher
+
+- (void)willTransitionToLayout:(LayoutSwitcherState)nextState
+                    completion:
+                        (void (^)(BOOL completed, BOOL finished))completion {
+  FlowLayout* nextLayout;
+  switch (nextState) {
+    case LayoutSwitcherState::Horizontal:
+      nextLayout = self.horizontalLayout;
+      break;
+    case LayoutSwitcherState::Full:
+      nextLayout = self.gridLayout;
+      break;
+  }
+  auto completionBlock = ^(BOOL completed, BOOL finished) {
+    completion(completed, finished);
+    self.collectionView.scrollEnabled = YES;
+    self.currentLayout = nextLayout;
+  };
+  self.gridHorizontalTransitionLayout = [self.collectionView
+      startInteractiveTransitionToCollectionViewLayout:nextLayout
+                                            completion:completionBlock];
+
+  // Stops collectionView scrolling when the animation starts.
+  [self.collectionView setContentOffset:self.collectionView.contentOffset
+                               animated:NO];
+}
+
+- (void)didUpdateTransitionLayoutProgress:(CGFloat)progress {
+  self.gridHorizontalTransitionLayout.transitionProgress = progress;
+}
+
+- (void)didTransitionToLayoutSuccessfully:(BOOL)success {
+  if (success) {
+    [self.collectionView finishInteractiveTransition];
+  } else {
+    [self.collectionView cancelInteractiveTransition];
+  }
+}
+
 #pragma mark - Private properties
 
 - (NSUInteger)selectedIndex {
@@ -643,19 +799,25 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 #pragma mark - Private
 
-// Performs model updates and view updates together if the view is appeared, or
-// only the model updates if the view is not appeared. |completion| is only run
-// if view is appeared.
+// Checks whether |indexPath| corresponds to the index path of the plus sign
+// cell. The plus sign cell is the last cell in the collection view after all
+// the items.
+- (BOOL)isIndexPathForPlusSignCell:(NSIndexPath*)indexPath {
+  // When items are dragged from another collection, the count of cells in the
+  // collectionView is increased before self.items.count increases. That's what
+  // happens when the UICollectionViewDelegate's method
+  // |targetIndexPathForMoveFromItemAtIndexPath:toProposedIndexPath:| gets
+  // called, and that's why indexPath.item is not being compared to
+  // self.items.count here.
+  return IsThumbStripEnabled() &&
+         indexPath.item == [self.collectionView numberOfItemsInSection:0] - 1;
+}
+
+// Performs model updates and view updates together.
 - (void)performModelUpdates:(ProceduralBlock)modelUpdates
               collectionViewUpdates:(ProceduralBlock)collectionViewUpdates
     collectionViewUpdatesCompletion:
         (ProceduralBlockWithBool)collectionViewUpdatesCompletion {
-  // If the view isn't visible, there's no need for the collection view to
-  // update.
-  if (![self updatesCollectionView]) {
-    modelUpdates();
-    return;
-  }
   [self.collectionView performBatchUpdates:^{
     // Synchronize model and view updates.
     modelUpdates();
@@ -705,6 +867,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 // Tells the delegate that the user tapped the item with identifier
 // corresponding to |indexPath|.
 - (void)tappedItemAtIndexPath:(NSIndexPath*)indexPath {
+  if ([self isIndexPathForPlusSignCell:indexPath]) {
+    [self.delegate didTapPlusSignInGridViewController:self];
+    return;
+  }
   NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
   DCHECK_LT(index, self.items.count);
   NSString* itemID = self.items[index].identifier;
@@ -769,8 +935,15 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
         self.itemReorderTouchPoint =
             CGPointMake(location.x - cellCenter.x, location.y - cellCenter.y);
         // Switch to the reordering layout.
-        [self.collectionView setCollectionViewLayout:self.reorderingLayout
-                                            animated:YES];
+        if (IsThumbStripEnabled() &&
+            self.currentLayout == self.horizontalLayout) {
+          [self.collectionView
+              setCollectionViewLayout:self.horizontalReorderingLayout
+                             animated:YES];
+        } else {
+          [self.collectionView setCollectionViewLayout:self.reorderingLayout
+                                              animated:YES];
+        }
         // Immediately update the position of the moving item; otherwise, the
         // collection view may relayout its subviews and briefly show the moving
         // item at position (0,0).
@@ -797,7 +970,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       // Note: The completion block must be added *before* any animations are
       // added in the transaction.
       [CATransaction setCompletionBlock:^{
-        [self.collectionView setCollectionViewLayout:self.defaultLayout
+        [self.collectionView setCollectionViewLayout:self.currentLayout
                                             animated:YES];
       }];
       [self.collectionView endInteractiveMovement];
@@ -809,7 +982,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       self.itemReorderTouchPoint = CGPointZero;
       [self.collectionView cancelInteractiveMovement];
       [self recordInteractiveReordering];
-      [self.collectionView setCollectionViewLayout:self.defaultLayout
+      [self.collectionView setCollectionViewLayout:self.currentLayout
                                           animated:YES];
       // Re-enable cancelled gesture.
       gesture.enabled = YES;

@@ -16,12 +16,22 @@
 
 namespace chromeos {
 namespace quick_answers {
-class QuickAnswersConsent;
+class QuickAnswersNotice;
 }  // namespace quick_answers
 }  // namespace chromeos
 
 namespace ash {
 class QuickAnswersUiController;
+
+enum class QuickAnswersVisibility {
+  // Quick Answers UI is hidden and the previous session has finished.
+  kClosed = 0,
+  // Quick Answers session is initializing and the UI will be shown when the
+  // context is ready.
+  kPending = 1,
+  // Quick Answers UI is visible.
+  kVisible = 2,
+};
 
 // Implementation of QuickAnswerController. It fetches quick answers
 // result via QuickAnswersClient and manages quick answers UI.
@@ -51,6 +61,8 @@ class ASH_EXPORT QuickAnswersControllerImpl
   // Update the bounds of the anchor view.
   void UpdateQuickAnswersAnchorBounds(const gfx::Rect& anchor_bounds) override;
 
+  void SetPendingShowQuickAnswers() override;
+
   chromeos::quick_answers::QuickAnswersDelegate* GetQuickAnswersDelegate()
       override;
 
@@ -69,13 +81,13 @@ class ASH_EXPORT QuickAnswersControllerImpl
   // User clicks on the quick answer result.
   void OnQuickAnswerClick();
 
-  // Called by the UI Controller when user grants consent for the Quick Answers
-  // feature.
-  void OnUserConsentGranted();
+  // Called by the UI Controller when user accepts the notice for the
+  // Quick Answers feature.
+  void OnUserNoticeAccepted();
 
-  // Called by the UI Controller when user requests detailed settings regarding
-  // consent for the Quick Answers feature.
-  void OnConsentSettingsRequestedByUser();
+  // Called by the UI Controller when user requests detailed settings from the
+  // notice screen for the Quick Answers feature.
+  void OnNoticeSettingsRequestedByUser();
 
   // Open Quick-Answers dogfood URL.
   void OpenQuickAnswersDogfoodLink();
@@ -84,11 +96,27 @@ class ASH_EXPORT QuickAnswersControllerImpl
     return quick_answers_ui_controller_.get();
   }
 
- private:
-  void MaybeDismissQuickAnswersConsent();
+  QuickAnswersVisibility visibility() const { return visibility_; }
 
-  // Return true if the user consent view is showing.
-  bool MaybeShowUserConsent();
+  chromeos::quick_answers::QuickAnswersNotice* GetNoticeControllerForTesting() {
+    return notice_controller_.get();
+  }
+
+  void SetVisibilityForTesting(QuickAnswersVisibility visibility) {
+    visibility_ = visibility;
+  }
+
+ private:
+  void MaybeDismissQuickAnswersNotice();
+
+  void HandleQuickAnswerRequest(
+      const chromeos::quick_answers::QuickAnswersRequest& request);
+
+  bool ShouldShowUserNotice() const;
+  // Show the user notice view. Does nothing if the view is already
+  // visible.
+  void ShowUserNotice(const base::string16& intent_type,
+                      const base::string16& intent_text);
 
   chromeos::quick_answers::QuickAnswersRequest BuildRequest();
 
@@ -106,8 +134,8 @@ class ASH_EXPORT QuickAnswersControllerImpl
 
   std::unique_ptr<chromeos::quick_answers::QuickAnswersClient>
       quick_answers_client_;
-  std::unique_ptr<chromeos::quick_answers::QuickAnswersConsent>
-      consent_controller_;
+  std::unique_ptr<chromeos::quick_answers::QuickAnswersNotice>
+      notice_controller_;
 
   // Whether the feature is enabled and all eligibility criteria are met (
   // locale, consents, etc).
@@ -117,6 +145,8 @@ class ASH_EXPORT QuickAnswersControllerImpl
 
   // The last received QuickAnswer from client.
   std::unique_ptr<chromeos::quick_answers::QuickAnswer> quick_answer_;
+
+  QuickAnswersVisibility visibility_ = QuickAnswersVisibility::kClosed;
 };
 
 }  // namespace ash

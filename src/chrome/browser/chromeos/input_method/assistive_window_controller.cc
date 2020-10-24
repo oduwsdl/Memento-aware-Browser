@@ -11,14 +11,14 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
-#include "base/metrics/user_metrics.h"
 #include "chrome/browser/chromeos/input_method/assistive_window_controller_delegate.h"
 #include "chrome/browser/chromeos/input_method/assistive_window_properties.h"
+#include "chrome/browser/chromeos/input_method/ui/suggestion_details.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/ime/chromeos/ime_bridge.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
 
 namespace chromeos {
@@ -89,6 +89,7 @@ AssistiveWindowController::~AssistiveWindowController() {
     suggestion_window_view_->GetWidget()->RemoveObserver(this);
   if (undo_window_ && undo_window_->GetWidget())
     undo_window_->GetWidget()->RemoveObserver(this);
+  CHECK(!IsInObserverList());
 }
 
 void AssistiveWindowController::InitSuggestionWindow() {
@@ -96,8 +97,8 @@ void AssistiveWindowController::InitSuggestionWindow() {
     return;
   // suggestion_window_view_ is deleted by DialogDelegateView::DeleteDelegate.
   suggestion_window_view_ =
-      new ui::ime::SuggestionWindowView(GetParentView(), this);
-  views::Widget* widget = suggestion_window_view_->InitWidget();
+      ui::ime::SuggestionWindowView::Create(GetParentView(), this);
+  views::Widget* widget = suggestion_window_view_->GetWidget();
   widget->AddObserver(this);
   widget->Show();
 }
@@ -124,10 +125,16 @@ void AssistiveWindowController::OnWidgetClosing(views::Widget* widget) {
   }
 }
 
+// TODO(crbug/1119570): Update AcceptSuggestion signature (either use
+// announce_string, or no string)
 void AssistiveWindowController::AcceptSuggestion(
     const base::string16& suggestion) {
-  tts_handler_->Announce(base::StringPrintf(
-      "%s inserted.", base::UTF16ToUTF8(suggestion).c_str()));
+  if (window_.type == ui::ime::AssistiveWindowType::kEmojiSuggestion) {
+    tts_handler_->Announce(
+        l10n_util::GetStringUTF8(IDS_SUGGESTION_EMOJI_SUGGESTED));
+  } else {
+    tts_handler_->Announce(l10n_util::GetStringUTF8(IDS_SUGGESTION_INSERTED));
+  }
   HideSuggestion();
 }
 
@@ -138,11 +145,15 @@ void AssistiveWindowController::HideSuggestion() {
     suggestion_window_view_->GetWidget()->Close();
 }
 
-void AssistiveWindowController::SetBounds(const gfx::Rect& cursor_bounds) {
+void AssistiveWindowController::SetBounds(const Bounds& bounds) {
+  bounds_ = bounds;
+  // Sets suggestion_window_view_'s bounds here for most up-to-date cursor
+  // position. This is different from UndoWindow because UndoWindow gets cursors
+  // position before showing.
+  // TODO(crbug/1112982): Investigate getting bounds to suggester before sending
+  // show suggestion request.
   if (suggestion_window_view_ && confirmed_length_ == 0)
-    suggestion_window_view_->SetBounds(cursor_bounds);
-  if (undo_window_)
-    undo_window_->SetBounds(cursor_bounds);
+    suggestion_window_view_->SetAnchorRect(bounds.caret);
 }
 
 void AssistiveWindowController::FocusStateChanged() {
@@ -152,30 +163,43 @@ void AssistiveWindowController::FocusStateChanged() {
     undo_window_->Hide();
 }
 
-void AssistiveWindowController::ShowSuggestion(const base::string16& text,
-                                               const size_t confirmed_length,
-                                               const bool show_tab) {
+void AssistiveWindowController::ShowSuggestion(
+    const ui::ime::SuggestionDetails& details) {
   if (!suggestion_window_view_)
     InitSuggestionWindow();
-  suggestion_text_ = text;
-  confirmed_length_ = confirmed_length;
-  suggestion_window_view_->Show(text, confirmed_length, show_tab);
+  suggestion_text_ = details.text;
+  confirmed_length_ = details.confirmed_length;
+  suggestion_window_view_->Show(details);
 }
 
+// TODO(crbug/1102219): Method unused. Remove all definitions and references.
 void AssistiveWindowController::ShowMultipleSuggestions(
     const std::vector<base::string16>& suggestions) {
-  if (!suggestion_window_view_)
-    InitSuggestionWindow();
-  suggestion_window_view_->ShowMultipleCandidates(suggestions);
 }
 
-void AssistiveWindowController::HighlightSuggestionCandidate(int index) {
-  if (suggestion_window_view_)
-    suggestion_window_view_->HighlightCandidate(index);
-  if (index < static_cast<int>(window_.candidates.size()))
-    tts_handler_->Announce(base::StringPrintf(
-        "%s. %d of %zu", base::UTF16ToUTF8(window_.candidates[index]).c_str(),
-        index + 1, window_.candidates.size()));
+void AssistiveWindowController::SetButtonHighlighted(
+    const ui::ime::AssistiveWindowButton& button,
+    bool highlighted) {
+  switch (button.window_type) {
+    case ui::ime::AssistiveWindowType::kEmojiSuggestion:
+    case ui::ime::AssistiveWindowType::kPersonalInfoSuggestion:
+      if (!suggestion_window_view_)
+        return;
+
+      suggestion_window_view_->SetButtonHighlighted(button, highlighted);
+      if (highlighted)
+        tts_handler_->Announce(button.announce_string);
+      break;
+    case ui::ime::AssistiveWindowType::kUndoWindow:
+      if (!undo_window_)
+        return;
+
+      undo_window_->SetButtonHighlighted(button, highlighted);
+      tts_handler_->Announce(button.announce_string);
+      break;
+    case ui::ime::AssistiveWindowType::kNone:
+      break;
+  }
 }
 
 base::string16 AssistiveWindowController::GetSuggestionText() const {
@@ -193,13 +217,21 @@ void AssistiveWindowController::SetAssistiveWindowProperties(
     case ui::ime::AssistiveWindowType::kUndoWindow:
       if (!undo_window_)
         InitUndoWindow();
-      window.visible ? undo_window_->Show() : undo_window_->Hide();
+      if (window.visible) {
+        undo_window_->SetAnchorRect(bounds_.autocorrect.IsEmpty()
+                                        ? bounds_.caret
+                                        : bounds_.autocorrect);
+        undo_window_->Show();
+      } else {
+        undo_window_->Hide();
+      }
       break;
     case ui::ime::AssistiveWindowType::kEmojiSuggestion:
+    case ui::ime::AssistiveWindowType::kPersonalInfoSuggestion:
       if (!suggestion_window_view_)
         InitSuggestionWindow();
       if (window_.visible) {
-        suggestion_window_view_->ShowMultipleCandidates(window.candidates);
+        suggestion_window_view_->ShowMultipleCandidates(window);
       } else {
         HideSuggestion();
       }
@@ -211,16 +243,8 @@ void AssistiveWindowController::SetAssistiveWindowProperties(
 }
 
 void AssistiveWindowController::AssistiveWindowButtonClicked(
-    ui::ime::ButtonId id,
-    ui::ime::AssistiveWindowType type) const {
-  if (id == ui::ime::ButtonId::kSmartInputsSettingLink) {
-    base::RecordAction(base::UserMetricsAction("OpenSmartInputsSettings"));
-    chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-        ProfileManager::GetActiveUserProfile(),
-        chromeos::settings::mojom::kSmartInputsSubpagePath);
-  } else {
-    delegate_->AssistiveWindowButtonClicked(id, type);
-  }
+    const ui::ime::AssistiveWindowButton& button) const {
+    delegate_->AssistiveWindowButtonClicked(button);
 }
 
 ui::ime::SuggestionWindowView*

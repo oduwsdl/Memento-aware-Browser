@@ -161,16 +161,18 @@ apps::AppLaunchParams CreateAppLaunchParamsForIntent(
   auto params = CreateAppIdLaunchParamsWithEventFlags(
       app_id, event_flags, source, display_id, fallback_container);
 
-  if (intent->scheme.has_value() && intent->host.has_value() &&
-      intent->path.has_value()) {
+  if (intent->url.has_value()) {
     params.source = apps::mojom::AppLaunchSource::kSourceIntentUrl;
+    params.override_url = intent->url.value();
+    LOG(ERROR) << "url is:" << params.override_url.spec();
     std::string port;
-    if (intent->port.has_value()) {
-      port = ":" + intent->port.value();
+    if (intent->url->has_port()) {
+      port = ":" + intent->url->port();
     }
     params.override_url =
-        GURL(intent->scheme.value() + url::kStandardSchemeSeparator +
-             intent->host.value() + port + intent->path.value());
+        GURL(intent->url->scheme() + url::kStandardSchemeSeparator +
+             intent->url->host() + port + intent->url->path());
+    LOG(ERROR) << "url is:" << params.override_url.spec();
     DCHECK(params.override_url.is_valid());
   }
 
@@ -192,12 +194,14 @@ apps::mojom::AppLaunchSource GetAppLaunchSource(
     case apps::mojom::LaunchSource::kFromOmnibox:
     case apps::mojom::LaunchSource::kFromOtherApp:
     case apps::mojom::LaunchSource::kFromMenu:
+    case apps::mojom::LaunchSource::kFromSharesheet:
       return apps::mojom::AppLaunchSource::kSourceAppLauncher;
     case apps::mojom::LaunchSource::kFromKeyboard:
       return apps::mojom::AppLaunchSource::kSourceKeyboard;
     case apps::mojom::LaunchSource::kFromFileManager:
       return apps::mojom::AppLaunchSource::kSourceFileHandler;
     case apps::mojom::LaunchSource::kFromChromeInternal:
+    case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
       return apps::mojom::AppLaunchSource::kSourceChromeInternal;
     case apps::mojom::LaunchSource::kFromInstalledNotification:
       return apps::mojom::AppLaunchSource::kSourceInstalledNotification;

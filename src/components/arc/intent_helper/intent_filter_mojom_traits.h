@@ -10,7 +10,7 @@
 
 #include "base/containers/span.h"
 #include "components/arc/intent_helper/intent_filter.h"
-#include "components/arc/mojom/intent_helper.mojom.h"
+#include "components/arc/mojom/intent_helper.mojom-shared.h"
 
 namespace mojo {
 
@@ -48,6 +48,14 @@ struct StructTraits<arc::mojom::IntentFilterDataView, arc::IntentFilter> {
   static const std::vector<std::string>& mime_types(
       const arc::IntentFilter& r) {
     return r.mime_types();
+  }
+
+  static const std::string& activity_name(const arc::IntentFilter& r) {
+    return r.activity_name();
+  }
+
+  static const std::string& activity_label(const arc::IntentFilter& r) {
+    return r.activity_label();
   }
 
   static bool Read(arc::mojom::IntentFilterDataView data,

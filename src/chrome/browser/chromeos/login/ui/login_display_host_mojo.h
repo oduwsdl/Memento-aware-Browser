@@ -12,8 +12,11 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "chrome/browser/chromeos/login/challenge_response_auth_keys_loader.h"
+#include "chrome/browser/chromeos/login/screens/user_selection_screen.h"
 #include "chrome/browser/chromeos/login/security_token_pin_dialog_host_ash_impl.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_common.h"
 #include "chrome/browser/chromeos/login/ui/oobe_ui_dialog_delegate.h"
@@ -21,6 +24,12 @@
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chromeos/login/auth/auth_status_consumer.h"
 #include "chromeos/login/auth/challenge_response_key.h"
+#include "ui/views/view.h"
+#include "ui/views/view_observer.h"
+
+namespace views {
+class View;
+}  // namespace views
 
 namespace chromeos {
 
@@ -36,9 +45,10 @@ class MojoSystemInfoDispatcher;
 class LoginDisplayHostMojo : public LoginDisplayHostCommon,
                              public LoginScreenClient::Delegate,
                              public AuthStatusConsumer,
-                             public OobeUI::Observer {
+                             public OobeUI::Observer,
+                             public views::ViewObserver {
  public:
-  LoginDisplayHostMojo();
+  explicit LoginDisplayHostMojo(DisplayedScreen displayed_screen);
   ~LoginDisplayHostMojo() override;
 
   // Called when the gaia dialog is destroyed.
@@ -46,14 +56,14 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
 
   void SetUserCount(int user_count);
 
-  // Show password changed dialog. If |show_password_error| is true, user
+  // Show password changed dialog. If `show_password_error` is true, user
   // already tried to enter old password but it turned out to be incorrect.
   void ShowPasswordChangedDialog(bool show_password_error,
                                  const AccountId& account_id);
 
-  // Show whitelist check failed error. Happens after user completes online
-  // signin but whitelist check fails.
-  void ShowWhitelistCheckFailedError();
+  // Show allowlist check failed error. Happens after user completes online
+  // signin but allowlist check fails.
+  void ShowAllowlistCheckFailedError();
 
   // Shows signin UI with specified email.
   void ShowSigninUI(const std::string& email);
@@ -83,11 +93,12 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   void HideOobeDialog() override;
   void UpdateOobeDialogState(ash::OobeDialogState state) override;
   void OnCancelPasswordChangedFlow() override;
-  void ShowFeedback() override;
-  void ShowResetScreen() override;
   void HandleDisplayCaptivePortal() override;
   void UpdateAddUserButtonStatus() override;
   void RequestSystemInfoUpdate() override;
+  bool HasUserPods() override;
+  void AddObserver(LoginDisplayHost::Observer* observer) override;
+  void RemoveObserver(LoginDisplayHost::Observer* observer) override;
 
   // LoginScreenClient::Delegate:
   void HandleAuthenticateUserWithPasswordOrPin(
@@ -121,10 +132,18 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
                               OobeScreenId new_screen) override;
   void OnDestroyingOobeUI() override;
 
+  // views::ViewObserver:
+  void OnViewBoundsChanged(views::View* observed_view) override;
+  void OnViewIsDeleting(views::View* observed_view) override;
+
+  // TODO(https://crbug.com/1103564) This function needed to isolate error
+  // messages on the Views and WebUI side. Consider removing.
+  bool IsOobeUIDialogVisible() const;
+
  private:
   void LoadOobeDialog();
 
-  // Callback to be invoked when the |challenge_response_auth_keys_loader_|
+  // Callback to be invoked when the `challenge_response_auth_keys_loader_`
   // completes building the currently available challenge-response keys. Used
   // only during the challenge-response authentication.
   void OnChallengeResponseKeysPrepared(
@@ -137,11 +156,15 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   void ShowFullScreen();
   void HideDialog();
 
-  // Adds this as a |OobeUI::Observer| if it has not already been added as one.
+  // Adds this as a `OobeUI::Observer` if it has not already been added as one.
   void ObserveOobeUI();
 
-  // Removes this as a |OobeUI::Observer| if it has been added as an observer.
+  // Removes this as a `OobeUI::Observer` if it has been added as an observer.
   void StopObservingOobeUI();
+
+  // Create ExistingUserController and link it to LoginDisplayHostMojo so we can
+  // consume auth status events.
+  void CreateExistingUserController();
 
   // State associated with a pending authentication attempt.
   struct AuthState {
@@ -185,11 +208,18 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
 
   SecurityTokenPinDialogHostAshImpl security_token_pin_dialog_host_ash_impl_;
 
-  // Set if this has been added as a |OobeUI::Observer|.
+  // Set if this has been added as a `OobeUI::Observer`.
   bool added_as_oobe_observer_ = false;
 
   // Set if Gaia dialog is shown with prefilled email.
   base::Optional<AccountId> gaia_reauth_account_id_;
+
+  // Store which screen is currently displayed.
+  DisplayedScreen displayed_screen_ = DisplayedScreen::SIGN_IN_SCREEN;
+
+  ScopedObserver<views::View, views::ViewObserver> scoped_observer_{this};
+
+  base::ObserverList<LoginDisplayHost::Observer> observers_;
 
   base::WeakPtrFactory<LoginDisplayHostMojo> weak_factory_{this};
 

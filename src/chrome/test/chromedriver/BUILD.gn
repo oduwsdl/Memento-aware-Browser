@@ -70,19 +70,17 @@ source_set("automation_client_lib") {
     "chrome/chrome_desktop_impl.h",
     "chrome/chrome_finder.cc",
     "chrome/chrome_finder.h",
-    "chrome/chrome_finder_mac.mm",
     "chrome/chrome_impl.cc",
     "chrome/chrome_impl.h",
     "chrome/chrome_remote_impl.cc",
     "chrome/chrome_remote_impl.h",
     "chrome/console_logger.cc",
     "chrome/console_logger.h",
-    "chrome/debugger_tracker.cc",
-    "chrome/debugger_tracker.h",
     "chrome/device_manager.cc",
     "chrome/device_manager.h",
     "chrome/device_metrics.cc",
     "chrome/device_metrics.h",
+    "chrome/devtools_client.cc",
     "chrome/devtools_client.h",
     "chrome/devtools_client_impl.cc",
     "chrome/devtools_client_impl.h",
@@ -148,6 +146,8 @@ source_set("automation_client_lib") {
     "net/command_id.h",
     "net/net_util.cc",
     "net/net_util.h",
+    "net/pipe_handler.cc",
+    "net/pipe_handler.h",
     "net/sync_websocket.h",
     "net/sync_websocket_factory.cc",
     "net/sync_websocket_factory.h",
@@ -160,6 +160,10 @@ source_set("automation_client_lib") {
     "net/websocket.cc",
     "net/websocket.h",
   ]
+
+  if (is_mac) {
+    sources += [ "chrome/chrome_finder_mac.mm" ]
+  }
 
   # Also compile the generated files.
   sources += get_target_outputs(":embed_js_in_cpp")
@@ -207,6 +211,7 @@ source_set("lib") {
     "command_listener_proxy.h",
     "commands.cc",
     "commands.h",
+    "connection_session_map.h",
     "constants/version.h",
     "devtools_events_logger.cc",
     "devtools_events_logger.h",
@@ -217,18 +222,19 @@ source_set("lib") {
     "key_converter.cc",
     "key_converter.h",
     "keycode_text_conversion.h",
-    "keycode_text_conversion_mac.mm",
-    "keycode_text_conversion_win.cc",
     "logging.cc",
     "logging.h",
     "performance_logger.cc",
     "performance_logger.h",
     "server/http_handler.cc",
     "server/http_handler.h",
+    "server/http_server.cc",
+    "server/http_server.h",
     "session.cc",
     "session.h",
     "session_commands.cc",
     "session_commands.h",
+    "session_connection_map.h",
     "session_thread_map.h",
     "util.cc",
     "util.h",
@@ -237,6 +243,14 @@ source_set("lib") {
     "window_commands.cc",
     "window_commands.h",
   ]
+
+  if (is_mac) {
+    sources += [ "keycode_text_conversion_mac.mm" ]
+  }
+
+  if (is_win) {
+    sources += [ "keycode_text_conversion_win.cc" ]
+  }
 
   if (use_x11) {
     sources += [ "keycode_text_conversion_x.cc" ]
@@ -278,7 +292,7 @@ source_set("lib") {
   }
 
   if (is_mac) {
-    libs = [ "Carbon.framework" ]
+    frameworks = [ "Carbon.framework" ]
   }
 }
 

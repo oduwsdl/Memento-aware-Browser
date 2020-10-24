@@ -13,6 +13,7 @@ import org.json.JSONException;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.components.signin.base.GoogleServiceAuthError;
 import org.chromium.components.sync.KeyRetrievalTriggerForUMA;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.PassphraseType;
@@ -87,6 +88,7 @@ public class ProfileSyncService {
      */
     @VisibleForTesting
     public static void overrideForTests(ProfileSyncService profileSyncService) {
+        ThreadUtils.assertOnUiThread();
         sProfileSyncService = profileSyncService;
         sInitialized = true;
     }
@@ -191,6 +193,16 @@ public class ProfileSyncService {
 
     public boolean requiresClientUpgrade() {
         return ProfileSyncServiceJni.get().requiresClientUpgrade(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    public void setDecoupledFromAndroidMasterSync() {
+        ProfileSyncServiceJni.get().setDecoupledFromAndroidMasterSync(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    public boolean getDecoupledFromAndroidMasterSync() {
+        return ProfileSyncServiceJni.get().getDecoupledFromAndroidMasterSync(
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
     }
 
@@ -486,16 +498,6 @@ public class ProfileSyncService {
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
     }
 
-    /**
-     * Turns on encryption of all data types. This only takes effect after sync configuration is
-     * completed and setChosenDataTypes() is invoked.
-     */
-    public void enableEncryptEverything() {
-        assert isEngineInitialized();
-        ProfileSyncServiceJni.get().enableEncryptEverything(
-                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
-    }
-
     public void setEncryptionPassphrase(String passphrase) {
         assert isEngineInitialized();
         ProfileSyncServiceJni.get().setEncryptionPassphrase(
@@ -651,6 +653,10 @@ public class ProfileSyncService {
         int getAuthError(long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean requiresClientUpgrade(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        void setDecoupledFromAndroidMasterSync(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        boolean getDecoupledFromAndroidMasterSync(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isEngineInitialized(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isEncryptEverythingAllowed(
@@ -658,8 +664,6 @@ public class ProfileSyncService {
         boolean isEncryptEverythingEnabled(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isTransportStateActive(
-                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
-        void enableEncryptEverything(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isPassphraseRequiredForPreferredDataTypes(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);

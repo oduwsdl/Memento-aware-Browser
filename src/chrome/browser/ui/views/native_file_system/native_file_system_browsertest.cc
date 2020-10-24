@@ -4,8 +4,10 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/path_service.h"
+#include "base/strings/strcat.h"
 #include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_path_override.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/native_file_system/native_file_system_permission_context_factory.h"
@@ -17,22 +19,24 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
-#include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/permissions/permission_util.h"
 #include "components/safe_browsing/buildflags.h"
+#include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/web_ui_browsertest_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/blink/public/common/features.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
 #include "ui/shell_dialogs/select_file_policy.h"
+#include "ui/webui/webui_allowlist.h"
 
 using safe_browsing::ClientDownloadRequest;
 
@@ -98,9 +102,6 @@ class NativeFileSystemBrowserTest : public InProcessBrowserTest {
  public:
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    scoped_feature_list_.InitWithFeatures(
-        {blink::features::kNativeFileSystemAPI}, {});
-
     InProcessBrowserTest::SetUp();
   }
 
@@ -131,7 +132,7 @@ class NativeFileSystemBrowserTest : public InProcessBrowserTest {
   bool IsFullscreen() {
     content::WebContents* web_contents =
         browser()->tab_strip_model()->GetActiveWebContents();
-    return web_contents->IsFullscreenForCurrentTab();
+    return web_contents->IsFullscreen();
   }
 
   base::FilePath CreateTestFile(const std::string& contents) {
@@ -151,7 +152,6 @@ class NativeFileSystemBrowserTest : public InProcessBrowserTest {
   }
 
  protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
   base::ScopedTempDir temp_dir_;
 };
 
@@ -171,8 +171,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest, SaveFile) {
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
             content::EvalJs(web_contents,
                             "(async () => {"
-                            "  let e = await self.chooseFileSystemEntries("
-                            "      {type: 'save-file'});"
+                            "  let e = await self.showSaveFilePicker();"
                             "  self.entry = e;"
                             "  return e.name; })()"));
 
@@ -218,8 +217,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest, OpenFile) {
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
             content::EvalJs(web_contents,
                             "(async () => {"
-                            "  let e = await self.chooseFileSystemEntries("
-                            "      {type: 'open-file'});"
+                            "  let [e] = await self.showOpenFilePicker();"
                             "  self.entry = e;"
                             "  return e.name; })()"));
 
@@ -267,8 +265,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest, FullscreenOpenFile) {
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
             content::EvalJs(web_contents,
                             "(async () => {"
-                            "  let e = await self.chooseFileSystemEntries("
-                            "      {type: 'open-file'});"
+                            "  let [e] = await self.showOpenFilePicker();"
                             "  self.entry = e;"
                             "  return e.name; })()"));
 
@@ -352,8 +349,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest, SafeBrowsing) {
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
             content::EvalJs(web_contents,
                             "(async () => {"
-                            "  let e = await self.chooseFileSystemEntries("
-                            "      {type: 'save-file'});"
+                            "  let e = await self.showSaveFilePicker();"
                             "  const w = await e.createWritable();"
                             "  await w.write('abc');"
                             "  await w.close();"
@@ -380,8 +376,8 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   host_content_settings_map->SetContentSettingDefaultScope(
-      url, url, ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD,
-      std::string(), CONTENT_SETTING_ALLOW);
+      url, url, ContentSettingsType::FILE_SYSTEM_WRITE_GUARD, std::string(),
+      CONTENT_SETTING_ALLOW);
 
   // If a prompt shows up, deny it.
   NativeFileSystemPermissionRequestManager::FromWebContents(web_contents)
@@ -390,8 +386,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
             content::EvalJs(web_contents,
                             "(async () => {"
-                            "  let e = await self.chooseFileSystemEntries("
-                            "      {type: 'open-file'});"
+                            "  let [e] = await self.showOpenFilePicker();"
                             "  self.entry = e;"
                             "  return e.name; })()"));
 
@@ -433,8 +428,8 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   host_content_settings_map->SetContentSettingDefaultScope(
-      url, url, ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD,
-      std::string(), CONTENT_SETTING_ALLOW);
+      url, url, ContentSettingsType::FILE_SYSTEM_WRITE_GUARD, std::string(),
+      CONTENT_SETTING_ALLOW);
 
   // If a prompt shows up, deny it.
   NativeFileSystemPermissionRequestManager::FromWebContents(web_contents)
@@ -443,8 +438,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
             content::EvalJs(web_contents,
                             "(async () => {"
-                            "  let e = await self.chooseFileSystemEntries("
-                            "      {type: 'save-file'});"
+                            "  let e = await self.showSaveFilePicker();"
                             "  self.entry = e;"
                             "  return e.name; })()"));
 
@@ -530,8 +524,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
             content::EvalJs(
                 first_party_web_contents,
                 "(async () => {"
-                "  let e = await self.chooseFileSystemEntries("
-                "      {type: 'open-file'});"
+                "  let [e] = await self.showOpenFilePicker();"
                 "  self.entry = e;"
                 "  new BroadcastChannel('channel').postMessage({entry: e});"
                 "  return e.name; })()"));
@@ -544,10 +537,17 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
                             "  self.entry = e.data.entry;"
                             "  return self.entry.name; })()"));
 
+  // Try to request permission in iframe, should reject.
+  EXPECT_EQ("SecurityError",
+            content::EvalJs(third_party_iframe,
+                            "self.entry.requestPermission({mode: "
+                            "'readwrite'}).catch(e => e.name)"));
+
   // Have top-level page in first window request write permission.
-  EXPECT_EQ("granted",
-            content::EvalJs(first_party_web_contents,
-                            "self.entry.requestPermission({writable: true})"));
+  EXPECT_EQ(
+      "granted",
+      content::EvalJs(first_party_web_contents,
+                      "self.entry.requestPermission({mode: 'readwrite'})"));
 
   // And write to file from iframe.
   const std::string initial_file_contents = "file contents to write";
@@ -576,7 +576,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   // Permission should still be granted in iframe.
   EXPECT_EQ("granted",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: true})"));
+                            "self.entry.queryPermission({mode: 'readwrite'})"));
 
   // Even after triggering the timer in the permission context.
   static_cast<OriginScopedNativeFileSystemPermissionContext*>(
@@ -584,7 +584,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
       ->TriggerTimersForTesting();
   EXPECT_EQ("granted",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: true})"));
+                            "self.entry.queryPermission({mode: 'readwrite'})"));
 
   // Now navigate away from b.com in third window as well.
   ui_test_utils::NavigateToURL(third_window,
@@ -593,7 +593,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   // Permission should still be granted in iframe.
   EXPECT_EQ("granted",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: true})"));
+                            "self.entry.queryPermission({mode: 'readwrite'})"));
 
   // But after triggering the timer in the permission context ...
   static_cast<OriginScopedNativeFileSystemPermissionContext*>(
@@ -603,10 +603,10 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   // ... permission should have been revoked.
   EXPECT_EQ("prompt",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: true})"));
+                            "self.entry.queryPermission({mode: 'readwrite'})"));
   EXPECT_EQ("prompt",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: false})"));
+                            "self.entry.queryPermission({mode: 'read'})"));
 }
 
 // Tests that permissions are revoked after all top-level frames have been
@@ -665,8 +665,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
             content::EvalJs(
                 first_party_web_contents,
                 "(async () => {"
-                "  let e = await self.chooseFileSystemEntries("
-                "      {type: 'open-file'});"
+                "  let [e] = await self.showOpenFilePicker();"
                 "  self.entry = e;"
                 "  new BroadcastChannel('channel').postMessage({entry: e});"
                 "  return e.name; })()"));
@@ -679,15 +678,22 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
                             "  self.entry = e.data.entry;"
                             "  return self.entry.name; })()"));
 
+  // Try to request permission in iframe, should reject.
+  EXPECT_EQ("SecurityError",
+            content::EvalJs(third_party_iframe,
+                            "self.entry.requestPermission({mode: "
+                            "'readwrite'}).catch(e => e.name)"));
+
   // Have top-level page in first window request write permission.
-  EXPECT_EQ("granted",
-            content::EvalJs(first_party_web_contents,
-                            "self.entry.requestPermission({writable: true})"));
+  EXPECT_EQ(
+      "granted",
+      content::EvalJs(first_party_web_contents,
+                      "self.entry.requestPermission({mode: 'readwrite'})"));
 
   // Permission should also be granted in iframe.
   EXPECT_EQ("granted",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: true})"));
+                            "self.entry.queryPermission({mode: 'readwrite'})"));
 
   // Now close first window.
   CloseBrowserSynchronously(browser());
@@ -695,7 +701,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   // Permission should still be granted in iframe.
   EXPECT_EQ("granted",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: true})"));
+                            "self.entry.queryPermission({mode: 'readwrite'})"));
 
   // But after triggering the timer in the permission context ...
   static_cast<OriginScopedNativeFileSystemPermissionContext*>(
@@ -705,10 +711,173 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest,
   // ... permission should have been revoked.
   EXPECT_EQ("prompt",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: true})"));
+                            "self.entry.queryPermission({mode: 'readwrite'})"));
   EXPECT_EQ("prompt",
             content::EvalJs(third_party_iframe,
-                            "self.entry.queryPermission({writable: false})"));
+                            "self.entry.queryPermission({mode: 'read'})"));
+}
+
+// The helper methods in this class uses ExecuteScriptXXX, because WebUI has
+// a Content Security Policy that interferes with ExecJs and EvalJs.
+class NativeFileSystemBrowserTestForWebUI : public InProcessBrowserTest {
+ public:
+  NativeFileSystemBrowserTestForWebUI() {
+    content::WebUIControllerFactory::RegisterFactory(&factory_);
+
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    CHECK(temp_dir_.CreateUniqueTempDir());
+  }
+
+  ~NativeFileSystemBrowserTestForWebUI() override {
+    content::WebUIControllerFactory::UnregisterFactoryForTesting(&factory_);
+  }
+
+  // Return the evaluated value of a JavaScript |statement| as a std::string.
+  // The statement can be a Promise that resolves to a string. If errors are
+  // encountered during evaluation, returns the error's message.
+  std::string GetJsStatementValueAsString(content::WebContents* web_contents,
+                                          const std::string& statement) {
+    std::string result;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+        web_contents,
+        base::StrCat({"Promise.resolve(", statement, ").then(",
+                      "  result => domAutomationController.send(result),"
+                      "  error => domAutomationController.send(error.message)"
+                      ");"}),
+        &result));
+    return result;
+  }
+
+  content::WebContents* SetUpAndNavigateToTestWebUI() {
+    const GURL kWebUITestUrl = content::GetWebUIURL("webui/title1.html");
+    WebUIAllowlist::GetOrCreate(browser()->profile())
+        ->RegisterAutoGrantedPermissions(
+            url::Origin::Create(kWebUITestUrl),
+            {ContentSettingsType::FILE_SYSTEM_READ_GUARD,
+             ContentSettingsType::FILE_SYSTEM_WRITE_GUARD});
+
+    ui_test_utils::NavigateToURL(browser(), kWebUITestUrl);
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
+  void TestFilePermissionInDirectory(content::WebContents* web_contents,
+                                     const base::FilePath& dir_path) {
+    // Create a test file in the directory.
+    base::FilePath test_file_path;
+    {
+      base::ScopedAllowBlockingForTesting allow_blocking;
+      ASSERT_TRUE(base::CreateTemporaryFileInDir(dir_path, &test_file_path));
+      ASSERT_TRUE(base::WriteFile(test_file_path, "test"));
+    }
+
+    // Write permissions are granted to the test WebUI with WebUIAllowlist in
+    // SetUpAndNavigateToTestWebUI. Users should not get permission prompts. We
+    // auto-deny them if they show up.
+    NativeFileSystemPermissionRequestManager::FromWebContents(web_contents)
+        ->set_auto_response_for_test(permissions::PermissionAction::DENIED);
+
+    // Open the dialog and choose the file.
+    ui::SelectFileDialog::SetFactory(
+        new FakeSelectFileDialogFactory({test_file_path}));
+    EXPECT_EQ("ok",
+              GetJsStatementValueAsString(web_contents,
+                                          "window.showOpenFilePicker().then("
+                                          "  handles => {"
+                                          "    window.file_handle = handles[0];"
+                                          "    return 'ok';"
+                                          "})"));
+
+    EXPECT_EQ("file", GetJsStatementValueAsString(web_contents,
+                                                  "window.file_handle.kind"));
+
+    // Check permission descriptors.
+    EXPECT_EQ("granted",
+              GetJsStatementValueAsString(
+                  web_contents,
+                  "window.file_handle.queryPermission({ mode: 'read' })"));
+    EXPECT_EQ("granted",
+              GetJsStatementValueAsString(
+                  web_contents,
+                  "window.file_handle.queryPermission({ mode: 'readwrite' })"));
+  }
+
+  void TestDirectoryPermission(content::WebContents* web_contents,
+                               const base::FilePath& dir_path) {
+    // Write permissions are granted to the test WebUI with WebUIAllowlist in
+    // SetUpAndNavigateToTestWebUI. Users should not get permission prompts. We
+    // auto-deny them if they show up.
+    NativeFileSystemPermissionRequestManager::FromWebContents(web_contents)
+        ->set_auto_response_for_test(permissions::PermissionAction::DENIED);
+
+    // Open the dialog and choose the directory.
+    ui::SelectFileDialog::SetFactory(
+        new FakeSelectFileDialogFactory({dir_path}));
+
+    EXPECT_EQ("ok",
+              GetJsStatementValueAsString(web_contents,
+                                          "window.showDirectoryPicker().then("
+                                          "  handle => {"
+                                          "    window.dir_handle = handle;"
+                                          "    return 'ok';"
+                                          "})"));
+
+    EXPECT_EQ("directory", GetJsStatementValueAsString(
+                               web_contents, "window.dir_handle.kind"));
+
+    // Check permission descriptors.
+    EXPECT_EQ("granted",
+              GetJsStatementValueAsString(
+                  web_contents,
+                  "window.dir_handle.queryPermission({ mode: 'read' })"));
+    EXPECT_EQ("granted",
+              GetJsStatementValueAsString(
+                  web_contents,
+                  "window.dir_handle.queryPermission({ mode: 'readwrite' })"));
+  }
+
+ protected:
+  base::ScopedTempDir temp_dir_;
+
+ private:
+  content::TestWebUIControllerFactory factory_;
+};
+
+IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTestForWebUI,
+                       OpenFilePicker_NormalPath) {
+  content::WebContents* web_contents = SetUpAndNavigateToTestWebUI();
+  TestFilePermissionInDirectory(web_contents, temp_dir_.GetPath());
+}
+
+IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTestForWebUI,
+                       OpenFilePicker_FileInSensitivePath) {
+  base::ScopedPathOverride downloads_override(
+      chrome::DIR_DEFAULT_DOWNLOADS, temp_dir_.GetPath(), /*is_absolute*/ true,
+      /*create*/ false);
+
+  content::WebContents* web_contents = SetUpAndNavigateToTestWebUI();
+  TestFilePermissionInDirectory(web_contents, temp_dir_.GetPath());
+}
+
+IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTestForWebUI,
+                       OpenDirectoryPicker_NormalPath) {
+  content::WebContents* web_contents = SetUpAndNavigateToTestWebUI();
+  TestDirectoryPermission(web_contents, temp_dir_.GetPath());
+}
+
+IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTestForWebUI,
+                       OpenDirectoryPicker_DirectoryInSensitivePath) {
+  base::ScopedPathOverride downloads_override(
+      chrome::DIR_DEFAULT_DOWNLOADS, temp_dir_.GetPath(), /*is_absolute*/ true,
+      /*create*/ false);
+
+  base::FilePath test_dir_path = temp_dir_.GetPath().AppendASCII("folder");
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(CreateDirectory(test_dir_path));
+  }
+
+  content::WebContents* web_contents = SetUpAndNavigateToTestWebUI();
+  TestDirectoryPermission(web_contents, test_dir_path);
 }
 
 // TODO(mek): Add more end-to-end test including other bits of UI.

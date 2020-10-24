@@ -73,10 +73,10 @@ ValKind V8ValueTypeToWasm(i::wasm::ValueType v8_valtype) {
       return F64;
     case i::wasm::ValueType::kRef:
     case i::wasm::ValueType::kOptRef:
-      switch (v8_valtype.heap_type()) {
-        case i::wasm::kHeapFunc:
+      switch (v8_valtype.heap_representation()) {
+        case i::wasm::HeapType::kFunc:
           return FUNCREF;
-        case i::wasm::kHeapExtern:
+        case i::wasm::HeapType::kExtern:
           // TODO(7748): Rename this to EXTERNREF if/when third-party API
           // changes.
           return ANYREF;
@@ -209,8 +209,7 @@ auto seal(const typename implement<C>::type* x) -> const C* {
 
 // Configuration
 
-struct ConfigImpl {
-};
+struct ConfigImpl {};
 
 template <>
 struct implement<Config> {
@@ -888,8 +887,8 @@ own<Instance> GetInstance(StoreImpl* store,
 
 own<Frame> CreateFrameFromInternal(i::Handle<i::FixedArray> frames, int index,
                                    i::Isolate* isolate, StoreImpl* store) {
-  i::Handle<i::StackTraceFrame> frame(i::StackTraceFrame::cast(frames->get(0)),
-                                      isolate);
+  i::Handle<i::StackTraceFrame> frame(
+      i::StackTraceFrame::cast(frames->get(index)), isolate);
   i::Handle<i::WasmInstanceObject> instance =
       i::StackTraceFrame::GetWasmInstance(frame);
   uint32_t func_index = i::StackTraceFrame::GetWasmFunctionIndex(frame);
@@ -1035,6 +1034,8 @@ auto Module::serialize() const -> vec<byte_t> {
       impl(this)->v8_object()->native_module();
   i::Vector<const uint8_t> wire_bytes = native_module->wire_bytes();
   size_t binary_size = wire_bytes.size();
+  // We can only serialize after top-tier compilation (TurboFan) finished.
+  native_module->compilation_state()->WaitForTopTierFinished();
   i::wasm::WasmSerializer serializer(native_module);
   size_t serial_size = serializer.GetSerializedNativeModuleSize();
   size_t size_size = i::wasm::LEBHelper::sizeof_u64v(binary_size);
@@ -1378,12 +1379,13 @@ i::Address CallTargetFromCache(i::Object cached_call_target) {
 
 void PrepareFunctionData(i::Isolate* isolate,
                          i::Handle<i::WasmExportedFunctionData> function_data,
-                         const i::wasm::FunctionSig* sig) {
+                         const i::wasm::FunctionSig* sig,
+                         const i::wasm::WasmModule* module) {
   // If the data is already populated, return immediately.
   if (!function_data->c_wrapper_code().IsSmi()) return;
   // Compile wrapper code.
   i::Handle<i::Code> wrapper_code =
-      i::compiler::CompileCWasmEntry(isolate, sig);
+      i::compiler::CompileCWasmEntry(isolate, sig, module);
   function_data->set_c_wrapper_code(*wrapper_code);
   // Compute packed args size.
   function_data->set_packed_args_size(
@@ -1415,12 +1417,19 @@ void PushArgs(const i::wasm::FunctionSig* sig, const Val args[],
         break;
       case i::wasm::ValueType::kRef:
       case i::wasm::ValueType::kOptRef:
-        // TODO(7748): Make sure this works for all types.
+        // TODO(7748): Make sure this works for all heap types.
         packer->Push(WasmRefToV8(store->i_isolate(), args[i].ref())->ptr());
         break;
-      default:
-        // TODO(7748): Implement these.
+      case i::wasm::ValueType::kRtt:
+      case i::wasm::ValueType::kS128:
+        // TODO(7748): Implement.
         UNIMPLEMENTED();
+      case i::wasm::ValueType::kI8:
+      case i::wasm::ValueType::kI16:
+      case i::wasm::ValueType::kStmt:
+      case i::wasm::ValueType::kBottom:
+        UNREACHABLE();
+        break;
     }
   }
 }
@@ -1444,23 +1453,23 @@ void PopArgs(const i::wasm::FunctionSig* sig, Val results[],
         results[i] = Val(packer->Pop<double>());
         break;
       case i::wasm::ValueType::kRef:
-      case i::wasm::ValueType::kOptRef:
-        switch (type.heap_type()) {
-          case i::wasm::kHeapExtern:
-          case i::wasm::kHeapFunc: {
-            i::Address raw = packer->Pop<i::Address>();
-            i::Handle<i::Object> obj(i::Object(raw), store->i_isolate());
-            results[i] = Val(V8RefValueToWasm(store, obj));
-            break;
-          }
-          default:
-            // TODO(jkummerow): Implement these.
-            UNIMPLEMENTED();
-        }
+      case i::wasm::ValueType::kOptRef: {
+        // TODO(7748): Make sure this works for all heap types.
+        i::Address raw = packer->Pop<i::Address>();
+        i::Handle<i::Object> obj(i::Object(raw), store->i_isolate());
+        results[i] = Val(V8RefValueToWasm(store, obj));
         break;
-      default:
-        // TODO(7748): Implement these.
+      }
+      case i::wasm::ValueType::kRtt:
+      case i::wasm::ValueType::kS128:
+        // TODO(7748): Implement.
         UNIMPLEMENTED();
+      case i::wasm::ValueType::kI8:
+      case i::wasm::ValueType::kI16:
+      case i::wasm::ValueType::kStmt:
+      case i::wasm::ValueType::kBottom:
+        UNREACHABLE();
+        break;
     }
   }
 }
@@ -1501,7 +1510,8 @@ auto Func::call(const Val args[], Val results[]) const -> own<Trap> {
   auto store = func->store();
   auto isolate = store->i_isolate();
   i::HandleScope handle_scope(isolate);
-  i::Object raw_function_data = func->v8_object()->shared().function_data();
+  i::Object raw_function_data =
+      func->v8_object()->shared().function_data(v8::kAcquireLoad);
 
   // WasmCapiFunctions can be called directly.
   if (raw_function_data.IsWasmCapiFunctionData()) {
@@ -1517,7 +1527,7 @@ auto Func::call(const Val args[], Val results[]) const -> own<Trap> {
   // Caching {sig} would give a ~10% reduction in overhead.
   const i::wasm::FunctionSig* sig =
       instance->module()->functions[function_index].sig;
-  PrepareFunctionData(isolate, function_data, sig);
+  PrepareFunctionData(isolate, function_data, sig, instance->module());
   i::Handle<i::Code> wrapper_code = i::Handle<i::Code>(
       i::Code::cast(function_data->c_wrapper_code()), isolate);
   i::Address call_target =
@@ -1534,7 +1544,7 @@ auto Func::call(const Val args[], Val results[]) const -> own<Trap> {
     if (object_ref->IsTuple2()) {
       i::JSFunction jsfunc =
           i::JSFunction::cast(i::Tuple2::cast(*object_ref).value2());
-      i::Object data = jsfunc.shared().function_data();
+      i::Object data = jsfunc.shared().function_data(v8::kAcquireLoad);
       if (data.IsWasmCapiFunctionData()) {
         return CallWasmCapiFunction(i::WasmCapiFunctionData::cast(data), args,
                                     results);
@@ -1677,7 +1687,8 @@ auto Global::make(Store* store_abs, const GlobalType* type, const Val& val)
   bool is_mutable = (type->mutability() == VAR);
   const int32_t offset = 0;
   i::Handle<i::WasmGlobalObject> obj =
-      i::WasmGlobalObject::New(isolate, i::MaybeHandle<i::JSArrayBuffer>(),
+      i::WasmGlobalObject::New(isolate, i::Handle<i::WasmInstanceObject>(),
+                               i::MaybeHandle<i::JSArrayBuffer>(),
                                i::MaybeHandle<i::FixedArray>(), i_type, offset,
                                is_mutable)
           .ToHandleChecked();
@@ -1707,20 +1718,20 @@ auto Global::get() const -> Val {
     case i::wasm::ValueType::kF64:
       return Val(v8_global->GetF64());
     case i::wasm::ValueType::kRef:
-    case i::wasm::ValueType::kOptRef:
-      switch (v8_global->type().heap_type()) {
-        case i::wasm::kHeapExtern:
-        case i::wasm::kHeapFunc: {
-          StoreImpl* store = impl(this)->store();
-          i::HandleScope scope(store->i_isolate());
-          return Val(V8RefValueToWasm(store, v8_global->GetRef()));
-        }
-        default:
-          // TODO(wasm+): Support new value types.
-          UNREACHABLE();
-      }
-    default:
+    case i::wasm::ValueType::kOptRef: {
+      // TODO(7748): Make sure this works for all heap types.
+      StoreImpl* store = impl(this)->store();
+      i::HandleScope scope(store->i_isolate());
+      return Val(V8RefValueToWasm(store, v8_global->GetRef()));
+    }
+    case i::wasm::ValueType::kRtt:
+    case i::wasm::ValueType::kS128:
       // TODO(7748): Implement these.
+      UNIMPLEMENTED();
+    case i::wasm::ValueType::kI8:
+    case i::wasm::ValueType::kI16:
+    case i::wasm::ValueType::kStmt:
+    case i::wasm::ValueType::kBottom:
       UNREACHABLE();
   }
 }
@@ -1799,7 +1810,8 @@ auto Table::make(Store* store_abs, const TableType* type, const Ref* ref)
 
   i::Handle<i::FixedArray> backing_store;
   i::Handle<i::WasmTableObject> table_obj = i::WasmTableObject::New(
-      isolate, i_type, minimum, has_maximum, maximum, &backing_store);
+      isolate, i::Handle<i::WasmInstanceObject>(), i_type, minimum, has_maximum,
+      maximum, &backing_store);
 
   if (ref) {
     i::Handle<i::JSReceiver> init = impl(ref)->v8_object();
@@ -1821,11 +1833,11 @@ auto Table::type() const -> own<TableType> {
   uint32_t max;
   if (!table->maximum_length().ToUint32(&max)) max = 0xFFFFFFFFu;
   ValKind kind;
-  switch (table->type().heap_type()) {
-    case i::wasm::kHeapFunc:
+  switch (table->type().heap_representation()) {
+    case i::wasm::HeapType::kFunc:
       kind = FUNCREF;
       break;
-    case i::wasm::kHeapExtern:
+    case i::wasm::HeapType::kExtern:
       kind = ANYREF;
       break;
     default:
@@ -1890,13 +1902,13 @@ auto Memory::make(Store* store_abs, const MemoryType* type) -> own<Memory> {
 
   const Limits& limits = type->limits();
   uint32_t minimum = limits.min;
-  // The max_initial_mem_pages limit is only spec'ed for JS embeddings,
-  // so we'll directly use the maximum pages limit here.
-  if (minimum > i::wasm::kSpecMaxWasmMaximumMemoryPages) return nullptr;
+  // The max_mem_pages limit is only spec'ed for JS embeddings, so we'll
+  // directly use the maximum pages limit here.
+  if (minimum > i::wasm::kSpecMaxMemoryPages) return nullptr;
   uint32_t maximum = limits.max;
   if (maximum != Limits(0).max) {
     if (maximum < minimum) return nullptr;
-    if (maximum > i::wasm::kSpecMaxWasmMaximumMemoryPages) return nullptr;
+    if (maximum > i::wasm::kSpecMaxMemoryPages) return nullptr;
   }
   // TODO(wasm+): Support shared memory.
   i::SharedFlag shared = i::SharedFlag::kNotShared;

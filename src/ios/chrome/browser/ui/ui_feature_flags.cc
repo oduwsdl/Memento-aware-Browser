@@ -28,23 +28,11 @@ const base::Feature kVoiceOverUnstackedTabstrip{
 const base::Feature kForceUnstackedTabstrip{"ForceUnstackedTabstrip",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kContainedBVC{"ContainedBVC",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kTestFeature{"TestFeature",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kClearSyncedData{"ClearSyncedData",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kFirstResponderSendAction{
     "FirstResponderSendAction", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kNewSigninArchitecture{"NewSigninArchitecture",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kQRCodeGeneration{"QRCodeGeneration",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableNativeContextMenus{
     "EnableNativeContextMenus", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -55,13 +43,45 @@ const base::Feature kPointerSupport{"PointerSupport",
 #endif  // defined(__IPHONE_13_4)
 
 const base::Feature kEnableMyGoogle{"EnableMyGoogle",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableIOSManagedSettingsUI{
-    "EnableIOSManagedSettingsUI", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EnableIOSManagedSettingsUI", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSafetyCheckIOS{"SafetyCheckIOS",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kIllustratedEmptyStates{"IllustratedEmptyStates",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSharedHighlightingIOS{"SharedHighlightingIOS",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableFullPageScreenshot{
+    "EnableFullPageScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableAutofillPasswordReauthIOS{
+    "EnableAutofillPasswordReauthIOS", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDefaultBrowserFullscreenPromo{
+    "DefaultBrowserFullscreenPromo", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDefaultBrowserSettings{"DefaultBrowserSettings",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+// TODO(crbug.com/1128242): Remove this flag after the refactoring work is
+// finished.
+const base::Feature kModernTabStrip{"ModernTabStrip",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kIncognitoAuthentication{
+    "enable-incognito-authentication-ios", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kLocationRemoveFirstRunPrompt{
+    "LocationRemoveFirstRunPrompt", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kLocationStringChange{"LocationStringChange",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kLocationFirstRunModal{"LocationFirstRunModal",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};

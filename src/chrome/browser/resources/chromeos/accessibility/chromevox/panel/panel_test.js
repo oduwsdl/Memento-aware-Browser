@@ -7,10 +7,6 @@ GEN_INCLUDE([
   '//chrome/browser/resources/chromeos/accessibility/chromevox/testing/chromevox_next_e2e_test_base.js'
 ]);
 
-GEN_INCLUDE([
-  '//chrome/browser/resources/chromeos/accessibility/chromevox/testing/mock_feedback.js'
-]);
-
 /**
  * Test fixture for Panel.
  */
@@ -18,16 +14,6 @@ ChromeVoxPanelTest = class extends ChromeVoxNextE2ETest {
   /** @override */
   testGenCppIncludes() {
     ChromeVoxE2ETest.prototype.testGenCppIncludes.call(this);
-  }
-
-  /**
-   * @return {!MockFeedback}
-   */
-  createMockFeedback() {
-    const mockFeedback =
-        new MockFeedback(this.newCallback(), this.newCallback.bind(this));
-    mockFeedback.install();
-    return mockFeedback;
   }
 
   getPanelWindow() {
@@ -111,6 +97,13 @@ ChromeVoxPanelTest = class extends ChromeVoxNextE2ETest {
       <a href="#">banana</a>
     `;
   }
+
+  get internationalButtonDoc() {
+    return `
+      <button lang="en">Test</button>
+      <button lang="es">Prueba</button>
+    `;
+  }
 };
 
 TEST_F('ChromeVoxPanelTest', 'ActivateMenu', function() {
@@ -122,7 +115,7 @@ TEST_F('ChromeVoxPanelTest', 'ActivateMenu', function() {
     this.fireMockEvent('ArrowRight')();
     this.assertActiveMenuItem(
         'panel_menu_speech', 'Announce Current Battery Status');
-  }, {isAsync: true});
+  });
 });
 
 TEST_F('ChromeVoxPanelTest', 'LinkMenu', function() {
@@ -132,10 +125,10 @@ TEST_F('ChromeVoxPanelTest', 'LinkMenu', function() {
     this.fireMockEvent('ArrowLeft')();
     this.assertActiveMenuItem('role_landmark', 'No items');
     this.fireMockEvent('ArrowRight')();
-    this.assertActiveMenuItem('role_link', 'apple Link');
+    this.assertActiveMenuItem('role_link', 'apple Internal link');
     this.fireMockEvent('ArrowUp')();
-    this.assertActiveMenuItem('role_link', 'banana Link');
-  }, {isAsync: true});
+    this.assertActiveMenuItem('role_link', 'banana Internal link');
+  });
 });
 
 TEST_F('ChromeVoxPanelTest', 'FormControlsMenu', function() {
@@ -147,11 +140,10 @@ TEST_F('ChromeVoxPanelTest', 'FormControlsMenu', function() {
         this.assertActiveMenuItem('panel_menu_form_controls', 'OK Button');
         this.fireMockEvent('ArrowUp')();
         this.assertActiveMenuItem('panel_menu_form_controls', 'Cancel Button');
-      }, {isAsync: true});
+      });
 });
 
 TEST_F('ChromeVoxPanelTest', 'SearchMenu', function() {
-  const mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(this.linksDoc, async function(root) {
     new PanelCommand(PanelCommandType.OPEN_MENUS).send();
     await this.waitForMenu('panel_search_menu');
@@ -163,7 +155,7 @@ TEST_F('ChromeVoxPanelTest', 'SearchMenu', function() {
     this.assertActiveSearchMenuItem('Jump To The Top Of The Page');
     this.fireMockEvent('ArrowDown')();
     this.assertActiveSearchMenuItem('Jump To Details');
-  }, {isAsync: true});
+  });
 });
 
 // TODO(crbug.com/1088438): flaky crashes.
@@ -191,5 +183,21 @@ TEST_F('ChromeVoxPanelTest', 'DISABLED_Gestures', function() {
 
         doGesture('swipeLeft1');
         await this.waitForMenu('panel_menu_jump');
-      }, {isAsync: true});
+      });
+});
+
+TEST_F('ChromeVoxPanelTest', 'InternationalFormControlsMenu', function() {
+  this.runWithLoadedTree(this.internationalButtonDoc, async function(root) {
+    // Turn on language switching and set available voice list.
+    localStorage['languageSwitching'] = 'true';
+    this.getPanelWindow().LocaleOutputHelper.instance.availableVoices_ =
+        [{'lang': 'en-US'}, {'lang': 'es-ES'}];
+    CommandHandler.onCommand('showFormsList');
+    await this.waitForMenu('panel_menu_form_controls');
+    this.fireMockEvent('ArrowDown')();
+    this.assertActiveMenuItem(
+        'panel_menu_form_controls', 'español: Prueba Button');
+    this.fireMockEvent('ArrowUp')();
+    this.assertActiveMenuItem('panel_menu_form_controls', 'Test Button');
+  });
 });

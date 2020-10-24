@@ -4,7 +4,6 @@
 
 #include "ash/system/tray/system_menu_button.h"
 
-#include "ash/public/cpp/shelf_config.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_ink_drop_style.h"
@@ -37,7 +36,8 @@ SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
   TrayPopupUtils::ConfigureTrayPopupButton(this);
   TrayPopupUtils::InstallHighlightPathGenerator(
       this, TrayPopupInkDropStyle::HOST_CENTERED);
-  focus_ring()->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
+  focus_ring()->SetColor(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
 }
 
 SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
@@ -52,8 +52,7 @@ SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
 
 void SystemMenuButton::SetVectorIcon(const gfx::VectorIcon& icon) {
   const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kIconColorPrimary,
-      AshColorProvider::AshColorMode::kLight);
+      AshColorProvider::ContentLayerType::kIconColorPrimary);
   SetImage(views::Button::STATE_NORMAL,
            gfx::CreateVectorIcon(icon, icon_color));
   SetImage(views::Button::STATE_DISABLED,
@@ -63,30 +62,20 @@ void SystemMenuButton::SetVectorIcon(const gfx::VectorIcon& icon) {
 
 SystemMenuButton::~SystemMenuButton() = default;
 
-void SystemMenuButton::SetInkDropColor(SkColor color) {
-  ink_drop_color_ = color;
-}
-
 std::unique_ptr<views::InkDrop> SystemMenuButton::CreateInkDrop() {
   return TrayPopupUtils::CreateInkDrop(this);
 }
 
-// TODO(minch): Do not hard code the background color for InkDropRipple and
-// InkDropHighlight. Add it as a constructor argument to SystemMenuButton.
-// Then, |ink_drop_color_| related logic can be removed.
 std::unique_ptr<views::InkDropRipple> SystemMenuButton::CreateInkDropRipple()
     const {
   return TrayPopupUtils::CreateInkDropRipple(
       TrayPopupInkDropStyle::HOST_CENTERED, this,
-      GetInkDropCenterBasedOnLastEvent(),
-      ink_drop_color_.value_or(SK_ColorWHITE));
+      GetInkDropCenterBasedOnLastEvent());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 SystemMenuButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(
-      TrayPopupInkDropStyle::HOST_CENTERED, this,
-      ink_drop_color_.value_or(SK_ColorWHITE));
+  return TrayPopupUtils::CreateInkDropHighlight(this);
 }
 
 const char* SystemMenuButton::GetClassName() const {

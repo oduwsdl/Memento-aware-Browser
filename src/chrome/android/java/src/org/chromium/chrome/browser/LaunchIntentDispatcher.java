@@ -12,9 +12,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.StrictMode;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
@@ -29,6 +27,7 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider.CustomTabsUiType;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
 import org.chromium.chrome.browser.browserservices.ui.splashscreen.trustedwebactivity.TwaSplashController;
@@ -44,6 +43,7 @@ import org.chromium.chrome.browser.notifications.NotificationPlatformBridge;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.translate.TranslateIntentHandler;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.components.browser_ui.media.MediaNotificationUma;
@@ -221,6 +221,12 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
     }
 
     @Override
+    public void processTranslateTabIntent(
+            @Nullable String targetLanguageCode, @Nullable String expectedUrl) {
+        assert false;
+    }
+
+    @Override
     public void processUrlViewIntent(String url, String referer, String headers,
             @IntentHandler.TabOpenType int tabOpenType, String externalAppId,
             int tabIdToBringToFront, boolean hasUserGesture, boolean isRendererInitiated,
@@ -235,6 +241,22 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
             if (maybeUrl != null) {
                 WarmupManager.getInstance().maybePrefetchDnsForUrlInBackground(mActivity, maybeUrl);
             }
+        }
+    }
+
+    /**
+     * Adds a token to TRANSLATE_TAB intents that we know were sent from a first party app.
+     *
+     * TRANSLATE_TAB requires a signature permission. We know that permission has been enforced (and
+     * thus comes from a first party application) if it was routed via the TranslateDispatcher
+     * activity-alias. In this case, add a token so IntentHandler knows the intent is from a first
+     * party app.
+     */
+    private static void maybeAuthenticateFirstPartyTranslateIntent(Intent intent) {
+        if (intent != null && TranslateIntentHandler.ACTION_TRANSLATE_TAB.equals(intent.getAction())
+                && TranslateIntentHandler.COMPONENT_TRANSLATE_DISPATCHER.equals(
+                        intent.getComponent().getClassName())) {
+            IntentHandler.addTrustedIntentExtras(intent);
         }
     }
 
@@ -386,16 +408,16 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
 
         maybePrefetchDnsInBackground();
 
+        maybeAuthenticateFirstPartyTranslateIntent(mIntent);
+
         Intent newIntent = new Intent(mIntent);
         String targetActivityClassName = MultiWindowUtils.getInstance()
                                                  .getTabbedActivityForIntent(newIntent, mActivity)
                                                  .getName();
         newIntent.setClassName(
                 mActivity.getApplicationContext().getPackageName(), targetActivityClassName);
-        newIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            newIntent.addFlags(Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
-        }
+        newIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
         Uri uri = newIntent.getData();
         boolean isContentScheme = false;
         if (uri != null && UrlConstants.CONTENT_SCHEME.equals(uri.getScheme())) {
@@ -412,7 +434,6 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         }
 
         // This system call is often modified by OEMs and not actionable. http://crbug.com/619646.
-        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
         try {
             Bundle options = mIsVrIntent
                     ? VrModuleProvider.getIntentDelegate().getVrIntentOptions(mActivity)
@@ -427,8 +448,6 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
             } else {
                 throw ex;
             }
-        } finally {
-            StrictMode.setThreadPolicy(oldPolicy);
         }
 
         return Action.FINISH_ACTIVITY;
@@ -441,10 +460,7 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         @IntentHandler.ExternalAppId
         int source = IntentHandler.determineExternalIntentSource(mIntent);
         if (mIntent.getPackage() == null && source != IntentHandler.ExternalAppId.CHROME) {
-            int flagsOfInterest = Intent.FLAG_ACTIVITY_NEW_TASK;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                flagsOfInterest |= Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
-            }
+            int flagsOfInterest = Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
             int maskedFlags = mIntent.getFlags() & flagsOfInterest;
             RecordHistogram.recordSparseHistogram("Launch.IntentFlags", maskedFlags);
         }

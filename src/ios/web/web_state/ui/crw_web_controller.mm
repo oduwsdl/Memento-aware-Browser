@@ -6,6 +6,7 @@
 
 #import <WebKit/WebKit.h>
 
+#include "base/bind.h"
 #import "base/ios/block_types.h"
 #include "base/ios/ios_util.h"
 #include "base/json/string_escape.h"
@@ -31,6 +32,7 @@
 #import "ios/web/navigation/crw_web_view_navigation_observer_delegate.h"
 #import "ios/web/navigation/crw_wk_navigation_handler.h"
 #import "ios/web/navigation/crw_wk_navigation_states.h"
+#import "ios/web/navigation/error_page_helper.h"
 #import "ios/web/navigation/navigation_context_impl.h"
 #import "ios/web/navigation/wk_back_forward_list_item_holder.h"
 #import "ios/web/navigation/wk_navigation_util.h"
@@ -85,6 +87,9 @@ NSString* const kIsMainFrame = @"isMainFrame";
 // URL scheme for messages sent from javascript for asynchronous processing.
 NSString* const kScriptMessageName = @"crwebinvoke";
 
+// URL scheme for session restore.
+NSString* const kSessionRestoreScriptMessageName = @"session_restore";
+
 }  // namespace
 
 @interface CRWWebController () <CRWWKNavigationHandlerDelegate,
@@ -99,6 +104,7 @@ NSString* const kScriptMessageName = @"crwebinvoke";
                                 CRWWebViewScrollViewProxyObserver,
                                 CRWWKNavigationHandlerDelegate,
                                 CRWWKUIHandlerDelegate,
+                                UIDropInteractionDelegate,
                                 WKNavigationDelegate> {
   // The view used to display content.  Must outlive |_webViewProxy|. The
   // container view should be accessed through this property rather than
@@ -203,6 +209,10 @@ NSString* const kScriptMessageName = @"crwebinvoke";
 // gesture. Lazily created.
 @property(nonatomic, strong, readonly)
     CRWTouchTrackingRecognizer* touchTrackingRecognizer;
+
+// A custom drop interaction that is added alongside the web view's default drop
+// interaction.
+@property(nonatomic, strong) UIDropInteraction* customDropInteraction;
 
 // Session Information
 // -------------------
@@ -435,6 +445,15 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
           [weakSelf didReceiveScriptMessage:message];
         }
                            name:kScriptMessageName
+                        webView:_webView];
+
+    // TODO(crbug.com/1127521) Consider consolidating session restore script
+    // logic into a different place.
+    [messageRouter
+        setScriptMessageHandler:^(WKScriptMessage* message) {
+          [weakSelf didReceiveSessionRestoreScriptMessage:message];
+        }
+                           name:kSessionRestoreScriptMessageName
                         webView:_webView];
 
     _webView.allowsBackForwardNavigationGestures =
@@ -726,6 +745,10 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 
 - (void)wasShown {
   self.visible = YES;
+
+  // WebKit adds a drop interaction to a subview (WKContentView) of WKWebView's
+  // scrollView when the web view is added to the view hierarchy.
+  [self addCustomURLDropInteractionIfNeeded];
 }
 
 - (void)wasHidden {
@@ -800,6 +823,10 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
     self.navigationHandler.navigationState = web::WKNavigationState::REQUESTED;
   }
 
+  if ([ErrorPageHelper isErrorPageFileURL:URL]) {
+    context->SetLoadingErrorPage(true);
+  }
+
   web::WKBackForwardListItemHolder* holder =
       web::WKBackForwardListItemHolder::FromNavigationItem(item);
   holder->set_navigation_type(WKNavigationTypeBackForward);
@@ -840,14 +867,29 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
                     // |-removeWebView| are ignored to prevent crashing.
                     if (error || !weakSelf.webView) {
                       if (error) {
-                        DLOG(ERROR) << "WKWebView snapshot error: "
-                                    << error.description;
+                        DLOG(ERROR)
+                            << "WKWebView snapshot error: "
+                            << base::SysNSStringToUTF8(error.description);
                       }
                       completion(nil);
                     } else {
                       completion(snapshot);
                     }
                   }];
+}
+
+- (void)createFullPagePDFWithCompletion:(void (^)(NSData*))completionBlock {
+  // Invoke the |completionBlock| with nil rather than a blank PDF for certain
+  // URLs.
+  const GURL& URL = self.webState->GetLastCommittedURL();
+  if (![self contentIsHTML] || !URL.is_valid() ||
+      web::GetWebClient()->IsAppSpecificURL(URL)) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      completionBlock(nil);
+    });
+    return;
+  }
+  web::CreateFullPagePdf(self.webView, base::BindOnce(completionBlock));
 }
 
 #pragma mark - CRWTouchTrackingDelegate (Public)
@@ -877,11 +919,9 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
     _documentURL = newURL;
     _userInteractionState.SetUserInteractionRegisteredSinceLastUrlChange(false);
   }
-  if (context && !context->IsLoadingHtmlString() &&
-      (base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) ||
-       !context->IsLoadingErrorPage()) &&
-      !IsWKInternalUrl(newURL) && !newURL.SchemeIs(url::kAboutScheme) &&
-      self.webView) {
+  if (context && !context->IsLoadingErrorPage() &&
+      !context->IsLoadingHtmlString() && !IsWKInternalUrl(newURL) &&
+      !newURL.SchemeIs(url::kAboutScheme) && self.webView) {
     // On iOS13, WebKit started changing the URL visible webView.URL when
     // opening a new tab and then writing to it, e.g.
     // window.open('javascript:document.write(1)').  This URL is never commited,
@@ -931,6 +971,46 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   return _userInteractionState.IsUserInteracting(self.webView);
 }
 
+// Adds a custom drop interaction to the same subview of |self.webScrollView|
+// that already has a default drop interaction.
+- (void)addCustomURLDropInteractionIfNeeded {
+  if (!base::FeatureList::IsEnabled(
+          web::features::kAddWebContentDropInteraction))
+    return;
+
+  BOOL subviewWithDefaultInteractionFound = NO;
+  for (UIView* subview in self.webScrollView.subviews) {
+    BOOL defaultInteractionFound = NO;
+    BOOL customInteractionFound = NO;
+    for (id<UIInteraction> interaction in subview.interactions) {
+      if ([interaction isKindOfClass:[UIDropInteraction class]]) {
+        if (interaction == self.customDropInteraction) {
+          customInteractionFound = YES;
+        } else {
+          DCHECK(!defaultInteractionFound &&
+                 !subviewWithDefaultInteractionFound)
+              << "There should be only one default drop interaction in the "
+                 "webScrollView.";
+          defaultInteractionFound = YES;
+          subviewWithDefaultInteractionFound = YES;
+        }
+      }
+    }
+    if (customInteractionFound) {
+      // The custom interaction must be added after the default drop interaction
+      // to work properly.
+      [subview removeInteraction:self.customDropInteraction];
+      [subview addInteraction:self.customDropInteraction];
+    } else if (defaultInteractionFound) {
+      if (!self.customDropInteraction) {
+        self.customDropInteraction =
+            [[UIDropInteraction alloc] initWithDelegate:self];
+      }
+      [subview addInteraction:self.customDropInteraction];
+    }
+  }
+}
+
 #pragma mark - End of loading
 
 - (void)didFinishNavigation:(web::NavigationContextImpl*)context {
@@ -967,6 +1047,13 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 
   BOOL success = !context || !context->GetError();
   [self loadCompleteWithSuccess:success forContext:context];
+
+  // WebKit adds a drop interaction to a subview (WKContentView) of WKWebView's
+  // scrollView when a new WebProcess finishes launching. This can be loading
+  // the first page, navigating cross-domain, or recovering from a WebProcess
+  // crash. Add a custom drop interaction alongside the default drop
+  // interaction.
+  [self addCustomURLDropInteractionIfNeeded];
 }
 
 - (void)loadCompleteWithSuccess:(BOOL)loadSuccess
@@ -986,6 +1073,20 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   [_requestController didFinishWithURL:currentURL
                            loadSuccess:loadSuccess
                                context:context];
+
+  if (web::GetWebClient()->IsEmbedderBlockRestoreUrlEnabled()) {
+    if (@available(iOS 14, *)) {
+    } else {
+      if (@available(iOS 13.5, *)) {
+        // In some cases on iOS 13.5, when restoring about: URL, the load might
+        // never ends. Make sure to mark the load as done here. This is fixed in
+        // iOS 14. See crbug.com/1099235.
+        if (currentURL.SchemeIs(url::kAboutScheme)) {
+          self.webStateImpl->SetIsLoading(false);
+        }
+      }
+    }
+  }
 
   // Execute the pending LoadCompleteActions.
   for (ProceduralBlock action in _pendingLoadCompleteActions) {
@@ -1017,6 +1118,22 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   // Broken out into separate method to catch errors.
   if (![self respondToWKScriptMessage:message]) {
     DLOG(WARNING) << "Message from JS not handled due to invalid format";
+  }
+}
+
+// TODO(crbug.com/1127521) Consider consolidating session restore script
+// logic into a different place.
+- (void)didReceiveSessionRestoreScriptMessage:(WKScriptMessage*)message {
+  if ([message.name isEqualToString:kSessionRestoreScriptMessageName] &&
+      [message.body[@"offset"] isKindOfClass:[NSNumber class]]) {
+    NSString* method =
+        [NSString stringWithFormat:@"_crFinishSessionRestoration('%@')",
+                                   message.body[@"offset"]];
+    // Don't use |_jsInjector| -executeJavaScript here, as it relies on
+    // |windowID| being injected before window.onload starts.
+    web::ExecuteJavaScript(self.webView, method, nil);
+  } else {
+    DLOG(WARNING) << "Invalid session restore JS message name.";
   }
 }
 
@@ -1912,6 +2029,37 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 - (void)JSNavigationHandlerOptOutScrollsToTopForSubviews:
     (CRWJSNavigationHandler*)navigationHandler {
   return [self optOutScrollsToTopForSubviews];
+}
+
+#pragma mark - UIDropInteractionDelegate
+
+- (BOOL)dropInteraction:(UIDropInteraction*)interaction
+       canHandleSession:(id<UIDropSession>)session {
+  return session.items.count == 1U &&
+         [session canLoadObjectsOfClass:[NSURL class]];
+}
+
+- (UIDropProposal*)dropInteraction:(UIDropInteraction*)interaction
+                  sessionDidUpdate:(id<UIDropSession>)session {
+  return [[UIDropProposal alloc] initWithDropOperation:UIDropOperationCopy];
+}
+
+- (void)dropInteraction:(UIDropInteraction*)interaction
+            performDrop:(id<UIDropSession>)session {
+  DCHECK_EQ(1U, session.items.count);
+  if ([session canLoadObjectsOfClass:[NSURL class]]) {
+    __weak CRWWebController* weakSelf = self;
+    [session loadObjectsOfClass:[NSURL class]
+                     completion:^(NSArray<NSURL*>* objects) {
+                       GURL URL = net::GURLWithNSURL([objects firstObject]);
+                       if (!_isBeingDestroyed && URL.is_valid()) {
+                         web::NavigationManager::WebLoadParams params(URL);
+                         params.transition_type = ui::PAGE_TRANSITION_TYPED;
+                         weakSelf.webStateImpl->GetNavigationManager()
+                             ->LoadURLWithParams(params);
+                       }
+                     }];
+  }
 }
 
 #pragma mark - Testing-Only Methods

@@ -5,17 +5,18 @@
 package org.chromium.chrome.browser.omnibox.voice;
 
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
 
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.view.ViewGroup;
 
 import androidx.annotation.ColorRes;
+import androidx.annotation.Nullable;
 import androidx.test.filters.SmallTest;
 
 import org.junit.After;
@@ -24,16 +25,14 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mockito;
+import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.SysUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.OnSuggestionsReceivedListener;
@@ -47,22 +46,21 @@ import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler.VoiceRe
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.NewTabPageDelegate;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.OmniboxTestUtils.SuggestionsResult;
-import org.chromium.chrome.test.util.OmniboxTestUtils.TestAutocompleteController;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.AndroidPermissionDelegate;
 import org.chromium.ui.base.PermissionCallback;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.base.WindowAndroid.IntentCallback;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -73,13 +71,16 @@ import java.util.concurrent.ExecutionException;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class VoiceRecognitionHandlerTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+
+    @Mock
+    Intent mIntent;
+    @Mock
+    AssistantVoiceSearchService mAssistantVoiceSearchService;
 
     private TestDataProvider mDataProvider;
     private TestDelegate mDelegate;
     private TestVoiceRecognitionHandler mHandler;
-    private TestAutocompleteController mAutocomplete;
     private TestAndroidPermissionDelegate mPermissionDelegate;
     private TestWindowAndroid mWindowAndroid;
     private Tab mTab;
@@ -105,6 +106,8 @@ public class VoiceRecognitionHandlerTest {
         private int mDismissedSource = -1;
         @VoiceInteractionSource
         private int mFailureSource = -1;
+        @VoiceInteractionSource
+        private int mUnexpectedResultSource = -1;
         private Boolean mResult;
         private Float mVoiceConfidenceValue;
 
@@ -130,6 +133,11 @@ public class VoiceRecognitionHandlerTest {
         @Override
         protected void recordVoiceSearchDismissedEventSource(@VoiceInteractionSource int source) {
             mDismissedSource = source;
+        }
+
+        @Override
+        protected void recordVoiceSearchUnexpectedResultSource(@VoiceInteractionSource int source) {
+            mUnexpectedResultSource = source;
         }
 
         @Override
@@ -167,6 +175,11 @@ public class VoiceRecognitionHandlerTest {
             return mFailureSource;
         }
 
+        @VoiceInteractionSource
+        public int getVoiceSearchUnexpectedResultSource() {
+            return mUnexpectedResultSource;
+        }
+
         public Boolean getVoiceSearchResult() {
             return mResult;
         }
@@ -202,8 +215,8 @@ public class VoiceRecognitionHandlerTest {
         }
 
         @Override
-        public NewTabPage getNewTabPageForCurrentTab() {
-            return null;
+        public NewTabPageDelegate getNewTabPageDelegate() {
+            return NewTabPageDelegate.EMPTY;
         }
 
         @Override
@@ -292,6 +305,7 @@ public class VoiceRecognitionHandlerTest {
      * Test implementation of {@link VoiceRecognitionHandler.Delegate}.
      */
     private class TestDelegate implements VoiceRecognitionHandler.Delegate {
+        private String mUrl;
         private boolean mUpdatedMicButtonState;
         private AutocompleteCoordinator mAutocompleteCoordinator;
 
@@ -304,7 +318,9 @@ public class VoiceRecognitionHandlerTest {
         }
 
         @Override
-        public void loadUrlFromVoice(String url) {}
+        public void loadUrlFromVoice(String url) {
+            mUrl = url;
+        }
 
         @Override
         public void updateMicButtonState() {
@@ -332,6 +348,10 @@ public class VoiceRecognitionHandlerTest {
         public boolean updatedMicButtonState() {
             return mUpdatedMicButtonState;
         }
+
+        public String getUrl() {
+            return mUrl;
+        }
     }
 
     /**
@@ -344,6 +364,7 @@ public class VoiceRecognitionHandlerTest {
         private Activity mActivity;
         private boolean mWasCancelableIntentShown;
         private Intent mCancelableIntent;
+        private IntentCallback mCallback;
 
         public TestWindowAndroid(Context context) {
             super(context);
@@ -373,10 +394,15 @@ public class VoiceRecognitionHandlerTest {
             return mCancelableIntent;
         }
 
+        public IntentCallback getIntentCallback() {
+            return mCallback;
+        }
+
         @Override
         public int showCancelableIntent(Intent intent, IntentCallback callback, Integer errorId) {
             mWasCancelableIntentShown = true;
             mCancelableIntent = intent;
+            mCallback = callback;
             if (mCancelableIntentSuccess) {
                 callback.onIntentCompleted(mWindowAndroid, mResultCode, mResults);
                 return 0;
@@ -464,14 +490,16 @@ public class VoiceRecognitionHandlerTest {
         mDelegate = TestThreadUtils.runOnUiThreadBlocking(() -> new TestDelegate());
         mHandler = new TestVoiceRecognitionHandler(mDelegate);
         mPermissionDelegate = new TestAndroidPermissionDelegate();
-        mAutocomplete = new TestAutocompleteController(null /* view */, sEmptySuggestionListener,
-                new HashMap<String, List<SuggestionsResult>>());
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mWindowAndroid = new TestWindowAndroid(mActivityTestRule.getActivity());
             mWindowAndroid.setAndroidPermissionDelegate(mPermissionDelegate);
             mTab = new MockTab(0, false);
         });
+
+        doReturn(false).when(mAssistantVoiceSearchService).shouldRequestAssistantVoiceSearch();
+        doReturn(mIntent).when(mAssistantVoiceSearchService).getAssistantVoiceSearchIntent();
+        mHandler.setAssistantVoiceSearchService(mAssistantVoiceSearchService);
     }
 
     @After
@@ -529,6 +557,7 @@ public class VoiceRecognitionHandlerTest {
                 () -> { mHandler.startVoiceRecognition(VoiceInteractionSource.OMNIBOX); });
         Assert.assertEquals(-1, mHandler.getVoiceSearchStartEventSource());
         Assert.assertTrue(mDelegate.updatedMicButtonState());
+        verify(mAssistantVoiceSearchService).reportUserEligibility();
     }
 
     @Test
@@ -540,35 +569,20 @@ public class VoiceRecognitionHandlerTest {
                 () -> { mHandler.startVoiceRecognition(VoiceInteractionSource.OMNIBOX); });
         Assert.assertEquals(-1, mHandler.getVoiceSearchStartEventSource());
         Assert.assertTrue(mDelegate.updatedMicButtonState());
+        verify(mAssistantVoiceSearchService).reportUserEligibility();
     }
 
     @Test
     @SmallTest
     @Feature("OmniboxAssistantVoiceSearch")
     @EnableFeatures("OmniboxAssistantVoiceSearch")
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     public void testStartVoiceRecognition_StartsAssistantVoiceSearch() {
-        AssistantVoiceSearchService service = Mockito.mock(AssistantVoiceSearchService.class);
-        doReturn(true).when(service).shouldRequestAssistantVoiceSearch();
-        Intent intent = new Intent();
-        doReturn(intent).when(service).getAssistantVoiceSearchIntent();
-
-        mHandler.setAssistantVoiceSearchService(service);
+        doReturn(true).when(mAssistantVoiceSearchService).shouldRequestAssistantVoiceSearch();
         startVoiceRecognition(VoiceInteractionSource.OMNIBOX);
 
         Assert.assertTrue(mWindowAndroid.wasCancelableIntentShown());
-        Assert.assertEquals(intent, mWindowAndroid.getCancelableIntent());
-    }
-
-    /**
-     * Kicks off voice recognition with the given source, for testing
-     * {@linkVoiceRecognitionHandler.VoiceRecognitionCompleteCallback}.
-     *
-     * @param source The source of the voice recognition initiation.
-     */
-    private void startVoiceRecognition(@VoiceInteractionSource int source) {
-        mPermissionDelegate.setHasPermission(true);
-        TestThreadUtils.runOnUiThreadBlocking(() -> { mHandler.startVoiceRecognition(source); });
+        Assert.assertEquals(mIntent, mWindowAndroid.getCancelableIntent());
+        verify(mAssistantVoiceSearchService).reportUserEligibility();
     }
 
     @Test
@@ -608,6 +622,9 @@ public class VoiceRecognitionHandlerTest {
         Assert.assertEquals(null, mHandler.getVoiceSearchResult());
         Assert.assertEquals(
                 VoiceInteractionSource.NTP, mHandler.getVoiceSearchFailureEventSource());
+        Assert.assertEquals(0,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "VoiceInteraction.QueryDuration.Android"));
     }
 
     @Test
@@ -619,6 +636,9 @@ public class VoiceRecognitionHandlerTest {
         Assert.assertEquals(null, mHandler.getVoiceSearchResult());
         Assert.assertEquals(
                 VoiceInteractionSource.NTP, mHandler.getVoiceSearchDismissedEventSource());
+        Assert.assertEquals(0,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "VoiceInteraction.QueryDuration.Android"));
     }
 
     @Test
@@ -629,6 +649,9 @@ public class VoiceRecognitionHandlerTest {
         Assert.assertEquals(
                 VoiceInteractionSource.SEARCH_WIDGET, mHandler.getVoiceSearchStartEventSource());
         Assert.assertEquals(false, mHandler.getVoiceSearchResult());
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "VoiceInteraction.QueryDuration.Android"));
     }
 
     @Test
@@ -640,6 +663,9 @@ public class VoiceRecognitionHandlerTest {
             Assert.assertEquals(
                     VoiceInteractionSource.OMNIBOX, mHandler.getVoiceSearchStartEventSource());
             Assert.assertEquals(false, mHandler.getVoiceSearchResult());
+            Assert.assertEquals(1,
+                    RecordHistogram.getHistogramTotalCountForTesting(
+                            "VoiceInteraction.QueryDuration.Android"));
         });
     }
 
@@ -659,6 +685,9 @@ public class VoiceRecognitionHandlerTest {
             Assert.assertTrue(confidence == mHandler.getVoiceConfidenceValue());
             assertVoiceResultsAreEqual(
                     mAutocompleteVoiceResults, new String[] {"testing"}, new float[] {confidence});
+            Assert.assertEquals(1,
+                    RecordHistogram.getHistogramTotalCountForTesting(
+                            "VoiceInteraction.QueryDuration.Android"));
         });
     }
 
@@ -680,6 +709,32 @@ public class VoiceRecognitionHandlerTest {
             assertVoiceResultsAreEqual(mAutocompleteVoiceResults, new String[] {"testing"},
                     new float[] {
                             VoiceRecognitionHandler.VOICE_SEARCH_CONFIDENCE_NAVIGATE_THRESHOLD});
+            Assert.assertEquals(1,
+                    RecordHistogram.getHistogramTotalCountForTesting(
+                            "VoiceInteraction.QueryDuration.Android"));
+        });
+    }
+
+    @Test
+    @SmallTest
+    public void testCallback_successWithLangues() {
+        // Needs to run on the UI thread because we use the TemplateUrlService on success.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mWindowAndroid.setVoiceResults(createDummyBundle("testing",
+                    VoiceRecognitionHandler.VOICE_SEARCH_CONFIDENCE_NAVIGATE_THRESHOLD, "en-us"));
+            startVoiceRecognition(VoiceInteractionSource.OMNIBOX);
+            Assert.assertEquals(
+                    VoiceInteractionSource.OMNIBOX, mHandler.getVoiceSearchStartEventSource());
+            Assert.assertEquals(
+                    VoiceInteractionSource.OMNIBOX, mHandler.getVoiceSearchFinishEventSource());
+            Assert.assertEquals(true, mHandler.getVoiceSearchResult());
+            Assert.assertTrue(VoiceRecognitionHandler.VOICE_SEARCH_CONFIDENCE_NAVIGATE_THRESHOLD
+                    == mHandler.getVoiceConfidenceValue());
+            assertVoiceResultsAreEqual(mAutocompleteVoiceResults, new String[] {"testing"},
+                    new float[] {
+                            VoiceRecognitionHandler.VOICE_SEARCH_CONFIDENCE_NAVIGATE_THRESHOLD},
+                    new String[] {"en-us"});
+            Assert.assertTrue(mDelegate.getUrl().contains("&hl=en-us"));
         });
     }
 
@@ -696,6 +751,8 @@ public class VoiceRecognitionHandlerTest {
                 createDummyBundle(new String[] {"blah"}, new float[] {0f, 1f})));
         Assert.assertNull(mHandler.convertBundleToVoiceResults(
                 createDummyBundle(new String[] {"blah", "foo"}, new float[] {7f})));
+        Assert.assertNull(mHandler.convertBundleToVoiceResults(createDummyBundle(
+                new String[] {"blah", "foo"}, new float[] {7f, 1f}, new String[] {"foo"})));
     }
 
     @Test
@@ -728,30 +785,99 @@ public class VoiceRecognitionHandlerTest {
         });
     }
 
+    @Test
+    @SmallTest
+    public void testStopTrackingAndRecordQueryDuration() {
+        mHandler.setQueryStartTimeForTesting(100L);
+        mHandler.stopTrackingAndRecordQueryDuration();
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "VoiceInteraction.QueryDuration.Android"));
+    }
+
+    @Test
+    @SmallTest
+    public void testStopTrackingAndRecordQueryDuration_calledWithNull() {
+        mHandler.setQueryStartTimeForTesting(null);
+        mHandler.stopTrackingAndRecordQueryDuration();
+        Assert.assertEquals(0,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "VoiceInteraction.QueryDuration.Android"));
+    }
+
+    @Test
+    @SmallTest
+    public void testCallback_CalledTwice() {
+        startVoiceRecognition(VoiceInteractionSource.NTP);
+        Assert.assertEquals(-1, mHandler.getVoiceSearchUnexpectedResultSource());
+
+        IntentCallback callback = mWindowAndroid.getIntentCallback();
+        callback.onIntentCompleted(mWindowAndroid, Activity.RESULT_CANCELED, null);
+        Assert.assertEquals(
+                VoiceInteractionSource.NTP, mHandler.getVoiceSearchUnexpectedResultSource());
+    }
+
+    /**
+     * Kicks off voice recognition with the given source, for testing
+     * {@linkVoiceRecognitionHandler.VoiceRecognitionCompleteCallback}.
+     *
+     * @param source The source of the voice recognition initiation.
+     */
+    private void startVoiceRecognition(@VoiceInteractionSource int source) {
+        mPermissionDelegate.setHasPermission(true);
+        TestThreadUtils.runOnUiThreadBlocking(() -> { mHandler.startVoiceRecognition(source); });
+    }
+
     private static Bundle createDummyBundle(String text, float confidence) {
-        return createDummyBundle(new String[] {text}, new float[] {confidence});
+        return createDummyBundle(new String[] {text}, new float[] {confidence}, null);
+    }
+
+    private static Bundle createDummyBundle(
+            String text, float confidence, @Nullable String language) {
+        return createDummyBundle(new String[] {text}, new float[] {confidence},
+                language == null ? null : new String[] {language});
     }
 
     private static Bundle createDummyBundle(String[] texts, float[] confidences) {
+        return createDummyBundle(texts, confidences, null);
+    }
+
+    private static Bundle createDummyBundle(
+            String[] texts, float[] confidences, @Nullable String[] languages) {
         Bundle b = new Bundle();
 
         b.putStringArrayList(
                 RecognizerIntent.EXTRA_RESULTS, new ArrayList<String>(Arrays.asList(texts)));
         b.putFloatArray(RecognizerIntent.EXTRA_CONFIDENCE_SCORES, confidences);
+        if (languages != null) {
+            b.putStringArrayList(VoiceRecognitionHandler.VOICE_QUERY_RESULT_LANGUAGES,
+                    new ArrayList<String>(Arrays.asList(languages)));
+        }
 
         return b;
     }
 
     private static void assertVoiceResultsAreEqual(
             List<VoiceResult> results, String[] texts, float[] confidences) {
+        assertVoiceResultsAreEqual(results, texts, confidences, null);
+    }
+
+    private static void assertVoiceResultsAreEqual(
+            List<VoiceResult> results, String[] texts, float[] confidences, String[] languages) {
         Assert.assertTrue("Invalid array sizes",
                 results.size() == texts.length && texts.length == confidences.length);
+        if (languages != null) {
+            Assert.assertTrue("Invalid array sizes", confidences.length == languages.length);
+        }
 
         for (int i = 0; i < texts.length; ++i) {
             VoiceResult result = results.get(i);
             Assert.assertEquals("Match text is not equal", texts[i], result.getMatch());
             Assert.assertEquals(
                     "Confidence is not equal", confidences[i], result.getConfidence(), 0);
+            if (languages != null) {
+                Assert.assertEquals("Languages not equal", result.getLanguage(), languages[i]);
+            }
         }
     }
 }

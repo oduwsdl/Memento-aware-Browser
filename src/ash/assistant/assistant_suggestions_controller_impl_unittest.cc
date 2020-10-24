@@ -8,11 +8,14 @@
 #include "ash/assistant/test/assistant_ash_test_base.h"
 #include "ash/public/cpp/assistant/controller/assistant_suggestions_controller.h"
 #include "base/test/scoped_feature_list.h"
+#include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 
 namespace ash {
 
 namespace {
+
+using chromeos::assistant::prefs::AssistantOnboardingMode;
 
 // AssistantSuggestionsControllerImplTest --------------------------------------
 
@@ -21,16 +24,9 @@ class AssistantSuggestionsControllerImplTest
       public testing::WithParamInterface<bool> {
  public:
   AssistantSuggestionsControllerImplTest() {
-    if (GetParam()) {
-      feature_list_.InitAndEnableFeature(
-          chromeos::assistant::features::kAssistantBetterOnboarding);
-    } else {
-      feature_list_.InitAndDisableFeature(
-          chromeos::assistant::features::kAssistantBetterOnboarding);
-    }
+    feature_list_.InitWithFeatureState(
+        chromeos::assistant::features::kAssistantBetterOnboarding, GetParam());
   }
-
-  ~AssistantSuggestionsControllerImplTest() override = default;
 
   AssistantSuggestionsControllerImpl* controller() {
     return static_cast<AssistantSuggestionsControllerImpl*>(
@@ -48,9 +44,13 @@ class AssistantSuggestionsControllerImplTest
 // Tests -----------------------------------------------------------------------
 
 TEST_P(AssistantSuggestionsControllerImplTest,
-       ShouldMaybeHaveOnboardingSuggestionsOnCreation) {
-  // The model should only have onboarding suggestions when enabled.
-  EXPECT_NE(GetParam(), model()->GetOnboardingSuggestions().empty());
+       ShouldMaybeHaveOnboardingSuggestions) {
+  for (int i = 0; i < static_cast<int>(AssistantOnboardingMode::kMaxValue);
+       ++i) {
+    const auto onboarding_mode = static_cast<AssistantOnboardingMode>(i);
+    SetOnboardingMode(onboarding_mode);
+    EXPECT_NE(GetParam(), model()->GetOnboardingSuggestions().empty());
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

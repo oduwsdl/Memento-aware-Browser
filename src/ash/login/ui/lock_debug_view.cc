@@ -62,6 +62,7 @@ enum {
   kGlobalToggleManagedSessionDisclosure,
   kGlobalShowParentAccess,
   kPerUserTogglePin,
+  kPerUserToggleChallengeResponse,
   kPerUserToggleTap,
   kPerUserCycleEasyUnlockState,
   kPerUserCycleFingerprintState,
@@ -81,8 +82,10 @@ constexpr const char* kDebugUserNames[] = {
 };
 
 constexpr const char* kDebugPublicAccountNames[] = {
-    "Seattle Public Library", "San Jose Public Library",
-    "Sunnyvale Public Library", "Mountain View Public Library",
+    "Seattle Public Library",
+    "San Jose Public Library",
+    "Sunnyvale Public Library",
+    "Mountain View Public Library",
 };
 
 constexpr const char* kDebugDetachableBases[] = {"Base A", "Base B", "Base C"};
@@ -110,6 +113,7 @@ struct UserMetadata {
   std::string display_name;
   bool enable_pin = false;
   bool enable_tap_to_unlock = false;
+  bool enable_challenge_response = false;  // Smart Card
   bool enable_auth = true;
   user_manager::UserType type = user_manager::USER_TYPE_REGULAR;
   EasyUnlockIconId easy_unlock_id = EasyUnlockIconId::NONE;
@@ -151,7 +155,7 @@ LoginUserInfo PopulateUserData(const LoginUserInfo& user,
 
   if (is_public_account) {
     result.public_account_info.emplace();
-    result.public_account_info->device_enterprise_domain =
+    result.public_account_info->device_enterprise_manager =
         kDebugEnterpriseDomain;
     result.public_account_info->default_locale = kDebugDefaultLocaleCode;
     result.public_account_info->show_expanded_view = true;
@@ -267,6 +271,17 @@ class LockDebugView::DebugDataDispatcherTransformer
     debug_user->enable_pin = !debug_user->enable_pin;
     debug_dispatcher_.SetPinEnabledForUser(debug_user->account_id,
                                            debug_user->enable_pin);
+  }
+
+  // Activates or deactivates challenge response for the user at
+  // |user_index|.
+  void ToggleChallengeResponseStateForUserIndex(size_t user_index) {
+    DCHECK(user_index < debug_users_.size());
+    UserMetadata* debug_user = &debug_users_[user_index];
+    debug_user->enable_challenge_response =
+        !debug_user->enable_challenge_response;
+    debug_dispatcher_.SetChallengeResponseAuthEnabledForUser(
+        debug_user->account_id, debug_user->enable_challenge_response);
   }
 
   // Activates or deactivates tap unlock for the user at |user_index|.
@@ -431,14 +446,14 @@ class LockDebugView::DebugDataDispatcherTransformer
     menu_item.app_id = kDebugKioskAppId;
     menu_item.name = base::UTF8ToUTF16(kDebugKioskAppName);
     kiosk_apps_.push_back(std::move(menu_item));
-    shelf_widget->login_shelf_view()->SetKioskApps(kiosk_apps_, {});
+    shelf_widget->login_shelf_view()->SetKioskApps(kiosk_apps_, {}, {});
   }
 
   void RemoveKioskApp(ShelfWidget* shelf_widget) {
     if (kiosk_apps_.empty())
       return;
     kiosk_apps_.pop_back();
-    shelf_widget->login_shelf_view()->SetKioskApps(kiosk_apps_, {});
+    shelf_widget->login_shelf_view()->SetKioskApps(kiosk_apps_, {}, {});
   }
 
   void AddSystemInfo(const std::string& os_version,
@@ -1013,6 +1028,12 @@ void LockDebugView::ButtonPressed(views::Button* sender,
   if (sender->GetID() == ButtonId::kPerUserTogglePin)
     debug_data_dispatcher_->TogglePinStateForUserIndex(sender->tag());
 
+  // Enable or disable challenge response. (Smart Card)
+  if (sender->GetID() == ButtonId::kPerUserToggleChallengeResponse) {
+    debug_data_dispatcher_->ToggleChallengeResponseStateForUserIndex(
+        sender->tag());
+  }
+
   // Enable or disable tap.
   if (sender->GetID() == ButtonId::kPerUserToggleTap)
     debug_data_dispatcher_->ToggleTapStateForUserIndex(sender->tag());
@@ -1092,6 +1113,9 @@ void LockDebugView::UpdatePerUserActionContainer() {
     row->AddChildView(name);
 
     AddButton("Toggle PIN", ButtonId::kPerUserTogglePin, row)->set_tag(i);
+    AddButton("Toggle Smart card",
+              ButtonId::kPerUserToggleChallengeResponse, row)
+        ->set_tag(i);
     AddButton("Toggle Tap", ButtonId::kPerUserToggleTap, row)->set_tag(i);
     AddButton("Cycle easy unlock", ButtonId::kPerUserCycleEasyUnlockState, row)
         ->set_tag(i);
@@ -1160,8 +1184,8 @@ views::LabelButton* LockDebugView::AddButton(const std::string& text,
                                              int id,
                                              views::View* container) {
   // Creates a button with |text| that cannot be focused.
-  std::unique_ptr<views::LabelButton> button =
-      views::MdTextButton::Create(this, base::ASCIIToUTF16(text));
+  auto button =
+      std::make_unique<views::MdTextButton>(this, base::ASCIIToUTF16(text));
   button->SetID(id);
   button->SetFocusBehavior(views::View::FocusBehavior::NEVER);
 

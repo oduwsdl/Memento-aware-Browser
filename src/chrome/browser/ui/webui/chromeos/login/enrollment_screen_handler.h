@@ -21,6 +21,7 @@
 
 namespace chromeos {
 
+class CookieWaiter;
 class ErrorScreensHistogramHelper;
 class HelpAppLauncher;
 
@@ -70,9 +71,8 @@ class EnrollmentScreenHandler
   void SetEnrollmentConfig(Controller* controller,
                            const policy::EnrollmentConfig& config) override;
 
-  void SetEnterpriseDomainAndDeviceType(
-      const std::string& domain,
-      const base::string16& device_type) override;
+  void SetEnterpriseDomainInfo(const std::string& manager,
+                               const base::string16& device_type) override;
   void Show() override;
   void Hide() override;
   void ShowSigninScreen() override;
@@ -97,6 +97,9 @@ class EnrollmentScreenHandler
 
   // Implements NetworkStateInformer::NetworkStateInformerObserver
   void UpdateState(NetworkError::ErrorReason reason) override;
+
+  void ContinueAuthenticationWhenCookiesAvailable(const std::string& user);
+  void OnCookieWaitTimeout();
 
  private:
   // Handlers for WebUI messages.
@@ -182,10 +185,16 @@ class EnrollmentScreenHandler
 
   ErrorScreen* error_screen_ = nullptr;
 
+  std::string signin_partition_name_;
+
   std::unique_ptr<ErrorScreensHistogramHelper> histogram_helper_;
 
   // Help application used for help dialogs.
   scoped_refptr<HelpAppLauncher> help_app_;
+
+  std::unique_ptr<CookieWaiter> oauth_code_waiter_;
+
+  bool use_fake_login_for_testing_ = false;
 
   base::WeakPtrFactory<EnrollmentScreenHandler> weak_ptr_factory_{this};
 

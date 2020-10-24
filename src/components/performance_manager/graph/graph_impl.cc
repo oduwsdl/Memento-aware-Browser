@@ -256,7 +256,7 @@ void GraphImpl::RemoveWorkerNodeObserver(WorkerNodeObserver* observer) {
   RemoveObserverImpl(&worker_node_observers_, observer);
 }
 
-void GraphImpl::PassToGraph(std::unique_ptr<GraphOwned> graph_owned) {
+void GraphImpl::PassToGraphImpl(std::unique_ptr<GraphOwned> graph_owned) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   graph_owned_.PassObject(std::move(graph_owned), this);
 }
@@ -324,6 +324,12 @@ uintptr_t GraphImpl::GetImplType() const {
 const void* GraphImpl::GetImpl() const {
   return this;
 }
+
+#if DCHECK_IS_ON()
+bool GraphImpl::IsOnGraphSequence() const {
+  return sequence_checker_.CalledOnValidSequence();
+}
+#endif
 
 GraphRegistered* GraphImpl::GetRegisteredObject(uintptr_t type_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -447,8 +453,9 @@ ProcessNodeImpl* GraphImpl::GetProcessNodeByPid(base::ProcessId pid) const {
   return it->second;
 }
 
-FrameNodeImpl* GraphImpl::GetFrameNodeById(int render_process_id,
-                                           int render_frame_id) const {
+FrameNodeImpl* GraphImpl::GetFrameNodeById(
+    RenderProcessHostId render_process_id,
+    int render_frame_id) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto it =
       frames_by_id_.find(ProcessAndFrameId(render_process_id, render_frame_id));
@@ -492,8 +499,9 @@ size_t GraphImpl::GetNodeAttachedDataCountForTesting(const Node* node,
   return count;
 }
 
-GraphImpl::ProcessAndFrameId::ProcessAndFrameId(int render_process_id,
-                                                int render_frame_id)
+GraphImpl::ProcessAndFrameId::ProcessAndFrameId(
+    RenderProcessHostId render_process_id,
+    int render_frame_id)
     : render_process_id(render_process_id), render_frame_id(render_frame_id) {}
 
 bool GraphImpl::ProcessAndFrameId::operator<(
@@ -549,7 +557,7 @@ void GraphImpl::BeforeProcessPidChange(ProcessNodeImpl* process,
     processes_by_pid_[new_pid] = process;
 }
 
-void GraphImpl::RegisterFrameNodeForId(int render_process_id,
+void GraphImpl::RegisterFrameNodeForId(RenderProcessHostId render_process_id,
                                        int render_frame_id,
                                        FrameNodeImpl* frame_node) {
   auto insert_result = frames_by_id_.insert(
@@ -557,7 +565,7 @@ void GraphImpl::RegisterFrameNodeForId(int render_process_id,
   DCHECK(insert_result.second);
 }
 
-void GraphImpl::UnregisterFrameNodeForId(int render_process_id,
+void GraphImpl::UnregisterFrameNodeForId(RenderProcessHostId render_process_id,
                                          int render_frame_id,
                                          FrameNodeImpl* frame_node) {
   const ProcessAndFrameId process_and_frame_id(render_process_id,
@@ -609,5 +617,13 @@ template <>
 const std::vector<WorkerNodeObserver*>& GraphImpl::GetObservers() const {
   return worker_node_observers_;
 }
+
+GraphImpl::ProcessAndFrameId::~ProcessAndFrameId() = default;
+
+GraphImpl::ProcessAndFrameId::ProcessAndFrameId(
+    const GraphImpl::ProcessAndFrameId& other) = default;
+
+GraphImpl::ProcessAndFrameId& GraphImpl::ProcessAndFrameId::operator=(
+    const GraphImpl::ProcessAndFrameId& other) = default;
 
 }  // namespace performance_manager

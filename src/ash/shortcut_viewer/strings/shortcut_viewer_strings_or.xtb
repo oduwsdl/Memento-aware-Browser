@@ -10,7 +10,7 @@
 <translation id="1290373024480130896"><ph name="MODIFIER1" /><ph name="SEPARATOR1" /><ph name="MODIFIER2" /><ph name="SEPARATOR2" /><ph name="MODIFIER3" /><ph name="SEPARATOR3" /><ph name="KEY" /></translation>
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1299858300159559687">ଆପଣଙ୍କର ସାମ୍ପ୍ରତିକ ପ଼ୃଷ୍ଠା ପ୍ରିଣ୍ଟ କରନ୍ତୁ</translation>
-<translation id="1383876407941801731">ସନ୍ଧାନ</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1454364489140280055"><ph name="CTRL" /><ph name="SEPARATOR1" /><ph name="SHIFT1" /><ph name="SEPARATOR2" /><ph name="G" /> କିମ୍ବା <ph name="SHIFT2" /><ph name="SEPARATOR3" /><ph name="ENTER" /></translation>
 <translation id="1477442857810932985">ଲାଇନ୍‍ର ଶେଷକୁ ଯାଆନ୍ତୁ</translation>
 <translation id="1499072997694708844">ଯେ କୌଣସି ଖୋଲାଥିବା ’ଖୋଜିବା ୱିଣ୍ଡୋ’ ବନ୍ଦ କରନ୍ତୁ ବା ଆପଣଙ୍କ ବର୍ତ୍ତମାନର ପୃଷ୍ଠା ଲୋଡ୍ କରିବା ବନ୍ଦ କରନ୍ତୁ</translation>
@@ -47,6 +47,7 @@
 <translation id="2488661730534396940">ବାମ ପଟରେ ଥିବା ଡେସ୍କକୁ ସକ୍ରିୟ କରନ୍ତୁ</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2530339807289914946">ୱେବ୍ ପୃଷ୍ଠାରେ ତଳକୁ ସ୍କ୍ରୋଲ୍ କରନ୍ତୁ</translation>
+<translation id="2530896289327917474">କ୍ୟାରେଟ୍ ବ୍ରାଉଜିଂ ଚାଲୁ କିମ୍ବା ବନ୍ଦ କରନ୍ତୁ</translation>
 <translation id="2574014812750545982">ପୃଷ୍ଠାର ଜୁମ୍‍ ସ୍ତର ରିସେଟ୍‍ କରନ୍ତୁ</translation>
 <translation id="2596078834055697711">ୱିଣ୍ଡୋ ସ୍କ୍ରିନ୍‌ସଟ୍ ନିଅନ୍ତୁ</translation>
 <translation id="2685170433750953446"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" />, ତା'ପରେ <ph name="TAB" /> କିମ୍ବା <ph name="RIGHT" /></translation>

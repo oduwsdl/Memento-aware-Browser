@@ -15,7 +15,6 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/clock.h"
@@ -1408,7 +1407,7 @@ TEST_F(OfflinePageModelTaskifiedTest, PersistentPageConsistencyCheckExecuted) {
 
   // Delete the file associated with |page|, so the next time when the
   // consistency check is executed, the page will be marked as hidden.
-  base::DeleteFile(page.file_path, false);
+  base::DeleteFile(page.file_path);
 
   // Calling GetAllPages after only half of the enforced interval between
   // consistency check runs should not schedule the task.

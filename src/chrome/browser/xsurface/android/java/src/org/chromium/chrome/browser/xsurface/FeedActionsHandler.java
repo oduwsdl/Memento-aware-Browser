@@ -4,6 +4,12 @@
 
 package org.chromium.chrome.browser.xsurface;
 
+import android.view.View;
+
+import androidx.annotation.Nullable;
+
+import java.util.Map;
+
 /**
  * Interface to provide chromium calling points for a feed.
  */
@@ -20,6 +26,24 @@ public interface FeedActionsHandler {
      * Sends data back to the server when content is clicked.
      */
     default void processThereAndBackAgainData(byte[] data) {}
+
+    /**
+     * Sends data back to the server when content is clicked and provides the corresponding view
+     * through |actionSourceView| which can be null.
+     */
+    @Deprecated
+    default void processThereAndBackAgainData(byte[] data, @Nullable View actionSourceView) {}
+
+    /**
+     * Stores a view FeedAction for eventual upload. 'data' is a serialized FeedAction protobuf
+     * message.
+     */
+    default void processViewAction(byte[] data) {}
+
+    /**
+     * Triggers Chrome to send user feedback for this card.
+     */
+    default void sendFeedback(Map<String, String> productSpecificDataMap) {}
 
     /**
      * Requests to dismiss a card. A change ID will be returned and it can be used to commit or

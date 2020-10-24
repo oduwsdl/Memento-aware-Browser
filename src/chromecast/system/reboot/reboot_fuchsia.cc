@@ -6,26 +6,36 @@
 #include <fuchsia/hardware/power/statecontrol/cpp/fidl.h>
 #include <lib/sys/cpp/component_context.h>
 #include <lib/sys/cpp/service_directory.h>
+#include <zircon/status.h>
 #include <zircon/types.h>
 
+#include "base/files/file.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/fuchsia/process_context.h"
 #include "base/no_destructor.h"
 #include "chromecast/public/reboot_shlib.h"
+#include "chromecast/system/reboot/fuchsia_component_restart_reason.h"
+#include "chromecast/system/reboot/reboot_fuchsia.h"
 #include "chromecast/system/reboot/reboot_util.h"
 
 using fuchsia::feedback::LastReboot;
 using fuchsia::feedback::LastRebootInfoProviderSyncPtr;
 using fuchsia::feedback::RebootReason;
 using fuchsia::hardware::power::statecontrol::Admin_Reboot_Result;
-using fuchsia::hardware::power::statecontrol::AdminSyncPtr;
+using fuchsia::hardware::power::statecontrol::AdminPtr;
 using StateControlRebootReason =
     fuchsia::hardware::power::statecontrol::RebootReason;
 
 namespace chromecast {
 
-AdminSyncPtr& GetAdminSyncPtr() {
-  static base::NoDestructor<AdminSyncPtr> g_admin;
+namespace {
+FuchsiaComponentRestartReason state_;
+}
+
+AdminPtr& GetAdminPtr() {
+  static base::NoDestructor<AdminPtr> g_admin;
   return *g_admin;
 }
 
@@ -36,8 +46,20 @@ LastRebootInfoProviderSyncPtr& GetLastRebootInfoProviderSyncPtr() {
 
 void InitializeRebootShlib(const std::vector<std::string>& argv,
                            sys::ServiceDirectory* incoming_directory) {
-  incoming_directory->Connect(GetAdminSyncPtr().NewRequest());
+  incoming_directory->Connect(GetAdminPtr().NewRequest());
   incoming_directory->Connect(GetLastRebootInfoProviderSyncPtr().NewRequest());
+  GetAdminPtr().set_error_handler([](zx_status_t status) {
+    ZX_LOG(ERROR, status) << "AdminPtr disconnected";
+  });
+  InitializeRestartCheck();
+}
+
+base::FilePath InitializeFlagFileDirForTesting(const base::FilePath sub) {
+  return state_.SetFlagFileDirForTesting(sub);
+}
+
+void InitializeRestartCheck() {
+  state_.ResetRestartCheck();
 }
 
 // RebootShlib implementation:
@@ -78,10 +100,17 @@ bool RebootShlib::RebootNow(RebootSource reboot_source) {
       reason = StateControlRebootReason::USER_REQUEST;
       break;
   }
-  Admin_Reboot_Result out_result;
-  zx_status_t status = GetAdminSyncPtr()->Reboot(reason, &out_result);
-  ZX_CHECK(status == ZX_OK, status) << "Failed to suspend device";
-  return !out_result.is_err();
+
+  // Intentionally using async Ptr to avoid deadlock
+  // Otherwise caller is blocked, and if caller needs to be notified
+  // as well, it will go into a deadlock state.
+  GetAdminPtr()->Reboot(reason, [](Admin_Reboot_Result out_result) {
+    if (out_result.is_err()) {
+      LOG(ERROR) << "Failed to reboot after requested: "
+                 << zx_status_get_string(out_result.err());
+    }
+  });
+  return true;
 }
 
 // static
@@ -110,10 +139,15 @@ void RebootUtil::Initialize(const std::vector<std::string>& argv) {
 // static
 void RebootUtil::Finalize() {
   RebootShlib::Finalize();
+  state_.RegisterTeardown();
 }
 
 // static
 RebootShlib::RebootSource RebootUtil::GetLastRebootSource() {
+  RebootShlib::RebootSource last_restart;
+  if (state_.GetRestartReason(&last_restart))
+    return last_restart;
+
   LastReboot last_reboot;
   zx_status_t status = GetLastRebootInfoProviderSyncPtr()->Get(&last_reboot);
   if (status != ZX_OK || last_reboot.IsEmpty() || !last_reboot.has_graceful()) {

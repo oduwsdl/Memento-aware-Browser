@@ -35,6 +35,7 @@
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "net/base/mac/url_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -61,7 +62,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 #pragma mark - AutofillCreditCardTableViewController
 
 @interface AutofillCreditCardTableViewController () <
-    PersonalDataManagerObserver> {
+    PersonalDataManagerObserver,
+    PopoverLabelViewControllerDelegate> {
   autofill::PersonalDataManager* _personalDataManager;
 
   Browser* _browser;
@@ -123,7 +125,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self.navigationController.toolbar.accessibilityIdentifier =
       kAutofillPaymentMethodsToolbarId;
 
-  base::RecordAction(base::UserMetricsAction("AutofillCreditCardsViewed"));
   [self setToolbarItems:@[ [self flexibleSpace], self.addPaymentMethodButton ]
                animated:YES];
   [self updateUIForEditState];
@@ -217,6 +218,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
       l10n_util::GetNSString(IDS_AUTOFILL_ENABLE_CREDIT_CARDS_TOGGLE_LABEL);
   // The status could only be off when the pref is managed.
   cardManagedItem.statusText = l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+  cardManagedItem.accessibilityHint =
+      l10n_util::GetNSString(IDS_IOS_TOGGLE_SETTING_MANAGED_ACCESSIBILITY_HINT);
   cardManagedItem.accessibilityIdentifier = kAutofillCreditCardManagedViewId;
   return cardManagedItem;
 }
@@ -260,6 +263,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return !_personalDataManager->GetLocalCreditCards().empty();
 }
 
+#pragma mark - SettingsControllerProtocol
+
+- (void)reportDismissalUserAction {
+  base::RecordAction(base::UserMetricsAction("MobileCreditCardSettingsClose"));
+}
+
+- (void)reportBackUserAction {
+  base::RecordAction(base::UserMetricsAction("MobileCreditCardSettingsBack"));
+}
+
 #pragma mark - SettingsRootTableViewController
 
 - (BOOL)shouldShowEditButton {
@@ -283,6 +296,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)didTapManagedUIInfoButton:(UIButton*)buttonView {
   EnterpriseInfoPopoverViewController* bubbleViewController =
       [[EnterpriseInfoPopoverViewController alloc] initWithEnterpriseName:nil];
+  bubbleViewController.delegate = self;
   [self presentViewController:bubbleViewController animated:YES completion:nil];
 
   // Disable the button when showing the bubble.
@@ -563,6 +577,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   NSArray* customToolbarItems =
       @[ [self flexibleSpace], self.addPaymentMethodButton ];
   [self setToolbarItems:customToolbarItems animated:YES];
+}
+
+#pragma mark - PopoverLabelViewControllerDelegate
+
+- (void)didTapLinkURL:(NSURL*)URL {
+  GURL convertedURL = net::GURLWithNSURL(URL);
+  [self view:nil didTapLinkURL:convertedURL];
 }
 
 @end

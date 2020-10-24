@@ -7,19 +7,22 @@
 #include <lib/fidl/cpp/binding.h>
 #include <lib/ui/scenic/cpp/view_ref_pair.h>
 #include <algorithm>
+#include <string>
 #include <utility>
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/fuchsia/fuchsia_logging.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
+#include "base/task/current_thread.h"
+#include "components/cast/message_port/message_port_fuchsia.h"
 #include "fuchsia/base/agent_manager.h"
 #include "fuchsia/base/mem_buffer_util.h"
 #include "fuchsia/fidl/chromium/cast/cpp/fidl.h"
 #include "fuchsia/runners/cast/cast_runner.h"
 #include "fuchsia/runners/cast/cast_streaming.h"
+#include "fuchsia/runners/cast/create_web_message.h"
 #include "fuchsia/runners/common/web_component.h"
 
 namespace {
@@ -78,7 +81,7 @@ void CastComponent::StartComponent() {
 
   WebComponent::StartComponent();
 
-  connector_ = std::make_unique<NamedMessagePortConnector>(frame());
+  connector_ = std::make_unique<NamedMessagePortConnectorFuchsia>(frame());
 
   url_rewrite_rules_provider_.set_error_handler([this](zx_status_t status) {
     ZX_LOG_IF(ERROR, status != ZX_OK, status)
@@ -98,17 +101,13 @@ void CastComponent::StartComponent() {
     // component has been implemented.
 
     // Register the MessagePort for the Cast Streaming Receiver.
-    fidl::InterfaceHandle<fuchsia::web::MessagePort> message_port;
-    fuchsia::web::WebMessage message;
-    message.set_data(cr_fuchsia::MemBufferFromString("", "empty_message"));
-    fuchsia::web::OutgoingTransferable outgoing_transferable;
-    outgoing_transferable.set_message_port(message_port.NewRequest());
-    std::vector<fuchsia::web::OutgoingTransferable> outgoing_transferables;
-    outgoing_transferables.push_back(std::move(outgoing_transferable));
-    message.set_outgoing_transfer(std::move(outgoing_transferables));
-
+    std::unique_ptr<cast_api_bindings::MessagePort> message_port_for_web_engine;
+    std::unique_ptr<cast_api_bindings::MessagePort> message_port_for_agent;
+    cast_api_bindings::MessagePort::CreatePair(&message_port_for_agent,
+                                               &message_port_for_web_engine);
     frame()->PostMessage(
-        kCastStreamingMessagePortOrigin, std::move(message),
+        kCastStreamingMessagePortOrigin,
+        CreateWebMessage("", std::move(message_port_for_web_engine)),
         [this](fuchsia::web::Frame_PostMessage_Result result) {
           if (result.is_err()) {
             DestroyComponent(kBindingsFailureExitCode,
@@ -116,7 +115,7 @@ void CastComponent::StartComponent() {
           }
         });
     api_bindings_client_->OnPortConnected(kCastStreamingMessagePortName,
-                                          std::move(message_port));
+                                          std::move(message_port_for_agent));
   }
 
   api_bindings_client_->AttachToFrame(
@@ -137,14 +136,22 @@ void CastComponent::StartComponent() {
   application_controller_ = std::make_unique<ApplicationControllerImpl>(
       frame(), application_context_.get());
 
-  // Pass application permissions to the frame.
+  // Apply application-specific web permissions to the fuchsia.web.Frame.
   if (application_config_.has_permissions()) {
-    std::string origin = GURL(application_config_.web_url()).GetOrigin().spec();
+    // TODO(crbug.com/1136994): Replace this with the PermissionManager API
+    // when available.
+    const std::string origin =
+        GURL(application_config_.web_url()).GetOrigin().spec();
     for (auto& permission : application_config_.permissions()) {
       fuchsia::web::PermissionDescriptor permission_clone;
       zx_status_t status = permission.Clone(&permission_clone);
       ZX_DCHECK(status == ZX_OK, status);
-      frame()->SetPermissionState(std::move(permission_clone), origin,
+      const bool all_origins =
+          permission_clone.has_type() &&
+          (permission_clone.type() ==
+           fuchsia::web::PermissionType::PROTECTED_MEDIA_IDENTIFIER);
+      frame()->SetPermissionState(std::move(permission_clone),
+                                  all_origins ? "*" : origin,
                                   fuchsia::web::PermissionState::GRANTED);
     }
   }
@@ -163,6 +170,11 @@ void CastComponent::DestroyComponent(int64_t exit_code,
     application_context_->OnApplicationExit(exit_code);
   }
 
+  // frame() is about to be destroyed, so there is no need to perform cleanup
+  // such as removing before-load JavaScripts.
+  api_bindings_client_->DetachFromFrame(frame());
+  connector_->DetachFromFrame();
+
   WebComponent::DestroyComponent(exit_code, reason);
 }
 
@@ -177,8 +189,20 @@ void CastComponent::OnRewriteRulesReceived(
 void CastComponent::OnNavigationStateChanged(
     fuchsia::web::NavigationState change,
     OnNavigationStateChangedCallback callback) {
-  if (change.has_is_main_document_loaded() && change.is_main_document_loaded())
-    connector_->OnPageLoad();
+  if (change.has_is_main_document_loaded() &&
+      change.is_main_document_loaded()) {
+    std::string connect_message;
+    std::unique_ptr<cast_api_bindings::MessagePort> connect_port;
+    connector_->GetConnectMessage(&connect_message, &connect_port);
+
+    // Send the NamedMessagePortConnector handshake to the page.
+    frame()->PostMessage(
+        "*", CreateWebMessage(connect_message, std::move(connect_port)),
+        [](fuchsia::web::Frame_PostMessage_Result result) {
+          DCHECK(result.is_response());
+        });
+  }
+
   WebComponent::OnNavigationStateChanged(std::move(change),
                                          std::move(callback));
 }
@@ -202,7 +226,7 @@ void CastComponent::CreateViewWithViewRef(
     // Scenic View. It is merely used as a conduit for propagating termination
     // signals.
     headless_view_token_ = std::move(view_token);
-    base::MessageLoopCurrentForIO::Get()->WatchZxHandle(
+    base::CurrentIOThread::Get()->WatchZxHandle(
         headless_view_token_.get(), false /* persistent */,
         ZX_SOCKET_PEER_CLOSED, &headless_disconnect_watch_, this);
 

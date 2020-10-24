@@ -2,10 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/apple/tweak_info_plist.gni")
 import("//build/config/ios/ios_sdk.gni")
 import("//build/config/ios/rules.gni")
 import("//build/config/locales.gni")
-import("//build/mac/tweak_info_plist.gni")
 import("//components/cronet/native/include/headers.gni")
 import("//components/grpc_support/include/headers.gni")
 import("//ios/build/config.gni")
@@ -25,7 +25,7 @@ group("all_tests") {
 
 config("config") {
   defines = [ "CWV_IMPLEMENTATION" ]
-  libs = [
+  frameworks = [
     "CoreGraphics.framework",
     "Foundation.framework",
     "MobileCoreServices.framework",
@@ -161,8 +161,6 @@ source_set("web_view_sources") {
     "internal/metrics/cwv_metrics_provider.mm",
     "internal/metrics/cwv_metrics_provider_internal.h",
     "internal/passwords/cwv_password.mm",
-    "internal/passwords/cwv_password_controller.h",
-    "internal/passwords/cwv_password_controller.mm",
     "internal/passwords/cwv_password_internal.h",
     "internal/passwords/web_view_account_password_store_factory.h",
     "internal/passwords/web_view_account_password_store_factory.mm",
@@ -174,6 +172,8 @@ source_set("web_view_sources") {
     "internal/passwords/web_view_password_manager_driver.mm",
     "internal/passwords/web_view_password_manager_log_router_factory.h",
     "internal/passwords/web_view_password_manager_log_router_factory.mm",
+    "internal/passwords/web_view_password_requirements_service_factory.h",
+    "internal/passwords/web_view_password_requirements_service_factory.mm",
     "internal/passwords/web_view_password_store_factory.h",
     "internal/passwords/web_view_password_store_factory.mm",
     "internal/pref_names.h",
@@ -205,6 +205,8 @@ source_set("web_view_sources") {
     "internal/sync/web_view_profile_sync_service_factory.mm",
     "internal/sync/web_view_sync_client.h",
     "internal/sync/web_view_sync_client.mm",
+    "internal/sync/web_view_sync_invalidations_service_factory.h",
+    "internal/sync/web_view_sync_invalidations_service_factory.mm",
     "internal/translate/cwv_translation_controller.mm",
     "internal/translate/cwv_translation_controller_internal.h",
     "internal/translate/cwv_translation_language.mm",
@@ -272,6 +274,7 @@ source_set("web_view_sources") {
     "//components/language/ios/browser",
     "//components/leveldb_proto",
     "//components/metrics:library_support",
+    "//components/metrics/demographics",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/browser:affiliation",
     "//components/password_manager/core/common",
@@ -279,6 +282,7 @@ source_set("web_view_sources") {
     "//components/pref_registry",
     "//components/prefs",
     "//components/proxy_config",
+    "//components/safe_browsing/core/common:safe_browsing_prefs",
     "//components/security_state/ios",
     "//components/signin/core/browser",
     "//components/signin/ios/browser",
@@ -450,8 +454,6 @@ test("ios_web_view_unittests") {
     "internal/cwv_ssl_status_unittest.mm",
     "internal/cwv_web_view_configuration_unittest.mm",
     "internal/metrics/cwv_metrics_provider_unittest.mm",
-    "internal/passwords/cwv_password_controller_fake.h",
-    "internal/passwords/cwv_password_controller_fake.mm",
     "internal/passwords/cwv_password_unittest.mm",
     "internal/passwords/web_view_password_manager_client_unittest.mm",
     "internal/signin/cwv_identity_unittest.mm",
@@ -474,7 +476,6 @@ test("ios_web_view_unittests") {
     "//components/autofill/core/browser:test_support",
     "//components/autofill/ios/browser:test_support",
     "//components/autofill/ios/form_util:test_support",
-    "//components/browser_sync:test_support",
     "//components/invalidation/impl:test_support",
     "//components/password_manager/core/browser:test_support",
     "//components/prefs:test_support",
@@ -633,8 +634,8 @@ if (additional_toolchains == [] || current_toolchain == default_toolchain) {
 
       outputs = [ _output ]
 
-      args = [ rebase_path(_output, root_out_dir) ] +
-             rebase_path(_dsyms, root_out_dir)
+      args = [ rebase_path(_output, root_build_dir) ] +
+             rebase_path(_dsyms, root_build_dir)
 
       deps = [ ":web_view" ]
     }

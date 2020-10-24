@@ -28,7 +28,7 @@
 namespace {
 
 namespace metrics_util = password_manager::metrics_util;
-using Store = autofill::PasswordForm::Store;
+using Store = password_manager::PasswordForm::Store;
 
 password_manager::metrics_util::UIDisplayDisposition ComputeDisplayDisposition(
     PasswordBubbleControllerBase::DisplayReason display_reason,
@@ -66,14 +66,15 @@ void CleanStatisticsForSite(Profile* profile, const url::Origin& origin) {
   password_store->RemoveSiteStats(origin.GetURL());
 }
 
-std::vector<autofill::PasswordForm> DeepCopyForms(
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>& forms) {
-  std::vector<autofill::PasswordForm> result;
+std::vector<password_manager::PasswordForm> DeepCopyForms(
+    const std::vector<std::unique_ptr<password_manager::PasswordForm>>& forms) {
+  std::vector<password_manager::PasswordForm> result;
   result.reserve(forms.size());
-  std::transform(forms.begin(), forms.end(), std::back_inserter(result),
-                 [](const std::unique_ptr<autofill::PasswordForm>& form) {
-                   return *form;
-                 });
+  std::transform(
+      forms.begin(), forms.end(), std::back_inserter(result),
+      [](const std::unique_ptr<password_manager::PasswordForm>& form) {
+        return *form;
+      });
   return result;
 }
 
@@ -150,7 +151,7 @@ SaveUpdateBubbleController::~SaveUpdateBubbleController() {
 void SaveUpdateBubbleController::OnSaveClicked() {
   DCHECK(state_ == password_manager::ui::PENDING_PASSWORD_STATE ||
          state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE);
-  dismissal_reason_ = metrics_util::CLICKED_SAVE;
+  dismissal_reason_ = metrics_util::CLICKED_ACCEPT;
   if (delegate_) {
     CleanStatisticsForSite(GetProfile(), origin_);
     delegate_->SavePassword(pending_password_.username_value,
@@ -187,7 +188,7 @@ bool SaveUpdateBubbleController::IsCurrentStateUpdate() const {
   DCHECK(state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE ||
          state_ == password_manager::ui::PENDING_PASSWORD_STATE);
   return std::any_of(local_credentials_.begin(), local_credentials_.end(),
-                     [this](const autofill::PasswordForm& form) {
+                     [this](const password_manager::PasswordForm& form) {
                        return form.username_value ==
                               pending_password_.username_value;
                      });
@@ -272,7 +273,8 @@ void SaveUpdateBubbleController::ReportInteractions() {
   if (state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
     metrics_util::LogUpdateUIDismissalReason(dismissal_reason_);
   } else if (state_ == password_manager::ui::PENDING_PASSWORD_STATE) {
-    metrics_util::LogSaveUIDismissalReason(dismissal_reason_);
+    metrics_util::LogSaveUIDismissalReason(dismissal_reason_,
+                                           /*user_state=*/base::nullopt);
   }
 
   // Update the delegate so that it can send votes to the server.

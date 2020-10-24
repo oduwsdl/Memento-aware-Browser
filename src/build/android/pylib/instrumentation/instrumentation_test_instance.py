@@ -147,11 +147,19 @@ def GenerateTestResults(result_code, result_bundle, statuses, duration_ms,
   cumulative_duration = 0
 
   for status_code, bundle in statuses:
+    # If the last test was a failure already, don't override that failure with
+    # post-test failures that could be caused by the original failure.
+    if (status_code == instrumentation_parser.STATUS_CODE_BATCH_FAILURE
+        and current_result.GetType() != base_test_result.ResultType.FAIL):
+      current_result.SetType(base_test_result.ResultType.FAIL)
+      _MaybeSetLog(bundle, current_result, symbolizer, device_abi)
+      continue
+
     if status_code == instrumentation_parser.STATUS_CODE_TEST_DURATION:
       # For the first result, duration will be set below to the difference
       # between the reported and actual durations to account for overhead like
       # starting instrumentation.
-      if len(results) > 1:
+      if results:
         current_duration = int(bundle.get(_BUNDLE_DURATION_ID, duration_ms))
         current_result.SetDuration(current_duration)
         cumulative_duration += current_duration
@@ -185,13 +193,7 @@ def GenerateTestResults(result_code, result_bundle, statuses, duration_ms,
           logging.error('Unrecognized status code %d. Handling as an error.',
                         status_code)
         current_result.SetType(base_test_result.ResultType.FAIL)
-    if _BUNDLE_STACK_ID in bundle:
-      if symbolizer and device_abi:
-        current_result.SetLog('%s\n%s' % (bundle[_BUNDLE_STACK_ID], '\n'.join(
-            symbolizer.ExtractAndResolveNativeStackTraces(
-                bundle[_BUNDLE_STACK_ID], device_abi))))
-      else:
-        current_result.SetLog(bundle[_BUNDLE_STACK_ID])
+    _MaybeSetLog(bundle, current_result, symbolizer, device_abi)
 
   if current_result:
     if current_result.GetType() == base_test_result.ResultType.UNKNOWN:
@@ -204,9 +206,21 @@ def GenerateTestResults(result_code, result_bundle, statuses, duration_ms,
     results.append(current_result)
 
   if results:
+    logging.info('Adding cumulative overhead to test %s: %dms',
+                 results[0].GetName(), duration_ms - cumulative_duration)
     results[0].SetDuration(duration_ms - cumulative_duration)
 
   return results
+
+
+def _MaybeSetLog(bundle, current_result, symbolizer, device_abi):
+  if _BUNDLE_STACK_ID in bundle:
+    if symbolizer and device_abi:
+      current_result.SetLog('%s\n%s' % (bundle[_BUNDLE_STACK_ID], '\n'.join(
+          symbolizer.ExtractAndResolveNativeStackTraces(
+              bundle[_BUNDLE_STACK_ID], device_abi))))
+    else:
+      current_result.SetLog(bundle[_BUNDLE_STACK_ID])
 
 
 def FilterTests(tests, filter_str=None, annotations=None,
@@ -375,7 +389,7 @@ def _GetTestsFromProguard(jar_path):
 
 
 def _GetTestsFromDexdump(test_apk):
-  dump = dexdump.Dump(test_apk)
+  dex_dumps = dexdump.Dump(test_apk)
   tests = []
 
   def get_test_methods(methods):
@@ -387,15 +401,16 @@ def _GetTestsFromDexdump(test_apk):
           'annotations': {'MediumTest': None},
         } for m in methods if m.startswith('test')]
 
-  for package_name, package_info in dump.iteritems():
-    for class_name, class_info in package_info['classes'].iteritems():
-      if class_name.endswith('Test'):
-        tests.append({
-            'class': '%s.%s' % (package_name, class_name),
-            'annotations': {},
-            'methods': get_test_methods(class_info['methods']),
-            'superclass': class_info['superclass'],
-        })
+  for dump in dex_dumps:
+    for package_name, package_info in dump.iteritems():
+      for class_name, class_info in package_info['classes'].iteritems():
+        if class_name.endswith('Test'):
+          tests.append({
+              'class': '%s.%s' % (package_name, class_name),
+              'annotations': {},
+              'methods': get_test_methods(class_info['methods']),
+              'superclass': class_info['superclass'],
+          })
   return tests
 
 def SaveTestsToPickle(pickle_path, tests):
@@ -541,6 +556,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
     self._replace_system_package = None
     self._initializeReplaceSystemPackageAttributes(args)
+
+    self._system_packages_to_remove = None
+    self._initializeSystemPackagesToRemoveAttributes(args)
 
     self._use_webview_provider = None
     self._initializeUseWebviewProviderAttributes(args)
@@ -753,6 +771,12 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       return
     self._replace_system_package = args.replace_system_package
 
+  def _initializeSystemPackagesToRemoveAttributes(self, args):
+    if (not hasattr(args, 'system_packages_to_remove')
+        or not args.system_packages_to_remove):
+      return
+    self._system_packages_to_remove = args.system_packages_to_remove
+
   def _initializeUseWebviewProviderAttributes(self, args):
     if (not hasattr(args, 'use_webview_provider')
         or not args.use_webview_provider):
@@ -760,7 +784,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._use_webview_provider = args.use_webview_provider
 
   def _initializeSkiaGoldAttributes(self, args):
-    self._skia_gold_properties = gold_utils.SkiaGoldProperties(args)
+    self._skia_gold_properties = gold_utils.AndroidSkiaGoldProperties(args)
 
   @property
   def additional_apks(self):
@@ -857,6 +881,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   @property
   def symbolizer(self):
     return self._symbolizer
+
+  @property
+  def system_packages_to_remove(self):
+    return self._system_packages_to_remove
 
   @property
   def test_apk(self):

@@ -15,12 +15,15 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_types.h"
+#include "chrome/browser/chromeos/login/saml/password_sync_token_checkers_collection.h"
 #include "chrome/browser/chromeos/login/screens/encryption_migration_mode.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
@@ -33,6 +36,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/user_manager/user_type.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "third_party/cros_system_api/dbus/cryptohome/dbus-constants.h"
@@ -92,7 +96,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Cancels current password changed flow.
   void CancelPasswordChangedFlow();
 
-  // Decrypt cryptohome using user provided |old_password| and migrate to new
+  // Decrypt cryptohome using user provided `old_password` and migrate to new
   // password.
   void MigrateUserData(const std::string& old_password);
 
@@ -107,20 +111,18 @@ class ExistingUserController : public LoginDisplay::Delegate,
              const SigninSpecifics& specifics) override;
   void OnSigninScreenReady() override;
   void OnStartEnterpriseEnrollment() override;
-  void OnStartEnableDebuggingScreen() override;
   void OnStartKioskEnableScreen() override;
   void OnStartKioskAutolaunchScreen() override;
   void ResetAutoLoginTimer() override;
-  void ShowWrongHWIDScreen() override;
-  void ShowUpdateRequiredScreen() override;
-  void Signout() override;
 
   void CompleteLogin(const UserContext& user_context);
   void OnGaiaScreenReady();
   void SetDisplayEmail(const std::string& email);
   void SetDisplayAndGivenName(const std::string& display_name,
                               const std::string& given_name);
-  bool IsUserWhitelisted(const AccountId& account_id);
+  bool IsUserAllowlisted(
+      const AccountId& account_id,
+      const base::Optional<user_manager::UserType>& user_type);
 
   // user_manager::UserManager::Observer:
   void LocalStateChanged(user_manager::UserManager* user_manager) override;
@@ -130,11 +132,9 @@ class ExistingUserController : public LoginDisplay::Delegate,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // Set a delegate that we will pass AuthStatusConsumer events to.
-  // Used for testing.
-  void set_login_status_consumer(AuthStatusConsumer* consumer) {
-    auth_status_consumer_ = consumer;
-  }
+  // Add/remove a delegate that we will pass AuthStatusConsumer events to.
+  void AddLoginStatusConsumer(AuthStatusConsumer* consumer);
+  void RemoveLoginStatusConsumer(const AuthStatusConsumer* consumer);
 
   // Returns value of LoginPerformer::auth_mode() (cached if performer is
   // destroyed).
@@ -177,9 +177,8 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void OnPasswordChangeDetected(const UserContext& user_context) override;
   void OnOldEncryptionDetected(const UserContext& user_context,
                                bool has_incomplete_migration) override;
-  void WhiteListCheckFailed(const std::string& email) override;
+  void AllowlistCheckFailed(const std::string& email) override;
   void PolicyLoadFailed() override;
-  void SetAuthFlowOffline(bool offline) override;
 
   // UserSessionManagerDelegate implementation:
   void OnProfilePrepared(Profile* profile, bool browser_launched) override;
@@ -190,8 +189,8 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Returns corresponding native window.
   gfx::NativeWindow GetNativeWindow() const;
 
-  // Show error message. |error_id| error message ID in resources.
-  // If |details| string is not empty, it specify additional error text
+  // Show error message. `error_id` error message ID in resources.
+  // If `details` string is not empty, it specify additional error text
   // provided by authenticator, it is not localized.
   void ShowError(int error_id, const std::string& details);
 
@@ -207,9 +206,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
 
   // Enters the enterprise enrollment screen.
   void ShowEnrollmentScreen();
-
-  // Shows "enable developer features" screen.
-  void ShowEnableDebuggingScreen();
 
   // Shows privacy notification in case of auto lunch managed guest session.
   void ShowAutoLaunchManagedGuestSessionNotification();
@@ -230,16 +226,16 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Shows "password changed" dialog.
   void ShowPasswordChangedDialog(const UserContext& user_context);
 
-  // Creates |login_performer_| if necessary and calls login() on it.
+  // Creates `login_performer_` if necessary and calls login() on it.
   void PerformLogin(const UserContext& user_context,
                     LoginPerformer::AuthorizationMode auth_mode);
 
-  // Calls login() on previously-used |login_performer_|.
+  // Calls login() on previously-used `login_performer_`.
   void ContinuePerformLogin(LoginPerformer::AuthorizationMode auth_mode,
                             const UserContext& user_context);
 
   // Removes the constraint that user home mount requires ext4 encryption from
-  // |user_context|, then calls login() on previously-used |login_performer|.
+  // `user_context`, then calls login() on previously-used `login_performer`.
   void ContinuePerformLoginWithoutMigration(
       LoginPerformer::AuthorizationMode auth_mode,
       const UserContext& user_context);
@@ -247,7 +243,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Asks the user to enter their password again.
   void RestartLogin(const UserContext& user_context);
 
-  // Updates the |login_display_| attached to this controller.
+  // Updates the `login_display_` attached to this controller.
   void UpdateLoginDisplay(const user_manager::UserList& users);
 
   // Check if login screen will need to be refreshed when saml online login
@@ -284,16 +280,16 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void PerformPreLoginActions(const UserContext& user_context);
 
   // Performs set of actions when login has been completed or has been
-  // cancelled. If |start_auto_login_timer| is true than
+  // cancelled. If `start_auto_login_timer` is true than
   // auto-login timer is started.
   void PerformLoginFinishedActions(bool start_auto_login_timer);
 
-  // Invokes |continuation| after verifying that cryptohome service is
+  // Invokes `continuation` after verifying that cryptohome service is
   // available.
   void ContinueLoginWhenCryptohomeAvailable(base::OnceClosure continuation,
                                             bool service_is_available);
 
-  // Invokes |continuation| after verifying that the device is not disabled.
+  // Invokes `continuation` after verifying that the device is not disabled.
   void ContinueLoginIfDeviceNotDisabled(const base::Closure& continuation);
 
   // Signs in as a new user. This is a continuation of CompleteLogin() that gets
@@ -305,7 +301,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void DoLogin(const UserContext& user_context,
                const SigninSpecifics& specifics);
 
-  // Callback invoked when |oauth2_token_initializer_| has finished.
+  // Callback invoked when `oauth2_token_initializer_` has finished.
   void OnOAuth2TokensFetched(bool success, const UserContext& user_context);
 
   // Called on completition of a pre-signin policy fetch, which is performed to
@@ -320,7 +316,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void WipePerformed(const UserContext& user_context,
                      base::Optional<cryptohome::BaseReply> reply);
 
-  // Triggers online login for the given |account_id|.
+  // Triggers online login for the given `account_id`.
   void ForceOnlineLoginForAccountId(const AccountId& account_id);
 
   // Clear the recorded displayed email, displayed name, given name so it won't
@@ -347,9 +343,9 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Used to execute login operations.
   std::unique_ptr<LoginPerformer> login_performer_;
 
-  // Delegate to forward all authentication status events to.
+  // Delegates to forward all authentication status events to.
   // Tests can use this to receive authentication status events.
-  AuthStatusConsumer* auth_status_consumer_ = nullptr;
+  base::ObserverList<AuthStatusConsumer> auth_status_consumers_;
 
   // AccountId of the last login attempt.
   AccountId last_login_attempt_account_id_ = EmptyAccountId();
@@ -370,14 +366,14 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Used for notifications during the login process.
   content::NotificationRegistrar registrar_;
 
-  // The displayed email for the next login attempt set by |SetDisplayEmail|.
+  // The displayed email for the next login attempt set by `SetDisplayEmail`.
   std::string display_email_;
 
   // The displayed name for the next login attempt set by
-  // |SetDisplayAndGivenName|.
+  // `SetDisplayAndGivenName`.
   base::string16 display_name_;
 
-  // The given name for the next login attempt set by |SetDisplayAndGivenName|.
+  // The given name for the next login attempt set by `SetDisplayAndGivenName`.
   base::string16 given_name_;
 
   // Whether login attempt is running.
@@ -388,12 +384,9 @@ class ExistingUserController : public LoginDisplay::Delegate,
   bool password_changed_ = false;
 
   // Set in OnLoginSuccess. Before that use LoginPerformer::auth_mode().
-  // Initialized with |kExternal| as more restricted mode.
+  // Initialized with `kExternal` as more restricted mode.
   LoginPerformer::AuthorizationMode auth_mode_ =
       LoginPerformer::AuthorizationMode::kExternal;
-
-  // Indicates use of local (not GAIA) authentication.
-  bool auth_flow_offline_ = false;
 
   // Timer when the signin screen was first displayed. Used to measure the time
   // from showing the screen until a successful login is performed.
@@ -405,6 +398,10 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Timer to update login screen when SAMLOfflineSigninTimeLimit policy forces
   // online user authentication.
   std::unique_ptr<base::OneShotTimer> screen_refresh_timer_;
+
+  // Collection of verifiers that check validity of password sync token for SAML
+  // users.
+  std::unique_ptr<PasswordSyncTokenCheckersCollection> sync_token_checkers_;
 
   std::unique_ptr<login::NetworkStateHelper> network_state_helper_;
 
@@ -420,6 +417,8 @@ class ExistingUserController : public LoginDisplay::Delegate,
       local_account_auto_login_id_subscription_;
   std::unique_ptr<CrosSettings::ObserverSubscription>
       local_account_auto_login_delay_subscription_;
+  std::unique_ptr<CrosSettings::ObserverSubscription>
+      family_link_allowed_subscription_;
 
   std::unique_ptr<OAuth2TokenInitializer> oauth2_token_initializer_;
 

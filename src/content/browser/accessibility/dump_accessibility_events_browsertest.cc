@@ -20,6 +20,7 @@
 #include "content/browser/accessibility/accessibility_event_recorder.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
+#include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/accessibility/dump_accessibility_browsertest_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/accessibility_tree_formatter.h"
@@ -30,10 +31,11 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 
 namespace content {
 
-typedef AccessibilityTreeFormatter::PropertyFilter PropertyFilter;
+using ui::AXPropertyFilter;
 
 // See content/test/data/accessibility/readme.md for an overview.
 //
@@ -70,19 +72,16 @@ typedef AccessibilityTreeFormatter::PropertyFilter PropertyFilter;
 class DumpAccessibilityEventsTest : public DumpAccessibilityTestBase {
  public:
   void AddDefaultFilters(
-      std::vector<PropertyFilter>* property_filters) override {
+      std::vector<AXPropertyFilter>* property_filters) override {
     // Suppress spurious focus events on the document object.
-    property_filters->push_back(
-        PropertyFilter(base::ASCIIToUTF16("EVENT_OBJECT_FOCUS*DOCUMENT*"),
-                       PropertyFilter::DENY));
-    property_filters->push_back(
-        PropertyFilter(base::ASCIIToUTF16("AutomationFocusChanged*document*"),
-                       PropertyFilter::DENY));
+    property_filters->push_back(AXPropertyFilter("EVENT_OBJECT_FOCUS*DOCUMENT*",
+                                                 AXPropertyFilter::DENY));
+    property_filters->push_back(AXPropertyFilter(
+        "AutomationFocusChanged*document*", AXPropertyFilter::DENY));
     // Implementing IRawElementProviderAdviseEvents causes Win7 to fire
     // spurious focus events (regardless of what the implementation does).
-    property_filters->push_back(PropertyFilter(
-        base::ASCIIToUTF16("AutomationFocusChanged on role=region"),
-        PropertyFilter::DENY));
+    property_filters->push_back(AXPropertyFilter(
+        "AutomationFocusChanged on role=region", AXPropertyFilter::DENY));
   }
 
   std::vector<std::string> Dump(std::vector<std::string>& run_until) override;
@@ -91,13 +90,18 @@ class DumpAccessibilityEventsTest : public DumpAccessibilityTestBase {
   void RunEventTest(const base::FilePath::CharType* file_path);
 
  private:
-  base::string16 initial_tree_;
-  base::string16 final_tree_;
+  void OnEventRecorded(AccessibilityNotificationWaiter* waiter,
+                       const std::string& event) {
+    waiter->Quit();
+  }
+
+  std::string initial_tree_;
+  std::string final_tree_;
 };
 
 bool IsRecordingComplete(AccessibilityEventRecorder& event_recorder,
                          std::vector<std::string>& run_until) {
-  // If no @RUN-UNTIL-EVENT directives, then having any events is enough.
+  // If no @*-RUN-UNTIL-EVENT directives, then having any events is enough.
   LOG(ERROR) << "=== IsRecordingComplete#1 run_until size=" << run_until.size();
   if (run_until.empty())
     return true;
@@ -136,22 +140,32 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump(
     // Create a new Event Recorder for the run
     std::unique_ptr<AccessibilityEventRecorder> event_recorder =
         event_recorder_factory_(
-            web_contents->GetRootBrowserAccessibilityManager(), pid,
-            base::StringPiece{});
+            web_contents->GetRootBrowserAccessibilityManager(), pid, {});
     event_recorder->set_only_web_events(true);
 
     waiter.reset(new AccessibilityNotificationWaiter(
         shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kNone));
+
+    // It's possible for platform events to be received after all blink or
+    // generated events have been fired. Unblock the |waiter| when this happens.
+    event_recorder->ListenToEvents(
+        base::BindRepeating(&DumpAccessibilityEventsTest::OnEventRecorded,
+                            base::Unretained(this), waiter.get()));
 
     base::Value go_results =
         ExecuteScriptAndGetValue(web_contents->GetMainFrame(), "go()");
     run_go_again = go_results.is_bool() && go_results.GetBool();
 
     for (;;) {
-      waiter->WaitForNotification();  // Run at least once.
+      // Wait for at least one event. This may unblock either when |waiter|
+      // observes either an ax::mojom::Event or ui::AXEventGenerator::Event, or
+      // when |event_recorder| records a platform event.
+      waiter->WaitForNotification();
       if (IsRecordingComplete(*event_recorder, run_until))
         break;
     }
+
+    event_recorder->StopListeningToEvents();
 
     // More than one accessibility event could have been generated.
     // To make sure we've received all accessibility events, add a
@@ -181,13 +195,13 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump(
 
     for (size_t i = 0; i < event_logs.size(); ++i) {
       if (AccessibilityTreeFormatter::MatchesPropertyFilters(
-              property_filters_, base::UTF8ToUTF16(event_logs[i]), true)) {
+              property_filters_, event_logs[i], true)) {
         result.push_back(event_logs[i]);
       }
     }
 
     if (run_go_again) {
-      final_tree_.append(base::ASCIIToUTF16("=== Start Continuation ===\n"));
+      final_tree_.append("=== Start Continuation ===\n");
       result.emplace_back("=== Start Continuation ===");
     }
   } while (run_go_again);
@@ -198,10 +212,10 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump(
 void DumpAccessibilityEventsTest::OnDiffFailed() {
   printf("\n");
   printf("Initial accessibility tree (after load complete):\n");
-  printf("%s\n", base::UTF16ToUTF8(initial_tree_).c_str());
+  printf("%s\n", initial_tree_.c_str());
   printf("\n");
   printf("Final accessibility tree after events fired:\n");
-  printf("%s\n", base::UTF16ToUTF8(final_tree_).c_str());
+  printf("%s\n", final_tree_.c_str());
   printf("\n");
 }
 
@@ -379,8 +393,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("aria-combo-box-focus.html"));
 }
 
-// TODO(835455): Fails on Windows.
-#if defined(OS_WIN)
+// TODO(crbug.com/835455): Fails on Windows.
+// TODO(crbug.com/945193): Flaky on Mac.
+#if defined(OS_WIN) || defined(OS_MAC)
 #define MAYBE_AccessibilityEventsAriaComboBoxDelayAddList \
   DISABLED_AccessibilityEventsAriaComboBoxDelayAddList
 #else
@@ -466,8 +481,18 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsChildrenChangedOnlyOnAncestor) {
+  RunEventTest(FILE_PATH_LITERAL("children-changed-only-on-ancestor.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsCheckedStateChanged) {
   RunEventTest(FILE_PATH_LITERAL("checked-state-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsCheckedMixedChanged) {
+  RunEventTest(FILE_PATH_LITERAL("checked-mixed-changed.html"));
 }
 
 // http:/crbug.com/889013
@@ -497,9 +522,12 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 #endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        MAYBE_AccessibilityEventsCaretBrowsingEnabled) {
-  // Add command line switch that forces caret browsing on.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableCaretBrowsing);
+  // This actually enables caret browsing without setting the pref.
+  shell()->web_contents()->GetMutableRendererPrefs()->caret_browsing_enabled =
+      true;
+  // This notifies accessibility that caret browsing is on so that it sends
+  // accessibility events when the caret moves.
+  BrowserAccessibilityStateImpl::GetInstance()->SetCaretBrowsingState(true);
 
   RunEventTest(FILE_PATH_LITERAL("caret-browsing-enabled.html"));
 }
@@ -519,6 +547,22 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAriaHiddenDescendants) {
+  RunEventTest(FILE_PATH_LITERAL("aria-hidden-descendants.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAriaHiddenDescendantsAlreadyIgnored) {
+  RunEventTest(
+      FILE_PATH_LITERAL("aria-hidden-descendants-already-ignored.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsCSSDisplayDescendants) {
+  RunEventTest(FILE_PATH_LITERAL("css-display-descendants.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsCSSFlexTextUpdate) {
   RunEventTest(FILE_PATH_LITERAL("css-flex-text-update.html"));
 }
@@ -526,6 +570,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsCSSVisibility) {
   RunEventTest(FILE_PATH_LITERAL("css-visibility.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsCSSVisibilityDescendants) {
+  RunEventTest(FILE_PATH_LITERAL("css-visibility-descendants.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
@@ -583,6 +632,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsFocusListboxMultiselect) {
   RunEventTest(FILE_PATH_LITERAL("focus-listbox-multiselect.html"));
 }
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsInnerHtmlChange) {
   RunEventTest(FILE_PATH_LITERAL("inner-html-change.html"));
@@ -610,8 +660,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("listbox-next.html"));
 }
 
+// TODO(https://crbug.com/1123394): This is failing on Windows.
+#if defined(OS_WIN)
+#define MAYBE_AccessibilityEventsLiveRegionAdd \
+  DISABLED_AccessibilityEventsLiveRegionAdd
+#else
+#define MAYBE_AccessibilityEventsLiveRegionAdd AccessibilityEventsLiveRegionAdd
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsLiveRegionAdd) {
+                       MAYBE_AccessibilityEventsLiveRegionAdd) {
   RunEventTest(FILE_PATH_LITERAL("live-region-add.html"));
 }
 
@@ -731,7 +788,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // TODO(aboxhall): Fix flakiness on Windows and Mac
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
 #define MAYBE_AccessibilityEventsReportValidityInvalidField \
   DISABLED_AccessibilityEventsReportValidityInvalidField
 #else
@@ -757,6 +814,26 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsScrollVerticalScrollPercentChange) {
   RunEventTest(FILE_PATH_LITERAL("scroll-vertical-scroll-percent-change.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsStyleChanged) {
+  RunEventTest(FILE_PATH_LITERAL("style-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsSubtreeReparentedIgnoredChanged) {
+  RunEventTest(FILE_PATH_LITERAL("subtree-reparented-ignored-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsSubtreeReparentedViaAppendChild) {
+  RunEventTest(FILE_PATH_LITERAL("subtree-reparented-via-append-child.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsSubtreeReparentedViaAriaOwns) {
+  RunEventTest(FILE_PATH_LITERAL("subtree-reparented-via-aria-owns.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
@@ -786,6 +863,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsTextAlignChanged) {
+  RunEventTest(FILE_PATH_LITERAL("text-align-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsTextChanged) {
   RunEventTest(FILE_PATH_LITERAL("text-changed.html"));
 }
@@ -796,8 +878,23 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsTextIndentChanged) {
+  RunEventTest(FILE_PATH_LITERAL("text-indent-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsTextSelectionChanged) {
   RunEventTest(FILE_PATH_LITERAL("text-selection-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsTextSelectionInsideHiddenElement) {
+  RunEventTest(FILE_PATH_LITERAL("text-selection-inside-hidden-element.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsTextSelectionInsideVideo) {
+  RunEventTest(FILE_PATH_LITERAL("text-selection-inside-video.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
@@ -835,8 +932,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("tbody-focus.html"));
 }
 
+#if defined(OS_WIN)
+// TODO(crbug.com/1084871) Flaky on Windows https://crbug.com/1084871#c33
+#define MAYBE_AccessibilityEventsVisibilityHiddenChanged \
+  DISABLED_AccessibilityEventsVisibilityHiddenChanged
+#else
+#define MAYBE_AccessibilityEventsVisibilityHiddenChanged \
+  AccessibilityEventsVisibilityHiddenChanged
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsVisibilityHiddenChanged) {
+                       MAYBE_AccessibilityEventsVisibilityHiddenChanged) {
   RunEventTest(FILE_PATH_LITERAL("visibility-hidden-changed.html"));
 }
 
@@ -902,7 +1007,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // Test is flaky on Linux. See crbug.com/990847 for more details.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_DeleteSubtree DISABLED_DeleteSubtree
 #else
 #define MAYBE_DeleteSubtree DeleteSubtree

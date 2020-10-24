@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/test/scoped_feature_list.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/storage_partition_impl.h"
@@ -104,12 +103,14 @@ TEST_F(ServiceWorkerProcessManagerTest,
        AllocateWorkerProcess_WithProcessReuse) {
   const int kEmbeddedWorkerId = 100;
   const GURL kSiteUrl = GURL("http://example.com");
+  SiteInfo site_info = SiteInstanceImpl::ComputeSiteInfoForTesting(
+      IsolationContext(browser_context_.get()), kSiteUrl);
 
   // Create a process that is hosting a frame with kSiteUrl.
   std::unique_ptr<MockRenderProcessHost> host(CreateRenderProcessHost());
   host->Init();
   RenderProcessHostImpl::AddFrameWithSite(browser_context_.get(), host.get(),
-                                          SiteInfo(kSiteUrl));
+                                          site_info);
 
   const std::map<int, scoped_refptr<SiteInstance>>& processes =
       worker_process_map();
@@ -139,18 +140,20 @@ TEST_F(ServiceWorkerProcessManagerTest,
   EXPECT_TRUE(processes.empty());
 
   RenderProcessHostImpl::RemoveFrameWithSite(browser_context_.get(), host.get(),
-                                             SiteInfo(kSiteUrl));
+                                             site_info);
 }
 
 TEST_F(ServiceWorkerProcessManagerTest,
        AllocateWorkerProcess_WithoutProcessReuse) {
   const int kEmbeddedWorkerId = 100;
   const GURL kSiteUrl = GURL("http://example.com");
+  SiteInfo site_info = SiteInstanceImpl::ComputeSiteInfoForTesting(
+      IsolationContext(browser_context_.get()), kSiteUrl);
 
   // Create a process that is hosting a frame with kSiteUrl.
   std::unique_ptr<MockRenderProcessHost> host(CreateRenderProcessHost());
   RenderProcessHostImpl::AddFrameWithSite(browser_context_.get(), host.get(),
-                                          SiteInfo(kSiteUrl));
+                                          site_info);
 
   const std::map<int, scoped_refptr<SiteInstance>>& processes =
       worker_process_map();
@@ -179,7 +182,7 @@ TEST_F(ServiceWorkerProcessManagerTest,
   EXPECT_TRUE(processes.empty());
 
   RenderProcessHostImpl::RemoveFrameWithSite(browser_context_.get(), host.get(),
-                                             SiteInfo(kSiteUrl));
+                                             site_info);
 }
 
 TEST_F(ServiceWorkerProcessManagerTest, AllocateWorkerProcess_InShutdown) {

@@ -7,8 +7,6 @@
 
 #include "chrome/browser/ui/passwords/bubble_controllers/save_update_bubble_controller.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
-#include "ui/views/controls/button/button.h"
-#include "ui/views/controls/editable_combobox/editable_combobox_listener.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -21,9 +19,7 @@ class PasswordSignInPromoView;
 // A view offering the user the ability to save or update credentials (depending
 // on |is_update_bubble|). Contains a username and password field, along with a
 // "Save"/"Update" button and a "Never"/"Nope" button.
-class PasswordSaveUpdateView : public PasswordBubbleViewBase,
-                               public views::ButtonListener,
-                               public views::EditableComboboxListener {
+class PasswordSaveUpdateView : public PasswordBubbleViewBase {
  public:
   PasswordSaveUpdateView(content::WebContents* web_contents,
                          views::View* anchor_view,
@@ -38,20 +34,10 @@ class PasswordSaveUpdateView : public PasswordBubbleViewBase,
   PasswordBubbleControllerBase* GetController() override;
   const PasswordBubbleControllerBase* GetController() const override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // views::EditableComboboxListener:
-  // Used for both the username and password editable comboboxes.
-  void OnContentChanged(views::EditableCombobox* editable_combobox) override;
-
   // PasswordBubbleViewBase:
-  gfx::Size CalculatePreferredSize() const override;
   views::View* GetInitiallyFocusedView() override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
   gfx::ImageSkia GetWindowIcon() override;
-  bool ShouldShowWindowIcon() const override;
-  bool ShouldShowCloseButton() const override;
   bool Accept() override;
 
   // View:
@@ -64,6 +50,9 @@ class PasswordSaveUpdateView : public PasswordBubbleViewBase,
   void UpdateBubbleUIElements();
   std::unique_ptr<views::View> CreateFooterView();
   void OnDialogCancelled();
+
+  // Used for both the username and password editable comboboxes.
+  void OnContentChanged();
 
   SaveUpdateBubbleController controller_;
 

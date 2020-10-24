@@ -49,7 +49,7 @@ class BrowserAccessibilityManagerAndroid;
 class BrowserAccessibilityManagerWin;
 #elif BUILDFLAG(USE_ATK)
 class BrowserAccessibilityManagerAuraLinux;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 class BrowserAccessibilityManagerMac;
 #endif
 
@@ -346,7 +346,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   ToBrowserAccessibilityManagerAuraLinux();
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   BrowserAccessibilityManagerMac* ToBrowserAccessibilityManagerMac();
 #endif
 
@@ -447,6 +447,8 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   ui::AXNode* GetNodeFromTree(ui::AXTreeID tree_id,
                               ui::AXNode::AXID node_id) const override;
   ui::AXNode* GetNodeFromTree(ui::AXNode::AXID node_id) const override;
+  void AddObserver(ui::AXTreeObserver* observer) override;
+  void RemoveObserver(ui::AXTreeObserver* observer) override;
   AXTreeID GetTreeID() const override;
   AXTreeID GetParentTreeID() const override;
   ui::AXNode* GetRootAsAXNode() const override;
@@ -589,7 +591,16 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   static base::Optional<int32_t> last_focused_node_id_;
   static base::Optional<ui::AXTreeID> last_focused_node_tree_id_;
 
+  // For debug only: True when handling OnAccessibilityEvents.
+#if DCHECK_IS_ON()
+  bool in_on_accessibility_events_ = false;
+#endif  // DCHECK_IS_ON()
+
  private:
+  // Helper that calls AXTree::Unserialize(). On failure it populates crash data
+  // with error information.
+  bool Unserialize(const ui::AXTreeUpdate& tree_update);
+
   // The underlying tree of accessibility objects.
   std::unique_ptr<ui::AXSerializableTree> tree_;
 

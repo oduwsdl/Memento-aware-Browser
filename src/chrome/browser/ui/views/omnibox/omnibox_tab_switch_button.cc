@@ -29,12 +29,15 @@ int OmniboxTabSwitchButton::short_text_width_;
 int OmniboxTabSwitchButton::full_text_width_;
 
 OmniboxTabSwitchButton::OmniboxTabSwitchButton(
+    PressedCallback callback,
     OmniboxPopupContentsView* popup_contents_view,
     OmniboxResultView* result_view,
     const base::string16& hint,
     const base::string16& hint_short,
     const gfx::VectorIcon& icon)
-    : MdTextButton(result_view, views::style::CONTEXT_BUTTON_MD),
+    : MdTextButton(std::move(callback),
+                   base::string16(),
+                   views::style::CONTEXT_BUTTON_MD),
       popup_contents_view_(popup_contents_view),
       result_view_(result_view),
       hint_(hint),
@@ -70,12 +73,13 @@ OmniboxTabSwitchButton::OmniboxTabSwitchButton(
 OmniboxTabSwitchButton::~OmniboxTabSwitchButton() = default;
 
 void OmniboxTabSwitchButton::StateChanged(ButtonState old_state) {
-  if (state() == STATE_NORMAL && old_state == STATE_PRESSED) {
+  MdTextButton::StateChanged(old_state);
+  if (GetState() == STATE_NORMAL && old_state == STATE_PRESSED) {
     SetMouseHandler(parent());
-    if (popup_contents_view_->IsButtonSelected())
+    if (popup_contents_view_->model()->selected_line_state() ==
+        OmniboxPopupModel::FOCUSED_BUTTON_TAB_SWITCH)
       popup_contents_view_->UnselectButton();
   }
-  MdTextButton::StateChanged(old_state);
 }
 
 void OmniboxTabSwitchButton::OnThemeChanged() {
@@ -108,7 +112,8 @@ void OmniboxTabSwitchButton::ProvideWidthHint(int parent_width) {
 bool OmniboxTabSwitchButton::IsSelected() const {
   // Is this result selected and is button selected?
   return result_view_->IsMatchSelected() &&
-         popup_contents_view_->IsButtonSelected();
+         popup_contents_view_->model()->selected_line_state() ==
+             OmniboxPopupModel::FOCUSED_BUTTON_TAB_SWITCH;
 }
 
 int OmniboxTabSwitchButton::CalculateGoalWidth(int parent_width,

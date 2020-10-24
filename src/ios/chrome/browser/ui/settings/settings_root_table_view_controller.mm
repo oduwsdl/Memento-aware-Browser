@@ -141,8 +141,8 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
   }
 }
 
-- (void)viewWillDisappear:(BOOL)animated {
-  [super viewWillDisappear:animated];
+- (void)willMoveToParentViewController:(UIViewController*)parent {
+  [super willMoveToParentViewController:parent];
   [self.navigationController setToolbarHidden:YES animated:YES];
 }
 
@@ -196,6 +196,18 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
   if ([self.tableViewModel footerForSection:section])
     return UITableViewAutomaticDimension;
   return kDefaultHeaderFooterHeight;
+}
+
+#pragma mark - UITableViewDataSource
+
+- (UITableViewCell*)tableView:(UITableView*)tableView
+        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
+  if (base::FeatureList::IsEnabled(kSettingsRefresh)) {
+    TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+    item.useCustomSeparator = YES;
+  }
+
+  return [super tableView:tableView cellForRowAtIndexPath:indexPath];
 }
 
 #pragma mark - TableViewLinkHeaderFooterItemDelegate

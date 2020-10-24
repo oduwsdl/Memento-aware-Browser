@@ -62,8 +62,9 @@ class ChromeAutofillClientIOS : public AutofillClient {
   ukm::UkmRecorder* GetUkmRecorder() override;
   ukm::SourceId GetUkmSourceId() override;
   AddressNormalizer* GetAddressNormalizer() override;
+  const GURL& GetLastCommittedURL() override;
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
-  std::string GetPageLanguage() const override;
+  const translate::LanguageState* GetLanguageState() override;
   std::string GetVariationConfigCountryCode() const override;
 
   void ShowAutofillSettings(bool show_credit_card_settings) override;
@@ -119,6 +120,8 @@ class ChromeAutofillClientIOS : public AutofillClient {
       base::OnceCallback<void(const std::string&)> callback) override;
 
   LogManager* GetLogManager() const override;
+
+  bool IsQueryIDRelevant(int query_id) override;
 
  private:
   PrefService* pref_service_;

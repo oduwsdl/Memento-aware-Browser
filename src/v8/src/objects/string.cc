@@ -4,6 +4,7 @@
 
 #include "src/objects/string.h"
 
+#include "src/common/assert-scope.h"
 #include "src/common/globals.h"
 #include "src/handles/handles-inl.h"
 #include "src/heap/heap-inl.h"
@@ -42,6 +43,7 @@ Handle<String> String::SlowFlatten(Isolate* isolate, Handle<ConsString> cons,
   }
 
   DCHECK(AllowHeapAllocation::IsAllowed());
+  DCHECK(AllowGarbageCollection::IsAllowed());
   int length = cons->length();
   allocation =
       ObjectInYoungGeneration(*cons) ? allocation : AllocationType::kOld;
@@ -72,19 +74,19 @@ Handle<String> String::SlowFlatten(Isolate* isolate, Handle<ConsString> cons,
 namespace {
 
 template <class StringClass>
-void MigrateExternalStringResource(Isolate* isolate, String from, String to) {
-  StringClass cast_from = StringClass::cast(from);
-  StringClass cast_to = StringClass::cast(to);
-  const typename StringClass::Resource* to_resource = cast_to.resource();
-  if (to_resource == nullptr) {
+void MigrateExternalStringResource(Isolate* isolate, ExternalString from,
+                                   StringClass to) {
+  Address to_resource_address = to.resource_as_address();
+  if (to_resource_address == kNullAddress) {
+    StringClass cast_from = StringClass::cast(from);
     // |to| is a just-created internalized copy of |from|. Migrate the resource.
-    cast_to.SetResource(isolate, cast_from.resource());
+    to.SetResource(isolate, cast_from.resource());
     // Zap |from|'s resource pointer to reflect the fact that |from| has
     // relinquished ownership of its resource.
     isolate->heap()->UpdateExternalString(
         from, ExternalString::cast(from).ExternalPayloadSize(), 0);
     cast_from.SetResource(isolate, nullptr);
-  } else if (to_resource != cast_from.resource()) {
+  } else if (to_resource_address != from.resource_as_address()) {
     // |to| already existed and has its own resource. Finalize |from|.
     isolate->heap()->FinalizeExternalString(from);
   }
@@ -99,11 +101,11 @@ void String::MakeThin(Isolate* isolate, String internalized) {
 
   if (this->IsExternalString()) {
     if (internalized.IsExternalOneByteString()) {
-      MigrateExternalStringResource<ExternalOneByteString>(isolate, *this,
-                                                           internalized);
+      MigrateExternalStringResource(isolate, ExternalString::cast(*this),
+                                    ExternalOneByteString::cast(internalized));
     } else if (internalized.IsExternalTwoByteString()) {
-      MigrateExternalStringResource<ExternalTwoByteString>(isolate, *this,
-                                                           internalized);
+      MigrateExternalStringResource(isolate, ExternalString::cast(*this),
+                                    ExternalTwoByteString::cast(internalized));
     } else {
       // If the external string is duped into an existing non-external
       // internalized string, free its resource (it's about to be rewritten
@@ -115,17 +117,16 @@ void String::MakeThin(Isolate* isolate, String internalized) {
   bool has_pointers = StringShape(*this).IsIndirect();
 
   int old_size = this->Size();
-  // Slot invalidation is not necessary here: ThinString only stores tagged
-  // value, so it can't store an untagged value in a recorded slot.
-  isolate->heap()->NotifyObjectLayoutChange(*this, no_gc,
-                                            InvalidateRecordedSlots::kNo);
   bool one_byte = internalized.IsOneByteRepresentation();
   Handle<Map> map = one_byte ? isolate->factory()->thin_one_byte_string_map()
                              : isolate->factory()->thin_string_map();
+  // Update actual first and then do release store on the map word. This ensures
+  // that the concurrent marker will read the pointer when visiting a
+  // ThinString.
+  ThinString thin = ThinString::unchecked_cast(*this);
+  thin.set_actual(internalized);
   DCHECK_GE(old_size, ThinString::kSize);
   this->synchronized_set_map(*map);
-  ThinString thin = ThinString::cast(*this);
-  thin.set_actual(internalized);
   Address thin_end = thin.address() + ThinString::kSize;
   int size_delta = old_size - ThinString::kSize;
   if (size_delta != 0) {
@@ -196,6 +197,7 @@ bool String::MakeExternal(v8::String::ExternalStringResource* resource) {
   this->synchronized_set_map(new_map);
 
   ExternalTwoByteString self = ExternalTwoByteString::cast(*this);
+  self.AllocateExternalPointerEntries(isolate);
   self.SetResource(isolate, resource);
   isolate->heap()->RegisterExternalString(*this);
   if (is_internalized) self.Hash();  // Force regeneration of the hash value.
@@ -266,6 +268,7 @@ bool String::MakeExternal(v8::String::ExternalOneByteStringResource* resource) {
   this->synchronized_set_map(new_map);
 
   ExternalOneByteString self = ExternalOneByteString::cast(*this);
+  self.AllocateExternalPointerEntries(isolate);
   self.SetResource(isolate, resource);
   isolate->heap()->RegisterExternalString(*this);
   if (is_internalized) self.Hash();  // Force regeneration of the hash value.
@@ -308,6 +311,8 @@ const char* String::PrefixForDebugPrint() const {
       return "uc\"";
     } else if (shape.IsThin()) {
       return "u>\"";
+    } else if (shape.IsExternal()) {
+      return "ue\"";
     } else {
       return "u\"";
     }
@@ -319,6 +324,8 @@ const char* String::PrefixForDebugPrint() const {
       return "c\"";
     } else if (shape.IsThin()) {
       return ">\"";
+    } else if (shape.IsExternal()) {
+      return "e\"";
     } else {
       return "\"";
     }
@@ -755,7 +762,7 @@ Handle<FixedArray> String::CalculateLineEnds(LocalIsolate* isolate,
 template Handle<FixedArray> String::CalculateLineEnds(Isolate* isolate,
                                                       Handle<String> src,
                                                       bool include_ending_line);
-template Handle<FixedArray> String::CalculateLineEnds(OffThreadIsolate* isolate,
+template Handle<FixedArray> String::CalculateLineEnds(LocalIsolate* isolate,
                                                       Handle<String> src,
                                                       bool include_ending_line);
 

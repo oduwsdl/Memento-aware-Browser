@@ -10,6 +10,8 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -28,7 +30,8 @@ class Layer;
 // highlight the focused UI element for accessibility.
 class AccessibilityFocusHighlight : public ui::LayerDelegate,
                                     public ui::CompositorAnimationObserver,
-                                    public content::NotificationObserver {
+                                    public content::NotificationObserver,
+                                    public TabStripModelObserver {
  public:
   explicit AccessibilityFocusHighlight(BrowserView* browser_view);
   ~AccessibilityFocusHighlight() override;
@@ -41,16 +44,22 @@ class AccessibilityFocusHighlight : public ui::LayerDelegate,
  private:
   FRIEND_TEST_ALL_PREFIXES(AccessibilityFocusHighlightBrowserTest,
                            DrawsHighlight);
+  FRIEND_TEST_ALL_PREFIXES(AccessibilityFocusHighlightBrowserTest,
+                           FocusAppearance);
   // For testing.
   static void SetNoFadeForTesting();
   static void SkipActivationCheckForTesting();
-  static SkColor GetHighlightColorForTesting();
+  static void UseDefaultColorForTesting();
+  ui::Layer* GetLayerForTesting();
 
-  // Create the layer if needed, and update its bounds to match |bounds_|.
-  void CreateOrUpdateLayer();
+  // Create the layer if needed, and set node_bounds_
+  void CreateOrUpdateLayer(gfx::Rect node_bounds);
 
   // Get rid of the layer and stop animation.
   void RemoveLayer();
+
+  // Handle preference changes by adding or removing observers as necessary.
+  void AddOrRemoveObservers();
 
   // content::NotificationObserver overrides:
   void Observe(int type,
@@ -60,11 +69,24 @@ class AccessibilityFocusHighlight : public ui::LayerDelegate,
   // ui::LayerDelegate overrides:
   void OnPaintLayer(const ui::PaintContext& context) override;
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
-                                  float new_device_scale_factor) override;
+                                  float new_device_scale_factor) override {}
 
   // CompositorAnimationObserver overrides:
   void OnAnimationStep(base::TimeTicks timestamp) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
+
+  // TabStripModelObserver
+  void OnTabStripModelChanged(TabStripModel*,
+                              const TabStripModelChange&,
+                              const TabStripSelectionChange&) override;
+
+  // Compute the highlight color based on theme colors and defaults.
+  SkColor GetHighlightColor();
+
+  // Compute the opacity based on the fade in and fade out times.
+  // TODO(aboxhall): figure out how to use cubic beziers
+  float ComputeOpacity(base::TimeDelta time_since_layer_create,
+                       base::TimeDelta time_since_focus_move);
 
   // The layer, if visible.
   std::unique_ptr<ui::Layer> layer_;
@@ -72,9 +94,8 @@ class AccessibilityFocusHighlight : public ui::LayerDelegate,
   // The compositor associated with this layer.
   ui::Compositor* compositor_ = nullptr;
 
-  // The bounding rectangle of the focused object, in the coordinate system
-  // of our owner BrowserView's layer.
-  gfx::Rect bounds_;
+  // The bounding rectangle of the focused object, relative to the layer.
+  gfx::Rect node_bounds_;
 
   // Owns this.
   BrowserView* browser_view_;
@@ -85,20 +106,30 @@ class AccessibilityFocusHighlight : public ui::LayerDelegate,
   // The most recent time the layer was updated because focus moved.
   base::TimeTicks focus_last_changed_time_;
 
-  // The current scale factor between DIPs and pixels.
-  float device_scale_factor_;
+  // The default color used for the highlight.
+  static SkColor default_color_;
 
-  // The color used for the highlight.
-  static SkColor color_;
+  // Whether to skip fade in/fade out for testing.
+  static bool no_fade_for_testing_;
 
   // The amount of time it should take for the highlight to fade in.
   static base::TimeDelta fade_in_time_;
+
+  // The amount of time the highlight should persist between fading in and
+  // fading out.
+  static base::TimeDelta persist_time_;
 
   // The amount of time it should take for the highlight to fade out.
   static base::TimeDelta fade_out_time_;
 
   // If set, draws the highlight even if the widget is not active.
   static bool skip_activation_check_for_testing_;
+
+  // If set, don't check the system theme color.
+  static bool use_default_color_for_testing_;
+
+  // For observing browser preference notifications.
+  PrefChangeRegistrar profile_pref_registrar_;
 
   // For observing focus notifications.
   content::NotificationRegistrar notification_registrar_;

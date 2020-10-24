@@ -19,23 +19,21 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.webapps.WebApkActivityLifecycleUmaTracker;
-import org.chromium.chrome.browser.webapps.WebappActivity;
+import org.chromium.chrome.browser.webapps.WebApkActivityTestRule;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
-import org.chromium.webapk.lib.common.WebApkConstants;
 
 /**
  * Tests for startup timing histograms.
@@ -61,8 +59,7 @@ public class StartupLoadingMetricsTest {
     public ChromeTabbedActivityTestRule mTabbedActivityTestRule =
             new ChromeTabbedActivityTestRule();
     @Rule
-    public ChromeActivityTestRule<WebappActivity> mWebApkActivityTestRule =
-            new ChromeActivityTestRule<>(WebappActivity.class);
+    public WebApkActivityTestRule mWebApkActivityTestRule = new WebApkActivityTestRule();
 
     private String mTestPage;
     private String mTestPage2;
@@ -116,36 +113,14 @@ public class StartupLoadingMetricsTest {
                         FIRST_CONTENTFUL_PAINT_HISTOGRAM + histogramSuffix));
     }
 
-    private void startWebApkActivity(final String startUrl) {
-        Intent intent =
-                new Intent(InstrumentationRegistry.getTargetContext(), WebappActivity.class);
-        intent.putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, "org.chromium.webapk.test");
-        intent.putExtra(ShortcutHelper.EXTRA_URL, startUrl);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-        WebappActivity webApkActivity =
-                (WebappActivity) InstrumentationRegistry.getInstrumentation().startActivitySync(
-                        intent);
-        mWebApkActivityTestRule.setActivity(webApkActivity);
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mWebApkActivityTestRule.getActivity().getActivityTab() != null;
-            }
-        }, 10000L, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
-        ChromeTabUtils.waitForTabPageLoaded(
-                mWebApkActivityTestRule.getActivity().getActivityTab(), startUrl);
-    }
-
     /**
      * Tests that the startup loading histograms are recorded only once on startup.
      */
     @Test
     @LargeTest
     public void testWebApkStartRecorded() throws Exception {
-        runAndWaitForPageLoadMetricsRecorded(() -> startWebApkActivity(mTestPage));
+        runAndWaitForPageLoadMetricsRecorded(
+                () -> mWebApkActivityTestRule.startWebApkActivity(mTestPage));
         assertHistogramsRecorded(1, WEBAPK_SUFFIX);
         loadUrlAndWaitForPageLoadMetricsRecorded(mWebApkActivityTestRule, mTestPage2);
         assertHistogramsRecorded(1, WEBAPK_SUFFIX);
@@ -199,6 +174,7 @@ public class StartupLoadingMetricsTest {
      */
     @Test
     @LargeTest
+    @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/1062055")
     public void testErrorPageNotRecorded() throws Exception {
         runAndWaitForPageLoadMetricsRecorded(
                 () -> mTabbedActivityTestRule.startMainActivityWithURL(mErrorPage));
@@ -214,7 +190,8 @@ public class StartupLoadingMetricsTest {
     @Test
     @LargeTest
     public void testWebApkErrorPageNotRecorded() throws Exception {
-        runAndWaitForPageLoadMetricsRecorded(() -> startWebApkActivity(mErrorPage));
+        runAndWaitForPageLoadMetricsRecorded(
+                () -> mWebApkActivityTestRule.startWebApkActivity(mErrorPage));
         assertHistogramsRecorded(0, WEBAPK_SUFFIX);
         loadUrlAndWaitForPageLoadMetricsRecorded(mWebApkActivityTestRule, mTestPage2);
         assertHistogramsRecorded(0, WEBAPK_SUFFIX);
@@ -226,6 +203,7 @@ public class StartupLoadingMetricsTest {
      */
     @Test
     @LargeTest
+    @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/1062055")
     public void testBackgroundedPageNotRecorded() throws Exception {
         runAndWaitForPageLoadMetricsRecorded(() -> {
             Intent intent = new Intent(Intent.ACTION_VIEW);

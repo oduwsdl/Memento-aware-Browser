@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.webapps;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
 import android.content.Intent;
 import android.net.Uri;
 import android.support.test.InstrumentationRegistry;
@@ -12,13 +15,13 @@ import android.view.ViewGroup;
 
 import androidx.browser.customtabs.TrustedWebUtils;
 
-import org.junit.Assert;
+import org.hamcrest.Matchers;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.ui.splashscreen.SplashController;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
@@ -87,6 +90,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
     public Intent createIntent() {
         Intent intent =
                 new Intent(InstrumentationRegistry.getTargetContext(), WebappActivity.class);
+        intent.setAction(Intent.ACTION_VIEW);
         intent.setData(Uri.parse(WebappActivity.WEBAPP_SCHEME + "://" + WEBAPP_ID));
         intent.putExtra(ShortcutHelper.EXTRA_ID, WEBAPP_ID);
         intent.putExtra(ShortcutHelper.EXTRA_URL, "about:blank");
@@ -156,25 +160,25 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
         WebappActivity webappActivity = getActivity();
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return webappActivity.getActivityTab() != null;
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(webappActivity.getActivityTab(), Matchers.notNullValue());
         }, STARTUP_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
 
         ChromeTabUtils.waitForTabPageLoaded(webappActivity.getActivityTab(), startUrl);
         waitUntilSplashscreenHides();
     }
 
-    public static void assertToolbarShowState(ChromeActivity activity, boolean showState) {
+    public static void assertToolbarShownMaybeHideable(ChromeActivity activity) {
         @BrowserControlsState
-        int expectedState = showState ? BrowserControlsState.SHOWN : BrowserControlsState.HIDDEN;
-        Assert.assertEquals(expectedState,
-                (int) TestThreadUtils.runOnUiThreadBlockingNoException(
-                        ()
-                                -> TabBrowserControlsConstraintsHelper.getConstraints(
-                                        activity.getActivityTab())));
+        int state = getToolbarShowState(activity);
+        assertTrue(state == BrowserControlsState.SHOWN || state == BrowserControlsState.BOTH);
+    }
+
+    public static @BrowserControlsState int getToolbarShowState(ChromeActivity activity) {
+        return TestThreadUtils.runOnUiThreadBlockingNoException(
+                ()
+                        -> TabBrowserControlsConstraintsHelper.getConstraints(
+                                activity.getActivityTab()));
     }
 
     /**
@@ -215,25 +219,22 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
         intent.putExtra(ShortcutHelper.EXTRA_URL, getTestServer().getURL("/slow?2"));
         launchActivity(intent);
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                // we are waiting for WebappActivity#getActivityTab() to be non-null because we want
-                // to ensure that native has been loaded.
-                // We also wait till the splash screen has finished initializing.
-                if (getActivity().getActivityTab() == null) return false;
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            // we are waiting for WebappActivity#getActivityTab() to be non-null because we want
+            // to ensure that native has been loaded.
+            // We also wait till the splash screen has finished initializing.
+            Criteria.checkThat(getActivity().getActivityTab(), Matchers.notNullValue());
 
-                View splashScreen = getSplashController(getActivity()).getSplashScreenForTests();
-                if (splashScreen == null) return false;
+            View splashScreen = getSplashController(getActivity()).getSplashScreenForTests();
+            Criteria.checkThat(splashScreen, Matchers.notNullValue());
 
-                return (!(splashScreen instanceof ViewGroup)
-                        || ((ViewGroup) splashScreen).getChildCount() > 0);
-            }
+            if (!(splashScreen instanceof ViewGroup)) return;
+            Criteria.checkThat(((ViewGroup) splashScreen).getChildCount(), Matchers.greaterThan(0));
         }, STARTUP_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         View splashScreen = getSplashController(getActivity()).getSplashScreenForTests();
-        Assert.assertNotNull("No splash screen available.", splashScreen);
+        assertNotNull("No splash screen available.", splashScreen);
 
         // TODO(pkotwicz): Change return type in order to accommodate new-style WebAPKs.
         // (crbug.com/958288)
@@ -248,11 +249,8 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
     }
 
     public static void waitUntilSplashHides(WebappActivity activity) {
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return getSplashController(activity).wasSplashScreenHiddenForTests();
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            return getSplashController(activity).wasSplashScreenHiddenForTests();
         }, STARTUP_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 

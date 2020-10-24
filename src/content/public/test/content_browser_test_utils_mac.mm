@@ -55,9 +55,10 @@ namespace {
 
 content::RenderWidgetHostViewMac* GetRenderWidgetHostViewMac(NSObject* object) {
   for (auto* contents : WebContentsImpl::GetAllWebContents()) {
-    if (!contents->GetBrowserPluginGuest()) {
-      RenderWidgetHostViewMac* rwhv_mac = static_cast<RenderWidgetHostViewMac*>(
-          contents->GetRenderWidgetHostView());
+    auto* rwhv_base = static_cast<RenderWidgetHostViewBase*>(
+        contents->GetRenderWidgetHostView());
+    if (rwhv_base && !rwhv_base->IsRenderWidgetHostViewChildFrame()) {
+      auto* rwhv_mac = static_cast<RenderWidgetHostViewMac*>(rwhv_base);
       if (rwhv_mac->GetInProcessNSView() == object)
         return rwhv_mac;
     }
@@ -135,15 +136,18 @@ void GetStringAtPointForRenderWidget(
   TextInputClientMac::GetInstance()->GetStringAtPoint(
       rwh, point,
       base::BindOnce(
-          base::RetainBlock(
-              ^(base::OnceCallback<void(const std::string&, const gfx::Point&)>
-                    callback,
-                ui::mojom::AttributedStringPtr attributed_string,
-                const gfx::Point& baseline_point) {
-                std::string string = base::SysNSStringToUTF8(
-                    [attributed_string.To<NSAttributedString*>() string]);
-                std::move(callback).Run(string, baseline_point);
-              }),
+          base::RetainBlock(^(
+              base::OnceCallback<void(const std::string&, const gfx::Point&)>
+                  callback,
+              ui::mojom::AttributedStringPtr attributed_string,
+              const gfx::Point& baseline_point) {
+            std::string string =
+                attributed_string
+                    ? base::SysNSStringToUTF8(
+                          [attributed_string.To<NSAttributedString*>() string])
+                    : std::string();
+            std::move(callback).Run(string, baseline_point);
+          }),
           std::move(result_callback)));
 }
 
@@ -155,15 +159,18 @@ void GetStringFromRangeForRenderWidget(
   TextInputClientMac::GetInstance()->GetStringFromRange(
       rwh, range,
       base::BindOnce(
-          base::RetainBlock(
-              ^(base::OnceCallback<void(const std::string&, const gfx::Point&)>
-                    callback,
-                ui::mojom::AttributedStringPtr attributed_string,
-                const gfx::Point& baseline_point) {
-                std::string string = base::SysNSStringToUTF8(
-                    [attributed_string.To<NSAttributedString*>() string]);
-                std::move(callback).Run(string, baseline_point);
-              }),
+          base::RetainBlock(^(
+              base::OnceCallback<void(const std::string&, const gfx::Point&)>
+                  callback,
+              ui::mojom::AttributedStringPtr attributed_string,
+              const gfx::Point& baseline_point) {
+            std::string string =
+                attributed_string
+                    ? base::SysNSStringToUTF8(
+                          [attributed_string.To<NSAttributedString*>() string])
+                    : std::string();
+            std::move(callback).Run(string, baseline_point);
+          }),
           std::move(result_callback)));
 }
 

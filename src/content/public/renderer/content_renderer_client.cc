@@ -53,16 +53,6 @@ bool ContentRendererClient::HasErrorPage(int http_status_code) {
   return false;
 }
 
-bool ContentRendererClient::ShouldSuppressErrorPage(RenderFrame* render_frame,
-                                                    const GURL& url,
-                                                    int error_code) {
-  return false;
-}
-
-bool ContentRendererClient::ShouldTrackUseCounter(const GURL& url) {
-  return true;
-}
-
 bool ContentRendererClient::DeferMediaLoad(RenderFrame* render_frame,
                                            bool has_played_media_before,
                                            base::OnceClosure closure) {
@@ -189,7 +179,8 @@ ContentRendererClient::CreateWorkerContentSettingsClient(
 #if !defined(OS_ANDROID)
 std::unique_ptr<media::SpeechRecognitionClient>
 ContentRendererClient::CreateSpeechRecognitionClient(
-    RenderFrame* render_frame) {
+    RenderFrame* render_frame,
+    media::SpeechRecognitionClient::OnReadyCallback callback) {
   return nullptr;
 }
 #endif
@@ -199,16 +190,9 @@ bool ContentRendererClient::IsPluginAllowedToUseCameraDeviceAPI(
   return false;
 }
 
-bool ContentRendererClient::IsPluginAllowedToUseDevChannelAPIs() {
+bool ContentRendererClient::AllowScriptExtensionForServiceWorker(
+    const url::Origin& script_origin) {
   return false;
-}
-
-BrowserPluginDelegate* ContentRendererClient::CreateBrowserPluginDelegate(
-    RenderFrame* render_frame,
-    const WebPluginInfo& info,
-    const std::string& mime_type,
-    const GURL& original_url) {
-  return nullptr;
 }
 
 bool ContentRendererClient::IsExcludedHeaderForServiceWorkerFetchEvent(
@@ -261,7 +245,9 @@ ContentRendererClient::GetAudioRendererAlgorithmParameters(
   return base::nullopt;
 }
 
-void ContentRendererClient::BindReceiverOnMainThread(
-    mojo::GenericPendingReceiver receiver) {}
+void ContentRendererClient::MaybeProxyURLLoaderFactory(
+    RenderFrame* render_frame,
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver) {
+}
 
 }  // namespace content

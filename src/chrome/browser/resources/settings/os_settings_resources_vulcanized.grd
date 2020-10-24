@@ -34,10 +34,6 @@
                use_base_dir="false"
                flattenhtml="true"
                type="BINDATA" />
-      <include name="IDR_OS_SETTINGS_MANIFEST"
-               file="os_settings_manifest.json"
-               type="BINDATA"
-               compress="gzip" />
 
       <!-- Constants -->
       <include name="IDR_OS_SETTINGS_ROUTES_MOJOM_LITE_JS"
@@ -80,6 +76,37 @@
                file="${root_gen_dir}\chrome\browser\ui\webui\settings\chromeos\search\user_action_recorder.mojom-lite.js"
                use_base_dir="false"
                type="BINDATA" />
+
+      <!-- Polymer3 related files-->
+      <include name="IDR_OS_SETTINGS_OS_SETTINGS_ROLLUP_JS"
+               file="${root_gen_dir}\chrome\browser\resources\settings\chromeos\os_settings.rollup.js"
+               use_base_dir="false"
+               type="BINDATA" />
+      <include name="IDR_OS_SETTINGS_OS_SETTINGS_V3_HTML"
+               file="chromeos/os_settings_v3.html"
+               type="BINDATA" />
+      <include name="IDR_OS_SETTINGS_LAZY_LOAD_ROLLUP_JS"
+               file="${root_gen_dir}\chrome\browser\resources\settings\chromeos\lazy_load.rollup.js"
+               type="BINDATA"
+               use_base_dir="false" />
+      <include name="IDR_OS_SETTINGS_SHARED_ROLLUP_JS"
+               file="${root_gen_dir}\chrome\browser\resources\settings\chromeos\shared.rollup.js"
+               type="BINDATA"
+               use_base_dir="false" />
+
+      <!-- SVG assets -->
+      <include name="IDR_OS_SETTINGS_ICON_ADD_CIRCLE_SVG"
+               file="chromeos/images/icon_add_circle.svg"
+               type="BINDATA"
+               compress="gzip" />
+      <include name="IDR_OS_SETTINGS_ICON_ADD_WIFI_SVG"
+               file="chromeos/images/icon_add_wifi.svg"
+               type="BINDATA"
+               compress="gzip" />
+      <include name="IDR_OS_SETTINGS_ICON_ADD_CELLULAR_SVG"
+               file="chromeos/images/icon_add_cellular.svg"
+               type="BINDATA"
+               compress="gzip" />
     </includes>
   </release>
 </grit>

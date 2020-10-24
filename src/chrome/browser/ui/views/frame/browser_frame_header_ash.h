@@ -31,7 +31,7 @@ class BrowserFrameHeaderAsh : public ash::FrameHeader {
       views::Widget* target_widget,
       views::View* view,
       AppearanceProvider* appearance_provider,
-      ash::FrameCaptionButtonContainerView* caption_button_container);
+      chromeos::FrameCaptionButtonContainerView* caption_button_container);
   ~BrowserFrameHeaderAsh() override;
 
   // Returns the amount that the frame background is inset from the left edge of
@@ -49,9 +49,8 @@ class BrowserFrameHeaderAsh : public ash::FrameHeader {
   SkColor GetCurrentFrameColor() const override;
 
  private:
-  // Paints the frame image for the |active| state based on the current value of
-  // the activation animation.
-  void PaintFrameImages(gfx::Canvas* canvas, bool active);
+  // Paints the frame image.
+  void PaintFrameImages(gfx::Canvas* canvas);
 
   AppearanceProvider* appearance_provider_ = nullptr;
 

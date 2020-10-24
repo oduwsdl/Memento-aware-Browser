@@ -185,8 +185,7 @@ MaybeHandle<Cell> SourceTextModule::ResolveExport(
     if (result.second) {
       // |module| wasn't in the map previously, so allocate a new name set.
       Zone* zone = resolve_set->zone();
-      name_set =
-          new (zone->New(sizeof(UnorderedStringSet))) UnorderedStringSet(zone);
+      name_set = zone->New<UnorderedStringSet>(zone);
     } else if (name_set->count(export_name)) {
       // Cycle detected.
       if (must_resolve) {
@@ -454,10 +453,9 @@ bool SourceTextModule::FinishInstantiate(
     if (requested_module->status() == kInstantiating) {
       // SyntheticModules go straight to kInstantiated so this must be a
       // SourceTextModule
-      module->set_dfs_ancestor_index(
-          std::min(module->dfs_ancestor_index(),
-                   Handle<SourceTextModule>::cast(requested_module)
-                       ->dfs_ancestor_index()));
+      module->set_dfs_ancestor_index(std::min(
+          module->dfs_ancestor_index(),
+          SourceTextModule::cast(*requested_module).dfs_ancestor_index()));
     }
   }
 
@@ -583,11 +581,14 @@ Handle<JSModuleNamespace> SourceTextModule::GetModuleNamespace(
   return Module::GetModuleNamespace(isolate, requested_module);
 }
 
-Handle<JSObject> SourceTextModule::GetImportMeta(
+MaybeHandle<JSObject> SourceTextModule::GetImportMeta(
     Isolate* isolate, Handle<SourceTextModule> module) {
   Handle<HeapObject> import_meta(module->import_meta(), isolate);
   if (import_meta->IsTheHole(isolate)) {
-    import_meta = isolate->RunHostInitializeImportMetaObjectCallback(module);
+    if (!isolate->RunHostInitializeImportMetaObjectCallback(module).ToHandle(
+            &import_meta)) {
+      return {};
+    }
     module->set_import_meta(*import_meta);
   }
   return Handle<JSObject>::cast(import_meta);
@@ -692,7 +693,7 @@ MaybeHandle<Object> SourceTextModule::Evaluate(
       CHECK_EQ(descendant->status(), kEvaluating);
       //  ii. Set m.[[Status]] to "evaluated".
       // iii. Set m.[[EvaluationError]] to result.
-      descendant->RecordErrorUsingPendingException(isolate);
+      Module::RecordErrorUsingPendingException(isolate, descendant);
     }
 
 #ifdef DEBUG
@@ -817,7 +818,7 @@ void SourceTextModule::AsyncModuleExecutionRejected(
   }
 
   // 4. Set module.[[EvaluationError]] to ThrowCompletion(error).
-  module->RecordError(isolate, exception);
+  Module::RecordError(isolate, module, exception);
 
   // 5. Set module.[[AsyncEvaluating]] to false.
   module->set_async_evaluating(false);

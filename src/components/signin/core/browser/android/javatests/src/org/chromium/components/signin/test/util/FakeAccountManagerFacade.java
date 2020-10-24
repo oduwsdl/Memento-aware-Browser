@@ -93,7 +93,9 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
     }
 
     @Override
-    public void getGoogleAccounts(Callback<AccountManagerResult<List<Account>>> callback) {}
+    public void getGoogleAccounts(Callback<AccountManagerResult<List<Account>>> callback) {
+        callback.onResult(new AccountManagerResult<>(getGoogleAccounts()));
+    }
 
     @Override
     public boolean hasGoogleAccountAuthenticator() {
@@ -153,6 +155,19 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
         // to account holders to avoid potential race condition.
         synchronized (mLock) {
             mAccountHolders.add(accountHolder);
+        }
+        ThreadUtils.runOnUiThreadBlocking(this::fireOnAccountsChangedNotification);
+    }
+
+    /**
+     * Removes an account from the fake AccountManagerFacade.
+     */
+    public void removeAccount(Account account) {
+        AccountHolder accountHolder = AccountHolder.builder(account).alwaysAccept(true).build();
+        synchronized (mLock) {
+            if (!mAccountHolders.remove(accountHolder)) {
+                throw new IllegalArgumentException("Cannot find account:" + accountHolder);
+            }
         }
         ThreadUtils.runOnUiThreadBlocking(this::fireOnAccountsChangedNotification);
     }

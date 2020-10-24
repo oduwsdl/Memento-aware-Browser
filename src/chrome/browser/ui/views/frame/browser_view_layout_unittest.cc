@@ -169,10 +169,11 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
 
     top_container_ =
         root_view_->AddChildView(CreateFixedSizeView(gfx::Size(800, 60)));
-    views::View* tab_strip_region_view =
-        top_container_->AddChildView(std::make_unique<TabStripRegionView>());
-    tab_strip_ = tab_strip_region_view->AddChildView(std::make_unique<TabStrip>(
-        std::make_unique<FakeBaseTabStripController>()));
+    auto tab_strip = std::make_unique<TabStrip>(
+        std::make_unique<FakeBaseTabStripController>());
+    tab_strip_ = tab_strip.get();
+    TabStripRegionView* tab_strip_region_view = top_container_->AddChildView(
+        std::make_unique<TabStripRegionView>(std::move(tab_strip)));
     webui_tab_strip_ =
         top_container_->AddChildView(CreateFixedSizeView(gfx::Size(800, 200)));
     webui_tab_strip_->SetVisible(false);
@@ -203,7 +204,7 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
         nullptr,  // NativeView.
         nullptr,  // BrowserView.
         top_container_, tab_strip_region_view, tab_strip_, toolbar_,
-        infobar_container_, contents_container_,
+        infobar_container_, contents_container_, nullptr,  // SidePanel.
         immersive_mode_controller_.get(), nullptr, separator_);
     layout_->set_webui_tab_strip(webui_tab_strip());
   }

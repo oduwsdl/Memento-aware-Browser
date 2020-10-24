@@ -15,14 +15,18 @@ import 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-lite.js';
 import 'chrome://resources/mojo/url/mojom/url.mojom-lite.js';
 import './print_job_clear_history_dialog.js';
 import './print_job_entry.js';
+import './print_management_fonts_css.js';
 import './print_management_shared_css.js';
 
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {getMetadataProvider} from './mojo_interface_provider.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
-import {ListPropertyUpdateBehavior} from 'chrome://resources/js/list_property_update_behavior.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
+
+const METADATA_STORED_INDEFINITELY = -1;
+const METADATA_STORED_FOR_ONE_DAY = 1;
+const METADATA_NOT_STORED = 0;
 
 /**
  * @typedef {Array<!chromeos.printing.printingManager.mojom.PrintJobInfo>}
@@ -83,6 +87,24 @@ Polymer({
       value: () => [],
     },
 
+    /** @private */
+    printJobHistoryExpirationPeriod_: {
+      type: String,
+      value: '',
+    },
+
+    /** @private */
+    activeHistoryInfoIcon_: {
+      type: String,
+      value: '',
+    },
+
+    /** @private */
+    isPolicyControlled_: {
+      type: Boolean,
+      value: false,
+    },
+
     /**
      * @type {!PrintJobInfoArr}
      * @private
@@ -122,12 +144,21 @@ Polymer({
       type: Boolean,
       value: true,
     },
+
+    /** @private */
+    shouldDisableClearAllButton_: {
+      type: Boolean,
+      computed: 'computeShouldDisableClearAllButton_(printJobs_,' +
+          'deletePrintJobHistoryAllowedByPolicy_)',
+    }
   },
 
   listeners: {
     'all-history-cleared': 'getPrintJobs_',
     'remove-print-job' : 'removePrintJob_',
   },
+
+  observers: ['onClearAllButtonUpdated_(shouldDisableClearAllButton_)'],
 
   /** @override */
   created() {
@@ -141,6 +172,7 @@ Polymer({
 
   /** @override */
   attached() {
+    this.getPrintJobHistoryExpirationPeriod_();
     this.startObservingPrintJobs_();
     this.fetchDeletePrintJobHistoryPolicy_();
   },
@@ -250,7 +282,51 @@ Polymer({
   /** @private */
   getPrintJobs_() {
     this.mojoInterfaceProvider_.getPrintJobs()
-        .then(this.onPrintJobsReceived_.bind(this));
+      .then(this.onPrintJobsReceived_.bind(this));
+  },
+
+  /**
+   * @param {!{
+   *     expirationPeriodInDays: number,
+   *     isFromPolicy: boolean
+   * }}  printJobPolicyInfo
+   * @private
+   */
+  onPrintJobHistoryExpirationPeriodReceived_(printJobPolicyInfo) {
+    const expirationPeriod = printJobPolicyInfo.expirationPeriodInDays;
+    // If print jobs are not persisted, we can return early since the tooltip
+    // section won't be shown.
+    if (expirationPeriod === METADATA_NOT_STORED) {
+      return;
+    }
+
+    this.isPolicyControlled_ = printJobPolicyInfo.isFromPolicy;
+    this.activeHistoryInfoIcon_ = this.isPolicyControlled_
+      ? 'enterpriseIcon'
+      : 'infoIcon';
+
+    switch (expirationPeriod) {
+      case METADATA_STORED_INDEFINITELY:
+        this.printJobHistoryExpirationPeriod_ =
+          loadTimeData.getString('printJobHistoryIndefinitePeriod');
+        break;
+      case METADATA_STORED_FOR_ONE_DAY:
+        this.printJobHistoryExpirationPeriod_ =
+          loadTimeData.getString('printJobHistorySingleDay');
+        break;
+      default:
+        this.printJobHistoryExpirationPeriod_ =
+          loadTimeData.getStringF(
+          'printJobHistoryExpirationPeriod',
+          expirationPeriod
+        );
+    }
+  },
+
+  /** @private */
+  getPrintJobHistoryExpirationPeriod_() {
+    this.mojoInterfaceProvider_.getPrintJobHistoryExpirationPeriod()
+      .then(this.onPrintJobHistoryExpirationPeriodReceived_.bind(this));
   },
 
   /**
@@ -275,14 +351,6 @@ Polymer({
   },
 
   /**
-   * @return {string}
-   * @private
-   */
-  getHistoryLabel_() {
-    return loadTimeData.getString('historyToolTip');
-  },
-
-  /**
    * @param {string} expectedId
    * @return {number}
    * @private
@@ -297,8 +365,16 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  shouldDisableClearAllButton_() {
+  computeShouldDisableClearAllButton_() {
     return !this.deletePrintJobHistoryAllowedByPolicy_ ||
         !this.printJobs_.length;
   },
+
+  /** @private */
+  onClearAllButtonUpdated_() {
+    this.$.deleteIcon.classList.toggle(
+        'delete-enabled', !this.shouldDisableClearAllButton_);
+    this.$.deleteIcon.classList.toggle(
+        'delete-disabled', this.shouldDisableClearAllButton_);
+  }
 });

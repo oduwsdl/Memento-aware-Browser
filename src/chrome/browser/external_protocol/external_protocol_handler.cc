@@ -5,6 +5,7 @@
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 
 #include <stddef.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/check_op.h"
@@ -79,13 +80,12 @@ constexpr const char* kAllowedSchemes[] = {
 // Functions enabling unit testing. Using a NULL delegate will use the default
 // behavior; if a delegate is provided it will be used instead.
 scoped_refptr<shell_integration::DefaultProtocolClientWorker> CreateShellWorker(
-    const shell_integration::DefaultWebClientWorkerCallback& callback,
     const std::string& protocol,
     ExternalProtocolHandler::Delegate* delegate) {
   if (delegate)
-    return delegate->CreateShellWorker(callback, protocol);
+    return delegate->CreateShellWorker(protocol);
   return base::MakeRefCounted<shell_integration::DefaultProtocolClientWorker>(
-      callback, protocol);
+      protocol);
 }
 
 ExternalProtocolHandler::BlockState GetBlockStateWithDelegate(
@@ -112,6 +112,19 @@ void RunExternalProtocolDialogWithDelegate(
                                         has_user_gesture, initiating_origin);
     return;
   }
+
+#if defined(OS_MAC) || defined(OS_WIN)
+  // If the Shell does not have a registered name for the protocol,
+  // attempting to invoke the protocol will fail.
+  if (shell_integration::GetApplicationNameForProtocol(url).empty()) {
+    web_contents->GetMainFrame()->AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kError,
+        "Failed to launch '" + url.possibly_invalid_spec() +
+            "' because the scheme does not have a registered handler.");
+    return;
+  }
+#endif
+
   ExternalProtocolHandler::RunExternalProtocolDialog(
       url, web_contents, page_transition, has_user_gesture, initiating_origin);
 }
@@ -129,6 +142,10 @@ void LaunchUrlWithoutSecurityCheckWithDelegate(
   // that the external protocol request came from the main frame.
   if (!web_contents)
     return;
+
+  web_contents->GetMainFrame()->AddMessageToConsole(
+      blink::mojom::ConsoleMessageLevel::kInfo,
+      "Launched external handler for '" + url.possibly_invalid_spec() + "'.");
 
   platform_util::OpenExternal(
       Profile::FromBrowserContext(web_contents->GetBrowserContext()), url);
@@ -215,6 +232,9 @@ void OnDefaultProtocolClientWorkerFinished(
 bool IsSchemeOriginPairAllowedByPolicy(const std::string& scheme,
                                        const url::Origin* initiating_origin,
                                        PrefService* prefs) {
+  if (!initiating_origin)
+    return false;
+
   const base::ListValue* exempted_protocols =
       prefs->GetList(prefs::kAutoLaunchProtocolsFromOrigins);
   if (!exempted_protocols)
@@ -391,6 +411,11 @@ void ExternalProtocolHandler::LaunchUrl(
       escaped_url.scheme(), base::OptionalOrNullptr(initiating_origin),
       g_external_protocol_handler_delegate, profile);
   if (block_state == BLOCK) {
+    web_contents->GetMainFrame()->AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kError,
+        "Not allowed to launch '" + url.possibly_invalid_spec() + "'" +
+            (g_accept_requests ? "." : " because a user gesture is required."));
+
     if (g_external_protocol_handler_delegate)
       g_external_protocol_handler_delegate->BlockRequest();
     return;
@@ -414,7 +439,7 @@ void ExternalProtocolHandler::LaunchUrl(
 
   // The worker creates tasks with references to itself and puts them into
   // message loops.
-  shell_integration::DefaultWebClientWorkerCallback callback = base::Bind(
+  shell_integration::DefaultWebClientWorkerCallback callback = base::BindOnce(
       &OnDefaultProtocolClientWorkerFinished, escaped_url,
       render_process_host_id, render_view_routing_id, block_state == UNKNOWN,
       page_transition, has_user_gesture, initiating_origin_or_precursor,
@@ -423,9 +448,8 @@ void ExternalProtocolHandler::LaunchUrl(
   // Start the check process running. This will send tasks to a worker task
   // runner and when the answer is known will send the result back to
   // OnDefaultProtocolClientWorkerFinished().
-  CreateShellWorker(callback, escaped_url.scheme(),
-                    g_external_protocol_handler_delegate)
-      ->StartCheckIsDefault();
+  CreateShellWorker(escaped_url.scheme(), g_external_protocol_handler_delegate)
+      ->StartCheckIsDefault(std::move(callback));
 }
 
 // static

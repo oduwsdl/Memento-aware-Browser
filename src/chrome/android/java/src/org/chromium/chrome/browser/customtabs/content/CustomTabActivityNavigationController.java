@@ -12,7 +12,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.StrictMode;
 import android.os.SystemClock;
 import android.text.TextUtils;
 
@@ -23,15 +22,15 @@ import androidx.core.app.ActivityOptionsCompat;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.CloseButtonNavigator;
 import org.chromium.chrome.browser.customtabs.CustomTabObserver;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.StartStopWithNativeObserver;
@@ -89,7 +88,7 @@ public class CustomTabActivityNavigationController implements StartStopWithNativ
     private final CloseButtonNavigator mCloseButtonNavigator;
     private final ChromeBrowserInitializer mChromeBrowserInitializer;
     private final Activity mActivity;
-    private final Lazy<ChromeFullscreenManager> mFullscreenManager;
+    private final Lazy<FullscreenManager> mFullscreenManager;
 
     @Nullable
     private ToolbarManager mToolbarManager;
@@ -117,7 +116,7 @@ public class CustomTabActivityNavigationController implements StartStopWithNativ
             Lazy<CustomTabObserver> customTabObserver, CloseButtonNavigator closeButtonNavigator,
             ChromeBrowserInitializer chromeBrowserInitializer, ChromeActivity<?> activity,
             ActivityLifecycleDispatcher lifecycleDispatcher,
-            Lazy<ChromeFullscreenManager> fullscreenManager) {
+            Lazy<FullscreenManager> fullscreenManager) {
         mTabController = tabController;
         mTabProvider = tabProvider;
         mIntentDataProvider = intentDataProvider;
@@ -167,9 +166,6 @@ public class CustomTabActivityNavigationController implements StartStopWithNativ
         }
 
         IntentHandler.addReferrerAndHeaders(params, mIntentDataProvider.getIntent());
-        if (params.getReferrer() == null) {
-            params.setReferrer(mConnection.getReferrerForSession(mIntentDataProvider.getSession()));
-        }
 
         // Launching a TWA, WebAPK or a standalone-mode homescreen shortcut counts as a TOPLEVEL
         // transition since it opens up an app-like experience, and should count towards site
@@ -244,13 +240,8 @@ public class CustomTabActivityNavigationController implements StartStopWithNativ
         boolean willChromeHandleIntent =
                 mIntentDataProvider.isOpenedByChrome() || mIntentDataProvider.isIncognito();
 
-        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
-        try {
-            willChromeHandleIntent |=
-                    ExternalNavigationDelegateImpl.willChromeHandleIntent(intent, true);
-        } finally {
-            StrictMode.setThreadPolicy(oldPolicy);
-        }
+        willChromeHandleIntent |=
+                ExternalNavigationDelegateImpl.willChromeHandleIntent(intent, true);
 
         Bundle startActivityOptions = ActivityOptionsCompat.makeCustomAnimation(
                 mActivity, R.anim.abc_fade_in, R.anim.abc_fade_out).toBundle();
@@ -261,16 +252,10 @@ public class CustomTabActivityNavigationController implements StartStopWithNativ
             mTabController.detachAndStartReparenting(intent, startActivityOptions,
                     () -> finish(REPARENTING));
         } else {
-            // Temporarily allowing disk access while fixing. TODO: http://crbug.com/581860
-            StrictMode.allowThreadDiskWrites();
-            try {
-                if (mIntentDataProvider.isInfoPage()) {
-                    IntentHandler.startChromeLauncherActivityForTrustedIntent(intent);
-                } else {
-                    mActivity.startActivity(intent, startActivityOptions);
-                }
-            } finally {
-                StrictMode.setThreadPolicy(oldPolicy);
+            if (mIntentDataProvider.isInfoPage()) {
+                IntentHandler.startChromeLauncherActivityForTrustedIntent(intent);
+            } else {
+                mActivity.startActivity(intent, startActivityOptions);
             }
         }
         return true;

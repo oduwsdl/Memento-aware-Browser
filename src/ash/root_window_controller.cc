@@ -77,6 +77,7 @@
 #include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
@@ -452,9 +453,7 @@ class FillLayoutManager : public aura::LayoutManager {
   void OnChildWindowVisibilityChanged(aura::Window* child,
                                       bool visible) override {}
   void SetChildBounds(aura::Window* child,
-                      const gfx::Rect& requested_bounds) override {
-    SetChildBoundsDirect(child, requested_bounds);
-  }
+                      const gfx::Rect& requested_bounds) override {}
 
  private:
   void Relayout() {
@@ -464,7 +463,7 @@ class FillLayoutManager : public aura::LayoutManager {
       const int resize_behavior =
           child->GetProperty(aura::client::kResizeBehaviorKey);
       if (resize_behavior & aura::client::kResizeBehaviorCanMaximize)
-        child->SetBounds(fullscreen);
+        SetChildBoundsDirect(child, fullscreen);
     }
   }
 
@@ -881,11 +880,8 @@ void RootWindowController::Init(RootWindowType root_window_type) {
       base::BindOnce(&RootWindowController::OnFirstWallpaperWidgetSet,
                      base::Unretained(this)));
 
-  int container = Shell::Get()->session_controller()->IsUserSessionBlocked()
-                      ? kShellWindowId_LockScreenWallpaperContainer
-                      : kShellWindowId_WallpaperContainer;
-  wallpaper_widget_controller_->Init(container);
-
+  wallpaper_widget_controller_->Init(
+      Shell::Get()->session_controller()->IsUserSessionBlocked());
   root_window_layout_manager_->OnWindowResized();
 
   // Explicitly update the desks controller before notifying the ShellObservers.
@@ -969,12 +965,15 @@ void RootWindowController::CreateContainers() {
   aura::Window* root = GetRootWindow();
   root_window_layout_manager_ = new RootWindowLayoutManager(root);
 
-  // For screen rotation animation: add a NOT_DRAWN layer in between the
-  // root_window's layer and its current children so that we only need to
-  // initiate two LayerAnimationSequences. One for the new layers and one for
-  // the old layers.
-  aura::Window* screen_rotation_container = CreateContainer(
-      kShellWindowId_ScreenRotationContainer, "ScreenRotationContainer", root);
+  // Add a NOT_DRAWN layer in between the root_window's layer and its current
+  // children so that we only need to initiate two LayerAnimationSequences for
+  // fullscreen animations such as the screen rotation animation and the desk
+  // switch animation. Those animations take a screenshot of this container,
+  // stack it ontop and animate the screenshot instead of the individual
+  // elements.
+  aura::Window* screen_rotation_container =
+      CreateContainer(kShellWindowId_ScreenAnimationContainer,
+                      "ScreenAnimationContainer", root);
 
   // Everything that needs to be included in the docked magnifier, when enabled,
   // should be a descendant of MagnifiedContainer. The DockedMagnifierContainer
@@ -1174,6 +1173,16 @@ void RootWindowController::CreateContainers() {
   overlay_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
   overlay_container->SetLayoutManager(
       new OverlayLayoutManager(overlay_container));  // Takes ownership.
+
+  if (chromeos::features::IsAmbientModeEnabled()) {
+    aura::Window* ambient_container =
+        CreateContainer(kShellWindowId_AmbientModeContainer,
+                        "AmbientModeContainer", lock_screen_related_containers);
+    ::wm::SetChildWindowVisibilityChangesAnimated(ambient_container);
+    ambient_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
+    ambient_container->SetLayoutManager(
+        new FillLayoutManager(ambient_container));  // Takes ownership.
+  }
 
   aura::Window* mouse_cursor_container =
       CreateContainer(kShellWindowId_MouseCursorContainer,

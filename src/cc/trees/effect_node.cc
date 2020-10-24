@@ -35,6 +35,8 @@ EffectNode::EffectNode()
       effect_changed(false),
       subtree_has_copy_request(false),
       is_fast_rounded_corner(false),
+      node_or_ancestor_has_filters(false),
+      affected_by_backdrop_filter(false),
       render_surface_reason(RenderSurfaceReason::kNone),
       transform_id(0),
       clip_id(0),
@@ -46,6 +48,7 @@ EffectNode::EffectNode(const EffectNode& other) = default;
 
 EffectNode::~EffectNode() = default;
 
+#if DCHECK_IS_ON()
 bool EffectNode::operator==(const EffectNode& other) const {
   return id == other.id && parent_id == other.parent_id &&
          stable_id == other.stable_id && opacity == other.opacity &&
@@ -59,6 +62,8 @@ bool EffectNode::operator==(const EffectNode& other) const {
          backdrop_mask_element_id == other.backdrop_mask_element_id &&
          rounded_corner_bounds == other.rounded_corner_bounds &&
          is_fast_rounded_corner == other.is_fast_rounded_corner &&
+         node_or_ancestor_has_filters == other.node_or_ancestor_has_filters &&
+         affected_by_backdrop_filter == other.affected_by_backdrop_filter &&
          // The specific reason is just for tracing/testing/debugging, so just
          // check whether a render surface is needed.
          HasRenderSurface() == other.HasRenderSurface() &&
@@ -91,6 +96,7 @@ bool EffectNode::operator==(const EffectNode& other) const {
          closest_ancestor_with_copy_request_id ==
              other.closest_ancestor_with_copy_request_id;
 }
+#endif  // DCHECK_IS_ON()
 
 const char* RenderSurfaceReasonToString(RenderSurfaceReason reason) {
   switch (reason) {
@@ -153,6 +159,8 @@ void EffectNode::AsValueInto(base::trace_event::TracedValue* value) const {
     value->SetString("backdrop_filters", backdrop_filters.ToString());
   value->SetDouble("backdrop_filter_quality", backdrop_filter_quality);
   value->SetBoolean("is_fast_rounded_corner", is_fast_rounded_corner);
+  value->SetBoolean("node_or_ancestor_has_filters",
+                    node_or_ancestor_has_filters);
   if (!rounded_corner_bounds.IsEmpty()) {
     MathUtil::AddToTracedValue("rounded_corner_bounds", rounded_corner_bounds,
                                value);
@@ -184,6 +192,7 @@ void EffectNode::AsValueInto(base::trace_event::TracedValue* value) const {
                     closest_ancestor_with_cached_render_surface_id);
   value->SetInteger("closest_ancestor_with_copy_request_id",
                     closest_ancestor_with_copy_request_id);
+  value->SetBoolean("affected_by_backdrop_filter", affected_by_backdrop_filter);
 }
 
 }  // namespace cc

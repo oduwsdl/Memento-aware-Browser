@@ -15,19 +15,22 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.firstrun.DisableFirstRun;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabbed_mode.TabbedRootUiCoordinator;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
+import org.chromium.chrome.test.util.browser.contextmenu.RevampedContextMenuUtils;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetTestSupport;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -38,7 +41,7 @@ import org.chromium.net.test.EmbeddedTestServerRule;
  * FocusedEditableTextFieldZoomTest and TabsTest.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@DisableFeatures({ChromeFeatureList.REVAMPED_CONTEXT_MENU})
+@Restriction(Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE)
 @EnableFeatures(ChromeFeatureList.EPHEMERAL_TAB_USING_BOTTOM_SHEET)
 public class PreviewTabTest {
     @Rule
@@ -75,6 +78,10 @@ public class PreviewTabTest {
                                                                .getBottomSheetController());
     }
 
+    /**
+     * End all animations that already started before so that the UI will be in a state ready
+     * for the next command.
+     */
     private void endAnimations() {
         TestThreadUtils.runOnUiThreadBlocking(mSheetTestSupport::endAllAnimations);
     }
@@ -98,7 +105,7 @@ public class PreviewTabTest {
 
         ChromeActivity activity = mActivityTestRule.getActivity();
         Tab tab = activity.getActivityTab();
-        ContextMenuUtils.selectContextMenuItem(InstrumentationRegistry.getInstrumentation(),
+        RevampedContextMenuUtils.selectContextMenuItem(InstrumentationRegistry.getInstrumentation(),
                 activity, tab, PREVIEW_TAB_DOM_ID, R.id.contextmenu_open_in_ephemeral_tab);
         endAnimations();
         Assert.assertTrue("The Preview Tab did not open", mEphemeralTabCoordinator.isOpened());
@@ -110,6 +117,39 @@ public class PreviewTabTest {
                 mEphemeralTabCoordinator.isOpened());
 
         closePreviewTab();
+    }
+
+    /**
+     * Test that closing all incognito tabs successfully handles the base tab and
+     * its preview tab opened in incognito mode. This makes sure an incognito profile
+     * shared by the tabs is destroyed safely.
+     */
+    @Test
+    @MediumTest
+    @Feature({"PreviewTab"})
+    public void testCloseAllIncognitoTabsClosesPreviewTab() throws Throwable {
+        Assert.assertFalse("Test should have started without any Preview Tab",
+                mEphemeralTabCoordinator.isOpened());
+
+        mActivityTestRule.loadUrlInNewTab(mTestServer.getServer().getURL(BASE_PAGE),
+                /*incognito=*/true);
+        mActivityTestRule.getActivity().getTabModelSelector().selectModel(true);
+        ChromeActivity activity = mActivityTestRule.getActivity();
+        Tab tab = activity.getActivityTab();
+        Assert.assertTrue(tab.isIncognito());
+
+        RevampedContextMenuUtils.selectContextMenuItem(InstrumentationRegistry.getInstrumentation(),
+                activity, tab, PREVIEW_TAB_DOM_ID, R.id.contextmenu_open_in_ephemeral_tab);
+        endAnimations();
+        BottomSheetController bottomSheet =
+                activity.getRootUiCoordinatorForTesting().getBottomSheetController();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            bottomSheet.expandSheet();
+            endAnimations();
+            IncognitoUtils.closeAllIncognitoTabs();
+            endAnimations();
+        });
+        Assert.assertEquals(SheetState.HIDDEN, bottomSheet.getSheetState());
     }
 
     /**

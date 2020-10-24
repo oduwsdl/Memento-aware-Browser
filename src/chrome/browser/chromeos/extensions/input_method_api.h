@@ -265,6 +265,18 @@ class InputMethodPrivateSetCompositionRangeFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class InputMethodPrivateSetComposingRangeFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.setComposingRange",
+                             INPUTMETHODPRIVATE_SETCOMPOSINGRANGE)
+
+ protected:
+  ~InputMethodPrivateSetComposingRangeFunction() override {}
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
 class InputMethodPrivateSetSelectionRangeFunction : public ExtensionFunction {
  public:
   InputMethodPrivateSetSelectionRangeFunction(
@@ -281,6 +293,43 @@ class InputMethodPrivateSetSelectionRangeFunction : public ExtensionFunction {
  private:
   DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.setSelectionRange",
                              INPUTMETHODPRIVATE_SETSELECTIONRANGE)
+};
+
+class InputMethodPrivateGetAutocorrectRangeFunction : public ExtensionFunction {
+ public:
+  InputMethodPrivateGetAutocorrectRangeFunction(
+      const InputMethodPrivateGetAutocorrectRangeFunction&) = delete;
+  InputMethodPrivateGetAutocorrectRangeFunction& operator=(
+      const InputMethodPrivateGetAutocorrectRangeFunction&) = delete;
+  InputMethodPrivateGetAutocorrectRangeFunction() = default;
+
+ protected:
+  ~InputMethodPrivateGetAutocorrectRangeFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.getAutocorrectRange",
+                             INPUTMETHODPRIVATE_GETAUTOCORRECTRANGE)
+};
+
+class InputMethodPrivateGetAutocorrectCharacterBoundsFunction
+    : public ExtensionFunction {
+ public:
+  InputMethodPrivateGetAutocorrectCharacterBoundsFunction(
+      const InputMethodPrivateGetAutocorrectCharacterBoundsFunction&) = delete;
+  InputMethodPrivateGetAutocorrectCharacterBoundsFunction& operator=(
+      const InputMethodPrivateGetAutocorrectCharacterBoundsFunction&) = delete;
+  InputMethodPrivateGetAutocorrectCharacterBoundsFunction() = default;
+
+ protected:
+  ~InputMethodPrivateGetAutocorrectCharacterBoundsFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.getAutocorrectCharacterBounds",
+                             INPUTMETHODPRIVATE_GETAUTOCORRECTCHARACTERBOUNDS)
 };
 
 class InputMethodPrivateSetAutocorrectRangeFunction : public ExtensionFunction {

@@ -6,7 +6,6 @@
 
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "base/test/scoped_feature_list.h"
 #import "ios/chrome/browser/feature_engagement/feature_engagement_app_interface.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
@@ -27,14 +26,12 @@
 #error "This file requires ARC support."
 #endif
 
-#if defined(CHROME_EARL_GREY_2)
 // TODO(crbug.com/1015113): The EG2 macro is breaking indexing for some reason
 // without the trailing semicolon.  For now, disable the extra semi warning
 // so Xcode indexing works for the egtest.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wc++98-compat-extra-semi"
 GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(FeatureEngagementAppInterface);
-#endif  // defined(CHROME_EARL_GREY_2)
 
 namespace {
 

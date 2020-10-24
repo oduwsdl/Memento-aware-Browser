@@ -11,8 +11,10 @@
 
 #include <string>
 
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/win/atl.h"
+#include "base/win/scoped_handle.h"
 #include "base/win/windows_types.h"
 
 namespace updater {
@@ -28,9 +30,8 @@ template <typename Error>
 HRESULT HRESULTFromUpdaterError(Error error) {
   constexpr ULONG kCustomerBit = 0x20000000;
   constexpr ULONG kFacilityOmaha = 67;
-  return static_cast<HRESULT>(static_cast<ULONG>(SEVERITY_ERROR) |
-                              kCustomerBit | (kFacilityOmaha << 16) |
-                              static_cast<ULONG>(error));
+  return HRESULT{ULONG{SEVERITY_ERROR} | kCustomerBit | (kFacilityOmaha << 16) |
+                 ULONG{error}};
 }
 
 // Checks whether a process is running with the image |executable|. Returns true
@@ -110,6 +111,9 @@ int GetDownloadProgress(int64_t downloaded_bytes, int64_t total_bytes);
 int GetInstallerProgress(const std::string& app_id);
 
 bool DeleteInstallerProgress(const std::string& app_id);
+
+// Returns a logged on user token handle from the current session.
+base::win::ScopedHandle GetUserTokenFromCurrentSessionId();
 
 }  // namespace updater
 

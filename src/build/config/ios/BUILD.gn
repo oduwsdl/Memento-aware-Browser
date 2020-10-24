@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/coverage/coverage.gni")
 import("//build/config/ios/ios_sdk.gni")
 import("//build/config/sysroot.gni")
 import("//build/toolchain/toolchain.gni")
@@ -32,26 +31,32 @@ config("compiler") {
 
   # CPU architecture.
   if (current_cpu == "x64") {
-    common_ios_flags += [
-      "-arch",
-      "x86_64",
-    ]
+    triplet_cpu = "x86_64"
   } else if (current_cpu == "x86") {
-    common_ios_flags += [
-      "-arch",
-      "i386",
-    ]
-  } else if (current_cpu == "armv7" || current_cpu == "arm") {
-    common_ios_flags += [
-      "-arch",
-      "armv7",
-    ]
+    triplet_cpu = "i386"
+  } else if (current_cpu == "arm" || current_cpu == "armv7") {
+    triplet_cpu = "armv7"
   } else if (current_cpu == "arm64") {
-    common_ios_flags += [
-      "-arch",
-      "arm64",
-    ]
+    triplet_cpu = "arm64"
+  } else {
+    assert(false, "unsupported cpu: $current_cpu")
   }
+
+  # Environment.
+  if (target_environment == "simulator") {
+    triplet_environment = "-simulator"
+  } else {
+    triplet_environment = ""
+  }
+
+  # OS.
+  triplet_os = "apple-ios"
+
+  # Set target.
+  common_ios_flags = [
+    "-target",
+    "$triplet_cpu-$triplet_os$ios_deployment_target$triplet_environment",
+  ]
 
   # This is here so that all files get recompiled after an Xcode update.
   # (defines are passed via the command line, and build system rebuild things
@@ -60,6 +65,12 @@ config("compiler") {
 
   asmflags = common_ios_flags
   cflags = common_ios_flags
+  swiftflags = common_ios_flags
+
+  swiftflags += [
+    "-swift-version",
+    "5",
+  ]
 
   # Without this, the constructors and destructors of a C++ object inside
   # an Objective C struct won't be called, which is very bad.
@@ -73,25 +84,21 @@ config("compiler") {
 # that is iOS-only. Please see that target for advice on what should go in
 # :runtime_library vs. :compiler.
 config("runtime_library") {
+  _sysroot_path = sysroot
   if (ios_enable_relative_sdk_path) {
-    common_flags = [
-      "-isysroot",
-      rebase_path(sysroot, root_build_dir),
-    ]
-  } else {
-    common_flags = [
-      "-isysroot",
-      sysroot,
-    ]
+    _sysroot_path = rebase_path(sysroot, root_build_dir)
   }
 
-  if (use_ios_simulator) {
-    common_flags += [ "-mios-simulator-version-min=$ios_deployment_target" ]
-  } else {
-    common_flags += [ "-miphoneos-version-min=$ios_deployment_target" ]
-  }
+  common_flags = [
+    "-isysroot",
+    _sysroot_path,
+  ]
+  swiftflags = [
+    "-sdk",
+    _sysroot_path,
+  ]
 
-  if (use_xcode_clang && enable_ios_bitcode && !use_ios_simulator) {
+  if (use_xcode_clang && enable_ios_bitcode && target_environment == "device") {
     if (is_debug) {
       common_flags += [ "-fembed-bitcode-marker" ]
     } else {
@@ -102,10 +109,6 @@ config("runtime_library") {
   asmflags = common_flags
   cflags = common_flags
   ldflags = common_flags
-
-  if (use_clang_coverage) {
-    configs = [ "//build/config/coverage:default_coverage" ]
-  }
 }
 
 config("ios_executable_flags") {
@@ -113,6 +116,7 @@ config("ios_executable_flags") {
 
 config("ios_dynamic_flags") {
   ldflags = [ "-Wl,-ObjC" ]  # Always load Objective-C categories and class.
+  lib_dirs = [ "$sysroot/usr/lib/swift" ]
 }
 
 config("xctest_config") {
@@ -169,6 +173,8 @@ action("xctest_runner_without_arm64e") {
     rebase_path(outputs[0], root_build_dir),
     "--input",
     rebase_path(sources[0], root_build_dir),
+    "--xcode-version",
+    xcode_version,
   ]
 
   if (ios_use_goma_rbe) {

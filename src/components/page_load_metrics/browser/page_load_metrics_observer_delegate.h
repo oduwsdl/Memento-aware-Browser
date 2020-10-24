@@ -7,7 +7,7 @@
 
 #include "base/optional.h"
 #include "base/time/time.h"
-#include "components/page_load_metrics/browser/observers/largest_contentful_paint_handler.h"
+#include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/resource_tracker.h"
 #include "components/page_load_metrics/common/page_end_reason.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -30,6 +30,20 @@ struct PageRenderData;
 // from any PageLoadMetricsObserver.
 class PageLoadMetricsObserverDelegate {
  public:
+  // States when the page is restored from the back-forward cache.
+  struct BackForwardCacheRestore {
+    explicit BackForwardCacheRestore(bool was_in_foreground);
+    BackForwardCacheRestore(const BackForwardCacheRestore&);
+
+    // The first time when the page becomes backgrounded after the page is
+    // restored. The time is relative to the navigation start of bfcache restore
+    // avigation.
+    base::Optional<base::TimeDelta> first_background_time;
+
+    // True if the page was in foreground when the page is restored.
+    bool was_in_foreground = false;
+  };
+
   virtual content::WebContents* GetWebContents() const = 0;
 
   // The time the navigation was initiated.
@@ -43,18 +57,12 @@ class PageLoadMetricsObserverDelegate {
   virtual const base::Optional<base::TimeDelta>& GetFirstForegroundTime()
       const = 0;
 
-  // The first time that the page was backgrounded after the last restore from
-  // the back-forward cache, relative to the navigation start of the bfcache
-  // restore navigation.
-  virtual const base::Optional<base::TimeDelta>&
-  GetFirstBackgroundTimeAfterBackForwardCacheRestore() const = 0;
+  // The state of index-th restore from the back-forward cache.
+  virtual const BackForwardCacheRestore& GetBackForwardCacheRestore(
+      size_t index) const = 0;
 
   // True if the page load started in the foreground.
   virtual bool StartedInForeground() const = 0;
-
-  // True if the last restore from back-forward cache occurred in a foreground
-  // tab.
-  virtual bool LastBackForwardCacheRestoreWasInForeground() const = 0;
 
   // Whether the page load was initiated by a user.
   virtual const UserInitiatedInfo& GetUserInitiatedInfo() const = 0;
@@ -123,8 +131,8 @@ class PageLoadMetricsObserverDelegate {
   virtual const LargestContentfulPaintHandler&
   GetExperimentalLargestContentfulPaintHandler() const = 0;
 
-  // UKM SourceId for the current page load.
-  virtual ukm::SourceId GetSourceId() const = 0;
+  // UKM source ID for the current page load.
+  virtual ukm::SourceId GetPageUkmSourceId() const = 0;
 
   // Whether the associated navigation is the first navigation in its associated
   // WebContents. Note that, for newly opened tabs that display the New Tab

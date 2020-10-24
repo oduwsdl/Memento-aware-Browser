@@ -11,6 +11,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -26,9 +28,10 @@ import org.chromium.chrome.browser.util.KeyNavigationUtil;
 @VisibleForTesting
 public class OmniboxSuggestionsRecyclerView
         extends RecyclerView implements OmniboxSuggestionsDropdown {
-    private final OmniboxSuggestionsDropdownDelegate mDropdownDelegate;
-    private final SuggestionScrollListener mScrollListener;
-    private OmniboxSuggestionsRecyclerViewAdapter mAdapter;
+    private final @NonNull OmniboxSuggestionsDropdownDelegate mDropdownDelegate;
+    private final @NonNull SuggestionScrollListener mScrollListener;
+    private @Nullable OmniboxSuggestionsDropdown.Observer mObserver;
+    private @Nullable OmniboxSuggestionsRecyclerViewAdapter mAdapter;
 
     private final int[] mTempMeasureSpecs = new int[2];
 
@@ -48,6 +51,10 @@ public class OmniboxSuggestionsRecyclerView
             if (scrollState == SCROLL_STATE_DRAGGING && mObserver != null) {
                 mObserver.onSuggestionDropdownScroll();
             }
+        }
+
+        void onOverscrollToTop() {
+            mObserver.onSuggestionDropdownOverscrolledToTop();
         }
     }
 
@@ -79,7 +86,6 @@ public class OmniboxSuggestionsRecyclerView
      */
     public OmniboxSuggestionsRecyclerView(Context context) {
         super(context, null, android.R.attr.dropDownListViewStyle);
-        setLayoutManager(new LinearLayoutManager(context));
         setFocusable(true);
         setFocusableInTouchMode(true);
         setRecycledViewPool(new HistogramRecordingRecycledViewPool());
@@ -87,14 +93,26 @@ public class OmniboxSuggestionsRecyclerView
         // By default RecyclerViews come with item animators.
         setItemAnimator(null);
 
+        mScrollListener = new SuggestionScrollListener();
+        setOnScrollListener(mScrollListener);
+        setLayoutManager(new LinearLayoutManager(context) {
+            @Override
+            public int scrollVerticallyBy(
+                    int deltaY, RecyclerView.Recycler recycler, RecyclerView.State state) {
+                int scrollY = super.scrollVerticallyBy(deltaY, recycler, state);
+                if (scrollY == 0 && deltaY < 0) {
+                    mScrollListener.onOverscrollToTop();
+                }
+                return scrollY;
+            }
+        });
+
         final Resources resources = context.getResources();
         int paddingBottom =
                 resources.getDimensionPixelOffset(R.dimen.omnibox_suggestion_list_padding_bottom);
         ViewCompat.setPaddingRelative(this, 0, 0, 0, paddingBottom);
 
         mDropdownDelegate = new OmniboxSuggestionsDropdownDelegate(resources, this);
-        mScrollListener = new SuggestionScrollListener();
-        setOnScrollListener(mScrollListener);
     }
 
     @Override
@@ -109,6 +127,7 @@ public class OmniboxSuggestionsRecyclerView
 
     @Override
     public void setObserver(OmniboxSuggestionsDropdown.Observer observer) {
+        mObserver = observer;
         mScrollListener.setObserver(observer);
         mDropdownDelegate.setObserver(observer);
     }
@@ -120,9 +139,16 @@ public class OmniboxSuggestionsRecyclerView
     }
 
     @Override
-    public int getItemCount() {
+    public int getDropdownItemViewCountForTest() {
         if (mAdapter == null) return 0;
         return mAdapter.getItemCount();
+    }
+
+    @Override
+    public View getDropdownItemViewForTest(int index) {
+        final LayoutManager manager = getLayoutManager();
+        manager.scrollToPosition(index);
+        return manager.findViewByPosition(index);
     }
 
     @Override
@@ -133,6 +159,13 @@ public class OmniboxSuggestionsRecyclerView
         if (mAdapter != null && mAdapter.getSelectedViewIndex() != 0) {
             mAdapter.resetSelection();
         }
+    }
+
+    @Override
+    public void hide() {
+        if (getVisibility() != VISIBLE) return;
+        setVisibility(GONE);
+        getRecycledViewPool().clear();
     }
 
     @Override
@@ -194,5 +227,15 @@ public class OmniboxSuggestionsRecyclerView
     public boolean onGenericMotionEvent(MotionEvent event) {
         return mDropdownDelegate.shouldIgnoreGenericMotionEvent(event)
                 || super.onGenericMotionEvent(event);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        final int eventType = ev.getActionMasked();
+        if ((eventType == MotionEvent.ACTION_UP || eventType == MotionEvent.ACTION_DOWN)
+                && mObserver != null) {
+            mObserver.onGesture(eventType == MotionEvent.ACTION_UP, ev.getEventTime());
+        }
+        return super.dispatchTouchEvent(ev);
     }
 }

@@ -6,14 +6,15 @@
 
 #include "src/base/bounded-page-allocator.h"
 #include "src/base/platform/platform.h"
+#include "src/heap/base/stack.h"
 #include "src/heap/cppgc/globals.h"
-#include "src/heap/cppgc/heap-object-header-inl.h"
-#include "src/heap/cppgc/heap-page-inl.h"
+#include "src/heap/cppgc/heap-object-header.h"
+#include "src/heap/cppgc/heap-page.h"
 #include "src/heap/cppgc/heap-visitor.h"
 #include "src/heap/cppgc/marker.h"
+#include "src/heap/cppgc/marking-verifier.h"
 #include "src/heap/cppgc/page-memory.h"
 #include "src/heap/cppgc/prefinalizer-handler.h"
-#include "src/heap/cppgc/stack.h"
 #include "src/heap/cppgc/stats-collector.h"
 
 namespace cppgc {
@@ -52,8 +53,10 @@ class ObjectSizeCounter : private HeapVisitor<ObjectSizeCounter> {
 
 }  // namespace
 
-HeapBase::HeapBase(std::shared_ptr<cppgc::Platform> platform,
-                   size_t custom_spaces)
+HeapBase::HeapBase(
+    std::shared_ptr<cppgc::Platform> platform,
+    const std::vector<std::unique_ptr<CustomSpaceBase>>& custom_spaces,
+    StackSupport stack_support)
     : raw_heap_(this, custom_spaces),
       platform_(std::move(platform)),
 #if defined(CPPGC_CAGED_HEAP)
@@ -64,11 +67,14 @@ HeapBase::HeapBase(std::shared_ptr<cppgc::Platform> platform,
           std::make_unique<PageBackend>(platform_->GetPageAllocator())),
 #endif
       stats_collector_(std::make_unique<StatsCollector>()),
-      stack_(std::make_unique<Stack>(v8::base::Stack::GetStackStart())),
+      stack_(std::make_unique<heap::base::Stack>(
+          v8::base::Stack::GetStackStart())),
       prefinalizer_handler_(std::make_unique<PreFinalizerHandler>()),
+      compactor_(raw_heap_),
       object_allocator_(&raw_heap_, page_backend_.get(),
                         stats_collector_.get()),
-      sweeper_(&raw_heap_, platform_.get(), stats_collector_.get()) {
+      sweeper_(&raw_heap_, platform_.get(), stats_collector_.get()),
+      stack_support_(stack_support) {
 }
 
 HeapBase::~HeapBase() = default;
@@ -82,6 +88,10 @@ HeapBase::NoGCScope::NoGCScope(HeapBase& heap) : heap_(heap) {
 }
 
 HeapBase::NoGCScope::~NoGCScope() { heap_.no_gc_scope_--; }
+
+void HeapBase::AdvanceIncrementalGarbageCollectionOnAllocationIfNeeded() {
+  if (marker_) marker_->AdvanceMarkingOnAllocation();
+}
 
 }  // namespace internal
 }  // namespace cppgc

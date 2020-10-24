@@ -42,12 +42,6 @@ cast_source_set("base") {
   sources = [
     "alarm_manager.cc",
     "alarm_manager.h",
-    "android/cast_settings_manager.cc",
-    "android/cast_settings_manager.h",
-    "android/dumpstate_writer.cc",
-    "android/dumpstate_writer.h",
-    "android/system_time_change_notifier_android.cc",
-    "android/system_time_change_notifier_android.h",
     "bind_to_task_runner.h",
     "bitstream_audio_codecs.cc",
     "bitstream_audio_codecs.h",
@@ -97,10 +91,6 @@ cast_source_set("base") {
     "//chromecast:chromecast_buildflags",
   ]
 
-  if (is_android) {
-    deps += [ ":jni_headers" ]
-  }
-
   if (chromecast_branding == "public") {
     sources += [ "cast_features_internal.cc" ]
   } else {
@@ -108,7 +98,16 @@ cast_source_set("base") {
   }
 
   if (is_android) {
-    sources += [ "chromecast_config_android.h" ]
+    sources += [
+      "android/cast_settings_manager.cc",
+      "android/cast_settings_manager.h",
+      "android/dumpstate_writer.cc",
+      "android/dumpstate_writer.h",
+      "android/system_time_change_notifier_android.cc",
+      "android/system_time_change_notifier_android.h",
+      "chromecast_config_android.h",
+    ]
+    deps += [ ":jni_headers" ]
     if (chromecast_branding == "public") {
       sources += [ "chromecast_config_android_dummy.cc" ]
     } else {
@@ -355,6 +354,7 @@ if (is_android) {
     deps = [
       "//base:base_java",
       "//base:jni_java",
+      "//third_party/android_deps:androidx_annotation_annotation_java",
     ]
     annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   }

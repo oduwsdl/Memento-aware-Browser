@@ -77,9 +77,24 @@ PermissionsClient::CreateNotificationPermissionUiSelector(
 void PermissionsClient::OnPromptResolved(
     content::BrowserContext* browser_context,
     PermissionRequestType request_type,
-    PermissionAction action) {}
+    PermissionAction action,
+    const GURL& origin,
+    base::Optional<QuietUiReason> quiet_ui_reason) {}
+
+base::Optional<bool>
+PermissionsClient::HadThreeConsecutiveNotificationPermissionDenies(
+    content::BrowserContext* browser_context) {
+  return base::nullopt;
+}
 
 base::Optional<url::Origin> PermissionsClient::GetAutoApprovalOrigin() {
+  return base::nullopt;
+}
+
+base::Optional<bool> PermissionsClient::HasPreviouslyAutoRevokedPermission(
+    content::BrowserContext* browser_context,
+    const GURL& origin,
+    ContentSettingsType permission) {
   return base::nullopt;
 }
 

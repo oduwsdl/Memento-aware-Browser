@@ -8,6 +8,7 @@ import android.view.View;
 
 import androidx.test.filters.LargeTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -15,13 +16,15 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListenerWithScroll;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.RenderFrameHostTestExt;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
@@ -36,8 +39,9 @@ public class GestureListenerManagerTest {
     public ContentShellActivityTestRule mActivityTestRule = new ContentShellActivityTestRule();
 
     // The page should be large enough so that scrolling occurs.
-    private static final String TEST_URL =
-            UrlUtils.encodeHtmlDataUri("<html><body style='height: 10000px'>");
+    private static final String TEST_URL = UrlUtils.encodeHtmlDataUri(
+            "<html><body style='height: 10000px'><script>"
+            + "window.addEventListener('load', () => { document.title = 'loaded'; });</script>");
 
     private static final class GestureStateListenerImpl implements GestureStateListenerWithScroll {
         private int mNumOnScrollOffsetOrExtentChangedCalls;
@@ -48,11 +52,15 @@ public class GestureListenerManagerTest {
 
         @Override
         public void onScrollStarted(int scrollOffsetY, int scrollExtentY) {
+            org.chromium.base.Log.e("chrome", "!!!onScrollStarted " + scrollOffsetY);
             mGotStarted = true;
             mLastScrollOffsetY = null;
         }
         @Override
         public void onScrollOffsetOrExtentChanged(int scrollOffsetY, int scrollExtentY) {
+            org.chromium.base.Log.e("chrome",
+                    "!!!onScrollOffsetOrExtentChanged started=" + mGotStarted
+                            + " scroll=" + scrollOffsetY + " last=" + mLastScrollOffsetY);
             if (mGotStarted
                     && (mLastScrollOffsetY == null || !mLastScrollOffsetY.equals(scrollOffsetY))) {
                 if (mLastScrollOffsetY != null) mDidScrollOffsetChangeWhileScrolling = true;
@@ -61,6 +69,7 @@ public class GestureListenerManagerTest {
         }
         @Override
         public void onScrollEnded(int scrollOffsetY, int scrollExtentY) {
+            org.chromium.base.Log.e("chrome", "!!!onScrollEnded, offset=" + scrollOffsetY);
             // onScrollEnded() should be preceded by onScrollStarted().
             Assert.assertTrue(mGotStarted);
             // onScrollOffsetOrExtentChanged() should be called at least twice. Once with an initial
@@ -78,7 +87,6 @@ public class GestureListenerManagerTest {
      * Assertions for GestureStateListener.onScrollOffsetOrExtentChanged.
      */
     @Test
-    @DisabledTest(message = "crbug.com/1091129")
     @LargeTest
     @Feature({"Browser"})
     public void testOnScrollOffsetOrExtentChanged() throws Throwable {
@@ -87,10 +95,27 @@ public class GestureListenerManagerTest {
         // This needs to wait for first-paint, otherwise scrolling doesn't happen.
         TestCallbackHelperContainer callbackHelperContainer =
                 new TestCallbackHelperContainer(webContents);
-        CallbackHelper done = callbackHelperContainer.getOnFirstVisuallyNonEmptyPaintHelper();
         mActivityTestRule.loadUrl(webContents.getNavigationController(), callbackHelperContainer,
                 new LoadUrlParams(TEST_URL));
-        done.waitForCallback(0);
+        // Wait for the first non-empty visual paint and the title to change. The title changes when
+        // the doc has finished loading, which is a good signal events can be processed.
+        callbackHelperContainer.getOnFirstVisuallyNonEmptyPaintHelper().waitForCallback(0);
+        CriteriaHelper.pollUiThread(
+                () -> Criteria.checkThat(webContents.getTitle(), Matchers.is("loaded")));
+
+        // At this point the page has finished loading and a non-empty paint occurred. This does not
+        // mean the renderer is fully ready to process events (processing events requires layers,
+        // which may not have been created yet). Wait for a visual update, which should ensure the
+        // renderer is ready.
+        CallbackHelper callbackHelper = new CallbackHelper();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            new RenderFrameHostTestExt(webContents.getMainFrame())
+                    .updateVisualState((Boolean result) -> {
+                        Assert.assertTrue(result);
+                        callbackHelper.notifyCalled();
+                    });
+        });
+        callbackHelper.waitForFirst();
 
         final GestureStateListenerImpl listener = new GestureStateListenerImpl();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -105,6 +130,7 @@ public class GestureListenerManagerTest {
             View webContentsView = webContents.getViewAndroidDelegate().getContainerView();
             mCurrentX = webContentsView.getWidth() / 2;
             mCurrentY = webContentsView.getHeight() / 2;
+            Assert.assertTrue(mCurrentY > 0);
         });
 
         // Perform a scroll.

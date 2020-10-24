@@ -219,7 +219,9 @@ MetricsService::MetricsService(MetricsStateManager* state_manager,
       test_mode_active_(false),
       state_(INITIALIZED),
       idle_since_last_transmission_(false),
-      session_id_(-1) {
+      session_id_(-1),
+      synthetic_trial_registry_(
+          client->IsExternalExperimentAllowlistEnabled()) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(state_manager_);
   DCHECK(client_);
@@ -507,8 +509,6 @@ void MetricsService::InitializeMetricsState() {
     // provided UMA is enabled.
     if (state_manager_->IsMetricsReportingEnabled()) {
       has_initial_stability_log = PrepareInitialStabilityLog(previous_version);
-      if (!has_initial_stability_log)
-        provider.LogStabilityLogDeferred();
     }
   }
 
@@ -518,10 +518,8 @@ void MetricsService::InitializeMetricsState() {
   // number of different edge cases, such as if the last version crashed before
   // it could save off a system profile or if UMA reporting is disabled (which
   // normally results in stats being accumulated).
-  if (version_changed && !has_initial_stability_log) {
+  if (version_changed && !has_initial_stability_log)
     ClearSavedStabilityMetrics();
-    provider.LogStabilityDataDiscarded();
-  }
 
   // If the version changed, the system profile is obsolete and needs to be
   // cleared. This is to avoid the stability data misattribution that could
@@ -662,7 +660,7 @@ void MetricsService::PushPendingLogsToPersistentStorage() {
     return;  // We didn't and still don't have time to get plugin list etc.
 
   CloseCurrentLog();
-  log_store()->PersistUnsentLogs();
+  log_store()->TrimAndPersistUnsentLogs();
 }
 
 //------------------------------------------------------------------------------
@@ -752,8 +750,6 @@ bool MetricsService::PrepareInitialStabilityLog(
           local_state_, &system_profile_app_version)) {
     return false;
   }
-  if (system_profile_app_version != prefs_previous_version)
-    StabilityMetricsProvider(local_state_).LogStabilityVersionMismatch();
 
   log_manager_.PauseCurrentLog();
   log_manager_.BeginLoggingWithLog(std::move(initial_stability_log));
@@ -769,7 +765,7 @@ bool MetricsService::PrepareInitialStabilityLog(
 
   // Store unsent logs, including the stability log that was just saved, so
   // that they're not lost in case of a crash before upload time.
-  log_store()->PersistUnsentLogs();
+  log_store()->TrimAndPersistUnsentLogs();
 
   return true;
 }
@@ -799,7 +795,7 @@ void MetricsService::PrepareInitialMetricsLog() {
 
   // Store unsent logs, including the initial log that was just saved, so
   // that they're not lost in case of a crash before upload time.
-  log_store()->PersistUnsentLogs();
+  log_store()->TrimAndPersistUnsentLogs();
 
   state_ = SENDING_LOGS;
 }

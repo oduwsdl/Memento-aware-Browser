@@ -33,6 +33,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/permissions/features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -146,16 +147,16 @@ ContentSettingsContentSettingGetFunction::Run() {
   content_settings::CookieSettings* cookie_settings;
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
-    if (!profile->HasOffTheRecordProfile()) {
+    if (!profile->HasPrimaryOTRProfile()) {
       // TODO(bauerb): Allow reading incognito content settings
       // outside of an incognito session.
       return RespondNow(
           Error(content_settings_api_constants::kIncognitoSessionOnlyError));
     }
     map = HostContentSettingsMapFactory::GetForProfile(
-        profile->GetOffTheRecordProfile());
+        profile->GetPrimaryOTRProfile());
     cookie_settings =
-        CookieSettingsFactory::GetForProfile(profile->GetOffTheRecordProfile())
+        CookieSettingsFactory::GetForProfile(profile->GetPrimaryOTRProfile())
             .get();
   } else {
     map = HostContentSettingsMapFactory::GetForProfile(profile);
@@ -178,7 +179,8 @@ ContentSettingsContentSettingGetFunction::Run() {
   result->SetString(content_settings_api_constants::kContentSettingKey,
                     setting_string);
 
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 ExtensionFunction::ResponseAction
@@ -268,9 +270,7 @@ ContentSettingsContentSettingSetFunction::Run() {
 
   if (primary_pattern != secondary_pattern &&
       secondary_pattern != ContentSettingsPattern::Wildcard() &&
-      !info->website_settings_info()->SupportsEmbeddedExceptions() &&
-      base::FeatureList::IsEnabled(
-          permissions::features::kPermissionDelegation)) {
+      !info->website_settings_info()->SupportsSecondaryPattern()) {
     static const char kUnsupportedEmbeddedException[] =
         "Embedded patterns are not supported for this setting.";
     return RespondNow(Error(kUnsupportedEmbeddedException));
@@ -301,9 +301,23 @@ ContentSettingsContentSettingSetFunction::Run() {
   }
 
   if (scope == kExtensionPrefsScopeIncognitoSessionOnly &&
-      !Profile::FromBrowserContext(browser_context())
-           ->HasOffTheRecordProfile()) {
+      !Profile::FromBrowserContext(browser_context())->HasPrimaryOTRProfile()) {
     return RespondNow(Error(pref_keys::kIncognitoSessionOnlyErrorMessage));
+  }
+
+  if (content_type == ContentSettingsType::PLUGINS) {
+    if (base::FeatureList::IsEnabled(
+            content_settings::kDisallowExtensionsToSetPluginContentSettings)) {
+      return RespondNow(Error(content_settings_api_constants::
+                                  kSettingPluginContentSettingsIsDisallowed));
+    }
+    if (base::FeatureList::IsEnabled(
+            content_settings::kDisallowWildcardsInPluginContentSettings) &&
+        primary_pattern.HasHostWildcards()) {
+      WriteToConsole(blink::mojom::ConsoleMessageLevel::kError,
+                     content_settings_api_constants::
+                         kWildcardPatternsForPluginsDisallowed);
+    }
   }
 
   scoped_refptr<ContentSettingsStore> store =
@@ -311,6 +325,7 @@ ContentSettingsContentSettingSetFunction::Run() {
   store->SetExtensionContentSetting(extension_id(), primary_pattern,
                                     secondary_pattern, content_type,
                                     resource_identifier, setting, scope);
+
   return RespondNow(NoArguments());
 }
 
@@ -354,7 +369,7 @@ void ContentSettingsContentSettingGetResourceIdentifiersFunction::OnGotPlugins(
                     plugin_metadata->name());
     list->Append(std::move(dict));
   }
-  Respond(OneArgument(std::move(list)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(list))));
 }
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 

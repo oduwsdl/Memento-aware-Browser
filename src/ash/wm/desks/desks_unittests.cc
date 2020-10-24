@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#include "ash/app_list/app_list_controller_impl.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/multi_user/multi_user_window_manager_impl.h"
@@ -427,7 +428,7 @@ TEST_F(DesksTest, DesksBarViewDeskCreation) {
   EXPECT_FALSE(controller->CanCreateDesks());
   EXPECT_TRUE(controller->CanRemoveDesks());
   EXPECT_FALSE(new_desk_button->GetEnabled());
-  EXPECT_EQ(views::Button::STATE_DISABLED, new_desk_button->state());
+  EXPECT_EQ(views::Button::STATE_DISABLED, new_desk_button->GetState());
 
   // Hover over one of the mini_views, and expect that the close button becomes
   // visible.
@@ -448,7 +449,7 @@ TEST_F(DesksTest, DesksBarViewDeskCreation) {
   EXPECT_EQ(controller->desks().size(), desks_bar_view->mini_views().size());
   EXPECT_TRUE(controller->CanCreateDesks());
   EXPECT_TRUE(new_desk_button->GetEnabled());
-  EXPECT_EQ(views::Button::STATE_NORMAL, new_desk_button->state());
+  EXPECT_EQ(views::Button::STATE_NORMAL, new_desk_button->GetState());
 
   // Exit overview mode and re-enter. Since we have more than one pre-existing
   // desks, their mini_views should be created upon construction of the desks
@@ -492,7 +493,7 @@ TEST_F(DesksTest, GestureTapOnNewDeskButton) {
     GestureTapOnView(new_desk_button, event_generator);
 
   EXPECT_FALSE(new_desk_button->GetEnabled());
-  EXPECT_EQ(views::Button::STATE_DISABLED, new_desk_button->state());
+  EXPECT_EQ(views::Button::STATE_DISABLED, new_desk_button->GetState());
 }
 
 TEST_F(DesksTest, DesksBarViewScreenLayoutTest) {
@@ -1232,6 +1233,28 @@ TEST_F(DesksTest, MinimizedWindow) {
   EXPECT_NE(win0.get(), window_util::GetActiveWindow());
 }
 
+// Tests that the app list stays open when switching desks. Regression test for
+// http://crbug.com/1138982.
+TEST_F(DesksTest, AppListStaysOpen) {
+  auto* controller = DesksController::Get();
+  NewDesk();
+  ASSERT_EQ(2u, controller->desks().size());
+
+  // Create one app window on each desk.
+  auto win0 = CreateAppWindow(gfx::Rect(400, 400));
+  ActivateDesk(controller->desks()[1].get());
+  auto win1 = CreateAppWindow(gfx::Rect(400, 400));
+
+  // Open the app list.
+  auto* app_list_controller = Shell::Get()->app_list_controller();
+  app_list_controller->ShowAppList();
+  ASSERT_TRUE(app_list_controller->IsVisible(base::nullopt));
+
+  // Switch back to desk 1. Test that the app list is still open.
+  ActivateDesk(controller->desks()[0].get());
+  EXPECT_TRUE(app_list_controller->IsVisible(base::nullopt));
+}
+
 TEST_P(DesksTest, DragWindowToDesk) {
   auto* controller = DesksController::Get();
   NewDesk();
@@ -1567,8 +1590,7 @@ TEST_F(DesksTest, NewDeskButtonStateAndColor) {
   // and color.
   const SkColor background_color =
       AshColorProvider::Get()->GetControlsLayerColor(
-          AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-          AshColorProvider::AshColorMode::kDark);
+          AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
   const SkColor disabled_background_color =
       AshColorProvider::GetDisabledColor(background_color);
   EXPECT_TRUE(new_desk_button->GetEnabled());
@@ -2564,28 +2586,6 @@ TEST_F(TabletModeDesksTest, HotSeatStateAfterMovingAWindowToAnotherDesk) {
   }
 }
 
-namespace {
-
-// A client view that returns a given minimum size to be used on the widget's
-// native window.
-class TestClientView : public views::ClientView {
- public:
-  TestClientView(views::Widget* widget, const gfx::Size& minimum_size)
-      : views::ClientView(widget, widget->widget_delegate()->GetContentsView()),
-        minimum_size_(minimum_size) {}
-  ~TestClientView() override = default;
-
-  // views::ClientView:
-  gfx::Size GetMinimumSize() const override { return minimum_size_; }
-
- private:
-  const gfx::Size minimum_size_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestClientView);
-};
-
-}  // namespace
-
 TEST_F(TabletModeDesksTest, RestoringUnsnappableWindowsInSplitView) {
   UpdateDisplay("600x400");
   display::test::DisplayManagerTestApi(display_manager())
@@ -2595,8 +2595,8 @@ TEST_F(TabletModeDesksTest, RestoringUnsnappableWindowsInSplitView) {
   // can be snapped in portrait orientation.
   auto window = CreateAppWindow(gfx::Rect(350, 350));
   views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window.get());
-  widget->non_client_view()->set_client_view(
-      new TestClientView(widget, gfx::Size(350, 100)));
+  widget->widget_delegate()->GetContentsView()->SetPreferredSize(
+      gfx::Size(350, 100));
   EXPECT_FALSE(split_view_controller()->CanSnapWindow(window.get()));
 
   // Change to a portrait orientation and expect it's possible to snap the
@@ -2771,7 +2771,8 @@ TEST_F(DesksWithSplitViewTest, SwitchToDeskWithSnappedActiveWindow) {
   WindowState* win0_state = WindowState::Get(win0.get());
   WMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_LEFT);
   win0_state->OnWMEvent(&snap_to_left);
-  EXPECT_EQ(WindowStateType::kLeftSnapped, win0_state->GetStateType());
+  EXPECT_EQ(chromeos::WindowStateType::kLeftSnapped,
+            win0_state->GetStateType());
 
   // Switch to |desk_2| and then back to |desk_1|. Verify that neither split
   // view nor overview arises.

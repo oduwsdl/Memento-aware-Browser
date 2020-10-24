@@ -27,7 +27,6 @@
 #include "content/test/test_web_contents.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
-#include "net/url_request/url_request.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -163,6 +162,12 @@ class AppCacheHostTest : public testing::Test {
 
   void SwapCacheCallback(bool result) { last_swap_result_ = result; }
 
+  void LockProcessToURL(const GURL& url) {
+    ChildProcessSecurityPolicyImpl::GetInstance()->LockProcessForTesting(
+        web_contents_->GetMainFrame()->GetSiteInstance()->GetIsolationContext(),
+        kProcessIdForTest, url);
+  }
+
   BrowserTaskEnvironment task_environment_;
   RenderViewHostTestEnabler rvh_enabler_;
   TestBrowserContext browser_context_;
@@ -222,9 +227,7 @@ TEST_F(AppCacheHostTest, SelectNoCache) {
   // Lock process with |kInitialDocumentURL| so we can only accept URLs that
   // generate the same lock as |kInitialDocumentURL|.
   const GURL kInitialDocumentURL("http://whatever/document");
-  ChildProcessSecurityPolicyImpl::GetInstance()->LockProcessForTesting(
-      IsolationContext(&browser_context_), kProcessIdForTest,
-      kInitialDocumentURL);
+  LockProcessToURL(kInitialDocumentURL);
 
   const std::vector<GURL> kDocumentURLs = {
       GURL("http://whatever/"),
@@ -689,9 +692,7 @@ TEST_F(AppCacheHostTest, SelectCacheURLsForWrongSite) {
   // Lock process with |kInitialDocumentURL| so we can only accept URLs that
   // generate the same lock as |kInitialDocumentURL|.
   const GURL kInitialDocumentURL("http://foo.com/document");
-  ChildProcessSecurityPolicyImpl::GetInstance()->LockProcessForTesting(
-      IsolationContext(&browser_context_), kProcessIdForTest,
-      kInitialDocumentURL);
+  LockProcessToURL(kInitialDocumentURL);
 
   AppCacheHost host(kHostIdForTest, kProcessIdForTest, kRenderFrameIdForTest,
                     ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(
@@ -742,9 +743,7 @@ TEST_F(AppCacheHostTest, ForeignEntryForWrongSite) {
   // Lock process with |kInitialDocumentURL| so we can only accept URLs that
   // generate the same lock as |kInitialDocumentURL|.
   const GURL kInitialDocumentURL("http://foo.com");
-  ChildProcessSecurityPolicyImpl::GetInstance()->LockProcessForTesting(
-      IsolationContext(&browser_context_), kProcessIdForTest,
-      kInitialDocumentURL);
+  LockProcessToURL(kInitialDocumentURL);
 
   AppCacheHost host(kHostIdForTest, kProcessIdForTest, kRenderFrameIdForTest,
                     ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(
@@ -772,8 +771,7 @@ TEST_F(AppCacheHostTest, SelectCacheAfterProcessCleanup) {
   const GURL kManifestURL("http://foo.com/manifest");
 
   auto* security_policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  security_policy->LockProcessForTesting(IsolationContext(&browser_context_),
-                                         kProcessIdForTest, kDocumentURL);
+  LockProcessToURL(kDocumentURL);
 
   AppCacheHost host(kHostIdForTest, kProcessIdForTest, kRenderFrameIdForTest,
                     ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(
@@ -825,8 +823,7 @@ TEST_F(AppCacheHostTest, ForeignEntryAfterProcessCleanup) {
   const GURL kDocumentURL("http://foo.com/document");
 
   auto* security_policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  security_policy->LockProcessForTesting(IsolationContext(&browser_context_),
-                                         kProcessIdForTest, kDocumentURL);
+  LockProcessToURL(kDocumentURL);
 
   AppCacheHost host(kHostIdForTest, kProcessIdForTest, kRenderFrameIdForTest,
                     ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(

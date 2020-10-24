@@ -12,12 +12,6 @@ source_set("transitions") {
     "grid_transition_animation_layout_providing.h",
     "grid_transition_layout.h",
     "grid_transition_layout.mm",
-    "legacy_grid_to_visible_tab_animator.h",
-    "legacy_grid_to_visible_tab_animator.mm",
-    "legacy_tab_to_grid_animator.h",
-    "legacy_tab_to_grid_animator.mm",
-    "reduced_motion_animator.h",
-    "reduced_motion_animator.mm",
     "tab_grid_transition_handler.h",
     "tab_grid_transition_handler.mm",
   ]
@@ -27,6 +21,7 @@ source_set("transitions") {
   deps = [
     "//base",
     "//ios/chrome/browser/crash_report",
+    "//ios/chrome/browser/ui/tab_grid:tab_grid_paging",
     "//ios/chrome/browser/ui/util",
   ]
 }

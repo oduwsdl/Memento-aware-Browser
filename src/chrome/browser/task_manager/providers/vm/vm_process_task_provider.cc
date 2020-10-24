@@ -64,12 +64,10 @@ bool HasValidVmDiskExtension(const std::string& filename) {
 }
 
 // The argument this is extracting from will look like this:
-// /home/root/53d63eda33c610d37b44cde8ed06854a05e9cc84/crosvm/dGVybWluYQ==.qcow2
-// This is the path to a VM disk in the user-specific root directory that is not
-// exposed to the user in the Files app. The base for this is /home/root and
-// the cryptohome ID for the user is the next path element. Then we have the
-// service specific 'crosvm' directory which we put VM images in. VM images use
-// base64 encoding of the VM name as the filename with a .qcow2/.img extension.
+// /run/daemon-store/crosvm/53d63eda33c610d37b44cde8ed06854a05e9cc84/dGVybWluYQ==.img
+// This is the path to a VM disk in the user's cryptohome that's not exposed to
+// the user in the Files app, consisting of the path to crosvm's daemon store,
+// the user hash, then the base64 encoded VM name with a .qcow2/.img extension.
 bool CrostiniExtractVmNameAndOwnerId(const std::string& arg,
                                      std::string* vm_name_out,
                                      std::string* owner_id_out) {
@@ -77,7 +75,7 @@ bool CrostiniExtractVmNameAndOwnerId(const std::string& arg,
   DCHECK(owner_id_out);
 
   // All VM disk images are contained in a subdirectory of this path.
-  constexpr char kVmDiskRoot[] = "/home/root/";
+  constexpr char kVmDiskRoot[] = "/run/daemon-store";
 
   // Skip paths that don't start with the correct prefix to filter out the
   // rootfs .img file.
@@ -95,46 +93,42 @@ bool CrostiniExtractVmNameAndOwnerId(const std::string& arg,
   base::Base64Decode(vm_disk_path.RemoveExtension().BaseName().value(),
                      vm_name_out);
 
-  // The owner ID is the long hex string in there...which is 2 parents up.
+  // The owner ID is the long hex string in there...which is 1 parent up.
   // It's safe to call this even if there's not enough parents because the
   // DirName of the root is still the root.
-  *owner_id_out = vm_disk_path.DirName().DirName().BaseName().value();
+  *owner_id_out = vm_disk_path.DirName().BaseName().value();
 
   return true;
 }
 
-// We are looking for argument like this:
-// --params=/run/pvm-images/<cryptohome id>/UHZtRGVmYXVsdA==.pvm/...
+// We are looking for an argument like this:
+// /run/daemon-store/pvm/<cryptohome id>/UHZtRGVmYXVsdA==.pvm:/pvm:true
 bool PluginVmExtractVmNameAndOwnerId(const std::string& arg,
                                      std::string* vm_name_out,
                                      std::string* owner_id_out) {
   DCHECK(vm_name_out);
   DCHECK(owner_id_out);
 
-  constexpr char kParamPrefix[] = "--params=";
-  if (!base::StartsWith(arg, kParamPrefix, base::CompareCase::SENSITIVE)) {
+  constexpr char kArgStart[] = "/run/daemon-store/pvm/";
+  constexpr char kArgEnd[] = ":/pvm:true";
+
+  // Skip paths that don't start/end with the expected prefix/suffix.
+  if (!base::StartsWith(arg, kArgStart, base::CompareCase::SENSITIVE))
     return false;
-  }
-  base::StringPiece param(arg.begin() + strlen(kParamPrefix), arg.end());
-
-  // All VM disk images are mounted at this path.
-  constexpr char kVmDiskRoot[] = "/run/pvm-images/";
-
-  // Skip paths that don't start with the correct prefix.
-  if (!base::StartsWith(param, kVmDiskRoot, base::CompareCase::SENSITIVE)) {
+  if (!base::EndsWith(arg, kArgEnd, base::CompareCase::SENSITIVE))
     return false;
-  }
 
-  const base::FilePath vm_disk_path(param);
+  const base::FilePath vm_disk_path(
+      base::StringPiece(arg.begin(), arg.end() - strlen(kArgEnd)));
 
   std::vector<std::string> components;
   vm_disk_path.GetComponents(&components);
 
-  // Expect /, root, pvm-images, <owner_id>, vm_name.pvm, ...
-  if (components.size() < 5)
+  // Expect /, run, daemon-store, pvm, <owner_id>, vm_name.pvm
+  if (components.size() != 6)
     return false;
 
-  base::FilePath vm_subdir(components[4]);
+  base::FilePath vm_subdir(components[5]);
   if (vm_subdir.Extension() != ".pvm")
     return false;
 
@@ -142,10 +136,7 @@ bool PluginVmExtractVmNameAndOwnerId(const std::string& arg,
   // file itself without the extension.
   base::Base64Decode(vm_subdir.RemoveExtension().value(), vm_name_out);
 
-  // The owner ID is the long hex string in there...which is 2 parents up.
-  // It's safe to call this even if there's not enough parents because the
-  // DirName of the root is still the root.
-  *owner_id_out = components[3];
+  *owner_id_out = components[4];
 
   return true;
 }

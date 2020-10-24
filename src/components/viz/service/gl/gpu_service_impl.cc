@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -52,7 +53,7 @@
 #include "media/mojo/services/mojo_video_encode_accelerator_provider.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "skia/buildflags.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 #include "ui/gl/gl_context.h"
@@ -88,7 +89,7 @@
 #include "ui/gl/direct_composition_surface_win.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "ui/base/cocoa/quartz_util.h"
 #endif
 
@@ -293,7 +294,7 @@ void GetVideoCapabilities(const gpu::GpuPreferences& gpu_preferences,
   gpu_info->video_encode_accelerator_supported_profiles =
       media::GpuVideoAcceleratorUtil::ConvertMediaToGpuEncodeProfiles(
           media::GpuVideoEncodeAcceleratorFactory::GetSupportedProfiles(
-              gpu_preferences));
+              gpu_preferences, gpu_workarounds));
 #endif
 }
 
@@ -324,7 +325,7 @@ GpuServiceImpl::GpuServiceImpl(
     const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
     const base::Optional<gpu::GpuFeatureInfo>&
         gpu_feature_info_for_hardware_gpu,
-    const gpu::GpuExtraInfo& gpu_extra_info,
+    const gfx::GpuExtraInfo& gpu_extra_info,
     gpu::VulkanImplementation* vulkan_implementation,
     base::OnceCallback<void(base::Optional<ExitCode>)> exit_callback)
     : main_runner_(base::ThreadTaskRunnerHandle::Get()),
@@ -393,12 +394,12 @@ GpuServiceImpl::GpuServiceImpl(
   }
 #endif
 
-#if BUILDFLAG(USE_VAAPI)
+#if BUILDFLAG(USE_VAAPI_IMAGE_CODECS)
   image_decode_accelerator_worker_ =
       media::VaapiImageDecodeAcceleratorWorker::Create();
-#endif
+#endif  // BUILDFLAG(USE_VAAPI_IMAGE_CODECS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   if (gpu_feature_info_.status_values[gpu::GPU_FEATURE_TYPE_METAL] ==
       gpu::kGpuFeatureStatusEnabled) {
     metal_context_provider_ = MetalContextProvider::Create(context_options);
@@ -647,7 +648,8 @@ void GpuServiceImpl::CreateArcVideoDecodeAcceleratorOnMainThread(
   DCHECK(main_runner_->BelongsToCurrentThread());
   mojo::MakeSelfOwnedReceiver(
       std::make_unique<arc::GpuArcVideoDecodeAccelerator>(
-          gpu_preferences_, protected_buffer_manager_),
+          gpu_preferences_, gpu_channel_manager_->gpu_driver_bug_workarounds(),
+          protected_buffer_manager_),
       std::move(vda_receiver));
 }
 
@@ -655,7 +657,8 @@ void GpuServiceImpl::CreateArcVideoEncodeAcceleratorOnMainThread(
     mojo::PendingReceiver<arc::mojom::VideoEncodeAccelerator> vea_receiver) {
   DCHECK(main_runner_->BelongsToCurrentThread());
   mojo::MakeSelfOwnedReceiver(
-      std::make_unique<arc::GpuArcVideoEncodeAccelerator>(gpu_preferences_),
+      std::make_unique<arc::GpuArcVideoEncodeAccelerator>(
+          gpu_preferences_, gpu_channel_manager_->gpu_driver_bug_workarounds()),
       std::move(vea_receiver));
 }
 
@@ -706,7 +709,7 @@ void GpuServiceImpl::CreateVideoEncodeAcceleratorProvider(
   media::MojoVideoEncodeAcceleratorProvider::Create(
       std::move(vea_provider_receiver),
       base::BindRepeating(&media::GpuVideoEncodeAcceleratorFactory::CreateVEA),
-      gpu_preferences_);
+      gpu_preferences_, gpu_channel_manager_->gpu_driver_bug_workarounds());
 }
 
 void GpuServiceImpl::CreateGpuMemoryBuffer(
@@ -1047,7 +1050,7 @@ void GpuServiceImpl::OnMemoryPressure(
 }
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 void GpuServiceImpl::BeginCATransaction() {
   DCHECK(io_runner_->BelongsToCurrentThread());
   main_runner_->PostTask(FROM_HERE, base::BindOnce(&ui::BeginCATransaction));

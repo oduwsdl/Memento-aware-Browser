@@ -1,10 +1,14 @@
 include_rules = [
   "+chrome/browser/image_decoder",
   "-chrome/browser/ui/views",
+  "+components/browser_ui/client_certificate",
   "+components/browser_ui/util/android/url_constants.h",
   "+components/country_codes",
+  "+components/enterprise",
+  "+components/infobars/android",
   "+components/page_load_metrics/browser",
   "+components/safety_check",
+  "+components/translate/content/android",
   "+services/content/public",
   "+services/device/public/mojom",
 ]

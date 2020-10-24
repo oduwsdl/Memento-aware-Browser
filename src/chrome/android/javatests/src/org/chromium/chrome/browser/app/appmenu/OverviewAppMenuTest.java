@@ -39,7 +39,8 @@ import org.chromium.ui.test.util.UiRestriction;
  * TODO(crbug.com/1031958): Add more required tests.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+@Restriction(
+        {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class OverviewAppMenuTest {
     @Rule
@@ -59,8 +60,7 @@ public class OverviewAppMenuTest {
     public void testAllMenuItemsWithoutStartSurface() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, false);
-            AppMenuTestSupport.showAppMenu(
-                    mActivityTestRule.getAppMenuCoordinator(), null, false, false);
+            AppMenuTestSupport.showAppMenu(mActivityTestRule.getAppMenuCoordinator(), null, false);
         });
 
         int checkedMenuItems = 0;
@@ -94,8 +94,7 @@ public class OverviewAppMenuTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mActivityTestRule.getActivity().getTabModelSelector().selectModel(true);
             CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, false);
-            AppMenuTestSupport.showAppMenu(
-                    mActivityTestRule.getAppMenuCoordinator(), null, false, false);
+            AppMenuTestSupport.showAppMenu(mActivityTestRule.getAppMenuCoordinator(), null, false);
         });
 
         int checkedMenuItems = 0;
@@ -128,8 +127,7 @@ public class OverviewAppMenuTest {
     public void testAllMenuItemsWithStartSurface() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, true);
-            AppMenuTestSupport.showAppMenu(
-                    mActivityTestRule.getAppMenuCoordinator(), null, false, false);
+            AppMenuTestSupport.showAppMenu(mActivityTestRule.getAppMenuCoordinator(), null, false);
         });
 
         int checkedMenuItems = 0;
@@ -165,8 +163,7 @@ public class OverviewAppMenuTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mActivityTestRule.getActivity().getTabModelSelector().selectModel(true);
             CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, true);
-            AppMenuTestSupport.showAppMenu(
-                    mActivityTestRule.getAppMenuCoordinator(), null, false, false);
+            AppMenuTestSupport.showAppMenu(mActivityTestRule.getAppMenuCoordinator(), null, false);
         });
 
         int checkedMenuItems = 0;
@@ -201,8 +198,7 @@ public class OverviewAppMenuTest {
     public void testGroupTabsIsDisabled() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, false);
-            AppMenuTestSupport.showAppMenu(
-                    mActivityTestRule.getAppMenuCoordinator(), null, false, false);
+            AppMenuTestSupport.showAppMenu(mActivityTestRule.getAppMenuCoordinator(), null, false);
         });
 
         int checkedMenuItems = 0;
@@ -224,8 +220,7 @@ public class OverviewAppMenuTest {
     public void testGroupTabsIsEnabled() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, false);
-            AppMenuTestSupport.showAppMenu(
-                    mActivityTestRule.getAppMenuCoordinator(), null, false, false);
+            AppMenuTestSupport.showAppMenu(mActivityTestRule.getAppMenuCoordinator(), null, false);
         });
 
         int checkedMenuItems = 0;
@@ -253,8 +248,7 @@ public class OverviewAppMenuTest {
     public void testGroupTabsIsDisabledWithStartSurface() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, true);
-            AppMenuTestSupport.showAppMenu(
-                    mActivityTestRule.getAppMenuCoordinator(), null, false, false);
+            AppMenuTestSupport.showAppMenu(mActivityTestRule.getAppMenuCoordinator(), null, false);
         });
 
         int checkedMenuItems = 0;
@@ -276,8 +270,7 @@ public class OverviewAppMenuTest {
     public void testGroupTabsIsEnabledWithStartSurface() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, true);
-            AppMenuTestSupport.showAppMenu(
-                    mActivityTestRule.getAppMenuCoordinator(), null, false, false);
+            AppMenuTestSupport.showAppMenu(mActivityTestRule.getAppMenuCoordinator(), null, false);
         });
 
         int checkedMenuItems = 0;

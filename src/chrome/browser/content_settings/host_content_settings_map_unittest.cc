@@ -32,6 +32,7 @@
 #include "components/content_settings/core/browser/user_modifiable_provider.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
@@ -147,7 +148,8 @@ class TesterForType {
     ContentSettingsPattern pattern =
         ContentSettingsPattern::FromString(exception);
     host_content_settings_map_->SetContentSettingCustomScope(
-        pattern, pattern, content_type_, std::string(), content_settings);
+        pattern, ContentSettingsPattern::Wildcard(), content_type_,
+        std::string(), content_settings);
   }
 
   // Wrapper to query GetWebsiteSetting(), and only return the source.
@@ -973,7 +975,6 @@ TEST_F(HostContentSettingsMapTest, IncognitoPartialInheritPref) {
 
   // GetSettingsForOneType should return preference followed by default, both inherited.
   {
-    
     ContentSettingsForOneType otr_settings;
     otr_map->GetSettingsForOneType(ContentSettingsType::MEDIASTREAM_MIC,
                                    std::string(), &otr_settings);
@@ -1001,8 +1002,8 @@ TEST_F(HostContentSettingsMapTest, IncognitoPartialInheritPref) {
       otr_map->GetContentSetting(
           host, host, ContentSettingsType::MEDIASTREAM_MIC, std::string()));
 
-  // The inherited ALLOW gets turned back into ASK in GetSettingsForOneType, mirroring the 
-  // reverting to ASK behavior above.
+  // The inherited ALLOW gets turned back into ASK in GetSettingsForOneType,
+  // mirroring the reverting to ASK behavior above.
   {
     ContentSettingsForOneType otr_settings;
     otr_map->GetSettingsForOneType(ContentSettingsType::MEDIASTREAM_MIC,
@@ -1572,7 +1573,7 @@ TEST_F(HostContentSettingsMapTest, ClearSettingsForOneTypeWithPredicate) {
   // First, test that we clear only COOKIES (not APP_BANNER), and pattern2.
   host_content_settings_map->ClearSettingsForOneTypeWithPredicate(
       ContentSettingsType::COOKIES, base::Time(), base::Time::Max(),
-      base::Bind(&MatchPrimaryPattern, pattern2));
+      base::BindRepeating(&MatchPrimaryPattern, pattern2));
   host_content_settings_map->GetSettingsForOneType(
       ContentSettingsType::COOKIES, std::string(), &host_settings);
   // |host_settings| contains default & block.
@@ -1617,7 +1618,7 @@ TEST_F(HostContentSettingsMapTest, ClearSettingsForOneTypeWithPredicate) {
       ContentSettingsPattern::FromURLNoWildcard(url3_origin_only);
   host_content_settings_map->ClearSettingsForOneTypeWithPredicate(
       ContentSettingsType::SITE_ENGAGEMENT, base::Time(), base::Time::Max(),
-      base::Bind(&MatchPrimaryPattern, http_pattern));
+      base::BindRepeating(&MatchPrimaryPattern, http_pattern));
   // Verify we only have one, and it's url1.
   host_content_settings_map->GetSettingsForOneType(
       ContentSettingsType::SITE_ENGAGEMENT, std::string(), &host_settings);
@@ -1831,6 +1832,8 @@ TEST_F(HostContentSettingsMapTest, MigrateRequestingAndTopLevelOriginSettings) {
   ContentSettingsPattern embedding_pattern =
       ContentSettingsPattern::FromURLNoWildcard(embedding_origin);
 
+  map->AllowInvalidSecondaryPatternForTesting(true);
+
   // Set content settings for 2 types that use requesting and top level
   // origin as well as one for a type that doesn't.
   map->SetContentSettingCustomScope(requesting_pattern, embedding_pattern,
@@ -1844,7 +1847,9 @@ TEST_F(HostContentSettingsMapTest, MigrateRequestingAndTopLevelOriginSettings) {
                                     ContentSettingsType::COOKIES, std::string(),
                                     CONTENT_SETTING_ALLOW);
 
-  map->MigrateRequestingAndTopLevelOriginSettings();
+  map->MigrateSettingsPrecedingPermissionDelegationActivation();
+
+  map->AllowInvalidSecondaryPatternForTesting(false);
 
   ContentSettingsForOneType host_settings;
   // Verify that all the settings are deleted except the cookies setting.
@@ -1889,6 +1894,8 @@ TEST_F(HostContentSettingsMapTest,
   ContentSettingsPattern embedding_pattern =
       ContentSettingsPattern::FromURLNoWildcard(embedding_origin);
 
+  map->AllowInvalidSecondaryPatternForTesting(true);
+
   map->SetContentSettingCustomScope(requesting_pattern, embedding_pattern,
                                     ContentSettingsType::GEOLOCATION,
                                     std::string(), CONTENT_SETTING_BLOCK);
@@ -1896,7 +1903,9 @@ TEST_F(HostContentSettingsMapTest,
                                     ContentSettingsType::GEOLOCATION,
                                     std::string(), CONTENT_SETTING_ALLOW);
 
-  map->MigrateRequestingAndTopLevelOriginSettings();
+  map->MigrateSettingsPrecedingPermissionDelegationActivation();
+
+  map->AllowInvalidSecondaryPatternForTesting(false);
 
   ContentSettingsForOneType host_settings;
   // Verify that all settings for the embedding origin are deleted. This is
@@ -2182,11 +2191,11 @@ TEST_F(HostContentSettingsMapTest, GetPatternsFromScopingType) {
   // Testing case:
   // WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_LEVEL_ORIGIN_SCOPE.
   host_content_settings_map->SetContentSettingDefaultScope(
-      primary_url, secondary_url, ContentSettingsType::GEOLOCATION,
+      primary_url, secondary_url, ContentSettingsType::STORAGE_ACCESS,
       std::string(), CONTENT_SETTING_ASK);
 
   host_content_settings_map->GetSettingsForOneType(
-      ContentSettingsType::GEOLOCATION, std::string(), &settings);
+      ContentSettingsType::STORAGE_ACCESS, std::string(), &settings);
 
   EXPECT_EQ(settings[0].primary_pattern,
             ContentSettingsPattern::FromURLNoWildcard(primary_url));
@@ -2250,7 +2259,8 @@ TEST_F(HostContentSettingsMapTest, IncognitoChangesDoNotPersist) {
     // Set the different value in incognito mode.
     base::Value incognito_value = new_value->Clone();
     incognito_map->SetWebsiteSettingCustomScope(
-        pattern, pattern, info->type(), std::string(), std::move(new_value));
+        pattern, ContentSettingsPattern::Wildcard(), info->type(),
+        std::string(), std::move(new_value));
 
     // Ensure incognito mode value is changed.
     EXPECT_EQ(incognito_value,

@@ -18,7 +18,6 @@
 
 #include "base/fuchsia/scoped_service_binding.h"
 #include "base/fuchsia/startup_context.h"
-#include "base/logging.h"
 #include "fuchsia/base/lifecycle_impl.h"
 #include "url/gurl.h"
 
@@ -61,6 +60,12 @@ class WebComponent : public fuchsia::sys::ComponentController,
 
   WebContentRunner* runner() const { return runner_; }
 
+  // Returns the component's startup context (e.g. incoming services, public
+  // service directory, etc).
+  base::fuchsia::StartupContext* startup_context() const {
+    return startup_context_.get();
+  }
+
  protected:
   // fuchsia::sys::ComponentController implementation.
   void Kill() override;
@@ -89,12 +94,6 @@ class WebComponent : public fuchsia::sys::ComponentController,
   // to the status reported by the FramePtr's error handler.
   virtual void DestroyComponent(int64_t exit_code,
                                 fuchsia::sys::TerminationReason reason);
-
-  // Returns the component's startup context (e.g. incoming services, public
-  // service directory, etc).
-  base::fuchsia::StartupContext* startup_context() const {
-    return startup_context_.get();
-  }
 
  private:
   WebContentRunner* const runner_ = nullptr;

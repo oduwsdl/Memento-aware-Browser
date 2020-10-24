@@ -92,6 +92,10 @@ class GPU_EXPORT GpuControlList {
     // DDDD(old schema) or CCC.DDDD(new schema) is the build number.
     // That is, indicates the actual driver number.
     kVersionSchemaIntelDriver,
+    // The version format of Nvidia drivers is XX.XX.XXXA.AAAA where the X's
+    // can be any digits, and the A's are the actual version.  The workaround
+    // list specifies them as AAA.AA to match how Nvidia publishes them.
+    kVersionSchemaNvidiaDriver,
   };
 
   enum SupportedOrNot {
@@ -206,7 +210,7 @@ class GPU_EXPORT GpuControlList {
                   const std::string& os_version,
                   const GPUInfo& gpu_info) const;
 
-    // Determines whether we needs more gpu info to make the blacklisting
+    // Determines whether we needs more gpu info to make the blocklisting
     // decision.  It should only be checked if Contains() returns true.
     bool NeedsMoreInfo(const GPUInfo& gpu_info) const;
   };
@@ -232,7 +236,7 @@ class GPU_EXPORT GpuControlList {
 
     bool AppliesToTestGroup(uint32_t target_test_group) const;
 
-    // Determines whether we needs more gpu info to make the blacklisting
+    // Determines whether we needs more gpu info to make the blocklisting
     // decision.  It should only be checked if Contains() returns true.
     bool NeedsMoreInfo(const GPUInfo& gpu_info, bool consider_exceptions) const;
 

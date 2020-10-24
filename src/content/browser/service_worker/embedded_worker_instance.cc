@@ -365,12 +365,12 @@ void SetupOnUIThread(
       std::move(coep_reporter_for_subresources),
       ContentBrowserClient::URLLoaderFactoryType::kServiceWorkerSubResource);
 
-  // TODO(crbug.com/862854): Support changes to
-  // blink::mojom::RendererPreferences while the worker is running.
+  // TODO(crbug.com/862854): Support changes to blink::RendererPreferences while
+  // the worker is running.
   DCHECK(process_manager->browser_context() || process_manager->IsShutdown());
-  params->renderer_preferences = blink::mojom::RendererPreferences::New();
+  params->renderer_preferences = blink::RendererPreferences();
   GetContentClient()->browser()->UpdateRendererPreferencesForWorker(
-      process_manager->browser_context(), params->renderer_preferences.get());
+      process_manager->browser_context(), &params->renderer_preferences);
 
   // Create a RendererPreferenceWatcher to observe updates in the preferences.
   mojo::PendingRemote<blink::mojom::RendererPreferenceWatcher> watcher_remote;
@@ -773,10 +773,6 @@ class EmbeddedWorkerInstance::StartTask {
                             instance_->embedded_worker_id()),
         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "StartSituation",
         ServiceWorkerMetrics::StartSituationToString(start_situation));
-    if (is_installed_) {
-      ServiceWorkerMetrics::RecordProcessCreated(
-          start_situation == ServiceWorkerMetrics::StartSituation::NEW_PROCESS);
-    }
 
     if (started_during_browser_startup_)
       start_situation = ServiceWorkerMetrics::StartSituation::DURING_STARTUP;
@@ -868,6 +864,7 @@ void EmbeddedWorkerInstance::Start(
   status_ = EmbeddedWorkerStatus::STARTING;
   starting_phase_ = ALLOCATING_PROCESS;
   network_accessed_for_script_ = false;
+  token_ = blink::ServiceWorkerToken();
 
   for (auto& observer : listener_list_)
     observer.OnStarting();
@@ -877,6 +874,7 @@ void EmbeddedWorkerInstance::Start(
   params->wait_for_debugger = false;
   params->subresource_loader_updater =
       subresource_loader_updater_.BindNewPipeAndPassReceiver();
+  params->service_worker_token = token_.value();
 
   // TODO(https://crbug.com/978694): Consider a reset flow since new mojo types
   // check is_bound strictly.
@@ -1221,9 +1219,9 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
   network::mojom::URLLoaderFactoryParamsPtr factory_params =
       URLLoaderFactoryParamsHelper::CreateForWorker(
           rph, origin,
-          net::IsolationInfo::Create(
-              net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
-              net::SiteForCookies::FromOrigin(origin)),
+          net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                     origin, origin,
+                                     net::SiteForCookies::FromOrigin(origin)),
           std::move(coep_reporter));
   bool bypass_redirect_checks = false;
 
@@ -1236,9 +1234,9 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       rph->GetBrowserContext(), nullptr /* frame_host */, rph->GetID(),
       factory_type, origin, base::nullopt /* navigation_id */,
-      &default_factory_receiver, &factory_params->header_client,
-      &bypass_redirect_checks, nullptr /* disable_secure_dns */,
-      &factory_params->factory_override);
+      base::kInvalidUkmSourceId, &default_factory_receiver,
+      &factory_params->header_client, &bypass_redirect_checks,
+      nullptr /* disable_secure_dns */, &factory_params->factory_override);
   devtools_instrumentation::WillCreateURLLoaderFactoryForServiceWorker(
       rph, routing_id, &factory_params->factory_override);
 
@@ -1259,8 +1257,7 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
   factory_bundle->set_bypass_redirect_checks(bypass_redirect_checks);
 
   ContentBrowserClient::NonNetworkURLLoaderFactoryMap non_network_factories;
-  non_network_factories[url::kDataScheme] =
-      std::make_unique<DataURLLoaderFactory>();
+  non_network_factories[url::kDataScheme] = DataURLLoaderFactory::Create();
   GetContentClient()
       ->browser()
       ->RegisterNonNetworkSubresourceURLLoaderFactories(
@@ -1268,20 +1265,19 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
 
   for (auto& pair : non_network_factories) {
     const std::string& scheme = pair.first;
-    std::unique_ptr<network::mojom::URLLoaderFactory> factory =
-        std::move(pair.second);
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>& pending_remote =
+        pair.second;
 
     // To be safe, ignore schemes that aren't allowed to register service
     // workers. We assume that importScripts and fetch() should fail on such
     // schemes.
     if (!base::Contains(GetServiceWorkerSchemes(), scheme))
       continue;
-    mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
-    mojo::MakeSelfOwnedReceiver(
-        std::move(factory), factory_remote.InitWithNewPipeAndPassReceiver());
+
     factory_bundle->pending_scheme_specific_factories().emplace(
-        scheme, std::move(factory_remote));
+        scheme, std::move(pending_remote));
   }
+
   return factory_bundle;
 }
 
@@ -1377,6 +1373,7 @@ void EmbeddedWorkerInstance::ReleaseProcess() {
   status_ = EmbeddedWorkerStatus::STOPPED;
   starting_phase_ = NOT_STARTING;
   thread_id_ = ServiceWorkerConsts::kInvalidEmbeddedWorkerThreadId;
+  token_ = base::nullopt;
 }
 
 void EmbeddedWorkerInstance::OnSetupFailed(
@@ -1507,7 +1504,7 @@ void EmbeddedWorkerInstance::BindCacheStorageInternal() {
     RunOrPostTaskOnThread(
         FROM_HERE, BrowserThread::UI,
         base::BindOnce(content::BindCacheStorageOnUIThread, process_id(),
-                       owner_version_->script_origin(), coep,
+                       owner_version_->origin(), coep,
                        std::move(coep_reporter_remote), std::move(receiver)));
   }
   pending_cache_storage_receivers_.clear();

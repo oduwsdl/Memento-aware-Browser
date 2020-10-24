@@ -5,31 +5,57 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TAB_SEARCH_TAB_SEARCH_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_TAB_SEARCH_TAB_SEARCH_BUBBLE_VIEW_H_
 
-#include "ui/views/bubble/bubble_dialog_delegate_view.h"
-#include "ui/views/controls/webview/webview.h"
-#include "ui/web_dialogs/web_dialog_delegate.h"
+#include "base/scoped_observer.h"
+#include "base/timer/elapsed_timer.h"
+#include "ui/views/controls/webview/web_bubble_dialog_view.h"
 
-class Profile;
+namespace views {
+class Widget;
+}  // namespace views
 
-// TODO(tluk): Only show the bubble once web contents are available to prevent
-// akward resizing when web content finally loads in.
-class TabSearchBubbleView : public views::BubbleDialogDelegateView {
+namespace content {
+class BrowserContext;
+}  // namespace content
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class TabSearchOpenAction {
+  kMouseClick = 0,
+  kKeyboardNavigation = 1,
+  kKeyboardShortcut = 2,
+  kTouchGesture = 3,
+  kMaxValue = kTouchGesture,
+};
+
+class TabSearchBubbleView : public views::WebBubbleDialogView,
+                            public views::WidgetObserver {
  public:
-  static void CreateTabSearchBubble(Profile* profile, views::View* anchor_view);
+  static views::Widget* CreateTabSearchBubble(
+      content::BrowserContext* browser_context,
+      views::View* anchor_view);
 
-  ~TabSearchBubbleView() override = default;
+  TabSearchBubbleView(content::BrowserContext* browser_context,
+                      views::View* anchor_view);
+  TabSearchBubbleView(const TabSearchBubbleView&) = delete;
+  TabSearchBubbleView& operator=(const TabSearchBubbleView&) = delete;
+  ~TabSearchBubbleView() override;
 
-  // views::BubbleDialogDelegateView:
-  gfx::Size CalculatePreferredSize() const override;
+  // views::WebBubbleDialogView:
+  void AddedToWidget() override;
 
-  void OnWebViewSizeChanged();
+  // views::WidgetObserver:
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
+
+  const base::Optional<base::ElapsedTimer>& timer_for_testing() {
+    return timer_;
+  }
 
  private:
-  TabSearchBubbleView(Profile* profile, views::View* anchor_view);
+  // Time the Tab Search window has been open.
+  base::Optional<base::ElapsedTimer> timer_;
 
-  views::WebView* web_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabSearchBubbleView);
+  ScopedObserver<views::Widget, views::WidgetObserver> observed_bubble_widget_{
+      this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TAB_SEARCH_TAB_SEARCH_BUBBLE_VIEW_H_

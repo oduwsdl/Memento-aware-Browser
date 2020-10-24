@@ -4,6 +4,8 @@
 
 #include "ios/chrome/browser/policy/policy_features.h"
 
+#include <string>
+
 #include "base/command_line.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/chrome_switches.h"
@@ -21,40 +23,42 @@ const base::Feature kURLBlocklistIOS{"URLBlocklistIOS",
 
 namespace {
 
+bool HasSwitch(const std::string& switch_name) {
+  // Most policy features must be controlled via the command line because policy
+  // infrastructure must be initialized before about:flags or field trials.
+  // Using a command line flag is the only way to control these features at
+  // runtime.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return command_line->HasSwitch(switch_name);
+}
+
 // Returns true if the current command line contains the
 // |kDisableEnterprisePolicy| switch.
 bool IsDisableEnterprisePolicySwitchPresent() {
-  // This feature is controlled via the command line because policy must be
-  // initialized before about:flags or field trials. Using a command line flag
-  // is the only way to control this feature at runtime.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->HasSwitch(switches::kDisableEnterprisePolicy);
-}
-
-// Returns true if the current command line contains the
-// |kEnableEnterprisePolicy| switch.
-bool IsEnableEnterprisePolicySwitchPresent() {
-  // This feature is controlled via the command line because policy must be
-  // initialized before about:flags or field trials. Using a command line flag
-  // is the only way to control this feature at runtime.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->HasSwitch(switches::kEnableEnterprisePolicy);
+  return HasSwitch(switches::kDisableEnterprisePolicy);
 }
 
 }  // namespace
+
+bool IsChromeBrowserCloudManagementEnabled() {
+  // This method is called very early during the launch sequence (inside
+  // IOSChromeMainParts::PreCreateThreads). At that point, the FeatureList API
+  // isn't ready yet, so neither Finch experiments nor first-run field trials
+  // can be used for progressive rollout. To ensure adequate coverage of both
+  // the "CBCM disabled" and "CBCM enabled" code paths, CBCM is enabled at 100%
+  // on Beta and 0% on all other channels (CBCM is disabled by default). This
+  // allows monitoring crashes for both code paths while allowing early adopters
+  // to use CBCM on the Beta channel.
+  return HasSwitch(switches::kEnableChromeBrowserCloudManagement) ||
+         GetChannel() == version_info::Channel::BETA;
+}
 
 bool IsEditBookmarksIOSEnabled() {
   return base::FeatureList::IsEnabled(kEditBookmarksIOS);
 }
 
 bool IsEnterprisePolicyEnabled() {
-  if (IsDisableEnterprisePolicySwitchPresent()) {
-    return false;
-  }
-
-  // Policy is enabled by default for non-stable channels.
-  return GetChannel() != version_info::Channel::STABLE ||
-         IsEnableEnterprisePolicySwitchPresent();
+  return !IsDisableEnterprisePolicySwitchPresent();
 }
 
 bool ShouldInstallEnterprisePolicyHandlers() {
@@ -62,11 +66,7 @@ bool ShouldInstallEnterprisePolicyHandlers() {
 }
 
 bool ShouldInstallManagedBookmarksPolicyHandler() {
-  // This feature is controlled via the command line because policy must be
-  // initialized before about:flags or field trials. Using a command line flag
-  // is the only way to control this feature at runtime.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->HasSwitch(switches::kInstallManagedBookmarksHandler);
+  return HasSwitch(switches::kInstallManagedBookmarksHandler);
 }
 
 bool IsManagedBookmarksEnabled() {
@@ -75,11 +75,7 @@ bool IsManagedBookmarksEnabled() {
 }
 
 bool ShouldInstallURLBlocklistPolicyHandlers() {
-  // This feature is controlled via the command line because policy must be
-  // initialized before about:flags or field trials. Using a command line flag
-  // is the only way to control this feature at runtime.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->HasSwitch(switches::kInstallURLBlocklistHandlers);
+  return HasSwitch(switches::kInstallURLBlocklistHandlers);
 }
 
 bool IsURLBlocklistEnabled() {

@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <regex>
-
 #include "components/omnibox/browser/location_bar_model_impl.h"
 
 #include "base/check.h"
@@ -15,27 +13,23 @@
 #include "build/build_config.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/dom_distiller/core/url_utils.h"
-#include "components/omnibox/browser/autocomplete_classifier.h"
-#include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/buildflags.h"
 #include "components/omnibox/browser/location_bar_model_delegate.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/browser/location_bar_model_util.h"
 #include "components/omnibox/common/omnibox_features.h"
-#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
-#include "content/public/common/origin_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "url/origin.h"
 
 #if (!defined(OS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !defined(OS_IOS)
 #include "components/omnibox/browser/vector_icons.h"  // nogncheck
-#include "components/vector_icons/vector_icons.h"     // nogncheck
 #endif
 
 using metrics::OmniboxEventProto;
@@ -64,11 +58,8 @@ base::string16 LocationBarModelImpl::GetURLForDisplay() const {
   format_types |= url_formatter::kFormatUrlTrimAfterHost;
 #endif
 
-  if (OmniboxFieldTrial::IsHideSteadyStateUrlSchemeEnabled())
-    format_types |= url_formatter::kFormatUrlOmitHTTPS;
-
-  if (OmniboxFieldTrial::IsHideSteadyStateUrlTrivialSubdomainsEnabled())
-    format_types |= url_formatter::kFormatUrlOmitTrivialSubdomains;
+  format_types |= url_formatter::kFormatUrlOmitHTTPS;
+  format_types |= url_formatter::kFormatUrlOmitTrivialSubdomains;
 
   if (base::FeatureList::IsEnabled(omnibox::kHideFileUrlScheme))
     format_types |= url_formatter::kFormatUrlOmitFileScheme;
@@ -98,7 +89,30 @@ base::string16 LocationBarModelImpl::GetFormattedURL(
                    ~url_formatter::kFormatUrlOmitHTTP;
   }
 
+  // Prevent scheme/trivial subdomain elision when simplified domain field
+  // trials are enabled. In these field trials, OmniboxViewViews handles elision
+  // of scheme and trivial subdomains because they are shown/hidden based on
+  // user interactions with the omnibox.
+  if (base::FeatureList::IsEnabled(
+          omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover) ||
+      base::FeatureList::IsEnabled(
+          omnibox::kHideSteadyStateUrlPathQueryAndRefOnInteraction)) {
+    format_types &= ~url_formatter::kFormatUrlOmitHTTP;
+    format_types &= ~url_formatter::kFormatUrlOmitHTTPS;
+    format_types &= ~url_formatter::kFormatUrlOmitTrivialSubdomains;
+  }
+
   GURL url(GetURL());
+
+#if defined(OS_IOS)
+  // On iOS, the blob: display URLs should be simply the domain name. However,
+  // url_formatter parses everything past blob: as path, not domain, so swap
+  // the url here to be just origin.
+  if (url.SchemeIsBlob()) {
+    url = url::Origin::Create(url).GetURL();
+  }
+#endif  // defined(OS_IOS)
+
   // Special handling for dom-distiller:. Instead of showing internal reader
   // mode URLs, show the original article URL in the omnibox.
   // Note that this does not disallow the user from seeing the distilled page
@@ -157,7 +171,7 @@ LocationBarModelImpl::GetPageClassification(OmniboxFocusSource focus_source) {
 
   if (focus_source == OmniboxFocusSource::SEARCH_BUTTON)
     return OmniboxEventProto::SEARCH_BUTTON_AS_STARTING_FOCUS;
-  if (delegate_->IsInstantNTP()) {
+  if (delegate_->IsNewTabPage()) {
     // Note that we treat OMNIBOX as the source if focus_source_ is INVALID,
     // i.e., if input isn't actually in progress.
     return (focus_source == OmniboxFocusSource::FAKEBOX)
@@ -166,7 +180,7 @@ LocationBarModelImpl::GetPageClassification(OmniboxFocusSource focus_source) {
   }
   if (!gurl.is_valid())
     return OmniboxEventProto::INVALID_SPEC;
-  if (delegate_->IsNewTabPage(gurl))
+  if (delegate_->IsNewTabPageURL(gurl))
     return OmniboxEventProto::NTP;
   if (gurl.spec() == url::kAboutBlankURL)
     return OmniboxEventProto::BLANK;
@@ -191,54 +205,9 @@ const gfx::VectorIcon& LocationBarModelImpl::GetVectorIcon() const {
 
   if (IsOfflinePage())
     return omnibox::kOfflinePinIcon;
-
-  security_state::SecurityLevel security_level = GetSecurityLevel();
-
-  switch (security_level) {
-    case security_state::NONE:
-      return omnibox::kHttpIcon;
-    case security_state::WARNING:
-      // When kMarkHttpAsParameterDangerWarning is enabled, show a danger
-      // triangle icon.
-      if (security_state::ShouldShowDangerTriangleForWarningLevel()) {
-        return omnibox::kNotSecureWarningIcon;
-      }
-      return omnibox::kHttpIcon;
-    case security_state::SECURE:
-      return omnibox::kHttpsValidIcon;
-    case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
-      return vector_icons::kBusinessIcon;
-    case security_state::DANGEROUS:
-      return omnibox::kNotSecureWarningIcon;
-    case security_state::SECURITY_LEVEL_COUNT:
-      NOTREACHED();
-      return omnibox::kHttpIcon;
-  }
-  NOTREACHED();
-  return omnibox::kHttpIcon;
-#else
-  NOTREACHED();
-  static const gfx::VectorIcon dummy = {};
-  return dummy;
 #endif
-}
 
-const gfx::VectorIcon& LocationBarModelImpl::GetMementoIcon() const {
-#if (!defined(OS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !defined(OS_IOS)
-  auto* const icon_override = delegate_->GetVectorIconOverride();
-  if (icon_override)
-    return *icon_override;
-
-  std::unique_ptr<security_state::VisibleSecurityState>
-          visible_security_state = delegate_->GetVisibleSecurityState();
-
-  return omnibox::kMementoIcon;
-
-#else
-  NOTREACHED();
-  static const gfx::VectorIcon dummy = {};
-  return dummy;
-#endif
+  return location_bar_model::GetSecurityVectorIcon(GetSecurityLevel());
 }
 
 base::string16 LocationBarModelImpl::GetSecureDisplayText() const {
@@ -277,61 +246,6 @@ base::string16 LocationBarModelImpl::GetSecureDisplayText() const {
   }
 }
 
-base::string16 LocationBarModelImpl::GetMementoDisplayText() const {
-
-  DVLOG(0) << "Determining Memento display text.";
-
-  std::map<std::string, std::string> months
-    {
-        { "Jan", "01" },
-        { "Feb", "02" },
-        { "Mar", "03" },
-        { "Apr", "04" },
-        { "May", "05" },
-        { "Jun", "06" },
-        { "Jul", "07" },
-        { "Aug", "08" },
-        { "Sep", "09" },
-        { "Oct", "10" },
-        { "Nov", "11" },
-        { "Dec", "12" }
-    };
-
-    if (IsMixedContent())
-      return base::UTF8ToUTF16("Mixed archival content");
-    else {
-
-      const std::string s = GetMementoDatetime();
-
-      DVLOG(0) << "The datetime = " << s;
-
-      // Get the day
-      std::regex dayRGX("[\\ ](\\d{2})[\\ ]");
-      std::smatch dayMatch;
-
-      if (std::regex_search(s.begin(), s.end(), dayMatch, dayRGX))
-          DVLOG(0 ) << "Day: " << dayMatch[1] << '\n';
-
-      std::regex yearRGX("(\\d{4})");
-      std::smatch yearMatch;
-
-      if (std::regex_search(s.begin(), s.end(), yearMatch, yearRGX))
-          DVLOG(0 ) << "Year: " << yearMatch[1] << '\n';
-
-      std::regex monthRGX("([A-Z]{1}[a-z]{2})[\\ ]");
-      std::smatch monthMatch;
-
-      if (std::regex_search(s.begin(), s.end(), monthMatch, monthRGX))
-          DVLOG(0 ) << "Month: " << months[monthMatch[1]] << '\n';
-
-      std::string dateString = std::string(yearMatch[1]) + "-" + 
-                               months[monthMatch[1]] + "-" + 
-                               std::string(dayMatch[1]);
-
-      return base::UTF8ToUTF16(dateString);
-    }
-} 
-
 base::string16 LocationBarModelImpl::GetSecureAccessibilityText() const {
   auto display_text = GetSecureDisplayText();
   if (!display_text.empty())
@@ -353,23 +267,6 @@ bool LocationBarModelImpl::IsOfflinePage() const {
   return delegate_->IsOfflinePage();
 }
 
-bool LocationBarModelImpl::IsMemento() const {
-  std::unique_ptr<security_state::VisibleSecurityState>
-          visible_security_state = delegate_->GetVisibleSecurityState();
-
-  return visible_security_state->memento_status;
-}
-
-bool LocationBarModelImpl::IsMixedContent() const {
-  std::unique_ptr<security_state::VisibleSecurityState>
-          visible_security_state = delegate_->GetVisibleSecurityState();
-
-  return visible_security_state->mixed_memento;
-}
-
-std::string LocationBarModelImpl::GetMementoDatetime() const {
-  std::unique_ptr<security_state::VisibleSecurityState>
-          visible_security_state = delegate_->GetVisibleSecurityState();
-
-  return visible_security_state->memento_datetime;
+bool LocationBarModelImpl::ShouldPreventElision() const {
+  return delegate_->ShouldPreventElision();
 }

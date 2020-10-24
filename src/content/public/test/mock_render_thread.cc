@@ -11,6 +11,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#include "content/common/associated_interfaces.mojom.h"
 #include "content/common/frame_messages.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/view_messages.h"
@@ -51,7 +52,7 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
     std::move(callback).Run(false);
   }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   void SetThreadPriority(int32_t platform_thread_id,
                          base::ThreadPriority thread_priority) override {}
 #endif
@@ -335,17 +336,23 @@ void MockRenderThread::OnCreateWindow(
   mojo::AssociatedRemote<blink::mojom::FrameWidget> blink_frame_widget;
   mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
       blink_frame_widget_receiver =
-          blink_frame_widget
-              .BindNewEndpointAndPassDedicatedReceiverForTesting();
+          blink_frame_widget.BindNewEndpointAndPassDedicatedReceiver();
 
   mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> blink_frame_widget_host;
-  mojo::PendingAssociatedReceiver<blink::mojom::FrameWidgetHost>
-      blink_frame_widget_host_receiver =
-          blink_frame_widget_host
-              .BindNewEndpointAndPassDedicatedReceiverForTesting();
+  ignore_result(
+      blink_frame_widget_host.BindNewEndpointAndPassDedicatedReceiver());
+
+  mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
+  mojo::PendingAssociatedReceiver<blink::mojom::Widget> blink_widget_receiver =
+      blink_widget.BindNewEndpointAndPassDedicatedReceiver();
+
+  mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
+  ignore_result(blink_widget_host.BindNewEndpointAndPassDedicatedReceiver());
 
   reply->frame_widget = std::move(blink_frame_widget_receiver);
   reply->frame_widget_host = blink_frame_widget_host.Unbind();
+  reply->widget = std::move(blink_widget_receiver);
+  reply->widget_host = blink_widget_host.Unbind();
 }
 
 }  // namespace content

@@ -66,8 +66,7 @@ public class ModalDialogViewRenderTest extends DummyUiActivityTestCase {
     private TextView mCustomTextView2;
 
     @Rule
-    public RenderTestRule mRenderTestRule =
-            new RenderTestRule("chrome/test/data/android/render_tests");
+    public RenderTestRule mRenderTestRule = RenderTestRule.Builder.withPublicCorpus().build();
 
     public ModalDialogViewRenderTest(boolean nightModeEnabled) {
         // Sets a fake background color to make the screenshots easier to compare with bare eyes.
@@ -111,7 +110,7 @@ public class ModalDialogViewRenderTest extends DummyUiActivityTestCase {
     public void testRender_TitleAndTitleIcon() throws IOException {
         setUpViews(R.style.Theme_Chromium_ModalDialog_TextPrimaryButton);
         final Drawable icon = UiUtils.getTintedDrawable(
-                getActivity(), R.drawable.ic_add, R.color.default_icon_color);
+                getActivity(), org.chromium.chrome.R.drawable.ic_add, R.color.default_icon_color);
         createModel(mModelBuilder.with(ModalDialogProperties.TITLE, mResources, R.string.title)
                             .with(ModalDialogProperties.TITLE_ICON, icon));
         mRenderTestRule.render(mModalDialogView, "title_and_title_icon");

@@ -46,12 +46,10 @@ class ShowGenericUiAction : public Action,
   void EndAction(const ClientStatus& status);
 
   void OnViewInflationFinished(const ClientStatus& status);
+  void OnNavigationEnded();
 
   // From autofill::PersonalDataManagerObserver.
   void OnPersonalDataChanged() override;
-
-  void OnGetLogins(const ShowGenericUiProto::RequestLoginOptions& proto,
-                   std::vector<WebsiteLoginManager::Login> logins);
 
   bool has_pending_wait_for_dom_ = false;
   bool should_end_action_ = false;

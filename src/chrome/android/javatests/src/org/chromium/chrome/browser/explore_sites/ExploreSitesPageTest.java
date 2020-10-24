@@ -8,8 +8,6 @@ import static androidx.test.espresso.Espresso.onView;
 
 import static org.hamcrest.Matchers.instanceOf;
 
-import android.annotation.TargetApi;
-import android.os.Build;
 import android.os.SystemClock;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -17,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -33,13 +32,12 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -81,11 +79,11 @@ public class ExploreSitesPageTest {
     }
 
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
-    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
     private Tab mTab;
     private RecyclerView mRecyclerView;
@@ -246,17 +244,11 @@ public class ExploreSitesPageTest {
         mRecyclerView = mEsp.getView().findViewById(R.id.explore_sites_category_recycler);
     }
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public static void waitForEspLoaded(final Tab tab) {
-        CriteriaHelper.pollUiThread(new Criteria("ESP never fully loaded") {
-            @Override
-            public boolean isSatisfied() {
-                if (tab.getNativePage() instanceof ExploreSitesPage) {
-                    return ((ExploreSitesPage) tab.getNativePage()).isLoadedForTests();
-                } else {
-                    return false;
-                }
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(tab.getNativePage(), Matchers.instanceOf(ExploreSitesPage.class));
+            Criteria.checkThat(
+                    ((ExploreSitesPage) tab.getNativePage()).isLoadedForTests(), Matchers.is(true));
         });
     }
 }

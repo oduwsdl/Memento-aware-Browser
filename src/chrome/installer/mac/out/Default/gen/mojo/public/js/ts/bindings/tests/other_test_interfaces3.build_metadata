@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/mojo/public/js/ts/bindings/tests/other_test_interfaces2.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/mojo/public/js/ts/bindings/tests/export_other3.test-mojom"
+  ]
+}

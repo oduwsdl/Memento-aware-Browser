@@ -27,6 +27,7 @@
 #include "ash/wm/wm_event.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/user_metrics.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -304,7 +305,6 @@ void BackGestureEventHandler::OnGestureEvent(GestureConsumer* consumer,
 bool BackGestureEventHandler::MaybeHandleBackGesture(
     ui::GestureEvent* event,
     const gfx::Point& screen_location) {
-  DCHECK(features::IsSwipingFromLeftEdgeToGoBackEnabled());
   switch (event->type()) {
     case ui::ET_GESTURE_TAP_DOWN:
       going_back_started_ = CanStartGoingBack(screen_location);
@@ -315,6 +315,9 @@ bool BackGestureEventHandler::MaybeHandleBackGesture(
       if (features::AreContextualNudgesEnabled()) {
         // Cancel the in-waiting or in-progress back nudge animation.
         nudge_controller_->OnBackGestureStarted();
+        contextual_tooltip::HandleGesturePerformed(
+            Shell::Get()->session_controller()->GetActivePrefService(),
+            contextual_tooltip::TooltipType::kBackGesture);
       }
       return true;
     case ui::ET_GESTURE_SCROLL_BEGIN:
@@ -394,11 +397,6 @@ bool BackGestureEventHandler::MaybeHandleBackGesture(
           }
         }
         back_gesture_affordance_->Complete();
-        if (features::AreContextualNudgesEnabled()) {
-          contextual_tooltip::HandleGesturePerformed(
-              Shell::Get()->session_controller()->GetActivePrefService(),
-              contextual_tooltip::TooltipType::kBackGesture);
-        }
       } else {
         back_gesture_affordance_->Abort();
         RecordEndScenarioType(GetEndScenarioType(
@@ -420,8 +418,6 @@ bool BackGestureEventHandler::MaybeHandleBackGesture(
 
 bool BackGestureEventHandler::CanStartGoingBack(
     const gfx::Point& screen_location) {
-  DCHECK(features::IsSwipingFromLeftEdgeToGoBackEnabled());
-
   Shell* shell = Shell::Get();
   if (!shell->tablet_mode_controller()->InTabletMode())
     return false;
@@ -494,7 +490,7 @@ bool BackGestureEventHandler::ShouldWaitForTouchPressAck(
     return false;
 
   aura::Window* top_window = window_util::GetTopWindow();
-  return !top_window->GetProperty(kIsShowingInOverviewKey) &&
+  return !top_window->GetProperty(chromeos::kIsShowingInOverviewKey) &&
          Shell::Get()->shell_delegate()->ShouldWaitForTouchPressAck(top_window);
 }
 

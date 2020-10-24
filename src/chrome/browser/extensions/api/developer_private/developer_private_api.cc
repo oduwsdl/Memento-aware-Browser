@@ -69,11 +69,13 @@
 #include "extensions/browser/error_map.h"
 #include "extensions/browser/event_router_factory.h"
 #include "extensions/browser/extension_error.h"
+#include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_factory.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/file_highlighter.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/notification_types.h"
@@ -88,6 +90,7 @@
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -109,8 +112,6 @@ namespace developer = api::developer_private;
 namespace {
 
 const char kNoSuchExtensionError[] = "No such extension.";
-const char kCannotModifyPolicyExtensionError[] =
-    "Cannot modify the extension by policy.";
 const char kRequiresUserGestureError[] =
     "This action requires a user gesture.";
 const char kCouldNotShowSelectFileDialogError[] =
@@ -134,6 +135,11 @@ const char kCannotRepairPolicyExtension[] =
 const char kCannotChangeHostPermissions[] =
     "Cannot change host permissions for the given extension.";
 const char kInvalidHost[] = "Invalid host.";
+const char kInvalidLazyBackgroundPageParameter[] =
+    "isServiceWorker can not be set for lazy background page based extensions.";
+const char kInvalidRenderProcessId[] =
+    "render_process_id can be set to -1 for only lazy background page based or "
+    "service-worker based extensions.";
 
 const char kUnpackedAppsFolder[] = "apps_target";
 const char kManifestFile[] = "manifest.json";
@@ -181,23 +187,6 @@ void GetManifestError(const std::string& error,
       base::BindOnce(&ReadFileToString,
                      extension_path.Append(kManifestFilename)),
       base::BindOnce(std::move(callback), extension_path, error, line));
-}
-
-bool UserCanModifyExtensionConfiguration(
-    const Extension* extension,
-    content::BrowserContext* browser_context,
-    std::string* error) {
-  ManagementPolicy* management_policy =
-      ExtensionSystem::Get(browser_context)->management_policy();
-  if (!management_policy->UserMayModifySettings(extension, nullptr)) {
-    LOG(ERROR) << "Attempt to change settings of an extension that is "
-               << "non-usermanagable was made. Extension id : "
-               << extension->id();
-    *error = kCannotModifyPolicyExtensionError;
-    return false;
-  }
-
-  return true;
 }
 
 // Runs the install verifier for all extensions that are enabled, disabled, or
@@ -325,7 +314,7 @@ std::unique_ptr<developer::ProfileInfo> DeveloperPrivateAPI::CreateProfileInfo(
       prefs->GetBoolean(prefs::kExtensionsUIDeveloperMode);
   info->can_load_unpacked =
       ExtensionManagementFactory::GetForBrowserContext(profile)
-          ->HasWhitelistedExtension();
+          ->HasAllowlistedExtension();
   return info;
 }
 
@@ -393,7 +382,8 @@ void DeveloperPrivateEventRouter::RemoveExtensionId(
 void DeveloperPrivateEventRouter::OnExtensionLoaded(
     content::BrowserContext* browser_context,
     const Extension* extension) {
-  DCHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  DCHECK(
+      profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   BroadcastItemStateChanged(developer::EVENT_TYPE_LOADED, extension->id());
 }
 
@@ -401,7 +391,8 @@ void DeveloperPrivateEventRouter::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
     UnloadedExtensionReason reason) {
-  DCHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  DCHECK(
+      profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   BroadcastItemStateChanged(developer::EVENT_TYPE_UNLOADED, extension->id());
 }
 
@@ -409,7 +400,8 @@ void DeveloperPrivateEventRouter::OnExtensionInstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     bool is_update) {
-  DCHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  DCHECK(
+      profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   BroadcastItemStateChanged(developer::EVENT_TYPE_INSTALLED, extension->id());
 }
 
@@ -417,7 +409,8 @@ void DeveloperPrivateEventRouter::OnExtensionUninstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     extensions::UninstallReason reason) {
-  DCHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  DCHECK(
+      profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   BroadcastItemStateChanged(developer::EVENT_TYPE_UNINSTALLED, extension->id());
 }
 
@@ -452,6 +445,18 @@ void DeveloperPrivateEventRouter::OnExtensionFrameUnregistered(
     content::RenderFrameHost* render_frame_host) {
   BroadcastItemStateChanged(developer::EVENT_TYPE_VIEW_UNREGISTERED,
                             extension_id);
+}
+
+void DeveloperPrivateEventRouter::OnServiceWorkerRegistered(
+    const WorkerId& worker_id) {
+  BroadcastItemStateChanged(developer::EVENT_TYPE_SERVICE_WORKER_STARTED,
+                            worker_id.extension_id);
+}
+
+void DeveloperPrivateEventRouter::OnServiceWorkerUnregistered(
+    const WorkerId& worker_id) {
+  BroadcastItemStateChanged(developer::EVENT_TYPE_SERVICE_WORKER_STOPPED,
+                            worker_id.extension_id);
 }
 
 void DeveloperPrivateEventRouter::OnAppWindowAdded(AppWindow* window) {
@@ -805,7 +810,7 @@ DeveloperPrivateGetExtensionSizeFunction::Run() {
 
 void DeveloperPrivateGetExtensionSizeFunction::OnSizeCalculated(
     const base::string16& size) {
-  Respond(OneArgument(std::make_unique<base::Value>(size)));
+  Respond(OneArgument(base::Value(size)));
 }
 
 DeveloperPrivateGetItemsInfoFunction::DeveloperPrivateGetItemsInfoFunction() {}
@@ -902,12 +907,6 @@ DeveloperPrivateUpdateExtensionConfigurationFunction::Run() {
     return RespondNow(Error(kRequiresUserGestureError));
 
   if (update.file_access) {
-    std::string error;
-    if (!UserCanModifyExtensionConfiguration(extension,
-                                             browser_context(),
-                                             &error)) {
-      return RespondNow(Error(std::move(error)));
-    }
     util::SetAllowFileAccess(
         extension->id(), browser_context(), *update.file_access);
   }
@@ -1099,7 +1098,7 @@ ExtensionFunction::ResponseAction DeveloperPrivateLoadUnpackedFunction::Run() {
         Error("Must be in developer mode to load unpacked extensions."));
   }
   if (ExtensionManagementFactory::GetForBrowserContext(browser_context())
-          ->BlacklistedByDefault()) {
+          ->BlocklistedByDefault()) {
     return RespondNow(Error("Extension installation is blocked by policy."));
   }
 
@@ -1209,7 +1208,8 @@ DeveloperPrivateInstallDroppedFileFunction::Run() {
 
   ExtensionService* service = GetExtensionService(browser_context());
   if (path.MatchesExtension(FILE_PATH_LITERAL(".zip"))) {
-    ZipFileInstaller::Create(MakeRegisterInExtensionServiceCallback(service))
+    ZipFileInstaller::Create(GetExtensionFileTaskRunner(),
+                             MakeRegisterInExtensionServiceCallback(service))
         ->LoadFromZipFile(path);
   } else {
     auto prompt = std::make_unique<ExtensionInstallPrompt>(web_contents);
@@ -1475,13 +1475,13 @@ void DeveloperPrivateLoadDirectoryFunction::Load() {
 
   // TODO(grv) : The unpacked installer should fire an event when complete
   // and return the extension_id.
-  Respond(OneArgument(std::make_unique<base::Value>("-1")));
+  Respond(OneArgument(base::Value("-1")));
 }
 
 void DeveloperPrivateLoadDirectoryFunction::ClearExistingDirectoryContent(
     const base::FilePath& project_path) {
   // Clear the project directory before copying new files.
-  base::DeleteFileRecursively(project_path);
+  base::DeletePathRecursively(project_path);
 
   pending_copy_operations_count_ = 1;
 
@@ -1651,7 +1651,7 @@ ExtensionFunction::ResponseAction DeveloperPrivateChoosePathFunction::Run() {
 
 void DeveloperPrivateChoosePathFunction::FileSelected(
     const base::FilePath& path) {
-  Respond(OneArgument(std::make_unique<base::Value>(path.LossyDisplayName())));
+  Respond(OneArgument(base::Value(path.LossyDisplayName())));
   Release();
 }
 
@@ -1666,7 +1666,7 @@ DeveloperPrivateChoosePathFunction::~DeveloperPrivateChoosePathFunction() {}
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateIsProfileManagedFunction::Run() {
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
+  return RespondNow(OneArgument(base::Value(
       Profile::FromBrowserContext(browser_context())->IsSupervised())));
 }
 
@@ -1758,17 +1758,37 @@ DeveloperPrivateOpenDevToolsFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
   const developer::OpenDevToolsProperties& properties = params->properties;
 
-  if (properties.render_process_id == -1) {
-    // This is a lazy background page.
-    const Extension* extension = properties.extension_id ?
-        GetEnabledExtensionById(*properties.extension_id) : nullptr;
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  if (properties.incognito && *properties.incognito)
+    profile = profile->GetPrimaryOTRProfile();
+
+  const Extension* extension =
+      properties.extension_id
+          ? GetEnabledExtensionById(*properties.extension_id)
+          : nullptr;
+
+  const bool is_service_worker =
+      properties.is_service_worker && *properties.is_service_worker;
+  if (is_service_worker) {
+    if (!BackgroundInfo::IsServiceWorkerBased(extension))
+      return RespondNow(Error(kInvalidLazyBackgroundPageParameter));
     if (!extension)
       return RespondNow(Error(kNoSuchExtensionError));
+    if (properties.render_process_id == -1) {
+      // Start the service worker and open the inspect window.
+      devtools_util::InspectInactiveServiceWorkerBackground(extension, profile);
+      return RespondNow(NoArguments());
+    }
+    devtools_util::InspectServiceWorkerBackground(extension, profile);
+    return RespondNow(NoArguments());
+  }
 
-    Profile* profile = Profile::FromBrowserContext(browser_context());
-    if (properties.incognito && *properties.incognito)
-      profile = profile->GetOffTheRecordProfile();
-
+  if (properties.render_process_id == -1) {
+    // This is for a lazy background page.
+    if (!extension)
+      return RespondNow(Error(kNoSuchExtensionError));
+    if (!BackgroundInfo::HasLazyBackgroundPage(extension))
+      return RespondNow(Error(kInvalidRenderProcessId));
     // Wakes up the background page and opens the inspect window.
     devtools_util::InspectBackgroundPage(extension, profile);
     return RespondNow(NoArguments());

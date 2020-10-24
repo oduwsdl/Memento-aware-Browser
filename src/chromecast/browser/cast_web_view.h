@@ -16,8 +16,12 @@
 #include "chromecast/browser/cast_web_contents.h"
 #include "chromecast/ui/mojom/ui_service.mojom.h"
 #include "content/public/browser/bluetooth_chooser.h"
-#include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
+
+namespace content {
+class RenderFrameHost;
+class WebContents;
+}  // namespace content
 
 namespace chromecast {
 
@@ -94,6 +98,9 @@ class CastWebView {
 
     // Whether this CastWebView should be managed by web ui window manager.
     bool managed = true;
+
+    // Whether JS console logs should be appended to the device logs.
+    bool log_js_console_messages = false;
 
     // Prefix for JS console logs. This can be used to help identify the source
     // of console log messages.

@@ -47,6 +47,13 @@ class AssistiveSuggester {
   // Returns true if suggester handles the event and it should stop propagate.
   bool OnKeyEvent(const InputMethodEngineBase::KeyboardEvent& event);
 
+  // Accepts the suggestion at a given index if a suggester is currently active.
+  void AcceptSuggestion(size_t index);
+
+  EmojiSuggester* get_emoji_suggester_for_testing() {
+    return &emoji_suggester_;
+  }
+
  private:
   // Returns if any suggestion text should be displayed according to the
   // surrounding text information.
@@ -60,6 +67,14 @@ class AssistiveSuggester {
   bool IsAssistPersonalInfoEnabled();
 
   bool IsEmojiSuggestAdditionEnabled();
+
+  void RecordAssistiveMatchMetricsForAction(AssistiveType action);
+
+  // Only the first applicable reason in DisabledReason enum is returned.
+  DisabledReason GetDisabledReasonForEmoji();
+
+  // Only the first applicable reason in DisabledReason enum is returned.
+  DisabledReason GetDisabledReasonForPersonalInfo();
 
   bool IsActionEnabled(AssistiveType action);
 

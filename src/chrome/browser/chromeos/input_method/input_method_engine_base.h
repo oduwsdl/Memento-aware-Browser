@@ -10,13 +10,16 @@
 #include <string>
 #include <vector>
 
+#include "base/scoped_observer.h"
 #include "base/time/time.h"
+#include "base/values.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_observer.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "ui/base/ime/chromeos/ime_engine_handler_interface.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/composition_text.h"
-#include "ui/base/ime/ime_engine_handler_interface.h"
 #include "url/gurl.h"
-
-class Profile;
 
 namespace ui {
 struct CompositionText;
@@ -24,14 +27,14 @@ class IMEEngineHandlerInterface;
 class KeyEvent;
 
 namespace ime {
-enum class ButtonId;
-enum class AssistiveWindowType;
+struct AssistiveWindowButton;
 }  // namespace ime
 }  // namespace ui
 
 namespace chromeos {
 
-class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
+class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface,
+                              public ProfileObserver {
  public:
   struct KeyboardEvent {
     KeyboardEvent();
@@ -117,8 +120,7 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
 
     // Called when the user clicks on a button in assistive window.
     virtual void OnAssistiveWindowButtonClicked(
-        const ui::ime::ButtonId& id,
-        const ui::ime::AssistiveWindowType& type) {}
+        const ui::ime::AssistiveWindowButton& button) {}
 
     // Called when a menu item for this IME is interacted with.
     virtual void OnMenuItemActivated(const std::string& component_id,
@@ -129,6 +131,9 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
     // Called when the suggestions to display have changed.
     virtual void OnSuggestionsChanged(
         const std::vector<std::string>& suggestions) = 0;
+
+    // Called when the input method options are updated.
+    virtual void OnInputMethodOptionsChanged(const std::string& engine_id) = 0;
   };
 
   InputMethodEngineBase();
@@ -201,12 +206,24 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
                       const std::vector<SegmentInfo>& segments,
                       std::string* error);
 
-  // Set the current composition range.
+  // Set the current composition range around the current cursor.
+  // This function is deprecated. Use |SetComposingRange| instead.
   bool SetCompositionRange(int context_id,
                            int selection_before,
                            int selection_after,
                            const std::vector<SegmentInfo>& segments,
                            std::string* error);
+
+  // Set the current composition range.
+  bool SetComposingRange(int context_id,
+                         int start,
+                         int end,
+                         const std::vector<SegmentInfo>& segments,
+                         std::string* error);
+
+  gfx::Range GetAutocorrectRange(int context_id, std::string* error);
+
+  gfx::Rect GetAutocorrectCharacterBounds(int context_id, std::string* error);
 
   bool SetAutocorrectRange(int context_id,
                            const base::string16& autocorrect_text,
@@ -230,12 +247,21 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
       const std::string& component_id,
       ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback);
 
+  void OnInputMethodOptionsChanged();
+
   int GetContextIdForTesting() const { return context_id_; }
+
+  PrefChangeRegistrar* GetPrefChangeRegistrarForTesting() const {
+    return pref_change_registrar_.get();
+  }
 
   // Get the composition bounds.
   const std::vector<gfx::Rect>& composition_bounds() const {
     return composition_bounds_;
   }
+
+  // ProfileObserver:
+  void OnProfileWillBeDestroyed(Profile* profile) override;
 
  protected:
   struct PendingKeyEvent {
@@ -266,6 +292,15 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) = 0;
+
+  virtual bool SetComposingRange(
+      uint32_t start,
+      uint32_t end,
+      const std::vector<ui::ImeTextSpan>& text_spans) = 0;
+
+  virtual gfx::Range GetAutocorrectRange() = 0;
+
+  virtual gfx::Rect GetAutocorrectCharacterBounds() = 0;
 
   // Notifies the InputContextHandler that the autocorrect range should
   // be updated and the autocorrect text has updated.
@@ -332,6 +367,12 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
 
  private:
   ui::KeyEvent ConvertKeyboardEventToUIKeyEvent(const KeyboardEvent& event);
+
+  std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
+
+  base::Value input_method_settings_snapshot_;
+
+  ScopedObserver<Profile, ProfileObserver> profile_observer_{this};
 };
 
 }  // namespace chromeos

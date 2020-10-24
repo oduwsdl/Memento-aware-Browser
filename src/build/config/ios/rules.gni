@@ -285,6 +285,16 @@ template("create_signed_bundle") {
     _xcode_product_bundle_id = invoker.xcode_product_bundle_id
   }
 
+  if (_xcode_product_bundle_id != "") {
+    _ios_provisioning_profile_info =
+        exec_script("//build/config/ios/codesign.py",
+                    [
+                      "find-provisioning-profile",
+                      "-b=" + _xcode_product_bundle_id,
+                    ],
+                    "json")
+  }
+
   create_bundle(_target_name) {
     forward_variables_from(invoker,
                            [
@@ -313,6 +323,12 @@ template("create_signed_bundle") {
       IPHONEOS_DEPLOYMENT_TARGET = ios_deployment_target
       if (_xcode_product_bundle_id != "") {
         PRODUCT_BUNDLE_IDENTIFIER = _xcode_product_bundle_id
+
+        if (defined(_ios_provisioning_profile_info)) {
+          CODE_SIGN_IDENTITY = "iPhone Developer"
+          DEVELOPMENT_TEAM = _ios_provisioning_profile_info.team_identifier
+          PROVISIONING_PROFILE_SPECIFIER = _ios_provisioning_profile_info.name
+        }
       }
 
       # If invoker has defined extra attributes, they override the defaults.
@@ -348,7 +364,7 @@ template("create_signed_bundle") {
       code_signing_outputs +=
           [ "$bundle_contents_dir/_CodeSignature/CodeResources" ]
     }
-    if (ios_code_signing_identity != "" && !use_ios_simulator &&
+    if (ios_code_signing_identity != "" && target_environment == "device" &&
         _enable_embedded_mobileprovision) {
       code_signing_outputs +=
           [ "$bundle_contents_dir/embedded.mobileprovision" ]
@@ -622,7 +638,8 @@ template("ios_app_bundle") {
     visibility = [ ":$_arch_executable_target" ]
   }
 
-  if (current_toolchain == default_toolchain || use_ios_simulator) {
+  if (current_toolchain == default_toolchain ||
+      target_environment == "simulator") {
     _generate_entitlements_target = _target_name + "_gen_entitlements"
     _generate_entitlements_output =
         get_label_info(":$_generate_entitlements_target($default_toolchain)",
@@ -705,7 +722,7 @@ template("ios_app_bundle") {
       ]
     }
 
-    if (use_ios_simulator) {
+    if (target_environment == "simulator") {
       deps += [ ":$_generate_entitlements_target($default_toolchain)" ]
 
       if (!defined(inputs)) {
@@ -887,7 +904,7 @@ template("ios_app_bundle") {
         }
         bundle_deps += _variant.bundle_deps
 
-        if (use_ios_simulator) {
+        if (target_environment == "simulator") {
           if (!defined(data_deps)) {
             data_deps = []
           }
@@ -910,8 +927,8 @@ template("ios_app_bundle") {
         sources = [ "${_default_variant.bundle_gen_dir}/$_bundle_short_name" ]
         outputs = [ "$root_out_dir/$_bundle_short_name" ]
 
-        args = rebase_path(sources, root_out_dir) +
-               rebase_path(outputs, root_out_dir)
+        args = rebase_path(sources, root_build_dir) +
+               rebase_path(outputs, root_build_dir)
       }
     }
   }
@@ -1240,6 +1257,11 @@ template("ios_framework_bundle") {
   _default_toolchain_root_out_dir =
       get_label_info("$_target_name($default_toolchain)", "root_out_dir")
 
+  _arch_shared_library_source = _target_name + "_arch_shared_library_sources"
+  _arch_shared_library_target = _target_name + "_arch_shared_library"
+  _lipo_shared_library_target = _target_name + "_shared_library"
+  _link_target_name = _target_name + "+link"
+
   if (_has_public_headers) {
     _default_toolchain_target_gen_dir =
         get_label_info("$_target_name($default_toolchain)", "target_gen_dir")
@@ -1250,7 +1272,10 @@ template("ios_framework_bundle") {
     _header_map_filename =
         "$_default_toolchain_target_gen_dir/$_output_name.headers.hmap"
     config(_headers_map_config) {
-      visibility = [ ":${_target_name}_signed_bundle" ]
+      visibility = [
+        ":${_arch_shared_library_source}",
+        ":${_target_name}_signed_bundle",
+      ]
       include_dirs = [ _header_map_filename ]
     }
   }
@@ -1259,11 +1284,6 @@ template("ios_framework_bundle") {
   config(_framework_headers_config) {
     framework_dirs = [ _default_toolchain_root_out_dir ]
   }
-
-  _arch_shared_library_source = _target_name + "_arch_shared_library_sources"
-  _arch_shared_library_target = _target_name + "_arch_shared_library"
-  _lipo_shared_library_target = _target_name + "_shared_library"
-  _link_target_name = _target_name + "+link"
 
   _framework_public_config = _target_name + "_public_config"
   config(_framework_public_config) {
@@ -1942,6 +1962,7 @@ template("ios_xcuitest_test_runner_bundle") {
     args = [
              "merge",
              "-f=xml1",
+             "-x=$xcode_version",
              "-o=" + rebase_path(_output_name, root_build_dir),
            ] + rebase_path(sources, root_build_dir)
 

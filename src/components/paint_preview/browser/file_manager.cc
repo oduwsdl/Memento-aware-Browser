@@ -139,7 +139,7 @@ base::Optional<base::FilePath> FileManager::CreateOrGetDirectory(
         DVLOG(1) << "ERROR: failed to unzip: " << path << " to " << dst_path;
         return base::nullopt;
       }
-      base::DeleteFileRecursively(path);
+      base::DeletePathRecursively(path);
       return dst_path;
     }
     default:
@@ -160,7 +160,7 @@ bool FileManager::CompressDirectory(const DirectoryKey& key) const {
       base::FilePath dst_path = path.AddExtensionASCII(kZipExt);
       if (!zip::Zip(path, dst_path, /* hidden files */ true))
         return false;
-      base::DeleteFileRecursively(path);
+      base::DeletePathRecursively(path);
       return true;
     }
     case kZip:
@@ -177,7 +177,7 @@ void FileManager::DeleteArtifactSet(const DirectoryKey& key) const {
   StorageType storage_type = GetPathForKey(key, &path);
   if (storage_type == FileManager::StorageType::kNone)
     return;
-  base::DeleteFileRecursively(path);
+  base::DeletePathRecursively(path);
 }
 
 void FileManager::DeleteArtifactSets(
@@ -189,7 +189,7 @@ void FileManager::DeleteArtifactSets(
 
 void FileManager::DeleteAll() const {
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
-  base::DeleteFileRecursively(root_directory_);
+  base::DeletePathRecursively(root_directory_);
 }
 
 bool FileManager::SerializePaintPreviewProto(const DirectoryKey& key,
@@ -218,13 +218,22 @@ bool FileManager::SerializePaintPreviewProto(const DirectoryKey& key,
   return result;
 }
 
-std::unique_ptr<PaintPreviewProto> FileManager::DeserializePaintPreviewProto(
-    const DirectoryKey& key) const {
+std::pair<FileManager::ProtoReadStatus, std::unique_ptr<PaintPreviewProto>>
+FileManager::DeserializePaintPreviewProto(const DirectoryKey& key) const {
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
   auto path = CreateOrGetDirectory(key, false);
   if (!path.has_value())
-    return nullptr;
-  return ReadProtoFromFile(path->AppendASCII(kProtoName));
+    return std::make_pair(ProtoReadStatus::kNoProto, nullptr);
+
+  auto proto_path = path->AppendASCII(kProtoName);
+  if (!base::PathExists(proto_path))
+    return std::make_pair(ProtoReadStatus::kNoProto, nullptr);
+
+  auto proto = ReadProtoFromFile(path->AppendASCII(kProtoName));
+  if (proto == nullptr)
+    return std::make_pair(ProtoReadStatus::kDeserializationError, nullptr);
+
+  return std::make_pair(ProtoReadStatus::kOk, std::move(proto));
 }
 
 base::flat_set<DirectoryKey> FileManager::ListUsedKeys() const {
@@ -242,13 +251,8 @@ base::flat_set<DirectoryKey> FileManager::ListUsedKeys() const {
 }
 
 std::vector<DirectoryKey> FileManager::GetOldestArtifactsForCleanup(
-    size_t max_size) {
-  // The rest of this function is expensive so cleanup should exit early if not
-  // required.
-  size_t size = base::ComputeDirectorySize(root_directory_);
-  if (size <= max_size)
-    return std::vector<DirectoryKey>();
-
+    size_t max_size,
+    base::TimeDelta expiry_horizon) {
   base::FileEnumerator file_enum(
       root_directory_, false,
       base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES);
@@ -260,22 +264,29 @@ std::vector<DirectoryKey> FileManager::GetOldestArtifactsForCleanup(
 
   std::sort(file_infos.begin(), file_infos.end(), CompareByLastModified);
 
+  // If the oldest file doesn't need to expire attempt to early exit.
+  base::Time expiry_threshold =
+      base::Time::NowFromSystemTime() - expiry_horizon;
+
+  size_t size = base::ComputeDirectorySize(root_directory_);
   std::vector<DirectoryKey> keys_to_remove;
   for (const auto& file_info : file_infos) {
-    base::FilePath full_path = root_directory_.Append(file_info.GetName());
+    // Stop when both the max size and expiry threshold requirements are met.
+    if (size <= max_size && file_info.GetLastModifiedTime() > expiry_threshold)
+      break;
 
     size_t size_delta = file_info.GetSize();
     // Computing a directory size is expensive. Most files should hopefully be
     // compressed already.
-    if (file_info.IsDirectory())
+    if (file_info.IsDirectory()) {
+      base::FilePath full_path = root_directory_.Append(file_info.GetName());
       size_delta = base::ComputeDirectorySize(full_path);
+    }
 
     // Directory names should always be ASCII.
     keys_to_remove.emplace_back(
         file_info.GetName().RemoveExtension().MaybeAsASCII());
     size -= size_delta;
-    if (size <= max_size)
-      break;
   }
   return keys_to_remove;
 }

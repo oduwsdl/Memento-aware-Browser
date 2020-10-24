@@ -8,6 +8,10 @@
 #include <memory>
 #include <utility>
 
+#if defined(OS_ANDROID)
+#include "base/android/android_hardware_buffer_compat.h"
+#endif
+
 #include "base/bind_helpers.h"
 #include "base/numerics/ranges.h"
 #include "build/build_config.h"
@@ -107,38 +111,14 @@ device::mojom::VREyeParametersPtr ValidateEyeParameters(
 }
 
 device::mojom::VRDisplayInfoPtr ValidateVRDisplayInfo(
-    const device::mojom::VRDisplayInfo* info,
-    device::mojom::XRDeviceId id) {
+    const device::mojom::VRDisplayInfo* info) {
   if (!info)
     return nullptr;
 
   device::mojom::VRDisplayInfoPtr ret = device::mojom::VRDisplayInfo::New();
 
-  // Rather than just cloning everything, we copy over each field and validate
-  // individually.  This ensures new fields don't bypass validation.
-  ret->id = id;
-
-  // Maximum 1000km translation.
-  if (info->stage_parameters &&
-      IsValidTransform(info->stage_parameters->standing_transform, 1000000)) {
-    ret->stage_parameters = device::mojom::VRStageParameters::New(
-        info->stage_parameters->standing_transform,
-        info->stage_parameters->bounds);
-  }
-
   ret->left_eye = ValidateEyeParameters(info->left_eye.get());
   ret->right_eye = ValidateEyeParameters(info->right_eye.get());
-
-  float kMinFramebufferScale = 0.1f;
-  float kMaxFramebufferScale = 1.0f;
-
-  if (info->webxr_default_framebuffer_scale <= kMaxFramebufferScale &&
-      info->webxr_default_framebuffer_scale >= kMinFramebufferScale) {
-    ret->webxr_default_framebuffer_scale =
-        info->webxr_default_framebuffer_scale;
-  } else {
-    ret->webxr_default_framebuffer_scale = 1;
-  }
   return ret;
 }
 
@@ -163,17 +143,9 @@ constexpr device::mojom::XRSessionFeature kARCoreDeviceFeatures[] = {
     device::mojom::XRSessionFeature::DOM_OVERLAY,
     device::mojom::XRSessionFeature::LIGHT_ESTIMATION,
     device::mojom::XRSessionFeature::ANCHORS,
-    device::mojom::XRSessionFeature::CAMERA_ACCESS,
+    device::mojom::XRSessionFeature::PLANE_DETECTION,
+    device::mojom::XRSessionFeature::DEPTH,
 };
-
-#if BUILDFLAG(ENABLE_OPENVR)
-constexpr device::mojom::XRSessionFeature kOpenVRFeatures[] = {
-    device::mojom::XRSessionFeature::REF_SPACE_VIEWER,
-    device::mojom::XRSessionFeature::REF_SPACE_LOCAL,
-    device::mojom::XRSessionFeature::REF_SPACE_LOCAL_FLOOR,
-    device::mojom::XRSessionFeature::REF_SPACE_BOUNDED_FLOOR,
-};
-#endif
 
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
 constexpr device::mojom::XRSessionFeature kWindowsMixedRealityFeatures[] = {
@@ -194,15 +166,6 @@ constexpr device::mojom::XRSessionFeature kOpenXRFeatures[] = {
 };
 #endif
 
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-constexpr device::mojom::XRSessionFeature kOculusFeatures[] = {
-    device::mojom::XRSessionFeature::REF_SPACE_VIEWER,
-    device::mojom::XRSessionFeature::REF_SPACE_LOCAL,
-    device::mojom::XRSessionFeature::REF_SPACE_LOCAL_FLOOR,
-    device::mojom::XRSessionFeature::REF_SPACE_BOUNDED_FLOOR,
-};
-#endif
-
 bool ContainsFeature(
     base::span<const device::mojom::XRSessionFeature> feature_list,
     device::mojom::XRSessionFeature feature) {
@@ -219,7 +182,7 @@ BrowserXRRuntimeImpl::BrowserXRRuntimeImpl(
     : id_(id),
       device_data_(std::move(device_data)),
       runtime_(std::move(runtime)),
-      display_info_(ValidateVRDisplayInfo(display_info.get(), id)) {
+      display_info_(ValidateVRDisplayInfo(display_info.get())) {
   DVLOG(2) << __func__ << ": id=" << id;
   // Unretained is safe because we are calling through an InterfacePtr we own,
   // so we won't be called after runtime_ is destroyed.
@@ -266,21 +229,20 @@ bool BrowserXRRuntimeImpl::SupportsFeature(
         return base::FeatureList::IsEnabled(features::kWebXrHitTest);
       }
 
+#if defined(OS_ANDROID)
+      // Only support camera access if the feature flag is enabled & the device
+      // supports shared buffers.
+      if (feature == device::mojom::XRSessionFeature::CAMERA_ACCESS) {
+        return base::FeatureList::IsEnabled(features::kWebXrIncubations) &&
+               base::AndroidHardwareBufferCompat::IsSupportAvailable();
+      }
+#endif
+
       return ContainsFeature(kARCoreDeviceFeatures, feature);
     case device::mojom::XRDeviceId::ORIENTATION_DEVICE_ID:
       return ContainsFeature(kOrientationDeviceFeatures, feature);
     case device::mojom::XRDeviceId::GVR_DEVICE_ID:
       return ContainsFeature(kGVRDeviceFeatures, feature);
-
-#if BUILDFLAG(ENABLE_OPENVR)
-    case device::mojom::XRDeviceId::OPENVR_DEVICE_ID:
-      return ContainsFeature(kOpenVRFeatures, feature);
-#endif
-
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-    case device::mojom::XRDeviceId::OCULUS_DEVICE_ID:
-      return ContainsFeature(kOculusFeatures, feature);
-#endif
 
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
     case device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID:
@@ -314,14 +276,6 @@ bool BrowserXRRuntimeImpl::SupportsCustomIPD() const {
     case device::mojom::XRDeviceId::ORIENTATION_DEVICE_ID:
     case device::mojom::XRDeviceId::GVR_DEVICE_ID:
       return false;
-#if BUILDFLAG(ENABLE_OPENVR)
-    case device::mojom::XRDeviceId::OPENVR_DEVICE_ID:
-      return true;
-#endif
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-    case device::mojom::XRDeviceId::OCULUS_DEVICE_ID:
-      return true;
-#endif
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
     case device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID:
       return true;
@@ -343,12 +297,6 @@ bool BrowserXRRuntimeImpl::SupportsNonEmulatedHeight() const {
     case device::mojom::XRDeviceId::ORIENTATION_DEVICE_ID:
       return false;
     case device::mojom::XRDeviceId::GVR_DEVICE_ID:
-#if BUILDFLAG(ENABLE_OPENVR)
-    case device::mojom::XRDeviceId::OPENVR_DEVICE_ID:
-#endif
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-    case device::mojom::XRDeviceId::OCULUS_DEVICE_ID:
-#endif
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
     case device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID:
 #endif
@@ -361,10 +309,14 @@ bool BrowserXRRuntimeImpl::SupportsNonEmulatedHeight() const {
   NOTREACHED();
 }
 
+bool BrowserXRRuntimeImpl::SupportsArBlendMode() {
+  return device_data_->is_ar_blend_mode_supported;
+}
+
 void BrowserXRRuntimeImpl::OnDisplayInfoChanged(
     device::mojom::VRDisplayInfoPtr vr_device_info) {
   bool had_display_info = !!display_info_;
-  display_info_ = ValidateVRDisplayInfo(vr_device_info.get(), id_);
+  display_info_ = ValidateVRDisplayInfo(vr_device_info.get());
   if (had_display_info) {
     for (VRServiceImpl* service : services_) {
       service->OnDisplayInfoChanged();
@@ -543,10 +495,6 @@ void BrowserXRRuntimeImpl::AddObserver(Observer* observer) {
 
 void BrowserXRRuntimeImpl::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
-}
-
-void BrowserXRRuntimeImpl::SetInlinePosesEnabled(bool enabled) {
-  runtime_->SetInlinePosesEnabled(enabled);
 }
 
 void BrowserXRRuntimeImpl::BeforeRuntimeRemoved() {

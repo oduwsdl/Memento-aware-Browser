@@ -4,23 +4,46 @@
 
 package org.chromium.chrome.browser.signin.account_picker;
 
-import android.content.Context;
+import android.app.Activity;
+import android.view.View;
 
 import androidx.annotation.MainThread;
+import androidx.annotation.VisibleForTesting;
 
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
+import org.chromium.chrome.browser.incognito.interstitial.IncognitoInterstitialCoordinator;
+import org.chromium.chrome.browser.incognito.interstitial.IncognitoInterstitialDelegate;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
-import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 /**
  * Coordinator of the account picker bottom sheet used in web signin flow.
  */
 public class AccountPickerBottomSheetCoordinator {
+    private final AccountPickerBottomSheetView mView;
+    private final AccountPickerBottomSheetMediator mAccountPickerBottomSheetMediator;
     private final AccountPickerCoordinator mAccountPickerCoordinator;
     private final BottomSheetController mBottomSheetController;
     private final BottomSheetObserver mBottomSheetObserver = new EmptyBottomSheetObserver() {
+        @Override
+        public void onSheetClosed(@StateChangeReason int reason) {
+            super.onSheetClosed(reason);
+            final @AccountConsistencyPromoAction int promoAction;
+            if (reason == StateChangeReason.SWIPE) {
+                promoAction = AccountConsistencyPromoAction.DISMISSED_SWIPE_DOWN;
+            } else if (reason == StateChangeReason.BACK_PRESS) {
+                promoAction = AccountConsistencyPromoAction.DISMISSED_BACK;
+            } else if (reason == StateChangeReason.TAP_SCRIM) {
+                promoAction = AccountConsistencyPromoAction.DISMISSED_SCRIM;
+            } else {
+                promoAction = AccountConsistencyPromoAction.DISMISSED_OTHER;
+            }
+            AccountPickerDelegate.recordAccountConsistencyPromoAction(promoAction);
+        }
+
         @Override
         public void onSheetStateChanged(int newState) {
             super.onSheetStateChanged(newState);
@@ -32,20 +55,30 @@ public class AccountPickerBottomSheetCoordinator {
 
     /**
      * Constructs the AccountPickerBottomSheetCoordinator and shows the
-     * bottomsheet on the screen.
+     * bottom sheet on the screen.
      */
     @MainThread
-    public AccountPickerBottomSheetCoordinator(Context context,
+    public AccountPickerBottomSheetCoordinator(Activity activity,
             BottomSheetController bottomSheetController,
-            AccountPickerCoordinator.Listener accountPickerListener) {
-        AccountPickerBottomSheetView view = new AccountPickerBottomSheetView(context);
-        mAccountPickerCoordinator = new AccountPickerCoordinator(
-                view.getAccountPickerItemView(), accountPickerListener, null);
+            AccountPickerDelegate accountPickerDelegate,
+            IncognitoInterstitialDelegate incognitoInterstitialDelegate) {
+        AccountPickerDelegate.recordAccountConsistencyPromoAction(
+                AccountConsistencyPromoAction.SHOWN);
+
+        mAccountPickerBottomSheetMediator = new AccountPickerBottomSheetMediator(
+                activity, accountPickerDelegate, this::dismissBottomSheet);
+        mView = new AccountPickerBottomSheetView(activity, mAccountPickerBottomSheetMediator);
+        mAccountPickerCoordinator = new AccountPickerCoordinator(mView.getAccountListView(),
+                mAccountPickerBottomSheetMediator, /* selectedAccountName= */ null,
+                /* showIncognitoRow= */ IncognitoUtils.isIncognitoModeEnabled());
+        IncognitoInterstitialCoordinator incognitoInterstitialCoordinator =
+                new IncognitoInterstitialCoordinator(
+                        mView.getIncognitoInterstitialView(), incognitoInterstitialDelegate);
         mBottomSheetController = bottomSheetController;
-        PropertyModel model = AccountPickerBottomSheetProperties.createModel();
-        PropertyModelChangeProcessor.create(model, view, AccountPickerBottomSheetViewBinder::bind);
+        PropertyModelChangeProcessor.create(mAccountPickerBottomSheetMediator.getModel(), mView,
+                AccountPickerBottomSheetViewBinder::bind);
         mBottomSheetController.addObserver(mBottomSheetObserver);
-        mBottomSheetController.requestShowContent(view, true);
+        mBottomSheetController.requestShowContent(mView, true);
     }
 
     /**
@@ -54,6 +87,18 @@ public class AccountPickerBottomSheetCoordinator {
     @MainThread
     private void destroy() {
         mAccountPickerCoordinator.destroy();
+        mAccountPickerBottomSheetMediator.destroy();
+
         mBottomSheetController.removeObserver(mBottomSheetObserver);
+    }
+
+    @MainThread
+    private void dismissBottomSheet() {
+        mBottomSheetController.hideContent(mView, true);
+    }
+
+    @VisibleForTesting
+    public View getBottomSheetViewForTesting() {
+        return mView.getContentView();
     }
 }

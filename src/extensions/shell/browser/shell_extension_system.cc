@@ -95,7 +95,7 @@ ServiceWorkerManager* ShellExtensionSystem::service_worker_manager() {
   return service_worker_manager_.get();
 }
 
-SharedUserScriptMaster* ShellExtensionSystem::shared_user_script_master() {
+SharedUserScriptManager* ShellExtensionSystem::shared_user_script_manager() {
   return nullptr;
 }
 
@@ -164,7 +164,7 @@ void ShellExtensionSystem::InstallUpdate(
     bool install_immediately,
     InstallUpdateCallback install_update_callback) {
   NOTREACHED();
-  base::DeleteFileRecursively(temp_dir);
+  base::DeletePathRecursively(temp_dir);
 }
 
 void ShellExtensionSystem::PerformActionBasedOnOmahaAttributes(

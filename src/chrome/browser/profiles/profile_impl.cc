@@ -18,7 +18,6 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/environment.h"
-#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -44,7 +43,6 @@
 #include "chrome/browser/background_fetch/background_fetch_delegate_factory.h"
 #include "chrome/browser/background_fetch/background_fetch_delegate_impl.h"
 #include "chrome/browser/background_sync/background_sync_controller_factory.h"
-#include "chrome/browser/background_sync/background_sync_controller_impl.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -109,7 +107,6 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
@@ -117,6 +114,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
+#include "components/background_sync/background_sync_controller_impl.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -163,7 +161,6 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
-#include "services/network/public/cpp/features.h"
 #include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom.h"
 #include "services/service_manager/public/cpp/service.h"
@@ -1088,14 +1085,14 @@ void ProfileImpl::SetExitType(ExitType exit_type) {
   }
 }
 
-Profile::ExitType ProfileImpl::GetLastSessionExitType() {
+Profile::ExitType ProfileImpl::GetLastSessionExitType() const {
   // last_session_exited_cleanly_ is set when the preferences are loaded. Force
   // it to be set by asking for the prefs.
   GetPrefs();
   return last_session_exit_type_;
 }
 
-bool ProfileImpl::ShouldRestoreOldSessionCookies() {
+bool ProfileImpl::ShouldRestoreOldSessionCookies() const {
 #if defined(OS_ANDROID)
   SessionStartupPref::Type startup_pref_type =
       SessionStartupPref::GetDefaultStartupType();
@@ -1109,7 +1106,7 @@ bool ProfileImpl::ShouldRestoreOldSessionCookies() {
          startup_pref_type == SessionStartupPref::LAST;
 }
 
-bool ProfileImpl::ShouldPersistSessionCookies() {
+bool ProfileImpl::ShouldPersistSessionCookies() const {
   return true;
 }
 
@@ -1131,8 +1128,8 @@ ChromeZoomLevelPrefs* ProfileImpl::GetZoomLevelPrefs() {
 #endif  // !defined(OS_ANDROID)
 
 PrefService* ProfileImpl::GetOffTheRecordPrefs() {
-  if (HasOffTheRecordProfile()) {
-    return GetOffTheRecordProfile()->GetPrefs();
+  if (HasPrimaryOTRProfile()) {
+    return GetPrimaryOTRProfile()->GetPrefs();
   } else {
     // The extensions preference API and many tests call this method even when
     // there's no OTR profile, in order to figure out what a pref value would
@@ -1288,13 +1285,13 @@ void ProfileImpl::SetCorsOriginAccessListForOrigin(
                                 base::RetainedRef(profile_setter.get())));
 
   // Keep incognito storage partitions' NetworkContexts synchronized.
-  if (HasOffTheRecordProfile()) {
+  if (HasPrimaryOTRProfile()) {
     auto off_the_record_setter = base::MakeRefCounted<CorsOriginPatternSetter>(
         source_origin, CorsOriginPatternSetter::ClonePatterns(allow_patterns),
         CorsOriginPatternSetter::ClonePatterns(block_patterns),
         barrier_closure);
     ForEachStoragePartition(
-        GetOffTheRecordProfile(),
+        GetPrimaryOTRProfile(),
         base::BindRepeating(&CorsOriginPatternSetter::SetLists,
                             base::RetainedRef(off_the_record_setter.get())));
   } else {
@@ -1315,23 +1312,6 @@ ProfileImpl::GetSharedCorsOriginAccessList() {
   return shared_cors_origin_access_list_.get();
 }
 
-bool ProfileImpl::ShouldEnableOutOfBlinkCors() {
-  // Obtains the applied policy at most one time per profile, and reuse the
-  // same value for the whole session so that CORS implementations distributed
-  // in multi-processes work consistently. Profile-bound renderers and
-  // NetworkContexts will be initialized based on this returned mode.
-  if (!cors_legacy_mode_enabled_.has_value()) {
-    cors_legacy_mode_enabled_ =
-        base::FeatureList::IsEnabled(
-            features::kHideCorsLegacyModeEnabledPolicySupport)
-            ? false
-            : GetPrefs()->GetBoolean(prefs::kCorsLegacyModeEnabled);
-  }
-  if (cors_legacy_mode_enabled_.value())
-    return false;
-  return base::FeatureList::IsEnabled(network::features::kOutOfBlinkCors);
-}
-
 std::string ProfileImpl::GetMediaDeviceIDSalt() {
   return media_device_id_salt_->GetSalt();
 }
@@ -1346,7 +1326,7 @@ ProfileImpl::GetNativeFileSystemPermissionContext() {
   return NativeFileSystemPermissionContextFactory::GetForProfile(this);
 }
 
-bool ProfileImpl::IsSameProfile(Profile* profile) {
+bool ProfileImpl::IsSameOrParent(Profile* profile) {
   return profile && profile->GetOriginalProfile() == this;
 }
 

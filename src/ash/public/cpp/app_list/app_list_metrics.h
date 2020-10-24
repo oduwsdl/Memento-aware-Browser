@@ -88,6 +88,10 @@ enum SearchResultType {
   PLUGIN_VM_APP,
   // LaCrOS binary.
   LACROS,
+  // A Remote App Result.
+  REMOTE_APP,
+  // A Borealis App Result.
+  BOREALIS_APP,
   // Boundary is always last.
   SEARCH_RESULT_TYPE_BOUNDARY
 };
@@ -104,6 +108,8 @@ ASH_PUBLIC_EXPORT void RecordZeroStateSuggestionOpenTypeHistogram(
     SearchResultType type);
 
 ASH_PUBLIC_EXPORT void RecordLauncherIssuedSearchQueryLength(int query_length);
+
+ASH_PUBLIC_EXPORT void RecordLauncherClickedSearchQueryLength(int query_length);
 
 ASH_PUBLIC_EXPORT void RecordSuccessfulAppLaunchUsingSearch(
     AppListLaunchedFrom launched_from,

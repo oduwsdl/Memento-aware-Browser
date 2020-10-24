@@ -17,9 +17,10 @@
 #include "ash/login/ui/login_data_dispatcher.h"
 #include "ash/login/ui/login_display_style.h"
 #include "ash/login/ui/login_error_bubble.h"
-#include "ash/login/ui/login_tooltip_view.h"
+#include "ash/login/ui/login_unpositioned_tooltip_view.h"
 #include "ash/login/ui/non_accessible_view.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
+#include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/login_types.h"
 #include "ash/public/cpp/system_tray_focus_observer.h"
 #include "base/callback_forward.h"
@@ -31,7 +32,6 @@
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
-#include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
@@ -41,7 +41,6 @@ class KeyboardUIController;
 
 namespace views {
 class BoxLayout;
-class StyledLabel;
 }  // namespace views
 
 namespace ash {
@@ -68,13 +67,21 @@ class ASH_EXPORT LockContentsView
       public LoginDataDispatcher::Observer,
       public SystemTrayFocusObserver,
       public display::DisplayObserver,
-      public views::StyledLabelListener,
       public KeyboardControllerObserver,
       public chromeos::PowerManagerClient::Observer {
  public:
   METADATA_HEADER(LockContentsView);
   class AuthErrorBubble;
+  class ManagementPopUp;
+  class LoginTooltipView;
+  class UserAddingPopUp;
   class UserState;
+
+  enum class BottomIndicatorState {
+    kNone,
+    kManagedDevice,
+    kAdbSideLoadingEnabled,
+  };
 
   // TestApi is used for tests to get internal implementation details.
   class ASH_EXPORT TestApi {
@@ -88,13 +95,16 @@ class ASH_EXPORT LockContentsView
     ScrollableUsersListView* users_list() const;
     LockScreenMediaControlsView* media_controls_view() const;
     views::View* note_action() const;
-    LoginTooltipView* tooltip_bubble() const;
+    views::View* tooltip_bubble() const;
+    views::View* management_bubble() const;
     LoginErrorBubble* auth_error_bubble() const;
     LoginErrorBubble* detachable_base_error_bubble() const;
     LoginErrorBubble* warning_banner_bubble() const;
     LoginErrorBubble* supervised_user_deprecation_bubble() const;
+    views::View* user_adding_screen_bubble() const;
     views::View* system_info() const;
     views::View* bottom_status_indicator() const;
+    BottomIndicatorState bottom_status_indicator_status() const;
     LoginExpandedPublicAccountView* expanded_view() const;
     views::View* main_view() const;
     const std::vector<LockContentsView::UserState>& users() const;
@@ -118,12 +128,6 @@ class ASH_EXPORT LockContentsView
     kExclusivePublicAccountExpandedView,
   };
 
-  enum class AcceleratorAction {
-    kToggleSystemInfo,
-    kShowFeedback,
-    kShowResetScreen,
-  };
-
   // Number of login attempts before a login dialog is shown. For example, if
   // this value is 4 then the user can submit their password 4 times, and on the
   // 4th bad attempt the login dialog is shown. This only applies to the login
@@ -139,6 +143,8 @@ class ASH_EXPORT LockContentsView
 
   void FocusNextUser();
   void FocusPreviousUser();
+  void ShowEnterpriseDomainManager(
+      const std::string& entreprise_domain_manager);
   void ShowAdbEnabled();
   void ToggleSystemInfo();
   void ShowParentAccessDialog();
@@ -167,6 +173,9 @@ class ASH_EXPORT LockContentsView
   void OnAuthDisabledForUser(
       const AccountId& user,
       const AuthDisabledData& auth_disabled_data) override;
+  void OnSetTpmLockedState(const AccountId& user,
+                           bool is_locked,
+                           base::TimeDelta time_left) override;
   void OnLockScreenNoteStateChanged(mojom::TrayActionState state) override;
   void OnTapToUnlockEnabledForUserChanged(const AccountId& user,
                                           bool enabled) override;
@@ -208,11 +217,6 @@ class ASH_EXPORT LockContentsView
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
 
-  // views::StyledLabelListener:
-  void StyledLabelLinkClicked(views::StyledLabel* label,
-                              const gfx::Range& range,
-                              int event_flags) override {}
-
   // KeyboardControllerObserver:
   void OnKeyboardVisibilityChanged(bool is_visible) override;
 
@@ -243,8 +247,11 @@ class ASH_EXPORT LockContentsView
     bool force_online_sign_in = false;
     bool disable_auth = false;
     bool show_pin_pad_for_password = false;
-    base::Optional<EasyUnlockIconOptions> easy_unlock_state;
+    size_t autosubmit_pin_length = 0;
+    base::Optional<EasyUnlockIconOptions> easy_unlock_state = base::nullopt;
     FingerprintState fingerprint_state;
+    // When present, indicates that the TPM is locked.
+    base::Optional<base::TimeDelta> time_until_tpm_unlock = base::nullopt;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(UserState);
@@ -292,7 +299,8 @@ class ASH_EXPORT LockContentsView
   void LayoutTopHeader();
 
   // Lay out the bottom status indicator. This is called when system information
-  // is shown if ADB is enabled.
+  // is shown if ADB is enabled and at the initialization of lock screen if the
+  // device is enrolled.
   void LayoutBottomStatusIndicator();
 
   // Lay out the expanded public session view.
@@ -390,7 +398,7 @@ class ASH_EXPORT LockContentsView
   void RegisterAccelerators();
 
   // Performs the specified accelerator action.
-  void PerformAction(AcceleratorAction action);
+  void PerformAction(LoginAcceleratorAction action);
 
   // Check whether the view should display the system information based on all
   // factors including policy settings, channel and Alt-V accelerator.
@@ -399,6 +407,11 @@ class ASH_EXPORT LockContentsView
   // Toggles the visibility of the |bottom_status_indicator_| based on its
   // content type and whether the extension UI window is opened.
   void UpdateBottomStatusIndicatorVisibility();
+
+  // Shows a pop-up including more details about device management. It is
+  // triggered when the bottom status indicator is clicked while displaying a
+  // "device is managed" type message.
+  void OnBottomStatusIndicatorTapped();
 
   const LockScreen::ScreenType screen_type_;
 
@@ -445,12 +458,17 @@ class ASH_EXPORT LockContentsView
   LoginErrorBubble* detachable_base_error_bubble_;
   // Bubble for displaying easy-unlock tooltips.
   LoginTooltipView* tooltip_bubble_;
+  // Bubble for displaying management details.
+  ManagementPopUp* management_bubble_;
+  // Bubble for displaying a warning message when a secondary user is being
+  // added.
+  UserAddingPopUp* user_adding_screen_bubble_ = nullptr;
   // Bubble for displaying warning banner message.
   LoginErrorBubble* warning_banner_bubble_;
   // Bubble for displaying supervised user deprecation message.
   LoginErrorBubble* supervised_user_deprecation_bubble_;
 
-  // Bottom status indicator displaying ADB enabled alert.
+  // Bottom status indicator displaying entreprise domain or ADB enabled alert
   BottomStatusIndicator* bottom_status_indicator_;
 
   // Tracks the visibility of the extension Ui window.
@@ -485,12 +503,15 @@ class ASH_EXPORT LockContentsView
   bool keyboard_shown_ = false;
 
   // Accelerators handled by login screen.
-  std::map<ui::Accelerator, AcceleratorAction> accel_map_;
+  std::map<ui::Accelerator, LoginAcceleratorAction> accel_map_;
 
   // Notifies Chrome when user activity is detected on the login screen so that
   // the auto-login timer can be reset.
   std::unique_ptr<AutoLoginUserActivityHandler>
       auto_login_user_activity_handler_;
+
+  BottomIndicatorState bottom_status_indicator_status_ =
+      BottomIndicatorState::kNone;
 
   base::WeakPtrFactory<LockContentsView> weak_ptr_factory_{this};
 

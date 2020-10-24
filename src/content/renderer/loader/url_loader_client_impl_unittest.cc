@@ -7,7 +7,6 @@
 #include <vector>
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
-#include "content/renderer/loader/navigation_response_override_parameters.h"
 #include "content/renderer/loader/resource_dispatcher.h"
 #include "content/renderer/loader/test_request_peer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -20,6 +19,7 @@
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
+#include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
 namespace content {
@@ -60,7 +60,8 @@ class URLLoaderClientImplTest : public ::testing::Test,
                                           &request_peer_context_),
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(this),
         std::vector<std::unique_ptr<blink::URLLoaderThrottle>>(),
-        nullptr /* navigation_response_override_params */);
+        std::make_unique<blink::ResourceLoadInfoNotifierWrapper>(
+            /*resource_load_info_notifier=*/nullptr));
     request_peer_context_.request_id = request_id_;
 
     base::RunLoop().RunUntilIdle();

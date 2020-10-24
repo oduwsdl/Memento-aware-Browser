@@ -11,6 +11,7 @@ struct Feature;
 
 namespace autofill_assistant {
 namespace features {
+
 // All features in alphabetical order.
 extern const base::Feature kAutofillAssistant;
 extern const base::Feature kAutofillAssistantChromeEntry;

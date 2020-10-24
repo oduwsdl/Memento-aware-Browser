@@ -12,7 +12,6 @@ goog.provide('Background');
 goog.require('AutomationPredicate');
 goog.require('AutomationUtil');
 goog.require('BackgroundKeyboardHandler');
-goog.require('BackgroundMouseHandler');
 goog.require('BrailleCommandData');
 goog.require('BrailleCommandHandler');
 goog.require('BrailleKeyCommand');
@@ -26,6 +25,7 @@ goog.require('ExtensionBridge');
 goog.require('FindHandler');
 goog.require('FocusAutomationHandler');
 goog.require('GestureCommandHandler');
+goog.require('InstanceChecker');
 goog.require('LiveRegions');
 goog.require('LocaleOutputHelper');
 goog.require('MathHandler');
@@ -61,14 +61,6 @@ Background = class extends ChromeVoxState {
     // Initialize legacy background page first.
     ChromeVoxBackground.init();
     LocaleOutputHelper.init();
-
-    /**
-     * A list of site substring patterns to use with ChromeVox next. Keep these
-     * strings relatively specific.
-     * @type {!Array<string>}
-     * @private
-     */
-    this.whitelist_ = ['chromevox_next_test'];
 
     /**
      * @type {cursors.Range}
@@ -115,13 +107,6 @@ Background = class extends ChromeVoxState {
 
     /** @type {!BackgroundKeyboardHandler} @private */
     this.keyboardHandler_ = new BackgroundKeyboardHandler();
-
-    /** @type {!BackgroundMouseHandler} @private */
-    this.mouseHandler_ = new BackgroundMouseHandler();
-
-    if (localStorage['speakTextUnderMouse'] == String(true)) {
-      chrome.accessibilityPrivate.enableChromeVoxMouseEvents(true);
-    }
 
     /** @type {!LiveRegions} @private */
     this.liveRegions_ = new LiveRegions(this);
@@ -176,6 +161,54 @@ Background = class extends ChromeVoxState {
     // Set the darkScreen state to false, since the display will be on whenever
     // ChromeVox starts.
     sessionStorage.setItem('darkScreen', 'false');
+
+    // A self-contained class to start and stop progress sounds before any
+    // speech has been generated on startup. This is important in cases where
+    // speech is severely delayed.
+    /** @implements {TtsCapturingEventListener} */
+    const ProgressPlayer = class {
+      constructor() {
+        ChromeVox.tts.addCapturingEventListener(this);
+        ChromeVox.earcons.playEarcon(Earcon.CHROMEVOX_LOADING);
+      }
+
+      /** @override */
+      onTtsStart() {
+        ChromeVox.earcons.playEarcon(Earcon.CHROMEVOX_LOADED);
+        ChromeVox.tts.removeCapturingEventListener(this);
+      }
+
+      /** @override */
+      onTtsEnd() {}
+      /** @override */
+      onTtsInterrupted() {}
+    };
+    new ProgressPlayer();
+
+    chrome.commandLinePrivate.hasSwitch(
+        'enable-experimental-accessibility-chromevox-tutorial', (enabled) => {
+          if (!enabled) {
+            return;
+          }
+
+          chrome.loginState.getSessionState((sessionState) => {
+            // If starting ChromeVox from OOBE, start the tutorial.
+            // Use a timeout to allow ChromeVox to initialize first.
+            if (sessionState ===
+                chrome.loginState.SessionState.IN_OOBE_SCREEN) {
+              chrome.chromeosInfoPrivate.isTabletModeEnabled((enabled) => {
+                // Only start the tutorial if we are not in tablet mode. This
+                // is a temporary workaround until we implement a touch-specific
+                // tutorial.
+                if (!enabled) {
+                  setTimeout(() => {
+                    (new PanelCommand(PanelCommandType.TUTORIAL)).send();
+                  }, 1000);
+                }
+              });
+            }
+          });
+        });
   }
 
   /**
@@ -247,10 +280,9 @@ Background = class extends ChromeVoxState {
   /**
    * @override
    */
-  navigateToRange(range, opt_focus, opt_speechProps, opt_skipSettingSelection) {
+  navigateToRange(range, opt_focus, opt_speechProps, opt_shouldSetSelection) {
     opt_focus = opt_focus === undefined ? true : opt_focus;
     opt_speechProps = opt_speechProps || {};
-    opt_skipSettingSelection = opt_skipSettingSelection || false;
     const prevRange = this.currentRange_;
 
     // Specialization for math output.
@@ -270,8 +302,7 @@ Background = class extends ChromeVoxState {
     let selectedRange;
     let msg;
 
-    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid() &&
-        !opt_skipSettingSelection) {
+    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid()) {
       // Suppress hints.
       o.withoutHints();
 
@@ -281,7 +312,7 @@ Background = class extends ChromeVoxState {
       const curRootStart = range.start.node.root;
       const curRootEnd = range.end.node.root;
 
-      // Disallow crossing over the start of the page selection and roots.
+      // Deny crossing over the start of the page selection and roots.
       if (pageRootStart != pageRootEnd || pageRootStart != curRootStart ||
           pageRootEnd != curRootEnd) {
         o.format('@end_selection');
@@ -314,7 +345,7 @@ Background = class extends ChromeVoxState {
           this.pageSel_.select();
         }
       }
-    } else if (!opt_skipSettingSelection) {
+    } else if (opt_shouldSetSelection) {
       // Ensure we don't select the editable when we first encounter it.
       let lca = null;
       if (range.start.node && prevRange.start.node) {
@@ -532,17 +563,7 @@ Background = class extends ChromeVoxState {
   }
 };
 
-
-// In 'split' manifest mode, the extension system runs two copies of the
-// extension. One in an incognito context; the other not. In guest mode, the
-// extension system runs only the extension in an incognito context. To prevent
-// doubling of this extension, only continue for one context.
-const manifest =
-    /** @type {{incognito: (string|undefined)}} */ (
-        chrome.runtime.getManifest());
-if (manifest.incognito == 'split' && !chrome.extension.inIncognitoContext) {
-  window.close();
-}
+InstanceChecker.closeExtraInstances();
 new Background();
 
 });  // goog.scope

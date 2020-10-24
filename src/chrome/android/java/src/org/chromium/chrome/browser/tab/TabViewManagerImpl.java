@@ -62,10 +62,16 @@ class TabViewManagerImpl implements TabViewManager, Comparator<TabViewProvider> 
     TabViewManagerImpl(TabImpl tab) {
         mTab = tab;
         mTabViewProviders = new PriorityQueue<>(PRIORITIZED_TAB_VIEW_PROVIDER_TYPES.length, this);
-        if (mTab.getActivity() == null) return;
+    }
+
+    private void initMarginSupplier() {
+        if (mTab.getActivity() == null || mTab.getActivity().isActivityFinishingOrDestroyed()
+                || mMarginSupplier != null) {
+            return;
+        }
 
         mMarginSupplier =
-                new BrowserControlsMarginSupplier(mTab.getActivity().getFullscreenManager());
+                new BrowserControlsMarginSupplier(mTab.getActivity().getBrowserControlsManager());
         mMarginSupplier.addObserver(this::updateViewMargins);
         // Update margins immediately if available rather than waiting for a posted notification.
         // Waiting for a posted notification could allow a layout pass to occur before the margins
@@ -119,8 +125,11 @@ class TabViewManagerImpl implements TabViewManager, Comparator<TabViewProvider> 
             if (currentTabViewProvider != null) {
                 view = currentTabViewProvider.getView();
                 assert view != null;
+                view.setFocusable(true);
+                view.setFocusableInTouchMode(true);
             }
             mCurrentView = view;
+            initMarginSupplier();
             updateViewMargins();
             mTab.setCustomView(mCurrentView);
             if (previousTabViewProvider != null) previousTabViewProvider.onHidden();

@@ -11,6 +11,7 @@
 #include "base/no_destructor.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chromeos/components/cdm_factory_daemon/output_protection_impl.h"
 #include "chromeos/dbus/cdm_factory_daemon/cdm_factory_daemon_client.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -53,16 +54,27 @@ void CdmFactoryDaemonProxy::CreateFactory(const std::string& key_system,
                      base::Unretained(this), key_system, std::move(callback)));
 }
 
-void CdmFactoryDaemonProxy::ConnectOemCrypto(
-    arc::mojom::OemCryptoServiceRequest oemcryptor,
+void CdmFactoryDaemonProxy::ConnectOemCryptoDeprecated(
+    mojo::PendingReceiver<arc::mojom::OemCryptoService> oemcryptor,
     mojo::PendingRemote<arc::mojom::ProtectedBufferManager>
         protected_buffer_manager) {
+  // This will never get called because this originates from Chrome as well
+  // which will always be on the same version as us.
+  NOTIMPLEMENTED();
+}
+
+void CdmFactoryDaemonProxy::ConnectOemCrypto(
+    mojo::PendingReceiver<arc::mojom::OemCryptoService> oemcryptor,
+    mojo::PendingRemote<arc::mojom::ProtectedBufferManager>
+        protected_buffer_manager,
+    mojo::PendingRemote<cdm::mojom::OutputProtection> output_protection) {
   // This gets invoked from ArcBridge which uses a different thread.
   if (!mojo_task_runner_->RunsTasksInCurrentSequence()) {
     mojo_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&CdmFactoryDaemonProxy::ConnectOemCrypto,
                                   base::Unretained(this), std::move(oemcryptor),
-                                  std::move(protected_buffer_manager)));
+                                  std::move(protected_buffer_manager),
+                                  std::move(output_protection)));
     return;
   }
 
@@ -70,14 +82,34 @@ void CdmFactoryDaemonProxy::ConnectOemCrypto(
   if (daemon_remote_.is_bound()) {
     DVLOG(1) << "CdmFactoryDaemon mojo connection already exists, re-use it";
     CompleteOemCryptoConnection(std::move(oemcryptor),
-                                std::move(protected_buffer_manager));
+                                std::move(protected_buffer_manager),
+                                std::move(output_protection));
+    return;
+  }
+
+  EstablishDaemonConnection(base::BindOnce(
+      &CdmFactoryDaemonProxy::CompleteOemCryptoConnection,
+      base::Unretained(this), std::move(oemcryptor),
+      std::move(protected_buffer_manager), std::move(output_protection)));
+}
+
+void CdmFactoryDaemonProxy::GetOutputProtection(
+    mojo::PendingReceiver<cdm::mojom::OutputProtection> output_protection) {
+  OutputProtectionImpl::Create(std::move(output_protection));
+}
+
+void CdmFactoryDaemonProxy::GetHwConfigData(GetHwConfigDataCallback callback) {
+  DCHECK(mojo_task_runner_->RunsTasksInCurrentSequence());
+  DVLOG(1) << "CdmFactoryDaemonProxy::GetHwConfigData called";
+  if (daemon_remote_.is_bound()) {
+    DVLOG(1) << "CdmFactoryDaemon mojo connection already exists, re-use it";
+    ProxyGetHwConfigData(std::move(callback));
     return;
   }
 
   EstablishDaemonConnection(
-      base::BindOnce(&CdmFactoryDaemonProxy::CompleteOemCryptoConnection,
-                     base::Unretained(this), std::move(oemcryptor),
-                     std::move(protected_buffer_manager)));
+      base::BindOnce(&CdmFactoryDaemonProxy::ProxyGetHwConfigData,
+                     base::Unretained(this), std::move(callback)));
 }
 
 void CdmFactoryDaemonProxy::SendDBusRequest(base::ScopedFD fd,
@@ -153,9 +185,10 @@ void CdmFactoryDaemonProxy::GetFactoryInterface(
 }
 
 void CdmFactoryDaemonProxy::CompleteOemCryptoConnection(
-    arc::mojom::OemCryptoServiceRequest oemcryptor,
+    mojo::PendingReceiver<arc::mojom::OemCryptoService> oemcryptor,
     mojo::PendingRemote<arc::mojom::ProtectedBufferManager>
-        protected_buffer_manager) {
+        protected_buffer_manager,
+    mojo::PendingRemote<cdm::mojom::OutputProtection> output_protection) {
   if (!daemon_remote_ || !daemon_remote_.is_bound()) {
     LOG(ERROR) << "daemon_remote_ interface is not connected";
     // Just let the mojo objects go out of scope and be destructed to signal
@@ -163,7 +196,18 @@ void CdmFactoryDaemonProxy::CompleteOemCryptoConnection(
     return;
   }
   daemon_remote_->ConnectOemCrypto(std::move(oemcryptor),
-                                   std::move(protected_buffer_manager));
+                                   std::move(protected_buffer_manager),
+                                   std::move(output_protection));
+}
+
+void CdmFactoryDaemonProxy::ProxyGetHwConfigData(
+    GetHwConfigDataCallback callback) {
+  if (!daemon_remote_ || !daemon_remote_.is_bound()) {
+    LOG(ERROR) << "daemon_remote_ interface is not connected";
+    std::move(callback).Run(false, std::vector<uint8_t>());
+    return;
+  }
+  daemon_remote_->GetHwConfigData(std::move(callback));
 }
 
 // static

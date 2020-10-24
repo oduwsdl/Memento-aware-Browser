@@ -194,8 +194,6 @@ using Instr = uint32_t;
   V(xsnmsubmsp, XSNMSUBMSP, 0xF00004C8)                                       \
   /* VSX Scalar Reciprocal Estimate Double-Precision */                       \
   V(xsredp, XSREDP, 0xF0000168)                                               \
-  /* VSX Scalar Reciprocal Estimate Single-Precision */                       \
-  V(xsresp, XSRESP, 0xF0000068)                                               \
   /* VSX Scalar Subtract Double-Precision */                                  \
   V(xssubdp, XSSUBDP, 0xF0000140)                                             \
   /* VSX Scalar Subtract Single-Precision */                                  \
@@ -286,8 +284,6 @@ using Instr = uint32_t;
   V(xvnmsubmsp, XVNMSUBMSP, 0xF00006C8)                                       \
   /* VSX Vector Reciprocal Estimate Double-Precision */                       \
   V(xvredp, XVREDP, 0xF0000368)                                               \
-  /* VSX Vector Reciprocal Estimate Single-Precision */                       \
-  V(xvresp, XVRESP, 0xF0000268)                                               \
   /* VSX Vector Subtract Double-Precision */                                  \
   V(xvsubdp, XVSUBDP, 0xF0000340)                                             \
   /* VSX Vector Subtract Single-Precision */                                  \
@@ -363,9 +359,63 @@ using Instr = uint32_t;
   /* Decimal Floating Test Data Group Quad */                   \
   V(dtstdgq, DTSTDGQ, 0xFC0001C4)
 
-#define PPC_XX2_OPCODE_LIST(V)                                               \
+#define PPC_XX2_OPCODE_A_FORM_LIST(V)                                    \
+  /* VSX Vector Absolute Value Double-Precision */                       \
+  V(xvabsdp, XVABSDP, 0xF0000764)                                        \
+  /* VSX Vector Negate Double-Precision */                               \
+  V(xvnegdp, XVNEGDP, 0xF00007E4)                                        \
+  /* VSX Vector Square Root Double-Precision */                          \
+  V(xvsqrtdp, XVSQRTDP, 0xF000032C)                                      \
+  /* VSX Vector Absolute Value Single-Precision */                       \
+  V(xvabssp, XVABSSP, 0xF0000664)                                        \
+  /* VSX Vector Negate Single-Precision */                               \
+  V(xvnegsp, XVNEGSP, 0xF00006E4)                                        \
+  /* VSX Vector Reciprocal Estimate Single-Precision */                  \
+  V(xvresp, XVRESP, 0xF0000268)                                          \
+  /* VSX Vector Reciprocal Square Root Estimate Single-Precision */      \
+  V(xvrsqrtesp, XVRSQRTESP, 0xF0000228)                                  \
+  /* VSX Vector Square Root Single-Precision */                          \
+  V(xvsqrtsp, XVSQRTSP, 0xF000022C)                                      \
+  /* VSX Vector Convert Single-Precision to Signed Fixed-Point Word */   \
+  /* Saturate */                                                         \
+  V(xvcvspsxws, XVCVSPSXWS, 0xF0000260)                                  \
+  /* VSX Vector Convert Single-Precision to Unsigned Fixed-Point Word */ \
+  /* Saturate */                                                         \
+  V(xvcvspuxws, XVCVSPUXWS, 0xF0000220)                                  \
+  /* VSX Vector Convert Signed Fixed-Point Word to Single-Precision */   \
+  V(xvcvsxwsp, XVCVSXWSP, 0xF00002E0)                                    \
+  /* VSX Vector Convert Unsigned Fixed-Point Word to Single-Precision */ \
+  V(xvcvuxwsp, XVCVUXWSP, 0xF00002A0)                                    \
+  /* VSX Vector Round to Double-Precision Integer toward +Infinity */    \
+  V(xvrdpip, XVRDPIP, 0xF00003A4)                                        \
+  /* VSX Vector Round to Double-Precision Integer toward -Infinity */    \
+  V(xvrdpim, XVRDPIM, 0xF00003E4)                                        \
+  /* VSX Vector Round to Double-Precision Integer toward Zero */         \
+  V(xvrdpiz, XVRDPIZ, 0xF0000364)                                        \
+  /* VSX Vector Round to Double-Precision Integer */                     \
+  V(xvrdpi, XVRDPI, 0xF0000324)                                          \
+  /* VSX Vector Round to Single-Precision Integer toward +Infinity */    \
+  V(xvrspip, XVRSPIP, 0xF00002A4)                                        \
+  /* VSX Vector Round to Single-Precision Integer toward -Infinity */    \
+  V(xvrspim, XVRSPIM, 0xF00002E4)                                        \
+  /* VSX Vector Round to Single-Precision Integer toward Zero */         \
+  V(xvrspiz, XVRSPIZ, 0xF0000264)                                        \
+  /* VSX Vector Round to Single-Precision Integer */                     \
+  V(xvrspi, XVRSPI, 0xF0000224)
+
+#define PPC_XX2_OPCODE_UNUSED_LIST(V)                                        \
+  /* VSX Scalar Square Root Double-Precision */                              \
+  V(xssqrtdp, XSSQRTDP, 0xF000012C)                                          \
+  /* VSX Scalar Reciprocal Estimate Single-Precision */                      \
+  V(xsresp, XSRESP, 0xF0000068)                                              \
+  /* VSX Scalar Reciprocal Square Root Estimate Single-Precision */          \
+  V(xsrsqrtesp, XSRSQRTESP, 0xF0000028)                                      \
+  /* VSX Scalar Square Root Single-Precision */                              \
+  V(xssqrtsp, XSSQRTSP, 0xF000002C)                                          \
   /* Move To VSR Doubleword */                                               \
   V(mtvsrd, MTVSRD, 0x7C000166)                                              \
+  /* Move To VSR Double Doubleword */                                        \
+  V(mtvsrdd, MTVSRDD, 0x7C000366)                                            \
   /* Move To VSR Word Algebraic */                                           \
   V(mtvsrwa, MTVSRWA, 0x7C0001A6)                                            \
   /* Move To VSR Word and Zero */                                            \
@@ -423,18 +473,8 @@ using Instr = uint32_t;
   V(xsrsp, XSRSP, 0xF0000464)                                                \
   /* VSX Scalar Reciprocal Square Root Estimate Double-Precision */          \
   V(xsrsqrtedp, XSRSQRTEDP, 0xF0000128)                                      \
-  /* VSX Scalar Reciprocal Square Root Estimate Single-Precision */          \
-  V(xsrsqrtesp, XSRSQRTESP, 0xF0000028)                                      \
-  /* VSX Scalar Square Root Double-Precision */                              \
-  V(xssqrtdp, XSSQRTDP, 0xF000012C)                                          \
-  /* VSX Scalar Square Root Single-Precision */                              \
-  V(xssqrtsp, XSSQRTSP, 0xF000002C)                                          \
   /* VSX Scalar Test for software Square Root Double-Precision */            \
   V(xstsqrtdp, XSTSQRTDP, 0xF00001A8)                                        \
-  /* VSX Vector Absolute Value Double-Precision */                           \
-  V(xvabsdp, XVABSDP, 0xF0000764)                                            \
-  /* VSX Vector Absolute Value Single-Precision */                           \
-  V(xvabssp, XVABSSP, 0xF0000664)                                            \
   /* VSX Vector Convert Double-Precision to Single-Precision */              \
   V(xvcvdpsp, XVCVDPSP, 0xF0000624)                                          \
   /* VSX Vector Convert Double-Precision to Signed Fixed-Point Doubleword */ \
@@ -454,23 +494,15 @@ using Instr = uint32_t;
   /* VSX Vector Convert Single-Precision to Signed Fixed-Point Doubleword */ \
   /* Saturate */                                                             \
   V(xvcvspsxds, XVCVSPSXDS, 0xF0000660)                                      \
-  /* VSX Vector Convert Single-Precision to Signed Fixed-Point Word */       \
-  /* Saturate */                                                             \
-  V(xvcvspsxws, XVCVSPSXWS, 0xF0000260)                                      \
   /* VSX Vector Convert Single-Precision to Unsigned Fixed-Point */          \
   /* Doubleword Saturate */                                                  \
   V(xvcvspuxds, XVCVSPUXDS, 0xF0000620)                                      \
-  /* VSX Vector Convert Single-Precision to Unsigned Fixed-Point Word */     \
-  /* Saturate */                                                             \
-  V(xvcvspuxws, XVCVSPUXWS, 0xF0000220)                                      \
   /* VSX Vector Convert Signed Fixed-Point Doubleword to Double-Precision */ \
   V(xvcvsxddp, XVCVSXDDP, 0xF00007E0)                                        \
   /* VSX Vector Convert Signed Fixed-Point Doubleword to Single-Precision */ \
   V(xvcvsxdsp, XVCVSXDSP, 0xF00006E0)                                        \
   /* VSX Vector Convert Signed Fixed-Point Word to Double-Precision */       \
   V(xvcvsxwdp, XVCVSXWDP, 0xF00003E0)                                        \
-  /* VSX Vector Convert Signed Fixed-Point Word to Single-Precision */       \
-  V(xvcvsxwsp, XVCVSXWSP, 0xF00002E0)                                        \
   /* VSX Vector Convert Unsigned Fixed-Point Doubleword to Double- */        \
   /* Precision */                                                            \
   V(xvcvuxddp, XVCVUXDDP, 0xF00007A0)                                        \
@@ -479,50 +511,26 @@ using Instr = uint32_t;
   V(xvcvuxdsp, XVCVUXDSP, 0xF00006A0)                                        \
   /* VSX Vector Convert Unsigned Fixed-Point Word to Double-Precision */     \
   V(xvcvuxwdp, XVCVUXWDP, 0xF00003A0)                                        \
-  /* VSX Vector Convert Unsigned Fixed-Point Word to Single-Precision */     \
-  V(xvcvuxwsp, XVCVUXWSP, 0xF00002A0)                                        \
   /* VSX Vector Negative Absolute Value Double-Precision */                  \
   V(xvnabsdp, XVNABSDP, 0xF00007A4)                                          \
   /* VSX Vector Negative Absolute Value Single-Precision */                  \
   V(xvnabssp, XVNABSSP, 0xF00006A4)                                          \
-  /* VSX Vector Negate Double-Precision */                                   \
-  V(xvnegdp, XVNEGDP, 0xF00007E4)                                            \
-  /* VSX Vector Negate Single-Precision */                                   \
-  V(xvnegsp, XVNEGSP, 0xF00006E4)                                            \
-  /* VSX Vector Round to Double-Precision Integer */                         \
-  V(xvrdpi, XVRDPI, 0xF0000324)                                              \
   /* VSX Vector Round to Double-Precision Integer using Current rounding */  \
   /* mode */                                                                 \
   V(xvrdpic, XVRDPIC, 0xF00003AC)                                            \
-  /* VSX Vector Round to Double-Precision Integer toward -Infinity */        \
-  V(xvrdpim, XVRDPIM, 0xF00003E4)                                            \
-  /* VSX Vector Round to Double-Precision Integer toward +Infinity */        \
-  V(xvrdpip, XVRDPIP, 0xF00003A4)                                            \
-  /* VSX Vector Round to Double-Precision Integer toward Zero */             \
-  V(xvrdpiz, XVRDPIZ, 0xF0000364)                                            \
-  /* VSX Vector Round to Single-Precision Integer */                         \
-  V(xvrspi, XVRSPI, 0xF0000224)                                              \
   /* VSX Vector Round to Single-Precision Integer using Current rounding */  \
   /* mode */                                                                 \
   V(xvrspic, XVRSPIC, 0xF00002AC)                                            \
-  /* VSX Vector Round to Single-Precision Integer toward -Infinity */        \
-  V(xvrspim, XVRSPIM, 0xF00002E4)                                            \
-  /* VSX Vector Round to Single-Precision Integer toward +Infinity */        \
-  V(xvrspip, XVRSPIP, 0xF00002A4)                                            \
-  /* VSX Vector Round to Single-Precision Integer toward Zero */             \
-  V(xvrspiz, XVRSPIZ, 0xF0000264)                                            \
   /* VSX Vector Reciprocal Square Root Estimate Double-Precision */          \
   V(xvrsqrtedp, XVRSQRTEDP, 0xF0000328)                                      \
-  /* VSX Vector Reciprocal Square Root Estimate Single-Precision */          \
-  V(xvrsqrtesp, XVRSQRTESP, 0xF0000228)                                      \
-  /* VSX Vector Square Root Double-Precision */                              \
-  V(xvsqrtdp, XVSQRTDP, 0xF000032C)                                          \
-  /* VSX Vector Square Root Single-Precision */                              \
-  V(xvsqrtsp, XVSQRTSP, 0xF000022C)                                          \
   /* VSX Vector Test for software Square Root Double-Precision */            \
   V(xvtsqrtdp, XVTSQRTDP, 0xF00003A8)                                        \
   /* VSX Vector Test for software Square Root Single-Precision */            \
   V(xvtsqrtsp, XVTSQRTSP, 0xF00002A8)
+
+#define PPC_XX2_OPCODE_LIST(V)  \
+  PPC_XX2_OPCODE_A_FORM_LIST(V) \
+  PPC_XX2_OPCODE_UNUSED_LIST(V)
 
 #define PPC_EVX_OPCODE_LIST(V)                                                \
   /* Vector Load Double Word into Double Word by External PID Indexed */      \
@@ -2196,13 +2204,17 @@ using Instr = uint32_t;
   /* Rotate Left Word then AND with Mask */           \
   V(rlwnm, RLWNMX, 0x5C000000)
 
-#define PPC_VX_OPCODE_A_FORM_LIST(V) \
-  /* Vector Splat Byte */            \
-  V(vspltb, VSPLTB, 0x1000020C)      \
-  /* Vector Splat Word */            \
-  V(vspltw, VSPLTW, 0x1000028C)      \
-  /* Vector Splat Halfword */        \
-  V(vsplth, VSPLTH, 0x1000024C)
+#define PPC_VX_OPCODE_A_FORM_LIST(V)     \
+  /* Vector Splat Byte */                \
+  V(vspltb, VSPLTB, 0x1000020C)          \
+  /* Vector Splat Word */                \
+  V(vspltw, VSPLTW, 0x1000028C)          \
+  /* Vector Splat Halfword */            \
+  V(vsplth, VSPLTH, 0x1000024C)          \
+  /* Vector Extract Unsigned Byte */     \
+  V(vextractub, VEXTRACTUB, 0x1000020d)  \
+  /* Vector Extract Unsigned Halfword */ \
+  V(vextractuh, VEXTRACTUH, 0x1000024D)
 
 #define PPC_VX_OPCODE_B_FORM_LIST(V)                       \
   /* Vector Logical OR */                                  \
@@ -2308,7 +2320,53 @@ using Instr = uint32_t;
   /* Vector Shift Right Algebraic Doubleword */            \
   V(vsrad, VSRAD, 0x100003C4)                              \
   /* Vector Logical AND */                                 \
-  V(vand, VAND, 0x10000404)
+  V(vand, VAND, 0x10000404)                                \
+  /* Vector Pack Signed Word Signed Saturate */            \
+  V(vpkswss, VPKSWSS, 0x100001CE)                          \
+  /* Vector Pack Signed Word Unsigned Saturate */          \
+  V(vpkswus, VPKSWUS, 0x1000014E)                          \
+  /* Vector Pack Signed Halfword Signed Saturate */        \
+  V(vpkshss, VPKSHSS, 0x1000018E)                          \
+  /* Vector Pack Signed Halfword Unsigned Saturate */      \
+  V(vpkshus, VPKSHUS, 0x1000010E)                          \
+  /* Vector Add Signed Halfword Saturate */                \
+  V(vaddshs, VADDSHS, 0x10000340)                          \
+  /* Vector Subtract Signed Halfword Saturate */           \
+  V(vsubshs, VSUBSHS, 0x10000740)                          \
+  /* Vector Add Unsigned Halfword Saturate */              \
+  V(vadduhs, VADDUHS, 0x10000240)                          \
+  /* Vector Subtract Unsigned Halfword Saturate */         \
+  V(vsubuhs, VSUBUHS, 0x10000640)                          \
+  /* Vector Add Signed Byte Saturate */                    \
+  V(vaddsbs, VADDSBS, 0x10000300)                          \
+  /* Vector Subtract Signed Byte Saturate */               \
+  V(vsubsbs, VSUBSBS, 0x10000700)                          \
+  /* Vector Add Unsigned Byte Saturate */                  \
+  V(vaddubs, VADDUBS, 0x10000200)                          \
+  /* Vector Subtract Unsigned Byte Saturate */             \
+  V(vsububs, VSUBUBS, 0x10000600)                          \
+  /* Vector Average Unsigned Byte */                       \
+  V(vavgub, VAVGUB, 0x10000402)                            \
+  /* Vector Average Unsigned Halfword */                   \
+  V(vavguh, VAVGUH, 0x10000442)                            \
+  /* Vector Logical AND with Complement */                 \
+  V(vandc, VANDC, 0x10000444)                              \
+  /* Vector Minimum Single-Precision */                    \
+  V(vminfp, VMINFP, 0x1000044A)                            \
+  /* Vector Maximum Single-Precision */                    \
+  V(vmaxfp, VMAXFP, 0x1000040A)                            \
+  /* Vector Bit Permute Quadword */                        \
+  V(vbpermq, VBPERMQ, 0x1000054C)
+
+#define PPC_VX_OPCODE_C_FORM_LIST(V)       \
+  /* Vector Unpack Low Signed Halfword */  \
+  V(vupklsh, VUPKLSH, 0x100002CE)          \
+  /* Vector Unpack High Signed Halfword */ \
+  V(vupkhsh, VUPKHSH, 0x1000024E)          \
+  /* Vector Unpack Low Signed Byte */      \
+  V(vupklsb, VUPKLSB, 0x1000028E)          \
+  /* Vector Unpack High Signed Byte */     \
+  V(vupkhsb, VUPKHSB, 0x1000020E)
 
 #define PPC_VX_OPCODE_UNUSED_LIST(V)                                      \
   /* Decimal Add Modulo */                                                \
@@ -2323,36 +2381,20 @@ using Instr = uint32_t;
   V(vaddcuq, VADDCUQ, 0x10000140)                                         \
   /* Vector Add and Write Carry-Out Unsigned Word */                      \
   V(vaddcuw, VADDCUW, 0x10000180)                                         \
-  /* Vector Add Signed Byte Saturate */                                   \
-  V(vaddsbs, VADDSBS, 0x10000300)                                         \
-  /* Vector Add Signed Halfword Saturate */                               \
-  V(vaddshs, VADDSHS, 0x10000340)                                         \
   /* Vector Add Signed Word Saturate */                                   \
   V(vaddsws, VADDSWS, 0x10000380)                                         \
-  /* Vector Add Unsigned Byte Saturate */                                 \
-  V(vaddubs, VADDUBS, 0x10000200)                                         \
-  /* Vector Add Unsigned Halfword Saturate */                             \
-  V(vadduhs, VADDUHS, 0x10000240)                                         \
   /* Vector Add Unsigned Quadword Modulo */                               \
   V(vadduqm, VADDUQM, 0x10000100)                                         \
   /* Vector Add Unsigned Word Saturate */                                 \
   V(vadduws, VADDUWS, 0x10000280)                                         \
-  /* Vector Logical AND with Complement */                                \
-  V(vandc, VANDC, 0x10000444)                                             \
   /* Vector Average Signed Byte */                                        \
   V(vavgsb, VAVGSB, 0x10000502)                                           \
   /* Vector Average Signed Halfword */                                    \
   V(vavgsh, VAVGSH, 0x10000542)                                           \
   /* Vector Average Signed Word */                                        \
   V(vavgsw, VAVGSW, 0x10000582)                                           \
-  /* Vector Average Unsigned Byte */                                      \
-  V(vavgub, VAVGUB, 0x10000402)                                           \
-  /* Vector Average Unsigned Halfword */                                  \
-  V(vavguh, VAVGUH, 0x10000442)                                           \
   /* Vector Average Unsigned Word */                                      \
   V(vavguw, VAVGUW, 0x10000482)                                           \
-  /* Vector Bit Permute Quadword */                                       \
-  V(vbpermq, VBPERMQ, 0x1000054C)                                         \
   /* Vector Convert From Signed Fixed-Point Word To Single-Precision */   \
   V(vcfsx, VCFSX, 0x1000034A)                                             \
   /* Vector Convert From Unsigned Fixed-Point Word To Single-Precision */ \
@@ -2379,10 +2421,6 @@ using Instr = uint32_t;
   V(vgbbd, VGBBD, 0x1000050C)                                             \
   /* Vector Log Base 2 Estimate Single-Precision */                       \
   V(vlogefp, VLOGEFP, 0x100001CA)                                         \
-  /* Vector Maximum Single-Precision */                                   \
-  V(vmaxfp, VMAXFP, 0x1000040A)                                           \
-  /* Vector Minimum Single-Precision */                                   \
-  V(vminfp, VMINFP, 0x1000044A)                                           \
   /* Vector Merge High Byte */                                            \
   V(vmrghb, VMRGHB, 0x1000000C)                                           \
   /* Vector Merge High Halfword */                                        \
@@ -2425,14 +2463,6 @@ using Instr = uint32_t;
   V(vpksdss, VPKSDSS, 0x100005CE)                                         \
   /* Vector Pack Signed Doubleword Unsigned Saturate */                   \
   V(vpksdus, VPKSDUS, 0x1000054E)                                         \
-  /* Vector Pack Signed Halfword Signed Saturate */                       \
-  V(vpkshss, VPKSHSS, 0x1000018E)                                         \
-  /* Vector Pack Signed Halfword Unsigned Saturate */                     \
-  V(vpkshus, VPKSHUS, 0x1000010E)                                         \
-  /* Vector Pack Signed Word Signed Saturate */                           \
-  V(vpkswss, VPKSWSS, 0x100001CE)                                         \
-  /* Vector Pack Signed Word Unsigned Saturate */                         \
-  V(vpkswus, VPKSWUS, 0x1000014E)                                         \
   /* Vector Pack Unsigned Doubleword Unsigned Saturate */                 \
   V(vpkudus, VPKUDUS, 0x100004CE)                                         \
   /* Vector Pack Unsigned Halfword Unsigned Saturate */                   \
@@ -2489,16 +2519,8 @@ using Instr = uint32_t;
   V(vsubcuq, VSUBCUQ, 0x10000540)                                         \
   /* Vector Subtract and Write Carry-Out Unsigned Word */                 \
   V(vsubcuw, VSUBCUW, 0x10000580)                                         \
-  /* Vector Subtract Signed Byte Saturate */                              \
-  V(vsubsbs, VSUBSBS, 0x10000700)                                         \
-  /* Vector Subtract Signed Halfword Saturate */                          \
-  V(vsubshs, VSUBSHS, 0x10000740)                                         \
   /* Vector Subtract Signed Word Saturate */                              \
   V(vsubsws, VSUBSWS, 0x10000780)                                         \
-  /* Vector Subtract Unsigned Byte Saturate */                            \
-  V(vsububs, VSUBUBS, 0x10000600)                                         \
-  /* Vector Subtract Unsigned Halfword Saturate */                        \
-  V(vsubuhs, VSUBUHS, 0x10000640)                                         \
   /* Vector Subtract Unsigned Quadword Modulo */                          \
   V(vsubuqm, VSUBUQM, 0x10000500)                                         \
   /* Vector Subtract Unsigned Word Saturate */                            \
@@ -2511,18 +2533,10 @@ using Instr = uint32_t;
   V(vsumsws, VSUMSWS, 0x10000788)                                         \
   /* Vector Unpack High Pixel */                                          \
   V(vupkhpx, VUPKHPX, 0x1000034E)                                         \
-  /* Vector Unpack High Signed Byte */                                    \
-  V(vupkhsb, VUPKHSB, 0x1000020E)                                         \
-  /* Vector Unpack High Signed Halfword */                                \
-  V(vupkhsh, VUPKHSH, 0x1000024E)                                         \
   /* Vector Unpack High Signed Word */                                    \
   V(vupkhsw, VUPKHSW, 0x1000064E)                                         \
   /* Vector Unpack Low Pixel */                                           \
   V(vupklpx, VUPKLPX, 0x100003CE)                                         \
-  /* Vector Unpack Low Signed Byte */                                     \
-  V(vupklsb, VUPKLSB, 0x1000028E)                                         \
-  /* Vector Unpack Low Signed Halfword */                                 \
-  V(vupklsh, VUPKLSH, 0x100002CE)                                         \
   /* Vector Unpack Low Signed Word */                                     \
   V(vupklsw, VUPKLSW, 0x100006CE)                                         \
   /* Vector AES Cipher */                                                 \
@@ -2547,6 +2561,7 @@ using Instr = uint32_t;
 #define PPC_VX_OPCODE_LIST(V)  \
   PPC_VX_OPCODE_A_FORM_LIST(V) \
   PPC_VX_OPCODE_B_FORM_LIST(V) \
+  PPC_VX_OPCODE_C_FORM_LIST(V) \
   PPC_VX_OPCODE_UNUSED_LIST(V)
 
 #define PPC_XS_OPCODE_LIST(V)                      \

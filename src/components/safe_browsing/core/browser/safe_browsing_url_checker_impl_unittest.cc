@@ -19,11 +19,19 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
-#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 using ::testing::_;
 
 namespace safe_browsing {
+
+namespace {
+
+// A matcher for threat source in UnsafeResource.
+MATCHER_P(IsSameThreatSource, threatSource, "") {
+  return arg.threat_source == threatSource;
+}
+
+}  // namespace
 
 class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
  public:
@@ -139,7 +147,7 @@ class MockUrlCheckerDelegate : public UrlCheckerDelegate {
                void(const base::RepeatingCallback<content::WebContents*()>&));
   MOCK_METHOD0(GetUIManager, BaseUIManager*());
 
-  bool IsUrlWhitelisted(const GURL& url) override { return false; }
+  bool IsUrlAllowlisted(const GURL& url) override { return false; }
   const SBThreatTypeSet& GetThreatTypes() override { return threat_types_; }
   SafeBrowsingDatabaseManager* GetDatabaseManager() override {
     return database_manager_;
@@ -195,10 +203,11 @@ class MockRealTimeUrlLookupService : public RealTimeUrlLookupService {
     threat_info.set_threat_type(threat_type);
     threat_info.set_verdict_type(verdict_type);
     *new_threat_info = threat_info;
-    base::PostTask(FROM_HERE, CreateTaskTraits(ThreadID::IO),
-                   base::BindOnce(std::move(response_callback),
-                                  /* is_rt_lookup_successful */ true,
-                                  std::move(response)));
+    base::PostTask(
+        FROM_HERE, CreateTaskTraits(ThreadID::IO),
+        base::BindOnce(std::move(response_callback),
+                       /* is_rt_lookup_successful */ true,
+                       /* is_cached_response */ false, std::move(response)));
   }
 
   void SetThreatTypeForUrl(const GURL& gurl, SBThreatType threat_type) {
@@ -228,7 +237,7 @@ class SafeBrowsingUrlCheckerTest : public PlatformTest {
         mock_web_contents_getter;
     return std::make_unique<SafeBrowsingUrlCheckerImpl>(
         net::HttpRequestHeaders(), /*load_flags=*/0,
-        blink::mojom::ResourceType::kMainFrame,
+        static_cast<blink::mojom::ResourceType>(ResourceType::kMainFrame),
         /*has_user_gesture=*/false, url_checker_delegate_,
         mock_web_contents_getter.Get(), real_time_lookup_enabled,
         /*can_rt_check_subresource_url=*/false, can_check_safe_browsing_db,
@@ -274,7 +283,8 @@ TEST_F(SafeBrowsingUrlCheckerTest, CheckUrl_DangerousUrl) {
   EXPECT_CALL(callback,
               Run(_, /*proceed=*/false, /*showed_interstitial=*/false));
   EXPECT_CALL(*url_checker_delegate_,
-              StartDisplayingBlockingPageHelper(_, _, _, _, _))
+              StartDisplayingBlockingPageHelper(
+                  IsSameThreatSource(ThreatSource::UNKNOWN), _, _, _, _))
       .Times(1);
   safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
   task_environment_->RunUntilIdle();
@@ -365,7 +375,8 @@ TEST_F(SafeBrowsingUrlCheckerTest, CheckUrl_RealTimeEnabledAllowlistMatch) {
   // while we perform a real time URL check.
   EXPECT_CALL(callback, Run(_, _, _)).Times(0);
   EXPECT_CALL(*url_checker_delegate_,
-              StartDisplayingBlockingPageHelper(_, _, _, _, _))
+              StartDisplayingBlockingPageHelper(
+                  IsSameThreatSource(ThreatSource::UNKNOWN), _, _, _, _))
       .Times(1);
   safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
 
@@ -403,8 +414,10 @@ TEST_F(SafeBrowsingUrlCheckerTest,
   base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
       callback;
   // Should still show blocking page because real time lookup is enabled.
-  EXPECT_CALL(*url_checker_delegate_,
-              StartDisplayingBlockingPageHelper(_, _, _, _, _))
+  EXPECT_CALL(
+      *url_checker_delegate_,
+      StartDisplayingBlockingPageHelper(
+          IsSameThreatSource(ThreatSource::REAL_TIME_CHECK), _, _, _, _))
       .Times(1);
   safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
 

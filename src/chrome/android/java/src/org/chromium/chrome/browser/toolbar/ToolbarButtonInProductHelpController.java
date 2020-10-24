@@ -9,8 +9,9 @@ import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.app.appmenu.AppMenuPropertiesDelegateImpl;
 import org.chromium.chrome.browser.datareduction.DataReductionSavingsMilestonePromo;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotMonitor;
@@ -24,7 +25,6 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.previews.Previews;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarConfiguration;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.chrome.browser.translate.TranslateUtils;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
@@ -32,6 +32,9 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuPropertiesDelegate;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
+import org.chromium.chrome.browser.video_tutorials.FeatureType;
+import org.chromium.chrome.browser.video_tutorials.VideoTutorialServiceFactory;
+import org.chromium.chrome.browser.video_tutorials.iph.VideoTutorialTryNowTracker;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
@@ -55,7 +58,8 @@ public class ToolbarButtonInProductHelpController
             AppMenuCoordinator appMenuCoordinator, ActivityLifecycleDispatcher lifecycleDispatcher,
             ActivityTabProvider tabProvider) {
         mActivity = activity;
-        mUserEducationHelper = new UserEducationHelper(mActivity, mHandler);
+        mUserEducationHelper =
+                new UserEducationHelper(mActivity, mHandler, TrackerFactory::getTrackerForProfile);
         mScreenshotMonitor = new ScreenshotMonitor(this);
         lifecycleDispatcher.register(this);
         mPageLoadObserver = new ActivityTabTabObserver(tabProvider) {
@@ -165,6 +169,7 @@ public class ToolbarButtonInProductHelpController
         // (e.g. tab switch or in overview mode).
         if (mActivity.isTablet()) return;
         mScreenshotMonitor.startMonitoring();
+        mHandler.post(this::showVideoTutorialTryNowUIForDownload);
     }
 
     @Override
@@ -191,8 +196,7 @@ public class ToolbarButtonInProductHelpController
 
     // Private methods.
     private static int getDataReductionMenuItemHighlight() {
-        return BottomToolbarConfiguration.isBottomToolbarEnabled() ? R.id.data_reduction_menu_item
-                                                                   : R.id.app_menu_footer;
+        return R.id.app_menu_footer;
     }
 
     // Attempts to show an IPH text bubble for data saver detail.
@@ -276,7 +280,10 @@ public class ToolbarButtonInProductHelpController
                         R.string.iph_download_page_for_offline_usage_text,
                         R.string.iph_download_page_for_offline_usage_accessibility_text)
                         .setOnShowCallback(
-                                () -> turnOnHighlightForMenuItem(R.id.offline_page_id, true))
+                                ()
+                                        -> turnOnHighlightForMenuItem(
+                                                AppMenuPropertiesDelegateImpl.getOfflinePageId(),
+                                                true))
                         .setOnDismissCallback(this::turnOffHighlightForMenuItem)
                         .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
                         .build());
@@ -309,6 +316,28 @@ public class ToolbarButtonInProductHelpController
                         .setOnDismissCallback(this::turnOffHighlightForMenuItem)
                         .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
                         .build());
+    }
+
+    /** Show the Try Now UI for video tutorial download feature. */
+    private void showVideoTutorialTryNowUIForDownload() {
+        VideoTutorialTryNowTracker tryNowTracker = VideoTutorialServiceFactory.getTryNowTracker();
+        if (!tryNowTracker.didClickTryNowButton(FeatureType.DOWNLOAD)) {
+            return;
+        }
+
+        Integer menuItemId = DownloadUtils.isAllowedToDownloadPage(mActivity.getActivityTab())
+                ? AppMenuPropertiesDelegateImpl.getOfflinePageId()
+                : R.id.downloads_menu_id;
+
+        mUserEducationHelper.requestShowIPH(
+                new IPHCommandBuilder(mActivity.getResources(), null,
+                        R.string.video_tutorials_iph_tap_here_to_start,
+                        R.string.video_tutorials_iph_tap_here_to_start)
+                        .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
+                        .setOnShowCallback(() -> turnOnHighlightForMenuItem(menuItemId, true))
+                        .setOnDismissCallback(this::turnOffHighlightForMenuItem)
+                        .build());
+        tryNowTracker.tryNowUIShown(FeatureType.DOWNLOAD);
     }
 
     private void turnOnHighlightForMenuItem(Integer highlightMenuItemId, boolean circleHighlight) {

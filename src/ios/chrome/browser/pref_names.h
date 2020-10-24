@@ -29,13 +29,11 @@ extern const char kIosSettingsPromoAlreadySeen[];
 extern const char kIosSettingsSigninPromoDisplayedCount[];
 extern const char kLastSessionExitedCleanly[];
 extern const char kMetricsReportingWifiOnly[];
+extern const char kPrintingEnabled[];
 extern const char kSavingBrowserHistoryDisabled[];
 extern const char kSearchSuggestEnabled[];
 
-// TODO(crbug.com/538573): Consider migrating from these two bools to an integer
-// since only three cases are supported.
-extern const char kNetworkPredictionEnabled[];
-extern const char kNetworkPredictionWifiOnly[];
+extern const char kNetworkPredictionSetting[];
 
 extern const char kNtpShownBookmarksFolder[];
 extern const char kShowMemoryDebuggingTools[];

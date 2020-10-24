@@ -3,9 +3,11 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sync/test/integration/search_engines_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sync/driver/profile_sync_service.h"
 #include "content/public/test/browser_test.h"
@@ -13,11 +15,26 @@
 class SingleClientSearchEnginesSyncTest : public SyncTest {
  public:
   SingleClientSearchEnginesSyncTest() : SyncTest(SINGLE_CLIENT) {}
+  ~SingleClientSearchEnginesSyncTest() override = default;
 
-  ~SingleClientSearchEnginesSyncTest() override {}
+  bool SetupClients() override {
+    if (!SyncTest::SetupClients()) {
+      return false;
+    }
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(SingleClientSearchEnginesSyncTest);
+    // Wait for models to load.
+    search_test_utils::WaitForTemplateURLServiceToLoad(
+        TemplateURLServiceFactory::GetForProfile(verifier()));
+    search_test_utils::WaitForTemplateURLServiceToLoad(
+        TemplateURLServiceFactory::GetForProfile(GetProfile(0)));
+
+    return true;
+  }
+
+  bool UseVerifier() override {
+    // TODO(crbug.com/1137771): rewrite test to not use verifier.
+    return true;
+  }
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientSearchEnginesSyncTest, Sanity) {

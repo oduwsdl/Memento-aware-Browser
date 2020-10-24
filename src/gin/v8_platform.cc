@@ -202,10 +202,10 @@ class PageAllocator : public v8::PageAllocator {
   ~PageAllocator() override = default;
 
   size_t AllocatePageSize() override {
-    return base::kPageAllocationGranularity;
+    return base::PageAllocationGranularity();
   }
 
-  size_t CommitPageSize() override { return base::kSystemPageSize; }
+  size_t CommitPageSize() override { return base::SystemPageSize(); }
 
   void SetRandomMmapSeed(int64_t seed) override {
     base::SetMmapSeedForTesting(seed);
@@ -217,6 +217,13 @@ class PageAllocator : public v8::PageAllocator {
                       size_t length,
                       size_t alignment,
                       v8::PageAllocator::Permission permissions) override {
+    if (permissions == v8::PageAllocator::Permission::kNoAccessWillJitLater) {
+      // We could use this information to conditionally set the MAP_JIT flag
+      // on Mac-arm64; however this permissions value is intended to be a
+      // short-term solution, so we continue to set MAP_JIT for all V8 pages
+      // for now.
+      permissions = v8::PageAllocator::Permission::kNoAccess;
+    }
     base::PageAccessibilityConfiguration config = GetPageConfig(permissions);
     bool commit = (permissions != v8::PageAllocator::Permission::kNoAccess);
     return base::AllocPages(address, length, alignment, config,
@@ -283,6 +290,8 @@ class JobDelegateImpl : public v8::JobDelegate {
   void NotifyConcurrencyIncrease() override {
     delegate_->NotifyConcurrencyIncrease();
   }
+  uint8_t GetTaskId() override { return delegate_->GetTaskId(); }
+  bool IsJoiningThread() const override { return delegate_->IsJoiningThread(); }
 
  private:
   base::JobDelegate* delegate_;
@@ -303,7 +312,8 @@ class JobHandleImpl : public v8::JobHandle {
   }
   void Join() override { handle_.Join(); }
   void Cancel() override { handle_.Cancel(); }
-
+  void CancelAndDetach() override { handle_.CancelAndDetach(); }
+  bool IsCompleted() override { return handle_.IsCompleted(); }
   bool IsRunning() override { return !!handle_; }
 
  private:
@@ -498,17 +508,19 @@ std::unique_ptr<v8::JobHandle> V8Platform::PostJob(
       task_traits = kBlockingTaskTraits;
       break;
   }
-  auto handle = base::PostJob(
-      FROM_HERE, task_traits,
-      base::BindRepeating(
-          [](v8::JobTask* job_task, base::JobDelegate* delegate) {
-            JobDelegateImpl delegate_impl(delegate);
-            job_task->Run(&delegate_impl);
-          },
-          base::Unretained(job_task.get())),
-      base::BindRepeating(
-          [](v8::JobTask* job_task) { return job_task->GetMaxConcurrency(); },
-          base::Unretained(job_task.get())));
+  auto handle =
+      base::PostJob(FROM_HERE, task_traits,
+                    base::BindRepeating(
+                        [](v8::JobTask* job_task, base::JobDelegate* delegate) {
+                          JobDelegateImpl delegate_impl(delegate);
+                          job_task->Run(&delegate_impl);
+                        },
+                        base::Unretained(job_task.get())),
+                    base::BindRepeating(
+                        [](v8::JobTask* job_task, size_t worker_count) {
+                          return job_task->GetMaxConcurrency(worker_count);
+                        },
+                        base::Unretained(job_task.get())));
 
   return std::make_unique<JobHandleImpl>(std::move(handle),
                                          std::move(job_task));

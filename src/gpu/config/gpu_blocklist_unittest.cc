@@ -56,9 +56,9 @@ class GpuBlocklistTest : public testing::Test {
         nullptr,  // exceptions
     }};
     GpuControlListData data(1, kTestEntries);
-    std::unique_ptr<GpuBlocklist> blacklist = GpuBlocklist::Create(data);
+    std::unique_ptr<GpuBlocklist> blocklist = GpuBlocklist::Create(data);
     std::set<int> type =
-        blacklist->MakeDecision(GpuBlocklist::kOsMacosx, "10.12.3", gpu_info());
+        blocklist->MakeDecision(GpuBlocklist::kOsMacosx, "10.12.3", gpu_info());
     EXPECT_EQ(1u, type.size());
     EXPECT_EQ(1u, type.count(feature_type));
   }
@@ -86,13 +86,6 @@ GPU_BLOCKLIST_FEATURE_TEST(Accelerated2DCanvas,
                            GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS)
 
 GPU_BLOCKLIST_FEATURE_TEST(AcceleratedWebGL, GPU_FEATURE_TYPE_ACCELERATED_WEBGL)
-
-GPU_BLOCKLIST_FEATURE_TEST(Flash3D, GPU_FEATURE_TYPE_FLASH3D)
-
-GPU_BLOCKLIST_FEATURE_TEST(FlashStage3D, GPU_FEATURE_TYPE_FLASH_STAGE3D)
-
-GPU_BLOCKLIST_FEATURE_TEST(FlashStage3DBaseline,
-                           GPU_FEATURE_TYPE_FLASH_STAGE3D_BASELINE)
 
 GPU_BLOCKLIST_FEATURE_TEST(AcceleratedVideoDecode,
                            GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE)

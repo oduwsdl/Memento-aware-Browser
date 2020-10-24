@@ -14,9 +14,11 @@
 #include "base/util/type_safety/pass_key.h"
 #include "components/performance_manager/graph/node_base.h"
 #include "components/performance_manager/public/graph/frame_node.h"
+#include "components/performance_manager/public/graph/node_attached_data.h"
 #include "components/performance_manager/public/render_frame_host_proxy.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "url/gurl.h"
 
 namespace performance_manager {
@@ -25,6 +27,10 @@ class FrameNodeImplDescriber;
 class PageNodeImpl;
 class ProcessNodeImpl;
 class WorkerNodeImpl;
+
+namespace execution_context {
+class ExecutionContextAccess;
+}  // namespace execution_context
 
 // Frame nodes form a tree structure, each FrameNode at most has one parent that
 // is a FrameNode. Conceptually, a frame corresponds to a
@@ -53,6 +59,8 @@ class FrameNodeImpl
       public TypedNodeBase<FrameNodeImpl, FrameNode, FrameNodeObserver>,
       public mojom::DocumentCoordinationUnit {
  public:
+  using PassKey = util::PassKey<FrameNodeImpl>;
+
   static const char kDefaultPriorityReason[];
   static constexpr NodeTypeEnum Type() { return NodeTypeEnum::kFrame; }
 
@@ -65,8 +73,7 @@ class FrameNodeImpl
                 FrameNodeImpl* parent_frame_node,
                 int frame_tree_node_id,
                 int render_frame_id,
-                const base::UnguessableToken& dev_tools_token,
-                const FrameToken& frame_token,
+                const blink::LocalFrameToken& frame_token,
                 int32_t browsing_instance_id,
                 int32_t site_instance_id);
   ~FrameNodeImpl() override;
@@ -77,6 +84,7 @@ class FrameNodeImpl
   void SetNetworkAlmostIdle() override;
   void SetLifecycleState(LifecycleState state) override;
   void SetHasNonEmptyBeforeUnload(bool has_nonempty_beforeunload) override;
+  void SetViewportIntersection(const gfx::Rect& viewport_intersection) override;
   void SetOriginTrialFreezePolicy(mojom::InterventionPolicy policy) override;
   void SetIsAdFrame() override;
   void SetHadFormInteraction() override;
@@ -94,8 +102,7 @@ class FrameNodeImpl
   ProcessNodeImpl* process_node() const;
   int frame_tree_node_id() const;
   int render_frame_id() const;
-  const base::UnguessableToken& dev_tools_token() const;
-  const FrameToken& frame_token() const;
+  const blink::LocalFrameToken& frame_token() const;
   int32_t browsing_instance_id() const;
   int32_t site_instance_id() const;
   const RenderFrameHostProxy& render_frame_host_proxy() const;
@@ -116,12 +123,15 @@ class FrameNodeImpl
   const PriorityAndReason& priority_and_reason() const;
   bool had_form_interaction() const;
   bool is_audible() const;
+  const base::Optional<gfx::Rect>& viewport_intersection() const;
+  Visibility visibility() const;
 
   // Setters are not thread safe.
   void SetIsCurrent(bool is_current);
   void SetIsHoldingWebLock(bool is_holding_weblock);
   void SetIsHoldingIndexedDBLock(bool is_holding_indexeddb_lock);
   void SetIsAudible(bool is_audible);
+  void SetVisibility(Visibility visibility);
 
   // Invoked when a navigation is committed in the frame.
   void OnNavigationCommitted(const GURL& url, bool same_document);
@@ -141,8 +151,7 @@ class FrameNodeImpl
     SeverOpenedPagesAndMaybeReparent();
   }
 
- protected:
-  friend class PageNodeImpl;
+  // Implementation details below this point.
 
   // Invoked by opened pages when this frame is set/cleared as their opener.
   // See PageNodeImpl::(Set|Clear)OpenerFrameNodeAndOpenedType.
@@ -150,9 +159,17 @@ class FrameNodeImpl
   void RemoveOpenedPage(util::PassKey<PageNodeImpl> key,
                         PageNodeImpl* page_node);
 
+  // Used by the ExecutionContextRegistry mechanism.
+  std::unique_ptr<NodeAttachedData>* GetExecutionContextStorage(
+      util::PassKey<execution_context::ExecutionContextAccess> key) {
+    return &execution_context_;
+  }
+
+  static PassKey CreatePassKeyForTesting() { return PassKey(); }
+
  private:
+  friend class ExecutionContextPriorityAccess;
   friend class FrameNodeImplDescriber;
-  friend class FramePriorityAccess;
   friend class ProcessNodeImpl;
 
   // Rest of FrameNode implementation. These are private so that users of the
@@ -161,8 +178,7 @@ class FrameNodeImpl
   const PageNode* GetPageNode() const override;
   const ProcessNode* GetProcessNode() const override;
   int GetFrameTreeNodeId() const override;
-  const base::UnguessableToken& GetDevToolsToken() const override;
-  const FrameToken& GetFrameToken() const override;
+  const blink::LocalFrameToken& GetFrameToken() const override;
   int32_t GetBrowsingInstanceId() const override;
   int32_t GetSiteInstanceId() const override;
   bool VisitChildFrameNodes(const FrameNodeVisitor& visitor) const override;
@@ -182,6 +198,8 @@ class FrameNodeImpl
   const PriorityAndReason& GetPriorityAndReason() const override;
   bool HadFormInteraction() const override;
   bool IsAudible() const override;
+  const base::Optional<gfx::Rect>& GetViewportIntersection() const override;
+  Visibility GetVisibility() const override;
 
   // Properties associated with a Document, which are reset when a
   // different-document navigation is committed in the frame.
@@ -243,6 +261,10 @@ class FrameNodeImpl
   bool HasFrameNodeInDescendants(FrameNodeImpl* frame_node) const;
   bool HasFrameNodeInTree(FrameNodeImpl* frame_node) const;
 
+  // Returns the initial visibility of this frame. Should only be called when
+  // the frame node joins the graph.
+  Visibility GetInitialFrameVisibility() const;
+
   mojo::Receiver<mojom::DocumentCoordinationUnit> receiver_{this};
 
   FrameNodeImpl* const parent_frame_node_;
@@ -253,15 +275,10 @@ class FrameNodeImpl
   const int frame_tree_node_id_;
   // The routing id of the frame.
   const int render_frame_id_;
-  // A unique identifier shared with all representations of this node across
-  // content and blink. The token is only defined by the browser process and
-  // is never sent back from the renderer in control calls. It should never be
-  // used to look up the FrameTreeNode instance.
-  const base::UnguessableToken dev_tools_token_;
 
   // This is the unique token for this frame instance as per e.g.
   // RenderFrameHost::GetFrameToken().
-  const FrameToken frame_token_;
+  const blink::LocalFrameToken frame_token_;
 
   // The unique ID of the BrowsingInstance this frame belongs to. Frames in the
   // same BrowsingInstance are allowed to script each other at least
@@ -318,7 +335,7 @@ class FrameNodeImpl
   // The child workers of this frame.
   base::flat_set<WorkerNodeImpl*> child_worker_nodes_;
 
-  // Frame priority information. Set via FramePriorityDecorator.
+  // Frame priority information. Set via ExecutionContextPriorityDecorator.
   ObservedProperty::NotifiesOnlyOnChangesWithPreviousValue<
       PriorityAndReason,
       const PriorityAndReason&,
@@ -333,10 +350,32 @@ class FrameNodeImpl
       NotifiesOnlyOnChanges<bool, &FrameNodeObserver::OnIsAudibleChanged>
           is_audible_{false};
 
-  // Inline storage for FramePriorityDecorator data.
-  frame_priority::AcceptedVote accepted_vote_;
+  // Tracks the intersection of this frame with the viewport.
+  //
+  // Note that the viewport intersection for the main frame is always invalid.
+  // This is because the main frame always occupies the entirety of the viewport
+  // so there is no point in tracking it. To avoid programming mistakes, it is
+  // forbidden to query this property for the main frame.
+  ObservedProperty::NotifiesOnlyOnChanges<
+      base::Optional<gfx::Rect>,
+      &FrameNodeObserver::OnViewportIntersectionChanged>
+      viewport_intersection_;
 
-  base::WeakPtrFactory<FrameNodeImpl> weak_factory_;
+  // Indicates if the frame is visible. This is initialized in
+  // FrameNodeImpl::OnJoiningGraph() and then maintained by
+  // FrameVisibilityDecorator.
+  ObservedProperty::NotifiesOnlyOnChanges<
+      Visibility,
+      &FrameNodeObserver::OnFrameVisibilityChanged>
+      visibility_{Visibility::kUnknown};
+
+  // Inline storage for ExecutionContext.
+  std::unique_ptr<NodeAttachedData> execution_context_;
+
+  // Inline storage for ExecutionContextPriorityDecorator data.
+  execution_context_priority::AcceptedVote accepted_vote_;
+
+  base::WeakPtrFactory<FrameNodeImpl> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FrameNodeImpl);
 };

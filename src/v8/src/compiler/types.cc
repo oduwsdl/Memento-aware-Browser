@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <iomanip>
-
 #include "src/compiler/types.h"
+
+#include <iomanip>
 
 #include "src/handles/handles-inl.h"
 #include "src/objects/instance-type.h"
@@ -218,6 +218,7 @@ Type::bitset BitsetType::Lub(const MapRefLike& map) {
     case JS_RELATIVE_TIME_FORMAT_TYPE:
     case JS_SEGMENT_ITERATOR_TYPE:
     case JS_SEGMENTER_TYPE:
+    case JS_SEGMENTS_TYPE:
 #endif  // V8_INTL_SUPPORT
     case JS_CONTEXT_EXTENSION_OBJECT_TYPE:
     case JS_GENERATOR_OBJECT_TYPE:
@@ -284,7 +285,6 @@ Type::bitset BitsetType::Lub(const MapRefLike& map) {
     case GLOBAL_DICTIONARY_TYPE:
     case NUMBER_DICTIONARY_TYPE:
     case SIMPLE_NUMBER_DICTIONARY_TYPE:
-    case STRING_TABLE_TYPE:
     case EPHEMERON_HASH_TABLE_TYPE:
     case WEAK_FIXED_ARRAY_TYPE:
     case WEAK_ARRAY_LIST_TYPE:
@@ -295,6 +295,7 @@ Type::bitset BitsetType::Lub(const MapRefLike& map) {
     case OBJECT_BOILERPLATE_DESCRIPTION_TYPE:
     case ARRAY_BOILERPLATE_DESCRIPTION_TYPE:
     case DESCRIPTOR_ARRAY_TYPE:
+    case STRONG_DESCRIPTOR_ARRAY_TYPE:
     case TRANSITION_ARRAY_TYPE:
     case FEEDBACK_CELL_TYPE:
     case CLOSURE_FEEDBACK_CELL_ARRAY_TYPE:
@@ -324,6 +325,7 @@ Type::bitset BitsetType::Lub(const MapRefLike& map) {
     case UNCOMPILED_DATA_WITHOUT_PREPARSE_DATA_TYPE:
     case UNCOMPILED_DATA_WITH_PREPARSE_DATA_TYPE:
     case COVERAGE_INFO_TYPE:
+    case WASM_TYPE_INFO_TYPE:
       return kOtherInternal;
 
     // Remaining instance types are unsupported for now. If any of them do
@@ -370,7 +372,7 @@ Type::bitset BitsetType::Lub(const MapRefLike& map) {
     case PROMISE_REJECT_REACTION_JOB_TASK_TYPE:
     case PROMISE_RESOLVE_THENABLE_JOB_TASK_TYPE:
 #define MAKE_TORQUE_CLASS_TYPE(INSTANCE_TYPE, Name, name) case INSTANCE_TYPE:
-      TORQUE_INTERNAL_INSTANCE_TYPE_LIST(MAKE_TORQUE_CLASS_TYPE)
+      TORQUE_DEFINED_INSTANCE_TYPE_LIST(MAKE_TORQUE_CLASS_TYPE)
 #undef MAKE_TORQUE_CLASS_TYPE
       UNREACHABLE();
   }

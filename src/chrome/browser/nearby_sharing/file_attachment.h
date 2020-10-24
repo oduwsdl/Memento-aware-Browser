@@ -10,46 +10,44 @@
 #include "base/files/file_path.h"
 #include "base/optional.h"
 #include "chrome/browser/nearby_sharing/attachment.h"
+#include "chromeos/services/nearby/public/mojom/nearby_decoder_types.mojom.h"
 
 // A single attachment to be sent by / received from a |ShareTarget|, can be
 // either a file or text.
 class FileAttachment : public Attachment {
  public:
-  // Different types are used to offer richer experiences on Receiver side,
-  // mainly for: 1. displaying notification of attachment types, 2. opening
-  // different types with different apps. Remember to update Notifications,
-  // ShareTarget, etc once more types are introduced here.
-  enum class Type {
-    kUnknown,
-    kImage,
-    kVideo,
-    kApp,
-    kAudio,
-    kMaxValue = kAudio
-  };
+  using Type = sharing::mojom::FileMetadata::Type;
 
-  FileAttachment(std::string file_name,
-                 Type type,
+  explicit FileAttachment(base::FilePath file_path);
+  FileAttachment(int64_t id,
                  int64_t size,
-                 base::Optional<base::FilePath> file_path,
-                 std::string mime_type);
+                 std::string file_name,
+                 std::string mime_type,
+                 Type type);
+  FileAttachment(const FileAttachment&);
+  FileAttachment(FileAttachment&&);
+  FileAttachment& operator=(const FileAttachment&);
+  FileAttachment& operator=(FileAttachment&&);
   ~FileAttachment() override;
 
-  // Attachment:
-  int64_t size() const override;
-  Attachment::Family family() const override;
-
   const std::string& file_name() const { return file_name_; }
+  const std::string& mime_type() const { return mime_type_; }
   Type type() const { return type_; }
   const base::Optional<base::FilePath>& file_path() const { return file_path_; }
-  const std::string& mime_type() const { return mime_type_; }
+
+  // Attachment:
+  void MoveToShareTarget(ShareTarget& share_target) override;
+  const std::string& GetDescription() const override;
+
+  void set_file_path(base::Optional<base::FilePath> path) {
+    file_path_ = std::move(path);
+  }
 
  private:
   std::string file_name_;
-  Type type_;
-  int64_t size_;
-  base::Optional<base::FilePath> file_path_;
   std::string mime_type_;
+  Type type_;
+  base::Optional<base::FilePath> file_path_;
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_FILE_ATTACHMENT_H_

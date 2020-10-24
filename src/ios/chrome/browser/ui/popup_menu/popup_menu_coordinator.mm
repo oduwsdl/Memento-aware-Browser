@@ -8,6 +8,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/feature_engagement/tracker_factory.h"
@@ -28,7 +29,6 @@
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_presenter_delegate.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_table_view_controller.h"
 #import "ios/chrome/browser/ui/presenters/contained_presenter_delegate.h"
-#import "ios/chrome/browser/ui/toolbar/public/features.h"
 #import "ios/chrome/browser/ui/util/layout_guide_names.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -129,13 +129,6 @@ PopupMenuCommandType CommandTypeFromPopupType(PopupMenuType type) {
             fromNamedGuide:kNewTabButtonGuide];
 }
 
-- (void)showTabStripTabGridButtonPopup {
-  DCHECK(!base::FeatureList::IsEnabled(kChangeTabSwitcherPosition));
-  base::RecordAction(base::UserMetricsAction("MobileTabStripShowTabGridMenu"));
-  [self presentPopupOfType:PopupMenuTypeTabStripTabGrid
-            fromNamedGuide:kTabStripTabSwitcherGuide];
-}
-
 - (void)dismissPopupMenuAnimated:(BOOL)animated {
   [self.UIUpdater updateUIForMenuDismissed];
   [self.presenter dismissAnimated:animated];
@@ -230,7 +223,9 @@ PopupMenuCommandType CommandTypeFromPopupType(PopupMenuType type) {
                                     ->IsOffTheRecord()
                readingListModel:ReadingListModelFactory::GetForBrowserState(
                                     self.browser->GetBrowserState())
-      triggerNewIncognitoTabTip:triggerNewIncognitoTabTip];
+      triggerNewIncognitoTabTip:triggerNewIncognitoTabTip
+         browserPolicyConnector:GetApplicationContext()
+                                    ->GetBrowserPolicyConnector()];
   self.mediator.engagementTracker =
       feature_engagement::TrackerFactory::GetForBrowserState(
           self.browser->GetBrowserState());

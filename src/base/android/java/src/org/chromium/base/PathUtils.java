@@ -108,8 +108,11 @@ public abstract class PathUtils {
             if (sCacheSubDirectory == null) {
                 paths[CACHE_DIRECTORY] = appContext.getCacheDir().getPath();
             } else {
-                paths[CACHE_DIRECTORY] =
-                        new File(appContext.getCacheDir(), sCacheSubDirectory).getPath();
+                File cacheDir = new File(appContext.getCacheDir(), sCacheSubDirectory);
+                cacheDir.mkdir();
+                paths[CACHE_DIRECTORY] = cacheDir.getPath();
+                // Set to rwx--S--- as the Android cache dir has a distinct gid and is setgid.
+                chmod(paths[CACHE_DIRECTORY], 02700);
             }
         }
         return paths;
@@ -195,7 +198,7 @@ public abstract class PathUtils {
     @SuppressWarnings("unused")
     @CalledByNative
     private static @NonNull String getDownloadsDirectory() {
-        // TODO(crbug.com/508615): Temporarily allowing disk access until more permanent fix is in.
+        // TODO(crbug.com/508615): Move calls to getDownloadsDirectory() to background thread.
         try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
             if (BuildInfo.isAtLeastQ()) {
                 // https://developer.android.com/preview/privacy/scoped-storage

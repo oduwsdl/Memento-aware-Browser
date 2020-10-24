@@ -59,12 +59,24 @@ class FakeServiceConnectionImpl : public ServiceConnection,
       override;
 
   void LoadHandwritingModel(
+      mojom::HandwritingRecognizerSpecPtr spec,
       mojo::PendingReceiver<mojom::HandwritingRecognizer> receiver,
       mojom::MachineLearningService::LoadHandwritingModelCallback
           result_callback) override;
 
+  // Will be deprecated and removed soon.
+  void LoadHandwritingModelWithSpec(
+      mojom::HandwritingRecognizerSpecPtr spec,
+      mojo::PendingReceiver<mojom::HandwritingRecognizer> receiver,
+      mojom::MachineLearningService::LoadHandwritingModelWithSpecCallback
+          result_callback) override;
+
   // mojom::Model:
   void CreateGraphExecutor(
+      mojo::PendingReceiver<mojom::GraphExecutor> receiver,
+      mojom::Model::CreateGraphExecutorCallback callback) override;
+  void CreateGraphExecutorWithOptions(
+      mojom::GraphExecutorOptionsPtr options,
       mojo::PendingReceiver<mojom::GraphExecutor> receiver,
       mojom::Model::CreateGraphExecutorCallback callback) override;
 
@@ -110,6 +122,10 @@ class FakeServiceConnectionImpl : public ServiceConnection,
   // selection.
   void SetOutputSelection(const mojom::CodepointSpanPtr& selection);
 
+  // Call SetOutputLanguages() before FindLanguages() to set the output
+  // languages.
+  void SetOutputLanguages(const std::vector<mojom::TextLanguagePtr>& languages);
+
   // Call SetOutputHandwritingRecognizerResult() before Recognize() to set the
   // output of handwriting.
   void SetOutputHandwritingRecognizerResult(
@@ -123,6 +139,11 @@ class FakeServiceConnectionImpl : public ServiceConnection,
   void SuggestSelection(
       mojom::TextSuggestSelectionRequestPtr request,
       mojom::TextClassifier::SuggestSelectionCallback callback) override;
+
+  // mojom::TextClassifier:
+  void FindLanguages(
+      const std::string& text,
+      mojom::TextClassifier::FindLanguagesCallback callback) override;
 
   // mojom::HandwritingRecognizer:
   void Recognize(
@@ -149,9 +170,16 @@ class FakeServiceConnectionImpl : public ServiceConnection,
   void HandleSuggestSelectionCall(
       mojom::TextSuggestSelectionRequestPtr request,
       mojom::TextClassifier::SuggestSelectionCallback callback);
+  void HandleFindLanguagesCall(
+      std::string text,
+      mojom::TextClassifier::FindLanguagesCallback callback);
   void HandleLoadHandwritingModel(
       mojo::PendingReceiver<mojom::HandwritingRecognizer> receiver,
       mojom::MachineLearningService::LoadHandwritingModelCallback callback);
+  void HandleLoadHandwritingModelWithSpec(
+      mojo::PendingReceiver<mojom::HandwritingRecognizer> receiver,
+      mojom::MachineLearningService::LoadHandwritingModelWithSpecCallback
+          callback);
   void HandleRecognize(
       mojom::HandwritingRecognitionQueryPtr query,
       mojom::HandwritingRecognizer::RecognizeCallback callback);
@@ -161,12 +189,14 @@ class FakeServiceConnectionImpl : public ServiceConnection,
   mojo::ReceiverSet<mojom::TextClassifier> text_classifier_receivers_;
   mojo::ReceiverSet<mojom::HandwritingRecognizer> handwriting_receivers_;
   mojom::TensorPtr output_tensor_;
+  mojom::LoadHandwritingModelResult load_handwriting_model_result_;
   mojom::LoadModelResult load_model_result_;
   mojom::LoadModelResult load_text_classifier_result_;
   mojom::CreateGraphExecutorResult create_graph_executor_result_;
   mojom::ExecuteResult execute_result_;
   std::vector<mojom::TextAnnotationPtr> annotate_result_;
   mojom::CodepointSpanPtr suggest_selection_result_;
+  std::vector<mojom::TextLanguagePtr> find_languages_result_;
   mojom::HandwritingRecognizerResultPtr handwriting_result_;
 
   bool async_mode_;

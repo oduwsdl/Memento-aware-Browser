@@ -15,8 +15,8 @@
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
-#include "content/browser/frame_host/frame_tree.h"
-#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/renderer_host/frame_tree.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_watcher.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -36,6 +36,7 @@
 #include "url/gurl.h"
 
 namespace content {
+
 namespace protocol {
 
 namespace {
@@ -153,7 +154,7 @@ void DidFindRegistrationForDispatchPeriodicSyncEventOnCoreThread(
 void DispatchSyncEventOnCoreThread(
     scoped_refptr<ServiceWorkerContextWrapper> context,
     scoped_refptr<BackgroundSyncContextImpl> sync_context,
-    const GURL& origin,
+    const url::Origin& origin,
     int64_t registration_id,
     const std::string& tag,
     bool last_chance) {
@@ -166,7 +167,7 @@ void DispatchSyncEventOnCoreThread(
 void DispatchPeriodicSyncEventOnCoreThread(
     scoped_refptr<ServiceWorkerContextWrapper> context,
     scoped_refptr<BackgroundSyncContextImpl> sync_context,
-    const GURL& origin,
+    const url::Origin& origin,
     int64_t registration_id,
     const std::string& tag) {
   context->FindReadyRegistrationForId(
@@ -256,7 +257,7 @@ Response ServiceWorkerHandler::StartWorker(const std::string& scope_url) {
     return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
-  context_->StartServiceWorker(GURL(scope_url), base::DoNothing());
+  context_->StartActiveServiceWorker(GURL(scope_url), base::DoNothing());
   return Response::Success();
 }
 
@@ -351,7 +352,7 @@ Response ServiceWorkerHandler::DeliverPushMessage(
   BrowserContext::DeliverPushMessage(
       browser_context_, GURL(origin), id, /* push_message_id= */ std::string(),
       std::move(payload),
-      base::BindOnce([](blink::mojom::PushDeliveryStatus status) {}));
+      base::BindOnce([](blink::mojom::PushEventStatus status) {}));
 
   return Response::Success();
 }
@@ -372,10 +373,11 @@ Response ServiceWorkerHandler::DispatchSyncEvent(
   BackgroundSyncContextImpl* sync_context =
       storage_partition_->GetBackgroundSyncContext();
 
-  RunOrPostTaskOnThread(FROM_HERE, ServiceWorkerContext::GetCoreThreadId(),
-                        base::BindOnce(&DispatchSyncEventOnCoreThread, context_,
-                                       base::WrapRefCounted(sync_context),
-                                       GURL(origin), id, tag, last_chance));
+  RunOrPostTaskOnThread(
+      FROM_HERE, ServiceWorkerContext::GetCoreThreadId(),
+      base::BindOnce(&DispatchSyncEventOnCoreThread, context_,
+                     base::WrapRefCounted(sync_context),
+                     url::Origin::Create(GURL(origin)), id, tag, last_chance));
   return Response::Success();
 }
 
@@ -397,8 +399,8 @@ Response ServiceWorkerHandler::DispatchPeriodicSyncEvent(
   RunOrPostTaskOnThread(
       FROM_HERE, ServiceWorkerContext::GetCoreThreadId(),
       base::BindOnce(&DispatchPeriodicSyncEventOnCoreThread, context_,
-                     base::WrapRefCounted(sync_context), GURL(origin), id,
-                     tag));
+                     base::WrapRefCounted(sync_context),
+                     url::Origin::Create(GURL(origin)), id, tag));
   return Response::Success();
 }
 
@@ -480,7 +482,7 @@ void ServiceWorkerHandler::OnWorkerVersionUpdated(
 void ServiceWorkerHandler::OnErrorReported(
     int64_t registration_id,
     int64_t version_id,
-    const ServiceWorkerContextCoreObserver::ErrorInfo& info) {
+    const ServiceWorkerContextObserver::ErrorInfo& info) {
   frontend_->WorkerErrorReported(
       ServiceWorker::ServiceWorkerErrorMessage::Create()
           .SetErrorMessage(base::UTF16ToUTF8(info.error_message))

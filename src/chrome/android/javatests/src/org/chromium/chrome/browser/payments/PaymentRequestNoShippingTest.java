@@ -8,8 +8,6 @@ import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.DECEMB
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.FIRST_BILLING_ADDRESS;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NEXT_YEAR;
 
-import android.os.Build;
-
 import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -21,7 +19,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
@@ -29,6 +26,7 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.payments.Event;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
@@ -157,7 +155,6 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
     /** Attempt to add a credit card with an empty name on card and cancel payment. */
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // crbug.com/678983
     @Feature({"Payments"})
     public void testAddEmptyNameOnCardAndCancel() throws TimeoutException {
         fillNewCardForm("5454-5454-5454-5454", "", DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS);

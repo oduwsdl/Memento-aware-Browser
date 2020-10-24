@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/logging.h"
 #include "base/metrics/histogram_base.h"
@@ -29,10 +30,13 @@ namespace base {
 // for histogram allocation. False will allocate histograms from the process
 // heap.
 class SparseHistogramTest : public testing::TestWithParam<bool> {
+ public:
+  SparseHistogramTest() : use_persistent_histogram_allocator_(GetParam()) {}
+  SparseHistogramTest(const SparseHistogramTest&) = delete;
+  SparseHistogramTest& operator=(const SparseHistogramTest&) = delete;
+
  protected:
   const int32_t kAllocatorMemorySize = 8 << 20;  // 8 MiB
-
-  SparseHistogramTest() : use_persistent_histogram_allocator_(GetParam()) {}
 
   void SetUp() override {
     if (use_persistent_histogram_allocator_)
@@ -91,9 +95,6 @@ class SparseHistogramTest : public testing::TestWithParam<bool> {
 
   std::unique_ptr<StatisticsRecorder> statistics_recorder_;
   PersistentMemoryAllocator* allocator_ = nullptr;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SparseHistogramTest);
 };
 
 // Run all HistogramTest cases with both heap and persistent memory.
@@ -399,10 +400,10 @@ TEST_P(SparseHistogramTest, HistogramNameHash) {
 TEST_P(SparseHistogramTest, CheckGetCountAndBucketData) {
   std::unique_ptr<SparseHistogram> histogram(NewSparseHistogram("Sparse"));
   // Add samples in reverse order and make sure the output is in correct order.
-  histogram->AddCount(/*sample=*/200, /*value=*/15);
-  histogram->AddCount(/*sample=*/100, /*value=*/5);
+  histogram->AddCount(/*sample=*/200, /*count=*/15);
+  histogram->AddCount(/*sample=*/100, /*count=*/5);
   // Add samples to the same bucket and make sure they'll be aggregated.
-  histogram->AddCount(/*sample=*/100, /*value=*/5);
+  histogram->AddCount(/*sample=*/100, /*count=*/5);
 
   base::Histogram::Count total_count;
   int64_t sum;
@@ -437,8 +438,8 @@ TEST_P(SparseHistogramTest, CheckGetCountAndBucketData) {
 TEST_P(SparseHistogramTest, WriteAscii) {
   HistogramBase* histogram =
       SparseHistogram::FactoryGet("AsciiOut", HistogramBase::kNoFlags);
-  histogram->AddCount(/*sample=*/4, /*value=*/5);
-  histogram->AddCount(/*sample=*/10, /*value=*/15);
+  histogram->AddCount(/*sample=*/4, /*count=*/5);
+  histogram->AddCount(/*sample=*/10, /*count=*/15);
 
   std::string output;
   histogram->WriteAscii(&output);
@@ -454,8 +455,8 @@ TEST_P(SparseHistogramTest, WriteAscii) {
 TEST_P(SparseHistogramTest, ToGraphDict) {
   HistogramBase* histogram =
       SparseHistogram::FactoryGet("HTMLOut", HistogramBase::kNoFlags);
-  histogram->AddCount(/*sample=*/4, /*value=*/5);
-  histogram->AddCount(/*sample=*/10, /*value=*/15);
+  histogram->AddCount(/*sample=*/4, /*count=*/5);
+  histogram->AddCount(/*sample=*/10, /*count=*/15);
 
   base::DictionaryValue output = histogram->ToGraphDict();
   std::string* header = output.FindStringKey("header");

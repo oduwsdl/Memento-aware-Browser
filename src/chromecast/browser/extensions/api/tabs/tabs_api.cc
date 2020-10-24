@@ -84,8 +84,8 @@ class ApiParameterExtractor {
   ~ApiParameterExtractor() {}
 
   bool populate_tabs() {
-    if (params_->get_info.get() && params_->get_info->populate.get())
-      return *params_->get_info->populate;
+    if (params_->query_options.get() && params_->query_options->populate.get())
+      return *params_->query_options->populate;
     return false;
   }
 
@@ -761,6 +761,14 @@ ExecuteCodeFunction::InitResult ExecuteCodeInTabFunction::Init() {
   return set_init_result(SUCCESS);
 }
 
+bool ExecuteCodeInTabFunction::ShouldInsertCSS() const {
+  return false;
+}
+
+bool ExecuteCodeInTabFunction::ShouldRemoveCSS() const {
+  return false;
+}
+
 bool ExecuteCodeInTabFunction::CanExecuteScriptOnPage(std::string* error) {
   const CastWebContents* webview = GetWebViewForTab(execute_tab_id_);
   if (!webview) {
@@ -835,11 +843,11 @@ const GURL& ExecuteCodeInTabFunction::GetWebViewSrc() const {
   return GURL::EmptyGURL();
 }
 
-bool TabsExecuteScriptFunction::ShouldInsertCSS() const {
-  return false;
+bool TabsInsertCSSFunction::ShouldInsertCSS() const {
+  return true;
 }
 
-bool TabsInsertCSSFunction::ShouldInsertCSS() const {
+bool TabsRemoveCSSFunction::ShouldRemoveCSS() const {
   return true;
 }
 

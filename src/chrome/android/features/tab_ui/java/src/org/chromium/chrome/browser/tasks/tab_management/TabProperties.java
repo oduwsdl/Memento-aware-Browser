@@ -73,8 +73,8 @@ public class TabProperties {
     public static final PropertyModel.WritableObjectPropertyKey<TabListMediator.TabActionListener>
             SELECTABLE_TAB_CLICKED_LISTENER = new PropertyModel.WritableObjectPropertyKey<>();
 
-    public static final WritableObjectPropertyKey<SelectionDelegate> TAB_SELECTION_DELEGATE =
-            new WritableObjectPropertyKey<>();
+    public static final WritableObjectPropertyKey<SelectionDelegate<Integer>>
+            TAB_SELECTION_DELEGATE = new WritableObjectPropertyKey<>();
 
     public static final PropertyModel.ReadableBooleanPropertyKey IS_INCOGNITO =
             new PropertyModel.ReadableBooleanPropertyKey();
@@ -103,11 +103,20 @@ public class TabProperties {
     public static final WritableObjectPropertyKey<String> SEARCH_QUERY =
             new WritableObjectPropertyKey<>();
 
-    public static final WritableObjectPropertyKey<TabListMediator.TabActionListener>
-            SEARCH_LISTENER = new WritableObjectPropertyKey<>();
+    public static final WritableObjectPropertyKey<String> PRICE_STRING =
+            new WritableObjectPropertyKey<>();
 
-    public static final PropertyModel.WritableIntPropertyKey SEARCH_CHIP_ICON_DRAWABLE_ID =
+    public static final WritableObjectPropertyKey<TabListMediator.TabActionListener>
+            PAGE_INFO_LISTENER = new WritableObjectPropertyKey<>();
+
+    public static final PropertyModel.WritableIntPropertyKey PAGE_INFO_ICON_DRAWABLE_ID =
             new PropertyModel.WritableIntPropertyKey();
+
+    public static final WritableObjectPropertyKey<String> CONTENT_DESCRIPTION_STRING =
+            new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<String> CLOSE_BUTTON_DESCRIPTION_STRING =
+            new WritableObjectPropertyKey<>();
 
     public static final PropertyKey[] ALL_KEYS_TAB_GRID = new PropertyKey[] {TAB_ID,
             TAB_SELECTED_LISTENER, TAB_CLOSED_LISTENER, FAVICON, THUMBNAIL_FETCHER, IPH_PROVIDER,
@@ -116,7 +125,8 @@ public class TabProperties {
             IS_INCOGNITO, SELECTED_TAB_BACKGROUND_DRAWABLE_ID, TABSTRIP_FAVICON_BACKGROUND_COLOR_ID,
             SELECTABLE_TAB_ACTION_BUTTON_BACKGROUND,
             SELECTABLE_TAB_ACTION_BUTTON_SELECTED_BACKGROUND, URL_DOMAIN, ACCESSIBILITY_DELEGATE,
-            SEARCH_QUERY, SEARCH_LISTENER, SEARCH_CHIP_ICON_DRAWABLE_ID, CARD_TYPE};
+            SEARCH_QUERY, PAGE_INFO_LISTENER, PAGE_INFO_ICON_DRAWABLE_ID, CARD_TYPE,
+            CONTENT_DESCRIPTION_STRING, CLOSE_BUTTON_DESCRIPTION_STRING, PRICE_STRING};
 
     public static final PropertyKey[] ALL_KEYS_TAB_STRIP =
             new PropertyKey[] {TAB_ID, TAB_SELECTED_LISTENER, TAB_CLOSED_LISTENER, FAVICON,

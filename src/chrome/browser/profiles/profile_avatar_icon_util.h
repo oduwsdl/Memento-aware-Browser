@@ -14,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/models/image_model.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace base {
@@ -58,7 +59,7 @@ enum AvatarShape {
 };
 
 // Returns the default guest avatar.
-gfx::ImageSkia GetGuestAvatar(int size = 256);
+ui::ImageModel GetGuestAvatar(int size = 256);
 
 // Returns a version of |image| of a specific size. Note that no checks are
 // done on the width/height so make sure they're reasonable values; in the
@@ -85,7 +86,7 @@ gfx::Image GetAvatarIconForTitleBar(const gfx::Image& image,
                                     int dst_width,
                                     int dst_height);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Returns the image for the profile at |profile_path| that is suitable for use
 // in the macOS menu bar.
 gfx::Image GetAvatarIconForNSMenu(const base::FilePath& profile_path);
@@ -117,8 +118,19 @@ int GetPlaceholderAvatarIconResourceID();
 // Returns a URL for the placeholder avatar icon.
 std::string GetPlaceholderAvatarIconUrl();
 
+// Returns colored generic avatar.
+gfx::Image GetPlaceholderAvatarIconWithColors(SkColor fill_color,
+                                              SkColor stroke_color,
+                                              int size);
+
 // Gets the resource ID of the default avatar icon at |index|.
 int GetDefaultAvatarIconResourceIDAtIndex(size_t index);
+
+#if defined(OS_WIN)
+// Gets the resource ID of the 2x sized version of the old profile avatar icon
+// at |index|.
+int GetOldDefaultAvatar2xIconResourceIDAtIndex(size_t index);
+#endif  // defined(OS_WIN)
 
 // Gets the resource filename of the default avatar icon at |index|.
 const char* GetDefaultAvatarIconFileNameAtIndex(size_t index);
@@ -152,16 +164,13 @@ size_t GetRandomAvatarIconIndex(
     const std::unordered_set<size_t>& used_icon_indices);
 
 #if defined(OS_WIN)
-// Get the 1x and 2x avatar images for a ProfileAttributesEntry.
-void GetWinAvatarImages(ProfileAttributesEntry* entry,
-                        SkBitmap* avatar_image_1x,
-                        SkBitmap* avatar_image_2x);
+// Get the 2x avatar image for a ProfileAttributesEntry.
+SkBitmap GetWin2xAvatarImage(ProfileAttributesEntry* entry);
 
 // Badges |app_icon_bitmap| with |avatar_bitmap| at the bottom right corner and
 // returns the resulting SkBitmap.
 SkBitmap GetBadgedWinIconBitmapForAvatar(const SkBitmap& app_icon_bitmap,
-                                         const SkBitmap& avatar_bitmap,
-                                         int scale_factor);
+                                         const SkBitmap& avatar_bitmap);
 #endif  // OS_WIN
 
 }  // namespace profiles

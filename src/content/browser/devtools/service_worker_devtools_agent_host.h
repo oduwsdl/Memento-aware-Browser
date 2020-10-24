@@ -50,6 +50,9 @@ class ServiceWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   bool Activate() override;
   void Reload() override;
   bool Close() override;
+  NetworkLoaderFactoryParamsAndInfo CreateNetworkFactoryParamsForDevTools()
+      override;
+  RenderProcessHost* GetProcessHost() override;
 
   void WorkerRestarted(int worker_process_id, int worker_route_id);
   void WorkerReadyForInspection(
@@ -86,7 +89,7 @@ class ServiceWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   void UpdateIsAttached(bool attached);
 
   // DevToolsAgentHostImpl overrides.
-  bool AttachSession(DevToolsSession* session) override;
+  bool AttachSession(DevToolsSession* session, bool acquire_wake_lock) override;
   void DetachSession(DevToolsSession* session) override;
 
   void UpdateLoaderFactories(base::OnceClosure callback);

@@ -15,11 +15,14 @@
 namespace content {
 
 #if defined(OS_ANDROID)
+// The mobile hang timer is shorter than the desktop hang timer because the
+// screen is smaller and more intimate, and therefore requires more nimbleness.
 constexpr base::TimeDelta kHungRendererDelay = base::TimeDelta::FromSeconds(5);
 #else
-// TODO(jdduke): Consider shortening this delay on desktop. It was originally
-// set to 5 seconds but was extended to accommodate less responsive plugins.
-constexpr base::TimeDelta kHungRendererDelay = base::TimeDelta::FromSeconds(30);
+// It would be nice to lower the desktop delay, but going any further with the
+// modal dialog UI would be disruptive, and while new gentle UI indicating that
+// a page is hung would be great, that UI isn't going to happen any time soon.
+constexpr base::TimeDelta kHungRendererDelay = base::TimeDelta::FromSeconds(15);
 #endif
 
 // The maximum length of string as data url.
@@ -37,6 +40,11 @@ CONTENT_EXPORT extern const int kTraceEventRendererMainThreadSortIndex;
 
 // HTTP header set in requests to indicate they should be marked DoNotTrack.
 extern const char kDoNotTrackHeader[];
+
+// Constants for attaching message pipes to the mojo invitation used to
+// initialize child processes.
+extern const int kChildProcessReceiverAttachmentName;
+extern const int kChildProcessHostRemoteAttachmentName;
 
 } // namespace content
 

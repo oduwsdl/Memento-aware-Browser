@@ -42,12 +42,9 @@ class ConcurrentAllocator {
         space_(space),
         lab_(LocalAllocationBuffer::InvalidBuffer()) {}
 
-  inline AllocationResult Allocate(int object_size,
-                                   AllocationAlignment alignment,
-                                   AllocationOrigin origin);
-
-  inline Address AllocateOrFail(int object_size, AllocationAlignment alignment,
-                                AllocationOrigin origin);
+  inline AllocationResult AllocateRaw(int object_size,
+                                      AllocationAlignment alignment,
+                                      AllocationOrigin origin);
 
   void FreeLinearAllocationArea();
   void MakeLinearAllocationAreaIterable();
@@ -55,15 +52,15 @@ class ConcurrentAllocator {
   void UnmarkLinearAllocationArea();
 
  private:
-  inline bool EnsureLab(AllocationOrigin origin);
+  V8_EXPORT_PRIVATE AllocationResult AllocateInLabSlow(
+      int object_size, AllocationAlignment alignment, AllocationOrigin origin);
+  bool EnsureLab(AllocationOrigin origin);
+
   inline AllocationResult AllocateInLab(int object_size,
                                         AllocationAlignment alignment,
                                         AllocationOrigin origin);
 
   V8_EXPORT_PRIVATE AllocationResult AllocateOutsideLab(
-      int object_size, AllocationAlignment alignment, AllocationOrigin origin);
-
-  V8_EXPORT_PRIVATE Address PerformCollectionAndAllocateAgain(
       int object_size, AllocationAlignment alignment, AllocationOrigin origin);
 
   LocalHeap* const local_heap_;

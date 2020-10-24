@@ -7,7 +7,9 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
+
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -142,10 +144,6 @@ class VIZ_COMMON_EXPORT CompositorFrameMetadata {
   // visible height should be the same as in the latest submitted frame with a
   // value set.
   base::Optional<float> top_controls_visible_height;
-
-  // The time at which the LocalSurfaceId used to submit this CompositorFrame
-  // was allocated.
-  base::TimeTicks local_surface_id_allocation_time;
 
   base::Optional<base::TimeDelta> preferred_frame_interval;
 

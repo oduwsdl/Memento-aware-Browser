@@ -7,6 +7,7 @@
 #include "ash/public/cpp/ash_features.h"
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -15,6 +16,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/account_manager/account_manager_util.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -44,9 +46,11 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
+#include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
@@ -112,12 +116,6 @@ const std::vector<SearchConcept>& GetPeopleSearchConcepts() {
        {.setting = mojom::Setting::kLockScreen},
        {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING_ALT1,
         SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS_REMOVE,
-       mojom::kMyAccountsSubpagePath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kRemoveAccount}},
       {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN,
        mojom::kManageOtherPeopleSubpagePath,
        mojom::SearchResultIcon::kAvatar,
@@ -137,6 +135,18 @@ const std::vector<SearchConcept>& GetPeopleSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kAddToUserWhitelist}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetRemoveAccountSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS_REMOVE,
+       mojom::kMyAccountsSubpagePath,
+       mojom::SearchResultIcon::kAvatar,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kRemoveAccount}},
   });
   return *tags;
 }
@@ -226,25 +236,25 @@ const std::vector<SearchConcept>& GetSplitSyncOffSearchConcepts() {
 const std::vector<SearchConcept>& GetKerberosSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_KERBEROS_ADD,
-       mojom::kKerberosSubpagePath,
+       mojom::kKerberosAccountsSubpagePath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kAddKerberosTicket}},
       {IDS_OS_SETTINGS_TAG_KERBEROS_REMOVE,
-       mojom::kKerberosSubpagePath,
+       mojom::kKerberosAccountsSubpagePath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kRemoveKerberosTicket}},
       {IDS_OS_SETTINGS_TAG_KERBEROS,
-       mojom::kKerberosSubpagePath,
+       mojom::kKerberosAccountsSubpagePath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kKerberos}},
+       {.subpage = mojom::Subpage::kKerberosAccounts}},
       {IDS_OS_SETTINGS_TAG_KERBEROS_ACTIVE,
-       mojom::kKerberosSubpagePath,
+       mojom::kKerberosAccountsSubpagePath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -255,12 +265,6 @@ const std::vector<SearchConcept>& GetKerberosSearchConcepts() {
 
 const std::vector<SearchConcept>& GetFingerprintSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_FINGERPRINT_REMOVE,
-       mojom::kFingerprintSubpagePath,
-       mojom::SearchResultIcon::kFingerprint,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kRemoveFingerprint}},
       {IDS_OS_SETTINGS_TAG_FINGERPRINT_ADD,
        mojom::kFingerprintSubpagePath,
        mojom::SearchResultIcon::kFingerprint,
@@ -273,6 +277,18 @@ const std::vector<SearchConcept>& GetFingerprintSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kFingerprint}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetRemoveFingerprintSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_FINGERPRINT_REMOVE,
+       mojom::kFingerprintSubpagePath,
+       mojom::SearchResultIcon::kFingerprint,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kRemoveFingerprint}},
   });
   return *tags;
 }
@@ -416,6 +432,8 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
        IDS_ASH_SETTINGS_LOCK_SCREEN_NOTIFICATION_SHOW},
       {"lockScreenPinOrPassword",
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_OR_PASSWORD},
+      {"lockScreenPinAutoSubmit",
+       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_AUTOSUBMIT},
       {"lockScreenSetupFingerprintButton",
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_SETUP_BUTTON},
       {"lockScreenNotificationHide",
@@ -444,6 +462,12 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_TITLE_LOGIN_LOCK},
       {"passwordPromptEnterPasswordLock",
        IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_ENTER_PASSWORD_LOCK},
+      {"pinAutoSubmitPrompt",
+       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_AUTOSUBMIT_PROMPT},
+      {"pinAutoSubmitLongPinError",
+       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_AUTOSUBMIT_ERROR_PIN_TOO_LONG},
+      {"pinAutoSubmitPinIncorrect",
+       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_AUTOSUBMIT_ERROR_PIN_INCORRECT},
       {"passwordPromptEnterPasswordLoginLock",
        IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_ENTER_PASSWORD_LOGIN_LOCK},
   };
@@ -451,6 +475,8 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
 
   html_source->AddBoolean("quickUnlockEnabled",
                           chromeos::quick_unlock::IsPinEnabled(pref_service));
+  html_source->AddBoolean("quickUnlockPinAutosubmitFeatureEnabled",
+                          chromeos::features::IsPinAutosubmitFeatureEnabled());
   html_source->AddBoolean(
       "quickUnlockDisabledByPolicy",
       chromeos::quick_unlock::IsPinDisabledByPolicy(pref_service));
@@ -487,7 +513,8 @@ void AddFingerprintStrings(content::WebUIDataSource* html_source,
     // lottie animations, this update has to be performed manually. As the usage
     // increases, set this as the default so manual override is no longer
     // required.
-    html_source->OverrideContentSecurityPolicyWorkerSrc(
+    html_source->OverrideContentSecurityPolicy(
+        network::mojom::CSPDirectiveName::WorkerSrc,
         "worker-src blob: 'self';");
     html_source->AddResourcePath("finger_print.json",
                                  IDR_LOGIN_FINGER_PRINT_TABLET_ANIMATION);
@@ -550,6 +577,7 @@ void AddSetupPinDialogStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CHOOSE_PIN_TITLE},
       {"configurePinConfirmPinTitle",
        IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CONFIRM_PIN_TITLE},
+      {"invalidPin", IDS_SETTINGS_PEOPLE_PIN_PROMPT_INVALID_PIN},
       {"configurePinMismatched", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_MISMATCHED},
       {"configurePinTooShort", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_SHORT},
       {"configurePinTooLong", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_LONG},
@@ -589,9 +617,6 @@ void AddSyncControlsStrings(content::WebUIDataSource* html_source) {
                           chromeos::features::IsSplitSettingsSyncEnabled());
   html_source->AddBoolean("useBrowserSyncConsent",
                           chromeos::features::ShouldUseBrowserSyncConsent());
-  html_source->AddBoolean(
-      "syncSetupFriendlySettings",
-      base::FeatureList::IsEnabled(::features::kSyncSetupFriendlySettings));
   html_source->AddString(
       "browserSettingsSyncSetupUrl",
       base::StrCat({chrome::kChromeUISettingsURL, chrome::kSyncSetupSubPage}));
@@ -659,6 +684,20 @@ void AddParentalControlStrings(content::WebUIDataSource* html_source,
                          tooltip);
 }
 
+bool IsSameAccount(const AccountManager::AccountKey& account_key,
+                   const AccountId& account_id) {
+  switch (account_key.account_type) {
+    case account_manager::AccountType::ACCOUNT_TYPE_GAIA:
+      return account_id.GetAccountType() == AccountType::GOOGLE &&
+             account_id.GetGaiaId() == account_key.id;
+    case account_manager::AccountType::ACCOUNT_TYPE_ACTIVE_DIRECTORY:
+      return account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY &&
+             account_id.GetObjGuid() == account_key.id;
+    case account_manager::AccountType::ACCOUNT_TYPE_UNSPECIFIED:
+      return false;
+  }
+}
+
 }  // namespace
 
 PeopleSection::PeopleSection(
@@ -679,7 +718,21 @@ PeopleSection::PeopleSection(
   if (features::IsGuestModeActive())
     return;
 
-  registry()->AddSearchTags(GetPeopleSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetPeopleSearchConcepts());
+
+  // TODO(jamescook): Sort out how account management is split between Chrome
+  // OS and browser settings.
+  if (IsAccountManagerAvailable(profile)) {
+    // Some Account Manager search tags are added/removed dynamically.
+    AccountManagerFactory* factory =
+        g_browser_process->platform_part()->GetAccountManagerFactory();
+    account_manager_ = factory->GetAccountManager(profile->GetPath().value());
+    DCHECK(account_manager_);
+
+    account_manager_->AddObserver(this);
+    FetchAccounts();
+  }
 
   if (kerberos_credentials_manager_) {
     // Kerberos search tags are added/removed dynamically.
@@ -689,25 +742,33 @@ PeopleSection::PeopleSection(
 
   if (chromeos::features::IsSplitSettingsSyncEnabled()) {
     if (sync_service_) {
-      registry()->AddSearchTags(GetSplitSyncSearchConcepts());
+      updater.AddSearchTags(GetSplitSyncSearchConcepts());
 
       // Sync search tags are added/removed dynamically.
       sync_service_->AddObserver(this);
       OnStateChanged(sync_service_);
     }
   } else {
-    registry()->AddSearchTags(GetNonSplitSyncSearchConcepts());
+    updater.AddSearchTags(GetNonSplitSyncSearchConcepts());
   }
 
   // Parental control search tags are added if necessary and do not update
   // dynamically during a user session.
   if (features::ShouldShowParentalControlSettings(profile))
-    registry()->AddSearchTags(GetParentalSearchConcepts());
+    updater.AddSearchTags(GetParentalSearchConcepts());
 
-  // Fingerprint search tags are added if necessary and do not update
-  // dynamically during a user session.
-  if (AreFingerprintSettingsAllowed())
-    registry()->AddSearchTags(GetFingerprintSearchConcepts());
+  // Fingerprint search tags are added if necessary. Remove fingerprint search
+  // tags update dynamically during a user session.
+  if (AreFingerprintSettingsAllowed()) {
+    updater.AddSearchTags(GetFingerprintSearchConcepts());
+
+    fingerprint_pref_change_registrar_.Init(pref_service_);
+    fingerprint_pref_change_registrar_.Add(
+        ::prefs::kQuickUnlockFingerprintRecord,
+        base::BindRepeating(&PeopleSection::UpdateRemoveFingerprintSearchTags,
+                            base::Unretained(this)));
+    UpdateRemoveFingerprintSearchTags();
+  }
 }
 
 PeopleSection::~PeopleSection() {
@@ -716,6 +777,9 @@ PeopleSection::~PeopleSection() {
 
   if (chromeos::features::IsSplitSettingsSyncEnabled() && sync_service_)
     sync_service_->RemoveObserver(this);
+
+  if (account_manager_)
+    account_manager_->RemoveObserver(this);
 }
 
 void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
@@ -740,7 +804,7 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   // Toggles the Chrome OS Account Manager submenu in the People section.
   html_source->AddBoolean("isAccountManagerEnabled",
-                          chromeos::IsAccountManagerAvailable(profile()));
+                          account_manager_ != nullptr);
 
   if (chromeos::features::ShouldUseBrowserSyncConsent()) {
     static constexpr webui::LocalizedString kTurnOffStrings[] = {
@@ -772,8 +836,6 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "secondaryGoogleAccountSigninAllowed",
       pref_service_->GetBoolean(
           chromeos::prefs::kSecondaryGoogleAccountSigninAllowed));
-  html_source->AddBoolean("isEduCoexistenceEnabled",
-                          ::chromeos::features::IsEduCoexistenceEnabled());
 
   html_source->AddBoolean(
       "driveSuggestAvailable",
@@ -810,18 +872,10 @@ void PeopleSection::AddHandlers(content::WebUI* web_ui) {
                                             IDS_OS_SETTINGS_PROFILE_LABEL);
   web_ui->AddMessageHandler(std::move(plural_string_handler));
 
-  // TODO(jamescook): Sort out how account management is split between Chrome OS
-  // and browser settings.
-  if (chromeos::IsAccountManagerAvailable(profile())) {
-    chromeos::AccountManagerFactory* factory =
-        g_browser_process->platform_part()->GetAccountManagerFactory();
-    chromeos::AccountManager* account_manager =
-        factory->GetAccountManager(profile()->GetPath().value());
-    DCHECK(account_manager);
-
+  if (account_manager_) {
     web_ui->AddMessageHandler(
         std::make_unique<chromeos::settings::AccountManagerUIHandler>(
-            account_manager, identity_manager_));
+            account_manager_, identity_manager_));
   }
 
   if (chromeos::features::IsSplitSettingsSyncEnabled())
@@ -863,6 +917,19 @@ mojom::SearchResultIcon PeopleSection::GetSectionIcon() const {
 
 std::string PeopleSection::GetSectionPath() const {
   return mojom::kPeopleSectionPath;
+}
+
+bool PeopleSection::LogMetric(mojom::Setting setting,
+                              base::Value& value) const {
+  switch (setting) {
+    case mojom::Setting::kAddAccount:
+      base::UmaHistogramCounts1000("ChromeOS.Settings.People.AddAccountCount",
+                                   value.GetInt());
+      return true;
+
+    default:
+      return false;
+  }
 }
 
 void PeopleSection::RegisterHierarchy(HierarchyGenerator* generator) const {
@@ -951,37 +1018,78 @@ void PeopleSection::RegisterHierarchy(HierarchyGenerator* generator) const {
                             kManageOtherPeopleSettings, generator);
 
   // Kerberos.
-  generator->RegisterTopLevelSubpage(
-      IDS_SETTINGS_KERBEROS_ACCOUNTS_PAGE_TITLE, mojom::Subpage::kKerberos,
-      mojom::SearchResultIcon::kAvatar, mojom::SearchResultDefaultRank::kMedium,
-      mojom::kKerberosSubpagePath);
+  generator->RegisterTopLevelSubpage(IDS_SETTINGS_KERBEROS_ACCOUNTS_PAGE_TITLE,
+                                     mojom::Subpage::kKerberosAccounts,
+                                     mojom::SearchResultIcon::kAvatar,
+                                     mojom::SearchResultDefaultRank::kMedium,
+                                     mojom::kKerberosAccountsSubpagePath);
   static constexpr mojom::Setting kKerberosSettings[] = {
       mojom::Setting::kAddKerberosTicket,
       mojom::Setting::kRemoveKerberosTicket,
       mojom::Setting::kSetActiveKerberosTicket,
   };
-  RegisterNestedSettingBulk(mojom::Subpage::kKerberos, kKerberosSettings,
-                            generator);
+  RegisterNestedSettingBulk(mojom::Subpage::kKerberosAccounts,
+                            kKerberosSettings, generator);
+}
+
+void PeopleSection::FetchAccounts() {
+  account_manager_->GetAccounts(
+      base::BindOnce(&PeopleSection::UpdateAccountManagerSearchTags,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void PeopleSection::OnTokenUpserted(const AccountManager::Account& account) {
+  FetchAccounts();
+}
+
+void PeopleSection::OnAccountRemoved(const AccountManager::Account& account) {
+  FetchAccounts();
+}
+
+void PeopleSection::UpdateAccountManagerSearchTags(
+    const std::vector<AccountManager::Account>& accounts) {
+  DCHECK(IsAccountManagerAvailable(profile()));
+
+  // Start with no Account Manager search tags.
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.RemoveSearchTags(GetRemoveAccountSearchConcepts());
+
+  user_manager::User* user = ProfileHelper::Get()->GetUserByProfile(profile());
+  DCHECK(user);
+
+  for (const AccountManager::Account& account : accounts) {
+    if (IsSameAccount(account.key, user->GetAccountId()))
+      continue;
+
+    // If a non-device account exists, add the "Remove Account" search tag.
+    updater.AddSearchTags(GetRemoveAccountSearchConcepts());
+    return;
+  }
 }
 
 void PeopleSection::OnStateChanged(syncer::SyncService* sync_service) {
   DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
   DCHECK_EQ(sync_service, sync_service_);
+
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (sync_service_->IsEngineInitialized() &&
       sync_service_->GetUserSettings()->IsOsSyncFeatureEnabled()) {
-    registry()->AddSearchTags(GetSplitSyncOnSearchConcepts());
-    registry()->RemoveSearchTags(GetSplitSyncOffSearchConcepts());
+    updater.AddSearchTags(GetSplitSyncOnSearchConcepts());
+    updater.RemoveSearchTags(GetSplitSyncOffSearchConcepts());
   } else {
-    registry()->RemoveSearchTags(GetSplitSyncOnSearchConcepts());
-    registry()->AddSearchTags(GetSplitSyncOffSearchConcepts());
+    updater.RemoveSearchTags(GetSplitSyncOnSearchConcepts());
+    updater.AddSearchTags(GetSplitSyncOffSearchConcepts());
   }
 }
 
 void PeopleSection::OnKerberosEnabledStateChanged() {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (kerberos_credentials_manager_->IsKerberosEnabled())
-    registry()->AddSearchTags(GetKerberosSearchConcepts());
+    updater.AddSearchTags(GetKerberosSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetKerberosSearchConcepts());
+    updater.RemoveSearchTags(GetKerberosSearchConcepts());
 }
 
 void PeopleSection::AddKerberosAccountsPageStrings(
@@ -1012,8 +1120,10 @@ void PeopleSection::AddKerberosAccountsPageStrings(
 
   // Toggles the Chrome OS Kerberos Accounts submenu in the People section.
   // Note that the handler is also dependent on this pref.
-  html_source->AddBoolean("isKerberosEnabled",
-                          kerberos_credentials_manager_->IsKerberosEnabled());
+  html_source->AddBoolean(
+      "isKerberosEnabled",
+      kerberos_credentials_manager_ != nullptr &&
+          kerberos_credentials_manager_->IsKerberosEnabled());
 
   PrefService* local_state = g_browser_process->local_state();
 
@@ -1032,6 +1142,19 @@ void PeopleSection::AddKerberosAccountsPageStrings(
 
 bool PeopleSection::AreFingerprintSettingsAllowed() {
   return chromeos::quick_unlock::IsFingerprintEnabled(profile());
+}
+
+void PeopleSection::UpdateRemoveFingerprintSearchTags() {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.RemoveSearchTags(GetRemoveFingerprintSearchConcepts());
+
+  // "Remove fingerprint" search tag should exist only when 1 or more
+  // fingerprints are registered.
+  int registered_fingerprint_count =
+      pref_service_->GetInteger(::prefs::kQuickUnlockFingerprintRecord);
+  if (registered_fingerprint_count > 0) {
+    updater.AddSearchTags(GetRemoveFingerprintSearchConcepts());
+  }
 }
 
 }  // namespace settings

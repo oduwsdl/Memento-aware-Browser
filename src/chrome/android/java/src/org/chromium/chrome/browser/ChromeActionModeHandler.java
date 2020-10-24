@@ -19,7 +19,6 @@ import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.share.ChromeShareExtras;
 import org.chromium.chrome.browser.share.ShareDelegate;
@@ -67,7 +66,7 @@ public class ChromeActionModeHandler {
         mActivityTabTabObserver =
                 new ActivityTabProvider.ActivityTabTabObserver(activityTabProvider) {
                     @Override
-                    public void onObservingDifferentTab(Tab tab) {
+                    public void onObservingDifferentTab(Tab tab, boolean hint) {
                         // ActivityTabProvider will null out the tab passed to
                         // onObservingDifferentTab when the tab is non-interactive (e.g. when
                         // entering the TabSwitcher), but in those cases we actually still want to
@@ -165,13 +164,16 @@ public class ChromeActionModeHandler {
                 LocaleManager.getInstance().showSearchEnginePromoIfNeeded(
                         TabUtils.getActivity(mTab), callback);
                 mHelper.finishActionMode();
-            } else if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARING_HUB_V15)
+            } else if (mShareDelegateSupplier.get().isSharingHubV15Enabled()
                     && item.getItemId() == R.id.select_action_menu_share) {
                 mShareDelegateSupplier.get().share(
                         new ShareParams.Builder(mTab.getWindowAndroid(), /*url=*/"", /*title=*/"")
                                 .setText(sanitizeTextForShare(mHelper.getSelectedText()))
                                 .build(),
-                        new ChromeShareExtras.Builder().setSaveLastUsed(true).build());
+                        new ChromeShareExtras.Builder()
+                                .setSaveLastUsed(true)
+                                .setIsUserHighlightedText(true)
+                                .build());
             } else {
                 return mHelper.onActionItemClicked(mode, item);
             }

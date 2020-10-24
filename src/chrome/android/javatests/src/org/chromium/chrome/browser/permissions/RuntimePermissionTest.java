@@ -13,6 +13,7 @@ import android.widget.TextView;
 import androidx.annotation.StringRes;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -21,7 +22,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.download.DownloadItem;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.DownloadManagerService.DownloadObserver;
@@ -29,6 +30,7 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.permissions.PermissionTestRule.PermissionUpdateWaiter;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.permissions.R;
 import org.chromium.content_public.browser.test.util.Criteria;
@@ -137,7 +139,7 @@ public class RuntimePermissionTest {
     private static final String MEDIA_TEST = "/content/test/data/media/getusermedia.html";
     private static final String DOWNLOAD_TEST = "/chrome/test/data/android/download/get.html";
 
-    private TestAndroidPermissionDelegate mTestAndroidPermissionDelegate = null;
+    private TestAndroidPermissionDelegate mTestAndroidPermissionDelegate;
 
     @Before
     public void setUp() throws Exception {
@@ -145,14 +147,17 @@ public class RuntimePermissionTest {
     }
 
     private void waitUntilDifferentDialogIsShowing(final PropertyModel currentDialog) {
-        CriteriaHelper.pollUiThread(new Criteria("Dialog not displayed.") {
-            @Override
-            public boolean isSatisfied() {
-                final ModalDialogManager manager =
-                        mPermissionTestRule.getActivity().getModalDialogManager();
-                return manager.isShowing() && currentDialog != manager.getCurrentDialogForTest();
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            final ModalDialogManager manager =
+                    mPermissionTestRule.getActivity().getModalDialogManager();
+            Criteria.checkThat(manager.isShowing(), Matchers.is(true));
+            Criteria.checkThat(manager.getCurrentDialogForTest(), Matchers.not(currentDialog));
         });
+    }
+
+    private void setupGeolocationSystemMock() {
+        LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);
+        LocationProviderOverrider.setLocationProviderImpl(new MockLocationProvider());
     }
 
     /**
@@ -235,7 +240,7 @@ public class RuntimePermissionTest {
     @MediumTest
     @Feature({"RuntimePermissions", "Location"})
     public void testAllowRuntimeLocation() throws Exception {
-        LocationProviderOverrider.setLocationProviderImpl(new MockLocationProvider());
+        setupGeolocationSystemMock();
 
         runTest(GEOLOCATION_TEST, true /* expectPermissionAllowed */,
                 true /* permissionPromptAllow */, RuntimePromptResponse.GRANT,
@@ -272,7 +277,7 @@ public class RuntimePermissionTest {
     @MediumTest
     @Feature({"RuntimePermissions", "Location"})
     public void testDenyRuntimeLocation() throws Exception {
-        LocationProviderOverrider.setLocationProviderImpl(new MockLocationProvider());
+        setupGeolocationSystemMock();
 
         runTest(GEOLOCATION_TEST, false /* expectPermissionAllowed */,
                 true /* permissionPromptAllow */, RuntimePromptResponse.DENY,
@@ -343,7 +348,7 @@ public class RuntimePermissionTest {
     @MediumTest
     @Feature({"RuntimePermissions", "Location"})
     public void testDenyTriggersNoRuntime() throws Exception {
-        LocationProviderOverrider.setLocationProviderImpl(new MockLocationProvider());
+        setupGeolocationSystemMock();
 
         runTest(GEOLOCATION_TEST, false /* expectPermissionAllowed */,
                 false /* permissionPromptAllow */, RuntimePromptResponse.ASSERT_NEVER_ASKED,
@@ -400,7 +405,7 @@ public class RuntimePermissionTest {
     @MediumTest
     @Feature({"RuntimePermissions", "Location"})
     public void testAlreadyGrantedRuntimeLocation() throws Exception {
-        LocationProviderOverrider.setLocationProviderImpl(new MockLocationProvider());
+        setupGeolocationSystemMock();
 
         runTest(GEOLOCATION_TEST, true /* expectPermissionAllowed */,
                 true /* permissionPromptAllow */, RuntimePromptResponse.ALREADY_GRANTED,
@@ -414,7 +419,7 @@ public class RuntimePermissionTest {
     @MediumTest
     @Feature({"RuntimePermissions", "Location"})
     public void testAllowRuntimeLocationIncognito() throws Exception {
-        LocationProviderOverrider.setLocationProviderImpl(new MockLocationProvider());
+        setupGeolocationSystemMock();
         mPermissionTestRule.newIncognitoTabFromMenu();
 
         runTest(GEOLOCATION_TEST, true /* expectPermissionAllowed */,

@@ -14,10 +14,12 @@ struct AssistiveWindowProperties {
   AssistiveWindowProperties();
   ~AssistiveWindowProperties();
 
-  ui::ime::AssistiveWindowType type;
-  bool visible;
+  ui::ime::AssistiveWindowType type = ui::ime::AssistiveWindowType::kNone;
+  bool visible = false;
   std::string announce_string;
   std::vector<base::string16> candidates;
+  bool show_indices = false;
+  bool show_setting_link = false;
 };
 
 }  // namespace chromeos

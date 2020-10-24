@@ -74,7 +74,6 @@ Reduction JSHeapCopyReducer::Reduce(Node* node) {
     case IrOpcode::kJSCreateClosure: {
       CreateClosureParameters const& p = CreateClosureParametersOf(node->op());
       SharedFunctionInfoRef(broker(), p.shared_info());
-      FeedbackCellRef(broker(), p.feedback_cell());
       HeapObjectRef(broker(), p.code());
       break;
     }
@@ -170,6 +169,13 @@ Reduction JSHeapCopyReducer::Reduce(Node* node) {
         broker()->ProcessFeedbackForPropertyAccess(p.feedback(),
                                                    AccessMode::kLoad, name);
       }
+      break;
+    }
+    case IrOpcode::kJSLoadNamedFromSuper: {
+      // TODO(marja, v8:9237): Process feedback once it's added to the byte
+      // code.
+      NamedAccess const& p = NamedAccessOf(node->op());
+      NameRef name(broker(), p.name());
       break;
     }
     case IrOpcode::kJSStoreNamed: {

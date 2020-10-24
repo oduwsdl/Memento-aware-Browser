@@ -2,6 +2,7 @@
 
 <link rel="import" href="chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html">
 <link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
+<link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="../os_route.html">
@@ -40,11 +41,13 @@
         </slot>
         <div id="item-text-container" class="middle">
           <div id="featureName">[[getFeatureName(feature)]]</div>
-          <settings-localized-link
-              class="secondary"
-              id="featureSecondary"
-              localized-string="[[getFeatureSummaryHtml(feature)]]">
-          </settings-localized-link>
+          <slot name="feature-summary">
+            <settings-localized-link
+                class="secondary"
+                id="featureSecondary"
+                localized-string="[[getFeatureSummaryHtml(feature)]]">
+            </settings-localized-link>
+          </slot>
         </div>
         <template is="dom-if"
                   if="[[hasSubpageClickHandler_(

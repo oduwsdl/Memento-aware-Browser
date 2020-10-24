@@ -179,7 +179,7 @@ VULKAN_DEVICE_FUNCTIONS = [
     ]
   },
   {
-    'ifdef': 'defined(OS_LINUX) || defined(OS_ANDROID)',
+    'ifdef': 'defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)',
     'extension': 'VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME',
     'functions': [
       'vkGetSemaphoreFdKHR',
@@ -195,7 +195,7 @@ VULKAN_DEVICE_FUNCTIONS = [
     ]
   },
   {
-    'ifdef': 'defined(OS_LINUX) || defined(OS_ANDROID)',
+    'ifdef': 'defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)',
     'extension': 'VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME',
     'functions': [
       'vkGetMemoryFdKHR',
@@ -382,7 +382,9 @@ def GenerateHeaderFile(out_file):
 #endif
 
 #if defined(USE_VULKAN_XLIB)
-#include <X11/Xlib.h>
+typedef struct _XDisplay Display;
+typedef unsigned long Window;
+typedef unsigned long VisualID;
 #include <vulkan/vulkan_xlib.h>
 #endif
 

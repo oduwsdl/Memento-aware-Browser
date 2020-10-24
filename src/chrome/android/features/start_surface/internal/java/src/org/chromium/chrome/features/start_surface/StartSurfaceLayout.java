@@ -20,7 +20,7 @@ import org.chromium.base.MathUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.ChromeVersionInfo;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimator;
@@ -32,11 +32,13 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.TabListSceneLayer;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.ui.resources.ResourceManager;
 
@@ -78,6 +80,8 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
     private int mStartFrame;
     private float mThumbnailAspectRatio;
 
+    private boolean mAndroidViewFinishedShowing;
+
     interface PerfListener {
         void onAnimationDone(
                 int frameRendered, long elapsedMs, long maxFrameInterval, int dirtySpan);
@@ -107,16 +111,19 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
 
         mIsInitialized = true;
         mStartSurface.initWithNative();
-        mSceneLayer = new TabListSceneLayer();
+        ensureSceneLayerCreated();
         mSceneLayer.setTabModelSelector(mTabModelSelector);
     }
 
     // StartSurface.OverviewModeObserver implementation.
     @Override
-    public void startedShowing() {}
+    public void startedShowing() {
+        mAndroidViewFinishedShowing = false;
+    }
 
     @Override
     public void finishedShowing() {
+        mAndroidViewFinishedShowing = true;
         doneShowing();
         // The Tab-to-GTS animation is done, and it's time to renew the thumbnail without causing
         // janky frames.
@@ -186,6 +193,14 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
         if (skipSlowZooming) {
             showShrinkingAnimation &= quick;
         }
+        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+            // Intentionally disable the shrinking animation when accessibility is enabled. During
+            // the shrinking animation, since the ComponsitorViewHolder is not focusable, I think
+            // we are in a temporary no "valid" focus target state, so the focus shifts to the
+            // omnibox and triggers an accessibility announcement of the URL and a keyboard hiding
+            // event. Disable the animation to avoid this temporary state.
+            showShrinkingAnimation &= !ChromeAccessibilityUtil.get().isAccessibilityEnabled();
+        }
 
         // Keep the current tab in mLayoutTabs even if we are not going to show the shrinking
         // animation so that thumbnail taking is not blocked.
@@ -200,11 +215,12 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
             return;
         }
 
-        shrinkTab(() -> mTabListDelegate.getThumbnailLocationOfCurrentTab(false));
+        shrinkTab(animate, () -> mTabListDelegate.getThumbnailLocationOfCurrentTab(false));
     }
 
     @Override
     protected void updateLayout(long time, long dt) {
+        ensureSceneLayerCreated();
         super.updateLayout(time, dt);
         if (mLayoutTabs == null) return;
 
@@ -250,6 +266,12 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
     }
 
     @Override
+    public void doneShowing() {
+        if (!mAndroidViewFinishedShowing) return;
+        super.doneShowing();
+    }
+
+    @Override
     public boolean onBackPressed() {
         if (mTabModelSelector.getCurrentModel().getCount() == 0) return false;
         return mController.onBackPressed();
@@ -263,6 +285,11 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
     @Override
     protected SceneLayer getSceneLayer() {
         return mSceneLayer;
+    }
+
+    private void ensureSceneLayerCreated() {
+        if (mSceneLayer != null) return;
+        mSceneLayer = new TabListSceneLayer();
     }
 
     @Override
@@ -290,24 +317,38 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
 
     /**
      * Animate shrinking a tab to a target {@link Rect} area.
+     * @param animate Whether to play an entry animation.
      * @param target The target {@link Rect} area.
      */
-    private void shrinkTab(Supplier<Rect> target) {
-        forceAnimationToFinish();
+    private void shrinkTab(boolean animate, Supplier<Rect> target) {
+        if (target.get() == null) {
+            mController.showOverview(animate);
+            return;
+        }
 
+        forceAnimationToFinish();
         LayoutTab sourceLayoutTab = mLayoutTabs[0];
         CompositorAnimationHandler handler = getAnimationHandler();
         Collection<Animator> animationList = new ArrayList<>(5);
 
         // Step 1: zoom out the source tab
+        Supplier<Float> scaleStartValueSupplier = () -> 1.0f;
+        Supplier<Float> scaleEndValueSupplier = () -> target.get().width() / (getWidth() * mDpToPx);
+
+        Supplier<Float> xStartValueSupplier = () -> 0f;
+        Supplier<Float> xEndValueSupplier = () -> target.get().left / mDpToPx;
+
+        Supplier<Float> yStartValueSupplier = () -> 0f;
+        Supplier<Float> yEndValueSupplier = () -> target.get().top / mDpToPx;
+
         animationList.add(CompositorAnimator.ofWritableFloatPropertyKey(handler, sourceLayoutTab,
-                LayoutTab.SCALE, 1.0f, target.get().width() / (getWidth() * mDpToPx),
-                ZOOMING_DURATION, Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR));
-        animationList.add(CompositorAnimator.ofWritableFloatPropertyKey(handler, sourceLayoutTab,
-                LayoutTab.X, 0f, target.get().left / mDpToPx, ZOOMING_DURATION,
+                LayoutTab.SCALE, scaleStartValueSupplier, scaleEndValueSupplier, ZOOMING_DURATION,
                 Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR));
         animationList.add(CompositorAnimator.ofWritableFloatPropertyKey(handler, sourceLayoutTab,
-                LayoutTab.Y, 0f, target.get().top / mDpToPx, ZOOMING_DURATION,
+                LayoutTab.X, xStartValueSupplier, xEndValueSupplier, ZOOMING_DURATION,
+                Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR));
+        animationList.add(CompositorAnimator.ofWritableFloatPropertyKey(handler, sourceLayoutTab,
+                LayoutTab.Y, yStartValueSupplier, yEndValueSupplier, ZOOMING_DURATION,
                 Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR));
         // TODO(crbug.com/964406): when shrinking to the bottom row, bottom of the tab goes up and
         // down, making the "create group" visible for a while.
@@ -454,13 +495,14 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
     @Override
     protected void updateSceneLayer(RectF viewport, RectF contentViewport,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
-            ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
+            ResourceManager resourceManager, BrowserControlsStateProvider browserControls) {
+        ensureSceneLayerCreated();
         super.updateSceneLayer(viewport, contentViewport, layerTitleCache, tabContentManager,
-                resourceManager, fullscreenManager);
+                resourceManager, browserControls);
         assert mSceneLayer != null;
         // The content viewport is intentionally sent as both params below.
         mSceneLayer.pushLayers(getContext(), contentViewport, contentViewport, this,
-                layerTitleCache, tabContentManager, resourceManager, fullscreenManager,
+                layerTitleCache, tabContentManager, resourceManager, browserControls,
                 TabUiFeatureUtilities.isTabToGtsAnimationEnabled()
                         ? mTabListDelegate.getResourceId()
                         : 0,
@@ -474,7 +516,24 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
     }
 
     @Override
+    public int getLayoutType() {
+        return LayoutType.TAB_SWITCHER;
+    }
+
+    @Override
     public boolean onUpdateAnimation(long time, boolean jumpToEnd) {
         return mTabToSwitcherAnimation == null && !mIsAnimating;
+    }
+
+    @Override
+    public boolean canHostBeFocusable() {
+        if (TabUiFeatureUtilities.isLaunchPolishEnabled()
+                && ChromeAccessibilityUtil.get().isAccessibilityEnabled()) {
+            // We don't allow this layout to gain focus when accessibility is enabled so that the
+            // CompositorViewHolder doesn't steal focus when entering tab switcher.
+            // (crbug.com/1125185).
+            return false;
+        }
+        return super.canHostBeFocusable();
     }
 }

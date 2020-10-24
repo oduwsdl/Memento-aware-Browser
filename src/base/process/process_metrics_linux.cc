@@ -6,14 +6,17 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <utility>
 
+#include "base/cpu.h"
 #include "base/files/dir_reader_posix.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -26,6 +29,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
@@ -40,7 +44,7 @@ void TrimKeyValuePairs(StringPairs* pairs) {
   }
 }
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 // Read a file with a single number string and return the number as a uint64_t.
 uint64_t ReadFileToUint64(const FilePath& file) {
   std::string file_contents;
@@ -100,7 +104,7 @@ size_t ReadProcStatusAndGetFieldAsSizeT(pid_t pid, StringPiece field) {
   return 0;
 }
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 // Read /proc/<pid>/status and look for |field|. On success, return true and
 // write the value for |field| into |result|.
 // Only works for fields in the form of "field    :     uint_value"
@@ -125,7 +129,7 @@ bool ReadProcStatusAndGetFieldAsUint64(pid_t pid,
   }
   return false;
 }
-#endif  // defined(OS_LINUX) || defined(OS_AIX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 
 // Get the total CPU from a proc stat buffer.  Return value is number of jiffies
 // on success or 0 if parsing failed.
@@ -147,43 +151,15 @@ int64_t GetProcessCPU(pid_t pid) {
   return ParseTotalCPUTimeFromStats(proc_stats);
 }
 
-#if defined(OS_CHROMEOS)
-// Report on Chrome OS GEM object graphics memory. /run/debugfs_gpu is a
-// bind mount into /sys/kernel/debug and synchronously reading the in-memory
-// files in /sys is fast.
-void ReadChromeOSGraphicsMemory(SystemMemoryInfoKB* meminfo) {
-#if defined(ARCH_CPU_ARM_FAMILY)
-  FilePath geminfo_file("/run/debugfs_gpu/exynos_gem_objects");
-#else
-  FilePath geminfo_file("/run/debugfs_gpu/i915_gem_objects");
-#endif
-  std::string geminfo_data;
-  meminfo->gem_objects = -1;
-  meminfo->gem_size = -1;
-  if (ReadFileToString(geminfo_file, &geminfo_data)) {
-    int gem_objects = -1;
-    long long gem_size = -1;
-    int num_res = sscanf(geminfo_data.c_str(), "%d objects, %lld bytes",
-                         &gem_objects, &gem_size);
-    if (num_res == 2) {
-      meminfo->gem_objects = gem_objects;
-      meminfo->gem_size = gem_size;
-    }
-  }
-
-#if defined(ARCH_CPU_ARM_FAMILY)
-  // Incorporate Mali graphics memory if present.
-  FilePath mali_memory_file("/sys/class/misc/mali0/device/memory");
-  std::string mali_memory_data;
-  if (ReadFileToStringNonBlocking(mali_memory_file, &mali_memory_data)) {
-    long long mali_size = -1;
-    int num_res = sscanf(mali_memory_data.c_str(), "%lld bytes", &mali_size);
-    if (num_res == 1)
-      meminfo->gem_size += mali_size;
-  }
-#endif  // defined(ARCH_CPU_ARM_FAMILY)
+bool SupportsPerTaskTimeInState() {
+  FilePath time_in_state_path = internal::GetProcPidDir(GetCurrentProcId())
+                                    .Append("task")
+                                    .Append(NumberToString(GetCurrentProcId()))
+                                    .Append("time_in_state");
+  std::string contents;
+  return internal::ReadProcFile(time_in_state_path, &contents) &&
+         StartsWith(contents, "cpu");
 }
-#endif  // defined(OS_CHROMEOS)
 
 }  // namespace
 
@@ -206,37 +182,52 @@ bool ProcessMetrics::GetCumulativeCPUUsagePerThread(
     CPUUsagePerThread& cpu_per_thread) {
   cpu_per_thread.clear();
 
-  // Iterate through the different threads tracked in /proc/<pid>/task.
-  FilePath fd_path = internal::GetProcPidDir(process_).Append("task");
+  internal::ForEachProcessTask(
+      process_,
+      [&cpu_per_thread](PlatformThreadId tid, const FilePath& task_path) {
+        FilePath thread_stat_path = task_path.Append("stat");
 
-  DirReaderPosix dir_reader(fd_path.value().c_str());
-  if (!dir_reader.IsValid())
-    return false;
+        std::string buffer;
+        std::vector<std::string> proc_stats;
+        if (!internal::ReadProcFile(thread_stat_path, &buffer) ||
+            !internal::ParseProcStats(buffer, &proc_stats)) {
+          return;
+        }
 
-  for (; dir_reader.Next();) {
-    const char* tid_str = dir_reader.name();
-    if (strcmp(tid_str, ".") == 0 || strcmp(tid_str, "..") == 0)
-      continue;
-
-    PlatformThreadId tid;
-    if (!StringToInt(tid_str, &tid))
-      continue;
-
-    FilePath thread_stat_path = fd_path.Append(tid_str).Append("stat");
-
-    std::string buffer;
-    std::vector<std::string> proc_stats;
-    if (!internal::ReadProcFile(thread_stat_path, &buffer) ||
-        !internal::ParseProcStats(buffer, &proc_stats)) {
-      continue;
-    }
-
-    TimeDelta thread_time =
-        internal::ClockTicksToTimeDelta(ParseTotalCPUTimeFromStats(proc_stats));
-    cpu_per_thread.emplace_back(tid, thread_time);
-  }
+        TimeDelta thread_time = internal::ClockTicksToTimeDelta(
+            ParseTotalCPUTimeFromStats(proc_stats));
+        cpu_per_thread.emplace_back(tid, thread_time);
+      });
 
   return !cpu_per_thread.empty();
+}
+
+bool ProcessMetrics::GetPerThreadCumulativeCPUTimeInState(
+    TimeInStatePerThread& time_in_state_per_thread) {
+  time_in_state_per_thread.clear();
+
+  // Check for per-pid/tid time_in_state support. If the current process's
+  // time_in_state file doesn't exist or conform to the expected format, there's
+  // no need to iterate the threads. This shouldn't change over the lifetime of
+  // the current process, so we cache it into a static constant.
+  static const bool kSupportsPerPidTimeInState = SupportsPerTaskTimeInState();
+  if (!kSupportsPerPidTimeInState)
+    return false;
+
+  bool success = false;
+  internal::ForEachProcessTask(
+      process_, [&time_in_state_per_thread, &success, this](
+                    PlatformThreadId tid, const FilePath& task_path) {
+        FilePath time_in_state_path = task_path.Append("time_in_state");
+
+        std::string buffer;
+        if (!internal::ReadProcFile(time_in_state_path, &buffer))
+          return;
+
+        success |= ParseProcTimeInState(buffer, tid, time_in_state_per_thread);
+      });
+
+  return success;
 }
 
 // For the /proc/self/io file to exist, the Linux kernel must have
@@ -269,13 +260,11 @@ bool ProcessMetrics::GetIOCounters(IoCounters* io_counters) const {
   return true;
 }
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 uint64_t ProcessMetrics::GetVmSwapBytes() const {
   return ReadProcStatusAndGetFieldAsSizeT(process_, "VmSwap") * 1024;
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
 bool ProcessMetrics::GetPageFaultCounts(PageFaultCounts* counts) const {
   // We are not using internal::ReadStatsFileAndGetFieldAsInt64(), since it
   // would read the file twice, and return inconsistent numbers.
@@ -292,7 +281,7 @@ bool ProcessMetrics::GetPageFaultCounts(PageFaultCounts* counts) const {
       internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_MAJFLT);
   return true;
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 int ProcessMetrics::GetOpenFdCount() const {
   // Use /proc/<pid>/fd to count the number of entries there.
@@ -322,7 +311,7 @@ int ProcessMetrics::GetOpenFdSoftLimit() const {
 
   for (const auto& line : SplitStringPiece(
            limits_contents, "\n", KEEP_WHITESPACE, SPLIT_WANT_NONEMPTY)) {
-    if (!line.starts_with("Max open files"))
+    if (!StartsWith(line, "Max open files"))
       continue;
 
     auto tokens =
@@ -337,7 +326,7 @@ int ProcessMetrics::GetOpenFdSoftLimit() const {
   return -1;
 }
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 ProcessMetrics::ProcessMetrics(ProcessHandle process)
     : process_(process), last_absolute_idle_wakeups_(0) {}
 #else
@@ -386,6 +375,79 @@ int ParseProcStatCPU(StringPiece input) {
 int GetNumberOfThreads(ProcessHandle process) {
   return internal::ReadProcStatsAndGetFieldAsInt64(process,
                                                    internal::VM_NUMTHREADS);
+}
+
+bool ProcessMetrics::ParseProcTimeInState(
+    const std::string& content,
+    PlatformThreadId tid,
+    TimeInStatePerThread& time_in_state_per_thread) {
+  uint32_t current_core_index = 0;
+  CPU::CoreType current_core_type = CPU::CoreType::kOther;
+  bool header_seen = false;
+
+  const char* begin = content.data();
+  size_t max_pos = content.size() - 1;
+
+  // Example time_in_state content:
+  // ---
+  // cpu0
+  // 300000 1
+  // 403200 0
+  // 499200 15
+  // cpu4
+  // 710400 13
+  // 825600 5
+  // 940800 550
+  // ---
+
+  // Iterate over the individual lines.
+  for (size_t pos = 0; pos <= max_pos;) {
+    const char next_char = content[pos];
+    int num_chars = 0;
+    if (!isdigit(next_char)) {
+      // Header line, which we expect to contain "cpu" followed by the number
+      // of the CPU, e.g. "cpu0" or "cpu24".
+      int matches = sscanf(begin + pos, "cpu%" PRIu32 "\n%n",
+                           &current_core_index, &num_chars);
+      if (matches != 1)
+        return false;
+      current_core_type = GetCoreType(current_core_index);
+      header_seen = true;
+    } else if (header_seen) {
+      // Data line with two integer fields, frequency (kHz) and time (in
+      // jiffies), separated by a space, e.g. "2419200 132".
+      uint64_t frequency;
+      uint64_t time;
+      int matches = sscanf(begin + pos, "%" PRIu64 " %" PRIu64 "\n%n",
+                           &frequency, &time, &num_chars);
+      if (matches != 2)
+        return false;
+
+      // Skip zero-valued entries in the output list (no time spent at this
+      // frequency).
+      if (time > 0) {
+        time_in_state_per_thread.push_back(
+            {tid, current_core_type, current_core_index, frequency,
+             internal::ClockTicksToTimeDelta(time)});
+      }
+    } else {
+      // Data without a header is not supported.
+      return false;
+    }
+
+    // Advance line.
+    DCHECK_GT(num_chars, 0);
+    pos += num_chars;
+  }
+
+  return true;
+}
+
+CPU::CoreType ProcessMetrics::GetCoreType(int core_index) {
+  const std::vector<CPU::CoreType>& core_types = CPU::GetGuessedCoreTypes();
+  if (static_cast<size_t>(core_index) >= core_types.size())
+    return CPU::CoreType::kUnknown;
+  return core_types[static_cast<size_t>(core_index)];
 }
 
 const char kProcSelfExe[] = "/proc/self/exe";
@@ -461,11 +523,9 @@ std::unique_ptr<DictionaryValue> SystemMemoryInfoKB::ToValue() const {
   res->SetIntKey("swap_used", swap_total - swap_free);
   res->SetIntKey("dirty", dirty);
   res->SetIntKey("reclaimable", reclaimable);
-#ifdef OS_CHROMEOS
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   res->SetIntKey("shmem", shmem);
   res->SetIntKey("slab", slab);
-  res->SetIntKey("gem_objects", gem_objects);
-  res->SetIntKey("gem_size", gem_size);
 #endif
 
   return res;
@@ -525,7 +585,7 @@ bool ParseProcMeminfo(StringPiece meminfo_data, SystemMemoryInfoKB* meminfo) {
       target = &meminfo->dirty;
     else if (tokens[0] == "SReclaimable:")
       target = &meminfo->reclaimable;
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
     // Chrome OS has a tweaked kernel that allows querying Shmem, which is
     // usually video memory otherwise invisible to the OS.
     else if (tokens[0] == "Shmem:")
@@ -552,9 +612,17 @@ bool ParseProcVmstat(StringPiece vmstat_data, VmStatInfo* vmstat) {
   //
   // Iterate through the whole file because the position of the
   // fields are dependent on the kernel version and configuration.
+
+  // Returns true if all of these 3 fields are present.
   bool has_pswpin = false;
   bool has_pswpout = false;
   bool has_pgmajfault = false;
+
+  // The oom_kill field is optional. The vmstat oom_kill field is available on
+  // upstream kernel 4.13. It's backported to Chrome OS kernel 3.10.
+  bool has_oom_kill = false;
+  vmstat->oom_kill = 0;
+
   for (const StringPiece& line : SplitStringPiece(
            vmstat_data, "\n", KEEP_WHITESPACE, SPLIT_WANT_NONEMPTY)) {
     std::vector<StringPiece> tokens = SplitStringPiece(
@@ -578,16 +646,18 @@ bool ParseProcVmstat(StringPiece vmstat_data, VmStatInfo* vmstat) {
       vmstat->pgmajfault = val;
       DCHECK(!has_pgmajfault);
       has_pgmajfault = true;
+    } else if (tokens[0] == "oom_kill") {
+      vmstat->oom_kill = val;
+      DCHECK(!has_oom_kill);
+      has_oom_kill = true;
     }
-    if (has_pswpin && has_pswpout && has_pgmajfault)
-      return true;
   }
 
-  return false;
+  return has_pswpin && has_pswpout && has_pgmajfault;
 }
 
 bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
-  // Synchronously reading files in /proc and /sys are safe.
+  // Synchronously reading files in /proc is safe.
   ThreadRestrictions::ScopedAllowIO allow_io;
 
   // Used memory is: total - free - buffers - caches
@@ -603,10 +673,6 @@ bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
     return false;
   }
 
-#if defined(OS_CHROMEOS)
-  ReadChromeOSGraphicsMemory(meminfo);
-#endif
-
   return true;
 }
 
@@ -619,7 +685,7 @@ std::unique_ptr<DictionaryValue> VmStatInfo::ToValue() const {
 }
 
 bool GetVmStatInfo(VmStatInfo* vmstat) {
-  // Synchronously reading files in /proc and /sys are safe.
+  // Synchronously reading files in /proc is safe.
   ThreadRestrictions::ScopedAllowIO allow_io;
 
   FilePath vmstat_file("/proc/vmstat");
@@ -686,7 +752,7 @@ bool IsValidDiskName(StringPiece candidate) {
   }
 
   const char kMMCName[] = "mmcblk";
-  if (!candidate.starts_with(kMMCName))
+  if (!StartsWith(candidate, kMMCName))
     return false;
 
   // mmcblk[0-9]+ case
@@ -779,7 +845,7 @@ TimeDelta GetUserCpuTimeSinceBoot() {
   return internal::GetUserCpuTimeSinceBoot();
 }
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 std::unique_ptr<Value> SwapInfo::ToValue() const {
   auto res = std::make_unique<DictionaryValue>();
 
@@ -794,6 +860,14 @@ std::unique_ptr<Value> SwapInfo::ToValue() const {
                                        static_cast<double>(compr_data_size)
                                  : 0;
   res->SetDouble("compression_ratio", ratio);
+
+  return std::move(res);
+}
+
+std::unique_ptr<Value> GraphicsMemoryInfoKB::ToValue() const {
+  auto res = std::make_unique<DictionaryValue>();
+  res->SetIntKey("gpu_objects", gpu_objects);
+  res->SetDouble("gpu_memory_size", static_cast<double>(gpu_memory_size));
 
   return std::move(res);
 }
@@ -937,9 +1011,57 @@ bool GetSwapInfo(SwapInfo* swap_info) {
   }
   return true;
 }
-#endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+bool GetGraphicsMemoryInfo(GraphicsMemoryInfoKB* gpu_meminfo) {
+#if defined(ARCH_CPU_X86_FAMILY)
+  // Reading i915_gem_objects on intel platform with kernel 5.4 is slow and is
+  // prohibited.
+  // TODO(b/170397975): Update if i915_gem_objects reading time is improved.
+  static bool is_newer_kernel =
+      base::StartsWith(base::SysInfo::KernelVersion(), "5.");
+  static bool is_intel_cpu = base::CPU().vendor_name() == "GenuineIntel";
+  if (is_newer_kernel && is_intel_cpu)
+    return false;
+#endif
+
+#if defined(ARCH_CPU_ARM_FAMILY)
+  const FilePath geminfo_path("/run/debugfs_gpu/exynos_gem_objects");
+#else
+  const FilePath geminfo_path("/run/debugfs_gpu/i915_gem_objects");
+#endif
+  std::string geminfo_data;
+  gpu_meminfo->gpu_objects = -1;
+  gpu_meminfo->gpu_memory_size = -1;
+  if (ReadFileToStringNonBlocking(geminfo_path, &geminfo_data)) {
+    int gpu_objects = -1;
+    int64_t gpu_memory_size = -1;
+    int num_res = sscanf(geminfo_data.c_str(), "%d objects, %" SCNd64 " bytes",
+                         &gpu_objects, &gpu_memory_size);
+    if (num_res == 2) {
+      gpu_meminfo->gpu_objects = gpu_objects;
+      gpu_meminfo->gpu_memory_size = gpu_memory_size;
+    }
+  }
+
+#if defined(ARCH_CPU_ARM_FAMILY)
+  // Incorporate Mali graphics memory if present.
+  FilePath mali_memory_file("/sys/class/misc/mali0/device/memory");
+  std::string mali_memory_data;
+  if (ReadFileToStringNonBlocking(mali_memory_file, &mali_memory_data)) {
+    int64_t mali_size = -1;
+    int num_res =
+        sscanf(mali_memory_data.c_str(), "%" SCNd64 " bytes", &mali_size);
+    if (num_res == 1)
+      gpu_meminfo->gpu_memory_size += mali_size;
+  }
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
+
+  return gpu_meminfo->gpu_memory_size != -1;
+}
+
+#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 int ProcessMetrics::GetIdleWakeupsPerSecond() {
   uint64_t num_switches;
   static const char kSwitchStat[] = "voluntary_ctxt_switches";
@@ -947,6 +1069,6 @@ int ProcessMetrics::GetIdleWakeupsPerSecond() {
              ? CalculateIdleWakeupsPerSecond(num_switches)
              : 0;
 }
-#endif  // defined(OS_LINUX) || defined(OS_AIX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 
 }  // namespace base

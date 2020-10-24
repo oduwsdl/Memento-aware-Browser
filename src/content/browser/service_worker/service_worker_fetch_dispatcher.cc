@@ -17,9 +17,9 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/loader/navigation_url_loader_impl.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -43,9 +43,7 @@
 #include "net/http/http_util.h"
 #include "net/log/net_log.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "net/url_request/url_request.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
-#include "services/network/throttling/throttling_controller.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 
 namespace content {
@@ -326,8 +324,10 @@ void CreateNetworkFactoryForNavigationPreloadOnUI(
       partition->browser_context(), frame_tree_node->current_frame_host(),
       frame_tree_node->current_frame_host()->GetProcess()->GetID(),
       ContentBrowserClient::URLLoaderFactoryType::kNavigation, url::Origin(),
-      frame_tree_node->navigation_request()->GetNavigationId(), &receiver,
-      &header_client, &bypass_redirect_checks_unused,
+      frame_tree_node->navigation_request()->GetNavigationId(),
+      base::UkmSourceId::FromInt64(
+          frame_tree_node->navigation_request()->GetNextPageUkmSourceId()),
+      &receiver, &header_client, &bypass_redirect_checks_unused,
       /*disable_secure_dns=*/nullptr, /*factory_override=*/nullptr);
 
   // Make the network factory.
@@ -534,6 +534,13 @@ void ServiceWorkerFetchDispatcher::StartWorker() {
       GetEventType(),
       base::BindOnce(&ServiceWorkerFetchDispatcher::DidStartWorker,
                      weak_factory_.GetWeakPtr()));
+
+  if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled() &&
+      version_->is_endpoint_ready()) {
+    // For an active service worker, the endpoint becomes ready synchronously
+    // with StartWorker(). In that case, we can dispatch FetchEvent immediately.
+    DispatchFetchEvent();
+  }
 }
 
 void ServiceWorkerFetchDispatcher::DidStartWorker(
@@ -547,17 +554,19 @@ void ServiceWorkerFetchDispatcher::DidStartWorker(
     DidFail(status);
     return;
   }
-  DispatchFetchEvent();
+  if (!IsEventDispatched()) {
+    DispatchFetchEvent();
+  }
 }
 
 void ServiceWorkerFetchDispatcher::DispatchFetchEvent() {
-  DCHECK_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status())
+  DCHECK(EmbeddedWorkerStatus::STARTING == version_->running_status() ||
+         EmbeddedWorkerStatus::RUNNING == version_->running_status())
       << "Worker stopped too soon after it was started.";
   TRACE_EVENT_WITH_FLOW0("ServiceWorker",
                          "ServiceWorkerFetchDispatcher::DispatchFetchEvent",
                          TRACE_ID_LOCAL(this),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
-
   // Grant the service worker's process access to files in the request body.
   if (request_->body) {
     GrantFileAccessToProcess(version_->embedded_worker()->process_id(),
@@ -628,9 +637,9 @@ void ServiceWorkerFetchDispatcher::DidFail(
       "ServiceWorker", "ServiceWorkerFetchDispatcher::DidFail",
       TRACE_ID_LOCAL(this),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "status", status);
-  Complete(status, FetchEventResult::kShouldFallback,
-           blink::mojom::FetchAPIResponse::New(), nullptr /* body_as_stream */,
-           nullptr /* timing */);
+  RunCallback(status, FetchEventResult::kShouldFallback,
+              blink::mojom::FetchAPIResponse::New(),
+              nullptr /* body_as_stream */, nullptr /* timing */);
 }
 
 void ServiceWorkerFetchDispatcher::DidFinish(
@@ -643,17 +652,21 @@ void ServiceWorkerFetchDispatcher::DidFinish(
                          "ServiceWorkerFetchDispatcher::DidFinish",
                          TRACE_ID_LOCAL(this),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
-  Complete(blink::ServiceWorkerStatusCode::kOk, fetch_result,
-           std::move(response), std::move(body_as_stream), std::move(timing));
+  RunCallback(blink::ServiceWorkerStatusCode::kOk, fetch_result,
+              std::move(response), std::move(body_as_stream),
+              std::move(timing));
 }
 
-void ServiceWorkerFetchDispatcher::Complete(
+void ServiceWorkerFetchDispatcher::RunCallback(
     blink::ServiceWorkerStatusCode status,
     FetchEventResult fetch_result,
     blink::mojom::FetchAPIResponsePtr response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
     blink::mojom::ServiceWorkerFetchEventTimingPtr timing) {
-  DCHECK(fetch_callback_);
+  // Fetch dispatcher can be completed at this point due to a failure of
+  // starting up a worker. In that case, let's simply ignore it.
+  if (!fetch_callback_)
+    return;
 
   std::move(fetch_callback_)
       .Run(status, fetch_result, std::move(response), std::move(body_as_stream),
@@ -759,6 +772,10 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
 ServiceWorkerMetrics::EventType ServiceWorkerFetchDispatcher::GetEventType()
     const {
   return ResourceTypeToEventType(resource_type_);
+}
+
+bool ServiceWorkerFetchDispatcher::IsEventDispatched() const {
+  return request_.is_null();
 }
 
 // static

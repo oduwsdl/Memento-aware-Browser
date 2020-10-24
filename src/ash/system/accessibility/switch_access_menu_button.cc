@@ -39,6 +39,8 @@ SwitchAccessMenuButton::SwitchAccessMenuButton(std::string action_name,
       image_view_(new views::ImageView()),
       label_(new views::Label(l10n_util::GetStringUTF16(label_text_id),
                               views::style::CONTEXT_BUTTON)) {
+  DCHECK_EQ(views::View::FocusBehavior::ACCESSIBLE_ONLY, GetFocusBehavior());
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
   std::unique_ptr<views::BoxLayout> layout = std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical,
       gfx::Insets(kButtonTopPaddingDip, kLabelMinSidePaddingDip,
@@ -46,11 +48,9 @@ SwitchAccessMenuButton::SwitchAccessMenuButton(std::string action_name,
       kLabelTopPaddingDefaultDip);
 
   SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kIconColorPrimary,
-      AshColorProvider::AshColorMode::kDark);
+      AshColorProvider::ContentLayerType::kIconColorPrimary);
   SkColor label_color = AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary,
-      AshColorProvider::AshColorMode::kDark);
+      AshColorProvider::ContentLayerType::kTextColorPrimary);
 
   image_view_->SetImage(gfx::CreateVectorIcon(icon, kIconSizeDip, icon_color));
   label_->SetAutoColorReadabilityEnabled(false);

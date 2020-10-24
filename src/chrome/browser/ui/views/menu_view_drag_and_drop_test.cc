@@ -215,8 +215,8 @@ void MenuViewDragAndDropTest::DoTestWithMenuOpen() {
   ASSERT_TRUE(submenu->IsShowing());
   ASSERT_EQ(3u, submenu->GetMenuItems().size());
   const views::View* first_view = submenu->GetMenuItemAt(0);
-  ASSERT_EQ(2u, first_view->children().size());
-  const views::View* child_view = first_view->children()[1];
+  ASSERT_EQ(1u, first_view->children().size());
+  const views::View* child_view = first_view->children().front();
   EXPECT_EQ(child_view, target_view_);
 
   // The menu is showing, so it has a widget we can observe now.
@@ -364,7 +364,7 @@ void MenuViewDragAndDropTestTestInMenuDrag::StartDrag() {
 // menu automatically once the drag is complete, and does not ask the delegate
 // to stay open.
 // TODO(pkasting): https://crbug.com/939621 Fails on Mac.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_TestInMenuDrag DISABLED_TestInMenuDrag
 #else
 #define MAYBE_TestInMenuDrag TestInMenuDrag
@@ -456,7 +456,7 @@ void MenuViewDragAndDropTestNestedDrag::StartDrag() {
 // implemented in menu code) will consult the delegate before closing the view
 // after the drag.
 // TODO(pkasting): https://crbug.com/939621 Fails on Mac.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_MenuViewDragAndDropNestedDrag \
   DISABLED_MenuViewDragAndDropNestedDrag
 #else

@@ -5,7 +5,10 @@
 #ifndef ASH_SHELF_HOTSEAT_WIDGET_H_
 #define ASH_SHELF_HOTSEAT_WIDGET_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
+#include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/shelf/hotseat_transition_animator.h"
@@ -96,13 +99,16 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   // Returns the target opacity for the shelf view given current conditions.
   float CalculateShelfViewOpacity() const;
 
-  // Sets the bounds of the translucent background which functions as the
+  // Updates the bounds of the translucent background which functions as the
   // hotseat background.
-  void SetTranslucentBackground(const gfx::Rect& background_bounds);
+  void UpdateTranslucentBackground();
 
   // Calculates the hotseat y position for |hotseat_target_state| in screen
   // coordinates.
   int CalculateHotseatYInScreen(HotseatState hotseat_target_state) const;
+
+  // Calculates the hotseat target bounds's size for the given target state.
+  gfx::Size CalculateTargetBoundsSize(HotseatState hotseat_target_state) const;
 
   // ShelfComponent:
   void CalculateTargetBounds() override;
@@ -122,6 +128,9 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   void SetFocusCycler(FocusCycler* focus_cycler);
 
   bool IsShowingShelfMenu() const;
+
+  // Whether the event is located in the hotseat area containing shelf apps.
+  bool EventTargetsShelfView(const ui::LocatedEvent& event) const;
 
   ShelfView* GetShelfView();
   const ShelfView* GetShelfView() const;
@@ -143,7 +152,7 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   // Returns whether the translucent background is visible, for tests.
   bool GetIsTranslucentBackgroundVisibleForTest() const;
 
-  ui::AnimationMetricsReporter* GetTranslucentBackgroundMetricsReporter();
+  metrics_util::ReportCallback GetTranslucentBackgroundReportCallback();
 
   void SetState(HotseatState state);
   HotseatState state() const { return state_; }
@@ -189,21 +198,17 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   // May update the hotseat widget's target in account of app scaling.
   void MaybeAdjustTargetBoundsForAppScaling(HotseatState hotseat_target_state);
 
-  // Calculates the target hotseat density if hotseat's size becomes
-  // |available_size| and the hotseat's state is |hotseat_target_state|.
-  HotseatDensity CalculateTargetHotseatDensity(
-      const gfx::Size& available_size,
-      HotseatState hotseat_target_state) const;
+  // Calculates the target hotseat density.
+  HotseatDensity CalculateTargetHotseatDensity() const;
 
   // Animates the hotseat to the target opacity/bounds.
   void LayoutHotseatByAnimation(double target_opacity,
                                 const gfx::Rect& target_bounds);
 
-  // Animates the hotseat for the transition between the home launcher state
-  // and the extended state.
-  void StartHomeLauncherExtendedTransitionAnimation(
-      double target_opacity,
-      const gfx::Rect& target_bounds);
+  // Start the animation designed specifically for |state_transition|.
+  void StartHotseatTransitionAnimation(StateTransition state_transition,
+                                       double target_opacity,
+                                       const gfx::Rect& target_bounds);
 
   // Starts the default bounds/opacity animation.
   void StartNormalBoundsAnimation(double target_opacity,
@@ -215,6 +220,10 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   base::Optional<LayoutInputs> layout_inputs_;
 
   gfx::Rect target_bounds_;
+
+  // The size that |target_bounds_| would have in kShownHomeLauncher state.
+  // Used to calculate hotseat density state.
+  gfx::Size target_size_for_shown_state_;
 
   HotseatState state_ = HotseatState::kNone;
 

@@ -10,7 +10,9 @@ import android.os.Handler;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
@@ -44,6 +46,8 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
 
     private final TabModelOrderController mOrderController;
 
+    private final AsyncTabParamsManager mAsyncTabParamsManager;
+
     private NextTabPolicySupplier mNextTabPolicySupplier;
 
     private TabContentManager mTabContentManager;
@@ -54,20 +58,29 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
 
     private CloseAllTabsDelegate mCloseAllTabsDelegate;
 
+    private final Supplier<WindowAndroid> mWindowAndroidSupplier;
+
     /**
      * Builds a {@link TabModelSelectorImpl} instance.
      * @param activity An {@link Activity} instance.
+     * @param windowAndroidSupplier A supplier of {@link WindowAndroid} instance which is passed
+     *         down to {@link IncognitoTabModelImplCreator} for creating {@link IncognitoTabModel}.
      * @param tabCreatorManager A {@link TabCreatorManager} instance.
      * @param persistencePolicy A {@link TabPersistencePolicy} instance.
      * @param tabModelFilterFactory
      * @param nextTabPolicySupplier
+     * @param asyncTabParamsManager
      * @param supportUndo Whether a tab closure can be undone.
      */
-    public TabModelSelectorImpl(Activity activity, TabCreatorManager tabCreatorManager,
-            TabPersistencePolicy persistencePolicy, TabModelFilterFactory tabModelFilterFactory,
-            NextTabPolicySupplier nextTabPolicySupplier, boolean supportUndo,
+    public TabModelSelectorImpl(Activity activity,
+            @Nullable Supplier<WindowAndroid> windowAndroidSupplier,
+            TabCreatorManager tabCreatorManager, TabPersistencePolicy persistencePolicy,
+            TabModelFilterFactory tabModelFilterFactory,
+            NextTabPolicySupplier nextTabPolicySupplier,
+            AsyncTabParamsManager asyncTabParamsManager, boolean supportUndo,
             boolean isTabbedActivity, boolean startIncognito) {
         super(tabCreatorManager, tabModelFilterFactory, startIncognito);
+        mWindowAndroidSupplier = windowAndroidSupplier;
         mUma = new TabModelSelectorUma(activity);
         final TabPersistentStoreObserver persistentStoreObserver =
                 new TabPersistentStoreObserver() {
@@ -82,6 +95,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
                 persistencePolicy, this, tabCreatorManager, persistentStoreObserver);
         mOrderController = new TabModelOrderControllerImpl(this);
         mNextTabPolicySupplier = nextTabPolicySupplier;
+        mAsyncTabParamsManager = asyncTabParamsManager;
     }
 
     @Override
@@ -123,20 +137,23 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
                 (ChromeTabCreator) getTabCreatorManager().getTabCreator(false);
         ChromeTabCreator incognitoTabCreator =
                 (ChromeTabCreator) getTabCreatorManager().getTabCreator(true);
-        TabModelImpl normalModel = new TabModelImpl(false, mIsTabbedActivityForSync,
-                regularTabCreator, incognitoTabCreator, mUma, mOrderController, mTabContentManager,
-                mTabSaver, mNextTabPolicySupplier, this, mIsUndoSupported);
-        TabModel incognitoModel = new IncognitoTabModel(new IncognitoTabModelImplCreator(
-                regularTabCreator, incognitoTabCreator, mUma, mOrderController, mTabContentManager,
-                mTabSaver, mNextTabPolicySupplier, this));
+        TabModelImpl normalModel = new TabModelImpl(Profile.getLastUsedRegularProfile(),
+                mIsTabbedActivityForSync, regularTabCreator, incognitoTabCreator, mUma,
+                mOrderController, mTabContentManager, mTabSaver, mNextTabPolicySupplier,
+                mAsyncTabParamsManager, this, mIsUndoSupported);
         regularTabCreator.setTabModel(normalModel, mOrderController);
+
+        IncognitoTabModel incognitoModel = new IncognitoTabModelImpl(
+                new IncognitoTabModelImplCreator(mWindowAndroidSupplier, regularTabCreator,
+                        incognitoTabCreator, mUma, mOrderController, mTabContentManager, mTabSaver,
+                        mNextTabPolicySupplier, mAsyncTabParamsManager, this));
         incognitoTabCreator.setTabModel(incognitoModel, mOrderController);
         onNativeLibraryReadyInternal(tabContentProvider, normalModel, incognitoModel);
     }
 
     @VisibleForTesting
-    void onNativeLibraryReadyInternal(
-            TabContentManager tabContentProvider, TabModel normalModel, TabModel incognitoModel) {
+    void onNativeLibraryReadyInternal(TabContentManager tabContentProvider, TabModel normalModel,
+            IncognitoTabModel incognitoModel) {
         mTabContentManager = tabContentProvider;
         initialize(normalModel, incognitoModel);
         mTabSaver.setTabContentManager(mTabContentManager);
@@ -221,7 +238,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
      * @param incognitoModel The incognito tab model.
      */
     @VisibleForTesting
-    public void initializeForTesting(TabModel normalModel, TabModel incognitoModel) {
+    public void initializeForTesting(TabModel normalModel, IncognitoTabModel incognitoModel) {
         initialize(normalModel, incognitoModel);
     }
 
@@ -344,7 +361,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         boolean isFromExternalApp =
                 tab != null && tab.getLaunchType() == TabLaunchType.FROM_EXTERNAL_APP;
         if (mVisibleTab != tab && tab != null && !tab.isNativePage()) {
-            TabModelImpl.startTabSwitchLatencyTiming(type);
+            TabSwitchMetrics.startTabSwitchLatencyTiming(type);
         }
         if (mVisibleTab != null && mVisibleTab != tab && !mVisibleTab.needsReload()) {
             boolean attached = mVisibleTab.getWebContents() != null

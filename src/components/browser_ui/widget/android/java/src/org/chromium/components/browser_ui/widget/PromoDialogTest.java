@@ -316,7 +316,7 @@ public class PromoDialogTest extends DummyUiActivityTestCase {
         ViewGroup scrollableLayout =
                 (ViewGroup) promoDialogLayout.findViewById(R.id.scrollable_promo_content);
 
-        wrapper.triggerDialogLayoutMeasure(400, 1000);
+        wrapper.triggerDialogLayoutMeasure(400, 2000);
         Assert.assertEquals(promoDialogLayout.getChildAt(0), header);
         assertHasStartAndEndPadding(header, true);
 
@@ -326,7 +326,7 @@ public class PromoDialogTest extends DummyUiActivityTestCase {
         assertHasStartAndEndPadding(header, false);
 
         // Increase again and ensure the header is moved back to the top of the layout.
-        wrapper.triggerDialogLayoutMeasure(400, 1000);
+        wrapper.triggerDialogLayoutMeasure(400, 2000);
         Assert.assertEquals(promoDialogLayout.getChildAt(0), header);
         assertHasStartAndEndPadding(header, true);
     }

@@ -413,18 +413,11 @@ void WifiConfigurationBridge::SaveNetworkToSync(
   Commit(std::move(batch));
   NET_LOG(EVENT) << "Saved network "
                  << NetworkId(NetworkStateFromNetworkIdentifier(id))
-                 << "to sync.";
+                 << " to sync.";
   metrics_recorder_->RecordTotalCount(entries_.size());
 }
 
 void WifiConfigurationBridge::OnNetworkCreated(const std::string& guid) {
-  if (network_metadata_store_->GetIsConfiguredBySync(guid)) {
-    // Don't have to upload a configuration that came from sync.
-    NET_LOG(EVENT) << "Not uploading newly configured network "
-                   << NetworkGuidId(guid) << ", it was added by sync.";
-    return;
-  }
-
   network_guid_to_timer_map_[guid] = timer_factory_->CreateOneShotTimer();
   network_guid_to_timer_map_[guid]->Start(
       FROM_HERE, kSyncAfterCreatedTimeout,
@@ -434,10 +427,19 @@ void WifiConfigurationBridge::OnNetworkCreated(const std::string& guid) {
 
 void WifiConfigurationBridge::OnNetworkConfiguredDelayComplete(
     const std::string& network_guid) {
-  NET_LOG(EVENT) << "Attempting to sync new network after delay.";
   if (network_guid_to_timer_map_.contains(network_guid)) {
     network_guid_to_timer_map_.erase(network_guid);
   }
+
+  // This check to prevent uploading networks that were added by sync happens
+  // after the delay because the metadata isn't available in OnNetworkCreated.
+  if (network_metadata_store_->GetIsConfiguredBySync(network_guid)) {
+    NET_LOG(EVENT) << "Not uploading newly configured network "
+                   << NetworkGuidId(network_guid) << ", it was added by sync.";
+    return;
+  }
+
+  NET_LOG(EVENT) << "Attempting to sync new network after delay.";
   local_network_collector_->GetSyncableNetwork(
       network_guid, base::BindOnce(&WifiConfigurationBridge::SaveNetworkToSync,
                                    weak_ptr_factory_.GetWeakPtr()));
@@ -463,7 +465,7 @@ void WifiConfigurationBridge::OnConfigurationRemoved(
     const std::string& service_path,
     const std::string& network_guid) {
   if (!pending_deletes_.contains(network_guid)) {
-    NET_LOG(EVENT) << "Configuraiton " << network_guid
+    NET_LOG(EVENT) << "Configuration " << network_guid
                    << " removed with no matching saved metadata.";
     return;
   }

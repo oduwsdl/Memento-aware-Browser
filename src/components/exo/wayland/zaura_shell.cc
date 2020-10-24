@@ -7,18 +7,22 @@
 #include <aura-shell-server-protocol.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
+
 #include <algorithm>
 #include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "ash/public/cpp/window_properties.h"
+#include "ash/wm/window_state.h"
 #include "components/exo/wayland/server_util.h"
 #include "components/exo/wayland/wayland_display_observer.h"
 #include "components/exo/wayland/wl_output.h"
 #include "components/exo/wm_helper.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_occlusion_tracker.h"
+#include "ui/display/display_observer.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_util.h"
 #include "ui/display/screen.h"
@@ -137,6 +141,12 @@ void aura_surface_draw_attention(wl_client* client, wl_resource* resource) {
   GetUserDataAs<AuraSurface>(resource)->DrawAttention();
 }
 
+void aura_surface_set_fullscreen_mode(wl_client* client,
+                                      wl_resource* resource,
+                                      uint32_t mode) {
+  GetUserDataAs<AuraSurface>(resource)->SetFullscreenMode(mode);
+}
+
 const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_frame,
     aura_surface_set_parent,
@@ -147,7 +157,8 @@ const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_occlusion_tracking,
     aura_surface_unset_occlusion_tracking,
     aura_surface_activate,
-    aura_surface_draw_attention};
+    aura_surface_draw_attention,
+    aura_surface_set_fullscreen_mode};
 
 }  // namespace
 
@@ -217,6 +228,24 @@ void AuraSurface::DrawAttention() {
   LOG(WARNING) << "Surface requested attention, but that is not implemented";
 }
 
+void AuraSurface::SetFullscreenMode(uint32_t mode) {
+  if (!surface_)
+    return;
+
+  switch (mode) {
+    case ZAURA_SURFACE_FULLSCREEN_MODE_PLAIN:
+      surface_->SetUseImmersiveForFullscreen(false);
+      break;
+    case ZAURA_SURFACE_FULLSCREEN_MODE_IMMERSIVE:
+      surface_->SetUseImmersiveForFullscreen(true);
+      break;
+    default:
+      VLOG(2) << "aura_surface_set_fullscreen_mode(): unknown fullscreen_mode: "
+              << mode;
+      break;
+  }
+}
+
 // Overridden from SurfaceObserver:
 void AuraSurface::OnSurfaceDestroying(Surface* surface) {
   surface->RemoveSurfaceObserver(this);
@@ -228,7 +257,7 @@ void AuraSurface::OnWindowOcclusionChanged(Surface* surface) {
     return;
   auto* window = surface_->window();
   ComputeAndSendOcclusionFraction(window->occlusion_state(),
-                                  window->occluded_region());
+                                  window->occluded_region_in_root());
 }
 
 void AuraSurface::OnWindowActivating(ActivationReason reason,
@@ -345,12 +374,20 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 // aura_output_interface:
 
-class AuraOutput : public WaylandDisplayObserver::ScaleObserver {
+class AuraOutput : public WaylandDisplayObserver {
  public:
   explicit AuraOutput(wl_resource* resource) : resource_(resource) {}
 
-  // Overridden from WaylandDisplayObserver::ScaleObserver:
-  void OnDisplayScalesChanged(const display::Display& display) override {
+  // Overridden from WaylandDisplayObserver:
+  bool SendDisplayMetrics(const display::Display& display,
+                          uint32_t changed_metrics) override {
+    if (!(changed_metrics &
+          (display::DisplayObserver::DISPLAY_METRIC_BOUNDS |
+           display::DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR |
+           display::DisplayObserver::DISPLAY_METRIC_ROTATION))) {
+      return false;
+    }
+
     const WMHelper* wm_helper = WMHelper::GetInstance();
     const display::ManagedDisplayInfo& display_info =
         wm_helper->GetDisplayInfo(display.id());
@@ -406,6 +443,8 @@ class AuraOutput : public WaylandDisplayObserver::ScaleObserver {
       zaura_output_send_device_scale_factor(
           resource_, display_info.device_scale_factor() * 1000);
     }
+
+    return true;
   }
 
  private:
@@ -441,20 +480,14 @@ void aura_shell_get_aura_output(wl_client* client,
                                 wl_resource* resource,
                                 uint32_t id,
                                 wl_resource* output_resource) {
-  WaylandDisplayObserver* display_observer =
-      GetUserDataAs<WaylandDisplayObserver>(output_resource);
-  if (display_observer->HasScaleObserver()) {
-    wl_resource_post_error(
-        resource, ZAURA_SHELL_ERROR_AURA_OUTPUT_EXISTS,
-        "an aura output object for that output already exists");
-    return;
-  }
+  WaylandDisplayHandler* display_handler =
+      GetUserDataAs<WaylandDisplayHandler>(output_resource);
 
   wl_resource* aura_output_resource = wl_resource_create(
       client, &zaura_output_interface, wl_resource_get_version(resource), id);
 
   auto aura_output = std::make_unique<AuraOutput>(aura_output_resource);
-  display_observer->SetScaleObserver(aura_output->AsWeakPtr());
+  display_handler->AddObserver(aura_output.get());
 
   SetImplementation(aura_output_resource, nullptr, std::move(aura_output));
 }

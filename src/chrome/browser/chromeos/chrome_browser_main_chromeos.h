@@ -13,29 +13,36 @@
 #include "chrome/browser/chromeos/external_metrics.h"
 #include "chrome/browser/memory/memory_kills_monitor.h"
 
+class AccessibilityEventRewriterDelegate;
 class AssistantClientImpl;
 class AssistantStateClient;
 class ChromeKeyboardControllerClient;
 class ImageDownloaderImpl;
-class SpokenFeedbackEventRewriterDelegate;
-
-namespace lock_screen_apps {
-class StateController;
-}
 
 namespace arc {
+namespace data_snapshotd {
+class ArcDataSnapshotdManager;
+}  // namespace data_snapshotd
+
 class ArcServiceLauncher;
 }  // namespace arc
 
-namespace policy {
-class LockToSingleUserManager;
-}  // namespace policy
-
+namespace crosapi {
+class BrowserManager;
+}  // namespace crosapi
 
 namespace crostini {
 class CrostiniUnsupportedActionNotifier;
 class CrosvmMetrics;
 }  // namespace crostini
+
+namespace lock_screen_apps {
+class StateController;
+}
+
+namespace policy {
+class LockToSingleUserManager;
+}  // namespace policy
 
 namespace chromeos {
 
@@ -48,7 +55,6 @@ class EventRewriterDelegateImpl;
 class FastTransitionObserver;
 class GnubbyNotification;
 class IdleActionWarningObserver;
-class LacrosManager;
 class LoginScreenExtensionsLifetimeManager;
 class LoginScreenExtensionsStorageCleaner;
 class LowDiskNotification;
@@ -131,9 +137,9 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<EventRewriterDelegateImpl> event_rewriter_delegate_;
 
-  // Handles event dispatch to the spoken feedback extension (ChromeVox).
-  std::unique_ptr<SpokenFeedbackEventRewriterDelegate>
-      spoken_feedback_event_rewriter_delegate_;
+  // Handles event dispatch to the accessibility component extensions.
+  std::unique_ptr<AccessibilityEventRewriterDelegate>
+      accessibility_event_rewriter_delegate_;
 
   scoped_refptr<chromeos::ExternalMetrics> external_metrics_;
 
@@ -149,14 +155,12 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<ArcKioskAppManager> arc_kiosk_app_manager_;
   std::unique_ptr<WebKioskAppManager> web_kiosk_app_manager_;
 
-  std::unique_ptr<memory::MemoryKillsMonitor::Handle> memory_kills_monitor_;
-
   std::unique_ptr<ChromeKeyboardControllerClient>
       chrome_keyboard_controller_client_;
 
   std::unique_ptr<lock_screen_apps::StateController>
       lock_screen_apps_state_controller_;
-  std::unique_ptr<LacrosManager> lacros_manager_;
+  std::unique_ptr<crosapi::BrowserManager> browser_manager_;
 
   std::unique_ptr<power::SmartChargingManager> smart_charging_manager_;
 
@@ -197,6 +201,9 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<GnubbyNotification> gnubby_notification_;
   std::unique_ptr<system::BreakpadConsentWatcher> breakpad_consent_watcher_;
+
+  std::unique_ptr<arc::data_snapshotd::ArcDataSnapshotdManager>
+      arc_data_snapshotd_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainPartsChromeos);
 };

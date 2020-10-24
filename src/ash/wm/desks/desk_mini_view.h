@@ -57,8 +57,8 @@ class ASH_EXPORT DeskMiniView
   bool IsDeskNameBeingModified() const;
 
   // Updates the visibility state of the close button depending on whether this
-  // view is mouse hovered.
-  void OnHoverStateMayHaveChanged();
+  // view is mouse hovered, or if switch access is enabled.
+  void UpdateCloseButtonVisibility();
 
   // Gesture tapping may affect the visibility of the close button. There's only
   // one mini_view that shows the close button on long press at any time.
@@ -69,11 +69,12 @@ class ASH_EXPORT DeskMiniView
   // state of the corresponding desk.
   void UpdateBorderColor();
 
-  // views::Button:
+  // views::View:
   const char* GetClassName() const override;
   void Layout() override;
   gfx::Size CalculatePreferredSize() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  void OnThemeChanged() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -119,6 +120,9 @@ class ASH_EXPORT DeskMiniView
   void OnCloseButtonPressed();
 
   void OnDeskPreviewPressed();
+
+  // Layout |desk_name_view_| given the current bounds of the desk preview.
+  void LayoutDeskNameView(const gfx::Rect& preview_bounds);
 
   DesksBarView* const owner_bar_;
 

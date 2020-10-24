@@ -38,8 +38,8 @@
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-#include "services/service_manager/zygote/zygote_host_linux.h"
+#if defined(OS_POSIX) && !defined(OS_MAC) && !defined(OS_ANDROID)
+#include "content/public/browser/zygote_host/zygote_host_linux.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -339,8 +339,8 @@ void MemoryDetails::CollectChildInfoOnUIThread() {
       process.titles.push_back(title);
     }
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-    if (service_manager::ZygoteHost::GetInstance()->IsZygotePid(process.pid)) {
+#if defined(OS_POSIX) && !defined(OS_MAC) && !defined(OS_ANDROID)
+    if (content::ZygoteHost::GetInstance()->IsZygotePid(process.pid)) {
       process.process_type = content::PROCESS_TYPE_ZYGOTE;
     }
 #endif

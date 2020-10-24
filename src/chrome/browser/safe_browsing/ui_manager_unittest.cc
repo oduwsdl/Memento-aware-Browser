@@ -31,7 +31,6 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/web_contents_tester.h"
-#include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -454,6 +453,8 @@ class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
                 false,                 // is_proceed_anyway_disabled
                 true,                  // should_open_links_in_new_tab
                 true,                  // always_show_back_to_safety
+                false,                 // is_enhanced_protection_message_enabled
+                false,                 // is_safe_browsing_managed
                 "cpn_safe_browsing"),  // help_center_article_link
             true) {                    // should_trigger_reporting
     // Don't delay details at all for the unittest.

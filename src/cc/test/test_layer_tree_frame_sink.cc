@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/single_thread_task_runner.h"
@@ -30,6 +31,7 @@ TestLayerTreeFrameSink::TestLayerTreeFrameSink(
     scoped_refptr<viz::RasterContextProvider> worker_context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const viz::RendererSettings& renderer_settings,
+    const viz::DebugRendererSettings* const debug_settings,
     scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
     bool synchronous_composite,
     bool disable_display_vsync,
@@ -42,6 +44,7 @@ TestLayerTreeFrameSink::TestLayerTreeFrameSink(
       synchronous_composite_(synchronous_composite),
       disable_display_vsync_(disable_display_vsync),
       renderer_settings_(renderer_settings),
+      debug_settings_(debug_settings),
       refresh_rate_(refresh_rate),
       frame_sink_id_(kLayerTreeFrameSinkId),
       parent_local_surface_id_allocator_(
@@ -109,8 +112,8 @@ bool TestLayerTreeFrameSink::BindToClient(LayerTreeFrameSinkClient* client) {
   // gpu::GpuTaskSchedulerHelper alive for output surface to use, so there is no
   // need to pass in an gpu::GpuTaskSchedulerHelper here.
   display_ = std::make_unique<viz::Display>(
-      shared_bitmap_manager_.get(), renderer_settings_, frame_sink_id_,
-      nullptr /* gpu::GpuTaskSchedulerHelper */,
+      shared_bitmap_manager_.get(), renderer_settings_, debug_settings_,
+      frame_sink_id_, nullptr /* gpu::GpuTaskSchedulerHelper */,
       std::move(display_output_surface), std::move(overlay_processor),
       std::move(scheduler), compositor_task_runner_);
 
@@ -172,15 +175,13 @@ void TestLayerTreeFrameSink::SubmitCompositorFrame(viz::CompositorFrame frame,
   gfx::Size frame_size = frame.size_in_pixels();
   float device_scale_factor = frame.device_scale_factor();
   viz::LocalSurfaceId local_surface_id =
-      parent_local_surface_id_allocator_->GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id();
+      parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
 
   if (frame_size != display_size_ ||
       device_scale_factor != device_scale_factor_) {
     parent_local_surface_id_allocator_->GenerateId();
     local_surface_id =
-        parent_local_surface_id_allocator_->GetCurrentLocalSurfaceIdAllocation()
-            .local_surface_id();
+        parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
     display_->SetLocalSurfaceId(local_surface_id, device_scale_factor);
     display_->Resize(frame_size);
     display_size_ = frame_size;
@@ -252,7 +253,7 @@ void TestLayerTreeFrameSink::DisplayOutputSurfaceLost() {
 
 void TestLayerTreeFrameSink::DisplayWillDrawAndSwap(
     bool will_draw_and_swap,
-    viz::RenderPassList* render_passes) {
+    viz::AggregatedRenderPassList* render_passes) {
   test_client_->DisplayWillDrawAndSwap(will_draw_and_swap, render_passes);
 }
 

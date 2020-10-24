@@ -4,6 +4,7 @@
 
 #include "ash/system/unified/unified_system_tray_controller.h"
 
+#include "ash/capture_mode/capture_mode_feature_pod_controller.h"
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/ash_features.h"
@@ -20,12 +21,18 @@
 #include "ash/system/brightness/unified_brightness_slider_controller.h"
 #include "ash/system/cast/cast_feature_pod_controller.h"
 #include "ash/system/cast/unified_cast_detailed_view_controller.h"
+#include "ash/system/dark_mode/dark_mode_detailed_view_controller.h"
+#include "ash/system/dark_mode/dark_mode_feature_pod_controller.h"
 #include "ash/system/ime/ime_feature_pod_controller.h"
 #include "ash/system/ime/unified_ime_detailed_view_controller.h"
 #include "ash/system/locale/locale_feature_pod_controller.h"
 #include "ash/system/locale/unified_locale_detailed_view_controller.h"
+#include "ash/system/media/media_tray.h"
+#include "ash/system/media/unified_media_controls_controller.h"
+#include "ash/system/media/unified_media_controls_detailed_view_controller.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/system_tray_model.h"
+#include "ash/system/nearby_share/nearby_share_feature_pod_controller.h"
 #include "ash/system/network/network_feature_pod_controller.h"
 #include "ash/system/network/unified_network_detailed_view_controller.h"
 #include "ash/system/network/unified_vpn_detailed_view_controller.h"
@@ -50,6 +57,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/ranges.h"
+#include "media/base/media_switches.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/compositor/animation_metrics_reporter.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/message_center/message_center.h"
@@ -95,9 +104,9 @@ UnifiedSystemTrayController::UnifiedSystemTrayController(
     : views::AnimationDelegateViews(owner_view),
       model_(model),
       bubble_(bubble),
-      animation_(std::make_unique<gfx::SlideAnimation>(this)),
       animation_metrics_reporter_(
-          std::make_unique<SystemTrayTransitionAnimationMetricsReporter>()) {
+          std::make_unique<SystemTrayTransitionAnimationMetricsReporter>()),
+      animation_(std::make_unique<gfx::SlideAnimation>(this)) {
   animation_->Reset(model_->IsExpandedOnOpen() ? 1.0 : 0.0);
   animation_->SetSlideDuration(base::TimeDelta::FromMilliseconds(
       kSystemMenuCollapseExpandAnimationDurationMs));
@@ -125,6 +134,15 @@ UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
   DCHECK(!unified_view_);
   unified_view_ = new UnifiedSystemTrayView(this, model_->IsExpandedOnOpen());
   InitFeaturePods();
+
+  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS) &&
+      !Shell::Get()->session_controller()->IsScreenLocked() &&
+      !MediaTray::IsPinnedToShelf()) {
+    media_controls_controller_ =
+        std::make_unique<UnifiedMediaControlsController>(this);
+    unified_view_->AddMediaControlsView(
+        media_controls_controller_->CreateView());
+  }
 
   volume_slider_controller_ =
       std::make_unique<UnifiedVolumeSliderController>(this);
@@ -202,11 +220,6 @@ void UnifiedSystemTrayController::ToggleExpanded() {
     }
     StartAnimation(true /*expand*/);
   }
-}
-
-void UnifiedSystemTrayController::OnMessageCenterVisibilityUpdated() {
-  if (bubble_)
-    bubble_->UpdateTransform();
 }
 
 void UnifiedSystemTrayController::BeginDrag(const gfx::PointF& location) {
@@ -345,10 +358,19 @@ void UnifiedSystemTrayController::ShowAudioDetailedView() {
   ShowDetailedView(std::make_unique<UnifiedAudioDetailedViewController>(this));
 }
 
+void UnifiedSystemTrayController::ShowDarkModeDetailedView() {
+  ShowDetailedView(std::make_unique<DarkModeDetailedViewController>(this));
+}
+
 void UnifiedSystemTrayController::ShowNotifierSettingsView() {
   DCHECK(Shell::Get()->session_controller()->ShouldShowNotificationTray());
   DCHECK(!Shell::Get()->session_controller()->IsScreenLocked());
   ShowDetailedView(std::make_unique<UnifiedNotifierSettingsController>(this));
+}
+
+void UnifiedSystemTrayController::ShowMediaControlsDetailedView() {
+  ShowDetailedView(
+      std::make_unique<UnifiedMediaControlsDetailedViewController>(this));
 }
 
 void UnifiedSystemTrayController::TransitionToMainView(bool restore_focus) {
@@ -404,6 +426,14 @@ void UnifiedSystemTrayController::OnAudioSettingsButtonClicked() {
   ShowAudioDetailedView();
 }
 
+void UnifiedSystemTrayController::ShowMediaControls() {
+  unified_view_->ShowMediaControls();
+}
+
+void UnifiedSystemTrayController::OnMediaControlsViewClicked() {
+  ShowMediaControlsDetailedView();
+}
+
 void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<NetworkFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<BluetoothFeaturePodController>(this));
@@ -416,6 +446,11 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<VPNFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<IMEFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<LocaleFeaturePodController>(this));
+  if (features::IsCaptureModeEnabled())
+    AddFeaturePodItem(std::make_unique<CaptureModeFeaturePodController>());
+  if (features::IsDarkLightModeEnabled())
+    AddFeaturePodItem(std::make_unique<DarkModeFeaturePodController>(this));
+  AddFeaturePodItem(std::make_unique<NearbyShareFeaturePodController>(this));
 
   // If you want to add a new feature pod item, add here.
 
@@ -461,16 +496,17 @@ void UnifiedSystemTrayController::ShowDetailedView(
   detailed_view_controller_ = std::move(controller);
 
   // |bubble_| may be null in tests.
-  if (bubble_)
+  if (bubble_) {
     bubble_->UpdateBubble();
+    // Notify accessibility features that a new view is showing.
+    bubble_->NotifyAccessibilityEvent(ax::mojom::Event::kShow, true);
+  }
 }
 
 void UnifiedSystemTrayController::UpdateExpandedAmount() {
   double expanded_amount = animation_->GetCurrentValue();
   unified_view_->SetExpandedAmount(expanded_amount);
-  // Can be null in unit tests.
-  if (bubble_)
-    bubble_->UpdateTransform();
+
   if (expanded_amount == 0.0 || expanded_amount == 1.0)
     model_->set_expanded_on_open(
         expanded_amount == 1.0

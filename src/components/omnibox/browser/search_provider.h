@@ -17,7 +17,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -56,6 +55,8 @@ class SearchProvider : public BaseSearchProvider,
  public:
   SearchProvider(AutocompleteProviderClient* client,
                  AutocompleteProviderListener* listener);
+  SearchProvider(const SearchProvider&) = delete;
+  SearchProvider& operator=(const SearchProvider&) = delete;
 
   // Extracts the suggest response metadata which SearchProvider previously
   // stored for |match|.
@@ -109,8 +110,6 @@ class SearchProvider : public BaseSearchProvider,
                            DontTrimHttpsSchemeIfInputHasScheme);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DoTrimHttpsScheme);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderWarmUpTest, SendsWarmUpRequestOnFocus);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedPrefetchTest, ClearPrefetchedResults);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedPrefetchTest, SetPrefetchQuery);
 
   // Manages the providers (TemplateURLs) used by SearchProvider. Two providers
   // may be used:
@@ -121,6 +120,8 @@ class SearchProvider : public BaseSearchProvider,
   class Providers {
    public:
     explicit Providers(TemplateURLService* template_url_service);
+    Providers(const Providers&) = delete;
+    Providers& operator=(const Providers&) = delete;
 
     // Returns true if the specified providers match the two providers cached
     // by this class.
@@ -154,8 +155,6 @@ class SearchProvider : public BaseSearchProvider,
     // user changes their default while the query is running.
     base::string16 default_provider_;
     base::string16 keyword_provider_;
-
-    DISALLOW_COPY_AND_ASSIGN(Providers);
   };
 
   class CompareScoredResults;
@@ -439,8 +438,6 @@ class SearchProvider : public BaseSearchProvider,
 
   ScopedObserver<TemplateURLService, TemplateURLServiceObserver> observer_{
       this};
-
-  DISALLOW_COPY_AND_ASSIGN(SearchProvider);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_SEARCH_PROVIDER_H_

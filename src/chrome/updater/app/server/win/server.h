@@ -5,8 +5,7 @@
 #ifndef CHROME_UPDATER_APP_SERVER_WIN_SERVER_H_
 #define CHROME_UPDATER_APP_SERVER_WIN_SERVER_H_
 
-#include <wrl/implements.h>
-#include <wrl/module.h>
+#include <windows.h>
 
 #include <string>
 
@@ -14,47 +13,52 @@
 #include "base/sequenced_task_runner.h"
 #include "base/win/scoped_com_initializer.h"
 #include "chrome/updater/app/app.h"
+#include "chrome/updater/app/app_server.h"
+#include "chrome/updater/control_service.h"
 #include "chrome/updater/update_service.h"
 
 namespace updater {
 
 class Configurator;
-class UpdateService;
 
 // The COM objects involved in this server are free threaded. Incoming COM calls
 // arrive on COM RPC threads. Outgoing COM calls are posted from a blocking
-// sequenced task runner in the thread pool. Calls to the update service occur
-// in the main sequence, which is bound to the main thread.
+// sequenced task runner in the thread pool. Calls to the update service and
+// control service occur in the main sequence, which is bound to the main
+// thread.
 //
-// The free-threaded COM objects exposed by this server are entered either by
-// COM RPC threads, when their functions are invoked by COM clients, or by
-// threads from the updater's thread pool, when callbacks posted by the
-// update service are handled. Access to the shared state maintained by these
-// objects is synchronized by a lock. The sequencing of callbacks is ensured
-// by using a sequenced task runner, since the callbacks can't use base
-// synchronization primitives on the main sequence where they are posted from.
+// If such a COM object has state which is visible to multiple threads, then the
+// access to the shared state of the object must be synchronized. This is done
+// by using a lock, internal to the object. Since the code running on the
+// main sequence can't use synchronization primitives, another task runner is
+// typically used to sequence the callbacks.
 //
 // This class is responsible for the lifetime of the COM server, as well as
 // class factory registration.
 //
 // The instance of the this class is managed by a singleton and it leaks at
 // runtime.
-class ComServerApp : public App {
+class ComServerApp : public AppServer {
  public:
   ComServerApp();
 
   scoped_refptr<base::SequencedTaskRunner> main_task_runner() {
     return main_task_runner_;
   }
-  scoped_refptr<UpdateService> service() { return service_; }
+  scoped_refptr<UpdateService> update_service() { return update_service_; }
+  scoped_refptr<ControlService> control_service() { return control_service_; }
 
  private:
   ~ComServerApp() override;
 
   // Overrides for App.
   void InitializeThreadPool() override;
-  void Initialize() override;
-  void FirstTaskRun() override;
+
+  // Overrides for AppServer
+  void ActiveDuty(scoped_refptr<UpdateService> update_service,
+                  scoped_refptr<ControlService> control_service) override;
+  bool SwapRPCInterfaces() override;
+  void UninstallSelf() override;
 
   // Registers and unregisters the out-of-process COM class factories.
   HRESULT RegisterClassObjects();
@@ -74,21 +78,18 @@ class ComServerApp : public App {
   void Stop();
 
   // Identifier of registered class objects used for unregistration.
-  DWORD cookies_[2] = {};
+  DWORD cookies_[3] = {};
 
   // While this object lives, COM can be used by all threads in the program.
   base::win::ScopedCOMInitializer com_initializer_;
 
-  // Task runner bound to the main sequence and the update service instance.
+  // Task runner bound to the main sequence.
   scoped_refptr<base::SequencedTaskRunner> main_task_runner_;
 
-  // The UpdateService to use for handling the incoming COM requests. This
-  // instance of the service runs the in-process update service code, which is
-  // delegating to the update_client component.
-  scoped_refptr<UpdateService> service_;
-
-  // The updater's Configurator.
-  scoped_refptr<Configurator> config_;
+  // These services run the in-process code, which is delegating to the
+  // |update_client| component.
+  scoped_refptr<UpdateService> update_service_;
+  scoped_refptr<ControlService> control_service_;
 };
 
 // Returns a singleton application object bound to this COM server.

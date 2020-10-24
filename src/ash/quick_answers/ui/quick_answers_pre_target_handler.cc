@@ -5,7 +5,7 @@
 #include "ash/quick_answers/ui/quick_answers_pre_target_handler.h"
 
 #include "ash/quick_answers/ui/quick_answers_view.h"
-#include "ash/quick_answers/ui/user_consent_view.h"
+#include "ash/quick_answers/ui/user_notice_view.h"
 #include "base/containers/adapters.h"
 #include "ui/aura/env.h"
 #include "ui/views/controls/menu/menu_controller.h"
@@ -24,7 +24,7 @@ QuickAnswersPreTargetHandler::QuickAnswersPreTargetHandler(
 }
 
 QuickAnswersPreTargetHandler::QuickAnswersPreTargetHandler(
-    quick_answers::UserConsentView* view)
+    quick_answers::UserNoticeView* view)
     : view_(view) {
   Init();
 }
@@ -169,32 +169,46 @@ void QuickAnswersPreTargetHandler::ProcessKeyEvent(ui::KeyEvent* key_event) {
       // Get the selected item, if any, in the currently active menu.
       auto* const active_menu = views::MenuController::GetActiveInstance();
       auto* const selected_item = active_menu->GetSelectedMenuItem();
-      if (!selected_item || !selected_item->GetParentMenuItem())
+      if (!selected_item)
         return;
 
-      // Check if the item is within the outer-most menu, since we do not want
-      // the selection to loop back to |view_| for submenus.
-      const auto* const parent = selected_item->GetParentMenuItem();
-      if (parent->GetParentMenuItem())
-        return;
+      auto* const parent = selected_item->GetParentMenuItem();
+      bool view_should_gain_focus = false;
+      if (parent) {
+        // Check if the item is within the outer-most menu, since we do not want
+        // the selection to loop back to |view_| for submenus.
+        if (parent->GetParentMenuItem())
+          return;
 
-      // Check if the selected item is first or last within the menu.
-      bool is_first = selected_item == parent->GetSubmenu()->children().front();
-      bool is_last = selected_item == parent->GetSubmenu()->children().back();
-      if (!is_first && !is_last)
-        return;
+        // |view_| should gain focus only when the selected item is first or
+        // last within the menu.
+        bool first_item_selected =
+            selected_item == parent->GetSubmenu()->children().front();
+        bool last_item_selected =
+            selected_item == parent->GetSubmenu()->children().back();
+        view_should_gain_focus =
+            (first_item_selected || last_item_selected) &&
+            first_item_selected == (key_code == ui::VKEY_UP);
+      } else {
+        // Selected menu-item will have no parent only when there are no nested
+        // menus and no items are visibly selected, and |view_| should gain
+        // focus for Up-key press in such scenario.
+        view_should_gain_focus = key_code == ui::VKEY_UP;
+      }
 
       // Focus |view_| if compatible key-event should transfer the selection to
       // it from within the menu.
-      if (is_first == (key_code == ui::VKEY_UP)) {
+      if (view_should_gain_focus) {
         // Track currently focused view to restore back to later and send focus
         // to |view_|.
         external_focus_tracker_->SetFocusManager(focus_manager);
         view_->RequestFocus();
         key_event->StopPropagation();
 
-        // Deselect the selected boundary menu-item.
-        selected_item->SetSelected(false);
+        // Reopen the sub-menu owned by |parent| to clear the currently selected
+        // boundary menu-item.
+        if (parent)
+          active_menu->SelectItemAndOpenSubmenu(parent);
       }
 
       return;

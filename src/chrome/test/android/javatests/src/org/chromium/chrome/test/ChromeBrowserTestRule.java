@@ -6,33 +6,34 @@ package org.chromium.chrome.test;
 
 import android.accounts.Account;
 
+import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
-import org.chromium.content_public.browser.test.NativeLibraryTestRule;
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 
 /**
  * JUnit test rule that takes care of important initialization for Chrome-specific tests, such as
  * initializing the AccountManagerFacade.
  */
-public class ChromeBrowserTestRule extends NativeLibraryTestRule {
+public class ChromeBrowserTestRule implements TestRule {
     private final AccountManagerTestRule mAccountManagerTestRule = new AccountManagerTestRule();
 
     @Override
     public Statement apply(final Statement base, Description description) {
-        Statement statement = super.apply(new Statement() {
+        Statement statement = new Statement() {
             @Override
             public void evaluate() throws Throwable {
                 /**
-                 * Loads the native library on the activity UI thread (must not be called from the
-                 * UI thread).  After loading the library, this will initialize the browser process
-                 * if necessary.
+                 * Loads the native library on the activity UI thread.  After loading the library,
+                 * this will initialize the browser process if necessary.
                  */
-                loadNativeLibraryAndInitBrowserProcess();
+                NativeLibraryTestUtils.loadNativeLibraryAndInitBrowserProcess();
                 base.evaluate();
             }
-        }, description);
+        };
         return mAccountManagerTestRule.apply(statement, description);
     }
 
@@ -46,7 +47,8 @@ public class ChromeBrowserTestRule extends NativeLibraryTestRule {
     /**
      * Add and sign in an account with the default name.
      */
-    public Account addAndSignInTestAccount() {
-        return mAccountManagerTestRule.addAndSignInTestAccount();
+    public CoreAccountInfo addTestAccountThenSigninAndEnableSync() {
+        Account account = mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
+        return mAccountManagerTestRule.toCoreAccountInfo(account.name);
     }
 }

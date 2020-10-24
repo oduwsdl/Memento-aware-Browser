@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "ash/hud_display/hud_constants.h"
 #include "base/containers/ring_buffer.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/point.h"
@@ -21,11 +22,10 @@ namespace hud_display {
 
 class Graph {
  public:
-  // Graph screen size (that is passed in Layout()) should match (ring buffer
+  // Graph screen size (that is used in Layout()) should match (ring buffer
   // size - 1) to prevent scaling, because RingBuffer always keeps one element
   // unused.
-  static constexpr size_t kDefaultWidth = 190;
-  using Data = base::RingBuffer<float, kDefaultWidth + 1>;
+  using Data = base::RingBuffer<float, kDefaultGraphWidth + 1>;
 
   enum class Baseline {
     BASELINE_BOTTOM,  // Positive values will be drawn from the bottom border
@@ -47,11 +47,28 @@ class Graph {
 
   // |value| must be normalized to [0,1]. When graphs are drawn stacked,
   // the full stack must be normalized.
-  void AddValue(float value);
+  // |unscaled_value| is used to label graph values to the user.
+  void AddValue(float value, float unscaled_value);
   void Layout(const gfx::Rect& graph_bounds, const Graph* base);
   void Draw(gfx::Canvas* canvas) const;
 
   const std::vector<SkPoint>& top_path() const { return top_path_; }
+
+  size_t GetDataBufferSize() const { return data_.BufferSize(); }
+
+  SkColor color() const { return color_; }
+
+  // Returns value from |unscaled_data_|.
+  // |index| is always interpreted as "negative", i.e. "0" - current data, "1"
+  // - previous graph data, 2 - two steps "ago". I.e. it's number of graph
+  // points from the right graph edge.
+  float GetUnscaledValueAt(size_t index) const;
+
+  // Returns true if |data_| is populated at the given index.
+  // |index| is always interpreted as "negative", i.e. "0" - current data, "1"
+  // - previous graph data, 2 - two steps ago. I.e. it's number of graph
+  // points from the right graph edge.
+  bool IsFilledIndex(size_t index) const;
 
 #if !defined(NDEBUG)
   // Returns string representation os this object for debug.
@@ -75,6 +92,7 @@ class Graph {
   std::vector<SkPoint> bottom_path_;
 
   Data data_;
+  Data unscaled_data_;
 };
 
 }  // namespace hud_display

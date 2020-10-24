@@ -29,8 +29,10 @@ class ContextualTooltipTest : public AshTestBase,
  public:
   ContextualTooltipTest() {
     if (GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          ash::features::kContextualNudges);
+      scoped_feature_list_.InitWithFeatures(
+          {ash::features::kContextualNudges,
+           ash::features::kHideShelfControlsInTabletMode},
+          {});
 
     } else {
       scoped_feature_list_.InitAndDisableFeature(
@@ -289,8 +291,8 @@ TEST_P(ContextualTooltipTest, DragHandleNudgeMetrics) {
   // Tracker should remain active when exiting the nudge state via kOther
   // but should reset visibility. Tracker should be deactivated after gesture is
   // performed.
-  contextual_tooltip::LogNudgeDismissedMetrics(TooltipType::kInAppToHome,
-                                               DismissNudgeReason::kOther);
+  contextual_tooltip::MaybeLogNudgeDismissedMetrics(TooltipType::kInAppToHome,
+                                                    DismissNudgeReason::kOther);
   EXPECT_TRUE(
       CanRecordGesturePerformedMetricForTesting(TooltipType::kInAppToHome));
   EXPECT_FALSE(CanRecordNudgeHiddenMetricForTesting(TooltipType::kInAppToHome));

@@ -9,7 +9,6 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.a
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
-import android.support.test.annotation.UiThreadTest;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,7 +24,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.UiThreadTest;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
@@ -132,8 +131,9 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
 
         mTabGridDialogView.resetDialog(toolbarView, recyclerView);
 
-        // It should contain three child views: top tool bar, recyclerview and ungroup bar.
-        Assert.assertEquals(3, mTabGridDialogContainer.getChildCount());
+        // It should contain four child views: top tool bar, recyclerview, ungroup bar and undo bar
+        // container.
+        Assert.assertEquals(4, mTabGridDialogContainer.getChildCount());
         Assert.assertEquals(View.VISIBLE, recyclerView.getVisibility());
         RelativeLayout.LayoutParams params =
                 (RelativeLayout.LayoutParams) recyclerView.getLayoutParams();
@@ -171,7 +171,7 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
 
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentUngroupBarAnimatorForTesting(),
                                 Matchers.nullValue()));
 
@@ -188,7 +188,7 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
 
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentUngroupBarAnimatorForTesting(),
                                 Matchers.nullValue()));
         // Ungroup bar is not visible after the hiding animation.
@@ -210,7 +210,7 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
 
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentUngroupBarAnimatorForTesting(),
                                 Matchers.nullValue()));
 
@@ -227,7 +227,7 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
 
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentUngroupBarAnimatorForTesting(),
                                 Matchers.nullValue()));
         // Ungroup bar is not visible after the hiding animation.
@@ -240,7 +240,7 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
                 () -> mTabGridDialogView.updateUngroupBar(TabGridDialogView.UngroupBarStatus.SHOW));
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentUngroupBarAnimatorForTesting(),
                                 Matchers.nullValue()));
 
@@ -272,60 +272,48 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1075677")
     public void testDialog_ZoomInZoomOut() {
+        // TODO(crbug.com/1075677): figure out a stable way to separate different stages of the
+        // animation so that we can verify the alpha and view hierarchy of the animation-related
+        // views.
         AtomicReference<ViewGroup> parentViewReference = new AtomicReference<>();
         // Setup the animation with a dummy animation source view.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             View sourceView = new View(getActivity());
             mTabGridDialogView.setupDialogAnimation(sourceView);
             parentViewReference.set((ViewGroup) mTabGridDialogContainer.getParent());
+            Assert.assertFalse(mTabGridDialogContainer.isFocused());
         });
         ViewGroup parent = parentViewReference.get();
 
         // Show the dialog with zoom-out animation.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            // At the very beginning of showing animation, the animation card should be on the
-            // top and the background frame should be the view below it. Both view should have
-            // alpha set to be 1.
             mTabGridDialogView.showDialog();
-            if (areAnimatorsEnabled()) {
-                Assert.assertSame(
-                        mAnimationCardView, parent.getChildAt(parent.getChildCount() - 1));
-                Assert.assertSame(
-                        mBackgroundFrameView, parent.getChildAt(parent.getChildCount() - 2));
-            }
-            Assert.assertEquals(1f, mAnimationCardView.getAlpha(), 0.0);
-            Assert.assertEquals(1f, mBackgroundFrameView.getAlpha(), 0.0);
             Assert.assertNotNull(mTabGridDialogView.getCurrentDialogAnimatorForTesting());
             Assert.assertEquals(View.VISIBLE, mTabGridDialogView.getVisibility());
         });
         // When the card fades out, the dialog should be brought to the top, and alpha of animation
         // related views should be set to 0.
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                mTabGridDialogContainer, () -> parent.getChildAt(parent.getChildCount() - 1)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(parent.getChildAt(parent.getChildCount() - 1),
+                    Matchers.is(mTabGridDialogContainer));
+        });
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> Assert.assertEquals(0f, mAnimationCardView.getAlpha(), 0.0));
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentDialogAnimatorForTesting(),
                                 Matchers.nullValue()));
 
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> Assert.assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0));
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0);
+            Assert.assertTrue(mTabGridDialogContainer.isFocused());
+        });
 
         // Hide the dialog with zoom-in animation.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mTabGridDialogView.hideDialog();
-            // At the very beginning of hiding animation, the dialog view should be on the top,
-            // and alpha of animation related views should remain 0.
-            if (areAnimatorsEnabled()) {
-                Assert.assertSame(
-                        mTabGridDialogContainer, parent.getChildAt(parent.getChildCount() - 1));
-            }
-            Assert.assertEquals(1f, mTabGridDialogContainer.getAlpha(), 0.0);
-            Assert.assertEquals(1f, mBackgroundFrameView.getAlpha(), 0.0);
             Assert.assertNotNull(mTabGridDialogView.getCurrentDialogAnimatorForTesting());
             // PopupWindow is still showing for the hide animation.
             Assert.assertEquals(View.VISIBLE, mTabGridDialogView.getVisibility());
@@ -341,13 +329,18 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
         // When the animation completes, the PopupWindow should be dismissed.
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentDialogAnimatorForTesting(),
                                 Matchers.nullValue()));
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(View.GONE, mTabGridDialogView.getVisibility());
             Assert.assertEquals(0f, mAnimationCardView.getAlpha(), 0.0);
             Assert.assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0);
+            Assert.assertEquals(0f, mTabGridDialogContainer.getTranslationX(), 0.0);
+            Assert.assertEquals(0f, mTabGridDialogContainer.getTranslationY(), 0.0);
+            Assert.assertEquals(1f, mTabGridDialogContainer.getScaleX(), 0.0);
+            Assert.assertEquals(1f, mTabGridDialogContainer.getScaleY(), 0.0);
+            Assert.assertFalse(mTabGridDialogContainer.isFocused());
         });
     }
 
@@ -358,18 +351,20 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             View sourceView = new View(getActivity());
             mTabGridDialogView.setupDialogAnimation(sourceView);
+            Assert.assertFalse(mTabGridDialogContainer.isFocused());
         });
         // Show the dialog.
         TestThreadUtils.runOnUiThreadBlocking(() -> mTabGridDialogView.showDialog());
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentDialogAnimatorForTesting(),
                                 Matchers.nullValue()));
         // After the zoom in animation, alpha of animation related views should be 0.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(0f, mAnimationCardView.getAlpha(), 0.0);
             Assert.assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0);
+            Assert.assertTrue(mTabGridDialogContainer.isFocused());
         });
 
         // Hide the dialog with basic fade-out animation.
@@ -386,13 +381,14 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
         // related views should remain 0.
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentDialogAnimatorForTesting(),
                                 Matchers.nullValue()));
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(View.GONE, mTabGridDialogView.getVisibility());
             Assert.assertEquals(0f, mAnimationCardView.getAlpha(), 0.0);
             Assert.assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0);
+            Assert.assertFalse(mTabGridDialogContainer.isFocused());
         });
     }
 
@@ -405,6 +401,7 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
             // Initially alpha of animation related views should be 0.
             Assert.assertEquals(0f, mAnimationCardView.getAlpha(), 0.0);
             Assert.assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0);
+            Assert.assertFalse(mTabGridDialogContainer.isFocused());
         });
 
         // Show the dialog with basic fade-in animation.
@@ -417,12 +414,13 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
         });
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentDialogAnimatorForTesting(),
                                 Matchers.nullValue()));
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(0f, mAnimationCardView.getAlpha(), 0.0);
             Assert.assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0);
+            Assert.assertTrue(mTabGridDialogContainer.isFocused());
         });
 
         // Hide the dialog with basic fade-out animation.
@@ -441,13 +439,14 @@ public class TabGridDialogViewTest extends DummyUiActivityTestCase {
         // related views should remain 0.
         CriteriaHelper.pollUiThread(
                 ()
-                        -> Assert.assertThat(
+                        -> Criteria.checkThat(
                                 mTabGridDialogView.getCurrentDialogAnimatorForTesting(),
                                 Matchers.nullValue()));
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(View.GONE, mTabGridDialogView.getVisibility());
             Assert.assertEquals(0f, mAnimationCardView.getAlpha(), 0.0);
             Assert.assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0);
+            Assert.assertFalse(mTabGridDialogContainer.isFocused());
         });
     }
 

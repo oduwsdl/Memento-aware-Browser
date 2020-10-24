@@ -4,16 +4,14 @@
 
 #include "components/sync/nigori/nigori_model_type_processor.h"
 
-#include "base/metrics/histogram_macros.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/sync_base_switches.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_queue.h"
-#include "components/sync/engine_impl/conflict_resolver.h"
+#include "components/sync/engine/forwarding_model_type_processor.h"
 #include "components/sync/model_impl/processor_entity.h"
-#include "components/sync/nigori/forwarding_model_type_processor.h"
 #include "components/sync/nigori/nigori_sync_bridge.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 #include "components/sync/protocol/proto_value_conversions.h"
@@ -101,7 +99,7 @@ void NigoriModelTypeProcessor::OnCommitCompleted(
   model_type_state_ = type_state;
   if (!committed_response_list.empty()) {
     entity_->ReceiveCommitResponse(committed_response_list[0],
-                                   /*commit_only=*/false, ModelType::NIGORI);
+                                   /*commit_only=*/false);
   } else {
     // If the entity hasn't been mentioned in response_list, then it's not
     // committed and we should reset its commit_requested_sequence_number so
@@ -168,9 +166,6 @@ void NigoriModelTypeProcessor::OnUpdateReceived(
     // of reapplying pending local changes after processing the remote update.
     entity_->RecordForcedUpdate(updates[0]);
     error = bridge_->ApplySyncChanges(std::move(updates[0].entity));
-    UMA_HISTOGRAM_ENUMERATION("Sync.ResolveSimpleConflict",
-                              ConflictResolver::NIGORI_MERGE,
-                              ConflictResolver::CONFLICT_RESOLUTION_SIZE);
   } else if (!entity_->MatchesData(updates[0].entity)) {
     // Inform the bridge of the new or updated data.
     entity_->RecordAcceptedUpdate(updates[0]);
@@ -242,7 +237,7 @@ void NigoriModelTypeProcessor::GetAllNodesForDebugging(
 
   if (entity_) {
     const sync_pb::EntityMetadata& metadata = entity_->metadata();
-    // Set id value as directory, "s" means server.
+    // Set id value as the legacy Directory implementation, "s" means server.
     entity_data->id = "s" + metadata.server_id();
     entity_data->creation_time = ProtoTimeToTime(metadata.creation_time());
     entity_data->modification_time =
@@ -265,15 +260,6 @@ void NigoriModelTypeProcessor::GetAllNodesForDebugging(
   auto all_nodes = std::make_unique<base::ListValue>();
   all_nodes->Append(std::move(root_node));
   std::move(callback).Run(syncer::NIGORI, std::move(all_nodes));
-}
-
-void NigoriModelTypeProcessor::GetStatusCountersForDebugging(
-    StatusCountersCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  StatusCounters counters;
-  counters.num_entries = entity_ ? 1 : 0;
-  counters.num_entries_and_tombstones = counters.num_entries;
-  std::move(callback).Run(syncer::NIGORI, counters);
 }
 
 void NigoriModelTypeProcessor::RecordMemoryUsageAndCountsHistograms() {
@@ -394,6 +380,10 @@ bool NigoriModelTypeProcessor::IsConnectedForTest() const {
 const sync_pb::ModelTypeState&
 NigoriModelTypeProcessor::GetModelTypeStateForTest() {
   return model_type_state_;
+}
+
+bool NigoriModelTypeProcessor::HasEntityForTest() const {
+  return entity_ != nullptr;
 }
 
 bool NigoriModelTypeProcessor::IsTrackingMetadata() {

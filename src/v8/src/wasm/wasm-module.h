@@ -15,7 +15,6 @@
 #include "src/wasm/struct-types.h"
 #include "src/wasm/wasm-constants.h"
 #include "src/wasm/wasm-opcodes.h"
-#include "src/zone/zone-containers.h"
 
 namespace v8 {
 
@@ -91,7 +90,7 @@ struct WasmException {
 struct WasmDataSegment {
   // Construct an active segment.
   explicit WasmDataSegment(WasmInitExpr dest_addr)
-      : dest_addr(dest_addr), active(true) {}
+      : dest_addr(std::move(dest_addr)), active(true) {}
 
   // Construct a passive segment, which has no dest_addr.
   WasmDataSegment() : active(false) {}
@@ -101,32 +100,21 @@ struct WasmDataSegment {
   bool active = true;      // true if copied automatically during instantiation.
 };
 
-// Static representation of a wasm indirect call table.
-struct WasmTable {
-  MOVE_ONLY_WITH_DEFAULT_CONSTRUCTORS(WasmTable);
-  ValueType type = kWasmStmt;     // table type.
-  uint32_t initial_size = 0;      // initial table size.
-  uint32_t maximum_size = 0;      // maximum table size.
-  bool has_maximum_size = false;  // true if there is a maximum size.
-  bool imported = false;        // true if imported.
-  bool exported = false;        // true if exported.
-};
-
 // Static representation of wasm element segment (table initializer).
 struct WasmElemSegment {
   MOVE_ONLY_NO_DEFAULT_CONSTRUCTOR(WasmElemSegment);
 
   // Construct an active segment.
   WasmElemSegment(uint32_t table_index, WasmInitExpr offset)
-      : type(ValueType::Ref(kHeapFunc, kNullable)),
+      : type(kWasmFuncRef),
         table_index(table_index),
-        offset(offset),
+        offset(std::move(offset)),
         status(kStatusActive) {}
 
   // Construct a passive or declarative segment, which has no table index or
   // offset.
   explicit WasmElemSegment(bool declarative)
-      : type(ValueType::Ref(kHeapFunc, kNullable)),
+      : type(kWasmFuncRef),
         table_index(0),
         status(declarative ? kStatusDeclarative : kStatusPassive) {}
 
@@ -269,6 +257,8 @@ struct V8_EXPORT_PRIVATE WasmDebugSymbols {
   WireBytesRef external_url;
 };
 
+struct WasmTable;
+
 // Static representation of a module.
 struct V8_EXPORT_PRIVATE WasmModule {
   std::unique_ptr<Zone> signature_zone;
@@ -276,6 +266,7 @@ struct V8_EXPORT_PRIVATE WasmModule {
   uint32_t maximum_pages = 0;      // maximum size of the memory in 64k pages
   bool has_shared_memory = false;  // true if memory is a SharedArrayBuffer
   bool has_maximum_pages = false;  // true if there is a maximum memory size
+  bool is_memory64 = false;        // true if the memory is 64 bit
   bool has_memory = false;         // true if the memory was defined or imported
   bool mem_export = false;         // true if the memory is exported
   int start_function_index = -1;   // start function, >= 0 if any
@@ -293,64 +284,55 @@ struct V8_EXPORT_PRIVATE WasmModule {
   uint32_t num_declared_data_segments = 0;  // From the DataCount section.
   WireBytesRef code = {0, 0};
   WireBytesRef name = {0, 0};
-  std::vector<TypeDefinition> types;    // by type index
-  std::vector<uint8_t> type_kinds;      // by type index
-  std::vector<uint32_t> signature_ids;  // by signature index
+  std::vector<TypeDefinition> types;  // by type index
+  std::vector<uint8_t> type_kinds;    // by type index
+  // Map from each type index to the index of its corresponding canonical type.
+  // Note: right now, only functions are canonicalized, and arrays and structs
+  // map to themselves.
+  std::vector<uint32_t> canonicalized_type_ids;
+
+  bool has_type(uint32_t index) const { return index < types.size(); }
+
   void add_signature(const FunctionSig* sig) {
     types.push_back(TypeDefinition(sig));
     type_kinds.push_back(kWasmFunctionTypeCode);
     uint32_t canonical_id = sig ? signature_map.FindOrInsert(*sig) : 0;
-    signature_ids.push_back(canonical_id);
-  }
-  const FunctionSig* signature(uint32_t index) const {
-    DCHECK(type_kinds[index] == kWasmFunctionTypeCode);
-    return types[index].function_sig;
+    canonicalized_type_ids.push_back(canonical_id);
   }
   bool has_signature(uint32_t index) const {
     return index < types.size() && type_kinds[index] == kWasmFunctionTypeCode;
   }
+  const FunctionSig* signature(uint32_t index) const {
+    DCHECK(has_signature(index));
+    return types[index].function_sig;
+  }
+
   void add_struct_type(const StructType* type) {
     types.push_back(TypeDefinition(type));
     type_kinds.push_back(kWasmStructTypeCode);
-  }
-  const StructType* struct_type(uint32_t index) const {
-    DCHECK(type_kinds[index] == kWasmStructTypeCode);
-    return types[index].struct_type;
+    // No canonicalization for structs.
+    canonicalized_type_ids.push_back(0);
   }
   bool has_struct(uint32_t index) const {
     return index < types.size() && type_kinds[index] == kWasmStructTypeCode;
   }
+  const StructType* struct_type(uint32_t index) const {
+    DCHECK(has_struct(index));
+    return types[index].struct_type;
+  }
+
   void add_array_type(const ArrayType* type) {
     types.push_back(TypeDefinition(type));
     type_kinds.push_back(kWasmArrayTypeCode);
-  }
-  const ArrayType* array_type(uint32_t index) const {
-    DCHECK(type_kinds[index] == kWasmArrayTypeCode);
-    return types[index].array_type;
+    // No canonicalization for arrays.
+    canonicalized_type_ids.push_back(0);
   }
   bool has_array(uint32_t index) const {
     return index < types.size() && type_kinds[index] == kWasmArrayTypeCode;
   }
-  bool is_cached_subtype(uint32_t subtype, uint32_t supertype) const {
-    return subtyping_cache->count(std::make_pair(subtype, supertype)) == 1;
-  }
-  void cache_subtype(uint32_t subtype, uint32_t supertype) const {
-    subtyping_cache->emplace(subtype, supertype);
-  }
-  void uncache_subtype(uint32_t subtype, uint32_t supertype) const {
-    subtyping_cache->erase(std::make_pair(subtype, supertype));
-  }
-  bool is_cached_equivalent_type(uint32_t type1, uint32_t type2) const {
-    if (type1 > type2) std::swap(type1, type2);
-    return type_equivalence_cache->count(std::make_pair(type1, type2)) == 1;
-  }
-  void cache_type_equivalence(uint32_t type1, uint32_t type2) const {
-    if (type1 > type2) std::swap(type1, type2);
-    type_equivalence_cache->emplace(type1, type2);
-  }
-  void uncache_type_equivalence(uint32_t type1, uint32_t type2) const {
-    if (type1 > type2) std::swap(type1, type2);
-    type_equivalence_cache->erase(std::make_pair(type1, type2));
+  const ArrayType* array_type(uint32_t index) const {
+    DCHECK(has_array(index));
+    return types[index].array_type;
   }
 
   std::vector<WasmFunction> functions;
@@ -374,15 +356,31 @@ struct V8_EXPORT_PRIVATE WasmModule {
   explicit WasmModule(std::unique_ptr<Zone> signature_zone = nullptr);
 
  private:
-  // Cache for discovered subtyping pairs.
-  std::unique_ptr<ZoneUnorderedSet<std::pair<uint32_t, uint32_t>>>
-      subtyping_cache;
-  // Cache for discovered equivalent type pairs.
-  // Indexes are stored in increasing order.
-  std::unique_ptr<ZoneUnorderedSet<std::pair<uint32_t, uint32_t>>>
-      type_equivalence_cache;
-
   DISALLOW_COPY_AND_ASSIGN(WasmModule);
+};
+
+// Static representation of a wasm indirect call table.
+struct WasmTable {
+  MOVE_ONLY_WITH_DEFAULT_CONSTRUCTORS(WasmTable);
+
+  // 'module' can be nullptr
+  // TODO(9495): Update this function as more table types are supported, or
+  // remove it completely when all reference types are allowed.
+  static bool IsValidTableType(ValueType type, const WasmModule* module) {
+    if (!type.is_nullable()) return false;
+    HeapType heap_type = type.heap_type();
+    return heap_type == HeapType::kFunc || heap_type == HeapType::kExtern ||
+           heap_type == HeapType::kExn ||
+           (module != nullptr && heap_type.is_index() &&
+            module->has_signature(heap_type.ref_index()));
+  }
+
+  ValueType type = kWasmStmt;     // table type.
+  uint32_t initial_size = 0;      // initial table size.
+  uint32_t maximum_size = 0;      // maximum table size.
+  bool has_maximum_size = false;  // true if there is a maximum size.
+  bool imported = false;          // true if imported.
+  bool exported = false;          // true if exported.
 };
 
 inline bool is_asmjs_module(const WasmModule* module) {
@@ -531,10 +529,12 @@ class TruncatedUserString {
   char buffer_[kMaxLen];
 };
 
-// Print the signature into the given {buffer}. If {buffer} is non-empty, it
-// will be null-terminated, even if the signature is cut off. Returns the number
-// of characters written, excluding the terminating null-byte.
-size_t PrintSignature(Vector<char> buffer, const wasm::FunctionSig*);
+// Print the signature into the given {buffer}, using {delimiter} as separator
+// between parameter types and return types. If {buffer} is non-empty, it will
+// be null-terminated, even if the signature is cut off. Returns the number of
+// characters written, excluding the terminating null-byte.
+size_t PrintSignature(Vector<char> buffer, const wasm::FunctionSig*,
+                      char delimiter = ':');
 
 }  // namespace wasm
 }  // namespace internal

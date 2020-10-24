@@ -4,16 +4,17 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
-import './untrusted_iframe.js';
+import './iframe.js';
 import './doodle_share_dialog.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {skColorToRgba} from 'chrome://resources/js/color_utils.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BrowserProxy} from './browser_proxy.js';
-import {$$, skColorToRgba} from './utils.js';
+import {$$} from './utils.js';
 
 /** @type {number} */
 const SHARE_BUTTON_SIZE_PX = 26;
@@ -70,14 +71,18 @@ class LogoElement extends PolymerElement {
       loaded_: Boolean,
 
       /** @private {newTabPage.mojom.Doodle} */
-      doodle_: {
-        observer: 'onDoodleChange_',
+      doodle_: Object,
+
+      /** @private {newTabPage.mojom.ImageDoodle} */
+      imageDoodle_: {
+        observer: 'onImageDoodleChange_',
+        computed: 'computeImageDoodle_(dark, doodle_)',
         type: Object,
       },
 
       /** @private */
       canShowDoodle_: {
-        computed: 'computeCanShowDoodle_(doodle_)',
+        computed: 'computeCanShowDoodle_(doodle_, imageDoodle_)',
         type: Boolean,
       },
 
@@ -97,12 +102,12 @@ class LogoElement extends PolymerElement {
       doodleBoxed_: {
         reflectToAttribute: true,
         type: Boolean,
-        computed: 'computeDoodleBoxed_(backgroundColor, doodle_)',
+        computed: 'computeDoodleBoxed_(backgroundColor, imageDoodle_)',
       },
 
       /** @private */
       imageUrl_: {
-        computed: 'computeImageUrl_(doodle_)',
+        computed: 'computeImageUrl_(imageDoodle_)',
         type: String,
       },
 
@@ -114,7 +119,7 @@ class LogoElement extends PolymerElement {
 
       /** @private */
       animationUrl_: {
-        computed: 'computeAnimationUrl_(doodle_)',
+        computed: 'computeAnimationUrl_(imageDoodle_)',
         type: String,
       },
 
@@ -143,6 +148,9 @@ class LogoElement extends PolymerElement {
       },
 
       /** @private */
+      expanded_: Boolean,
+
+      /** @private */
       showShareDialog_: Boolean,
     };
   }
@@ -157,17 +165,17 @@ class LogoElement extends PolymerElement {
     this.pageHandler_.getDoodle().then(({doodle}) => {
       this.doodle_ = doodle;
       this.loaded_ = true;
-      if (this.doodle_ && this.doodle_.content.interactiveDoodle) {
-        this.width_ = `${this.doodle_.content.interactiveDoodle.width}px`;
-        this.height_ = `${this.doodle_.content.interactiveDoodle.height}px`;
+      if (this.doodle_ && this.doodle_.interactive) {
+        this.width_ = `${this.doodle_.interactive.width}px`;
+        this.height_ = `${this.doodle_.interactive.height}px`;
       }
     });
     /** @private {?string} */
-    this.imageClickParams_;
+    this.imageClickParams_ = null;
     /** @private {url.mojom.Url} */
-    this.interactionLogUrl_;
+    this.interactionLogUrl_ = null;
     /** @private {?string} */
-    this.shareId_;
+    this.shareId_ = null;
   }
 
   /** @override */
@@ -178,6 +186,7 @@ class LogoElement extends PolymerElement {
         this.duration_ = assert(data.duration);
         this.height_ = assert(data.height);
         this.width_ = assert(data.width);
+        this.expanded_ = true;
       } else if (data['cmd'] === 'sendMode') {
         this.sendMode_();
       }
@@ -199,22 +208,56 @@ class LogoElement extends PolymerElement {
   }
 
   /** @private */
-  onDoodleChange_() {
-    const imageDoodle = this.doodle_ && this.doodle_.content.imageDoodle;
-    this.updateStyles({
-      '--ntp-logo-share-button-background-color':
-          imageDoodle && skColorToRgba(imageDoodle.shareButton.backgroundColor),
-      '--ntp-logo-share-button-height':
-          imageDoodle && `${SHARE_BUTTON_SIZE_PX / imageDoodle.height * 100}%`,
-      '--ntp-logo-share-button-width':
-          imageDoodle && `${SHARE_BUTTON_SIZE_PX / imageDoodle.width * 100}%`,
-      '--ntp-logo-share-button-x': imageDoodle &&
-          `${imageDoodle.shareButton.x / imageDoodle.width * 100}%`,
-      '--ntp-logo-share-button-y': imageDoodle &&
-          `${imageDoodle.shareButton.y / imageDoodle.height * 100}%`,
-      '--ntp-logo-box-color':
-          imageDoodle && skColorToRgba(imageDoodle.backgroundColor),
-    });
+  onImageDoodleChange_() {
+    const shareButton = this.imageDoodle_ && this.imageDoodle_.shareButton;
+    if (shareButton) {
+      const height = this.imageDoodle_.height;
+      const width = this.imageDoodle_.width;
+      this.updateStyles({
+        '--ntp-logo-share-button-background-color':
+            skColorToRgba(shareButton.backgroundColor),
+        '--ntp-logo-share-button-height':
+            `${SHARE_BUTTON_SIZE_PX / height * 100}%`,
+        '--ntp-logo-share-button-width':
+            `${SHARE_BUTTON_SIZE_PX / width * 100}%`,
+        '--ntp-logo-share-button-x': `${shareButton.x / width * 100}%`,
+        '--ntp-logo-share-button-y': `${shareButton.y / height * 100}%`,
+      });
+    } else {
+      this.updateStyles({
+        '--ntp-logo-share-button-background-color': null,
+        '--ntp-logo-share-button-height': null,
+        '--ntp-logo-share-button-width': null,
+        '--ntp-logo-share-button-x': null,
+        '--ntp-logo-share-button-y': null,
+      });
+    }
+    if (this.imageDoodle_) {
+      this.updateStyles({
+        '--ntp-logo-box-color':
+            skColorToRgba(this.imageDoodle_.backgroundColor),
+      });
+    } else {
+      this.updateStyles({
+        '--ntp-logo-box-color': null,
+      });
+    }
+    // Stop the animation (if it is running) and reset logging params since
+    // mode change constitutes a new doodle session.
+    this.showAnimation_ = false;
+    this.imageClickParams_ = null;
+    this.interactionLogUrl_ = null;
+    this.shareId_ = null;
+  }
+
+  /**
+   * @return {newTabPage.mojom.ImageDoodle}
+   * @private
+   */
+  computeImageDoodle_() {
+    return this.doodle_ && this.doodle_.image &&
+        (this.dark ? this.doodle_.image.dark : this.doodle_.image.light) ||
+        null;
   }
 
   /**
@@ -222,10 +265,10 @@ class LogoElement extends PolymerElement {
    * @private
    */
   computeCanShowDoodle_() {
-    return !!this.doodle_ &&
+    return !!this.imageDoodle_ ||
         /* We hide interactive doodles when offline. Otherwise, the iframe
            would show an ugly error page. */
-        (!this.doodle_.content.interactiveDoodle || window.navigator.onLine);
+        !!this.doodle_ && !!this.doodle_.interactive && window.navigator.onLine;
   }
 
   /**
@@ -250,9 +293,8 @@ class LogoElement extends PolymerElement {
    */
   computeDoodleBoxed_() {
     return !this.backgroundColor ||
-        !!this.doodle_ && !!this.doodle_.content.imageDoodle &&
-        this.doodle_.content.imageDoodle.backgroundColor.value !==
-            this.backgroundColor.value;
+        !!this.imageDoodle_ &&
+        this.imageDoodle_.backgroundColor.value !== this.backgroundColor.value;
   }
 
   /**
@@ -265,7 +307,7 @@ class LogoElement extends PolymerElement {
     if (this.isCtaImageShown_()) {
       this.showAnimation_ = true;
       this.pageHandler_.onDoodleImageClicked(
-          newTabPage.mojom.DoodleImageType.CTA, this.interactionLogUrl_);
+          newTabPage.mojom.DoodleImageType.kCta, this.interactionLogUrl_);
 
       // TODO(tiborg): This is technically not correct since we don't know if
       // the animation has loaded yet. However, since the animation is loaded
@@ -273,17 +315,17 @@ class LogoElement extends PolymerElement {
       // practice this should be good enough but we could improve that in the
       // future.
       this.logImageRendered_(
-          newTabPage.mojom.DoodleImageType.ANIMATION,
+          newTabPage.mojom.DoodleImageType.kAnimation,
           /** @type {!url.mojom.Url} */
-          (this.doodle_.content.imageDoodle.animationImpressionLogUrl));
+          (this.imageDoodle_.animationImpressionLogUrl));
 
       return;
     }
     this.pageHandler_.onDoodleImageClicked(
-        this.showAnimation_ ? newTabPage.mojom.DoodleImageType.ANIMATION :
-                              newTabPage.mojom.DoodleImageType.STATIC,
+        this.showAnimation_ ? newTabPage.mojom.DoodleImageType.kAnimation :
+                              newTabPage.mojom.DoodleImageType.kStatic,
         null);
-    const onClickUrl = new URL(this.doodle_.content.imageDoodle.onClickUrl.url);
+    const onClickUrl = new URL(this.doodle_.image.onClickUrl.url);
     if (this.imageClickParams_) {
       for (const param of new URLSearchParams(this.imageClickParams_)) {
         onClickUrl.searchParams.append(param[0], param[1]);
@@ -295,9 +337,9 @@ class LogoElement extends PolymerElement {
   /** @private */
   onImageLoad_() {
     this.logImageRendered_(
-        this.isCtaImageShown_() ? newTabPage.mojom.DoodleImageType.CTA :
-                                  newTabPage.mojom.DoodleImageType.STATIC,
-        this.doodle_.content.imageDoodle.imageImpressionLogUrl);
+        this.isCtaImageShown_() ? newTabPage.mojom.DoodleImageType.kCta :
+                                  newTabPage.mojom.DoodleImageType.kStatic,
+        this.imageDoodle_.imageImpressionLogUrl);
   }
 
   /**
@@ -329,8 +371,8 @@ class LogoElement extends PolymerElement {
    * @private
    */
   onShare_(e) {
-    const doodleId = new URL(this.doodle_.content.imageDoodle.onClickUrl.url)
-                         .searchParams.get('ct');
+    const doodleId =
+        new URL(this.doodle_.image.onClickUrl.url).searchParams.get('ct');
     if (!doodleId) {
       return;
     }
@@ -342,8 +384,7 @@ class LogoElement extends PolymerElement {
    * @private
    */
   isCtaImageShown_() {
-    return !this.showAnimation_ && !!this.doodle_ &&
-        !!this.doodle_.content.imageDoodle.animationUrl;
+    return !this.showAnimation_ && !!this.imageDoodle_.animationUrl;
   }
 
   /**
@@ -358,14 +399,7 @@ class LogoElement extends PolymerElement {
         this.dark === undefined || !iframe) {
       return;
     }
-    BrowserProxy.getInstance().postMessage(
-        iframe,
-        {
-          cmd: 'changeMode',
-          dark: this.dark,
-        },
-        new URL(iframe.src).origin,
-    );
+    iframe.postMessage({cmd: 'changeMode', dark: this.dark});
   }
 
   /** @private */
@@ -378,10 +412,7 @@ class LogoElement extends PolymerElement {
    * @private
    */
   computeImageUrl_() {
-    return (this.doodle_ && this.doodle_.content.imageDoodle &&
-            this.doodle_.content.imageDoodle.imageUrl) ?
-        this.doodle_.content.imageDoodle.imageUrl.url :
-        '';
+    return this.imageDoodle_ ? this.imageDoodle_.imageUrl.url : '';
   }
 
   /**
@@ -389,9 +420,9 @@ class LogoElement extends PolymerElement {
    * @private
    */
   computeAnimationUrl_() {
-    return (this.doodle_ && this.doodle_.content.imageDoodle &&
-            this.doodle_.content.imageDoodle.animationUrl) ?
-        `image?${this.doodle_.content.imageDoodle.animationUrl.url}` :
+    return this.imageDoodle_ && this.imageDoodle_.animationUrl ?
+        `chrome-untrusted://new-tab-page/image?${
+            this.imageDoodle_.animationUrl.url}` :
         '';
   }
 
@@ -400,8 +431,8 @@ class LogoElement extends PolymerElement {
    * @private
    */
   computeIframeUrl_() {
-    if (this.doodle_ && this.doodle_.content.interactiveDoodle) {
-      const url = new URL(this.doodle_.content.interactiveDoodle.url.url);
+    if (this.doodle_ && this.doodle_.interactive) {
+      const url = new URL(this.doodle_.interactive.url.url);
       if (loadTimeData.getBoolean('themeModeDoodlesEnabled')) {
         url.searchParams.append('theme_messages', '0');
       }

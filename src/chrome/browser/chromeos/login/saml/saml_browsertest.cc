@@ -61,6 +61,7 @@
 #include "chrome/browser/ui/login/login_handler_test_utils.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/saml_challenge_key_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -68,6 +69,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/attestation/mock_attestation_flow.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/mock_async_method_caller.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
@@ -111,13 +113,9 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/cookies/cookie_store.h"
-#include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -269,7 +267,7 @@ class FakeSamlIdp {
     kLoginCheckDeviceAnswer
   };
 
-  // Returns the RequestType that corresponds to |url|, or RequestType::Unknown
+  // Returns the RequestType that corresponds to `url`, or RequestType::Unknown
   // if this is not a request for the FakeSamlIdp.
   RequestType ParseRequestTypeFromRequestPath(const GURL& request_url) const;
 
@@ -373,7 +371,7 @@ void FakeSamlIdp::SetRequireHttpBasicAuth(bool require_http_basic_auth) {
 std::unique_ptr<net::test_server::HttpResponse> FakeSamlIdp::HandleRequest(
     const net::test_server::HttpRequest& request) {
   // The scheme and host of the URL is actually not important but required to
-  // get a valid GURL in order to parse |request.relative_url|.
+  // get a valid GURL in order to parse `request.relative_url`.
   GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
   const RequestType request_type = ParseRequestTypeFromRequestPath(request_url);
 
@@ -569,7 +567,12 @@ void SecretInterceptingFakeCryptohomeClient::MountEx(
 
 class SamlTest : public OobeBaseTest {
  public:
-  SamlTest() { fake_gaia_.set_initialize_fake_merge_session(false); }
+  SamlTest() {
+    // TODO(crbug.com/1121910): Fix tests.
+    feature_list_.InitAndDisableFeature(
+        chromeos::features::kChildSpecificSignin);
+    fake_gaia_.set_initialize_fake_merge_session(false);
+  }
   ~SamlTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -653,7 +656,7 @@ class SamlTest : public OobeBaseTest {
   }
 
   virtual void StartSamlAndWaitForIdpPageLoad(const std::string& gaia_email) {
-    OobeScreenWaiter(GaiaView::kScreenId).Wait();
+    OobeScreenWaiter(GetFirstSigninScreen()).Wait();
 
     content::DOMMessageQueue message_queue;  // Start observe before SAML.
     SetupAuthFlowChangeListener();
@@ -680,23 +683,15 @@ class SamlTest : public OobeBaseTest {
     test::OobeJS().TapOnPath(kPasswordSubmit);
   }
 
-  std::string WaitForAndGetFatalErrorMessage() {
-    OobeScreenWaiter(OobeScreen::SCREEN_FATAL_ERROR).Wait();
+  void ExpectFatalErrorMessage(const std::string& error_message) {
+    OobeScreenWaiter(SignInFatalErrorView::kScreenId).Wait();
 
     EXPECT_TRUE(ash::LoginScreenTestApi::IsShutdownButtonShown());
     EXPECT_FALSE(ash::LoginScreenTestApi::IsGuestButtonShown());
     EXPECT_FALSE(ash::LoginScreenTestApi::IsAddUserButtonShown());
 
-    std::string message_element = "$('fatal-error-card')";
-    std::string error_message;
-    if (!content::ExecuteScriptAndExtractString(
-            GetLoginUI()->GetWebContents(),
-            "window.domAutomationController.send(" + message_element +
-                ".textContent);",
-            &error_message)) {
-      ADD_FAILURE();
-    }
-    return error_message;
+    test::OobeJS().ExpectElementText(error_message,
+                                     {"signin-fatal-error", "subtitle"});
   }
 
   FakeSamlIdp* fake_saml_idp() { return &fake_saml_idp_; }
@@ -713,6 +708,8 @@ class SamlTest : public OobeBaseTest {
 
  private:
   FakeSamlIdp fake_saml_idp_;
+
+  base::test::ScopedFeatureList feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(SamlTest);
 };
@@ -790,7 +787,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, IdpRequiresHttpAuth) {
   auth_needed_waiter.Wait();
   ASSERT_FALSE(login_prompt_observer.handlers().empty());
   LoginHandler* handler = *login_prompt_observer.handlers().begin();
-  // Note that the actual credentials don't matter because |fake_saml_idp()|
+  // Note that the actual credentials don't matter because `fake_saml_idp()`
   // doesn't check those (only that something has been provided).
   handler->SetAuth(base::UTF8ToUTF16("user"), base::UTF8ToUTF16("pwd"));
 
@@ -1028,9 +1025,9 @@ IN_PROC_BROWSER_TEST_F(SamlTest, UseAutenticatedUserEmailAddress) {
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kSecondUserCorpExampleComEmail);
 
-  // Authenticate as the first user via SAML (the |Email| provided here is
+  // Authenticate as the first user via SAML (the `Email` provided here is
   // irrelevant - the authenticated user's e-mail address that FakeGAIA reports
-  // was set via |SetFakeMergeSessionParams|).
+  // was set via `SetFakeMergeSessionParams`).
   SigninFrameJS().TypeIntoPath("fake_user", {"Email"});
   SigninFrameJS().TypeIntoPath("fake_password", {"Password"});
 
@@ -1057,8 +1054,8 @@ IN_PROC_BROWSER_TEST_F(SamlTest, FailToRetrieveAutenticatedUserEmailAddress) {
   SigninFrameJS().TypeIntoPath("fake_password", {"Password"});
   SigninFrameJS().TapOn("Submit");
 
-  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS),
-            WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(
+      l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS));
 }
 
 // Tests the password confirm flow when more than one password is scraped: show
@@ -1090,21 +1087,20 @@ IN_PROC_BROWSER_TEST_F(SamlTest, PasswordConfirmFlow) {
 
   // Enter an unknown password 2nd time should go back fatal error message.
   SendConfirmPassword("wrong_password");
-  EXPECT_EQ(
-      l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_PASSWORD_VERIFICATION),
-      WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(
+      l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_PASSWORD_VERIFICATION));
 }
 
 // Verifies that when the login flow redirects from one host to another, the
 // notice shown to the user is updated. This guards against regressions of
 // http://crbug.com/447818.
 IN_PROC_BROWSER_TEST_F(SamlTest, NoticeUpdatedOnRedirect) {
-  // Start another https server at |kAdditionalIdPHost|.
+  // Start another https server at `kAdditionalIdPHost`.
   HTTPSForwarder saml_https_forwarder_2;
   ASSERT_TRUE(saml_https_forwarder_2.Initialize(
       kAdditionalIdPHost, embedded_test_server()->base_url()));
 
-  // Make the login flow redirect to |kAdditionalIdPHost|.
+  // Make the login flow redirect to `kAdditionalIdPHost`.
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login_instant_meta_refresh.html");
   fake_saml_idp()->SetRefreshURL(
       saml_https_forwarder_2.GetURLForSSLHost("simple.html"));
@@ -1112,7 +1108,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, NoticeUpdatedOnRedirect) {
       saml_test_users::kFirstUserCorpExampleComEmail);
 
   // Wait until the notice shown to the user is updated to contain
-  // |kAdditionalIdPHost|.
+  // `kAdditionalIdPHost`.
   std::string js =
       "var sendIfHostFound = function() {"
       "  var found = $SamlNoticeMessagePath.textContent.indexOf('$Host') > -1;"
@@ -1159,9 +1155,8 @@ IN_PROC_BROWSER_TEST_F(SamlTest, HTTPRedirectDisallowed) {
                                 "", "[]");
 
   const GURL url = embedded_test_server()->base_url().Resolve("/SAML");
-  EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL,
-                                      base::UTF8ToUTF16(url.spec())),
-            WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(l10n_util::GetStringFUTF8(
+      IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL, base::UTF8ToUTF16(url.spec())));
 }
 
 // Verifies that when GAIA attempts to redirect to a page served over http, not
@@ -1179,9 +1174,8 @@ IN_PROC_BROWSER_TEST_F(SamlTest, MetaRefreshToHTTPDisallowed) {
       ->ShowSigninScreenForTest(saml_test_users::kFirstUserCorpExampleComEmail,
                                 "", "[]");
 
-  EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL,
-                                      base::UTF8ToUTF16(url.spec())),
-            WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(l10n_util::GetStringFUTF8(
+      IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL, base::UTF8ToUTF16(url.spec())));
 }
 
 class SAMLEnrollmentTest : public SamlTest {
@@ -1225,9 +1219,11 @@ void SAMLEnrollmentTest::StartSamlAndWaitForIdpPageLoad(
   LoginDisplayHost::default_host()->StartWizard(
       EnrollmentScreenView::kScreenId);
   WaitForGaiaPageBackButtonUpdate();
+  auto flow_change_waiter =
+      OobeBaseTest::CreateGaiaPageEventWaiter("authFlowChange");
   SigninFrameJS().TypeIntoPath(gaia_email, {"identifier"});
   SigninFrameJS().TapOn("nextButton");
-  OobeBaseTest::WaitForGaiaPageEvent("authFlowChange");
+  flow_change_waiter->Wait();
 }
 
 IN_PROC_BROWSER_TEST_F(SAMLEnrollmentTest, WithoutCredentialsPassingAPI) {
@@ -1688,7 +1684,8 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLInterstitialChangeAccount) {
 // Tests that clicking "Next" in the SAML interstitial page successfully
 // triggers a SAML redirect request, and the SAML IdP authentication page is
 // loaded and authenticaing there is successful.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLInterstitialNext) {
+// TODO(https://crbug.com/1102738) flaky test
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, DISABLED_SAMLInterstitialNext) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   fake_gaia_.fake_gaia()->SetFakeMergeSessionParams(
       saml_test_users::kFirstUserCorpExampleComEmail, kTestAuthSIDCookie1,
@@ -1734,7 +1731,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
       web_contents->GetMainFrame(), url1,
       blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE));
 
-  // Camera should be allowed if allowed by the whitelist, otherwise blocked.
+  // Camera should be allowed if allowed by the allowlist, otherwise blocked.
   EXPECT_TRUE(web_contents_delegate->CheckMediaAccessPermission(
       web_contents->GetMainFrame(), url1,
       blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE));
@@ -1837,8 +1834,8 @@ IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, LoginFailed) {
   SigninFrameJS().TapOn("Submit");
 
   // SAML login fails:
-  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS),
-            WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(
+      l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS));
 
   // Make sure no SAML password attributes are saved.
   // None are saved for the logged in user, since there is no logged in user:
@@ -1853,9 +1850,7 @@ IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, LoginFailed) {
   EXPECT_FALSE(attrs.has_password_change_url());
 }
 
-INSTANTIATE_TEST_SUITE_P(SAMLPasswordAttributesSuite,
-                         SAMLPasswordAttributesTest,
-                         testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, SAMLPasswordAttributesTest, testing::Bool());
 
 void FakeGetCertificateCallbackTrue(
     attestation::AttestationFlow::CertificateCallback callback) {

@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/login/screens/recommend_apps/recommend_apps_fetcher.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps/recommend_apps_fetcher_delegate.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps/scoped_test_recommend_apps_fetcher_factory.h"
+#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
 #include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
@@ -32,7 +33,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/recommend_apps_screen_handler.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
 #include "components/prefs/pref_service.h"
@@ -64,11 +64,11 @@ struct FakeAppInfo {
   const std::string name;
 };
 
-class FakeRecommendAppsFetcher : public RecommendAppsFetcher {
+class StubRecommendAppsFetcher : public RecommendAppsFetcher {
  public:
-  explicit FakeRecommendAppsFetcher(RecommendAppsFetcherDelegate* delegate)
+  explicit StubRecommendAppsFetcher(RecommendAppsFetcherDelegate* delegate)
       : delegate_(delegate) {}
-  ~FakeRecommendAppsFetcher() override = default;
+  ~StubRecommendAppsFetcher() override = default;
 
   bool started() const { return started_; }
   int retries() const { return retries_; }
@@ -112,11 +112,7 @@ class FakeRecommendAppsFetcher : public RecommendAppsFetcher {
 
 class RecommendAppsScreenTest : public OobeBaseTest {
  public:
-  RecommendAppsScreenTest() {
-    // To reuse existing wizard controller in the flow.
-    feature_list_.InitAndEnableFeature(
-        chromeos::features::kOobeScreensPriority);
-  }
+  RecommendAppsScreenTest() = default;
   ~RecommendAppsScreenTest() override = default;
 
   // OobeBaseTest:
@@ -141,8 +137,8 @@ class RecommendAppsScreenTest : public OobeBaseTest {
   }
 
   void ShowRecommendAppsScreen() {
-    login_manager_.LoginAsNewReguarUser();
-    OobeScreenExitWaiter(GaiaView::kScreenId).Wait();
+    login_manager_.LoginAsNewRegularUser();
+    OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
     LoginDisplayHost::default_host()->StartWizard(
         RecommendAppsScreenView::kScreenId);
   }
@@ -228,7 +224,7 @@ class RecommendAppsScreenTest : public OobeBaseTest {
 
   RecommendAppsScreen* recommend_apps_screen_;
   base::Optional<RecommendAppsScreen::Result> screen_result_;
-  FakeRecommendAppsFetcher* recommend_apps_fetcher_ = nullptr;
+  StubRecommendAppsFetcher* recommend_apps_fetcher_ = nullptr;
 
   LoginManagerMixin login_manager_{&mixin_host_};
 
@@ -245,7 +241,7 @@ class RecommendAppsScreenTest : public OobeBaseTest {
     EXPECT_EQ(delegate, recommend_apps_screen_);
     EXPECT_FALSE(recommend_apps_fetcher_);
 
-    auto fetcher = std::make_unique<FakeRecommendAppsFetcher>(delegate);
+    auto fetcher = std::make_unique<StubRecommendAppsFetcher>(delegate);
     recommend_apps_fetcher_ = fetcher.get();
     return fetcher;
   }
@@ -254,8 +250,6 @@ class RecommendAppsScreenTest : public OobeBaseTest {
       recommend_apps_fetcher_factory_;
 
   base::OnceClosure screen_exit_callback_;
-
-  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(RecommendAppsScreenTest, BasicSelection) {
@@ -558,11 +552,15 @@ class RecommendAppsScreenManagedTest : public RecommendAppsScreenTest {
 };
 
 IN_PROC_BROWSER_TEST_F(RecommendAppsScreenManagedTest, SkipDueToManagedUser) {
+  // Force the sync screen to be shown so that OOBE isn't destroyed
+  // right after login due to all screens being skipped.
+  auto autoreset = SyncConsentScreen::ForceBrandedBuildForTesting(true);
+
   // Mark user as managed.
   user_policy_mixin_.RequestPolicyUpdate();
 
   login_manager_.LoginWithDefaultContext(test_user_);
-  OobeScreenExitWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
   if (!screen_result_.has_value()) {
     // Skip screens to the tested one.
     LoginDisplayHost::default_host()->StartWizard(

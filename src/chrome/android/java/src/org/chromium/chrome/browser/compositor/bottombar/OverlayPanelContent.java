@@ -14,13 +14,13 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.WebContentsFactory;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.content.ContentUtils;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
@@ -236,11 +236,6 @@ public class OverlayPanelContent {
             public int getBottomControlsHeight() {
                 return 0;
             }
-
-            @Override
-            public boolean controlsResizeView() {
-                return false;
-            }
         };
     }
 
@@ -367,7 +362,7 @@ public class OverlayPanelContent {
                     @Override
                     public void didStartNavigation(NavigationHandle navigation) {
                         if (navigation.isInMainFrame() && !navigation.isSameDocument()) {
-                            String url = navigation.getUrl();
+                            String url = navigation.getUrlString();
                             mContentDelegate.onMainFrameLoadStarted(
                                     url, !TextUtils.equals(url, mLoadedUrl));
                         }
@@ -382,8 +377,8 @@ public class OverlayPanelContent {
                     public void didFinishNavigation(NavigationHandle navigation) {
                         if (navigation.hasCommitted() && navigation.isInMainFrame()) {
                             mIsProcessingPendingNavigation = false;
-                            mContentDelegate.onMainFrameNavigation(navigation.getUrl(),
-                                    !TextUtils.equals(navigation.getUrl(), mLoadedUrl),
+                            mContentDelegate.onMainFrameNavigation(navigation.getUrlString(),
+                                    !TextUtils.equals(navigation.getUrlString(), mLoadedUrl),
                                     isHttpFailureCode(navigation.httpStatusCode()),
                                     navigation.isErrorPage());
                         }
@@ -421,9 +416,6 @@ public class OverlayPanelContent {
             mShouldReuseWebContents = false;
 
             setVisibility(false);
-
-            // After everything has been disposed, notify the observer.
-            mContentDelegate.onContentViewDestroyed();
         }
     }
 

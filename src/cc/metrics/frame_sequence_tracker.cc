@@ -4,6 +4,11 @@
 
 #include "cc/metrics/frame_sequence_tracker.h"
 
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
@@ -47,8 +52,6 @@ const char* FrameSequenceTracker::GetFrameSequenceTrackerTypeName(
       return "RAF";
     case FrameSequenceTrackerType::kTouchScroll:
       return "TouchScroll";
-    case FrameSequenceTrackerType::kUniversal:
-      return "Universal";
     case FrameSequenceTrackerType::kVideo:
       return "Video";
     case FrameSequenceTrackerType::kWheelScroll:
@@ -57,6 +60,10 @@ const char* FrameSequenceTracker::GetFrameSequenceTrackerTypeName(
       return "ScrollbarScroll";
     case FrameSequenceTrackerType::kCustom:
       return "Custom";
+    case FrameSequenceTrackerType::kCanvas:
+      return "Canvas";
+    case FrameSequenceTrackerType::kJSAnimation:
+      return "JSAnimation";
     case FrameSequenceTrackerType::kMaxType:
       return "";
   }
@@ -84,7 +91,9 @@ FrameSequenceTracker::FrameSequenceTracker(
   metrics_->SetCustomReporter(std::move(custom_reporter));
 }
 
-FrameSequenceTracker::~FrameSequenceTracker() = default;
+FrameSequenceTracker::~FrameSequenceTracker() {
+  CleanUp();
+}
 
 void FrameSequenceTracker::ScheduleTerminate() {
   // If the last frame has ended and there is no frame awaiting presentation,
@@ -127,8 +136,6 @@ void FrameSequenceTracker::ReportBeginImplFrame(
   UpdateTrackedFrameData(&begin_impl_frame_data_, args.frame_id.source_id,
                          args.frame_id.sequence_number);
   impl_throughput().frames_expected +=
-      begin_impl_frame_data_.previous_sequence_delta;
-  aggregated_throughput().frames_expected +=
       begin_impl_frame_data_.previous_sequence_delta;
 #if DCHECK_IS_ON()
   ++impl_throughput().frames_received;
@@ -269,6 +276,9 @@ void FrameSequenceTracker::ReportSubmitFrame(
 
   TRACKER_TRACE_STREAM << "s(" << frame_token % kDebugStrMod << ")";
   had_impl_frame_submitted_between_commits_ = true;
+  metrics()->NotifySubmitForJankReporter(
+      FrameSequenceMetrics::ThreadType::kCompositor, frame_token,
+      ack.frame_id.sequence_number);
 
   const bool main_changes_after_sequence_started =
       first_received_main_sequence_ &&
@@ -291,19 +301,14 @@ void FrameSequenceTracker::ReportSubmitFrame(
                            << origin_args.frame_id.sequence_number %
                                   kDebugStrMod
                            << ")";
+      metrics()->NotifySubmitForJankReporter(
+          FrameSequenceMetrics::ThreadType::kMain, frame_token,
+          origin_args.frame_id.sequence_number);
 
       last_submitted_main_sequence_ = origin_args.frame_id.sequence_number;
       main_frames_.push_back(frame_token);
       DCHECK_GE(main_throughput().frames_expected, main_frames_.size())
           << TRACKER_DCHECK_MSG;
-    } else {
-      // If we have sent a BeginMainFrame which hasn't yet been submitted, or
-      // confirmed that it has no damage (previous_sequence is set to 0), then
-      // we are currently expecting a main frame.
-      const bool expecting_main = begin_main_frame_data_.previous_sequence >
-                                  last_submitted_main_sequence_;
-      if (expecting_main)
-        expecting_main_when_submit_impl_.push_back(frame_token);
     }
   }
 
@@ -355,7 +360,13 @@ void FrameSequenceTracker::ReportFrameEnd(
     DCHECK_GT(impl_throughput().frames_expected,
               impl_throughput().frames_produced)
         << TRACKER_DCHECK_MSG;
+    DCHECK_GE(impl_throughput().frames_produced,
+              impl_throughput().frames_ontime)
+        << TRACKER_DCHECK_MSG;
     --impl_throughput().frames_expected;
+    metrics()->NotifyNoUpdateForJankReporter(
+        FrameSequenceMetrics::ThreadType::kCompositor,
+        args.frame_id.sequence_number, args.interval);
 #if DCHECK_IS_ON()
     ++impl_throughput().frames_processed;
     // If these two are the same, it means that each impl frame is either
@@ -367,8 +378,6 @@ void FrameSequenceTracker::ReportFrameEnd(
       NOTREACHED() << TRACKER_DCHECK_MSG;
 #endif
     begin_impl_frame_data_.previous_sequence = 0;
-    if (!IsExpectingMainFrame())
-      --aggregated_throughput().frames_expected;
   }
   // last_submitted_frame_ == 0 means the last impl frame has been presented.
   if (termination_status_ == TerminationStatus::kScheduledForTermination &&
@@ -429,9 +438,28 @@ void FrameSequenceTracker::ReportFramePresented(
 
   uint32_t impl_frames_produced = 0;
   uint32_t main_frames_produced = 0;
+  uint32_t impl_frames_ontime = 0;
+  uint32_t main_frames_ontime = 0;
+
+  const auto& vsync_interval =
+      (feedback.interval.is_zero() ? viz::BeginFrameArgs::DefaultInterval()
+                                   : feedback.interval) *
+      1.5;
+  DCHECK(!vsync_interval.is_zero()) << TRACKER_DCHECK_MSG;
+  base::TimeTicks safe_deadline_for_frame =
+      last_frame_presentation_timestamp_ + vsync_interval;
 
   const bool was_presented = !feedback.failed();
   if (was_presented && submitted_frame_since_last_presentation) {
+    if (!last_frame_presentation_timestamp_.is_null() &&
+        (safe_deadline_for_frame < feedback.timestamp)) {
+      DCHECK_LE(impl_throughput().frames_ontime,
+                impl_throughput().frames_produced)
+          << TRACKER_DCHECK_MSG;
+      ++impl_throughput().frames_ontime;
+      ++impl_frames_ontime;
+    }
+
     DCHECK_LT(impl_throughput().frames_produced,
               impl_throughput().frames_expected)
         << TRACKER_DCHECK_MSG;
@@ -440,6 +468,9 @@ void FrameSequenceTracker::ReportFramePresented(
     if (metrics()->GetEffectiveThread() == ThreadType::kCompositor) {
       metrics()->AdvanceTrace(feedback.timestamp);
     }
+
+    metrics()->ComputeJank(FrameSequenceMetrics::ThreadType::kCompositor,
+                           frame_token, feedback.timestamp, feedback.interval);
   }
 
   if (was_presented) {
@@ -459,43 +490,22 @@ void FrameSequenceTracker::ReportFramePresented(
       if (metrics()->GetEffectiveThread() == ThreadType::kMain) {
         metrics()->AdvanceTrace(feedback.timestamp);
       }
-    }
 
-    if (impl_frames_produced > 0) {
-      // If there is no main frame presented, then we need to see whether or not
-      // we are expecting main frames to be presented or not.
-      if (main_frames_produced == 0) {
-        // Only need to check the first element in the deque because the
-        // elements are in order.
-        bool expecting_main_frames =
-            !expecting_main_when_submit_impl_.empty() &&
-            !viz::FrameTokenGT(expecting_main_when_submit_impl_[0],
-                               frame_token);
-        if (expecting_main_frames) {
-          // We are expecting a main frame to be processed, the main frame
-          // should either report no-damage or be submitted to GPU. Since we
-          // don't know which case it would be, we accumulate the number of impl
-          // frames produced so that we can apply that to aggregated throughput
-          // if the main frame reports no-damage later on.
-          impl_frames_produced_while_expecting_main_ += impl_frames_produced;
-        } else {
-          // TODO(https://crbug.com/1066455): Determine why this DCHECK is
-          // causing PageLoadMetricsBrowserTests to flake, and re-enable.
-          // DCHECK_EQ(impl_frames_produced_while_expecting_main_, 0u)
-          //    << TRACKER_DCHECK_MSG;
-          aggregated_throughput().frames_produced += impl_frames_produced;
-          impl_frames_produced_while_expecting_main_ = 0;
-        }
-      } else {
-        aggregated_throughput().frames_produced += main_frames_produced;
-        impl_frames_produced_while_expecting_main_ = 0;
-        while (!expecting_main_when_submit_impl_.empty() &&
-               !viz::FrameTokenGT(expecting_main_when_submit_impl_.front(),
-                                  frame_token)) {
-          expecting_main_when_submit_impl_.pop_front();
-        }
+      metrics()->ComputeJank(FrameSequenceMetrics::ThreadType::kMain,
+                             frame_token, feedback.timestamp,
+                             feedback.interval);
+    }
+    if (main_frames_.size() < size_before_erase) {
+      if (!last_frame_presentation_timestamp_.is_null() &&
+          (safe_deadline_for_frame < feedback.timestamp)) {
+        DCHECK_LE(main_throughput().frames_ontime,
+                  main_throughput().frames_produced)
+            << TRACKER_DCHECK_MSG;
+        ++main_throughput().frames_ontime;
+        ++main_frames_ontime;
       }
     }
+    last_frame_presentation_timestamp_ = feedback.timestamp;
 
     if (checkerboarding_.last_frame_had_checkerboarding) {
       DCHECK(!checkerboarding_.last_frame_timestamp.is_null())
@@ -515,7 +525,7 @@ void FrameSequenceTracker::ReportFramePresented(
                                  : feedback.interval;
       DCHECK(!interval.is_zero()) << TRACKER_DCHECK_MSG;
       constexpr base::TimeDelta kEpsilon = base::TimeDelta::FromMilliseconds(1);
-      int64_t frames = (difference + kEpsilon) / interval;
+      int64_t frames = (difference + kEpsilon).IntDiv(interval);
       metrics_->add_checkerboarded_frames(frames);
     }
 
@@ -594,8 +604,14 @@ void FrameSequenceTracker::ReportMainFrameCausedNoDamage(
   DCHECK_GT(main_throughput().frames_expected,
             main_throughput().frames_produced)
       << TRACKER_DCHECK_MSG;
+  DCHECK_GE(main_throughput().frames_produced, main_throughput().frames_ontime)
+      << TRACKER_DCHECK_MSG;
   last_no_main_damage_sequence_ = args.frame_id.sequence_number;
   --main_throughput().frames_expected;
+  metrics()->NotifyNoUpdateForJankReporter(
+      FrameSequenceMetrics::ThreadType::kMain, args.frame_id.sequence_number,
+      args.interval);
+
   DCHECK_GE(main_throughput().frames_expected, main_frames_.size())
       << TRACKER_DCHECK_MSG;
 
@@ -606,11 +622,6 @@ void FrameSequenceTracker::ReportMainFrameCausedNoDamage(
         << TRACKER_DCHECK_MSG;
   }
   begin_main_frame_data_.previous_sequence = 0;
-
-  aggregated_throughput().frames_produced +=
-      impl_frames_produced_while_expecting_main_;
-  impl_frames_produced_while_expecting_main_ = 0;
-  expecting_main_when_submit_impl_.clear();
 }
 
 void FrameSequenceTracker::PauseFrameProduction() {
@@ -658,25 +669,6 @@ bool FrameSequenceTracker::ShouldIgnoreSequence(
   return sequence_number != begin_impl_frame_data_.previous_sequence;
 }
 
-bool FrameSequenceTracker::IsExpectingMainFrame() const {
-  bool last_main_not_processed =
-      begin_main_frame_data_.previous_sequence != 0 &&
-      begin_main_frame_data_.previous_sequence != last_processed_main_sequence_;
-  return !main_frames_.empty() || last_main_not_processed;
-}
-
-std::unique_ptr<base::trace_event::TracedValue>
-FrameSequenceMetrics::ThroughputData::ToTracedValue(
-    const ThroughputData& impl,
-    const ThroughputData& main) {
-  auto dict = std::make_unique<base::trace_event::TracedValue>();
-  dict->SetInteger("impl-frames-produced", impl.frames_produced);
-  dict->SetInteger("impl-frames-expected", impl.frames_expected);
-  dict->SetInteger("main-frames-produced", main.frames_produced);
-  dict->SetInteger("main-frames-expected", main.frames_expected);
-  return dict;
-}
-
 bool FrameSequenceTracker::ShouldReportMetricsNow(
     const viz::BeginFrameArgs& args) const {
   return metrics_->HasEnoughDataForReporting() &&
@@ -691,6 +683,11 @@ std::unique_ptr<FrameSequenceMetrics> FrameSequenceTracker::TakeMetrics() {
       << frame_sequence_trace_.str().substr(ignored_trace_char_count_);
 #endif
   return std::move(metrics_);
+}
+
+void FrameSequenceTracker::CleanUp() {
+  if (metrics_)
+    metrics_->ReportLeftoverData();
 }
 
 FrameSequenceTracker::CheckerboardingData::CheckerboardingData() = default;

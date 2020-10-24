@@ -171,8 +171,6 @@ class ChromeUserManagerImpl
   void DemoAccountLoggedIn() override;
   void GuestUserLoggedIn() override;
   void KioskAppLoggedIn(user_manager::User* user) override;
-  void ArcKioskAppLoggedIn(user_manager::User* user) override;
-  void WebKioskAppLoggedIn(user_manager::User* user) override;
   void PublicAccountUserLoggedIn(user_manager::User* user) override;
   void RegularUserLoggedIn(const AccountId& account_id,
                            const user_manager::UserType user_type) override;
@@ -210,14 +208,14 @@ class ChromeUserManagerImpl
       const std::vector<std::string>& old_device_local_accounts);
 
   // Replaces the list of device local accounts with those found in
-  // |device_local_accounts|. Ensures that data belonging to accounts no longer
-  // on the list is removed. Returns |true| if the list has changed.
+  // `device_local_accounts`. Ensures that data belonging to accounts no longer
+  // on the list is removed. Returns `true` if the list has changed.
   // Device local accounts are defined by policy. This method is called whenever
   // an updated list of device local accounts is received from policy.
   bool UpdateAndCleanUpDeviceLocalAccounts(
       const std::vector<policy::DeviceLocalAccount>& device_local_accounts);
 
-  // Updates the display name for public account |username| from policy settings
+  // Updates the display name for public account `username` from policy settings
   // associated with that username.
   void UpdatePublicAccountDisplayName(const std::string& user_id);
 

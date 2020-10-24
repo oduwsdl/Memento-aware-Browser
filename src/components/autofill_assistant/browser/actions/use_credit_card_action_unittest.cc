@@ -13,8 +13,10 @@
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill_assistant/browser/actions/action_test_utils.h"
 #include "components/autofill_assistant/browser/actions/mock_action_delegate.h"
 #include "components/autofill_assistant/browser/mock_personal_data_manager.h"
+#include "components/autofill_assistant/browser/string_conversions_util.h"
 #include "components/autofill_assistant/browser/user_model.h"
 #include "components/autofill_assistant/browser/web/mock_web_controller.h"
 #include "components/autofill_assistant/browser/web/web_controller_util.h"
@@ -82,6 +84,7 @@ class UseCreditCardActionTest : public testing::Test {
                           : nullptr,
               base::UTF8ToUTF16(kFakeCvc));
         }));
+    test_util::MockFindAnyElement(mock_web_controller_);
   }
 
  protected:
@@ -240,6 +243,8 @@ TEST_F(UseCreditCardActionTest, FillCreditCardRequiredFieldsFilled) {
 }
 
 TEST_F(UseCreditCardActionTest, FillCreditCardWithFallback) {
+  InSequence sequence;
+
   ON_CALL(mock_action_delegate_, GetElementTag(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
 
@@ -295,89 +300,83 @@ TEST_F(UseCreditCardActionTest, FillCreditCardWithFallback) {
                                  "}"}),
                    "#network");
 
-  // First validation fails.
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#cvc"}), _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#expmonth"}), _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#expyear2"}), _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#expyear4"}), _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_web_controller_,
-              OnGetFieldValue(Selector({"#card_name"}), _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_web_controller_,
-              OnGetFieldValue(Selector({"#card_number"}), _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#network"}), _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-
-  // Expect fields to be filled
-  Expectation set_cvc =
-      EXPECT_CALL(mock_action_delegate_,
-                  OnSetFieldValue(Selector({"#cvc"}), kFakeCvc, _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  Expectation set_expmonth =
-      EXPECT_CALL(mock_action_delegate_,
-                  OnSetFieldValue(Selector({"#expmonth"}), "09", _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  Expectation set_expyear2 =
-      EXPECT_CALL(mock_action_delegate_,
-                  OnSetFieldValue(Selector({"#expyear2"}), "50", _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  Expectation set_expyear4 =
-      EXPECT_CALL(mock_action_delegate_,
-                  OnSetFieldValue(Selector({"#expyear4"}), "2050", _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  Expectation set_cardholder_name =
-      EXPECT_CALL(mock_action_delegate_,
-                  OnSetFieldValue(Selector({"#card_name"}), "Adam West", _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  Expectation set_card_number =
-      EXPECT_CALL(
-          mock_action_delegate_,
-          OnSetFieldValue(Selector({"#card_number"}), "4111111111111111", _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  Expectation set_card_network =
-      EXPECT_CALL(mock_action_delegate_,
-                  OnSetFieldValue(Selector({"#network"}), "visa", _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-
-  // After fallback, second validation succeeds.
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#cvc"}), _))
-      .After(set_cvc)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#expmonth"}), _))
-      .After(set_expmonth)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#expyear2"}), _))
-      .After(set_expyear2)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#expyear4"}), _))
-      .After(set_expyear4)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
-  EXPECT_CALL(mock_web_controller_,
-              OnGetFieldValue(Selector({"#card_name"}), _))
-      .After(set_expyear4)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
-  EXPECT_CALL(mock_web_controller_,
-              OnGetFieldValue(Selector({"#card_number"}), _))
-      .After(set_expyear4)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#network"}), _))
-      .After(set_card_network)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
-
   EXPECT_CALL(mock_action_delegate_,
               OnFillCardForm(_, base::UTF8ToUTF16(kFakeCvc),
                              Selector({kFakeSelector}).MustBeVisible(), _))
       .WillOnce(RunOnceCallback<3>(OkClientStatus()));
 
+  Selector cvc_selector({"#cvc"});
+  Selector expiry_month_selector({"#expmonth"});
+  Selector expiry_year2_selector({"#expyear2"});
+  Selector expiry_year4_selector({"#expyear4"});
+  Selector card_name_selector({"#card_name"});
+  Selector card_number_selector({"#card_number"});
+  Selector network_selector({"#network"});
+
+  // First validation fails with an empty value, called once for each field.
+  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+      .Times(7)
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), std::string()));
+
+  // Expect fields to be filled
+  EXPECT_CALL(mock_action_delegate_,
+              SetValueAttribute(kFakeCvc,
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, cvc_selector)),
+                                _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(
+      mock_action_delegate_,
+      SetValueAttribute("09",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, expiry_month_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(
+      mock_action_delegate_,
+      SetValueAttribute("50",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, expiry_year2_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(
+      mock_action_delegate_,
+      SetValueAttribute("2050",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, expiry_year4_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(mock_action_delegate_,
+              SetValueAttribute("Adam West",
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, card_name_selector)),
+                                _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(
+      mock_action_delegate_,
+      SetValueAttribute("4111111111111111",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, card_number_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(mock_action_delegate_,
+              SetValueAttribute("visa",
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, network_selector)),
+                                _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+
+  // After fallback, second validation succeeds.
+  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+      .Times(7)
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), "not empty"));
+
   EXPECT_EQ(ProcessedActionStatusProto::ACTION_APPLIED, ProcessAction(action));
 }
 
 TEST_F(UseCreditCardActionTest, ForcedFallbackWithKeystrokes) {
+  InSequence sequence;
+
   ON_CALL(mock_action_delegate_, GetElementTag(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
 
@@ -393,25 +392,50 @@ TEST_F(UseCreditCardActionTest, ForcedFallbackWithKeystrokes) {
   cvc_required->set_fill_strategy(SIMULATE_KEY_PRESSES);
   cvc_required->set_delay_in_millisecond(1000);
 
-  // No field is ever empty
-  ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
-      .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "not empty"));
-
-  // But we still want the CVC filled, with simulated keypresses.
-  EXPECT_CALL(mock_action_delegate_,
-              OnSetFieldValue(Selector({"#cvc"}), kFakeCvc, true, 1000, _))
-      .WillOnce(RunOnceCallback<4>(OkClientStatus()));
-
   user_data_.selected_card_ = std::make_unique<autofill::CreditCard>();
   EXPECT_CALL(mock_action_delegate_,
               OnFillCardForm(_, base::UTF8ToUTF16(kFakeCvc),
                              Selector({kFakeSelector}).MustBeVisible(), _))
       .WillOnce(RunOnceCallback<3>(OkClientStatus()));
 
+  // Do not check required field.
+  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _)).Times(0);
+
+  // But we still want the CVC filled, with simulated keypresses.
+  Selector cvc_selector({"#cvc"});
+  auto expected_element =
+      test_util::MockFindElement(mock_action_delegate_, cvc_selector);
+  EXPECT_CALL(mock_action_delegate_,
+              SetValueAttribute("", EqualsElement(expected_element), _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(mock_action_delegate_, WaitForDocumentToBecomeInteractive(
+                                         EqualsElement(expected_element), _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus()));
+  EXPECT_CALL(mock_action_delegate_,
+              ScrollIntoView(EqualsElement(expected_element), _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus()));
+  EXPECT_CALL(
+      mock_action_delegate_,
+      ClickOrTapElement(ClickType::CLICK, EqualsElement(expected_element), _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(mock_action_delegate_,
+              OnSendKeyboardInput(UTF8ToUnicode(kFakeCvc), 1000,
+                                  EqualsElement(expected_element), _))
+      .WillOnce(RunOnceCallback<3>(OkClientStatus()));
+
+  // The field is only checked afterwards and is not empty.
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, cvc_selector)),
+                              _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
+
   EXPECT_EQ(ProcessedActionStatusProto::ACTION_APPLIED, ProcessAction(action));
 }
 
 TEST_F(UseCreditCardActionTest, SkippingAutofill) {
+  InSequence sequence;
+
   ON_CALL(mock_action_delegate_, GetElementTag(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
 
@@ -425,20 +449,29 @@ TEST_F(UseCreditCardActionTest, SkippingAutofill) {
       "#cvc");
   action.mutable_use_card()->set_skip_autofill(true);
 
+  Selector cvc_selector({"#cvc"});
+
   EXPECT_CALL(mock_action_delegate_, OnShortWaitForElement(_, _)).Times(0);
   EXPECT_CALL(mock_action_delegate_, OnFillCardForm(_, _, _, _)).Times(0);
 
   // First validation fails.
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#cvc"}), _))
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, cvc_selector)),
+                              _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
   // Fill cvc.
-  Expectation set_cvc =
-      EXPECT_CALL(mock_action_delegate_,
-                  OnSetFieldValue(Selector({"#cvc"}), kFakeCvc, _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(mock_action_delegate_,
+              SetValueAttribute(kFakeCvc,
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, cvc_selector)),
+                                _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
   // Second validation succeeds.
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#cvc"}), _))
-      .After(set_cvc)
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, cvc_selector)),
+                              _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
 
   EXPECT_EQ(ProcessedActionStatusProto::ACTION_APPLIED, ProcessAction(action));
@@ -466,6 +499,8 @@ TEST_F(UseCreditCardActionTest, AutofillFailureWithoutRequiredFieldsIsFatal) {
 
 TEST_F(UseCreditCardActionTest,
        AutofillFailureWithRequiredFieldsLaunchesFallback) {
+  InSequence sequence;
+
   ON_CALL(mock_action_delegate_, GetElementTag(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
 
@@ -478,6 +513,8 @@ TEST_F(UseCreditCardActionTest,
                     "}"}),
       "#cvc");
 
+  Selector cvc_selector({"#cvc"});
+
   user_data_.selected_card_ = std::make_unique<autofill::CreditCard>();
   EXPECT_CALL(mock_action_delegate_,
               OnFillCardForm(_, base::UTF8ToUTF16(kFakeCvc),
@@ -486,16 +523,23 @@ TEST_F(UseCreditCardActionTest,
           FillAutofillErrorStatus(ClientStatus(OTHER_ACTION_STATUS))));
 
   // First validation fails.
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#cvc"}), _))
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, cvc_selector)),
+                              _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
   // Fill CVC.
-  Expectation set_cvc =
-      EXPECT_CALL(mock_action_delegate_,
-                  OnSetFieldValue(Selector({"#cvc"}), kFakeCvc, _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(mock_action_delegate_,
+              SetValueAttribute(kFakeCvc,
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, cvc_selector)),
+                                _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
   // Second validation succeeds.
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#cvc"}), _))
-      .After(set_cvc)
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                                  mock_web_controller_, cvc_selector)),
+                              _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
 
   ProcessedActionProto processed_action;
@@ -513,11 +557,15 @@ TEST_F(UseCreditCardActionTest,
 }
 
 TEST_F(UseCreditCardActionTest, FallbackForCardExpirationSucceeds) {
+  InSequence sequence;
+
   ON_CALL(mock_action_delegate_, GetElementTag(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
 
   ActionProto action_proto = CreateUseCreditCardAction();
   AddRequiredField(&action_proto, "${53} - ${55}", "#expiration_date");
+
+  Selector expiration_date_selector({"#expiration_date"});
 
   // Autofill succeeds.
   EXPECT_CALL(mock_action_delegate_,
@@ -526,20 +574,28 @@ TEST_F(UseCreditCardActionTest, FallbackForCardExpirationSucceeds) {
       .WillOnce(RunOnceCallback<3>(OkClientStatus()));
 
   // Validation fails when getting expiration date.
-  EXPECT_CALL(mock_web_controller_,
-              OnGetFieldValue(Eq(Selector({"#expiration_date"})), _))
+  EXPECT_CALL(
+      mock_web_controller_,
+      OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                          mock_web_controller_, expiration_date_selector)),
+                      _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
 
   // Fallback succeeds.
-  Expectation set_expiration_date =
-      EXPECT_CALL(
-          mock_action_delegate_,
-          OnSetFieldValue(Eq(Selector({"#expiration_date"})), "09 - 2050", _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  EXPECT_CALL(
+      mock_action_delegate_,
+      SetValueAttribute("09 - 2050",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, expiration_date_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
 
   // Second validation succeeds.
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
-      .After(set_expiration_date)
+  EXPECT_CALL(
+      mock_web_controller_,
+      OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                          mock_web_controller_, expiration_date_selector)),
+                      _))
       .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), "not empty"));
 
   EXPECT_EQ(ProcessedActionStatusProto::ACTION_APPLIED,
@@ -553,6 +609,8 @@ TEST_F(UseCreditCardActionTest, FallbackFails) {
   ActionProto action_proto = CreateUseCreditCardAction();
   AddRequiredField(&action_proto, "${57}", "#expiration_date");
 
+  Selector expiration_date_selector({"#expiration_date"});
+
   // Autofill succeeds.
   EXPECT_CALL(mock_action_delegate_,
               OnFillCardForm(_, base::UTF8ToUTF16(kFakeCvc),
@@ -560,17 +618,39 @@ TEST_F(UseCreditCardActionTest, FallbackFails) {
       .WillOnce(RunOnceCallback<3>(OkClientStatus()));
 
   // Validation fails when getting expiration date.
-  EXPECT_CALL(mock_web_controller_,
-              OnGetFieldValue(Eq(Selector({"#expiration_date"})), _))
+  EXPECT_CALL(
+      mock_web_controller_,
+      OnGetFieldValue(EqualsElement(test_util::MockFindElement(
+                          mock_web_controller_, expiration_date_selector)),
+                      _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
 
   // Fallback fails.
-  EXPECT_CALL(mock_action_delegate_,
-              OnSetFieldValue(Eq(Selector({"#expiration_date"})), "09/2050", _))
+  EXPECT_CALL(
+      mock_action_delegate_,
+      SetValueAttribute("09/2050",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, expiration_date_selector)),
+                        _))
       .WillOnce(RunOnceCallback<2>(ClientStatus(OTHER_ACTION_STATUS)));
 
-  EXPECT_EQ(ProcessedActionStatusProto::AUTOFILL_INCOMPLETE,
-            ProcessAction(action_proto));
+  ProcessedActionProto processed_action;
+  EXPECT_CALL(callback_, Run(_)).WillOnce(SaveArgPointee<0>(&processed_action));
+
+  UseCreditCardAction action(&mock_action_delegate_, action_proto);
+  action.ProcessAction(callback_.Get());
+
+  EXPECT_EQ(processed_action.status(),
+            ProcessedActionStatusProto::AUTOFILL_INCOMPLETE);
+  EXPECT_TRUE(processed_action.has_status_details());
+  EXPECT_EQ(processed_action.status_details()
+                .autofill_error_info()
+                .autofill_field_error_size(),
+            1);
+  EXPECT_EQ(OTHER_ACTION_STATUS, processed_action.status_details()
+                                     .autofill_error_info()
+                                     .autofill_field_error(0)
+                                     .status());
 }
 
 }  // namespace

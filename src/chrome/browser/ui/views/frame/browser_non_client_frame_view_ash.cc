@@ -7,33 +7,25 @@
 #include <algorithm>
 
 #include "ash/public/cpp/app_types.h"
-#include "ash/public/cpp/ash_constants.h"
-#include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/caption_buttons/frame_back_button.h"
-#include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/public/cpp/default_frame_header.h"
 #include "ash/public/cpp/frame_utils.h"
-#include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/public/cpp/window_state_type.h"
 #include "ash/wm/window_util.h"
-#include "base/command_line.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/tab_icon_view.h"
@@ -43,6 +35,10 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/base/window_state_type.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -76,11 +72,6 @@ constexpr SkColor kIncognitoWindowTitleTextColor = SK_ColorWHITE;
 // The indicator for teleported windows has 8 DIPs before and below it.
 constexpr int kProfileIndicatorPadding = 8;
 
-bool IsV1AppBackButtonEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ash::switches::kAshEnableV1AppBackButton);
-}
-
 // Returns true if the header should be painted so that it looks the same as
 // the header used for packaged apps.
 bool UsePackagedAppHeaderStyle(const Browser* browser) {
@@ -94,9 +85,6 @@ bool UsePackagedAppHeaderStyle(const Browser* browser) {
 
 }  // namespace
 
-///////////////////////////////////////////////////////////////////////////////
-// BrowserNonClientFrameViewAsh, public:
-
 BrowserNonClientFrameViewAsh::BrowserNonClientFrameViewAsh(
     BrowserFrame* frame,
     BrowserView* browser_view)
@@ -106,10 +94,7 @@ BrowserNonClientFrameViewAsh::BrowserNonClientFrameViewAsh(
 }
 
 BrowserNonClientFrameViewAsh::~BrowserNonClientFrameViewAsh() {
-  browser_view()->browser()->command_controller()->RemoveCommandObserver(
-      IDC_BACK, this);
-
-  ash::TabletMode::Get()->RemoveObserver(this);
+  chromeos::TabletState::Get()->RemoveObserver(this);
 
   ImmersiveModeController* immersive_controller =
       browser_view()->immersive_mode_controller();
@@ -118,7 +103,8 @@ BrowserNonClientFrameViewAsh::~BrowserNonClientFrameViewAsh() {
 }
 
 void BrowserNonClientFrameViewAsh::Init() {
-  caption_button_container_ = new ash::FrameCaptionButtonContainerView(frame());
+  caption_button_container_ =
+      new chromeos::FrameCaptionButtonContainerView(frame());
   caption_button_container_->UpdateCaptionButtonState(false /*=animate*/);
   AddChildView(caption_button_container_);
 
@@ -126,7 +112,7 @@ void BrowserNonClientFrameViewAsh::Init() {
 
   // Initializing the TabIconView is expensive, so only do it if we need to.
   if (browser_view()->ShouldShowWindowIcon()) {
-    window_icon_ = new TabIconView(this, nullptr);
+    window_icon_ = new TabIconView(this, views::Button::PressedCallback());
     window_icon_->set_is_light(true);
     AddChildView(window_icon_);
     window_icon_->Update();
@@ -147,14 +133,7 @@ void BrowserNonClientFrameViewAsh::Init() {
   if (browser->profile()->IsOffTheRecord())
     window->SetProperty(ash::kBlockedForAssistantSnapshotKey, true);
 
-  ash::TabletMode::Get()->AddObserver(this);
-
-  if (browser->deprecated_is_app() && IsV1AppBackButtonEnabled()) {
-    browser->command_controller()->AddCommandObserver(IDC_BACK, this);
-    back_button_ = new ash::FrameBackButton();
-    AddChildView(back_button_);
-    // TODO(oshima): Add Tooltip, accessibility name.
-  }
+  chromeos::TabletState::Get()->AddObserver(this);
 
   if (frame()->ShouldDrawFrameHeader())
     frame_header_ = CreateFrameHeader();
@@ -168,19 +147,13 @@ void BrowserNonClientFrameViewAsh::Init() {
   browser_view()->immersive_mode_controller()->AddObserver(this);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// BrowserNonClientFrameView:
-
 gfx::Rect BrowserNonClientFrameViewAsh::GetBoundsForTabStripRegion(
-    const views::View* tabstrip) const {
-  if (!tabstrip)
-    return gfx::Rect();
-
+    const gfx::Size& tabstrip_minimum_size) const {
   const int left_inset = GetTabStripLeftInset();
   const bool restored = !frame()->IsMaximized() && !frame()->IsFullscreen();
   return gfx::Rect(left_inset, GetTopInset(restored),
                    std::max(0, width() - left_inset - GetTabStripRightInset()),
-                   tabstrip->GetPreferredSize().height());
+                   tabstrip_minimum_size.height());
 }
 
 int BrowserNonClientFrameViewAsh::GetTopInset(bool restored) const {
@@ -244,7 +217,7 @@ SkColor BrowserNonClientFrameViewAsh::GetCaptionColor(
   bool active = ShouldPaintAsActive(active_state);
 
   SkColor active_color =
-      views::FrameCaptionButton::GetButtonColor(ash::kDefaultFrameColor);
+      views::FrameCaptionButton::GetButtonColor(chromeos::kDefaultFrameColor);
 
   // Web apps apply a theme color if specified by the extension.
   Browser* browser = browser_view()->browser();
@@ -261,9 +234,6 @@ SkColor BrowserNonClientFrameViewAsh::GetCaptionColor(
       views::FrameCaptionButton::GetInactiveButtonColorAlphaRatio();
   return SkColorSetA(active_color, inactive_alpha_ratio * SK_AlphaOPAQUE);
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// views::NonClientFrameView:
 
 gfx::Rect BrowserNonClientFrameViewAsh::GetBoundsForClientView() const {
   // The ClientView must be flush with the top edge of the widget so that the
@@ -330,28 +300,12 @@ void BrowserNonClientFrameViewAsh::UpdateWindowTitle() {
 
 void BrowserNonClientFrameViewAsh::SizeConstraintsChanged() {}
 
-void BrowserNonClientFrameViewAsh::PaintAsActiveChanged(bool active) {
-  BrowserNonClientFrameView::PaintAsActiveChanged(active);
-
-  UpdateProfileIcons();
-
-  const bool should_paint_as_active = ShouldPaintAsActive();
-  if (frame_header_)
-    frame_header_->SetPaintAsActive(should_paint_as_active);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// views::View:
-
 void BrowserNonClientFrameViewAsh::OnPaint(gfx::Canvas* canvas) {
   if (!ShouldPaint())
     return;
 
-  const ash::FrameHeader::Mode header_mode =
-      ShouldPaintAsActive() ? ash::FrameHeader::MODE_ACTIVE
-                            : ash::FrameHeader::MODE_INACTIVE;
   if (frame_header_)
-    frame_header_->PaintHeader(canvas, header_mode);
+    frame_header_->PaintHeader(canvas);
 }
 
 void BrowserNonClientFrameViewAsh::Layout() {
@@ -413,7 +367,7 @@ gfx::Size BrowserNonClientFrameViewAsh::GetMinimumSize() const {
     // Ensure that the minimum width is enough to hold a minimum width tab strip
     // at its usual insets.
     const int min_tabstrip_width =
-        browser_view()->tabstrip()->GetMinimumSize().width();
+        browser_view()->tab_strip_region_view()->GetMinimumSize().width();
     min_width =
         std::max(min_width, min_tabstrip_width + GetTabStripLeftInset() +
                                 GetTabStripRightInset());
@@ -433,9 +387,6 @@ void BrowserNonClientFrameViewAsh::ChildPreferredSizeChanged(
     frame()->GetRootView()->Layout();
   }
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// ash::BrowserFrameHeaderAsh::AppearanceProvider:
 
 SkColor BrowserNonClientFrameViewAsh::GetTitleColor() {
   return browser_view()->IsRegularOrGuestSession()
@@ -463,15 +414,19 @@ gfx::ImageSkia BrowserNonClientFrameViewAsh::GetFrameHeaderOverlayImage(
                                      : BrowserFrameActiveState::kInactive);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// ash::TabletModeToggleObserver:
-
-void BrowserNonClientFrameViewAsh::OnTabletModeStarted() {
-  OnTabletModeToggled(true);
-}
-
-void BrowserNonClientFrameViewAsh::OnTabletModeEnded() {
-  OnTabletModeToggled(false);
+void BrowserNonClientFrameViewAsh::OnTabletStateChanged(
+    chromeos::TabletState::State state) {
+  switch (state) {
+    case chromeos::TabletState::State::kInTabletMode:
+      OnTabletModeToggled(true);
+      return;
+    case chromeos::TabletState::State::kInClamshellMode:
+      OnTabletModeToggled(false);
+      return;
+    case chromeos::TabletState::State::kEnteringTabletMode:
+    case chromeos::TabletState::State::kExitingTabletMode:
+      break;
+  }
 }
 
 void BrowserNonClientFrameViewAsh::OnTabletModeToggled(bool enabled) {
@@ -494,7 +449,7 @@ void BrowserNonClientFrameViewAsh::OnTabletModeToggled(bool enabled) {
     // minimized are still put in immersive mode, since they may still be
     // visible but not activated due to something transparent and/or not
     // fullscreen (ie. fullscreen launcher).
-    if (!frame()->IsFullscreen() && !browser_view()->IsTabStripSupported() &&
+    if (!frame()->IsFullscreen() && !browser_view()->CanSupportTabStrip() &&
         !frame()->IsMinimized()) {
       browser_view()->immersive_mode_controller()->SetEnabled(true);
       return;
@@ -502,7 +457,7 @@ void BrowserNonClientFrameViewAsh::OnTabletModeToggled(bool enabled) {
   } else {
     // Exit immersive mode if the feature is enabled and the widget is not in
     // fullscreen mode.
-    if (!frame()->IsFullscreen() && !browser_view()->IsTabStripSupported()) {
+    if (!frame()->IsFullscreen() && !browser_view()->CanSupportTabStrip()) {
       browser_view()->immersive_mode_controller()->SetEnabled(false);
       return;
     }
@@ -515,9 +470,6 @@ void BrowserNonClientFrameViewAsh::OnTabletModeToggled(bool enabled) {
   if (frame()->GetRootView())
     frame()->GetRootView()->Layout();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// TabIconViewModel:
 
 bool BrowserNonClientFrameViewAsh::ShouldTabIconViewAnimate() const {
   // Web apps use their app icon and shouldn't show a throbber.
@@ -536,18 +488,6 @@ gfx::ImageSkia BrowserNonClientFrameViewAsh::GetFaviconForTabIconView() {
   return delegate ? delegate->GetWindowIcon() : gfx::ImageSkia();
 }
 
-void BrowserNonClientFrameViewAsh::EnabledStateChangedForCommand(int id,
-                                                                 bool enabled) {
-  DCHECK_EQ(IDC_BACK, id);
-  DCHECK(browser_view()->browser()->deprecated_is_app());
-
-  if (back_button_)
-    back_button_->SetEnabled(enabled);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// aura::WindowObserver:
-
 void BrowserNonClientFrameViewAsh::OnWindowDestroying(aura::Window* window) {
   window_observer_.RemoveAll();
 }
@@ -555,7 +495,7 @@ void BrowserNonClientFrameViewAsh::OnWindowDestroying(aura::Window* window) {
 void BrowserNonClientFrameViewAsh::OnWindowPropertyChanged(aura::Window* window,
                                                            const void* key,
                                                            intptr_t old) {
-  if (key == ash::kIsShowingInOverviewKey) {
+  if (key == chromeos::kIsShowingInOverviewKey) {
     OnAddedToOrRemovedFromOverview();
     return;
   }
@@ -570,9 +510,6 @@ void BrowserNonClientFrameViewAsh::OnWindowPropertyChanged(aura::Window* window,
     frame_header_->view()->InvalidateLayout();
   }
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// ImmersiveModeController::Observer:
 
 void BrowserNonClientFrameViewAsh::OnImmersiveRevealStarted() {
   // The frame caption buttons use ink drop highlights and flood fill effects.
@@ -591,8 +528,6 @@ void BrowserNonClientFrameViewAsh::OnImmersiveRevealStarted() {
   container->AddChildViewAt(caption_button_container_, 0);
   if (web_app_frame_toolbar())
     container->AddChildViewAt(web_app_frame_toolbar(), 0);
-  if (back_button_)
-    container->AddChildViewAt(back_button_, 0);
 
   container->Layout();
 }
@@ -601,8 +536,6 @@ void BrowserNonClientFrameViewAsh::OnImmersiveRevealEnded() {
   AddChildViewAt(caption_button_container_, 0);
   if (web_app_frame_toolbar())
     AddChildViewAt(web_app_frame_toolbar(), 0);
-  if (back_button_)
-    AddChildViewAt(back_button_, 0);
   Layout();
 }
 
@@ -610,17 +543,20 @@ void BrowserNonClientFrameViewAsh::OnImmersiveFullscreenExited() {
   OnImmersiveRevealEnded();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// BrowserNonClientFrameViewAsh, protected:
+void BrowserNonClientFrameViewAsh::PaintAsActiveChanged() {
+  BrowserNonClientFrameView::PaintAsActiveChanged();
+
+  UpdateProfileIcons();
+
+  if (frame_header_)
+    frame_header_->SetPaintAsActive(ShouldPaintAsActive());
+}
 
 void BrowserNonClientFrameViewAsh::OnProfileAvatarChanged(
     const base::FilePath& profile_path) {
   BrowserNonClientFrameView::OnProfileAvatarChanged(profile_path);
   UpdateProfileIcons();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// BrowserNonClientFrameViewAsh, private:
 
 bool BrowserNonClientFrameViewAsh::ShouldShowCaptionButtons() const {
   return ShouldShowCaptionButtonsWhenNotInOverview() && !IsInOverviewMode();
@@ -629,7 +565,7 @@ bool BrowserNonClientFrameViewAsh::ShouldShowCaptionButtons() const {
 bool BrowserNonClientFrameViewAsh::ShouldShowCaptionButtonsWhenNotInOverview()
     const {
   return UsePackagedAppHeaderStyle(browser_view()->browser()) ||
-         !ash::TabletMode::Get()->InTabletMode();
+         !chromeos::TabletState::Get()->InTabletMode();
 }
 
 int BrowserNonClientFrameViewAsh::GetToolbarLeftInset() const {
@@ -660,8 +596,9 @@ bool BrowserNonClientFrameViewAsh::ShouldPaint() const {
 #if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
   // Normal windows that have a WebUI-based tab strip do not need a browser
   // frame as no tab strip is drawn on top of the browser frame.
-  if (WebUITabStripContainerView::UseTouchableTabStrip() &&
-      browser_view()->IsTabStripSupported()) {
+  if (WebUITabStripContainerView::UseTouchableTabStrip(
+          browser_view()->browser()) &&
+      browser_view()->CanSupportTabStrip()) {
     return false;
   }
 #endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
@@ -695,7 +632,6 @@ BrowserNonClientFrameViewAsh::CreateFrameHeader() {
         frame(), this, caption_button_container_);
   }
 
-  header->SetBackButton(back_button_);
   header->SetLeftHeaderView(window_icon_);
   return header;
 }
@@ -774,7 +710,7 @@ void BrowserNonClientFrameViewAsh::LayoutProfileIndicator() {
 }
 
 bool BrowserNonClientFrameViewAsh::IsInOverviewMode() const {
-  return GetFrameWindow()->GetProperty(ash::kIsShowingInOverviewKey);
+  return GetFrameWindow()->GetProperty(chromeos::kIsShowingInOverviewKey);
 }
 
 void BrowserNonClientFrameViewAsh::OnUpdateFrameColor() {

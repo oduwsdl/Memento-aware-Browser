@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/memory_usage_monitor_linux.mojom"
+  ]
+}

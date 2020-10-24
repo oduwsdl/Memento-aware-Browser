@@ -10,6 +10,8 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/scoped_observer.h"
 #include "components/favicon/ios/web_favicon_driver.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -20,8 +22,8 @@
 #include "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/main/browser_util.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
+#import "ios/chrome/browser/snapshots/snapshot_browser_agent.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
-#import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_observer.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #include "ios/chrome/browser/system_flags.h"
@@ -135,17 +137,6 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
       _scopedWebStateObserver;
 }
 
-// Public properties.
-@synthesize browser = _browser;
-@synthesize tabRestoreService = _tabRestoreService;
-// Private properties.
-@synthesize webStateList = _webStateList;
-@synthesize browserState = _browserState;
-@synthesize consumer = _consumer;
-@synthesize closedSessionWindow = _closedSessionWindow;
-@synthesize syncedClosedTabsCount = _syncedClosedTabsCount;
-@synthesize appearanceCache = _appearanceCache;
-
 - (instancetype)initWithConsumer:(id<GridConsumer>)consumer {
   if (self = [super init]) {
     _consumer = consumer;
@@ -191,6 +182,9 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
     didInsertWebState:(web::WebState*)webState
               atIndex:(int)index
            activating:(BOOL)activating {
+  DCHECK_EQ(_webStateList, webStateList);
+  if (webStateList->IsBatchInProgress())
+    return;
   [self.consumer insertItem:CreateItem(webState)
                     atIndex:index
              selectedItemID:GetActiveTabId(webStateList)];
@@ -201,6 +195,9 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
      didMoveWebState:(web::WebState*)webState
            fromIndex:(int)fromIndex
              toIndex:(int)toIndex {
+  DCHECK_EQ(_webStateList, webStateList);
+  if (webStateList->IsBatchInProgress())
+    return;
   TabIdTabHelper* tabHelper = TabIdTabHelper::FromWebState(webState);
   [self.consumer moveItemWithID:tabHelper->tab_id() toIndex:toIndex];
 }
@@ -209,6 +206,9 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
     didReplaceWebState:(web::WebState*)oldWebState
           withWebState:(web::WebState*)newWebState
                atIndex:(int)index {
+  DCHECK_EQ(_webStateList, webStateList);
+  if (webStateList->IsBatchInProgress())
+    return;
   TabIdTabHelper* tabHelper = TabIdTabHelper::FromWebState(oldWebState);
   [self.consumer replaceItemID:tabHelper->tab_id()
                       withItem:CreateItem(newWebState)];
@@ -219,6 +219,9 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 - (void)webStateList:(WebStateList*)webStateList
     didDetachWebState:(web::WebState*)webState
               atIndex:(int)index {
+  DCHECK_EQ(_webStateList, webStateList);
+  if (webStateList->IsBatchInProgress())
+    return;
   if (!webStateList)
     return;
   TabIdTabHelper* tabHelper = TabIdTabHelper::FromWebState(webState);
@@ -233,6 +236,9 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
                 oldWebState:(web::WebState*)oldWebState
                     atIndex:(int)atIndex
                      reason:(ActiveWebStateChangeReason)reason {
+  DCHECK_EQ(_webStateList, webStateList);
+  if (webStateList->IsBatchInProgress())
+    return;
   // If the selected index changes as a result of the last webstate being
   // detached, atIndex will be -1.
   if (atIndex == -1) {
@@ -242,6 +248,21 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 
   TabIdTabHelper* tabHelper = TabIdTabHelper::FromWebState(newWebState);
   [self.consumer selectItemWithID:tabHelper->tab_id()];
+}
+
+- (void)webStateListWillBeginBatchOperation:(WebStateList*)webStateList {
+  DCHECK_EQ(_webStateList, webStateList);
+  _scopedWebStateObserver->RemoveAll();
+}
+
+- (void)webStateListBatchOperationEnded:(WebStateList*)webStateList {
+  DCHECK_EQ(_webStateList, webStateList);
+  for (int i = 0; i < self.webStateList->count(); i++) {
+    web::WebState* webState = self.webStateList->GetWebStateAt(i);
+    _scopedWebStateObserver->Add(webState);
+  }
+  [self.consumer populateItems:CreateItems(self.webStateList)
+                selectedItemID:GetActiveTabId(self.webStateList)];
 }
 
 #pragma mark - CRWWebStateObserver
@@ -296,23 +317,25 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 }
 
 - (void)closeAllItems {
+  if (!self.browserState->IsOffTheRecord()) {
+    base::RecordAction(
+        base::UserMetricsAction("MobileTabGridCloseAllRegularTabs"));
+  } else {
+    base::RecordAction(
+        base::UserMetricsAction("MobileTabGridCloseAllIncognitoTabs"));
+  }
   // This is a no-op if |webStateList| is already empty.
   self.webStateList->CloseAllWebStates(WebStateList::CLOSE_USER_ACTION);
+  SnapshotBrowserAgent::FromBrowser(self.browser)->RemoveAllSnapshots();
 }
 
+// TODO(crbug.com/1123536): Merges this method with |closeAllItems| once
+// EnableCloseAllTabsConfirmation is landed.
 - (void)saveAndCloseAllItems {
+  base::RecordAction(
+      base::UserMetricsAction("MobileTabGridCloseAllRegularTabs"));
   if (self.webStateList->empty())
     return;
-  // Tell the cache to mark these images for deletion, rather than immediately
-  // deleting them.
-  DCHECK(self.browser->GetBrowserState());
-  SnapshotCache* cache =
-      SnapshotCacheFactory::GetForBrowserState(self.browser->GetBrowserState());
-  for (int i = 0; i < self.webStateList->count(); i++) {
-    web::WebState* webState = self.webStateList->GetWebStateAt(i);
-    TabIdTabHelper* tabHelper = TabIdTabHelper::FromWebState(webState);
-    [cache markImageWithSessionID:tabHelper->tab_id()];
-  }
   self.closedSessionWindow = SerializeWebStateList(self.webStateList);
   int old_size =
       self.tabRestoreService ? self.tabRestoreService->entries().size() : 0;
@@ -324,17 +347,15 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 }
 
 - (void)undoCloseAllItems {
+  base::RecordAction(
+      base::UserMetricsAction("MobileTabGridUndoCloseAllRegularTabs"));
   if (!self.closedSessionWindow)
     return;
-  DCHECK(self.browser->GetBrowserState());
   SessionRestorationBrowserAgent::FromBrowser(self.browser)
       ->RestoreSessionWindow(self.closedSessionWindow);
   self.closedSessionWindow = nil;
   [self removeEntriesFromTabRestoreService];
   self.syncedClosedTabsCount = 0;
-  // Unmark all images for deletion since they are now active tabs again.
-  ChromeBrowserState* browserState = self.browser->GetBrowserState();
-  [SnapshotCacheFactory::GetForBrowserState(browserState) unmarkAllImages];
 }
 
 - (void)discardSavedClosedItems {
@@ -342,10 +363,16 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
     return;
   self.syncedClosedTabsCount = 0;
   self.closedSessionWindow = nil;
-  // Delete all marked images from the cache.
-  DCHECK(self.browserState);
-  [SnapshotCacheFactory::GetForBrowserState(self.browserState)
-      removeMarkedImages];
+  SnapshotBrowserAgent::FromBrowser(self.browser)->RemoveAllSnapshots();
+}
+
+- (void)showCloseAllConfirmationActionSheetWithAnchor:
+    (UIBarButtonItem*)buttonAnchor {
+  [self.delegate
+      showCloseAllConfirmationActionSheetWitTabGridMediator:self
+                                               numberOfTabs:self.webStateList
+                                                                ->count()
+                                                     anchor:buttonAnchor];
 }
 
 #pragma mark GridCommands helpers
@@ -434,29 +461,39 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
   }
 
   // Handle URLs from within Chrome synchronously using a local object.
-  if ([dragItem.localObject isKindOfClass:[NSURL class]]) {
-    NSURL* droppedURL = static_cast<NSURL*>(dragItem.localObject);
-    [self insertNewItemAtIndex:destinationIndex
-                       withURL:net::GURLWithNSURL(droppedURL)];
+  if ([dragItem.localObject isKindOfClass:[URLInfo class]]) {
+    URLInfo* droppedURL = static_cast<URLInfo*>(dragItem.localObject);
+    [self insertNewItemAtIndex:destinationIndex withURL:droppedURL.URL];
+    return;
+  }
+}
+
+- (void)dropItemFromProvider:(NSItemProvider*)itemProvider
+                     toIndex:(NSUInteger)destinationIndex
+          placeholderContext:
+              (id<UICollectionViewDropPlaceholderContext>)placeholderContext {
+  if (![itemProvider canLoadObjectOfClass:[NSURL class]]) {
+    [placeholderContext deletePlaceholder];
     return;
   }
 
-  // Handle URLs from other apps asynchronously, as synchronous is not possible
-  // with NSItemProvider.
-  NSItemProvider* itemProvider = dragItem.itemProvider;
-  if ([itemProvider canLoadObjectOfClass:[NSURL class]]) {
-    auto loadHandler =
-        ^(id<NSItemProviderReading> providedItem, NSError* error) {
-          dispatch_async(dispatch_get_main_queue(), ^{
-            NSURL* droppedURL = static_cast<NSURL*>(providedItem);
-            [self insertNewItemAtIndex:destinationIndex
-                               withURL:net::GURLWithNSURL(droppedURL)];
-          });
-        };
-    [itemProvider loadObjectOfClass:[NSURL class]
-                  completionHandler:loadHandler];
-    return;
-  }
+  // The parameter type has changed with Xcode 12 SDK.
+  // TODO(crbug.com/1098318): Remove this once Xcode 11 support is dropped.
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+  using providerType = __kindof id<NSItemProviderReading>;
+#else
+  using providerType = id<NSItemProviderReading>;
+#endif
+
+  auto loadHandler = ^(providerType providedItem, NSError* error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [placeholderContext deletePlaceholder];
+      NSURL* droppedURL = static_cast<NSURL*>(providedItem);
+      [self insertNewItemAtIndex:destinationIndex
+                         withURL:net::GURLWithNSURL(droppedURL)];
+    });
+  };
+  [itemProvider loadObjectOfClass:[NSURL class] completionHandler:loadHandler];
 }
 
 #pragma mark - GridImageDataSource
@@ -547,11 +584,11 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
   }
 }
 
-// Returns a SnapshotCache for the current BrowserState.
+// Returns a SnapshotCache for the current browser.
 - (SnapshotCache*)snapshotCache {
-  if (!self.browserState)
+  if (!self.browser)
     return nil;
-  return SnapshotCacheFactory::GetForBrowserState(self.browserState);
+  return SnapshotBrowserAgent::FromBrowser(self.browser)->snapshot_cache();
 }
 
 @end

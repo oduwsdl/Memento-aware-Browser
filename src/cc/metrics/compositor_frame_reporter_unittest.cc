@@ -32,7 +32,9 @@ class CompositorFrameReporterTest : public testing::Test {
             CompositorFrameReporter::ActiveTrackers(),
             viz::BeginFrameArgs(),
             nullptr,
-            /*should_report_metrics=*/true)) {
+            /*should_report_metrics=*/true,
+            CompositorFrameReporter::SmoothThread::kSmoothBoth,
+            /*layer_tree_host_id=*/1)) {
     pipeline_reporter_->set_tick_clock(&test_tick_clock_);
     AdvanceNowByMs(1);
   }
@@ -51,10 +53,10 @@ class CompositorFrameReporterTest : public testing::Test {
     breakdown->animate = base::TimeDelta::FromMicroseconds(9);
     breakdown->style_update = base::TimeDelta::FromMicroseconds(8);
     breakdown->layout_update = base::TimeDelta::FromMicroseconds(7);
-    breakdown->prepaint = base::TimeDelta::FromMicroseconds(6);
-    breakdown->composite = base::TimeDelta::FromMicroseconds(5);
-    breakdown->paint = base::TimeDelta::FromMicroseconds(4);
-    breakdown->scrolling_coordinator = base::TimeDelta::FromMicroseconds(3);
+    breakdown->compositing_inputs = base::TimeDelta::FromMicroseconds(6);
+    breakdown->prepaint = base::TimeDelta::FromMicroseconds(5);
+    breakdown->compositing_assignments = base::TimeDelta::FromMicroseconds(4);
+    breakdown->paint = base::TimeDelta::FromMicroseconds(3);
     breakdown->composite_commit = base::TimeDelta::FromMicroseconds(2);
     breakdown->update_layers = base::TimeDelta::FromMicroseconds(1);
 
@@ -232,9 +234,12 @@ TEST_F(CompositorFrameReporterTest,
 
   const base::TimeTicks event_time = Now();
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_TOUCH_PRESSED, event_time, base::nullopt),
-      EventMetrics::Create(ui::ET_TOUCH_MOVED, event_time, base::nullopt),
-      EventMetrics::Create(ui::ET_TOUCH_MOVED, event_time, base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_PRESSED, base::nullopt, event_time,
+                           base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_MOVED, base::nullopt, event_time,
+                           base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_MOVED, base::nullopt, event_time,
+                           base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
   std::vector<EventMetrics> events_metrics = {
@@ -269,10 +274,13 @@ TEST_F(CompositorFrameReporterTest,
   histogram_tester.ExpectTotalCount("EventLatency.TouchPressed.TotalLatency",
                                     1);
   histogram_tester.ExpectTotalCount("EventLatency.TouchMoved.TotalLatency", 2);
+  histogram_tester.ExpectTotalCount("EventLatency.TotalLatency", 3);
   histogram_tester.ExpectBucketCount("EventLatency.TouchPressed.TotalLatency",
                                      latency_ms, 1);
   histogram_tester.ExpectBucketCount("EventLatency.TouchMoved.TotalLatency",
                                      latency_ms, 2);
+  histogram_tester.ExpectBucketCount("EventLatency.TotalLatency", latency_ms,
+                                     3);
 }
 
 // Tests that when a frame is presented to the user, event latency breakdown
@@ -283,7 +291,8 @@ TEST_F(CompositorFrameReporterTest,
 
   const base::TimeTicks event_time = Now();
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_TOUCH_PRESSED, event_time, base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_PRESSED, base::nullopt, event_time,
+                           base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
   std::vector<EventMetrics> events_metrics = {*event_metrics_ptrs[0]};
@@ -357,15 +366,15 @@ TEST_F(CompositorFrameReporterTest,
        blink_breakdown_copy.style_update},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.LayoutUpdate",
        blink_breakdown_copy.layout_update},
+      {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.CompositingInputs",
+       blink_breakdown_copy.compositing_inputs},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.Prepaint",
        blink_breakdown_copy.prepaint},
-      {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.Composite",
-       blink_breakdown_copy.composite},
+      {"EventLatency.TouchPressed.SendBeginMainFrameToCommit"
+       ".CompositingAssignments",
+       blink_breakdown_copy.compositing_assignments},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.Paint",
        blink_breakdown_copy.paint},
-      {"EventLatency.TouchPressed.SendBeginMainFrameToCommit."
-       "ScrollingCoordinator",
-       blink_breakdown_copy.scrolling_coordinator},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.CompositeCommit",
        blink_breakdown_copy.composite_commit},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.UpdateLayers",
@@ -408,6 +417,8 @@ TEST_F(CompositorFrameReporterTest,
            viz_breakdown.swap_timings.swap_end},
       {"EventLatency.TouchPressed.TotalLatency",
        viz_breakdown.presentation_feedback.timestamp - event_time},
+      {"EventLatency.TotalLatency",
+       viz_breakdown.presentation_feedback.timestamp - event_time},
   };
 
   for (const auto& expected_latency : expected_latencies) {
@@ -425,12 +436,14 @@ TEST_F(CompositorFrameReporterTest,
 
   const base::TimeTicks event_time = Now();
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_BEGIN, event_time,
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_BEGIN, base::nullopt,
+                           event_time, ui::ScrollInputType::kWheel),
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE,
+                           EventMetrics::ScrollUpdateType::kStarted, event_time,
                            ui::ScrollInputType::kWheel),
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE, event_time,
-                           ui::ScrollInputType::kWheel),
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE, event_time,
-                           ui::ScrollInputType::kWheel),
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE,
+                           EventMetrics::ScrollUpdateType::kContinued,
+                           event_time, ui::ScrollInputType::kWheel),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
   std::vector<EventMetrics> events_metrics = {
@@ -465,28 +478,29 @@ TEST_F(CompositorFrameReporterTest,
   const int total_latency_ms =
       (viz_breakdown.presentation_feedback.timestamp - event_time)
           .InMicroseconds();
-  const int swap_end_latency_ms =
-      (viz_breakdown.swap_timings.swap_end - event_time).InMicroseconds();
+  const int swap_begin_latency_ms =
+      (viz_breakdown.swap_timings.swap_start - event_time).InMicroseconds();
   struct {
     const char* name;
     const int64_t latency_ms;
-    const int count;
-  } expected_counts[] = {
-      {"EventLatency.GestureScrollBegin.Wheel.TotalLatency", total_latency_ms,
-       1},
-      {"EventLatency.GestureScrollBegin.Wheel.TotalLatencyToSwapEnd",
-       swap_end_latency_ms, 1},
-      {"EventLatency.GestureScrollUpdate.Wheel.TotalLatency", total_latency_ms,
-       2},
-      {"EventLatency.GestureScrollUpdate.Wheel.TotalLatencyToSwapEnd",
-       swap_end_latency_ms, 2},
+  } expected_metrics[] = {
+      {"EventLatency.GestureScrollBegin.Wheel.TotalLatency", total_latency_ms},
+      {"EventLatency.GestureScrollBegin.Wheel.TotalLatencyToSwapBegin",
+       swap_begin_latency_ms},
+      {"EventLatency.FirstGestureScrollUpdate.Wheel.TotalLatency",
+       total_latency_ms},
+      {"EventLatency.FirstGestureScrollUpdate.Wheel.TotalLatencyToSwapBegin",
+       swap_begin_latency_ms},
+      {"EventLatency.GestureScrollUpdate.Wheel.TotalLatency", total_latency_ms},
+      {"EventLatency.GestureScrollUpdate.Wheel.TotalLatencyToSwapBegin",
+       swap_begin_latency_ms},
   };
-  for (const auto& expected_count : expected_counts) {
-    histogram_tester.ExpectTotalCount(expected_count.name,
-                                      expected_count.count);
-    histogram_tester.ExpectBucketCount(
-        expected_count.name, expected_count.latency_ms, expected_count.count);
+  for (const auto& expected_metric : expected_metrics) {
+    histogram_tester.ExpectTotalCount(expected_metric.name, 1);
+    histogram_tester.ExpectBucketCount(expected_metric.name,
+                                       expected_metric.latency_ms, 1);
   }
+  histogram_tester.ExpectTotalCount("EventLatency.TotalLatency", 3);
 }
 
 // Tests that when the frame is not presented to the user, event latency metrics
@@ -497,9 +511,12 @@ TEST_F(CompositorFrameReporterTest,
 
   const base::TimeTicks event_time = Now();
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_TOUCH_PRESSED, event_time, base::nullopt),
-      EventMetrics::Create(ui::ET_TOUCH_MOVED, event_time, base::nullopt),
-      EventMetrics::Create(ui::ET_TOUCH_MOVED, event_time, base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_PRESSED, base::nullopt, event_time,
+                           base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_MOVED, base::nullopt, event_time,
+                           base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_MOVED, base::nullopt, event_time,
+                           base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
   std::vector<EventMetrics> events_metrics = {

@@ -9,6 +9,7 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
@@ -16,10 +17,12 @@ import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
+import android.view.WindowInsets;
 
 import androidx.annotation.NonNull;
 
 import org.chromium.base.task.PostTask;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.ViewUtils;
@@ -67,6 +70,9 @@ class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeList
         // montior those changes to update the positioning of the list.
         mAnchorViewLayoutListener = new OnGlobalLayoutListener() {
             private int mOffsetInWindow;
+            private WindowInsets mWindowInsets;
+            private final Rect mTempRect = new Rect();
+            private final Rect mWindowRect = new Rect();
 
             @Override
             public void onGlobalLayout() {
@@ -78,7 +84,21 @@ class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeList
                     if (parent == null || !(parent instanceof View)) break;
                     currentView = (View) parent;
                 }
-                if (mOffsetInWindow == offsetInWindow) return;
+
+                boolean insetsHaveChanged = false;
+                WindowInsets currentInsets = null;
+                // TODO(ender): Replace with VERSION_CODE_R once we switch to SDK 30.
+                if (Build.VERSION.SDK_INT >= 30) {
+                    currentInsets = mAnchorView.getRootWindowInsets();
+                    insetsHaveChanged = !currentInsets.equals(mWindowInsets);
+                } else if (isAdaptiveSuggestionsCountEnabled()) {
+                    mEmbedder.getWindowDelegate().getWindowVisibleDisplayFrame(mTempRect);
+                    insetsHaveChanged = !mTempRect.equals(mWindowRect);
+                    mWindowRect.set(mTempRect);
+                }
+
+                if (mOffsetInWindow == offsetInWindow && !insetsHaveChanged) return;
+                mWindowInsets = currentInsets;
                 mOffsetInWindow = offsetInWindow;
                 mSuggestionsDropdown.requestLayout();
             }
@@ -203,6 +223,7 @@ class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeList
                 // A->B->A transitions and suppress the broadcasts.
                 if (mLastBroadcastedListViewMaxHeight == availableViewportHeight) return;
                 if (mObserver == null) return;
+
                 mObserver.onSuggestionDropdownHeightChanged(availableViewportHeight);
                 mLastBroadcastedListViewMaxHeight = availableViewportHeight;
             });
@@ -225,5 +246,11 @@ class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeList
             }
         }
         return false;
+    }
+
+    /** @return Whether Adaptive Suggestions Count feature is enabled. */
+    private boolean isAdaptiveSuggestionsCountEnabled() {
+        return ChromeFeatureList.isInitialized() &&
+                ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT);
     }
 }

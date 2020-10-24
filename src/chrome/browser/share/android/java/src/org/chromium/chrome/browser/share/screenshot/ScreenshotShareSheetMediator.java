@@ -8,42 +8,61 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.net.Uri;
 
-import org.chromium.chrome.browser.share.BitmapUriRequest;
+import org.chromium.base.Callback;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.share.ChromeShareExtras;
 import org.chromium.chrome.browser.share.screenshot.ScreenshotShareSheetViewProperties.NoArgOperation;
 import org.chromium.chrome.browser.share.share_sheet.ChromeOptionShareCallback;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.components.browser_ui.share.ShareImageFileUtils;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Locale;
 
 /**
  * ScreenshotShareSheetMediator is in charge of calculating and setting values for
  * ScreenshotShareSheetViewProperties.
  */
 class ScreenshotShareSheetMediator {
+    private static final String sIsoDateFormat = "yyyy-MM-dd";
+
     private final PropertyModel mModel;
     private final Context mContext;
     private final Runnable mSaveRunnable;
-    private final Runnable mDeleteRunnable;
+    private final Runnable mCloseDialogRunnable;
+    private final Callback<Runnable> mInstallCallback;
     private final ChromeOptionShareCallback mChromeOptionShareCallback;
-    private Tab mTab;
+
+    private final Tab mTab;
 
     /**
      * The ScreenshotShareSheetMediator constructor.
      * @param context The context to use.
      * @param propertyModel The property model to use to communicate with views.
-     * @param deleteRunnable The action to take when cancel or delete is called.
+     * @param closeDialogRunnable The action to take to close the dialog.
+     * @param saveRunnable The action to take when save is called.
+     * @param tab The tab that originated this screenshot.
+     * @param chromeOptionShareCallback The callback to share a screenshot via the share sheet.
+     * @param installCallback The action to take when install is called, will call runnable on
+     *         success.
      */
     ScreenshotShareSheetMediator(Context context, PropertyModel propertyModel,
-            Runnable deleteRunnable, Runnable saveRunnable, Tab tab,
-            ChromeOptionShareCallback chromeOptionShareCallback) {
-        mDeleteRunnable = deleteRunnable;
+            Runnable closeDialogRunnable, Runnable saveRunnable, Tab tab,
+            ChromeOptionShareCallback chromeOptionShareCallback,
+            Callback<Runnable> installCallback) {
+        mCloseDialogRunnable = closeDialogRunnable;
         mSaveRunnable = saveRunnable;
         mContext = context;
         mModel = propertyModel;
         mTab = tab;
         mChromeOptionShareCallback = chromeOptionShareCallback;
+        mInstallCallback = installCallback;
         mModel.set(ScreenshotShareSheetViewProperties.NO_ARG_OPERATION_LISTENER,
                 operation -> { performNoArgOperation(operation); });
     }
@@ -60,7 +79,9 @@ class ScreenshotShareSheetMediator {
         } else if (NoArgOperation.SAVE == operation) {
             mSaveRunnable.run();
         } else if (NoArgOperation.DELETE == operation) {
-            mDeleteRunnable.run();
+            mCloseDialogRunnable.run();
+        } else if (NoArgOperation.INSTALL == operation) {
+            mInstallCallback.onResult(mCloseDialogRunnable);
         }
     }
 
@@ -68,25 +89,34 @@ class ScreenshotShareSheetMediator {
      * Sends the current image to the share target.
      */
     private void share() {
+        if (!mTab.isInitialized()) {
+            return;
+        }
         Bitmap bitmap = mModel.get(ScreenshotShareSheetViewProperties.SCREENSHOT_BITMAP);
-        final Uri bitmapUri = Uri.parse(BitmapUriRequest.bitmapUri(bitmap));
-        // TODO(crbug.com/1093386) Add Metrics for tracking size or Uri and performance of
-        // UriRequest.
 
         WindowAndroid window = mTab.getWindowAndroid();
-        String title = mTab.getTitle();
-        String visibleUrl = mTab.getUrlString();
+        String isoDate = new SimpleDateFormat(sIsoDateFormat, Locale.getDefault())
+                                 .format(new Date(System.currentTimeMillis()));
+        String title = mContext.getString(R.string.screenshot_title_for_share, isoDate);
+        Callback<Uri> callback = (bitmapUri) -> {
+            ShareParams params =
+                    new ShareParams.Builder(window, title, /*url=*/"")
+                            .setFileUris(new ArrayList<>(Collections.singletonList(bitmapUri)))
+                            .setFileContentType(
+                                    window.getApplicationContext().getContentResolver().getType(
+                                            bitmapUri))
+                            .build();
 
-        ShareParams params = new ShareParams.Builder(window, title, visibleUrl)
-                                     .setScreenshotUri(bitmapUri)
-                                     .build();
-        ChromeShareExtras chromeShareExtras = new ChromeShareExtras.Builder()
-                                                      .setSaveLastUsed(false)
-                                                      .setShareDirectly(false)
-                                                      .setIsUrlOfVisiblePage(false)
-                                                      .build();
-        mChromeOptionShareCallback.showThirdPartyShareSheet(
-                params, chromeShareExtras, System.currentTimeMillis());
-        mDeleteRunnable.run();
+            mChromeOptionShareCallback.showThirdPartyShareSheet(
+                    params, new ChromeShareExtras.Builder().build(), System.currentTimeMillis());
+        };
+
+        generateTemporaryUriFromBitmap(title, bitmap, callback);
+        mCloseDialogRunnable.run();
+    }
+
+    protected void generateTemporaryUriFromBitmap(
+            String fileName, Bitmap bitmap, Callback<Uri> callback) {
+        ShareImageFileUtils.generateTemporaryUriFromBitmap(fileName, bitmap, callback);
     }
 }

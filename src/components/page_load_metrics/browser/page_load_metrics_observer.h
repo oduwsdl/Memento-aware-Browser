@@ -94,15 +94,16 @@ struct UserInitiatedInfo {
 // Information about how the page rendered during the browsing session.
 // Derived from the FrameRenderDataUpdate that is sent via UpdateTiming IPC.
 struct PageRenderData {
-  PageRenderData()
-      : layout_shift_score(0), layout_shift_score_before_input_or_scroll(0) {}
+  PageRenderData() = default;
 
   // How much visible elements on the page shifted (bit.ly/lsm-explainer).
-  float layout_shift_score;
+  float layout_shift_score = 0;
 
   // How much visible elements on the page shifted (bit.ly/lsm-explainer),
-  // before user input or document scroll.
-  float layout_shift_score_before_input_or_scroll;
+  // before user input or document scroll. This field's meaning is context-
+  // dependent (see comments on page_render_data_ and main_frame_render_data_
+  // in PageLoadMetricsUpdateDispatcher).
+  float layout_shift_score_before_input_or_scroll = 0;
 
   // How many LayoutBlock instances were created.
   uint64_t all_layout_block_count = 0;
@@ -303,7 +304,8 @@ class PageLoadMetricsObserver {
   // OnRestoreFromBackForwardCache is triggered when a page is restored from
   // the back-forward cache.
   virtual void OnRestoreFromBackForwardCache(
-      const mojom::PageLoadTiming& timing) {}
+      const mojom::PageLoadTiming& timing,
+      content::NavigationHandle* navigation_handle) {}
 
   // Called before OnCommit. The observer should return whether it wishes to
   // observe navigations whose main resource has MIME type |mine_type|. The
@@ -364,10 +366,14 @@ class PageLoadMetricsObserver {
   virtual void OnFirstContentfulPaintInPage(
       const mojom::PageLoadTiming& timing) {}
 
-  // This is called once every time when the page is restored from the
-  // back-forward cache.
+  // These are called once every time when the page is restored from the
+  // back-forward cache. |index| indicates |index|-th restore.
   virtual void OnFirstPaintAfterBackForwardCacheRestoreInPage(
-      const mojom::BackForwardCacheTiming& timing) {}
+      const mojom::BackForwardCacheTiming& timing,
+      size_t index) {}
+  virtual void OnFirstInputAfterBackForwardCacheRestoreInPage(
+      const mojom::BackForwardCacheTiming& timing,
+      size_t index) {}
 
   // Unlike other paint callbacks, OnFirstMeaningfulPaintInMainFrameDocument is
   // tracked per document, and is reported for the main frame document only.
@@ -386,8 +392,11 @@ class PageLoadMetricsObserver {
       content::RenderFrameHost* rfh,
       const mojom::PageLoadFeatures& features) {}
 
-  virtual void OnThroughputUpdate(
-      const mojom::ThroughputUkmDataPtr& throughput_data) {}
+  // The smoothness metrics is shared over shared-memory. The observer should
+  // create a mapping (by calling |shared_memory.Map()|) so that they are able
+  // to read from the shared memory.
+  virtual void SetUpSharedMemoryForSmoothness(
+      const base::ReadOnlySharedMemoryRegion& shared_memory) {}
 
   // Invoked when there is data use for loading a resource on the page
   // for a given render frame host. This only contains resources that have had

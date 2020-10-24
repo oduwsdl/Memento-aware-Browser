@@ -18,7 +18,10 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "printing/buildflags/buildflags.h"
+
+#if BUILDFLAG(ENABLE_TAGGED_PDF)
 #include "ui/accessibility/ax_tree_update_forward.h"
+#endif
 
 namespace printing {
 
@@ -31,17 +34,16 @@ class PrintCompositeClient
       public content::WebContentsObserver {
  public:
   explicit PrintCompositeClient(content::WebContents* web_contents);
+  PrintCompositeClient(const PrintCompositeClient&) = delete;
+  PrintCompositeClient& operator=(const PrintCompositeClient&) = delete;
   ~PrintCompositeClient() override;
 
   // content::WebContentsObserver
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* render_frame_host) override;
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
 
-  // IPC message handler.
 #if BUILDFLAG(ENABLE_TAGGED_PDF)
-  void OnAccessibilityTree(int document_cookie,
-                           const ui::AXTreeUpdate& accessibility_tree);
+  void SetAccessibilityTree(int document_cookie,
+                            const ui::AXTreeUpdate& accessibility_tree);
 #endif
 
   // Instructs the specified subframe to print.
@@ -64,6 +66,7 @@ class PrintCompositeClient
   // when processing the individual pages for preview.
   void DoPrepareForDocumentToPdf(
       int document_cookie,
+      content::RenderFrameHost* render_frame_host,
       mojom::PrintCompositor::PrepareForDocumentToPdfCallback callback);
 
   // Notifies compositor of the total number of pages being concurrently
@@ -113,41 +116,56 @@ class PrintCompositeClient
       mojom::PrintCompositor::Status status,
       base::ReadOnlySharedMemoryRegion region);
 
-  void OnDidPrintFrameContent(content::RenderFrameHost* render_frame_host,
+  void OnDidPrintFrameContent(int render_process_id,
+                              int render_frame_id,
                               int document_cookie,
                               mojom::DidPrintContentParamsPtr params);
 
-  // Get the request or create a new one if none exists.
-  // Since printed pages always share content with its document, they share the
-  // same composite request.
-  mojom::PrintCompositor* GetCompositeRequest(int cookie);
+  // Creates a new composite request for a given document |cookie|. Since
+  // printed pages always share content with its document, they share the same
+  // composite request. Launches the compositor in a separate process.
+  // If a composite request already exists, it is removed.
+  // Returns the created composite request.
+  mojom::PrintCompositor* CreateCompositeRequest(
+      int cookie,
+      content::RenderFrameHost* initiator_frame);
 
-  // Remove an existing request from |compositor_map_|.
+  // Remove the existing composite request.
   void RemoveCompositeRequest(int cookie);
 
-  mojo::Remote<mojom::PrintCompositor> CreateCompositeRequest();
+  // Checks if the |document_cookie| is not 0 and matches |document_cookie_|.
+  bool IsDocumentCookieValid(int document_cookie) const;
+
+  // Get the composite request of a document. |cookie| must be valid and equal
+  // to |document_cookie_|.
+  mojom::PrintCompositor* GetCompositeRequest(int cookie) const;
 
   // Helper method to fetch the PrintRenderFrame remote interface pointer
   // associated with a given subframe.
   const mojo::AssociatedRemote<mojom::PrintRenderFrame>& GetPrintRenderFrame(
       content::RenderFrameHost* rfh);
 
-  // Stores the mapping between document cookies and their corresponding
-  // requests.
-  std::map<int, mojo::Remote<mojom::PrintCompositor>> compositor_map_;
+  // Stores the message pipe endpoint for making remote calls to the compositor.
+  mojo::Remote<mojom::PrintCompositor> compositor_;
 
-  // Stores the mapping between render frame's global unique id and document
-  // cookies that requested such frame.
-  std::map<uint64_t, base::flat_set<int>> pending_subframe_cookies_;
+  // Stores the unique sequential cookie of the document being composited.
+  // Holds 0 if no document is being composited.
+  int document_cookie_ = 0;
 
-  // Stores the mapping between document cookie and all the printed subframes
-  // for that document.
-  std::map<int, base::flat_set<uint64_t>> printed_subframes_;
+  // Stores whether the document is concurrently compositing using individual
+  // pages, so that no separate composite request with full-document blob is
+  // required.
+  bool is_doc_concurrently_composited_ = false;
 
-  // Stores the set of cookies for documents that are doing concurrently
-  // composition using individual pages, so that no separate composite request
-  // with full-document blob is required.
-  base::flat_set<int> is_doc_concurrently_composited_set_;
+  // Stores the the frame that initiated the composite request;
+  // Holds nullptr if no document is being composited.
+  content::RenderFrameHost* initiator_frame_ = nullptr;
+
+  // Stores the pending subframes for the composited document.
+  base::flat_set<content::RenderFrameHost*> pending_subframes_;
+
+  // Stores the printed subframes for the composited document.
+  base::flat_set<content::RenderFrameHost*> printed_subframes_;
 
   std::string user_agent_;
 
@@ -161,8 +179,6 @@ class PrintCompositeClient
   base::WeakPtrFactory<PrintCompositeClient> weak_ptr_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-
-  DISALLOW_COPY_AND_ASSIGN(PrintCompositeClient);
 };
 
 }  // namespace printing

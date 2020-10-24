@@ -75,8 +75,11 @@ void VerifyBookmarkContextBarEditButtonDisabled() {
 }
 
 void LongPressBookmarkNodeWithLabel(NSString* bookmark_node_label) {
-  [[EarlGrey selectElementWithMatcher:TappableBookmarkNodeWithLabel(
-                                          bookmark_node_label)]
+  id<GREYMatcher> nodeMatcher =
+      TappableBookmarkNodeWithLabel(bookmark_node_label);
+  [ChromeEarlGrey
+      waitForMatcher:grey_allOf(nodeMatcher, grey_interactable(), nil)];
+  [[EarlGrey selectElementWithMatcher:nodeMatcher]
       performAction:grey_longPress()];
 }
 
@@ -161,13 +164,11 @@ void SearchBookmarksForText(NSString* search_text) {
 
 // Tests that the managed bookmarks folder does not exist when the policy data
 // is empty.
-- (void)testEmptyManagedBookmarks {
+// Flaky. TODO(crbug.com/1132310): Re-enable.
+- (void)DISABLED_testEmptyManagedBookmarks {
   [BookmarkEarlGreyUI openBookmarks];
 
-  // Mobile bookmarks exists.
-  [[EarlGrey selectElementWithMatcher:TappableBookmarkNodeWithLabel(
-                                          @"Mobile Bookmarks")]
-      assertWithMatcher:grey_notNil()];
+  [BookmarkEarlGreyUI verifyEmptyState];
 
   // Managed bookmarks folder does not exist.
   [[EarlGrey selectElementWithMatcher:TappableBookmarkNodeWithLabel(
@@ -252,8 +253,11 @@ void SearchBookmarksForText(NSString* search_text) {
 }
 
 - (void)openCustomManagedSubFolder {
-  [[EarlGrey selectElementWithMatcher:TappableBookmarkNodeWithLabel(
-                                          @"Managed_Sub_Folder")]
+  id<GREYMatcher> subFolderMatcher =
+      TappableBookmarkNodeWithLabel(@"Managed_Sub_Folder");
+  [ChromeEarlGrey
+      waitForMatcher:grey_allOf(subFolderMatcher, grey_interactable(), nil)];
+  [[EarlGrey selectElementWithMatcher:subFolderMatcher]
       performAction:grey_tap()];
 }
 
@@ -333,6 +337,14 @@ void SearchBookmarksForText(NSString* search_text) {
 
   SwipeBookmarkNodeWithLabel(@"First_Managed_URL");
   VerifyDeleteSwipeButtonNil();
+
+  // TODO(crbug.com/1105526) On iOS14 the swipe above will trigger a tap
+  // instead, and dismiss the bookmarks UI.  Since the test is still effectively
+  // testing for swipeButton nil, simply return here.  This test should be
+  // refactored to account for swipe-on-disabled-rows-trigger-a-tap.
+  if (@available(iOS 14, *)) {
+    return;
+  }
 
   SwipeBookmarkNodeWithLabel(@"Managed_Sub_Folder");
   VerifyDeleteSwipeButtonNil();

@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
+#include "base/check.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -22,12 +24,16 @@
 #include "chrome/browser/policy/cloud/user_policy_signin_service.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/signin/account_id_from_account_info.h"
 #include "chrome/browser/signin/dice_signed_in_profile_creator.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/webui/signin/dice_turn_sync_on_helper_delegate_impl.h"
+#include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/ui/webui/signin/signin_utils_desktop.h"
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
@@ -86,6 +92,36 @@ AccountInfo GetAccountInfo(signin::IdentityManager* identity_manager,
                                         : AccountInfo();
 }
 
+// User input handler for the signin confirmation dialog.
+class SigninDialogDelegate : public ui::ProfileSigninConfirmationDelegate {
+ public:
+  explicit SigninDialogDelegate(
+      DiceTurnSyncOnHelper::SigninChoiceCallback callback)
+      : callback_(std::move(callback)) {
+    DCHECK(callback_);
+  }
+  SigninDialogDelegate(const SigninDialogDelegate&) = delete;
+  SigninDialogDelegate& operator=(const SigninDialogDelegate&) = delete;
+  ~SigninDialogDelegate() override = default;
+
+  void OnCancelSignin() override {
+    DCHECK(callback_);
+    std::move(callback_).Run(DiceTurnSyncOnHelper::SIGNIN_CHOICE_CANCEL);
+  }
+
+  void OnContinueSignin() override {
+    DCHECK(callback_);
+    std::move(callback_).Run(DiceTurnSyncOnHelper::SIGNIN_CHOICE_CONTINUE);
+  }
+
+  void OnSigninWithNewProfile() override {
+    DCHECK(callback_);
+    std::move(callback_).Run(DiceTurnSyncOnHelper::SIGNIN_CHOICE_NEW_PROFILE);
+  }
+
+ private:
+  DiceTurnSyncOnHelper::SigninChoiceCallback callback_;
+};
 
 struct CurrentDiceTurnSyncOnHelperUserData
     : public base::SupportsUserData::Data {
@@ -120,6 +156,38 @@ void SetCurrentDiceTurnSyncOnHelper(Profile* profile,
 }
 
 }  // namespace
+
+// static
+void DiceTurnSyncOnHelper::Delegate::ShowLoginErrorForBrowser(
+    const std::string& email,
+    const std::string& error_message,
+    Browser* browser) {
+  LoginUIServiceFactory::GetForProfile(browser->profile())
+      ->DisplayLoginResult(browser, base::UTF8ToUTF16(error_message),
+                           base::UTF8ToUTF16(email));
+}
+
+// static
+void DiceTurnSyncOnHelper::Delegate::
+    ShowEnterpriseAccountConfirmationForBrowser(
+        const std::string& email,
+        DiceTurnSyncOnHelper::SigninChoiceCallback callback,
+        Browser* browser) {
+  DCHECK(callback);
+  content::WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!web_contents) {
+    std::move(callback).Run(DiceTurnSyncOnHelper::SIGNIN_CHOICE_CANCEL);
+    return;
+  }
+
+  base::RecordAction(
+      base::UserMetricsAction("Signin_Show_EnterpriseAccountPrompt"));
+  TabDialogs::FromWebContents(web_contents)
+      ->ShowProfileSigninConfirmation(
+          browser, browser->profile(), email,
+          std::make_unique<SigninDialogDelegate>(std::move(callback)));
+}
 
 DiceTurnSyncOnHelper::DiceTurnSyncOnHelper(
     Profile* profile,
@@ -371,6 +439,7 @@ void DiceTurnSyncOnHelper::CreateNewSignedInProfile() {
   dice_signed_in_profile_creator_ =
       std::make_unique<DiceSignedInProfileCreator>(
           profile_, account_info_.account_id,
+          /*local_profile_name=*/base::string16(), /*icon_index=*/base::nullopt,
           base::BindOnce(&DiceTurnSyncOnHelper::OnNewSignedInProfileCreated,
                          base::Unretained(this)));
 }
@@ -384,6 +453,7 @@ syncer::SyncService* DiceTurnSyncOnHelper::GetSyncService() {
 void DiceTurnSyncOnHelper::OnNewSignedInProfileCreated(Profile* new_profile) {
   DCHECK(dice_signed_in_profile_creator_);
   dice_signed_in_profile_creator_.reset();
+  ProfileMetrics::LogProfileAddNewUser(ProfileMetrics::ADD_NEW_USER_SYNC_FLOW);
 
   if (!new_profile) {
     // TODO(atwilson): On error, unregister the client to release the DMToken

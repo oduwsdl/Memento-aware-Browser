@@ -14,7 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/sequence_checker.h"
-#include "chrome/browser/performance_hints/performance_hints_rewrite_handler.h"
+#include "chrome/browser/performance_hints/rewrite_handler.h"
 #include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/proto/performance_hints_metadata.pb.h"
@@ -35,16 +35,7 @@ class PerformanceHint;
 
 class GURL;
 
-// If enabled, PerformanceHintsObserver will be added as a tab helper and will
-// fetch performance hints.
-extern const base::Feature kPerformanceHintsObserver;
-// If enabled, hints of PERFORMANCE_UNKNOWN will be overridden to
-// PERFORMANCE_FAST. This does not affect the value that is recorded via UMA.
-extern const base::Feature kPerformanceHintsTreatUnknownAsFast;
-// If enabled, PerformanceHintsRewriteHandler will be used to detect rewritten
-// URLs (specified by the rewrite_config param) and revert them to their
-// original form.
-extern const base::Feature kPerformanceHintsHandleRewrites;
+namespace performance_hints {
 
 // Provides an interface to access PerformanceHints for the associated
 // WebContents and links within it.
@@ -175,7 +166,7 @@ class PerformanceHintsObserver
   //
   // Configuration is controlled by kRewriteConfig in
   // performance_hints_observer.cc.
-  PerformanceHintsRewriteHandler rewrite_handler_;
+  RewriteHandler rewrite_handler_;
 
   // Initialized in constructor. It may be null if !IsOptimizationHintsEnabled.
   optimization_guide::OptimizationGuideDecider* optimization_guide_decider_ =
@@ -195,5 +186,7 @@ class PerformanceHintsObserver
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
+
+}  // namespace performance_hints
 
 #endif  // CHROME_BROWSER_PERFORMANCE_HINTS_PERFORMANCE_HINTS_OBSERVER_H_

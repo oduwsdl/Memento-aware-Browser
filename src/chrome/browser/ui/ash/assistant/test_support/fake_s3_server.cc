@@ -26,8 +26,13 @@ namespace assistant {
 namespace {
 
 // Folder where the S3 communications are stored when running in replay mode.
-constexpr const char kTestDataFolder[] =
-    "chromeos/assistant/internal/test_data/";
+constexpr char kTestDataFolder[] = "chromeos/assistant/internal/test_data/";
+
+// Fake device id passed to Libassistant. By fixing this we ensure it remains
+// consistent between the current session and the value stored in the stored
+// test data.
+// This must be a 16 characters hex string or it will be rejected.
+constexpr char kDeviceId[] = "11112222333344445555666677778888";
 
 base::FilePath GetExecutableDir() {
   base::FilePath result;
@@ -93,7 +98,7 @@ class PortSelector {
   PortSelector& operator=(PortSelector&) = delete;
   ~PortSelector() {
     lock_file_.Close();
-    base::DeleteFileRecursively(GetLockFilePath());
+    base::DeletePathRecursively(GetLockFilePath());
   }
 
   int port() const { return port_; }
@@ -152,10 +157,12 @@ void FakeS3Server::Setup(FakeS3Mode mode) {
   SetAccessTokenForMode(mode);
   StartS3ServerProcess(mode);
   SetFakeS3ServerURI();
+  SetDeviceId();
 }
 
 void FakeS3Server::Teardown() {
   StopS3ServerProcess();
+  UnsetDeviceId();
   UnsetFakeS3ServerURI();
 }
 
@@ -177,12 +184,26 @@ void FakeS3Server::SetFakeS3ServerURI() {
   Service::OverrideS3ServerUriForTesting(fake_s3_server_uri_.c_str());
 }
 
+void FakeS3Server::SetDeviceId() {
+  Service::OverrideDeviceIdForTesting(kDeviceId);
+}
+
+void FakeS3Server::UnsetDeviceId() {
+  Service::OverrideDeviceIdForTesting(nullptr);
+}
+
 void FakeS3Server::UnsetFakeS3ServerURI() {
   Service::OverrideS3ServerUriForTesting(nullptr);
   fake_s3_server_uri_ = "";
 }
 
 void FakeS3Server::StartS3ServerProcess(FakeS3Mode mode) {
+  if (process_running_) {
+    LOG(WARNING)
+        << "Called FakeS3Server::StartS3ServerProcess when already running.";
+    return;
+  }
+
   base::FilePath fake_s3_server_main =
       GetExecutableDir().Append(FILE_PATH_LITERAL(kFakeS3ServerBinary));
 
@@ -193,10 +214,17 @@ void FakeS3Server::StartS3ServerProcess(FakeS3Mode mode) {
   AppendArgument(&command_line, "--test_data_file", GetTestDataFileName());
 
   fake_s3_server_ = base::LaunchProcess(command_line, base::LaunchOptions{});
+  process_running_ = true;
 }
 
 void FakeS3Server::StopS3ServerProcess() {
+  if (!process_running_) {
+    LOG(WARNING)
+        << "Called FakeS3Server::StopS3ServerProcess when already stopped.";
+    return;
+  }
   fake_s3_server_.Terminate(/*exit_code=*/0, /*wait=*/true);
+  process_running_ = false;
 }
 
 std::string FakeS3Server::GetTestDataFileName() {

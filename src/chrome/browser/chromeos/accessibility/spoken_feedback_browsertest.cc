@@ -23,7 +23,12 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
+#include "chrome/browser/chromeos/login/test/device_state_mixin.h"
+#include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/browser.h"
@@ -33,6 +38,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -43,6 +49,7 @@
 #include "extensions/browser/browsertest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/test/ui_controls.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -147,19 +154,12 @@ void LoggedInSpokenFeedbackTest::EnableChromeVox() {
   ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
 
   AccessibilityManager::Get()->EnableSpokenFeedback(true);
-
-  // AccessibilityManager sends a warmup utterance prior to actually loading
-  // ChromeVox.
-  sm_.ExpectSpeech("");
-
-  // The next utterance comes from ChromeVox signaling it is ready.
   sm_.ExpectSpeechPattern("*");
-
-  // Injects js to disable earcons.
   sm_.Call([this]() { DisableEarcons(); });
 }
 
-IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, AddBookmark) {
+// Flaky test, crbug.com/1081563
+IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, DISABLED_AddBookmark) {
   EnableChromeVox();
 
   sm_.Call(
@@ -231,6 +231,46 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, NavigateNotificationCenter) {
   sm_.ExpectSpeech("List item");
 
   // Furthermore, navigation is generally broken using Search+Left.
+
+  sm_.Replay();
+}
+
+// Test Learn Mode by pressing a few keys in Learn Mode. Only available while
+// logged in.
+IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, LearnModeHardwareKeys) {
+  EnableChromeVox();
+  sm_.Call([this]() {
+    extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
+        browser()->profile(), extension_misc::kChromeVoxExtensionId,
+        "CommandHandler.onCommand('showKbExplorerPage');");
+  });
+  sm_.ExpectSpeech("ChromeVox Learn Mode");
+  sm_.ExpectSpeech(
+      "Press a qwerty key, refreshable braille key, or touch gesture to learn "
+      "its function. Press control with w or escape to exit.");
+
+  // These are the default top row keys and their descriptions which live in
+  // ChromeVox.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F1); });
+  sm_.ExpectSpeech("back");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F2); });
+  sm_.ExpectSpeech("forward");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F3); });
+  sm_.ExpectSpeech("refresh");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F4); });
+  sm_.ExpectSpeech("toggle full screen");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F5); });
+  sm_.ExpectSpeech("window overview");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F6); });
+  sm_.ExpectSpeech("Brightness down");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F7); });
+  sm_.ExpectSpeech("Brightness up");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F8); });
+  sm_.ExpectSpeech("volume mute");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F9); });
+  sm_.ExpectSpeech("volume down");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F10); });
+  sm_.ExpectSpeech("volume up");
 
   sm_.Replay();
 }
@@ -421,6 +461,58 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SpeakingTextUnderMouseForShelfItem) {
   sm_.Replay();
 }
 
+class ShelfNotificationBadgeSpokenFeedbackTest : public SpokenFeedbackTest {
+ protected:
+  ShelfNotificationBadgeSpokenFeedbackTest() {
+    scoped_features_.InitWithFeatures({::features::kNotificationIndicator}, {});
+  }
+  ~ShelfNotificationBadgeSpokenFeedbackTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_features_;
+};
+
+INSTANTIATE_TEST_SUITE_P(TestAsNormalAndGuestUser,
+                         ShelfNotificationBadgeSpokenFeedbackTest,
+                         ::testing::Values(kTestAsNormalUser,
+                                           kTestAsGuestUser));
+
+// Verifies that an announcement is triggered when focusing a ShelfItem with a
+// notification badge shown.
+IN_PROC_BROWSER_TEST_P(ShelfNotificationBadgeSpokenFeedbackTest,
+                       ShelfNotificationBadgeAnnouncement) {
+  EnableChromeVox();
+
+  // Create and add a test app to the shelf model.
+  ash::ShelfItem item;
+  item.id = ash::ShelfID("TestApp");
+  item.title = base::ASCIIToUTF16("TestAppTitle");
+  item.type = ash::ShelfItemType::TYPE_APP;
+  ash::ShelfModel::Get()->Add(item);
+
+  // Set the notification badge to be shown for the test app.
+  ash::ShelfModel::Get()->UpdateItemNotification("TestApp", /*has_badge=*/true);
+
+  // Focus on the shelf.
+  sm_.Call([this]() { PerformAcceleratorAction(ash::FOCUS_SHELF); });
+  sm_.ExpectSpeech("Launcher");
+  sm_.ExpectSpeech("Button");
+  sm_.ExpectSpeech("Shelf");
+  sm_.ExpectSpeech("Tool bar");
+
+  // Press right key twice to focus the test app.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("TestAppTitle");
+  sm_.ExpectSpeech("Button");
+
+  // Check that when a shelf app button with a notification badge is focused,
+  // the correct announcement occurs.
+  sm_.ExpectSpeech("TestAppTitle requests your attention.");
+
+  sm_.Replay();
+}
+
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OpenStatusTray) {
   EnableChromeVox();
 
@@ -504,8 +596,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
   sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_TAB); });
   sm_.ExpectSpeechPattern(
       "Chrom* - data:text slash html;charset equal utf-8, less than button "
-      "autofocus greater than Click me less than slash button greater than , "
-      "window");
+      "autofocus greater than Click me less than slash button greater than");
+  sm_.ExpectSpeechPattern("Press Ctrl plus W to close.");
+  sm_.ExpectSpeechPattern(", window");
 
   sm_.Replay();
 }
@@ -784,6 +877,26 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SmartStickyMode) {
   sm_.ExpectSpeech("Sticky mode enabled");
   sm_.ExpectSpeech("start");
 
+  // Try a few jump commands and linear nav with no Search modifier. We never
+  // leave sticky mode.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_E); });
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_F); });
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("end");
+
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F); });
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_E); });
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_LEFT); });
+  sm_.ExpectSpeech("start");
+
   // Now, navigate with sticky mode off.
   sm_.Call([this]() { SendStickyKeyCommand(); });
   sm_.ExpectSpeech("Sticky mode disabled");
@@ -796,6 +909,13 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SmartStickyMode) {
   sm_.ExpectNextSpeechIsNotPattern("Sticky mode *abled");
   sm_.ExpectSpeech("end");
 
+  sm_.Replay();
+}
+
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, HardwareKeysGetRewritten) {
+  EnableChromeVox();
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_F7); });
+  sm_.ExpectSpeech("Darken screen");
   sm_.Replay();
 }
 
@@ -812,7 +932,8 @@ class OobeSpokenFeedbackTest : public OobeBaseTest {
     OobeBaseTest::SetUpCommandLine(command_line);
     // Many bots don't have keyboard/mice which triggers the HID detection
     // dialog in the OOBE.  Avoid confusing the tests with that.
-    command_line->AppendSwitch(chromeos::switches::kDisableHIDDetectionOnOOBE);
+    command_line->AppendSwitch(
+        chromeos::switches::kDisableHIDDetectionOnOOBEForTesting);
   }
 
   SpeechMonitor sm_;
@@ -821,13 +942,7 @@ class OobeSpokenFeedbackTest : public OobeBaseTest {
   DISALLOW_COPY_AND_ASSIGN(OobeSpokenFeedbackTest);
 };
 
-#if defined(MEMORY_SANITIZER)
-// Times out under MSan: https://crbug.com/1071693
-#define MAYBE_SpokenFeedbackInOobe DISABLED_SpokenFeedbackInOobe
-#else
-#define MAYBE_SpokenFeedbackInOobe SpokenFeedbackInOobe
-#endif
-IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, MAYBE_SpokenFeedbackInOobe) {
+IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, SpokenFeedbackInOobe) {
   ui_controls::EnableUIControls();
   ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
   AccessibilityManager::Get()->EnableSpokenFeedback(true);
@@ -842,6 +957,47 @@ IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, MAYBE_SpokenFeedbackInOobe) {
   sm_.ExpectSpeech("Shut down");
   sm_.ExpectSpeech("Button");
 
+  sm_.Replay();
+}
+
+class SigninToUserProfileSwitchTest : public OobeSpokenFeedbackTest {
+ public:
+  // OobeSpokenFeedbackTest:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    OobeSpokenFeedbackTest::SetUpCommandLine(command_line);
+    // Force the help app to launch in the background.
+    command_line->AppendSwitch(switches::kForceFirstRunUI);
+  }
+
+ protected:
+  LoginManagerMixin login_manager_{&mixin_host_};
+  DeviceStateMixin device_state_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_UNOWNED};
+};
+
+// Verifies that spoken feedback correctly handles profile switch (signin ->
+// user) and announces the sync consent screen correctly.
+IN_PROC_BROWSER_TEST_F(SigninToUserProfileSwitchTest, LoginAsNewUser) {
+  // Force sync screen.
+  auto reset = SyncConsentScreen::ForceBrandedBuildForTesting(true);
+  AccessibilityManager::Get()->EnableSpokenFeedback(true);
+  sm_.ExpectSpeechPattern("*");
+
+  sm_.Call([this]() {
+    ASSERT_EQ(chromeos::AccessibilityManager::Get()->profile(),
+              ProfileHelper::GetSigninProfile());
+    login_manager_.LoginAsNewRegularUser();
+  });
+
+  std::string button_title =
+      features::IsSplitSettingsSyncEnabled() ? "Got it" : "Accept and continue";
+  sm_.ExpectSpeech(button_title);
+
+  // Check that profile switched to the active user.
+  sm_.Call([]() {
+    ASSERT_EQ(chromeos::AccessibilityManager::Get()->profile(),
+              ProfileManager::GetActiveUserProfile());
+  });
   sm_.Replay();
 }
 

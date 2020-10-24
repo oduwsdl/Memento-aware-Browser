@@ -9,9 +9,8 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/render_frame_host_manager.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/render_frame_host_manager.h"
 #include "content/browser/speech/speech_recognition_manager_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -87,6 +86,14 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
   }
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(rfh));
+
+  // Disable BackForwardCache when using the SpeechRecognition feature, because
+  // currently we do not handle speech recognition after placing the page in
+  // BackForwardCache.
+  // TODO(sreejakshetty): Make SpeechRecognition compatible with
+  // BackForwardCache.
+  rfh->OnSchedulerTrackedFeatureUsed(
+      blink::scheduler::WebSchedulerTrackedFeature::kSpeechRecognizer);
 
   // If the speech API request was from an inner WebContents or a guest, save
   // the context of the outer WebContents or the embedder since we will use it

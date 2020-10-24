@@ -29,7 +29,6 @@
 #include "content/common/navigation_gesture.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/menu_item.h"
-#include "content/public/common/page_state.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/three_d_api_types.h"
@@ -41,7 +40,6 @@
 #include "net/base/network_change_notifier.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/point.h"
@@ -54,7 +52,7 @@
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "ui/native_theme/native_theme.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "third_party/blink/public/platform/mac/web_scrollbar_theme.h"
 #endif
 
@@ -73,7 +71,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::ThreeDAPIType,
                           content::THREE_D_API_TYPE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::TextInputType, ui::TEXT_INPUT_TYPE_MAX)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::ScrollerStyle, blink::kScrollerStyleOverlay)
 #endif
 
@@ -94,72 +92,12 @@ IPC_STRUCT_TRAITS_END()
 
 // Messages sent from the browser to the renderer.
 
-// This passes a set of webkit preferences down to the renderer.
-IPC_MESSAGE_ROUTED1(ViewMsg_UpdateWebPreferences,
-                    content::WebPreferences)
-
-// Used to notify the render-view that we have received a target URL. Used
-// to prevent target URLs spamming the browser.
-IPC_MESSAGE_ROUTED0(ViewMsg_UpdateTargetURL_ACK)
-
 // Notification that a move or resize renderer's containing window has
 // started.
 IPC_MESSAGE_ROUTED0(ViewMsg_MoveOrResizeStarted)
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-// Reply to ViewHostMsg_OpenChannelToPpapiBroker
-// Tells the renderer that the channel to the broker has been created.
-IPC_MESSAGE_ROUTED2(ViewMsg_PpapiBrokerChannelCreated,
-                    base::ProcessId /* broker_pid */,
-                    IPC::ChannelHandle /* handle */)
-
-// Reply to ViewHostMsg_RequestPpapiBrokerPermission.
-// Tells the renderer whether permission to access to PPAPI broker was granted
-// or not.
-IPC_MESSAGE_ROUTED1(ViewMsg_PpapiBrokerPermissionResult,
-                    bool /* result */)
-#endif
-
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.
-
-// These two messages are sent to the parent RenderViewHost to display a widget
-// that was created by CreateWidget/CreateFullscreenWidget. |route_id| refers
-// to the id that was returned from the corresponding Create message above.
-// |initial_rect| is in screen coordinates.
-IPC_MESSAGE_ROUTED2(ViewHostMsg_ShowWidget,
-                    int /* route_id */,
-                    gfx::Rect /* initial_rect */)
-
-// Message to show a full screen widget.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_ShowFullscreenWidget,
-                    int /* route_id */)
-
-// Sent from an inactive renderer for the browser to route to the active
-// renderer, instructing it to close.
-IPC_MESSAGE_ROUTED0(ViewHostMsg_RouteCloseEvent)
-
-// Notifies the browser that we want to show a destination url for a potential
-// action (e.g. when the user is hovering over a link).
-IPC_MESSAGE_ROUTED1(ViewHostMsg_UpdateTargetURL,
-                    GURL)
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-// A renderer sends this to the browser process when it wants to access a PPAPI
-// broker. In contrast to FrameHostMsg_OpenChannelToPpapiBroker, this is called
-// for every connection.
-// The browser will respond with ViewMsg_PpapiBrokerPermissionResult.
-IPC_MESSAGE_ROUTED3(ViewHostMsg_RequestPpapiBrokerPermission,
-                    int /* routing_id */,
-                    GURL /* document_url */,
-                    base::FilePath /* plugin_path */)
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
-
-// When the renderer needs the browser to transfer focus cross-process on its
-// behalf in the focus hierarchy. This may focus an element in the browser ui or
-// a cross-process frame, as appropriate.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_TakeFocus,
-                    bool /* reverse */)
 
 // Adding a new message? Stick to the sort order above: first platform
 // independent ViewMsg, then ifdefs for platform specific ViewMsg, then platform

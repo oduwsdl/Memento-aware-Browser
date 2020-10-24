@@ -150,6 +150,7 @@ Polymer({
     this.$['third-party-dialog'].setAttribute(
         'aria-label', data['thirdPartyTitle']);
     this.$['title-text'].textContent = data['thirdPartyTitle'];
+    this.$['next-button'].labelForAria = data['thirdPartyContinueButton'];
     this.$['next-button-text'].textContent = data['thirdPartyContinueButton'];
     this.$['footer-text'].innerHTML =
         this.sanitizer_.sanitizeHtml(data['thirdPartyFooter']);
@@ -234,7 +235,8 @@ Polymer({
     if (!this.settingZippyLoaded_ || !this.consentStringLoaded_) {
       this.reloadPage();
     } else {
-      this.$['next-button'].focus();
+      Polymer.RenderStatus.afterNextRender(
+          this, () => this.$['next-button'].focus());
       this.browserProxy_.screenShown(THIRD_PARTY_SCREEN_ID);
       this.screenShown_ = true;
     }

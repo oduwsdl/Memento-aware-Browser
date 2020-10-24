@@ -1,0 +1,21 @@
+[
+  {
+    "traits_headers": [
+      "third_party/blink/renderer/platform/mojo/bluetooth_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//device/bluetooth"
+    ],
+    "types": [
+      {
+        "cpp": "::WTF::String",
+        "mojom": "blink.mojom.WebBluetoothDeviceId"
+      },
+      {
+        "cpp": "::WTF::String",
+        "mojom": "bluetooth.mojom.UUID",
+        "nullable_is_same_type": true
+      }
+    ]
+  }
+]

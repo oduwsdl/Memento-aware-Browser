@@ -11,11 +11,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
+#include "components/favicon_base/favicon_types.h"
 #include "components/sync/base/time.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/driver/sync_driver_switches.h"
@@ -88,10 +90,26 @@ class TestBookmarkClientWithFavicon : public bookmarks::TestBookmarkClient {
     return true;
   }
 
+  // Mimics the completion of a previously-triggered GetFaviconImageForPageURL()
+  // call for |page_url|, usually invoked by BookmarkModel. Returns false if no
+  // such a call is pending completion. The completion returns an empty image
+  // for the favicon.
+  bool SimulateEmptyFaviconLoaded(const GURL& page_url) {
+    if (requests_per_page_url_[page_url].empty()) {
+      return false;
+    }
+
+    favicon_base::FaviconImageCallback callback =
+        std::move(requests_per_page_url_[page_url].front());
+    requests_per_page_url_[page_url].pop_front();
+
+    std::move(callback).Run(favicon_base::FaviconImageResult());
+    return true;
+  }
+
   // bookmarks::TestBookmarkClient implementation.
   base::CancelableTaskTracker::TaskId GetFaviconImageForPageURL(
       const GURL& page_url,
-      favicon_base::IconType type,
       favicon_base::FaviconImageCallback callback,
       base::CancelableTaskTracker* tracker) override {
     requests_per_page_url_[page_url].push_back(std::move(callback));
@@ -875,6 +893,39 @@ TEST_F(BookmarkModelObserverImplTest,
   EXPECT_THAT(bookmark_tracker()->GetTombstoneEntityForGuid(folder->guid()),
               IsNull());
   EXPECT_EQ(folder_entity->bookmark_node(), folder);
+}
+
+// Tests that the bookmark entity will be committed if its favicon is deleted.
+TEST_F(BookmarkModelObserverImplTest, ShouldCommitOnDeleteFavicon) {
+  const GURL kBookmarkUrl("http://www.url.com");
+  const GURL kIconUrl("http://www.url.com/favicon.ico");
+
+  // Add a new node with specifics.
+  const bookmarks::BookmarkNode* bookmark_bar_node =
+      bookmark_model()->bookmark_bar_node();
+  const bookmarks::BookmarkNode* bookmark_node = bookmark_model()->AddURL(
+      /*parent=*/bookmark_bar_node, /*index=*/0, base::UTF8ToUTF16("title"),
+      kBookmarkUrl);
+
+  ASSERT_TRUE(bookmark_node->is_favicon_loading());
+  ASSERT_TRUE(bookmark_client()->SimulateFaviconLoaded(kBookmarkUrl, kIconUrl,
+                                                       SK_ColorRED));
+
+  const SyncedBookmarkTracker::Entity* entity =
+      bookmark_tracker()->GetEntityForBookmarkNode(bookmark_node);
+  ASSERT_THAT(entity, NotNull());
+  ASSERT_TRUE(entity->IsUnsynced());
+
+  SimulateCommitResponseForAllLocalChanges();
+
+  ASSERT_FALSE(bookmark_tracker()->HasLocalChanges());
+
+  // Delete favicon and check that its deletion is committed.
+  bookmark_model()->OnFaviconsChanged({kBookmarkUrl}, GURL());
+  ASSERT_TRUE(bookmark_node->is_favicon_loading());
+  ASSERT_TRUE(bookmark_client()->SimulateEmptyFaviconLoaded(kBookmarkUrl));
+
+  EXPECT_TRUE(entity->IsUnsynced());
 }
 
 }  // namespace

@@ -17,7 +17,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/net/proxy_test_utils.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -29,6 +28,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "components/prerender/common/prerender_origin.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/security_interstitials/content/ssl_blocking_page.h"
@@ -36,7 +36,6 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -47,6 +46,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "services/network/public/cpp/features.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -246,14 +246,14 @@ class LoginPromptBrowserTest
     if (GetParam() == SplitAuthCacheByNetworkIsolationKey::kFalse) {
       scoped_feature_list_.InitWithFeatures(
           // enabled_features
-          {features::kFtpProtocol},
+          {blink::features::kFtpProtocol},
           // disabled_features
           {network::features::kSplitAuthCacheByNetworkIsolationKey});
     } else {
       scoped_feature_list_.InitWithFeatures(
           // enabled_features
           {network::features::kSplitAuthCacheByNetworkIsolationKey,
-           features::kFtpProtocol},
+           blink::features::kFtpProtocol},
           // disabled_features
           {});
     }
@@ -1648,7 +1648,7 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest,
 // the omnibox.
 
 // Fails occasionally on Mac. http://crbug.com/852703
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_CancelLoginInterstitialOnRedirect \
   DISABLED_CancelLoginInterstitialOnRedirect
 #else
@@ -2193,7 +2193,7 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest,
 }
 
 // Tests that basic proxy auth works as expected, for HTTPS pages.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // TODO(https://crbug.com/1000446): Re-enable this test.
 #define MAYBE_ProxyAuthHTTPS DISABLED_ProxyAuthHTTPS
 #else

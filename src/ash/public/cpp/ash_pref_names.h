@@ -91,6 +91,10 @@ ASH_PUBLIC_EXPORT extern const char kShownPaletteWelcomeBubble[];
 ASH_PUBLIC_EXPORT extern const char kEnableStylusTools[];
 ASH_PUBLIC_EXPORT extern const char kLaunchPaletteOnEjectEvent[];
 
+// Managed-guest session privacy warning.
+ASH_PUBLIC_EXPORT extern const char
+    kManagedGuestSessionPrivacyWarningsEnabled[];
+
 // Lock screen notification settings.
 ASH_PUBLIC_EXPORT extern const char kMessageCenterLockScreenMode[];
 ASH_PUBLIC_EXPORT extern const char kMessageCenterLockScreenModeShow[];
@@ -166,7 +170,8 @@ ASH_PUBLIC_EXPORT extern const char kDetachableBaseDevices[];
 
 ASH_PUBLIC_EXPORT extern const char kCursorMotionBlurEnabled[];
 
-ASH_PUBLIC_EXPORT extern const char kAssistantNumWarmerWelcomeTriggered[];
+ASH_PUBLIC_EXPORT extern const char kAssistantNumSessionsWhereOnboardingShown[];
+ASH_PUBLIC_EXPORT extern const char kAssistantTimeOfLastInteraction[];
 
 ASH_PUBLIC_EXPORT extern const char kVpnConfigAllowed[];
 
@@ -199,6 +204,17 @@ ASH_PUBLIC_EXPORT extern const char kXkbAutoRepeatInterval[];
 
 ASH_PUBLIC_EXPORT extern const char kNaturalScroll[];
 ASH_PUBLIC_EXPORT extern const char kMouseReverseScroll[];
+
+ASH_PUBLIC_EXPORT extern const char kMultipasteNudges[];
+
+ASH_PUBLIC_EXPORT extern const char kDarkModeEnabled[];
+ASH_PUBLIC_EXPORT extern const char kColorModeThemed[];
+
+ASH_PUBLIC_EXPORT extern const char kAppNotificationBadgingEnabled[];
+
+ASH_PUBLIC_EXPORT extern const char kReverseGestureNotificationCount[];
+
+ASH_PUBLIC_EXPORT extern const char kGlobalMediaControlsPinned[];
 
 }  // namespace prefs
 

@@ -10,7 +10,7 @@
 
 #include "base/base_export.h"
 #include "base/callback.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -136,8 +136,6 @@ class BASE_EXPORT ThreadPoolImpl : public ThreadPoolInstance,
   // |all_tasks_user_blocking_| is set.
   TaskTraits VerifyAndAjustIncomingTraits(TaskTraits traits) const;
 
-  void ReportHeartbeatMetrics() const;
-
   const ThreadGroup* GetThreadGroupForTraits(const TaskTraits& traits) const;
 
   // ThreadGroup::Delegate:
@@ -151,7 +149,7 @@ class BASE_EXPORT ThreadPoolImpl : public ThreadPoolInstance,
   // PooledTaskRunnerDelegate:
   bool PostTaskWithSequence(Task task,
                             scoped_refptr<Sequence> sequence) override;
-  bool ShouldYield(const TaskSource* task_source) const override;
+  bool ShouldYield(const TaskSource* task_source) override;
 
   const std::unique_ptr<TaskTrackerImpl> task_tracker_;
   std::unique_ptr<Thread> service_thread_;

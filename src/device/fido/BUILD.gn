@@ -16,8 +16,11 @@ component("fido") {
     "cable/cable_discovery_data.h",
     "cable/noise.cc",
     "cable/noise.h",
+    "cable/v2_constants.h",
     "cable/v2_handshake.cc",
     "cable/v2_handshake.h",
+    "cable/websocket_adapter.cc",
+    "cable/websocket_adapter.h",
     "cbor_extract.cc",
     "ed25519_public_key.cc",
     "ed25519_public_key.h",
@@ -66,17 +69,21 @@ component("fido") {
     "//services/device/public/mojom",
   ]
 
-  libs = []  # Extended for mac.
-
   # Android implementation of FIDO is delegated to GMSCore.
   if (!is_android) {
     sources += [
+      "aoa/android_accessory_device.cc",
+      "aoa/android_accessory_device.h",
+      "aoa/android_accessory_discovery.cc",
+      "aoa/android_accessory_discovery.h",
       "attestation_object.cc",
       "attestation_object.h",
       "attestation_statement.cc",
       "attestation_statement.h",
       "attestation_statement_formats.cc",
       "attestation_statement_formats.h",
+      "auth_token_requester.cc",
+      "auth_token_requester.h",
       "authenticator_data.cc",
       "authenticator_data.h",
       "authenticator_get_assertion_response.cc",
@@ -109,6 +116,10 @@ component("fido") {
       "cable/fido_cable_discovery.h",
       "cable/fido_cable_handshake_handler.cc",
       "cable/fido_cable_handshake_handler.h",
+      "cable/fido_tunnel_device.cc",
+      "cable/fido_tunnel_device.h",
+      "cable/v2_discovery.cc",
+      "cable/v2_discovery.h",
       "client_data.cc",
       "client_data.h",
       "credential_management.cc",
@@ -154,6 +165,8 @@ component("fido") {
       "hid/fido_hid_message.h",
       "hid/fido_hid_packet.cc",
       "hid/fido_hid_packet.h",
+      "large_blob.cc",
+      "large_blob.h",
       "make_credential_request_handler.cc",
       "make_credential_request_handler.h",
       "make_credential_task.cc",
@@ -162,6 +175,8 @@ component("fido") {
       "opaque_attestation_statement.h",
       "pin.cc",
       "pin.h",
+      "pin_internal.cc",
+      "pin_internal.h",
       "platform_credential_store.h",
       "reset_request_handler.cc",
       "reset_request_handler.h",
@@ -185,7 +200,10 @@ component("fido") {
 
     deps += [
       "//services/device/public/cpp/hid",
+      "//services/device/public/cpp/usb",
       "//services/device/public/mojom",
+      "//services/device/public/mojom:usb",
+      "//services/network/public/mojom",
     ]
   }
 
@@ -213,7 +231,7 @@ component("fido") {
       "mac/util.mm",
     ]
 
-    libs += [
+    frameworks = [
       "Foundation.framework",
       "LocalAuthentication.framework",
       "Security.framework",
@@ -250,6 +268,50 @@ component("fido") {
       "//dbus",
     ]
   }
+}
+
+static_library("cablev2_registration") {
+  sources = [
+    "cable/v2_registration.cc",
+    "cable/v2_registration.h",
+  ]
+  deps = [
+    ":fido",
+    "//base",
+    "//components/cbor",
+    "//components/device_event_log",
+    "//components/gcm_driver",
+    "//components/gcm_driver/instance_id",
+  ]
+}
+
+static_library("cablev2_authenticator") {
+  sources = [
+    "cable/v2_authenticator.cc",
+    "cable/v2_authenticator.h",
+  ]
+  deps = [
+    ":fido",
+    "//components/cbor",
+    "//components/device_event_log",
+    "//services/network/public/mojom",
+  ]
+}
+
+static_library("cablev2_test_util") {
+  testonly = true
+  sources = [
+    "cable/v2_test_util.cc",
+    "cable/v2_test_util.h",
+  ]
+  deps = [
+    ":cablev2_authenticator",
+    ":fido",
+    "//components/cbor",
+    "//crypto",
+    "//services/network:test_support",
+    "//services/network/public/mojom",
+  ]
 }
 
 if (is_chromeos) {
@@ -322,8 +384,8 @@ fuzzer_test("fido_cable_handshake_handler_fuzzer") {
   libfuzzer_options = [ "max_len=2048" ]
 }
 
-fuzzer_test("fido_cable_handshake_handler_v2_fuzzer") {
-  sources = [ "cable/fido_cable_handshake_handler_v2_fuzzer.cc" ]
+fuzzer_test("v2_handshake_fuzzer") {
+  sources = [ "cable/v2_handshake_fuzzer.cc" ]
   deps = [
     ":fido",
     "//base",
@@ -335,7 +397,7 @@ fuzzer_test("fido_cable_handshake_handler_v2_fuzzer") {
   libfuzzer_options = [ "max_len=2048" ]
 }
 
-is_linux_without_udev = is_linux && !use_udev
+is_linux_without_udev = (is_linux || is_chromeos) && !use_udev
 
 source_set("test_support") {
   testonly = true

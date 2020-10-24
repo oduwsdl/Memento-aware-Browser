@@ -116,6 +116,7 @@ ScopedAnonymousMmap ScopedAnonymousMmap::ReserveAtAddress(void* address,
 
   if (actual_address && actual_address != address) {
     LOG_ERROR("Failed to obtain fixed address for load");
+    munmap(actual_address, size);
     return {};
   }
 
@@ -311,7 +312,8 @@ bool CopyAndRemapRelocations(const LoadedLibraryMetadata& metadata, int* fd) {
   }
 
   memcpy(relro_copy_addr, relro_addr, metadata.relro_size);
-  int retval = mprotect(relro_copy_addr, metadata.relro_size, PROT_READ);
+  int retval =
+      HANDLE_EINTR(mprotect(relro_copy_addr, metadata.relro_size, PROT_READ));
   if (retval) {
     LOG_ERROR("Cannot call mprotect()");
     close(shared_mem_fd);

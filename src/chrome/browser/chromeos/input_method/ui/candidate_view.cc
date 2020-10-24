@@ -128,9 +128,9 @@ std::unique_ptr<views::Label> CreateAnnotationLabel(
 
 }  // namespace
 
-CandidateView::CandidateView(views::ButtonListener* listener,
+CandidateView::CandidateView(PressedCallback callback,
                              ui::CandidateWindow::Orientation orientation)
-    : views::Button(listener), orientation_(orientation) {
+    : views::Button(std::move(callback)), orientation_(orientation) {
   SetBorder(views::CreateEmptyBorder(1, 1, 1, 1));
 
   const ui::NativeTheme& theme = *GetNativeTheme();
@@ -144,6 +144,9 @@ CandidateView::CandidateView(views::ButtonListener* listener,
         theme.GetSystemColor(ui::NativeTheme::kColorId_FocusedBorderColor)));
     infolist_icon_ = AddChildView(std::move(infolist_icon));
   }
+
+  DCHECK_EQ(views::View::FocusBehavior::ACCESSIBLE_ONLY, GetFocusBehavior());
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
 }
 
 void CandidateView::GetPreferredWidths(int* shortcut_width,
@@ -200,11 +203,12 @@ void CandidateView::SetHighlighted(bool highlighted) {
 }
 
 void CandidateView::StateChanged(ButtonState old_state) {
-  int text_style = state() == STATE_DISABLED ? views::style::STYLE_DISABLED
-                                             : views::style::STYLE_PRIMARY;
+  Button::StateChanged(old_state);
+  int text_style = GetState() == STATE_DISABLED ? views::style::STYLE_DISABLED
+                                                : views::style::STYLE_PRIMARY;
   shortcut_label_->SetEnabledColor(views::style::GetColor(
       *shortcut_label_, views::style::CONTEXT_LABEL, text_style));
-  if (state() == STATE_PRESSED)
+  if (GetState() == STATE_PRESSED)
     SetHighlighted(true);
 }
 

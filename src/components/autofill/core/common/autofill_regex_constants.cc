@@ -30,6 +30,11 @@ const char kCompanyRe[] =
     "|单位|公司"                 // zh-CN
     "|شرکت"                      // fa
     "|회사|직장";                // ko-KR
+const char kStreetNameRe[] =
+    "stra(ss|ß)e"    // de
+    "|street"        // en
+    "|rua|avenida";  // br
+const char kHouseNumberRe[] = "(house |^)number|(haus|^)nummer|^número$";
 const char kAddressLine1Re[] =
     "^address$|address[_-]?line(one)?|address1|addr1|street"
     "|(?:shipping|billing)address$"
@@ -317,11 +322,9 @@ const char kFirstNameRe[] =
     "|(\\b|_|\\*)(isim|ad|ad(i|ı|iniz|ınız)?)(\\b|_|\\*)"  // tr
     "|नाम";                                                // hi
 const char kMiddleInitialRe[] = "middle.*initial|m\\.i\\.|mi$|\\bmi\\b";
-const char kMiddleNameRe[] =
-    "middle.*name|mname|middle$"
-    "|apellido.?materno|lastlastname";  // es
+const char kMiddleNameRe[] = "middle.*name|mname|middle$";
 const char kLastNameRe[] =
-    "last.*name|lname|surname|last$|secondname|family.*name"
+    "last.*name|lname|surname(?!\\d)|last$|secondname|family.*name"
     "|nachname"                                               // de-DE
     "|apellidos?"                                             // es
     "|famille|^nom(?!bre)"                                    // fr-FR
@@ -334,7 +337,26 @@ const char kLastNameRe[] =
     "|മറുപേര്"                                                  // ml
     "|(\\b|_|\\*)(soyisim|soyad(i|ı|iniz|ınız)?)(\\b|_|\\*)"  // tr
     "|\\b성(?:[^명]|\\b)";                                    // ko-KR
-
+const char kNameLastFirstRe[] =
+    "(primer.*apellido)"                 // es
+    "|(apellido1)"                       // es
+    "|(apellido.*paterno)"               // es
+    "|surname_?1|first(\\s|_)?surname";  // es
+const char kNameLastSecondRe[] =
+    "(segund.*apellido)"                  // es
+    "|(apellido2)"                        // es
+    "|(apellido.*materno)"                // es
+    "|surname_?2|second(\\s|_)?surname";  // es
+const char kHonorificPrefixRe[] =
+    "anrede|titel"                 // de-DE
+    "|tratamiento|encabezamiento"  // es
+    "|^title:?$"  // Matched only if there is no prefix or suffix.
+    "|(salutation(?! and given name))"  // en
+    "|titolo"                           // it-IT
+    "|titre"                            // fr-FR
+    "|обраще́ние|зва́ние"                 // ru
+    "|προσφώνηση"                       // el
+    "|hitap";                           // tr
 /////////////////////////////////////////////////////////////////////////////
 // phone_field.cc
 /////////////////////////////////////////////////////////////////////////////
@@ -351,6 +373,8 @@ const char kPhoneRe[] =
     "|电话"                                         // zh-CN
     "|മൊബൈല്‍"                        // ml for mobile
     "|(?:전화|핸드폰|휴대폰|휴대전화)(?:.?번호)?";  // ko-KR
+const char kAugmentedPhoneCountryCodeRe[] =
+    "^[^0-9+]*(?:\\+|00)\\s*([1-9]\\d{0,3})\\D*$";
 const char kCountryCodeRe[] =
     "country.*code|ccode|_cc|phone.*code|user.*phone.*code";
 const char kAreaCodeNotextRe[] = "^\\($";

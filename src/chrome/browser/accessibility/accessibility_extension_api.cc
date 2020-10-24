@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -45,6 +46,7 @@
 #include "ash/public/cpp/window_tree_host_lookup.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_helper_bridge.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes_util.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ui_base_features.h"
@@ -81,8 +83,11 @@ AccessibilityPrivateOpenSettingsSubpageFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
 #if defined(OS_CHROMEOS)
+  // TODO(chrome-a11y-core): we can't open a settings page when you're on the
+  // signin profile, but maybe we should notify the user and explain why?
   Profile* profile = chromeos::AccessibilityManager::Get()->profile();
-  if (chromeos::settings::IsOSSettingsSubPage(params->subpage)) {
+  if (!chromeos::ProfileHelper::IsSigninProfile(profile) &&
+      chromeos::settings::IsOSSettingsSubPage(params->subpage)) {
     chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
         profile, params->subpage);
   }
@@ -308,7 +313,7 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
   accessibility_private::SyntheticMouseEvent* mouse_data = &params->mouse_event;
 
-  ui::EventType type;
+  ui::EventType type = ui::ET_UNKNOWN;
   switch (mouse_data->type) {
     case accessibility_private::SYNTHETIC_MOUSE_EVENT_TYPE_PRESS:
       type = ui::ET_MOUSE_PRESSED;
@@ -332,7 +337,15 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
       NOTREACHED();
   }
 
-  int flags = ui::EF_LEFT_MOUSE_BUTTON;
+  int flags = 0;
+  if (type != ui::ET_MOUSE_MOVED)
+    flags |= ui::EF_LEFT_MOUSE_BUTTON;
+
+  int changed_button_flags = flags;
+
+  flags |= ui::EF_IS_SYNTHESIZED;
+  if (mouse_data->touch_accessibility && *(mouse_data->touch_accessibility))
+    flags |= ui::EF_TOUCH_ACCESSIBILITY;
 
   // Locations are assumed to be display relative (and in DIPs).
   // TODO(crbug/893752) Choose correct display
@@ -341,7 +354,7 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
   std::unique_ptr<ui::MouseEvent> synthetic_mouse_event =
       std::make_unique<ui::MouseEvent>(type, location, location,
                                        ui::EventTimeForNow(), flags,
-                                       flags /* changed_button_flags */);
+                                       changed_button_flags);
 
   auto* host = ash::GetWindowTreeHostForDisplay(display.id());
   DCHECK(host);
@@ -357,11 +370,9 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
-AccessibilityPrivateOnSelectToSpeakStateChangedFunction::Run() {
-  std::unique_ptr<accessibility_private::OnSelectToSpeakStateChanged::Params>
-      params =
-          accessibility_private::OnSelectToSpeakStateChanged::Params::Create(
-              *args_);
+AccessibilityPrivateSetSelectToSpeakStateFunction::Run() {
+  std::unique_ptr<accessibility_private::SetSelectToSpeakState::Params> params =
+      accessibility_private::SetSelectToSpeakState::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
   accessibility_private::SelectToSpeakState params_state = params->state;
   ash::SelectToSpeakState state;
@@ -381,21 +392,42 @@ AccessibilityPrivateOnSelectToSpeakStateChangedFunction::Run() {
   }
 
   auto* accessibility_manager = chromeos::AccessibilityManager::Get();
-  accessibility_manager->OnSelectToSpeakStateChanged(state);
+  accessibility_manager->SetSelectToSpeakState(state);
 
   return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
-AccessibilityPrivateOnScrollableBoundsForPointFoundFunction::Run() {
+AccessibilityPrivateHandleScrollableBoundsForPointFoundFunction::Run() {
   std::unique_ptr<
-      accessibility_private::OnScrollableBoundsForPointFound::Params>
-      params = accessibility_private::OnScrollableBoundsForPointFound::Params::
-          Create(*args_);
+      accessibility_private::HandleScrollableBoundsForPointFound::Params>
+      params = accessibility_private::HandleScrollableBoundsForPointFound::
+          Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
   accessibility_private::ScreenRect rect = std::move(params->rect);
   gfx::Rect bounds(rect.left, rect.top, rect.width, rect.height);
-  ash::AccessibilityController::Get()->OnAutoclickScrollableBoundsFound(bounds);
+  ash::AccessibilityController::Get()->HandleAutoclickScrollableBoundsFound(
+      bounds);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivateMoveMagnifierToRectFunction::Run() {
+  std::unique_ptr<accessibility_private::MoveMagnifierToRect::Params> params =
+      accessibility_private::MoveMagnifierToRect::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  if (!::switches::
+          IsExperimentalAccessibilityMagnifierNewFocusFollowingEnabled()) {
+    return RespondNow(NoArguments());
+  }
+  accessibility_private::ScreenRect rect = std::move(params->rect);
+  gfx::Rect bounds(rect.left, rect.top, rect.width, rect.height);
+
+  chromeos::MagnificationManager* magnification_manager =
+      chromeos::MagnificationManager::Get();
+  if (magnification_manager)
+    magnification_manager->HandleMoveMagnifierToRectIfEnabled(bounds);
+
   return RespondNow(NoArguments());
 }
 
@@ -422,10 +454,7 @@ AccessibilityPrivateForwardKeyEventsToSwitchAccessFunction::Run() {
               *args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  ash::AccessibilityController::Get()->ForwardKeyEventsToSwitchAccess(
-      params->should_forward);
-
-  return RespondNow(NoArguments());
+  return RespondNow(Error("Forwarding key events is no longer supported."));
 }
 
 ExtensionFunction::ResponseAction
@@ -476,6 +505,21 @@ AccessibilityPrivateUpdateSwitchAccessBubbleFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+ExtensionFunction::ResponseAction
+AccessibilityPrivateEnablePointScanFunction::Run() {
+  std::unique_ptr<accessibility_private::EnablePointScan::Params> params =
+      accessibility_private::EnablePointScan::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  if (params->enabled) {
+    ash::AccessibilityController::Get()->StartPointScan();
+  }
+
+  // TODO(crbug.com/1061537): Implement (!params->enabled) to disable point scan
+
+  return RespondNow(NoArguments());
+}
+
 AccessibilityPrivateGetBatteryDescriptionFunction::
     AccessibilityPrivateGetBatteryDescriptionFunction() {}
 
@@ -484,7 +528,7 @@ AccessibilityPrivateGetBatteryDescriptionFunction::
 
 ExtensionFunction::ResponseAction
 AccessibilityPrivateGetBatteryDescriptionFunction::Run() {
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
+  return RespondNow(OneArgument(base::Value(
       ash::AccessibilityController::Get()->GetBatteryDescription())));
 }
 
@@ -498,6 +542,30 @@ AccessibilityPrivateSetVirtualKeyboardVisibleFunction::Run() {
   ash::AccessibilityController::Get()->SetVirtualKeyboardVisible(
       params->is_visible);
 
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivatePerformAcceleratorActionFunction::Run() {
+  std::unique_ptr<accessibility_private::PerformAcceleratorAction::Params>
+      params = accessibility_private::PerformAcceleratorAction::Params::Create(
+          *args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  ash::AcceleratorAction accelerator_action;
+  switch (params->accelerator_action) {
+    case accessibility_private::ACCELERATOR_ACTION_FOCUSPREVIOUSPANE:
+      accelerator_action = ash::FOCUS_PREVIOUS_PANE;
+      break;
+    case accessibility_private::ACCELERATOR_ACTION_FOCUSNEXTPANE:
+      accelerator_action = ash::FOCUS_NEXT_PANE;
+      break;
+    case accessibility_private::ACCELERATOR_ACTION_NONE:
+      NOTREACHED();
+      return RespondNow(Error("Invalid accelerator action."));
+  }
+
+  ash::AccessibilityController::Get()->PerformAcceleratorAction(
+      accelerator_action);
   return RespondNow(NoArguments());
 }
 

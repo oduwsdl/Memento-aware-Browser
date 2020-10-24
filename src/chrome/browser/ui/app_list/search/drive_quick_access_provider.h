@@ -25,6 +25,10 @@ class SearchController;
 
 // DriveQuickAccessProvider dispatches queries to extensions and fetches the
 // results from them via chrome.launcherSearchProvider API.
+//
+// TODO(crbug.com/1034842): This is deprecated in favour of
+// DriveZeroStateProvider. This class and related results classes can be
+// deleted.
 class DriveQuickAccessProvider : public SearchProvider,
                                  public drive::DriveIntegrationServiceObserver {
  public:
@@ -62,6 +66,10 @@ class DriveQuickAccessProvider : public SearchProvider,
 
   // Whether the suggested files experiment is enabled.
   const bool suggested_files_enabled_;
+
+  // Whether we have sent at least one request to ItemSuggest to warm up the
+  // results cache.
+  bool have_warmed_up_cache_ = false;
 
   // Stores the last-returned results from the QuickAccess API.
   std::vector<drive::QuickAccessItem> results_cache_;

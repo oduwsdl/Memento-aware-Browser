@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ash/ambient/model/ambient_backend_model_observer.h"
+#include "ash/ambient/ui/ambient_background_image_view.h"
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -17,14 +18,11 @@ namespace gfx {
 class ImageSkia;
 }  // namespace gfx
 
-namespace ui {
-class AnimationMetricsReporter;
-}  // namespace ui
-
 namespace ash {
 
 class AmbientBackgroundImageView;
 class AmbientViewDelegate;
+struct PhotoWithDetails;
 
 // View to display photos in ambient mode.
 class ASH_EXPORT PhotoView : public views::View,
@@ -38,7 +36,6 @@ class ASH_EXPORT PhotoView : public views::View,
 
   // views::View:
   const char* GetClassName() const override;
-  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
   // AmbientBackendModelObserver:
   void OnImagesChanged() override;
@@ -50,7 +47,9 @@ class ASH_EXPORT PhotoView : public views::View,
   friend class AmbientAshTestBase;
 
   void Init();
-  void UpdateImages();
+
+  void UpdateImage(const PhotoWithDetails& image);
+
   void StartTransitionAnimation();
 
   // Return if can start transition animation.
@@ -62,13 +61,8 @@ class ASH_EXPORT PhotoView : public views::View,
   // strong guarantee on the life cycle.
   AmbientViewDelegate* const delegate_ = nullptr;
 
-  std::unique_ptr<ui::AnimationMetricsReporter> metrics_reporter_;
-
   // Image containers used for animation. Owned by view hierarchy.
   AmbientBackgroundImageView* image_views_[2]{nullptr, nullptr};
-
-  // The unscaled images used for scaling and displaying in different bounds.
-  gfx::ImageSkia images_unscaled_[2];
 
   // The index of |image_views_| to update the next image.
   int image_index_ = 0;

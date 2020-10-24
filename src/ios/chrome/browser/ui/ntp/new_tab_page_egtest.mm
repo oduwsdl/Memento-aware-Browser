@@ -4,7 +4,6 @@
 
 #import "base/test/ios/wait_util.h"
 #include "base/test/scoped_command_line.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -53,6 +52,10 @@ BOOL WaitForHistoryToDisappear() {
 
 // Tests that the NTP is still displayed after loading an invalid URL.
 - (void)testNTPStayForInvalidURL {
+  if (@available(iOS 13, *)) {
+  } else {
+    EARL_GREY_TEST_DISABLED(@"Failing on iOS 12.");
+  }
 // TODO(crbug.com/1067813): Test won't pass on iPad device.
 #if !TARGET_IPHONE_SIMULATOR
   if ([ChromeEarlGrey isIPadIdiom]) {

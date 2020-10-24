@@ -36,9 +36,6 @@ void FakeAccessibilityController::SetSelectToSpeakState(
 void FakeAccessibilityController::SetSelectToSpeakEventHandlerDelegate(
     ash::SelectToSpeakEventHandlerDelegate* delegate) {}
 
-void FakeAccessibilityController::SetSwitchAccessEventHandlerDelegate(
-    ash::SwitchAccessEventHandlerDelegate* delegate) {}
-
 void FakeAccessibilityController::HideSwitchAccessBackButton() {}
 
 void FakeAccessibilityController::HideSwitchAccessMenu() {}
@@ -50,16 +47,15 @@ void FakeAccessibilityController::ShowSwitchAccessMenu(
     const gfx::Rect& anchor,
     std::vector<std::string> actions) {}
 
+void FakeAccessibilityController::StartPointScan() {}
+
 void FakeAccessibilityController::SetDictationActive(bool is_active) {}
 
 void FakeAccessibilityController::ToggleDictationFromSource(
     ash::DictationToggleSource source) {}
 
-void FakeAccessibilityController::OnAutoclickScrollableBoundsFound(
+void FakeAccessibilityController::HandleAutoclickScrollableBoundsFound(
     gfx::Rect& bounds_in_screen) {}
-
-void FakeAccessibilityController::ForwardKeyEventsToSwitchAccess(
-    bool should_forward) {}
 
 base::string16 FakeAccessibilityController::GetBatteryDescription() const {
   return base::string16();
@@ -67,15 +63,15 @@ base::string16 FakeAccessibilityController::GetBatteryDescription() const {
 
 void FakeAccessibilityController::SetVirtualKeyboardVisible(bool is_visible) {}
 
+void FakeAccessibilityController::PerformAcceleratorAction(
+    ash::AcceleratorAction accelerator_action) {}
+
 void FakeAccessibilityController::NotifyAccessibilityStatusChanged() {}
 
 bool FakeAccessibilityController::IsAccessibilityFeatureVisibleInTrayMenu(
     const std::string& path) {
   return true;
 }
-
-void FakeAccessibilityController::
-    SetSwitchAccessIgnoreVirtualKeyEventForTesting(bool should_ignore) {}
 
 void FakeAccessibilityController::
     DisableSwitchAccessDisableConfirmationDialogTesting() {}

@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.permissions;
 
+import android.os.Build.VERSION_CODES;
 import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.LargeTest;
@@ -14,13 +15,17 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.permissions.PermissionTestRule.PermissionUpdateWaiter;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentSwitches;
+import org.chromium.device.geolocation.LocationProviderOverrider;
+import org.chromium.device.geolocation.MockLocationProvider;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 
 /**
@@ -74,7 +79,14 @@ public class AutomaticEmbargoTest {
     @Test
     @LargeTest
     @Feature({"Location"})
+    @DisableIf.
+    Build(message = "Test is failing on Nexus 5X (64-bit) + Android M, see crbug.com/1111001.",
+            sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
+            supported_abis_includes = "arm64-v8a")
     public void testGeolocationEmbargo() throws Exception {
+        LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);
+        LocationProviderOverrider.setLocationProviderImpl(new MockLocationProvider());
+
         runTest(GEOLOCATION_TEST_FILE, "", "Denied", 0);
     }
 

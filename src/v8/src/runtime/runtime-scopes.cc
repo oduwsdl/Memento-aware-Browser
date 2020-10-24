@@ -18,8 +18,8 @@
 #include "src/objects/module-inl.h"
 #include "src/objects/smi.h"
 #include "src/runtime/runtime-utils.h"
-#include "torque-generated/exported-class-definitions-tq-inl.h"
-#include "torque-generated/exported-class-definitions-tq.h"
+#include "torque-generated/exported-class-definitions-inl.h"
+#include "torque-generated/exported-class-definitions.h"
 
 namespace v8 {
 namespace internal {
@@ -379,12 +379,16 @@ std::unique_ptr<Handle<Object>[]> GetCallerArguments(Isolate* isolate,
 
     return param_data;
   } else {
+#ifdef V8_NO_ARGUMENTS_ADAPTOR
+    int args_count = frame->GetActualArgumentCount();
+#else
     if (it.frame()->has_adapted_arguments()) {
       it.AdvanceOneFrame();
       DCHECK(it.frame()->is_arguments_adaptor());
     }
     frame = it.frame();
     int args_count = frame->ComputeParametersCount();
+#endif
 
     *total_argc = args_count;
     std::unique_ptr<Handle<Object>[]> param_data(
@@ -548,30 +552,6 @@ RUNTIME_FUNCTION(Runtime_NewRestParameter) {
     for (int i = 0; i < num_elements; i++) {
       elements.set(i, *arguments[i + start_index], mode);
     }
-  }
-  return *result;
-}
-
-RUNTIME_FUNCTION(Runtime_NewArgumentsElements) {
-  HandleScope scope(isolate);
-  DCHECK_EQ(3, args.length());
-  // Note that args[0] is the address of an array of full object pointers
-  // (a.k.a. FullObjectSlot), which looks like a Smi because it's aligned.
-  DCHECK(args[0].IsSmi());
-  FullObjectSlot frame(args[0].ptr());
-  CONVERT_SMI_ARG_CHECKED(length, 1);
-  CONVERT_SMI_ARG_CHECKED(mapped_count, 2);
-  Handle<FixedArray> result =
-      isolate->factory()->NewUninitializedFixedArray(length);
-  int const offset = length + 1;
-  DisallowHeapAllocation no_gc;
-  WriteBarrierMode mode = result->GetWriteBarrierMode(no_gc);
-  int number_of_holes = Min(mapped_count, length);
-  for (int index = 0; index < number_of_holes; ++index) {
-    result->set_the_hole(isolate, index);
-  }
-  for (int index = number_of_holes; index < length; ++index) {
-    result->set(index, *(frame + (offset - index)), mode);
   }
   return *result;
 }

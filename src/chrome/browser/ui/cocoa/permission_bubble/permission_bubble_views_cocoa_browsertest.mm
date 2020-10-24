@@ -30,7 +30,9 @@ void ShowBubble(Browser* browser) {
       std::make_unique<test::PermissionRequestManagerTestApi>(browser);
   EXPECT_TRUE(test_api->manager());
 
-  test_api->AddSimpleRequest(ContentSettingsType::GEOLOCATION);
+  test_api->AddSimpleRequest(
+      browser->tab_strip_model()->GetActiveWebContents()->GetMainFrame(),
+      ContentSettingsType::GEOLOCATION);
 
   // The PermissionRequestManager displays prompts asynchronously.
   EXPECT_FALSE(test_api->GetPromptWindow());
@@ -88,9 +90,8 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest, AppHasNoLocationBar) {
   EXPECT_FALSE(HasVisibleLocationBarForBrowser(app_browser));
 }
 
-// Crashes. http://crbug.com/920582
 IN_PROC_BROWSER_TEST_F(PermissionBubbleKioskBrowserTest,
-                       DISABLED_KioskHasNoLocationBar) {
+                       KioskHasNoLocationBar) {
   ShowBubble(browser());
   // Kiosk mode on Mac has no location bar.
   EXPECT_FALSE(HasVisibleLocationBarForBrowser(browser()));

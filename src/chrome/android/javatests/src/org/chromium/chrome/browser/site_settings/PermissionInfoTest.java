@@ -14,17 +14,16 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.site_settings.PermissionInfo;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridgeJni;
 import org.chromium.components.content_settings.ContentSettingValues;
+import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.concurrent.ExecutionException;
@@ -37,8 +36,7 @@ public class PermissionInfoTest {
     private static final String OTHER_ORIGIN = "https://www.other.com";
 
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Before
     public void setUp() throws Exception {
@@ -53,7 +51,7 @@ public class PermissionInfoTest {
     private void setGeolocation(
             String origin, String embedder, @ContentSettingValues int setting, boolean incognito) {
         PermissionInfo info =
-                new PermissionInfo(PermissionInfo.Type.GEOLOCATION, origin, embedder, incognito);
+                new PermissionInfo(ContentSettingsType.GEOLOCATION, origin, embedder, incognito);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> info.setContentSetting(getProfile(incognito), setting));
     }
@@ -62,7 +60,7 @@ public class PermissionInfoTest {
             String origin, String embedder, boolean incognito) throws ExecutionException {
         return TestThreadUtils.runOnUiThreadBlocking(() -> {
             PermissionInfo info = new PermissionInfo(
-                    PermissionInfo.Type.GEOLOCATION, origin, embedder, incognito);
+                    ContentSettingsType.GEOLOCATION, origin, embedder, incognito);
             return info.getContentSetting(getProfile(incognito));
         });
     }
@@ -70,7 +68,7 @@ public class PermissionInfoTest {
     private void setNotifications(
             String origin, String embedder, @ContentSettingValues int setting, boolean incognito) {
         PermissionInfo info =
-                new PermissionInfo(PermissionInfo.Type.NOTIFICATION, origin, embedder, incognito);
+                new PermissionInfo(ContentSettingsType.NOTIFICATIONS, origin, embedder, incognito);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> info.setContentSetting(getProfile(incognito), setting));
     }
@@ -79,7 +77,7 @@ public class PermissionInfoTest {
             String origin, String embedder, boolean incognito) throws ExecutionException {
         return TestThreadUtils.runOnUiThreadBlocking(() -> {
             PermissionInfo info = new PermissionInfo(
-                    PermissionInfo.Type.NOTIFICATION, origin, embedder, incognito);
+                    ContentSettingsType.NOTIFICATIONS, origin, embedder, incognito);
             return info.getContentSetting(getProfile(incognito));
         });
     }
@@ -113,23 +111,6 @@ public class PermissionInfoTest {
         setGeolocation(OTHER_ORIGIN, null, ContentSettingValues.DEFAULT, incognito);
         Assert.assertEquals(
                 ContentSettingValues.ASK, getGeolocation(OTHER_ORIGIN, null, incognito));
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Preferences"})
-    @DisableFeatures(ChromeFeatureList.PERMISSION_DELEGATION)
-    public void testResetDSEGeolocationEmbeddedOrigin() throws Throwable {
-        // It's not possible to set a permission for an embedded origin when permission delegation
-        // is enabled. This code can be deleted when the feature is enabled by default.
-        // Resetting an embedded DSE origin should not have the same behavior.
-        boolean incognito = false;
-        setGeolocation(DSE_ORIGIN, OTHER_ORIGIN, ContentSettingValues.BLOCK, incognito);
-        Assert.assertEquals(
-                ContentSettingValues.BLOCK, getGeolocation(DSE_ORIGIN, OTHER_ORIGIN, incognito));
-        setGeolocation(DSE_ORIGIN, OTHER_ORIGIN, ContentSettingValues.DEFAULT, incognito);
-        Assert.assertEquals(
-                ContentSettingValues.ASK, getGeolocation(DSE_ORIGIN, OTHER_ORIGIN, incognito));
     }
 
     @Test

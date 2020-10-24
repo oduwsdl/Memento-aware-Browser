@@ -122,6 +122,10 @@ class FileSystemURL;
 namespace file_manager {
 namespace file_tasks {
 
+extern const char kActionIdView[];
+extern const char kActionIdSend[];
+extern const char kActionIdSendMultiple[];
+
 // Task types as explained in the comment above. Search for <task-type>.
 enum TaskType {
   TASK_TYPE_UNKNOWN = 0,  // Used only for handling errors.
@@ -341,6 +345,9 @@ void ChooseAndSetDefaultTask(const PrefService& pref_service,
 // net/mime_util.cc), it's enough to simply check the extension rather than
 // using MimeTypeCollector. TODO(crbug/1030935): Remove this.
 bool IsRawImage(const base::FilePath& path);
+
+// Returns whether |path| is an HTML file according to its extension.
+bool IsHtmlFile(const base::FilePath& path);
 
 }  // namespace file_tasks
 }  // namespace file_manager

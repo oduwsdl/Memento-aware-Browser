@@ -57,7 +57,9 @@ class WebViewAutofillClientIOS : public AutofillClient {
   ukm::UkmRecorder* GetUkmRecorder() override;
   ukm::SourceId GetUkmSourceId() override;
   AddressNormalizer* GetAddressNormalizer() override;
+  const GURL& GetLastCommittedURL() override;
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
+  const translate::LanguageState* GetLanguageState() override;
   void ShowAutofillSettings(bool show_credit_card_settings) override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
@@ -113,6 +115,8 @@ class WebViewAutofillClientIOS : public AutofillClient {
   LogManager* GetLogManager() const override;
 
   void set_bridge(id<CWVAutofillClientIOSBridge> bridge) { bridge_ = bridge; }
+
+  bool IsQueryIDRelevant(int query_id) override;
 
  private:
   PrefService* pref_service_;

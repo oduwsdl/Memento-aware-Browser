@@ -15,9 +15,11 @@
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
+#include "content/browser/renderer_host/drop_data_util.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/site_instance_impl.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
@@ -25,13 +27,15 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/page_state.h"
-#include "content/public/common/web_preferences.h"
+#include "content/public/common/drop_data.h"
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "media/base/video_frame.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_type.h"
@@ -58,7 +62,7 @@ void InitNavigateParams(FrameHostMsg_DidCommitProvisionalLoad_Params* params,
   params->did_create_new_entry = did_create_new_entry;
   params->gesture = NavigationGestureUser;
   params->method = "GET";
-  params->page_state = PageState::CreateFromURL(url);
+  params->page_state = blink::PageState::CreateFromURL(url);
 }
 
 TestRenderWidgetHostView::TestRenderWidgetHostView(RenderWidgetHost* rwh)
@@ -144,6 +148,14 @@ void TestRenderWidgetHostView::WasOccluded() {
   is_occluded_ = true;
 }
 
+void TestRenderWidgetHostView::EnsureSurfaceSynchronizedForWebTest() {
+  ++latest_capture_sequence_number_;
+}
+
+uint32_t TestRenderWidgetHostView::GetCaptureSequenceNumber() const {
+  return latest_capture_sequence_number_;
+}
+
 void TestRenderWidgetHostView::RenderProcessGone() {
   delete this;
 }
@@ -154,13 +166,15 @@ gfx::Rect TestRenderWidgetHostView::GetViewBounds() {
   return gfx::Rect();
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void TestRenderWidgetHostView::SetActive(bool active) {
   // <viettrungluu@gmail.com>: Do I need to do anything here?
 }
 
 void TestRenderWidgetHostView::SpeakSelection() {
 }
+
+void TestRenderWidgetHostView::SetWindowFrameInScreen(const gfx::Rect& rect) {}
 #endif
 
 gfx::Rect TestRenderWidgetHostView::GetBoundsInRootWindow() {
@@ -190,9 +204,8 @@ const viz::FrameSinkId& TestRenderWidgetHostView::GetFrameSinkId() const {
   return frame_sink_id_;
 }
 
-const viz::LocalSurfaceIdAllocation&
-TestRenderWidgetHostView::GetLocalSurfaceIdAllocation() const {
-  return viz::ParentLocalSurfaceIdAllocator::InvalidLocalSurfaceIdAllocation();
+const viz::LocalSurfaceId& TestRenderWidgetHostView::GetLocalSurfaceId() const {
+  return viz::ParentLocalSurfaceIdAllocator::InvalidLocalSurfaceId();
 }
 
 viz::SurfaceId TestRenderWidgetHostView::GetCurrentSurfaceId() const {
@@ -231,8 +244,7 @@ TestRenderViewHost::TestRenderViewHost(
                          main_frame_routing_id,
                          swapped_out,
                          false /* has_initialized_audio_host */),
-      delete_counter_(nullptr),
-      webkit_preferences_changed_counter_(nullptr) {
+      delete_counter_(nullptr) {
   // TestRenderWidgetHostView installs itself into this->view_ in its
   // constructor, and deletes itself when TestRenderWidgetHostView::Destroy() is
   // called.
@@ -271,17 +283,17 @@ bool TestRenderViewHost::CreateRenderView(
     mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
     mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
     auto blink_widget_receiver =
-        blink_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+        blink_widget.BindNewEndpointAndPassDedicatedReceiver();
     GetWidget()->BindWidgetInterfaces(
-        blink_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
+        blink_widget_host.BindNewEndpointAndPassDedicatedReceiver(),
         blink_widget.Unbind());
 
     mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
     mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
     auto frame_widget_receiver =
-        frame_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+        frame_widget.BindNewEndpointAndPassDedicatedReceiver();
     GetWidget()->BindFrameWidgetInterfaces(
-        frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
+        frame_widget_host.BindNewEndpointAndPassDedicatedReceiver(),
         frame_widget.Unbind());
 
     main_frame->SetRenderFrameCreated(true);
@@ -299,35 +311,34 @@ void TestRenderViewHost::SimulateWasHidden() {
 }
 
 void TestRenderViewHost::SimulateWasShown() {
-  GetWidget()->WasShown(base::nullopt /* record_tab_switch_time_request */);
+  GetWidget()->WasShown({} /* record_tab_switch_time_request */);
 }
 
-WebPreferences TestRenderViewHost::TestComputeWebPreferences() {
-  return ComputeWebPreferences();
-}
-
-void TestRenderViewHost::OnWebkitPreferencesChanged() {
-  RenderViewHostImpl::OnWebkitPreferencesChanged();
-  if (webkit_preferences_changed_counter_)
-    ++*webkit_preferences_changed_counter_;
+blink::web_pref::WebPreferences
+TestRenderViewHost::TestComputeWebPreferences() {
+  return static_cast<WebContentsImpl*>(WebContents::FromRenderViewHost(this))
+      ->ComputeWebPreferences();
 }
 
 bool TestRenderViewHost::IsTestRenderViewHost() const {
   return true;
 }
 
-void TestRenderViewHost::TestOnStartDragging(
-    const DropData& drop_data) {
-  blink::WebDragOperationsMask drag_operation = blink::kWebDragOperationEvery;
-  DragEventSourceInfo event_info;
-  GetWidget()->OnStartDragging(drop_data, drag_operation, SkBitmap(),
-                               gfx::Vector2d(), event_info);
+void TestRenderViewHost::TestStartDragging(const DropData& drop_data) {
+  StoragePartitionImpl* storage_partition =
+      static_cast<StoragePartitionImpl*>(GetProcess()->GetStoragePartition());
+  GetWidget()->StartDragging(
+      DropDataToDragData(drop_data,
+                         storage_partition->GetNativeFileSystemManager(),
+                         GetProcess()->GetID()),
+      blink::kDragOperationEvery, SkBitmap(), gfx::Vector2d(),
+      blink::mojom::DragEventSourceInfo::New());
 }
 
 void TestRenderViewHost::TestOnUpdateStateWithFile(
     const base::FilePath& file_path) {
-  PageState state = PageState::CreateForTesting(GURL("http://www.google.com"),
-                                                false, "data", &file_path);
+  auto state = blink::PageState::CreateForTesting(GURL("http://www.google.com"),
+                                                  false, "data", &file_path);
   static_cast<RenderFrameHostImpl*>(GetMainFrame())->UpdateState(state);
 }
 

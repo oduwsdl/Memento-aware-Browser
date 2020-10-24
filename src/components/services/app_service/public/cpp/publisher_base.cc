@@ -87,6 +87,7 @@ void PublisherBase::SetPermission(const std::string& app_id,
 }
 
 void PublisherBase::Uninstall(const std::string& app_id,
+                              apps::mojom::UninstallSource uninstall_source,
                               bool clear_site_data,
                               bool report_abuse) {
   LOG(ERROR) << "Uninstall failed, could not remove the app with id " << app_id;
@@ -108,6 +109,13 @@ void PublisherBase::GetMenuModel(const std::string& app_id,
                                  apps::mojom::MenuType menu_type,
                                  int64_t display_id,
                                  GetMenuModelCallback callback) {
+  NOTIMPLEMENTED();
+}
+
+void PublisherBase::ExecuteContextMenuCommand(const std::string& app_id,
+                                              int command_id,
+                                              const std::string& shortcut_id,
+                                              int64_t display_id) {
   NOTIMPLEMENTED();
 }
 

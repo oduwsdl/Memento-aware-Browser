@@ -96,6 +96,7 @@ Polymer({
       type: Boolean,
       computed: 'computeExpired_(expirationMonth_, expirationYear_)',
       reflectToAttribute: true,
+      observer: 'onExpiredChanged_',
     },
   },
 
@@ -183,6 +184,7 @@ Polymer({
 
     this.creditCard.expirationYear = this.expirationYear_;
     this.creditCard.expirationMonth = this.expirationMonth_;
+    this.trimCreditCard_();
     this.fire('save-credit-card', this.creditCard);
     this.close();
   },
@@ -221,6 +223,26 @@ Polymer({
   },
 
   /**
+   * Handles a11y error announcement the same way as in cr-input.
+   * @private
+   */
+  onExpiredChanged_() {
+    const ERROR_ID =
+        this.nicknameManagementEnabled_ ? 'expired-error' : 'expired';
+    const errorElement = this.$$(`#${ERROR_ID}`);
+    // Readding attributes is needed for consistent announcement by VoiceOver
+    if (this.expired_) {
+      errorElement.setAttribute('role', 'alert');
+      this.$$(`#month`).setAttribute('aria-errormessage', ERROR_ID);
+      this.$$(`#year`).setAttribute('aria-errormessage', ERROR_ID);
+    } else {
+      errorElement.removeAttribute('role');
+      this.$$(`#month`).removeAttribute('aria-errormessage');
+      this.$$(`#year`).removeAttribute('aria-errormessage');
+    }
+  },
+
+  /**
    * Validate no digits are used in nickname. Display error message and disable
    * the save button when invalid.
    * @private
@@ -240,11 +262,27 @@ Polymer({
   },
 
   /**
-   * @return {string} 'true' or 'false', indicating whether the expired error
-   *     message should be aria-hidden.
+   * @return {string} 'true' or 'false' for the aria-invalid attribute
+   *     of expiration selectors.
    * @private
    */
-  getAriaHidden_() {
-    return this.expired_ ? 'false' : 'true';
+  getExpirationAriaInvalid_() {
+    return this.expired_ ? 'true' : 'false';
+  },
+
+  /**
+   * Trim credit card's name, cardNumber and nickname if exist.
+   * @private
+   */
+  trimCreditCard_() {
+    if (this.creditCard.name) {
+      this.creditCard.name = this.creditCard.name.trim();
+    }
+    if (this.creditCard.cardNumber) {
+      this.creditCard.cardNumber = this.creditCard.cardNumber.trim();
+    }
+    if (this.creditCard.nickname) {
+      this.creditCard.nickname = this.creditCard.nickname.trim();
+    }
   },
 });

@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "build/build_config.h"
-#include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
@@ -19,8 +18,6 @@
 #include "content/public/browser/storage_usage_info.h"
 #include "media/media_buildflags.h"
 #include "net/cookies/cookie_util.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "storage/browser/file_system/file_system_context.h"
@@ -30,7 +27,7 @@
 #include "url/origin.h"
 
 #if defined(OS_ANDROID)
-#include "components/cdm/browser/media_drm_storage_impl.h"
+#include "components/cdm/browser/media_drm_storage_impl.h"  // nogncheck crbug.com/1125897
 #endif
 
 using content::BrowserThread;
@@ -38,9 +35,11 @@ using content::BrowserThread;
 SiteDataCountingHelper::SiteDataCountingHelper(
     Profile* profile,
     base::Time begin,
+    base::Time end,
     base::OnceCallback<void(int)> completion_callback)
     : profile_(profile),
       begin_(begin),
+      end_(end),
       completion_callback_(std::move(completion_callback)),
       tasks_(0) {}
 
@@ -75,8 +74,8 @@ void SiteDataCountingHelper::CountAndDestroySelfWhenFinished() {
       tasks_ += 1;
       content::GetIOThreadTaskRunner({})->PostTask(
           FROM_HERE,
-          base::BindOnce(&storage::QuotaManager::GetOriginsModifiedSince,
-                         quota_manager, type, begin_, origins_callback));
+          base::BindOnce(&storage::QuotaManager::GetOriginsModifiedBetween,
+                         quota_manager, type, begin_, end_, origins_callback));
     }
   }
 
@@ -91,22 +90,11 @@ void SiteDataCountingHelper::CountAndDestroySelfWhenFinished() {
     // TODO(772337): Enable session storage counting when deletion is fixed.
   }
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-  // Count origins with flash data.
-  flash_lso_helper_ = BrowsingDataFlashLSOHelper::Create(profile_);
-  if (flash_lso_helper_) {
-    tasks_ += 1;
-    flash_lso_helper_->StartFetching(
-        base::BindOnce(&SiteDataCountingHelper::SitesWithFlashDataCallback,
-                       base::Unretained(this)));
-  }
-#endif
-
 #if defined(OS_ANDROID)
   // Count origins with media licenses on Android.
   tasks_ += 1;
-  Done(cdm::MediaDrmStorageImpl::GetOriginsModifiedSince(profile_->GetPrefs(),
-                                                         begin_));
+  Done(cdm::MediaDrmStorageImpl::GetOriginsModifiedBetween(profile_->GetPrefs(),
+                                                           begin_, end_));
 #endif  // defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -158,7 +146,7 @@ void SiteDataCountingHelper::GetCookiesCallback(
     const net::CookieList& cookies) {
   std::vector<GURL> origins;
   for (const net::CanonicalCookie& cookie : cookies) {
-    if (cookie.CreationDate() >= begin_) {
+    if (cookie.CreationDate() >= begin_ && cookie.CreationDate() < end_) {
       GURL url = net::cookie_util::CookieOriginToURL(cookie.Domain(),
                                                      cookie.IsSecure());
       origins.push_back(url);
@@ -187,19 +175,10 @@ void SiteDataCountingHelper::GetLocalStorageUsageInfoCallback(
     const std::vector<content::StorageUsageInfo>& infos) {
   std::vector<GURL> origins;
   for (const auto& info : infos) {
-    if (info.last_modified >= begin_ &&
+    if (info.last_modified >= begin_ && info.last_modified < end_ &&
         (!policy || !policy->IsStorageProtected(info.origin.GetURL()))) {
       origins.push_back(info.origin.GetURL());
     }
-  }
-  Done(origins);
-}
-
-void SiteDataCountingHelper::SitesWithFlashDataCallback(
-    const std::vector<std::string>& sites) {
-  std::vector<GURL> origins;
-  for (const std::string& site : sites) {
-    origins.push_back(GURL(site));
   }
   Done(origins);
 }
@@ -209,7 +188,7 @@ void SiteDataCountingHelper::SitesWithMediaLicensesCallback(
         media_license_info_list) {
   std::vector<GURL> origins;
   for (const auto& info : media_license_info_list) {
-    if (info.last_modified_time >= begin_)
+    if (info.last_modified_time >= begin_ && info.last_modified_time < end_)
       origins.push_back(info.origin);
   }
   Done(origins);

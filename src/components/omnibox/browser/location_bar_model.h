@@ -9,7 +9,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "components/security_state/core/security_state.h"
@@ -58,14 +57,9 @@ class LocationBarModel {
   // icon.
   virtual const gfx::VectorIcon& GetVectorIcon() const = 0;
 
-  virtual const gfx::VectorIcon& GetMementoIcon() const = 0;
-
   // Returns text for the omnibox secure verbose chip, displayed next to the
   // security icon on certain platforms.
   virtual base::string16 GetSecureDisplayText() const = 0;
-
-  // Displays the mixed memento content warning text for the omnibox verbose chip
-  virtual base::string16 GetMementoDisplayText() const = 0;
 
   // Returns text describing the security state for accessibility.
   virtual base::string16 GetSecureAccessibilityText() const = 0;
@@ -78,19 +72,16 @@ class LocationBarModel {
   // previously-downloaded content.
   virtual bool IsOfflinePage() const = 0;
 
-  // Returns whether the page is a Memento
-  virtual bool IsMemento() const = 0;
-
-  // Returns whether the page contains a mix of Memento content
-  virtual bool IsMixedContent() const = 0;
-
-  virtual std::string GetMementoDatetime() const = 0;
+  // Returns whether to prevent elision of the display URL, based on whether
+  // user has a specified extension or pref enabled. If true, the only elisions
+  // should be username/password and trailing slash on bare hostname.
+  virtual bool ShouldPreventElision() const = 0;
 
  protected:
   LocationBarModel() = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(LocationBarModel);
+  LocationBarModel(const LocationBarModel&) = delete;
+  LocationBarModel& operator=(const LocationBarModel&) = delete;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_LOCATION_BAR_MODEL_H_

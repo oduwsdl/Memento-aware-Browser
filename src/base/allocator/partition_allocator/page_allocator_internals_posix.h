@@ -9,10 +9,12 @@
 #include <sys/mman.h>
 
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
+#include "base/posix/eintr_wrapper.h"
 #include "build/build_config.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
@@ -23,7 +25,7 @@
 #if defined(OS_ANDROID)
 #include <sys/prctl.h>
 #endif
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <sys/resource.h>
 
 #include <algorithm>
@@ -63,7 +65,7 @@ const char* PageTagToName(PageTag tag) {
 }
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // Tests whether the version of macOS supports the MAP_JIT flag and if the
 // current process is signed with the allow-jit entitlement.
 bool UseMapJit() {
@@ -79,7 +81,7 @@ bool UseMapJit() {
     return false;
   return mac::CFCast<CFBooleanRef>(value.get()) == kCFBooleanTrue;
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
 }  // namespace
 
@@ -110,7 +112,7 @@ void* SystemAllocPagesInternal(void* hint,
                                PageAccessibilityConfiguration accessibility,
                                PageTag page_tag,
                                bool commit) {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // Use a custom tag to make it easier to distinguish Partition Alloc regions
   // in vmmap(1). Tags between 240-255 are supported.
   PA_DCHECK(PageTag::kFirst <= page_tag);
@@ -123,7 +125,7 @@ void* SystemAllocPagesInternal(void* hint,
   int access_flag = GetAccessFlags(accessibility);
   int map_flags = MAP_ANONYMOUS | MAP_PRIVATE;
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // On macOS 10.14 and higher, executables that are code signed with the
   // "runtime" option cannot execute writable memory by default. They can opt
   // into this capability by specifying the "com.apple.security.cs.allow-jit"
@@ -134,8 +136,7 @@ void* SystemAllocPagesInternal(void* hint,
   }
 #endif
 
-  void* ret =
-      mmap(hint, length, access_flag, map_flags, fd, 0);
+  void* ret = mmap(hint, length, access_flag, map_flags, fd, 0);
   if (ret == MAP_FAILED) {
     s_allocPageErrorCode = errno;
     ret = nullptr;
@@ -154,6 +155,43 @@ void* SystemAllocPagesInternal(void* hint,
   return ret;
 }
 
+bool TrySetSystemPagesAccessInternal(
+    void* address,
+    size_t length,
+    PageAccessibilityConfiguration accessibility) {
+  return 0 ==
+         HANDLE_EINTR(mprotect(address, length, GetAccessFlags(accessibility)));
+}
+
+void SetSystemPagesAccessInternal(
+    void* address,
+    size_t length,
+    PageAccessibilityConfiguration accessibility) {
+  if (!HANDLE_EINTR(mprotect(address, length, GetAccessFlags(accessibility))))
+    return;
+
+  // mprotect() failed, let's get more data on errno in crash reports. Values
+  // taken from man mprotect(2) on Linux:
+  switch (errno) {
+    case EACCES:
+      PCHECK(false);
+      break;
+    case EINVAL:
+      PCHECK(false);
+      break;
+    case ENOMEM:
+      PCHECK(false);
+      break;
+    default:
+      PCHECK(false);
+      break;
+  }
+}
+
+void FreePagesInternal(void* address, size_t length) {
+  PCHECK(!munmap(address, length));
+}
+
 void* TrimMappingInternal(void* base,
                           size_t base_length,
                           size_t trim_length,
@@ -165,33 +203,13 @@ void* TrimMappingInternal(void* base,
   // We can resize the allocation run. Release unneeded memory before and after
   // the aligned range.
   if (pre_slack) {
-    int res = munmap(base, pre_slack);
-    PCHECK(!res);
+    FreePages(base, pre_slack);
     ret = reinterpret_cast<char*>(base) + pre_slack;
   }
   if (post_slack) {
-    int res = munmap(reinterpret_cast<char*>(ret) + trim_length, post_slack);
-    PCHECK(!res);
+    FreePages(reinterpret_cast<char*>(ret) + trim_length, post_slack);
   }
   return ret;
-}
-
-bool TrySetSystemPagesAccessInternal(
-    void* address,
-    size_t length,
-    PageAccessibilityConfiguration accessibility) {
-  return 0 == mprotect(address, length, GetAccessFlags(accessibility));
-}
-
-void SetSystemPagesAccessInternal(
-    void* address,
-    size_t length,
-    PageAccessibilityConfiguration accessibility) {
-  PCHECK(!mprotect(address, length, GetAccessFlags(accessibility)));
-}
-
-void FreePagesInternal(void* address, size_t length) {
-  PCHECK(!munmap(address, length));
 }
 
 void DecommitSystemPagesInternal(void* address, size_t length) {
@@ -209,7 +227,7 @@ void DecommitSystemPagesInternal(void* address, size_t length) {
 bool RecommitSystemPagesInternal(void* address,
                                  size_t length,
                                  PageAccessibilityConfiguration accessibility) {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // On macOS, to update accounting, we need to make another syscall. For more
   // details, see https://crbug.com/823915.
   madvise(address, length, MADV_FREE_REUSE);
@@ -222,7 +240,7 @@ bool RecommitSystemPagesInternal(void* address,
 }
 
 void DiscardSystemPagesInternal(void* address, size_t length) {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   int ret = madvise(address, length, MADV_FREE_REUSABLE);
   if (ret) {
     // MADV_FREE_REUSABLE sometimes fails, so fall back to MADV_DONTNEED.

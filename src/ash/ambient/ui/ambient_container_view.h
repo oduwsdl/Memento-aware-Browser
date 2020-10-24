@@ -5,6 +5,8 @@
 #ifndef ASH_AMBIENT_UI_AMBIENT_CONTAINER_VIEW_H_
 #define ASH_AMBIENT_UI_AMBIENT_CONTAINER_VIEW_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "ui/views/view.h"
@@ -13,7 +15,6 @@ namespace ash {
 
 class AmbientAssistantContainerView;
 class AmbientViewDelegate;
-class GlanceableInfoView;
 class PhotoView;
 
 // Container view to display all Ambient Mode related views, i.e. photo frame,
@@ -34,18 +35,16 @@ class ASH_EXPORT AmbientContainerView : public views::View {
   void Init();
 
   // Layouts its child views.
+  // TODO(meilinw): Use LayoutManagers to lay out children instead of overriding
+  // Layout(). See b/163170162.
   void LayoutPhotoView();
-  void LayoutGlanceableInfoView();
   void LayoutAssistantView();
-
-  PhotoView* photo_view_for_testing() { return photo_view_; }
 
   AmbientViewDelegate* delegate_ = nullptr;
 
   // Owned by view hierarchy.
   PhotoView* photo_view_ = nullptr;
   AmbientAssistantContainerView* ambient_assistant_container_view_ = nullptr;
-  GlanceableInfoView* glanceable_info_view_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AmbientContainerView);
 };

@@ -18,19 +18,16 @@ import android.content.res.Resources;
 import android.content.res.Resources.NotFoundException;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.ColorFilter;
+import android.graphics.ImageDecoder;
 import android.graphics.PorterDuff;
-import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.LayerDrawable;
-import android.graphics.drawable.TransitionDrawable;
 import android.hardware.display.DisplayManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.PowerManager;
-import android.os.Process;
 import android.os.StrictMode;
 import android.os.UserManager;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.Html;
 import android.text.Spanned;
@@ -44,14 +41,12 @@ import android.view.inputmethod.InputMethodSubtype;
 import android.view.textclassifier.TextClassifier;
 import android.widget.EditText;
 import android.widget.ImageView;
-import android.widget.PopupWindow;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.widget.ImageViewCompat;
 
-import org.chromium.base.annotations.VerifiesOnLollipop;
 import org.chromium.base.annotations.VerifiesOnLollipopMR1;
 import org.chromium.base.annotations.VerifiesOnM;
 import org.chromium.base.annotations.VerifiesOnN;
@@ -59,12 +54,13 @@ import org.chromium.base.annotations.VerifiesOnO;
 import org.chromium.base.annotations.VerifiesOnP;
 import org.chromium.base.annotations.VerifiesOnQ;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Utility class to use new APIs that were added after KitKat (API level 19).
+ * Utility class to use APIs not in all supported Android versions.
  *
  * Do not inline because we use many new APIs, and if they are inlined, they could cause dex
  * validation errors on low Android versions.
@@ -105,6 +101,10 @@ public class ApiCompatibilityUtils {
     private static class ApisP {
         static String getProcessName() {
             return Application.getProcessName();
+        }
+
+        static Bitmap getBitmapByUri(ContentResolver cr, Uri uri) throws IOException {
+            return ImageDecoder.decodeBitmap(ImageDecoder.createSource(cr, uri));
         }
     }
 
@@ -171,94 +171,6 @@ public class ApiCompatibilityUtils {
     private static class ApisLmr1 {
         static void setAccessibilityTraversalBefore(View view, int viewFocusedAfter) {
             view.setAccessibilityTraversalBefore(viewFocusedAfter);
-        }
-    }
-
-    @VerifiesOnLollipop
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    private static class ApisL {
-        static final int FLAG_ACTIVITY_NEW_DOCUMENT = Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
-
-        static void finishAndRemoveTask(Activity activity) {
-            activity.finishAndRemoveTask();
-        }
-
-        static void finishAfterTransition(Activity activity) {
-            activity.finishAfterTransition();
-        }
-
-        static void setElevation(PopupWindow popupWindow, float elevationValue) {
-            popupWindow.setElevation(elevationValue);
-        }
-
-        static boolean isInteractive(PowerManager manager) {
-            return manager.isInteractive();
-        }
-
-        static boolean shouldSkipFirstUseHints(ContentResolver contentResolver) {
-            return Settings.Secure.getInt(contentResolver, Settings.Secure.SKIP_FIRST_USE_HINTS, 0)
-                    != 0;
-        }
-
-        static void setTaskDescription(Activity activity, String title, Bitmap icon, int color) {
-            ActivityManager.TaskDescription description =
-                    new ActivityManager.TaskDescription(title, icon, color);
-            activity.setTaskDescription(description);
-        }
-
-        static void setStatusBarColor(Window window, int statusBarColor) {
-            // If both system bars are black, we can remove these from our layout,
-            // removing or shrinking the SurfaceFlinger overlay required for our views.
-            // This benefits battery usage on L and M.  However, this no longer provides a battery
-            // benefit as of N and starts to cause flicker bugs on O, so don't bother on O and up.
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && statusBarColor == Color.BLACK
-                    && window.getNavigationBarColor() == Color.BLACK) {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            } else {
-                window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            }
-            window.setStatusBarColor(statusBarColor);
-        }
-
-        static Drawable getDrawableForDensity(Resources res, int id, int density) {
-            // On newer OS versions, this check is done within getDrawableForDensity().
-            if (density == 0) {
-                return res.getDrawable(id, null);
-            }
-            return res.getDrawableForDensity(id, density, null);
-        }
-
-        static void setImageTintList(ImageView view, @Nullable ColorStateList tintList) {
-            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {
-                // Work around broken workaround in ImageViewCompat, see
-                // https://crbug.com/891609#c3.
-                if (tintList != null && view.getImageTintMode() == null) {
-                    view.setImageTintMode(PorterDuff.Mode.SRC_IN);
-                }
-            }
-            ImageViewCompat.setImageTintList(view, tintList);
-
-            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {
-                // Work around that the tint list is not cleared when setting tint list to null on L
-                // in some cases. See https://crbug.com/983686.
-                if (tintList == null) view.refreshDrawableState();
-            }
-        }
-
-        static Drawable getUserBadgedIcon(PackageManager packageManager, Drawable drawable) {
-            return packageManager.getUserBadgedIcon(drawable, Process.myUserHandle());
-        }
-
-        static Drawable getUserBadgedDrawableForDensity(
-                Drawable drawable, Rect badgeLocation, int density) {
-            PackageManager packageManager =
-                    ContextUtils.getApplicationContext().getPackageManager();
-            return packageManager.getUserBadgedDrawableForDensity(
-                    drawable, Process.myUserHandle(), badgeLocation, density);
-        }
-
-        static ColorFilter getColorFilter(Drawable drawable) {
-            return drawable.getColorFilter();
         }
     }
 
@@ -332,21 +244,11 @@ public class ApiCompatibilityUtils {
      */
     public static void finishAndRemoveTask(Activity activity) {
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP) {
-            ApisL.finishAndRemoveTask(activity);
-        } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {
+            activity.finishAndRemoveTask();
+        } else {
+            assert Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP;
             // crbug.com/395772 : Fallback for Activity.finishAndRemoveTask() failing.
             new FinishAndRemoveTaskWithRetry(activity).run();
-        } else {
-            activity.finish();
-        }
-    }
-
-    /**
-     * Set elevation if supported.
-     */
-    public static void setElevation(PopupWindow window, float elevationValue) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            ApisL.setElevation(window, elevationValue);
         }
     }
 
@@ -380,7 +282,7 @@ public class ApiCompatibilityUtils {
 
         @Override
         public void run() {
-            ApisL.finishAndRemoveTask(mActivity);
+            mActivity.finishAndRemoveTask();
             mTryCount++;
             if (!mActivity.isFinishing()) {
                 if (mTryCount < MAX_TRY_COUNT) {
@@ -393,58 +295,20 @@ public class ApiCompatibilityUtils {
     }
 
     /**
-     * @return Whether the screen of the device is interactive.
-     */
-    @SuppressWarnings("deprecation")
-    public static boolean isInteractive() {
-        PowerManager manager = (PowerManager) ContextUtils.getApplicationContext().getSystemService(
-                Context.POWER_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            return ApisL.isInteractive(manager);
-        }
-        return manager.isScreenOn();
-    }
-
-    @SuppressWarnings("deprecation")
-    public static int getActivityNewDocumentFlag() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            return ApisL.FLAG_ACTIVITY_NEW_DOCUMENT;
-        }
-        return Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET;
-    }
-
-    /**
-     * @see android.provider.Settings.Secure#SKIP_FIRST_USE_HINTS
-     */
-    public static boolean shouldSkipFirstUseHints(ContentResolver contentResolver) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            return ApisL.shouldSkipFirstUseHints(contentResolver);
-        }
-        return false;
-    }
-
-    /**
-     * @param activity Activity that should get the task description update.
-     * @param title Title of the activity.
-     * @param icon Icon of the activity.
-     * @param color Color of the activity. It must be a fully opaque color.
-     */
-    public static void setTaskDescription(Activity activity, String title, Bitmap icon, int color) {
-        // TaskDescription requires an opaque color.
-        assert Color.alpha(color) == 255;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            ApisL.setTaskDescription(activity, title, icon, color);
-        }
-    }
-
-    /**
      * @see android.view.Window#setStatusBarColor(int color).
      */
     public static void setStatusBarColor(Window window, int statusBarColor) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            ApisL.setStatusBarColor(window, statusBarColor);
+        // If both system bars are black, we can remove these from our layout,
+        // removing or shrinking the SurfaceFlinger overlay required for our views.
+        // This benefits battery usage on L and M.  However, this no longer provides a battery
+        // benefit as of N and starts to cause flicker bugs on O, so don't bother on O and up.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && statusBarColor == Color.BLACK
+                && window.getNavigationBarColor() == Color.BLACK) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        } else {
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         }
+        window.setStatusBarColor(statusBarColor);
     }
 
     /**
@@ -470,7 +334,20 @@ public class ApiCompatibilityUtils {
     }
 
     public static void setImageTintList(ImageView view, @Nullable ColorStateList tintList) {
-        ApisL.setImageTintList(view, tintList);
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {
+            // Work around broken workaround in ImageViewCompat, see
+            // https://crbug.com/891609#c3.
+            if (tintList != null && view.getImageTintMode() == null) {
+                view.setImageTintMode(PorterDuff.Mode.SRC_IN);
+            }
+        }
+        ImageViewCompat.setImageTintList(view, tintList);
+
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {
+            // Work around that the tint list is not cleared when setting tint list to null on L
+            // in some cases. See https://crbug.com/983686.
+            if (tintList == null) view.refreshDrawableState();
+        }
     }
 
     /**
@@ -480,51 +357,16 @@ public class ApiCompatibilityUtils {
     public static Drawable getDrawableForDensity(Resources res, int id, int density) {
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                return ApisL.getDrawableForDensity(res, id, density);
-            } else if (density == 0) {
-                // On newer OS versions, this check is done within getDrawableForDensity().
-                return res.getDrawable(id);
+            // For Android Oreo+, Resources.getDrawable(id, null) delegates to
+            // Resources.getDrawableForDensity(id, 0, null), but before that the two functions are
+            // independent. This check can be removed after Oreo becomes the minimum supported API.
+            if (density == 0) {
+                return res.getDrawable(id, null);
             }
-            return res.getDrawableForDensity(id, density);
+            return res.getDrawableForDensity(id, density, null);
         } finally {
             StrictMode.setThreadPolicy(oldPolicy);
         }
-    }
-
-    /**
-     * @see android.app.Activity#finishAfterTransition().
-     */
-    public static void finishAfterTransition(Activity activity) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            ApisL.finishAfterTransition(activity);
-        } else {
-            activity.finish();
-        }
-    }
-
-    /**
-     * @see android.content.pm.PackageManager#getUserBadgedIcon(Drawable, android.os.UserHandle).
-     */
-    public static Drawable getUserBadgedIcon(Context context, int id) {
-        Drawable drawable = getDrawable(context.getResources(), id);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            PackageManager packageManager = context.getPackageManager();
-            drawable = ApisL.getUserBadgedIcon(packageManager, drawable);
-        }
-        return drawable;
-    }
-
-    /**
-     * @see android.content.pm.PackageManager#getUserBadgedDrawableForDensity(Drawable drawable,
-     * UserHandle user, Rect badgeLocation, int badgeDensity).
-     */
-    public static Drawable getUserBadgedDrawableForDensity(
-            Drawable drawable, Rect badgeLocation, int density) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            drawable = ApisL.getUserBadgedDrawableForDensity(drawable, badgeLocation, density);
-        }
-        return drawable;
     }
 
     /**
@@ -533,16 +375,6 @@ public class ApiCompatibilityUtils {
     @SuppressWarnings("deprecation")
     public static int getColor(Resources res, int id) throws NotFoundException {
         return res.getColor(id);
-    }
-
-    /**
-     * @see android.graphics.drawable.Drawable#getColorFilter().
-     */
-    public static ColorFilter getColorFilter(Drawable drawable) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            return ApisL.getColorFilter(drawable);
-        }
-        return null;
     }
 
     /**
@@ -586,21 +418,6 @@ public class ApiCompatibilityUtils {
             return ApisN.getLocale(inputMethodSubType);
         }
         return inputMethodSubType.getLocale();
-    }
-
-    /**
-     * @see android.view.Window#FEATURE_INDETERMINATE_PROGRESS
-     */
-    public static void setWindowIndeterminateProgress(Window window) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-            @SuppressWarnings("deprecation")
-            int featureNumber = Window.FEATURE_INDETERMINATE_PROGRESS;
-
-            @SuppressWarnings("deprecation")
-            int featureValue = Window.PROGRESS_VISIBILITY_OFF;
-
-            window.setFeatureInt(featureNumber, featureValue);
-        }
     }
 
     /**
@@ -662,32 +479,6 @@ public class ApiCompatibilityUtils {
     }
 
     /**
-     * Creates regular LayerDrawable on Android L+. On older versions creates a helper class that
-     * fixes issues around {@link LayerDrawable#mutate()}. See https://crbug.com/890317 for details.
-     * See also {@link #createTransitionDrawable}.
-     * @param layers A list of drawables to use as layers in this new drawable.
-     */
-    public static LayerDrawable createLayerDrawable(@NonNull Drawable[] layers) {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
-            return new LayerDrawableCompat(layers);
-        }
-        return new LayerDrawable(layers);
-    }
-
-    /**
-     * Creates regular TransitionDrawable on Android L+. On older versions creates a helper class
-     * that fixes issues around {@link TransitionDrawable#mutate()}. See https://crbug.com/892061
-     * for details. See also {@link #createLayerDrawable}.
-     * @param layers A list of drawables to use as layers in this new drawable.
-     */
-    public static TransitionDrawable createTransitionDrawable(@NonNull Drawable[] layers) {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
-            return new TransitionDrawableCompat(layers);
-        }
-        return new TransitionDrawable(layers);
-    }
-
-    /**
      * Adds a content description to the provided EditText password field on versions of Android
      * where the hint text is not used for accessibility. Does nothing if the EditText field does
      * not have a password input type or the hint text is empty.  See https://crbug.com/911762.
@@ -734,77 +525,13 @@ public class ApiCompatibilityUtils {
         return false;
     }
 
-    private static class LayerDrawableCompat extends LayerDrawable {
-        private boolean mMutated;
-
-        LayerDrawableCompat(@NonNull Drawable[] layers) {
-            super(layers);
-        }
-
-        @NonNull
-        @Override
-        public Drawable mutate() {
-            // LayerDrawable in Android K loses bounds of layers, so this method works around that.
-            if (mMutated) {
-                // This object has already been mutated and shouldn't have any shared state.
-                return this;
-            }
-
-            Rect[] oldBounds = getLayersBounds(this);
-            Drawable superResult = super.mutate();
-            // LayerDrawable.mutate() always returns this, bail out if this isn't the case.
-            if (superResult != this) return superResult;
-            restoreLayersBounds(this, oldBounds);
-            mMutated = true;
-            return this;
-        }
-    }
-
-    private static class TransitionDrawableCompat extends TransitionDrawable {
-        private boolean mMutated;
-
-        TransitionDrawableCompat(@NonNull Drawable[] layers) {
-            super(layers);
-        }
-
-        @NonNull
-        @Override
-        public Drawable mutate() {
-            // LayerDrawable in Android K loses bounds of layers, so this method works around that.
-            if (mMutated) {
-                // This object has already been mutated and shouldn't have any shared state.
-                return this;
-            }
-            Rect[] oldBounds = getLayersBounds(this);
-            Drawable superResult = super.mutate();
-            // TransitionDrawable.mutate() always returns this, bail out if this isn't the case.
-            if (superResult != this) return superResult;
-            restoreLayersBounds(this, oldBounds);
-            mMutated = true;
-            return this;
-        }
-    }
-
     /**
-     * Helper for {@link LayerDrawableCompat#mutate} and {@link TransitionDrawableCompat#mutate}.
-     * Obtains the bounds of layers so they can be restored after a mutation.
+     * Retrieves an image for the given url as a Bitmap.
      */
-    private static Rect[] getLayersBounds(LayerDrawable layerDrawable) {
-        Rect[] result = new Rect[layerDrawable.getNumberOfLayers()];
-        for (int i = 0; i < layerDrawable.getNumberOfLayers(); i++) {
-            result[i] = layerDrawable.getDrawable(i).getBounds();
+    public static Bitmap getBitmapByUri(ContentResolver cr, Uri uri) throws IOException {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return ApisP.getBitmapByUri(cr, uri);
         }
-        return result;
-    }
-
-    /**
-     * Helper for {@link LayerDrawableCompat#mutate} and {@link TransitionDrawableCompat#mutate}.
-     * Restores the bounds of layers after a mutation.
-     */
-    private static void restoreLayersBounds(LayerDrawable layerDrawable, Rect[] oldBounds) {
-        assert layerDrawable.getNumberOfLayers() == oldBounds.length;
-        for (int i = 0; i < layerDrawable.getNumberOfLayers(); i++) {
-            layerDrawable.getDrawable(i).setBounds(oldBounds[i]);
-        }
+        return MediaStore.Images.Media.getBitmap(cr, uri);
     }
 }

@@ -20,11 +20,11 @@
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "mojo/public/cpp/bindings/thread_safe_interface_ptr.h"
 
 namespace content {
 
-CONTENT_EXPORT std::unique_ptr<base::DiscardableMemoryAllocator>
+CONTENT_EXPORT
+std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
 CreateDiscardableMemoryAllocator();
 
 }  // namespace content

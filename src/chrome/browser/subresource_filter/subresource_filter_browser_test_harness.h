@@ -14,6 +14,7 @@
 #include "chrome/browser/subresource_filter/test_ruleset_publisher.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/safe_browsing/core/db/util.h"
+#include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/url_pattern_index/proto/rules.pb.h"
@@ -31,11 +32,12 @@ class RenderFrameHost;
 class WebContents;
 }  // namespace content
 
-class SubresourceFilterContentSettingsManager;
 class TestSafeBrowsingDatabaseHelper;
 
 namespace subresource_filter {
 
+class AdsInterventionManager;
+class SubresourceFilterContentSettingsManager;
 class RulesetService;
 
 class SubresourceFilterBrowserTest : public InProcessBrowserTest {
@@ -64,7 +66,11 @@ class SubresourceFilterBrowserTest : public InProcessBrowserTest {
   content::WebContents* web_contents() const;
 
   SubresourceFilterContentSettingsManager* settings_manager() const {
-    return settings_manager_;
+    return profile_context_->settings_manager();
+  }
+
+  AdsInterventionManager* ads_intervention_manager() {
+    return profile_context_->ads_intervention_manager();
   }
 
   content::RenderFrameHost* FindFrameByName(const std::string& name) const;
@@ -114,7 +120,7 @@ class SubresourceFilterBrowserTest : public InProcessBrowserTest {
   std::unique_ptr<TestSafeBrowsingDatabaseHelper> database_helper_;
 
   // Owned by the profile.
-  SubresourceFilterContentSettingsManager* settings_manager_;
+  SubresourceFilterProfileContext* profile_context_;
 
   DISALLOW_COPY_AND_ASSIGN(SubresourceFilterBrowserTest);
 };

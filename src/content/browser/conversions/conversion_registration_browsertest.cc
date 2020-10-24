@@ -11,6 +11,7 @@
 #include "content/browser/conversions/conversion_manager_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -76,11 +77,11 @@ class TestConversionHost : public ConversionHost {
   base::RunLoop conversion_waiter_;
 };
 
-class ConversionRegistrationBrowserTest : public ContentBrowserTest {
+class ConversionDisabledBrowserTest : public ContentBrowserTest {
  public:
-  ConversionRegistrationBrowserTest() {
-    feature_list_.InitAndEnableFeature(features::kConversionMeasurement);
+  ConversionDisabledBrowserTest() {
     ConversionManagerImpl::RunInMemoryForTesting();
+    feature_list_.InitAndEnableFeature(features::kConversionMeasurement);
   }
 
   void SetUpOnMainThread() override {
@@ -104,9 +105,37 @@ class ConversionRegistrationBrowserTest : public ContentBrowserTest {
 
   net::EmbeddedTestServer* https_server() { return https_server_.get(); }
 
- private:
+ protected:
   base::test::ScopedFeatureList feature_list_;
+
+ private:
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    ConversionDisabledBrowserTest,
+    ConversionRegisteredWithoutOTEnabled_NoConversionDataReceived) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(),
+      embedded_test_server()->GetURL("/page_with_conversion_redirect.html")));
+  std::unique_ptr<TestConversionHost> host =
+      TestConversionHost::ReplaceAndGetConversionHost(web_contents());
+
+  EXPECT_TRUE(ExecJs(web_contents(), "registerConversion(123)"));
+
+  EXPECT_TRUE(NavigateToURL(shell(), GURL("about:blank")));
+  EXPECT_EQ(0u, host->num_conversions());
+}
+
+class ConversionRegistrationBrowserTest : public ConversionDisabledBrowserTest {
+ public:
+  ConversionRegistrationBrowserTest() = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // Sets up the blink runtime feature for ConversionMeasurement.
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
+  }
 };
 
 // Test that full conversion path does not cause any failure when a conversion
@@ -284,6 +313,9 @@ IN_PROC_BROWSER_TEST_F(
     ConversionRegistrationBrowserTest,
     RegisterWithDifferentUrlTypes_ConversionReceivedOrIgnored) {
   const char kSecureHost[] = "a.test";
+  // TODO(crbug.com/1137113): Should include a test where an insecure request is
+  // blocked from conversion registration if it is made on a secure page. Note
+  // that this can't work for image requests due to image auto-upgrade.
   struct {
     std::string page_host;
     std::string redirect_host;
@@ -298,8 +330,6 @@ IN_PROC_BROWSER_TEST_F(
       {kSecureHost /* page_host */, kSecureHost /* redirect_host */,
        true /* conversion_expected */},
       {"insecure.com" /* page_host */, kSecureHost /* redirect_host */,
-       false /* conversion_expected */},
-      {kSecureHost /* page_host */, "insecure.com" /* redirect_host */,
        false /* conversion_expected */}};
 
   for (const auto& test_case : kTestCases) {

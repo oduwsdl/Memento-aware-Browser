@@ -120,7 +120,7 @@ int ComputeHeadingMessageFromUsage(
 // Displays a (one-column) table model as a one-line summary showing the
 // first few items, with a toggle button to expand a table below to contain the
 // full list of items.
-class CollapsibleListView : public views::View, public views::ButtonListener {
+class CollapsibleListView : public views::View {
  public:
   // How many rows to show in the expanded table without having to scroll.
   static constexpr int kExpandedTableRowCount = 3;
@@ -157,10 +157,12 @@ class CollapsibleListView : public views::View, public views::ButtonListener {
           model->RowCount(), first_item, second_item);
     }
     auto* label = label_container->AddChildView(std::make_unique<views::Label>(
-        label_text, CONTEXT_BODY_TEXT_SMALL, views::style::STYLE_PRIMARY));
+        label_text, CONTEXT_DIALOG_BODY_TEXT_SMALL,
+        views::style::STYLE_PRIMARY));
     label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     label_layout->SetFlexForView(label, 1);
-    auto button = views::CreateVectorToggleImageButton(this);
+    auto button = views::CreateVectorToggleImageButton(base::BindRepeating(
+        &CollapsibleListView::ButtonPressed, base::Unretained(this)));
     button->SetTooltipText(
         l10n_util::GetStringUTF16(IDS_NATIVE_FILE_SYSTEM_USAGE_EXPAND));
     button->SetToggledTooltipText(
@@ -208,15 +210,14 @@ class CollapsibleListView : public views::View, public views::ButtonListener {
         icon_color, disabled_icon_color);
   }
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
+ private:
+  void ButtonPressed() {
     table_is_expanded_ = !table_is_expanded_;
     expand_collapse_button_->SetToggled(table_is_expanded_);
     table_view_parent_->SetVisible(table_is_expanded_);
     PreferredSizeChanged();
   }
 
- private:
   bool table_is_expanded_ = false;
   views::ScrollView* table_view_parent_;
   views::ToggleImageButton* expand_collapse_button_;
@@ -351,6 +352,8 @@ NativeFileSystemUsageBubbleView::NativeFileSystemUsageBubbleView(
   SetCancelCallback(
       base::BindOnce(&NativeFileSystemUsageBubbleView::OnDialogCancelled,
                      base::Unretained(this)));
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
 }
 
 NativeFileSystemUsageBubbleView::~NativeFileSystemUsageBubbleView() = default;
@@ -395,11 +398,12 @@ void NativeFileSystemUsageBubbleView::Init() {
 
   if (!embedded_path.empty()) {
     AddChildView(native_file_system_ui_helper::CreateOriginPathLabel(
-        heading_message_id, origin_, embedded_path, CONTEXT_BODY_TEXT_LARGE,
+        heading_message_id, origin_, embedded_path,
+        views::style::CONTEXT_DIALOG_BODY_TEXT,
         /*show_emphasis=*/false));
   } else {
     AddChildView(native_file_system_ui_helper::CreateOriginLabel(
-        heading_message_id, origin_, CONTEXT_BODY_TEXT_LARGE,
+        heading_message_id, origin_, views::style::CONTEXT_DIALOG_BODY_TEXT,
         /*show_emphasis=*/false));
 
     if (writable_paths_model_.RowCount() > 0) {
@@ -407,7 +411,8 @@ void NativeFileSystemUsageBubbleView::Init() {
         auto label = std::make_unique<views::Label>(
             l10n_util::GetStringUTF16(
                 IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_SAVE_CHANGES),
-            CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_PRIMARY);
+            views::style::CONTEXT_DIALOG_BODY_TEXT,
+            views::style::STYLE_PRIMARY);
         label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
         AddChildView(std::move(label));
       }
@@ -420,7 +425,8 @@ void NativeFileSystemUsageBubbleView::Init() {
         auto label = std::make_unique<views::Label>(
             l10n_util::GetStringUTF16(
                 IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_VIEW_CHANGES),
-            CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_PRIMARY);
+            views::style::CONTEXT_DIALOG_BODY_TEXT,
+            views::style::STYLE_PRIMARY);
         label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
         AddChildView(std::move(label));
       }
@@ -458,13 +464,6 @@ void NativeFileSystemUsageBubbleView::CloseBubble() {
   // this. Additionally web_contents() may have been destroyed.
   bubble_ = nullptr;
   LocationBarBubbleDelegateView::CloseBubble();
-}
-
-gfx::Size NativeFileSystemUsageBubbleView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 void NativeFileSystemUsageBubbleView::ChildPreferredSizeChanged(

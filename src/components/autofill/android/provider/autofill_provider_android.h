@@ -56,7 +56,8 @@ class AutofillProviderAndroid : public AutofillProvider {
                        const FormData& form,
                        bool known_success,
                        mojom::SubmissionSource source) override;
-  void OnFocusNoLongerOnForm(AutofillHandlerProxy* handler) override;
+  void OnFocusNoLongerOnForm(AutofillHandlerProxy* handler,
+                             bool had_interacted_form) override;
   void OnFocusOnFormField(AutofillHandlerProxy* handler,
                           const FormData& form,
                           const FormFieldData& field,
@@ -117,8 +118,6 @@ class AutofillProviderAndroid : public AutofillProvider {
   bool check_submission_;
   // Valid only if check_submission_ is true.
   mojom::SubmissionSource pending_submission_source_;
-
-  base::WeakPtr<AutofillHandlerProxy> handler_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillProviderAndroid);
 };

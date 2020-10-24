@@ -37,10 +37,10 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/web_preferences.h"
 #include "net/http/http_status_code.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_tree.h"
 #include "url/gurl.h"
@@ -168,7 +168,8 @@ void PerFrameContentTranslateDriver::TranslateFrame(
   mojo::AssociatedRemote<mojom::TranslateAgent> frame_agent;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &frame_agent);
-  frame_agent->TranslateFrame(
+  mojom::TranslateAgent* frame_agent_ptr = frame_agent.get();
+  frame_agent_ptr->TranslateFrame(
       translate_script, source_lang, target_lang,
       base::BindOnce(&PerFrameContentTranslateDriver::OnFrameTranslated,
                      weak_pointer_factory_.GetWeakPtr(), translate_seq_no,
@@ -223,7 +224,7 @@ void PerFrameContentTranslateDriver::NavigationEntryCommitted(
   }
 
   if (!load_details.is_main_frame &&
-      translate_manager()->GetLanguageState().translation_declined()) {
+      translate_manager()->GetLanguageState()->translation_declined()) {
     // Some sites (such as Google map) may trigger sub-frame navigations
     // when the user interacts with the page.  We don't want to show a new
     // infobar if the user already dismissed one in that case.
@@ -249,7 +250,7 @@ void PerFrameContentTranslateDriver::NavigationEntryCommitted(
     return;
   }
 
-  if (!translate_manager()->GetLanguageState().page_needs_translation())
+  if (!translate_manager()->GetLanguageState()->page_needs_translation())
     return;
 
   // Note that we delay it as the ordering of the processing of this callback
@@ -261,7 +262,7 @@ void PerFrameContentTranslateDriver::NavigationEntryCommitted(
       base::BindOnce(
           &PerFrameContentTranslateDriver::InitiateTranslation,
           weak_pointer_factory_.GetWeakPtr(),
-          translate_manager()->GetLanguageState().original_language(), 0));
+          translate_manager()->GetLanguageState()->original_language(), 0));
 }
 
 void PerFrameContentTranslateDriver::DidFinishNavigation(
@@ -287,7 +288,7 @@ void PerFrameContentTranslateDriver::DidFinishNavigation(
                                       google_util::ALLOW_NON_STANDARD_PORTS) ||
        IsAutoHrefTranslateAllOriginsEnabled());
 
-  translate_manager()->GetLanguageState().DidNavigate(
+  translate_manager()->GetLanguageState()->DidNavigate(
       navigation_handle->IsSameDocument(), navigation_handle->IsInMainFrame(),
       reload, navigation_handle->GetHrefTranslate(), navigation_from_google);
 }
@@ -336,7 +337,8 @@ void PerFrameContentTranslateDriver::StartLanguageDetection() {
   mojo::AssociatedRemote<mojom::TranslateAgent> frame_agent;
   web_contents()->GetMainFrame()->GetRemoteAssociatedInterfaces()->GetInterface(
       &frame_agent);
-  frame_agent->GetWebLanguageDetectionDetails(base::BindOnce(
+  mojom::TranslateAgent* frame_agent_ptr = frame_agent.get();
+  frame_agent_ptr->GetWebLanguageDetectionDetails(base::BindOnce(
       &PerFrameContentTranslateDriver::OnWebLanguageDetectionDetails,
       weak_pointer_factory_.GetWeakPtr(), std::move(frame_agent)));
 }
@@ -354,7 +356,7 @@ void PerFrameContentTranslateDriver::OnPageLanguageDetermined(
     language_histogram()->OnPageVisited(details.cld_language);
 
   if (translate_manager() && web_contents()) {
-    translate_manager()->GetLanguageState().LanguageDetermined(
+    translate_manager()->GetLanguageState()->LanguageDetermined(
         details.adopted_language, page_needs_translation);
     translate_manager()->InitiateTranslation(details.adopted_language);
   }
@@ -453,8 +455,13 @@ void PerFrameContentTranslateDriver::OnFrameTranslated(
   }
 
   if (--stats_.pending_request_count == 0) {
-    OnPageTranslated(cancelled, original_lang, translated_lang,
-                     stats_.main_frame_error);
+    // Post the callback on the thread's task runner in case the
+    // info bar is in the process of going away.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&ContentTranslateDriver::OnPageTranslated,
+                                  weak_pointer_factory_.GetWeakPtr(), cancelled,
+                                  original_lang, translated_lang,
+                                  stats_.main_frame_error));
     stats_.Report();
     stats_.Clear();
   }

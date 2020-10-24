@@ -11,17 +11,23 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
+#import "ios/chrome/browser/ui/settings/elements/enterprise_info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/content_setting_backed_boolean.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_cell.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "net/base/mac/url_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -38,13 +44,16 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeMainSwitch = kItemTypeEnumZero,
+  ItemTypeManaged,
   ItemTypeHeader,
   ItemTypeException,
 };
 
 }  // namespace
 
-@interface BlockPopupsTableViewController ()<BooleanObserver> {
+@interface BlockPopupsTableViewController () <
+    BooleanObserver,
+    PopoverLabelViewControllerDelegate> {
   ChromeBrowserState* _browserState;  // weak
 
   // List of url patterns that are allowed to display popups.
@@ -55,6 +64,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // The item related to the switch for the "Disable Popups" setting.
   SettingsSwitchItem* _blockPopupsItem;
+
+  // The managed item for the "Disable Popups" setting.
+  TableViewInfoButtonItem* _blockPopupsManagedItem;
 }
 
 @end
@@ -103,13 +115,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // Block popups switch.
   [model addSectionWithIdentifier:SectionIdentifierMainSwitch];
 
-  _blockPopupsItem =
-      [[SettingsSwitchItem alloc] initWithType:ItemTypeMainSwitch];
-  _blockPopupsItem.text = l10n_util::GetNSString(IDS_IOS_BLOCK_POPUPS);
-  _blockPopupsItem.on = [_disablePopupsSetting value];
-  _blockPopupsItem.accessibilityIdentifier = @"blockPopupsContentView_switch";
-  [model addItem:_blockPopupsItem
-      toSectionWithIdentifier:SectionIdentifierMainSwitch];
+  if (base::FeatureList::IsEnabled(kEnableIOSManagedSettingsUI) &&
+      _browserState->GetPrefs()->IsManagedPreference(
+          prefs::kManagedDefaultPopupsSetting)) {
+    _blockPopupsManagedItem = [self blockPopupsManagedItem];
+    [model addItem:_blockPopupsManagedItem
+        toSectionWithIdentifier:SectionIdentifierMainSwitch];
+  } else {
+    _blockPopupsItem =
+        [[SettingsSwitchItem alloc] initWithType:ItemTypeMainSwitch];
+    _blockPopupsItem.text = l10n_util::GetNSString(IDS_IOS_BLOCK_POPUPS);
+    _blockPopupsItem.on = [_disablePopupsSetting value];
+    _blockPopupsItem.accessibilityIdentifier = @"blockPopupsContentView_switch";
+    [model addItem:_blockPopupsItem
+        toSectionWithIdentifier:SectionIdentifierMainSwitch];
+  }
 
   if ([self popupsCurrentlyBlocked] && _exceptions.GetSize()) {
     [self populateExceptionsItems];
@@ -130,20 +150,50 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self deleteItemAtIndexPaths:indexPaths];
 }
 
+#pragma mark - LoadModel Helpers
+
+- (TableViewInfoButtonItem*)blockPopupsManagedItem {
+  TableViewInfoButtonItem* blockPopupsManagedItem =
+      [[TableViewInfoButtonItem alloc] initWithType:ItemTypeManaged];
+  blockPopupsManagedItem.text = l10n_util::GetNSString(IDS_IOS_BLOCK_POPUPS);
+  blockPopupsManagedItem.statusText =
+      [_disablePopupsSetting value]
+          ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+          : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+  blockPopupsManagedItem.accessibilityHint =
+      l10n_util::GetNSString(IDS_IOS_TOGGLE_SETTING_MANAGED_ACCESSIBILITY_HINT);
+  blockPopupsManagedItem.accessibilityIdentifier =
+      @"blockPopupsContentView_managed";
+  return blockPopupsManagedItem;
+}
+
 #pragma mark - UITableViewDataSource
 
 - (UITableViewCell*)tableView:(UITableView*)tableView
         cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   UITableViewCell* cell =
       [super tableView:tableView cellForRowAtIndexPath:indexPath];
-
-  if ([self.tableViewModel itemTypeForIndexPath:indexPath] ==
-      ItemTypeMainSwitch) {
-    SettingsSwitchCell* switchCell =
-        base::mac::ObjCCastStrict<SettingsSwitchCell>(cell);
-    [switchCell.switchView addTarget:self
-                              action:@selector(blockPopupsSwitchChanged:)
-                    forControlEvents:UIControlEventValueChanged];
+  switch ([self.tableViewModel itemTypeForIndexPath:indexPath]) {
+    case ItemTypeHeader:
+    case ItemTypeException:
+      break;
+    case ItemTypeMainSwitch: {
+      SettingsSwitchCell* switchCell =
+          base::mac::ObjCCastStrict<SettingsSwitchCell>(cell);
+      [switchCell.switchView addTarget:self
+                                action:@selector(blockPopupsSwitchChanged:)
+                      forControlEvents:UIControlEventValueChanged];
+      break;
+    }
+    case ItemTypeManaged: {
+      TableViewInfoButtonCell* managedCell =
+          base::mac::ObjCCastStrict<TableViewInfoButtonCell>(cell);
+      [managedCell.trailingButton
+                 addTarget:self
+                    action:@selector(didTapManagedUIInfoButton:)
+          forControlEvents:UIControlEventTouchUpInside];
+      break;
+    }
   }
   return cell;
 }
@@ -171,16 +221,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
   DCHECK_EQ(observableBoolean, _disablePopupsSetting);
+  if (_blockPopupsItem) {
+    if (_blockPopupsItem.on == [_disablePopupsSetting value])
+      return;
 
-  if (_blockPopupsItem.on == [_disablePopupsSetting value])
-    return;
+    // Update the item.
+    _blockPopupsItem.on = [_disablePopupsSetting value];
 
-  // Update the item.
-  _blockPopupsItem.on = [_disablePopupsSetting value];
-
-  // Update the cell.
-  [self reconfigureCellsForItems:@[ _blockPopupsItem ]];
-
+    // Update the cell.
+    [self reconfigureCellsForItems:@[ _blockPopupsItem ]];
+  } else {
+    _blockPopupsManagedItem.statusText =
+        [_disablePopupsSetting value]
+            ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+            : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+  }
   // Update the rest of the UI.
   [self setEditing:NO animated:YES];
   [self updateUIForEditState];
@@ -200,6 +255,25 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self setEditing:NO animated:YES];
   [self updateUIForEditState];
   [self layoutSections:switchView.on];
+}
+
+// Called when the user clicks on the information button of the managed
+// setting's UI. Shows a textual bubble with the information of the enterprise.
+- (void)didTapManagedUIInfoButton:(UIButton*)buttonView {
+  EnterpriseInfoPopoverViewController* bubbleViewController =
+      [[EnterpriseInfoPopoverViewController alloc] initWithEnterpriseName:nil];
+  bubbleViewController.delegate = self;
+  [self presentViewController:bubbleViewController animated:YES completion:nil];
+
+  // Disable the button when showing the bubble.
+  buttonView.enabled = NO;
+
+  // Set the anchor and arrow direction of the bubble.
+  bubbleViewController.popoverPresentationController.sourceView = buttonView;
+  bubbleViewController.popoverPresentationController.sourceRect =
+      buttonView.bounds;
+  bubbleViewController.popoverPresentationController.permittedArrowDirections =
+      UIPopoverArrowDirectionAny;
 }
 
 #pragma mark - Private
@@ -335,6 +409,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
                              completion:nil];
   }
+}
+
+#pragma mark - PopoverLabelViewControllerDelegate
+
+- (void)didTapLinkURL:(NSURL*)URL {
+  GURL convertedURL = net::GURLWithNSURL(URL);
+  [self view:nil didTapLinkURL:convertedURL];
 }
 
 @end

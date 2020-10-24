@@ -12,7 +12,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
@@ -21,7 +20,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -37,7 +35,6 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/pdf/pdf_extension_test_util.h"
-#include "chrome/browser/prerender/prerender_link_manager.h"
 #include "chrome/browser/prerender/prerender_link_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
@@ -48,7 +45,6 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -58,6 +54,7 @@
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
+#include "components/prerender/browser/prerender_link_manager.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/version_info/channel.h"
 #include "components/version_info/version_info.h"
@@ -160,8 +157,10 @@ class WebContentsHiddenObserver : public content::WebContentsObserver {
   WebContentsHiddenObserver(content::WebContents* web_contents,
                             base::OnceClosure hidden_callback)
       : WebContentsObserver(web_contents),
-        hidden_callback_(std::move(hidden_callback)),
-        hidden_observed_(false) {}
+        hidden_callback_(std::move(hidden_callback)) {}
+  WebContentsHiddenObserver(const WebContentsHiddenObserver&) = delete;
+  WebContentsHiddenObserver& operator=(const WebContentsHiddenObserver&) =
+      delete;
 
   // WebContentsObserver.
   void OnVisibilityChanged(content::Visibility visibility) override {
@@ -171,13 +170,11 @@ class WebContentsHiddenObserver : public content::WebContentsObserver {
     }
   }
 
-  bool hidden_observed() { return hidden_observed_; }
+  bool hidden_observed() const { return hidden_observed_; }
 
  private:
   base::OnceClosure hidden_callback_;
-  bool hidden_observed_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsHiddenObserver);
+  bool hidden_observed_ = false;
 };
 
 // Watches for context menu to be shown, sets a boolean if it is shown.
@@ -187,7 +184,9 @@ class ContextMenuShownObserver {
     RenderViewContextMenu::RegisterMenuShownCallbackForTesting(base::BindOnce(
         &ContextMenuShownObserver::OnMenuShown, base::Unretained(this)));
   }
-  ~ContextMenuShownObserver() {}
+  ContextMenuShownObserver(const ContextMenuShownObserver&) = delete;
+  ContextMenuShownObserver& operator=(const ContextMenuShownObserver&) = delete;
+  ~ContextMenuShownObserver() = default;
 
   void OnMenuShown(RenderViewContextMenu* context_menu) {
     shown_ = true;
@@ -205,14 +204,15 @@ class ContextMenuShownObserver {
  private:
   bool shown_ = false;
   base::RunLoop run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContextMenuShownObserver);
 };
 
 class EmbedderWebContentsObserver : public content::WebContentsObserver {
  public:
   explicit EmbedderWebContentsObserver(content::WebContents* web_contents)
-      : WebContentsObserver(web_contents), terminated_(false) {}
+      : WebContentsObserver(web_contents) {}
+  EmbedderWebContentsObserver(const EmbedderWebContentsObserver&) = delete;
+  EmbedderWebContentsObserver& operator=(const EmbedderWebContentsObserver&) =
+      delete;
 
   // WebContentsObserver.
   void RenderProcessGone(base::TerminationStatus status) override {
@@ -229,10 +229,8 @@ class EmbedderWebContentsObserver : public content::WebContentsObserver {
   }
 
  private:
-  bool terminated_;
+  bool terminated_ = false;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(EmbedderWebContentsObserver);
 };
 
 void ExecuteScriptWaitForTitle(content::WebContents* web_contents,
@@ -254,6 +252,8 @@ class SelectControlWaiter : public aura::WindowObserver,
  public:
   SelectControlWaiter() { aura::Env::GetInstance()->AddObserver(this); }
 
+  SelectControlWaiter(const SelectControlWaiter&) = delete;
+  SelectControlWaiter& operator=(const SelectControlWaiter&) = delete;
   ~SelectControlWaiter() override {
     aura::Env::GetInstance()->RemoveObserver(this);
   }
@@ -287,8 +287,6 @@ class SelectControlWaiter : public aura::WindowObserver,
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
   std::set<aura::Window*> observed_windows_;
   bool wait_for_widget_shown_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(SelectControlWaiter);
 };
 
 // Simulate real click with delay between mouse down and up.
@@ -302,6 +300,8 @@ class LeftMouseClick {
     mouse_event_.button = blink::WebMouseEvent::Button::kLeft;
   }
 
+  LeftMouseClick(const LeftMouseClick&) = delete;
+  LeftMouseClick& operator=(const LeftMouseClick&) = delete;
   ~LeftMouseClick() {
     DCHECK(click_completed_);
   }
@@ -351,8 +351,6 @@ class LeftMouseClick {
   blink::WebMouseEvent mouse_event_;
 
   bool click_completed_ = true;
-
-  DISALLOW_COPY_AND_ASSIGN(LeftMouseClick);
 };
 
 #endif
@@ -379,10 +377,10 @@ bool IsShowingInterstitial(content::WebContents* tab) {
 // the test run successfully on trybots.
 class MockWebContentsDelegate : public content::WebContentsDelegate {
  public:
-  MockWebContentsDelegate()
-      : requested_(false),
-        checked_(false) {}
-  ~MockWebContentsDelegate() override {}
+  MockWebContentsDelegate() = default;
+  MockWebContentsDelegate(const MockWebContentsDelegate&) = delete;
+  MockWebContentsDelegate& operator=(const MockWebContentsDelegate&) = delete;
+  ~MockWebContentsDelegate() override = default;
 
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
@@ -417,12 +415,10 @@ class MockWebContentsDelegate : public content::WebContentsDelegate {
   }
 
  private:
-  bool requested_;
-  bool checked_;
+  bool requested_ = false;
+  bool checked_ = false;
   scoped_refptr<content::MessageLoopRunner> request_message_loop_runner_;
   scoped_refptr<content::MessageLoopRunner> check_message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockWebContentsDelegate);
 };
 
 // This class intercepts download request from the guest.
@@ -430,12 +426,12 @@ class MockDownloadWebContentsDelegate : public content::WebContentsDelegate {
  public:
   explicit MockDownloadWebContentsDelegate(
       content::WebContentsDelegate* orig_delegate)
-      : orig_delegate_(orig_delegate),
-        waiting_for_decision_(false),
-        expect_allow_(false),
-        decision_made_(false),
-        last_download_allowed_(false) {}
-  ~MockDownloadWebContentsDelegate() override {}
+      : orig_delegate_(orig_delegate) {}
+  MockDownloadWebContentsDelegate(const MockDownloadWebContentsDelegate&) =
+      delete;
+  MockDownloadWebContentsDelegate& operator=(
+      const MockDownloadWebContentsDelegate&) = delete;
+  ~MockDownloadWebContentsDelegate() override = default;
 
   void CanDownload(const GURL& url,
                    const std::string& request_method,
@@ -482,13 +478,11 @@ class MockDownloadWebContentsDelegate : public content::WebContentsDelegate {
 
  private:
   content::WebContentsDelegate* orig_delegate_;
-  bool waiting_for_decision_;
-  bool expect_allow_;
-  bool decision_made_;
-  bool last_download_allowed_;
+  bool waiting_for_decision_ = false;
+  bool expect_allow_ = false;
+  bool decision_made_ = false;
+  bool last_download_allowed_ = false;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockDownloadWebContentsDelegate);
 };
 
 class WebViewTest : public extensions::PlatformAppBrowserTest {
@@ -635,19 +629,19 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
         LOG(ERROR) << "FAILED TO START TEST SERVER.";
         return;
       }
-      embedded_test_server()->RegisterRequestHandler(base::Bind(
+      embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
           &WebViewTest::RedirectResponseHandler, kRedirectResponsePath,
           embedded_test_server()->GetURL(kRedirectResponseFullPath)));
 
-      embedded_test_server()->RegisterRequestHandler(
-          base::Bind(&WebViewTest::EmptyResponseHandler, kEmptyResponsePath));
+      embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
+          &WebViewTest::EmptyResponseHandler, kEmptyResponsePath));
 
-      embedded_test_server()->RegisterRequestHandler(base::Bind(
+      embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
           &WebViewTest::UserAgentResponseHandler,
           kUserAgentRedirectResponsePath,
           embedded_test_server()->GetURL(kRedirectResponseFullPath)));
 
-      embedded_test_server()->RegisterRequestHandler(base::Bind(
+      embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
           &WebViewTest::CacheControlResponseHandler, kCacheResponsePath));
 
       EmbeddedTestServerAcceptConnections();
@@ -906,8 +900,10 @@ class WebContentsAudioMutedObserver : public content::WebContentsObserver {
  public:
   explicit WebContentsAudioMutedObserver(content::WebContents* web_contents)
       : WebContentsObserver(web_contents),
-        loop_runner_(new content::MessageLoopRunner),
-        muting_update_observed_(false) {}
+        loop_runner_(new content::MessageLoopRunner) {}
+  WebContentsAudioMutedObserver(const WebContentsAudioMutedObserver&) = delete;
+  WebContentsAudioMutedObserver& operator=(
+      const WebContentsAudioMutedObserver&) = delete;
 
   // WebContentsObserver.
   void DidUpdateAudioMutingState(bool muted) override {
@@ -923,16 +919,16 @@ class WebContentsAudioMutedObserver : public content::WebContentsObserver {
 
  private:
   scoped_refptr<content::MessageLoopRunner> loop_runner_;
-  bool muting_update_observed_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsAudioMutedObserver);
+  bool muting_update_observed_ = false;
 };
 
 class IsAudibleObserver : public content::WebContentsObserver {
  public:
   explicit IsAudibleObserver(content::WebContents* contents)
       : WebContentsObserver(contents) {}
-  ~IsAudibleObserver() override {}
+  IsAudibleObserver(const IsAudibleObserver&) = delete;
+  IsAudibleObserver& operator=(const IsAudibleObserver&) = delete;
+  ~IsAudibleObserver() override = default;
 
   void WaitForCurrentlyAudible(bool audible) {
     // If there's no state change to observe then return right away.
@@ -954,10 +950,8 @@ class IsAudibleObserver : public content::WebContentsObserver {
       message_loop_runner_->Quit();
   }
 
-  bool audible_;
+  bool audible_ = false;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(IsAudibleObserver);
 };
 
 IN_PROC_BROWSER_TEST_F(WebViewTest, AudibilityStatePropagates) {
@@ -1346,7 +1340,16 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestDisplayNoneWebviewLoad) {
   TestHelper("testDisplayNoneWebviewLoad", "web_view/shim", NO_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestDisplayNoneWebviewRemoveChild) {
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_Shim_TestDisplayNoneWebviewRemoveChild \
+  DISABLED_Shim_TestDisplayNoneWebviewRemoveChild
+#else
+#define MAYBE_Shim_TestDisplayNoneWebviewRemoveChild \
+  Shim_TestDisplayNoneWebviewRemoveChild
+#endif
+// Flaky on Windows & Linux: https://crbug.com/1115106.
+IN_PROC_BROWSER_TEST_F(WebViewTest,
+                       MAYBE_Shim_TestDisplayNoneWebviewRemoveChild) {
   TestHelper("testDisplayNoneWebviewRemoveChild",
              "web_view/shim", NO_TEST_SERVER);
 }
@@ -1515,7 +1518,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestNestedCrossOriginSubframes) {
              "web_view/shim", NEEDS_TEST_SERVER);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Flaky on Mac. See https://crbug.com/674904.
 #define MAYBE_Shim_TestNestedSubframes DISABLED_Shim_TestNestedSubframes
 #else
@@ -3012,23 +3015,23 @@ IN_PROC_BROWSER_TEST_F(WebViewTest,
 }
 
 // This test makes sure loading <webview> does not crash when there is an
-// extension which has content script whitelisted/forced.
-IN_PROC_BROWSER_TEST_F(WebViewTest, WhitelistedContentScript) {
-  // Whitelist the extension for running content script we are going to load.
-  extensions::ExtensionsClient::ScriptingWhitelist whitelist;
+// extension which has content script allowlisted/forced.
+IN_PROC_BROWSER_TEST_F(WebViewTest, AllowlistedContentScript) {
+  // Allowlist the extension for running content script we are going to load.
+  extensions::ExtensionsClient::ScriptingAllowlist allowlist;
   const std::string extension_id = "imeongpbjoodlnmlakaldhlcmijmhpbb";
-  whitelist.push_back(extension_id);
-  extensions::ExtensionsClient::Get()->SetScriptingWhitelist(whitelist);
+  allowlist.push_back(extension_id);
+  extensions::ExtensionsClient::Get()->SetScriptingAllowlist(allowlist);
 
   // Load the extension.
-  const extensions::Extension* content_script_whitelisted_extension =
+  const extensions::Extension* content_script_allowlisted_extension =
       LoadExtension(test_data_dir_.AppendASCII(
-                        "platform_apps/web_view/extension_api/content_script"));
-  ASSERT_TRUE(content_script_whitelisted_extension);
-  ASSERT_EQ(extension_id, content_script_whitelisted_extension->id());
+          "platform_apps/web_view/extension_api/content_script"));
+  ASSERT_TRUE(content_script_allowlisted_extension);
+  ASSERT_EQ(extension_id, content_script_allowlisted_extension->id());
 
   // Now load an app with <webview>.
-  LoadAndLaunchPlatformApp("web_view/content_script_whitelisted",
+  LoadAndLaunchPlatformApp("web_view/content_script_allowlisted",
                            "TEST_PASSED");
 }
 
@@ -3275,10 +3278,11 @@ class WebViewChannelTest
       public testing::WithParamInterface<version_info::Channel> {
  public:
   WebViewChannelTest() : channel_(GetParam()) {}
+  WebViewChannelTest(const WebViewChannelTest&) = delete;
+  WebViewChannelTest& operator=(const WebViewChannelTest&) = delete;
 
  private:
   extensions::ScopedCurrentChannel channel_;
-  DISALLOW_COPY_AND_ASSIGN(WebViewChannelTest);
 };
 
 // This test verify that the set of rules registries of a webview will be
@@ -3517,8 +3521,16 @@ IN_PROC_BROWSER_TEST_F(WebViewTest,
 
 // Tests that the embedder can create a blob URL and navigate a WebView to it.
 // See https://crbug.com/652077.
+// Also tests that the embedder can't navigate to a blob URL created by a
+// WebView. See https://crbug.com/1106890.
 IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestBlobURL) {
   TestHelper("testBlobURL", "web_view/shim", NEEDS_TEST_SERVER);
+}
+
+// Tests that no error page is shown when WebRequest blocks a navigation.
+IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestWebRequestBlockedNavigation) {
+  TestHelper("testWebRequestBlockedNavigation", "web_view/shim",
+             NEEDS_TEST_SERVER);
 }
 
 // Tests that a WebView accessible resource can actually be loaded from a
@@ -3724,6 +3736,44 @@ IN_PROC_BROWSER_TEST_F(WebViewAccessibilityTest, FocusAccessibility) {
   ui::AXNodeData node_data =
       content::GetFocusedAccessibilityNodeInfo(web_contents);
   EXPECT_EQ("Guest button",
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+}
+
+// Validate that an inner frame within a guest WebContents correctly receives
+// focus when requested by accessibility. Previously the root
+// BrowserAccessibilityManager would not be updated due to how we were updating
+// the AXTreeData.
+// The test was disabled. See crbug.com/1141313.
+IN_PROC_BROWSER_TEST_F(WebViewAccessibilityTest,
+                       DISABLED_FocusAccessibilityNestedFrame) {
+  LoadAppWithGuest("web_view/focus_accessibility");
+  content::WebContents* web_contents = GetFirstAppWindowWebContents();
+  content::EnableAccessibilityForWebContents(web_contents);
+  content::WebContents* guest_web_contents = GetGuestWebContents();
+  content::EnableAccessibilityForWebContents(guest_web_contents);
+
+  // Wait for focus to land on the "root web area" role, representing
+  // focus on the main document itself.
+  while (content::GetFocusedAccessibilityNodeInfo(web_contents).role !=
+         ax::mojom::Role::kRootWebArea) {
+    content::WaitForAccessibilityFocusChange();
+  }
+
+  // Now keep pressing the Tab key until focus lands on a text field.
+  // This is testing that the inner frame within the guest WebContents receives
+  // focus, and that the focus state is accurately reflected in the accessiblity
+  // state.
+  while (content::GetFocusedAccessibilityNodeInfo(web_contents).role !=
+         ax::mojom::Role::kTextField) {
+    content::SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('\t'),
+                              ui::DomCode::TAB, ui::VKEY_TAB, false, false,
+                              false, false);
+    content::WaitForAccessibilityFocusChange();
+  }
+
+  ui::AXNodeData node_data =
+      content::GetFocusedAccessibilityNodeInfo(web_contents);
+  EXPECT_EQ("InnerFrameTextField",
             node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
 }
 
@@ -4088,7 +4138,8 @@ class ChromeSignInWebViewTest : public WebViewTest {
         "var count = 10;"
         "var interval;"
         "interval = setInterval(function(){"
-        "  if (document.getElementsByTagName('webview').length) {"
+        "  if (document.querySelector('inline-login-app').shadowRoot"
+        "       .querySelector('webview')) {"
         "    document.title = 'success';"
         "    console.log('FOUND webview');"
         "    clearInterval(interval);"
@@ -4103,8 +4154,8 @@ class ChromeSignInWebViewTest : public WebViewTest {
   }
 };
 
-#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX) || \
-     defined(OS_WIN)
+#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MAC) || \
+    defined(OS_WIN)
 // This verifies the fix for http://crbug.com/667708.
 IN_PROC_BROWSER_TEST_F(ChromeSignInWebViewTest,
                        ClosingChromeSignInShouldNotCrash) {
@@ -4145,7 +4196,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSignInWebViewTest,
   auto* find_helper =
       find_in_page::FindTabHelper::FromWebContents(embedder_web_contents);
   find_helper->StartFinding(base::ASCIIToUTF16("doesn't matter"), true, true,
-                            true);
+                            false);
   auto pending =
       content::GetRenderFrameHostsWithPendingFindResults(embedder_web_contents);
   // Request for main frame of the tab.

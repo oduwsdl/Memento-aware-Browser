@@ -48,10 +48,6 @@ struct CONTENT_EXPORT FrameNavigateParams : public IPC::NoParams {
   // URL of the page being loaded.
   GURL url;
 
-  bool memento_status;
-
-  std::string memento_datetime;
-
   // The base URL for the page's document when the frame was committed. Empty if
   // similar to 'url' above. Note that any base element in the page has not been
   // parsed yet and is therefore not reflected.
@@ -78,9 +74,6 @@ struct CONTENT_EXPORT FrameNavigateParams : public IPC::NoParams {
 
   // Contents MIME type of main frame.
   std::string contents_mime_type;
-
-  // Remote address of the socket which fetched this resource.
-  net::HostPortPair socket_address;
 };
 
 }  // namespace content

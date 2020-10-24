@@ -18,7 +18,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
@@ -33,6 +32,7 @@
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -150,8 +150,6 @@ void ExtensionActionAPI::DispatchExtensionActionClicked(
   const char* event_name = NULL;
   switch (extension_action.action_type()) {
     case ActionInfo::TYPE_ACTION:
-      // TODO(https://crbug.com/893373): Add testing for this API (currently
-      // restricted to trunk).
       histogram_value = events::ACTION_ON_CLICKED;
       event_name = "action.onClicked";
       break;
@@ -503,31 +501,30 @@ ExtensionActionSetBadgeBackgroundColorFunction::RunExtensionAction() {
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetTitleFunction::RunExtensionAction() {
-  return RespondNow(OneArgument(
-      std::make_unique<base::Value>(extension_action_->GetTitle(tab_id_))));
+  return RespondNow(
+      OneArgument(base::Value(extension_action_->GetTitle(tab_id_))));
 }
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetPopupFunction::RunExtensionAction() {
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
-      extension_action_->GetPopupUrl(tab_id_).spec())));
+  return RespondNow(
+      OneArgument(base::Value(extension_action_->GetPopupUrl(tab_id_).spec())));
 }
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetBadgeTextFunction::RunExtensionAction() {
-  // Return a placeholder value if the extension has called
-  // setActionCountAsBadgeText(true) and the badge count shown for this tab is
-  // the number of actions matched.
+  // Return a placeholder value if the extension has enabled using
+  // declarativeNetRequest action count as badge text and the badge count shown
+  // for this tab is the number of actions matched.
   std::string badge_text =
       extension_action_->UseDNRActionCountAsBadgeText(tab_id_)
           ? declarative_net_request::kActionCountPlaceholderBadgeText
           : extension_action_->GetExplicitlySetBadgeText(tab_id_);
 
   // TODO(crbug.com/990224): Document this behavior once
-  // chrome.declarativeNetRequest.setActionCountAsBadgeText is promoted to beta
+  // chrome.declarativeNetRequest.setExtensionActionOptions is promoted to beta
   // from trunk.
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(std::move(badge_text))));
+  return RespondNow(OneArgument(base::Value(std::move(badge_text))));
 }
 
 ExtensionFunction::ResponseAction
@@ -538,7 +535,8 @@ ExtensionActionGetBadgeBackgroundColorFunction::RunExtensionAction() {
   list->AppendInteger(static_cast<int>(SkColorGetG(color)));
   list->AppendInteger(static_cast<int>(SkColorGetB(color)));
   list->AppendInteger(static_cast<int>(SkColorGetA(color)));
-  return RespondNow(OneArgument(std::move(list)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(list))));
 }
 
 BrowserActionOpenPopupFunction::BrowserActionOpenPopupFunction() = default;
@@ -553,9 +551,9 @@ ExtensionFunction::ResponseAction BrowserActionOpenPopupFunction::Run() {
   // extension can operate incognito, then check the last active incognito, too.
   if ((!browser || !browser->window()->IsActive()) &&
       util::IsIncognitoEnabled(extension()->id(), profile) &&
-      profile->HasOffTheRecordProfile()) {
+      profile->HasPrimaryOTRProfile()) {
     browser =
-        chrome::FindLastActiveWithProfile(profile->GetOffTheRecordProfile());
+        chrome::FindLastActiveWithProfile(profile->GetPrimaryOTRProfile());
   }
 
   // If there's no active browser, or the Toolbar isn't visible, abort.

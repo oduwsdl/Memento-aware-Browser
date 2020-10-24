@@ -11,18 +11,17 @@ import android.text.Spannable;
 import android.text.style.StyleSpan;
 
 import androidx.annotation.DrawableRes;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion.MatchClassification;
+import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties.Action;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionHost;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewDelegate;
 import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
@@ -39,6 +38,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
     private final Context mContext;
     private final SuggestionHost mSuggestionHost;
     private final int mDesiredFaviconWidthPx;
+    private final int mDecorationImageSizePx;
     private int mSuggestionSizePx;
     private @BaseSuggestionViewProperties.Density int mDensity =
             BaseSuggestionViewProperties.Density.COMFORTABLE;
@@ -52,6 +52,8 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
         mSuggestionHost = host;
         mDesiredFaviconWidthPx = mContext.getResources().getDimensionPixelSize(
                 R.dimen.omnibox_suggestion_favicon_size);
+        mDecorationImageSizePx = context.getResources().getDimensionPixelSize(
+                R.dimen.omnibox_suggestion_decoration_image_size);
         mSuggestionSizePx = mContext.getResources().getDimensionPixelSize(
                 R.dimen.omnibox_suggestion_comfortable_height);
     }
@@ -61,6 +63,13 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      */
     protected int getDesiredFaviconSize() {
         return mDesiredFaviconWidthPx;
+    }
+
+    /**
+     * @return The size of suggestion decoration images in pixels.
+     */
+    protected int getDecorationImageSize() {
+        return mDecorationImageSizePx;
     }
 
     @Override
@@ -115,16 +124,17 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
             PropertyModel model, OmniboxSuggestion suggestion, int position) {
         @DrawableRes
         int icon = 0;
-        @StringRes
-        int iconString = 0;
+        String iconString = null;
         Runnable action = null;
         if (suggestion.hasTabMatch()) {
             icon = R.drawable.switch_to_tab;
-            iconString = R.string.accessibility_omnibox_switch_to_tab;
+            iconString =
+                    mContext.getResources().getString(R.string.accessibility_omnibox_switch_to_tab);
             action = () -> mSuggestionHost.onSwitchToTab(suggestion, position);
         } else {
             icon = R.drawable.btn_suggestion_refine;
-            iconString = R.string.accessibility_omnibox_btn_refine;
+            iconString = mContext.getResources().getString(
+                    R.string.accessibility_omnibox_btn_refine, suggestion.getFillIntoEdit());
             action = () -> mSuggestionHost.onRefineSuggestion(suggestion);
         }
         setCustomActions(model,
@@ -136,12 +146,34 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
                                 iconString, action)));
     }
 
+    /**
+     * Process the click event.
+     *
+     * @param suggestion Selected suggestion.
+     * @param position Position of the suggestion on the list.
+     */
+    protected void onSuggestionClicked(@NonNull OmniboxSuggestion suggestion, int position) {
+        mSuggestionHost.onSuggestionClicked(suggestion, position, suggestion.getUrl());
+    }
+
+    /**
+     * Process the long-click event.
+     *
+     * @param suggestion Selected suggestion.
+     * @param position Position of the suggestion on the list.
+     */
+    protected void onSuggestionLongClicked(@NonNull OmniboxSuggestion suggestion, int position) {
+        mSuggestionHost.onSuggestionLongClicked(suggestion, position);
+    }
+
     @Override
     public void populateModel(OmniboxSuggestion suggestion, PropertyModel model, int position) {
-        SuggestionViewDelegate delegate =
-                mSuggestionHost.createSuggestionViewDelegate(this, model, suggestion, position);
-
-        model.set(BaseSuggestionViewProperties.SUGGESTION_DELEGATE, delegate);
+        model.set(BaseSuggestionViewProperties.ON_CLICK,
+                () -> onSuggestionClicked(suggestion, position));
+        model.set(BaseSuggestionViewProperties.ON_LONG_CLICK,
+                () -> onSuggestionLongClicked(suggestion, position));
+        model.set(BaseSuggestionViewProperties.ON_FOCUS_VIA_SELECTION,
+                () -> mSuggestionHost.setOmniboxEditingText(suggestion.getFillIntoEdit()));
         model.set(BaseSuggestionViewProperties.DENSITY, mDensity);
         setCustomActions(model, null);
     }

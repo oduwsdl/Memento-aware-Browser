@@ -50,7 +50,6 @@
 #include "crypto/nss_util_internal.h"
 #include "crypto/scoped_test_nss_chromeos_user.h"
 #include "net/base/net_errors.h"
-#include "net/url_request/url_request_status.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -219,7 +218,7 @@ class TestCryptohomeClient : public ::chromeos::FakeCryptohomeClient {
         FROM_HERE, base::BindOnce(std::move(callback), reply));
   }
 
-  // Calls RemoveEx method.  |callback| is called after the method call
+  // Calls RemoveEx method.  `callback` is called after the method call
   // succeeds.
   void RemoveEx(const cryptohome::AccountIdentifier& account,
                 DBusMethodCallback<cryptohome::BaseReply> callback) override {

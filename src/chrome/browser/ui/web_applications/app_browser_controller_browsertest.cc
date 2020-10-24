@@ -8,7 +8,6 @@
 
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/themes/custom_theme_supplier.h"
@@ -27,7 +26,6 @@
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_installation.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -41,10 +39,10 @@
 #include "ui/display/types/display_constants.h"
 
 namespace {
-SkColor GetTabColor(Browser* browser) {
+SkColor GetFrameColor(Browser* browser) {
   CustomThemeSupplier* theme = browser->app_controller()->GetThemeSupplier();
   SkColor result;
-  EXPECT_TRUE(theme->GetColor(ThemeProperties::COLOR_TOOLBAR, &result));
+  EXPECT_TRUE(theme->GetColor(ThemeProperties::COLOR_FRAME_ACTIVE, &result));
   return result;
 }
 }  // namespace
@@ -77,7 +75,7 @@ class LoadFinishedWaiter : public TabStripModelObserver,
 
   // content::WebContentsObserver:
   void DidFinishNavigation(content::NavigationHandle* handle) override {
-    color_at_navigation_ = GetTabColor(browser_);
+    color_at_navigation_ = GetFrameColor(browser_);
   }
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override {
@@ -94,7 +92,11 @@ class AppBrowserControllerBrowserTest : public InProcessBrowserTest {
  public:
   AppBrowserControllerBrowserTest()
       : test_system_web_app_installation_(
-            TestSystemWebAppInstallation::SetUpTabbedMultiWindowApp()) {}
+            TestSystemWebAppInstallation::SetUpTabbedMultiWindowApp(false)) {}
+  AppBrowserControllerBrowserTest(const AppBrowserControllerBrowserTest&) =
+      delete;
+  AppBrowserControllerBrowserTest& operator=(
+      const AppBrowserControllerBrowserTest&) = delete;
 
  protected:
   void InstallAndLaunchMockApp() {
@@ -131,7 +133,6 @@ class AppBrowserControllerBrowserTest : public InProcessBrowserTest {
   std::unique_ptr<TestSystemWebAppInstallation>
       test_system_web_app_installation_;
 
-  DISALLOW_COPY_AND_ASSIGN(AppBrowserControllerBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, TabsTest) {
@@ -211,8 +212,8 @@ IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, NonAppUrl) {
 IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, TabLoadNoThemeChange) {
   InstallAndLaunchMockApp();
   EXPECT_EQ(app_browser_->tab_strip_model()->count(), 1);
-  // First tab gets manifest theme immediately.
-  EXPECT_EQ(GetTabColor(app_browser_), SK_ColorGREEN);
+  // Frame gets manifest theme immediately.
+  EXPECT_EQ(GetFrameColor(app_browser_), SK_ColorGREEN);
 
   // Dynamically change color.
   content::WebContents* web_contents =
@@ -225,7 +226,7 @@ IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, TabLoadNoThemeChange) {
                               content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
                               /*world_id=*/1));
   theme_waiter.Wait();
-  EXPECT_EQ(GetTabColor(app_browser_), SK_ColorYELLOW);
+  EXPECT_EQ(GetFrameColor(app_browser_), SK_ColorYELLOW);
 
   // Second tab keeps dynamic theme until loaded.
   LoadFinishedWaiter load_waiter(app_browser_);
@@ -233,13 +234,13 @@ IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, TabLoadNoThemeChange) {
   load_waiter.Wait();
   EXPECT_EQ(app_browser_->tab_strip_model()->count(), 2);
   EXPECT_EQ(load_waiter.GetColorAtNavigation(), SK_ColorYELLOW);
-  EXPECT_EQ(GetTabColor(app_browser_), SK_ColorGREEN);
+  EXPECT_EQ(GetFrameColor(app_browser_), SK_ColorGREEN);
 
   // Switching tabs updates themes immediately.
   chrome::SelectNextTab(app_browser_);
-  EXPECT_EQ(GetTabColor(app_browser_), SK_ColorYELLOW);
+  EXPECT_EQ(GetFrameColor(app_browser_), SK_ColorYELLOW);
   chrome::SelectNextTab(app_browser_);
-  EXPECT_EQ(GetTabColor(app_browser_), SK_ColorGREEN);
+  EXPECT_EQ(GetFrameColor(app_browser_), SK_ColorGREEN);
 }
 
 // App Popups are only used on Chrome OS. See https://crbug.com/1060917.
@@ -284,7 +285,7 @@ class AppBrowserControllerChromeUntrustedBrowserTest
  public:
   AppBrowserControllerChromeUntrustedBrowserTest()
       : test_system_web_app_installation_(
-            TestSystemWebAppInstallation::SetUpChromeUntrustedApp()) {}
+            TestSystemWebAppInstallation::SetUpChromeUntrustedApp(false)) {}
 
  protected:
   Browser* InstallAndLaunchMockApp() {

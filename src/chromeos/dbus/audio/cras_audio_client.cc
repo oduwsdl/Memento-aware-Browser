@@ -273,16 +273,6 @@ class CrasAudioClientImpl : public CrasAudioClient {
                             base::DoNothing());
   }
 
-  void SetNextHandsfreeProfile(bool enabled) override {
-    dbus::MethodCall method_call(cras::kCrasControlInterface,
-                                 cras::kSetNextHandsfreeProfile);
-    dbus::MessageWriter writer(&method_call);
-    writer.AppendBool(enabled);
-    cras_proxy_->CallMethod(&method_call,
-                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-                            base::DoNothing());
-  }
-
   void AddActiveInputNode(uint64_t node_id) override {
     dbus::MethodCall method_call(cras::kCrasControlInterface,
                                  cras::kAddActiveInputNode);
@@ -414,6 +404,14 @@ class CrasAudioClientImpl : public CrasAudioClient {
 
     writer.CloseContainer(&array_writer);
 
+    cras_proxy_->CallMethod(&method_call,
+                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                            base::DoNothing());
+  }
+
+  void ResendBluetoothBattery() override {
+    dbus::MethodCall method_call(cras::kCrasControlInterface,
+                                 cras::kResendBluetoothBattery);
     cras_proxy_->CallMethod(&method_call,
                             dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
                             base::DoNothing());
@@ -737,9 +735,6 @@ class CrasAudioClientImpl : public CrasAudioClient {
           return false;
       } else if (key == cras::kPluggedTimeProperty) {
         if (!value_reader.PopUint64(&node->plugged_time))
-          return false;
-      } else if (key == cras::kMicPositionsProperty) {
-        if (!value_reader.PopString(&node->mic_positions))
           return false;
       } else if (key == cras::kStableDeviceIdProperty) {
         if (!value_reader.PopUint64(&node->stable_device_id_v1))

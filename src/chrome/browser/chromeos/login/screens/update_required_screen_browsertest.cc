@@ -44,38 +44,35 @@ namespace chromeos {
 
 namespace {
 
-const test::UIPath kUpdateRequiredScreen = {"update-required-card"};
-const test::UIPath kUpdateRequiredStep = {"update-required-card",
+const test::UIPath kUpdateRequiredScreen = {"update-required"};
+const test::UIPath kUpdateRequiredStep = {"update-required",
                                           "update-required-dialog"};
-const test::UIPath kUpdateNowButton = {"update-required-card", "update-button"};
-const test::UIPath kUpdateProcessStep = {"update-required-card",
+const test::UIPath kUpdateNowButton = {"update-required", "update-button"};
+const test::UIPath kUpdateProcessStep = {"update-required",
                                          "checking-downloading-update"};
-const test::UIPath kUpdateRequiredEolDialog = {"update-required-card",
-                                               "eolDialog"};
-const test::UIPath kEolAdminMessageContainer = {"update-required-card",
+const test::UIPath kUpdateRequiredEolDialog = {"update-required", "eolDialog"};
+const test::UIPath kEolAdminMessageContainer = {"update-required",
                                                 "adminMessageContainer"};
-const test::UIPath kEolAdminMessage = {"update-required-card", "adminMessage"};
-const test::UIPath kMeteredNetworkStep = {"update-required-card",
+const test::UIPath kEolAdminMessage = {"update-required", "adminMessage"};
+const test::UIPath kMeteredNetworkStep = {"update-required",
                                           "update-need-permission-dialog"};
 const test::UIPath kMeteredNetworkAcceptButton = {
-    "update-required-card", "cellular-permission-accept-button"};
-const test::UIPath kNoNetworkStep = {"update-required-card",
+    "update-required", "cellular-permission-accept-button"};
+const test::UIPath kNoNetworkStep = {"update-required",
                                      "update-required-no-network-dialog"};
 
 // Elements in checking-downloading-update
-const test::UIPath kUpdateProcessCheckingStep = {"update-required-card",
+const test::UIPath kUpdateProcessCheckingStep = {"update-required",
                                                  "checking-downloading-update",
                                                  "checking-for-updates-dialog"};
 const test::UIPath kUpdateProcessUpdatingStep = {
-    "update-required-card", "checking-downloading-update", "updating-dialog"};
-const test::UIPath kUpdateProcessCompleteStep = {"update-required-card",
-                                                 "checking-downloading-update",
-                                                 "update-complete-dialog"};
-const test::UIPath kCheckingForUpdatesMessage = {"update-required-card",
-                                                 "checking-downloading-update",
-                                                 "checkingForUpdatesMsg"};
+    "update-required", "checking-downloading-update", "updating-dialog"};
+const test::UIPath kUpdateProcessCompleteStep = {
+    "update-required", "checking-downloading-update", "update-complete-dialog"};
+const test::UIPath kCheckingForUpdatesMessage = {
+    "update-required", "checking-downloading-update", "checkingForUpdatesMsg"};
 const test::UIPath kUpdatingProgress = {
-    "update-required-card", "checking-downloading-update", "updating-progress"};
+    "update-required", "checking-downloading-update", "updating-progress"};
 
 constexpr char kWifiServicePath[] = "/service/wifi2";
 constexpr char kCellularServicePath[] = "/service/cellular1";
@@ -127,7 +124,7 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
     network_state_test_helper_->manager_test()->SetupDefaultEnvironment();
     // Fake networks have been set up. Connect to WiFi network.
     SetConnected(kWifiServicePath);
-    chromeos::OobeScreenWaiter(chromeos::GaiaView::kScreenId).Wait();
+    chromeos::OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   }
   void TearDownOnMainThread() override {
     network_state_test_helper_.reset();
@@ -163,16 +160,16 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
     policy::DevicePolicyBuilder* const device_policy(
         policy_helper_.device_policy());
     em::ChromeDeviceSettingsProto& proto(device_policy->payload());
-    proto.mutable_minimum_chrome_version_eol_message()->set_value(eol_message);
+    proto.mutable_device_minimum_version_aue_message()->set_value(eol_message);
     policy_helper_.RefreshPolicyAndWaitUntilDeviceSettingsUpdated(
-        {chromeos::kMinimumChromeVersionEolMessage});
+        {chromeos::kDeviceMinimumVersionAueMessage});
   }
 
  protected:
   UpdateRequiredScreen* update_required_screen_;
   // Error screen - owned by OobeUI.
   ErrorScreen* error_screen_ = nullptr;
-  // Version updater - owned by |update_required_screen_|.
+  // Version updater - owned by `update_required_screen_`.
   VersionUpdater* version_updater_ = nullptr;
   // For testing captive portal
   NetworkPortalDetectorMixin network_portal_detector_{&mixin_host_};

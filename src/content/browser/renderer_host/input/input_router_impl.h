@@ -85,7 +85,6 @@ class CONTENT_EXPORT InputRouterImpl
   mojo::PendingRemote<blink::mojom::WidgetInputHandlerHost> BindNewHost()
       override;
   void StopFling() override;
-  void OnSetTouchAction(cc::TouchAction touch_action) override;
   void ForceSetTouchActionAuto() override;
 
   // InputHandlerHost impl
@@ -98,10 +97,13 @@ class CONTENT_EXPORT InputRouterImpl
       const std::vector<gfx::Rect>& bounds) override;
   void SetMouseCapture(bool capture) override;
   void RequestMouseLock(bool from_user_gesture,
-                        bool privileged,
                         bool unadjusted_movement,
                         RequestMouseLockCallback response) override;
-  void OnHasTouchEventHandlers(bool has_handlers) override;
+  // Notifies touch action filter and touch event queue whether there are
+  // JavaScript touch event handlers or not, or whether the platform has
+  // hit-testable scrollbars.
+  void OnHasTouchEventConsumers(
+      blink::mojom::TouchEventConsumersPtr consumers) override;
   void WaitForInputProcessed(base::OnceClosure callback) override;
   void FlushTouchEventQueue() override;
 
@@ -228,7 +230,7 @@ class CONTENT_EXPORT InputRouterImpl
       GestureEventWithLatencyInfo& gesture_event,
       const FilterGestureEventResult& existing_result);
   void ProcessDeferredGestureEventQueue();
-  void OnSetWhiteListedTouchAction(cc::TouchAction touch_action);
+  void OnSetCompositorAllowedTouchAction(cc::TouchAction touch_action);
 
   InputRouterImplClient* client_;
   InputDispositionHandler* disposition_handler_;

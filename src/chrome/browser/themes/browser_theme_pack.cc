@@ -17,10 +17,13 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -42,7 +45,6 @@
 #include "ui/gfx/color_analysis.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image.h"
@@ -362,7 +364,7 @@ SkBitmap CreateLowQualityResizedBitmap(const SkBitmap& source_bitmap,
   SkBitmap scaled_bitmap;
   scaled_bitmap.allocN32Pixels(scaled_size.width(), scaled_size.height());
   scaled_bitmap.eraseARGB(0, 0, 0, 0);
-  SkCanvas canvas(scaled_bitmap);
+  SkCanvas canvas(scaled_bitmap, SkSurfaceProps{});
   SkRect scaled_bounds = RectToSkRect(gfx::Rect(scaled_size));
   // Note(oshima): The following scaling code doesn't work with
   // a mask image.
@@ -597,7 +599,12 @@ SkColor GetContrastingColorForBackground(SkColor bg_color,
 }  // namespace internal
 
 BrowserThemePack::~BrowserThemePack() {
-  if (!data_pack_.get()) {
+  if (data_pack_) {
+    auto task_runner = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
+    DCHECK(task_runner);
+    task_runner->DeleteSoon(FROM_HERE, data_pack_.release());
+  } else {
     delete header_;
     delete [] tints_;
     delete [] colors_;
@@ -1251,7 +1258,8 @@ void BrowserThemePack::ReadColorsFromJSON(
           double alpha;
           int alpha_int;
           if (color_list->GetDouble(3, &alpha) && alpha >= 0 && alpha <= 1) {
-            color = SkColorSetARGB(gfx::ToRoundedInt(alpha * 255), r, g, b);
+            color =
+                SkColorSetARGB(base::ClampRound<U8CPU>(alpha * 255), r, g, b);
           } else if (color_list->GetInteger(3, &alpha_int) &&
                      (alpha_int == 0 || alpha_int == 1)) {
             color = SkColorSetARGB(alpha_int ? 255 : 0, r, g, b);

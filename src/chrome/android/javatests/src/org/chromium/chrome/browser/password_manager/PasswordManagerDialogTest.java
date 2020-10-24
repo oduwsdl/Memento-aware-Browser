@@ -31,10 +31,10 @@ import org.mockito.quality.Strictness;
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
@@ -57,8 +57,7 @@ public class PasswordManagerDialogTest {
     private Callback<Integer> mOnClick;
 
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
     public MockitoRule mMockitoRule = MockitoJUnit.rule().strictness(Strictness.STRICT_STUBS);
@@ -71,7 +70,7 @@ public class PasswordManagerDialogTest {
                 TestThreadUtils.runOnUiThreadBlockingNoException(activity::getModalDialogManager);
 
         mCoordinator = new PasswordManagerDialogCoordinator(dialogManager,
-                activity.findViewById(android.R.id.content), activity.getFullscreenManager(),
+                activity.findViewById(android.R.id.content), activity.getBrowserControlsManager(),
                 activity.getControlContainerHeightResource());
         PasswordManagerDialogContents contents = new PasswordManagerDialogContents(TITLE, DETAILS,
                 R.drawable.data_reduction_illustration, OK_BUTTON, CANCEL_BUTTON, mOnClick);

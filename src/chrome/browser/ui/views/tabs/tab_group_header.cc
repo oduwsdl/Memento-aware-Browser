@@ -8,7 +8,9 @@
 #include <utility>
 
 #include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
@@ -56,6 +58,10 @@ class TabGroupHighlightPathGenerator : public views::HighlightPathGenerator {
   TabGroupHighlightPathGenerator(const views::View* chip,
                                  const views::View* title)
       : chip_(chip), title_(title) {}
+  TabGroupHighlightPathGenerator(const TabGroupHighlightPathGenerator&) =
+      delete;
+  TabGroupHighlightPathGenerator& operator=(
+      const TabGroupHighlightPathGenerator&) = delete;
 
   // views::HighlightPathGenerator:
   SkPath GetHighlightPath(const views::View* view) override {
@@ -68,8 +74,6 @@ class TabGroupHighlightPathGenerator : public views::HighlightPathGenerator {
  private:
   const views::View* const chip_;
   const views::View* const title_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabGroupHighlightPathGenerator);
 };
 
 }  // namespace
@@ -98,9 +102,15 @@ TabGroupHeader::TabGroupHeader(TabStrip* tab_strip,
   views::HighlightPathGenerator::Install(
       this,
       std::make_unique<TabGroupHighlightPathGenerator>(title_chip_, title_));
+
+  SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
+
+  last_modified_expansion_ = base::TimeTicks::Now();
 }
 
-TabGroupHeader::~TabGroupHeader() = default;
+TabGroupHeader::~TabGroupHeader() {
+  LogCollapseTime();
+}
 
 bool TabGroupHeader::OnKeyPressed(const ui::KeyEvent& event) {
   if ((event.key_code() == ui::VKEY_SPACE ||
@@ -109,8 +119,17 @@ bool TabGroupHeader::OnKeyPressed(const ui::KeyEvent& event) {
     if (base::FeatureList::IsEnabled(features::kTabGroupsCollapse)) {
       // The collapse feature changes the behavior from showing the
       // editor bubble to toggling the collapsed state of the group.
-      tab_strip_->controller()->ToggleTabGroupCollapsedState(group().value(),
-                                                             true);
+      bool successful_toggle =
+          tab_strip_->controller()->ToggleTabGroupCollapsedState(
+              group().value(), ToggleTabGroupCollapsedStateOrigin::kKeyboard);
+      if (successful_toggle) {
+#if defined(OS_WIN)
+        NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+#else
+        NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+#endif
+        LogCollapseTime();
+      }
     } else {
       editor_bubble_tracker_.Opened(TabGroupEditorBubbleView::Show(
           tab_strip_->controller()->GetBrowser(), group().value(), this));
@@ -119,7 +138,7 @@ bool TabGroupHeader::OnKeyPressed(const ui::KeyEvent& event) {
   }
 
   constexpr int kModifiedFlag =
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       ui::EF_COMMAND_DOWN;
 #else
       ui::EF_CONTROL_DOWN;
@@ -164,9 +183,14 @@ void TabGroupHeader::OnMouseReleased(const ui::MouseEvent& event) {
   if (base::FeatureList::IsEnabled(features::kTabGroupsCollapse)) {
     // The collapse feature changes the left click behavior from showing the
     // editor bubble to toggling the collapsed state of the group.
-    if (event.IsLeftMouseButton() && !dragging())
-      tab_strip_->controller()->ToggleTabGroupCollapsedState(group().value(),
-                                                             true);
+    if (event.IsLeftMouseButton() && !dragging()) {
+      bool successful_toggle =
+          tab_strip_->controller()->ToggleTabGroupCollapsedState(
+              group().value(), ToggleTabGroupCollapsedStateOrigin::kMouse);
+      if (successful_toggle)
+        LogCollapseTime();
+    }
+
   } else if (!dragging() && !editor_bubble_tracker_.is_open()) {
     // (TODO): Delete this else statement once collapse launches since
     // ShowContextMenuForViewImpl() will handle spawning the bubble on right
@@ -193,11 +217,26 @@ void TabGroupHeader::OnGestureEvent(ui::GestureEvent* event) {
   tab_strip_->UpdateHoverCard(nullptr);
   switch (event->type()) {
     case ui::ET_GESTURE_TAP: {
+      if (base::FeatureList::IsEnabled(features::kTabGroupsCollapse)) {
+        // The collapse feature changes the behavior from showing the
+        // editor bubble to toggling the collapsed state of the group.
+        bool successful_toggle =
+            tab_strip_->controller()->ToggleTabGroupCollapsedState(
+                group().value(), ToggleTabGroupCollapsedStateOrigin::kGesture);
+        if (successful_toggle)
+          LogCollapseTime();
+      } else {
+        editor_bubble_tracker_.Opened(TabGroupEditorBubbleView::Show(
+            tab_strip_->controller()->GetBrowser(), group().value(), this));
+      }
+      break;
+    }
+
+    case ui::ET_GESTURE_LONG_TAP: {
       editor_bubble_tracker_.Opened(TabGroupEditorBubbleView::Show(
           tab_strip_->controller()->GetBrowser(), group().value(), this));
       break;
     }
-
     case ui::ET_GESTURE_SCROLL_BEGIN: {
       tab_strip_->MaybeStartDrag(this, *event, tab_strip_->GetSelectionModel());
       break;
@@ -217,8 +256,9 @@ void TabGroupHeader::OnFocus() {
 void TabGroupHeader::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kTabList;
   node_data->AddState(ax::mojom::State::kEditable);
-
-  if (tab_strip_->controller()->IsGroupCollapsed(group().value())) {
+  bool is_collapsed =
+      tab_strip_->controller()->IsGroupCollapsed(group().value());
+  if (is_collapsed) {
     node_data->AddState(ax::mojom::State::kCollapsed);
     node_data->RemoveState(ax::mojom::State::kExpanded);
   } else {
@@ -230,12 +270,25 @@ void TabGroupHeader::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       tab_strip_->controller()->GetGroupTitle(group().value());
   base::string16 contents =
       tab_strip_->controller()->GetGroupContentString(group().value());
+  base::string16 collapsed_state = base::string16();
+
+// Windows screen reader properly announces the state set above in |node_data|
+// and will read out the state change when the header's collapsed state is
+// toggled. The state is added into the title for other platforms and the title
+// will be reread with the updated state when the header's collapsed state is
+// toggled.
+#if !defined(OS_WIN)
+  collapsed_state =
+      is_collapsed ? l10n_util::GetStringUTF16(IDS_GROUP_AX_LABEL_COLLAPSED)
+                   : l10n_util::GetStringUTF16(IDS_GROUP_AX_LABEL_EXPANDED);
+#endif
   if (title.empty()) {
     node_data->SetName(l10n_util::GetStringFUTF16(
-        IDS_GROUP_AX_LABEL_UNNAMED_GROUP_FORMAT, contents));
+        IDS_GROUP_AX_LABEL_UNNAMED_GROUP_FORMAT, contents, collapsed_state));
   } else {
-    node_data->SetName(l10n_util::GetStringFUTF16(
-        IDS_GROUP_AX_LABEL_NAMED_GROUP_FORMAT, title, contents));
+    node_data->SetName(
+        l10n_util::GetStringFUTF16(IDS_GROUP_AX_LABEL_NAMED_GROUP_FORMAT, title,
+                                   contents, collapsed_state));
   }
 }
 
@@ -282,7 +335,7 @@ void TabGroupHeader::ShowContextMenuForViewImpl(
   // reached this function via mouse if and only if the current OS is Mac.
   // Therefore, we don't stop the menu propagation in that case.
   constexpr bool kStopContextMenuPropagation =
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       false;
 #else
       true;
@@ -291,6 +344,17 @@ void TabGroupHeader::ShowContextMenuForViewImpl(
   editor_bubble_tracker_.Opened(TabGroupEditorBubbleView::Show(
       tab_strip_->controller()->GetBrowser(), group().value(), this,
       base::nullopt, nullptr, kStopContextMenuPropagation));
+}
+
+bool TabGroupHeader::DoesIntersectRect(const views::View* target,
+                                       const gfx::Rect& rect) const {
+  // Tab group headers are only highlighted with a tab shape while dragging, so
+  // visually the header is basically a rectangle between two tab separators.
+  // The distance from the endge of the view to the tab separator is half of the
+  // overlap distance. We should only accept events between the separators.
+  gfx::Rect contents_rect = GetLocalBounds();
+  contents_rect.Inset(TabStyle::GetTabOverlap() / 2, 0);
+  return contents_rect.Intersects(rect);
 }
 
 int TabGroupHeader::CalculateWidth() const {
@@ -317,6 +381,18 @@ int TabGroupHeader::CalculateWidth() const {
   const int right_adjust = title.empty() ? 2 : -2;
 
   return overlap_margin + title_chip_->width() + right_adjust;
+}
+
+void TabGroupHeader::LogCollapseTime() {
+  base::TimeTicks current_time = base::TimeTicks::Now();
+  if (tab_strip_->controller()->IsGroupCollapsed(group().value())) {
+    UMA_HISTOGRAM_LONG_TIMES_100("TabGroups.TimeSpentExpanded",
+                                 current_time - last_modified_expansion_);
+  } else {
+    UMA_HISTOGRAM_LONG_TIMES_100("TabGroups.TimeSpentCollapsed",
+                                 current_time - last_modified_expansion_);
+  }
+  last_modified_expansion_ = current_time;
 }
 
 void TabGroupHeader::VisualsChanged() {
@@ -383,6 +459,7 @@ TabGroupHeader::EditorBubbleTracker::~EditorBubbleTracker() {
     widget_->RemoveObserver(this);
     widget_->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
   }
+  CHECK(!IsInObserverList());
 }
 
 void TabGroupHeader::EditorBubbleTracker::Opened(views::Widget* bubble_widget) {

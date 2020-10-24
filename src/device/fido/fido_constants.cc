@@ -33,8 +33,10 @@ const char kCredentialManagementMapKey[] = "credMgmt";
 const char kCredentialManagementPreviewMapKey[] = "credentialMgmtPreview";
 const char kBioEnrollmentMapKey[] = "bioEnroll";
 const char kBioEnrollmentPreviewMapKey[] = "userVerificationMgmtPreview";
-const char kUvTokenMapKey[] = "uvToken";
+const char kPinUvTokenMapKey[] = "pinUvAuthToken";
 const char kDefaultCredProtectKey[] = "defaultCredProtect";
+const char kEnterpriseAttestationKey[] = "ep";
+const char kLargeBlobsKey[] = "largeBlobs";
 
 const base::TimeDelta kDeviceTimeout = base::TimeDelta::FromSeconds(20);
 const base::TimeDelta kU2fRetryDelay = base::TimeDelta::FromMilliseconds(200);
@@ -70,6 +72,7 @@ const char kCtap2_1Version[] = "FIDO_2_1";
 const char kExtensionHmacSecret[] = "hmac-secret";
 const char kExtensionCredProtect[] = "credProtect";
 const char kExtensionAndroidClientData[] = "googleAndroidClientData";
+const char kExtensionLargeBlobKey[] = "largeBlobKey";
 
 const base::TimeDelta kBleDevicePairingModeWaitingInterval =
     base::TimeDelta::FromSeconds(2);

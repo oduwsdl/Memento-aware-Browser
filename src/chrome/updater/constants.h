@@ -19,7 +19,6 @@ extern const char kNullVersion[];
 
 // Command line switches.
 //
-
 // This switch starts the COM server. This switch is invoked by the COM runtime
 // when CoCreate is called on one of several CLSIDs that the server supports.
 // We expect to use the COM server for the following scenarios:
@@ -38,6 +37,13 @@ extern const char kNullVersion[];
 //   (say, read-only) functionality for that same set of interfaces.
 extern const char kServerSwitch[];
 
+// This switch specifies the XPC service the server registers to listen to.
+extern const char kServerServiceSwitch[];
+
+// Valid values for the kServerServiceSwitch.
+extern const char kServerControlServiceSwitchValue[];
+extern const char kServerUpdateServiceSwitchValue[];
+
 // This switch starts the COM service. This switch is invoked by the Service
 // Manager when CoCreate is called on one of several CLSIDs that the server
 // supports.
@@ -53,17 +59,18 @@ extern const char kCrashMeSwitch[];
 // Runs as the Crashpad handler.
 extern const char kCrashHandlerSwitch[];
 
+// Updates the updater.
+extern const char kUpdateSwitch[];
+
 // Installs the updater.
 extern const char kInstallSwitch[];
 
-#if defined(OS_MACOSX)
-// Swaps the current version of the updater with the newly installed one.
-// Performs clean-up.
-extern const char kPromoteCandidateSwitch[];
-
-// TODO(crbug 1072061): this switch should not be shipped.
-extern const char kUninstallCandidateSwitch[];
-#endif  // OS_MACOSX
+// Contains the meta installer tag. The tag is a string of arguments, separated
+// by a delimiter (in this case, the delimiter is =). The tag is typically
+// embedded in the program image of the metainstaller, but for testing purposes,
+// the tag could be passed directly as a command line argument. The tag is
+// currently encoded as a ASCII string.
+extern const char kTagSwitch[];
 
 #if defined(OS_WIN)
 // A debug switch to indicate that --install is running from the `out` directory
@@ -100,13 +107,11 @@ extern const char kEnableLoggingSwitch[];
 // Specifies the logging module filter.
 extern const char kLoggingModuleSwitch[];
 
-// Specifies that the program uses a single process execution mode, meaning
-// out of process RPC is not being used. This mode is for debugging purposes
-// only and it may be removed at any time.
-extern const char kSingleProcessSwitch[];
-
 // Specifies the application that the Updater needs to install.
 extern const char kAppIdSwitch[];
+
+// Specifies the version of the application that the updater needs to register.
+extern const char kAppVersionSwitch[];
 
 // URLs.
 //
@@ -116,6 +121,9 @@ extern const char kUpdaterJSONDefaultUrl[];
 // The URL where crash reports are uploaded.
 extern const char kCrashUploadURL[];
 extern const char kCrashStagingUploadURL[];
+
+// DM server end point.
+extern const char kDeviceManagementServerURL[];
 
 // File system paths.
 //
@@ -143,7 +151,7 @@ constexpr int kWaitForAppInstallerSec = 60;
 constexpr int kWaitForInstallerProgressSec = 1;
 #endif  // OS_WIN
 
-// Errors.
+// Install Errors.
 //
 // Specific install errors for the updater are reported in such a way that
 // their range does not conflict with the range of generic errors defined by
@@ -165,6 +173,17 @@ constexpr int kErrorMissingRunableFile = kCustomInstallErrorBase + 2;
 
 // Running the application installer failed.
 constexpr int kErrorApplicationInstallerFailed = kCustomInstallErrorBase + 3;
+
+// Server Errors.
+//
+// The server process may exit with any of these exit codes.
+constexpr int kErrorOk = 0;
+
+// The server could not acquire the lock needed to run.
+constexpr int kErrorFailedToLockPrefsMutex = 1;
+
+// The server candidate failed to promote itself to active.
+constexpr int kErrorFailedToSwap = 2;
 
 // Policy Management constants.
 extern const char kProxyModeDirect[];

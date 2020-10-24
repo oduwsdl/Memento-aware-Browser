@@ -21,10 +21,10 @@
       },
 
       /**
-       * Management domain.
+       * Domain manager.
        * @type {?string}
        */
-      domain: {
+      manager: {
         type: String,
         value: '',
       },
@@ -94,9 +94,11 @@
     reset() {
       this.disabled = false;
       this.emailDomain = '';
-      this.domain = '';
+      this.manager = '';
       this.email_ = '';
       this.fullEmail_ = '';
+      this.$.emailInput.isInvalid = false;
+      this.$.passwordInput.isInvalid = false;
     },
 
     onForgotPasswordClicked_() {
@@ -181,7 +183,7 @@
         return;
       var msg = {
         'useOffline': true,
-        'email': this.email_,
+        'email': this.fullEmail_,
         'password': this.password_,
       };
       this.password_ = '';

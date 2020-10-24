@@ -38,7 +38,6 @@ class X509Certificate;
 // etc.).
 class PageInfoUI {
  public:
-
   enum class SecuritySummaryColor {
     RED,
     GREEN,
@@ -58,8 +57,6 @@ class PageInfoUI {
   };
 
   struct SecurityDescription {
-    SecurityDescription();
-    ~SecurityDescription();
     // The text style for |summary| used to color it. This provides an
     // opinionated guide to the user on the overall security state of the site.
     SecuritySummaryColor summary_style;
@@ -68,13 +65,6 @@ class PageInfoUI {
     // A short paragraph with more details about the state, and how
     // the user should treat it.
     base::string16 details;
-    // A one-line summary of the memento state.
-    base::string16 memento_summary;
-    // A short sentence that explains that the page is a memento.
-    base::string16 memento_info;
-
-    bool mixed_memento_content;
-
     // The category of the security description, used to determine which help
     // center article to link to.
     SecurityDescriptionType type;
@@ -93,22 +83,6 @@ class PageInfoUI {
     // Whether these cookies are from the current top-level origin as seen by
     // the user, or from third-party origins.
     bool is_first_party;
-  };
-
-  // |PermissionInfo| contains information about a single permission |type| for
-  // the current website.
-  struct PermissionInfo {
-    PermissionInfo();
-    // Site permission |type|.
-    ContentSettingsType type;
-    // The current value for the permission |type| (e.g. ALLOW or BLOCK).
-    ContentSetting setting;
-    // The global default settings for this permission |type|.
-    ContentSetting default_setting;
-    // The settings source e.g. user, extensions, policy, ... .
-    content_settings::SettingSource source;
-    // Whether we're in incognito mode.
-    bool is_incognito;
   };
 
   // |ChosenObjectInfo| contains information about a single |chooser_object| of
@@ -134,10 +108,6 @@ class PageInfoUI {
     // Extended Validation certificates, or the URL's hostname for all other
     // sites.
     std::string site_identity;
-    // Whether or not the page is a memento
-    bool memento_status = false;
-    std::string memento_datetime = "";
-    bool mixed_memento = false;
     // Status of the site's identity.
     PageInfo::SiteIdentityStatus identity_status;
     // Site's Safe Browsing status.
@@ -180,7 +150,7 @@ class PageInfoUI {
   };
 
   using CookieInfoList = std::vector<CookieInfo>;
-  using PermissionInfoList = std::vector<PermissionInfo>;
+  using PermissionInfoList = std::vector<PageInfo::PermissionInfo>;
   using ChosenObjectInfoList = std::vector<std::unique_ptr<ChosenObjectInfo>>;
 
   virtual ~PageInfoUI();
@@ -203,7 +173,7 @@ class PageInfoUI {
   // extension, enterprise policy, or embargo.
   static base::string16 PermissionDecisionReasonToUIString(
       PageInfoUiDelegate* delegate,
-      const PermissionInfo& permission,
+      const PageInfo::PermissionInfo& permission,
       const GURL& url);
 
   // Returns the color to use for the permission decision reason strings.
@@ -216,11 +186,11 @@ class PageInfoUI {
   // Returns the connection icon ID for the given connection |status|.
   static int GetConnectionIconID(PageInfo::SiteConnectionStatus status);
 #else  // !defined(OS_ANDROID)
-  // Returns icons for the given PermissionInfo |info|. If |info|'s current
-  // setting is CONTENT_SETTING_DEFAULT, it will return the icon for |info|'s
-  // default setting.
+  // Returns icons for the given PageInfo::PermissionInfo |info|. If |info|'s
+  // current setting is CONTENT_SETTING_DEFAULT, it will return the icon for
+  // |info|'s default setting.
   static const gfx::ImageSkia GetPermissionIcon(
-      const PermissionInfo& info,
+      const PageInfo::PermissionInfo& info,
       const SkColor related_text_color);
 
   // Returns the icon for the given object |info|.
@@ -231,10 +201,6 @@ class PageInfoUI {
 
   // Returns the icon for the page Certificate.
   static const gfx::ImageSkia GetCertificateIcon(
-      const SkColor related_text_color);
-
-  // Returns the icon for the Memento info.
-  static const gfx::ImageSkia GetMementoIcon(
       const SkColor related_text_color);
 
   // Returns the icon for the button / link to Site settings.
@@ -249,9 +215,7 @@ class PageInfoUI {
   static bool ContentSettingsTypeInPageInfo(ContentSettingsType type);
 
   static std::unique_ptr<SecurityDescription>
-  CreateSafetyTipSecurityDescription(const security_state::SafetyTipInfo& info,
-                                     bool memento_status,
-                                     std::string memento_datetime);
+  CreateSafetyTipSecurityDescription(const security_state::SafetyTipInfo& info);
 
   // Sets cookie information.
   virtual void SetCookieInfo(const CookieInfoList& cookie_info_list) = 0;
@@ -263,8 +227,6 @@ class PageInfoUI {
 
   // Sets site identity information.
   virtual void SetIdentityInfo(const IdentityInfo& identity_info) = 0;
-
-  virtual void SetMementoInfo(const IdentityInfo& identity_info) = 0;
 
   virtual void SetPageFeatureInfo(const PageFeatureInfo& page_feature_info) = 0;
 

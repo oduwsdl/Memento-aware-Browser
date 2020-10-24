@@ -23,6 +23,8 @@ struct ClientSettings {
   ClientSettings();
   ~ClientSettings();
 
+  void UpdateFromProto(const ClientSettingsProto& proto);
+
   // Time between two periodic script precondition checks.
   base::TimeDelta periodic_script_check_interval =
       base::TimeDelta::FromSeconds(1);
@@ -82,12 +84,14 @@ struct ClientSettings {
   base::Optional<OverlayImageProto> overlay_image;
 
   // Optional settings intended for integration tests.
-  base::Optional<ClientSettingsProto_IntegrationTestSettings>
+  base::Optional<ClientSettingsProto::IntegrationTestSettings>
       integration_test_settings;
 
-  void UpdateFromProto(const ClientSettingsProto& proto);
-
   float talkback_sheet_size_fraction = 0.5f;
+
+  // Optional settings to enable back button error in BottomSheet instead of
+  // Snackbar.
+  base::Optional<ClientSettingsProto::BackButtonSettings> back_button_settings;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ClientSettings);

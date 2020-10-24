@@ -4,6 +4,7 @@
 
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -26,6 +27,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_crx_util.h"
@@ -39,6 +42,9 @@
 #include "chrome/browser/download/download_target_determiner.h"
 #include "chrome/browser/download/mixed_content_download_blocking.h"
 #include "chrome/browser/download/save_package_file_picker.h"
+#include "chrome/browser/enterprise/connectors/common.h"
+#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
+#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
@@ -79,7 +85,9 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/filename_util.h"
 #include "net/base/mime_util.h"
+#include "net/base/network_change_notifier.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_ANDROID)
@@ -92,6 +100,7 @@
 #include "chrome/browser/download/android/download_utils.h"
 #include "chrome/browser/download/android/mixed_content_download_infobar_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "net/http/http_content_disposition.h"
 #else
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -272,23 +281,6 @@ void OnDownloadDialogClosed(
 }
 #endif  // defined(OS_ANDROID)
 
-void ConnectToQuarantineService(
-    mojo::PendingReceiver<quarantine::mojom::Quarantine> receiver) {
-#if defined(OS_WIN)
-  if (base::FeatureList::IsEnabled(quarantine::kOutOfProcessQuarantine)) {
-    content::ServiceProcessHost::Launch(
-        std::move(receiver),
-        content::ServiceProcessHost::Options()
-            .WithDisplayName("Quarantine Service")
-            .Pass());
-    return;
-  }
-#endif
-
-  mojo::MakeSelfOwnedReceiver(std::make_unique<quarantine::QuarantineImpl>(),
-                              std::move(receiver));
-}
-
 void OnCheckExistingDownloadPathDone(
     std::unique_ptr<DownloadTargetInfo> target_info,
     content::DownloadTargetCallback callback,
@@ -336,6 +328,44 @@ void HandleMixedDownloadInfoBarResult(
 }
 #endif
 
+void MaybeReportDangerousDownloadBlocked(
+    DownloadPrefs::DownloadRestriction download_restriction,
+    std::string danger_type,
+    std::string download_path,
+    download::DownloadItem* download) {
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+  if (download_restriction !=
+          DownloadPrefs::DownloadRestriction::POTENTIALLY_DANGEROUS_FILES &&
+      download_restriction !=
+          DownloadPrefs::DownloadRestriction::DANGEROUS_FILES) {
+    return;
+  }
+
+  content::BrowserContext* browser_context =
+      content::DownloadItemUtils::GetBrowserContext(download);
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  if (!profile)
+    return;
+
+  // If |download| has a deep scanning malware verdict, then it means the
+  // dangerous file has already been reported.
+  auto* scan_result = static_cast<enterprise_connectors::ScanResult*>(
+      download->GetUserData(enterprise_connectors::ScanResult::kKey));
+  if (scan_result &&
+      enterprise_connectors::ContainsMalwareVerdict(scan_result->response)) {
+    return;
+  }
+
+  std::string raw_digest_sha256 = download->GetHash();
+  extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
+      ->OnDangerousDownloadEvent(
+          download->GetURL(), download_path,
+          base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
+          danger_type, download->GetMimeType(), download->GetTotalBytes(),
+          safe_browsing::EventResult::BLOCKED);
+#endif
+}
+
 }  // namespace
 
 ChromeDownloadManagerDelegate::ChromeDownloadManagerDelegate(Profile* profile)
@@ -371,10 +401,12 @@ void ChromeDownloadManagerDelegate::ShowDownloadDialog(
     int64_t total_bytes,
     DownloadLocationDialogType dialog_type,
     const base::FilePath& suggested_path,
+    bool supports_later_dialog,
     DownloadDialogBridge::DialogCallback callback) {
   DCHECK(download_dialog_bridge_);
   download_dialog_bridge_->ShowDialog(native_window, total_bytes, dialog_type,
-                                      suggested_path, std::move(callback));
+                                      suggested_path, supports_later_dialog,
+                                      std::move(callback));
 }
 
 void ChromeDownloadManagerDelegate::SetDownloadDialogBridgeForTesting(
@@ -563,6 +595,10 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
                << "() SB service disabled. Marking download as DANGEROUS FILE";
       if (ShouldBlockFile(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE,
                           item)) {
+        MaybeReportDangerousDownloadBlocked(
+            download_prefs_->download_restriction(), "DANGEROUS_FILE_TYPE",
+            item->GetTargetFilePath().AsUTF8Unsafe(), item);
+
         item->OnContentCheckCompleted(
             // Specifying a dangerous type here would take precedence over the
             // blocking of the file.
@@ -656,8 +692,12 @@ bool ChromeDownloadManagerDelegate::InterceptDownloadIfApplicable(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // For background service downloads we don't want offline pages backend to
   // intercept the download. |is_transient| flag is used to determine whether
-  // the download corresponds to background service.
+  // the download corresponds to background service. Additionally we don't want
+  // offline pages backend to intercept html files explicitly marked as
+  // attachments.
   if (!is_transient &&
+      !net::HttpContentDisposition(content_disposition, std::string())
+           .is_attachment() &&
       offline_pages::OfflinePageUtils::CanDownloadAsOfflinePage(url,
                                                                 mime_type)) {
     offline_pages::OfflinePageUtils::ScheduleDownload(
@@ -929,7 +969,8 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
         return;
       }
 
-      if (!download_prefs_->PromptForDownload() && web_contents) {
+      if (!ShouldShowDownloadLaterDialog() &&
+          !download_prefs_->PromptForDownload() && web_contents) {
         android::ChromeDuplicateDownloadInfoBarDelegate::Create(
             InfoBarService::FromWebContents(web_contents), download,
             suggested_path, callback);
@@ -949,6 +990,7 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
       // Figure out type of dialog and display.
       DownloadLocationDialogType dialog_type =
           DownloadLocationDialogType::DEFAULT;
+
       switch (reason) {
         case DownloadConfirmationReason::TARGET_NO_SPACE:
           dialog_type = DownloadLocationDialogType::LOCATION_FULL;
@@ -969,7 +1011,7 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
 
       gfx::NativeWindow native_window = web_contents->GetTopLevelNativeWindow();
       ShowDownloadDialog(native_window, download->GetTotalBytes(), dialog_type,
-                         suggested_path,
+                         suggested_path, ShouldShowDownloadLaterDialog(),
                          base::BindOnce(&OnDownloadDialogClosed, callback));
     }
   } else {
@@ -1086,9 +1128,11 @@ void ChromeDownloadManagerDelegate::GenerateUniqueFileNameDone(
   // with the filename automatically set to be the unique filename.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (result == PathValidationResult::SUCCESS) {
-    if (download_prefs_->PromptForDownload()) {
+    bool show_download_later = ShouldShowDownloadLaterDialog();
+    if (download_prefs_->PromptForDownload() || show_download_later) {
       ShowDownloadDialog(native_window, 0 /* total_bytes */,
                          DownloadLocationDialogType::NAME_CONFLICT, target_path,
+                         show_download_later,
                          base::BindOnce(&OnDownloadDialogClosed, callback));
       return;
     }
@@ -1110,6 +1154,47 @@ void ChromeDownloadManagerDelegate::OnDownloadCanceled(
   DownloadManagerService::OnDownloadCanceled(download, has_no_external_storage);
 }
 #endif  // defined(OS_ANDROID)
+
+bool ChromeDownloadManagerDelegate::ShouldShowDownloadLaterDialog() const {
+  if (!base::FeatureList::IsEnabled(download::features::kDownloadLater) ||
+      profile_->IsOffTheRecord()) {
+    return false;
+  }
+
+  bool require_cellular = base::GetFieldTrialParamByFeatureAsBool(
+      download::features::kDownloadLater,
+      download::features::kDownloadLaterRequireCellular,
+      /*default_value=*/true);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          download::switches::kDownloadLaterDebugOnWifi)) {
+    require_cellular = false;
+  }
+
+  bool on_cellular = network::NetworkConnectionTracker::IsConnectionCellular(
+      network::mojom::ConnectionType(
+          net::NetworkChangeNotifier::GetConnectionType()));
+
+  // Check whether network condition is met.
+  if (require_cellular && !on_cellular)
+    return false;
+
+  // Check lite mode if the download later prompt is never shown before.
+  if (!download_prefs_->HasDownloadLaterPromptShown()) {
+    bool require_lite_mode = base::GetFieldTrialParamByFeatureAsBool(
+        download::features::kDownloadLater,
+        download::features::kDownloadLaterRequireLiteMode,
+        /*default_value=*/false);
+    auto* data_reduction_settings =
+        DataReductionProxyChromeSettingsFactory::GetForBrowserContext(profile_);
+    bool lite_mode_enabled =
+        data_reduction_settings->IsDataReductionProxyEnabled();
+
+    if (require_lite_mode && !lite_mode_enabled)
+      return false;
+  }
+
+  return download_prefs_->PromptDownloadLater();
+}
 
 void ChromeDownloadManagerDelegate::DetermineLocalPath(
     DownloadItem* download,
@@ -1260,8 +1345,12 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
       // blocking of the file. For BLOCKED_TOO_LARGE and
       // BLOCKED_PASSWORD_PROTECTED, we want to display more clear UX, so
       // allow those danger types.
-      if (!IsDangerTypeBlocked(danger_type))
+      if (!IsDangerTypeBlocked(danger_type)) {
         danger_type = download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
+        MaybeReportDangerousDownloadBlocked(
+            download_prefs_->download_restriction(), "DANGEROUS_FILE_TYPE",
+            item->GetTargetFilePath().AsUTF8Unsafe(), item);
+      }
       item->OnContentCheckCompleted(
           danger_type, download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED);
     } else {
@@ -1309,7 +1398,7 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
         target_info->is_filetype_handled_safely)
       DownloadItemModel(item).SetShouldPreferOpeningInBrowser(true);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     if (item->GetOriginalMimeType() == "application/x-x509-user-cert")
       DownloadItemModel(item).SetShouldPreferOpeningInBrowser(true);
 #endif
@@ -1317,6 +1406,9 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
     DownloadItemModel(item).SetDangerLevel(target_info->danger_level);
   }
   if (ShouldBlockFile(target_info->danger_type, item)) {
+    MaybeReportDangerousDownloadBlocked(
+        download_prefs_->download_restriction(), "DANGEROUS_FILE_TYPE",
+        target_info->target_path.AsUTF8Unsafe(), item);
     target_info->result = download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED;
     // A dangerous type would take precedence over the blocking of the file.
     target_info->danger_type = download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
@@ -1334,8 +1426,9 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
   if (target_info->result == download::DOWNLOAD_INTERRUPT_REASON_NONE &&
       (mcs == download::DownloadItem::MixedContentStatus::BLOCK ||
        mcs == download::DownloadItem::MixedContentStatus::WARN)) {
-    auto* infobar_service = InfoBarService::FromWebContents(
-        content::DownloadItemUtils::GetWebContents(item));
+    auto* web_contents = content::DownloadItemUtils::GetWebContents(item);
+    auto* infobar_service =
+        web_contents ? InfoBarService::FromWebContents(web_contents) : nullptr;
     if (infobar_service) {
       // There is always an infobar service except when running in a unit test,
       // and those tests assume no infobar is shown.
@@ -1358,7 +1451,8 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
 
 bool ChromeDownloadManagerDelegate::IsOpenInBrowserPreferreredForFile(
     const base::FilePath& path) {
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_MAC)
   if (path.MatchesExtension(FILE_PATH_LITERAL(".pdf"))) {
     return !download_prefs_->ShouldOpenPdfInSystemReader();
   }
@@ -1471,7 +1565,8 @@ void ChromeDownloadManagerDelegate::CheckDownloadAllowed(
 
 download::QuarantineConnectionCallback
 ChromeDownloadManagerDelegate::GetQuarantineConnectionCallback() {
-  return base::BindRepeating(&ConnectToQuarantineService);
+  return base::BindRepeating(
+      &ChromeDownloadManagerDelegate::ConnectToQuarantineService);
 }
 
 void ChromeDownloadManagerDelegate::OnCheckDownloadAllowedComplete(
@@ -1501,4 +1596,21 @@ const char ChromeDownloadManagerDelegate::SafeBrowsingState::
 base::WeakPtr<ChromeDownloadManagerDelegate>
 ChromeDownloadManagerDelegate::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
+}
+
+// static
+void ChromeDownloadManagerDelegate::ConnectToQuarantineService(
+    mojo::PendingReceiver<quarantine::mojom::Quarantine> receiver) {
+#if defined(OS_WIN)
+  if (base::FeatureList::IsEnabled(quarantine::kOutOfProcessQuarantine)) {
+    content::ServiceProcessHost::Launch(
+        std::move(receiver), content::ServiceProcessHost::Options()
+                                 .WithDisplayName("Quarantine Service")
+                                 .Pass());
+    return;
+  }
+#endif
+
+  mojo::MakeSelfOwnedReceiver(std::make_unique<quarantine::QuarantineImpl>(),
+                              std::move(receiver));
 }

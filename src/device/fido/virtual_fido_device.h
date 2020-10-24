@@ -108,6 +108,14 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // rp is only valid if |is_resident| is true.
     base::Optional<device::PublicKeyCredentialRpEntity> rp;
 
+    // hmac_key is present iff the credential has the hmac_secret extension
+    // enabled. The first element of the pair is the HMAC key for non-UV, and
+    // the second for when UV is used.
+    base::Optional<std::pair<std::array<uint8_t, 32>, std::array<uint8_t, 32>>>
+        hmac_key;
+
+    base::Optional<std::array<uint8_t, 32>> large_blob_key;
+
     DISALLOW_COPY_AND_ASSIGN(RegistrationData);
   };
 
@@ -213,6 +221,20 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // to return from a previous authenticatorCredentialManagement command.
     std::list<cbor::Value::MapValue> pending_registrations;
 
+    // allow_list_sizes contains the lengths of the allow_lists that have been
+    // seen in assertion requests. This is for tests to confirm that the
+    // expected sequence of requests was sent.
+    std::vector<size_t> allow_list_sizes;
+
+    // The large-blob array.
+    std::vector<uint8_t> large_blob;
+
+    // Buffer that gets progressively filled with large blob fragments until
+    // committed.
+    std::vector<uint8_t> large_blob_buffer;
+    uint64_t large_blob_expected_next_offset = 0;
+    uint64_t large_blob_expected_length = 0;
+
     FidoTransportProtocol transport =
         FidoTransportProtocol::kUsbHumanInterfaceDevice;
 
@@ -251,6 +273,19 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
                            base::span<const uint8_t> user_id,
                            base::Optional<std::string> user_name,
                            base::Optional<std::string> user_display_name);
+
+    // Returns the large blob associated with the credential, if any.
+    base::Optional<std::vector<uint8_t>> GetLargeBlob(
+        const RegistrationData& credential);
+
+    // Injects a large blob for the credential. If the credential already has an
+    // associated large blob, replaces it. If the |large_blob| is malformed,
+    // completely replaces its contents.
+    void InjectLargeBlob(RegistrationData* credential,
+                         base::span<const uint8_t> blob);
+
+    // Clears all large blobs resetting |large_blob| to its default value.
+    void ClearLargeBlobs();
 
    private:
     friend class base::RefCounted<State>;

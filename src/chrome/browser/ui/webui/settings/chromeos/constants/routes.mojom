@@ -59,7 +59,7 @@ enum Subpage {
   kSecurityAndSignIn = 304,
   kFingerprint = 305,
   kManageOtherPeople = 306,
-  kKerberos = 307,
+  kKerberosAccounts = 307,
 
   // Device section.
   kPointers = 400,
@@ -68,12 +68,16 @@ enum Subpage {
   kDisplay = 403,
   kStorage = 404,
   kExternalStorage = 405,
-  kDlc = 406,
+  // Note: Value 406 was for deprecated DLC Subpage - see
+  // https://crbug.com/1108093. Do not reuse.
   kPower = 407,
 
   // Personalization section.
   kChangePicture = 500,
   kAmbientMode = 501,
+  // Note: Value 502 was for deprecated kAmbientModePhotos. Do not reuse.
+  kAmbientModeGooglePhotosAlbum = 503,
+  kAmbientModeArtGalleryAlbum = 504,
 
   // Search and Assistant section.
   kAssistant = 600,
@@ -83,6 +87,7 @@ enum Subpage {
   kAppDetails = 701,
   kGooglePlayStore = 702,
   kPluginVmSharedPaths = 703,
+  kPluginVmUsbPreferences = 704,
 
   // Crostini section.
   kCrostiniDetails = 800,
@@ -104,6 +109,9 @@ enum Subpage {
   kManageInputMethods = 1201,
   kSmartInputs = 1202,
   kInputMethodOptions = 1203,
+  kLanguages = 1204,
+  kInput = 1205,
+  kEditDictionary = 1206,
 
   // Files section.
   kNetworkFileShares = 1300,
@@ -154,7 +162,7 @@ const string kSyncDeprecatedAdvancedSubpagePath = "syncSetup/advanced";
 const string kSecurityAndSignInSubpagePath = "lockScreen";
 const string kFingerprintSubpagePath = "lockScreen/fingerprint";
 const string kManageOtherPeopleSubpagePath = "accounts";
-const string kKerberosSubpagePath = "kerberosAccounts";
+const string kKerberosAccountsSubpagePath = "kerberosAccounts";
 
 // Device section.
 const string kDeviceSectionPath = "device";
@@ -164,13 +172,16 @@ const string kStylusSubpagePath = "stylus";
 const string kDisplaySubpagePath = "display";
 const string kStorageSubpagePath = "storage";
 const string kExternalStorageSubpagePath = "storage/externalStoragePreferences";
-const string kDlcSubpagePath = "storage/downloadedContent";
 const string kPowerSubpagePath = "power";
 
 // Personalization section.
 const string kPersonalizationSectionPath = "personalization";
 const string kChangePictureSubpagePath = "changePicture";
 const string kAmbientModeSubpagePath = "ambientMode";
+const string kAmbientModeGooglePhotosAlbumSubpagePath =
+    "ambientMode/photos?topicSource=0";
+const string kAmbientModeArtGalleryAlbumSubpagePath =
+    "ambientMode/photos?topicSource=1";
 
 // Search and Assistant section.
 const string kSearchAndAssistantSectionPath = "osSearch";
@@ -183,6 +194,8 @@ const string kAppDetailsSubpagePath = "app-management/detail";
 const string kGooglePlayStoreSubpagePath = "androidAppsDetails";
 const string kPluginVmSharedPathsSubpagePath =
     "app-management/pluginVm/sharedPaths";
+const string kPluginVmUsbPreferencesSubpagePath =
+    "app-management/pluginVm/sharedUsbDevices";
 
 // Crostini section.
 const string kCrostiniSectionPath = "crostini";
@@ -206,6 +219,9 @@ const string kLanguagesAndInputDetailsSubpagePath = "osLanguages/details";
 const string kManageInputMethodsSubpagePath = "osLanguages/inputMethods";
 const string kSmartInputsSubpagePath = "osLanguages/smartInputs";
 const string kInputMethodOptionsSubpagePath = "osLanguages/inputMethodOptions";
+const string kLanguagesSubpagePath = "osLanguages/languages";
+const string kInputSubpagePath = "osLanguages/input";
+const string kEditDictionarySubpagePath = "osLanguages/editDictionary";
 
 // Files section.
 const string kFilesSectionPath = "files";

@@ -12,6 +12,7 @@ import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.anyOf;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -29,9 +30,9 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.layouts.OverviewModeState;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.features.start_surface.StartSurfaceState;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ViewUtils;
@@ -39,6 +40,10 @@ import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.ui.modaldialog.DialogDismissalCause;
+import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.UiRestriction;
 
 /** Tests {@link ShareButtonController}. */
@@ -119,17 +124,19 @@ public final class ShareButtonControllerTest {
     @MediumTest
     @Feature({"StartSurface"})
     @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:start_surface_variation/single"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    public void testShareButtonInToolbarNotAffectedByOverview() {
+    @Restriction(
+            {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    public void
+    testShareButtonInToolbarNotAffectedByOverview() {
         // Sign in.
-        mAccountManagerTestRule.addAndSignInTestAccount();
+        mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
 
         TestThreadUtils.runOnUiThreadBlocking(
                 ()
                         -> mActivityTestRule.getActivity()
                                    .getStartSurface()
                                    .getController()
-                                   .setOverviewState(OverviewModeState.SHOWING_START));
+                                   .setOverviewState(StartSurfaceState.SHOWING_START));
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> mActivityTestRule.getActivity().getLayoutManager().showOverview(false));
 
@@ -153,8 +160,10 @@ public final class ShareButtonControllerTest {
     @MediumTest
     @Feature({"StartSurface"})
     @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:start_surface_variation/single"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    public void testShareButtonDisabledOnDataUrl() {
+    @Restriction(
+            {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    public void
+    testShareButtonDisabledOnDataUrl() {
         mActivityTestRule.loadUrl("data:,Hello%2C%20World!");
 
         ViewUtils.waitForView(allOf(withId(R.id.optional_toolbar_button),
@@ -170,6 +179,61 @@ public final class ShareButtonControllerTest {
             assertTrue("Share button isnt showing",
                     (View.GONE == experimentalButton.getVisibility()
                             || !shareString.equals(experimentalButton.getContentDescription())));
+        }
+    }
+
+    @Test
+    @MediumTest
+    public void testShareButtonInToolbarIsDisabledOnUpdate() {
+        View experimentalButton = mActivityTestRule.getActivity()
+                                          .getToolbarManager()
+                                          .getToolbarLayoutForTesting()
+                                          .getOptionalButtonView();
+
+        ModalDialogProperties.Controller controller = new ModalDialogProperties.Controller() {
+            @Override
+            public void onClick(PropertyModel model, int buttonType) {}
+
+            @Override
+            public void onDismiss(PropertyModel model, int dismissalCause) {}
+        };
+
+        PropertyModel dialogModel = (new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)
+                                             .with(ModalDialogProperties.CONTROLLER, controller)
+                                             .build());
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.getActivity().getModalDialogManager().showDialog(
+                    dialogModel, ModalDialogType.APP);
+        });
+
+        if (!mButtonExpected) {
+            assertTrue(
+                    experimentalButton == null || View.GONE == experimentalButton.getVisibility());
+        } else {
+            assertNotNull("experimental button not found", experimentalButton);
+            assertEquals(View.VISIBLE, experimentalButton.getVisibility());
+            String shareString =
+                    mActivityTestRule.getActivity().getResources().getString(R.string.share);
+
+            assertTrue(shareString.equals(experimentalButton.getContentDescription()));
+            assertFalse(experimentalButton.isEnabled());
+        }
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.getActivity().getModalDialogManager().dismissDialog(
+                    dialogModel, DialogDismissalCause.UNKNOWN);
+        });
+        if (!mButtonExpected) {
+            assertTrue(
+                    experimentalButton == null || View.GONE == experimentalButton.getVisibility());
+        } else {
+            assertNotNull("experimental button not found", experimentalButton);
+            assertEquals(View.VISIBLE, experimentalButton.getVisibility());
+            String shareString =
+                    mActivityTestRule.getActivity().getResources().getString(R.string.share);
+
+            assertTrue(shareString.equals(experimentalButton.getContentDescription()));
+            assertTrue(experimentalButton.isEnabled());
         }
     }
 

@@ -193,7 +193,7 @@ SynchronousCompositorHost::DemandDrawHwAsync(
     const gfx::Transform& transform_for_tile_priority) {
   invalidate_needs_draw_ = false;
   scoped_refptr<FrameFuture> frame_future =
-      new FrameFuture(rwhva_->GetLocalSurfaceIdAllocation().local_surface_id());
+      new FrameFuture(rwhva_->GetLocalSurfaceId());
   if (!allow_async_draw_) {
     allow_async_draw_ = allow_async_draw_ || IsReadyForSynchronousCall();
     auto frame_ptr = std::make_unique<Frame>();
@@ -464,9 +464,6 @@ void SynchronousCompositorHost::DidPresentCompositorFrames(
 
 void SynchronousCompositorHost::UpdatePresentedFrameToken(
     uint32_t frame_token) {
-  if (!viz::FrameTokenGT(frame_token, last_frame_token_))
-    return;
-  last_frame_token_ = frame_token;
   rwhva_->FrameTokenChangedForSynchronousCompositor(frame_token,
                                                     root_scroll_offset_);
 }

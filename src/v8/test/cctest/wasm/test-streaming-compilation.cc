@@ -31,6 +31,20 @@ class MockPlatform final : public TestPlatform {
     i::V8::SetPlatformForTesting(this);
   }
 
+  ~MockPlatform() {
+    for (auto* job_handle : job_handles_) job_handle->ResetPlatform();
+  }
+
+  std::unique_ptr<v8::JobHandle> PostJob(
+      v8::TaskPriority priority,
+      std::unique_ptr<v8::JobTask> job_task) override {
+    auto orig_job_handle = TestPlatform::PostJob(priority, std::move(job_task));
+    auto job_handle =
+        std::make_unique<MockJobHandle>(std::move(orig_job_handle), this);
+    job_handles_.insert(job_handle.get());
+    return job_handle;
+  }
+
   std::shared_ptr<TaskRunner> GetForegroundTaskRunner(
       v8::Isolate* isolate) override {
     return task_runner_;
@@ -42,7 +56,12 @@ class MockPlatform final : public TestPlatform {
 
   bool IdleTasksEnabled(v8::Isolate* isolate) override { return false; }
 
-  void ExecuteTasks() { task_runner_->ExecuteTasks(); }
+  void ExecuteTasks() {
+    for (auto* job_handle : job_handles_) {
+      if (job_handle->IsValid()) job_handle->Join();
+    }
+    task_runner_->ExecuteTasks();
+  }
 
  private:
   class MockTaskRunner final : public TaskRunner {
@@ -75,7 +94,35 @@ class MockPlatform final : public TestPlatform {
     std::queue<std::unique_ptr<v8::Task>> tasks_;
   };
 
+  class MockJobHandle : public JobHandle {
+   public:
+    explicit MockJobHandle(std::unique_ptr<JobHandle> orig_handle,
+                           MockPlatform* platform)
+        : orig_handle_(std::move(orig_handle)), platform_(platform) {}
+
+    ~MockJobHandle() {
+      if (platform_) platform_->job_handles_.erase(this);
+    }
+
+    void ResetPlatform() { platform_ = nullptr; }
+
+    void NotifyConcurrencyIncrease() override {
+      orig_handle_->NotifyConcurrencyIncrease();
+    }
+    void Join() override { orig_handle_->Join(); }
+    void Cancel() override { orig_handle_->Cancel(); }
+    void CancelAndDetach() override { orig_handle_->CancelAndDetach(); }
+    bool IsCompleted() override { return orig_handle_->IsCompleted(); }
+    bool IsRunning() override { return orig_handle_->IsRunning(); }
+    bool IsValid() override { return orig_handle_->IsValid(); }
+
+   private:
+    std::unique_ptr<JobHandle> orig_handle_;
+    MockPlatform* platform_;
+  };
+
   std::shared_ptr<MockTaskRunner> task_runner_;
+  std::unordered_set<MockJobHandle*> job_handles_;
 };
 
 namespace {
@@ -224,10 +271,11 @@ ZoneBuffer GetValidCompiledModuleBytes(Zone* zone, ZoneBuffer wire_bytes) {
   // Serialize the NativeModule.
   std::shared_ptr<NativeModule> native_module = tester.native_module();
   CHECK(native_module);
+  native_module->compilation_state()->WaitForTopTierFinished();
   i::wasm::WasmSerializer serializer(native_module.get());
   size_t size = serializer.GetSerializedNativeModuleSize();
   std::vector<byte> buffer(size);
-  CHECK(serializer.SerializeNativeModule({buffer.data(), size}));
+  CHECK(serializer.SerializeNativeModule(VectorOf(buffer)));
   ZoneBuffer result(zone, size);
   result.write(buffer.data(), size);
   return result;
@@ -264,10 +312,11 @@ STREAM_TEST(TestAllBytesArriveAOTCompilerFinishesFirst) {
 
 size_t GetFunctionOffset(i::Isolate* isolate, const uint8_t* buffer,
                          size_t size, size_t index) {
-  ModuleResult result =
-      DecodeWasmModule(WasmFeatures::All(), buffer, buffer + size, false,
-                       ModuleOrigin::kWasmOrigin, isolate->counters(),
-                       isolate->wasm_engine()->allocator());
+  ModuleResult result = DecodeWasmModule(
+      WasmFeatures::All(), buffer, buffer + size, false,
+      ModuleOrigin::kWasmOrigin, isolate->counters(),
+      isolate->metrics_recorder(), v8::metrics::Recorder::ContextId::Empty(),
+      DecodingMethod::kSyncStream, isolate->wasm_engine()->allocator());
   CHECK(result.ok());
   const WasmFunction* func = &result.value()->functions[index];
   return func->code.offset();
@@ -315,8 +364,7 @@ ZoneBuffer GetModuleWithInvalidSection(Zone* zone) {
   TestSignatures sigs;
   WasmModuleBuilder builder(zone);
   // Add an invalid global to the module. The decoder will fail there.
-  builder.AddGlobal(kWasmStmt, true,
-                    WasmInitExpr(WasmInitExpr::kGlobalIndex, 12));
+  builder.AddGlobal(kWasmStmt, true, WasmInitExpr::GlobalGet(12));
   {
     WasmFunctionBuilder* f = builder.AddFunction(sigs.i_iii());
     uint8_t code[] = {kExprLocalGet, 0, kExprEnd};
@@ -448,20 +496,20 @@ STREAM_TEST(TestErrorInCodeSectionDetectedByModuleDecoder) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(1 + arraysize(code) * 2),      // section size
-      U32V_1(2),                            // !!! invalid function count !!!
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(1 + arraysize(code) * 2),    // section size
+      U32V_1(2),                          // !!! invalid function count !!!
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -487,20 +535,20 @@ STREAM_TEST(TestErrorInCodeSectionDetectedByStreamingDecoder) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(1 + arraysize(code) * 3),      // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(1 + arraysize(code) * 3),    // section size
+      U32V_1(3),                          // functions count
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -532,18 +580,18 @@ STREAM_TEST(TestErrorInCodeSectionDetectedByCompiler) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
       U32V_1(1 + arraysize(code) * 2 +
              arraysize(invalid_code)),  // section size
       U32V_1(3),                        // functions count
@@ -590,14 +638,14 @@ STREAM_TEST(TestAbortWithinSection1) {
 STREAM_TEST(TestAbortWithinSection2) {
   StreamTester tester;
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
       // Function section is not yet complete.
   };
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -610,11 +658,11 @@ STREAM_TEST(TestAbortWithinSection2) {
 STREAM_TEST(TestAbortAfterSection) {
   StreamTester tester;
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
   };
   tester.OnBytesReceived(bytes, arraysize(bytes));
   tester.RunCompilerTasks();
@@ -627,20 +675,20 @@ STREAM_TEST(TestAbortAfterSection) {
 STREAM_TEST(TestAbortAfterFunctionsCount1) {
   StreamTester tester;
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(20),                           // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(20),                         // section size
+      U32V_1(3),                          // functions count
   };
   tester.OnBytesReceived(bytes, arraysize(bytes));
   tester.RunCompilerTasks();
@@ -653,20 +701,20 @@ STREAM_TEST(TestAbortAfterFunctionsCount1) {
 STREAM_TEST(TestAbortAfterFunctionsCount2) {
   StreamTester tester;
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(20),                           // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(20),                         // section size
+      U32V_1(3),                          // functions count
   };
   tester.OnBytesReceived(bytes, arraysize(bytes));
   tester.stream()->Abort();
@@ -685,20 +733,20 @@ STREAM_TEST(TestAbortAfterFunctionGotCompiled1) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(20),                           // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(20),                         // section size
+      U32V_1(3),                          // functions count
   };
   tester.OnBytesReceived(bytes, arraysize(bytes));
   tester.OnBytesReceived(code, arraysize(code));
@@ -719,20 +767,20 @@ STREAM_TEST(TestAbortAfterFunctionGotCompiled2) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(20),                           // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(20),                         // section size
+      U32V_1(3),                          // functions count
   };
   tester.OnBytesReceived(bytes, arraysize(bytes));
   tester.OnBytesReceived(code, arraysize(code));
@@ -751,20 +799,20 @@ STREAM_TEST(TestAbortAfterCodeSection1) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(1 + arraysize(code) * 3),      // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(1 + arraysize(code) * 3),    // section size
+      U32V_1(3),                          // functions count
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -787,20 +835,20 @@ STREAM_TEST(TestAbortAfterCodeSection2) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(1 + arraysize(code) * 3),      // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(1 + arraysize(code) * 3),    // section size
+      U32V_1(3),                          // functions count
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -827,18 +875,18 @@ STREAM_TEST(TestAbortAfterCompilationError1) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
       U32V_1(1 + arraysize(code) * 2 +
              arraysize(invalid_code)),  // section size
       U32V_1(3),                        // functions count
@@ -869,18 +917,18 @@ STREAM_TEST(TestAbortAfterCompilationError2) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
       U32V_1(1 + arraysize(code) * 2 +
              arraysize(invalid_code)),  // section size
       U32V_1(3),                        // functions count
@@ -940,20 +988,20 @@ STREAM_TEST(TestModuleWithMultipleFunctions) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(1 + arraysize(code) * 3),      // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(1 + arraysize(code) * 3),    // section size
+      U32V_1(3),                          // functions count
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -976,20 +1024,20 @@ STREAM_TEST(TestModuleWithDataSection) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(1 + arraysize(code) * 3),      // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(1 + arraysize(code) * 3),    // section size
+      U32V_1(3),                          // functions count
   };
 
   const uint8_t data_section[] = {
@@ -1035,28 +1083,28 @@ STREAM_TEST(TestModuleWithErrorAfterDataSection) {
   StreamTester tester;
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 1),                        // section size
-      U32V_1(1),                            // functions count
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(6),                            // section size
-      U32V_1(1),                            // functions count
-      U32V_1(4),                            // body size
-      U32V_1(0),                            // locals count
-      kExprLocalGet,                        // some code
-      0,                                    // some code
-      kExprEnd,                             // some code
-      kDataSectionCode,                     // section code
-      U32V_1(1),                            // section size
-      U32V_1(0),                            // data segment count
-      kUnknownSectionCode,                  // section code
-      U32V_1(1),                            // invalid section size
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 1),                      // section size
+      U32V_1(1),                          // functions count
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(6),                          // section size
+      U32V_1(1),                          // functions count
+      U32V_1(4),                          // body size
+      U32V_1(0),                          // locals count
+      kExprLocalGet,                      // some code
+      0,                                  // some code
+      kExprEnd,                           // some code
+      kDataSectionCode,                   // section code
+      U32V_1(1),                          // section size
+      U32V_1(0),                          // data segment count
+      kUnknownSectionCode,                // section code
+      U32V_1(1),                          // invalid section size
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -1103,17 +1151,17 @@ STREAM_TEST(TestFunctionSectionWithoutCodeSection) {
   StreamTester tester;
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -1139,20 +1187,20 @@ STREAM_TEST(TestSetModuleCompiledCallback) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 3),                        // section size
-      U32V_1(3),                            // functions count
-      0,                                    // signature index
-      0,                                    // signature index
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(1 + arraysize(code) * 3),      // section size
-      U32V_1(3),                            // functions count
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 3),                      // section size
+      U32V_1(3),                          // functions count
+      0,                                  // signature index
+      0,                                  // signature index
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(1 + arraysize(code) * 3),    // section size
+      U32V_1(3),                          // functions count
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));
@@ -1169,21 +1217,21 @@ STREAM_TEST(TestSetModuleCompiledCallback) {
 // section is not present at the time the error is detected.
 STREAM_TEST(TestCompileErrorFunctionName) {
   const uint8_t bytes_module_with_code[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(2),                            // section size
-      U32V_1(1),                            // functions count
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(4),                            // section size
-      U32V_1(1),                            // functions count
-      2,                                    // body size
-      0,                                    // local definitions count
-      kExprNop,                             // body
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(2),                          // section size
+      U32V_1(1),                          // functions count
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(4),                          // section size
+      U32V_1(1),                          // functions count
+      2,                                  // body size
+      0,                                  // local definitions count
+      kExprNop,                           // body
   };
 
   const uint8_t bytes_names[] = {
@@ -1232,17 +1280,17 @@ STREAM_TEST(TestSetModuleCodeSection) {
   };
 
   const uint8_t bytes[] = {
-      WASM_MODULE_HEADER,                   // module header
-      kTypeSectionCode,                     // section code
-      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),     // section size
-      U32V_1(1),                            // type count
-      SIG_ENTRY_x_x(kLocalI32, kLocalI32),  // signature entry
-      kFunctionSectionCode,                 // section code
-      U32V_1(1 + 1),                        // section size
-      U32V_1(1),                            // functions count
-      0,                                    // signature index
-      kCodeSectionCode,                     // section code
-      U32V_1(arraysize(code)),              // section size
+      WASM_MODULE_HEADER,                 // module header
+      kTypeSectionCode,                   // section code
+      U32V_1(1 + SIZEOF_SIG_ENTRY_x_x),   // section size
+      U32V_1(1),                          // type count
+      SIG_ENTRY_x_x(kI32Code, kI32Code),  // signature entry
+      kFunctionSectionCode,               // section code
+      U32V_1(1 + 1),                      // section size
+      U32V_1(1),                          // functions count
+      0,                                  // signature index
+      kCodeSectionCode,                   // section code
+      U32V_1(arraysize(code)),            // section size
   };
 
   tester.OnBytesReceived(bytes, arraysize(bytes));

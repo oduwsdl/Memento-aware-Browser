@@ -14,6 +14,7 @@
 #include "base/stl_util.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/crosapi/browser_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
@@ -31,8 +32,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/grit/chrome_unscaled_resources.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_util.h"
+#include "components/exo/shell_surface_base.h"
 #include "components/services/app_service/public/cpp/instance.h"
 #include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -40,6 +43,8 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -62,21 +67,34 @@ AppServiceAppWindowLauncherController::AppServiceAppWindowLauncherController(
       app_service_instance_helper_(
           std::make_unique<AppServiceInstanceRegistryHelper>(this)) {
   aura::Env::GetInstance()->AddObserver(this);
-  DCHECK(proxy_);
   Observe(&proxy_->InstanceRegistry());
 
   if (arc::IsArcAllowedForProfile(owner->profile()))
     arc_tracker_ = std::make_unique<AppServiceAppWindowArcTracker>(this);
 
-  if (crostini::CrostiniFeatures::Get()->IsUIAllowed(owner->profile()))
+  if (crostini::CrostiniFeatures::Get()->IsUIAllowed(owner->profile())) {
     crostini_tracker_ =
         std::make_unique<AppServiceAppWindowCrostiniTracker>(this);
+  }
 
   profile_list_.push_back(owner->profile());
 
   for (auto* browser : *BrowserList::GetInstance()) {
-    if (browser && browser->window() && browser->window()->GetNativeWindow())
+    if (browser && browser->window() && browser->window()->GetNativeWindow()) {
       observed_windows_.Add(browser->window()->GetNativeWindow());
+
+      // Observe the browser tabs
+      TabStripModel* tab_strip = browser->tab_strip_model();
+      for (int i = 0; i < tab_strip->count(); ++i) {
+        auto* tab = tab_strip->GetWebContentsAt(i);
+        if (!tab)
+          continue;
+        aura::Window* window = tab->GetNativeView();
+        if (window) {
+          observed_windows_.Add(window);
+        }
+      }
+    }
   }
 }
 
@@ -88,9 +106,11 @@ AppServiceAppWindowLauncherController::
   for (auto* profile : profile_list_) {
     apps::AppServiceProxy* proxy =
         apps::AppServiceProxyFactory::GetForProfile(profile);
-    DCHECK(proxy);
     proxy->InstanceRegistry().RemoveObserver(this);
   }
+
+  app_service_instance_helper_.reset();
+  observed_windows_.RemoveAll();
 }
 
 AppWindowLauncherItemController*
@@ -111,7 +131,6 @@ AppServiceAppWindowLauncherController::ControllerForWindow(
 void AppServiceAppWindowLauncherController::ActiveUserChanged(
     const std::string& user_email) {
   proxy_ = apps::AppServiceProxyFactory::GetForProfile(owner()->profile());
-  DCHECK(proxy_);
   // Deactivates the running app windows in InstanceRegistry for the inactive
   // user, and activates the app windows for the active user.
   for (auto* window : window_list_) {
@@ -135,7 +154,6 @@ void AppServiceAppWindowLauncherController::AdditionalUserAddedToSession(
     Profile* profile) {
   // Each users InstanceRegister needs to be observed.
   proxy_ = apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy_);
   proxy_->InstanceRegistry().AddObserver(this);
   profile_list_.push_back(profile);
 
@@ -235,6 +253,8 @@ void AppServiceAppWindowLauncherController::OnWindowDestroying(
   observed_windows_.Remove(window);
   if (arc_tracker_)
     arc_tracker_->RemoveCandidateWindow(window);
+  if (crostini_tracker_)
+    crostini_tracker_->OnWindowDestroying(window);
 
   // When the window is destroyed, we should search all proxies, because the
   // window could be teleported from the inactive user, and isn't saved in the
@@ -419,6 +439,19 @@ AppWindowBase* AppServiceAppWindowLauncherController::GetAppWindow(
   return aura_window_to_app_window_[window].get();
 }
 
+void AppServiceAppWindowLauncherController::ObserveWindow(
+    aura::Window* window) {
+  if (!window || observed_windows_.IsObserving(window))
+    return;
+  observed_windows_.Add(window);
+}
+
+bool AppServiceAppWindowLauncherController::IsObservingWindow(
+    aura::Window* window) {
+  DCHECK(window);
+  return observed_windows_.IsObserving(window);
+}
+
 std::vector<aura::Window*>
 AppServiceAppWindowLauncherController::GetArcWindows() {
   std::vector<aura::Window*> arc_windows;
@@ -479,6 +512,14 @@ void AppServiceAppWindowLauncherController::RegisterWindow(
     }
 
     AddWindowToShelf(window, shelf_id);
+
+    if (plugin_vm::IsPluginVmAppWindow(window)) {
+      // Set an icon for the Plugin VM app window.
+      static_cast<exo::ShellSurfaceBase*>(
+          views::Widget::GetWidgetForNativeWindow(window)->widget_delegate())
+          ->SetIcon(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+              IDR_LOGO_PLUGIN_VM_DEFAULT_192));
+    }
   }
 }
 
@@ -557,6 +598,9 @@ void AppServiceAppWindowLauncherController::OnItemDelegateDiscarded(
 
 ash::ShelfID AppServiceAppWindowLauncherController::GetShelfId(
     aura::Window* window) const {
+  if (crosapi::browser_util::IsLacrosWindow(window))
+    return ash::ShelfID(extension_misc::kLacrosAppId);
+
   if (crostini_tracker_) {
     std::string shelf_app_id;
     shelf_app_id = crostini_tracker_->GetShelfAppId(window);

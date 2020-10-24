@@ -17,13 +17,13 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_client.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
@@ -54,6 +54,8 @@ class OmniboxView {
   };
 
   virtual ~OmniboxView();
+  OmniboxView(const OmniboxView&) = delete;
+  OmniboxView& operator=(const OmniboxView&) = delete;
 
   // Used by the automation system for getting at the model from the view.
   OmniboxEditModel* model() { return model_.get(); }
@@ -91,10 +93,9 @@ class OmniboxView {
 
   // Returns the icon to display as the location icon. If a favicon is
   // available, |on_icon_fetched| may be called later asynchronously.
-  gfx::ImageSkia GetIcon(int dip_size,
+  ui::ImageModel GetIcon(int dip_size,
                          SkColor color,
-                         IconFetchedCallback on_icon_fetched,
-                         bool is_memento) const;
+                         IconFetchedCallback on_icon_fetched) const;
 
   // The user text is the text the user has manually keyed in.  When present,
   // this is shown in preference to the permanent text; hitting escape will
@@ -165,7 +166,8 @@ class OmniboxView {
 
   // Updates the accessibility state by enunciating any on-focus text.
   virtual void SetAccessibilityLabel(const base::string16& display_text,
-                                     const AutocompleteMatch& match) {}
+                                     const AutocompleteMatch& match,
+                                     bool notify_text_changed) {}
 
   // Called when the temporary text in the model may have changed.
   // |display_text| is the new text to show; |match_type| is the type of the
@@ -179,14 +181,13 @@ class OmniboxView {
                                            bool notify_text_changed) = 0;
 
   // Called when the inline autocomplete text in the model may have changed.
-  // |display_text| is the new text to show. |user_text_start| and
-  // |user_text_length| are the start and length of the user input portion of
-  // the text (not including the inline autocompletion or prefix inline
-  // autocompletion). If rich autocompletion is enabled, |additional_text| is
-  // displayed in a non-editable views::Label adjacent to the omnibox.
+  // |display_text| is the new text to show. |selection| indicates the
+  // autocompleted portions which should be selected. |user_text_length| is the
+  // length of the user input portion of the text (not including the
+  // autocompletion).
   virtual void OnInlineAutocompleteTextMaybeChanged(
       const base::string16& display_text,
-      size_t user_text_start,
+      std::vector<gfx::Range> selections,
       size_t user_text_length) = 0;
 
   // Called when the inline autocomplete text in the model has been cleared.
@@ -322,8 +323,6 @@ class OmniboxView {
   // |model_| can be NULL in tests.
   std::unique_ptr<OmniboxEditModel> model_;
   OmniboxEditController* controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(OmniboxView);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_VIEW_H_

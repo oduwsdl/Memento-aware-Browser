@@ -14,6 +14,7 @@
 #include "ash/login/ui/login_user_view.h"
 #include "ash/login/ui/public_account_warning_dialog.h"
 #include "ash/login/ui/views_utils.h"
+#include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/login_types.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
@@ -22,6 +23,8 @@
 #include "base/bind_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
@@ -29,7 +32,6 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 
@@ -246,7 +248,7 @@ class MonitoringWarningView : public NonAccessibleView {
   enum class WarningType { kNone, kSoftWarning, kFullWarning };
 
   void UpdateForUser(const LoginUserInfo& user) {
-    enterprise_domain_ = user.public_account_info->device_enterprise_domain;
+    device_manager_ = user.public_account_info->device_enterprise_manager;
     UpdateLabel();
   }
 
@@ -261,19 +263,19 @@ class MonitoringWarningView : public NonAccessibleView {
   void UpdateLabel() {
     // Call sequence of UpdateForUser() and SetWarningType() is not clear.
     // In case SetWarningType is called first there is a need to wait for
-    // enterprise_domain_ is set.
-    if (warning_type_ == WarningType::kNone || !enterprise_domain_.has_value())
+    // device_manager_ is set.
+    if (warning_type_ == WarningType::kNone || !device_manager_.has_value())
       return;
     base::string16 label_text;
     if (warning_type_ == WarningType::kFullWarning) {
       label_text = l10n_util::GetStringFUTF16(
           IDS_ASH_LOGIN_MANAGED_SESSION_MONITORING_FULL_WARNING,
-          base::UTF8ToUTF16(enterprise_domain_.value()));
+          base::UTF8ToUTF16(device_manager_.value()));
       image_->SetVisible(true);
     } else {
       label_text = l10n_util::GetStringFUTF16(
           IDS_ASH_LOGIN_MANAGED_SESSION_MONITORING_SOFT_WARNING,
-          base::UTF8ToUTF16(enterprise_domain_.value()));
+          base::UTF8ToUTF16(device_manager_.value()));
       image_->SetVisible(false);
     }
     label_->SetText(label_text);
@@ -282,7 +284,7 @@ class MonitoringWarningView : public NonAccessibleView {
   friend class LoginExpandedPublicAccountView::TestApi;
 
   WarningType warning_type_;
-  base::Optional<std::string> enterprise_domain_;
+  base::Optional<std::string> device_manager_;
   views::ImageView* image_;
   views::Label* label_;
 
@@ -290,12 +292,9 @@ class MonitoringWarningView : public NonAccessibleView {
 };
 
 // Implements the right part of the expanded public session view.
-class RightPaneView : public NonAccessibleView,
-                      public views::ButtonListener,
-                      public views::StyledLabelListener {
+class RightPaneView : public NonAccessibleView, public views::ButtonListener {
  public:
-  explicit RightPaneView(const base::RepeatingClosure& on_learn_more_tapped)
-      : on_learn_more_tapped_(on_learn_more_tapped) {
+  explicit RightPaneView(const base::RepeatingClosure& on_learn_more_tapped) {
     SetPreferredSize(
         gfx::Size(kExpandedViewWidthDp / 2, kExpandedViewHeightDp));
     SetBorder(views::CreateEmptyBorder(gfx::Insets(kHorizontalMarginPaneDp)));
@@ -307,29 +306,33 @@ class RightPaneView : public NonAccessibleView,
         kSpacingBetweenLabelsDp));
     AddChildView(labels_view_);
 
-    monitoring_warning_view_ = new MonitoringWarningView();
-    labels_view_->AddChildView(monitoring_warning_view_);
+    const bool enable_warning = Shell::Get()->local_state()->GetBoolean(
+        prefs::kManagedGuestSessionPrivacyWarningsEnabled);
+    if (enable_warning) {
+      monitoring_warning_view_ = new MonitoringWarningView();
+      labels_view_->AddChildView(monitoring_warning_view_);
+    }
 
     const base::string16 link = l10n_util::GetStringUTF16(IDS_ASH_LEARN_MORE);
     size_t offset;
     const base::string16 text = l10n_util::GetStringFUTF16(
         IDS_ASH_LOGIN_PUBLIC_ACCOUNT_SIGNOUT_REMINDER, link, &offset);
-    learn_more_label_ = new views::StyledLabel(text, this);
+    learn_more_label_ =
+        labels_view_->AddChildView(std::make_unique<views::StyledLabel>());
+    learn_more_label_->SetText(text);
 
     views::StyledLabel::RangeStyleInfo style;
-    style.custom_font = learn_more_label_->GetDefaultFontList().Derive(
+    style.custom_font = learn_more_label_->GetFontList().Derive(
         0, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL);
     style.override_color = SK_ColorWHITE;
     learn_more_label_->AddStyleRange(gfx::Range(0, offset), style);
 
     views::StyledLabel::RangeStyleInfo link_style =
-        views::StyledLabel::RangeStyleInfo::CreateForLink();
+        views::StyledLabel::RangeStyleInfo::CreateForLink(on_learn_more_tapped);
     link_style.override_color = kPublicSessionBlueColor;
     learn_more_label_->AddStyleRange(gfx::Range(offset, offset + link.length()),
                                      link_style);
     learn_more_label_->SetAutoColorReadabilityEnabled(false);
-
-    labels_view_->AddChildView(learn_more_label_);
 
     // Create button to show/hide advanced view.
     advanced_view_button_ = new SelectionButtonView(
@@ -475,18 +478,11 @@ class RightPaneView : public NonAccessibleView,
     }
   }
 
-  // "Learn more" is clicked to show additional information of what the device
-  // admin may monitor.
-  void StyledLabelLinkClicked(views::StyledLabel* label,
-                              const gfx::Range& range,
-                              int event_flags) override {
-    on_learn_more_tapped_.Run();
-  }
-
   void UpdateForUser(const LoginUserInfo& user) {
     DCHECK_EQ(user.basic_user_info.type,
               user_manager::USER_TYPE_PUBLIC_ACCOUNT);
-    monitoring_warning_view_->UpdateForUser(user);
+    if (monitoring_warning_view_)
+      monitoring_warning_view_->UpdateForUser(user);
     current_user_ = user;
     if (!language_changed_by_user_)
       selected_language_item_.value = user.public_account_info->default_locale;
@@ -510,10 +506,11 @@ class RightPaneView : public NonAccessibleView,
   }
 
   void SetShowFullManagementDisclosure(bool show_full_management_disclosure) {
-    monitoring_warning_view_->SetWarningType(
-        show_full_management_disclosure
-            ? MonitoringWarningView::WarningType::kFullWarning
-            : MonitoringWarningView::WarningType::kSoftWarning);
+    if (monitoring_warning_view_)
+      monitoring_warning_view_->SetWarningType(
+          show_full_management_disclosure
+              ? MonitoringWarningView::WarningType::kFullWarning
+              : MonitoringWarningView::WarningType::kSoftWarning);
   }
 
   void OnLanguageSelected(LoginMenuView::Item item) {
@@ -646,8 +643,6 @@ class RightPaneView : public NonAccessibleView,
   bool show_advanced_changed_by_user_ = false;
   bool language_changed_by_user_ = false;
 
-  base::RepeatingClosure on_learn_more_tapped_;
-
   base::WeakPtrFactory<RightPaneView> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(RightPaneView);
@@ -715,16 +710,21 @@ LoginExpandedPublicAccountView::TestApi::selected_keyboard_item() {
 
 views::ImageView*
 LoginExpandedPublicAccountView::TestApi::monitoring_warning_icon() {
-  return view_->right_pane_->monitoring_warning_view_->image_;
+  if (view_->right_pane_->monitoring_warning_view_)
+    return view_->right_pane_->monitoring_warning_view_->image_;
+  return nullptr;
 }
 
 views::Label*
 LoginExpandedPublicAccountView::TestApi::monitoring_warning_label() {
-  return view_->right_pane_->monitoring_warning_view_->label_;
+  if (view_->right_pane_->monitoring_warning_view_)
+    return view_->right_pane_->monitoring_warning_view_->label_;
+  return nullptr;
 }
 
 void LoginExpandedPublicAccountView::TestApi::ResetUserForTest() {
-  view_->right_pane_->monitoring_warning_view_->enterprise_domain_.reset();
+  if (view_->right_pane_->monitoring_warning_view_)
+    view_->right_pane_->monitoring_warning_view_->device_manager_.reset();
 }
 
 bool LoginExpandedPublicAccountView::TestApi::SelectLanguage(
@@ -812,6 +812,13 @@ LoginExpandedPublicAccountView::LoginExpandedPublicAccountView(
 }
 
 LoginExpandedPublicAccountView::~LoginExpandedPublicAccountView() = default;
+
+// static
+void LoginExpandedPublicAccountView::RegisterLocalStatePrefs(
+    PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(
+      prefs::kManagedGuestSessionPrivacyWarningsEnabled, true);
+}
 
 void LoginExpandedPublicAccountView::ProcessPressedEvent(
     const ui::LocatedEvent* event) {

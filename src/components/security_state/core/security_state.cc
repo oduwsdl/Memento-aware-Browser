@@ -24,32 +24,20 @@ namespace {
 // For nonsecure pages, returns a SecurityLevel based on the
 // provided information and the kMarkHttpAsFeature field trial.
 SecurityLevel GetSecurityLevelForNonSecureFieldTrial(
-    bool is_error_page,
     const InsecureInputEventData& input_events) {
   if (base::FeatureList::IsEnabled(features::kMarkHttpAsFeature)) {
     std::string parameter = base::GetFieldTrialParamValueByFeature(
         features::kMarkHttpAsFeature,
         features::kMarkHttpAsFeatureParameterName);
-
     if (parameter == features::kMarkHttpAsParameterDangerous) {
       return DANGEROUS;
     }
-    if (parameter == features::kMarkHttpAsParameterDangerWarning) {
-      return WARNING;
+    if (parameter ==
+        features::kMarkHttpAsParameterWarningAndDangerousOnFormEdits) {
+      return input_events.insecure_field_edited ? DANGEROUS : WARNING;
     }
   }
-
-  // Default to dangerous on editing form fields and otherwise
-  // warning.
-  return input_events.insecure_field_edited ? DANGEROUS : WARNING;
-}
-
-SecurityLevel GetSecurityLevelForDisplayedMixedContent(bool suppress_warning) {
-  if (base::FeatureList::IsEnabled(features::kPassiveMixedContentWarning) &&
-      !suppress_warning) {
-    return kDisplayedInsecureContentWarningLevel;
-  }
-  return kDisplayedInsecureContentLevel;
+  return WARNING;
 }
 
 std::string GetHistogramSuffixForSecurityLevel(
@@ -190,7 +178,6 @@ SecurityLevel GetSecurityLevel(
       }
 #endif  // !defined(OS_ANDROID)
       return GetSecurityLevelForNonSecureFieldTrial(
-          visible_security_state.is_error_page,
           visible_security_state.insecure_input_events);
     }
     return NONE;
@@ -223,11 +210,11 @@ SecurityLevel GetSecurityLevel(
   DCHECK(!visible_security_state.ran_content_with_cert_errors);
 
   if (visible_security_state.displayed_mixed_content) {
-    return GetSecurityLevelForDisplayedMixedContent(
-        visible_security_state.should_suppress_mixed_content_warning);
+    return kDisplayedInsecureContentWarningLevel;
   }
 
-  if (visible_security_state.contained_mixed_form ||
+  if ((visible_security_state.contained_mixed_form &&
+       !visible_security_state.should_treat_displayed_mixed_forms_as_secure) ||
       visible_security_state.displayed_content_with_cert_errors) {
     return kDisplayedInsecureContentLevel;
   }
@@ -266,9 +253,6 @@ VisibleSecurityState::VisibleSecurityState()
       connection_info_initialized(false),
       cert_status(0),
       connection_status(0),
-      memento_status(false),
-      memento_datetime(""),
-      mixed_memento(false),
       key_exchange_group(0),
       peer_signature_algorithm(0),
       displayed_mixed_content(false),
@@ -283,7 +267,7 @@ VisibleSecurityState::VisibleSecurityState()
       is_reader_mode(false),
       connection_used_legacy_tls(false),
       should_suppress_legacy_tls_warning(false),
-      should_suppress_mixed_content_warning(false) {}
+      should_treat_displayed_mixed_forms_as_secure(false) {}
 
 VisibleSecurityState::VisibleSecurityState(const VisibleSecurityState& other) =
     default;
@@ -341,10 +325,7 @@ bool IsSHA1InChain(const VisibleSecurityState& visible_security_state) {
 // TODO(crbug.com/1015626): Clean this up once the experiment is fully
 // launched.
 bool ShouldShowDangerTriangleForWarningLevel() {
-  return base::GetFieldTrialParamValueByFeature(
-             features::kMarkHttpAsFeature,
-             features::kMarkHttpAsFeatureParameterName) ==
-         security_state::features::kMarkHttpAsParameterDangerWarning;
+  return true;
 }
 
 }  // namespace security_state

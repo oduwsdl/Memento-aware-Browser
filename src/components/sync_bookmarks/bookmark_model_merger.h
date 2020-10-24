@@ -13,7 +13,7 @@
 
 #include "base/macros.h"
 #include "components/sync/base/unique_position.h"
-#include "components/sync/engine/non_blocking_sync_common.h"
+#include "components/sync/engine/commit_and_get_updates_types.h"
 
 namespace bookmarks {
 class BookmarkModel;
@@ -68,8 +68,10 @@ class BookmarkModelMerger {
     // |updates_per_parent_id| must not be null. All updates
     // |*updates_per_parent_id| must represent valid updates. Updates
     // corresponding from descendant nodes are moved away from
-    // |*updates_per_parent_id|.
+    // |*updates_per_parent_id|. |max_depth| is the max tree depth to sync
+    // after which content is silently ignored.
     static RemoteTreeNode BuildTree(syncer::UpdateResponseData update,
+                                    size_t max_depth,
                                     UpdatesPerParentId* updates_per_parent_id);
 
     ~RemoteTreeNode();

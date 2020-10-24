@@ -49,17 +49,12 @@ class ClientSideDetectionHost;
 
 // Main service which pushes models to the renderers, responds to classification
 // requests. This owns two ModelLoader objects.
-class ClientSideDetectionService : public content::NotificationObserver,
-                                   public KeyedService {
+class ClientSideDetectionService : public KeyedService {
  public:
   // void(GURL phishing_url, bool is_phishing).
   typedef base::Callback<void(GURL, bool)> ClientReportPhishingRequestCallback;
 
   explicit ClientSideDetectionService(Profile* profile);
-
-  // Create a ClientSideDetectionService with no associated profile, for tests.
-  explicit ClientSideDetectionService(
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader);
   ~ClientSideDetectionService() override;
 
   void Shutdown() override;
@@ -75,11 +70,6 @@ class ClientSideDetectionService : public content::NotificationObserver,
   void OnURLLoaderComplete(network::SimpleURLLoader* url_loader,
                            std::unique_ptr<std::string> response_body);
 
-  // content::NotificationObserver overrides:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
-
   // Sends a request to the SafeBrowsing servers with the ClientPhishingRequest.
   // The URL scheme of the |url()| in the request should be HTTP.  This method
   // takes ownership of the |verdict| as well as the |callback| and calls the
@@ -92,7 +82,7 @@ class ClientSideDetectionService : public content::NotificationObserver,
   // SendClientReportPhishingRequest() was called.  You may set |callback| to
   // NULL if you don't care about the server verdict.
   virtual void SendClientReportPhishingRequest(
-      ClientPhishingRequest* verdict,
+      std::unique_ptr<ClientPhishingRequest> verdict,
       bool is_extended_reporting,
       bool is_enhanced_protection,
       const ClientReportPhishingRequestCallback& callback);
@@ -124,6 +114,10 @@ class ClientSideDetectionService : public content::NotificationObserver,
 
   // Get the model status for the given client-side model.
   ModelLoader::ClientModelStatus GetLastModelStatus();
+
+  // Returns the model string. Virtual so that mock implementation can override
+  // it.
+  virtual std::string GetModelStr();
 
   // Makes ModelLoaders be constructed by calling |factory| rather than the
   // default constructor.
@@ -173,7 +167,7 @@ class ClientSideDetectionService : public content::NotificationObserver,
   // Starts sending the request to the client-side detection frontends.
   // This method takes ownership of both pointers.
   void StartClientReportPhishingRequest(
-      ClientPhishingRequest* verdict,
+      std::unique_ptr<ClientPhishingRequest> request,
       bool is_extended_reporting,
       bool is_enhanced_protection,
       const ClientReportPhishingRequestCallback& callback);
@@ -234,8 +228,6 @@ class ClientSideDetectionService : public content::NotificationObserver,
 
   // The URLLoaderFactory we use to issue network requests.
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
-
-  content::NotificationRegistrar registrar_;
 
   // PrefChangeRegistrar used to track when the Safe Browsing pref changes.
   PrefChangeRegistrar pref_change_registrar_;

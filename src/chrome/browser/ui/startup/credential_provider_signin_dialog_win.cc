@@ -37,7 +37,8 @@ namespace {
 bool g_enable_gcpw_signin_during_tests = false;
 #endif  // BUILDFLAG(CAN_TEST_GCPW_SIGNIN_STARTUP)
 
-// This message must match the one sent in inline_login.js: sendLSTFetchResults.
+// This message must match the one sent in inline_login_app.js:
+// sendLSTFetchResults.
 constexpr char kLSTFetchResultsMessage[] = "lstFetchResults";
 
 void WriteResultToHandle(const base::Value& result) {
@@ -316,7 +317,7 @@ class CredentialProviderWebDialogDelegate : public ui::WebDialogDelegate {
   }
 
   ui::ModalType GetDialogModalType() const override {
-    return ui::MODAL_TYPE_SYSTEM;
+    return ui::MODAL_TYPE_WINDOW;
   }
 
   base::string16 GetDialogTitle() const override { return base::string16(); }

@@ -8,8 +8,9 @@
 #include <memory>
 
 #include "src/base/platform/platform.h"
-#include "src/heap/cppgc/heap-page-inl.h"
+#include "src/heap/cppgc/heap-page.h"
 #include "src/heap/cppgc/heap.h"
+#include "src/heap/cppgc/liveness-broker.h"
 
 namespace cppgc {
 namespace internal {
@@ -24,7 +25,7 @@ void PreFinalizerRegistrationDispatcher::RegisterPrefinalizer(
 }
 
 bool PreFinalizerRegistrationDispatcher::PreFinalizer::operator==(
-    const PreFinalizer& other) {
+    const PreFinalizer& other) const {
   return (object == other.object) && (callback == other.callback);
 }
 

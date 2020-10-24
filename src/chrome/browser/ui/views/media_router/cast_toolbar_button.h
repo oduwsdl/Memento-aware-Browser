@@ -6,12 +6,11 @@
 #define CHROME_BROWSER_UI_VIEWS_MEDIA_ROUTER_CAST_TOOLBAR_BUTTON_H_
 
 #include "base/macros.h"
-#include "chrome/browser/media/router/issues_observer.h"
 #include "chrome/browser/ui/toolbar/media_router_action_controller.h"
 #include "chrome/browser/ui/toolbar/media_router_contextual_menu.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
+#include "components/media_router/browser/issues_observer.h"
 #include "ui/events/event.h"
-#include "ui/views/controls/button/button.h"
 
 class Browser;
 
@@ -26,7 +25,6 @@ class MediaRouter;
 // - There is an active local cast session.
 // - There is an outstanding issue.
 class CastToolbarButton : public ToolbarButton,
-                          public views::ButtonListener,
                           public MediaRouterActionController::Observer,
                           public IssuesObserver,
                           public MediaRoutesObserver {
@@ -37,9 +35,6 @@ class CastToolbarButton : public ToolbarButton,
                     MediaRouter* media_router,
                     std::unique_ptr<MediaRouterContextualMenu> context_menu);
   ~CastToolbarButton() override;
-
-  // Updates the icon image.
-  void UpdateIcon();
 
   // MediaRouterActionController::Observer:
   void ShowIcon() override;
@@ -60,23 +55,19 @@ class CastToolbarButton : public ToolbarButton,
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // views::View
-  void AddedToWidget() override;
+  void UpdateIcon() override;
 
   MediaRouterContextualMenu* context_menu_for_test() {
     return context_menu_.get();
   }
 
  private:
-  const gfx::VectorIcon& GetCurrentIcon() const;
-
   MediaRouterActionController* GetActionController() const;
 
-  SkColor GetIconColor(ButtonState state, const gfx::VectorIcon* icon_id) const;
+  // Updates insets per touch ui mode.
+  void UpdateLayoutInsetDelta();
+
+  void ButtonPressed();
 
   Browser* const browser_;
   Profile* const profile_;

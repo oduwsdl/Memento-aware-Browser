@@ -14,9 +14,9 @@ void TestAppRegistryController::Init(base::OnceClosure callback) {
   std::move(callback).Run();
 }
 
-void TestAppRegistryController::SetAppUserDisplayMode(
-    const AppId& app_id,
-    DisplayMode display_mode) {}
+void TestAppRegistryController::SetAppUserDisplayMode(const AppId& app_id,
+                                                      DisplayMode display_mode,
+                                                      bool is_user_action) {}
 
 void TestAppRegistryController::SetAppIsDisabled(const AppId& app_id,
                                                  bool is_disabled) {}
@@ -30,6 +30,9 @@ void TestAppRegistryController::SetAppLastLaunchTime(const AppId& app_id,
 
 void TestAppRegistryController::SetAppInstallTime(const AppId& app_id,
                                                   const base::Time& time) {}
+
+void TestAppRegistryController::SetAppRunOnOsLoginMode(const AppId& app_id,
+                                                       RunOnOsLoginMode mode) {}
 
 WebAppSyncBridge* TestAppRegistryController::AsWebAppSyncBridge() {
   return nullptr;

@@ -166,8 +166,8 @@ Polymer({
         return this.i18n('siteSettingsInsecureContent');
       case ContentSettingsTypes.BLUETOOTH_SCANNING:
         return this.i18n('siteSettingsBluetoothScanning');
-      case ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE:
-        return this.i18n('siteSettingsNativeFileSystemWrite');
+      case ContentSettingsTypes.FILE_SYSTEM_WRITE:
+        return this.i18n('siteSettingsFileSystemWrite');
       case ContentSettingsTypes.HID_DEVICES:
         return this.i18n('siteSettingsHidDevices');
       case ContentSettingsTypes.AR:
@@ -176,6 +176,10 @@ Polymer({
         return this.i18n('siteSettingsVr');
       case ContentSettingsTypes.WINDOW_PLACEMENT:
         return this.i18n('siteSettingsWindowPlacement');
+      case ContentSettingsTypes.FONT_ACCESS:
+        return this.i18n('fonts');
+      case ContentSettingsTypes.IDLE_DETECTION:
+        return this.i18n('siteSettingsIdleDetection');
       default:
         return '';
     }
@@ -325,12 +329,12 @@ Polymer({
       /** @type {{hide: Function}} */ (tooltip).hide();
       target.removeEventListener('mouseleave', hide);
       target.removeEventListener('blur', hide);
-      target.removeEventListener('tap', hide);
+      target.removeEventListener('click', hide);
       tooltip.removeEventListener('mouseenter', hide);
     };
     target.addEventListener('mouseleave', hide);
     target.addEventListener('blur', hide);
-    target.addEventListener('tap', hide);
+    target.addEventListener('click', hide);
     tooltip.addEventListener('mouseenter', hide);
 
     tooltip.show();

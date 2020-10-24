@@ -39,7 +39,7 @@ std::unique_ptr<views::TooltipIcon> CreateInfoIcon() {
       l10n_util::GetStringUTF16(IDS_COOKIE_CONTROLS_HELP));
   explanation_tooltip->set_bubble_width(
       ChromeLayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_BUBBLE_PREFERRED_WIDTH));
+          views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   explanation_tooltip->set_anchor_point_arrow(
       views::BubbleBorder::Arrow::TOP_RIGHT);
   return explanation_tooltip;
@@ -76,9 +76,10 @@ CookieControlsBubbleView* CookieControlsBubbleView::GetCookieBubble() {
 void CookieControlsBubbleView::OnStatusChanged(
     CookieControlsStatus new_status,
     CookieControlsEnforcement new_enforcement,
+    int allowed_cookies,
     int blocked_cookies) {
-  if (status_ == new_status) {
-    OnBlockedCookiesCountChanged(blocked_cookies);
+  if (status_ == new_status && enforcement_ == new_enforcement) {
+    OnCookiesCountChanged(allowed_cookies, blocked_cookies);
     return;
   }
   if (new_status != CookieControlsStatus::kEnabled)
@@ -89,8 +90,8 @@ void CookieControlsBubbleView::OnStatusChanged(
   UpdateUi();
 }
 
-void CookieControlsBubbleView::OnBlockedCookiesCountChanged(
-    int blocked_cookies) {
+void CookieControlsBubbleView::OnCookiesCountChanged(int allowed_cookies,
+                                                     int blocked_cookies) {
   // The blocked cookie count changes quite frequently, so avoid unnecessary
   // UI updates if possible.
   if (blocked_cookies_ == blocked_cookies)
@@ -141,7 +142,7 @@ void CookieControlsBubbleView::UpdateUi() {
         l10n_util::GetStringUTF16(IDS_COOKIE_CONTROLS_BLOCKED_MESSAGE));
     auto link = std::make_unique<views::Link>(
         l10n_util::GetStringUTF16(IDS_COOKIE_CONTROLS_NOT_WORKING_TITLE));
-    link->set_callback(
+    link->SetCallback(
         base::BindRepeating(&CookieControlsBubbleView::NotWorkingLinkClicked,
                             base::Unretained(this)));
     extra_view_ = SetExtraView(std::move(link));
@@ -202,7 +203,7 @@ void CookieControlsBubbleView::Init() {
   auto cookie_link = std::make_unique<views::Link>(
       l10n_util::GetStringUTF16(IDS_BLOCKED_COOKIES_INFO));
   cookie_link->SetMultiLine(true);
-  cookie_link->set_callback(
+  cookie_link->SetCallback(
       base::BindRepeating(&CookieControlsBubbleView::ShowCookiesLinkClicked,
                           base::Unretained(this)));
   cookie_link->SetHorizontalAlignment(gfx::ALIGN_LEFT);

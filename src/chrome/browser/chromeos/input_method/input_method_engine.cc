@@ -10,7 +10,6 @@
 
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "base/check.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
@@ -103,9 +102,8 @@ void InputMethodEngine::CandidateClicked(uint32_t index) {
 }
 
 void InputMethodEngine::AssistiveWindowButtonClicked(
-    const ui::ime::ButtonId& id,
-    const ui::ime::AssistiveWindowType& type) {
-  observer_->OnAssistiveWindowButtonClicked(id, type);
+    const ui::ime::AssistiveWindowButton& button) {
+  observer_->OnAssistiveWindowButtonClicked(button);
 }
 
 void InputMethodEngine::SetMirroringEnabled(bool mirroring_enabled) {
@@ -158,9 +156,11 @@ bool InputMethodEngine::ShowMultipleSuggestions(
   return true;
 }
 
-bool InputMethodEngine::HighlightSuggestionCandidate(int context_id,
-                                                     int index,
-                                                     std::string* error) {
+bool InputMethodEngine::SetButtonHighlighted(
+    int context_id,
+    const ui::ime::AssistiveWindowButton& button,
+    bool highlighted,
+    std::string* error) {
   if (!IsActive()) {
     *error = kErrorNotActive;
     return false;
@@ -172,8 +172,13 @@ bool InputMethodEngine::HighlightSuggestionCandidate(int context_id,
   IMEAssistiveWindowHandlerInterface* aw_handler =
       ui::IMEBridge::Get()->GetAssistiveWindowHandler();
   if (aw_handler)
-    aw_handler->HighlightSuggestionCandidate(index);
+    aw_handler->SetButtonHighlighted(button, highlighted);
   return true;
+}
+
+void InputMethodEngine::ClickButton(
+    const ui::ime::AssistiveWindowButton& button) {
+  observer_->OnAssistiveWindowButtonClicked(button);
 }
 
 bool InputMethodEngine::AcceptSuggestionCandidate(
@@ -319,9 +324,7 @@ bool InputMethodEngine::SetCursorPosition(int context_id,
 }
 
 bool InputMethodEngine::SetSuggestion(int context_id,
-                                      const base::string16& text,
-                                      const size_t confirmed_length,
-                                      const bool show_tab,
+                                      const ui::ime::SuggestionDetails& details,
                                       std::string* error) {
   if (!IsActive()) {
     *error = kErrorNotActive;
@@ -335,7 +338,7 @@ bool InputMethodEngine::SetSuggestion(int context_id,
   IMEAssistiveWindowHandlerInterface* aw_handler =
       ui::IMEBridge::Get()->GetAssistiveWindowHandler();
   if (aw_handler)
-    aw_handler->ShowSuggestion(text, confirmed_length, show_tab);
+    aw_handler->ShowSuggestion(details);
   return true;
 }
 
@@ -466,6 +469,33 @@ bool InputMethodEngine::SetCompositionRange(
   if (!input_context)
     return false;
   return input_context->SetCompositionRange(before, after, text_spans);
+}
+
+bool InputMethodEngine::SetComposingRange(
+    uint32_t start,
+    uint32_t end,
+    const std::vector<ui::ImeTextSpan>& text_spans) {
+  ui::IMEInputContextHandlerInterface* input_context =
+      ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!input_context)
+    return false;
+  return input_context->SetComposingRange(start, end, text_spans);
+}
+
+gfx::Range InputMethodEngine::GetAutocorrectRange() {
+  ui::IMEInputContextHandlerInterface* input_context =
+      ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!input_context)
+    return gfx::Range();
+  return input_context->GetAutocorrectRange();
+}
+
+gfx::Rect InputMethodEngine::GetAutocorrectCharacterBounds() {
+  ui::IMEInputContextHandlerInterface* input_context =
+      ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!input_context)
+    return gfx::Rect();
+  return input_context->GetAutocorrectCharacterBounds();
 }
 
 bool InputMethodEngine::SetAutocorrectRange(

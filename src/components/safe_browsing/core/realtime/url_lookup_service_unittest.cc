@@ -56,7 +56,6 @@ class RealTimeUrlLookupServiceTest : public PlatformTest {
     content_setting_map_ = new HostContentSettingsMap(
         &test_pref_service_, false /* is_off_the_record */,
         false /* store_last_modified */,
-        false /* migrate_requesting_and_top_level_origin_settings */,
         false /* restore_session */);
     cache_manager_ = std::make_unique<VerdictCacheManager>(
         nullptr, content_setting_map_.get());
@@ -167,7 +166,8 @@ class RealTimeUrlLookupServiceTest : public PlatformTest {
       feature_list_.InitWithFeatures(
           {kRealTimeUrlLookupEnabled, kRealTimeUrlLookupEnabledWithToken}, {});
     } else {
-      feature_list_.InitWithFeatures({kRealTimeUrlLookupEnabled}, {});
+      feature_list_.InitWithFeatures({kRealTimeUrlLookupEnabled},
+                                     {kRealTimeUrlLookupEnabledWithToken});
     }
 #endif
   }
@@ -527,10 +527,11 @@ TEST_F(RealTimeUrlLookupServiceTest, TestCanCheckUrl) {
                              {"http://10.1.1.1/path", false},
                              {"http://10.1.1.1.1/path", true},
                              {"http://example.test/path", true},
-                             {"https://example.test/path", true}};
-  for (size_t i = 0; i < base::size(can_check_url_cases); i++) {
-    GURL url(can_check_url_cases[i].url);
-    bool expected_can_check = can_check_url_cases[i].can_check;
+                             {"http://nodothost/path", false},
+                             {"http://x.x/shorthost", false}};
+  for (auto& can_check_url_case : can_check_url_cases) {
+    GURL url(can_check_url_case.url);
+    bool expected_can_check = can_check_url_case.can_check;
     EXPECT_EQ(expected_can_check, CanCheckUrl(url));
   }
 }
@@ -574,7 +575,8 @@ TEST_F(RealTimeUrlLookupServiceTest, TestStartLookup_ResponseIsAlreadyCached) {
 
   // |request_callback| should not be called.
   EXPECT_CALL(request_callback, Run(_, _)).Times(0);
-  EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true, _));
+  EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true,
+                                     /* is_cached_response */ true, _));
 
   task_environment_->RunUntilIdle();
 
@@ -601,12 +603,14 @@ TEST_F(RealTimeUrlLookupServiceTest,
       url,
       base::BindOnce(
           [](std::unique_ptr<RTLookupRequest> request, std::string token) {
+            EXPECT_FALSE(request->has_dm_token());
             // Check token is attached.
             EXPECT_EQ("access_token_string", token);
           }),
       response_callback.Get());
 
-  EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true, _));
+  EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true,
+                                     /* is_cached_response */ false, _));
 
   WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
       "access_token_string");
@@ -640,7 +644,8 @@ TEST_F(RealTimeUrlLookupServiceTest, TestStartLookup_NoTokenWhenNotSignedIn) {
           }),
       response_callback.Get());
 
-  EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true, _));
+  EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true,
+                                     /* is_cached_response */ false, _));
 
   task_environment_->RunUntilIdle();
 
@@ -670,7 +675,8 @@ TEST_F(RealTimeUrlLookupServiceTest,
           }),
       response_callback.Get());
 
-  EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true, _));
+  EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true,
+                                     /* is_cached_response */ false, _));
 
   task_environment_->RunUntilIdle();
 

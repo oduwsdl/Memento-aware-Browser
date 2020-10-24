@@ -55,7 +55,8 @@ class MockRenderProcessHost : public RenderProcessHost {
   using InterfaceBinder =
       base::RepeatingCallback<void(mojo::ScopedMessagePipeHandle)>;
 
-  explicit MockRenderProcessHost(BrowserContext* browser_context);
+  explicit MockRenderProcessHost(BrowserContext* browser_context,
+                                 bool is_for_guests_only = false);
   ~MockRenderProcessHost() override;
 
   // Provides access to all IPC messages that would have been sent to the
@@ -101,6 +102,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   StoragePartition* GetStoragePartition() override;
   virtual void AddWord(const base::string16& word);
   bool Shutdown(int exit_code) override;
+  bool ShutdownRequested() override;
   bool FastShutdownIfPossible(size_t page_count,
                               bool skip_unload_handlers) override;
   bool FastShutdownStarted() override;
@@ -110,9 +112,9 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool IsInitializedAndNotDead() override;
   void SetBlocked(bool blocked) override;
   bool IsBlocked() override;
-  std::unique_ptr<base::CallbackList<void(bool)>::Subscription>
+  std::unique_ptr<BlockStateChangedCallbackList::Subscription>
   RegisterBlockStateChangedCallback(
-      const base::RepeatingCallback<void(bool)>& cb) override;
+      const BlockStateChangedCallback& cb) override;
   void Cleanup() override;
   void AddPendingView() override;
   void RemovePendingView() override;
@@ -151,7 +153,6 @@ class MockRenderProcessHost : public RenderProcessHost {
   void DecrementKeepAliveRefCount() override;
   void DisableKeepAliveRefCount() override;
   bool IsKeepAliveRefCountDisabled() override;
-  void Resume() override;
   mojom::Renderer* GetRendererInterface() override;
   void CreateURLLoaderFactory(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
@@ -162,9 +163,9 @@ class MockRenderProcessHost : public RenderProcessHost {
   void SetIsUsed() override;
 
   bool HostHasNotBeenUsed() override;
-  void LockToOrigin(const IsolationContext& isolation_context,
-                    const GURL& lock_url) override;
-  bool IsLockedToOriginForTesting() override;
+  void SetProcessLock(const IsolationContext& isolation_context,
+                      const ProcessLock& process_lock) override;
+  bool IsProcessLockedToSiteForTesting() override;
   void BindCacheStorage(
       const network::CrossOriginEmbedderPolicy&,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>,
@@ -197,6 +198,12 @@ class MockRenderProcessHost : public RenderProcessHost {
       int render_frame_id,
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::LockManager> receiver) override {}
+  void CreateOneShotSyncService(
+      mojo::PendingReceiver<blink::mojom::OneShotBackgroundSyncService>
+          receiver) override {}
+  void CreatePeriodicSyncService(
+      mojo::PendingReceiver<blink::mojom::PeriodicBackgroundSyncService>
+          receiver) override {}
   void CreatePermissionService(
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::PermissionService> receiver)
@@ -215,6 +222,7 @@ class MockRenderProcessHost : public RenderProcessHost {
       override {}
 
   void CleanupNetworkServicePluginExceptionsUponDestruction() override;
+  std::string GetInfoForBrowserContextDestructionCrashReporting() override;
 
   // IPC::Sender via RenderProcessHost.
   bool Send(IPC::Message* msg) override;
@@ -227,10 +235,6 @@ class MockRenderProcessHost : public RenderProcessHost {
   // and prevent MockRenderProcessHostFacotry from deleting it.
   void SetFactory(const MockRenderProcessHostFactory* factory) {
     factory_ = factory;
-  }
-
-  void set_is_for_guests_only(bool is_for_guests_only) {
-    is_for_guests_only_ = is_for_guests_only;
   }
 
   void set_is_process_backgrounded(bool is_process_backgrounded) {
@@ -269,6 +273,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   base::flat_set<PriorityClient*> priority_clients_;
   int prev_routing_id_;
   base::IDMap<IPC::Listener*> listeners_;
+  bool shutdown_requested_;
   bool fast_shutdown_started_;
   bool deletion_callback_called_;
   bool is_for_guests_only_;

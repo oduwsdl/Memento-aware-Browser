@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/input_method/ui/undo_window.h"
 
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/chromeos/input_method/ui/border_factory.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -17,20 +18,9 @@ namespace ime {
 
 namespace {
 const char kUndoButtonText[] = "Undo";
-class UndoWindowBorder : public views::BubbleBorder {
- public:
-  UndoWindowBorder()
-      : views::BubbleBorder(views::BubbleBorder::NONE,
-                            views::BubbleBorder::SMALL_SHADOW,
-                            gfx::kPlaceholderColor) {
-    SetCornerRadius(views::LayoutProvider::Get()->GetCornerRadiusMetric(
-        views::EmphasisMetric::EMPHASIS_MEDIUM));
-    set_use_theme_background_color(true);
-  }
-  ~UndoWindowBorder() override = default;
-
-  DISALLOW_COPY_AND_ASSIGN(UndoWindowBorder);
-};
+// TODO(crbug/1099044): Update and use cros_colors.json5
+constexpr SkColor kButtonHighlightColor =
+    SkColorSetA(SK_ColorBLACK, 0x0F);  // 6% Black.
 
 }  // namespace
 
@@ -42,13 +32,18 @@ UndoWindow::UndoWindow(gfx::NativeView parent, AssistiveDelegate* delegate)
   set_parent_window(parent);
   set_margins(gfx::Insets());
 
+  SetArrow(views::BubbleBorder::Arrow::BOTTOM_LEFT);
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
+
   undo_button_ = AddChildView(std::make_unique<views::LabelButton>(
-      this, base::UTF8ToUTF16(kUndoButtonText)));
+      base::BindRepeating(&UndoWindow::UndoButtonPressed,
+                          base::Unretained(this)),
+      base::UTF8ToUTF16(kUndoButtonText)));
   undo_button_->SetImageLabelSpacing(
       views::LayoutProvider::Get()->GetDistanceMetric(
-          views::DistanceMetric::DISTANCE_RELATED_CONTROL_HORIZONTAL));
+          views::DistanceMetric::DISTANCE_RELATED_BUTTON_HORIZONTAL));
+  undo_button_->SetBackground(nullptr);
 }
 
 void UndoWindow::OnThemeChanged() {
@@ -68,7 +63,8 @@ views::Widget* UndoWindow::InitWidget() {
   wm::SetWindowVisibilityAnimationTransition(widget->GetNativeView(),
                                              wm::ANIMATE_NONE);
 
-  GetBubbleFrameView()->SetBubbleBorder(std::make_unique<UndoWindowBorder>());
+  GetBubbleFrameView()->SetBubbleBorder(
+      GetBorderForWindow(WindowBorderType::Undo));
   GetBubbleFrameView()->OnThemeChanged();
   return widget;
 }
@@ -85,11 +81,18 @@ void UndoWindow::SetBounds(const gfx::Rect& word_bounds) {
   SetAnchorRect(word_bounds);
 }
 
-void UndoWindow::ButtonPressed(views::Button* sender, const ui::Event& event) {
-  button_pressed_ = sender;
-  if (sender == undo_button_)
-    delegate_->AssistiveWindowButtonClicked(ButtonId::kUndo,
-                                            AssistiveWindowType::kUndoWindow);
+void UndoWindow::SetButtonHighlighted(const AssistiveWindowButton& button,
+                                      bool highlighted) {
+  if (button.id != ButtonId::kUndo)
+    return;
+
+  bool currently_hightlighted = undo_button_->background() != nullptr;
+  if (highlighted == currently_hightlighted)
+    return;
+
+  undo_button_->SetBackground(
+      highlighted ? views::CreateSolidBackground(kButtonHighlightColor)
+                  : nullptr);
 }
 
 views::Button* UndoWindow::GetUndoButtonForTesting() {
@@ -98,6 +101,13 @@ views::Button* UndoWindow::GetUndoButtonForTesting() {
 
 const char* UndoWindow::GetClassName() const {
   return "UndoWindow";
+}
+
+void UndoWindow::UndoButtonPressed() {
+  const AssistiveWindowButton button = {
+      .id = ButtonId::kUndo, .window_type = AssistiveWindowType::kUndoWindow};
+  SetButtonHighlighted(button, true);
+  delegate_->AssistiveWindowButtonClicked(button);
 }
 
 }  // namespace ime

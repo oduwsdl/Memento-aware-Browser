@@ -30,17 +30,15 @@ class AccessibilityTreeFormatterUia : public AccessibilityTreeFormatterBase {
 
   // AccessibilityTreeFormatterBase:
   void AddDefaultFilters(
-      std::vector<PropertyFilter>* property_filters) override;
+      std::vector<AXPropertyFilter>* property_filters) override;
   base::FilePath::StringType GetExpectedFileSuffix() override;
   base::FilePath::StringType GetVersionSpecificExpectedFileSuffix() override;
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTree(
       BrowserAccessibility* start) override;
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForProcess(
-      base::ProcessId pid) override;
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForWindow(
       gfx::AcceleratedWidget hwnd) override;
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForPattern(
-      const base::StringPiece& pattern) override;
+  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForSelector(
+      const AXTreeSelector& selector) override;
 
  private:
   static const long properties_[];
@@ -100,16 +98,17 @@ class AccessibilityTreeFormatterUia : public AccessibilityTreeFormatterBase {
   const std::string GetAllowString() override;
   const std::string GetDenyString() override;
   const std::string GetDenyNodeString() override;
-  base::string16 ProcessTreeForOutput(
+  const std::string GetRunUntilEventString() override;
+  std::string ProcessTreeForOutput(
       const base::DictionaryValue& node,
       base::DictionaryValue* filtered_result = nullptr) override;
   void ProcessPropertyForOutput(const std::string& property_name,
                                 const base::DictionaryValue& dict,
-                                base::string16& line,
+                                std::string& line,
                                 base::DictionaryValue* filtered_result);
   void ProcessValueForOutput(const std::string& name,
                              const base::Value* value,
-                             base::string16& line,
+                             std::string& line,
                              base::DictionaryValue* filtered_result);
   Microsoft::WRL::ComPtr<IUIAutomation> uia_;
   Microsoft::WRL::ComPtr<IUIAutomationCacheRequest> element_cache_request_;

@@ -6,15 +6,14 @@
 
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "chrome/browser/chromeos/local_search_service/local_search_service.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/fake_hierarchy.h"
 #include "chrome/browser/ui/webui/settings/chromeos/fake_os_settings_sections.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search.mojom-test-utils.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/components/local_search_service/local_search_service_sync.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -23,6 +22,27 @@
 namespace chromeos {
 namespace settings {
 namespace {
+
+class FakeObserver : public mojom::SearchResultsObserver {
+ public:
+  FakeObserver() = default;
+  ~FakeObserver() override = default;
+
+  mojo::PendingRemote<mojom::SearchResultsObserver> GenerateRemote() {
+    mojo::PendingRemote<mojom::SearchResultsObserver> remote;
+    receiver_.Bind(remote.InitWithNewPipeAndPassReceiver());
+    return remote;
+  }
+
+  size_t num_calls() const { return num_calls_; }
+
+ private:
+  // mojom::SearchResultsObserver:
+  void OnSearchResultAvailabilityChanged() override { ++num_calls_; }
+
+  size_t num_calls_ = 0;
+  mojo::Receiver<mojom::SearchResultsObserver> receiver_{this};
+};
 
 // Note: Copied from printing_section.cc but does not need to stay in sync with
 // it.
@@ -33,10 +53,7 @@ const std::vector<SearchConcept>& GetPrintingSearchConcepts() {
        mojom::SearchResultIcon::kPrinter,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kAddPrinter},
-       {IDS_OS_SETTINGS_TAG_PRINTING_ADD_PRINTER_ALT1,
-        IDS_OS_SETTINGS_TAG_PRINTING_ADD_PRINTER_ALT2,
-        SearchConcept::kAltTagEnd}},
+       {.setting = mojom::Setting::kAddPrinter}},
       {IDS_OS_SETTINGS_TAG_PRINTING_SAVED_PRINTERS,
        mojom::kPrintingDetailsSubpagePath,
        mojom::SearchResultIcon::kPrinter,
@@ -63,6 +80,7 @@ mojom::SearchResultPtr CreateDummyResult() {
       mojom::SearchResultIcon::kPrinter, /*relevance_score=*/0.5,
       /*hierarchy_strings=*/std::vector<base::string16>(),
       mojom::SearchResultDefaultRank::kMedium,
+      /*was_generated_from_text_match=*/false,
       mojom::SearchResultType::kSection,
       mojom::SearchResultIdentifier::NewSection(mojom::Section::kPrinting));
 }
@@ -82,8 +100,6 @@ class SearchHandlerTest : public testing::Test {
 
   // testing::Test:
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        chromeos::features::kNewOsSettingsSearch);
     handler_.BindInterface(handler_remote_.BindNewPipeAndPassReceiver());
 
     fake_hierarchy_.AddSubpageMetadata(
@@ -95,21 +111,39 @@ class SearchHandlerTest : public testing::Test {
                                        mojom::Setting::kAddPrinter);
     fake_hierarchy_.AddSettingMetadata(mojom::Section::kPrinting,
                                        mojom::Setting::kSavedPrinters);
+
+    handler_remote_->Observe(observer_.GenerateRemote());
+    handler_remote_.FlushForTesting();
+  }
+
+  void AddSearchTags(const std::vector<SearchConcept>& search_tags) {
+    SearchTagRegistry::ScopedTagUpdater updater =
+        search_tag_registry_.StartUpdate();
+    updater.AddSearchTags(search_tags);
+  }
+
+  void RemoveSearchTags(const std::vector<SearchConcept>& search_tags) {
+    SearchTagRegistry::ScopedTagUpdater updater =
+        search_tag_registry_.StartUpdate();
+    updater.RemoveSearchTags(search_tags);
   }
 
   base::test::TaskEnvironment task_environment_;
-  base::test::ScopedFeatureList scoped_feature_list_;
-  local_search_service::LocalSearchService local_search_service_;
+  local_search_service::LocalSearchServiceSync local_search_service_;
   SearchTagRegistry search_tag_registry_;
   FakeOsSettingsSections fake_sections_;
   FakeHierarchy fake_hierarchy_;
   SearchHandler handler_;
   mojo::Remote<mojom::SearchHandler> handler_remote_;
+  FakeObserver observer_;
 };
 
 TEST_F(SearchHandlerTest, AddAndRemove) {
   // Add printing search tags to registry and search for "Print".
-  search_tag_registry_.AddSearchTags(GetPrintingSearchConcepts());
+  AddSearchTags(GetPrintingSearchConcepts());
+  handler_remote_.FlushForTesting();
+  EXPECT_EQ(1u, observer_.num_calls());
+
   std::vector<mojom::SearchResultPtr> search_results;
 
   // 3 results should be available for a "Print" query.
@@ -138,18 +172,19 @@ TEST_F(SearchHandlerTest, AddAndRemove) {
 
   // Remove printing search tags to registry and verify that no results are
   // returned for "Printing".
-  search_tag_registry_.RemoveSearchTags(GetPrintingSearchConcepts());
+  RemoveSearchTags(GetPrintingSearchConcepts());
   mojom::SearchHandlerAsyncWaiter(handler_remote_.get())
       .Search(base::ASCIIToUTF16("Print"),
               /*max_num_results=*/3u,
               mojom::ParentResultBehavior::kDoNotIncludeParentResults,
               &search_results);
   EXPECT_TRUE(search_results.empty());
+  EXPECT_EQ(2u, observer_.num_calls());
 }
 
 TEST_F(SearchHandlerTest, UrlModification) {
   // Add printing search tags to registry and search for "Saved".
-  search_tag_registry_.AddSearchTags(GetPrintingSearchConcepts());
+  AddSearchTags(GetPrintingSearchConcepts());
   std::vector<mojom::SearchResultPtr> search_results;
   mojom::SearchHandlerAsyncWaiter(handler_remote_.get())
       .Search(base::ASCIIToUTF16("Saved"),
@@ -169,7 +204,7 @@ TEST_F(SearchHandlerTest, UrlModification) {
 
 TEST_F(SearchHandlerTest, AltTagMatch) {
   // Add printing search tags to registry.
-  search_tag_registry_.AddSearchTags(GetPrintingSearchConcepts());
+  AddSearchTags(GetPrintingSearchConcepts());
   std::vector<mojom::SearchResultPtr> search_results;
 
   // Search for "CUPS". The IDS_OS_SETTINGS_TAG_PRINTING result has an alternate
@@ -191,7 +226,7 @@ TEST_F(SearchHandlerTest, AltTagMatch) {
 
 TEST_F(SearchHandlerTest, AllowParentResult) {
   // Add printing search tags to registry.
-  search_tag_registry_.AddSearchTags(GetPrintingSearchConcepts());
+  AddSearchTags(GetPrintingSearchConcepts());
   std::vector<mojom::SearchResultPtr> search_results;
 
   // Search for "Saved", which should only apply to the "saved printers" item.
@@ -203,11 +238,12 @@ TEST_F(SearchHandlerTest, AllowParentResult) {
               mojom::ParentResultBehavior::kAllowParentResults,
               &search_results);
   EXPECT_EQ(search_results.size(), 2u);
+  EXPECT_FALSE(search_results[1]->was_generated_from_text_match);
 }
 
 TEST_F(SearchHandlerTest, DefaultRank) {
   // Add printing search tags to registry.
-  search_tag_registry_.AddSearchTags(GetPrintingSearchConcepts());
+  AddSearchTags(GetPrintingSearchConcepts());
   std::vector<mojom::SearchResultPtr> search_results;
 
   // Search for "Print". Only the IDS_OS_SETTINGS_TAG_PRINTING result

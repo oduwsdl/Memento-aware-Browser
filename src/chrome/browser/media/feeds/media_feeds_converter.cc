@@ -330,10 +330,7 @@ MediaFeedsConverter::GetMediaImage(const Property& property) {
     image->src = url->values->url_values[0];
 
     auto content_attributes = GetContentAttributes(image_object);
-    if (!content_attributes.has_value())
-      continue;
-
-    if (!content_attributes.value().empty()) {
+    if (content_attributes && !content_attributes.value().empty()) {
       image->content_attributes = std::move(content_attributes.value());
     }
 
@@ -1079,7 +1076,12 @@ bool MediaFeedsConverter::GetMediaFeedItem(
 
   auto* name = GetProperty(item.get(), schema_org::property::kName);
   if (name && IsNonEmptyString(*name)) {
-    converted_item->name = base::ASCIIToUTF16(name->values->string_values[0]);
+    const auto value = name->values->string_values[0];
+    if (!base::UTF8ToUTF16(value.c_str(), value.size(),
+                           &converted_item->name)) {
+      Log("Invalid name.");
+      return false;
+    }
   } else {
     Log("Invalid name.");
     return false;
@@ -1255,10 +1257,7 @@ void MediaFeedsConverter::GetDataFeedItems(
       if (!GetMediaFeedItem(embedded_item->values->entity_values[0],
                             converted_item.get(), &item_ids,
                             /*is_embedded_item=*/true)) {
-        std::string item_name = !converted_item->name.empty()
-                                    ? base::UTF16ToASCII(converted_item->name)
-                                    : "Unknown item";
-        Log("Item was invalid: " + item_name);
+        Log("Item was invalid");
         continue;
       }
 
@@ -1284,10 +1283,7 @@ void MediaFeedsConverter::GetDataFeedItems(
     } else {
       if (!GetMediaFeedItem(item, converted_item.get(), &item_ids,
                             /*is_embedded_item=*/false)) {
-        std::string item_name = !converted_item->name.empty()
-                                    ? base::UTF16ToASCII(converted_item->name)
-                                    : "Unknown item";
-        Log("Item was invalid: " + item_name);
+        Log("Item was invalid");
         continue;
       }
     }

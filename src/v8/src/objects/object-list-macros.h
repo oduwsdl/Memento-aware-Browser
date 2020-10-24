@@ -5,7 +5,7 @@
 #ifndef V8_OBJECTS_OBJECT_LIST_MACROS_H_
 #define V8_OBJECTS_OBJECT_LIST_MACROS_H_
 
-#include "torque-generated/instance-types-tq.h"
+#include "torque-generated/instance-types.h"
 
 namespace v8 {
 namespace internal {
@@ -209,7 +209,6 @@ class ZoneForwardList;
   V(StoreHandler)                              \
   V(String)                                    \
   V(StringSet)                                 \
-  V(StringTable)                               \
   V(StringWrapper)                             \
   V(Struct)                                    \
   V(Symbol)                                    \
@@ -232,11 +231,12 @@ class ZoneForwardList;
   V(WasmMemoryObject)                          \
   V(WasmModuleObject)                          \
   V(WasmStruct)                                \
+  V(WasmTypeInfo)                              \
   V(WasmTableObject)                           \
   V(WeakFixedArray)                            \
   V(WeakArrayList)                             \
   V(WeakCell)                                  \
-  TORQUE_INTERNAL_CLASS_LIST(V)
+  TORQUE_DEFINED_CLASS_LIST(V)
 
 #ifdef V8_INTL_SUPPORT
 #define HEAP_OBJECT_ORDINARY_TYPE_LIST(V) \
@@ -251,7 +251,8 @@ class ZoneForwardList;
   V(JSPluralRules)                        \
   V(JSRelativeTimeFormat)                 \
   V(JSSegmentIterator)                    \
-  V(JSSegmenter)
+  V(JSSegmenter)                          \
+  V(JSSegments)
 #else
 #define HEAP_OBJECT_ORDINARY_TYPE_LIST(V) HEAP_OBJECT_ORDINARY_TYPE_LIST_BASE(V)
 #endif  // V8_INTL_SUPPORT
@@ -280,6 +281,7 @@ class ZoneForwardList;
   V(ModuleContext)                           \
   V(NonNullForeign)                          \
   V(ScriptContext)                           \
+  V(StrongDescriptorArray)                   \
   V(WithContext)
 
 #define HEAP_OBJECT_TYPE_LIST(V)    \

@@ -53,7 +53,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
@@ -70,6 +69,7 @@
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_operation_runner.h"
 #include "storage/browser/file_system/file_system_url.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/base/page_transition_types.h"
 #include "url/origin.h"
 
@@ -461,7 +461,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
   }
   DownloadManager* GetOffRecordManager() {
     return BrowserContext::GetDownloadManager(
-        browser()->profile()->GetOffTheRecordProfile());
+        browser()->profile()->GetPrimaryOTRProfile());
   }
   DownloadManager* GetCurrentManager() {
     return (current_browser_ == incognito_browser_) ?
@@ -700,7 +700,7 @@ class MockIconExtractorImpl : public DownloadFileIconExtractor {
     EXPECT_EQ(expected_icon_size_, icon_size);
     if (expected_path_ == path &&
         expected_icon_size_ == icon_size) {
-      callback_ = callback;
+      callback_ = std::move(callback);
       content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE, base::BindOnce(&MockIconExtractorImpl::RunCallback,
                                     base::Unretained(this)));
@@ -712,7 +712,8 @@ class MockIconExtractorImpl : public DownloadFileIconExtractor {
 
  private:
   void RunCallback() {
-    callback_.Run(response_);
+    DCHECK(callback_);
+    std::move(callback_).Run(response_);
     // Drop the reference on extension function to avoid memory leaks.
     callback_ = IconURLCallback();
   }
@@ -792,7 +793,7 @@ class HTML5FileWriter {
                        base::Unretained(&result), run_loop.QuitClosure()));
     // Wait for that to finish.
     run_loop.Run();
-    base::DeleteFile(temp_file, false);
+    base::DeleteFile(temp_file);
     return result;
   }
 
@@ -875,6 +876,8 @@ downloads::InterruptReason InterruptReasonContentToExtension(
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, DownloadExtensionTest_Open) {
+  platform_util::internal::DisableShellOperationsForTesting();
+
   LoadExtension("downloads_split");
   DownloadsOpenFunction* open_function = new DownloadsOpenFunction();
   open_function->set_user_gesture(true);
@@ -1181,7 +1184,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, FileExistenceCheckAfterSearch) {
 
   // Finish the download and try again.
   FinishFirstSlowDownloads();
-  base::DeleteFile(download_item->GetTargetFilePath(), false);
+  base::DeleteFile(download_item->GetTargetFilePath());
 
   ASSERT_FALSE(download_item->GetFileExternallyRemoved());
   std::unique_ptr<base::Value> result(
@@ -1200,6 +1203,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, FileExistenceCheckAfterSearch) {
 #if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadsShowFunction) {
+  platform_util::internal::DisableShellOperationsForTesting();
   ScopedCancellingItem item(CreateFirstSlowTestDownload());
   ASSERT_TRUE(item.get());
 
@@ -1366,15 +1370,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 }
 
 // Test the |state| option for search().
-//
-// http://crbug.com/508949
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_DownloadExtensionTest_SearchState DISABLED_DownloadExtensionTest_SearchState
-#else
-#define MAYBE_DownloadExtensionTest_SearchState DownloadExtensionTest_SearchState
-#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       MAYBE_DownloadExtensionTest_SearchState) {
+                       DownloadExtensionTest_SearchState) {
   DownloadManager::DownloadVector items;
   CreateTwoDownloads(&items);
   ScopedItemVectorCanceller delete_items(&items);
@@ -1390,15 +1387,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 }
 
 // Test the |limit| option for search().
-//
-// http://crbug.com/508949
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_DownloadExtensionTest_SearchLimit DISABLED_DownloadExtensionTest_SearchLimit
-#else
-#define MAYBE_DownloadExtensionTest_SearchLimit DownloadExtensionTest_SearchLimit
-#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       MAYBE_DownloadExtensionTest_SearchLimit) {
+                       DownloadExtensionTest_SearchLimit) {
   DownloadManager::DownloadVector items;
   CreateTwoDownloads(&items);
   ScopedItemVectorCanceller delete_items(&items);
@@ -1998,7 +1988,7 @@ class DownloadExtensionTestWithFtp : public DownloadExtensionTest {
   DownloadExtensionTestWithFtp() {
     // DownloadExtensionTest_Download_InvalidURLs2 requires FTP support.
     // TODO(https://crbug.com/333943): Remove FTP tests and FTP feature flags.
-    scoped_feature_list_.InitAndEnableFeature(features::kFtpProtocol);
+    scoped_feature_list_.InitAndEnableFeature(blink::features::kFtpProtocol);
   }
 
  private:
@@ -2651,7 +2641,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 }
 
 // flaky on mac: crbug.com/392288
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_DownloadExtensionTest_Download_FileSystemURL \
         DISABLED_DownloadExtensionTest_Download_FileSystemURL
 #else
@@ -3832,7 +3822,7 @@ IN_PROC_BROWSER_TEST_F(
 
 // TODO test precedence rules: install_time
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_DownloadExtensionTest_OnDeterminingFilename_RemoveFilenameDeterminer \
   DISABLED_DownloadExtensionTest_OnDeterminingFilename_RemoveFilenameDeterminer
 #else
@@ -3890,9 +3880,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// This test is flaky on Linux ASan LSan Tests bot. https://crbug.com/1114226
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ADDRESS_SANITIZER)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit \
+  DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
@@ -4339,7 +4337,7 @@ void OnDangerPromptCreated(DownloadDangerPrompt* prompt) {
   prompt->InvokeActionForTesting(DownloadDangerPrompt::ACCEPT);
 }
 
-#if defined(OS_MACOSX) && !defined(NDEBUG)
+#if defined(OS_MAC) && !defined(NDEBUG)
 // Flaky on Mac debug, failing with a timeout.
 // http://crbug.com/180759
 #define MAYBE_DownloadExtensionTest_AcceptDanger \

@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/trace_event/trace_log.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/tracing/common/tracing_switches.h"
@@ -39,7 +40,9 @@ const base::FilePath::CharType kAndroidTraceConfigFile[] =
 
 const char kDefaultStartupCategories[] =
     "startup,browser,toplevel,toplevel.flow,ipc,EarlyJava,cc,Java,navigation,"
-    "loading,gpu,disabled-by-default-cpu_profiler,download_service,-*";
+    "loading,gpu,disabled-by-default-cpu_profiler,download_service,"
+    "disabled-by-default-histogram_samples,"
+    "disabled-by-default-user_action_samples,-*";
 #else
 const char kDefaultStartupCategories[] =
     "benchmark,toplevel,startup,disabled-by-default-file,toplevel.flow,"
@@ -63,15 +66,8 @@ TraceStartupConfig* TraceStartupConfig::GetInstance() {
 // static
 base::trace_event::TraceConfig
 TraceStartupConfig::GetDefaultBrowserStartupConfig() {
-  base::trace_event::TraceConfig trace_config(
+  return base::trace_event::TraceConfig(
       kDefaultStartupCategories, base::trace_event::RECORD_UNTIL_FULL);
-  // Filter only browser process events.
-  base::trace_event::TraceConfig::ProcessFilterConfig process_config(
-      {base::GetCurrentProcId()});
-  // First 10k events at start are sufficient to debug startup traces.
-  trace_config.SetTraceBufferSizeInEvents(10000);
-  trace_config.SetProcessFilterConfig(process_config);
-  return trace_config;
 }
 
 TraceStartupConfig::TraceStartupConfig() {
@@ -92,6 +88,10 @@ TraceStartupConfig::TraceStartupConfig() {
     DCHECK(IsEnabled());
     DCHECK(!IsTracingStartupForDuration());
     DCHECK_EQ(SessionOwner::kBackgroundTracing, session_owner_);
+    CHECK(!ShouldTraceToResultFile());
+  } else if (EnableFromATrace()) {
+    DCHECK(IsEnabled());
+    DCHECK_EQ(SessionOwner::kSystemTracing, session_owner_);
     CHECK(!ShouldTraceToResultFile());
   }
 }
@@ -192,6 +192,24 @@ bool TraceStartupConfig::EnableFromCommandLine() {
   is_enabled_ = true;
   should_trace_to_result_file_ = true;
   return true;
+}
+
+bool TraceStartupConfig::EnableFromATrace() {
+#if defined(OS_ANDROID)
+  auto atrace_config =
+      base::trace_event::TraceLog::GetInstance()->TakeATraceStartupConfig();
+  if (!atrace_config)
+    return false;
+  trace_config_ = *atrace_config;
+  is_enabled_ = true;
+  // We only support ATrace-initiated startup tracing together with the system
+  // service, because DevTools and background tracing generally use Chrome
+  // command line flags to control startup tracing instead of ATrace.
+  session_owner_ = SessionOwner::kSystemTracing;
+  return true;
+#else   // defined(OS_ANDROID)
+  return false;
+#endif  // !defined(OS_ANDROID)
 }
 
 bool TraceStartupConfig::EnableFromConfigFile() {

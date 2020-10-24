@@ -173,14 +173,14 @@ def _CallWithOutput(cmd):
   print("# %s" % cmd)
   # The following trickery is required so that the 'cmd' thinks it's running
   # in a real terminal, while this script gets to intercept its output.
-  master, slave = pty.openpty()
-  p = subprocess.Popen(cmd, shell=True, stdin=slave, stdout=slave, stderr=slave)
-  os.close(slave)
+  parent, child = pty.openpty()
+  p = subprocess.Popen(cmd, shell=True, stdin=child, stdout=child, stderr=child)
+  os.close(child)
   output = []
   try:
     while True:
       try:
-        data = os.read(master, 512).decode('utf-8')
+        data = os.read(parent, 512).decode('utf-8')
       except OSError as e:
         if e.errno != errno.EIO: raise
         break # EIO means EOF on some systems
@@ -191,7 +191,7 @@ def _CallWithOutput(cmd):
         sys.stdout.flush()
         output.append(data)
   finally:
-    os.close(master)
+    os.close(parent)
     p.wait()
   return p.returncode, "".join(output)
 
@@ -300,6 +300,11 @@ class Config(object):
     return return_code
 
   def RunTests(self):
+    # Special handling for "mkgrokdump": if it was built, run it.
+    if (self.arch == "x64" and self.mode == "release" and
+        "mkgrokdump" in self.targets):
+      _Call("%s/mkgrokdump > tools/v8heapconst.py" %
+            GetPath(self.arch, self.mode))
     if not self.tests: return 0
     if "ALL" in self.tests:
       tests = ""
@@ -352,6 +357,10 @@ class ArgumentParser(object):
     targets = []
     actions = []
     tests = []
+    # Special handling for "mkgrokdump": build it for x64.release.
+    if argstring == "mkgrokdump":
+      self.PopulateConfigs(["x64"], ["release"], ["mkgrokdump"], [])
+      return
     # Specifying a single unit test looks like "unittests/Foo.Bar", test262
     # tests have names like "S15.4.4.7_A4_T1", don't split these.
     if argstring.startswith("unittests/") or argstring.startswith("test262/"):

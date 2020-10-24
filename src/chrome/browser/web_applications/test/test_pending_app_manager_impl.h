@@ -7,6 +7,8 @@
 
 #include <vector>
 
+#include "base/optional.h"
+#include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/pending_app_manager_impl.h"
 
 namespace web_app {
@@ -31,9 +33,23 @@ class TestPendingAppManagerImpl : public PendingAppManagerImpl {
     return uninstall_requests_;
   }
 
+  void SetDropRequestsForTesting(bool drop_requests_for_testing) {
+    drop_requests_for_testing_ = drop_requests_for_testing;
+  }
+
+  using HandleInstallRequestCallback =
+      base::RepeatingCallback<InstallResultCode(const ExternalInstallOptions&)>;
+
+  // Set a callback to handle install requests. If set, this callback will be
+  // used in place of the real installation process. The callback takes a const
+  // ExternalInstallOptions& and should return a InstallResultCode.
+  void SetHandleInstallRequestCallback(HandleInstallRequestCallback callback);
+
  private:
   std::vector<ExternalInstallOptions> install_requests_;
   std::vector<GURL> uninstall_requests_;
+  bool drop_requests_for_testing_ = false;
+  HandleInstallRequestCallback handle_install_request_callback_;
 };
 
 }  // namespace web_app

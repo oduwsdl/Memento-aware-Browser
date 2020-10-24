@@ -18,8 +18,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_handle.h"
 #include "build/branding_buildflags.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
+#include "chrome/installer/util/initial_preferences.h"
+#include "chrome/installer/util/initial_preferences_constants.h"
 #include "chrome/installer/util/util_constants.h"
 
 // {93BCE0BF-3FAF-43b1-9E28-BEB6FAB5ECE7}
@@ -63,7 +63,7 @@ TruncateResult TruncateLogFileIfNeeded(const base::FilePath& log_file) {
           result = LOGFILE_TRUNCATED;
         }
       }
-    } else if (base::DeleteFile(log_file, false)) {
+    } else if (base::DeleteFile(log_file)) {
       // Couldn't get sufficient access to the log file, optimistically try to
       // delete it.
       result = LOGFILE_DELETED;
@@ -80,7 +80,7 @@ void InitInstallerLogging(const installer::MasterPreferences& prefs) {
   installer_logging_ = true;
 
   bool value = false;
-  if (prefs.GetBool(installer::master_preferences::kDisableLogging, &value) &&
+  if (prefs.GetBool(installer::initial_preferences::kDisableLogging, &value) &&
       value) {
     return;
   }
@@ -93,7 +93,7 @@ void InitInstallerLogging(const installer::MasterPreferences& prefs) {
   settings.log_file_path = log_file_path.value().c_str();
   logging::InitLogging(settings);
 
-  if (prefs.GetBool(installer::master_preferences::kVerboseLogging, &value) &&
+  if (prefs.GetBool(installer::initial_preferences::kVerboseLogging, &value) &&
       value) {
     logging::SetMinLogLevel(logging::LOG_VERBOSE);
   } else {
@@ -112,7 +112,7 @@ void EndInstallerLogging() {
 
 base::FilePath GetLogFilePath(const installer::MasterPreferences& prefs) {
   std::string path;
-  prefs.GetString(installer::master_preferences::kLogFile, &path);
+  prefs.GetString(installer::initial_preferences::kLogFile, &path);
   if (!path.empty())
     return base::FilePath(base::UTF8ToWide(path));
 

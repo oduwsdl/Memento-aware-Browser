@@ -25,11 +25,11 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.IntentUtils;
-import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.util.AndroidTaskUtils;
 import org.chromium.ui.display.DisplayAndroidManager;
 
 import java.lang.ref.WeakReference;
@@ -45,13 +45,15 @@ import java.util.List;
  */
 public class MultiWindowUtils implements ActivityStateListener {
     // getInstance() is called early in start-up, so there is not point in lazily initializing it.
-    private static final MultiWindowUtils sInstance = AppHooks.get().createMultiWindowUtils();
+    private static final MultiWindowUtils sInstance = new MultiWindowUtils();
 
     // Used to keep track of whether ChromeTabbedActivity2 is running. A tri-state Boolean is
     // used in case both activities die in the background and MultiWindowUtils is recreated.
     private Boolean mTabbedActivity2TaskRunning;
     private WeakReference<ChromeTabbedActivity> mLastResumedTabbedActivity;
     private boolean mIsInMultiWindowModeForTesting;
+
+    private MultiWindowUtils() {}
 
     /**
      * Returns the singleton instance of MultiWindowUtils.
@@ -203,10 +205,11 @@ public class MultiWindowUtils implements ActivityStateListener {
     public static String getActivityNameFromTask(AppTask task) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return "";
 
-        if (task.getTaskInfo() == null || task.getTaskInfo().baseActivity == null) return "";
+        ActivityManager.RecentTaskInfo taskInfo = AndroidTaskUtils.getTaskInfoFromTask(task);
+        if (taskInfo == null || taskInfo.baseActivity == null) return "";
 
-        String baseActivity = task.getTaskInfo().baseActivity.getClassName();
-        // Contrary to the documentation task.getTaskInfo().baseActivity for the .LauncherMain
+        String baseActivity = taskInfo.baseActivity.getClassName();
+        // Contrary to the documentation taskInfo.baseActivity for the .LauncherMain
         // activity alias is the alias itself, and not the implementation. Filed b/66729258;
         // for now translate the alias manually.
         if (TextUtils.equals(baseActivity, ChromeTabbedActivity.MAIN_LAUNCHER_ACTIVITY_NAME)) {
@@ -437,7 +440,6 @@ public class MultiWindowUtils implements ActivityStateListener {
     /**
      * Makes |intent| able to support multi-instance in pre-N Samsung multi-window mode.
      */
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void makeLegacyMultiInstanceIntent(Activity activity, Intent intent) {
         if (isLegacyMultiWindow(activity)) {
             if (TextUtils.equals(ChromeTabbedActivity.class.getName(),

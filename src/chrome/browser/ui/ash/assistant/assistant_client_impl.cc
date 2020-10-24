@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ash/public/cpp/assistant/assistant_interface_binder.h"
+#include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
 #include "ash/public/cpp/network_config_service.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/assistant/assistant_util.h"
@@ -18,6 +19,9 @@
 #include "chrome/browser/ui/ash/assistant/assistant_web_view_factory_impl.h"
 #include "chrome/browser/ui/ash/assistant/conversation_starters_client_impl.h"
 #include "chrome/browser/ui/ash/assistant/device_actions_delegate_impl.h"
+#include "chromeos/components/bloom/public/cpp/bloom_controller.h"
+#include "chromeos/components/bloom/public/cpp/bloom_controller_factory.h"
+#include "chromeos/components/bloom/public/cpp/bloom_screenshot_delegate.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
@@ -86,9 +90,11 @@ void AssistantClientImpl::MaybeInit(Profile* profile) {
         std::make_unique<ConversationStartersClientImpl>(profile_);
   }
 
-  for (auto& receiver : pending_assistant_receivers_)
-    service_->BindAssistant(std::move(receiver));
-  pending_assistant_receivers_.clear();
+  if (chromeos::assistant::features::IsBloomEnabled()) {
+    bloom_controller_ = chromeos::bloom::BloomControllerFactory::Create(
+        profile->GetURLLoaderFactory()->Clone(),
+        IdentityManagerFactory::GetForProfile(profile));
+  }
 }
 
 void AssistantClientImpl::MaybeStartAssistantOptInFlow() {
@@ -96,17 +102,6 @@ void AssistantClientImpl::MaybeStartAssistantOptInFlow() {
     return;
 
   assistant_setup_->MaybeStartAssistantOptInFlow();
-}
-
-void AssistantClientImpl::BindAssistant(
-    mojo::PendingReceiver<chromeos::assistant::mojom::Assistant> receiver) {
-  if (!initialized_) {
-    pending_assistant_receivers_.push_back(std::move(receiver));
-    return;
-  }
-
-  chromeos::assistant::AssistantService::Get()->BindAssistant(
-      std::move(receiver));
 }
 
 void AssistantClientImpl::Observe(int type,
@@ -127,13 +122,6 @@ void AssistantClientImpl::RequestAssistantStructure(
 void AssistantClientImpl::OnAssistantStatusChanged(
     chromeos::assistant::AssistantStatus new_status) {
   ash::AssistantState::Get()->NotifyStatusChanged(new_status);
-}
-
-void AssistantClientImpl::RequestAssistantNotificationController(
-    mojo::PendingReceiver<ash::mojom::AssistantNotificationController>
-        receiver) {
-  ash::AssistantInterfaceBinder::GetInstance()->BindNotificationController(
-      std::move(receiver));
 }
 
 void AssistantClientImpl::RequestAssistantVolumeControl(

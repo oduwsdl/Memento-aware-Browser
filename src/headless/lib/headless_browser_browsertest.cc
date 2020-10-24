@@ -42,7 +42,7 @@
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/gfx/geometry/size.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "third_party/crashpad/crashpad/client/crash_report_database.h"
 #endif
 
@@ -212,7 +212,7 @@ class HeadlessBrowserTestWithProxy : public HeadlessBrowserTest {
   net::SpawnedTestServer proxy_server_;
 };
 
-#if defined(OS_WIN) || (defined(OS_MACOSX) && defined(ADDRESS_SANITIZER))
+#if defined(NO_WIN_FLAKES) || (defined(OS_MAC) && defined(ADDRESS_SANITIZER))
 // TODO(crbug.com/1045971): Disabled due to flakiness.
 // TODO(crbug.com/1086872): Disabled due to flakiness on Mac ASAN.
 #define MAYBE_SetProxyConfig DISABLED_SetProxyConfig
@@ -245,7 +245,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTestWithProxy, MAYBE_SetProxyConfig) {
 }
 
 // TODO(crbug.com/867447): Flaky on Windows 10 debug.
-#if defined(OS_WIN) && !defined(NDEBUG)
+#if defined(NO_WIN_FLAKES) && !defined(NDEBUG)
 #define MAYBE_WebGLSupported DISABLED_WebGLSupported
 #else
 #define MAYBE_WebGLSupported WebGLSupported
@@ -281,12 +281,12 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, ClipboardCopyPasteText) {
       writer.WriteText(paste_text);
     }
     base::string16 copy_text;
-    clipboard->ReadText(buffer, &copy_text);
+    clipboard->ReadText(buffer, /* data_dst = */ nullptr, &copy_text);
     EXPECT_EQ(paste_text, copy_text);
   }
 }
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045971): Disabled due to flakiness.
 #define MAYBE_DefaultSizes DISABLED_DefaultSizes
 #else
@@ -302,7 +302,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, MAYBE_DefaultSizes) {
   HeadlessBrowser::Options::Builder builder;
   const HeadlessBrowser::Options kDefaultOptions = builder.Build();
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // On Mac headless does not override the screen dimensions, so they are
   // left with the actual screen values.
   EXPECT_EQ(kDefaultOptions.window_size.width(),
@@ -315,7 +315,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, MAYBE_DefaultSizes) {
                 ->GetResult()
                 ->GetValue()
                 ->GetInt());
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
   EXPECT_EQ(kDefaultOptions.window_size.width(),
             EvaluateScript(web_contents, "window.innerWidth")
                 ->GetResult()
@@ -399,9 +399,9 @@ class HeadlessBrowserRendererCommandPrefixTest : public HeadlessBrowserTest {
 
   void TearDown() override {
     if (!launcher_script_.empty())
-      base::DeleteFile(launcher_script_, false);
+      base::DeleteFile(launcher_script_);
     if (!launcher_stamp_.empty())
-      base::DeleteFile(launcher_stamp_, false);
+      base::DeleteFile(launcher_stamp_);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -454,7 +454,7 @@ class CrashReporterTest : public HeadlessBrowserTest,
 
   void TearDown() override {
     base::ThreadRestrictions::SetIOAllowed(true);
-    base::DeleteFile(crash_dumps_dir_, /* recursive */ false);
+    base::DeleteFile(crash_dumps_dir_);
   }
 
   // HeadlessWebContents::Observer implementation:
@@ -479,12 +479,12 @@ class CrashReporterTest : public HeadlessBrowserTest,
 
 // TODO(skyostil): Minidump generation currently is only supported on Linux and
 // Mac.
-#if (defined(HEADLESS_USE_BREAKPAD) || defined(OS_MACOSX)) && \
+#if (defined(HEADLESS_USE_BREAKPAD) || defined(OS_MAC)) && \
     !defined(ADDRESS_SANITIZER)
 #define MAYBE_GenerateMinidump GenerateMinidump
 #else
 #define MAYBE_GenerateMinidump DISABLED_GenerateMinidump
-#endif  // defined(HEADLESS_USE_BREAKPAD) || defined(OS_MACOSX)
+#endif  // defined(HEADLESS_USE_BREAKPAD) || defined(OS_MAC)
 IN_PROC_BROWSER_TEST_F(CrashReporterTest, MAYBE_GenerateMinidump) {
   content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
 
@@ -510,7 +510,7 @@ IN_PROC_BROWSER_TEST_F(CrashReporterTest, MAYBE_GenerateMinidump) {
   {
     base::ThreadRestrictions::SetIOAllowed(true);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     auto database = crashpad::CrashReportDatabase::Initialize(crash_dumps_dir_);
     std::vector<crashpad::CrashReportDatabase::Report> reports;
     ASSERT_EQ(database->GetPendingReports(&reports),
@@ -628,7 +628,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, TraceUsingBrowserDevToolsTarget) {
   EXPECT_LT(0u, tracing_data->GetSize());
 }
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045971): Disabled due to flakiness.
 #define MAYBE_WindowPrint DISABLED_WindowPrint
 #else
@@ -656,7 +656,7 @@ class HeadlessBrowserAllowInsecureLocalhostTest : public HeadlessBrowserTest {
   }
 };
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045971): Disabled due to flakiness.
 #define MAYBE_AllowInsecureLocalhostFlag DISABLED_AllowInsecureLocalhostFlag
 #else
@@ -707,7 +707,7 @@ class HeadlessBrowserTestAppendCommandLineFlags : public HeadlessBrowserTest {
   bool callback_was_run_ = false;
 };
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // Flaky on Win ASAN. See https://crbug.com/884095.
 #define MAYBE_AppendChildProcessCommandLineFlags \
   DISABLED_AppendChildProcessCommandLineFlags
@@ -731,7 +731,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTestAppendCommandLineFlags,
   (void)web_contents;
 }
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045971): Disabled due to flakiness.
 #define MAYBE_ServerWantsClientCertificate DISABLED_ServerWantsClientCertificate
 #else
@@ -757,7 +757,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest,
   EXPECT_TRUE(WaitForLoad(web_contents));
 }
 
-#if defined(OS_WIN)
+#if defined(NO_WIN_FLAKES)
 // TODO(crbug.com/1045971): Disabled due to flakiness.
 #define MAYBE_AIAFetching DISABLED_AIAFetching
 #else

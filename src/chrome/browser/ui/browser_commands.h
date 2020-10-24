@@ -140,6 +140,10 @@ void BookmarkCurrentTab(Browser* browser);
 bool CanBookmarkCurrentTab(const Browser* browser);
 void BookmarkAllTabs(Browser* browser);
 bool CanBookmarkAllTabs(const Browser* browser);
+bool CanMoveActiveTabToReadLater(Browser* browser);
+bool MoveCurrentTabToReadLater(Browser* browser);
+bool MarkCurrentTabAsReadInReadLater(Browser* browser);
+bool IsCurrentTabUnreadInReadLater(Browser* browser);
 void SaveCreditCard(Browser* browser);
 void MigrateLocalCards(Browser* browser);
 void MaybeShowSaveLocalCardSignInPromo(Browser* browser);
@@ -161,13 +165,12 @@ bool CanRouteMedia(Browser* browser);
 // from the app menu. That will need to be changed if this is to be invoked from
 // elsewhere.
 void RouteMediaInvokedFromAppMenu(Browser* browser);
-void EmailPageLocation(Browser* browser);
-bool CanEmailPageLocation(const Browser* browser);
 void CutCopyPaste(Browser* browser, int command_id);
 void Find(Browser* browser);
 void FindNext(Browser* browser);
 void FindPrevious(Browser* browser);
 void FindInPage(Browser* browser, bool find_next, bool forward_direction);
+void ShowTabSearch(Browser* browser);
 bool CanCloseFind(Browser* browser);
 void CloseFind(Browser* browser);
 void Zoom(Browser* browser, content::PageZoom zoom);
@@ -204,6 +207,9 @@ void CopyURL(Browser* browser);
 // the tabbed Browser.
 Browser* OpenInChrome(Browser* hosted_app_browser);
 bool CanViewSource(const Browser* browser);
+bool CanToggleCaretBrowsing(Browser* browser);
+void ToggleCaretBrowsing(Browser* browser);
+void PromptToNameWindow(Browser* browser);
 
 base::Optional<int> GetKeyboardFocusedTabIndex(const Browser* browser);
 

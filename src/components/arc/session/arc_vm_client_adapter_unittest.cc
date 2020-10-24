@@ -7,21 +7,23 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/system/sys_info.h"
+#include "base/task/current_thread.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_run_loop_timeout.h"
@@ -42,8 +44,15 @@ namespace arc {
 namespace {
 
 constexpr const char kArcCreateDataJobName[] = "arc_2dcreate_2ddata";
+constexpr const char kArcHostClockServiceJobName[] =
+    "arc_2dhost_2dclock_2dservice";
 constexpr const char kArcKeymasterJobName[] = "arc_2dkeymasterd";
+constexpr const char kArcSensorServiceJobName[] = "arc_2dsensor_2dservice";
+constexpr const char kArcVmMountMyFilesJobName[] = "arcvm_2dmount_2dmyfiles";
+constexpr const char kArcVmMountRemovableMediaJobName[] =
+    "arcvm_2dmount_2dremovable_2dmedia";
 constexpr const char kArcVmServerProxyJobName[] = "arcvm_2dserver_2dproxy";
+constexpr const char kArcVmAdbdJobName[] = "arcvm_2dadbd";
 constexpr const char kArcVmPerBoardFeaturesJobName[] =
     "arcvm_2dper_2dboard_2dfeatures";
 constexpr const char kArcVmBootNotificationServerJobName[] =
@@ -64,7 +73,6 @@ StartParams GetPopulatedStartParams() {
   params.play_store_auto_update =
       StartParams::PlayStoreAutoUpdate::AUTO_UPDATE_ON;
   params.arc_custom_tabs_experiment = true;
-  params.arc_print_spooler_experiment = true;
   params.num_cores_disabled = 2;
   return params;
 }
@@ -90,12 +98,7 @@ class TestDebugDaemonClient : public chromeos::FakeDebugDaemonClient {
   TestDebugDaemonClient() = default;
   ~TestDebugDaemonClient() override = default;
 
-  void StartConcierge(ConciergeCallback callback) override {
-    start_concierge_called_ = true;
-    std::move(callback).Run(start_concierge_result_);
-  }
-
-  void BackupArcBugReport(const std::string& userhash,
+  void BackupArcBugReport(const cryptohome::AccountIdentifier& id,
                           chromeos::VoidDBusMethodCallback callback) override {
     backup_arc_bug_report_called_ = true;
     std::move(callback).Run(backup_arc_bug_report_result_);
@@ -108,14 +111,7 @@ class TestDebugDaemonClient : public chromeos::FakeDebugDaemonClient {
     backup_arc_bug_report_result_ = result;
   }
 
-  bool start_concierge_called() const { return start_concierge_called_; }
-  void set_start_concierge_result(bool result) {
-    start_concierge_result_ = result;
-  }
-
  private:
-  bool start_concierge_called_ = false;
-  bool start_concierge_result_ = true;
   bool backup_arc_bug_report_called_ = false;
   bool backup_arc_bug_report_result_ = true;
 
@@ -175,7 +171,7 @@ class TestArcVmBootNotificationServer
     ASSERT_EQ(HANDLE_EINTR(listen(fd_.get(), 5)), 0);
 
     controller_.reset(new base::MessagePumpForUI::FdWatchController(FROM_HERE));
-    ASSERT_TRUE(base::MessageLoopCurrentForUI::Get()->WatchFileDescriptor(
+    ASSERT_TRUE(base::CurrentUIThread::Get()->WatchFileDescriptor(
         fd_.get(), true, base::MessagePumpForUI::WATCH_READ, controller_.get(),
         this));
   }
@@ -277,10 +273,10 @@ class ArcVmClientAdapterTest : public testing::Test,
     SetArcVmBootNotificationServerAddressForTesting(
         std::string(kArcVmBootNotificationServerAddress,
                     sizeof(kArcVmBootNotificationServerAddress)),
-        base::TimeDelta::FromMilliseconds(100) /* connect_timeout_limit */,
-        base::TimeDelta::FromMilliseconds(
-            20) /* connect_sleep_duration_initial */
-    );
+        // connect_timeout_limit
+        base::TimeDelta::FromMilliseconds(100),
+        // connect_sleep_duration_initial
+        base::TimeDelta::FromMilliseconds(20));
   }
 
   void TearDown() override {
@@ -306,14 +302,6 @@ class ArcVmClientAdapterTest : public testing::Test,
   }
 
  protected:
-  bool GetStartConciergeCalled() {
-    return GetTestDebugDaemonClient()->start_concierge_called();
-  }
-
-  void SetStartConciergeResponse(bool response) {
-    GetTestDebugDaemonClient()->set_start_concierge_result(response);
-  }
-
   void SetValidUserInfo() { SetUserInfo(kUserIdHash, kSerialNumber); }
 
   void SetUserInfo(const std::string& hash, const std::string& serial) {
@@ -409,6 +397,22 @@ class ArcVmClientAdapterTest : public testing::Test,
         }));
   }
 
+  void StartRecordingUpstartOperations() {
+    auto* upstart_client = chromeos::FakeUpstartClient::Get();
+    upstart_client->set_start_job_cb(
+        base::BindLambdaForTesting([this](const std::string& job_name,
+                                          const std::vector<std::string>& env) {
+          upstart_operations_.emplace_back(job_name, true);
+          return true;
+        }));
+    upstart_client->set_stop_job_cb(
+        base::BindLambdaForTesting([this](const std::string& job_name,
+                                          const std::vector<std::string>& env) {
+          upstart_operations_.emplace_back(job_name, false);
+          return true;
+        }));
+  }
+
   void RemoveUpstartStartStopJobFailures() {
     auto* upstart_client = chromeos::FakeUpstartClient::Get();
     upstart_client->set_start_job_cb(
@@ -427,6 +431,9 @@ class ArcVmClientAdapterTest : public testing::Test,
   }
   void reset_arc_instance_stopped_called() {
     arc_instance_stopped_called_ = false;
+  }
+  const std::vector<std::pair<std::string, bool>>& upstart_operations() const {
+    return upstart_operations_;
   }
   TestConciergeClient* GetTestConciergeClient() {
     return static_cast<TestConciergeClient*>(
@@ -451,7 +458,6 @@ class ArcVmClientAdapterTest : public testing::Test,
   }
 
  private:
-
   void RewriteStatus(FileSystemStatus* status) {
     status->set_host_rootfs_writable_for_testing(host_rootfs_writable_);
     status->set_system_image_ext_format_for_testing(system_image_ext_format_);
@@ -467,6 +473,10 @@ class ArcVmClientAdapterTest : public testing::Test,
   // Variables to override the value in FileSystemStatus.
   bool host_rootfs_writable_;
   bool system_image_ext_format_;
+
+  // List of upstart operations recorded. When it's "start" the boolean is set
+  // to true.
+  std::vector<std::pair<std::string, bool>> upstart_operations_;
 
   std::unique_ptr<TestArcVmBootNotificationServer> boot_server_;
 
@@ -504,6 +514,28 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcVmServerProxyJobFail) {
   // for other StartMiniArc_...Fail tests.
 }
 
+// Tests that StartMiniArc() fails if Upstart fails to start
+// arc-host-clock-service.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcHostClockServiceJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStartJobFailure(kArcHostClockServiceJobName);
+
+  StartMiniArcWithParams(false, {});
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
+// Tests that StartMiniArc() succeeds if Upstart fails to stop
+// arc-host-clock-service.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcHostClockServiceJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStopJobFailure(kArcHostClockServiceJobName);
+
+  StartMiniArc();
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
 // Tests that StartMiniArc() fails if Upstart fails to start arc-keymasterd.
 TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcKeymasterJobFail) {
   // Inject failure to FakeUpstartClient.
@@ -524,6 +556,50 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcKeymasterJobFail) {
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
 }
 
+// Tests that StartMiniArc() fails if Upstart fails to start arc-sensor-service.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcSensorServiceJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStartJobFailure(kArcSensorServiceJobName);
+
+  StartMiniArcWithParams(false, {});
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
+// Tests that StartMiniArc() succeeds if Upstart fails to stop
+// arc-sensor-service.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcSensorServiceJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStopJobFailure(kArcSensorServiceJobName);
+
+  StartMiniArc();
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
+// Tests that StartMiniArc() still succeeds even when Upstart fails to stop
+// arcvm-mount-myfiles.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcVmMountMyFilesJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStopJobFailure(kArcVmMountMyFilesJobName);
+
+  StartMiniArc();
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
+// Tests that StartMiniArc() still succeeds even when Upstart fails to stop
+// arcvm-mount-removable-media.
+TEST_F(ArcVmClientAdapterTest,
+       StartMiniArc_StopArcVmMountRemovableMediaJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStopJobFailure(kArcVmMountRemovableMediaJobName);
+
+  StartMiniArc();
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
 // Tests that StartMiniArc() fails when Upstart fails to start the job.
 TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcVmPerBoardFeaturesJobFail) {
   // Inject failure to FakeUpstartClient.
@@ -532,6 +608,25 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcVmPerBoardFeaturesJobFail) {
   StartMiniArcWithParams(false, {});
   // Confirm that no VM is started.
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
+// Tests that StartMiniArc()'s JOB_RESTART for |kArcSensorServiceJobName| is
+// properly implemented.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_JobRestart) {
+  StartRecordingUpstartOperations();
+  StartMiniArc();
+
+  const auto& ops = upstart_operations();
+  // Find the STOP operation for the job.
+  auto it =
+      std::find(ops.begin(), ops.end(),
+                std::make_pair(std::string(kArcSensorServiceJobName), false));
+  ASSERT_NE(ops.end(), it);
+  ++it;
+  ASSERT_NE(ops.end(), it);
+  // The next operation must be START for the job.
+  EXPECT_EQ(it->first, kArcSensorServiceJobName);
+  EXPECT_TRUE(it->second);  // true means START.
 }
 
 // Tests that StopArcInstance() eventually notifies the observer.
@@ -554,6 +649,85 @@ TEST_F(ArcVmClientAdapterTest, StopArcInstance) {
   run_loop()->Run();
   // ..and that calls ArcInstanceStopped.
   EXPECT_TRUE(arc_instance_stopped_called());
+}
+
+// b/164816080 This test ensures that a new vm instance that is
+// created while handling the shutting down of the previous instance,
+// doesn't incorrectly receive the shutdown event as well.
+TEST_F(ArcVmClientAdapterTest, DoesNotGetArcInstanceStoppedOnNestedInstance) {
+  using RunLoopFactory = base::RepeatingCallback<base::RunLoop*()>;
+
+  class Observer : public ArcClientAdapter::Observer {
+   public:
+    Observer(RunLoopFactory run_loop_factory, Observer* child_observer)
+        : run_loop_factory_(run_loop_factory),
+          child_observer_(child_observer) {}
+    Observer(const Observer&) = delete;
+    Observer& operator=(const Observer&) = delete;
+
+    ~Observer() override {
+      if (child_observer_ && nested_adapter_)
+        nested_adapter_->RemoveObserver(child_observer_);
+    }
+
+    bool stopped_called() const { return stopped_called_; }
+
+    // ArcClientAdapter::Observer:
+    void ArcInstanceStopped() override {
+      stopped_called_ = true;
+
+      if (child_observer_) {
+        nested_adapter_ = CreateArcVmClientAdapterForTesting(base::DoNothing());
+        nested_adapter_->AddObserver(child_observer_);
+        nested_adapter_->SetUserInfo(
+            cryptohome::Identification(user_manager::StubAccountId()),
+            kUserIdHash, kSerialNumber);
+
+        base::RunLoop* run_loop = run_loop_factory_.Run();
+        nested_adapter_->StartMiniArc({}, QuitClosure(run_loop));
+        run_loop->Run();
+
+        run_loop = run_loop_factory_.Run();
+        nested_adapter_->UpgradeArc({}, QuitClosure(run_loop));
+        run_loop->Run();
+      }
+    }
+
+   private:
+    base::OnceCallback<void(bool)> QuitClosure(base::RunLoop* run_loop) {
+      return base::BindOnce(
+          [](base::RunLoop* run_loop, bool result) { run_loop->Quit(); },
+          run_loop);
+    }
+
+    base::RepeatingCallback<base::RunLoop*()> const run_loop_factory_;
+    Observer* const child_observer_;
+    std::unique_ptr<ArcClientAdapter> nested_adapter_;
+    bool stopped_called_ = false;
+  };
+
+  SetValidUserInfo();
+  StartMiniArc();
+  UpgradeArc(true);
+
+  RunLoopFactory run_loop_factory = base::BindLambdaForTesting([this]() {
+    RecreateRunLoop();
+    return run_loop();
+  });
+
+  Observer child_observer(run_loop_factory, nullptr);
+  Observer parent_observer(run_loop_factory, &child_observer);
+  adapter()->AddObserver(&parent_observer);
+  base::ScopedClosureRunner teardown(base::BindOnce(
+      [](ArcClientAdapter* adapter, Observer* parent_observer) {
+        adapter->RemoveObserver(parent_observer);
+      },
+      adapter(), &parent_observer));
+
+  SendVmStoppedSignal();
+
+  EXPECT_TRUE(parent_observer.stopped_called());
+  EXPECT_FALSE(child_observer.stopped_called());
 }
 
 // Tests that StopArcInstance() initiates ARC log backup.
@@ -616,7 +790,9 @@ TEST_F(ArcVmClientAdapterTest, StopArcInstance_OnShutdown) {
 
 // Tests that StopArcInstance() immediately notifies the observer on failure.
 TEST_F(ArcVmClientAdapterTest, StopArcInstance_Fail) {
+  SetValidUserInfo();
   StartMiniArc();
+  UpgradeArc(true);
 
   // Inject failure.
   vm_tools::concierge::StopVmResponse response;
@@ -641,19 +817,54 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcVmProxyFailure) {
   InjectUpstartStartJobFailure(kArcVmServerProxyJobName);
 
   UpgradeArc(false);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
-  // Try to stop the VM. StopVm will fail in this case because
-  // no VM is running.
-  vm_tools::concierge::StopVmResponse response;
-  response.set_success(false);
-  GetTestConciergeClient()->set_stop_vm_response(response);
+  // Try to stop the VM. No VM is running so StopVm() shouldn't be called.
   adapter()->StopArcInstance(/*on_shutdown=*/false,
                              /*should_backup_log=*/false);
   run_loop()->Run();
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_TRUE(arc_instance_stopped_called());
+}
+
+// Tests that UpgradeArc() handles arcvm-adbd stop failures properly.
+// Note that arcvm-adbd is restarted AFTER ARCVM is started.
+TEST_F(ArcVmClientAdapterTest, UpgradeArc_StopArcVmAdbdFailure) {
+  SetValidUserInfo();
+  StartMiniArc();
+
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStopJobFailure(kArcVmAdbdJobName);
+
+  // Upgrade should still succeed.
+  UpgradeArc(true);
+  EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
+  EXPECT_FALSE(arc_instance_stopped_called());
+
+  // Make sure StopVm() is not called.
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
+}
+
+// Tests that UpgradeArc() handles arcvm-adbd startup failures properly.
+// Note that arcvm-adbd is restarted AFTER ARCVM is started.
+TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcVmAdbdFailure) {
+  SetValidUserInfo();
+  StartMiniArc();
+
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStartJobFailure(kArcVmAdbdJobName);
+
+  EnableAdbOverUsbForTesting();
+  UpgradeArc(false);
+  EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
+  EXPECT_FALSE(arc_instance_stopped_called());
+
+  // Make sure StopVm() *is* called.
   EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  // Run the loop and make sure the VM is stopped.
+  SendVmStoppedSignal();
+  run_loop()->Run();
   EXPECT_TRUE(arc_instance_stopped_called());
 }
 
@@ -666,42 +877,57 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcCreateDataFailure) {
   InjectUpstartStartJobFailure(kArcCreateDataJobName);
 
   UpgradeArc(false);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
-  // Try to stop the VM. StopVm will fail in this case because
-  // no VM is running.
-  vm_tools::concierge::StopVmResponse response;
-  response.set_success(false);
-  GetTestConciergeClient()->set_stop_vm_response(response);
+  // Try to stop the VM. No VM is running so StopVm() shouldn't be called.
   adapter()->StopArcInstance(/*on_shutdown=*/false,
                              /*should_backup_log=*/false);
   run_loop()->Run();
-  EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
   EXPECT_TRUE(arc_instance_stopped_called());
 }
 
-// Tests that UpgradeArc() handles StartConcierge() failures properly.
-TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartConciergeFailure) {
+// Tests that UpgradeArc() handles arcvm-mount-myfiles startup failures
+// properly.
+TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcVmMountMyFilesJobFail) {
   SetValidUserInfo();
   StartMiniArc();
-  // Inject failure to StartConcierge().
-  SetStartConciergeResponse(false);
+
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStartJobFailure(kArcVmMountMyFilesJobName);
+
   UpgradeArc(false);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
-  // Try to stop the VM. StopVm will fail in this case because
-  // no VM is running.
-  vm_tools::concierge::StopVmResponse response;
-  response.set_success(false);
-  GetTestConciergeClient()->set_stop_vm_response(response);
+  // Try to stop the VM. No VM is running so StopVm() shouldn't be called.
   adapter()->StopArcInstance(/*on_shutdown=*/false,
                              /*should_backup_log=*/false);
   run_loop()->Run();
-  EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_TRUE(arc_instance_stopped_called());
+}
+
+// Tests that UpgradeArc() handles arcvm-mount-removable-media startup failures
+// properly.
+TEST_F(ArcVmClientAdapterTest,
+       UpgradeArc_StartArcVmMountRemovableMediaJobFail) {
+  SetValidUserInfo();
+  StartMiniArc();
+
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStartJobFailure(kArcVmMountRemovableMediaJobName);
+
+  UpgradeArc(false);
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+  EXPECT_FALSE(arc_instance_stopped_called());
+
+  // Try to stop the VM. No VM is running so StopVm() shouldn't be called.
+  adapter()->StopArcInstance(/*on_shutdown=*/false,
+                             /*should_backup_log=*/false);
+  run_loop()->Run();
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
   EXPECT_TRUE(arc_instance_stopped_called());
 }
 
@@ -713,19 +939,14 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_NoUserId) {
   StartMiniArc();
 
   UpgradeArc(false);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
-  // Try to stop the VM. StopVm will fail in this case because
-  // no VM is running.
-  vm_tools::concierge::StopVmResponse response;
-  response.set_success(false);
-  GetTestConciergeClient()->set_stop_vm_response(response);
+  // Try to stop the VM. No VM is running so StopVm() shouldn't be called.
   adapter()->StopArcInstance(/*on_shutdown=*/false,
                              /*should_backup_log=*/false);
   run_loop()->Run();
-  EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
   EXPECT_TRUE(arc_instance_stopped_called());
 }
 
@@ -737,19 +958,14 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_NoSerial) {
   StartMiniArc();
 
   UpgradeArc(false);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
-  // Try to stop the VM. StopVm will fail in this case because
-  // no VM is running.
-  vm_tools::concierge::StopVmResponse response;
-  response.set_success(false);
-  GetTestConciergeClient()->set_stop_vm_response(response);
+  // Try to stop the VM. No VM is running so StopVm() shouldn't be called.
   adapter()->StopArcInstance(/*on_shutdown=*/false,
                              /*should_backup_log=*/false);
   run_loop()->Run();
-  EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
   EXPECT_TRUE(arc_instance_stopped_called());
 }
 
@@ -763,19 +979,14 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcVmFailure) {
   GetTestConciergeClient()->set_start_vm_response(start_vm_response);
 
   UpgradeArc(false);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
-  // Try to stop the VM. StopVm will fail in this case because
-  // no VM is running.
-  vm_tools::concierge::StopVmResponse response;
-  response.set_success(false);
-  GetTestConciergeClient()->set_stop_vm_response(response);
+  // Try to stop the VM. No VM is running so StopVm() shouldn't be called.
   adapter()->StopArcInstance(/*on_shutdown=*/false,
                              /*should_backup_log=*/false);
   run_loop()->Run();
-  EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
   EXPECT_TRUE(arc_instance_stopped_called());
 }
 
@@ -786,19 +997,14 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcVmFailureEmptyReply) {
   GetTestConciergeClient()->set_start_vm_response(base::nullopt);
 
   UpgradeArc(false);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
-  // Try to stop the VM. StopVm will fail in this case because
-  // no VM is running.
-  vm_tools::concierge::StopVmResponse response;
-  response.set_success(false);
-  GetTestConciergeClient()->set_stop_vm_response(response);
+  // Try to stop the VM. No VM is running so StopVm() shouldn't be called.
   adapter()->StopArcInstance(/*on_shutdown=*/false,
                              /*should_backup_log=*/false);
   run_loop()->Run();
-  EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_FALSE(GetTestConciergeClient()->stop_vm_called());
   EXPECT_TRUE(arc_instance_stopped_called());
 }
 
@@ -807,7 +1013,6 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_Success) {
   SetValidUserInfo();
   StartMiniArc();
   UpgradeArc(true);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
@@ -832,7 +1037,6 @@ TEST_F(ArcVmClientAdapterTest, StartUpgradeArc_VariousParams) {
 
   UpgradeParams params(GetPopulatedUpgradeParams());
   UpgradeArcWithParams(true, std::move(params));
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 }
@@ -856,7 +1060,6 @@ TEST_F(ArcVmClientAdapterTest, StartUpgradeArc_VariousParams2) {
   params.preferred_languages = {"en_US"};
 
   UpgradeArcWithParams(true, std::move(params));
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 }
@@ -876,7 +1079,6 @@ TEST_F(ArcVmClientAdapterTest, StartUpgradeArc_DemoMode) {
   params.demo_session_apps_path = base::FilePath(kDemoImage);
 
   UpgradeArcWithParams(true, std::move(params));
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
@@ -900,7 +1102,6 @@ TEST_F(ArcVmClientAdapterTest, StartUpgradeArc_DisableSystemDefaultApp) {
   StartMiniArcWithParams(true, std::move(start_params));
   UpgradeParams params(GetPopulatedUpgradeParams());
   UpgradeArcWithParams(true, std::move(params));
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
   EXPECT_TRUE(
@@ -933,7 +1134,6 @@ TEST_F(ArcVmClientAdapterTest, CrosvmCrash) {
   SetValidUserInfo();
   StartMiniArc();
   UpgradeArc(true);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
@@ -948,7 +1148,6 @@ TEST_F(ArcVmClientAdapterTest, ConciergeCrash) {
   SetValidUserInfo();
   StartMiniArc();
   UpgradeArc(true);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
@@ -963,7 +1162,6 @@ TEST_F(ArcVmClientAdapterTest, CrosvmAndConciergeCrashes) {
   SetValidUserInfo();
   StartMiniArc();
   UpgradeArc(true);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 
@@ -986,7 +1184,6 @@ TEST_F(ArcVmClientAdapterTest, VmStoppedSignal_UnknownCid) {
   SetValidUserInfo();
   StartMiniArc();
   UpgradeArc(true);
-  EXPECT_TRUE(GetStartConciergeCalled());
   EXPECT_TRUE(GetTestConciergeClient()->start_arc_vm_called());
   EXPECT_FALSE(arc_instance_stopped_called());
 

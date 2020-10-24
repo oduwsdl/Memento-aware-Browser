@@ -21,7 +21,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "components/search_provider_logos/features.h"
 #include "components/search_provider_logos/switches.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
@@ -184,7 +183,7 @@ std::unique_ptr<EncodedLogo> ParseDoodleLogoResponse(
     bool* parsing_failed) {
   // The response may start with )]}'. Ignore this.
   base::StringPiece response_sp(*response);
-  if (response_sp.starts_with(kResponsePreamble))
+  if (base::StartsWith(response_sp, kResponsePreamble))
     response_sp.remove_prefix(strlen(kResponsePreamble));
 
   // Default parsing failure to be true.
@@ -336,10 +335,11 @@ std::unique_ptr<EncodedLogo> ParseDoodleLogoResponse(
   logo->metadata.on_click_url = ParseUrl(*ddljson, "target_url", base_url);
   ddljson->GetString("alt_text", &logo->metadata.alt_text);
 
-  if (base::FeatureList::IsEnabled(features::kDoodleLogging)) {
-    logo->metadata.cta_log_url = ParseUrl(*ddljson, "cta_log_url", base_url);
-    logo->metadata.log_url = ParseUrl(*ddljson, "log_url", base_url);
-  }
+  logo->metadata.cta_log_url = ParseUrl(*ddljson, "cta_log_url", base_url);
+  logo->metadata.dark_cta_log_url =
+      ParseUrl(*ddljson, "dark_cta_log_url", base_url);
+  logo->metadata.log_url = ParseUrl(*ddljson, "log_url", base_url);
+  logo->metadata.dark_log_url = ParseUrl(*ddljson, "dark_log_url", base_url);
 
   ddljson->GetString("fingerprint", &logo->metadata.fingerprint);
 

@@ -8,7 +8,7 @@
 #include "builtins-generated/bytecodes-builtins-list.h"
 
 // include generated header
-#include "torque-generated/builtin-definitions-tq.h"
+#include "torque-generated/builtin-definitions.h"
 
 namespace v8 {
 namespace internal {
@@ -94,14 +94,6 @@ namespace internal {
   ASM(JSBuiltinsConstructStub, Dummy)                                          \
   TFC(FastNewObject, FastNewObject)                                            \
   TFS(FastNewClosure, kSharedFunctionInfo, kFeedbackCell)                      \
-  TFC(FastNewFunctionContextEval, FastNewFunctionContext)                      \
-  TFC(FastNewFunctionContextFunction, FastNewFunctionContext)                  \
-  TFS(CreateEmptyLiteralObject)                                                \
-  TFS(CreateRegExpLiteral, kFeedbackVector, kSlot, kPattern, kFlags)           \
-  TFS(CreateEmptyArrayLiteral, kFeedbackVector, kSlot)                         \
-  TFS(CreateShallowArrayLiteral, kFeedbackVector, kSlot, kConstantElements)    \
-  TFS(CreateShallowObjectLiteral, kFeedbackVector, kSlot,                      \
-      kObjectBoilerplateDescription, kFlags)                                   \
   /* ES6 section 9.5.14 [[Construct]] ( argumentsList, newTarget) */           \
   TFC(ConstructProxy, JSTrampoline)                                            \
                                                                                \
@@ -146,6 +138,10 @@ namespace internal {
   TFC(CompileLazyDeoptimizedCode, JSTrampoline)                                \
   TFC(InstantiateAsmJs, JSTrampoline)                                          \
   ASM(NotifyDeoptimized, Dummy)                                                \
+  ASM(DeoptimizationEntry_Eager, DeoptimizationEntry)                          \
+  ASM(DeoptimizationEntry_Soft, DeoptimizationEntry)                           \
+  ASM(DeoptimizationEntry_Bailout, DeoptimizationEntry)                        \
+  ASM(DeoptimizationEntry_Lazy, DeoptimizationEntry)                           \
                                                                                \
   /* Trampolines called when returning from a deoptimization that expects   */ \
   /* to continue in a JavaScript builtin to finish the functionality of a   */ \
@@ -189,7 +185,6 @@ namespace internal {
   TFS(CopyFastSmiOrObjectElements, kObject)                                    \
   TFC(GrowFastDoubleElements, GrowArrayElements)                               \
   TFC(GrowFastSmiOrObjectElements, GrowArrayElements)                          \
-  TFC(NewArgumentsElements, NewArgumentsElements)                              \
                                                                                \
   /* Debugger */                                                               \
   TFJ(DebugBreakTrampoline, kDontAdaptArgumentsSentinel)                       \
@@ -198,6 +193,7 @@ namespace internal {
                                                                                \
   /* Type conversions */                                                       \
   TFC(ToNumber, TypeConversion)                                                \
+  TFC(PlainPrimitiveToNumber, TypeConversionNoContext)                         \
   TFC(ToNumberConvertBigInt, TypeConversion)                                   \
   TFC(Typeof, Typeof)                                                          \
   TFC(GetSuperConstructor, Typeof)                                             \
@@ -350,8 +346,6 @@ namespace internal {
   /* ES #sec-arraybuffer-constructor */                                        \
   CPP(ArrayBufferConstructor)                                                  \
   CPP(ArrayBufferConstructor_DoNotInitialize)                                  \
-  CPP(ArrayBufferPrototypeGetByteLength)                                       \
-  CPP(ArrayBufferIsView)                                                       \
   CPP(ArrayBufferPrototypeSlice)                                               \
                                                                                \
   /* AsyncFunction */                                                          \
@@ -545,6 +539,7 @@ namespace internal {
   TFH(LoadIC_Noninlined, LoadWithVector)                                       \
   TFH(LoadICTrampoline, Load)                                                  \
   TFH(LoadICTrampoline_Megamorphic, Load)                                      \
+  TFH(LoadSuperIC, LoadWithReceiverAndVector)                                  \
   TFH(KeyedLoadIC, LoadWithVector)                                             \
   TFH(KeyedLoadIC_Megamorphic, LoadWithVector)                                 \
   TFH(KeyedLoadICTrampoline, Load)                                             \
@@ -600,7 +595,6 @@ namespace internal {
   TFS(MapIteratorToList, kSource)                                              \
                                                                                \
   /* ES #sec-number-constructor */                                             \
-  TFJ(NumberConstructor, kDontAdaptArgumentsSentinel)                          \
   CPP(NumberPrototypeToExponential)                                            \
   CPP(NumberPrototypeToFixed)                                                  \
   CPP(NumberPrototypeToLocaleString)                                           \
@@ -638,7 +632,6 @@ namespace internal {
                                                                                \
   /* Object */                                                                 \
   /* ES #sec-object-constructor */                                             \
-  TFJ(ObjectConstructor, kDontAdaptArgumentsSentinel)                          \
   TFJ(ObjectAssign, kDontAdaptArgumentsSentinel)                               \
   /* ES #sec-object.create */                                                  \
   TFJ(ObjectCreate, kDontAdaptArgumentsSentinel)                               \
@@ -671,6 +664,7 @@ namespace internal {
   /* instanceof */                                                             \
   TFC(OrdinaryHasInstance, Compare)                                            \
   TFC(InstanceOf, Compare)                                                     \
+  TFC(InstanceOf_WithFeedback, Compare_WithFeedback)                           \
                                                                                \
   /* for-in */                                                                 \
   TFS(ForInEnumerate, kReceiver)                                               \
@@ -710,6 +704,7 @@ namespace internal {
   TFS(RegExpExecAtom, kRegExp, kString, kLastIndex, kMatchInfo)                \
   TFS(RegExpExecInternal, kRegExp, kString, kLastIndex, kMatchInfo)            \
   ASM(RegExpInterpreterTrampoline, CCall)                                      \
+  ASM(RegExpExperimentalTrampoline, CCall)                                     \
                                                                                \
   /* Set */                                                                    \
   TFJ(SetConstructor, kDontAdaptArgumentsSentinel)                             \
@@ -730,7 +725,6 @@ namespace internal {
   TFS(SetOrSetIteratorToList, kSource)                                         \
                                                                                \
   /* SharedArrayBuffer */                                                      \
-  CPP(SharedArrayBufferPrototypeGetByteLength)                                 \
   CPP(SharedArrayBufferPrototypeSlice)                                         \
   TFJ(AtomicsLoad, 2, kReceiver, kArray, kIndex)                               \
   TFJ(AtomicsStore, 3, kReceiver, kArray, kIndex, kValue)                      \
@@ -745,7 +739,7 @@ namespace internal {
   CPP(AtomicsNotify)                                                           \
   CPP(AtomicsIsLockFree)                                                       \
   CPP(AtomicsWait)                                                             \
-  CPP(AtomicsWake)                                                             \
+  CPP(AtomicsWaitAsync)                                                        \
                                                                                \
   /* String */                                                                 \
   /* ES #sec-string.fromcodepoint */                                           \
@@ -787,7 +781,6 @@ namespace internal {
   /* TypedArray */                                                             \
   /* ES #sec-typedarray-constructors */                                        \
   TFJ(TypedArrayBaseConstructor, 0, kReceiver)                                 \
-  TFJ(GenericLazyDeoptContinuation, 1, kReceiver, kResult)                     \
   TFJ(TypedArrayConstructor, kDontAdaptArgumentsSentinel)                      \
   CPP(TypedArrayPrototypeBuffer)                                               \
   /* ES6 #sec-get-%typedarray%.prototype.bytelength */                         \
@@ -814,13 +807,15 @@ namespace internal {
   TFJ(TypedArrayPrototypeMap, kDontAdaptArgumentsSentinel)                     \
                                                                                \
   /* Wasm */                                                                   \
+  ASM(GenericJSToWasmWrapper, Dummy)                                           \
   ASM(WasmCompileLazy, Dummy)                                                  \
   ASM(WasmDebugBreak, Dummy)                                                   \
   TFC(WasmFloat32ToNumber, WasmFloat32ToNumber)                                \
   TFC(WasmFloat64ToNumber, WasmFloat64ToNumber)                                \
-  TFS(WasmAllocateArray, kMapIndex, kLength, kElementSize)                     \
+  TFS(WasmAllocateArrayWithRtt, kMap, kLength, kElementSize)                   \
   TFC(WasmI32AtomicWait32, WasmI32AtomicWait32)                                \
   TFC(WasmI64AtomicWait32, WasmI64AtomicWait32)                                \
+  TFS(WasmAllocatePair, kValue1, kValue2)                                      \
                                                                                \
   /* WeakMap */                                                                \
   TFJ(WeakMapConstructor, kDontAdaptArgumentsSentinel)                         \
@@ -917,11 +912,7 @@ namespace internal {
   CPP(Trace)                                                                   \
                                                                                \
   /* Weak refs */                                                              \
-  CPP(FinalizationRegistryConstructor)                                         \
-  CPP(FinalizationRegistryRegister)                                            \
   CPP(FinalizationRegistryUnregister)                                          \
-  CPP(WeakRefConstructor)                                                      \
-  CPP(WeakRefDeref)                                                            \
                                                                                \
   /* Async modules */                                                          \
   TFJ(AsyncModuleEvaluate, kDontAdaptArgumentsSentinel)                        \
@@ -1037,16 +1028,12 @@ namespace internal {
   CPP(SegmenterPrototypeSegment)                                       \
   /* ecma402  #sec-Intl.Segmenter.supportedLocalesOf */                \
   CPP(SegmenterSupportedLocalesOf)                                     \
-  /* ecma402 #sec-segment-iterator-prototype-breakType */              \
-  CPP(SegmentIteratorPrototypeBreakType)                               \
-  /* ecma402 #sec-segment-iterator-prototype-following */              \
-  CPP(SegmentIteratorPrototypeFollowing)                               \
-  /* ecma402 #sec-segment-iterator-prototype-preceding */              \
-  CPP(SegmentIteratorPrototypePreceding)                               \
-  /* ecma402 #sec-segment-iterator-prototype-index */                  \
-  CPP(SegmentIteratorPrototypeIndex)                                   \
   /* ecma402 #sec-segment-iterator-prototype-next */                   \
   CPP(SegmentIteratorPrototypeNext)                                    \
+  /* ecma402 #sec-%segmentsprototype%.containing */                    \
+  CPP(SegmentsPrototypeContaining)                                     \
+  /* ecma402 #sec-%segmentsprototype%-@@iterator */                    \
+  CPP(SegmentsPrototypeIterator)                                       \
   /* ES #sec-string.prototype.normalize */                             \
   CPP(StringPrototypeNormalizeIntl)                                    \
   /* ecma402 #sup-string.prototype.tolocalelowercase */                \

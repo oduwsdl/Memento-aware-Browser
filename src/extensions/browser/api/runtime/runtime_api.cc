@@ -567,8 +567,8 @@ void RuntimeEventRouter::OnExtensionUninstalled(
     return;
   }
 
-  // Blacklisted extensions should not open uninstall_url.
-  if (extensions::ExtensionPrefs::Get(context)->IsExtensionBlacklisted(
+  // Blocklisted extensions should not open uninstall_url.
+  if (extensions::ExtensionPrefs::Get(context)->IsExtensionBlocklisted(
           extension_id)) {
     return;
   }
@@ -661,7 +661,7 @@ void RuntimeRequestUpdateCheckFunction::CheckComplete(
                          std::move(details)));
   } else {
     // HMM(kalman): Why does !success not imply Error()?
-    Respond(OneArgument(std::make_unique<base::Value>(result.response)));
+    Respond(OneArgument(base::Value(result.response)));
   }
 }
 
@@ -742,7 +742,8 @@ RuntimeGetPackageDirectoryEntryFunction::Run() {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("fileSystemId", filesystem.id());
   dict->SetString("baseName", relative_path);
-  return RespondNow(OneArgument(std::move(dict)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 }  // namespace extensions

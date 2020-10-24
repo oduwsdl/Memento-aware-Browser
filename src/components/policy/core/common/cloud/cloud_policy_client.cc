@@ -62,7 +62,7 @@ DeviceMode TranslateProtobufDeviceMode(
 bool IsChromePolicy(const std::string& type) {
   return type == dm_protocol::kChromeDevicePolicyType ||
          type == dm_protocol::kChromeUserPolicyType ||
-         type == dm_protocol::kChromeMachineLevelUserCloudPolicyType;
+         IsMachineLevelUserCloudPolicyType(type);
 }
 
 em::PolicyValidationReportRequest::ValidationResultType
@@ -180,6 +180,7 @@ void CloudPolicyClient::SetupRegistration(
   client_id_ = client_id;
   request_jobs_.clear();
   app_install_report_request_job_ = nullptr;
+  extension_install_report_request_job_ = nullptr;
   policy_fetch_request_job_.reset();
   responses_.clear();
   if (device_dm_token_callback_) {
@@ -459,7 +460,7 @@ void CloudPolicyClient::FetchRobotAuthCodes(
 
   request->set_device_type(device_type);
 
-  policy_fetch_request_job_ = service_->CreateJob(std::move(config));
+  request_jobs_.push_back(service_->CreateJob(std::move(config)));
 }
 
 void CloudPolicyClient::Unregister() {
@@ -594,16 +595,10 @@ void CloudPolicyClient::UploadRealtimeReport(base::Value report,
                                              StatusCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(is_registered());
-
-  std::unique_ptr<RealtimeReportingJobConfiguration> config =
-      std::make_unique<RealtimeReportingJobConfiguration>(
-          this, DMAuth::FromDMToken(dm_token_),
-          base::BindOnce(&CloudPolicyClient::OnRealtimeReportUploadCompleted,
-                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-
-  config->AddReport(std::move(report));
-
-  request_jobs_.push_back(service_->CreateJob(std::move(config)));
+  CreateNewRealtimeReportingJob(
+      std::move(report),
+      service()->configuration()->GetReportingConnectorServerUrl(),
+      add_connector_url_params_, std::move(callback));
 }
 
 void CloudPolicyClient::UploadAppInstallReport(base::Value report,
@@ -611,17 +606,10 @@ void CloudPolicyClient::UploadAppInstallReport(base::Value report,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(is_registered());
   CancelAppInstallReportUpload();
-
-  std::unique_ptr<RealtimeReportingJobConfiguration> config =
-      std::make_unique<RealtimeReportingJobConfiguration>(
-          this, DMAuth::FromDMToken(dm_token_),
-          base::BindOnce(&CloudPolicyClient::OnRealtimeReportUploadCompleted,
-                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-
-  config->AddReport(std::move(report));
-
-  request_jobs_.push_back(service_->CreateJob(std::move(config)));
-  app_install_report_request_job_ = request_jobs_.back().get();
+  app_install_report_request_job_ = CreateNewRealtimeReportingJob(
+      std::move(report),
+      service()->configuration()->GetRealtimeReportingServerUrl(),
+      /* add_connector_url_params=*/false, std::move(callback));
   DCHECK(app_install_report_request_job_);
 }
 
@@ -631,6 +619,26 @@ void CloudPolicyClient::CancelAppInstallReportUpload() {
   if (app_install_report_request_job_) {
     RemoveJob(app_install_report_request_job_);
     DCHECK_EQ(app_install_report_request_job_, nullptr);
+  }
+}
+
+void CloudPolicyClient::UploadExtensionInstallReport(base::Value report,
+                                                     StatusCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(is_registered());
+  CancelExtensionInstallReportUpload();
+  extension_install_report_request_job_ = CreateNewRealtimeReportingJob(
+      std::move(report),
+      service()->configuration()->GetRealtimeReportingServerUrl(),
+      /* add_connector_url_params=*/false, std::move(callback));
+  DCHECK(extension_install_report_request_job_);
+}
+
+void CloudPolicyClient::CancelExtensionInstallReportUpload() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (extension_install_report_request_job_) {
+    RemoveJob(extension_install_report_request_job_);
+    DCHECK_EQ(extension_install_report_request_job_, nullptr);
   }
 }
 
@@ -664,6 +672,23 @@ void CloudPolicyClient::FetchRemoteCommands(
   request_jobs_.push_back(service_->CreateJob(std::move(config)));
 }
 
+DeviceManagementService::Job* CloudPolicyClient::CreateNewRealtimeReportingJob(
+    base::Value report,
+    const std::string& server_url,
+    bool add_connector_url_params,
+    StatusCallback callback) {
+  std::unique_ptr<RealtimeReportingJobConfiguration> config =
+      std::make_unique<RealtimeReportingJobConfiguration>(
+          this, DMAuth::FromDMToken(dm_token_), server_url,
+          add_connector_url_params,
+          base::BindOnce(&CloudPolicyClient::OnRealtimeReportUploadCompleted,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+
+  config->AddReport(std::move(report));
+  request_jobs_.push_back(service_->CreateJob(std::move(config)));
+  return request_jobs_.back().get();
+}
+
 void CloudPolicyClient::GetDeviceAttributeUpdatePermission(
     std::unique_ptr<DMAuth> auth,
     CloudPolicyClient::StatusCallback callback) {
@@ -673,15 +698,16 @@ void CloudPolicyClient::GetDeviceAttributeUpdatePermission(
   // (https://crbug.com/942013).
   // DCHECK(auth->has_oauth_token() || auth->has_enrollment_token());
 
-  bool has_oauth_token = auth->has_oauth_token();
+  const bool has_oauth_token = auth->has_oauth_token();
+  const std::string oauth_token =
+      has_oauth_token ? auth->oauth_token() : std::string();
   std::unique_ptr<DMServerJobConfiguration> config =
       std::make_unique<DMServerJobConfiguration>(
           DeviceManagementService::JobConfiguration::
               TYPE_ATTRIBUTE_UPDATE_PERMISSION,
           this,
           /*critical=*/false,
-          !has_oauth_token ? std::move(auth) : DMAuth::NoAuth(),
-          has_oauth_token ? auth->oauth_token() : std::string(),
+          !has_oauth_token ? std::move(auth) : DMAuth::NoAuth(), oauth_token,
           base::BindOnce(
               &CloudPolicyClient::OnDeviceAttributeUpdatePermissionCompleted,
               weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -700,14 +726,15 @@ void CloudPolicyClient::UpdateDeviceAttributes(
   CHECK(is_registered());
   DCHECK(auth->has_oauth_token() || auth->has_enrollment_token());
 
-  bool has_oauth_token = auth->has_oauth_token();
+  const bool has_oauth_token = auth->has_oauth_token();
+  const std::string oauth_token =
+      has_oauth_token ? auth->oauth_token() : std::string();
   std::unique_ptr<DMServerJobConfiguration> config =
       std::make_unique<DMServerJobConfiguration>(
           DeviceManagementService::JobConfiguration::TYPE_ATTRIBUTE_UPDATE,
           this,
           /*critical=*/false,
-          !has_oauth_token ? std::move(auth) : DMAuth::NoAuth(),
-          has_oauth_token ? auth->oauth_token() : std::string(),
+          !has_oauth_token ? std::move(auth) : DMAuth::NoAuth(), oauth_token,
           base::BindOnce(&CloudPolicyClient::OnDeviceAttributeUpdated,
                          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 
@@ -1014,6 +1041,10 @@ void CloudPolicyClient::OnFetchRobotAuthCodesCompleted(
     DeviceManagementStatus status,
     int net_error,
     const em::DeviceManagementResponse& response) {
+  // Remove the job before executing the callback because |this| might be
+  // deleted during the callback.
+  RemoveJob(job);
+
   if (status == DM_STATUS_SUCCESS &&
       (!response.has_service_api_access_response())) {
     LOG(WARNING) << "Invalid service api access response.";
@@ -1028,6 +1059,7 @@ void CloudPolicyClient::OnFetchRobotAuthCodesCompleted(
   } else {
     std::move(callback).Run(status, std::string());
   }
+  // |this| might be deleted at this point.
 }
 
 void CloudPolicyClient::OnPolicyFetchCompleted(
@@ -1098,6 +1130,7 @@ void CloudPolicyClient::OnUnregisterCompleted(
     // Cancel all outstanding jobs.
     request_jobs_.clear();
     app_install_report_request_job_ = nullptr;
+    extension_install_report_request_job_ = nullptr;
     device_dm_token_.clear();
     NotifyRegistrationStateChanged();
   } else {
@@ -1180,6 +1213,8 @@ void CloudPolicyClient::OnDeviceAttributeUpdated(
 void CloudPolicyClient::RemoveJob(DeviceManagementService::Job* job) {
   if (app_install_report_request_job_ == job) {
     app_install_report_request_job_ = nullptr;
+  } else if (extension_install_report_request_job_ == job) {
+    extension_install_report_request_job_ = nullptr;
   }
   for (auto it = request_jobs_.begin(); it != request_jobs_.end(); ++it) {
     if (it->get() == job) {

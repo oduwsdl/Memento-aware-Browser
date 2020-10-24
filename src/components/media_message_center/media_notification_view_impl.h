@@ -10,7 +10,6 @@
 #include "base/optional.h"
 #include "components/media_message_center/media_notification_view.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
 
@@ -20,6 +19,7 @@ class NotificationHeaderView;
 
 namespace views {
 class BoxLayout;
+class Button;
 class ToggleImageButton;
 }  // namespace views
 
@@ -29,9 +29,16 @@ class MediaNotificationBackground;
 class MediaNotificationContainer;
 class MediaNotificationItem;
 
+struct COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) NotificationTheme {
+  SkColor primary_text_color = 0;
+  SkColor secondary_text_color = 0;
+  SkColor enabled_icon_color = 0;
+  SkColor disabled_icon_color = 0;
+  SkColor separator_color = 0;
+};
+
 class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
-    : public MediaNotificationView,
-      public views::ButtonListener {
+    : public MediaNotificationView {
  public:
   // The name of the histogram used when recorded whether the artwork was
   // present.
@@ -58,14 +65,12 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
       std::unique_ptr<views::View> header_row_controls_view,
       const base::string16& default_app_name,
       int notification_width,
-      bool should_show_icon);
+      bool should_show_icon,
+      base::Optional<NotificationTheme> theme = base::nullopt);
   ~MediaNotificationViewImpl() override;
 
   // views::View:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // MediaNotificationView:
   void SetExpanded(bool expanded) override;
@@ -81,6 +86,8 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
   void UpdateWithMediaArtwork(const gfx::ImageSkia& image) override;
   void UpdateWithFavicon(const gfx::ImageSkia& icon) override;
   void UpdateWithVectorIcon(const gfx::VectorIcon& vector_icon) override;
+  void UpdateDeviceSelectorAvailability(bool availability) override;
+
   void OnThemeChanged() override;
 
   const views::Label* title_label_for_testing() const { return title_label_; }
@@ -90,6 +97,12 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
   const views::Button* picture_in_picture_button_for_testing() const {
     return picture_in_picture_button_;
   }
+
+  const views::View* playback_button_container_for_testing() const {
+    return playback_button_container_;
+  }
+
+  std::vector<views::View*> get_buttons_for_testing() { return GetButtons(); }
 
   views::Button* GetHeaderRowForTesting() const;
   base::string16 GetSourceTitleForTesting() const;
@@ -113,6 +126,12 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
   bool IsActuallyExpanded() const;
 
   void UpdateForegroundColor();
+
+  void ButtonPressed(views::Button* button);
+
+  // Returns the buttons contained in the button row and playback button
+  // container.
+  std::vector<views::View*> GetButtons();
 
   // Container that receives OnExpanded events.
   MediaNotificationContainer* const container_;
@@ -149,6 +168,7 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
   // Container views directly attached to this view.
   message_center::NotificationHeaderView* header_row_ = nullptr;
   views::View* button_row_ = nullptr;
+  views::View* playback_button_container_ = nullptr;
   views::View* pip_button_separator_view_ = nullptr;
   views::ToggleImageButton* play_pause_button_ = nullptr;
   views::ToggleImageButton* picture_in_picture_button_ = nullptr;
@@ -160,6 +180,8 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
 
   views::BoxLayout* title_artist_row_layout_ = nullptr;
   const gfx::VectorIcon* vector_header_icon_ = nullptr;
+
+  base::Optional<NotificationTheme> theme_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaNotificationViewImpl);
 };

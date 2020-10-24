@@ -1,0 +1,43 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/third_party/blink/public/mojom/android_mojo_bindings.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/third_party/blink/public/mojom/color_scheme_mojo_bindings.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/third_party/blink/public/mojom/mojom_platform.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/third_party/blink/public/mojom/script_type_mojo_bindings.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/third_party/blink/public/mojom/web_feature_mojo_bindings.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/components/payments/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/services/service_manager/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/skia/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/third_party/blink/public/mojom/service_worker/storage.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/ui/gfx/range/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/url/mojom/url_mojom_origin.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/ui/base/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/ui/gfx/range/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/frame.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/frame_owner_properties.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/frame_policy.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/navigation_initiator.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/messaging/cloneable_message.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/messaging/message_port_descriptor.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/messaging/transferable_message.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/messaging/user_activation_snapshot.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/portal/portal.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/service_worker/controller_service_worker.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/service_worker/embedded_worker.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/service_worker/service_worker.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/service_worker/service_worker_container.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/service_worker/service_worker_object.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/service_worker/service_worker_provider.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/service_worker/service_worker_registration.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/worker/shared_worker.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/worker/shared_worker_connector.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/worker/shared_worker_factory.mojom"
+  ]
+}

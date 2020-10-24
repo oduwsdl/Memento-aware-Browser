@@ -17,6 +17,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
 #include "chrome/browser/devtools/devtools_eye_dropper.h"
@@ -37,6 +38,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/javascript_dialogs/app_modal_dialog_manager.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sessions/content/session_tab_helper.h"
@@ -64,6 +68,7 @@
 #include "net/base/escape.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/public_buildflags.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -226,6 +231,10 @@ GURL DecorateFrontendURL(const GURL& base_url) {
         switches::kDevToolsFlags);
   }
 
+  if (command_line->HasSwitch(switches::kCustomDevtoolsFrontend)) {
+    url_string += "&debugFrontend=true";
+  }
+
   return GURL(url_string);
 }
 
@@ -311,7 +320,7 @@ bool DevToolsEventForwarder::ForwardEvent(
   event_data.SetIntKey("keyCode", key_code);
   event_data.SetIntKey("modifiers", modifiers);
   devtools_window_->bindings_->CallClientMethod(
-      "DevToolsAPI", "keyEventUnhandled", event_data);
+      "DevToolsAPI", "keyEventUnhandled", std::move(event_data));
   return true;
 }
 
@@ -377,6 +386,27 @@ class DevToolsWindow::Throttle : public content::NavigationThrottle {
   DISALLOW_COPY_AND_ASSIGN(Throttle);
 };
 
+// Helper class that holds the owned main WebContents for the docked
+// devtools window and maintains a keepalive object that keeps the browser
+// main loop alive long enough for the WebContents to clean up properly.
+class DevToolsWindow::OwnedMainWebContents {
+ public:
+  explicit OwnedMainWebContents(
+      std::unique_ptr<content::WebContents> web_contents)
+      : keep_alive_(KeepAliveOrigin::DEVTOOLS_WINDOW,
+                    KeepAliveRestartOption::DISABLED),
+        web_contents_(std::move(web_contents)) {}
+
+  static std::unique_ptr<content::WebContents> TakeWebContents(
+      std::unique_ptr<OwnedMainWebContents> instance) {
+    return std::move(instance->web_contents_);
+  }
+
+ private:
+  ScopedKeepAlive keep_alive_;
+  std::unique_ptr<content::WebContents> web_contents_;
+};
+
 // DevToolsWindow -------------------------------------------------------------
 
 const char DevToolsWindow::kDevToolsApp[] = "DevToolsApp";
@@ -401,6 +431,10 @@ void DevToolsWindow::RemoveCreationCallbackForTest(
 DevToolsWindow::~DevToolsWindow() {
   if (throttle_)
     throttle_->ResumeThrottle();
+
+  if (reattach_complete_callback_) {
+    std::move(reattach_complete_callback_).Run();
+  }
 
   life_stage_ = kClosing;
 
@@ -763,12 +797,19 @@ DevToolsWindow::MaybeCreateNavigationThrottle(
 }
 
 void DevToolsWindow::UpdateInspectedWebContents(
-    content::WebContents* new_web_contents) {
+    content::WebContents* new_web_contents,
+    base::OnceCallback<void()> callback) {
+  DCHECK(!reattach_complete_callback_);
+  reattach_complete_callback_ = std::move(callback);
+
   inspected_contents_observer_ =
       std::make_unique<ObserverWithAccessor>(new_web_contents);
   bindings_->AttachTo(
       content::DevToolsAgentHost::GetOrCreateFor(new_web_contents));
-  bindings_->CallClientMethod("DevToolsAPI", "reattachMainTarget");
+  bindings_->CallClientMethod(
+      "DevToolsAPI", "reattachMainTarget", {}, {}, {},
+      base::BindOnce(&DevToolsWindow::OnReattachMainTargetComplete,
+                     base::Unretained(this)));
 }
 
 void DevToolsWindow::ScheduleShow(const DevToolsToggleAction& action) {
@@ -822,7 +863,7 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
     main_web_contents_->SetInitialFocus();
 
     PrefsTabHelper::CreateForWebContents(main_web_contents_);
-    main_web_contents_->SyncRendererPrefs();
+    OverrideAndSyncDevToolsRendererPrefs();
 
     DoAction(action);
     return;
@@ -934,7 +975,8 @@ DevToolsWindow::DevToolsWindow(FrontendType frontend_type,
       bindings_(bindings),
       browser_(nullptr),
       is_docked_(true),
-      owned_main_web_contents_(std::move(main_web_contents)),
+      owned_main_web_contents_(
+          std::make_unique<OwnedMainWebContents>(std::move(main_web_contents))),
       can_dock_(can_dock),
       close_on_detach_(true),
       // This initialization allows external front-end to work without changes.
@@ -982,6 +1024,12 @@ DevToolsWindow::DevToolsWindow(FrontendType frontend_type,
       g_creation_callbacks.Get());
   for (const auto& callback : copy)
     callback.Run(this);
+
+  pref_change_registrar_.Init(profile_->GetPrefs());
+  pref_change_registrar_.Add(
+      language::prefs::kAcceptLanguages,
+      base::BindRepeating(&DevToolsWindow::OnLocaleChanged,
+                          base::Unretained(this)));
 }
 
 // static
@@ -1279,7 +1327,7 @@ content::ColorChooser* DevToolsWindow::OpenColorChooser(
 
 void DevToolsWindow::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
   FileSelectHelper::RunFileChooser(render_frame_host, std::move(listener),
                                    params);
@@ -1312,7 +1360,7 @@ void DevToolsWindow::Inspect(scoped_refptr<content::DevToolsAgentHost> host) {
 }
 
 void DevToolsWindow::SetInspectedPageBounds(const gfx::Rect& rect) {
-  DevToolsContentsResizingStrategy strategy(rect);
+  DevToolsContentsResizingStrategy strategy(rect, is_docked_);
   if (contents_resizing_strategy_.Equals(strategy))
     return;
 
@@ -1361,8 +1409,9 @@ void DevToolsWindow::SetIsDocked(bool dock_requested) {
     // okay to just null the raw pointer here.
     browser_ = nullptr;
 
-    owned_main_web_contents_ = tab_strip_model->DetachWebContentsAt(
-        tab_strip_model->GetIndexOfWebContents(main_web_contents_));
+    owned_main_web_contents_ = std::make_unique<OwnedMainWebContents>(
+        tab_strip_model->DetachWebContentsAt(
+            tab_strip_model->GetIndexOfWebContents(main_web_contents_)));
   } else if (!dock_requested && was_docked) {
     UpdateBrowserWindow();
   }
@@ -1420,7 +1469,8 @@ void DevToolsWindow::ColorPickedInEyeDropper(int r, int g, int b, int a) {
   color.SetInteger("g", g);
   color.SetInteger("b", b);
   color.SetInteger("a", a);
-  bindings_->CallClientMethod("DevToolsAPI", "eyeDropperPickedColor", color);
+  bindings_->CallClientMethod("DevToolsAPI", "eyeDropperPickedColor",
+                              std::move(color));
 }
 
 void DevToolsWindow::InspectedContentsClosing() {
@@ -1536,9 +1586,10 @@ void DevToolsWindow::CreateDevToolsBrowser() {
 
   browser_ = new Browser(Browser::CreateParams::CreateForDevTools(profile_));
   browser_->tab_strip_model()->AddWebContents(
-      std::move(owned_main_web_contents_), -1,
-      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, TabStripModel::ADD_ACTIVE);
-  main_web_contents_->SyncRendererPrefs();
+      OwnedMainWebContents::TakeWebContents(
+          std::move(owned_main_web_contents_)),
+      -1, ui::PAGE_TRANSITION_AUTO_TOPLEVEL, TabStripModel::ADD_ACTIVE);
+  OverrideAndSyncDevToolsRendererPrefs();
 }
 
 BrowserWindow* DevToolsWindow::GetInspectedBrowserWindow() {
@@ -1635,4 +1686,19 @@ void DevToolsWindow::RegisterModalDialogManager(Browser* browser) {
       main_web_contents_);
   web_modal::WebContentsModalDialogManager::FromWebContents(main_web_contents_)
       ->SetDelegate(browser);
+}
+
+void DevToolsWindow::OnReattachMainTargetComplete(base::Value) {
+  std::move(reattach_complete_callback_).Run();
+}
+
+void DevToolsWindow::OnLocaleChanged() {
+  OverrideAndSyncDevToolsRendererPrefs();
+}
+
+void DevToolsWindow::OverrideAndSyncDevToolsRendererPrefs() {
+  main_web_contents_->GetMutableRendererPrefs()->can_accept_load_drops = false;
+  main_web_contents_->GetMutableRendererPrefs()->accept_languages =
+      g_browser_process->GetApplicationLocale();
+  main_web_contents_->SyncRendererPrefs();
 }

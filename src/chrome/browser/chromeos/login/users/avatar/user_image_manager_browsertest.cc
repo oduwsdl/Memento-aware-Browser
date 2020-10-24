@@ -75,7 +75,6 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "net/url_request/url_request_status.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/layout.h"
@@ -210,7 +209,7 @@ class UserImageManagerTestBase : public LoginManagerTest,
       run_loop_->Quit();
   }
 
-  // Logs in |account_id|.
+  // Logs in `account_id`.
   void LogIn(const AccountId& account_id) {
     user_manager::UserManager::Get()->UserLoggedIn(
         account_id, account_id.GetUserEmail(), false /* browser_restart */,
@@ -239,8 +238,8 @@ class UserImageManagerTestBase : public LoginManagerTest,
     EXPECT_EQ(image_path.value(), actual_image_path);
   }
 
-  // Verifies that there is no image info for |account_id| in dictionary
-  // |images_pref|.
+  // Verifies that there is no image info for `account_id` in dictionary
+  // `images_pref`.
   void ExpectNoUserImageInfo(const base::DictionaryValue* images_pref,
                              const AccountId& account_id) {
     ASSERT_TRUE(images_pref);
@@ -250,7 +249,7 @@ class UserImageManagerTestBase : public LoginManagerTest,
     ASSERT_FALSE(image_properties);
   }
 
-  // Returns the image path for user |account_id| with specified |extension|.
+  // Returns the image path for user `account_id` with specified `extension`.
   base::FilePath GetUserImagePath(const AccountId& account_id,
                                   const std::string& extension) {
     return user_data_dir_.Append(account_id.GetUserEmail())
@@ -299,7 +298,7 @@ class UserImageManagerTestBase : public LoginManagerTest,
     const user_manager::User* user =
         user_manager::UserManager::Get()->GetActiveUser();
     ASSERT_TRUE(user);
-    UserImageManagerImpl* uim = reinterpret_cast<UserImageManagerImpl*>(
+    UserImageManagerImpl* uim = static_cast<UserImageManagerImpl*>(
         ChromeUserManager::Get()->GetUserImageManager(user->GetAccountId()));
     if (uim->job_.get()) {
       run_loop_.reset(new base::RunLoop);

@@ -20,7 +20,7 @@ namespace v8 {
 namespace internal {
 namespace wasm {
 class WasmCode;
-}
+}  // namespace wasm
 
 // Forward declarations.
 class AbstractCode;
@@ -314,7 +314,7 @@ class ErrorUtils : public AllStatic {
 
 class MessageFormatter {
  public:
-  static const char* TemplateString(MessageTemplate index);
+  V8_EXPORT_PRIVATE static const char* TemplateString(MessageTemplate index);
 
   V8_EXPORT_PRIVATE static MaybeHandle<String> Format(Isolate* isolate,
                                                       MessageTemplate index,

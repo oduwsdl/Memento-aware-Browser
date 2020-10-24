@@ -60,7 +60,15 @@ HidChooserContext::HidChooserContext(Profile* profile)
                          HostContentSettingsMapFactory::GetForProfile(profile)),
       is_incognito_(profile->IsOffTheRecord()) {}
 
-HidChooserContext::~HidChooserContext() = default;
+HidChooserContext::~HidChooserContext() {
+  // Notify observers that the chooser context is about to be destroyed.
+  // Observers must remove themselves from the observer lists.
+  for (auto& observer : device_observer_list_) {
+    observer.OnHidChooserContextShutdown();
+    DCHECK(!device_observer_list_.HasObserver(&observer));
+  }
+  DCHECK(!permission_observer_list_.might_have_observers());
+}
 
 base::string16 HidChooserContext::GetObjectDisplayName(
     const base::Value& object) {
@@ -243,6 +251,13 @@ void HidChooserContext::GetDevices(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(device_list)));
 }
 
+const device::mojom::HidDeviceInfo* HidChooserContext::GetDeviceInfo(
+    const std::string& guid) {
+  DCHECK(is_initialized_);
+  auto it = devices_.find(guid);
+  return it == devices_.end() ? nullptr : it->second.get();
+}
+
 device::mojom::HidManager* HidChooserContext::GetHidManager() {
   EnsureHidManagerConnection();
   return hid_manager_.get();
@@ -335,6 +350,8 @@ void HidChooserContext::InitDeviceList(
     std::vector<device::mojom::HidDeviceInfoPtr> devices) {
   for (auto& device : devices)
     devices_.insert({device->guid, std::move(device)});
+
+  is_initialized_ = true;
 
   while (!pending_get_devices_requests_.empty()) {
     std::vector<device::mojom::HidDeviceInfoPtr> device_list;

@@ -105,23 +105,14 @@ public class TabGroupModelFilterUnitTest {
 
     private TabImpl prepareTab(int tabId, int rootId, int parentTabId) {
         TabImpl tab = mock(TabImpl.class);
-
-        doAnswer(invocation -> {
-            int newRootId = invocation.getArgument(0);
-            UserDataHost userDataHost = new UserDataHost();
-            userDataHost.setUserData(
-                    CriticalPersistedTabData.class, CriticalPersistedTabData.build(tab));
-            when(tab.getUserDataHost()).thenReturn(userDataHost);
-            CriticalPersistedTabData.from(tab).setRootId(newRootId);
-            return null;
-        })
-                .when(tab)
-                .setRootId(anyInt());
-
+        doReturn(true).when(tab).isInitialized();
+        CriticalPersistedTabData criticalPersistedTabData = CriticalPersistedTabData.build(tab);
+        UserDataHost userDataHost = new UserDataHost();
+        userDataHost.setUserData(CriticalPersistedTabData.class, criticalPersistedTabData);
+        when(tab.getUserDataHost()).thenReturn(userDataHost);
         doReturn(tabId).when(tab).getId();
-        doReturn(parentTabId).when(tab).getParentId();
-        tab.setRootId(rootId);
-
+        CriticalPersistedTabData.from(tab).setRootId(rootId);
+        CriticalPersistedTabData.from(tab).setParentId(parentTabId);
         return tab;
     }
 
@@ -303,6 +294,8 @@ public class TabGroupModelFilterUnitTest {
 
     @Test
     public void addTab_DuringRestore() {
+        setupTabGroupModelFilter(false, false);
+        assertFalse(mTabGroupModelFilter.isTabModelRestored());
         TabImpl newTab = prepareTab(NEW_TAB_ID, NEW_TAB_ID, TAB1_ID);
         doReturn(TabLaunchType.FROM_RESTORE).when(newTab).getLaunchType();
 
@@ -312,9 +305,22 @@ public class TabGroupModelFilterUnitTest {
     }
 
     @Test
+    public void addTab_ThemeChangeReparenting() {
+        // When tab is added due to theme change reparenting, their launch type remains unchanged.
+        setupTabGroupModelFilter(false, false);
+        assertFalse(mTabGroupModelFilter.isTabModelRestored());
+        TabImpl newTab = prepareTab(NEW_TAB_ID, NEW_TAB_ID, TAB1_ID);
+        doReturn(TabLaunchType.FROM_LONGPRESS_BACKGROUND).when(newTab).getLaunchType();
+
+        addTabToTabModel(POSITION1 + 1, newTab);
+
+        assertThat(CriticalPersistedTabData.from(newTab).getRootId(), equalTo(NEW_TAB_ID));
+    }
+
+    @Test
     public void addTab_DuringResettingFilterState() {
         mTabGroupModelFilter.resetFilterState();
-        verify(mock(TabImpl.class), never()).setRootId(anyInt());
+        verify(mock(CriticalPersistedTabData.class), never()).setRootId(anyInt());
     }
 
     @Test(expected = IllegalStateException.class)
@@ -884,7 +890,7 @@ public class TabGroupModelFilterUnitTest {
         assertTrue(mTabGroupModelFilter.isTabModelRestored());
 
         // Simulate that tab3 is going to be moved out of group.
-        mTab3.setRootId(TAB3_ID);
+        CriticalPersistedTabData.from(mTab3).setRootId(TAB3_ID);
 
         mTabModelObserverCaptor.getValue().didMoveTab(mTab3, POSITION3, POSITION6);
 
@@ -919,7 +925,7 @@ public class TabGroupModelFilterUnitTest {
     @Test
     public void resetFilterStateTest() {
         assertThat(CriticalPersistedTabData.from(mTab3).getRootId(), equalTo(TAB2_ROOT_ID));
-        mTab3.setRootId(TAB1_ROOT_ID);
+        CriticalPersistedTabData.from(mTab3).setRootId(TAB1_ROOT_ID);
         mTabGroupModelFilter.resetFilterState();
         assertThat(CriticalPersistedTabData.from(mTab3).getRootId(), equalTo(TAB1_ROOT_ID));
     }

@@ -12,6 +12,8 @@
 #include "chrome/browser/chromeos/file_manager/file_manager_browsertest_base.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/web_applications/system_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
@@ -101,6 +103,16 @@ struct TestCase {
     return *this;
   }
 
+  TestCase& EnableSinglePartitionFormat() {
+    options.single_partition_format = true;
+    return *this;
+  }
+
+  TestCase& EnableTrash() {
+    options.trash = true;
+    return *this;
+  }
+
   // Show the startup browser. Some tests invoke the file picker dialog during
   // the test. Requesting a file picker from a background page is forbidden by
   // the apps platform, and it's a bug that these tests do so.
@@ -112,8 +124,19 @@ struct TestCase {
     return *this;
   }
 
+  // TODO(crbug.com/912236) Remove once transition to new ZIP system is done.
   TestCase& ZipNoNaCl() {
     options.zip_no_nacl = true;
+    return *this;
+  }
+
+  TestCase& EnableSharesheet() {
+    options.enable_sharesheet = true;
+    return *this;
+  }
+
+  TestCase& DisableSharesheet() {
+    options.enable_sharesheet = false;
     return *this;
   }
 
@@ -140,6 +163,9 @@ struct TestCase {
 
     if (options.zip_no_nacl)
       full_name += "_ZipNoNaCl";
+
+    if (options.single_partition_format)
+      full_name += "_SinglePartitionFormat";
 
     return full_name;
   }
@@ -196,6 +222,26 @@ IN_PROC_BROWSER_TEST_P(FilesAppBrowserTest, Test) {
   StartTest();
 }
 
+// Files app tests that require SWA (System Web Apps).
+class SWAsFilesAppBrowserTest : public FilesAppBrowserTest {
+ public:
+  SWAsFilesAppBrowserTest() = default;
+  SWAsFilesAppBrowserTest(const SWAsFilesAppBrowserTest&) = delete;
+  SWAsFilesAppBrowserTest& operator=(const SWAsFilesAppBrowserTest&) = delete;
+
+  void SetUpOnMainThread() override {
+    web_app::WebAppProvider::Get(profile())
+        ->system_web_app_manager()
+        .InstallSystemAppsForTesting();
+
+    FilesAppBrowserTest::SetUpOnMainThread();
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(SWAsFilesAppBrowserTest, Test) {
+  StartTest();
+}
+
 // A version of the FilesAppBrowserTest that supports spanning browser restart
 // to allow testing prefs and other things.
 class ExtendedFilesAppBrowserTest : public FilesAppBrowserTest {
@@ -244,6 +290,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("fileDisplayMtp"),
         TestCase("fileDisplayUsb"),
         TestCase("fileDisplayUsbPartition"),
+        TestCase("fileDisplayUsbPartition").EnableSinglePartitionFormat(),
         TestCase("fileDisplayUsbPartitionSort"),
         TestCase("fileDisplayPartitionFileTable"),
         TestCase("fileSearch"),
@@ -294,6 +341,12 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("audioRepeatOneModeMultipleFileDrive")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
+    OpenImageBacklight, /* open_image_backlight.js */
+    SWAsFilesAppBrowserTest,
+    ::testing::Values(TestCase("imageOpenBacklight").InGuestMode(),
+                      TestCase("imageOpenBacklight")));
+
+WRAPPED_INSTANTIATE_TEST_SUITE_P(
     OpenImageFiles, /* open_image_files.js */
     FilesAppBrowserTest,
     ::testing::Values(TestCase("imageOpenDownloads").InGuestMode(),
@@ -323,7 +376,6 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FilesAppBrowserTest,
     ::testing::Values(ZipCase("zipFileOpenDownloads").InGuestMode(),
                       ZipCase("zipFileOpenDownloads"),
-                      ZipCase("zipFileCannotOpen").ZipNoNaCl(),
                       ZipCase("zipFileOpenDownloadsShiftJIS"),
                       ZipCase("zipFileOpenDownloadsMacOs"),
                       ZipCase("zipFileOpenDownloadsWithAbsolutePaths"),
@@ -430,14 +482,19 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Toolbar, /* toolbar.js */
     FilesAppBrowserTest,
-    ::testing::Values(TestCase("toolbarDeleteWithMenuItemNoEntrySelected"),
-                      TestCase("toolbarDeleteButtonKeepFocus"),
-                      TestCase("toolbarDeleteEntry").InGuestMode(),
-                      TestCase("toolbarDeleteEntry"),
-                      TestCase("toolbarRefreshButtonWithSelection").EnableArc(),
-                      TestCase("toolbarAltACommand").FilesNg(),
-                      TestCase("toolbarRefreshButtonHiddenInRecents"),
-                      TestCase("toolbarMultiMenuFollowsButton")));
+    ::testing::Values(
+        TestCase("toolbarDeleteWithMenuItemNoEntrySelected"),
+        TestCase("toolbarDeleteButtonKeepFocus"),
+        TestCase("toolbarDeleteEntry").InGuestMode(),
+        TestCase("toolbarDeleteEntry"),
+        TestCase("toolbarRefreshButtonWithSelection").EnableArc(),
+        TestCase("toolbarAltACommand").FilesNg(),
+        TestCase("toolbarRefreshButtonHiddenInRecents"),
+        TestCase("toolbarMultiMenuFollowsButton"),
+        TestCase("toolbarSharesheetButtonWithSelection").EnableSharesheet(),
+        TestCase("toolbarSharesheetContextMenuWithSelection")
+            .EnableSharesheet(),
+        TestCase("toolbarSharesheetNoEntrySelected").EnableSharesheet()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     QuickView, /* quick_view.js */
@@ -456,6 +513,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("openQuickViewAudioWithImageMetadata"),
         TestCase("openQuickViewImageJpg"),
         TestCase("openQuickViewImageJpeg"),
+        TestCase("openQuickViewImageJpeg").InGuestMode(),
         TestCase("openQuickViewImageExif"),
         TestCase("openQuickViewImageRaw"),
         TestCase("openQuickViewImageRawWithOrientation"),
@@ -469,6 +527,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("openQuickViewKeyboardLeftRightChangesView"),
         TestCase("openQuickViewSniffedText"),
         TestCase("openQuickViewTextFileWithUnknownMimeType"),
+        TestCase("openQuickViewUtf8Text"),
         TestCase("openQuickViewScrollText"),
         TestCase("openQuickViewScrollHtml"),
         TestCase("openQuickViewMhtml"),
@@ -483,6 +542,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("openQuickViewMtp"),
         TestCase("openQuickViewTabIndexImage"),
         TestCase("openQuickViewTabIndexText"),
+        TestCase("openQuickViewTabIndexHtml"),
         TestCase("openQuickViewTabIndexAudio"),
         TestCase("openQuickViewTabIndexVideo"),
         TestCase("openQuickViewTabIndexDeleteDialog"),
@@ -516,10 +576,13 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("directoryTreeRecentsSubtypeScroll").EnableUnifiedMediaView(),
         TestCase("directoryTreeHorizontalScroll"),
         TestCase("directoryTreeExpandHorizontalScroll"),
-        // Disabled. Fails on internal ChromeOS bot. https://crbug.com/1061821.
-        // TestCase("directoryTreeExpandHorizontalScrollRTL"),
+        TestCase("directoryTreeExpandHorizontalScrollRTL"),
         TestCase("directoryTreeVerticalScroll"),
-        TestCase("directoryTreeExpandFolder")));
+        TestCase("directoryTreeExpandFolder"),
+        TestCase(
+            "directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOff"),
+        TestCase(
+            "directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOn")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     DirectoryTreeContextMenu, /* directory_tree_context_menu.js */
@@ -569,9 +632,11 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("dirContextMenuCrostini"),
         TestCase("dirContextMenuPlayFiles"),
         TestCase("dirContextMenuUsbs"),
+        TestCase("dirContextMenuUsbs").EnableSinglePartitionFormat(),
         TestCase("dirContextMenuFsp"),
         TestCase("dirContextMenuDocumentsProvider").EnableDocumentsProvider(),
         TestCase("dirContextMenuUsbDcim"),
+        TestCase("dirContextMenuUsbDcim").EnableSinglePartitionFormat(),
         TestCase("dirContextMenuMtp"),
         TestCase("dirContextMenuMediaView").EnableArc(),
         TestCase("dirContextMenuMyDrive"),
@@ -585,21 +650,26 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     DriveSpecific, /* drive_specific.js */
     FilesAppBrowserTest,
-    ::testing::Values(TestCase("driveOpenSidebarOffline"),
-                      TestCase("driveOpenSidebarSharedWithMe"),
-                      TestCase("driveAutoCompleteQuery"),
-                      TestCase("drivePinFileMobileNetwork"),
-                      TestCase("driveClickFirstSearchResult"),
-                      TestCase("drivePressEnterToSearch"),
-                      TestCase("drivePressClearSearch"),
-                      TestCase("drivePressCtrlAFromSearch"),
-                      TestCase("driveBackupPhotos"),
-                      TestCase("driveAvailableOfflineGearMenu"),
-                      TestCase("driveAvailableOfflineDirectoryGearMenu"),
-                      TestCase("driveLinkToDirectory"),
-                      TestCase("driveLinkOpenFileThroughLinkedDirectory"),
-                      TestCase("driveLinkOpenFileThroughTransitiveLink"),
-                      TestCase("driveWelcomeBanner")));
+    ::testing::Values(
+        TestCase("driveOpenSidebarOffline"),
+        TestCase("driveOpenSidebarSharedWithMe"),
+        TestCase("driveAutoCompleteQuery"),
+        TestCase("drivePinMultiple"),
+        TestCase("drivePinHosted"),
+        TestCase("drivePinFileMobileNetwork"),
+        TestCase("driveClickFirstSearchResult"),
+        TestCase("drivePressEnterToSearch"),
+        TestCase("drivePressClearSearch"),
+        TestCase("drivePressCtrlAFromSearch"),
+        TestCase("driveBackupPhotos"),
+        TestCase("driveBackupPhotos").EnableSinglePartitionFormat(),
+        TestCase("driveAvailableOfflineGearMenu"),
+        TestCase("driveAvailableOfflineDirectoryGearMenu"),
+        TestCase("driveAvailableOfflineActionBar"),
+        TestCase("driveLinkToDirectory"),
+        TestCase("driveLinkOpenFileThroughLinkedDirectory"),
+        TestCase("driveLinkOpenFileThroughTransitiveLink"),
+        TestCase("driveWelcomeBanner")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Transfer, /* transfer.js */
@@ -621,13 +691,25 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("transferFromDownloadsToTeamDrive").FilesNg(),
         TestCase("transferBetweenTeamDrives").DisableFilesNg(),
         TestCase("transferBetweenTeamDrives").FilesNg(),
+        TestCase("transferDragDropActiveLeave"),
+        TestCase("transferDragDropActiveDrop"),
+        TestCase("transferDragDropTreeItemAccepts").FilesNg(),
+        TestCase("transferDragDropTreeItemDenies").FilesNg(),
+        TestCase("transferDragAndHoverTreeItemEntryList"),
+        TestCase("transferDragAndHoverTreeItemFakeEntry"),
+        TestCase("transferDragAndHoverTreeItemFakeEntry")
+            .EnableSinglePartitionFormat(),
+        TestCase("transferDragFileListItemSelects"),
         TestCase("transferDragAndDrop"),
         TestCase("transferDragAndHover"),
         TestCase("transferFromDownloadsToDownloads"),
         TestCase("transferDeletedFile"),
         TestCase("transferInfoIsRemembered"),
         TestCase("transferToUsbHasDestinationText"),
-        TestCase("transferDismissedErrorIsRemembered")));
+        TestCase("transferDismissedErrorIsRemembered"),
+        TestCase("transferNotSupportedOperationHasNoRemainingTimeText"),
+        TestCase("transferUpdateSamePanelItem"),
+        TestCase("transferShowPendingMessageForZeroRemainingTime")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     RestorePrefs, /* restore_prefs.js */
@@ -687,8 +769,10 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("defaultTaskDialogDownloads"),
                       TestCase("defaultTaskDialogDownloads").InGuestMode(),
                       TestCase("defaultTaskDialogDrive"),
+                      TestCase("changeDefaultDialogScrollList"),
                       TestCase("genericTaskIsNotExecuted"),
-                      TestCase("genericTaskAndNonGenericTask")));
+                      TestCase("genericTaskAndNonGenericTask"),
+                      TestCase("noActionBarOpenForDirectories")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FolderShortcuts, /* folder_shortcuts.js */
@@ -704,8 +788,14 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(TestCase("sortColumns"),
                       TestCase("sortColumns").InGuestMode()));
 
+// TODO(crbug.com/1139247): Failing on ChromeOS.
+#if defined(OS_CHROMEOS)
+#define MAYBE_TabIndex DISABLED_TabIndex
+#else
+#define MAYBE_TabIndex TabIndex
+#endif
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
-    TabIndex, /* tab_index.js: */
+    MAYBE_TabIndex, /* tab_index.js: */
     FilesAppBrowserTest,
     ::testing::Values(
         TestCase("tabindexSearchBoxFocus").FilesNg(),
@@ -717,8 +807,15 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("tabindexFocusDownloads").InGuestMode().DisableFilesNg(),
         // TestCase("tabindexFocusBreadcrumbBackground").FilesNg(),
         TestCase("tabindexFocusBreadcrumbBackground").DisableFilesNg(),
-        TestCase("tabindexFocusDirectorySelected").FilesNg(),
-        TestCase("tabindexFocusDirectorySelected").DisableFilesNg(),
+        TestCase("tabindexFocusDirectorySelected")
+            .FilesNg()
+            .DisableSharesheet(),
+        TestCase("tabindexFocusDirectorySelected")
+            .DisableFilesNg()
+            .DisableSharesheet(),
+        TestCase("tabindexFocusDirectorySelectedSharesheetEnabled")
+            .FilesNg()
+            .EnableSharesheet(),
         TestCase("tabindexOpenDialogDownloadsFilesNg").WithBrowser().FilesNg(),
         TestCase("tabindexOpenDialogDownloads").WithBrowser().DisableFilesNg(),
         TestCase("tabindexOpenDialogDownloads")
@@ -778,6 +875,10 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("saveFileDialogDriveOfflinePinned").WithBrowser().Offline(),
         TestCase("openFileDialogDefaultFilter").WithBrowser(),
         TestCase("saveFileDialogDefaultFilter").WithBrowser(),
+        TestCase("saveFileDialogSingleFilterNoAcceptAll").WithBrowser(),
+        TestCase("saveFileDialogExtensionNotAddedWithNoFilter").WithBrowser(),
+        TestCase("saveFileDialogExtensionAddedWithJpegFilter").WithBrowser(),
+        TestCase("saveFileDialogExtensionNotAddedWhenProvided").WithBrowser(),
         TestCase("openFileDialogFileListShowContextMenu").WithBrowser(),
         TestCase("openFileDialogSelectAllDisabled").WithBrowser(),
         TestCase("openMultiFileDialogSelectAllEnabled").WithBrowser()));
@@ -795,14 +896,16 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     GridView, /* grid_view.js */
     FilesAppBrowserTest,
-    ::testing::Values(TestCase("showGridViewDownloads").DisableFilesNg(),
-                      TestCase("showGridViewDownloads").InGuestMode(),
-                      TestCase("showGridViewDownloads").FilesNg(),
-                      TestCase("showGridViewDrive"),
-                      TestCase("showGridViewButtonSwitches"),
-                      TestCase("showGridViewKeyboardSelectionA11y"),
-                      TestCase("showGridViewTitles").FilesNg(),
-                      TestCase("showGridViewMouseSelectionA11y")));
+    ::testing::Values(
+        TestCase("showGridViewDownloads").DisableFilesNg(),
+        TestCase("showGridViewDownloads").InGuestMode(),
+        TestCase("showGridViewDownloads").FilesNg(),
+        TestCase("showGridViewDrive"),
+        TestCase("showGridViewButtonSwitches"),
+        TestCase("showGridViewKeyboardSelectionA11y"),
+        TestCase("showGridViewTitles").FilesNg(),
+        TestCase("showGridViewMouseSelectionA11y"),
+        TestCase("showGridViewDocumentsProvider").EnableDocumentsProvider()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Providers, /* providers.js */
@@ -834,7 +937,10 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("hideCurrentDirectoryByTogglingHiddenAndroidFolders"),
         TestCase("newFolderInDownloads"),
         TestCase("showSendFeedbackAction"),
-        TestCase("enableDisableStorageSettingsLink")));
+        TestCase("enableDisableStorageSettingsLink"),
+        TestCase("showAvailableStorageMyFiles"),
+        TestCase("showAvailableStorageDrive"),
+        TestCase("showAvailableStorageSmbfs").EnableSmbfs()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FilesTooltip, /* files_tooltip.js */
@@ -908,6 +1014,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("recentsCrostiniMounted"),
         TestCase("recentsDownloadsAndDrive"),
         TestCase("recentsDownloadsAndDriveWithOverlap"),
+        TestCase("recentsNested"),
         TestCase("recentAudioDownloads").EnableUnifiedMediaView(),
         TestCase("recentAudioDownloadsAndDrive").EnableUnifiedMediaView(),
         TestCase("recentImagesDownloads").EnableUnifiedMediaView(),
@@ -936,7 +1043,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("searchDownloadsClearSearch"),
                       TestCase("searchHidingViaTab"),
                       TestCase("searchHidingTextEntryField"),
-                      TestCase("searchButtonToggles")));
+                      TestCase("searchButtonToggles"),
+                      TestCase("searchQueryLaunchParam")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Metrics, /* metrics.js */
@@ -966,11 +1074,24 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FormatDialog, /* format_dialog.js */
     FilesAppBrowserTest,
-    ::testing::Values(TestCase("formatDialog"),
-                      TestCase("formatDialogEmpty"),
-                      TestCase("formatDialogCancel"),
-                      TestCase("formatDialogNameLength"),
-                      TestCase("formatDialogNameInvalid"),
-                      TestCase("formatDialogGearMenu")));
+    ::testing::Values(
+        TestCase("formatDialog"),
+        TestCase("formatDialogEmpty"),
+        TestCase("formatDialogCancel"),
+        TestCase("formatDialogNameLength"),
+        TestCase("formatDialogNameInvalid"),
+        TestCase("formatDialogGearMenu"),
+        TestCase("formatDialog").EnableSinglePartitionFormat(),
+        TestCase("formatDialogEmpty").EnableSinglePartitionFormat(),
+        TestCase("formatDialogCancel").EnableSinglePartitionFormat(),
+        TestCase("formatDialogNameLength").EnableSinglePartitionFormat(),
+        TestCase("formatDialogNameInvalid").EnableSinglePartitionFormat(),
+        TestCase("formatDialogGearMenu").EnableSinglePartitionFormat()));
+
+WRAPPED_INSTANTIATE_TEST_SUITE_P(
+    Trash, /* trash.js */
+    FilesAppBrowserTest,
+    ::testing::Values(TestCase("trashMoveToTrash").EnableTrash(),
+                      TestCase("trashRestore").EnableTrash()));
 
 }  // namespace file_manager

@@ -85,7 +85,7 @@ void UserBoardViewMojo::SetPublicSessionLocales(
       lock_screen_utils::FromListValueToLocaleItem(std::move(locales)),
       default_locale, multiple_recommended_locales);
 
-  // Send a request to get keyboard layouts for |default_locale|.
+  // Send a request to get keyboard layouts for `default_locale`.
   LoginScreenClient::Get()->RequestPublicSessionKeyboardLayouts(account_id,
                                                                 default_locale);
 }
@@ -128,6 +128,13 @@ void UserBoardViewMojo::SetAuthType(const AccountId& account_id,
   if (auth_type == proximity_auth::mojom::AuthType::ONLINE_SIGN_IN) {
     ash::LoginScreen::Get()->GetModel()->ForceOnlineSignInForUser(account_id);
   }
+}
+
+void UserBoardViewMojo::SetTpmLockedState(const AccountId& account_id,
+                                          bool is_locked,
+                                          base::TimeDelta time_left) {
+  ash::LoginScreen::Get()->GetModel()->SetTpmLockedState(account_id, is_locked,
+                                                         time_left);
 }
 
 base::WeakPtr<UserBoardView> UserBoardViewMojo::GetWeakPtr() {

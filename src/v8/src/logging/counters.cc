@@ -7,6 +7,7 @@
 #include <iomanip>
 
 #include "src/base/platform/platform.h"
+#include "src/base/platform/time.h"
 #include "src/builtins/builtins-definitions.h"
 #include "src/execution/isolate.h"
 #include "src/logging/counters-inl.h"
@@ -79,6 +80,15 @@ void* Histogram::CreateHistogram() const {
   return counters_->CreateHistogram(name_, min_, max_, num_buckets_);
 }
 
+void TimedHistogram::AddTimedSample(base::TimeDelta sample) {
+  if (Enabled()) {
+    int64_t sample_int = resolution_ == HistogramTimerResolution::MICROSECOND
+                             ? sample.InMicroseconds()
+                             : sample.InMilliseconds();
+    AddSample(static_cast<int>(sample_int));
+  }
+}
+
 void TimedHistogram::Start(base::ElapsedTimer* timer, Isolate* isolate) {
   if (Enabled()) timer->Start();
   if (isolate) Logger::CallEventLogger(isolate, name(), Logger::START, true);
@@ -86,11 +96,9 @@ void TimedHistogram::Start(base::ElapsedTimer* timer, Isolate* isolate) {
 
 void TimedHistogram::Stop(base::ElapsedTimer* timer, Isolate* isolate) {
   if (Enabled()) {
-    int64_t sample = resolution_ == HistogramTimerResolution::MICROSECOND
-                         ? timer->Elapsed().InMicroseconds()
-                         : timer->Elapsed().InMilliseconds();
+    base::TimeDelta delta = timer->Elapsed();
     timer->Stop();
-    AddSample(static_cast<int>(sample));
+    AddTimedSample(delta);
   }
   if (isolate != nullptr) {
     Logger::CallEventLogger(isolate, name(), Logger::END, true);
@@ -555,6 +563,17 @@ void RuntimeCallStats::Print(std::ostream& os) {
     entries.Add(GetCounter(i));
   }
   entries.Print(os);
+}
+
+void RuntimeCallStats::EnumerateCounters(
+    debug::RuntimeCallCounterCallback callback) {
+  if (current_timer_.Value() != nullptr) {
+    current_timer_.Value()->Snapshot();
+  }
+  for (int i = 0; i < kNumberOfCounters; i++) {
+    RuntimeCallCounter* counter = GetCounter(i);
+    callback(counter->name(), counter->count(), counter->time());
+  }
 }
 
 void RuntimeCallStats::Reset() {

@@ -20,11 +20,14 @@ PasswordCheckObserverBridge::~PasswordCheckObserverBridge() = default;
 
 void PasswordCheckObserverBridge::PasswordCheckStatusChanged(
     PasswordCheckState status) {
-  [delegate_ passwordCheckStateDidChange:status];
+  // Since password check state update can be called with delay from the
+  // background thread, dispatch aync should be used to update main UI thread.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [delegate_ passwordCheckStateDidChange:status];
+  });
 }
 
 void PasswordCheckObserverBridge::CompromisedCredentialsChanged(
-    password_manager::CompromisedCredentialsManager::CredentialsView
-        credentials) {
+    password_manager::InsecureCredentialsManager::CredentialsView credentials) {
   [delegate_ compromisedCredentialsDidChange:credentials];
 }

@@ -26,10 +26,10 @@
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 // This file tests that net::LoadTimingInfo is correctly hooked up to the
@@ -114,8 +114,8 @@ class LoadTimingBrowserTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(LoadTimingBrowserTest, HTTP) {
-  ASSERT_TRUE(spawned_test_server()->Start());
-  GURL url = spawned_test_server()->GetURL("chunked?waitBeforeHeaders=100");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL("/chunked?waitBeforeHeaders=100");
   ui_test_utils::NavigateToURL(browser(), url);
 
   TimingDeltas navigation_deltas;
@@ -131,12 +131,12 @@ IN_PROC_BROWSER_TEST_F(LoadTimingBrowserTest, HTTP) {
   EXPECT_EQ(navigation_deltas.ssl_start, -1);
 }
 
-IN_PROC_BROWSER_TEST_F(LoadTimingBrowserTest, HTTPS) {
-  net::SpawnedTestServer https_server(net::SpawnedTestServer::TYPE_HTTPS,
-                                      net::BaseTestServer::SSLOptions(),
-                                      base::FilePath());
+// TODO(crbug.com/1128033): flaky.
+IN_PROC_BROWSER_TEST_F(LoadTimingBrowserTest, DISABLED_HTTPS) {
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.AddDefaultHandlers();
   ASSERT_TRUE(https_server.Start());
-  GURL url = https_server.GetURL("chunked?waitBeforeHeaders=100");
+  GURL url = https_server.GetURL("/chunked?waitBeforeHeaders=100");
   ui_test_utils::NavigateToURL(browser(), url);
 
   TimingDeltas navigation_deltas;
@@ -191,7 +191,7 @@ IN_PROC_BROWSER_TEST_F(LoadTimingBrowserTest, MAYBE_Proxy) {
 class LoadTimingBrowserTestWithFtp : public LoadTimingBrowserTest {
  public:
   LoadTimingBrowserTestWithFtp() {
-    scoped_feature_list_.InitAndEnableFeature(features::kFtpProtocol);
+    scoped_feature_list_.InitAndEnableFeature(blink::features::kFtpProtocol);
   }
 
  private:

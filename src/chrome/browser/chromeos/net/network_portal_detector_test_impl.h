@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -42,7 +43,7 @@ class NetworkPortalDetectorTestImpl : public NetworkPortalDetector {
       const std::string& service_path) override;
   bool IsEnabled() override;
   void Enable(bool start_detection) override;
-  bool StartPortalDetection(bool force) override;
+  void StartPortalDetection() override;
   void SetStrategy(PortalDetectorStrategy::StrategyId id) override;
 
   PortalDetectorStrategy::StrategyId strategy_id() const {

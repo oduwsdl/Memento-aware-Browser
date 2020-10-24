@@ -33,6 +33,7 @@ class FormTracker : public content::RenderFrameObserver {
       SELECT_CHANGED,
     };
 
+    // TODO(crbug.com/1126017): Find a better name for this method.
     // Invoked when form needs to be saved because of |source|, |element| is
     // valid if the callback caused by source other than
     // WILL_SEND_SUBMIT_EVENT, |form| is valid for the callback caused by
@@ -92,7 +93,7 @@ class FormTracker : public content::RenderFrameObserver {
   void DidStartNavigation(
       const GURL& url,
       base::Optional<blink::WebNavigationType> navigation_type) override;
-  void FrameDetached() override;
+  void WillDetach() override;
   void WillSendSubmitEvent(const blink::WebFormElement& form) override;
   void WillSubmitForm(const blink::WebFormElement& form) override;
   void OnDestruct() override;

@@ -9,7 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "chrome/browser/android/vr/arcore_device/arcore.h"
+#include "device/vr/android/arcore/arcore.h"
 
 namespace device {
 
@@ -23,12 +23,14 @@ class FakeArCore : public ArCore {
 
   // ArCore implementation.
   bool Initialize(
-      base::android::ScopedJavaLocalRef<jobject> application_context) override;
-  void SetCameraTexture(GLuint texture) override;
+      base::android::ScopedJavaLocalRef<jobject> application_context,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          enabled_features) override;
+  MinMaxRange GetTargetFramerateRange() override;
+  void SetCameraTexture(uint32_t texture) override;
   void SetDisplayGeometry(const gfx::Size& frame_size,
                           display::Display::Rotation display_rotation) override;
-  std::vector<float> TransformDisplayUvCoords(
-      const base::span<const float> uvs) override;
+
   gfx::Transform GetProjectionMatrix(float near, float far) override;
   mojom::VRPosePtr Update(bool* camera_updated) override;
   base::TimeDelta GetFrameTimestamp() override;
@@ -59,6 +61,7 @@ class FakeArCore : public ArCore {
   mojom::XRPlaneDetectionDataPtr GetDetectedPlanesData() override;
   mojom::XRAnchorsDataPtr GetAnchorsData() override;
   mojom::XRLightEstimationDataPtr GetLightEstimationData() override;
+  mojom::XRDepthDataPtr GetDepthData() override;
 
   void CreateAnchor(
       const mojom::XRNativeOriginInformation& native_origin_information,
@@ -78,6 +81,10 @@ class FakeArCore : public ArCore {
   void DetachAnchor(uint64_t anchor_id) override;
 
   void SetCameraAspect(float aspect) { camera_aspect_ = aspect; }
+
+ protected:
+  std::vector<float> TransformDisplayUvCoords(
+      const base::span<const float> uvs) const override;
 
  private:
   bool IsOnGlThread() const;

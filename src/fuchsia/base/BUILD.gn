@@ -4,15 +4,14 @@
 
 assert(is_fuchsia)
 
-import("//build/buildflag_header.gni")
 import("//build/config/fuchsia/generate_runner_scripts.gni")
-import("//fuchsia/release_channel.gni")
 import("//testing/test.gni")
 
 # Integration helpers for commonly used fuchsia.* APIs.
 source_set("base") {
   sources = [
     "config_reader.cc",
+    "feedback_registration.cc",
     "fuchsia_dir_scheme.cc",
     "init_logging.cc",
     "inspect.cc",
@@ -21,6 +20,7 @@ source_set("base") {
   ]
   public = [
     "config_reader.h",
+    "feedback_registration.h",
     "fuchsia_dir_scheme.h",
     "init_logging.h",
     "inspect.h",
@@ -30,8 +30,10 @@ source_set("base") {
   deps = [
     "//base",
     "//components/version_info",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.feedback",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.mem",
     "//third_party/fuchsia-sdk/sdk/pkg/fdio",
+    "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     "//third_party/fuchsia-sdk/sdk/pkg/sys_inspect_cpp",
     "//url",
   ]
@@ -83,13 +85,6 @@ source_set("legacymetrics") {
   friend = [ ":*" ]
 }
 
-# Used to propagate release-qualified package names to integration test code.
-buildflag_header("release_channel_buildflags") {
-  header = "release_channel.h"
-  flags = [ "FUCHSIA_RELEASE_CHANNEL_SUFFIX=\"$release_channel_suffix\"" ]
-  visibility = [ "//fuchsia/*" ]
-}
-
 source_set("test_support") {
   testonly = true
   sources = [
@@ -111,7 +106,6 @@ source_set("test_support") {
   public_deps = [
     ":base",
     ":modular",
-    ":release_channel_buildflags",
     "//base",
     "//net",
     "//net:test_support",

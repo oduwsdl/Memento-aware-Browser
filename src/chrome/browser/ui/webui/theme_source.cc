@@ -26,7 +26,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/common/url_constants.h"
-#include "net/url_request/url_request.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -55,15 +55,6 @@ void ProcessImageOnUiThread(const gfx::ImageSkia& image,
   const gfx::ImageSkiaRep& rep = image.GetRepresentation(scale);
   gfx::PNGCodec::EncodeBGRASkBitmap(
       rep.GetBitmap(), false /* discard transparency */, &data->data());
-}
-
-void ProcessResourceOnUiThread(int resource_id,
-                               float scale,
-                               scoped_refptr<base::RefCountedBytes> data) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  ProcessImageOnUiThread(
-      *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(resource_id),
-      scale, data);
 }
 
 }  // namespace
@@ -210,22 +201,18 @@ void ThemeSource::SendThemeImage(
     content::URLDataSource::GotDataCallback callback,
     int resource_id,
     float scale) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   scoped_refptr<base::RefCountedBytes> data(new base::RefCountedBytes());
   if (BrowserThemePack::IsPersistentImageID(resource_id)) {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     const ui::ThemeProvider& tp = ThemeService::GetThemeProviderForProfile(
         profile_->GetOriginalProfile());
     ProcessImageOnUiThread(*tp.GetImageSkiaNamed(resource_id), scale, data);
-    std::move(callback).Run(data.get());
   } else {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-    // Fetching image data in ResourceBundle should happen on the UI thread. See
-    // crbug.com/449277
-    content::GetUIThreadTaskRunner({})->PostTaskAndReply(
-        FROM_HERE,
-        base::BindOnce(&ProcessResourceOnUiThread, resource_id, scale, data),
-        base::BindOnce(std::move(callback), data));
+    ProcessImageOnUiThread(
+        *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(resource_id),
+        scale, data);
   }
+  std::move(callback).Run(data.get());
 }
 
 std::string ThemeSource::GetAccessControlAllowOriginForOrigin(
@@ -240,11 +227,13 @@ std::string ThemeSource::GetAccessControlAllowOriginForOrigin(
   return content::URLDataSource::GetAccessControlAllowOriginForOrigin(origin);
 }
 
-std::string ThemeSource::GetContentSecurityPolicyDefaultSrc() {
-  if (serve_untrusted_) {
+std::string ThemeSource::GetContentSecurityPolicy(
+    network::mojom::CSPDirectiveName directive) {
+  if (directive == network::mojom::CSPDirectiveName::DefaultSrc &&
+      serve_untrusted_) {
     // TODO(https://crbug.com/1085327): Audit and tighten CSP.
     return std::string();
   }
 
-  return content::URLDataSource::GetContentSecurityPolicyDefaultSrc();
+  return content::URLDataSource::GetContentSecurityPolicy(directive);
 }

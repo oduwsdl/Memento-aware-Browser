@@ -52,7 +52,8 @@ const std::vector<SearchConcept>& GetFilesSearchConcepts() {
 FilesSection::FilesSection(Profile* profile,
                            SearchTagRegistry* search_tag_registry)
     : OsSettingsSection(profile, search_tag_registry) {
-  registry()->AddSearchTags(GetFilesSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetFilesSearchConcepts());
 }
 
 FilesSection::~FilesSection() = default;
@@ -116,6 +117,11 @@ mojom::SearchResultIcon FilesSection::GetSectionIcon() const {
 
 std::string FilesSection::GetSectionPath() const {
   return mojom::kFilesSectionPath;
+}
+
+bool FilesSection::LogMetric(mojom::Setting setting, base::Value& value) const {
+  // Unimplemented.
+  return false;
 }
 
 void FilesSection::RegisterHierarchy(HierarchyGenerator* generator) const {

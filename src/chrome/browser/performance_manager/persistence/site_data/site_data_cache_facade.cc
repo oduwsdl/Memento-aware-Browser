@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/util/type_safety/pass_key.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/performance_manager/persistence/site_data/site_data_cache_facade_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -23,11 +24,14 @@
 namespace performance_manager {
 
 class GraphImpl;
+using PassKey = util::PassKey<SiteDataCacheFacade>;
 
 SiteDataCacheFacade::SiteDataCacheFacade(
     content::BrowserContext* browser_context)
     : browser_context_(browser_context) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  SiteDataCacheFacadeFactory::GetInstance()->OnBeforeFacadeCreated(PassKey());
+
   base::Optional<std::string> parent_context_id;
   if (browser_context->IsOffTheRecord()) {
     content::BrowserContext* parent_context =
@@ -36,10 +40,11 @@ SiteDataCacheFacade::SiteDataCacheFacade(
   }
 
   // Creates the real cache on the SiteDataCache's sequence.
-  SiteDataCacheFacadeFactory::GetInstance()->cache_factory()->Post(
-      FROM_HERE, &SiteDataCacheFactory::OnBrowserContextCreated,
-      browser_context->UniqueId(), browser_context->GetPath(),
-      parent_context_id);
+  SiteDataCacheFacadeFactory::GetInstance()
+      ->cache_factory()
+      ->AsyncCall(&SiteDataCacheFactory::OnBrowserContextCreated)
+      .WithArgs(browser_context->UniqueId(), browser_context->GetPath(),
+                parent_context_id);
 
   history::HistoryService* history =
       HistoryServiceFactory::GetForProfileWithoutCreating(
@@ -50,9 +55,11 @@ SiteDataCacheFacade::SiteDataCacheFacade(
 
 SiteDataCacheFacade::~SiteDataCacheFacade() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  SiteDataCacheFacadeFactory::GetInstance()->cache_factory()->Post(
-      FROM_HERE, &SiteDataCacheFactory::OnBrowserContextDestroyed,
-      browser_context_->UniqueId());
+  SiteDataCacheFacadeFactory::GetInstance()
+      ->cache_factory()
+      ->AsyncCall(&SiteDataCacheFactory::OnBrowserContextDestroyed)
+      .WithArgs(browser_context_->UniqueId());
+  SiteDataCacheFacadeFactory::GetInstance()->OnFacadeDestroyed(PassKey());
 }
 
 void SiteDataCacheFacade::IsDataCacheRecordingForTesting(
@@ -85,7 +92,7 @@ void SiteDataCacheFacade::WaitUntilCacheInitializedForTesting() {
                            auto* cache =
                                cache_factory->GetDataCacheForBrowserContext(
                                    browser_context_id);
-                           if (cache->IsRecordingForTesting()) {
+                           if (cache->IsRecording()) {
                              static_cast<SiteDataCacheImpl*>(cache)
                                  ->SetInitializationCallbackForTesting(
                                      std::move(quit_closure));
@@ -104,7 +111,8 @@ void SiteDataCacheFacade::OnURLsDeleted(
            SiteDataCacheFactory* cache_factory) {
           auto* cache =
               cache_factory->GetDataCacheForBrowserContext(browser_context_id);
-          static_cast<SiteDataCacheImpl*>(cache)->ClearAllSiteData();
+          if (cache->IsRecording())
+            static_cast<SiteDataCacheImpl*>(cache)->ClearAllSiteData();
         },
         browser_context_->UniqueId());
     SiteDataCacheFacadeFactory::GetInstance()
@@ -132,8 +140,10 @@ void SiteDataCacheFacade::OnURLsDeleted(
            SiteDataCacheFactory* cache_factory) {
           auto* cache =
               cache_factory->GetDataCacheForBrowserContext(browser_context_id);
-          static_cast<SiteDataCacheImpl*>(cache)->ClearSiteDataForOrigins(
-              origins_to_remove);
+          if (cache->IsRecording()) {
+            static_cast<SiteDataCacheImpl*>(cache)->ClearSiteDataForOrigins(
+                origins_to_remove);
+          }
         },
         browser_context_->UniqueId(), std::move(origins_to_remove));
     SiteDataCacheFacadeFactory::GetInstance()

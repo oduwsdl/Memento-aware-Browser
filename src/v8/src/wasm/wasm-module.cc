@@ -218,16 +218,7 @@ std::ostream& operator<<(std::ostream& os, const WasmFunctionName& name) {
 }
 
 WasmModule::WasmModule(std::unique_ptr<Zone> signature_zone)
-    : signature_zone(std::move(signature_zone)),
-      subtyping_cache(this->signature_zone.get() == nullptr
-                          ? nullptr
-                          : new ZoneUnorderedSet<std::pair<uint32_t, uint32_t>>(
-                                this->signature_zone.get())),
-      type_equivalence_cache(
-          this->signature_zone.get() == nullptr
-              ? nullptr
-              : new ZoneUnorderedSet<std::pair<uint32_t, uint32_t>>(
-                    this->signature_zone.get())) {}
+    : signature_zone(std::move(signature_zone)) {}
 
 bool IsWasmCodegenAllowed(Isolate* isolate, Handle<Context> context) {
   // TODO(wasm): Once wasm has its own CSP policy, we should introduce a
@@ -252,8 +243,7 @@ namespace {
 // reflective functions. Should be kept in sync with the {GetValueType} helper.
 Handle<String> ToValueTypeString(Isolate* isolate, ValueType type) {
   return isolate->factory()->InternalizeUtf8String(
-      type == kWasmFuncRef ? CStrVector("anyfunc")
-                           : VectorOf(type.type_name()));
+      type == kWasmFuncRef ? CStrVector("anyfunc") : VectorOf(type.name()));
 }
 }  // namespace
 
@@ -329,14 +319,12 @@ Handle<JSObject> GetTypeForTable(Isolate* isolate, ValueType type,
   Factory* factory = isolate->factory();
 
   Handle<String> element;
-  if (type.is_reference_to(kHeapFunc)) {
+  if (type.is_reference_to(HeapType::kFunc)) {
     // TODO(wasm): We should define the "anyfunc" string in one central
     // place and then use that constant everywhere.
     element = factory->InternalizeUtf8String("anyfunc");
   } else {
-    DCHECK(WasmFeatures::FromFlags().has_reftypes() &&
-           type.is_reference_to(kHeapExtern));
-    element = factory->InternalizeUtf8String("externref");
+    element = factory->InternalizeUtf8String(VectorOf(type.name()));
   }
 
   Handle<JSFunction> object_function = isolate->object_function();
@@ -630,13 +618,15 @@ size_t EstimateStoredSize(const WasmModule* module) {
          (module->signature_zone ? module->signature_zone->allocation_size()
                                  : 0) +
          VectorSize(module->types) + VectorSize(module->type_kinds) +
-         VectorSize(module->signature_ids) + VectorSize(module->functions) +
-         VectorSize(module->data_segments) + VectorSize(module->tables) +
-         VectorSize(module->import_table) + VectorSize(module->export_table) +
-         VectorSize(module->exceptions) + VectorSize(module->elem_segments);
+         VectorSize(module->canonicalized_type_ids) +
+         VectorSize(module->functions) + VectorSize(module->data_segments) +
+         VectorSize(module->tables) + VectorSize(module->import_table) +
+         VectorSize(module->export_table) + VectorSize(module->exceptions) +
+         VectorSize(module->elem_segments);
 }
 
-size_t PrintSignature(Vector<char> buffer, const wasm::FunctionSig* sig) {
+size_t PrintSignature(Vector<char> buffer, const wasm::FunctionSig* sig,
+                      char delimiter) {
   if (buffer.empty()) return 0;
   size_t old_size = buffer.size();
   auto append_char = [&buffer](char c) {
@@ -647,7 +637,7 @@ size_t PrintSignature(Vector<char> buffer, const wasm::FunctionSig* sig) {
   for (wasm::ValueType t : sig->parameters()) {
     append_char(t.short_name());
   }
-  append_char(':');
+  append_char(delimiter);
   for (wasm::ValueType t : sig->returns()) {
     append_char(t.short_name());
   }

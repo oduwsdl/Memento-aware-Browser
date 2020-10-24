@@ -9,16 +9,17 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
-#include "content/public/common/previews_state.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/use_counter/css_property_id.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
@@ -56,7 +57,7 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
                                            public IPC::Sender {
  public:
   // A subclass can use this to delete itself. If it does not, the subclass must
-  // always null-check each call to render_frame() becase the RenderFrame can
+  // always null-check each call to render_frame() because the RenderFrame can
   // go away at any time.
   virtual void OnDestruct() = 0;
 
@@ -141,7 +142,7 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // Called when this frame has been detached from the view. This *will* be
   // called for child frames when a parent frame is detached. Since the frame is
   // already detached from the DOM at this time, it should not be inspected.
-  virtual void FrameDetached() {}
+  virtual void WillDetach() {}
 
   // Called when we receive a console message from Blink for which we requested
   // extra details (like the stack trace). |message| is the error message,
@@ -219,7 +220,7 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
       int request_id,
       const network::mojom::URLResponseHead& response_head,
       network::mojom::RequestDestination request_destination,
-      PreviewsState previews_state) {}
+      blink::PreviewsState previews_state) {}
   virtual void DidCompleteResponse(
       int request_id,
       const network::URLLoaderCompletionStatus& status) {}
@@ -256,8 +257,8 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // Called when a worker fetch context will be created.
   virtual void WillCreateWorkerFetchContext(blink::WebWorkerFetchContext*) {}
 
-  // Called when a frame's intersection with the root frame changes.
-  virtual void OnMainFrameDocumentIntersectionChanged(
+  // Called when a frame's intersection with the main frame changes.
+  virtual void OnMainFrameIntersectionChanged(
       const blink::WebRect& intersect_rect) {}
 
   // Called to give the embedder an opportunity to bind an interface request
@@ -274,11 +275,11 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle* handle);
 
-  // Submit throughput data to the browser process. Only called for local roots.
-  virtual void OnThroughputDataAvailable(ukm::SourceId source_id,
-                                         int aggregated_percent,
-                                         int impl_percent,
-                                         base::Optional<int> main_percent) {}
+  // The smoothness metrics is shared over shared-memory. The interested
+  // observer should invalidate |shared_memory| (by std::move()'ing it), and
+  // return true. All other observers should return false (default).
+  virtual bool SetUpSmoothnessReporting(
+      base::ReadOnlySharedMemoryRegion& shared_memory);
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;

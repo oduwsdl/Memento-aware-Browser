@@ -95,6 +95,12 @@ void PositionView(UIView* view, CGPoint point) {
     _snapshotView = snapshotView;
     _closeTapTargetButton = closeTapTargetButton;
 
+    self.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.layer.shadowOffset = CGSizeMake(0, 0);
+    self.layer.shadowRadius = 4.0f;
+    self.layer.shadowOpacity = 0.5f;
+    self.layer.masksToBounds = NO;
+
     NSArray* constraints = @[
       [topBar.topAnchor constraintEqualToAnchor:contentView.topAnchor],
       [topBar.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor],
@@ -152,7 +158,7 @@ void PositionView(UIView* view, CGPoint point) {
   self.selected = NO;
 }
 
-#pragma mark - Accessibility
+#pragma mark - UIAccessibility
 
 - (BOOL)isAccessibilityElement {
   // This makes the whole cell tappable in VoiceOver rather than the individual
@@ -179,7 +185,7 @@ void PositionView(UIView* view, CGPoint point) {
 
   // This background color must be set to avoid the corners behind the rounded
   // layer from showing when dragging and dropping.
-  self.backgroundColor = [UIColor colorNamed:kGridBackgroundColor];
+  self.backgroundColor = [UIColor clearColor];
 
   self.iconView.backgroundColor = UIColor.clearColor;
   switch (theme) {
@@ -255,10 +261,13 @@ void PositionView(UIView* view, CGPoint point) {
   _titleHidden = titleHidden;
 }
 
-- (UIBezierPath*)visiblePath {
-  return [UIBezierPath
+- (UIDragPreviewParameters*)dragPreviewParameters {
+  UIBezierPath* visiblePath = [UIBezierPath
       bezierPathWithRoundedRect:self.bounds
                    cornerRadius:self.contentView.layer.cornerRadius];
+  UIDragPreviewParameters* params = [[UIDragPreviewParameters alloc] init];
+  params.visiblePath = visiblePath;
+  return params;
 }
 
 #pragma mark - Private

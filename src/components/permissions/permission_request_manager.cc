@@ -17,10 +17,12 @@
 #include "base/strings/string16.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permission_prompt.h"
 #include "components/permissions/permission_request.h"
+#include "components/permissions/permission_request_id.h"
 #include "components/permissions/permission_uma_util.h"
 #include "components/permissions/permissions_client.h"
 #include "components/permissions/switches.h"
@@ -28,7 +30,10 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "url/gurl.h"
 #include "url/origin.h"
 
 namespace permissions {
@@ -46,6 +51,20 @@ const char kAbusiveNotificationRequestsWarningMessage[] =
     "mislead, trick, or force users into allowing notifications. You should "
     "fix the issues as soon as possible and submit your site for another "
     "review. Learn more at https://support.google.com/webtools/answer/9799048.";
+
+constexpr char kAbusiveNotificationContentEnforcementMessage[] =
+    "Chrome is blocking notification permission requests on this site because "
+    "the site tends to show notifications with content that mislead or trick "
+    "users. You should fix the issues as soon as possible and submit your site "
+    "for another review. Learn more at "
+    "https://support.google.com/webtools/answer/9799048";
+
+constexpr char kAbusiveNotificationContentWarningMessage[] =
+    "Chrome might start blocking notification permission requests on this site "
+    "in the future because the site tends to show notifications with content "
+    "that mislead or trick users. You should fix the issues as soon as "
+    "possible and submit your site for another review. Learn more at "
+    "https://support.google.com/webtools/answer/9799048";
 
 namespace {
 
@@ -65,19 +84,40 @@ bool isMediaRequest(PermissionRequestType type) {
          type == PermissionRequestType::PERMISSION_CAMERA_PAN_TILT_ZOOM;
 }
 
-// We only group together media requests. We don't display grouped requests for
-// any other permissions at present.
+bool isArOrCameraRequest(PermissionRequestType type) {
+  return type == PermissionRequestType::PERMISSION_AR ||
+         type == PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA;
+}
+
 bool ShouldGroupRequests(PermissionRequest* a, PermissionRequest* b) {
   if (a->GetOrigin() != b->GetOrigin())
     return false;
 
-  return isMediaRequest(a->GetPermissionRequestType()) &&
-         isMediaRequest(b->GetPermissionRequestType());
+  // Group if both requests are media requests.
+  if (isMediaRequest(a->GetPermissionRequestType()) &&
+      isMediaRequest(b->GetPermissionRequestType())) {
+    return true;
+  }
+
+  // Group if the requests are an AR and a Camera Access request.
+  if (isArOrCameraRequest(a->GetPermissionRequestType()) &&
+      isArOrCameraRequest(b->GetPermissionRequestType())) {
+    return true;
+  }
+
+  return false;
 }
 
 }  // namespace
 
 // PermissionRequestManager ----------------------------------------------------
+
+bool PermissionRequestManager::RequestAndSource::
+    IsSourceFrameInactiveAndDisallowReactivation() const {
+  content::RenderFrameHost* rfh =
+      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
+  return !rfh || rfh->IsInactiveAndDisallowReactivation();
+}
 
 PermissionRequestManager::~PermissionRequestManager() {
   DCHECK(!IsRequestInProgress());
@@ -85,7 +125,13 @@ PermissionRequestManager::~PermissionRequestManager() {
   DCHECK(queued_requests_.empty());
 }
 
-void PermissionRequestManager::AddRequest(PermissionRequest* request) {
+void PermissionRequestManager::AddRequest(
+    content::RenderFrameHost* source_frame,
+    PermissionRequest* request) {
+  DCHECK(source_frame);
+  DCHECK_EQ(content::WebContents::FromRenderFrameHost(source_frame),
+            web_contents());
+
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDenyPermissionPrompts)) {
     request->PermissionDenied();
@@ -134,6 +180,16 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
     return;
   }
 
+  // Cancel permission requests wile Autofill Assistant's UI is shown.
+  auto* assistant_runtime_manager =
+      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
+  if (assistant_runtime_manager && assistant_runtime_manager->GetState() ==
+                                       autofill_assistant::UIState::kShown) {
+    request->Cancelled();
+    request->RequestFinished();
+    return;
+  }
+
   // Don't re-add an existing request or one with a duplicate text request.
   PermissionRequest* existing_request = GetExistingRequest(request);
   if (existing_request) {
@@ -159,7 +215,8 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
     base::RecordAction(
         base::UserMetricsAction("PermissionBubbleIFrameRequestQueued"));
   }
-  queued_requests_.push_back(request);
+  queued_requests_.push_back({source_frame->GetProcess()->GetID(),
+                              source_frame->GetRoutingID(), request});
 
   // If we're displaying a quiet permission request, kill it in favor of this
   // permission request.
@@ -293,6 +350,20 @@ const std::vector<PermissionRequest*>& PermissionRequestManager::Requests() {
   return requests_;
 }
 
+GURL PermissionRequestManager::GetRequestingOrigin() const {
+  CHECK(!requests_.empty());
+  GURL origin = requests_.front()->GetOrigin();
+  if (DCHECK_IS_ON()) {
+    for (auto* request : requests_)
+      DCHECK_EQ(origin, request->GetOrigin());
+  }
+  return origin;
+}
+
+GURL PermissionRequestManager::GetEmbeddingOrigin() const {
+  return web_contents()->GetLastCommittedURL().GetOrigin();
+}
+
 void PermissionRequestManager::Accept() {
   if (deleting_bubble_)
     return;
@@ -343,6 +414,10 @@ void PermissionRequestManager::Closing() {
   FinalizeBubble(PermissionAction::DISMISSED);
 }
 
+bool PermissionRequestManager::WasCurrentRequestAlreadyDisplayed() {
+  return current_request_already_displayed_;
+}
+
 PermissionRequestManager::PermissionRequestManager(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
@@ -364,17 +439,39 @@ void PermissionRequestManager::ScheduleShowBubble() {
 
 void PermissionRequestManager::DequeueRequestIfNeeded() {
   if (!web_contents()->IsDocumentOnLoadCompletedInMainFrame() || view_ ||
-      queued_requests_.empty() || IsRequestInProgress()) {
+      IsRequestInProgress()) {
     return;
   }
 
-  requests_.push_back(queued_requests_.front());
-  queued_requests_.pop_front();
+  // Find first valid request.
+  while (!queued_requests_.empty()) {
+    RequestAndSource& front = queued_requests_.front();
 
-  while (!queued_requests_.empty() &&
-         ShouldGroupRequests(requests_.front(), queued_requests_.front())) {
-    requests_.push_back(queued_requests_.front());
+    if (!front.IsSourceFrameInactiveAndDisallowReactivation()) {
+      requests_.push_back(front.request);
+      queued_requests_.pop_front();
+      break;
+    }
+    front.request->Cancelled();
+    front.request->RequestFinished();
     queued_requests_.pop_front();
+  }
+
+  if (requests_.empty()) {
+    return;
+  }
+
+  // Find additional requests that can be grouped with the first one.
+  for (; !queued_requests_.empty(); queued_requests_.pop_front()) {
+    RequestAndSource& front = queued_requests_.front();
+    if (front.IsSourceFrameInactiveAndDisallowReactivation()) {
+      front.request->Cancelled();
+      front.request->RequestFinished();
+    } else if (ShouldGroupRequests(requests_.front(), front.request)) {
+      requests_.push_back(front.request);
+    } else {
+      break;
+    }
   }
 
   if (notification_permission_ui_selector_ &&
@@ -405,6 +502,7 @@ void PermissionRequestManager::ShowBubble() {
   if (!IsRequestInProgress())
     return;
 
+  DCHECK(!requests_.empty());
   DCHECK(!view_);
   DCHECK(web_contents()->IsDocumentOnLoadCompletedInMainFrame());
   DCHECK(current_request_ui_to_use_);
@@ -416,25 +514,37 @@ void PermissionRequestManager::ShowBubble() {
   if (!view_)
     return;
 
-  if (!current_request_view_shown_to_user_) {
+  if (!current_request_already_displayed_) {
     PermissionUmaUtil::PermissionPromptShown(requests_);
 
     if (ShouldCurrentRequestUseQuietUI()) {
-      if (ReasonForUsingQuietUi() ==
-          QuietUiReason::kTriggeredDueToAbusiveRequests) {
-        LogWarningToConsole(kAbusiveNotificationRequestsEnforcementMessage);
+      switch (ReasonForUsingQuietUi()) {
+        case QuietUiReason::kEnabledInPrefs:
+        case QuietUiReason::kTriggeredByCrowdDeny:
+          break;
+        case QuietUiReason::kTriggeredDueToAbusiveRequests:
+          LogWarningToConsole(kAbusiveNotificationRequestsEnforcementMessage);
+          break;
+        case QuietUiReason::kTriggeredDueToAbusiveContent:
+          LogWarningToConsole(kAbusiveNotificationContentEnforcementMessage);
+          break;
       }
       base::RecordAction(base::UserMetricsAction(
           "Notifications.Quiet.PermissionRequestShown"));
     }
 
-    if (current_request_ui_to_use_->warning_reason &&
-        *(current_request_ui_to_use_->warning_reason) ==
-            WarningReason::kAbusiveRequests) {
-      LogWarningToConsole(kAbusiveNotificationRequestsWarningMessage);
+    if (current_request_ui_to_use_->warning_reason) {
+      switch (*(current_request_ui_to_use_->warning_reason)) {
+        case WarningReason::kAbusiveRequests:
+          LogWarningToConsole(kAbusiveNotificationRequestsWarningMessage);
+          break;
+        case WarningReason::kAbusiveContent:
+          LogWarningToConsole(kAbusiveNotificationContentWarningMessage);
+          break;
+      }
     }
   }
-  current_request_view_shown_to_user_ = true;
+  current_request_already_displayed_ = true;
   NotifyBubbleAdded();
 
   // If in testing mode, automatically respond to the bubble that was shown.
@@ -465,6 +575,10 @@ void PermissionRequestManager::FinalizeBubble(
       PermissionsClient::Get()->GetPermissionDecisionAutoBlocker(
           browser_context);
 
+  base::Optional<QuietUiReason> quiet_ui_reason;
+  if (ShouldCurrentRequestUseQuietUI())
+    quiet_ui_reason = ReasonForUsingQuietUi();
+
   for (PermissionRequest* request : requests_) {
     // TODO(timloh): We only support dismiss and ignore embargo for permissions
     // which use PermissionRequestImpl as the other subclasses don't support
@@ -473,8 +587,8 @@ void PermissionRequestManager::FinalizeBubble(
       continue;
 
     PermissionsClient::Get()->OnPromptResolved(
-        browser_context, request->GetPermissionRequestType(),
-        permission_action);
+        browser_context, request->GetPermissionRequestType(), permission_action,
+        request->GetOrigin(), quiet_ui_reason);
 
     PermissionEmbargoStatus embargo_status =
         PermissionEmbargoStatus::NOT_EMBARGOED;
@@ -503,7 +617,7 @@ void PermissionRequestManager::FinalizeBubble(
   if (notification_permission_ui_selector_)
     notification_permission_ui_selector_->Cancel();
 
-  current_request_view_shown_to_user_ = false;
+  current_request_already_displayed_ = false;
   current_request_ui_to_use_.reset();
 
   if (view_)
@@ -513,9 +627,9 @@ void PermissionRequestManager::FinalizeBubble(
 }
 
 void PermissionRequestManager::CleanUpRequests() {
-  for (PermissionRequest* request : queued_requests_) {
-    CancelledIncludingDuplicates(request);
-    RequestFinishedIncludingDuplicates(request);
+  for (auto& queued_request : queued_requests_) {
+    CancelledIncludingDuplicates(queued_request.request);
+    RequestFinishedIncludingDuplicates(queued_request.request);
   }
   queued_requests_.clear();
 
@@ -535,9 +649,9 @@ PermissionRequest* PermissionRequestManager::GetExistingRequest(
     if (IsMessageTextEqual(existing_request, request))
       return existing_request;
   }
-  for (PermissionRequest* existing_request : queued_requests_) {
-    if (IsMessageTextEqual(existing_request, request))
-      return existing_request;
+  for (RequestAndSource& request_and_source : queued_requests_) {
+    if (IsMessageTextEqual(request_and_source.request, request))
+      return request_and_source.request;
   }
   return nullptr;
 }
@@ -545,7 +659,7 @@ PermissionRequest* PermissionRequestManager::GetExistingRequest(
 void PermissionRequestManager::PermissionGrantedIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(1, base::STLCount(requests_, request) +
-                   base::STLCount(queued_requests_, request))
+                   CountQueuedPermissionRequests(request))
       << "Only requests in [queued_[frame_]]requests_ can have duplicates";
   request->PermissionGranted();
   auto range = duplicate_requests_.equal_range(request);
@@ -556,7 +670,7 @@ void PermissionRequestManager::PermissionGrantedIncludingDuplicates(
 void PermissionRequestManager::PermissionDeniedIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(1, base::STLCount(requests_, request) +
-                   base::STLCount(queued_requests_, request))
+                   CountQueuedPermissionRequests(request))
       << "Only requests in [queued_]requests_ can have duplicates";
   request->PermissionDenied();
   auto range = duplicate_requests_.equal_range(request);
@@ -567,7 +681,7 @@ void PermissionRequestManager::PermissionDeniedIncludingDuplicates(
 void PermissionRequestManager::CancelledIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(1, base::STLCount(requests_, request) +
-                   base::STLCount(queued_requests_, request))
+                   CountQueuedPermissionRequests(request))
       << "Only requests in [queued_]requests_ can have duplicates";
   request->Cancelled();
   auto range = duplicate_requests_.equal_range(request);
@@ -578,7 +692,7 @@ void PermissionRequestManager::CancelledIncludingDuplicates(
 void PermissionRequestManager::RequestFinishedIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(1, base::STLCount(requests_, request) +
-                   base::STLCount(queued_requests_, request))
+                   CountQueuedPermissionRequests(request))
       << "Only requests in [queued_]requests_ can have duplicates";
   request->RequestFinished();
   // Beyond this point, |request| has probably been deleted.
@@ -634,18 +748,9 @@ void PermissionRequestManager::OnSelectedUiToUseForNotifications(
 
 PermissionPromptDisposition
 PermissionRequestManager::DetermineCurrentRequestUIDispositionForUMA() {
-#if defined(OS_ANDROID)
-  return ShouldCurrentRequestUseQuietUI()
-             ? PermissionPromptDisposition::MINI_INFOBAR
-             : PermissionPromptDisposition::MODAL_DIALOG;
-#else
-  return !ShouldCurrentRequestUseQuietUI()
-             ? PermissionPromptDisposition::ANCHORED_BUBBLE
-             : ReasonForUsingQuietUi() == QuietUiReason::kTriggeredByCrowdDeny
-                   ? PermissionPromptDisposition::LOCATION_BAR_RIGHT_STATIC_ICON
-                   : PermissionPromptDisposition::
-                         LOCATION_BAR_RIGHT_ANIMATED_ICON;
-#endif
+  if (view_)
+    return view_->GetPromptDisposition();
+  return PermissionPromptDisposition::NONE_VISIBLE;
 }
 
 void PermissionRequestManager::LogWarningToConsole(const char* message) {
@@ -667,6 +772,14 @@ void PermissionRequestManager::DoAutoResponseForTesting() {
     case NONE:
       NOTREACHED();
   }
+}
+
+int PermissionRequestManager::CountQueuedPermissionRequests(
+    PermissionRequest* request) {
+  return std::count_if(queued_requests_.begin(), queued_requests_.end(),
+                       [request](const RequestAndSource& entry) {
+                         return request == entry.request;
+                       });
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PermissionRequestManager)

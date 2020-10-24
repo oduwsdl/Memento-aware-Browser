@@ -9,27 +9,16 @@
  */
 class SwitchAccess {
   static initialize() {
-    window.switchAccess = new SwitchAccess();
-    chrome.virtualKeyboardPrivate.setKeyboardState(
-        chrome.virtualKeyboardPrivate.KeyboardState.ENABLED);
+    SwitchAccess.instance = new SwitchAccess();
 
     chrome.automation.getDesktop((desktop) => {
-      // These two must be initialized before the others.
-      AutoScanManager.initialize();
+      // NavigationManager must be initialized first.
       NavigationManager.initialize(desktop);
 
       Commands.initialize();
-      MenuManager.initialize();
-      SwitchAccessPreferences.initialize();
-      TextNavigationManager.initialize();
-
       KeyboardRootNode.startWatchingVisibility();
+      PreferenceManager.initialize();
     });
-  }
-
-  // TODO(anastasi): Remove once new menu is being used.
-  static get instance() {
-    return window.switchAccess;
   }
 
   /** @private */
@@ -56,58 +45,56 @@ class SwitchAccess {
   }
 
   /**
-   * Helper function to robustly find a node fitting a given predicate, even if
+   * Helper function to robustly find a node fitting a given FindParams, even if
    * that node has not yet been created.
    * Used to find the menu and back button.
-   * @param {!function(!AutomationNode): boolean} predicate
+   * @param {!chrome.automation.FindParams} findParams
    * @param {!function(!AutomationNode): void} foundCallback
    */
-  static findNodeMatchingPredicate(predicate, foundCallback) {
+  static findNodeMatching(findParams, foundCallback) {
     const desktop = NavigationManager.desktopNode;
     // First, check if the node is currently in the tree.
-    const treeWalker = new AutomationTreeWalker(
-        desktop, constants.Dir.FORWARD, {visit: predicate});
-    treeWalker.next();
-    if (treeWalker.node) {
-      foundCallback(treeWalker.node);
+    let node = desktop.find(findParams);
+    if (node) {
+      foundCallback(node);
       return;
     }
     // If it's not currently in the tree, listen for changes to the desktop
     // tree.
-    const onDesktopChildrenChanged = (event) => {
-      if (predicate(event.target)) {
+    const eventHandler = new EventHandler(
+        desktop, chrome.automation.EventType.CHILDREN_CHANGED,
+        null /** callback */);
+
+    const onEvent = (event) => {
+      if (event.target.matches(findParams)) {
         // If the event target is the node we're looking for, we've found it.
-        desktop.removeEventListener(
-            chrome.automation.EventType.CHILDREN_CHANGED,
-            onDesktopChildrenChanged, false);
+        eventHandler.stop();
         foundCallback(event.target);
       } else if (event.target.children.length > 0) {
         // Otherwise, see if one of its children is the node we're looking for.
-        const treeWalker = new AutomationTreeWalker(
-            event.target, constants.Dir.FORWARD,
-            {visit: predicate, root: (node) => node == event.target});
-        treeWalker.next();
-        if (treeWalker.node) {
-          desktop.removeEventListener(
-              chrome.automation.EventType.CHILDREN_CHANGED,
-              onDesktopChildrenChanged, false);
-          foundCallback(treeWalker.node);
+        node = event.target.find(findParams);
+        if (node) {
+          eventHandler.stop();
+          foundCallback(node);
         }
       }
     };
 
-    desktop.addEventListener(
-        chrome.automation.EventType.CHILDREN_CHANGED, onDesktopChildrenChanged,
-        false);
+    eventHandler.setCallback(onEvent);
+    eventHandler.start();
   }
 
   /*
    * Creates and records the specified error.
    * @param {SAConstants.ErrorType} errorType
    * @param {string} errorString
+   * @param {boolean} shouldRecover
    * @return {!Error}
    */
-  static error(errorType, errorString) {
+  static error(errorType, errorString, shouldRecover = false) {
+    if (shouldRecover) {
+      setTimeout(NavigationManager.moveToValidNode, 0);
+    }
     const errorTypeCountForUMA = Object.keys(SAConstants.ErrorType).length;
     chrome.metricsPrivate.recordEnumerationValue(
         'Accessibility.CrosSwitchAccess.Error', errorType,

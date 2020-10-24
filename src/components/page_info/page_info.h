@@ -25,7 +25,7 @@ class WebContents;
 }
 
 namespace content_settings {
-class TabSpecificContentSettings;
+class PageSpecificContentSettings;
 }
 
 namespace net {
@@ -105,7 +105,7 @@ class PageInfo : public content::WebContentsObserver {
     SAFE_BROWSING_STATUS_SIGNED_IN_SYNC_PASSWORD_REUSE,
     SAFE_BROWSING_STATUS_SIGNED_IN_NON_SYNC_PASSWORD_REUSE,
     SAFE_BROWSING_STATUS_ENTERPRISE_PASSWORD_REUSE,
-    SAFE_BROWSING_STATUS_BILLING
+    SAFE_BROWSING_STATUS_BILLING,
   };
 
   // Events for UMA. Do not reorder or change! Exposed in header so enum is
@@ -134,8 +134,12 @@ class PageInfo : public content::WebContentsObserver {
     PAGE_INFO_CONNECTION_HELP_OPENED = 8,
     PAGE_INFO_SITE_SETTINGS_OPENED = 9,
     PAGE_INFO_SECURITY_DETAILS_OPENED = 10,
-    PAGE_INFO_COOKIE_ALLOWED_FOR_SITE = 11,
-    PAGE_INFO_COOKIE_BLOCKED_FOR_SITE = 12,
+    PAGE_INFO_COOKIES_ALLOWED_FOR_SITE = 11,
+    PAGE_INFO_COOKIES_BLOCKED_FOR_SITE = 12,
+    PAGE_INFO_COOKIES_CLEARED = 13,
+    PAGE_INFO_PERMISSION_DIALOG_OPENED = 14,
+    PAGE_INFO_PERMISSIONS_CLEARED = 15,
+    PAGE_INFO_PERMISSIONS_CHANGED = 16,
     PAGE_INFO_COUNT
   };
 
@@ -146,12 +150,41 @@ class PageInfo : public content::WebContentsObserver {
     int delete_tooltip_string_id;
   };
 
+  // |PermissionInfo| contains information about a single permission |type| for
+  // the current website.
+  struct PermissionInfo {
+    PermissionInfo() = default;
+    // Site permission |type|.
+    ContentSettingsType type = ContentSettingsType::DEFAULT;
+    // The current value for the permission |type| (e.g. ALLOW or BLOCK).
+    ContentSetting setting = CONTENT_SETTING_DEFAULT;
+    // The global default settings for this permission |type|.
+    ContentSetting default_setting = CONTENT_SETTING_DEFAULT;
+    // The settings source e.g. user, extensions, policy, ... .
+    content_settings::SettingSource source =
+        content_settings::SETTING_SOURCE_NONE;
+    // Whether we're in incognito mode.
+    bool is_incognito = false;
+  };
+
   // Creates a PageInfo for the passed |url| using the given |ssl| status
   // object to determine the status of the site's connection.
   PageInfo(std::unique_ptr<PageInfoDelegate> delegate,
            content::WebContents* web_contents,
            const GURL& url);
   ~PageInfo() override;
+
+  // Checks whether this permission is currently the factory default, as set by
+  // Chrome. Specifically, that the following three conditions are true:
+  //   - The current active setting comes from the default or pref provider.
+  //   - The setting is the factory default setting (as opposed to a global
+  //     default setting set by the user).
+  //   - The setting is a wildcard setting applying to all origins (which can
+  //     only be set from the default provider).
+  static bool IsPermissionFactoryDefault(const PermissionInfo& info);
+
+  // Returns whether this page info is for an internal page.
+  static bool IsFileOrInternalPage(const GURL& url);
 
   // Initializes UI state that is dependent on having access to the PageInfoUI
   // object associated with this object. This explicit post-construction
@@ -160,13 +193,15 @@ class PageInfo : public content::WebContentsObserver {
   // occurs in this method. If this initialization flow was done as part of
   // PageInfo's constructor, those subclasses would not have their PageInfo
   // member set and crashes would ensue.
-  void InitializeUiState(PageInfoUI* ui, bool is_memento);
+  void InitializeUiState(PageInfoUI* ui);
 
   // This method is called to update the presenter's security state and forwards
   // that change on to the UI to be redrawn.
   void UpdateSecurityState();
 
   void RecordPageInfoAction(PageInfoAction action);
+
+  void UpdatePermissions();
 
   // This method is called when ever a permission setting is changed.
   void OnSitePermissionChanged(ContentSettingsType type, ContentSetting value);
@@ -217,7 +252,10 @@ class PageInfo : public content::WebContentsObserver {
  private:
   FRIEND_TEST_ALL_PREFIXES(PageInfoTest,
                            NonFactoryDefaultAndRecentlyChangedPermissionsShown);
+  FRIEND_TEST_ALL_PREFIXES(PageInfoTest, IncognitoPermissionsEmptyByDefault);
+  FRIEND_TEST_ALL_PREFIXES(PageInfoTest, IncognitoPermissionsDontShowAsk);
   friend class PageInfoBubbleViewBrowserTest;
+
   // Populates this object's UI state with provided security context. This
   // function does not update visible UI-- that's part of Present*().
   void ComputeUIInputs(const GURL& url);
@@ -230,7 +268,7 @@ class PageInfo : public content::WebContentsObserver {
 
   // Sets (presents) the information about the site's identity and connection
   // in the |ui_|.
-  void PresentSiteIdentity(bool is_memento_info);
+  void PresentSiteIdentity();
 
   // Presents feature related info in the |ui_|; like, if VR content is being
   // presented in a headset.
@@ -258,10 +296,10 @@ class PageInfo : public content::WebContentsObserver {
   // Exposed for testing.
   static std::vector<ContentSettingsType> GetAllPermissionsForTesting();
 
-  // Creates if necessary, and returns TabSpecificContentSettings
-  // for the observed WebContents.
-  content_settings::TabSpecificContentSettings* GetTabSpecificContentSettings()
-      const;
+  // Returns PageSpecificContentSettings for the observed WebContents if
+  // present, nullptr otherwise.
+  content_settings::PageSpecificContentSettings*
+  GetPageSpecificContentSettings() const;
 
   // Whether the content setting of type |type| has changed via Page Info UI.
   bool HasContentSettingChangedViaPageInfo(ContentSettingsType type);
@@ -269,13 +307,6 @@ class PageInfo : public content::WebContentsObserver {
   // Notifies the delegate that the content setting of type |type| has changed
   // via Page Info UI.
   void ContentSettingChangedViaPageInfo(ContentSettingsType type);
-
-  // Get allowed and blocked shared objects like cookies, local storage, etc for
-  // |site_url|.
-  const browsing_data::LocalSharedObjectsContainer& GetAllowedObjects(
-      const GURL& site_url);
-  const browsing_data::LocalSharedObjectsContainer& GetBlockedObjects(
-      const GURL& site_url);
 
   // Get counts of allowed and blocked cookies.
   int GetFirstPartyAllowedCookiesCount(const GURL& site_url);
@@ -351,12 +382,6 @@ class PageInfo : public content::WebContentsObserver {
   security_state::SecurityLevel security_level_;
 
   security_state::VisibleSecurityState visible_security_state_for_metrics_;
-
-  bool memento_status_ = false;
-
-  std::string memento_datetime_ = "";
-
-  bool mixed_memento_content_ = false;
 
   // Set when the user ignored the password reuse modal warning dialog. When
   // |show_change_password_buttons_| is true, the page identity area of the page

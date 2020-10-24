@@ -12,10 +12,6 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-namespace media {
-class MojoDecoderBufferWriter;
-}  // namespace media
-
 // Owns the CastStreamingSession and sends buffers to the renderer process via
 // a Mojo service.
 class CastStreamingSessionClient
@@ -40,23 +36,26 @@ class CastStreamingSessionClient
   void OnReceiverEnabled();
 
   // cast_streaming::CastStreamingSession::Client implementation.
-  void OnInitializationSuccess(
-      base::Optional<media::AudioDecoderConfig> audio_decoder_config,
-      base::Optional<media::VideoDecoderConfig> video_decoder_config) final;
-  void OnInitializationFailure() final;
-  void OnAudioFrameReceived(scoped_refptr<media::DecoderBuffer> buffer) final;
-  void OnVideoFrameReceived(scoped_refptr<media::DecoderBuffer> buffer) final;
-  void OnReceiverSessionEnded() final;
+  void OnSessionInitialization(
+      base::Optional<cast_streaming::CastStreamingSession::AudioStreamInfo>
+          audio_stream_info,
+      base::Optional<cast_streaming::CastStreamingSession::VideoStreamInfo>
+          video_stream_info) final;
+  void OnAudioBufferReceived(media::mojom::DecoderBufferPtr buffer) final;
+  void OnVideoBufferReceived(media::mojom::DecoderBufferPtr buffer) final;
+  void OnSessionReinitialization(
+      base::Optional<cast_streaming::CastStreamingSession::AudioStreamInfo>
+          audio_stream_info,
+      base::Optional<cast_streaming::CastStreamingSession::VideoStreamInfo>
+          video_stream_info) final;
+  void OnSessionEnded() final;
 
   fidl::InterfaceRequest<fuchsia::web::MessagePort> message_port_request_;
   mojo::AssociatedRemote<mojom::CastStreamingReceiver> cast_streaming_receiver_;
   cast_streaming::CastStreamingSession cast_streaming_session_;
 
   mojo::Remote<mojom::CastStreamingBufferReceiver> audio_remote_;
-  std::unique_ptr<media::MojoDecoderBufferWriter> audio_buffer_writer_;
-
   mojo::Remote<mojom::CastStreamingBufferReceiver> video_remote_;
-  std::unique_ptr<media::MojoDecoderBufferWriter> video_buffer_writer_;
 };
 
 #endif  // FUCHSIA_ENGINE_BROWSER_CAST_STREAMING_SESSION_CLIENT_H_

@@ -34,7 +34,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/animation/animation_delegate_views.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/drag_controller.h"
 
@@ -70,7 +69,6 @@ class LocationBarView : public LocationBar,
                         public views::AnimationDelegateViews,
                         public ChromeOmniboxEditController,
                         public DropdownBarHostDelegate,
-                        public views::ButtonListener,
                         public IconLabelBubbleView::Delegate,
                         public LocationIconView::Delegate,
                         public ContentSettingImageView::Delegate,
@@ -202,9 +200,6 @@ class LocationBarView : public LocationBar,
   ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
       override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   static bool IsVirtualKeyboardVisible(views::Widget* widget);
 
   // Returns the height available for user-entered text in the location bar.
@@ -228,12 +223,9 @@ class LocationBarView : public LocationBar,
   void OnLocationIconPressed(const ui::MouseEvent& event) override;
   void OnLocationIconDragged(const ui::MouseEvent& event) override;
   bool ShowPageInfoDialog() override;
-  bool Dialog() override;
   SkColor GetSecurityChipColor(
       security_state::SecurityLevel security_level) const override;
-  gfx::ImageSkia GetLocationIcon(LocationIconView::Delegate::IconFetchedCallback
-                                     on_icon_fetched) const override;
-  gfx::ImageSkia GetMementoIcon(LocationIconView::Delegate::IconFetchedCallback
+  ui::ImageModel GetLocationIcon(LocationIconView::Delegate::IconFetchedCallback
                                      on_icon_fetched) const override;
 
  private:
@@ -278,6 +270,8 @@ class LocationBarView : public LocationBar,
 
   // Gets the OmniboxPopupView associated with the model in |omnibox_view_|.
   OmniboxPopupView* GetOmniboxPopupView();
+
+  void KeywordHintViewPressed(const ui::Event& event);
 
   // Called when the page info bubble is closed.
   void OnPageInfoBubbleClosed(views::Widget::ClosedReason closed_reason,
@@ -379,9 +373,6 @@ class LocationBarView : public LocationBar,
   // An icon to the left of the edit field: the HTTPS lock, blank page icon,
   // search icon, EV HTTPS bubble, etc.
   LocationIconView* location_icon_view_ = nullptr;
-
-  // Memento icon to the left of location_icon_view_
-  LocationIconView* location_icon_memento_ = nullptr;
 
   // A view to show inline autocompletion when an IME is active.  In this case,
   // we shouldn't change the text or selection inside the OmniboxView itself,

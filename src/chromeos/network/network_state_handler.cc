@@ -35,9 +35,6 @@ namespace chromeos {
 
 namespace {
 
-// Ignore changes to signal strength less than this value for active networks.
-const int kSignalStrengthChangeThreshold = 5;
-
 // Constants used for logging.
 constexpr char kReasonStateChange[] = "State Change";
 constexpr char kReasonChange[] = "New Network";
@@ -126,7 +123,7 @@ class NetworkStateHandler::ActiveNetworkState {
            activation_state_ == network->activation_state() &&
            connect_requested_ == network->connect_requested() &&
            (abs(signal_strength_ - network->signal_strength()) <
-            kSignalStrengthChangeThreshold) &&
+            NetworkState::kSignalStrengthChangeThreshold) &&
            network_technology_ == network->network_technology();
   }
 
@@ -180,15 +177,15 @@ void NetworkStateHandler::InitShillPropertyHandler() {
 void NetworkStateHandler::UpdateBlockedWifiNetworks(
     bool only_managed,
     bool available_only,
-    const std::vector<std::string>& blacklisted_hex_ssids) {
+    const std::vector<std::string>& blocked_hex_ssids) {
   if (allow_only_policy_networks_to_connect_ == only_managed &&
       allow_only_policy_networks_to_connect_if_available_ == available_only &&
-      blacklisted_hex_ssids_ == blacklisted_hex_ssids) {
+      blocked_hex_ssids_ == blocked_hex_ssids) {
     return;
   }
   allow_only_policy_networks_to_connect_ = only_managed;
   allow_only_policy_networks_to_connect_if_available_ = available_only;
-  blacklisted_hex_ssids_ = blacklisted_hex_ssids;
+  blocked_hex_ssids_ = blocked_hex_ssids;
 
   UpdateBlockedWifiNetworksInternal();
 }
@@ -282,7 +279,7 @@ NetworkStateHandler::TechnologyState NetworkStateHandler::GetTechnologyState(
 void NetworkStateHandler::SetTechnologyEnabled(
     const NetworkTypePattern& type,
     bool enabled,
-    const network_handler::ErrorCallback& error_callback) {
+    network_handler::ErrorCallback error_callback) {
   std::vector<std::string> technologies = GetTechnologiesForType(type);
   for (const std::string& technology : technologies) {
     if (technology == kTypeTether) {
@@ -292,7 +289,7 @@ void NetworkStateHandler::SetTechnologyEnabled(
                        << "DeviceState, but the current state was: "
                        << tether_technology_state_;
         network_handler::RunErrorCallback(
-            error_callback, kTetherDevicePath,
+            std::move(error_callback), kTetherDevicePath,
             NetworkConnectionHandler::kErrorEnabledOrDisabledWhenNotAvailable,
             "");
         continue;
@@ -309,7 +306,7 @@ void NetworkStateHandler::SetTechnologyEnabled(
       continue;
     NET_LOG(USER) << "SetTechnologyEnabled " << technology << ":" << enabled;
     shill_property_handler_->SetTechnologyEnabled(technology, enabled,
-                                                  error_callback);
+                                                  std::move(error_callback));
   }
   // Signal Device/Technology state changed.
   NotifyDeviceListChanged();
@@ -346,8 +343,7 @@ void NetworkStateHandler::SetTetherScanState(bool is_scanning) {
 }
 
 void NetworkStateHandler::SetProhibitedTechnologies(
-    const std::vector<std::string>& prohibited_technologies,
-    const network_handler::ErrorCallback& error_callback) {
+    const std::vector<std::string>& prohibited_technologies) {
   // Make a copy of |prohibited_technologies| since the list may be edited
   // within this function.
   std::vector<std::string> prohibited_technologies_copy =
@@ -368,7 +364,7 @@ void NetworkStateHandler::SetProhibitedTechnologies(
   }
 
   shill_property_handler_->SetProhibitedTechnologies(
-      prohibited_technologies_copy, error_callback);
+      prohibited_technologies_copy);
   // Signal Device/Technology state changed.
   NotifyDeviceListChanged();
 }
@@ -996,7 +992,7 @@ bool NetworkStateHandler::UpdateBlockedByPolicy(NetworkState* network) const {
   bool blocked_by_policy =
       !network->IsManagedByPolicy() &&
       (OnlyManagedWifiNetworksAllowed() ||
-       base::Contains(blacklisted_hex_ssids_, network->GetHexSsid()));
+       base::Contains(blocked_hex_ssids_, network->GetHexSsid()));
   network->set_blocked_by_policy(blocked_by_policy);
   return prev_blocked_by_policy != blocked_by_policy;
 }
@@ -1113,38 +1109,6 @@ void NetworkStateHandler::SetCheckPortalList(
     const std::string& check_portal_list) {
   NET_LOG(EVENT) << "SetCheckPortalList: " << check_portal_list;
   shill_property_handler_->SetCheckPortalList(check_portal_list);
-}
-
-void NetworkStateHandler::SetCaptivePortalProviderForHexSsid(
-    const std::string& hex_ssid,
-    const std::string& provider_id,
-    const std::string& provider_name) {
-  NET_LOG(EVENT) << "SetCaptivePortalProviderForHexSsid: " << hex_ssid
-                 << " -> (" << provider_id << ", " << provider_name << ")";
-  // NetworkState hex SSIDs are always uppercase.
-  std::string hex_ssid_uc = hex_ssid;
-  transform(hex_ssid_uc.begin(), hex_ssid_uc.end(), hex_ssid_uc.begin(),
-            toupper);
-  if (provider_id.empty()) {
-    hex_ssid_to_captive_portal_provider_map_.erase(hex_ssid_uc);
-  } else {
-    NetworkState::CaptivePortalProviderInfo provider_info;
-    provider_info.id = provider_id;
-    provider_info.name = provider_name;
-    hex_ssid_to_captive_portal_provider_map_[hex_ssid_uc] =
-        std::move(provider_info);
-  }
-  // When a new entry is added or removed from the map, check all networks
-  // for a matching hex SSID and update the provider info. (This should occur
-  // infrequently). New networks will be updated when added.
-  for (auto& managed : network_list_) {
-    NetworkState* network = managed->AsNetworkState();
-    if (network->GetHexSsid() == hex_ssid_uc) {
-      NET_LOG(EVENT) << "Setting captive portal provider for network: "
-                     << NetworkId(network) << " = " << provider_id;
-      network->SetCaptivePortalProvider(provider_id, provider_name);
-    }
-  }
 }
 
 void NetworkStateHandler::SetWakeOnLanEnabled(bool enabled) {
@@ -1376,7 +1340,6 @@ void NetworkStateHandler::UpdateNetworkStateProperties(
   network_property_updated |= network->InitialPropertiesReceived(properties);
 
   UpdateGuid(network);
-  UpdateCaptivePortalProvider(network);
   if (network->Matches(NetworkTypePattern::Cellular()))
     UpdateCellularStateFromDevice(network);
 
@@ -1572,6 +1535,13 @@ void NetworkStateHandler::CheckPortalListChanged(
   check_portal_list_ = check_portal_list;
 }
 
+void NetworkStateHandler::HostnameChanged(const std::string& hostname) {
+  NET_LOG(EVENT) << "HostnameChanged: " << hostname;
+  hostname_ = hostname;
+  for (auto& observer : observers_)
+    observer.HostnameChanged(hostname);
+}
+
 void NetworkStateHandler::TechnologyListChanged() {
   // Eventually we would like to replace Technology state with Device state.
   // For now, treat technology state changes as device list changes.
@@ -1581,27 +1551,30 @@ void NetworkStateHandler::TechnologyListChanged() {
 void NetworkStateHandler::ManagedStateListChanged(
     ManagedState::ManagedType type) {
   SCOPED_NET_LOG_IF_SLOW();
-  if (type == ManagedState::MANAGED_TYPE_NETWORK) {
-    SortNetworkList(true /* ensure_cellular */);
-    UpdateNetworkStats();
-    NotifyIfActiveNetworksChanged();
-    NotifyNetworkListChanged();
-    UpdateManagedWifiNetworkAvailable();
-  } else if (type == ManagedState::MANAGED_TYPE_DEVICE) {
-    std::string devices;
-    for (auto iter = device_list_.begin(); iter != device_list_.end(); ++iter) {
-      if (iter != device_list_.begin())
-        devices += ", ";
-      devices += (*iter)->name();
-    }
-    NET_LOG(EVENT) << "DeviceList: " << devices;
-    // A change to the device list may affect the default Cellular network, so
-    // call SortNetworkList here.
-    SortNetworkList(true /* ensure_cellular */);
-    NotifyDeviceListChanged();
-  } else {
-    NOTREACHED();
+  switch (type) {
+    case ManagedState::MANAGED_TYPE_NETWORK:
+      SortNetworkList(true /* ensure_cellular */);
+      UpdateNetworkStats();
+      NotifyIfActiveNetworksChanged();
+      NotifyNetworkListChanged();
+      UpdateManagedWifiNetworkAvailable();
+      return;
+    case ManagedState::MANAGED_TYPE_DEVICE:
+      std::string devices;
+      for (auto iter = device_list_.begin(); iter != device_list_.end();
+           ++iter) {
+        if (iter != device_list_.begin())
+          devices += ", ";
+        devices += (*iter)->name();
+      }
+      NET_LOG(EVENT) << "DeviceList: " << devices;
+      // A change to the device list may affect the default Cellular network, so
+      // call SortNetworkList here.
+      SortNetworkList(true /* ensure_cellular */);
+      NotifyDeviceListChanged();
+      return;
   }
+  NOTREACHED();
 }
 
 void NetworkStateHandler::SortNetworkList(bool ensure_cellular) {
@@ -1789,19 +1762,6 @@ void NetworkStateHandler::UpdateGuid(NetworkState* network) {
     specifier_guid_map_[specifier] = guid;
   }
   network->SetGuid(guid);
-}
-
-void NetworkStateHandler::UpdateCaptivePortalProvider(NetworkState* network) {
-  auto portal_iter =
-      hex_ssid_to_captive_portal_provider_map_.find(network->GetHexSsid());
-  if (portal_iter == hex_ssid_to_captive_portal_provider_map_.end()) {
-    network->SetCaptivePortalProvider("", "");
-    return;
-  }
-  NET_LOG(EVENT) << "Setting captive portal provider for network: "
-                 << NetworkId(network) << " = " << portal_iter->second.id;
-  network->SetCaptivePortalProvider(portal_iter->second.id,
-                                    portal_iter->second.name);
 }
 
 void NetworkStateHandler::UpdateCellularStateFromDevice(NetworkState* network) {
@@ -2087,7 +2047,7 @@ std::string NetworkStateHandler::GetTechnologyForType(
   if (type.MatchesType(kTypeTether))
     return kTypeTether;
 
-  NOTREACHED() << "Unexpected Type: " << type.ToDebugString();
+  NET_LOG(ERROR) << "Unexpected Type for technology: " << type.ToDebugString();
   return std::string();
 }
 

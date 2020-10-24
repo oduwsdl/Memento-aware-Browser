@@ -71,8 +71,8 @@ std::ostream& operator<<(std::ostream& out,
     case ActionProto::ActionInfoCase::kTell:
       out << "Tell";
       break;
-    case ActionProto::ActionInfoCase::kFocusElement:
-      out << "FocusElement";
+    case ActionProto::ActionInfoCase::kShowCast:
+      out << "ShowCast";
       break;
     case ActionProto::ActionInfoCase::kWaitForDom:
       out << "WaitForDom";
@@ -133,6 +133,15 @@ std::ostream& operator<<(std::ostream& out,
       break;
     case ActionProto::kSaveGeneratedPassword:
       out << "SaveGeneratedPassword";
+      break;
+    case ActionProto::ActionInfoCase::kConfigureUiState:
+      out << "ConfigureUiState";
+      break;
+    case ActionProto::ActionInfoCase::kPresaveGeneratedPassword:
+      out << "PresaveGeneratedPassword";
+      break;
+    case ActionProto::ActionInfoCase::kGetElementStatus:
+      out << "GetElementStatus";
       break;
     case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET:
       out << "ACTION_INFO_NOT_SET";

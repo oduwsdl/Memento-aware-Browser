@@ -32,6 +32,10 @@
       settings-collapse-radio-button .bullet-line:last-child {
         padding-bottom: 12px;
       }
+
+      #exceptionHeader {
+        padding: 0 var(--cr-section-padding);
+      }
     </style>
     <picture>
       <source
@@ -61,27 +65,25 @@
             </div>
           </div>
         </settings-collapse-radio-button>
-        <template is="dom-if" if="[[improvedCookieControlsEnabled_]]">
-          <settings-collapse-radio-button id="blockThirdPartyIncognito"
-              pref="[[prefs.generated.cookie_primary_setting]]"
-              name="[[cookiePrimarySettingEnum_.BLOCK_THIRD_PARTY_INCOGNITO]]"
-              label="$i18n{cookiePageBlockThirdIncognito}">
-            <div slot="collapse">
-              <div class="bullet-line">
-                <iron-icon icon="settings:cookie"></iron-icon>
-                <div class="secondary">
-                      $i18n{cookiePageBlockThirdIncognitoBulOne}
-                </div>
-              </div>
-              <div class="bullet-line">
-                <iron-icon icon="settings:block"></iron-icon>
-                <div class="secondary">
-                      $i18n{cookiePageBlockThirdIncognitoBulTwo}
-                </div>
+        <settings-collapse-radio-button id="blockThirdPartyIncognito"
+            pref="[[prefs.generated.cookie_primary_setting]]"
+            name="[[cookiePrimarySettingEnum_.BLOCK_THIRD_PARTY_INCOGNITO]]"
+            label="$i18n{cookiePageBlockThirdIncognito}">
+          <div slot="collapse">
+            <div class="bullet-line">
+              <iron-icon icon="settings:cookie"></iron-icon>
+              <div class="secondary">
+                    $i18n{cookiePageBlockThirdIncognitoBulOne}
               </div>
             </div>
-          </settings-collapse-radio-button>
-        </template>
+            <div class="bullet-line">
+              <iron-icon icon="settings:block"></iron-icon>
+              <div class="secondary">
+                    $i18n{cookiePageBlockThirdIncognitoBulTwo}
+              </div>
+            </div>
+          </div>
+        </settings-collapse-radio-button>
         <settings-collapse-radio-button id="blockThirdParty"
             pref="[[prefs.generated.cookie_primary_setting]]"
             name="[[cookiePrimarySettingEnum_.BLOCK_THIRD_PARTY]]"
@@ -136,8 +138,12 @@
         on-settings-boolean-control-change="onNetworkPredictionChange_">
     </settings-toggle-button>
     <cr-link-row id="site-data-trigger" class="hr"
-        on-click="onSiteDataClick_" label="$i18n{siteSettingsCookieLink}">
+        on-click="onSiteDataClick_" label="$i18n{siteSettingsCookieLink}"
+        role-description="$i18n{subpageArrowRoleDescription}">
     </cr-link-row>
+    <div  id="exceptionHeader" hidden="[[!enableContentSettingsRedesign_]]">
+      <h2>$i18n{siteSettingsCustomizedBehaviors}</h2>
+    </div>
     <site-list id="allowExceptionsList"
         category="[[cookiesContentSettingType_]]"
         category-subtype="[[contentSetting_.ALLOW]]"

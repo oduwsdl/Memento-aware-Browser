@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/optional.h"
+#include "chrome/browser/ui/webui/nearby_share/nearby_share.mojom.h"
 #include "url/gurl.h"
 
 // Metadata about an ongoing transfer. Wraps transient data like status and
@@ -34,25 +35,37 @@ class TransferMetadata {
     kMaxValue = kExternalProviderLaunched
   };
 
+  static bool IsFinalStatus(Status status);
+
+  static std::string StatusToString(TransferMetadata::Status status);
+
+  static nearby_share::mojom::TransferStatus StatusToMojo(Status status);
+
   TransferMetadata(Status status,
                    float progress,
                    base::Optional<std::string> token,
                    bool is_original,
                    bool is_final_status);
   ~TransferMetadata();
+  TransferMetadata(const TransferMetadata&);
+  TransferMetadata& operator=(const TransferMetadata&);
 
-  Status status() { return status_; }
-  float progress() { return progress_; }
+  Status status() const { return status_; }
+
+  // Returns transfer progress as percentage.
+  float progress() const { return progress_; }
 
   // Represents the UKey2 token from Nearby Connection. base::nullopt if no
   // UKey2 comparison is needed for this transfer.
-  const base::Optional<std::string>& token() { return token_; }
+  const base::Optional<std::string>& token() const { return token_; }
 
   // True if this |TransferMetadata| has not been seen.
-  bool is_original() { return is_original_; }
+  bool is_original() const { return is_original_; }
 
   // True if this |TransferMetadata| is the last status for this transfer.
-  bool is_final_status() { return is_final_status_; }
+  bool is_final_status() const { return is_final_status_; }
+
+  nearby_share::mojom::TransferMetadataPtr ToMojo() const;
 
  private:
   Status status_;

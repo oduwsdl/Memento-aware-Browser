@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.webapps;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
 import static org.chromium.base.ApplicationState.HAS_DESTROYED_ACTIVITIES;
 import static org.chromium.base.ApplicationState.HAS_PAUSED_ACTIVITIES;
 import static org.chromium.base.ApplicationState.HAS_STOPPED_ACTIVITIES;
@@ -19,7 +22,7 @@ import android.util.Base64;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.SmallTest;
 
-import org.junit.Assert;
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -35,30 +38,27 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.test.MockCertVerifierRuleAndroid;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
 import org.chromium.chrome.test.util.browser.contextmenu.RevampedContextMenuUtils;
 import org.chromium.chrome.test.util.browser.webapps.WebappTestPage;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
-import org.chromium.content_public.browser.test.NativeLibraryTestRule;
+import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
@@ -72,20 +72,16 @@ import org.chromium.ui.test.util.UiRestriction;
 public class WebappNavigationTest {
     public final WebappActivityTestRule mActivityTestRule = new WebappActivityTestRule();
 
-    public final NativeLibraryTestRule mNativeLibraryTestRule = new NativeLibraryTestRule();
-
     public MockCertVerifierRuleAndroid mCertVerifierRule =
-            new MockCertVerifierRuleAndroid(mNativeLibraryTestRule, 0 /* net::OK */);
+            new MockCertVerifierRuleAndroid(0 /* net::OK */);
 
     @Rule
-    public RuleChain mRuleChain = RuleChain.emptyRuleChain()
-                                          .around(mActivityTestRule)
-                                          .around(mNativeLibraryTestRule)
-                                          .around(mCertVerifierRule);
+    public RuleChain mRuleChain =
+            RuleChain.emptyRuleChain().around(mActivityTestRule).around(mCertVerifierRule);
 
     @Before
     public void setUp() {
-        mNativeLibraryTestRule.loadNativeLibraryNoBrowserProcess();
+        NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
 
         mActivityTestRule.getEmbeddedTestServerRule().setServerUsesHttps(true);
         Uri mapToUri =
@@ -106,14 +102,14 @@ public class WebappNavigationTest {
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
     public void testRegularLinkOffOriginNoWebappThemeColor() throws Exception {
         WebappActivity activity = runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
-        WebappActivityTestRule.assertToolbarShowState(activity, false);
+        assertEquals(
+                BrowserControlsState.HIDDEN, WebappActivityTestRule.getToolbarShowState(activity));
 
         addAnchorAndClick(offOriginUrl(), "_self");
 
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), offOriginUrl());
-        WebappActivityTestRule.assertToolbarShowState(activity, true);
-        Assert.assertEquals(
-                getDefaultPrimaryColor(), activity.getToolbarManager().getPrimaryColor());
+        WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
+        assertEquals(getDefaultPrimaryColor(), activity.getToolbarManager().getPrimaryColor());
     }
 
     /**
@@ -130,13 +126,14 @@ public class WebappNavigationTest {
         WebappActivity activity =
                 runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent().putExtra(
                         ShortcutHelper.EXTRA_THEME_COLOR, (long) Color.CYAN));
-        WebappActivityTestRule.assertToolbarShowState(activity, false);
+        assertEquals(
+                BrowserControlsState.HIDDEN, WebappActivityTestRule.getToolbarShowState(activity));
 
         addAnchorAndClick(offOriginUrl(), "_self");
 
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), offOriginUrl());
-        WebappActivityTestRule.assertToolbarShowState(activity, true);
-        Assert.assertEquals(Color.CYAN, activity.getToolbarManager().getPrimaryColor());
+        WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
+        assertEquals(Color.CYAN, activity.getToolbarManager().getPrimaryColor());
     }
 
     /**
@@ -157,11 +154,12 @@ public class WebappNavigationTest {
                 ChromeSwitches.DISABLE_DIGITAL_ASSET_LINK_VERIFICATION, url);
         mActivityTestRule.startWebappActivity(launchIntent.putExtra(ShortcutHelper.EXTRA_URL, url));
         WebappActivity activity = mActivityTestRule.getActivity();
-        WebappActivityTestRule.assertToolbarShowState(activity, false);
+        assertEquals(
+                BrowserControlsState.HIDDEN, WebappActivityTestRule.getToolbarShowState(activity));
         addAnchorAndClick(offOriginUrl(), "_self");
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), offOriginUrl());
-        WebappActivityTestRule.assertToolbarShowState(activity, true);
-        Assert.assertEquals(Color.CYAN, activity.getToolbarManager().getPrimaryColor());
+        WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
+        assertEquals(Color.CYAN, activity.getToolbarManager().getPrimaryColor());
     }
 
     /**
@@ -186,7 +184,7 @@ public class WebappNavigationTest {
         clickNodeWithId("post_button");
 
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), offOriginUrl());
-        Assert.assertEquals(Color.CYAN, activity.getToolbarManager().getPrimaryColor());
+        assertEquals(Color.CYAN, activity.getToolbarManager().getPrimaryColor());
     }
 
     /**
@@ -201,11 +199,13 @@ public class WebappNavigationTest {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
         addAnchorAndClick(offOriginUrl(), "_blank");
         ChromeActivity activity = mActivityTestRule.getActivity();
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                2, () -> activity.getTabModelSelector().getModel(false).getCount()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    activity.getTabModelSelector().getModel(false).getCount(), Matchers.is(2));
+        });
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), offOriginUrl());
 
-        WebappActivityTestRule.assertToolbarShowState(activity, true);
+        WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
     }
 
     /**
@@ -222,11 +222,13 @@ public class WebappNavigationTest {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
         addAnchorAndClick(inScopeUrl, "_blank");
         ChromeActivity activity = mActivityTestRule.getActivity();
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                2, () -> activity.getTabModelSelector().getModel(false).getCount()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    activity.getTabModelSelector().getModel(false).getCount(), Matchers.is(2));
+        });
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), inScopeUrl);
 
-        WebappActivityTestRule.assertToolbarShowState(activity, true);
+        WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
     }
 
     /**
@@ -244,13 +246,13 @@ public class WebappNavigationTest {
         addAnchorAndClick(otherPageUrl, "_self");
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), otherPageUrl);
 
-        WebappActivityTestRule.assertToolbarShowState(activity, false);
+        assertEquals(
+                BrowserControlsState.HIDDEN, WebappActivityTestRule.getToolbarShowState(activity));
     }
 
     @Test
     @SmallTest
     @Feature({"Webapps"})
-    @DisableFeatures({ChromeFeatureList.REVAMPED_CONTEXT_MENU})
     public void testOpenInChromeFromContextMenuTabbedChrome() throws Exception {
         // Needed to get full context menu.
         FirstRunStatus.setFirstRunFlowComplete(true);
@@ -263,38 +265,14 @@ public class WebappNavigationTest {
         final ActivityMonitor monitor =
                 InstrumentationRegistry.getInstrumentation().addMonitor(filter, null, false);
 
-        ContextMenuUtils.selectContextMenuItem(InstrumentationRegistry.getInstrumentation(),
-                null /* activity to check for focus after click */,
-                mActivityTestRule.getActivity().getActivityTab(), "myTestAnchorId",
-                R.id.contextmenu_open_in_chrome);
-
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return InstrumentationRegistry.getInstrumentation().checkMonitorHit(monitor, 1);
-            }
-        });
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Webapps"})
-    @EnableFeatures({ChromeFeatureList.REVAMPED_CONTEXT_MENU})
-    public void testOpenInChromeFromRevampedContextMenuTabbedChrome() throws Exception {
-        // Needed to get full context menu.
-        FirstRunStatus.setFirstRunFlowComplete(true);
-        runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
-
-        addAnchor("myTestAnchorId", offOriginUrl(), "_self");
-
         RevampedContextMenuUtils.selectContextMenuItem(InstrumentationRegistry.getInstrumentation(),
                 null /* activity to check for focus after click */,
                 mActivityTestRule.getActivity().getActivityTab(), "myTestAnchorId",
                 R.id.contextmenu_open_in_chrome);
 
-        ChromeTabbedActivity tabbedChrome =
-                ChromeActivityTestRule.waitFor(ChromeTabbedActivity.class);
-        ChromeTabUtils.waitForTabPageLoaded(tabbedChrome.getActivityTab(), offOriginUrl());
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            return InstrumentationRegistry.getInstrumentation().checkMonitorHit(monitor, 1);
+        });
     }
 
     @Test
@@ -307,7 +285,7 @@ public class WebappNavigationTest {
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             activity.getComponent().resolveNavigationController().openCurrentUrlInBrowser(true);
-            Assert.assertNull(activity.getActivityTab());
+            assertNull(activity.getActivityTab());
         });
 
         ChromeTabbedActivity tabbedChrome =
@@ -332,7 +310,7 @@ public class WebappNavigationTest {
                     .getComponent()
                     .resolveNavigationController()
                     .openCurrentUrlInBrowser(true);
-            Assert.assertNull(mActivityTestRule.getActivity().getActivityTab());
+            assertNull(mActivityTestRule.getActivity().getActivityTab());
         });
 
         ChromeTabbedActivity tabbedChrome =
@@ -352,7 +330,7 @@ public class WebappNavigationTest {
         String otherInScopeUrl =
                 WebappTestPage.getNonServiceWorkerUrl(mActivityTestRule.getTestServer());
         mActivityTestRule.loadUrlInTab(otherInScopeUrl, PageTransition.LINK, tab);
-        Assert.assertEquals(otherInScopeUrl, tab.getUrlString());
+        assertEquals(otherInScopeUrl, ChromeTabUtils.getUrlStringOnUiThread(tab));
 
         mActivityTestRule.loadUrlInTab(
                 offOriginUrl(), PageTransition.LINK, tab, 10 /* secondsToWait */);
@@ -362,7 +340,7 @@ public class WebappNavigationTest {
                 mozillaUrl, PageTransition.LINK, tab, 10 /* secondsToWait */);
 
         // Toolbar with the close button should be visible.
-        WebappActivityTestRule.assertToolbarShowState(activity, true);
+        WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
 
         // Navigate back to in-scope through a close button.
         TestThreadUtils.runOnUiThreadBlocking(()
@@ -395,16 +373,16 @@ public class WebappNavigationTest {
                 testServer.getURL("/chrome/test/data/android/redirect/js_redirect.html"
                         + "?replace_text="
                         + Base64.encodeToString(
-                                  ApiCompatibilityUtils.getBytesUtf8("PARAM_URL"), Base64.URL_SAFE)
+                                ApiCompatibilityUtils.getBytesUtf8("PARAM_URL"), Base64.URL_SAFE)
                         + ":"
                         + Base64.encodeToString(ApiCompatibilityUtils.getBytesUtf8(offOriginUrl()),
-                                  Base64.URL_SAFE));
+                                Base64.URL_SAFE));
         addAnchorAndClick(redirectingUrl, "_self");
 
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), offOriginUrl());
 
         // Close the Minimal UI.
-        WebappActivityTestRule.assertToolbarShowState(activity, true);
+        WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
         TestThreadUtils.runOnUiThreadBlocking(()
                                                       -> activity.getToolbarManager()
                                                                  .getToolbarLayoutForTesting()
@@ -455,13 +433,10 @@ public class WebappNavigationTest {
     }
 
     private void waitForExternalAppOrIntentPicker() {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return ApplicationStatus.getStateForApplication() == HAS_PAUSED_ACTIVITIES
-                        || ApplicationStatus.getStateForApplication() == HAS_STOPPED_ACTIVITIES
-                        || ApplicationStatus.getStateForApplication() == HAS_DESTROYED_ACTIVITIES;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(ApplicationStatus.getStateForApplication(),
+                    Matchers.isOneOf(HAS_PAUSED_ACTIVITIES, HAS_STOPPED_ACTIVITIES,
+                            HAS_DESTROYED_ACTIVITIES));
         });
     }
 }

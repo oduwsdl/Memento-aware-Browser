@@ -18,8 +18,8 @@
 #include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "components/blocked_content/popup_navigation_delegate.h"
 #include "components/blocked_content/test/test_popup_navigation_delegate.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
-#include "components/content_settings/browser/test_tab_specific_content_settings_delegate.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
+#include "components/content_settings/browser/test_page_specific_content_settings_delegate.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
@@ -64,6 +64,14 @@ class SafeBrowsingTriggeredPopupBlockerTest
       subresource_filter::ActivationDecision* decision) override {
     return initial_activation_level;
   }
+  void OnAdsViolationTriggered(
+      content::RenderFrameHost*,
+      subresource_filter::mojom::AdsViolation) override {}
+  const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+  GetSafeBrowsingDatabaseManager() override {
+    return nullptr;
+  }
+  void OnReloadRequested() override {}
 
   // content::RenderViewHostTestHarness:
   void SetUp() override {
@@ -77,16 +85,17 @@ class SafeBrowsingTriggeredPopupBlockerTest
         pref_service_.registry());
     HostContentSettingsMap::RegisterProfilePrefs(pref_service_.registry());
     settings_map_ = base::MakeRefCounted<HostContentSettingsMap>(
-        &pref_service_, false, false, false, false);
+        &pref_service_, false /* is_off_the_record */,
+        false /* store_last_modified */, false /* restore_session*/);
 
     scoped_feature_list_ = DefaultFeatureList();
     subresource_filter::SubresourceFilterObserverManager::CreateForWebContents(
         web_contents());
     PopupBlockerTabHelper::CreateForWebContents(web_contents());
-    content_settings::TabSpecificContentSettings::CreateForWebContents(
+    content_settings::PageSpecificContentSettings::CreateForWebContents(
         web_contents(),
         std::make_unique<
-            content_settings::TestTabSpecificContentSettingsDelegate>(
+            content_settings::TestPageSpecificContentSettingsDelegate>(
             /*prefs=*/nullptr, settings_map_.get()));
     popup_blocker_ =
         SafeBrowsingTriggeredPopupBlocker::FromWebContents(web_contents());

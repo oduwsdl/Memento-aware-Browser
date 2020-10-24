@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
@@ -135,11 +136,8 @@ class WebstorePrivateExtensionInstallRequestBase : public ExtensionApiUnittest {
 
   void VerifyResponse(const ExtensionInstallStatus& expected_response,
                       const base::Value* actual_response) {
-    ASSERT_TRUE(actual_response->is_list());
-    const auto& actual_list = actual_response->GetList();
-    ASSERT_EQ(1u, actual_list.size());
-    ASSERT_TRUE(actual_list[0].is_string());
-    EXPECT_EQ(ToString(expected_response), actual_list[0].GetString());
+    ASSERT_TRUE(actual_response->is_string());
+    EXPECT_EQ(ToString(expected_response), actual_response->GetString());
   }
 
  private:

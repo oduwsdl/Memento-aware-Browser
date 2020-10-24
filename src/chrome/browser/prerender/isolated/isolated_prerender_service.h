@@ -10,14 +10,13 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/content_browser_client.h"
 #include "url/gurl.h"
 
 class Profile;
 class IsolatedPrerenderProxyConfigurator;
-class IsolatedPrerenderServiceWorkersObserver;
+class IsolatedPrerenderOriginProber;
 class IsolatedPrerenderSubresourceManager;
 class PrefetchedMainframeResponseContainer;
 
@@ -26,9 +25,7 @@ class RenderFrameHost;
 }
 
 // This service owns browser-level objects used in Isolated Prerenders.
-class IsolatedPrerenderService
-    : public KeyedService,
-      public data_reduction_proxy::DataReductionProxySettingsObserver {
+class IsolatedPrerenderService : public KeyedService {
  public:
   explicit IsolatedPrerenderService(Profile* profile);
   ~IsolatedPrerenderService() override;
@@ -37,8 +34,8 @@ class IsolatedPrerenderService
     return proxy_configurator_.get();
   }
 
-  IsolatedPrerenderServiceWorkersObserver* service_workers_observer() {
-    return service_workers_observer_.get();
+  IsolatedPrerenderOriginProber* origin_prober() {
+    return origin_prober_.get();
   }
 
   // This call is forwarded to all |IsolatedPrerenderSubresourceManager| in
@@ -73,17 +70,6 @@ class IsolatedPrerenderService
   IsolatedPrerenderService& operator=(const IsolatedPrerenderService&) = delete;
 
  private:
-  // data_reduction_proxy::DataReductionProxySettingsObserver:
-  void OnProxyRequestHeadersChanged(
-      const net::HttpRequestHeaders& headers) override;
-  void OnSettingsInitialized() override;
-  void OnDataSaverEnabledChanged(bool enabled) override;
-  void OnPrefetchProxyHostsChanged(
-      const std::vector<GURL>& prefetch_proxies) override;
-
-  // KeyedService:
-  void Shutdown() override;
-
   // Cleans up the NoStatePrerender response. Used in a delayed post task.
   void CleanupNoStatePrefetchResponse(const GURL& url);
 
@@ -93,9 +79,8 @@ class IsolatedPrerenderService
   // The custom proxy configurator for Isolated Prerenders.
   std::unique_ptr<IsolatedPrerenderProxyConfigurator> proxy_configurator_;
 
-  // The storage partition-level observer of registered service workers.
-  std::unique_ptr<IsolatedPrerenderServiceWorkersObserver>
-      service_workers_observer_;
+  // The origin prober class which manages all logic for origin probing.
+  std::unique_ptr<IsolatedPrerenderOriginProber> origin_prober_;
 
   // Map of prerender URL to its manager. Kept at the browser level since NSPs
   // are done in a separate WebContents from the one they are created in.

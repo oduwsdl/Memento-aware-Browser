@@ -25,6 +25,11 @@ extern const char kSafeBrowsingEnabled[];
 // Boolean that is true when Safe Browsing Enhanced Protection is enabled.
 extern const char kSafeBrowsingEnhanced[];
 
+// Integer indicating the state of real time URL check. This is managed
+// by enterprise policy and has no effect on users who are not managed by
+// enterprise policy.
+extern const char kSafeBrowsingEnterpriseRealTimeUrlCheckMode[];
+
 // Boolean that tells us whether users are given the option to opt in to Safe
 // Browsing extended reporting. This is exposed as a preference that can be
 // overridden by enterprise policy.
@@ -87,10 +92,6 @@ extern const char kPasswordProtectionWarningTrigger[];
 // microseconds);
 extern const char kAdvancedProtectionLastRefreshInUs[];
 
-// Whether or not to send downloads to Safe Browsing for deep scanning. This
-// is configured by enterprise policy.
-extern const char kSafeBrowsingSendFilesForMalwareCheck[];
-
 // Boolean that indidicates if Chrome reports unsafe events to Google.
 extern const char kUnsafeEventsReportingEnabled[];
 
@@ -105,9 +106,6 @@ extern const char kDelayDeliveryUntilVerdict[];
 // Integer that specifies if password protected files can be either uploaded
 // or downloaded or both.
 extern const char kAllowPasswordProtectedFiles[];
-
-// Integer that indicates if Chrome checks data for content compliance.
-extern const char kCheckContentCompliance[];
 
 // Integer that indicates if Chrome blocks data that cannot be checked for
 // content compliance due to unsupported filetypes.
@@ -179,7 +177,7 @@ enum PasswordProtectionTrigger {
 };
 
 // Enum representing possible values of the SendFilesForMalwareCheck policy.
-// This must be kept in sync with policy_templates.json.
+// TODO(crbug/1109242): Remove this once tests use connector policies directly.
 enum SendFilesForMalwareCheckValues {
   DO_NOT_SCAN = 0,
   SEND_DOWNLOADS = 2,
@@ -189,8 +187,8 @@ enum SendFilesForMalwareCheckValues {
   SEND_FILES_FOR_MALWARE_CHECK_MAX = SEND_UPLOADS_AND_DOWNLOADS,
 };
 
-// Enum representing possible values of the CheckContentCompliance policy. This
-// must be kept in sync with policy_templates.json.
+// Enum representing possible values of the CheckContentCompliance policy.
+// TODO(crbug/1109242): Remove this once tests use connector policies directly.
 enum CheckContentComplianceValues {
   CHECK_NONE = 0,
   CHECK_DOWNLOADS = 1,
@@ -236,6 +234,9 @@ enum DelayDeliveryUntilVerdictValues {
   DELAY_UPLOADS_AND_DOWNLOADS = 3,
 };
 
+// Enum representing possible values of the Safe Browsing state.
+// A Java counterpart will be generated for this enum.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.safe_browsing
 enum SafeBrowsingState {
   // The user is not opted into Safe Browsing.
   NO_SAFE_BROWSING = 0,
@@ -245,7 +246,14 @@ enum SafeBrowsingState {
   ENHANCED_PROTECTION = 2,
 };
 
+enum EnterpriseRealTimeUrlCheckMode {
+  REAL_TIME_CHECK_DISABLED = 0,
+  REAL_TIME_CHECK_FOR_MAINFRAME_ENABLED = 1,
+};
+
 SafeBrowsingState GetSafeBrowsingState(const PrefService& prefs);
+
+void SetSafeBrowsingState(PrefService* prefs, SafeBrowsingState state);
 
 // Returns whether Safe Browsing is enabled for the user.
 bool IsSafeBrowsingEnabled(const PrefService& prefs);
@@ -276,6 +284,14 @@ bool IsExtendedReportingEnabled(const PrefService& prefs);
 // enterprise policy, meaning the user can't change it.
 bool IsExtendedReportingPolicyManaged(const PrefService& prefs);
 
+// Return whether the Safe Browsing preference is managed. It can be managed by
+// either the SafeBrowsingEnabled policy(legacy) or the
+// SafeBrowsingProtectionLevel policy(new).
+bool IsSafeBrowsingPolicyManaged(const PrefService& prefs);
+
+// Returns whether enhanced protection message is enabled in interstitials.
+bool IsEnhancedProtectionMessageInInterstitialsEnabled();
+
 // Updates UMA metrics about Safe Browsing Extended Reporting states.
 void RecordExtendedReportingMetrics(const PrefService& prefs);
 
@@ -297,7 +313,13 @@ void SetExtendedReportingPrefForTests(PrefService* prefs, bool value);
 
 // Sets the currently active Safe Browsing Enhanced Protection to the specified
 // value.
+void SetEnhancedProtectionPrefForTests(PrefService* prefs, bool value);
+
+// Set prefs to enable Safe Browsing Enhanced Protection.
 void SetEnhancedProtectionPref(PrefService* prefs, bool value);
+
+// Set prefs to enable Safe Browsing Standard Protection.
+void SetStandardProtectionPref(PrefService* prefs, bool value);
 
 // Called when a security interstitial is closed by the user.
 // |on_show_pref_existed| indicates whether the pref existed when the

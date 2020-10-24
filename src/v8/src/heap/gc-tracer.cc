@@ -566,6 +566,7 @@ void GCTracer::PrintNVP() const {
           "mutator=%.1f "
           "gc=%s "
           "reduce_memory=%d "
+          "stop_the_world=%.2f "
           "heap.prologue=%.2f "
           "heap.epilogue=%.2f "
           "heap.epilogue.reduce_new_space=%.2f "
@@ -609,7 +610,8 @@ void GCTracer::PrintNVP() const {
           "unmapper_chunks=%d "
           "context_disposal_rate=%.1f\n",
           duration, spent_in_mutator, current_.TypeName(true),
-          current_.reduce_memory, current_.scopes[Scope::HEAP_PROLOGUE],
+          current_.reduce_memory, current_.scopes[Scope::STOP_THE_WORLD],
+          current_.scopes[Scope::HEAP_PROLOGUE],
           current_.scopes[Scope::HEAP_EPILOGUE],
           current_.scopes[Scope::HEAP_EPILOGUE_REDUCE_NEW_SPACE],
           current_.scopes[Scope::HEAP_EXTERNAL_PROLOGUE],
@@ -657,6 +659,7 @@ void GCTracer::PrintNVP() const {
           "reduce_memory=%d "
           "minor_mc=%.2f "
           "finish_sweeping=%.2f "
+          "stop_the_world=%.2f "
           "mark=%.2f "
           "mark.seed=%.2f "
           "mark.roots=%.2f "
@@ -681,6 +684,7 @@ void GCTracer::PrintNVP() const {
           duration, spent_in_mutator, "mmc", current_.reduce_memory,
           current_.scopes[Scope::MINOR_MC],
           current_.scopes[Scope::MINOR_MC_SWEEPING],
+          current_.scopes[Scope::STOP_THE_WORLD],
           current_.scopes[Scope::MINOR_MC_MARK],
           current_.scopes[Scope::MINOR_MC_MARK_SEED],
           current_.scopes[Scope::MINOR_MC_MARK_ROOTS],
@@ -711,6 +715,7 @@ void GCTracer::PrintNVP() const {
           "mutator=%.1f "
           "gc=%s "
           "reduce_memory=%d "
+          "stop_the_world=%.2f "
           "heap.prologue=%.2f "
           "heap.embedder_tracing_epilogue=%.2f "
           "heap.epilogue=%.2f "
@@ -805,7 +810,8 @@ void GCTracer::PrintNVP() const {
           "context_disposal_rate=%.1f "
           "compaction_speed=%.f\n",
           duration, spent_in_mutator, current_.TypeName(true),
-          current_.reduce_memory, current_.scopes[Scope::HEAP_PROLOGUE],
+          current_.reduce_memory, current_.scopes[Scope::STOP_THE_WORLD],
+          current_.scopes[Scope::HEAP_PROLOGUE],
           current_.scopes[Scope::HEAP_EMBEDDER_TRACING_EPILOGUE],
           current_.scopes[Scope::HEAP_EPILOGUE],
           current_.scopes[Scope::HEAP_EPILOGUE_REDUCE_NEW_SPACE],
@@ -1223,22 +1229,27 @@ void GCTracer::RecordGCPhasesHistograms(TimedHistogram* gc_timer) {
     heap_->isolate()->counters()->gc_marking_sum()->AddSample(
         static_cast<int>(overall_marking_time));
 
+    // Filter out samples where
+    // - we don't have high-resolution timers;
+    // - size of marked objects is very small;
+    // - marking time is rounded to 0;
     constexpr size_t kMinObjectSizeForReportingThroughput = 1024 * 1024;
     if (base::TimeTicks::IsHighResolution() &&
-        heap_->SizeOfObjects() > kMinObjectSizeForReportingThroughput) {
-      DCHECK_GT(overall_marking_time, 0.0);
+        heap_->SizeOfObjects() > kMinObjectSizeForReportingThroughput &&
+        overall_marking_time > 0) {
       const double overall_v8_marking_time =
           overall_marking_time -
           current_.scopes[Scope::MC_MARK_EMBEDDER_TRACING];
-      DCHECK_GT(overall_v8_marking_time, 0.0);
-      const int main_thread_marking_throughput_mb_per_s =
-          static_cast<int>(static_cast<double>(heap_->SizeOfObjects()) /
-                           overall_v8_marking_time * 1000 / 1024 / 1024);
-      heap_->isolate()
-          ->counters()
-          ->gc_main_thread_marking_throughput()
-          ->AddSample(
-              static_cast<int>(main_thread_marking_throughput_mb_per_s));
+      if (overall_v8_marking_time > 0) {
+        const int main_thread_marking_throughput_mb_per_s =
+            static_cast<int>(static_cast<double>(heap_->SizeOfObjects()) /
+                             overall_v8_marking_time * 1000 / 1024 / 1024);
+        heap_->isolate()
+            ->counters()
+            ->gc_main_thread_marking_throughput()
+            ->AddSample(
+                static_cast<int>(main_thread_marking_throughput_mb_per_s));
+      }
     }
 
     DCHECK_EQ(Scope::LAST_TOP_MC_SCOPE, Scope::MC_SWEEP);

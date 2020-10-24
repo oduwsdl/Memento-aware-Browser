@@ -652,8 +652,10 @@ TEST_F(ShellUtilShortcutTest, ClearShortcutArguments) {
   ShellUtil::ShortcutProperties expected_properties3(test_properties_);
 
   // Shortcut 4: targets "chrome.exe"; has both unknown and known arguments.
+  const base::string16 kKnownArg = L"--app-id";
+  const base::string16 kExpectedArgs = L"foo.com " + kKnownArg;
   test_properties_.set_shortcut_name(L"Chrome 4");
-  test_properties_.set_arguments(L"foo.com --show-app-list");
+  test_properties_.set_arguments(kExpectedArgs);
   ASSERT_TRUE(ShellUtil::CreateOrUpdateShortcut(
       ShellUtil::SHORTCUT_LOCATION_DESKTOP, test_properties_,
       ShellUtil::SHELL_SHORTCUT_CREATE_ALWAYS));
@@ -675,7 +677,7 @@ TEST_F(ShellUtilShortcutTest, ClearShortcutArguments) {
   EXPECT_EQ(shortcut3_path, shortcut3.first);
   EXPECT_EQ(L"foo.com", shortcut3.second);
   EXPECT_EQ(shortcut4_path, shortcut4.first);
-  EXPECT_EQ(L"foo.com --show-app-list", shortcut4.second);
+  EXPECT_EQ(kExpectedArgs, shortcut4.second);
 
   // Clear shortcuts.
   shortcuts.clear();
@@ -690,7 +692,7 @@ TEST_F(ShellUtilShortcutTest, ClearShortcutArguments) {
   EXPECT_EQ(shortcut3_path, shortcut3.first);
   EXPECT_EQ(L"foo.com", shortcut3.second);
   EXPECT_EQ(shortcut4_path, shortcut4.first);
-  EXPECT_EQ(L"foo.com --show-app-list", shortcut4.second);
+  EXPECT_EQ(kExpectedArgs, shortcut4.second);
 
   ValidateChromeShortcut(ShellUtil::SHORTCUT_LOCATION_DESKTOP,
                          expected_properties1);
@@ -699,9 +701,43 @@ TEST_F(ShellUtilShortcutTest, ClearShortcutArguments) {
   expected_properties3.set_arguments(base::string16());
   ValidateChromeShortcut(ShellUtil::SHORTCUT_LOCATION_DESKTOP,
                          expected_properties3);
-  expected_properties4.set_arguments(L"--show-app-list");
+  expected_properties4.set_arguments(kKnownArg);
   ValidateChromeShortcut(ShellUtil::SHORTCUT_LOCATION_DESKTOP,
                          expected_properties4);
+}
+
+TEST_F(ShellUtilShortcutTest, ShortcutsAreNotHidden) {
+  // Shortcut 1: targets "chrome.exe"; not hidden.
+  test_properties_.set_shortcut_name(L"Chrome Visible");
+  ASSERT_TRUE(ShellUtil::CreateOrUpdateShortcut(
+      ShellUtil::SHORTCUT_LOCATION_DESKTOP, test_properties_,
+      ShellUtil::SHELL_SHORTCUT_CREATE_ALWAYS));
+  base::FilePath visible_shortcut = GetExpectedShortcutPath(
+      ShellUtil::SHORTCUT_LOCATION_DESKTOP, test_properties_);
+  ASSERT_TRUE(base::PathExists(visible_shortcut));
+
+  // Shortcut 2: targets "chrome.exe"; hidden.
+  test_properties_.set_shortcut_name(L"Chrome Hidden");
+  ASSERT_TRUE(ShellUtil::CreateOrUpdateShortcut(
+      ShellUtil::SHORTCUT_LOCATION_DESKTOP, test_properties_,
+      ShellUtil::SHELL_SHORTCUT_CREATE_ALWAYS));
+  base::FilePath hidden_shortcut = GetExpectedShortcutPath(
+      ShellUtil::SHORTCUT_LOCATION_DESKTOP, test_properties_);
+  ASSERT_TRUE(base::PathExists(hidden_shortcut));
+  DWORD shortcut_attributes =
+      ::GetFileAttributes(hidden_shortcut.value().c_str());
+  ASSERT_NE(shortcut_attributes, INVALID_FILE_ATTRIBUTES);
+  ASSERT_TRUE(::SetFileAttributes(hidden_shortcut.value().c_str(),
+                                  shortcut_attributes | FILE_ATTRIBUTE_HIDDEN));
+
+  EXPECT_TRUE(ShellUtil::ResetShortcutFileAttributes(
+      ShellUtil::SHORTCUT_LOCATION_DESKTOP, ShellUtil::CURRENT_USER,
+      chrome_exe_));
+
+  shortcut_attributes = ::GetFileAttributes(visible_shortcut.value().c_str());
+  EXPECT_EQ(shortcut_attributes & FILE_ATTRIBUTE_HIDDEN, 0UL);
+  shortcut_attributes = ::GetFileAttributes(hidden_shortcut.value().c_str());
+  EXPECT_EQ(shortcut_attributes & FILE_ATTRIBUTE_HIDDEN, 0UL);
 }
 
 TEST_F(ShellUtilShortcutTest, CreateMultipleStartMenuShortcutsAndRemoveFolder) {
@@ -820,8 +856,6 @@ class ShellUtilRegistryTest : public testing::Test {
   static base::CommandLine OpenCommand() {
     base::FilePath open_command_path(kTestOpenCommand);
     base::CommandLine open_command(open_command_path);
-    // The "%1" should automatically be quoted.
-    open_command.AppendArg("%1");
     return open_command;
   }
 
@@ -863,7 +897,7 @@ TEST_F(ShellUtilRegistryTest, AddFileAssociations) {
       key.Open(HKEY_CURRENT_USER,
                L"Software\\Classes\\TestApp\\shell\\open\\command", KEY_READ));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
-  EXPECT_EQ(L"\"C:\\test.exe\" \"%1\"", value);
+  EXPECT_EQ(L"\"C:\\test.exe\" --single-argument %1", value);
 
   // The Application subkey and values are only required by Windows 8 and later.
   if (base::win::GetVersion() >= base::win::Version::WIN8) {
@@ -939,6 +973,57 @@ TEST_F(ShellUtilRegistryTest, DeleteFileAssociations) {
   EXPECT_EQ(L"SomeOtherApp", value);
 }
 
+TEST_F(ShellUtilRegistryTest, AddApplicationClass) {
+  // Add TestApp application class and verify registry entries.
+  EXPECT_TRUE(ShellUtil::AddApplicationClass(
+      base::string16(kTestProgid), OpenCommand(), kTestApplicationName,
+      kTestFileTypeName, base::FilePath(kTestIconPath)));
+
+  base::win::RegKey key;
+  std::wstring value;
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\TestApp", KEY_READ));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
+  EXPECT_EQ(L"Test File Type", value);
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.Open(HKEY_CURRENT_USER,
+                     L"Software\\Classes\\TestApp\\DefaultIcon", KEY_READ));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
+  EXPECT_EQ(L"D:\\test.ico,0", value);
+  ASSERT_EQ(
+      ERROR_SUCCESS,
+      key.Open(HKEY_CURRENT_USER,
+               L"Software\\Classes\\TestApp\\shell\\open\\command", KEY_READ));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
+  EXPECT_EQ(L"\"C:\\test.exe\" --single-argument %1", value);
+
+  // The Application subkey and values are only required by Windows 8 and later.
+  if (base::win::GetVersion() >= base::win::Version::WIN8) {
+    ASSERT_EQ(ERROR_SUCCESS,
+              key.Open(HKEY_CURRENT_USER,
+                       L"Software\\Classes\\TestApp\\Application", KEY_READ));
+    EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"ApplicationName", &value));
+    EXPECT_EQ(L"Test Application", value);
+    EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"ApplicationIcon", &value));
+    EXPECT_EQ(L"D:\\test.ico,0", value);
+  }
+}
+
+TEST_F(ShellUtilRegistryTest, DeleteApplicationClass) {
+  ASSERT_TRUE(ShellUtil::AddApplicationClass(
+      kTestProgid, OpenCommand(), kTestApplicationName, kTestFileTypeName,
+      base::FilePath(kTestIconPath)));
+
+  base::win::RegKey key;
+  std::wstring value;
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\TestApp", KEY_READ));
+
+  EXPECT_TRUE(ShellUtil::DeleteApplicationClass(kTestProgid));
+  EXPECT_NE(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\TestApp", KEY_READ));
+}
+
 TEST_F(ShellUtilRegistryTest, GetFileAssociationsAndAppName) {
   ShellUtil::FileAssociationsAndAppName empty_file_associations_and_app_name(
       ShellUtil::GetFileAssociationsAndAppName(kTestProgid));
@@ -970,7 +1055,7 @@ TEST(ShellUtilTest, BuildAppModelIdBasic) {
   std::vector<base::string16> components;
   const base::string16 base_app_id(install_static::GetBaseAppId());
   components.push_back(base_app_id);
-  ASSERT_EQ(base_app_id, ShellUtil::BuildAppModelId(components));
+  ASSERT_EQ(base_app_id, ShellUtil::BuildAppUserModelId(components));
 }
 
 TEST(ShellUtilTest, BuildAppModelIdManySmall) {
@@ -981,7 +1066,7 @@ TEST(ShellUtilTest, BuildAppModelIdManySmall) {
   components.push_back(L"Default");
   components.push_back(L"Test");
   ASSERT_EQ(suffixed_app_id + L".Default.Test",
-            ShellUtil::BuildAppModelId(components));
+            ShellUtil::BuildAppUserModelId(components));
 }
 
 TEST(ShellUtilTest, BuildAppModelIdNullTerminatorInTheMiddle) {
@@ -994,7 +1079,7 @@ TEST(ShellUtilTest, BuildAppModelIdNullTerminatorInTheMiddle) {
   components.push_back(L"Test");
   base::string16 expected_string(L"I_have_nul_in_middle.Default.Test");
   expected_string[5] = '\0';
-  ASSERT_EQ(expected_string, ShellUtil::BuildAppModelId(components));
+  ASSERT_EQ(expected_string, ShellUtil::BuildAppUserModelId(components));
 }
 
 TEST(ShellUtilTest, BuildAppModelIdLongUsernameNormalProfile) {
@@ -1005,7 +1090,7 @@ TEST(ShellUtilTest, BuildAppModelIdLongUsernameNormalProfile) {
   components.push_back(long_appname);
   components.push_back(L"Default");
   ASSERT_EQ(L"Chrome.a_user_wer_64_characters.Default",
-            ShellUtil::BuildAppModelId(components));
+            ShellUtil::BuildAppUserModelId(components));
 }
 
 TEST(ShellUtilTest, BuildAppModelIdLongEverything) {
@@ -1017,7 +1102,7 @@ TEST(ShellUtilTest, BuildAppModelIdLongEverything) {
   components.push_back(
       L"A_crazy_profile_name_not_even_sure_whether_that_is_possible");
   const base::string16 constructed_app_id(
-      ShellUtil::BuildAppModelId(components));
+      ShellUtil::BuildAppUserModelId(components));
   ASSERT_LE(constructed_app_id.length(), installer::kMaxAppModelIdLength);
   ASSERT_EQ(L"Chrome.a_user_wer_64_characters.A_crazy_profilethat_is_possible",
             constructed_app_id);

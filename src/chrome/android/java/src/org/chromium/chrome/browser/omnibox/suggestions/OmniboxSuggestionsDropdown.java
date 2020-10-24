@@ -48,6 +48,20 @@ public interface OmniboxSuggestionsDropdown {
          * Invoked whenever the User scrolls the list.
          */
         void onSuggestionDropdownScroll();
+
+        /**
+         * Invoked whenever the User scrolls the list to the top.
+         */
+        void onSuggestionDropdownOverscrolledToTop();
+
+        /**
+         * Notify that the user is interacting with an item on the Suggestions list.
+         *
+         * @param isGestureUp Whether user pressed (false) or depressed (true) the element on the
+         *         list.
+         * @param timestamp The timestamp associated with the event.
+         */
+        void onGesture(boolean isGestureUp, long timestamp);
     }
 
     /** Get the Android View implementing suggestion list. */
@@ -55,6 +69,9 @@ public interface OmniboxSuggestionsDropdown {
 
     /** Show (and properly size) the suggestions list. */
     void show();
+
+    /** Hide the suggestions list and release any cached resources. */
+    void hide();
 
     /**
      * Sets the embedder for the list view.
@@ -74,6 +91,9 @@ public interface OmniboxSuggestionsDropdown {
     /** Update the suggestion popup background to reflect the current state. */
     void refreshPopupBackground(boolean isIncognito);
 
-    /** Gets the number of items in the list. */
-    int getItemCount();
+    /** @return The number of items in the list. */
+    int getDropdownItemViewCountForTest();
+
+    /** @return The Suggestion view at specific index. */
+    View getDropdownItemViewForTest(int position);
 }

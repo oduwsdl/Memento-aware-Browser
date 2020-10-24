@@ -4,22 +4,32 @@
 
 package org.chromium.chrome.browser.share.qrcode.share_tab;
 
+import android.Manifest.permission;
+import android.app.Activity;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.os.Process;
 import android.text.DynamicLayout;
 import android.text.Layout.Alignment;
 import android.text.TextPaint;
+import android.text.TextUtils;
 import android.text.TextUtils.TruncateAt;
 import android.view.View;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.download.DownloadController;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.share.BitmapDownloadRequest;
 import org.chromium.chrome.browser.share.qrcode.QRCodeGenerationRequest;
-import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.ui.base.ActivityAndroidPermissionDelegate;
+import org.chromium.ui.base.AndroidPermissionDelegate;
 import org.chromium.ui.modelutil.PropertyModel;
+
+import java.lang.ref.WeakReference;
 
 /**
  * QrCodeShareMediator is in charge of calculating and setting values for QrCodeShareViewProperties.
@@ -27,31 +37,33 @@ import org.chromium.ui.modelutil.PropertyModel;
 class QrCodeShareMediator {
     private final Context mContext;
     private final PropertyModel mPropertyModel;
+    private final AndroidPermissionDelegate mPermissionDelegate;
 
     // The number of times the user has attempted to download the QR code in this dialog.
     private int mNumDownloads;
 
-    private long mDownloadStartTime;
     private boolean mIsDownloadInProgress;
     private String mUrl;
+    private Runnable mCloseDialog;
 
     /**
      * The QrCodeScanMediator constructor.
      * @param context The context to use.
-     * @param propertyModel The property modelto use to communicate with views.
+     * @param propertyModel The property model to use to communicate with views.
+     * @param closeDialog The {@link Runnable} to close the dialog.
+     * @param url The url to create the QRCode.
      */
-    QrCodeShareMediator(Context context, PropertyModel propertyModel) {
+    QrCodeShareMediator(
+            Context context, PropertyModel propertyModel, Runnable closeDialog, String url) {
         mContext = context;
         mPropertyModel = propertyModel;
-
-        // TODO(crbug.com/1083351): Get URL from Sharing Hub.
-        if (context instanceof ChromeActivity) {
-            Tab tab = ((ChromeActivity) context).getActivityTabProvider().get();
-            if (tab != null) {
-                mUrl = tab.getUrl().getSpec();
-                refreshQrCode(mUrl);
-            }
-        }
+        mCloseDialog = closeDialog;
+        mUrl = url;
+        ChromeBrowserInitializer.getInstance().runNowOrAfterFullBrowserStarted(
+                () -> refreshQrCode(mUrl));
+        mPermissionDelegate = new ActivityAndroidPermissionDelegate(
+                new WeakReference<Activity>((Activity) mContext));
+        updatePermissionSettings();
     }
 
     /**
@@ -59,14 +71,32 @@ class QrCodeShareMediator {
      * @param data The data to encode.
      */
     protected void refreshQrCode(String data) {
+        if (TextUtils.isEmpty(data)) {
+            mPropertyModel.set(QrCodeShareViewProperties.ERROR_STRING,
+                    mContext.getResources().getString(R.string.qr_code_error_unknown));
+            return;
+        }
+
         QRCodeGenerationRequest.QRCodeServiceCallback callback =
                 new QRCodeGenerationRequest.QRCodeServiceCallback() {
                     @Override
                     public void onQRCodeAvailable(Bitmap bitmap) {
-                        // TODO(skare): If bitmap is null, surface an error.
                         if (bitmap != null) {
                             mPropertyModel.set(QrCodeShareViewProperties.QRCODE_BITMAP, bitmap);
+                            return;
                         }
+                        int maxUrlLength = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
+                                ChromeFeatureList.CHROME_SHARE_QRCODE, "max_url_length",
+                                /*defaultValue=*/122);
+                        String errorMessage;
+                        if (data != null && data.length() > maxUrlLength) {
+                            errorMessage = mContext.getResources().getString(
+                                    R.string.qr_code_error_too_long, maxUrlLength);
+                        } else {
+                            errorMessage = mContext.getResources().getString(
+                                    R.string.qr_code_error_unknown);
+                        }
+                        mPropertyModel.set(QrCodeShareViewProperties.ERROR_STRING, errorMessage);
                     }
                 };
         new QRCodeGenerationRequest(data, callback);
@@ -74,14 +104,60 @@ class QrCodeShareMediator {
 
     /** Triggers download for the generated QR code bitmap if available. */
     protected void downloadQrCode(View view) {
+        logDownload();
         Bitmap qrcodeBitmap = mPropertyModel.get(QrCodeShareViewProperties.QRCODE_BITMAP);
         if (qrcodeBitmap != null && !mIsDownloadInProgress) {
+            DownloadController.requestFileAccessPermission(this::finishDownloadWithPermission);
+            return;
+        }
+    }
+
+    private void finishDownloadWithPermission(boolean granted) {
+        if (granted) {
+            updatePermissionSettings();
+            Bitmap qrcodeBitmap = mPropertyModel.get(QrCodeShareViewProperties.QRCODE_BITMAP);
             String fileName = mContext.getString(
                     R.string.qr_code_filename_prefix, String.valueOf(System.currentTimeMillis()));
             mIsDownloadInProgress = true;
             BitmapDownloadRequest.downloadBitmap(fileName, addUrlToBitmap(qrcodeBitmap, mUrl));
+            mCloseDialog.run();
         }
-        logDownload();
+    }
+
+    /** Returns whether the user has granted storage permissions. */
+    private Boolean hasStoragePermission() {
+        return mContext.checkPermission(
+                       permission.WRITE_EXTERNAL_STORAGE, Process.myPid(), Process.myUid())
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** Returns whether the user can be prompted for storage permissions. */
+    private Boolean canPromptForPermission() {
+        return mPermissionDelegate.canRequestPermission(permission.WRITE_EXTERNAL_STORAGE);
+    }
+
+    /** Updates the permission settings with the latest values. */
+    private void updatePermissionSettings() {
+        mPropertyModel.set(
+                QrCodeShareViewProperties.CAN_PROMPT_FOR_PERMISSION, canPromptForPermission());
+        mPropertyModel.set(
+                QrCodeShareViewProperties.HAS_STORAGE_PERMISSION, hasStoragePermission());
+    }
+
+    /**
+     * Sets whether QrCode UI is on foreground.
+     *
+     * @param isOnForeground Indicates whether this component UI is current on foreground.
+     */
+    public void setIsOnForeground(boolean isOnForeground) {
+        // If the app is in the foreground, the permissions need to be checked again to ensure
+        // the user is seeing the right thing.
+        if (isOnForeground) {
+            updatePermissionSettings();
+        }
+        // This is intentionally done last so that the view is updated according to the latest
+        // permissions.
+        mPropertyModel.set(QrCodeShareViewProperties.IS_ON_FOREGROUND, isOnForeground);
     }
 
     /** Logs user actions when attempting to download a QR code. */
@@ -95,15 +171,13 @@ class QrCodeShareMediator {
     }
 
     private Bitmap addUrlToBitmap(Bitmap bitmap, String url) {
-        int qrCodeSize = mContext.getResources().getDimensionPixelSize(
-                org.chromium.chrome.browser.share.R.dimen.qrcode_size);
+        int qrCodeSize = mContext.getResources().getDimensionPixelSize(R.dimen.qrcode_size);
         int fontSize = mContext.getResources().getDimensionPixelSize(R.dimen.text_size_large);
-        int sidePadding = mContext.getResources().getDimensionPixelSize(
-                org.chromium.chrome.browser.share.R.dimen.side_padding);
-        int textTopPadding = mContext.getResources().getDimensionPixelSize(
-                org.chromium.chrome.browser.share.R.dimen.url_box_top_padding);
-        int textBottomPadding = mContext.getResources().getDimensionPixelSize(
-                org.chromium.chrome.browser.share.R.dimen.url_box_bottom_padding);
+        int sidePadding = mContext.getResources().getDimensionPixelSize(R.dimen.side_padding);
+        int textTopPadding =
+                mContext.getResources().getDimensionPixelSize(R.dimen.url_box_top_padding);
+        int textBottomPadding =
+                mContext.getResources().getDimensionPixelSize(R.dimen.url_box_bottom_padding);
 
         TextPaint mTextPaint = new TextPaint();
         mTextPaint.setAntiAlias(true);

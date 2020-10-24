@@ -136,7 +136,7 @@ suite('SiteDetails', function() {
               ContentSettingsTypes.BLUETOOTH_SCANNING,
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
-              ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE,
+              ContentSettingsTypes.FILE_SYSTEM_WRITE,
               [createRawSiteException('https://foo.com:443', {
                 setting: ContentSetting.BLOCK,
               })]),
@@ -157,6 +157,12 @@ suite('SiteDetails', function() {
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
               ContentSettingsTypes.WINDOW_PLACEMENT,
+              [createRawSiteException('https://foo.com:443')]),
+          createContentSettingTypeToValuePair(
+              ContentSettingsTypes.FONT_ACCESS,
+              [createRawSiteException('https://foo.com:443')]),
+          createContentSettingTypeToValuePair(
+              ContentSettingsTypes.IDLE_DETECTION,
               [createRawSiteException('https://foo.com:443')]),
         ],
         [
@@ -210,16 +216,9 @@ suite('SiteDetails', function() {
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .BLUETOOTH_SCANNING] =
         'enableExperimentalWebPlatformFeatures';
-    optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes.HID_DEVICES] =
-        'enableExperimentalWebPlatformFeatures';
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .WINDOW_PLACEMENT] =
         'enableExperimentalWebPlatformFeatures';
-    optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes.MIXEDSCRIPT] =
-        'enableInsecureContentContentSetting';
-    optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
-                                                .NATIVE_FILE_SYSTEM_WRITE] =
-        'enableNativeFileSystemWriteContentSetting';
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .PAYMENT_HANDLER] =
         'enablePaymentHandlerContentSetting';
@@ -228,12 +227,13 @@ suite('SiteDetails', function() {
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .BLUETOOTH_DEVICES] =
         'enableWebBluetoothNewPermissionsBackend';
+    optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes.FONT_ACCESS] =
+        'enableFontAccessContentSetting';
 
     const controlledSettingsCount = /** @type{string : int } */ ({});
 
-    controlledSettingsCount['enableExperimentalWebPlatformFeatures'] = 3;
-    controlledSettingsCount['enableInsecureContentContentSetting'] = 1;
-    controlledSettingsCount['enableNativeFileSystemWriteContentSetting'] = 1;
+    controlledSettingsCount['enableExperimentalWebPlatformFeatures'] = 2;
+    controlledSettingsCount['enableFontAccessContentSetting'] = 1;
     controlledSettingsCount['enablePaymentHandlerContentSetting'] = 1;
     controlledSettingsCount['enableSafeBrowsingSubresourceFilter'] = 1;
     controlledSettingsCount['enableWebBluetoothNewPermissionsBackend'] = 1;
@@ -319,7 +319,7 @@ suite('SiteDetails', function() {
           assertTrue(testElement.$$('#noStorage').hidden);
           assertFalse(testElement.$$('#storage').hidden);
 
-          testElement.$$('#confirmClearStorage .action-button').click();
+          testElement.$$('#confirmClearStorageNew .action-button').click();
           return websiteUsageProxy.whenCalled('clearUsage');
         })
         .then(originCleared => {
@@ -350,7 +350,7 @@ suite('SiteDetails', function() {
           assertTrue(testElement.$$('#noStorage').hidden);
           assertFalse(testElement.$$('#storage').hidden);
 
-          testElement.$$('#confirmClearStorage .action-button').click();
+          testElement.$$('#confirmClearStorageNew .action-button').click();
           return websiteUsageProxy.whenCalled('clearUsage');
         })
         .then(originCleared => {
@@ -363,8 +363,8 @@ suite('SiteDetails', function() {
     // Make sure all the possible content settings are shown for this test.
     loadTimeData.overrideValues({
       enableExperimentalWebPlatformFeatures: true,
-      enableInsecureContentContentSetting: true,
-      enableNativeFileSystemWriteContentSetting: true,
+      enableFileSystemWriteContentSetting: true,
+      enableFontAccessContentSetting: true,
       enablePaymentHandlerContentSetting: true,
       enableSafeBrowsingSubresourceFilter: true,
       enableWebBluetoothNewPermissionsBackend: true,
@@ -402,7 +402,7 @@ suite('SiteDetails', function() {
                     siteDetailsPermission.category ===
                         ContentSettingsTypes.POPUPS ||
                     siteDetailsPermission.category ===
-                        ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE) {
+                        ContentSettingsTypes.FILE_SYSTEM_WRITE) {
                   expectedSetting =
                       prefs.exceptions[siteDetailsPermission.category][0]
                           .setting;
@@ -456,13 +456,14 @@ suite('SiteDetails', function() {
     // Check both cancelling and accepting the dialog closes it.
     ['cancel-button', 'action-button'].forEach(buttonType => {
       testElement.$$('#usage cr-button').click();
-      assertTrue(testElement.$.confirmClearStorage.open);
+      assertTrue(testElement.$.confirmClearStorageNew.open);
       const actionButtonList =
-          testElement.$.confirmClearStorage.getElementsByClassName(buttonType);
+          testElement.$.confirmClearStorageNew.getElementsByClassName(
+              buttonType);
       assertEquals(1, actionButtonList.length);
       testElement.storedData_ = '';
       actionButtonList[0].click();
-      assertFalse(testElement.$.confirmClearStorage.open);
+      assertFalse(testElement.$.confirmClearStorageNew.open);
     });
   });
 
@@ -470,8 +471,9 @@ suite('SiteDetails', function() {
     browserProxy.setPrefs(prefs);
     testElement = createSiteDetails('https://foo.com:443');
 
-    const siteDetailsPermission =
-        testElement.root.querySelector('#notifications');
+    const elems = testElement.root.querySelectorAll('site-details-permission');
+    const notificationPermission = Array.from(elems).find(
+        elem => elem.category === ContentSettingsTypes.NOTIFICATIONS);
 
     // Wait for all the permissions to be populated initially.
     return browserProxy.whenCalled('isOriginValid')
@@ -480,11 +482,11 @@ suite('SiteDetails', function() {
         })
         .then(() => {
           // Make sure initial state is as expected.
-          assertEquals(ContentSetting.ASK, siteDetailsPermission.site.setting);
+          assertEquals(ContentSetting.ASK, notificationPermission.site.setting);
           assertEquals(
-              SiteSettingSource.POLICY, siteDetailsPermission.site.source);
+              SiteSettingSource.POLICY, notificationPermission.site.source);
           assertEquals(
-              ContentSetting.ASK, siteDetailsPermission.$.permission.value);
+              ContentSetting.ASK, notificationPermission.$.permission.value);
 
           // Set new prefs and make sure only that permission is updated.
           const newException = {
@@ -503,13 +505,14 @@ suite('SiteDetails', function() {
           // getOriginPermissions was to check notifications.
           assertTrue(args[1].includes(ContentSettingsTypes.NOTIFICATIONS));
 
-          // Check |siteDetailsPermission| now shows the new permission value.
+          // Check |notificationPermission| now shows the new permission value.
           assertEquals(
-              ContentSetting.BLOCK, siteDetailsPermission.site.setting);
+              ContentSetting.BLOCK, notificationPermission.site.setting);
           assertEquals(
-              SiteSettingSource.DEFAULT, siteDetailsPermission.site.source);
+              SiteSettingSource.DEFAULT, notificationPermission.site.source);
           assertEquals(
-              ContentSetting.DEFAULT, siteDetailsPermission.$.permission.value);
+              ContentSetting.DEFAULT,
+              notificationPermission.$.permission.value);
         });
   });
 

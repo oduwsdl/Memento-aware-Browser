@@ -126,9 +126,7 @@ function makeWorkerCodeForOpcode(compareExchangeOpcode, size, functionName,
     builder.addFunction(functionName, makeSig([kWasmI32, kWasmI32, kWasmI32,
             kWasmI32, kWasmI32
         ], []))
-        .addLocals({
-            i32_count: 3
-        })
+        .addLocals(kWasmI32, 3)
         .addBody(body)
         .exportAs(functionName);
 }
@@ -136,8 +134,7 @@ function makeWorkerCodeForOpcode(compareExchangeOpcode, size, functionName,
 function generateSequence(typedarray, start, count) {
     let end = count + start;
     for (let i = start; i < end; i++) {
-        // Avoid the value 255, which is used as initial value in memory.
-        typedarray[i] = Math.floor(Math.random() * 255);
+        typedarray[i] = Math.floor(Math.random() * 256);
     }
 }
 
@@ -148,8 +145,8 @@ function spawnWorker(module, memory, address, sequence) {
             `onmessage = function(msg) {
                 this.instance = new WebAssembly.Instance(msg.module,
                     {m: {imported_mem: msg.memory}});
-                instance.exports.worker(msg.address, msg.sequence, msg.sequenceLength, msg.workerId,
-                    msg.bitMask);
+                instance.exports.worker(msg.address, msg.sequence,
+                    msg.sequenceLength, msg.workerId, msg.bitMask);
                 postMessage({workerId: msg.workerId});
             }`,
             {type: 'string'}
@@ -192,19 +189,15 @@ function testOpcode(opcode, opcodeSize) {
     generateSequence(
         memoryView, kSequenceStartAddress, kSequenceLength * numBytes);
 
-    // Initialize the memory to a value which does not appear in the sequence.
-    memoryView.fill(255, kMemoryAddress, numBytes);
+    // Write the first element of the sequence to memory, such that the workers
+    // can start running as soon as they are spawned.
+    memoryView.copyWithin(
+        kMemoryAddress, kSequenceStartAddress,
+        kSequenceStartAddress + numBytes);
 
     let module = new WebAssembly.Module(builder.toBuffer());
     let workers =
         spawnWorker(module, memory, kMemoryAddress, kSequenceStartAddress);
-
-    // Fire off the workers by writing the first element of the sequence to
-    // memory. The byte order does not matter here, since all bytes need to be
-    // updated before the first worker can do an update.
-    memoryView.copyWithin(
-        kMemoryAddress, kSequenceStartAddress,
-        kSequenceStartAddress + numBytes);
 
     waitForWorkers(workers);
 

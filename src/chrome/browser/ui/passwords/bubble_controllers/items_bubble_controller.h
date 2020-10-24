@@ -8,9 +8,16 @@
 #include "chrome/browser/ui/passwords/bubble_controllers/password_bubble_controller_base.h"
 
 #include "base/memory/weak_ptr.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
+#include "components/password_manager/core/browser/password_form_forward.h"
+#include "ui/gfx/image/image.h"
 
 class PasswordsModelDelegate;
+
+namespace favicon_base {
+struct FaviconImageResult;
+}
 
 // This controller provides data and actions for the PasswordItemsView.
 class ItemsBubbleController : public PasswordBubbleControllerBase {
@@ -24,20 +31,36 @@ class ItemsBubbleController : public PasswordBubbleControllerBase {
 
   // Called by the view code to delete or add a password form to the
   // PasswordStore.
-  void OnPasswordAction(const autofill::PasswordForm& password_form,
+  void OnPasswordAction(const password_manager::PasswordForm& password_form,
                         PasswordAction action);
 
+  // Makes a request to the favicon service for the icon of current visible URL.
+  // The request to the favicon store is canceled on destruction of the
+  // controller.
+  void RequestFavicon(
+      base::OnceCallback<void(const gfx::Image&)> favicon_ready_callback);
+
   // Returns the available credentials which match the current site.
-  const std::vector<autofill::PasswordForm>& local_credentials() const {
+  const std::vector<password_manager::PasswordForm>& local_credentials() const {
     return local_credentials_;
   }
 
  private:
+  // Called when the favicon was retrieved. It invokes |favicon_ready_callback|
+  // passing the retrieved favicon.
+  void OnFaviconReady(
+      base::OnceCallback<void(const gfx::Image&)> favicon_ready_callback,
+      const favicon_base::FaviconImageResult& result);
+
   // PasswordBubbleControllerBase methods:
   base::string16 GetTitle() const override;
   void ReportInteractions() override;
 
-  const std::vector<autofill::PasswordForm> local_credentials_;
+  const std::vector<password_manager::PasswordForm> local_credentials_;
+
+  // Used to track a requested favicon.
+  base::CancelableTaskTracker favicon_tracker_;
+
   const base::string16 title_;
   // Dismissal reason for a password bubble.
   password_manager::metrics_util::UIDismissalReason dismissal_reason_ =

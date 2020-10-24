@@ -23,6 +23,7 @@
 #include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/graph_registered.h"
 #include "components/performance_manager/public/graph/node_attached_data.h"
+#include "components/performance_manager/public/render_process_host_id.h"
 #include "components/performance_manager/registered_objects.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
@@ -67,7 +68,7 @@ class GraphImpl : public Graph {
   void RemoveProcessNodeObserver(ProcessNodeObserver* observer) override;
   void RemoveSystemNodeObserver(SystemNodeObserver* observer) override;
   void RemoveWorkerNodeObserver(WorkerNodeObserver* observer) override;
-  void PassToGraph(std::unique_ptr<GraphOwned> graph_owned) override;
+  void PassToGraphImpl(std::unique_ptr<GraphOwned> graph_owned) override;
   std::unique_ptr<GraphOwned> TakeFromGraph(GraphOwned* graph_owned) override;
   void RegisterObject(GraphRegistered* object) override;
   void UnregisterObject(GraphRegistered* object) override;
@@ -81,6 +82,9 @@ class GraphImpl : public Graph {
   NodeDataDescriberRegistry* GetNodeDataDescriberRegistry() const override;
   uintptr_t GetImplType() const override;
   const void* GetImpl() const override;
+#if DCHECK_IS_ON()
+  bool IsOnGraphSequence() const override;
+#endif
   GraphRegistered* GetRegisteredObject(uintptr_t type_id) override;
 
   // Helper function for safely downcasting to the implementation. This also
@@ -103,7 +107,7 @@ class GraphImpl : public Graph {
   ProcessNodeImpl* GetProcessNodeByPid(base::ProcessId pid) const;
 
   // Retrieves the frame node with the routing ids of the process and the frame.
-  FrameNodeImpl* GetFrameNodeById(int render_process_id,
+  FrameNodeImpl* GetFrameNodeById(RenderProcessHostId render_process_id,
                                   int render_frame_id) const;
 
   // Returns true if |node| is in this graph.
@@ -136,9 +140,15 @@ class GraphImpl : public Graph {
 
  private:
   struct ProcessAndFrameId {
-    ProcessAndFrameId(int render_process_id, int render_frame_id);
+    ProcessAndFrameId(RenderProcessHostId render_process_id,
+                      int render_frame_id);
+    ~ProcessAndFrameId();
+
+    ProcessAndFrameId(const ProcessAndFrameId& other);
+    ProcessAndFrameId& operator=(const ProcessAndFrameId& other);
+
     bool operator<(const ProcessAndFrameId& other) const;
-    int render_process_id;
+    RenderProcessHostId render_process_id;
     int render_frame_id;
   };
 
@@ -159,10 +169,10 @@ class GraphImpl : public Graph {
 
   // Frame id map for use by FrameNodeImpl.
   friend class FrameNodeImpl;
-  void RegisterFrameNodeForId(int render_process_id,
+  void RegisterFrameNodeForId(RenderProcessHostId render_process_id,
                               int render_frame_id,
                               FrameNodeImpl* frame_node);
-  void UnregisterFrameNodeForId(int render_process_id,
+  void UnregisterFrameNodeForId(RenderProcessHostId render_process_id,
                                 int render_frame_id,
                                 FrameNodeImpl* frame_node);
 

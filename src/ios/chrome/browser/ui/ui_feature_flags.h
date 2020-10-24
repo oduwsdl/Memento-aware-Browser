@@ -29,27 +29,13 @@ extern const base::Feature kVoiceOverUnstackedTabstrip;
 // Feature flag to always force an unstacked tabstrip.
 extern const base::Feature kForceUnstackedTabstrip;
 
-// Feature flag to have the Browser contained by the TabGrid instead of being
-// presented.
-extern const base::Feature kContainedBVC;
-
 // Test-only: Feature flag used to verify that EG2 can trigger flags. Must be
 // always disabled by default, because it is used to verify that enabling
 // features in tests works.
 extern const base::Feature kTestFeature;
 
-// Feature flag to display a new option that wipes synced data on a local
-// device when signing out from a non-managed account.
-extern const base::Feature kClearSyncedData;
-
 // Verify if the crash in https://crbug.com/816427 is fixed on iOS 12.
 extern const base::Feature kFirstResponderSendAction;
-
-// Feature flag to enable the new sign-in architecture.
-extern const base::Feature kNewSigninArchitecture;
-
-// Feature flag to enable QR code generation for a URL.
-extern const base::Feature kQRCodeGeneration;
 
 // Feature flag that enables the native UI Context Menus (not for Web content).
 extern const base::Feature kEnableNativeContextMenus;
@@ -71,5 +57,41 @@ extern const base::Feature kSafetyCheckIOS;
 
 // Feature flag to enable new illustrations and UI on empty states.
 extern const base::Feature kIllustratedEmptyStates;
+
+// Feature flag to enable Shared Highlighting (Link to Text). Also enable
+// kScrollToTextIOS to successfully open these links.
+extern const base::Feature kSharedHighlightingIOS;
+
+// Feature flag that enables taking fullpage screenshots of a webpage.
+extern const base::Feature kEnableFullPageScreenshot;
+
+// Feature flag that enables reauth for filling passwords;
+extern const base::Feature kEnableAutofillPasswordReauthIOS;
+
+// Feature flag that enables showing a fullscreen modal promo informing users
+// about the default browser feature that also provides a button to send the
+// users in the Settings.app to update the default browser.
+extern const base::Feature kDefaultBrowserFullscreenPromo;
+
+// Feature flag that enables the button in the settings to send the users in the
+// Settings.app to update the default browser.
+extern const base::Feature kDefaultBrowserSettings;
+
+// TODO(crbug.com/1128242): Remove this flag after the refactoring work is
+// finished. Flag to modernize the tabstrip without disturbing the existing one.
+extern const base::Feature kModernTabStrip;
+
+// Adds a setting to enable biometric authentication for incognito tabs.
+extern const base::Feature kIncognitoAuthentication;
+
+// Feature flag that removes the location permissions prompt from First Run.
+extern const base::Feature kLocationRemoveFirstRunPrompt;
+
+// Feature flag that changes the string in the location permissions prompt.
+extern const base::Feature kLocationStringChange;
+
+// Feature flag that adds a modal in First Run that details Chrome location data
+// usage.
+extern const base::Feature kLocationFirstRunModal;
 
 #endif  // IOS_CHROME_BROWSER_UI_UI_FEATURE_FLAGS_H_

@@ -38,13 +38,16 @@ class AppRegistryController {
   virtual void Init(base::OnceClosure callback) = 0;
 
   virtual void SetAppUserDisplayMode(const AppId& app_id,
-                                     DisplayMode display_mode) = 0;
+                                     DisplayMode display_mode,
+                                     bool is_user_action) = 0;
 
   virtual void SetAppIsDisabled(const AppId& app_id, bool is_disabled) = 0;
 
   // TODO(crbug.com/897314): Finish experiment by legitimising it as a
   // DisplayMode or removing entirely.
-  void SetExperimentalTabbedWindowMode(const AppId& app_id, bool enabled);
+  void SetExperimentalTabbedWindowMode(const AppId& app_id,
+                                       bool enabled,
+                                       bool is_user_action);
 
   virtual void SetAppIsLocallyInstalled(const AppId& app_id,
                                         bool is_locally_installed) = 0;
@@ -54,6 +57,9 @@ class AppRegistryController {
 
   virtual void SetAppInstallTime(const AppId& app_id,
                                  const base::Time& time) = 0;
+
+  virtual void SetAppRunOnOsLoginMode(const AppId& app_id,
+                                      RunOnOsLoginMode mode) = 0;
 
   // Safe downcast:
   virtual WebAppSyncBridge* AsWebAppSyncBridge() = 0;

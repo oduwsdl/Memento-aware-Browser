@@ -34,15 +34,17 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/ipc/common/gpu_client_ids.h"
+#include "gpu/ipc/common/gpu_watchdog_timeout.h"
 #include "gpu/ipc/in_process_command_buffer.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/constants.mojom.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #endif
 
 #if defined(USE_X11)
 #include "content/browser/gpu/gpu_memory_buffer_manager_singleton_x11.h"  // nogncheck
+#include "ui/base/ui_base_features.h"
 #endif
 
 namespace content {
@@ -72,10 +74,10 @@ void TimerFired() {
 GpuMemoryBufferManagerSingleton* CreateGpuMemoryBufferManagerSingleton(
     int gpu_client_id) {
 #if defined(USE_X11)
-  return new GpuMemoryBufferManagerSingletonX11(gpu_client_id);
-#else
-  return new GpuMemoryBufferManagerSingleton(gpu_client_id);
+  if (!features::IsUsingOzonePlatform())
+    return new GpuMemoryBufferManagerSingletonX11(gpu_client_id);
 #endif
+  return new GpuMemoryBufferManagerSingleton(gpu_client_id);
 }
 
 }  // namespace
@@ -145,7 +147,7 @@ BrowserGpuChannelHostFactory::EstablishRequest::EstablishRequest(
       gpu_client_id_(gpu_client_id),
       gpu_client_tracing_id_(gpu_client_tracing_id),
       finished_(false),
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       main_task_runner_(ui::WindowResizeHelperMac::Get()->task_runner())
 #else
       main_task_runner_(base::ThreadTaskRunnerHandle::Get())
@@ -443,11 +445,20 @@ void BrowserGpuChannelHostFactory::RestartTimeout() {
     BUILDFLAG(ORDERFILE_INSTRUMENTATION)
   constexpr int64_t kGpuChannelTimeoutInSeconds = 40;
 #else
-  // The GPU watchdog timeout is 15 seconds (1.5x the kGpuTimeout value due to
-  // logic in GpuWatchdogThread). Make this slightly longer to give the GPU a
-  // chance to crash itself before crashing the browser.
-  constexpr int64_t kGpuChannelTimeoutInSeconds = 20;
+  // This is also monitored by the GPU watchdog (restart or initialization
+  // event) in the GPU process. Make this slightly longer than the GPU watchdog
+  // timeout to give the GPU a chance to crash itself before crashing the
+  // browser.
+  int64_t kGpuChannelTimeoutInSeconds =
+      gpu::kGpuWatchdogTimeout.InSeconds() * gpu::kRestartFactor + 5;
+
+  // TODO(magchen@): To be removed. For finch only.
+  if (base::FeatureList::IsEnabled(features::kGpuWatchdogV2NewTimeout)) {
+    kGpuChannelTimeoutInSeconds =
+        gpu::kGpuWatchdogTimeout.InSeconds() * gpu::kRestartFactorFinch + 5;
+  }
 #endif
+
   timeout_.Start(FROM_HERE,
                  base::TimeDelta::FromSeconds(kGpuChannelTimeoutInSeconds),
                  base::BindOnce(&TimerFired));
@@ -460,7 +471,7 @@ void BrowserGpuChannelHostFactory::InitializeShaderDiskCacheOnIO(
     const base::FilePath& cache_dir) {
   GetShaderCacheFactorySingleton()->SetCacheInfo(gpu_client_id, cache_dir);
   GetShaderCacheFactorySingleton()->SetCacheInfo(
-      gpu::kInProcessCommandBufferClientId, cache_dir);
+      gpu::kDisplayCompositorClientId, cache_dir);
 }
 
 // static

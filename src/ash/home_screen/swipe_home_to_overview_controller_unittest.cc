@@ -13,7 +13,7 @@
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_metrics.h"
-#include "ash/shelf/test/overview_animation_waiter.h"
+#include "ash/shelf/shelf_test_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/overview/overview_controller.h"
@@ -22,7 +22,6 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/test_utils.h"
@@ -45,10 +44,7 @@ gfx::RectF GetShelfBoundsInFloat() {
 
 class SwipeHomeToOverviewControllerTest : public AshTestBase {
  public:
-  SwipeHomeToOverviewControllerTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kDragFromShelfToHomeOrOverview}, {});
-  }
+  SwipeHomeToOverviewControllerTest() {}
   ~SwipeHomeToOverviewControllerTest() override = default;
 
   // AshTestBase:
@@ -142,7 +138,6 @@ class SwipeHomeToOverviewControllerTest : public AshTestBase {
  private:
   std::unique_ptr<SwipeHomeToOverviewController> home_to_overview_controller_;
 
-  base::test::ScopedFeatureList scoped_feature_list_;
   DISALLOW_COPY_AND_ASSIGN(SwipeHomeToOverviewControllerTest);
 };
 
@@ -172,8 +167,7 @@ TEST_F(SwipeHomeToOverviewControllerTest, VerifyHomeLauncherMetrics) {
     GetEventGenerator()->MoveTouchBy(0, -1);
 
     // Wait until overview animation finishes.
-    OverviewAnimationWaiter enter_overview_waiter;
-    enter_overview_waiter.Wait();
+    WaitForOverviewAnimation(/*enter=*/true);
 
     GetEventGenerator()->ReleaseTouch();
     WaitForHomeLauncherAnimationToFinish();
@@ -190,8 +184,7 @@ TEST_F(SwipeHomeToOverviewControllerTest, VerifyHomeLauncherMetrics) {
       GetContext()->GetBoundsInScreen().top_center());
 
   // Wait until overview animation finishes.
-  OverviewAnimationWaiter exit_overview_waiter;
-  exit_overview_waiter.Wait();
+  WaitForOverviewAnimation(/*enter=*/false);
   WaitForHomeLauncherAnimationToFinish();
 
   // Verify that the animation to show the home launcher is recorded.

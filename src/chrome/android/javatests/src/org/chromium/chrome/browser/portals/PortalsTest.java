@@ -19,6 +19,7 @@ import android.view.View;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -35,7 +36,7 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.engagement.SiteEngagementService;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -46,8 +47,8 @@ import org.chromium.chrome.browser.login.ChromeHttpAuthHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.webapps.WebappTestPage;
 import org.chromium.components.location.LocationUtils;
 import org.chromium.components.permissions.PermissionDialogController;
@@ -73,8 +74,7 @@ import java.util.concurrent.TimeoutException;
         "enable-blink-features=OverscrollCustomization"})
 public class PortalsTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private EmbeddedTestServer mTestServer;
 
@@ -153,10 +153,11 @@ public class PortalsTest {
         swapWaiter.waitForCallback(currSwapCount, 1);
     }
 
-    private List<HistoryItem> getBrowsingHistory() throws TimeoutException {
+    private List<HistoryItem> getBrowsingHistory(Tab tab) throws TimeoutException {
         TestBrowsingHistoryObserver observer = new TestBrowsingHistoryObserver();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            BrowsingHistoryBridge provider = new BrowsingHistoryBridge(/* isIncognito */ false);
+            Profile profile = Profile.fromWebContents(tab.getWebContents());
+            BrowsingHistoryBridge provider = new BrowsingHistoryBridge(profile);
             provider.setObserver(observer);
             provider.queryHistory(/* query */ "");
         });
@@ -319,7 +320,6 @@ public class PortalsTest {
     @Test
     @MediumTest
     @Feature({"Portals"})
-    @DisabledTest // Disabled due to flakiness. See https://crbug.com/1024850
     public void testTouchTransferAfterTouchStartActivate() throws Exception {
         mActivityTestRule.startMainActivityWithURL(mTestServer.getURL(
                 "/chrome/test/data/android/portals/touch-transfer.html?event=touchstart"));
@@ -459,9 +459,11 @@ public class PortalsTest {
         final ChromeHttpAuthHandler authHandler = helper.getAuthHandler();
         Assert.assertNotNull(authHandler);
 
-        CriteriaHelper.pollUiThread(Criteria.equals(true, authHandler::isShowingAuthDialog));
+        CriteriaHelper.pollUiThread(authHandler::isShowingAuthDialog);
         ThreadUtils.runOnUiThread(() -> authHandler.proceed("basicuser", "secret"));
-        CriteriaHelper.pollUiThread(Criteria.equals("basicuser/secret", portalContents::getTitle));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(portalContents.getTitle(), Matchers.is("basicuser/secret"));
+        });
     }
 
     /**
@@ -483,7 +485,7 @@ public class PortalsTest {
 
         // Content loaded in a portal should not be considered a page visit by the
         // user.
-        List<HistoryItem> history = getBrowsingHistory();
+        List<HistoryItem> history = getBrowsingHistory(tab);
         Assert.assertEquals(1, history.size());
         Assert.assertEquals(mainUrl, history.get(0).getUrl());
         Assert.assertEquals(mainTitle, history.get(0).getTitle());
@@ -492,7 +494,7 @@ public class PortalsTest {
 
         // Now that the portal has activated, its contents are presented to the user
         // as a navigation in the tab, so this should be considered a page visit.
-        history = getBrowsingHistory();
+        history = getBrowsingHistory(tab);
         Assert.assertEquals(2, history.size());
         Assert.assertEquals(portalUrl, history.get(0).getUrl());
         Assert.assertEquals(portalTitle, history.get(0).getTitle());
@@ -511,6 +513,11 @@ public class PortalsTest {
 
     @TargetApi(Build.VERSION_CODES.M)
     private void waitForNotification(NotificationPredicate pred) {
+        waitForNotification(pred, CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL);
+    }
+
+    @TargetApi(Build.VERSION_CODES.M)
+    private void waitForNotification(NotificationPredicate pred, long maxTimeoutMs) {
         CriteriaHelper.pollInstrumentationThread(() -> {
             StatusBarNotification notifications[] =
                     ((NotificationManager) ContextUtils.getApplicationContext().getSystemService(
@@ -522,7 +529,7 @@ public class PortalsTest {
                 }
             }
             return false;
-        });
+        }, maxTimeoutMs, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
     @TargetApi(Build.VERSION_CODES.M)
@@ -557,7 +564,7 @@ public class PortalsTest {
             PermissionDialogController permissionDialogController =
                     PermissionDialogController.getInstance();
             return permissionDialogController.isDialogShownForTest();
-        });
+        }, 12000, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
         // Accept permissions request by clicking button on permissions dialog.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PermissionDialogController permissionDialogController =
@@ -566,7 +573,7 @@ public class PortalsTest {
                     ModalDialogProperties.ButtonType.POSITIVE);
         });
         // Wait for video capture notification.
-        waitForNotification(mMediaCaptureNotificationPred);
+        waitForNotification(mMediaCaptureNotificationPred, 12000);
         // Activate portal.
         executeScriptAndAwaitSwap(tab, "activate()");
         // Wait for adoption to complete.
@@ -625,11 +632,16 @@ public class PortalsTest {
                         + "portal.onload = () => portal.activate();\n"
                         + "document.body.appendChild(portal);");
 
-        CriteriaHelper.pollUiThread(Criteria.equals("Web app banner test page", tab::getTitle));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(tab.getTitle(), Matchers.is("Web app banner test page"));
+        });
         CriteriaHelper.pollUiThread(() -> !AppBannerManager.forTab(tab).isRunningForTesting());
         TouchCommon.singleClickView(tab.getView());
-        String expectedDialogTitle = mActivityTestRule.getActivity().getString(
-                AppBannerManager.getHomescreenLanguageOption());
+
+        String expectedDialogTitle = ThreadUtils.runOnUiThreadBlocking(() -> {
+            return mActivityTestRule.getActivity().getString(
+                    AppBannerManager.getHomescreenLanguageOption(tab).titleTextId);
+        });
         UiObject dialogUiObject = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                                           .findObject(new UiSelector().text(expectedDialogTitle));
         Assert.assertTrue(dialogUiObject.waitForExists(CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL));

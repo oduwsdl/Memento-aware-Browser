@@ -105,7 +105,7 @@ bool ValueToString(UserModel* user_model,
     case ValueProto::kUserActions:
     case ValueProto::kLoginOptions:
     case ValueProto::kCreditCardResponse:
-    case ValueProto::kLoginOptionResponse:
+    case ValueProto::kServerPayload:
       DVLOG(2) << "Error evaluating " << __func__
                << ": does not support values of type " << value->kind_case();
       return false;
@@ -207,7 +207,7 @@ bool ValueToString(UserModel* user_model,
       case ValueProto::kUserActions:
       case ValueProto::kLoginOptions:
       case ValueProto::kCreditCardResponse:
-      case ValueProto::kLoginOptionResponse:
+      case ValueProto::kServerPayload:
       case ValueProto::KIND_NOT_SET:
         NOTREACHED();
         return false;
@@ -242,6 +242,13 @@ bool Compare(UserModel* user_model,
     user_model->SetValue(
         result_model_identifier,
         SimpleValue(*value_a == *value_b,
+                    ContainsClientOnlyValue({*value_a, *value_b})));
+    return true;
+  }
+  if (proto.mode() == ValueComparisonProto::NOT_EQUAL) {
+    user_model->SetValue(
+        result_model_identifier,
+        SimpleValue(*value_a != *value_b,
                     ContainsClientOnlyValue({*value_a, *value_b})));
     return true;
   }
@@ -286,6 +293,7 @@ bool Compare(UserModel* user_model,
       result = *value_a > *value_b;
       break;
     case ValueComparisonProto::EQUAL:
+    case ValueComparisonProto::NOT_EQUAL:
     case ValueComparisonProto::UNDEFINED:
       NOTREACHED();
       return false;
@@ -372,8 +380,7 @@ bool CreateLoginOptionResponse(UserModel* user_model,
 
   // The result is intentionally not client_side_only, irrespective of input.
   ValueProto result;
-  result.mutable_login_option_response()->set_payload(
-      value->login_options().values(0).payload());
+  result.set_server_payload(value->login_options().values(0).payload());
   user_model->SetValue(result_model_identifier, result);
   return true;
 }
@@ -619,38 +626,6 @@ bool BasicInteractions::RunConditionalCallback(
   }
   if (condition_value->booleans().values(0)) {
     callback.Run();
-  }
-  return true;
-}
-
-bool BasicInteractions::UpdateRadioButtonGroup(
-    const std::vector<std::string>& model_identifiers,
-    const std::string& selected_model_identifier) {
-  auto selected_iterator =
-      std::find(model_identifiers.begin(), model_identifiers.end(),
-                selected_model_identifier);
-  if (selected_iterator == model_identifiers.end()) {
-    return false;
-  }
-
-  auto values = delegate_->GetUserModel()->GetValues(model_identifiers);
-  if (!values.has_value()) {
-    return false;
-  }
-
-  if (!AreAllValuesOfType(*values, ValueProto::kBooleans)) {
-    return false;
-  }
-
-  if (!AreAllValuesOfSize(*values, 1)) {
-    return false;
-  }
-
-  for (const auto& model_identifier : model_identifiers) {
-    if (model_identifier == selected_model_identifier) {
-      continue;
-    }
-    delegate_->GetUserModel()->SetValue(model_identifier, SimpleValue(false));
   }
   return true;
 }

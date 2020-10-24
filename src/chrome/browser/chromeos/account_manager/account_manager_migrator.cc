@@ -25,6 +25,7 @@
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/auth/arc_auth_service.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
@@ -96,10 +97,9 @@ class AccountMigrationBaseStep : public AccountMigrationRunner::Step {
   ~AccountMigrationBaseStep() override = default;
 
  protected:
-  bool IsAccountWithNonDummyTokenPresentInAccountManager(
+  bool IsAccountPresentInAccountManager(
       const AccountManager::AccountKey& account) const {
-    return base::Contains(account_manager_accounts_, account) &&
-           !account_manager_->HasDummyGaiaToken(account);
+    return base::Contains(account_manager_accounts_, account);
   }
 
   bool IsAccountManagerEmpty() const {
@@ -185,11 +185,27 @@ class DeviceAccountMigration : public AccountMigrationBaseStep,
 
  private:
   void StartMigration() override {
-    if (IsAccountWithNonDummyTokenPresentInAccountManager(device_account_)) {
+    if (!IsAccountPresentInAccountManager(device_account_)) {
+      MigrateDeviceAccount();
+      return;
+    }
+
+    account_manager()->HasDummyGaiaToken(
+        device_account_,
+        base::BindOnce(&DeviceAccountMigration::OnHasDummyGaiaToken,
+                       weak_factory_.GetWeakPtr()));
+  }
+
+  void OnHasDummyGaiaToken(bool has_dummy_token) {
+    if (!has_dummy_token) {
       FinishWithSuccess();
       return;
     }
 
+    MigrateDeviceAccount();
+  }
+
+  void MigrateDeviceAccount() {
     switch (device_account_.account_type) {
       case account_manager::AccountType::ACCOUNT_TYPE_ACTIVE_DIRECTORY:
         MigrateActiveDirectoryAccount();
@@ -270,6 +286,8 @@ class DeviceAccountMigration : public AccountMigrationBaseStep,
 
   SEQUENCE_CHECKER(sequence_checker_);
 
+  base::WeakPtrFactory<DeviceAccountMigration> weak_factory_{this};
+
   DISALLOW_COPY_AND_ASSIGN(DeviceAccountMigration);
 };
 
@@ -348,7 +366,7 @@ class ContentAreaAccountsMigration : public AccountMigrationBaseStep,
 // potentially waiting forever to get a callback from ARC. If we do not have a
 // timeout, this |Step| can make the rest of migration |Step|s wait forever.
 class ArcAccountsMigration : public AccountMigrationBaseStep,
-                             public arc::ArcSessionManager::Observer {
+                             public arc::ArcSessionManagerObserver {
  public:
   ArcAccountsMigration(AccountManager* account_manager,
                        signin::IdentityManager* identity_manager,

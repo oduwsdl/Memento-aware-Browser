@@ -6,9 +6,8 @@
 
 #include "include/cppgc/internal/pointer-policies.h"
 #include "src/heap/cppgc/globals.h"
-#include "src/heap/cppgc/heap-object-header-inl.h"
 #include "src/heap/cppgc/heap-object-header.h"
-#include "src/heap/cppgc/heap-page-inl.h"
+#include "src/heap/cppgc/heap-page.h"
 #include "src/heap/cppgc/heap.h"
 #include "src/heap/cppgc/marker.h"
 #include "src/heap/cppgc/marking-visitor.h"
@@ -22,7 +21,7 @@ namespace internal {
 
 namespace {
 
-void MarkValue(const BasePage* page, Marker* marker, const void* value) {
+void MarkValue(const BasePage* page, MarkerBase* marker, const void* value) {
 #if defined(CPPGC_CAGED_HEAP)
   DCHECK(reinterpret_cast<CagedHeapLocalData*>(
              reinterpret_cast<uintptr_t>(value) &
@@ -35,19 +34,17 @@ void MarkValue(const BasePage* page, Marker* marker, const void* value) {
 
   DCHECK(marker);
 
-  if (V8_UNLIKELY(MutatorThreadMarkingVisitor::IsInConstruction(header))) {
-    // It is assumed that objects on not_fully_constructed_worklist_ are not
-    // marked.
-    header.Unmark();
-    Marker::NotFullyConstructedWorklist::View not_fully_constructed_worklist(
-        marker->not_fully_constructed_worklist(), Marker::kMutatorThreadId);
-    not_fully_constructed_worklist.Push(header.Payload());
+  if (V8_UNLIKELY(header.IsInConstruction<AccessMode::kNonAtomic>())) {
+    // In construction objects are traced only if they are unmarked. If marking
+    // reaches this object again when it is fully constructed, it will re-mark
+    // it and tracing it as a previously not fully constructed object would know
+    // to bail out.
+    header.Unmark<AccessMode::kAtomic>();
+    marker->WriteBarrierForInConstructionObject(header);
     return;
   }
 
-  Marker::WriteBarrierWorklist::View write_barrier_worklist(
-      marker->write_barrier_worklist(), Marker::kMutatorThreadId);
-  write_barrier_worklist.Push(&header);
+  marker->WriteBarrierForObject(header);
 }
 
 }  // namespace

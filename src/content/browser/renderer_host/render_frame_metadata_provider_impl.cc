@@ -26,9 +26,9 @@ void RenderFrameMetadataProviderImpl::RemoveObserver(Observer* observer) {
 }
 
 void RenderFrameMetadataProviderImpl::Bind(
-    mojo::PendingReceiver<mojom::RenderFrameMetadataObserverClient>
+    mojo::PendingReceiver<cc::mojom::RenderFrameMetadataObserverClient>
         client_receiver,
-    mojo::PendingRemote<mojom::RenderFrameMetadataObserver> observer) {
+    mojo::PendingRemote<cc::mojom::RenderFrameMetadataObserver> observer) {
   render_frame_metadata_observer_remote_.reset();
   render_frame_metadata_observer_remote_.Bind(std::move(observer));
   render_frame_metadata_observer_client_receiver_.reset();
@@ -99,9 +99,8 @@ void RenderFrameMetadataProviderImpl::OnRenderFrameMetadataChanged(
   for (Observer& observer : observers_)
     observer.OnRenderFrameMetadataChangedBeforeActivation(metadata);
 
-  if (metadata.local_surface_id_allocation !=
-      last_local_surface_id_allocation_) {
-    last_local_surface_id_allocation_ = metadata.local_surface_id_allocation;
+  if (metadata.local_surface_id != last_local_surface_id_) {
+    last_local_surface_id_ = metadata.local_surface_id;
     for (Observer& observer : observers_)
       observer.OnLocalSurfaceIdChanged(metadata);
   }
@@ -126,5 +125,13 @@ void RenderFrameMetadataProviderImpl::OnFrameSubmissionForTesting(
                                       OnFrameTokenFrameSubmissionForTesting,
                                   weak_factory_.GetWeakPtr()));
 }
+
+#if defined(OS_ANDROID)
+void RenderFrameMetadataProviderImpl::OnRootScrollOffsetChanged(
+    const gfx::Vector2dF& root_scroll_offset) {
+  for (Observer& observer : observers_)
+    observer.OnRootScrollOffsetChanged(root_scroll_offset);
+}
+#endif
 
 }  // namespace content

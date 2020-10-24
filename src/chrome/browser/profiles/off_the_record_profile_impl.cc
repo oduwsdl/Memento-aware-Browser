@@ -21,7 +21,6 @@
 #include "chrome/browser/background_fetch/background_fetch_delegate_factory.h"
 #include "chrome/browser/background_fetch/background_fetch_delegate_impl.h"
 #include "chrome/browser/background_sync/background_sync_controller_factory.h"
-#include "chrome/browser/background_sync/background_sync_controller_impl.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
@@ -46,9 +45,9 @@
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/background_sync/background_sync_controller_impl.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/simple_dependency_manager.h"
@@ -149,11 +148,11 @@ void OffTheRecordProfileImpl::Init() {
   BrowserContextDependencyManager::GetInstance()->CreateBrowserContextServices(
       this);
 
+  // Incognito is not available for ephemeral Guest profiles.
+  CHECK(!profile_->IsEphemeralGuestProfile());
+
   // Always crash when incognito is not available.
-  // Guest profiles may always be OTR, and non primary OTRs are always allowed.
-  // Check IncognitoModePrefs otherwise.
-  CHECK(profile_->IsGuestSession() || profile_->IsSystemProfile() ||
-        !IsPrimaryOTRProfile() ||
+  CHECK(!profile_->IsIncognitoProfile() ||
         IncognitoModePrefs::GetAvailability(profile_->GetPrefs()) !=
             IncognitoModePrefs::DISABLED);
 
@@ -182,6 +181,9 @@ void OffTheRecordProfileImpl::Init() {
   AccessibilityLabelsService::InitOffTheRecordPrefs(this);
 
   HeavyAdServiceFactory::GetForBrowserContext(this)->InitializeOffTheRecord();
+
+  key_->SetProtoDatabaseProvider(
+      GetDefaultStoragePartition(this)->GetProtoDatabaseProvider());
 }
 
 OffTheRecordProfileImpl::~OffTheRecordProfileImpl() {
@@ -212,12 +214,16 @@ OffTheRecordProfileImpl::~OffTheRecordProfileImpl() {
   // other profile-related destroy notifications are dispatched.
   ShutdownStoragePartitions();
 
-  // Store incognito lifetime histogram.
-  if (!IsGuestSession()) {
+  // Store incognito lifetime and navigations count histogram.
+  if (IsIncognitoProfile()) {
     auto duration = base::Time::Now() - start_time_;
     base::UmaHistogramCustomCounts(
         "Profile.Incognito.Lifetime", duration.InMinutes(), 1,
         base::TimeDelta::FromDays(28).InMinutes(), 100);
+
+    base::UmaHistogramCounts1000(
+        "Profile.Incognito.MainFrameNavigationsPerSession",
+        main_frame_navigations_);
   }
 }
 
@@ -346,7 +352,8 @@ bool OffTheRecordProfileImpl::IsLegacySupervised() const {
 }
 
 bool OffTheRecordProfileImpl::AllowsBrowserWindows() const {
-  return profile_->AllowsBrowserWindows();
+  return profile_->AllowsBrowserWindows() &&
+         otr_profile_id_.AllowsBrowserWindows();
 }
 
 PrefService* OffTheRecordProfileImpl::GetPrefs() {
@@ -506,16 +513,12 @@ OffTheRecordProfileImpl::GetSharedCorsOriginAccessList() {
   return profile_->GetSharedCorsOriginAccessList();
 }
 
-bool OffTheRecordProfileImpl::ShouldEnableOutOfBlinkCors() {
-  return profile_->ShouldEnableOutOfBlinkCors();
-}
-
 content::NativeFileSystemPermissionContext*
 OffTheRecordProfileImpl::GetNativeFileSystemPermissionContext() {
   return NativeFileSystemPermissionContextFactory::GetForProfile(this);
 }
 
-bool OffTheRecordProfileImpl::IsSameProfile(Profile* profile) {
+bool OffTheRecordProfileImpl::IsSameOrParent(Profile* profile) {
   return (profile == this) || (profile == profile_);
 }
 
@@ -559,7 +562,7 @@ bool OffTheRecordProfileImpl::WasCreatedByVersionOrLater(
   return profile_->WasCreatedByVersionOrLater(version);
 }
 
-Profile::ExitType OffTheRecordProfileImpl::GetLastSessionExitType() {
+Profile::ExitType OffTheRecordProfileImpl::GetLastSessionExitType() const {
   return profile_->GetLastSessionExitType();
 }
 
@@ -654,3 +657,7 @@ void OffTheRecordProfileImpl::UpdateDefaultZoomLevel() {
       ->OnDefaultZoomLevelChanged();
 }
 #endif  // !defined(OS_ANDROID)
+
+void OffTheRecordProfileImpl::RecordMainFrameNavigation() {
+  main_frame_navigations_++;
+}

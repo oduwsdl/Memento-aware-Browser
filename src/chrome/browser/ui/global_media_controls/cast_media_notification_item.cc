@@ -18,9 +18,9 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/url_request/referrer_policy.h"
 #include "services/media_session/public/cpp/util.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 
@@ -154,9 +154,9 @@ CastMediaNotificationItem::CastMediaNotificationItem(
           profile,
           base::BindRepeating(&CastMediaNotificationItem::ImageChanged,
                               base::Unretained(this))),
-      session_info_(CreateSessionInfo()) {
+      session_info_(CreateSessionInfo()),
+      profile_(profile) {
   metadata_.source_title = GetSourceTitle(route);
-  notification_controller_->ShowNotification(media_route_id_);
   base::UmaHistogramEnumeration(
       kSourceHistogramName, route.is_local() ? Source::kLocalCastSession
                                              : Source::kNonLocalCastSession);
@@ -198,6 +198,10 @@ void CastMediaNotificationItem::OnMediaSessionActionButtonPressed(
 
 void CastMediaNotificationItem::Dismiss() {
   notification_controller_->HideNotification(media_route_id_);
+}
+
+media_message_center::SourceType CastMediaNotificationItem::SourceType() {
+  return media_message_center::SourceType::kCast;
 }
 
 void CastMediaNotificationItem::OnMediaStatusUpdated(
@@ -270,7 +274,7 @@ void CastMediaNotificationItem::ImageDownloader::Download(const GURL& url) {
                         : std::make_unique<BitmapFetcher>(
                               url_, this, GetTrafficAnnotationTag());
   bitmap_fetcher_->Init(
-      /* referrer */ "", net::URLRequest::NEVER_CLEAR_REFERRER,
+      /* referrer */ "", net::ReferrerPolicy::NEVER_CLEAR,
       network::mojom::CredentialsMode::kOmit);
   bitmap_fetcher_->Start(url_loader_factory_.get());
 }

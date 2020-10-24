@@ -6,9 +6,10 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.ADD_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.ANIMATION_SOURCE_VIEW;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.COLLAPSE_BUTTON_CONTENT_DESCRIPTION;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.COLLAPSE_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.CONTENT_TOP_MARGIN;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.DIALOG_BACKGROUND_RESOUCE_ID;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.DIALOG_BACKGROUND_RESOURCE_ID;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.DIALOG_UNGROUP_BAR_BACKGROUND_COLOR_ID;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.DIALOG_UNGROUP_BAR_HOVERED_BACKGROUND_COLOR_ID;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.DIALOG_UNGROUP_BAR_TEXT_APPEARANCE;
@@ -93,9 +94,9 @@ class TabGridPanelViewBinder {
             viewHolder.dialogView.setupDialogAnimation(model.get(ANIMATION_SOURCE_VIEW));
         } else if (UNGROUP_BAR_STATUS == propertyKey) {
             viewHolder.dialogView.updateUngroupBar(model.get(UNGROUP_BAR_STATUS));
-        } else if (DIALOG_BACKGROUND_RESOUCE_ID == propertyKey) {
+        } else if (DIALOG_BACKGROUND_RESOURCE_ID == propertyKey) {
             if (viewHolder.dialogView != null) {
-                int backgroundResourceId = model.get(DIALOG_BACKGROUND_RESOUCE_ID);
+                int backgroundResourceId = model.get(DIALOG_BACKGROUND_RESOURCE_ID);
                 viewHolder.dialogView.updateDialogContainerBackgroundResource(backgroundResourceId);
                 viewHolder.toolbarView.setBackgroundResource(backgroundResourceId);
             }
@@ -130,14 +131,27 @@ class TabGridPanelViewBinder {
         } else if (TITLE_CURSOR_VISIBILITY == propertyKey) {
             viewHolder.toolbarView.setTitleCursorVisibility(model.get(TITLE_CURSOR_VISIBILITY));
         } else if (IS_TITLE_TEXT_FOCUSED == propertyKey) {
+            if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+                viewHolder.toolbarView.updateTitleTextFocus(model.get(IS_TITLE_TEXT_FOCUSED));
+                return;
+            }
             // Don't explicitly request focus since it should happen automatically.
             if (!model.get(IS_TITLE_TEXT_FOCUSED)) {
                 viewHolder.toolbarView.clearTitleTextFocus();
             }
         } else if (IS_KEYBOARD_VISIBLE == propertyKey) {
+            if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+                viewHolder.toolbarView.updateKeyboardVisibility(model.get(IS_KEYBOARD_VISIBLE));
+                return;
+            }
             // Don't explicitly show keyboard since it should happen automatically.
             if (!model.get(IS_KEYBOARD_VISIBLE)) {
                 viewHolder.toolbarView.hideKeyboard();
+            }
+        } else if (COLLAPSE_BUTTON_CONTENT_DESCRIPTION == propertyKey) {
+            if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+                viewHolder.toolbarView.setLeftButtonContentDescription(
+                        model.get(COLLAPSE_BUTTON_CONTENT_DESCRIPTION));
             }
         }
     }

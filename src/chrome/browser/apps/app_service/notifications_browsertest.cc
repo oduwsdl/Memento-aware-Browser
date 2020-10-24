@@ -9,13 +9,13 @@
 #include "ash/public/cpp/message_center/arc_notifications_host_initializer.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/arc_apps.h"
 #include "chrome/browser/apps/app_service/arc_apps_factory.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/extensions/api/notifications/extension_notification_display_helper.h"
 #include "chrome/browser/extensions/api/notifications/extension_notification_display_helper_factory.h"
 #include "chrome/browser/extensions/api/notifications/extension_notification_handler.h"
@@ -26,8 +26,6 @@
 #include "chrome/browser/notifications/profile_notification.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/browser/web_applications/test/web_app_test.h"
-#include "chrome/common/chrome_features.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/session/arc_bridge_service.h"
@@ -110,7 +108,7 @@ void RemoveNotification(Profile* profile, const std::string& notification_id) {
 void UninstallApp(Profile* profile, const std::string& app_id) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  proxy->UninstallSilently(app_id);
+  proxy->UninstallSilently(app_id, apps::mojom::UninstallSource::kUser);
   proxy->FlushMojoCallsForTesting();
 }
 
@@ -253,19 +251,9 @@ IN_PROC_BROWSER_TEST_F(AppNotificationsExtensionApiTest,
 }
 
 class AppNotificationsWebNotificationTest
-    : public extensions::PlatformAppBrowserTest,
-      public ::testing::WithParamInterface<web_app::ProviderType> {
+    : public extensions::PlatformAppBrowserTest {
  protected:
-  AppNotificationsWebNotificationTest() {
-    if (GetParam() == web_app::ProviderType::kWebApps) {
-      scoped_feature_list_.InitAndEnableFeature(
-          features::kDesktopPWAsWithoutExtensions);
-    } else {
-      scoped_feature_list_.InitAndDisableFeature(
-          features::kDesktopPWAsWithoutExtensions);
-    }
-  }
-
+  AppNotificationsWebNotificationTest() = default;
   ~AppNotificationsWebNotificationTest() override = default;
 
   // extensions::PlatformAppBrowserTest:
@@ -278,7 +266,7 @@ class AppNotificationsWebNotificationTest
 
   std::string CreateWebApp(const GURL& url, const GURL& scope) const {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = url;
+    web_app_info->start_url = url;
     web_app_info->scope = scope;
     std::string app_id =
         web_app::InstallWebApp(browser()->profile(), std::move(web_app_info));
@@ -331,11 +319,9 @@ class AppNotificationsWebNotificationTest
  private:
   // For mocking a secure site.
   net::EmbeddedTestServer https_server_;
-
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
+IN_PROC_BROWSER_TEST_F(AppNotificationsWebNotificationTest,
                        AddAndRemovePersistentNotification) {
   std::string app_id1 = CreateWebApp(GetUrl1(), GetScope1());
   std::string app_id2 = CreateWebApp(GetUrl2(), GetScope2());
@@ -377,7 +363,7 @@ IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
   ASSERT_EQ(apps::mojom::OptionalBool::kFalse, HasBadge(profile(), app_id2));
 }
 
-IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
+IN_PROC_BROWSER_TEST_F(AppNotificationsWebNotificationTest,
                        PersistentNotificationWhenInstallAndUninstallApp) {
   // Send a notification before installing apps.
   const GURL origin = GetOrigin();
@@ -471,7 +457,7 @@ IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
   ASSERT_EQ(apps::mojom::OptionalBool::kFalse, HasBadge(profile(), app_id2));
 }
 
-IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
+IN_PROC_BROWSER_TEST_F(AppNotificationsWebNotificationTest,
                        AddAndRemoveNonPersistentNotificationForOneApp) {
   base::HistogramTester histogram_tester;
 
@@ -499,7 +485,7 @@ IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
   ASSERT_EQ(apps::mojom::OptionalBool::kFalse, HasBadge(profile(), app_id3));
 }
 
-IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
+IN_PROC_BROWSER_TEST_F(AppNotificationsWebNotificationTest,
                        AddAndRemoveNonPersistentNotification) {
   base::HistogramTester histogram_tester;
 
@@ -531,7 +517,7 @@ IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
   ASSERT_EQ(apps::mojom::OptionalBool::kFalse, HasBadge(profile(), app_id3));
 }
 
-IN_PROC_BROWSER_TEST_P(AppNotificationsWebNotificationTest,
+IN_PROC_BROWSER_TEST_F(AppNotificationsWebNotificationTest,
                        NonPersistentNotificationWhenInstallAndUninstallApp) {
   base::HistogramTester histogram_tester;
 
@@ -898,9 +884,3 @@ IN_PROC_BROWSER_TEST_F(AppNotificationsArcNotificationTest,
   ASSERT_EQ(apps::mojom::OptionalBool::kFalse, HasBadge(profile(), app_id1));
   ASSERT_EQ(apps::mojom::OptionalBool::kFalse, HasBadge(profile(), app_id2));
 }
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         AppNotificationsWebNotificationTest,
-                         ::testing::Values(web_app::ProviderType::kBookmarkApps,
-                                           web_app::ProviderType::kWebApps),
-                         web_app::ProviderTypeParamToString);

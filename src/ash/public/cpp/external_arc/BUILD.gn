@@ -24,17 +24,23 @@ static_library("external_arc") {
     "message_center/arc_notification_surface_manager_impl.h",
     "message_center/arc_notification_view.cc",
     "message_center/arc_notification_view.h",
+    "toast/arc_toast_surface_manager.cc",
+    "toast/arc_toast_surface_manager.h",
   ]
   defines = [ "ASH_PUBLIC_IMPLEMENTATION" ]
   deps = [
     "//ash/public/cpp",
     "//base",
+    "//chromeos/constants",
     "//components/account_id",
     "//components/arc:arc_metrics_constants",
     "//components/arc:connection_holder",
     "//components/arc/mojom:notifications",
     "//components/exo",
     "//mojo/public/cpp/system",
+    "//ui/accessibility:accessibility",
+    "//ui/accessibility:ax_base",
+    "//ui/aura",
     "//ui/message_center",
     "//ui/views",
     "//ui/wm",
@@ -48,6 +54,7 @@ source_set("unit_tests") {
     "message_center/arc_notification_content_view_unittest.cc",
     "message_center/arc_notification_manager_unittest.cc",
     "message_center/arc_notification_view_unittest.cc",
+    "toast/arc_toast_surface_manager_unittest.cc",
   ]
   public_deps = [ "//ash:test_support" ]
   deps = [

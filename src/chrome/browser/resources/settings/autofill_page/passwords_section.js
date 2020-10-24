@@ -8,7 +8,6 @@
  * save any passwords.
  */
 
-
 /** @typedef {!{model: !{item: !chrome.passwordsPrivate.ExceptionEntry}}} */
 let ExceptionEntryEntryEvent;
 
@@ -23,7 +22,6 @@ import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
-import {getImage} from 'chrome://resources/js/icon.m.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
 import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
@@ -31,9 +29,6 @@ import {IronA11yKeysBehavior} from 'chrome://resources/polymer/v3_0/iron-a11y-ke
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 
-// <if expr="chromeos">
-import {convertImageSequenceToPng} from 'chrome://resources/cr_elements/chromeos/cr_picture/png.m.js';
-// </if>
 import '../controls/extension_controlled_indicator.m.js';
 import '../controls/settings_toggle_button.m.js';
 import {GlobalScrollTargetBehavior} from '../global_scroll_target_behavior.m.js';
@@ -45,7 +40,6 @@ import {routes} from '../route.js';
 import {MergeExceptionsStoreCopiesBehavior} from './merge_exceptions_store_copies_behavior.js';
 import {MergePasswordsStoreCopiesBehavior} from './merge_passwords_store_copies_behavior.js';
 import {MultiStorePasswordUiEntry} from './multi_store_password_ui_entry.js';
-import {MultiStoreExceptionEntry} from './multi_store_exception_entry.js';
 import {Router} from '../router.m.js';
 import '../settings_shared_css.m.js';
 import '../site_favicon.js';
@@ -55,7 +49,7 @@ import './passwords_list_handler.js';
 import {PasswordManagerImpl, PasswordManagerProxy} from './password_manager_proxy.js';
 import './passwords_export_dialog.js';
 import './passwords_shared_css.js';
-import {ProfileInfo, ProfileInfoBrowserProxy, ProfileInfoBrowserProxyImpl} from '../people_page/profile_info_browser_proxy.m.js';
+import './avatar_icon.js';
 // <if expr="chromeos">
 import '../controls/password_prompt_dialog.m.js';
 import {BlockingRequestManager} from './blocking_request_manager.js';
@@ -92,10 +86,12 @@ Polymer({
   ],
 
   properties: {
-    // <if expr="not chromeos">
-    /** @private */
-    storedAccounts_: Array,
-    // </if>
+
+    /** @type {!Map<string, (string|Function)>} */
+    focusConfig: {
+      type: Object,
+      observer: 'focusConfigChanged_',
+    },
 
     /** Preferences state. */
     prefs: {
@@ -115,13 +111,16 @@ Polymer({
       value: () => document,
     },
 
-    /** @private */
-    enablePasswordCheck_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('enablePasswordCheck');
-      }
+    /** Filter on the saved passwords and exceptions. */
+    filter: {
+      type: String,
+      value: '',
     },
+
+    // <if expr="not chromeos">
+    /** @private */
+    storedAccounts_: Array,
+    // </if>
 
     /** @private */
     signedIn_: {
@@ -134,7 +133,8 @@ Polymer({
     eligibleForAccountStorage_: {
       type: Boolean,
       value: false,
-      computed: 'computeEligibleForAccountStorage_(syncStatus_, signedIn_)',
+      computed: 'computeEligibleForAccountStorage_(' +
+          'syncStatus_, signedIn_, syncPrefs_)',
     },
 
     /** @private */
@@ -166,6 +166,7 @@ Polymer({
       computed: 'computeHasPasswordExceptions_(passwordExceptions)',
     },
 
+    /** @private */
     shouldShowBanner_: {
       type: Boolean,
       value: true,
@@ -176,6 +177,7 @@ Polymer({
     /**
      * Whether the edit dialog and removal notification should show
      * information about which location(s) a password is stored.
+     * @private
      */
     shouldShowStorageDetails_: {
       type: Boolean,
@@ -255,12 +257,6 @@ Polymer({
     /** @private {SyncStatus} */
     syncStatus_: Object,
 
-    /** Filter on the saved passwords and exceptions. */
-    filter: {
-      type: String,
-      value: '',
-    },
-
     /** @private {!MultiStorePasswordUiEntry} */
     lastFocused_: Object,
 
@@ -272,7 +268,7 @@ Polymer({
     showPasswordPromptDialog_: Boolean,
 
     /** @private {BlockingRequestManager} */
-    tokenRequestManager_: Object
+    tokenRequestManager_: Object,
     // </if>
   },
 
@@ -298,16 +294,10 @@ Polymer({
   /** @private {?PasswordManagerProxy} */
   passwordManager_: null,
 
-  /**
-   * @type {?function(boolean):void}
-   * @private
-   */
+  /** @private {?function(boolean):void} */
   setIsOptedInForAccountStorageListener_: null,
 
-  /**
-   * @type {?function(!Array<PasswordManagerProxy.ExceptionEntry>):void}
-   * @private
-   */
+  /** @private {?function(!Array<PasswordManagerProxy.ExceptionEntry>):void} */
   setPasswordExceptionsListener_: null,
 
   /** @override */
@@ -351,15 +341,8 @@ Polymer({
     this.addWebUIListener('sync-status-changed', syncStatusChanged);
 
     const syncPrefsChanged = syncPrefs => this.syncPrefs_ = syncPrefs;
-    syncBrowserProxy.sendSyncPrefsChanged();
     this.addWebUIListener('sync-prefs-changed', syncPrefsChanged);
-
-    /** @type {!ProfileInfoBrowserProxy} */ (
-        ProfileInfoBrowserProxyImpl.getInstance())
-        .getProfileInfo()
-        .then(this.extractImageFromProfileInfo_.bind(this));
-    this.addWebUIListener(
-        'profile-info-changed', this.extractImageFromProfileInfo_.bind(this));
+    syncBrowserProxy.sendSyncPrefsChanged();
 
     // For non-ChromeOS, also check whether accounts are available.
     // <if expr="not chromeos">
@@ -380,56 +363,6 @@ Polymer({
   },
 
   /**
-   * Shows the check passwords sub page.
-   * @private
-   */
-  onCheckPasswordsClick_() {
-    Router.getInstance().navigateTo(
-        routes.CHECK_PASSWORDS, new URLSearchParams('start=true'));
-    this.passwordManager_.recordPasswordCheckReferrer(
-        PasswordManagerProxy.PasswordCheckReferrer.PASSWORD_SETTINGS);
-  },
-
-  /**
-   * Shows the 'device passwords' page.
-   */
-  onDevicePasswordsLinkClicked_() {
-    Router.getInstance().navigateTo(routes.DEVICE_PASSWORDS);
-  },
-
-  // <if expr="chromeos">
-  /**
-   * When this event fired, it means that the password-prompt-dialog succeeded
-   * in creating a fresh token in the quickUnlockPrivate API. Because new tokens
-   * can only ever be created immediately following a GAIA password check, the
-   * passwordsPrivate API can now safely grant requests for secure data (i.e.
-   * saved passwords) for a limited time. This observer resolves the request,
-   * triggering a callback that requires a fresh auth token to succeed and that
-   * was provided to the BlockingRequestManager by another DOM element seeking
-   * secure data.
-   *
-   * @param {!CustomEvent<!chrome.quickUnlockPrivate.TokenInfo>} e - Contains
-   *     newly created auth token. Note that its precise value is not relevant
-   *     here, only the facts that it's created.
-   * @private
-   */
-  onTokenObtained_(e) {
-    assert(e.detail);
-    this.tokenRequestManager_.resolve();
-  },
-
-  onPasswordPromptClosed_() {
-    this.showPasswordPromptDialog_ = false;
-    focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
-  },
-
-  openPasswordPromptDialog_() {
-    this.activeDialogAnchorStack_.push(getDeepActiveElement());
-    this.showPasswordPromptDialog_ = true;
-  },
-  // </if>
-
-  /**
    * @return {boolean}
    * @private
    */
@@ -444,10 +377,13 @@ Polymer({
    * @private
    */
   computeEligibleForAccountStorage_() {
-    // |this.syncStatus_.signedIn| means the user has sync enabled, while
-    // |this.signedIn_| means they have signed in, in the content area.
+    // The user must have signed in but should have sync disabled
+    // (|!this.syncStatus_.signedin|). They should not be using a custom
+    // passphrase to encrypt their sync data, since there's no way for account
+    // storage users to input their passphrase and decrypt the passwords.
     return this.accountStorageFeatureEnabled_ &&
-        (!!this.syncStatus_ && !this.syncStatus_.signedIn) && this.signedIn_;
+        (!!this.syncStatus_ && !this.syncStatus_.signedIn) && this.signedIn_ &&
+        (!this.syncPrefs_ || !this.syncPrefs_.encryptAllData);
   },
 
   /**
@@ -512,6 +448,86 @@ Polymer({
         (!!this.syncStatus_ && !!this.syncStatus_.signedIn &&
          !!this.syncPrefs_ && !!this.syncPrefs_.encryptAllData);
   },
+
+  /**
+   * @private
+   * @return {boolean}
+   */
+  computeHasLeakedCredentials_() {
+    return this.leakedPasswords.length > 0;
+  },
+
+  /**
+   * @private
+   * @return {boolean}
+   */
+  computeHasNeverCheckedPasswords_() {
+    return !this.status.elapsedTimeSinceLastCheck;
+  },
+
+  /**
+   * @private
+   * @return {string}
+   */
+  computeDevicePasswordsLinkLabel_() {
+    return this.numberOfDevicePasswords_ === 1 ?
+        this.i18n('devicePasswordsLinkLabelSingular') :
+        this.i18n(
+            'devicePasswordsLinkLabelPlural', this.numberOfDevicePasswords_);
+  },
+
+  /**
+   * Shows the check passwords sub page.
+   * @private
+   */
+  onCheckPasswordsClick_() {
+    Router.getInstance().navigateTo(
+        routes.CHECK_PASSWORDS, new URLSearchParams('start=true'));
+    this.passwordManager_.recordPasswordCheckReferrer(
+        PasswordManagerProxy.PasswordCheckReferrer.PASSWORD_SETTINGS);
+  },
+
+  /**
+   * Shows the 'device passwords' page.
+   * @private
+   */
+  onDevicePasswordsLinkClicked_() {
+    Router.getInstance().navigateTo(routes.DEVICE_PASSWORDS);
+  },
+
+  // <if expr="chromeos">
+  /**
+   * When this event fired, it means that the password-prompt-dialog succeeded
+   * in creating a fresh token in the quickUnlockPrivate API. Because new tokens
+   * can only ever be created immediately following a GAIA password check, the
+   * passwordsPrivate API can now safely grant requests for secure data (i.e.
+   * saved passwords) for a limited time. This observer resolves the request,
+   * triggering a callback that requires a fresh auth token to succeed and that
+   * was provided to the BlockingRequestManager by another DOM element seeking
+   * secure data.
+   *
+   * @param {!CustomEvent<!chrome.quickUnlockPrivate.TokenInfo>} e - Contains
+   *     newly created auth token. Note that its precise value is not relevant
+   *     here, only the facts that it's created.
+   * @private
+   */
+  onTokenObtained_(e) {
+    assert(e.detail);
+    this.tokenRequestManager_.resolve();
+  },
+
+  /** @private */
+  onPasswordPromptClosed_() {
+    this.showPasswordPromptDialog_ = false;
+    focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
+  },
+
+  /** @private */
+  openPasswordPromptDialog_() {
+    this.activeDialogAnchorStack_.push(getDeepActiveElement());
+    this.showPasswordPromptDialog_ = true;
+  },
+  // </if>
 
   /**
    * @param {string} filter
@@ -625,59 +641,11 @@ Polymer({
   },
 
   /**
-   * Updates the profile icon used in the opt-in/opt-out element based on the
-   * given profile info.
-   * @private
-   * @param {!ProfileInfo} info
-   */
-  extractImageFromProfileInfo_(info) {
-    /**
-     * Extract first frame from image by creating a single frame PNG using
-     * url as input if base64 encoded and potentially animated.
-     */
-    // <if expr="chromeos">
-    if (info.iconUrl.startsWith('data:image/png;base64')) {
-      this.profileIcon_ = getImage(convertImageSequenceToPng([info.iconUrl]));
-      return;
-    }
-    // </if>
-
-    this.profileIcon_ = getImage(info.iconUrl);
-  },
-
-  /**
    * @private
    * @return {boolean}
    */
   showImportOrExportPasswords_() {
     return this.hasSavedPasswords_ || this.showImportPasswords_;
-  },
-
-  /**
-   * @private
-   * @return {boolean}
-   */
-  computeHasLeakedCredentials_() {
-    return this.leakedPasswords.length > 0;
-  },
-
-  /**
-   * @private
-   * @return {boolean}
-   */
-  computeHasNeverCheckedPasswords_() {
-    return !this.status.elapsedTimeSinceLastCheck;
-  },
-
-  /**
-   * @private
-   * @return {string}
-   */
-  computeDevicePasswordsLinkLabel_() {
-    return this.numberOfDevicePasswords_ === 1 ?
-        this.i18n('devicePasswordsLinkLabelSingular') :
-        this.i18n(
-            'devicePasswordsLinkLabelPlural', this.numberOfDevicePasswords_);
   },
 
   /**
@@ -692,5 +660,23 @@ Polymer({
     return !!this.storedAccounts_ && this.storedAccounts_.length > 0 ?
         this.storedAccounts_[0].email :
         '';
+  },
+
+  /**
+   * @param {!Map<string, string>} newConfig
+   * @param {?Map<string, string>} oldConfig
+   * @private
+   */
+  focusConfigChanged_(newConfig, oldConfig) {
+    // focusConfig is set only once on the parent, so this observer should
+    // only fire once.
+    assert(!oldConfig);
+
+    // Populate the |focusConfig| map of the parent <settings-autofill-page>
+    // element, with additional entries that correspond to subpage trigger
+    // elements residing in this element's Shadow DOM.
+    this.focusConfig.set(assert(routes.CHECK_PASSWORDS).path, () => {
+      focusWithoutInk(assert(this.$$('#icon')));
+    });
   },
 });

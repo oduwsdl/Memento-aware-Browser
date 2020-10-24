@@ -99,10 +99,7 @@ MemoryDumpManager::CreateInstanceForTesting() {
   return instance;
 }
 
-MemoryDumpManager::MemoryDumpManager()
-    : is_coordinator_(false),
-      tracing_process_id_(kInvalidTracingProcessId),
-      dumper_registrations_ignored_for_testing_(false) {}
+MemoryDumpManager::MemoryDumpManager() = default;
 
 MemoryDumpManager::~MemoryDumpManager() {
   Thread* dump_thread = nullptr;
@@ -277,8 +274,6 @@ MemoryDumpManager::GetDumpThreadTaskRunner() {
 
 scoped_refptr<base::SequencedTaskRunner>
 MemoryDumpManager::GetOrCreateBgTaskRunnerLocked() {
-  lock_.AssertAcquired();
-
   if (dump_thread_)
     return dump_thread_->task_runner();
 
@@ -292,7 +287,7 @@ MemoryDumpManager::GetOrCreateBgTaskRunnerLocked() {
 void MemoryDumpManager::CreateProcessDump(const MemoryDumpRequestArgs& args,
                                           ProcessMemoryDumpCallback callback) {
   char guid_str[20];
-  sprintf(guid_str, "0x%" PRIx64, args.dump_guid);
+  snprintf(guid_str, base::size(guid_str), "0x%" PRIx64, args.dump_guid);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(kTraceCategory, "ProcessMemoryDump",
                                     TRACE_ID_LOCAL(args.dump_guid), "dump_guid",
                                     TRACE_STR_COPY(guid_str));

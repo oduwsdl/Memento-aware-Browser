@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/unguessable_token.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
+#include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
 #include "url/gurl.h"
 
@@ -40,7 +41,7 @@ class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   void Disconnected();
 
   // DevToolsAgentHostImpl overrides.
-  bool AttachSession(DevToolsSession* session) override;
+  bool AttachSession(DevToolsSession* session, bool acquire_wake_lock) override;
   void DetachSession(DevToolsSession* session) override;
 
   const int process_id_;
@@ -48,6 +49,7 @@ class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   const std::string name_;
   const std::string parent_id_;
   base::OnceCallback<void(DevToolsAgentHostImpl*)> destroyed_callback_;
+  const base::UnguessableToken devtools_worker_token_;
 
   DISALLOW_COPY_AND_ASSIGN(WorkerDevToolsAgentHost);
 };

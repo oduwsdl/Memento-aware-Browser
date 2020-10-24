@@ -5,6 +5,7 @@
 #include "components/variations/net/variations_http_headers.h"
 
 #include <map>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -12,22 +13,33 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/net/system_network_context_manager.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
+#include "chrome/browser/predictors/predictors_features.h"
+#include "chrome/browser/predictors/predictors_switches.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/optimization_guide/optimization_guide_features.h"
+#include "components/optimization_guide/proto/hints.pb.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/variations/net/variations_http_headers.h"
-#include "components/variations/variations_http_header_provider.h"
+#include "components/variations/proto/study.pb.h"
+#include "components/variations/variations.mojom.h"
+#include "components/variations/variations_features.h"
+#include "components/variations/variations_ids_provider.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/browser_test.h"
@@ -44,7 +56,6 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 #include "url/gurl.h"
 
 namespace {
@@ -58,7 +69,7 @@ class VariationHeaderSetter : public ChromeBrowserMainExtraParts {
   void PostEarlyInitialization() override {
     // Set up some fake variations.
     auto* variations_provider =
-        variations::VariationsHttpHeaderProvider::GetInstance();
+        variations::VariationsIdsProvider::GetInstance();
     variations_provider->ForceVariationIds({"12", "456", "t789"}, "");
   }
 
@@ -74,7 +85,7 @@ class VariationsHttpHeadersBrowserTest : public InProcessBrowserTest {
 
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
     static_cast<ChromeBrowserMainParts*>(parts)->AddParts(
-        new VariationHeaderSetter());
+        std::make_unique<VariationHeaderSetter>());
   }
 
   void SetUp() override {
@@ -133,6 +144,15 @@ class VariationsHttpHeadersBrowserTest : public InProcessBrowserTest {
   }
 
   GURL GetExampleUrl() const { return GetExampleUrlWithPath("/landing.html"); }
+
+  void WaitForRequest(const GURL& url) {
+    auto it = received_headers_.find(url);
+    if (it != received_headers_.end())
+      return;
+    base::RunLoop loop;
+    done_callbacks_.emplace(url, loop.QuitClosure());
+    loop.Run();
+  }
 
   // Returns whether a given |header| has been received for a |url|. If
   // |url| has not been observed, fails an EXPECT and returns false.
@@ -282,7 +302,32 @@ class VariationsHttpHeadersBrowserTest : public InProcessBrowserTest {
   // Stores the observed HTTP Request headers.
   std::map<GURL, net::test_server::HttpRequest::HeaderMap> received_headers_;
 
+  // For waiting for requests.
+  std::map<GURL, base::OnceClosure> done_callbacks_;
+
   DISALLOW_COPY_AND_ASSIGN(VariationsHttpHeadersBrowserTest);
+};
+
+// Used for testing the kRestrictGoogleWebVisibility feature.
+class VariationsHttpHeadersBrowserTestWithRestrictedVisibility
+    : public VariationsHttpHeadersBrowserTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  VariationsHttpHeadersBrowserTestWithRestrictedVisibility() {
+    if (GetParam()) {
+      scoped_feature_list_.InitAndEnableFeature(
+          variations::internal::kRestrictGoogleWebVisibility);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          variations::internal::kRestrictGoogleWebVisibility);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(
+      VariationsHttpHeadersBrowserTestWithRestrictedVisibility);
 };
 
 std::unique_ptr<net::test_server::HttpResponse>
@@ -304,6 +349,10 @@ VariationsHttpHeadersBrowserTest::RequestHandler(
 
   // Memorize the request headers for this URL for later verification.
   received_headers_[original_url] = request.headers;
+  auto iter = done_callbacks_.find(original_url);
+  if (iter != done_callbacks_.end()) {
+    std::move(iter->second).Run();
+  }
 
   // Set up a test server that redirects according to the
   // following redirect chain:
@@ -357,10 +406,68 @@ void CreateGoogleSignedInFieldTrial() {
   scoped_refptr<base::FieldTrial> trial_1(CreateTrialAndAssociateId(
       "t1", default_name, variations::GOOGLE_WEB_PROPERTIES_SIGNED_IN, 123));
 
-  auto* variations_http_header_provider =
-      variations::VariationsHttpHeaderProvider::GetInstance();
-  EXPECT_NE(variations_http_header_provider->GetClientDataHeader(true),
-            variations_http_header_provider->GetClientDataHeader(false));
+  auto* provider = variations::VariationsIdsProvider::GetInstance();
+  variations::mojom::VariationsHeadersPtr signed_in_headers =
+      provider->GetClientDataHeaders(/*is_signed_in=*/true);
+  variations::mojom::VariationsHeadersPtr signed_out_headers =
+      provider->GetClientDataHeaders(/*is_signed_in=*/false);
+
+  EXPECT_NE(signed_in_headers->headers_map.at(
+                variations::mojom::GoogleWebVisibility::ANY),
+            signed_out_headers->headers_map.at(
+                variations::mojom::GoogleWebVisibility::ANY));
+  EXPECT_NE(signed_in_headers->headers_map.at(
+                variations::mojom::GoogleWebVisibility::FIRST_PARTY),
+            signed_out_headers->headers_map.at(
+                variations::mojom::GoogleWebVisibility::FIRST_PARTY));
+}
+
+// Creates FieldTrials associatedd with the FIRST_PARTY IDCollectionKeys and
+// their corresponding ANY_CONTEXT keys.
+void CreateFieldTrialsWithDifferentVisibilities() {
+  scoped_refptr<base::FieldTrial> trial_1(CreateTrialAndAssociateId(
+      "t1", "g1", variations::GOOGLE_WEB_PROPERTIES_ANY_CONTEXT, 11));
+  scoped_refptr<base::FieldTrial> trial_2(CreateTrialAndAssociateId(
+      "t2", "g2", variations::GOOGLE_WEB_PROPERTIES_FIRST_PARTY, 22));
+  scoped_refptr<base::FieldTrial> trial_3(CreateTrialAndAssociateId(
+      "t3", "g3", variations::GOOGLE_WEB_PROPERTIES_TRIGGER_ANY_CONTEXT, 33));
+  scoped_refptr<base::FieldTrial> trial_4(CreateTrialAndAssociateId(
+      "t4", "g4", variations::GOOGLE_WEB_PROPERTIES_TRIGGER_FIRST_PARTY, 44));
+
+  auto* provider = variations::VariationsIdsProvider::GetInstance();
+  variations::mojom::VariationsHeadersPtr signed_in_headers =
+      provider->GetClientDataHeaders(/*is_signed_in=*/true);
+  variations::mojom::VariationsHeadersPtr signed_out_headers =
+      provider->GetClientDataHeaders(/*is_signed_in=*/false);
+
+  if (base::FeatureList::IsEnabled(
+          variations::internal::kRestrictGoogleWebVisibility)) {
+    EXPECT_NE(signed_in_headers->headers_map.at(
+                  variations::mojom::GoogleWebVisibility::ANY),
+              signed_in_headers->headers_map.at(
+                  variations::mojom::GoogleWebVisibility::FIRST_PARTY));
+    EXPECT_NE(signed_out_headers->headers_map.at(
+                  variations::mojom::GoogleWebVisibility::ANY),
+              signed_out_headers->headers_map.at(
+                  variations::mojom::GoogleWebVisibility::FIRST_PARTY));
+  } else {
+    // When kRestrictGoogleWebVisibility is disabled, the transmission of
+    // VariationIDs is not restricted. This is the status quo implementation.
+    //
+    // This means that IDs associated with the FIRST_PARTY IDCollectionKeys are
+    // treated as if they were associated with their corresponding ANY_CONTEXT
+    // IDCollectionKeys. For example, when the feature is disabled, IDs
+    // associated with GOOGLE_WEB_PROPERTIES_FIRST_PARTY are transmitted when
+    // IDs associated with GOOGLE_WEB_PROPERTIES_ANY_CONTEXT are.
+    EXPECT_EQ(signed_in_headers->headers_map.at(
+                  variations::mojom::GoogleWebVisibility::ANY),
+              signed_in_headers->headers_map.at(
+                  variations::mojom::GoogleWebVisibility::FIRST_PARTY));
+    EXPECT_EQ(signed_out_headers->headers_map.at(
+                  variations::mojom::GoogleWebVisibility::ANY),
+              signed_out_headers->headers_map.at(
+                  variations::mojom::GoogleWebVisibility::FIRST_PARTY));
+  }
 }
 
 }  // namespace
@@ -415,8 +522,13 @@ IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest, UserSignedIn) {
   base::Optional<std::string> header =
       GetReceivedHeader(GetGoogleUrl(), "X-Client-Data");
   ASSERT_TRUE(header);
-  EXPECT_EQ(*header, variations::VariationsHttpHeaderProvider::GetInstance()
-                         ->GetClientDataHeader(true));
+
+  variations::mojom::VariationsHeadersPtr headers =
+      variations::VariationsIdsProvider::GetInstance()->GetClientDataHeaders(
+          /*is_signed_in=*/true);
+
+  EXPECT_EQ(*header, headers->headers_map.at(
+                         variations::mojom::GoogleWebVisibility::ANY));
 }
 
 IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest, UserNotSignedIn) {
@@ -430,8 +542,42 @@ IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest, UserNotSignedIn) {
   base::Optional<std::string> header =
       GetReceivedHeader(GetGoogleUrl(), "X-Client-Data");
   ASSERT_TRUE(header);
-  EXPECT_EQ(*header, variations::VariationsHttpHeaderProvider::GetInstance()
-                         ->GetClientDataHeader(false));
+
+  variations::mojom::VariationsHeadersPtr headers =
+      variations::VariationsIdsProvider::GetInstance()->GetClientDataHeaders(
+          /*is_signed_in=*/false);
+
+  EXPECT_EQ(*header, headers->headers_map.at(
+                         variations::mojom::GoogleWebVisibility::ANY));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    VariationsHttpHeadersBrowserTest,
+    VariationsHttpHeadersBrowserTestWithRestrictedVisibility,
+    testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(VariationsHttpHeadersBrowserTestWithRestrictedVisibility,
+                       TestRestrictGoogleWebVisibilityInThirdPartyContexts) {
+  // Ensure GetClientDataHeader() returns different values when
+  // kRestrictGoogleWebVisibility is enabled and the same values otherwise.
+  CreateFieldTrialsWithDifferentVisibilities();
+
+  ui_test_utils::NavigateToURL(browser(), GetGoogleUrl());
+  base::Optional<std::string> header =
+      GetReceivedHeader(GetGoogleUrl(), "X-Client-Data");
+  ASSERT_TRUE(header);
+
+  variations::mojom::GoogleWebVisibility web_visibility =
+      base::FeatureList::IsEnabled(
+          variations::internal::kRestrictGoogleWebVisibility)
+          ? variations::mojom::GoogleWebVisibility::FIRST_PARTY
+          : variations::mojom::GoogleWebVisibility::ANY;
+
+  variations::mojom::VariationsHeadersPtr headers =
+      variations::VariationsIdsProvider::GetInstance()->GetClientDataHeaders(
+          /*is_signed_in=*/false);
+
+  EXPECT_EQ(*header, headers->headers_map.at(web_visibility));
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -561,13 +707,11 @@ IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest, ServiceWorkerScript) {
   EXPECT_TRUE(
       HasReceivedHeader(GetGoogleUrlWithPath(worker_path), "X-Client-Data"));
 
-  if (blink::ServiceWorkerUtils::IsImportedScriptUpdateCheckEnabled()) {
-    // And on import script requests to Google.
-    EXPECT_TRUE(HasReceivedHeader(
-        GetGoogleUrlWithPath("/service_worker/empty.js"), "X-Client-Data"));
-    // But not on requests not to Google.
-    EXPECT_FALSE(HasReceivedHeader(absolute_import, "X-Client-Data"));
-  }
+  // And on import script requests to Google.
+  EXPECT_TRUE(HasReceivedHeader(
+      GetGoogleUrlWithPath("/service_worker/empty.js"), "X-Client-Data"));
+  // But not on requests not to Google.
+  EXPECT_FALSE(HasReceivedHeader(absolute_import, "X-Client-Data"));
 }
 
 // Verify in an integration test that the variations header (X-Client-Data) is
@@ -583,4 +727,90 @@ IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest,
                        DedicatedWorkerScript) {
   WorkerScriptTest("/workers/create_dedicated_worker.html",
                    "/workers/import_scripts_dedicated_worker.js");
+}
+
+namespace {
+
+// A test fixture for testing prefetches from the Loading Predictor.
+class VariationsHttpHeadersBrowserTestWithOptimizationGuide
+    : public VariationsHttpHeadersBrowserTest {
+ public:
+  VariationsHttpHeadersBrowserTestWithOptimizationGuide() {
+    std::vector<base::test::ScopedFeatureList::FeatureAndParams> enabled = {
+        {features::kLoadingPredictorPrefetch, {}},
+        {features::kLoadingPredictorUseOptimizationGuide,
+         {{"use_predictions_for_preconnect", "true"}}},
+        {optimization_guide::features::kOptimizationHints, {}}};
+    std::vector<base::Feature> disabled = {
+        features::kLoadingPredictorUseLocalPredictions};
+    feature_list_.InitWithFeaturesAndParameters(enabled, disabled);
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    VariationsHttpHeadersBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(
+        switches::kLoadingPredictorAllowLocalRequestForTesting);
+  }
+
+  std::unique_ptr<content::TestNavigationManager> NavigateToURLAsync(
+      const GURL& url) {
+    chrome::NewTab(browser());
+    content::WebContents* tab =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    DCHECK(tab);
+    auto observer = std::make_unique<content::TestNavigationManager>(tab, url);
+    tab->GetController().LoadURL(url, content::Referrer(),
+                                 ui::PAGE_TRANSITION_TYPED, std::string());
+    return observer;
+  }
+
+  void SetUpOptimizationHint(
+      const GURL& url,
+      const std::vector<std::string>& predicted_subresource_urls) {
+    auto* optimization_guide_keyed_service =
+        OptimizationGuideKeyedServiceFactory::GetForProfile(
+            browser()->profile());
+    ASSERT_TRUE(optimization_guide_keyed_service);
+
+    optimization_guide::proto::LoadingPredictorMetadata
+        loading_predictor_metadata;
+    for (const auto& subresource_url : predicted_subresource_urls) {
+      loading_predictor_metadata.add_subresources()->set_url(subresource_url);
+    }
+
+    optimization_guide::OptimizationMetadata optimization_metadata;
+    optimization_metadata.set_loading_predictor_metadata(
+        loading_predictor_metadata);
+    optimization_guide_keyed_service->AddHintForTesting(
+        url, optimization_guide::proto::LOADING_PREDICTOR,
+        optimization_metadata);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+}  // namespace
+
+// Verify in an integration test that that the variations header (X-Client-Data)
+// is correctly attached to prefetch requests from the Loading Predictor.
+IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTestWithOptimizationGuide,
+                       Prefetch) {
+  GURL url = server()->GetURL("test.com", "/simple_page.html");
+  GURL google_url = GetGoogleSubresourceUrl();
+  GURL non_google_url = GetExampleUrl();
+
+  // Set up optimization hints.
+  std::vector<std::string> hints = {google_url.spec(), non_google_url.spec()};
+  SetUpOptimizationHint(url, hints);
+
+  // Navigate.
+  auto observer = NavigateToURLAsync(url);
+  EXPECT_TRUE(observer->WaitForRequestStart());
+  WaitForRequest(google_url);
+  WaitForRequest(non_google_url);
+
+  // Expect header on google urls only.
+  EXPECT_TRUE(HasReceivedHeader(google_url, "X-Client-Data"));
+  EXPECT_FALSE(HasReceivedHeader(non_google_url, "X-Client-Data"));
 }

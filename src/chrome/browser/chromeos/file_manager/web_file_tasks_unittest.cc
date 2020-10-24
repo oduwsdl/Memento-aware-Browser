@@ -15,9 +15,8 @@
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/test/test_app_registrar.h"
 #include "chrome/browser/web_applications/test/test_file_handler_manager.h"
+#include "chrome/browser/web_applications/test/test_os_integration_manager.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
-#include "chrome/browser/web_applications/test/web_app_test.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/browser/entry_info.h"
@@ -25,21 +24,12 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 
-using web_app::ProviderType;
-
 namespace file_manager {
 namespace file_tasks {
 
-class WebFileTasksTest : public ::testing::TestWithParam<ProviderType> {
+class WebFileTasksTest : public ::testing::Test {
  protected:
   WebFileTasksTest() {
-    if (GetParam() == web_app::ProviderType::kWebApps) {
-      scoped_feature_list_.InitAndEnableFeature(
-          features::kDesktopPWAsWithoutExtensions);
-    } else if (GetParam() == web_app::ProviderType::kBookmarkApps) {
-      scoped_feature_list_.InitAndDisableFeature(
-          features::kDesktopPWAsWithoutExtensions);
-    }
   }
 
   void SetUp() override {
@@ -54,7 +44,11 @@ class WebFileTasksTest : public ::testing::TestWithParam<ProviderType> {
     auto file_handler_manager =
         std::make_unique<web_app::TestFileHandlerManager>(profile_.get());
     file_handler_manager_ = file_handler_manager.get();
-    app_provider_->SetFileHandlerManager(std::move(file_handler_manager));
+    auto os_integration_manager =
+        std::make_unique<web_app::TestOsIntegrationManager>(
+            profile_.get(), /*app_shortcut_manager=*/nullptr,
+            std::move(file_handler_manager));
+    app_provider_->SetOsIntegrationManager(std::move(os_integration_manager));
 
     app_provider_->Start();
   }
@@ -73,7 +67,6 @@ class WebFileTasksTest : public ::testing::TestWithParam<ProviderType> {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
   web_app::TestWebAppProvider* app_provider_;
@@ -81,7 +74,7 @@ class WebFileTasksTest : public ::testing::TestWithParam<ProviderType> {
   web_app::TestFileHandlerManager* file_handler_manager_;
 };
 
-TEST_P(WebFileTasksTest, WebAppFileHandlingCanBeDisabledByFlag) {
+TEST_F(WebFileTasksTest, WebAppFileHandlingCanBeDisabledByFlag) {
   const char kGraphrId[] = "graphr-app-id";
   const char kGraphrAction[] = "https://graphr.tld/csv";
   InstallFileHandler(kGraphrId, GURL(kGraphrAction), {{"text/csv", {".csv"}}});
@@ -94,23 +87,21 @@ TEST_P(WebFileTasksTest, WebAppFileHandlingCanBeDisabledByFlag) {
   std::vector<FullTaskDescriptor> tasks;
 
   {
-    // Web Apps should not be able to handle files unless
-    // kNativeFileSystemAPI and kFileHandlingAPI are enabled.
+    // Web Apps should not be able to handle files unless kFileHandlingAPI is
+    // enabled.
     base::test::ScopedFeatureList scoped_feature_list;
     scoped_feature_list.InitWithFeatures({},
-                                         {blink::features::kNativeFileSystemAPI,
-                                          blink::features::kFileHandlingAPI});
+                                         {blink::features::kFileHandlingAPI});
     FindWebTasks(profile(), entries, &tasks);
     EXPECT_EQ(0u, tasks.size());
     tasks.clear();
   }
 
   {
-    // When the flags are enabled, it should be possible to handle files from
+    // When the flag is enabled, it should be possible to handle files from
     // bookmark apps.
     base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitWithFeatures({blink::features::kNativeFileSystemAPI,
-                                          blink::features::kFileHandlingAPI},
+    scoped_feature_list.InitWithFeatures({blink::features::kFileHandlingAPI},
                                          {});
 
     // Note: FileHandlers aren't enabled while the flag is off.
@@ -127,19 +118,17 @@ TEST_P(WebFileTasksTest, WebAppFileHandlingCanBeDisabledByFlag) {
   }
 }
 
-TEST_P(WebFileTasksTest, DisabledFileHandlersAreNotVisible) {
+TEST_F(WebFileTasksTest, DisabledFileHandlersAreNotVisible) {
   const char kGraphrId[] = "graphr-app-id";
   const char kGraphrAction[] = "https://graphr.tld/csv";
 
   const char kFooId[] = "foo-app-id";
   const char kFooAction[] = "https://foo.tld/csv";
 
-  // Web Apps should not be able to handle files unless
-  // kNativeFileSystemAPI and kFileHandlingAPI are enabled.
+  // Web Apps should not be able to handle files unless kFileHandlingAPI is
+  // enabled.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({blink::features::kNativeFileSystemAPI,
-                                        blink::features::kFileHandlingAPI},
-                                       {});
+  scoped_feature_list.InitWithFeatures({blink::features::kFileHandlingAPI}, {});
 
   InstallFileHandler(kGraphrId, GURL(kGraphrAction), {{"text/csv", {".csv"}}});
   InstallFileHandler(kFooId, GURL(kFooAction), {{"text/csv", {".csv"}}});
@@ -164,11 +153,9 @@ TEST_P(WebFileTasksTest, DisabledFileHandlersAreNotVisible) {
   EXPECT_EQ(kFooId, tasks[0].task_descriptor().app_id);
 }
 
-TEST_P(WebFileTasksTest, FindWebFileHandlerTasks) {
+TEST_F(WebFileTasksTest, FindWebFileHandlerTasks) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({blink::features::kNativeFileSystemAPI,
-                                        blink::features::kFileHandlingAPI},
-                                       {});
+  scoped_feature_list.InitWithFeatures({blink::features::kFileHandlingAPI}, {});
   const char kFooId[] = "foo-app-id";
   const char kFooAction[] = "https://foo.tld/files";
 
@@ -214,11 +201,9 @@ TEST_P(WebFileTasksTest, FindWebFileHandlerTasks) {
   FindWebTasks(profile(), entries, &tasks);
 }
 
-TEST_P(WebFileTasksTest, FindWebFileHandlerTask_Generic) {
+TEST_F(WebFileTasksTest, FindWebFileHandlerTask_Generic) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({blink::features::kNativeFileSystemAPI,
-                                        blink::features::kFileHandlingAPI},
-                                       {});
+  scoped_feature_list.InitWithFeatures({blink::features::kFileHandlingAPI}, {});
 
   const char kBarId[] = "bar-app-id";
   const char kBarAction[] = "https://bar.tld/files";
@@ -298,12 +283,6 @@ TEST_P(WebFileTasksTest, FindWebFileHandlerTask_Generic) {
   EXPECT_EQ(kQuxId, tasks[2].task_descriptor().app_id);
   EXPECT_TRUE(tasks[2].is_generic_file_handler());
 }
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         WebFileTasksTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         web_app::ProviderTypeParamToString);
 
 }  // namespace file_tasks
 }  // namespace file_manager

@@ -45,26 +45,21 @@ class LoginDisplayMojo : public LoginDisplay,
   void ShowPasswordChangedDialog(bool show_password_error,
                                  const AccountId& account_id) override;
   void ShowSigninUI(const std::string& email) override;
-  void ShowWhitelistCheckFailedError() override;
+  void ShowAllowlistCheckFailedError() override;
 
   // SigninScreenHandlerDelegate:
   void Login(const UserContext& user_context,
              const SigninSpecifics& specifics) override;
   bool IsSigninInProgress() const override;
-  void Signout() override;
   void OnSigninScreenReady() override;
   void ShowEnterpriseEnrollmentScreen() override;
-  void ShowEnableDebuggingScreen() override;
   void ShowKioskEnableScreen() override;
   void ShowKioskAutolaunchScreen() override;
   void ShowWrongHWIDScreen() override;
-  void ShowUpdateRequiredScreen() override;
   void CancelUserAdding() override;
   void SetWebUIHandler(LoginDisplayWebUIHandler* webui_handler) override;
-  bool IsShowGuest() const override;
   bool IsShowUsers() const override;
   bool ShowUsersHasChanged() const override;
-  bool IsAllowNewUser() const override;
   bool AllowNewUserChanged() const override;
   bool IsUserSigninCompleted() const override;
   void HandleGetUsers() override;

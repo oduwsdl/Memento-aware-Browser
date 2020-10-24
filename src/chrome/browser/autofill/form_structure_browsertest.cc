@@ -28,6 +28,7 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/data_driven_test.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/pattern_provider/pattern_configuration_parser.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "content/public/common/content_switches.h"
@@ -38,7 +39,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "url/gurl.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/foundation_util.h"
 #endif
 
@@ -84,31 +85,26 @@ std::vector<base::FilePath> GetTestFiles() {
   }
   std::sort(files.begin(), files.end());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   base::mac::ClearAmIBundledCache();
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
   return files;
 }
 
 std::string FormStructuresToString(
     const std::map<FormRendererId, std::unique_ptr<FormStructure>>& forms) {
-  std::map<base::TimeTicks, const FormStructure*> sorted_forms;
-  for (const auto& form_kv : forms) {
-    const auto* form = form_kv.second.get();
-    EXPECT_TRUE(
-        sorted_forms.emplace(form->form_parsed_timestamp(), form).second);
-  }
-
   std::string forms_string;
-  for (const auto& kv : sorted_forms) {
-    const auto* form = kv.second;
+  // The forms are sorted by renderer ID, which should make the order
+  // deterministic.
+  for (const auto& kv : forms) {
+    const auto* form = kv.second.get();
     for (const auto& field : *form) {
-      forms_string += field->Type().ToString();
-      forms_string += " | " + base::UTF16ToUTF8(field->name);
-      forms_string += " | " + base::UTF16ToUTF8(field->label);
-      forms_string += " | " + base::UTF16ToUTF8(field->value);
-      forms_string += " | " + field->section;
+      forms_string += base::JoinString(
+          {field->Type().ToString(), base::UTF16ToUTF8(field->name),
+           base::UTF16ToUTF8(field->label), base::UTF16ToUTF8(field->value),
+           field->section},
+          base::StringPiece(" | "));
       forms_string += "\n";
     }
   }
@@ -154,12 +150,19 @@ FormStructureBrowserTest::FormStructureBrowserTest()
     : DataDrivenTest(GetTestDataDir()) {
   feature_list_.InitWithFeatures(
       // Enabled
-      {},
+      {
+          // TODO(crbug.com/1098943): Remove once experiment is over.
+          autofill::features::kAutofillEnableSupportForMoreStructureInNames,
+          // TODO(crbug.com/1125978): Remove once launched.
+          autofill::features::kAutofillEnableSupportForMoreStructureInAddresses,
+      },
       // Disabled
       {autofill::features::kAutofillEnforceMinRequiredFieldsForHeuristics,
        autofill::features::kAutofillEnforceMinRequiredFieldsForQuery,
        autofill::features::kAutofillEnforceMinRequiredFieldsForUpload,
-       autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout});
+       autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout,
+       autofill::features::
+           kAutofillUseParseCityStateCountryZipCodeInHeuristic});
 }
 
 FormStructureBrowserTest::~FormStructureBrowserTest() {}
@@ -174,6 +177,11 @@ void FormStructureBrowserTest::SetUpCommandLine(
 
 void FormStructureBrowserTest::SetUpOnMainThread() {
   InProcessBrowserTest::SetUpOnMainThread();
+
+  // Load the MatchingPattern definitions.
+  base::RunLoop run_loop;
+  field_type_parsing::PopulateFromResourceBundle(run_loop.QuitClosure());
+  run_loop.Run();
 
   embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
       &FormStructureBrowserTest::HandleRequest, base::Unretained(this)));

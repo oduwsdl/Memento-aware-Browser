@@ -72,6 +72,7 @@ public class WebPaymentIntentHelper {
     public static final String EXTRA_RESPONSE_PAYER_NAME = "payerName";
     public static final String EXTRA_RESPONSE_PAYER_EMAIL = "payerEmail";
     public static final String EXTRA_RESPONSE_PAYER_PHONE = "payerPhone";
+    public static final String EXTRA_SHIPPING_OPTION_ID = "shippingOptionId";
 
     // Shipping address bundle used in payment response and shippingAddressChange.
     public static final String EXTRA_SHIPPING_ADDRESS = "shippingAddress";
@@ -92,6 +93,22 @@ public class WebPaymentIntentHelper {
          * @param payerData The payer data parsed from the intent response.
          */
         void onPaymentSuccess(String methodName, String details, PayerData payerData);
+    }
+
+    /**
+     * Get stringified payment details from a payment intent.
+     *
+     * @param data The payment intent data.
+     * @return The stringified payment details, if any.
+     */
+    @Nullable
+    public static String getPaymentIntentDetails(Intent data) {
+        String details = data.getExtras().getString(EXTRA_RESPONSE_DETAILS);
+        if (details == null) {
+            // try to get deprecated details rather than early returning.
+            details = data.getExtras().getString(EXTRA_DEPRECATED_RESPONSE_INSTRUMENT_DETAILS);
+        }
+        return details;
     }
 
     /**
@@ -124,11 +141,7 @@ public class WebPaymentIntentHelper {
             return;
         }
 
-        String details = data.getExtras().getString(EXTRA_RESPONSE_DETAILS);
-        if (details == null) {
-            // try to get deprecated details rather than early returning.
-            details = data.getExtras().getString(EXTRA_DEPRECATED_RESPONSE_INSTRUMENT_DETAILS);
-        }
+        String details = getPaymentIntentDetails(data);
         if (TextUtils.isEmpty(details)) {
             errorCallback.onPaymentError(ErrorStrings.MISSING_DETAILS_FROM_PAYMENT_APP);
             return;
@@ -183,7 +196,7 @@ public class WebPaymentIntentHelper {
         }
 
         String selectedShippingOptionId = requestedPaymentOptions.requestShipping
-                ? getStringOrEmpty(data, PaymentShippingOption.EXTRA_SHIPPING_OPTION_ID)
+                ? getStringOrEmpty(data, EXTRA_SHIPPING_OPTION_ID)
                 : "";
         if (requestedPaymentOptions.requestShipping
                 && TextUtils.isEmpty(selectedShippingOptionId)) {

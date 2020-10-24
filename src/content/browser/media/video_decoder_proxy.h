@@ -27,7 +27,8 @@ namespace content {
 // RenderProcessHostImpl. Unlike MediaInterfaceProxy, only
 // CreateVideoDecoder() is implemented. This allows WebRTC to create
 // MojoVideoDecoder instances without a RenderFrame.
-class CONTENT_EXPORT VideoDecoderProxy : public media::mojom::InterfaceFactory {
+class CONTENT_EXPORT VideoDecoderProxy final
+    : public media::mojom::InterfaceFactory {
  public:
   VideoDecoderProxy();
   ~VideoDecoderProxy() final;
@@ -61,8 +62,8 @@ class CONTENT_EXPORT VideoDecoderProxy : public media::mojom::InterfaceFactory {
       mojo::PendingReceiver<media::mojom::Renderer> receiver) final;
 #endif  // defined(OS_ANDROID)
   void CreateCdm(const std::string& key_system,
-                 mojo::PendingReceiver<media::mojom::ContentDecryptionModule>
-                     receiver) final;
+                 const media::CdmConfig& cdm_config,
+                 CreateCdmCallback callback) final;
 
  private:
   media::mojom::InterfaceFactory* GetMediaInterfaceFactory();

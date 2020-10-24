@@ -291,7 +291,7 @@ IDNSpoofChecker::IDNSpoofChecker() {
   // The ideal fix would be to change the omnibox font used for Thai. In
   // that case, the Linux-only list should be revisited and potentially
   // removed.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
        "[ทนบพรหเแ๐ดลปฟม]",
 #else
        "[บพเแ๐]",
@@ -368,7 +368,7 @@ IDNSpoofChecker::Result IDNSpoofChecker::SafeToDisplayAsUnicode(
     return Result::kICUSpoofChecks;
   }
 
-  icu::UnicodeString label_string(FALSE /* isTerminated */, label.data(),
+  icu::UnicodeString label_string(false /* isTerminated */, label.data(),
                                   base::checked_cast<int32_t>(label.size()));
 
   // A punycode label with 'xn--' prefix is not subject to the URL
@@ -419,12 +419,16 @@ IDNSpoofChecker::Result IDNSpoofChecker::SafeToDisplayAsUnicode(
       kana_letters_exceptions_.containsNone(label_string) &&
       combining_diacritics_exceptions_.containsNone(label_string)) {
     for (auto const& script : wholescriptconfusables_) {
-      if (IsLabelWholeScriptConfusableForScript(*script.get(), label_string) &&
-          !IsWholeScriptConfusableAllowedForTLD(*script.get(), top_level_domain,
+      if (IsLabelWholeScriptConfusableForScript(*script, label_string) &&
+          !IsWholeScriptConfusableAllowedForTLD(*script, top_level_domain,
                                                 top_level_domain_unicode)) {
         return Result::kWholeScriptConfusable;
       }
     }
+    // Disallow domains that contain only numbers and number-spoofs.
+    if (IsDigitLookalike(label_string))
+      return Result::kDigitLookalikes;
+
     return Result::kSafe;
   }
 
@@ -557,7 +561,7 @@ TopDomainEntry IDNSpoofChecker::GetSimilarTopDomain(
   return TopDomainEntry();
 }
 
-Skeletons IDNSpoofChecker::GetSkeletons(base::StringPiece16 hostname) {
+Skeletons IDNSpoofChecker::GetSkeletons(base::StringPiece16 hostname) const {
   return skeleton_generator_->GetSkeletons(hostname);
 }
 
@@ -657,7 +661,7 @@ void IDNSpoofChecker::SetAllowedUnicodeSet(UErrorCode* status) {
   // No need to block U+144A (Canadian Syllabics West-Cree P) separately
   // because it's blocked from mixing with other scripts including Latin.
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // The following characters are reported as present in the default macOS
   // system UI font, but they render as blank. Remove them from the allowed
   // set to prevent spoofing until the font issue is resolved.
@@ -707,7 +711,7 @@ bool IDNSpoofChecker::IsWholeScriptConfusableAllowedForTLD(
     base::StringPiece tld,
     base::StringPiece16 tld_unicode) {
   icu::UnicodeString tld_string(
-      FALSE /* isTerminated */, tld_unicode.data(),
+      false /* isTerminated */, tld_unicode.data(),
       base::checked_cast<int32_t>(tld_unicode.size()));
   // Allow if the TLD contains any letter from the script, in which case it's
   // likely to be a TLD in that script.

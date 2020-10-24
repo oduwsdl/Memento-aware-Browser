@@ -107,8 +107,10 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   std::unique_ptr<const base::FieldTrial::EntropyProvider>
   CreateLowEntropyProvider();
 
-  // Enables or disables URL-Keyed Metrics. This is disabled by default.
-  void EnableUkm(bool enable);
+  // Updates the state of whether UKM is enabled or not by calling back into
+  // IsUkmAllowedForAllProfiles(). If |must_purge| is true then currently
+  // collected data will be purged.
+  void UpdateUkm(bool must_purge);
 
   // Updates the state of the UKM service if it's running. This should be called
   // when a BrowserContext is created or destroyed which would change the value
@@ -152,8 +154,13 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // Runs |closure| when CollectFinalMetricsForLog() is called.
+  // Runs |closure| when CollectFinalMetricsForLog() is called, when we begin
+  // collecting final metrics.
   void SetCollectFinalMetricsForLogClosureForTesting(base::OnceClosure closure);
+
+  // Runs |listener| after all final metrics have been collected.
+  void SetOnFinalMetricsCollectedListenerForTesting(
+      base::RepeatingClosure listener);
 
   metrics::MetricsStateManager* metrics_state_manager() const {
     return metrics_state_manager_.get();
@@ -210,7 +217,7 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   // client returns true then its
   // variations::PlatformFieldTrials::SetupFieldTrials needs to also call
   // InstantiatePersistentHistograms.
-  virtual bool EnablePersistentHistograms();
+  virtual bool IsPersistentHistogramsEnabled();
 
   // Returns the embedding application's package name (unconditionally). Virtual
   // for testing.
@@ -232,10 +239,9 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   void MaybeStartMetrics();
   void RegisterForNotifications();
 
-  std::unique_ptr<MetricsService> CreateMetricsService(
-      MetricsStateManager* state_manager,
-      AndroidMetricsServiceClient* client,
-      PrefService* prefs);
+  void CreateMetricsService(MetricsStateManager* state_manager,
+                            AndroidMetricsServiceClient* client,
+                            PrefService* prefs);
   void CreateUkmService();
 
   std::unique_ptr<MetricsStateManager> metrics_state_manager_;
@@ -249,13 +255,13 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   bool app_consent_ = false;
   bool is_in_sample_ = false;
   bool fast_startup_for_testing_ = false;
-  bool ukm_enabled_ = false;
 
   // When non-zero, this overrides the default value in
   // GetStandardUploadInterval().
   base::TimeDelta overridden_upload_interval_;
 
   base::OnceClosure collect_final_metrics_for_log_closure_;
+  base::RepeatingClosure on_final_metrics_collected_listener_;
 
   // MetricsServiceClient may be created before the UI thread is promoted to
   // BrowserThread::UI. Use |sequence_checker_| to enforce that the

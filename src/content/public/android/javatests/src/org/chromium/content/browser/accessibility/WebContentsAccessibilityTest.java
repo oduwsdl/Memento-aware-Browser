@@ -35,6 +35,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.UrlUtils;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
@@ -85,8 +86,9 @@ public class WebContentsAccessibilityTest {
         wcax.setState(true);
         wcax.setAccessibilityEnabledForTesting();
 
-        CriteriaHelper.pollUiThread(
-                () -> Assert.assertNotNull(wcax.getAccessibilityNodeProvider()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(wcax.getAccessibilityNodeProvider(), Matchers.notNullValue());
+        });
 
         return wcax.getAccessibilityNodeProvider();
     }
@@ -142,10 +144,10 @@ public class WebContentsAccessibilityTest {
      */
     private int waitForNodeMatching(
             AccessibilityNodeProvider provider, AccessibilityNodeInfoMatcher matcher) {
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> Assert.assertNotEquals(
-                                View.NO_ID, findNodeMatching(provider, View.NO_ID, matcher)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    findNodeMatching(provider, View.NO_ID, matcher), Matchers.not(View.NO_ID));
+        });
 
         int virtualViewId = TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> findNodeMatching(provider, View.NO_ID, matcher));
@@ -354,8 +356,6 @@ public class WebContentsAccessibilityTest {
      */
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEventIndices_SelectionOFF_CharacterGranularity() throws Throwable {
         // Build a simple web page with an input and the text "Testing"
         int editTextVirtualViewId = buildWebPageWithEditText(
@@ -401,8 +401,6 @@ public class WebContentsAccessibilityTest {
     @Test
     @LargeTest
     @Ignore("Skipping due to long run time")
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEventIndices_SelectionON_CharacterGranularity() throws Throwable {
         // Build a simple web page with an input and the text "Testing"
         int editTextVirtualViewId = buildWebPageWithEditText(
@@ -503,8 +501,6 @@ public class WebContentsAccessibilityTest {
      */
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEventIndices_SelectionOFF_WordGranularity() throws Throwable {
         // Build a simple web page with an input and the text "Testing this output is correct"
         int editTextVirtualViewId = buildWebPageWithEditText(
@@ -554,8 +550,6 @@ public class WebContentsAccessibilityTest {
     @Test
     @LargeTest
     @Ignore("Skipping due to long run time")
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEventIndices_SelectionON_WordGranularity() throws Throwable {
         // Build a simple web page with an input and the text "Testing this output is correct"
         int editTextVirtualViewId = buildWebPageWithEditText(
@@ -661,8 +655,6 @@ public class WebContentsAccessibilityTest {
     @Test
     @LargeTest
     @Ignore("Skipping due to long run time")
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEventIndices_contenteditable_SelectionON_CharacterGranularity()
             throws Throwable {
         int contentEditableVirtualViewId =
@@ -771,8 +763,6 @@ public class WebContentsAccessibilityTest {
      */
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testTextFieldExposesActionSetText() {
         // Load a web page with a text field.
         final String data = "<h1>Simple test page</h1>"
@@ -795,8 +785,6 @@ public class WebContentsAccessibilityTest {
      **/
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testContentEditableClassName() {
         final String data = "<div contenteditable>Edit This</div>";
 
@@ -817,8 +805,6 @@ public class WebContentsAccessibilityTest {
      **/
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEditTextFieldAriaInvalidTrueErrorMessage() {
         final String data = "<form>\n"
                 + "  First name:<br>\n"
@@ -842,8 +828,6 @@ public class WebContentsAccessibilityTest {
      **/
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEditTextFieldAriaInvalidSpellingErrorMessage() {
         final String data = "<input type='text' aria-invalid='spelling'><br>\n";
 
@@ -864,8 +848,6 @@ public class WebContentsAccessibilityTest {
      **/
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEditTextFieldAriaInvalidGrammarErrorMessage() {
         final String data = "<input type='text' aria-invalid='grammar'><br>\n";
 
@@ -885,8 +867,6 @@ public class WebContentsAccessibilityTest {
      **/
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testEditTextFieldValidNoErrorMessage() {
         final String data = "<input type='text'><br>\n";
         mActivityTestRule.launchContentShellWithUrl(UrlUtils.encodeHtmlDataUri(data));
@@ -896,9 +876,9 @@ public class WebContentsAccessibilityTest {
 
         AccessibilityNodeInfo textNode =
                 provider.createAccessibilityNodeInfo(textNodeVirtualViewId);
-        Assert.assertNotEquals(textNode, null);
-        Assert.assertEquals(textNode.isContentInvalid(), false);
-        Assert.assertEquals(textNode.getError(), "");
+        Assert.assertNotEquals(null, textNode);
+        Assert.assertFalse(textNode.isContentInvalid());
+        Assert.assertNull(textNode.getError());
     }
 
     /**
@@ -906,8 +886,6 @@ public class WebContentsAccessibilityTest {
      **/
     @Test
     @MediumTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void testSpellingError() {
         // Load a web page containing a text field with one misspelling.
         // Note that for content_shell, no spelling suggestions are enabled
@@ -1009,8 +987,8 @@ public class WebContentsAccessibilityTest {
             Bundle textNodeExtras = textNode.getExtras();
             RectF[] textNodeResults = (RectF[]) textNodeExtras.getParcelableArray(
                     EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY);
-            Assert.assertThat(textNodeResults, Matchers.arrayWithSize(4));
-            Assert.assertNotEquals(textNodeResults[0], textNodeResults[1]);
+            Criteria.checkThat(textNodeResults, Matchers.arrayWithSize(4));
+            Criteria.checkThat(textNodeResults[0], Matchers.not(textNodeResults[1]));
         });
 
         // The final result should be the separate bounding box of all four characters.

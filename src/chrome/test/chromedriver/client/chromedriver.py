@@ -151,7 +151,7 @@ class ChromeDriver(object):
       send_w3c_capability=True, send_w3c_request=True,
       page_load_strategy=None, unexpected_alert_behaviour=None,
       devtools_events_to_log=None, accept_insecure_certs=None,
-      timeouts=None, test_name=None):
+      timeouts=None, test_name=None, web_socket_url=None):
     self._executor = command_executor.CommandExecutor(server_url)
     self._server_url = server_url
     self.w3c_compliant = False
@@ -265,6 +265,9 @@ class ChromeDriver(object):
 
     if test_name is not None:
       params['goog:testName'] = test_name
+
+    if web_socket_url is not None:
+      params['webSocketUrl'] = web_socket_url
 
     if send_w3c_request:
       params = {'capabilities': {'alwaysMatch': params}}
@@ -593,6 +596,12 @@ class ChromeDriver(object):
   def TakeScreenshot(self):
     return self.ExecuteCommand(Command.SCREENSHOT)
 
+  def TakeFullPageScreenshot(self):
+    return self.ExecuteCommand(Command.FULL_PAGE_SCREENSHOT)
+
+  def PrintPDF(self, params={}):
+    return self.ExecuteCommand(Command.PRINT, params)
+
   def Quit(self):
     """Quits the browser and ends the session."""
     self.ExecuteCommand(Command.QUIT)
@@ -658,7 +667,8 @@ class ChromeDriver(object):
 
   def AddVirtualAuthenticator(self, protocol=None, transport=None,
                               hasResidentKey=None, hasUserVerification=None,
-                              isUserConsenting=None, isUserVerified=None):
+                              isUserConsenting=None, isUserVerified=None,
+                              extensions=None):
     options = {}
     if protocol is not None:
       options['protocol'] = protocol
@@ -672,6 +682,8 @@ class ChromeDriver(object):
       options['isUserConsenting'] = isUserConsenting
     if isUserVerified is not None:
       options['isUserVerified'] = isUserVerified
+    if extensions is not None:
+      options['extensions'] = extensions
 
     return self.ExecuteCommand(Command.ADD_VIRTUAL_AUTHENTICATOR, options)
 
@@ -681,7 +693,7 @@ class ChromeDriver(object):
 
   def AddCredential(self, authenticatorId=None, credentialId=None,
                     isResidentCredential=None, rpId=None, privateKey=None,
-                    userHandle=None, signCount=None):
+                    userHandle=None, signCount=None, largeBlob=None):
     options = {}
     if authenticatorId is not None:
       options['authenticatorId'] = authenticatorId
@@ -697,6 +709,8 @@ class ChromeDriver(object):
       options['userHandle'] = userHandle
     if signCount is not None:
       options['signCount'] = signCount
+    if largeBlob is not None:
+      options['largeBlob'] = largeBlob
     return self.ExecuteCommand(Command.ADD_CREDENTIAL, options)
 
   def GetCredentials(self, authenticatorId):
@@ -716,3 +730,9 @@ class ChromeDriver(object):
     params = {'authenticatorId': authenticatorId,
               'isUserVerified': isUserVerified}
     return self.ExecuteCommand(Command.SET_USER_VERIFIED, params)
+
+  def GetSessionId(self):
+    if not hasattr(self, '_session_id'):
+      return None
+    return self._session_id
+

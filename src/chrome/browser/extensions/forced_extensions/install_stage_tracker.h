@@ -14,9 +14,16 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/browser/install/crx_install_error.h"
 #include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
+#include "extensions/browser/install_stage.h"
 #include "extensions/browser/updater/extension_downloader_delegate.h"
 #include "extensions/browser/updater/safe_manifest_parser.h"
 #include "extensions/common/extension_id.h"
+
+#if defined(OS_CHROMEOS)
+#include "components/user_manager/user_manager.h"
+#endif  // defined(OS_CHROMEOS)
+
+class Profile;
 
 namespace content {
 class BrowserContext;
@@ -31,34 +38,29 @@ class InstallStageTracker : public KeyedService {
  public:
   // Stage of extension installing process. Typically forced extensions from
   // policies should go through all stages in this order, other extensions skip
-  // CREATED stage.
-  // Note: enum used for UMA. Do NOT reorder or remove entries. Don't forget to
-  // update enums.xml (name: ExtensionInstallationStage) when adding new
-  // entries.
+  // CREATED stage. The stages are recorded in the increasing order of their
+  // values, therefore always verify that values are in increasing order and
+  // items are in order in which they appear. Exceptions are handled in
+  // ShouldOverrideCurrentStage method. Note: enum used for UMA. Do NOT reorder
+  // or remove entries. Don't forget to update enums.xml (name:
+  // ExtensionInstallationStage) when adding new entries. Don't forget to update
+  // device_management_backend.proto (name:
+  // ExtensionInstallReportLogEvent::InstallationStage) when adding new entries.
+  // Don't forget to update ConvertInstallationStageToProto method in
+  // ExtensionInstallEventLogCollector.
   enum class Stage {
     // Extension found in ForceInstall policy and added to
     // ExtensionManagement::settings_by_id_.
     CREATED = 0,
 
-    // TODO(crbug.com/989526): stages from NOTIFIED_FROM_MANAGEMENT to
-    // SEEN_BY_EXTERNAL_PROVIDER are temporary ones for investigation. Remove
-    // then after investigation will complete and we'll be confident in
-    // extension handling between CREATED and PENDING.
+    // NOTIFIED_FROM_MANAGEMENT = 5, // Moved to InstallCreationStage.
 
-    // ExtensionManagement class is about to pass extension with
-    // INSTALLATION_FORCED mode to its observers.
-    NOTIFIED_FROM_MANAGEMENT = 5,
+    // NOTIFIED_FROM_MANAGEMENT_NOT_FORCED = 6, // Moved to
+    // InstallCreationStage.
 
-    // ExtensionManagement class is about to pass extension with other mode to
-    // its observers.
-    NOTIFIED_FROM_MANAGEMENT_NOT_FORCED = 6,
+    // SEEN_BY_POLICY_LOADER = 7, // Moved to InstallCreationStage.
 
-    // ExternalPolicyLoader with FORCED type fetches extension from
-    // ExtensionManagement.
-    SEEN_BY_POLICY_LOADER = 7,
-
-    // ExternalProviderImpl receives extension.
-    SEEN_BY_EXTERNAL_PROVIDER = 8,
+    // SEEN_BY_EXTERNAL_PROVIDER = 8, // Moved to InstallCreationStage.
 
     // Extension added to PendingExtensionManager.
     PENDING = 1,
@@ -74,12 +76,60 @@ class InstallStageTracker : public KeyedService {
 
     // Magic constant used by the histogram macros.
     // Always update it to the max value.
+    kMaxValue = COMPLETE,
+  };
+
+  // Intermediate stage of extension installation when the Stage is CREATED.
+  // TODO(crbug.com/989526): These stages are temporary ones for investigation.
+  // Remove them after investigation will complete.
+  // Note: enum used for UMA. Do NOT reorder or remove entries. Don't forget to
+  // update enums.xml (name: InstallCreationStage) when adding new
+  // entries. Don't forget to update device_management_backend.proto (name:
+  // ExtensionInstallReportLogEvent::InstallCreationStage) when adding new
+  // entries. Don't forget to update ConvertInstallCreationStageToProto method
+  // in ExtensionInstallEventLogCollector.
+  enum InstallCreationStage {
+    UNKNOWN = 0,
+
+    // ExtensionManagement has reported the Stage has Stage::CREATED.
+    CREATION_INITIATED = 1,
+
+    // Installation mode for the extension is set to INSTALLATION_FORCED just
+    // after ExtensionManagement class is created and CREATION_INITIATED has
+    // been reported.
+    NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_FORCED = 2,
+
+    // Installation mode for the extension is set to other mode just after
+    // ExtensionManagement class is created and CREATION_INITIATED has been
+    // reported.
+    NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_NOT_FORCED = 3,
+
+    // ExtensionManagement class is about to pass extension with
+    // INSTALLATION_FORCED mode to its observers.
+    NOTIFIED_FROM_MANAGEMENT = 4,
+
+    // ExtensionManagement class is about to pass extension with other mode to
+    // its observers.
+    NOTIFIED_FROM_MANAGEMENT_NOT_FORCED = 5,
+
+    // ExternalPolicyLoader with FORCED type fetches extension from
+    // ExtensionManagement.
+    SEEN_BY_POLICY_LOADER = 6,
+
+    // ExternalProviderImpl receives extension.
+    SEEN_BY_EXTERNAL_PROVIDER = 7,
+
+    // Magic constant used by the histogram macros.
+    // Always update it to the max value.
     kMaxValue = SEEN_BY_EXTERNAL_PROVIDER,
   };
 
   // Enum used for UMA. Do NOT reorder or remove entries. Don't forget to
   // update enums.xml (name: ExtensionInstallationFailureReason) when adding new
-  // entries.
+  // entries. Don't forget to update device_management_backend.proto (name:
+  // ExtensionInstallReportLogEvent::FailureReason) when adding new entries.
+  // Don't forget to update ConvertFailureReasonToProto method in
+  // ExtensionInstallEventLogCollector.
   enum class FailureReason {
     // Reason for the failure is not reported. Typically this should not happen,
     // because if we know that we need to install an extension, it should
@@ -163,50 +213,76 @@ class InstallStageTracker : public KeyedService {
     // extension in required time.
     IN_PROGRESS = 24,
 
-    // The download of the crx failed.
+    // The download of the crx failed. In past histograms, this error has only
+    // occurred when the update check status is "no update" in the manifest. See
+    // crbug/1063031 for more details.
     CRX_FETCH_URL_EMPTY = 25,
 
     // The download of the crx failed.
     CRX_FETCH_URL_INVALID = 26,
 
+    // Applying the ExtensionSettings policy changed installation mode from
+    // force-installed to anything else.
+    OVERRIDDEN_BY_SETTINGS = 27,
+
     // Magic constant used by the histogram macros.
     // Always update it to the max value.
-    kMaxValue = CRX_FETCH_URL_INVALID,
+    kMaxValue = OVERRIDDEN_BY_SETTINGS,
   };
-  // Status for the update check returned by server while fetching manifest.
-  // Enum used for UMA. Do NOT reorder or remove entries. Don't forget to update
-  // enums.xml (name: UpdateCheckStatus) when adding new entries.
-  enum class UpdateCheckStatus {
+
+  // Status for the app returned by server while fetching manifest when status
+  // was not OK. Enum used for UMA. Do NOT reorder or remove entries. Don't
+  // forget to update enums.xml (name: ManifestInvalidAppStatusError) when
+  // adding new entries.
+  enum class AppStatusError {
     // Technically it may happen that update server return some unknown value or
     // no value.
     kUnknown = 0,
 
-    // An update is available and should be applied.
-    kOk = 1,
+    // The appid was not recognized and no action elements are included.
+    kErrorUnknownApplication = 1,
 
-    // No update is available for this application at this time.
-    kNoUpdate = 2,
+    // The appid is not properly formed; no action elements are included.
+    kErrorInvalidAppId = 2,
 
-    // Server encountered an unknown internal error.
-    kErrorInternal = 3,
-
-    // The server attempted to serve an update, but could not provide a valid
-    // hash for the download.
-    kErrorHash = 4,
-
-    // The application is running on an incompatible operating system.
-    kErrorOsNotSupported = 5,
-
-    // The application is running on an incompatible hardware.
-    kErrorHardwareNotSupported = 6,
-
-    // This application is incompatible with this version of the protocol.
-    kErrorUnsupportedProtocol = 7,
+    // The application is not available to this user (usually based on country
+    // export restrictions).
+    kErrorRestricted = 3,
 
     // Magic constant used by the histogram macros.
     // Always update it to the max value.
-    kMaxValue = kErrorUnsupportedProtocol,
+    kMaxValue = kErrorRestricted,
   };
+
+  // Info field in the update manifest returned by the server when no update is
+  // available. Enum used for UMA. Do NOT reorder or remove entries. Don't
+  // forget to update enums.xml (name: ExtensionNoUpdatesInfo) when adding new
+  // entries.
+  enum class NoUpdatesInfo {
+    // Update server returns some unknown value.
+    kUnknown = 0,
+    // Update server returns empty info.
+    kEmpty = 1,
+    // Popular no update reasons are marked as "rate limit", "disabled by
+    // client" and "bandwidth limit".
+    kRateLimit = 2,
+    kDisabledByClient = 3,
+    kBandwidthLimit = 4,
+    // Magic constant used by the histogram macros.
+    // Always update it to the max value.
+    kMaxValue = kBandwidthLimit,
+  };
+
+#if defined(OS_CHROMEOS)
+  // Contains information about the current user.
+  struct UserInfo {
+    UserInfo(const UserInfo&);
+    UserInfo(user_manager::UserType user_type, bool is_new_user);
+
+    user_manager::UserType user_type = user_manager::USER_TYPE_REGULAR;
+    bool is_new_user = false;
+  };
+#endif  // defined(OS_CHROMEOS)
 
   // Contains information about extension installation: failure reason, if any
   // reported, specific details in case of CRX install error, current
@@ -216,6 +292,7 @@ class InstallStageTracker : public KeyedService {
     InstallationData(const InstallationData&);
 
     base::Optional<Stage> install_stage;
+    base::Optional<InstallCreationStage> install_creation_stage;
     base::Optional<ExtensionDownloaderDelegate::Stage> downloading_stage;
     base::Optional<ExtensionDownloaderDelegate::CacheStatus>
         downloading_cache_status;
@@ -231,16 +308,44 @@ class InstallStageTracker : public KeyedService {
     // Unpack failure reason in case of
     // CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE.
     base::Optional<SandboxedUnpackerFailureReason> unpacker_failure_reason;
-    // Type of extension, assigned when CRX installation error detail is
-    // DISALLOWED_BY_POLICY.
+    // Type of extension, assigned during CRX installation process.
     base::Optional<Manifest::Type> extension_type;
-    // Type of update check status received from server when manifest was
-    // fetched.
-    base::Optional<UpdateCheckStatus> update_check_status;
     // Error detail when the fetched manifest was invalid. This includes errors
     // occurred while parsing the manifest and errors occurred due to the
     // internal details of the parsed manifest.
     base::Optional<ManifestInvalidError> manifest_invalid_error;
+    // Info field in the update manifest returned by the server when no update
+    // is available.
+    base::Optional<NoUpdatesInfo> no_updates_info;
+    // Type of app status error received from update server when manifest was
+    // fetched.
+    base::Optional<AppStatusError> app_status_error;
+    // Time at which the download is started.
+    base::Optional<base::TimeTicks> download_manifest_started_time;
+    // Time at which the update manifest is downloaded and successfully parsed
+    // from the server.
+    base::Optional<base::TimeTicks> download_manifest_finish_time;
+    // See InstallationStage enum.
+    base::Optional<InstallationStage> installation_stage;
+    // Time at which the download of CRX is started.
+    base::Optional<base::TimeTicks> download_CRX_started_time;
+    // Time at which CRX is downloaded.
+    base::Optional<base::TimeTicks> download_CRX_finish_time;
+    // Time at which signature verification of CRX is started.
+    base::Optional<base::TimeTicks> verification_started_time;
+    // Time at which copying of extension archive into the working directory is
+    // started.
+    base::Optional<base::TimeTicks> copying_started_time;
+    // Time at which unpacking of the extension archive is started.
+    base::Optional<base::TimeTicks> unpacking_started_time;
+    // Time at which the extension archive has been successfully unpacked and
+    // the expectation checks before extension installation are started.
+    base::Optional<base::TimeTicks> checking_expectations_started_time;
+    // Time at which the extension has passed the expectation checks and the
+    // installation is started.
+    base::Optional<base::TimeTicks> finalizing_started_time;
+    // Time at which the installation process is complete.
+    base::Optional<base::TimeTicks> installation_complete_time;
   };
 
   class Observer : public base::CheckedObserver {
@@ -262,6 +367,20 @@ class InstallStageTracker : public KeyedService {
     virtual void OnExtensionDownloadCacheStatusRetrieved(
         const ExtensionId& id,
         ExtensionDownloaderDelegate::CacheStatus cache_status) {}
+
+    // Called when installation stage of extension is updated.
+    virtual void OnExtensionInstallationStageChanged(const ExtensionId& id,
+                                                     Stage stage) {}
+
+    // Called when downloading stage of extension is updated.
+    virtual void OnExtensionDownloadingStageChanged(
+        const ExtensionId& id,
+        ExtensionDownloaderDelegate::Stage stage) {}
+
+    // Called when InstallCreationStage of extension is updated.
+    virtual void OnExtensionInstallCreationStageChanged(
+        const ExtensionId& id,
+        InstallCreationStage stage) {}
   };
 
   explicit InstallStageTracker(const content::BrowserContext* context);
@@ -274,14 +393,27 @@ class InstallStageTracker : public KeyedService {
   // Convenience function to get the InstallStageTracker for a BrowserContext.
   static InstallStageTracker* Get(content::BrowserContext* context);
 
+#if defined(OS_CHROMEOS)
+  // Returns user type of the user associated with the |profile| and whether the
+  // user is new or not. This method should be used only if there is a user
+  // associated with the profile.
+  static UserInfo GetUserInfo(Profile* profile);
+#endif  // defined(OS_CHROMEOS)
+
+  void ReportInfoOnNoUpdatesFailure(const ExtensionId& id,
+                                    const std::string& info);
+
   // Reports detailed error type when extension fails to install with failure
   // reason MANIFEST_INVALID. See InstallationData::manifest_invalid_error
   // for more details.
-  void ReportManifestInvalidFailure(const ExtensionId& id,
-                                    ManifestInvalidError error);
+  void ReportManifestInvalidFailure(
+      const ExtensionId& id,
+      const ExtensionDownloaderDelegate::FailureData& failure_data);
 
   // Remembers failure reason and in-progress stages in memory.
   void ReportInstallationStage(const ExtensionId& id, Stage stage);
+  void ReportInstallCreationStage(const ExtensionId& id,
+                                  InstallCreationStage stage);
   void ReportFetchError(
       const ExtensionId& id,
       FailureReason reason,
@@ -289,16 +421,16 @@ class InstallStageTracker : public KeyedService {
   void ReportFailure(const ExtensionId& id, FailureReason reason);
   void ReportDownloadingStage(const ExtensionId& id,
                               ExtensionDownloaderDelegate::Stage stage);
+  void ReportCRXInstallationStage(const ExtensionId& id,
+                                  InstallationStage stage);
   void ReportDownloadingCacheStatus(
       const ExtensionId& id,
       ExtensionDownloaderDelegate::CacheStatus cache_status);
-  void ReportManifestUpdateCheckStatus(const ExtensionId& id,
-                                       const std::string& status);
-  // Assigns the extension type. See InstallationData::extension_type for
-  // more details.
-  void ReportExtensionTypeForPolicyDisallowedExtension(
-      const ExtensionId& id,
-      Manifest::Type extension_type);
+  // Assigns the extension type. Reported from SandboxedInstalled when (and in
+  // case when) the extension type is discovered.
+  // See InstallationData::extension_type for more details.
+  void ReportExtensionType(const ExtensionId& id,
+                           Manifest::Type extension_type);
   void ReportCrxInstallError(const ExtensionId& id,
                              FailureReason reason,
                              CrxInstallErrorDetail crx_install_error);
@@ -318,6 +450,9 @@ class InstallStageTracker : public KeyedService {
   void RemoveObserver(Observer* observer);
 
  private:
+  // Helper function that maps the current app status to AppStatusError enum.
+  AppStatusError GetManifestInvalidAppStatusError(const std::string& status);
+
   // Helper function to report installation failures to the observers.
   void NotifyObserversOfFailure(const ExtensionId& id,
                                 FailureReason reason,

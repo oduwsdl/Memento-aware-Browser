@@ -31,27 +31,24 @@ var INJECTED_WEBVIEW_SCRIPT = String.raw`
 Polymer({
   is: 'enterprise-enrollment',
 
-  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior, LoginScreenBehavior],
+  behaviors: [
+    OobeI18nBehavior,
+    OobeDialogHostBehavior,
+    LoginScreenBehavior,
+    MultiStepBehavior,
+  ],
 
   EXTERNAL_API: [
     'doReload',
     'setAdJoinConfiguration',
     'setAdJoinParams',
-    'setEnterpriseDomainAndDeviceType',
+    'setEnterpriseDomainInfo',
     'showAttributePromptStep',
     'showError',
     'showStep',
   ],
 
   properties: {
-
-    /**
-     * The current step. This is the last value passed to showStep().
-     */
-    currentStep_: {
-      type: String,
-      value: '',
-    },
 
     /**
      * Indicates if authenticator have shown internal dialog.
@@ -62,9 +59,10 @@ Polymer({
     },
 
     /**
-     * Domain the device was enrolled to.
+     * Manager of the enrolled domain. Either a domain (foo.com) or an email
+     * address (admin@foo.com).
      */
-    enrolledDomain_: {
+    domainManager_: {
       type: String,
       value: '',
     },
@@ -144,6 +142,12 @@ Polymer({
     },
   },
 
+  defaultUIStep() {
+    return ENROLLMENT_STEP.SIGNIN;
+  },
+
+  UI_STEPS: ENROLLMENT_STEP,
+
   /**
    * Authenticator object that wraps GAIA webview.
    */
@@ -197,7 +201,7 @@ Polymer({
 
     this.authenticator_.addEventListener(
         'ready', (function() {
-                   if (this.currentStep_ != ENROLLMENT_STEP.SIGNIN)
+                   if (this.uiStep != ENROLLMENT_STEP.SIGNIN)
                      return;
                    this.isCancelDisabled = false;
                    chrome.send('frameLoadingCompleted');
@@ -243,14 +247,12 @@ Polymer({
                             if (Oobe.getInstance().currentScreen == this)
                               Oobe.getInstance().updateScreenSize(this);
                             this.lastBackMessageValue_ = false;
-                            this.updateControlsState();
                           }).bind(this));
 
     this.authenticator_.addEventListener(
         'backButton', (function(e) {
                         this.lastBackMessageValue_ = !!e.detail;
                         this.$.authView.focus();
-                        this.updateControlsState();
                       }).bind(this));
 
     this.authenticator_.addEventListener(
@@ -319,7 +321,7 @@ Polymer({
 
     this.authenticatorDialogDisplayed_ = false;
     cr.ui.login.invokePolymerMethod(this.$.adJoinUI, 'onBeforeShow');
-    if (!this.currentStep_) {
+    if (!this.uiStep) {
       this.showStep(data.attestationBased ?
           ENROLLMENT_STEP.WORKING : ENROLLMENT_STEP.SIGNIN);
     }
@@ -355,11 +357,11 @@ Polymer({
   /**
    * Sets the type of the device and the enterprise domain to be shown.
    *
-   * @param {string} enterprise_domain
+   * @param {string} manager
    * @param {string} device_type
    */
-  setEnterpriseDomainAndDeviceType(enterprise_domain, device_type) {
-    this.enrolledDomain_ = enterprise_domain;
+  setEnterpriseDomainInfo(manager, device_type) {
+    this.domainManager_ = manager;
     this.deviceName_ = device_type;
   },
 
@@ -380,35 +382,21 @@ Polymer({
    * "attribute-prompt", "error", "success".
    */
   showStep(step) {
-    this.isCancelDisabled =
-        (step == ENROLLMENT_STEP.SIGNIN && !this.isManualEnrollment_) ||
-        step == ENROLLMENT_STEP.AD_JOIN || step == ENROLLMENT_STEP.WORKING;
-
-    this.currentStep_ = step;
-
-    if (this.isErrorStep_(step)) {
-      this.$.errorCard.show();
-    } else if (step == ENROLLMENT_STEP.SIGNIN) {
-      this.$.authView.focus();
-    } else if (step == ENROLLMENT_STEP.SUCCESS) {
-      this.$.successCard.show();
-    } else if (step == ENROLLMENT_STEP.ATTRIBUTE_PROMPT) {
-      this.$.attributePromptCard.show();
-    } else if (step == ENROLLMENT_STEP.AD_JOIN) {
+    this.setUIStep(step);
+    if (step === ENROLLMENT_STEP.AD_JOIN) {
       this.$.adJoinUI.disabled = false;
       this.$.adJoinUI.loading = false;
-      this.$.adJoinUI.focus();
     }
-
+    this.isCancelDisabled =
+        (step === ENROLLMENT_STEP.SIGNIN && !this.isManualEnrollment_) ||
+        step === ENROLLMENT_STEP.AD_JOIN || step === ENROLLMENT_STEP.WORKING;
     this.lastBackMessageValue_ = false;
-    this.updateControlsState();
   },
 
   doReload() {
     this.lastBackMessageValue_ = false;
     this.authenticatorDialogDisplayed_ = false;
     this.authenticator_.reload();
-    this.updateControlsState();
   },
 
   /**
@@ -458,7 +446,7 @@ Polymer({
    * shows the successful enrollment step.
    */
   onBackButtonClicked_() {
-    if (this.currentStep_ == ENROLLMENT_STEP.SIGNIN) {
+    if (this.uiStep === ENROLLMENT_STEP.SIGNIN) {
       if (this.lastBackMessageValue_) {
         this.lastBackMessageValue_ = false;
         this.$.authView.back();
@@ -480,25 +468,6 @@ Polymer({
   },
 
   /**
-   * Returns true if we are at the begging of enrollment flow (i.e. the email
-   * page).
-   *
-   * @type {boolean}
-   */
-  isAtTheBeginning() {
-    return !this.lastBackMessageValue_ &&
-        this.currentStep_ == ENROLLMENT_STEP.SIGNIN;
-  },
-
-  /**
-   * Updates visibility of navigation buttons.
-   */
-  updateControlsState() {
-    this.$.navigation.refreshVisible =
-        this.isAtTheBeginning() && this.isManualEnrollment_ === false;
-  },
-
-  /**
    * Notifies chrome that enrollment have finished.
    */
   onEnrollmentFinished_() {
@@ -515,13 +484,6 @@ Polymer({
 
   isEmpty_(str) {
     return !str;
-  },
-
-  /**
-   * Simple equality comparison function.
-   */
-  eq_(currentStep, expectedStep) {
-    return currentStep == expectedStep;
   },
 
   /**
@@ -559,22 +521,13 @@ Polymer({
     this.errorText_ = message;
     this.canRetryAfterError_ = retry;
 
-    if (this.currentStep_ == ENROLLMENT_STEP.ATTRIBUTE_PROMPT) {
+    if (this.uiStep === ENROLLMENT_STEP.ATTRIBUTE_PROMPT) {
       this.showStep(ENROLLMENT_STEP.ATTRIBUTE_PROMPT_ERROR);
-    } else if (this.currentStep_ == ENROLLMENT_STEP.AD_JOIN) {
+    } else if (this.uiStep === ENROLLMENT_STEP.AD_JOIN) {
       this.showStep(ENROLLMENT_STEP.ACTIVE_DIRECTORY_JOIN_ERROR);
     } else {
       this.showStep(ENROLLMENT_STEP.ERROR);
     }
-  },
-
-  /**
-   * Simple equality comparison function.
-   */
-  isErrorStep_(currentStep) {
-    return currentStep == ENROLLMENT_STEP.ERROR ||
-           currentStep == ENROLLMENT_STEP.ATTRIBUTE_PROMPT_ERROR ||
-           currentStep == ENROLLMENT_STEP.ACTIVE_DIRECTORY_JOIN_ERROR;
   },
 
   /**

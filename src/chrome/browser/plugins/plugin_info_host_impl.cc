@@ -29,7 +29,6 @@
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_content_client.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/plugin.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "components/component_updater/component_updater_service.h"
@@ -234,6 +233,15 @@ void PluginInfoHostImpl::Context::DecidePluginStatus(
     return;
   }
 
+// This block is separate from the outdated check, because the deprecated UI
+// must take precedence over any content setting or HTML5 by Default.
+#if BUILDFLAG(ENABLE_PLUGINS)
+  if (security_status == PluginMetadata::SECURITY_STATUS_DEPRECATED) {
+    *status = chrome::mojom::PluginStatus::kDeprecated;
+    return;
+  }
+#endif
+
   ContentSetting plugin_setting = CONTENT_SETTING_DEFAULT;
   bool uses_default_content_setting = true;
   bool is_managed = false;
@@ -382,7 +390,7 @@ void PluginInfoHostImpl::ComponentPluginLookupDone(
     std::unique_ptr<component_updater::ComponentInfo> cus_plugin_info) {
   if (cus_plugin_info) {
     output->status = chrome::mojom::PluginStatus::kComponentUpdateRequired;
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     if (cus_plugin_info->version != base::Version("0")) {
       output->status = chrome::mojom::PluginStatus::kRestartRequired;
     }

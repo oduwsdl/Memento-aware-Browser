@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/android/jni_android.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 
 namespace autofill_assistant {
@@ -22,6 +23,8 @@ class ViewHandlerAndroid {
   ViewHandlerAndroid(const ViewHandlerAndroid&) = delete;
   ViewHandlerAndroid& operator=(const ViewHandlerAndroid&) = delete;
 
+  base::WeakPtr<ViewHandlerAndroid> GetWeakPtr();
+
   // Returns the view associated with |view_identifier| or base::nullopt if
   // there is no such view.
   base::Optional<base::android::ScopedJavaGlobalRef<jobject>> GetView(
@@ -33,6 +36,7 @@ class ViewHandlerAndroid {
 
  private:
   std::map<std::string, base::android::ScopedJavaGlobalRef<jobject>> views_;
+  base::WeakPtrFactory<ViewHandlerAndroid> weak_ptr_factory_{this};
 };
 
 }  //  namespace autofill_assistant

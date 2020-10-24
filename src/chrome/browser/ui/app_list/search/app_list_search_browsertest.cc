@@ -9,9 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/chromeos/login/login_manager_test.h"
-#include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
@@ -19,8 +17,14 @@
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/search_controller.h"
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/web_applications/system_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/pref_names.h"
+#include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test.h"
 
 namespace app_list {
@@ -30,13 +34,12 @@ namespace app_list {
 // results that would be displayed via the AppListModelUpdater. This class is
 // also intended as in-code documentation for how to create future app list
 // search integration tests.
-class AppListSearchBrowserTest : public chromeos::LoginManagerTest {
+class AppListSearchBrowserTest : public InProcessBrowserTest {
  public:
   using ResultType = ash::AppListSearchResultType;
+  using DisplayType = ash::SearchResultDisplayType;
 
-  AppListSearchBrowserTest() : LoginManagerTest() {
-    login_mixin_.AppendRegularUsers(1);
-  }
+  AppListSearchBrowserTest() {}
   ~AppListSearchBrowserTest() override = default;
 
   AppListSearchBrowserTest(const AppListSearchBrowserTest&) = delete;
@@ -110,57 +113,23 @@ class AppListSearchBrowserTest : public chromeos::LoginManagerTest {
   // Session helpers
   //----------------
 
-  Profile* GetProfile() {
-    auto* profile = ProfileManager::GetActiveUserProfile();
-    CHECK(profile);
-    return profile;
-  }
-
-  base::FilePath GetProfileDir() { return profile_dir_; }
-
-  void DoLogin() { LoginUser(login_mixin_.users()[0].account_id); }
-
-  //-----
-  // Misc
-  //-----
-
-  // LoginManagerTest:
-  bool SetUpUserDataDirectory() override {
-    base::FilePath user_data_dir;
-    base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
-    const std::string& email =
-        login_mixin_.users()[0].account_id.GetUserEmail();
-    const std::string user_id_hash =
-        chromeos::ProfileHelper::GetUserIdHashByUserIdForTesting(email);
-    profile_dir_ = user_data_dir.Append(
-        chromeos::ProfileHelper::GetUserProfileDir(user_id_hash));
-    base::CreateDirectory(profile_dir_);
-
-    return true;
-  }
-
- protected:
-  base::FilePath profile_dir_;
-
-  chromeos::LoginManagerMixin login_mixin_{&mixin_host_};
+  Profile* GetProfile() { return browser()->profile(); }
 };
 
-// Test fixture for OS settings search. This subclass exists because changing a
-// feature flag has to be done in the constructor. Otherwise, it could use
+// Test fixture for Release notes search. This subclass exists because changing
+// a feature flag has to be done in the constructor. Otherwise, it could use
 // AppListSearchBrowserTest directly.
-class OsSettingsSearchBrowserTest : public AppListSearchBrowserTest {
+class ReleaseNotesSearchBrowserTest : public AppListSearchBrowserTest {
  public:
-  OsSettingsSearchBrowserTest() : AppListSearchBrowserTest() {
+  ReleaseNotesSearchBrowserTest() : AppListSearchBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {app_list_features::kLauncherSettingsSearch,
-         chromeos::features::kNewOsSettingsSearch},
-        {});
+        {chromeos::features::kHelpAppReleaseNotes}, {});
   }
-  ~OsSettingsSearchBrowserTest() override = default;
+  ~ReleaseNotesSearchBrowserTest() override = default;
 
-  OsSettingsSearchBrowserTest(const OsSettingsSearchBrowserTest&) = delete;
-  OsSettingsSearchBrowserTest& operator=(const OsSettingsSearchBrowserTest&) =
-      delete;
+  ReleaseNotesSearchBrowserTest(const ReleaseNotesSearchBrowserTest&) = delete;
+  ReleaseNotesSearchBrowserTest& operator=(
+      const ReleaseNotesSearchBrowserTest&) = delete;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -168,7 +137,6 @@ class OsSettingsSearchBrowserTest : public AppListSearchBrowserTest {
 
 // Simply tests that neither zero-state nor query-based search cause a crash.
 IN_PROC_BROWSER_TEST_F(AppListSearchBrowserTest, SearchDoesntCrash) {
-  DoLogin();
   // This won't catch everything, because not all providers run on all queries,
   // and so we can't wait for all providers to finish. Instead, we wait on one
   // app and one non-app provider. Note file search (kLauncher) is generally the
@@ -179,15 +147,58 @@ IN_PROC_BROWSER_TEST_F(AppListSearchBrowserTest, SearchDoesntCrash) {
                             {ResultType::kInstalledApp, ResultType::kLauncher});
 }
 
-// Test that searching for "wifi" correctly returns a settings result for wifi.
-IN_PROC_BROWSER_TEST_F(OsSettingsSearchBrowserTest, AppListSearchForSettings) {
-  DoLogin();
-  SearchAndWaitForProviders("network", {ResultType::kOsSettings});
+// Test that Help App shows up as Release notes if pref shows we have some times
+// left to show it.
+// TODO(b/169711884): Re-enable when suggestion chips are re-enabled.
+IN_PROC_BROWSER_TEST_F(ReleaseNotesSearchBrowserTest,
+                       DISABLED_AppListSearchHasSuggestionChip) {
+  web_app::WebAppProvider::Get(GetProfile())
+      ->system_web_app_manager()
+      .InstallSystemAppsForTesting();
+  GetProfile()->GetPrefs()->SetInteger(
+      prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 3);
 
-  auto* result = FindResult("os-settings://networks?type=WiFi");
+  SearchAndWaitForProviders("",
+                            {ResultType::kInstalledApp, ResultType::kLauncher});
+
+  // Note: SearchAndWaitForProviders decreases the count multiple times.
+  // TODO(b/169711884): Decrease times left only when the chip becomes visible.
+  const int times_left_to_show = GetProfile()->GetPrefs()->GetInteger(
+      prefs::kReleaseNotesSuggestionChipTimesLeftToShow);
+  EXPECT_EQ(times_left_to_show, 1);
+  auto* result = FindResult(chromeos::default_web_apps::kHelpAppId);
   ASSERT_TRUE(result);
-  EXPECT_EQ(base::UTF16ToASCII(result->accessible_name()),
-            "Wi-Fi networks, Network, Settings");
+  // Has Release notes title.
+  EXPECT_EQ(base::UTF16ToASCII(result->title()),
+            "See what's new on your Chrome device");
+  // Displayed in first position.
+  EXPECT_EQ(result->position_priority(), 1.0f);
+  // Has override url defined for updates tab.
+  EXPECT_EQ(result->query_url(), GURL("chrome://help-app/updates"));
+  EXPECT_EQ(result->display_type(), DisplayType::kChip);
+}
+
+// Test that Help App shows up normally if pref shows we should no longer show
+// as suggestion chip.
+IN_PROC_BROWSER_TEST_F(ReleaseNotesSearchBrowserTest, AppListSearchHasApp) {
+  web_app::WebAppProvider::Get(GetProfile())
+      ->system_web_app_manager()
+      .InstallSystemAppsForTesting();
+  GetProfile()->GetPrefs()->SetInteger(
+      prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 0);
+
+  SearchAndWaitForProviders("",
+                            {ResultType::kInstalledApp, ResultType::kLauncher});
+
+  auto* result = FindResult(chromeos::default_web_apps::kHelpAppId);
+  ASSERT_TRUE(result);
+  // Has regular app name as title.
+  EXPECT_EQ(base::UTF16ToASCII(result->title()), "Explore");
+  // No priority for position.
+  EXPECT_EQ(result->position_priority(), 0);
+  // No override url (will open app at default page).
+  EXPECT_FALSE(result->query_url().has_value());
+  EXPECT_EQ(result->display_type(), DisplayType::kTile);
 }
 
 }  // namespace app_list

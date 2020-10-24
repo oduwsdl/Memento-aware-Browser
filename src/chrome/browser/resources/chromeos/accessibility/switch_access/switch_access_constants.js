@@ -20,13 +20,6 @@ const SAConstants = {
   BACK_ID: 'back',
 
   /**
-   * The maximum length of a row in the Virtual Keyboard.
-   * @type {number}
-   * @const
-   */
-  KEYBOARD_MAX_ROW_LENGTH: 14,
-
-  /**
    * The ID of the menu panel.
    * This must be kept in sync with the div ID in menu_panel.html.
    * @type {string}
@@ -52,7 +45,7 @@ const SAConstants = {
     NO_ACTION_TAKEN: -1,
     REMAIN_OPEN: 0,
     CLOSE_MENU: 1,
-    RELOAD_MAIN_MENU: 2,
+    RELOAD_MENU: 2,
     OPEN_TEXT_NAVIGATION_MENU: 3,
   },
 
@@ -76,16 +69,19 @@ const SAConstants = {
     MALFORMED_DESKTOP: 8,
     MISSING_LOCATION: 9,
     MISSING_KEYBOARD: 10,
+    ROW_TOO_SHORT: 11,
+    MISSING_BASE_NODE: 12,
+    NEXT_INVALID: 13,
+    PREVIOUS_INVALID: 14,
+    INVALID_SELECTION_BOUNDS: 15,
   },
 
   /**
-   * IDs of menus that can appear in the menu panel.
-   * This must be kept in sync with the div ID of each menu
-   * in menu_panel.html.
-   * @enum {string}
+   * The different types of menus and sub-menus that can be shown.
+   * @enum {number}
    * @const
    */
-  MenuId: {MAIN: 'main_menu', TEXT_NAVIGATION: 'text_navigation_menu'},
+  MenuType: {MAIN_MENU: 0, TEXT_NAVIGATION: 1},
 
   /**
    * Preferences that are configurable in Switch Access.
@@ -134,8 +130,9 @@ const SAConstants = {
     ID: {
       // The ID for the ring showing the user's current focus.
       PRIMARY: 'primary',
-      // The ID for the ring showing the next focus.
-      NEXT: 'next',
+      // The ID for the ring showing a preview of the next focus, if the user
+      // selects the current element.
+      PREVIEW: 'preview',
       // The ID for the area where text is being input.
       TEXT: 'text'
     },

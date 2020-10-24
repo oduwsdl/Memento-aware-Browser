@@ -83,8 +83,16 @@ void WKBasedNavigationManagerImpl::OnNavigationItemCommitted() {
   DCHECK(item);
   delegate_->OnNavigationItemCommitted(item);
 
-  if (!wk_navigation_util::IsRestoreSessionUrl(item->GetURL()))
+  if (!wk_navigation_util::IsRestoreSessionUrl(item->GetURL())) {
     restored_visible_item_.reset();
+    if (is_restore_session_in_progress_) {
+      // There are crashes because restored_visible_item_ is nil and
+      // is_restore_session_in_progress_ is true. This is a speculative fix,
+      // based on the idea that a navigation item could be committed before
+      // OnNavigationStarted is called. See crbug.com/1127434.
+      FinalizeSessionRestore();
+    }
+  }
 }
 
 void WKBasedNavigationManagerImpl::OnNavigationStarted(const GURL& url) {
@@ -109,6 +117,20 @@ void WKBasedNavigationManagerImpl::OnNavigationStarted(const GURL& url) {
                           restoration_timer_->Elapsed());
       restoration_timer_.reset();
     }
+
+    // Get the last committed item directly because the restoration is in
+    // progress so the item returned by the last committed item is the
+    // last_committed_web_view_item_ as the origins mistmatch.
+    int index = GetLastCommittedItemIndexInCurrentOrRestoredSession();
+    DCHECK(index != -1 || 0 == GetItemCount());
+    if (index != -1 && restored_visible_item_ &&
+        restored_visible_item_->GetUserAgentType() != UserAgentType::NONE) {
+      NavigationItemImpl* last_committed_item =
+          GetNavigationItemImplAtIndex(static_cast<size_t>(index));
+      last_committed_item->SetUserAgentType(
+          restored_visible_item_->GetUserAgentType());
+    }
+
     FinalizeSessionRestore();
   }
 }
@@ -188,6 +210,18 @@ void WKBasedNavigationManagerImpl::AddPendingItem(
       web::wk_navigation_util::ExtractTargetURL(current_item_url,
                                                 &target_url)) {
     current_item_url = target_url;
+  }
+
+  // Restore the UserAgent when navigating forward to a Session restoration URL.
+  if (navigation_type & ui::PAGE_TRANSITION_RELOAD &&
+      !(navigation_type & ui::PAGE_TRANSITION_FORWARD_BACK) &&
+      web::wk_navigation_util::IsRestoreSessionUrl(current_item_url) &&
+      GetNavigationItemFromWKItem(current_wk_item) &&
+      GetNavigationItemFromWKItem(current_wk_item)->GetUserAgentType() !=
+          UserAgentType::NONE &&
+      wk_navigation_util::URLNeedsUserAgentType(pending_item_->GetURL())) {
+    pending_item_->SetUserAgentType(
+        GetNavigationItemFromWKItem(current_wk_item)->GetUserAgentType());
   }
 
   BOOL isCurrentURLSameAsPending = NO;
@@ -390,6 +424,13 @@ bool WKBasedNavigationManagerImpl::ShouldBlockUrlDuringRestore(
   // Abort restore.
   DiscardNonCommittedItems();
   last_committed_item_index_ = web_view_cache_.GetCurrentItemIndex();
+  if (restored_visible_item_ &&
+      restored_visible_item_->GetUserAgentType() != UserAgentType::NONE) {
+    NavigationItem* last_committed_item =
+        GetLastCommittedItemInCurrentOrRestoredSession();
+    last_committed_item->SetUserAgentType(
+        restored_visible_item_->GetUserAgentType());
+  }
   restored_visible_item_.reset();
   FinalizeSessionRestore();
   return true;
@@ -437,7 +478,7 @@ bool WKBasedNavigationManagerImpl::CanTrustLastCommittedItem(
   if (web_view_url.SchemeIs(url::kAboutScheme) ||
       last_committed_url.SchemeIs(url::kAboutScheme) ||
       web_view_url.SchemeIs(url::kFileScheme) ||
-      last_committed_url.SchemeIs(url::kAboutScheme) ||
+      last_committed_url.SchemeIs(url::kFileScheme) ||
       web::GetWebClient()->IsAppSpecificURL(web_view_url) ||
       web::GetWebClient()->IsAppSpecificURL(last_committed_url)) {
     return true;
@@ -753,6 +794,13 @@ void WKBasedNavigationManagerImpl::RestoreItemsState(
         web_view_cache_.GetNavigationItemImplAtIndex(
             cache_index, true /* create_if_missing */);
     NavigationItem* restore_item = items_restored[index].get();
+
+    // |cached_item| appears to be nil sometimes, perhaps due to a mismatch in
+    // WKWebView's backForwardList.  Returning early here may break some restore
+    // state features, but should not put the user in a broken state.
+    if (!cached_item || !restore_item) {
+      continue;
+    }
 
     bool is_same_url = cached_item->GetURL() == restore_item->GetURL();
     if (wk_navigation_util::IsRestoreSessionUrl(cached_item->GetURL())) {

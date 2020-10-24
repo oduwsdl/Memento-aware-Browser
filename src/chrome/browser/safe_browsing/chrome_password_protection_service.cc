@@ -15,12 +15,14 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
@@ -32,11 +34,11 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/google/core/common/google_util.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/form_parsing/form_parser.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
@@ -49,6 +51,7 @@
 #include "components/safe_browsing/content/password_protection/password_protection_request.h"
 #include "components/safe_browsing/content/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safebrowsing_constants.h"
 #include "components/safe_browsing/core/common/utils.h"
 #include "components/safe_browsing/core/db/database_manager.h"
 #include "components/safe_browsing/core/features.h"
@@ -64,6 +67,8 @@
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
 #include "components/sync_user_events/user_event_service.h"
+#include "components/unified_consent/pref_names.h"
+#include "components/variations/service/variations_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -85,6 +90,8 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/safe_browsing/android/password_reuse_controller_android.h"
+#else
+#include "chrome/browser/ui/browser_list.h"
 #endif
 
 using base::RecordAction;
@@ -115,7 +122,7 @@ const int kPasswordEventAttributionUserGestureLimit = 2;
 // allowlist for users opted into extended reporting, from non-incognito window.
 const float kProbabilityForSendingReportsFromSafeURLs = 0.01;
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 // If user specifically mark a site as legitimate, we will keep this decision
 // for 2 days.
 const int kOverrideVerdictCacheDurationSec = 2 * 24 * 60 * 60;
@@ -222,7 +229,7 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
     SafeBrowsingService* sb_service,
     Profile* profile)
     : PasswordProtectionService(sb_service->database_manager(),
-                                sb_service->GetURLLoaderFactory(),
+                                sb_service->GetURLLoaderFactory(profile),
                                 HistoryServiceFactory::GetForProfile(
                                     profile,
                                     ServiceAccessType::EXPLICIT_ACCESS)),
@@ -234,7 +241,7 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
       cache_manager_(VerdictCacheManagerFactory::GetForProfile(profile)) {
   pref_change_registrar_->Init(profile_->GetPrefs());
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   scoped_refptr<password_manager::PasswordStore> password_store =
       GetProfilePasswordStore();
   // Password store can be null in tests.
@@ -315,7 +322,7 @@ ChromePasswordProtectionService::GetPasswordProtectionService(
   return nullptr;
 }
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 // static
 bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
     content::WebContents* web_contents,
@@ -349,6 +356,26 @@ bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
              : false;
 }
 
+safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment
+ChromePasswordProtectionService::GetUrlDisplayExperiment() const {
+  safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment experiment;
+  experiment.set_simplified_url_display_enabled(
+      base::FeatureList::IsEnabled(safe_browsing::kSimplifiedUrlDisplay));
+  // Delayed warnings parameters:
+  experiment.set_delayed_warnings_enabled(
+      base::FeatureList::IsEnabled(safe_browsing::kDelayedWarnings));
+  experiment.set_delayed_warnings_mouse_clicks_enabled(
+      safe_browsing::kDelayedWarningsEnableMouseClicks.Get());
+  // Actual URL display experiments:
+  experiment.set_reveal_on_hover(base::FeatureList::IsEnabled(
+      omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover));
+  experiment.set_hide_on_interaction(base::FeatureList::IsEnabled(
+      omnibox::kHideSteadyStateUrlPathQueryAndRefOnInteraction));
+  experiment.set_elide_to_registrable_domain(
+      base::FeatureList::IsEnabled(omnibox::kMaybeElideToRegistrableDomain));
+  return experiment;
+}
+
 void ChromePasswordProtectionService::ShowModalWarning(
     content::WebContents* web_contents,
     RequestOutcome outcome,
@@ -369,7 +396,7 @@ void ChromePasswordProtectionService::ShowModalWarning(
     return;
 
   // Exit fullscreen if this |web_contents| is showing in fullscreen mode.
-  if (web_contents->IsFullscreenForCurrentTab())
+  if (web_contents->IsFullscreen())
     web_contents->ExitFullscreen(true);
 
 #if defined(OS_ANDROID)
@@ -464,7 +491,7 @@ void ChromePasswordProtectionService::ShowInterstitial(
              ReusedPasswordAccountType::NON_GAIA_ENTERPRISE ||
          password_type.account_type() == ReusedPasswordAccountType::GSUITE);
   // Exit fullscreen if this |web_contents| is showing in fullscreen mode.
-  if (web_contents->IsFullscreenForCurrentTab())
+  if (web_contents->IsFullscreen())
     web_contents->ExitFullscreen(/*will_cause_resize=*/true);
 
   content::OpenURLParams params(
@@ -786,6 +813,7 @@ void ChromePasswordProtectionService::MaybeLogPasswordReuseLookupEvent(
     case RequestOutcome::DISABLED_DUE_TO_USER_POPULATION:
     case RequestOutcome::SAFE_BROWSING_DISABLED:
     case RequestOutcome::USER_NOT_SIGNED_IN:
+    case RequestOutcome::EXCLUDED_COUNTRY:
       MaybeLogPasswordReuseLookupResult(web_contents,
                                         PasswordReuseLookup::REQUEST_FAILURE);
       break;
@@ -1107,8 +1135,8 @@ ChromePasswordProtectionService::GetPlaceholdersForSavedPasswordWarningText()
                        // 2. if "," + the current priority is a suffix of the
                        // matching domain The second case covers eTLD+1.
                        return (domain == *priority_domain_iter) ||
-                              domainStringPiece.ends_with(
-                                  "." + *priority_domain_iter);
+                              base::EndsWith(domainStringPiece,
+                                             "." + *priority_domain_iter);
                      }) != matching_domains.end()) {
       placeholders.push_back(base::UTF8ToUTF16(matching_domain));
     }
@@ -1139,9 +1167,7 @@ ChromePasswordProtectionService::GetWarningDetailTextForSavedPasswords(
       GetPlaceholdersForSavedPasswordWarningText();
   // If showing the saved passwords domain experiment is not on or if there is
   // are no saved domains, default to original saved passwords reuse warning.
-  if (!base::FeatureList::IsEnabled(
-          safe_browsing::kPasswordProtectionShowDomainsForSavedPasswords) ||
-      placeholders.size() == 0) {
+  if (placeholders.size() == 0) {
     return l10n_util::GetStringUTF16(
         IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED);
   }
@@ -1243,7 +1269,7 @@ void ChromePasswordProtectionService::ReportPasswordChanged() {
 }
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 bool ChromePasswordProtectionService::HasUnhandledEnterprisePasswordReuse(
     content::WebContents* web_contents) const {
   return web_contents_with_unhandled_enterprise_reuses_.find(web_contents) !=
@@ -1433,6 +1459,11 @@ bool ChromePasswordProtectionService::IsIncognito() {
   return profile_->IsOffTheRecord();
 }
 
+bool ChromePasswordProtectionService::IsUserMBBOptedIn() {
+  return GetPrefs()->GetBoolean(
+      unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled);
+}
+
 bool ChromePasswordProtectionService::IsInPasswordAlertMode(
     ReusedPasswordAccountType password_type) {
   return GetPasswordProtectionWarningTriggerPref(password_type) ==
@@ -1449,9 +1480,7 @@ bool ChromePasswordProtectionService::IsPingingEnabled(
   if (trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT) {
     if (password_type.account_type() ==
         ReusedPasswordAccountType::SAVED_PASSWORD) {
-      return extended_reporting_enabled ||
-             base::FeatureList::IsEnabled(
-                 safe_browsing::kPasswordProtectionForSavedPasswords);
+      return true;
     }
 
     // Only override policy if password protection is off for Gmail users.
@@ -1482,6 +1511,9 @@ RequestOutcome ChromePasswordProtectionService::GetPingNotSentReason(
     const GURL& url,
     ReusedPasswordAccountType password_type) {
   DCHECK(!CanSendPing(trigger_type, url, password_type));
+  if (IsInExcludedCountry()) {
+    return RequestOutcome::EXCLUDED_COUNTRY;
+  }
   if (!IsSafeBrowsingEnabled()) {
     return RequestOutcome::SAFE_BROWSING_DISABLED;
   }
@@ -1564,6 +1596,15 @@ AccountInfo ChromePasswordProtectionService::GetSignedInNonSyncAccount(
   return identity_manager
       ->FindExtendedAccountInfoForAccountWithRefreshToken(*account_iterator)
       .value_or(AccountInfo());
+}
+
+bool ChromePasswordProtectionService::IsInExcludedCountry() {
+  variations::VariationsService* variations_service =
+      g_browser_process->variations_service();
+  if (!variations_service)
+    return false;
+  return base::Contains(GetExcludedCountries(),
+                        variations_service->GetStoredPermanentCountry());
 }
 
 PasswordReuseEvent::SyncAccountType
@@ -1690,14 +1731,14 @@ void ChromePasswordProtectionService::PersistPhishedSavedPasswordCredential(
         matching_reused_credentials) {
   if (!profile_)
     return;
-  scoped_refptr<password_manager::PasswordStore> password_store =
-      GetProfilePasswordStore();
 
-  // Password store can be null in tests.
-  if (!password_store) {
-    return;
-  }
   for (const auto& credential : matching_reused_credentials) {
+    password_manager::PasswordStore* password_store =
+        GetStoreForReusedCredential(credential);
+    // Password store can be null in tests.
+    if (!password_store) {
+      continue;
+    }
     password_store->AddCompromisedCredentials(
         {credential.signon_realm, credential.username, base::Time::Now(),
          password_manager::CompromiseType::kPhished});
@@ -1709,14 +1750,14 @@ void ChromePasswordProtectionService::RemovePhishedSavedPasswordCredential(
         matching_reused_credentials) {
   if (!profile_)
     return;
-  scoped_refptr<password_manager::PasswordStore> password_store =
-      GetProfilePasswordStore();
 
-  // Password store can be null in tests.
-  if (!password_store) {
-    return;
-  }
   for (const auto& credential : matching_reused_credentials) {
+    password_manager::PasswordStore* password_store =
+        GetStoreForReusedCredential(credential);
+    // Password store can be null in tests.
+    if (!password_store) {
+      continue;
+    }
     password_store->RemoveCompromisedCredentials(
         credential.signon_realm, credential.username,
         password_manager::RemoveCompromisedCredentialsReason::
@@ -1730,6 +1771,15 @@ ChromePasswordProtectionService::GetProfilePasswordStore() const {
   // itself when it shouldn't access the PasswordStore.
   return PasswordStoreFactory::GetForProfile(profile_,
                                              ServiceAccessType::EXPLICIT_ACCESS)
+      .get();
+}
+
+password_manager::PasswordStore*
+ChromePasswordProtectionService::GetAccountPasswordStore() const {
+  // Always use EXPLICIT_ACCESS as the password manager checks IsIncognito
+  // itself when it shouldn't access the PasswordStore.
+  return AccountPasswordStoreFactory::GetForProfile(
+             profile_, ServiceAccessType::EXPLICIT_ACCESS)
       .get();
 }
 
@@ -1791,5 +1841,16 @@ gfx::Size ChromePasswordProtectionService::GetCurrentContentAreaSize() const {
       ->GetContentsSize();
 }
 #endif  // FULL_SAFE_BROWSING
+
+password_manager::PasswordStore*
+ChromePasswordProtectionService::GetStoreForReusedCredential(
+    const password_manager::MatchingReusedCredential& reused_credential) {
+  if (!profile_)
+    return nullptr;
+  return reused_credential.in_store ==
+                 autofill::PasswordForm::Store::kAccountStore
+             ? GetAccountPasswordStore()
+             : GetProfilePasswordStore();
+}
 
 }  // namespace safe_browsing

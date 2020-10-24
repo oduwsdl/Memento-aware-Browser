@@ -28,6 +28,7 @@ class ContentPasswordManagerDriver;
 }  // namespace password_manager
 
 class ManualFillingController;
+class AllPasswordsBottomSheetController;
 
 // Use either PasswordAccessoryController::GetOrCreate or
 // PasswordAccessoryController::GetIfExisting to obtain instances of this class.
@@ -99,11 +100,23 @@ class PasswordAccessoryControllerImpl
                             bool is_password,
                             const url::Origin& origin) const;
 
+  // Returns true if `field_type` and `origin` of a focused field allow to show
+  // the option toggle to recover from a "never save" state.
+  bool ShouldShowRecoveryToggle(autofill::mojom::FocusedFieldType field_type,
+                                const url::Origin& origin) const;
+
   // Lazy-initializes and returns the ManualFillingController for the current
   // |web_contents_|. The lazy initialization allows injecting mocks for tests.
   base::WeakPtr<ManualFillingController> GetManualFillingController();
 
+  // Instructs |AllPasswordsBottomSheetController| to show all passwords.
+  void ShowAllPasswords();
+
   url::Origin GetFocusedFrameOrigin() const;
+
+  // Called From |AllPasswordsBottomSheetController| when
+  // the Bottom Sheet view is destroyed.
+  void AllPasswordsSheetDismissed();
 
   // ------------------------------------------------------------------------
   // Members - Make sure to NEVER store state related to a single frame here!
@@ -121,6 +134,15 @@ class PasswordAccessoryControllerImpl
   // The password manager client is used to update the save passwords status
   // for the currently focused origin.
   password_manager::PasswordManagerClient* password_client_ = nullptr;
+
+  // Controller for the all passwords bottom sheet. Created on demand during the
+  // first call to |ShowAllPasswords()|.
+  std::unique_ptr<AllPasswordsBottomSheetController>
+      all_passords_bottom_sheet_controller_;
+
+  // Records the last focused field type that `RefreshSuggestionsForField()` was
+  // called with.
+  autofill::mojom::FocusedFieldType last_focused_field_type_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

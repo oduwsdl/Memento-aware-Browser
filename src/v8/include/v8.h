@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -45,6 +46,7 @@ class BigInt;
 class BigIntObject;
 class Boolean;
 class BooleanObject;
+class CFunction;
 class Context;
 class Data;
 class Date;
@@ -127,13 +129,13 @@ template <ArgumentsType>
 class Arguments;
 template <typename T>
 class CustomArguments;
-class DeferredHandles;
 class FunctionCallbackArguments;
 class GlobalHandles;
 class Heap;
 class HeapObject;
 class ExternalString;
 class Isolate;
+class JSMemberBase;
 class LocalEmbedderHeapTracer;
 class MicrotaskQueue;
 class PropertyCallbackArguments;
@@ -148,6 +150,10 @@ class StreamingDecoder;
 }  // namespace wasm
 
 }  // namespace internal
+
+namespace metrics {
+class Recorder;
+}  // namespace metrics
 
 namespace debug {
 class ConsoleCallArguments;
@@ -299,6 +305,7 @@ class Local {
                                 const TracedReferenceBase<T>& that);
 
  private:
+  friend class internal::JSMemberBase;
   friend class Utils;
   template<class F> friend class Eternal;
   template<class F> friend class PersistentBase;
@@ -900,6 +907,23 @@ class TracedReferenceBase {
         const_cast<TracedReferenceBase<T>&>(*this));
   }
 
+ protected:
+  /**
+   * Update this reference in a thread-safe way
+   */
+  void SetSlotThreadSafe(T* new_val) {
+    reinterpret_cast<std::atomic<T*>*>(&val_)->store(new_val,
+                                                     std::memory_order_relaxed);
+  }
+
+  /**
+   * Get this reference in a thread-safe way
+   */
+  const T* GetSlotThreadSafe() const {
+    return reinterpret_cast<std::atomic<const T*> const*>(&val_)->load(
+        std::memory_order_relaxed);
+  }
+
  private:
   enum DestructionMode { kWithDestructor, kWithoutDestructor };
 
@@ -1152,6 +1176,14 @@ class TracedReference : public TracedReferenceBase<T> {
     return reinterpret_cast<TracedReference<S>&>(
         const_cast<TracedReference<T>&>(*this));
   }
+
+  /**
+   * Returns true if this TracedReference is empty, i.e., has not been
+   * assigned an object. This version of IsEmpty is thread-safe.
+   */
+  bool IsEmptyThreadSafe() const {
+    return this->GetSlotThreadSafe() == nullptr;
+  }
 };
 
  /**
@@ -1289,6 +1321,32 @@ class V8_EXPORT SealHandleScope {
  * The superclass of objects that can reside on V8's heap.
  */
 class V8_EXPORT Data {
+ public:
+  /**
+   * Returns true if this data is a |v8::Value|.
+   */
+  bool IsValue() const;
+
+  /**
+   * Returns true if this data is a |v8::Module|.
+   */
+  bool IsModule() const;
+
+  /**
+   * Returns true if this data is a |v8::Private|.
+   */
+  bool IsPrivate() const;
+
+  /**
+   * Returns true if this data is a |v8::ObjectTemplate|.
+   */
+  bool IsObjectTemplate() const;
+
+  /**
+   * Returns true if this data is a |v8::FunctionTemplate|.
+   */
+  bool IsFunctionTemplate() const;
+
  private:
   Data();
 };
@@ -1545,6 +1603,31 @@ class V8_EXPORT Module : public Data {
    */
   Local<UnboundModuleScript> GetUnboundModuleScript();
 
+  /**
+   * Returns the underlying script's id.
+   *
+   * The module must be a SourceTextModule and must not have a kErrored status.
+   */
+  int ScriptId();
+
+  /**
+   * Returns whether this module or any of its requested modules is async,
+   * i.e. contains top-level await.
+   *
+   * The module's status must be at least kInstantiated.
+   */
+  bool IsGraphAsync() const;
+
+  /**
+   * Returns whether the module is a SourceTextModule.
+   */
+  bool IsSourceTextModule() const;
+
+  /**
+   * Returns whether the module is a SyntheticModule.
+   */
+  bool IsSyntheticModule() const;
+
   /*
    * Callback defined in the embedder.  This is responsible for setting
    * the module's exported values with calls to SetSyntheticModuleExport().
@@ -1583,6 +1666,11 @@ class V8_EXPORT Module : public Data {
       "the latter will crash with a failed CHECK().")
   void SetSyntheticModuleExport(Local<String> export_name,
                                 Local<Value> export_value);
+
+  V8_INLINE static Module* Cast(Data* data);
+
+ private:
+  static void CheckCast(Data* obj);
 };
 
 /**
@@ -2186,14 +2274,25 @@ enum StateTag {
   IDLE
 };
 
+// Holds the callee saved registers needed for the stack unwinder. It is the
+// empty struct if no registers are required. Implemented in
+// include/v8-unwinder-state.h.
+struct CalleeSavedRegisters;
+
 // A RegisterState represents the current state of registers used
 // by the sampling profiler API.
-struct RegisterState {
-  RegisterState() : pc(nullptr), sp(nullptr), fp(nullptr), lr(nullptr) {}
+struct V8_EXPORT RegisterState {
+  RegisterState();
+  ~RegisterState();
+  RegisterState(const RegisterState& other);
+  RegisterState& operator=(const RegisterState& other);
+
   void* pc;  // Instruction pointer.
   void* sp;  // Stack pointer.
   void* fp;  // Frame pointer.
   void* lr;  // Link register (or nullptr on platforms without a link register).
+  // Callee saved registers (or null if no callee saved registers were stored)
+  std::unique_ptr<CalleeSavedRegisters> callee_saved;
 };
 
 // The output structure filled up by GetStackSample API function.
@@ -2212,14 +2311,6 @@ struct MemoryRange {
 
 struct JSEntryStub {
   MemoryRange code;
-};
-
-struct UnwindState {
-  MemoryRange code_range;
-  MemoryRange embedded_code_range;
-  JSEntryStub js_entry_stub;
-  JSEntryStub js_construct_entry_stub;
-  JSEntryStub js_run_microtasks_entry_stub;
 };
 
 struct JSEntryStubs {
@@ -2886,6 +2977,8 @@ class V8_EXPORT Value : public Data {
   bool FullIsUndefined() const;
   bool FullIsNull() const;
   bool FullIsString() const;
+
+  static void CheckCast(Data* that);
 };
 
 
@@ -3041,9 +3134,17 @@ class V8_EXPORT String : public Name {
   V8_INLINE static Local<String> Empty(Isolate* isolate);
 
   /**
-   * Returns true if the string is external
+   * Returns true if the string is external two-byte.
+   *
    */
+  V8_DEPRECATED(
+      "Use String::IsExternalTwoByte() or String::IsExternalOneByte()")
   bool IsExternal() const;
+
+  /**
+   * Returns true if the string is both external and two-byte.
+   */
+  bool IsExternalTwoByte() const;
 
   /**
    * Returns true if the string is both external and one-byte.
@@ -3616,11 +3717,11 @@ enum PropertyFilter {
 
 /**
  * Options for marking whether callbacks may trigger JS-observable side effects.
- * Side-effect-free callbacks are whitelisted during debug evaluation with
+ * Side-effect-free callbacks are allowlisted during debug evaluation with
  * throwOnSideEffect. It applies when calling a Function, FunctionTemplate,
  * or an Accessor callback. For Interceptors, please see
  * PropertyHandlerFlags's kHasNoSideEffect.
- * Callbacks that only cause side effects to the receiver are whitelisted if
+ * Callbacks that only cause side effects to the receiver are allowlisted if
  * invoked on receiver objects that are created within the same debug-evaluate
  * call, as these objects are temporary and the side effect does not escape.
  */
@@ -5348,9 +5449,10 @@ class V8_EXPORT TypedArray : public ArrayBufferView {
   /*
    * The largest typed array size that can be constructed using New.
    */
-  static constexpr size_t kMaxLength = internal::kApiSystemPointerSize == 4
-                                           ? internal::kSmiMaxValue
-                                           : size_t{1} << 32;
+  static constexpr size_t kMaxLength =
+      internal::kApiSystemPointerSize == 4
+          ? internal::kSmiMaxValue
+          : static_cast<size_t>(uint64_t{1} << 32);
 
   /**
    * Number of elements in this typed array
@@ -5956,13 +6058,14 @@ class V8_EXPORT External : public Value {
   static void CheckCast(v8::Value* obj);
 };
 
-#define V8_INTRINSICS_LIST(F)                      \
-  F(ArrayProto_entries, array_entries_iterator)    \
-  F(ArrayProto_forEach, array_for_each_iterator)   \
-  F(ArrayProto_keys, array_keys_iterator)          \
-  F(ArrayProto_values, array_values_iterator)      \
-  F(ErrorPrototype, initial_error_prototype)       \
-  F(IteratorPrototype, initial_iterator_prototype) \
+#define V8_INTRINSICS_LIST(F)                                 \
+  F(ArrayProto_entries, array_entries_iterator)               \
+  F(ArrayProto_forEach, array_for_each_iterator)              \
+  F(ArrayProto_keys, array_keys_iterator)                     \
+  F(ArrayProto_values, array_values_iterator)                 \
+  F(AsyncIteratorPrototype, initial_async_iterator_prototype) \
+  F(ErrorPrototype, initial_error_prototype)                  \
+  F(IteratorPrototype, initial_iterator_prototype)            \
   F(ObjProto_valueOf, object_value_of_function)
 
 enum Intrinsic {
@@ -6309,7 +6412,6 @@ typedef bool (*AccessCheckCallback)(Local<Context> accessing_context,
                                     Local<Object> accessed_object,
                                     Local<Value> data);
 
-class CFunction;
 /**
  * A FunctionTemplate is used to create functions at runtime. There
  * can only be one function created from a FunctionTemplate in a
@@ -7090,25 +7192,25 @@ class V8_EXPORT ResourceConstraints {
   /**
    * Deprecated functions. Do not use in new code.
    */
-  V8_DEPRECATE_SOON("Use code_range_size_in_bytes.")
+  V8_DEPRECATED("Use code_range_size_in_bytes.")
   size_t code_range_size() const { return code_range_size_ / kMB; }
-  V8_DEPRECATE_SOON("Use set_code_range_size_in_bytes.")
+  V8_DEPRECATED("Use set_code_range_size_in_bytes.")
   void set_code_range_size(size_t limit_in_mb) {
     code_range_size_ = limit_in_mb * kMB;
   }
-  V8_DEPRECATE_SOON("Use max_young_generation_size_in_bytes.")
+  V8_DEPRECATED("Use max_young_generation_size_in_bytes.")
   size_t max_semi_space_size_in_kb() const;
-  V8_DEPRECATE_SOON("Use set_max_young_generation_size_in_bytes.")
+  V8_DEPRECATED("Use set_max_young_generation_size_in_bytes.")
   void set_max_semi_space_size_in_kb(size_t limit_in_kb);
-  V8_DEPRECATE_SOON("Use max_old_generation_size_in_bytes.")
+  V8_DEPRECATED("Use max_old_generation_size_in_bytes.")
   size_t max_old_space_size() const { return max_old_generation_size_ / kMB; }
-  V8_DEPRECATE_SOON("Use set_max_old_generation_size_in_bytes.")
+  V8_DEPRECATED("Use set_max_old_generation_size_in_bytes.")
   void set_max_old_space_size(size_t limit_in_mb) {
     max_old_generation_size_ = limit_in_mb * kMB;
   }
-  V8_DEPRECATE_SOON("Zone does not pool memory any more.")
+  V8_DEPRECATED("Zone does not pool memory any more.")
   size_t max_zone_pool_size() const { return max_zone_pool_size_; }
-  V8_DEPRECATE_SOON("Zone does not pool memory any more.")
+  V8_DEPRECATED("Zone does not pool memory any more.")
   void set_max_zone_pool_size(size_t bytes) { max_zone_pool_size_ = bytes; }
 
  private:
@@ -7221,8 +7323,7 @@ typedef MaybeLocal<Promise> (*HostImportModuleDynamicallyCallback)(
 
 /**
  * HostInitializeImportMetaObjectCallback is called the first time import.meta
- * is accessed for a module. Subsequent access will reuse the same value. The
- * callback must not throw.
+ * is accessed for a module. Subsequent access will reuse the same value.
  *
  * The method combines two implementation-defined abstract operations into one:
  * HostGetImportMetaProperties and HostFinalizeImportMeta.
@@ -7293,7 +7394,7 @@ class PromiseRejectMessage {
 typedef void (*PromiseRejectCallback)(PromiseRejectMessage message);
 
 // --- Microtasks Callbacks ---
-V8_DEPRECATE_SOON("Use *WithData version.")
+V8_DEPRECATED("Use *WithData version.")
 typedef void (*MicrotasksCompletedCallback)(Isolate*);
 typedef void (*MicrotasksCompletedCallbackWithData)(Isolate*, void*);
 typedef void (*MicrotaskCallback)(void* data);
@@ -8068,10 +8169,11 @@ enum class MeasureMemoryMode { kSummary, kDetailed };
 /**
  * Controls how promptly a memory measurement request is executed.
  * By default the measurement is folded with the next scheduled GC which may
- * happen after a while. The kEager starts increment GC right away and
- * is useful for testing.
+ * happen after a while and is forced after some timeout.
+ * The kEager mode starts incremental GC right away and is useful for testing.
+ * The kLazy mode does not force GC.
  */
-enum class MeasureMemoryExecution { kDefault, kEager };
+enum class MeasureMemoryExecution { kDefault, kEager, kLazy };
 
 /**
  * The delegate is used in Isolate::MeasureMemory API.
@@ -8391,8 +8493,8 @@ class V8_EXPORT Isolate {
     kFunctionTokenOffsetTooLongForToString = 49,
     kWasmSharedMemory = 50,
     kWasmThreadOpcodes = 51,
-    kAtomicsNotify = 52,
-    kAtomicsWake = 53,
+    kAtomicsNotify = 52,  // Unused.
+    kAtomicsWake = 53,    // Unused.
     kCollator = 54,
     kNumberFormat = 55,
     kDateTimeFormat = 56,
@@ -8730,8 +8832,7 @@ class V8_EXPORT Isolate {
    *   kept alive by JavaScript objects.
    * \returns the adjusted value.
    */
-  V8_INLINE int64_t
-      AdjustAmountOfExternalAllocatedMemory(int64_t change_in_bytes);
+  int64_t AdjustAmountOfExternalAllocatedMemory(int64_t change_in_bytes);
 
   /**
    * Returns the number of phantom handles without callbacks that were reset
@@ -8982,6 +9083,13 @@ class V8_EXPORT Isolate {
   void RequestInterrupt(InterruptCallback callback, void* data);
 
   /**
+   * Returns true if there is ongoing background work within V8 that will
+   * eventually post a foreground task, like asynchronous WebAssembly
+   * compilation.
+   */
+  bool HasPendingBackgroundTasks();
+
+  /**
    * Request garbage collection in this Isolate. It is only valid to call this
    * function if --expose_gc was specified.
    *
@@ -9040,7 +9148,7 @@ class V8_EXPORT Isolate {
   /**
    * An alias for PerformMicrotaskCheckpoint.
    */
-  V8_DEPRECATE_SOON("Use PerformMicrotaskCheckpoint.")
+  V8_DEPRECATED("Use PerformMicrotaskCheckpoint.")
   void RunMicrotasks() { PerformMicrotaskCheckpoint(); }
 
   /**
@@ -9084,7 +9192,7 @@ class V8_EXPORT Isolate {
    * Executing scripts inside the callback will not re-trigger microtasks and
    * the callback.
    */
-  V8_DEPRECATE_SOON("Use *WithData version.")
+  V8_DEPRECATED("Use *WithData version.")
   void AddMicrotasksCompletedCallback(MicrotasksCompletedCallback callback);
   void AddMicrotasksCompletedCallback(
       MicrotasksCompletedCallbackWithData callback, void* data = nullptr);
@@ -9092,7 +9200,7 @@ class V8_EXPORT Isolate {
   /**
    * Removes callback that was installed by AddMicrotasksCompletedCallback.
    */
-  V8_DEPRECATE_SOON("Use *WithData version.")
+  V8_DEPRECATED("Use *WithData version.")
   void RemoveMicrotasksCompletedCallback(MicrotasksCompletedCallback callback);
   void RemoveMicrotasksCompletedCallback(
       MicrotasksCompletedCallbackWithData callback, void* data = nullptr);
@@ -9116,6 +9224,18 @@ class V8_EXPORT Isolate {
    */
   void SetCreateHistogramFunction(CreateHistogramCallback);
   void SetAddHistogramSampleFunction(AddHistogramSampleCallback);
+
+  /**
+   * Enables the host application to provide a mechanism for recording
+   * event based metrics. In order to use this interface
+   *   include/v8-metrics.h
+   * needs to be included and the recorder needs to be derived from the
+   * Recorder base class defined there.
+   * This method can only be called once per isolate and must happen during
+   * isolate initialization before background threads are spawned.
+   */
+  void SetMetricsRecorder(
+      const std::shared_ptr<metrics::Recorder>& metrics_recorder);
 
   /**
    * Enables the host application to provide a mechanism for recording a
@@ -9261,11 +9381,10 @@ class V8_EXPORT Isolate {
   void GetCodeRange(void** start, size_t* length_in_bytes);
 
   /**
-   * Returns the UnwindState necessary for use with the Unwinder API.
+   * As GetCodeRange, but for embedded builtins (these live in a distinct
+   * memory region from other V8 Code objects).
    */
-  // TODO(petermarshall): Remove this API.
-  V8_DEPRECATED("Use entry_stubs + code_pages version.")
-  UnwindState GetUnwindState();
+  void GetEmbeddedCodeRange(const void** start, size_t* length_in_bytes);
 
   /**
    * Returns the JSEntryStubs necessary for use with the Unwinder API.
@@ -10070,8 +10189,6 @@ class V8_EXPORT TryCatch {
   /**
    * Returns the exception caught by this try/catch block.  If no exception has
    * been caught an empty handle is returned.
-   *
-   * The returned handle is valid until this TryCatch block has been destroyed.
    */
   Local<Value> Exception() const;
 
@@ -10093,9 +10210,6 @@ class V8_EXPORT TryCatch {
   /**
    * Returns the message associated with this exception.  If there is
    * no message associated an empty handle is returned.
-   *
-   * The returned handle is valid until this TryCatch block has been
-   * destroyed.
    */
   Local<v8::Message> Message() const;
 
@@ -10629,12 +10743,14 @@ class V8_EXPORT Unwinder {
    *
    * The unwinder also needs the virtual memory range of all possible V8 code
    * objects. There are two ranges required - the heap code range and the range
-   * for code embedded in the binary. The V8 API provides all required inputs
-   * via an UnwindState object through the Isolate::GetUnwindState() API. These
-   * values will not change after Isolate initialization, so the same
-   * |unwind_state| can be used for multiple calls.
+   * for code embedded in the binary.
    *
-   * \param unwind_state Input state for the Isolate that the stack comes from.
+   * Available on x64, ARM64 and ARM32.
+   *
+   * \param code_pages A list of all of the ranges in which V8 has allocated
+   * executable code. The caller should obtain this list by calling
+   * Isolate::CopyCodePages() during the same interrupt/thread suspension that
+   * captures the stack.
    * \param register_state The current registers. This is an in-out param that
    * will be overwritten with the register values after unwinding, on success.
    * \param stack_base The resulting stack pointer and frame pointer values are
@@ -10645,20 +10761,6 @@ class V8_EXPORT Unwinder {
    *
    * \return True on success.
    */
-  // TODO(petermarshall): Remove this API
-  V8_DEPRECATED("Use entry_stubs + code_pages version.")
-  static bool TryUnwindV8Frames(const UnwindState& unwind_state,
-                                RegisterState* register_state,
-                                const void* stack_base);
-
-  /**
-   * The same as above, but is available on x64, ARM64 and ARM32.
-   *
-   * \param code_pages A list of all of the ranges in which V8 has allocated
-   * executable code. The caller should obtain this list by calling
-   * Isolate::CopyCodePages() during the same interrupt/thread suspension that
-   * captures the stack.
-   */
   static bool TryUnwindV8Frames(const JSEntryStubs& entry_stubs,
                                 size_t code_pages_length,
                                 const MemoryRange* code_pages,
@@ -10666,20 +10768,13 @@ class V8_EXPORT Unwinder {
                                 const void* stack_base);
 
   /**
-   * Whether the PC is within the V8 code range represented by code_range or
-   * embedded_code_range in |unwind_state|.
+   * Whether the PC is within the V8 code range represented by code_pages.
    *
    * If this returns false, then calling UnwindV8Frames() with the same PC
    * and unwind_state will always fail. If it returns true, then unwinding may
    * (but not necessarily) be successful.
-   */
-  // TODO(petermarshall): Remove this API
-  V8_DEPRECATED("Use code_pages version.")
-  static bool PCIsInV8(const UnwindState& unwind_state, void* pc);
-
-  /**
-   * The same as above, but is available on x64, ARM64 and ARM32. See the
-   * comment on TryUnwindV8Frames.
+   *
+   * Available on x64, ARM64 and ARM32
    */
   static bool PCIsInV8(size_t code_pages_length, const MemoryRange* code_pages,
                        void* pc);
@@ -10900,7 +10995,7 @@ template <class T>
 void TracedReferenceBase<T>::Reset() {
   if (IsEmpty()) return;
   V8::DisposeTracedGlobal(reinterpret_cast<internal::Address*>(val_));
-  val_ = nullptr;
+  SetSlotThreadSafe(nullptr);
 }
 
 template <class T>
@@ -10956,10 +11051,11 @@ template <class T>
 template <class S>
 void TracedReference<T>::Reset(Isolate* isolate, const Local<S>& other) {
   static_assert(std::is_base_of<T, S>::value, "type check");
-  Reset();
+  this->Reset();
   if (other.IsEmpty()) return;
-  this->val_ = this->New(isolate, other.val_, &this->val_,
-                         TracedReferenceBase<T>::kWithoutDestructor);
+  this->SetSlotThreadSafe(
+      this->New(isolate, other.val_, &this->val_,
+                TracedReferenceBase<T>::kWithoutDestructor));
 }
 
 template <class T>
@@ -11163,22 +11259,14 @@ template<typename T>
 Local<Value> FunctionCallbackInfo<T>::operator[](int i) const {
   // values_ points to the first argument (not the receiver).
   if (i < 0 || length_ <= i) return Local<Value>(*Undefined(GetIsolate()));
-#ifdef V8_REVERSE_JSARGS
   return Local<Value>(reinterpret_cast<Value*>(values_ + i));
-#else
-  return Local<Value>(reinterpret_cast<Value*>(values_ - i));
-#endif
 }
 
 
 template<typename T>
 Local<Object> FunctionCallbackInfo<T>::This() const {
   // values_ points to the first argument (not the receiver).
-#ifdef V8_REVERSE_JSARGS
   return Local<Object>(reinterpret_cast<Object*>(values_ - 1));
-#else
-  return Local<Object>(reinterpret_cast<Object*>(values_ + 1));
-#endif
 }
 
 
@@ -11373,8 +11461,12 @@ void* Object::GetAlignedPointerFromInternalField(int index) {
                 instance_type == I::kJSApiObjectType ||
                 instance_type == I::kJSSpecialApiObjectType)) {
     int offset = I::kJSObjectHeaderSize + (I::kEmbedderDataSlotSize * index);
+#ifdef V8_HEAP_SANDBOX
+    offset += I::kEmbedderDataSlotRawPayloadOffset;
+#endif
     internal::Isolate* isolate = I::GetIsolateForHeapSandbox(obj);
-    A value = I::ReadExternalPointerField(isolate, obj, offset);
+    A value = I::ReadExternalPointerField(
+        isolate, obj, offset, internal::kEmbedderDataSlotPayloadTag);
     return reinterpret_cast<void*>(value);
   }
 #endif
@@ -11407,7 +11499,8 @@ String::ExternalStringResource* String::GetExternalStringResource() const {
   if (I::IsExternalTwoByteString(I::GetInstanceType(obj))) {
     internal::Isolate* isolate = I::GetIsolateForHeapSandbox(obj);
     A value =
-        I::ReadExternalPointerField(isolate, obj, I::kStringResourceOffset);
+        I::ReadExternalPointerField(isolate, obj, I::kStringResourceOffset,
+                                    internal::kExternalStringResourceTag);
     result = reinterpret_cast<String::ExternalStringResource*>(value);
   } else {
     result = GetExternalStringResourceSlow();
@@ -11431,7 +11524,8 @@ String::ExternalStringResourceBase* String::GetExternalStringResourceBase(
       type == I::kExternalTwoByteRepresentationTag) {
     internal::Isolate* isolate = I::GetIsolateForHeapSandbox(obj);
     A value =
-        I::ReadExternalPointerField(isolate, obj, I::kStringResourceOffset);
+        I::ReadExternalPointerField(isolate, obj, I::kStringResourceOffset,
+                                    internal::kExternalStringResourceTag);
     resource = reinterpret_cast<ExternalStringResourceBase*>(value);
   } else {
     resource = GetExternalStringResourceBaseSlow(encoding_out);
@@ -11517,6 +11611,13 @@ template <class T> Value* Value::Cast(T* value) {
   return static_cast<Value*>(value);
 }
 
+template <>
+V8_INLINE Value* Value::Cast(Data* value) {
+#ifdef V8_ENABLE_CHECKS
+  CheckCast(value);
+#endif
+  return static_cast<Value*>(value);
+}
 
 Boolean* Boolean::Cast(v8::Value* value) {
 #ifdef V8_ENABLE_CHECKS
@@ -11549,6 +11650,12 @@ Private* Private::Cast(Data* data) {
   return reinterpret_cast<Private*>(data);
 }
 
+Module* Module::Cast(Data* data) {
+#ifdef V8_ENABLE_CHECKS
+  CheckCast(data);
+#endif
+  return reinterpret_cast<Module*>(data);
+}
 
 Number* Number::Cast(v8::Value* value) {
 #ifdef V8_ENABLE_CHECKS
@@ -11945,37 +12052,6 @@ MaybeLocal<T> Isolate::GetDataFromSnapshotOnce(size_t index) {
   return Local<T>(data);
 }
 
-int64_t Isolate::AdjustAmountOfExternalAllocatedMemory(
-    int64_t change_in_bytes) {
-  typedef internal::Internals I;
-  int64_t* external_memory = reinterpret_cast<int64_t*>(
-      reinterpret_cast<uint8_t*>(this) + I::kExternalMemoryOffset);
-  int64_t* external_memory_limit = reinterpret_cast<int64_t*>(
-      reinterpret_cast<uint8_t*>(this) + I::kExternalMemoryLimitOffset);
-  int64_t* external_memory_low_since_mc =
-      reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(this) +
-                                 I::kExternalMemoryLowSinceMarkCompactOffset);
-
-  // Embedders are weird: we see both over- and underflows here. Perform the
-  // addition with unsigned types to avoid undefined behavior.
-  const int64_t amount =
-      static_cast<int64_t>(static_cast<uint64_t>(change_in_bytes) +
-                           static_cast<uint64_t>(*external_memory));
-  *external_memory = amount;
-
-  if (amount < *external_memory_low_since_mc) {
-    *external_memory_low_since_mc = amount;
-    *external_memory_limit = amount + I::kExternalAllocationSoftLimit;
-  }
-
-  if (change_in_bytes <= 0) return *external_memory;
-
-  if (amount > *external_memory_limit) {
-    ReportExternalAllocationLimitReached();
-  }
-  return *external_memory;
-}
-
 Local<Value> Context::GetEmbedderData(int index) {
 #ifndef V8_ENABLE_CHECKS
   typedef internal::Address A;
@@ -12011,9 +12087,13 @@ void* Context::GetAlignedPointerFromEmbedderData(int index) {
       I::ReadTaggedPointerField(ctx, I::kNativeContextEmbedderDataOffset);
   int value_offset =
       I::kEmbedderDataArrayHeaderSize + (I::kEmbedderDataSlotSize * index);
+#ifdef V8_HEAP_SANDBOX
+  value_offset += I::kEmbedderDataSlotRawPayloadOffset;
+#endif
   internal::Isolate* isolate = I::GetIsolateForHeapSandbox(ctx);
   return reinterpret_cast<void*>(
-      I::ReadExternalPointerField(isolate, embedder_data, value_offset));
+      I::ReadExternalPointerField(isolate, embedder_data, value_offset,
+                                  internal::kEmbedderDataSlotPayloadTag));
 #else
   return SlowGetAlignedPointerFromEmbedderData(index);
 #endif

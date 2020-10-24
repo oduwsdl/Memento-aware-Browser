@@ -49,16 +49,12 @@ class LocationIconView : public IconLabelBubbleView {
     // how and where to show the dialog. Returns true if a dialog was shown,
     // false otherwise.
     virtual bool ShowPageInfoDialog() = 0;
-    virtual bool Dialog() = 0;
 
     // Gets the LocationBarModel.
     const virtual LocationBarModel* GetLocationBarModel() const = 0;
 
     // Gets an icon for the location bar icon chip.
-    virtual gfx::ImageSkia GetLocationIcon(
-        IconFetchedCallback on_icon_fetched) const = 0;
-    // Gets an icon for the location bar memento icon chip.
-    virtual gfx::ImageSkia GetMementoIcon(
+    virtual ui::ImageModel GetLocationIcon(
         IconFetchedCallback on_icon_fetched) const = 0;
   };
 
@@ -85,7 +81,7 @@ class LocationIconView : public IconLabelBubbleView {
   // Updates the icon's ink drop mode, focusable behavior, text and security
   // status. |suppress_animations| indicates whether this update should suppress
   // the text change animation (e.g. when swapping tabs).
-  void Update(bool suppress_animations, bool is_memento);
+  void Update(bool suppress_animations);
 
   // Returns text to be placed in the view.
   // - For secure/insecure pages, returns text describing the URL's security
@@ -102,17 +98,6 @@ class LocationIconView : public IconLabelBubbleView {
   // - the current page has a special scheme (chrome://, extension, file://).
   bool ShouldShowText() const;
 
-  // Determines whether or not the mixed content text needs
-  // to be shown next to the Memento icon
-  bool ShouldShowMixedContentWarning() const;
-
-  // Determines whether or not the Memento icon should be shown.
-  // Returns true when Memento-Datetime header is present for the current page.
-  bool ShouldShowMementoInfo() const;
-
-  void SetIconType(bool is_memento_icon);
-  bool GetIconType();
-
   const views::InkDrop* get_ink_drop_for_testing();
 
  protected:
@@ -128,8 +113,6 @@ class LocationIconView : public IconLabelBubbleView {
   // Whether the delegate's editing or empty flag was set the last time the
   // location icon was updated.
   bool was_editing_or_empty_ = false;
-
-  bool is_memento_icon_ = false;
 
   // Returns what the minimum size would be if the preferred size were |size|.
   gfx::Size GetMinimumSizeForPreferredSize(gfx::Size size) const;
@@ -152,9 +135,6 @@ class LocationIconView : public IconLabelBubbleView {
 
   // Updates Icon based on the current state and theme.
   void UpdateIcon();
-
-  // Updates Memento Icon based on the current state and theme.
-  void UpdateMementoIcon();
 
   // Handles the arrival of an asynchronously fetched icon.
   void OnIconFetched(const gfx::Image& image);

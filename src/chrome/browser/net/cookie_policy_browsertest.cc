@@ -7,7 +7,6 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/net/storage_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
@@ -62,8 +61,11 @@ class CookiePolicyBrowserTest : public InProcessBrowserTest {
   }
 
   void SetBlockThirdPartyCookies(bool value) {
-    browser()->profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies,
-                                                 value);
+    browser()->profile()->GetPrefs()->SetInteger(
+        prefs::kCookieControlsMode,
+        static_cast<int>(
+            value ? content_settings::CookieControlsMode::kBlockThirdParty
+                  : content_settings::CookieControlsMode::kOff));
   }
 
   void NavigateToPageWithFrame(const std::string& host) {

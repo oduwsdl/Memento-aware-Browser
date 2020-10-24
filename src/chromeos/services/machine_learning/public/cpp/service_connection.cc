@@ -9,6 +9,7 @@
 #include "base/no_destructor.h"
 #include "base/sequence_checker.h"
 #include "chromeos/dbus/machine_learning/machine_learning_client.h"
+#include "chromeos/services/machine_learning/public/mojom/handwriting_recognizer.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -44,8 +45,15 @@ class ServiceConnectionImpl : public ServiceConnection {
           result_callback) override;
 
   void LoadHandwritingModel(
+      mojom::HandwritingRecognizerSpecPtr spec,
       mojo::PendingReceiver<mojom::HandwritingRecognizer> receiver,
       mojom::MachineLearningService::LoadHandwritingModelCallback
+          result_callback) override;
+
+  void LoadHandwritingModelWithSpec(
+      mojom::HandwritingRecognizerSpecPtr spec,
+      mojo::PendingReceiver<mojom::HandwritingRecognizer> receiver,
+      mojom::MachineLearningService::LoadHandwritingModelWithSpecCallback
           result_callback) override;
 
  private:
@@ -99,13 +107,25 @@ void ServiceConnectionImpl::LoadTextClassifier(
 }
 
 void ServiceConnectionImpl::LoadHandwritingModel(
+    mojom::HandwritingRecognizerSpecPtr spec,
     mojo::PendingReceiver<mojom::HandwritingRecognizer> receiver,
     mojom::MachineLearningService::LoadHandwritingModelCallback
         result_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindMachineLearningServiceIfNeeded();
-  machine_learning_service_->LoadHandwritingModel(std::move(receiver),
-                                                  std::move(result_callback));
+  machine_learning_service_->LoadHandwritingModel(
+      std::move(spec), std::move(receiver), std::move(result_callback));
+}
+
+void ServiceConnectionImpl::LoadHandwritingModelWithSpec(
+    mojom::HandwritingRecognizerSpecPtr spec,
+    mojo::PendingReceiver<mojom::HandwritingRecognizer> receiver,
+    mojom::MachineLearningService::LoadHandwritingModelWithSpecCallback
+        result_callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindMachineLearningServiceIfNeeded();
+  machine_learning_service_->LoadHandwritingModelWithSpec(
+      std::move(spec), std::move(receiver), std::move(result_callback));
 }
 
 void ServiceConnectionImpl::BindMachineLearningServiceIfNeeded() {

@@ -4,6 +4,19 @@
     --ntp-theme-text-color: var(--google-grey-800);
     --ntp-theme-text-shadow: none;
     --ntp-one-google-bar-height: 56px;
+    --ntp-search-box-width: 337px;
+  }
+
+  @media (min-width: 560px) {
+    :host {
+      --ntp-search-box-width: 449px;
+    }
+  }
+
+  @media (min-width: 672px) {
+    :host {
+      --ntp-search-box-width: 561px;
+    }
   }
 
   @media (prefers-color-scheme: dark) {
@@ -51,14 +64,29 @@
   }
 
   #logo {
-    margin-bottom: 8px;
+    margin-bottom: 38px;
     z-index: 1;  /* Needed so it layers on top of OneGoogleBar. */
   }
 
   ntp-fakebox,
   ntp-realbox {
-    flex-shrink: 0;
     margin-bottom: 32px;
+  }
+
+  ntp-fakebox,
+  ntp-realbox,
+  ntp-module-wrapper {
+    flex-shrink: 0;
+    width: var(--ntp-search-box-width);
+  }
+
+  :host([modules-enabled_]) ntp-middle-slot-promo {
+    width: var(--ntp-search-box-width);
+  }
+
+  :host(:not([modules-enabled_])) ntp-middle-slot-promo {
+    bottom: 16px;
+    position: fixed;
   }
 
   ntp-realbox {
@@ -75,13 +103,15 @@
     --tile-hover-color: rgba(255, 255, 255, .1);
   }
 
-  #promo {
-    bottom: 16px;
-    height: 32px;
-    left: 0;
-    position: fixed;
-    right: 0;
-    width: 100%;
+  ntp-middle-slot-promo:not([hidden]) + ntp-module-wrapper,
+  ntp-module-wrapper + ntp-module-wrapper {
+    margin-top: 16px;
+  }
+
+  :host(:not([promo-and-modules-loaded_])) ntp-middle-slot-promo,
+  :host(:not([promo-and-modules-loaded_])) ntp-module-wrapper,
+  :host(:not([modules-visible_])) ntp-module-wrapper {
+    display: none;
   }
 
   #customizeButtonSpacer {
@@ -154,7 +184,7 @@
   #themeAttribution {
     align-self: flex-start;
     bottom: 16px;
-    color: var(--ntp-secondary-text-color);
+    color: var(--cr-secondary-text-color);
     margin-inline-start: 16px;
     position: fixed;
   }
@@ -235,13 +265,11 @@
         --ntp-theme-shortcut-background-color:
               [[rgbaOrInherit_(theme_.shortcutBackgroundColor)]];
         --ntp-logo-color: [[rgbaOrInherit_(logoColor_)]];">
-  <dom-if if="[[showIframedOneGoogleBar_]]">
-    <template>
-      <ntp-untrusted-iframe id="oneGoogleBar" path="[[oneGoogleBarIframePath_]]"
-          hidden$="[[!oneGoogleBarLoaded_]]">
-      </ntp-untrusted-iframe>
-    </template>
-  </dom-if>
+  <template is="dom-if" if="[[showIframedOneGoogleBar_]]">
+    <ntp-iframe id="oneGoogleBar" src="[[oneGoogleBarIframePath_]]"
+        hidden$="[[!oneGoogleBarLoaded_]]">
+    </ntp-iframe>
+  </template>
   <ntp-logo id="logo" doodle-allowed$="[[doodleAllowed_]]"
       single-colored$="[[singleColoredLogo_]]" dark="[[theme_.isDark]]"
       background-color="[[backgroundColor_]]">
@@ -257,10 +285,17 @@
       use-white-add-icon$="[[theme_.shortcutUseWhiteAddIcon]]"
       use-title-pill$="[[theme_.shortcutUseTitlePill]]">
   </ntp-most-visited>
-  <dom-if if="[[lazyRender_]]">
+  <dom-if if="[[lazyRender_]]" on-dom-change="onLazyRendered_">
     <template>
-      <ntp-untrusted-iframe id="promo" path="promo" hidden$="[[!promoLoaded_]]">
-      </ntp-untrusted-iframe>
+      <ntp-middle-slot-promo
+          on-ntp-middle-slot-promo-loaded="onMiddleSlotPromoLoaded_" hidden>
+      </ntp-middle-slot-promo>
+      <template is="dom-repeat" items="[[moduleDescriptors_]]" id="modules"
+          on-dom-change="onModulesLoaded_">
+        <ntp-module-wrapper descriptor="[[item]]"
+            on-dismiss-module="onDismissModule_">
+        </ntp-module-wrapper>
+      </template>
       <a id="backgroundImageAttribution"
           href="[[backgroundImageAttributionUrl_]]"
           hidden="[[!backgroundImageAttribution1_]]">
@@ -308,6 +343,18 @@
         theme="[[theme_]]"
         background-selection="{{backgroundSelection_}}">
     </ntp-customize-dialog>
+  </template>
+</dom-if>
+<dom-if if="[[lazyRender_]]" restamp>
+  <template>
+    <cr-toast id="dismissModuleToast" duration="10000">
+      <div id="dismissModuleToastMessage">[[dismissModuleToastMessage_]]</div>
+      <cr-button id="undoDismissModuleButton"
+          aria-label="$i18n{undoDescription}"
+          on-click="onUndoDismissModuleButtonClick_">
+        $i18n{undo}
+      </cr-button>
+    </cr-toast>
   </template>
 </dom-if>
 <div id="oneGoogleBarOverlayBackdrop"></div>

@@ -44,7 +44,6 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/mac/mac_startup_profiler.h"
-#include "chrome/browser/policy/chrome_browser_cloud_management_controller.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -93,6 +92,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #include "components/handoff/handoff_manager.h"
 #include "components/handoff/handoff_utility.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
@@ -135,7 +135,7 @@ bool g_is_opening_new_window = false;
 // there are only minimized windows), it will unminimize it.
 Browser* ActivateBrowser(Profile* profile) {
   Browser* browser = chrome::FindLastActiveWithProfile(
-      profile->IsGuestSession() ? profile->GetOffTheRecordProfile() : profile);
+      profile->IsGuestSession() ? profile->GetPrimaryOTRProfile() : profile);
   if (browser)
     browser->window()->Activate();
   return browser;
@@ -798,8 +798,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     _localPrefRegistrar.Init(localState);
     _localPrefRegistrar.Add(
         prefs::kAllowFileSelectionDialogs,
-        base::Bind(&chrome::BrowserCommandController::UpdateOpenFileState,
-                   _menuState.get()));
+        base::BindRepeating(
+            &chrome::BrowserCommandController::UpdateOpenFileState,
+            _menuState.get()));
   }
 
   _handoff_active_url_observer_bridge.reset(
@@ -860,8 +861,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   std::vector<Profile*> added_profiles;
   for (Profile* p : profiles) {
-    if (p->HasOffTheRecordProfile())
-      added_profiles.push_back(p->GetOffTheRecordProfile());
+    for (Profile* otr : p->GetAllOffTheRecordProfiles())
+      added_profiles.push_back(otr);
   }
   profiles.insert(profiles.end(), added_profiles.begin(), added_profiles.end());
 
@@ -1072,7 +1073,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
                              IDC_FOCUS_SEARCH);
       break;
     case IDC_NEW_INCOGNITO_WINDOW:
-      CreateBrowser(lastProfile->GetOffTheRecordProfile());
+      CreateBrowser(lastProfile->GetPrimaryOTRProfile());
       break;
     case IDC_RESTORE_TAB:
       chrome::OpenWindowWithRestoredTabs(lastProfile);
@@ -1363,7 +1364,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   // Guest sessions must always be OffTheRecord. Use that when opening windows.
   if (profile->IsGuestSession())
-    return profile->GetOffTheRecordProfile();
+    return profile->GetPrimaryOTRProfile();
 
   return profile;
 }
@@ -1630,10 +1631,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   _profilePrefRegistrar->Init(_lastProfile->GetPrefs());
   _profilePrefRegistrar->Add(
       prefs::kIncognitoModeAvailability,
-      base::Bind(&chrome::BrowserCommandController::
-                     UpdateSharedCommandsForIncognitoAvailability,
-                 _menuState.get(),
-                 _lastProfile));
+      base::BindRepeating(&chrome::BrowserCommandController::
+                              UpdateSharedCommandsForIncognitoAvailability,
+                          _menuState.get(), _lastProfile));
 }
 
 - (void)updateMenuItemKeyEquivalents {

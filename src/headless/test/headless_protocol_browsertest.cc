@@ -16,6 +16,7 @@
 #include "components/viz/common/switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
+#include "headless/app/headless_shell_switches.h"
 #include "headless/public/devtools/domains/runtime.h"
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_browser_context.h"
@@ -26,6 +27,7 @@
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/switches.h"
 #include "url/url_util.h"
 
 namespace headless {
@@ -55,12 +57,10 @@ class HeadlessProtocolBrowserTest
     // Make sure the navigations spawn new processes. We run test harness
     // in one process (harness.test) and tests in another.
     command_line->AppendSwitch(::switches::kSitePerProcess);
-    // TODO(yoichio): This is temporary switch to support chrome internal
-    // components migration from the old web APIs.
-    // After completion of the migration, we should remove this.
-    // See crbug.com/911943 for detail.
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "HTMLImports");
+
+    // Make sure proxy related tests are not affected by a platform specific
+    // system proxy configuration service.
+    command_line->AppendSwitch(switches::kNoSystemProxyConfigService);
   }
 
  private:
@@ -195,8 +195,8 @@ class HeadlessProtocolBrowserTest
 
 // TODO(crbug.com/867447): The whole test suite is extremely flaky on Win dbg.
 // TODO(crbug.com/1086872): The whole test suite is flaky on Mac ASAN.
-#if (defined(OS_WIN) && !defined(NDEBUG)) || \
-    (defined(OS_MACOSX) && defined(ADDRESS_SANITIZER))
+#if (defined(NO_WIN_FLAKES) && !defined(NDEBUG)) || \
+    (defined(OS_MAC) && defined(ADDRESS_SANITIZER))
 #define HEADLESS_PROTOCOL_TEST(TEST_NAME, SCRIPT_NAME)                        \
   IN_PROC_BROWSER_TEST_F(HeadlessProtocolBrowserTest, DISABLED_##TEST_NAME) { \
     test_folder_ = "/protocol/";                                              \
@@ -218,8 +218,8 @@ HEADLESS_PROTOCOL_TEST(VirtualTimeInterrupt,
                        "emulation/virtual-time-interrupt.js")
 
 // Flaky on Linux, Mac & Win. TODO(crbug.com/930717): Re-enable.
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN) || \
-    defined(OS_FUCHSIA)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) || \
+    defined(OS_WIN) || defined(OS_FUCHSIA)
 #define MAYBE_VirtualTimeCrossProcessNavigation \
   DISABLED_VirtualTimeCrossProcessNavigation
 #else
@@ -235,8 +235,6 @@ HEADLESS_PROTOCOL_TEST(VirtualTimeLocalStorage,
                        "emulation/virtual-time-local-storage.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimePendingScript,
                        "emulation/virtual-time-pending-script.js")
-HEADLESS_PROTOCOL_TEST(VirtualTimeHtmlImport,
-                       "emulation/virtual-time-html-import.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeRedirect,
                        "emulation/virtual-time-redirect.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeSessionStorage,
@@ -293,18 +291,18 @@ class HeadlessProtocolCompositorBrowserTest
     static const char* const compositor_switches[] = {
         // We control BeginFrames ourselves and need all compositing stages to
         // run.
-        switches::kRunAllCompositorStagesBeforeDraw,
-        switches::kDisableNewContentRenderingTimeout,
+        ::switches::kRunAllCompositorStagesBeforeDraw,
+        ::switches::kDisableNewContentRenderingTimeout,
 
         // Animtion-only BeginFrames are only supported when updates from the
         // impl-thread are disabled, see go/headless-rendering.
         cc::switches::kDisableThreadedAnimation,
         cc::switches::kDisableCheckerImaging,
-        switches::kDisableThreadedScrolling,
+        blink::switches::kDisableThreadedScrolling,
 
         // Ensure that image animations don't resync their animation timestamps
         // when looping back around.
-        switches::kDisableImageAnimationResync,
+        blink::switches::kDisableImageAnimationResync,
     };
 
     for (auto* compositor_switch : compositor_switches) {
@@ -318,8 +316,8 @@ class HeadlessProtocolCompositorBrowserTest
 // rcl=5811aa08e60ba5ac7622f029163213cfbdb682f7&l=32
 // TODO(crbug.com/954398): Suite is timeout-flaky on Windows.
 // TODO(crbug.com/1020046): Suite is flaky on TSan Linux.
-#if defined(OS_MACOSX) || defined(OS_WIN) || \
-    (defined(OS_LINUX) && defined(THREAD_SANITIZER))
+#if defined(OS_MAC) || defined(NO_WIN_FLAKES) || \
+    ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(THREAD_SANITIZER))
 #define HEADLESS_PROTOCOL_COMPOSITOR_TEST(TEST_NAME, SCRIPT_NAME) \
   IN_PROC_BROWSER_TEST_F(HeadlessProtocolCompositorBrowserTest,   \
                          DISABLED_##TEST_NAME) {                  \
@@ -342,8 +340,9 @@ HEADLESS_PROTOCOL_COMPOSITOR_TEST(
     CompositorImageAnimation,
     "emulation/compositor-image-animation-test.js")
 
-// Flaky on Linux. TODO(crbug.com/986027): Re-enable.
-#if defined(OS_LINUX) || defined(OS_FUCHSIA)
+// Flaky on all platforms. TODO(crbug.com/986027): Re-enable.
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_FUCHSIA)
 #define MAYBE_CompositorCssAnimation DISABLED_CompositorCssAnimation
 #else
 #define MAYBE_CompositorCssAnimation CompositorCssAnimation

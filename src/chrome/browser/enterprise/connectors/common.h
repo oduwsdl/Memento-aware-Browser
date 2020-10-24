@@ -8,10 +8,14 @@
 #include <set>
 #include <string>
 
+#include "base/supports_user_data.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "url/gurl.h"
 
 namespace enterprise_connectors {
+
+// Alias to reduce verbosity when using TriggeredRule::Actions.
+using TriggeredRule = ContentAnalysisResponse::Result::TriggeredRule;
 
 // Keys used to read a connector's policy values.
 constexpr char kKeyServiceProvider[] = "service_provider";
@@ -23,6 +27,7 @@ constexpr char kKeyBlockUntilVerdict[] = "block_until_verdict";
 constexpr char kKeyBlockPasswordProtected[] = "block_password_protected";
 constexpr char kKeyBlockLargeFiles[] = "block_large_files";
 constexpr char kKeyBlockUnsupportedFileTypes[] = "block_unsupported_file_types";
+constexpr char kKeyMinimumDataSize[] = "minimum_data_size";
 
 enum class ReportingConnector {
   SECURITY_EVENT,
@@ -50,10 +55,14 @@ struct AnalysisSettings {
   bool block_password_protected_files = false;
   bool block_large_files = false;
   bool block_unsupported_file_types = false;
+
+  // Minimum text size for BulkDataEntry scans. 0 means no minimum.
+  size_t minimum_data_size = 100;
 };
 
 struct ReportingSettings {
   ReportingSettings();
+  explicit ReportingSettings(GURL url);
   ReportingSettings(ReportingSettings&&);
   ReportingSettings& operator=(ReportingSettings&&);
   ~ReportingSettings();
@@ -64,6 +73,25 @@ struct ReportingSettings {
 // Returns the pref path corresponding to a connector.
 const char* ConnectorPref(AnalysisConnector connector);
 const char* ConnectorPref(ReportingConnector connector);
+
+// Returns the highest precedence action in the given parameters.
+TriggeredRule::Action GetHighestPrecedenceAction(
+    const ContentAnalysisResponse& response);
+TriggeredRule::Action GetHighestPrecedenceAction(
+    const TriggeredRule::Action& action_1,
+    const TriggeredRule::Action& action_2);
+
+// User data class to persist ContentAnalysisResponses in base::SupportsUserData
+// objects.
+struct ScanResult : public base::SupportsUserData::Data {
+  explicit ScanResult(const ContentAnalysisResponse& response);
+  ~ScanResult() override;
+  static const char kKey[];
+  ContentAnalysisResponse response;
+};
+
+// Checks if |response| contains a negative malware verdict.
+bool ContainsMalwareVerdict(const ContentAnalysisResponse& response);
 
 }  // namespace enterprise_connectors
 

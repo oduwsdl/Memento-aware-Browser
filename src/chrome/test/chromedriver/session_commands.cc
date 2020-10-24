@@ -77,14 +77,24 @@ Status EvaluateScriptAndIgnoreResult(Session* session,
   return web_view->EvaluateScript(frame_id, expression, awaitPromise, &result);
 }
 
+void InitSessionForWebSocketConnection(SessionConnectionMap* session_map,
+                                       std::string session_id) {
+  session_map->insert({session_id, -1});
+}
+
 }  // namespace
 
-InitSessionParams::InitSessionParams(network::mojom::URLLoaderFactory* factory,
-                                     const SyncWebSocketFactory& socket_factory,
-                                     DeviceManager* device_manager)
+InitSessionParams::InitSessionParams(
+    network::mojom::URLLoaderFactory* factory,
+    const SyncWebSocketFactory& socket_factory,
+    DeviceManager* device_manager,
+    const scoped_refptr<base::SingleThreadTaskRunner> cmd_task_runner,
+    SessionConnectionMap* session_map)
     : url_loader_factory(factory),
       socket_factory(socket_factory),
-      device_manager(device_manager) {}
+      device_manager(device_manager),
+      cmd_task_runner(cmd_task_runner),
+      session_map(session_map) {}
 
 InitSessionParams::InitSessionParams(const InitSessionParams& other) = default;
 
@@ -180,7 +190,9 @@ std::unique_ptr<base::DictionaryValue> CreateCapabilities(
 
   // Extensions defined by the W3C.
   // See https://w3c.github.io/webauthn/#sctn-automation-webdriver-capability
-  caps->SetBoolean("webauthn:virtualAuthenticators", !capabilities.IsAndroid());
+  caps->SetBoolPath("webauthn:virtualAuthenticators",
+                    !capabilities.IsAndroid());
+  caps->SetBoolPath("webauthn:extension:largeBlob", !capabilities.IsAndroid());
 
   // Chrome-specific extensions.
   const std::string chromedriverVersionKey = base::StringPrintf(
@@ -221,6 +233,11 @@ std::unique_ptr<base::DictionaryValue> CreateCapabilities(
     caps->SetBoolean("acceptSslCerts", capabilities.accept_insecure_certs);
     caps->SetBoolean("nativeEvents", true);
     caps->SetBoolean("hasTouchScreen", session->chrome->HasTouchScreen());
+  }
+
+  if (session->webSocketUrl) {
+    caps->SetString("webSocketUrl",
+                    "ws://" + session->host + "/session/" + session->id);
   }
 
   return caps;
@@ -363,6 +380,7 @@ Status ConfigureSession(Session* session,
   session->script_timeout = capabilities->script_timeout;
   session->strict_file_interactability =
       capabilities->strict_file_interactability;
+  session->webSocketUrl = capabilities->webSocketUrl;
   Log::Level driver_level = Log::kWarning;
   if (capabilities->logging_prefs.count(WebDriverLog::kDriverType))
     driver_level = capabilities->logging_prefs[WebDriverLog::kDriverType];
@@ -421,8 +439,8 @@ bool MergeCapabilities(const base::DictionaryValue* always_match,
 // Implementation of "matching capabilities", as defined in W3C spec at
 // https://www.w3.org/TR/webdriver/#dfn-matching-capabilities.
 // It checks some requested capabilities and make sure they are supported.
-// Currently, we only check "browserName", "platformName", and
-// "webauthn:virtualAuthenticators" but more can be added as necessary.
+// Currently, we only check "browserName", "platformName", and webauthn
+// capabilities but more can be added as necessary.
 bool MatchCapabilities(const base::DictionaryValue* capabilities) {
   const base::Value* name;
   if (capabilities->Get("browserName", &name) && !name->is_none()) {
@@ -473,12 +491,20 @@ bool MatchCapabilities(const base::DictionaryValue* capabilities) {
     }
   }
 
-  const base::Value* virtual_authenticators_value;
-  if (capabilities->Get("webauthn:virtualAuthenticators",
-                        &virtual_authenticators_value) &&
-      !virtual_authenticators_value->is_none()) {
+  const base::Value* virtual_authenticators_value =
+      capabilities->FindPath("webauthn:virtualAuthenticators");
+  if (virtual_authenticators_value) {
     if (!virtual_authenticators_value->is_bool() ||
         (virtual_authenticators_value->GetBool() && is_android)) {
+      return false;
+    }
+  }
+
+  const base::Value* large_blob_value =
+      capabilities->FindPath("webauthn:extension:largeBlob");
+  if (large_blob_value) {
+    if (!large_blob_value->is_bool() ||
+        (large_blob_value->GetBool() && is_android)) {
       return false;
     }
   }
@@ -595,6 +621,10 @@ Status ExecuteInitSession(const InitSessionParams& bound_params,
     session->quit = true;
     if (session->chrome != NULL)
       session->chrome->Quit();
+  } else if (session->webSocketUrl) {
+    bound_params.cmd_task_runner->PostTask(
+        FROM_HERE, base::BindOnce(&InitSessionForWebSocketConnection,
+                                  bound_params.session_map, session->id));
   }
   return status;
 }
@@ -682,16 +712,20 @@ Status ExecuteClose(Session* session,
       return Status(kUnexpectedAlertOpen, "{Alert text : " + alert_text + "}");
   }
 
-  status = session->chrome->CloseWebView(web_view->GetId());
-  if (status.IsError())
-    return status;
+  if (!is_last_web_view) {
+    status = session->chrome->CloseWebView(web_view->GetId());
+    if (status.IsError())
+      return status;
 
-  status = ExecuteGetWindowHandles(session, base::DictionaryValue(), value);
-  if ((status.code() == kChromeNotReachable && is_last_web_view) ||
-      (status.IsOk() && (*value)->GetList().empty())) {
-    // If the only open window was closed, close is the same as calling "quit".
+    status = ExecuteGetWindowHandles(session, base::DictionaryValue(), value);
+    if (status.IsError())
+      return status;
+  } else {
+    // If there is only one open window, close is the same as calling "quit".
     session->quit = true;
-    return session->chrome->Quit();
+    status = session->chrome->Quit();
+    if (status.IsOk())
+      value->reset(new base::ListValue());
   }
 
   return status;

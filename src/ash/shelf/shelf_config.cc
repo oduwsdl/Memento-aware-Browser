@@ -13,6 +13,7 @@
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/scoped_observer.h"
@@ -55,13 +56,13 @@ void RecordReasonForShowingShelfControls() {
         kControlButtonsShownForShelfNavigationButtonsSetting;
   }
 
-  if (accessibility_controller->spoken_feedback_enabled())
+  if (accessibility_controller->spoken_feedback().enabled())
     buttons_shown_reason_mask |= kControlButtonsShownForSpokenFeedback;
 
-  if (accessibility_controller->switch_access_enabled())
+  if (accessibility_controller->switch_access().enabled())
     buttons_shown_reason_mask |= kControlButtonsShownForSwitchAccess;
 
-  if (accessibility_controller->autoclick_enabled())
+  if (accessibility_controller->autoclick().enabled())
     buttons_shown_reason_mask |= kControlButtonsShownForAutoclick;
 
   base::UmaHistogramExactLinear(
@@ -100,7 +101,9 @@ class ShelfConfig::ShelfAccessibilityObserver : public AccessibilityObserver {
 };
 
 ShelfConfig::ShelfConfig()
-    : in_tablet_mode_(false),
+    : use_in_app_shelf_in_overview_(false),
+      overview_mode_(false),
+      in_tablet_mode_(false),
       is_dense_(false),
       shelf_controls_shown_(true),
       is_virtual_keyboard_shown_(false),
@@ -114,15 +117,14 @@ ShelfConfig::ShelfConfig()
       shelf_button_spacing_(8),
       shelf_status_area_hit_region_padding_(4),
       shelf_status_area_hit_region_padding_dense_(2),
-      app_icon_group_margin_(16),
+      app_icon_group_margin_tablet_(16),
+      app_icon_group_margin_clamshell_(12),
       shelf_control_permanent_highlight_background_(
           SkColorSetA(SK_ColorWHITE, 26)),  // 10%
       shelf_focus_border_color_(gfx::kGoogleBlue300),
       workspace_area_visible_inset_(2),
       workspace_area_auto_hide_inset_(5),
       hidden_shelf_in_screen_portion_(3),
-      shelf_ink_drop_base_color_(SK_ColorWHITE),
-      shelf_ink_drop_visible_opacity_(0.2f),
       shelf_icon_color_(SK_ColorWHITE),
       status_indicator_offset_from_shelf_edge_(1),
       scrollable_shelf_ripple_padding_(2),
@@ -161,6 +163,7 @@ void ShelfConfig::Init() {
     shell->app_list_controller()->AddObserver(this);
     display::Screen::GetScreen()->AddObserver(this);
     shell->system_tray_model()->virtual_keyboard()->AddObserver(this);
+    shell->overview_controller()->AddObserver(this);
   }
 
   shell->tablet_mode_controller()->AddObserver(this);
@@ -175,9 +178,24 @@ void ShelfConfig::Shutdown() {
   if (!chromeos::switches::ShouldShowShelfHotseat())
     return;
 
+  shell->overview_controller()->RemoveObserver(this);
   shell->system_tray_model()->virtual_keyboard()->RemoveObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
   shell->app_list_controller()->RemoveObserver(this);
+}
+
+void ShelfConfig::OnOverviewModeWillStart() {
+  DCHECK(!overview_mode_);
+  use_in_app_shelf_in_overview_ =
+      !features::IsMaintainShelfStateWhenEnteringOverviewEnabled() ||
+      is_in_app();
+  overview_mode_ = true;
+}
+
+void ShelfConfig::OnOverviewModeEnding(OverviewSession* overview_session) {
+  overview_mode_ = false;
+  use_in_app_shelf_in_overview_ = false;
+  UpdateConfig(is_app_list_visible_, /*tablet_mode_changed=*/false);
 }
 
 void ShelfConfig::OnTabletModeStarting() {
@@ -230,9 +248,9 @@ void ShelfConfig::OnAppListVisibilityWillChange(bool shown,
 
 bool ShelfConfig::ShelfControlsForcedShownForAccessibility() const {
   auto* accessibility_controller = Shell::Get()->accessibility_controller();
-  return accessibility_controller->spoken_feedback_enabled() ||
-         accessibility_controller->autoclick_enabled() ||
-         accessibility_controller->switch_access_enabled() ||
+  return accessibility_controller->spoken_feedback().enabled() ||
+         accessibility_controller->autoclick().enabled() ||
+         accessibility_controller->switch_access().enabled() ||
          accessibility_controller
              ->tablet_mode_shelf_navigation_buttons_enabled();
 }
@@ -346,10 +364,19 @@ int ShelfConfig::status_area_hit_region_padding() const {
 bool ShelfConfig::is_in_app() const {
   Shell* shell = Shell::Get();
   const auto* session = shell->session_controller();
-  if (!session)
+  if (!session ||
+      session->GetSessionState() != session_manager::SessionState::ACTIVE) {
     return false;
-  return session->GetSessionState() == session_manager::SessionState::ACTIVE &&
-         (!is_app_list_visible_ || is_virtual_keyboard_shown_);
+  }
+  if (is_virtual_keyboard_shown_)
+    return true;
+  if (is_app_list_visible_)
+    return false;
+  if (overview_mode_ &&
+      features::IsMaintainShelfStateWhenEnteringOverviewEnabled()) {
+    return use_in_app_shelf_in_overview_;
+  }
+  return true;
 }
 
 float ShelfConfig::drag_hide_ratio_threshold() const {
@@ -387,7 +414,7 @@ void ShelfConfig::UpdateConfig(bool new_is_app_list_visible,
           ? Shell::Get()->system_tray_model()->virtual_keyboard()->visible()
           : false;
 
-  if (is_dense_ == new_is_dense &&
+  if (!tablet_mode_changed && is_dense_ == new_is_dense &&
       shelf_controls_shown_ == new_shelf_controls_shown &&
       is_virtual_keyboard_shown_ == new_is_virtual_keyboard_shown &&
       is_app_list_visible_ == new_is_app_list_visible) {
@@ -438,50 +465,32 @@ SkColor ShelfConfig::GetMaximizedShelfColor() const {
   return SkColorSetA(GetDefaultShelfColor(), 0xFF);  // 100% opacity
 }
 
-SkColor ShelfConfig::GetThemedColorFromWallpaper(SkColor base_color) const {
-  if (!Shell::Get()->wallpaper_controller())
-    return base_color;
+AshColorProvider::BaseLayerType ShelfConfig::GetShelfBaseLayerType() const {
+  if (!chromeos::switches::ShouldShowShelfHotseat()) {
+    return in_tablet_mode_ ? AshColorProvider::BaseLayerType::kTransparent60
+                           : AshColorProvider::BaseLayerType::kTransparent80;
+  }
 
-  SkColor dark_muted_color =
-      Shell::Get()->wallpaper_controller()->GetProminentColor(
-          color_utils::ColorProfile(color_utils::LumaRange::DARK,
-                                    color_utils::SaturationRange::MUTED));
-
-  if (dark_muted_color == kInvalidWallpaperColor)
-    return base_color;
-
-  int base_alpha = SkColorGetA(base_color);
-  // Combine SK_ColorBLACK at 50% opacity with |dark_muted_color|.
-  base_color = color_utils::GetResultingPaintColor(
-      SkColorSetA(SK_ColorBLACK, 127), dark_muted_color);
-
-  return SkColorSetA(base_color, base_alpha);
+  if (in_tablet_mode_) {
+    if (is_in_app()) {
+      return AshColorProvider::Get()->IsDarkModeEnabled()
+                 ? AshColorProvider::BaseLayerType::kTransparent90
+                 : AshColorProvider::BaseLayerType::kOpaque;
+    }
+    return AshColorProvider::BaseLayerType::kTransparent60;
+  }
+  return AshColorProvider::BaseLayerType::kTransparent80;
 }
 
 SkColor ShelfConfig::GetDefaultShelfColor() const {
   if (!features::IsBackgroundBlurEnabled()) {
-    return GetThemedColorFromWallpaper(
-        AshColorProvider::Get()->GetBaseLayerColor(
-            AshColorProvider::BaseLayerType::kTransparent90,
-            AshColorProvider::AshColorMode::kDark));
+    return AshColorProvider::Get()->GetBaseLayerColor(
+        AshColorProvider::BaseLayerType::kTransparent90);
   }
 
-  AshColorProvider::BaseLayerType layer_type;
-  if (!chromeos::switches::ShouldShowShelfHotseat()) {
-    layer_type = in_tablet_mode_
-                     ? AshColorProvider::BaseLayerType::kTransparent60
-                     : AshColorProvider::BaseLayerType::kTransparent80;
-  } else if (in_tablet_mode_) {
-    layer_type = is_in_app() ? AshColorProvider::BaseLayerType::kTransparent90
-                             : AshColorProvider::BaseLayerType::kTransparent60;
-  } else {
-    layer_type = AshColorProvider::BaseLayerType::kTransparent80;
-  }
+  AshColorProvider::BaseLayerType layer_type = GetShelfBaseLayerType();
 
-  SkColor final_color = AshColorProvider::Get()->GetBaseLayerColor(
-      layer_type, AshColorProvider::AshColorMode::kDark);
-
-  return GetThemedColorFromWallpaper(final_color);
+  return AshColorProvider::Get()->GetBaseLayerColor(layer_type);
 }
 
 int ShelfConfig::GetShelfControlButtonBlurRadius() const {
@@ -496,6 +505,11 @@ int ShelfConfig::GetShelfControlButtonBlurRadius() const {
 int ShelfConfig::GetAppIconEndPadding() const {
   return chromeos::switches::ShouldShowShelfHotseat() ? app_icon_end_padding_
                                                       : 0;
+}
+
+int ShelfConfig::GetAppIconGroupMargin() const {
+  return in_tablet_mode_ ? app_icon_group_margin_tablet_
+                         : app_icon_group_margin_clamshell_;
 }
 
 base::TimeDelta ShelfConfig::DimAnimationDuration() const {

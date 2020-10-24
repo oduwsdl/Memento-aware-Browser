@@ -22,6 +22,7 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/filename_util.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 
 namespace {
 
@@ -89,6 +90,8 @@ class TestFilesDataSource : public content::URLDataSource {
     std::move(callback).Run(response.get());
   }
 
+  bool ShouldServeMimeTypeAsContentTypeHeader() override { return true; }
+
   // It currently only serves HTML/JS/CSS/SVG.
   std::string GetMimeType(const std::string& path) override {
     if (base::EndsWith(path, ".html", base::CompareCase::INSENSITIVE_ASCII)) {
@@ -111,10 +114,19 @@ class TestFilesDataSource : public content::URLDataSource {
     return {};
   }
 
-  std::string GetContentSecurityPolicyScriptSrc() override {
-    // Add 'unsafe-inline' to CSP to allow the inline <script> in the generated
-    // HTML to run see js_test_gen_html.py.
-    return "script-src chrome://resources 'self'  'unsafe-inline'; ";
+  std::string GetContentSecurityPolicy(
+      const network::mojom::CSPDirectiveName directive) override {
+    if (directive == network::mojom::CSPDirectiveName::ScriptSrc) {
+      // Add 'unsafe-inline' to CSP to allow the inline <script> in the
+      // generated HTML to run see js_test_gen_html.py.
+      return "script-src chrome://resources 'self'  'unsafe-inline'; ";
+    } else if (directive ==
+                   network::mojom::CSPDirectiveName::RequireTrustedTypesFor ||
+               directive == network::mojom::CSPDirectiveName::TrustedTypes) {
+      return std::string();
+    }
+
+    return content::URLDataSource::GetContentSecurityPolicy(directive);
   }
 
   // Root of repository source, where files are served directly from.

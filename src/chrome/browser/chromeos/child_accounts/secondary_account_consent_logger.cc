@@ -40,7 +40,7 @@ constexpr char kConsentApiPath[] =
 // Version of the parental consent text. Must be updated when consent text is
 // changed. Format of the text version is "v<GERRIT_CL_NUMBER>" with number of
 // the last CL where strings with information for parents were changed.
-constexpr char kConsentScreenTextVersion[] = "v2211143";
+constexpr char kConsentScreenTextVersion[] = "v2353089";
 // The text version which requires invalidation of the secondary accounts added
 // before consent text changes. Format of the invalidation version is
 // "iv<GERRIT_CL_NUMBER>".
@@ -48,7 +48,7 @@ constexpr char kConsentScreenTextVersion[] = "v2211143";
 // WARNING: change of the current version will result in invalidation of
 // secondary accounts added with previous versions.
 // =============================================================================
-constexpr char kSecondaryAccountsInvalidationVersion[] = "iv2153049";
+constexpr char kSecondaryAccountsInvalidationVersion[] = "iv2353089";
 
 constexpr int kNumConsentLogRetries = 1;
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
@@ -92,6 +92,13 @@ void SecondaryAccountConsentLogger::RegisterPrefs(
   registry->RegisterStringPref(
       chromeos::prefs::kEduCoexistenceSecondaryAccountsInvalidationVersion,
       "iv2153049" /* default_value, the first invalidation version */);
+
+  // |kEduCoexistenceToSVersion| is derived from Google3 cl that introduced new
+  // ToS version. We use string here for the ToS version to be more future
+  // proof. In the future we might add a prefix to indicate the flow where the
+  // ToS were accepted (OOBE or Settings flow).
+  registry->RegisterStringPref(chromeos::prefs::kEduCoexistenceToSVersion,
+                               std::string());
 }
 
 // static

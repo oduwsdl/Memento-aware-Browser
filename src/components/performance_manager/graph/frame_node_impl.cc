@@ -11,7 +11,7 @@
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/graph/process_node_impl.h"
 #include "components/performance_manager/graph/worker_node_impl.h"
-#include "components/performance_manager/public/frame_priority/frame_priority.h"
+#include "components/performance_manager/public/execution_context_priority/execution_context_priority.h"
 
 namespace performance_manager {
 
@@ -19,15 +19,14 @@ namespace performance_manager {
 constexpr char FrameNodeImpl::kDefaultPriorityReason[] =
     "default frame priority";
 
-using PriorityAndReason = frame_priority::PriorityAndReason;
+using PriorityAndReason = execution_context_priority::PriorityAndReason;
 
 FrameNodeImpl::FrameNodeImpl(ProcessNodeImpl* process_node,
                              PageNodeImpl* page_node,
                              FrameNodeImpl* parent_frame_node,
                              int frame_tree_node_id,
                              int render_frame_id,
-                             const base::UnguessableToken& dev_tools_token,
-                             const FrameToken& frame_token,
+                             const blink::LocalFrameToken& frame_token,
                              int32_t browsing_instance_id,
                              int32_t site_instance_id)
     : parent_frame_node_(parent_frame_node),
@@ -35,14 +34,14 @@ FrameNodeImpl::FrameNodeImpl(ProcessNodeImpl* process_node,
       process_node_(process_node),
       frame_tree_node_id_(frame_tree_node_id),
       render_frame_id_(render_frame_id),
-      dev_tools_token_(dev_tools_token),
       frame_token_(frame_token),
       browsing_instance_id_(browsing_instance_id),
       site_instance_id_(site_instance_id),
       render_frame_host_proxy_(content::GlobalFrameRoutingId(
-          process_node->render_process_host_proxy().render_process_host_id(),
-          render_frame_id)),
-      weak_factory_(this) {
+          process_node->render_process_host_proxy()
+              .render_process_host_id()
+              .value(),
+          render_frame_id)) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(process_node);
   DCHECK(page_node);
@@ -138,11 +137,7 @@ int FrameNodeImpl::render_frame_id() const {
   return render_frame_id_;
 }
 
-const base::UnguessableToken& FrameNodeImpl::dev_tools_token() const {
-  return dev_tools_token_;
-}
-
-const FrameToken& FrameNodeImpl::frame_token() const {
+const blink::LocalFrameToken& FrameNodeImpl::frame_token() const {
   return frame_token_;
 }
 
@@ -234,6 +229,18 @@ bool FrameNodeImpl::is_audible() const {
   return is_audible_.value();
 }
 
+const base::Optional<gfx::Rect>& FrameNodeImpl::viewport_intersection() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // The viewport intersection of the main frame is not tracked.
+  DCHECK(!IsMainFrame());
+  return viewport_intersection_.value();
+}
+
+FrameNode::Visibility FrameNodeImpl::visibility() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return visibility_.value();
+}
+
 void FrameNodeImpl::SetIsCurrent(bool is_current) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   is_current_.SetAndMaybeNotify(this, is_current);
@@ -277,6 +284,19 @@ void FrameNodeImpl::SetIsAudible(bool is_audible) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_NE(is_audible, is_audible_.value());
   is_audible_.SetAndMaybeNotify(this, is_audible);
+}
+
+void FrameNodeImpl::SetViewportIntersection(
+    const gfx::Rect& viewport_intersection) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // The viewport intersection of the main frame is not tracked.
+  DCHECK(!IsMainFrame());
+  viewport_intersection_.SetAndMaybeNotify(this, viewport_intersection);
+}
+
+void FrameNodeImpl::SetVisibility(Visibility visibility) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  visibility_.SetAndMaybeNotify(this, visibility);
 }
 
 void FrameNodeImpl::OnNavigationCommitted(const GURL& url, bool same_document) {
@@ -375,12 +395,7 @@ int FrameNodeImpl::GetFrameTreeNodeId() const {
   return frame_tree_node_id();
 }
 
-const base::UnguessableToken& FrameNodeImpl::GetDevToolsToken() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return dev_tools_token();
-}
-
-const FrameToken& FrameNodeImpl::GetFrameToken() const {
+const blink::LocalFrameToken& FrameNodeImpl::GetFrameToken() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return frame_token();
 }
@@ -507,6 +522,17 @@ bool FrameNodeImpl::IsAudible() const {
   return is_audible();
 }
 
+const base::Optional<gfx::Rect>& FrameNodeImpl::GetViewportIntersection()
+    const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return viewport_intersection();
+}
+
+FrameNode::Visibility FrameNodeImpl::GetVisibility() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return visibility();
+}
+
 void FrameNodeImpl::AddChildFrame(FrameNodeImpl* child_frame_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(child_frame_node);
@@ -537,6 +563,12 @@ void FrameNodeImpl::OnJoiningGraph() {
   // Enable querying this node using process and frame routing ids.
   graph()->RegisterFrameNodeForId(process_node_->GetRenderProcessId(),
                                   render_frame_id_, this);
+
+  // Set the initial frame visibility. This is done on the graph because the
+  // page node must be accessed. OnFrameNodeAdded() has not been called yet for
+  // this frame, so it is important to avoid sending a notification for this
+  // property change.
+  visibility_.Set(GetInitialFrameVisibility());
 
   // Wire this up to the other nodes in the graph.
   if (parent_frame_node_)
@@ -631,6 +663,25 @@ bool FrameNodeImpl::HasFrameNodeInDescendants(FrameNodeImpl* frame_node) const {
 bool FrameNodeImpl::HasFrameNodeInTree(FrameNodeImpl* frame_node) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetFrameTreeRoot() == frame_node->GetFrameTreeRoot();
+}
+
+FrameNode::Visibility FrameNodeImpl::GetInitialFrameVisibility() const {
+  DCHECK(!viewport_intersection_.value());
+
+  // If the page hosting this frame is not visible, then the frame is also not
+  // visible.
+  if (!page_node()->is_visible())
+    return FrameNode::Visibility::kNotVisible;
+
+  // The visibility of the frame depends on the viewport intersection of said
+  // frame. Since a main frame has no viewport intersection, it is always
+  // visible in the page.
+  if (IsMainFrame())
+    return FrameNode::Visibility::kVisible;
+
+  // Since the viewport intersection of a frame is not initially available, the
+  // visibility of a child frame is initially unknown.
+  return FrameNode::Visibility::kUnknown;
 }
 
 FrameNodeImpl::DocumentProperties::DocumentProperties() = default;

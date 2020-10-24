@@ -21,7 +21,9 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import org.chromium.components.browser_ui.widget.FadingEdgeScrollView;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -38,6 +40,7 @@ public class PageInfoDialog {
 
     @NonNull
     private final PageInfoView mView;
+    private final PageInfoContainer mContainerView;
     private final boolean mIsSheet;
     // The dialog implementation.
     // mSheetDialog is set if the dialog appears as a sheet. Otherwise, mModalDialog is set.
@@ -65,10 +68,12 @@ public class PageInfoDialog {
      * @param controller The dialog's controller.
      *
      */
-    public PageInfoDialog(Context context, @NonNull PageInfoView view, View containerView,
-            boolean isSheet, @NonNull ModalDialogManager manager,
+    public PageInfoDialog(Context context, @NonNull PageInfoView view,
+            @Nullable PageInfoContainer subpageView, View containerView, boolean isSheet,
+            @NonNull ModalDialogManager manager,
             @NonNull ModalDialogProperties.Controller controller) {
         mView = view;
+        mContainerView = subpageView;
         mIsSheet = isSheet;
         mManager = manager;
         mController = controller;
@@ -95,7 +100,7 @@ public class PageInfoDialog {
             container = new ScrollView(context);
         }
 
-        container.addView(mView);
+        container.addView(mContainerView != null ? mContainerView : mView);
 
         if (isSheet) {
             mSheetDialog = createSheetDialog(context, container);
@@ -159,6 +164,9 @@ public class PageInfoDialog {
                         // Delay the cleanup by a tiny amount to give this frame a chance to
                         // be displayed before we destroy the dialog.
                         mView.postDelayed(this::superDismiss, CLOSE_CLEANUP_DELAY_MS);
+                        if (mContainerView != null) {
+                            mContainerView.postDelayed(this::superDismiss, CLOSE_CLEANUP_DELAY_MS);
+                        }
                     }).start();
                 }
             }
@@ -196,11 +204,12 @@ public class PageInfoDialog {
     }
 
     private ViewGroup createSheetContainer(Context context, View containerView) {
-        return new ScrollView(context) {
+        return new FadingEdgeScrollView(context, null) {
             @Override
             protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 heightMeasureSpec = MeasureSpec.makeMeasureSpec(
-                        containerView != null ? containerView.getHeight() : 0, MeasureSpec.AT_MOST);
+                        containerView != null ? containerView.getHeight() * 90 / 100 : 0,
+                        MeasureSpec.AT_MOST);
                 super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             }
         };
@@ -209,15 +218,15 @@ public class PageInfoDialog {
     /**
      * Create an animator to slide in the entire dialog from the top of the screen.
      */
-    private Animator createDialogSlideAnimaton(boolean isEnter) {
-        final float animHeight = -mView.getHeight();
+    private Animator createDialogSlideAnimaton(boolean isEnter, View view) {
+        final float animHeight = -view.getHeight();
         ObjectAnimator translateAnim;
         if (isEnter) {
-            mView.setTranslationY(animHeight);
-            translateAnim = ObjectAnimator.ofFloat(mView, View.TRANSLATION_Y, 0f);
+            view.setTranslationY(animHeight);
+            translateAnim = ObjectAnimator.ofFloat(view, View.TRANSLATION_Y, 0f);
             translateAnim.setInterpolator(BakedBezierInterpolator.FADE_IN_CURVE);
         } else {
-            translateAnim = ObjectAnimator.ofFloat(mView, View.TRANSLATION_Y, animHeight);
+            translateAnim = ObjectAnimator.ofFloat(view, View.TRANSLATION_Y, animHeight);
             translateAnim.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
         }
         translateAnim.setDuration(ENTER_EXIT_DURATION_MS);
@@ -230,11 +239,14 @@ public class PageInfoDialog {
      */
     private Animator createAllAnimations(boolean isEnter, Runnable onAnimationEnd) {
         Animator dialogAnimation =
-                mIsSheet ? createDialogSlideAnimaton(isEnter) : new AnimatorSet();
+                mIsSheet ? createDialogSlideAnimaton(isEnter, mView) : new AnimatorSet();
+        Animator subpageDialogAnimation = mIsSheet && mContainerView != null
+                ? createDialogSlideAnimaton(isEnter, mContainerView)
+                : new AnimatorSet();
         Animator viewAnimation = mView.createEnterExitAnimation(isEnter);
         AnimatorSet allAnimations = new AnimatorSet();
         if (isEnter) allAnimations.setStartDelay(ENTER_START_DELAY_MS);
-        allAnimations.playTogether(dialogAnimation, viewAnimation);
+        allAnimations.playTogether(dialogAnimation, subpageDialogAnimation, viewAnimation);
         allAnimations.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {

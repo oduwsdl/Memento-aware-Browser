@@ -19,7 +19,7 @@ public class MockContextualSearchPolicy extends ContextualSearchPolicy {
     }
 
     @Override
-    public boolean maySendBasePageUrl() {
+    public boolean doSendBasePageUrl() {
         return false;
     }
 
@@ -30,6 +30,11 @@ public class MockContextualSearchPolicy extends ContextualSearchPolicy {
 
     @Override
     public boolean isPromoAvailable() {
+        return false;
+    }
+
+    @Override
+    public boolean isUserUndecided() {
         return false;
     }
 }

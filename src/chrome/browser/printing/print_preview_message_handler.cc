@@ -14,6 +14,7 @@
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/numerics/safe_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/printing/pdf_nup_converter_client.h"
 #include "chrome/browser/printing/print_job_manager.h"
@@ -65,8 +66,8 @@ bool ShouldUseCompositor(PrintPreviewUI* print_preview_ui) {
   return IsOopifEnabled() && print_preview_ui->source_is_modifiable();
 }
 
-bool IsValidPageNumber(int page_number, int page_count) {
-  return page_number >= 0 && page_number < page_count;
+bool IsValidPageNumber(uint32_t page_number, uint32_t page_count) {
+  return page_number < page_count;
 }
 
 }  // namespace
@@ -101,9 +102,14 @@ PrintPreviewUI* PrintPreviewMessageHandler::GetPrintPreviewUI(
 void PrintPreviewMessageHandler::OnRequestPrintPreview(
     content::RenderFrameHost* render_frame_host,
     const PrintHostMsg_RequestPrintPreview_Params& params) {
+  PrintViewManager* print_view_manager =
+      PrintViewManager::FromWebContents(web_contents());
+  if (print_view_manager->RejectPrintPreviewRequestIfRestricted(
+          render_frame_host)) {
+    return;
+  }
   if (params.webnode_only) {
-    PrintViewManager::FromWebContents(web_contents())->PrintPreviewForWebNode(
-        render_frame_host);
+    print_view_manager->PrintPreviewForWebNode(render_frame_host);
   }
   PrintPreviewDialogController::PrintPreview(web_contents());
   PrintPreviewUI::SetInitialParams(GetPrintPreviewDialog(), params);
@@ -111,13 +117,14 @@ void PrintPreviewMessageHandler::OnRequestPrintPreview(
 
 void PrintPreviewMessageHandler::OnDidStartPreview(
     const mojom::DidStartPreviewParams& params,
-    const PrintHostMsg_PreviewIds& ids) {
-  if (params.page_count <= 0 || params.pages_to_render.empty()) {
+    const mojom::PreviewIds& ids) {
+  if (params.page_count == 0 || params.page_count > kMaxPageCount ||
+      params.pages_to_render.empty()) {
     NOTREACHED();
     return;
   }
 
-  for (int page_number : params.pages_to_render) {
+  for (uint32_t page_number : params.pages_to_render) {
     if (!IsValidPageNumber(page_number, params.page_count)) {
       NOTREACHED();
       return;
@@ -142,8 +149,9 @@ void PrintPreviewMessageHandler::OnDidStartPreview(
 }
 
 void PrintPreviewMessageHandler::OnDidPrepareForDocumentToPdf(
+    content::RenderFrameHost* render_frame_host,
     int document_cookie,
-    const PrintHostMsg_PreviewIds& ids) {
+    const mojom::PreviewIds& ids) {
   PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
@@ -163,7 +171,7 @@ void PrintPreviewMessageHandler::OnDidPrepareForDocumentToPdf(
     return;
 
   client->DoPrepareForDocumentToPdf(
-      document_cookie,
+      document_cookie, render_frame_host,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(
               &PrintPreviewMessageHandler::OnPrepareForDocumentToPdfDone,
@@ -173,12 +181,14 @@ void PrintPreviewMessageHandler::OnDidPrepareForDocumentToPdf(
 
 void PrintPreviewMessageHandler::OnDidPreviewPage(
     content::RenderFrameHost* render_frame_host,
-    const PrintHostMsg_DidPreviewPage_Params& params,
-    const PrintHostMsg_PreviewIds& ids) {
-  int page_number = params.page_number;
-  const mojom::DidPrintContentParams& content = params.content;
-  if (page_number < FIRST_PAGE_INDEX || !content.metafile_data_region.IsValid())
+    const mojom::DidPreviewPageParams& params,
+    const mojom::PreviewIds& ids) {
+  uint32_t page_number = params.page_number;
+  const mojom::DidPrintContentParams& content = *params.content;
+  if (page_number == kInvalidPageIndex ||
+      !content.metafile_data_region.IsValid()) {
     return;
+  }
 
   PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
@@ -216,8 +226,8 @@ void PrintPreviewMessageHandler::OnDidPreviewPage(
 
 void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
     content::RenderFrameHost* render_frame_host,
-    const PrintHostMsg_DidPreviewDocument_Params& params,
-    const PrintHostMsg_PreviewIds& ids) {
+    const mojom::DidPreviewDocumentParams& params,
+    const mojom::PreviewIds& ids) {
   // Always try to stop the worker.
   StopWorker(params.document_cookie);
 
@@ -228,7 +238,7 @@ void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
   const bool composite_document_using_individual_pages =
       ShouldUseCompositor(print_preview_ui);
   const base::ReadOnlySharedMemoryRegion& metafile =
-      params.content.metafile_data_region;
+      params.content->metafile_data_region;
 
   // When the Print Compositor is active, the print document is composed from
   // the individual pages, so |metafile| should be invalid.
@@ -237,7 +247,7 @@ void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
   if (composite_document_using_individual_pages == metafile.IsValid())
     return;
 
-  if (params.expected_pages_count <= 0) {
+  if (params.expected_pages_count == 0) {
     NOTREACHED();
     return;
   }
@@ -272,7 +282,7 @@ void PrintPreviewMessageHandler::OnDidGetDefaultPageLayout(
     const mojom::PageSizeMargins& page_layout_in_points,
     const gfx::Rect& printable_area_in_points,
     bool has_custom_page_size_style,
-    const PrintHostMsg_PreviewIds& ids) {
+    const mojom::PreviewIds& ids) {
   PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
@@ -284,8 +294,8 @@ void PrintPreviewMessageHandler::OnDidGetDefaultPageLayout(
 
 void PrintPreviewMessageHandler::NotifyUIPreviewPageReady(
     PrintPreviewUI* print_preview_ui,
-    int page_number,
-    const PrintHostMsg_PreviewIds& ids,
+    uint32_t page_number,
+    const mojom::PreviewIds& ids,
     scoped_refptr<base::RefCountedMemory> data_bytes) {
   if (!data_bytes || !data_bytes->size())
     return;
@@ -300,7 +310,7 @@ void PrintPreviewMessageHandler::NotifyUIPreviewPageReady(
 
 void PrintPreviewMessageHandler::NotifyUIPreviewDocumentReady(
     PrintPreviewUI* print_preview_ui,
-    const PrintHostMsg_PreviewIds& ids,
+    const mojom::PreviewIds& ids,
     scoped_refptr<base::RefCountedMemory> data_bytes) {
   if (!data_bytes || !data_bytes->size())
     return;
@@ -314,12 +324,16 @@ void PrintPreviewMessageHandler::NotifyUIPreviewDocumentReady(
 }
 
 void PrintPreviewMessageHandler::OnCompositePdfPageDone(
-    int page_number,
+    uint32_t page_number,
     int document_cookie,
-    const PrintHostMsg_PreviewIds& ids,
+    const mojom::PreviewIds& ids,
     mojom::PrintCompositor::Status status,
     base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (PrintPreviewUI::ShouldCancelRequest(ids))
+    return;
+
   PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (status != mojom::PrintCompositor::Status::kSuccess) {
     DLOG(ERROR) << "Compositing pdf failed with error " << status;
@@ -338,15 +352,17 @@ void PrintPreviewMessageHandler::OnCompositePdfPageDone(
         base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(region));
   } else {
     print_preview_ui->AddPdfPageForNupConversion(std::move(region));
-    int current_page_index =
+    uint32_t current_page_index =
         print_preview_ui->GetPageToNupConvertIndex(page_number);
-    if (current_page_index == -1) {
+    if (current_page_index == kInvalidPageIndex) {
       return;
     }
 
     if (((current_page_index + 1) % pages_per_sheet) == 0 ||
         print_preview_ui->LastPageComposited(page_number)) {
-      int new_page_number = current_page_index / pages_per_sheet;
+      uint32_t new_page_number =
+          base::checked_cast<uint32_t>(current_page_index / pages_per_sheet);
+      DCHECK_NE(new_page_number, kInvalidPageIndex);
       std::vector<base::ReadOnlySharedMemoryRegion> pdf_page_regions =
           print_preview_ui->TakePagesForNupConvert();
 
@@ -371,8 +387,8 @@ void PrintPreviewMessageHandler::OnCompositePdfPageDone(
 }
 
 void PrintPreviewMessageHandler::OnNupPdfConvertDone(
-    int page_number,
-    const PrintHostMsg_PreviewIds& ids,
+    uint32_t page_number,
+    const mojom::PreviewIds& ids,
     mojom::PdfNupConverter::Status status,
     base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -394,10 +410,14 @@ void PrintPreviewMessageHandler::OnNupPdfConvertDone(
 
 void PrintPreviewMessageHandler::OnCompositeToPdfDone(
     int document_cookie,
-    const PrintHostMsg_PreviewIds& ids,
+    const mojom::PreviewIds& ids,
     mojom::PrintCompositor::Status status,
     base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (PrintPreviewUI::ShouldCancelRequest(ids))
+    return;
+
   PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (status != mojom::PrintCompositor::Status::kSuccess) {
     DLOG(ERROR) << "Completion of document to pdf failed with error " << status;
@@ -435,9 +455,13 @@ void PrintPreviewMessageHandler::OnCompositeToPdfDone(
 }
 
 void PrintPreviewMessageHandler::OnPrepareForDocumentToPdfDone(
-    const PrintHostMsg_PreviewIds& ids,
+    const mojom::PreviewIds& ids,
     mojom::PrintCompositor::Status status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (PrintPreviewUI::ShouldCancelRequest(ids))
+    return;
+
   if (status != mojom::PrintCompositor::Status::kSuccess) {
     PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
     if (print_preview_ui)
@@ -446,7 +470,7 @@ void PrintPreviewMessageHandler::OnPrepareForDocumentToPdfDone(
 }
 
 void PrintPreviewMessageHandler::OnNupPdfDocumentConvertDone(
-    const PrintHostMsg_PreviewIds& ids,
+    const mojom::PreviewIds& ids,
     mojom::PdfNupConverter::Status status,
     base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -474,6 +498,8 @@ bool PrintPreviewMessageHandler::OnMessageReceived(
                                    render_frame_host)
     IPC_MESSAGE_HANDLER(PrintHostMsg_RequestPrintPreview,
                         OnRequestPrintPreview)
+    IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrepareDocumentForPreview,
+                        OnDidPrepareForDocumentToPdf)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPreviewPage, OnDidPreviewPage)
     IPC_MESSAGE_HANDLER(PrintHostMsg_MetafileReadyForPrinting,
                         OnMetafileReadyForPrinting)
@@ -485,8 +511,6 @@ bool PrintPreviewMessageHandler::OnMessageReceived(
   handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintPreviewMessageHandler, message)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidStartPreview, OnDidStartPreview)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrepareDocumentForPreview,
-                        OnDidPrepareForDocumentToPdf)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetDefaultPageLayout,
                         OnDidGetDefaultPageLayout)
     IPC_MESSAGE_UNHANDLED(handled = false)

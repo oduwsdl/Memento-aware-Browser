@@ -34,10 +34,8 @@ extern const base::Feature kAdSamplerTriggerFeature;
 // reports.
 extern const base::Feature kCaptureInlineJavascriptForGoogleAds;
 
-// Controls whether to do deep scanning for DLP. If both this feature and
-// the enterprise policies are enabled, the downloaded and uploaded files are
-// sent for scanning.
-extern const base::Feature kContentComplianceEnabled;
+// Enables client side detection on Android.
+extern const base::Feature kClientSideDetectionForAndroid;
 
 // Enable the addition of access tokens to download pings for enhanced
 // protection users.
@@ -46,10 +44,12 @@ extern const base::Feature kDownloadRequestWithToken;
 // Enable Chrome Safe Browsing enhanced protection.
 extern const base::Feature kEnhancedProtection;
 
-// Controls whether to do deep scanning for malware. If both this feature and
-// the enterprise policies are enabled, the downloaded and uploaded files are
-// sent for scanning.
-extern const base::Feature kMalwareScanEnabled;
+// Include enhanced protection message in interstitials.
+extern const base::Feature kEnhancedProtectionMessageInInterstitials;
+
+// Controls whether the limited list size experiment is enabled. This experiment
+// limits the number of entries stored in each Safe Browsing list.
+extern const base::Feature kLimitedListSizeForIOS;
 
 // Enable password protection for non-Google accounts.
 extern const base::Feature kPasswordProtectionForSavedPasswords;
@@ -73,6 +73,14 @@ extern const base::Feature kSafeBrowsingAvailableOnIOS;
 // Controls whether Safe Browsing uses separate NetworkContexts for each
 // profile.
 extern const base::Feature kSafeBrowsingSeparateNetworkContexts;
+
+// Controls whether the Safe Browsing section is shown on the settings UI on
+// Android.
+extern const base::Feature kSafeBrowsingSectionUIAndroid;
+
+// Controls whether cookies are removed from certain communications with Safe
+// Browsing.
+extern const base::Feature kSafeBrowsingRemoveCookies;
 
 // Controls the daily quota for the suspicious site trigger.
 extern const base::Feature kSuspiciousSiteTriggerQuotaFeature;
@@ -128,6 +136,15 @@ extern const base::Feature kUseNewDownloadWarnings;
 
 // Controls whether the delayed warning experiment is enabled.
 extern const base::Feature kDelayedWarnings;
+// True if mouse clicks should undelay the warnings immediately when delayed
+// warnings feature is enabled.
+extern const base::FeatureParam<bool> kDelayedWarningsEnableMouseClicks;
+
+// Status of the SimplifiedUrlDisplay experiments. This does not control the
+// individual experiments, those are controlled by their own feature flags.
+// The feature is only set by Finch so that we can differentiate between
+// default and control groups of the experiment.
+extern const base::Feature kSimplifiedUrlDisplay;
 
 base::ListValue GetFeatureStatusList();
 

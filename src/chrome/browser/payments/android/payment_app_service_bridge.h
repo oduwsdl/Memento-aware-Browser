@@ -12,6 +12,7 @@
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "components/payments/content/payment_app_factory.h"
+#include "content/public/browser/global_routing_id.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -38,12 +39,13 @@ class PaymentAppServiceBridge : public PaymentAppFactory::Delegate {
 
   // Creates a new PaymentAppServiceBridge. This object is self-deleting; its
   // memory is freed when OnDoneCreatingPaymentApps() is called
-  // |number_of_factories| times.
+  // `number_of_factories` times. The `spec` parameter should not be null.
   static PaymentAppServiceBridge* Create(
       size_t number_of_factories,
       content::RenderFrameHost* render_frame_host,
       const GURL& top_origin,
-      PaymentRequestSpec* spec,
+      base::WeakPtr<PaymentRequestSpec> spec,
+      const std::string& twa_package_name,
       scoped_refptr<PaymentManifestWebDataService> web_data_service,
       bool may_crawl_for_installable_payment_apps,
       CanMakePaymentCalculatedCallback can_make_payment_calculated_callback,
@@ -67,6 +69,8 @@ class PaymentAppServiceBridge : public PaymentAppFactory::Delegate {
   content::RenderFrameHost* GetInitiatorRenderFrameHost() const override;
   const std::vector<mojom::PaymentMethodDataPtr>& GetMethodData()
       const override;
+  std::unique_ptr<autofill::InternalAuthenticator> CreateInternalAuthenticator()
+      const override;
   scoped_refptr<PaymentManifestWebDataService>
   GetPaymentManifestWebDataService() const override;
   bool MayCrawlForInstallablePaymentApps() override;
@@ -75,19 +79,23 @@ class PaymentAppServiceBridge : public PaymentAppFactory::Delegate {
   bool IsRequestedAutofillDataAvailable() override;
   ContentPaymentRequestDelegate* GetPaymentRequestDelegate() const override;
   void ShowProcessingSpinner() override;
-  PaymentRequestSpec* GetSpec() const override;
+  base::WeakPtr<PaymentRequestSpec> GetSpec() const override;
+  std::string GetTwaPackageName() const override;
   void OnPaymentAppCreated(std::unique_ptr<PaymentApp> app) override;
   void OnPaymentAppCreationError(const std::string& error_message) override;
   bool SkipCreatingNativePaymentApps() const override;
   void OnDoneCreatingPaymentApps() override;
+  void SetCanMakePaymentEvenWithoutApps() override;
 
  private:
-  // Prevents direct instantiation. Callers should use Create() instead.
+  // Prevents direct instantiation. Callers should use Create() instead. The
+  // `spec` parameter should not be null.
   PaymentAppServiceBridge(
       size_t number_of_factories,
       content::RenderFrameHost* render_frame_host,
       const GURL& top_origin,
-      PaymentRequestSpec* spec,
+      base::WeakPtr<PaymentRequestSpec> spec,
+      const std::string& twa_package_name,
       scoped_refptr<PaymentManifestWebDataService> web_data_service,
       bool may_crawl_for_installable_payment_apps,
       CanMakePaymentCalculatedCallback can_make_payment_calculated_callback,
@@ -96,12 +104,12 @@ class PaymentAppServiceBridge : public PaymentAppFactory::Delegate {
       base::OnceClosure done_creating_payment_apps_callback);
 
   size_t number_of_pending_factories_;
-  content::WebContents* web_contents_;
-  content::RenderFrameHost* render_frame_host_;
+  content::GlobalFrameRoutingId frame_routing_id_;
   const GURL top_origin_;
   const GURL frame_origin_;
   const url::Origin frame_security_origin_;
-  PaymentRequestSpec* spec_;
+  base::WeakPtr<PaymentRequestSpec> spec_;
+  const std::string twa_package_name_;
   scoped_refptr<PaymentManifestWebDataService>
       payment_manifest_web_data_service_;
   bool may_crawl_for_installable_payment_apps_;

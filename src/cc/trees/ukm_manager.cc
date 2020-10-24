@@ -112,8 +112,8 @@ void UkmManager::RecordThroughputUKM(
         CASE_FOR_MAIN_THREAD_TRACKER(MainThreadAnimation);
         CASE_FOR_MAIN_THREAD_TRACKER(PinchZoom);
         CASE_FOR_MAIN_THREAD_TRACKER(RAF);
+        CASE_FOR_MAIN_THREAD_TRACKER(ScrollbarScroll);
         CASE_FOR_MAIN_THREAD_TRACKER(TouchScroll);
-        CASE_FOR_MAIN_THREAD_TRACKER(Universal);
         CASE_FOR_MAIN_THREAD_TRACKER(Video);
         CASE_FOR_MAIN_THREAD_TRACKER(WheelScroll);
 #undef CASE_FOR_MAIN_THREAD_TRACKER
@@ -135,8 +135,8 @@ void UkmManager::RecordThroughputUKM(
         CASE_FOR_COMPOSITOR_THREAD_TRACKER(MainThreadAnimation);
         CASE_FOR_COMPOSITOR_THREAD_TRACKER(PinchZoom);
         CASE_FOR_COMPOSITOR_THREAD_TRACKER(RAF);
+        CASE_FOR_COMPOSITOR_THREAD_TRACKER(ScrollbarScroll);
         CASE_FOR_COMPOSITOR_THREAD_TRACKER(TouchScroll);
-        CASE_FOR_COMPOSITOR_THREAD_TRACKER(Universal);
         CASE_FOR_COMPOSITOR_THREAD_TRACKER(Video);
         CASE_FOR_COMPOSITOR_THREAD_TRACKER(WheelScroll);
 #undef CASE_FOR_COMPOSITOR_THREAD_TRACKER
@@ -147,28 +147,7 @@ void UkmManager::RecordThroughputUKM(
       break;
     }
 
-    case FrameSequenceMetrics::ThreadType::kSlower: {
-      switch (tracker_type) {
-#define CASE_FOR_SLOWER_THREAD_TRACKER(name)    \
-  case FrameSequenceTrackerType::k##name:       \
-    builder.SetSlowerThread_##name(throughput); \
-    break;
-        CASE_FOR_SLOWER_THREAD_TRACKER(CompositorAnimation);
-        CASE_FOR_SLOWER_THREAD_TRACKER(MainThreadAnimation);
-        CASE_FOR_SLOWER_THREAD_TRACKER(PinchZoom);
-        CASE_FOR_SLOWER_THREAD_TRACKER(RAF);
-        CASE_FOR_SLOWER_THREAD_TRACKER(TouchScroll);
-        CASE_FOR_SLOWER_THREAD_TRACKER(Universal);
-        CASE_FOR_SLOWER_THREAD_TRACKER(Video);
-        CASE_FOR_SLOWER_THREAD_TRACKER(WheelScroll);
-#undef CASE_FOR_SLOWER_THREAD_TRACKER
-        default:
-          NOTREACHED();
-          break;
-      }
-      break;
-    }
-    default:
+    case FrameSequenceMetrics::ThreadType::kUnknown:
       NOTREACHED();
       break;
   }
@@ -269,8 +248,6 @@ void UkmManager::RecordCompositorLatencyUKM(
       continue;
     const auto frame_sequence_tracker_type =
         static_cast<FrameSequenceTrackerType>(type);
-    if (frame_sequence_tracker_type == FrameSequenceTrackerType::kUniversal)
-      continue;
     switch (frame_sequence_tracker_type) {
 #define CASE_FOR_TRACKER(name)            \
   case FrameSequenceTrackerType::k##name: \
@@ -280,6 +257,7 @@ void UkmManager::RecordCompositorLatencyUKM(
       CASE_FOR_TRACKER(MainThreadAnimation);
       CASE_FOR_TRACKER(PinchZoom);
       CASE_FOR_TRACKER(RAF);
+      CASE_FOR_TRACKER(ScrollbarScroll);
       CASE_FOR_TRACKER(TouchScroll);
       CASE_FOR_TRACKER(Video);
       CASE_FOR_TRACKER(WheelScroll);
@@ -309,8 +287,8 @@ void UkmManager::RecordEventLatencyUKM(
           static_cast<int64_t>(*event_metrics.scroll_type()));
 
       if (!viz_breakdown.swap_timings.is_null()) {
-        builder.SetTotalLatencyToSwapEnd(
-            (viz_breakdown.swap_timings.swap_end - event_metrics.time_stamp())
+        builder.SetTotalLatencyToSwapBegin(
+            (viz_breakdown.swap_timings.swap_start - event_metrics.time_stamp())
                 .InMicroseconds());
       }
     }

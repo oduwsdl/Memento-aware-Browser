@@ -57,6 +57,7 @@ import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -123,13 +124,14 @@ public class AutofillAssistantUiTest {
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(createMinimalCustomTabIntent());
         BottomSheetController bottomSheetController =
                 TestThreadUtils.runOnUiThreadBlocking(this::initializeBottomSheet);
-        AssistantCoordinator assistantCoordinator = TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> new AssistantCoordinator(getActivity(), bottomSheetController,
-                                getActivity().getTabObscuringHandler(),
-                                /* overlayCoordinator= */ null,
-                                /* keyboardCoordinatorDelegate= */ null,
-                                /* bottomSheetDelegate= */ null));
+        AssistantCoordinator assistantCoordinator = TestThreadUtils.runOnUiThreadBlocking(() -> {
+            AssistantCoordinator coordinator = new AssistantCoordinator(getActivity(),
+                    bottomSheetController, getActivity().getTabObscuringHandler(),
+                    /* overlayCoordinator= */ null,
+                    /* keyboardCoordinatorDelegate= */ null);
+            coordinator.show();
+            return coordinator;
+        });
 
         // Bottom sheet is shown in the BottomSheet when creating the AssistantCoordinator.
         View contentView = AutofillAssistantUiTestUtil.getBottomSheetController(getActivity())
@@ -155,8 +157,14 @@ public class AutofillAssistantUiTest {
                 ()
                         -> assistantCoordinator.getModel().getOverlayModel().set(
                                 AssistantOverlayModel.STATE, AssistantOverlayState.FULL));
-        View scrim = getActivity().getScrim();
-        Assert.assertTrue(scrim.isShown());
+
+        View scrim = getActivity()
+                             .getRootUiCoordinatorForTesting()
+                             .getScrimCoordinator()
+                             .getViewForTesting();
+        CriteriaHelper.pollUiThread(
+                () -> scrim.getVisibility() == View.VISIBLE, "Scrim should be visible.");
+        Assert.assertNotEquals("The scrim should not be transparent.", scrim.getAlpha(), 0f);
 
         // TODO(crbug.com/806868): Fix test of actions carousel. This is currently broken as chips
         // are displayed in the reversed order in the actions carousel and calling
@@ -225,13 +233,15 @@ public class AutofillAssistantUiTest {
 
     private void testChips(InOrder inOrder, AssistantCarouselModel carouselModel,
             AssistantActionsCarouselCoordinator carouselCoordinator) {
-        List<AssistantChip> chips = Arrays.asList(
-                new AssistantChip(AssistantChip.Type.CHIP_ASSISTIVE, AssistantChip.Icon.NONE,
-                        "chip 0",
-                        /* disabled= */ false, /* sticky= */ false, "", () -> {/* do nothing */}),
-                new AssistantChip(AssistantChip.Type.CHIP_ASSISTIVE, AssistantChip.Icon.NONE,
-                        "chip 1",
-                        /* disabled= */ false, /* sticky= */ false, "", mRunnableMock));
+        List<AssistantChip> chips =
+                Arrays.asList(new AssistantChip(AssistantChip.Type.CHIP_ASSISTIVE,
+                                      AssistantChip.Icon.NONE, "chip 0",
+                                      /* disabled= */ false, /* sticky= */ false,
+                                      /* visible= */ true, () -> {/* do nothing */}),
+                        new AssistantChip(AssistantChip.Type.CHIP_ASSISTIVE,
+                                AssistantChip.Icon.NONE, "chip 1",
+                                /* disabled= */ false, /* sticky= */ false, /* visible= */ true,
+                                mRunnableMock));
         TestThreadUtils.runOnUiThreadBlocking(() -> carouselModel.setChips(chips));
         RecyclerView chipsViewContainer = carouselCoordinator.getView();
         Assert.assertEquals(2, chipsViewContainer.getAdapter().getItemCount());
@@ -250,13 +260,14 @@ public class AutofillAssistantUiTest {
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(createMinimalCustomTabIntent());
         BottomSheetController bottomSheetController =
                 TestThreadUtils.runOnUiThreadBlocking(this::initializeBottomSheet);
-        AssistantCoordinator assistantCoordinator = TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> new AssistantCoordinator(getActivity(), bottomSheetController,
-                                getActivity().getTabObscuringHandler(),
-                                /* overlayCoordinator= */ null,
-                                /* keyboardCoordinatorDelegate= */ null,
-                                /* bottomSheetDelegate= */ null));
+        AssistantCoordinator assistantCoordinator = TestThreadUtils.runOnUiThreadBlocking(() -> {
+            AssistantCoordinator coordinator = new AssistantCoordinator(getActivity(),
+                    bottomSheetController, getActivity().getTabObscuringHandler(),
+                    /* overlayCoordinator= */ null,
+                    /* keyboardCoordinatorDelegate= */ null);
+            coordinator.show();
+            return coordinator;
+        });
 
         // Bottom sheet is shown in the BottomSheet when creating the AssistantCoordinator.
         View contentView = AutofillAssistantUiTestUtil.getBottomSheetController(getActivity())

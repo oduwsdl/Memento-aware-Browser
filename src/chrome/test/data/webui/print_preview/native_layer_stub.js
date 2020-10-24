@@ -187,7 +187,8 @@ export class NativeLayerStub extends TestBrowserProxy {
         this.multipleCapabilitiesPromise_ = null;
       }
     }
-    if (printerId === Destination.GooglePromotedId.SAVE_AS_PDF) {
+    if (printerId === Destination.GooglePromotedId.SAVE_AS_PDF ||
+        printerId === Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS) {
       return Promise.resolve(getPdfPrinter());
     }
     if (type !== PrinterType.LOCAL_PRINTER) {
@@ -240,10 +241,10 @@ export class NativeLayerStub extends TestBrowserProxy {
   }
 
   /** @override */
-  signIn(addAccount) {
-    this.methodCalled('signIn', addAccount);
+  signIn() {
+    this.methodCalled('signIn');
     const accounts = this.accounts_ || ['foo@chromium.org'];
-    if (!this.accounts_ && addAccount) {
+    if (!this.accounts_) {
       accounts.push('bar@chromium.org');
     }
     if (accounts.length > 0) {
@@ -262,14 +263,6 @@ export class NativeLayerStub extends TestBrowserProxy {
 
   /** @override */
   openSettingsPrintPage() {}
-
-  /**
-   * @param {!Array<string>} accounts The accounts to send when signIn is
-   * called.
-   */
-  setSignIn(accounts) {
-    this.accounts_ = accounts;
-  }
 
   /**
    * @param {!NativeInitialSettings} settings The settings
@@ -320,7 +313,7 @@ export class NativeLayerStub extends TestBrowserProxy {
   /**
    * @param {!PrinterSetupResponse} response The response to send when
    *     |setupPrinter| is called.
-   * @param {?boolean} opt_reject Whether printSetup requests should be
+   * @param {boolean=} opt_reject Whether printSetup requests should be
    *     rejected. Defaults to false (will resolve callback) if not provided.
    */
   setSetupPrinterResponse(response, opt_reject) {
@@ -374,7 +367,7 @@ export class NativeLayerStub extends TestBrowserProxy {
       }
     }
 
-    return Promise.resolve(this.printerStatusMap_.get(printerId));
+    return Promise.resolve(this.printerStatusMap_.get(printerId) || {});
   }
 
   /**
@@ -395,4 +388,7 @@ export class NativeLayerStub extends TestBrowserProxy {
     this.multiplePrinterStatusRequestsPromise_ = new PromiseResolver();
     return this.multiplePrinterStatusRequestsPromise_.promise;
   }
+
+  /** @override */
+  recordPrinterStatusHistogram(statusReason, didUserAttemptPrint) {}
 }

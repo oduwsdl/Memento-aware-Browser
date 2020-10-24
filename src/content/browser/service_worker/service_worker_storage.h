@@ -24,7 +24,7 @@
 #include "components/services/storage/public/mojom/local_storage_control.mojom.h"
 #include "components/services/storage/public/mojom/service_worker_storage_control.mojom.h"
 #include "content/browser/service_worker/service_worker_database.h"
-#include "content/browser/service_worker/service_worker_metrics.h"
+#include "content/browser/service_worker/service_worker_resource_ops.h"
 #include "content/common/content_export.h"
 #include "url/gurl.h"
 
@@ -38,21 +38,15 @@ class QuotaManagerProxy;
 
 namespace content {
 
-class ServiceWorkerDiskCache;
-class ServiceWorkerResponseMetadataWriter;
-class ServiceWorkerResponseReader;
-class ServiceWorkerResponseWriter;
 class ServiceWorkerStorageControlImplTest;
 
 namespace service_worker_storage_unittest {
 class ServiceWorkerStorageTest;
-class ServiceWorkerResourceStorageTest;
-class ServiceWorkerResourceStorageDiskTest;
-FORWARD_DECLARE_TEST(ServiceWorkerResourceStorageDiskTest, CleanupOnRestart);
-FORWARD_DECLARE_TEST(ServiceWorkerResourceStorageDiskTest, DeleteAndStartOver);
-FORWARD_DECLARE_TEST(ServiceWorkerResourceStorageDiskTest,
+class ServiceWorkerStorageDiskTest;
+FORWARD_DECLARE_TEST(ServiceWorkerStorageDiskTest, DeleteAndStartOver);
+FORWARD_DECLARE_TEST(ServiceWorkerStorageDiskTest,
                      DeleteAndStartOver_UnrelatedFileExists);
-FORWARD_DECLARE_TEST(ServiceWorkerResourceStorageDiskTest,
+FORWARD_DECLARE_TEST(ServiceWorkerStorageDiskTest,
                      DeleteAndStartOver_OpenedFileExists);
 FORWARD_DECLARE_TEST(ServiceWorkerStorageTest, DisabledStorage);
 }  // namespace service_worker_storage_unittest
@@ -71,7 +65,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   using ResourceList =
       std::vector<storage::mojom::ServiceWorkerResourceRecordPtr>;
   using GetRegisteredOriginsCallback =
-      base::OnceCallback<void(std::vector<url::Origin> callback)>;
+      base::OnceCallback<void(const std::vector<url::Origin>& origins)>;
   using FindRegistrationDataCallback = base::OnceCallback<void(
       storage::mojom::ServiceWorkerRegistrationDataPtr data,
       std::unique_ptr<ResourceList> resources,
@@ -95,10 +89,9 @@ class CONTENT_EXPORT ServiceWorkerStorage {
       OriginState origin_state,
       int64_t deleted_version_id,
       const std::vector<int64_t>& newly_purgeable_resources)>;
-
-  using ResponseWriterCreationCallback = base::OnceCallback<void(
-      int64_t resource_id,
-      std::unique_ptr<ServiceWorkerResponseWriter> response_writer)>;
+  using ResourceIdsCallback =
+      base::OnceCallback<void(ServiceWorkerDatabase::Status status,
+                              const std::vector<int64_t>& resource_ids)>;
 
   using DatabaseStatusCallback =
       base::OnceCallback<void(ServiceWorkerDatabase::Status status)>;
@@ -107,8 +100,8 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   using GetUserKeysAndDataInDBCallback = storage::mojom::
       ServiceWorkerStorageControl::GetUserKeysAndDataByKeyPrefixCallback;
   using GetUserDataForAllRegistrationsInDBCallback = base::OnceCallback<void(
-      const std::vector<std::pair<int64_t, std::string>>& user_data,
-      ServiceWorkerDatabase::Status)>;
+      ServiceWorkerDatabase::Status,
+      std::vector<storage::mojom::ServiceWorkerUserDataPtr>)>;
 
   ~ServiceWorkerStorage();
 
@@ -116,10 +109,6 @@ class CONTENT_EXPORT ServiceWorkerStorage {
       const base::FilePath& user_data_directory,
       scoped_refptr<base::SequencedTaskRunner> database_task_runner,
       storage::QuotaManagerProxy* quota_manager_proxy);
-
-  // Used for DeleteAndStartOver. Creates new storage based on |old_storage|.
-  static std::unique_ptr<ServiceWorkerStorage> Create(
-      ServiceWorkerStorage* old_storage);
 
   // Returns all origins which have service worker registrations.
   void GetRegisteredOrigins(GetRegisteredOriginsCallback callback);
@@ -134,13 +123,13 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   void FindRegistrationForScope(const GURL& scope,
                                 FindRegistrationDataCallback callback);
   void FindRegistrationForId(int64_t registration_id,
-                             const GURL& origin,
+                             const url::Origin& origin,
                              FindRegistrationDataCallback callback);
   void FindRegistrationForIdOnly(int64_t registration_id,
                                  FindRegistrationDataCallback callback);
 
   // Returns all stored registrations for a given origin.
-  void GetRegistrationsForOrigin(const GURL& origin,
+  void GetRegistrationsForOrigin(const url::Origin& origin,
                                  GetRegistrationsDataCallback callback);
 
   // Reads the total resource size stored in the storage for a given origin.
@@ -190,12 +179,12 @@ class CONTENT_EXPORT ServiceWorkerStorage {
 
   // Creates a resource accessor. Never returns nullptr but an accessor may be
   // associated with the disabled disk cache if the storage is disabled.
-  std::unique_ptr<ServiceWorkerResponseReader> CreateResponseReader(
+  std::unique_ptr<ServiceWorkerResourceReaderImpl> CreateResourceReader(
       int64_t resource_id);
-  std::unique_ptr<ServiceWorkerResponseWriter> CreateResponseWriter(
+  std::unique_ptr<ServiceWorkerResourceWriterImpl> CreateResourceWriter(
       int64_t resource_id);
-  std::unique_ptr<ServiceWorkerResponseMetadataWriter>
-  CreateResponseMetadataWriter(int64_t resource_id);
+  std::unique_ptr<ServiceWorkerResourceMetadataWriterImpl>
+  CreateResourceMetadataWriter(int64_t resource_id);
 
   // Adds |resource_id| to the set of resources that are in the disk cache
   // but not yet stored with a registration.
@@ -230,7 +219,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   // Stored data is deleted when the associated registraton is deleted.
   void StoreUserData(
       int64_t registration_id,
-      const GURL& origin,
+      const url::Origin& origin,
       std::vector<storage::mojom::ServiceWorkerUserDataPtr> user_data,
       DatabaseStatusCallback callback);
   // Responds OK if all are successfully deleted or not found in the database.
@@ -265,37 +254,25 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   // Returns a new registration id which is guaranteed to be unique in the
   // storage. Returns blink::mojom::kInvalidServiceWorkerRegistrationId if the
   // storage is disabled.
-  // NOTE: Currently this method is synchronous but intentionally uses async
-  // style because ServiceWorkerStorage will be accessed via mojo calls soon.
-  // See crbug.com/1046335 for details.
   void GetNewRegistrationId(
       base::OnceCallback<void(int64_t registration_id)> callback);
 
   // Returns a new version id which is guaranteed to be unique in the storage.
   // Returns kInvalidServiceWorkerVersionId if the storage is disabled.
-  // NOTE: Currently this method can return a new version id synchronously
-  // and doesn't have to take a callback. Using a callback is a preparation
-  // for using ServiceWorkerStorage via a mojo interface.
-  // See crbug.com/1046335 for details.
   void GetNewVersionId(base::OnceCallback<void(int64_t version_id)> callback);
 
   // Returns a new resource id which is guaranteed to be unique in the storage.
   // Returns blink::mojom::kInvalidServiceWorkerResourceId if the storage
   // is disabled.
-  // NOTE: Currently this method can return a new resource id synchronously
-  // and doesn't have to take a callback. Using a callback is a preparation
-  // for using ServiceWorkerStorage via a mojo interface.
-  // See crbug.com/1046335 for details.
   void GetNewResourceId(base::OnceCallback<void(int64_t resource_id)> callback);
 
   void Disable();
 
-  // Schedules deleting |resources| from the disk cache and removing their keys
-  // as purgeable resources from the service worker database. It's OK to call
-  // this for resources that don't have purgeable resource keys, like
+  // Schedules deleting `resource_ids` from the disk cache and removing their
+  // keys as purgeable resources from the service worker database. It's OK to
+  // call this for resources that don't have purgeable resource keys, like
   // uncommitted resources, as long as the caller does its own cleanup to remove
   // the uncommitted resource keys.
-  void PurgeResources(const ResourceList& resources);
   void PurgeResources(const std::vector<int64_t>& resource_ids);
 
   // Applies |policy_updates|.
@@ -307,22 +284,21 @@ class CONTENT_EXPORT ServiceWorkerStorage {
 
   void SetPurgingCompleteCallbackForTest(base::OnceClosure callback);
 
+  void GetPurgingResourceIdsForTest(ResourceIdsCallback callback);
+  void GetPurgeableResourceIdsForTest(ResourceIdsCallback callback);
+  void GetUncommittedResourceIdsForTest(ResourceIdsCallback callback);
+
  private:
   friend class ServiceWorkerStorageControlImplTest;
   friend class service_worker_storage_unittest::ServiceWorkerStorageTest;
-  friend class service_worker_storage_unittest::
-      ServiceWorkerResourceStorageTest;
   FRIEND_TEST_ALL_PREFIXES(
-      service_worker_storage_unittest::ServiceWorkerResourceStorageDiskTest,
-      CleanupOnRestart);
-  FRIEND_TEST_ALL_PREFIXES(
-      service_worker_storage_unittest::ServiceWorkerResourceStorageDiskTest,
+      service_worker_storage_unittest::ServiceWorkerStorageDiskTest,
       DeleteAndStartOver);
   FRIEND_TEST_ALL_PREFIXES(
-      service_worker_storage_unittest::ServiceWorkerResourceStorageDiskTest,
+      service_worker_storage_unittest::ServiceWorkerStorageDiskTest,
       DeleteAndStartOver_UnrelatedFileExists);
   FRIEND_TEST_ALL_PREFIXES(
-      service_worker_storage_unittest::ServiceWorkerResourceStorageDiskTest,
+      service_worker_storage_unittest::ServiceWorkerStorageDiskTest,
       DeleteAndStartOver_OpenedFileExists);
   FRIEND_TEST_ALL_PREFIXES(
       service_worker_storage_unittest::ServiceWorkerStorageTest,
@@ -332,7 +308,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
     int64_t next_registration_id;
     int64_t next_version_id;
     int64_t next_resource_id;
-    std::set<GURL> origins;
+    std::set<url::Origin> origins;
 
     InitialData();
     ~InitialData();
@@ -406,8 +382,11 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   void DidWriteUncommittedResourceIds(DatabaseStatusCallback callback,
                                       const GURL& origin,
                                       ServiceWorkerDatabase::Status status);
+  void DidDoomUncommittedResourceIds(const std::vector<int64_t>& resource_ids,
+                                     DatabaseStatusCallback callback,
+                                     ServiceWorkerDatabase::Status status);
   void DidStoreUserData(DatabaseStatusCallback callback,
-                        const GURL& origin,
+                        const url::Origin& origin,
                         ServiceWorkerDatabase::Status status);
 
   // Lazy disk_cache getter.
@@ -429,10 +408,6 @@ class CONTENT_EXPORT ServiceWorkerStorage {
                                 ServiceWorkerDatabase::Status status);
 
   void ClearSessionOnlyOrigins();
-
-  int64_t NewRegistrationId();
-  int64_t NewVersionId();
-  int64_t NewResourceId();
 
   bool IsDisabled() const { return state_ == STORAGE_STATE_DISABLED; }
 
@@ -471,7 +446,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
       ServiceWorkerDatabase* database,
       scoped_refptr<base::SequencedTaskRunner> original_task_runner,
       int64_t registration_id,
-      const GURL& origin,
+      const url::Origin& origin,
       FindInDBCallback callback);
   static void FindForIdOnlyInDB(
       ServiceWorkerDatabase* database,
@@ -514,6 +489,14 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   static void DeleteAllDataForOriginsFromDB(ServiceWorkerDatabase* database,
                                             const std::set<GURL>& origins);
   static void PerformStorageCleanupInDB(ServiceWorkerDatabase* database);
+  static void GetPurgeableResourceIdsFromDB(
+      ServiceWorkerDatabase* database,
+      scoped_refptr<base::SequencedTaskRunner> original_task_runner,
+      ServiceWorkerStorage::ResourceIdsCallback callback);
+  static void GetUncommittedResourceIdsFromDB(
+      ServiceWorkerDatabase* database,
+      scoped_refptr<base::SequencedTaskRunner> original_task_runner,
+      ServiceWorkerStorage::ResourceIdsCallback callback);
 
   // Posted by the underlying cache implementation after it finishes making
   // disk changes upon its destruction.
@@ -524,7 +507,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   void DidDeleteDiskCache(DatabaseStatusCallback callback, bool result);
 
   // Origins having registations.
-  std::set<GURL> registered_origins_;
+  std::set<url::Origin> registered_origins_;
   // The set of origins whose storage should be cleaned on shutdown.
   std::set<GURL> origins_to_purge_on_shutdown_;
 

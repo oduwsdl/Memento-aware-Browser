@@ -4,21 +4,20 @@
 
 package org.chromium.chrome.browser.vr;
 
+import android.app.Activity;
 import android.content.Context;
 import android.view.Surface;
 
-import dalvik.system.BaseDexClassLoader;
-
+import org.chromium.base.BundleUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabUtils;
+import org.chromium.components.webxr.ArCompositorDelegateProvider;
+import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Provides ARCore classes access to java-related app functionality.
@@ -46,6 +45,16 @@ public class ArCoreJavaUtils {
     // session.
     private static ArCoreJavaUtils sActiveSessionInstance;
 
+    // Helper, obtains android Activity out of passed in WebContents instance.
+    // Equivalent to ChromeActivity.fromWebContents(), but does not require that
+    // the resulting instance is a ChromeActivity.
+    public static Activity getActivity(final WebContents webContents) {
+        if (webContents == null) return null;
+        WindowAndroid window = webContents.getTopLevelNativeWindow();
+        if (window == null) return null;
+        return window.getActivity().get();
+    }
+
     @CalledByNative
     private static ArCoreJavaUtils create(long nativeArCoreJavaUtils) {
         ThreadUtils.assertOnUiThread();
@@ -54,10 +63,7 @@ public class ArCoreJavaUtils {
 
     @CalledByNative
     private static String getArCoreShimLibraryPath() {
-        try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-            return ((BaseDexClassLoader) ContextUtils.getApplicationContext().getClassLoader())
-                    .findLibrary("arcore_sdk_c");
-        }
+        return BundleUtils.getNativeLibraryPath("arcore_sdk_c");
     }
 
     /**
@@ -76,11 +82,13 @@ public class ArCoreJavaUtils {
     }
 
     @CalledByNative
-    private void startSession(final Tab tab, boolean useOverlay) {
+    private void startSession(final ArCompositorDelegateProvider compositorDelegateProvider,
+            final WebContents webContents, boolean useOverlay) {
         if (DEBUG_LOGS) Log.i(TAG, "startSession");
         mArImmersiveOverlay = new ArImmersiveOverlay();
         sActiveSessionInstance = this;
-        mArImmersiveOverlay.show((ChromeActivity) TabUtils.getActivity(tab), this, useOverlay);
+        mArImmersiveOverlay.show(
+                compositorDelegateProvider.create(webContents), webContents, this, useOverlay);
     }
 
     @CalledByNative

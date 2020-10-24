@@ -114,12 +114,11 @@ class FakeBluetoothGattService
   FakeBluetoothGattService(device::MockBluetoothDevice* device,
                            const std::string& identifier,
                            const device::BluetoothUUID& uuid)
-      : testing::NiceMock<device::MockBluetoothGattService>(device,
-                                                            identifier,
-                                                            uuid,
-                                                            /*is_primary=*/true,
-                                                            /*is_local=*/true) {
-  }
+      : testing::NiceMock<device::MockBluetoothGattService>(
+            device,
+            identifier,
+            uuid,
+            /*is_primary=*/true) {}
 
   // Move-only class
   FakeBluetoothGattService(const FakeBluetoothGattService&) = delete;
@@ -199,14 +198,14 @@ class FakeBluetoothChooser : public content::BluetoothChooser {
     // Select the first device that is added if |device_to_select_| is not
     // populated.
     if (!device_to_select_) {
-      event_handler_.Run(content::BluetoothChooser::Event::SELECTED, device_id);
+      event_handler_.Run(content::BluetoothChooserEvent::SELECTED, device_id);
       return;
     }
 
     // Otherwise, select the added device if its device ID matches
     // |device_to_select_|.
     if (device_to_select_.value() == device_id) {
-      event_handler_.Run(content::BluetoothChooser::Event::SELECTED, device_id);
+      event_handler_.Run(content::BluetoothChooserEvent::SELECTED, device_id);
     }
   }
 

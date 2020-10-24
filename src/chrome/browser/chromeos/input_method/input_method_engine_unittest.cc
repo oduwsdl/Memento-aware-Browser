@@ -17,15 +17,14 @@
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
 #include "chrome/browser/chromeos/input_method/input_method_engine_base.h"
 #include "chrome/browser/chromeos/input_method/mock_input_method_manager_impl.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client_test_helper.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/ime_bridge.h"
+#include "ui/base/ime/chromeos/ime_engine_handler_interface.h"
 #include "ui/base/ime/chromeos/mock_component_extension_ime_manager_delegate.h"
-#include "ui/base/ime/ime_engine_handler_interface.h"
-#include "ui/base/ime/mock_ime_input_context_handler.h"
+#include "ui/base/ime/chromeos/mock_ime_input_context_handler.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -55,7 +54,7 @@ enum CallsBitmap {
 
 void InitInputMethod() {
   auto* comp_ime_manager = new ComponentExtensionIMEManager;
-  auto* delegate = new MockComponentExtIMEManagerDelegate;
+  auto* delegate = new MockComponentExtensionIMEManagerDelegate;
 
   ComponentExtensionIME ext1;
   ext1.id = kTestExtensionId;
@@ -123,6 +122,7 @@ class TestObserver : public InputMethodEngineBase::Observer {
 
   void OnSuggestionsChanged(
       const std::vector<std::string>& suggestions) override {}
+  void OnInputMethodOptionsChanged(const std::string& engine_id) override {}
 
   void OnReset(const std::string& engine_id) override {
     calls_bitmap_ |= RESET;
@@ -170,13 +170,13 @@ class InputMethodEngineTest : public testing::Test {
   }
 
  protected:
-  void CreateEngine(bool whitelisted) {
+  void CreateEngine(bool allowlisted) {
     engine_.reset(new InputMethodEngine());
     observer_ = new TestObserver();
     std::unique_ptr<InputMethodEngineBase::Observer> observer_ptr(observer_);
     engine_->Initialize(std::move(observer_ptr),
-                        whitelisted ? kTestExtensionId : kTestExtensionId2,
-                        ProfileManager::GetActiveUserProfile());
+                        allowlisted ? kTestExtensionId : kTestExtensionId2,
+                        nullptr);
   }
 
   void FocusIn(ui::TextInputType input_type) {
@@ -268,7 +268,7 @@ TEST_F(InputMethodEngineTest, TestSwitching_Password_3rd_Party) {
   EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
 }
 
-TEST_F(InputMethodEngineTest, TestSwitching_Password_Whitelisted) {
+TEST_F(InputMethodEngineTest, TestSwitching_Password_Allowlisted) {
   CreateEngine(true);
   // Enable/disable with focus.
   FocusIn(ui::TEXT_INPUT_TYPE_PASSWORD);

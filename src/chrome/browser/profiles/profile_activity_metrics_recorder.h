@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <string>
 
-#include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
@@ -24,6 +23,10 @@ class ProfileActivityMetricsRecorder
       public metrics::DesktopSessionDurationTracker::Observer,
       public ProfileObserver {
  public:
+  ProfileActivityMetricsRecorder(const ProfileActivityMetricsRecorder&) =
+      delete;
+  ProfileActivityMetricsRecorder& operator=(
+      const ProfileActivityMetricsRecorder&) = delete;
   // Initializes a |ProfileActivityMetricsRecorder| object and starts
   // tracking/recording.
   static void Initialize();
@@ -47,15 +50,18 @@ class ProfileActivityMetricsRecorder
 
   void OnUserAction(const std::string& action, base::TimeTicks action_time);
 
+  // The profile of the last active window.
   Profile* last_active_profile_ = nullptr;
-  base::TimeTicks profile_session_start_;
-  base::TimeTicks last_profile_session_end_;
+
+  // Profile of the currently running session, if there is any. Reset after
+  // inactivity.
+  Profile* running_session_profile_ = nullptr;
+  base::TimeTicks running_session_start_;
+  base::TimeTicks last_session_end_;
 
   base::ActionCallback action_callback_;
 
   ScopedObserver<Profile, ProfileObserver> profile_observer_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ProfileActivityMetricsRecorder);
 };
 
 #endif  // CHROME_BROWSER_PROFILES_PROFILE_ACTIVITY_METRICS_RECORDER_H_

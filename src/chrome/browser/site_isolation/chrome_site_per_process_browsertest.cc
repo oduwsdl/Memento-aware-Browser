@@ -24,10 +24,8 @@
 #include "chrome/browser/site_isolation/chrome_site_per_process_test.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/guest_view/browser/guest_view_base.h"
@@ -50,7 +48,6 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_notification_tracker.h"
 #include "content/public/test/test_utils.h"
@@ -64,6 +61,13 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/geometry/point.h"
 #include "url/gurl.h"
+
+#if defined(OS_CHROMEOS)
+#include "ash/public/cpp/test/shell_test_api.h"
+#include "ui/display/manager/display_manager.h"
+#include "ui/display/screen.h"
+#include "ui/display/test/display_manager_test_api.h"
+#endif
 
 namespace {
 
@@ -316,7 +320,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
 
   // Ctrl-click the anchor/link in the page.
   content::WebContentsAddedObserver new_tab_observer;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   std::string new_tab_click_script = "simulateClick({ metaKey: true });";
 #else
   std::string new_tab_click_script = "simulateClick({ ctrlKey: true });";
@@ -444,10 +448,8 @@ class MailtoExternalProtocolHandlerDelegate
 
   scoped_refptr<shell_integration::DefaultProtocolClientWorker>
   CreateShellWorker(
-      const shell_integration::DefaultWebClientWorkerCallback& callback,
       const std::string& protocol) override {
-    return new shell_integration::DefaultProtocolClientWorker(callback,
-                                                              protocol);
+    return new shell_integration::DefaultProtocolClientWorker(protocol);
   }
 
   ExternalProtocolHandler::BlockState GetBlockState(const std::string& scheme,
@@ -1252,8 +1254,8 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
 // Tests that a same-site iframe runs its beforeunload handler when closing a
 // tab.  Same as the test above, but for a same-site rather than cross-site
 // iframe.  See https://crbug.com/1010456.
-// Flaky on Linux and ChromeOS (crbug.com/1033002)
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+// Flaky on Linux, ChromeOS and Windows (crbug.com/1033002)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 #define MAYBE_TabCloseWithSameSiteBeforeUnloadIframe \
   DISABLED_TabCloseWithSameSiteBeforeUnloadIframe
 #else
@@ -1481,77 +1483,6 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTestWithVerifiedUserActivation,
   EXPECT_EQ(false, content::EvalJs(frame_b, "!!window.w"));
 }
 
-IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, NtpProcesses) {
-  // Listen for notifications about renderer processes being terminated - this
-  // shouldn't happen during the test.
-  content::TestNotificationTracker process_termination_tracker;
-  process_termination_tracker.ListenFor(
-      content::NOTIFICATION_RENDERER_PROCESS_TERMINATED,
-      content::NotificationService::AllBrowserContextsAndSources());
-
-  // Open a new tab and capture the initial state of the browser.
-  // TODO(crbug/1094088): Replace the following with chrome::NewTab(browser());
-  // when fixed.
-  local_ntp_test_utils::OpenNewTab(browser(),
-                                   GURL(chrome::kChromeSearchLocalNtpUrl));
-  EXPECT_EQ(2, browser()->tab_strip_model()->count());
-  EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
-  content::WebContents* tab1 =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_NO_FATAL_FAILURE(content::WaitForLoadStop(tab1));
-  int tab1_process_id = tab1->GetMainFrame()->GetProcess()->GetID();
-  int initial_spare_process_id = -1;
-  {
-    content::RenderProcessHost* spare =
-        content::RenderProcessHost::GetSpareRenderProcessHostForTesting();
-    ASSERT_TRUE(spare);
-    initial_spare_process_id = spare->GetID();
-  }
-  // NTP cannot reuse the spare process.
-  EXPECT_NE(tab1_process_id, initial_spare_process_id);
-  // No processes should be unnecessarily terminated.
-  EXPECT_EQ(0u, process_termination_tracker.size());
-
-  // Open another new tab and capture the resulting state of the browser.
-  // TODO(crbug/1094088): Replace the following with chrome::NewTab(browser());
-  // when fixed.
-  local_ntp_test_utils::OpenNewTab(browser(),
-                                   GURL(chrome::kChromeSearchLocalNtpUrl));
-  EXPECT_EQ(3, browser()->tab_strip_model()->count());
-  EXPECT_EQ(2, browser()->tab_strip_model()->active_index());
-  content::WebContents* tab2 =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_NO_FATAL_FAILURE(content::WaitForLoadStop(tab2));
-  EXPECT_EQ(tab1->GetLastCommittedURL(), tab2->GetLastCommittedURL());
-  EXPECT_EQ(tab1->GetVisibleURL(), tab2->GetVisibleURL());
-  int tab2_process_id = tab2->GetMainFrame()->GetProcess()->GetID();
-  int current_spare_process_id = -1;
-  {
-    content::RenderProcessHost* spare =
-        content::RenderProcessHost::GetSpareRenderProcessHostForTesting();
-    ASSERT_TRUE(spare);
-    current_spare_process_id = spare->GetID();
-  }
-  EXPECT_NE(tab1_process_id, current_spare_process_id);
-  EXPECT_NE(tab2_process_id, current_spare_process_id);
-
-  // Verify that:
-  // 1. Process-per-site is used for NTP.  This just captures the current
-  //    behavior without any value judgement.  Process-per-site translates into:
-  //      1.1. |tab1| and |tab2| share the same process
-  //      1.2. |tab2| does not use the spare process
-  // 2. The initial spare process wasn't replaced with a new spare process
-  //    The churn is undesirable since (per item 1.2. above) the initial spare
-  //    is not used for |tab2|.  This is the main part of the verification and a
-  //    regression test for https://crbug.com/1029345.
-  EXPECT_EQ(tab1_process_id, tab2_process_id);                    // 1.1.
-  EXPECT_NE(initial_spare_process_id, tab2_process_id);           // 1.2.
-  EXPECT_EQ(initial_spare_process_id, current_spare_process_id);  // 2.
-
-  // Verify that no processes were be unnecessarily terminated.
-  EXPECT_EQ(0u, process_termination_tracker.size());
-}
-
 IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, JSPrintDuringSwap) {
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -1564,8 +1495,45 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, JSPrintDuringSwap) {
       "a.com", "/print_during_load_with_broken_pdf_then_navigate.html"));
   ui_test_utils::NavigateToURL(browser(), main_url);
 
-  // Ensure the first process did not crash when the queued print() fires during frame detach.
+  // Ensure the first process did not crash when the queued print() fires
+  // during frame detach.
   EXPECT_TRUE(WaitForLoadStop(contents));
   watcher.Wait();
   EXPECT_TRUE(watcher.did_exit_normally());
 }
+
+#if defined(OS_CHROMEOS)
+// This test verifies that an OOPIF created in a tab on a secondary display
+// doesn't initialize its device scale factor based on the primary display.
+// Note: This test could probably be expanded to run on all ASH platforms.
+IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, TestInitialDSFForOOPIF) {
+  // Spec for a two-display system, where the primary display has non-unit
+  // device scale factor, but the secondary has unit device scale factor.
+  // Note: this test could really work with any two scale factors, so long as
+  // they're different.
+  std::string display_spec("0+0-500x500*2,0+501-500x500");
+  ash::ShellTestApi shell_test_api;
+  display::test::DisplayManagerTestApi(shell_test_api.display_manager())
+      .UpdateDisplay(display_spec);
+  ASSERT_EQ(2u, shell_test_api.display_manager()->GetNumDisplays());
+  display::test::DisplayManagerTestApi display_manager_test_api(
+      shell_test_api.display_manager());
+
+  display::Screen* screen = display::Screen::GetScreen();
+  int64_t display2 = display_manager_test_api.GetSecondaryDisplay().id();
+  screen->SetDisplayForNewWindows(display2);
+  Browser* browser_on_secondary_display = CreateBrowser(browser()->profile());
+
+  // Open a page with an OOPIF on the secondary display.
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  content::ProxyDSFObserver observer;
+  ui_test_utils::NavigateToURL(browser_on_secondary_display, main_url);
+  observer.WaitForOneProxyHostCreation();
+
+  EXPECT_EQ(1u, observer.num_creations());
+  // If the OOPIF correctly gets its device_scale_factor from the secondary
+  // screen, then it will satisfy the following expectation.
+  EXPECT_EQ(1.f, observer.get_proxy_host_dsf(0));
+}
+#endif

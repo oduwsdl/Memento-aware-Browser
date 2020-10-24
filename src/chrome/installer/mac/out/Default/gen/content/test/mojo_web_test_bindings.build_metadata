@@ -1,0 +1,9 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/content/test/data/lite_js_test.mojom",
+    "/Users/macuser/chromium/src/content/test/data/mojo_web_test_helper_test.mojom"
+  ]
+}

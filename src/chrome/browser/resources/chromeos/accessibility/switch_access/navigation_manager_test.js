@@ -4,47 +4,31 @@
 
 GEN_INCLUDE(['switch_access_e2e_test_base.js']);
 
-/**
- * @constructor
- * @extends {SwitchAccessE2ETest}
- */
-function SwitchAccessNavigationManagerTest() {
-  SwitchAccessE2ETest.call(this);
-  this.navigator = NavigationManager.instance;
-  BackButtonNode
-      .locationForTesting = {top: 10, left: 10, width: 20, height: 20};
-}
-
-SwitchAccessNavigationManagerTest.prototype = {
-  __proto__: SwitchAccessE2ETest.prototype,
-
+/** Test fixture for the navigation manager. */
+SwitchAccessNavigationManagerTest = class extends SwitchAccessE2ETest {
   /** @override */
   setUp() {
-    MenuManager.initialize();
+    this.navigator = NavigationManager.instance;
+    BackButtonNode
+        .locationForTesting = {top: 10, left: 10, width: 20, height: 20};
+  }
+
+  moveToPageContents(pageContents) {
+    const cache = new SACache();
+    if (!SwitchAccessPredicate.isGroup(pageContents, null, cache)) {
+      pageContents =
+          new AutomationTreeWalker(pageContents, constants.Dir.FORWARD, {
+            visit: (node) => SwitchAccessPredicate.isGroup(node, null, cache)
+          })
+              .next()
+              .node;
+    }
+    assertNotNullNorUndefined(
+        pageContents, 'Could not find group corresponding to page contents');
+    this.navigator.moveTo_(pageContents);
+    NavigationManager.enterGroup();
   }
 };
-
-function moveToPageContents() {
-  const navigator = NavigationManager.instance;
-  // Start from the desktop node.
-  navigator.setGroup_(DesktopNode.build(navigator.desktop_));
-
-  // The first item should be the browser window.
-  assertTrue(
-      navigator.node_.isGroup(),
-      'Browser window should be the desktop\'s first child');
-  NavigationManager.enterGroup();
-
-  // Find the page contents in the browser window.
-  // The third item in the browser window is the page contents.
-  // TODO(anastasi): find the browser window dynamically.
-  NavigationManager.moveForward();
-  NavigationManager.moveForward();
-  assertTrue(
-      navigator.node_.isGroup(),
-      'Page contents should be the browser window\'s third child');
-  NavigationManager.enterGroup();
-}
 
 function currentNode() {
   return NavigationManager.instance.node_;
@@ -58,7 +42,8 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveTo', function() {
                      </div>
                      <button></button>
                    </div>`;
-  this.runWithLoadedTree(website, (desktop) => {
+  this.runWithLoadedTree(website, (root) => {
+    const desktop = root.parent.root;
     const textFields =
         desktop.findAll({role: chrome.automation.RoleType.TEXT_FIELD});
     assertEquals(2, textFields.length, 'Should be exactly 2 text fields.');
@@ -97,7 +82,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveTo', function() {
         'Group node was not successfully populated');
     assertTrue(
         this.navigator.history_.peek().group.isEquivalentTo(outerGroup),
-        'Group stack was not built properly');
+        'History was not built properly');
 
     this.navigator.moveTo_(slider);
     assertEquals(
@@ -121,7 +106,8 @@ TEST_F('SwitchAccessNavigationManagerTest', 'JumpTo', function() {
                      <button></button>
                      <button></button>
                    </div>`;
-  this.runWithLoadedTree(website, (desktop) => {
+  this.runWithLoadedTree(website, (root) => {
+    const desktop = root.parent.root;
     const textInput =
         desktop.findAll({role: chrome.automation.RoleType.TEXT_FIELD})[1];
     assertNotNullNorUndefined(textInput, 'Text field is undefined');
@@ -137,7 +123,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'JumpTo', function() {
         this.navigator.group_.isEquivalentTo(group1),
         'Group is initialized in an unexpected manner');
 
-    this.navigator.jumpTo_(RootNodeWrapper.buildTree(group2));
+    this.navigator.jumpTo_(BasicRootNode.buildTree(group2));
     assertFalse(
         this.navigator.group_.isEquivalentTo(group1), 'Jump did nothing');
     assertTrue(
@@ -163,8 +149,8 @@ TEST_F('SwitchAccessNavigationManagerTest', 'SelectButton', function() {
         };
       </script>`;
 
-  this.runWithLoadedTree(website, function(desktop) {
-    moveToPageContents();
+  this.runWithLoadedTree(website, function(pageContents) {
+    this.moveToPageContents(pageContents);
 
     const node = currentNode().automationNode;
     assertNotNullNorUndefined(node, 'Node is invalid');
@@ -188,13 +174,13 @@ TEST_F('SwitchAccessNavigationManagerTest', 'EnterGroup', function() {
                      <button></button>
                    </div>
                    <input type="range">`;
-  this.runWithLoadedTree(website, (desktop) => {
+  this.runWithLoadedTree(website, (root) => {
     const targetGroup = this.findNodeById('group');
     this.navigator.moveTo_(targetGroup);
 
     const originalGroup = this.navigator.group_;
     assertEquals(
-        this.navigator.node_.automationNode.htmlAttributes['id'], 'group',
+        this.navigator.node_.automationNode.htmlAttributes.id, 'group',
         'Did not move to group properly');
 
     NavigationManager.enterGroup();
@@ -212,21 +198,20 @@ TEST_F('SwitchAccessNavigationManagerTest', 'EnterGroup', function() {
   });
 });
 
-// TODO(crbug.com/1045075): Test is flaky.
-TEST_F('SwitchAccessNavigationManagerTest', 'DISABLED_MoveForward', function() {
+TEST_F('SwitchAccessNavigationManagerTest', 'MoveForward', function() {
   const website = `<div>
                      <button id="button1"></button>
                      <button id="button2"></button>
                      <button id="button3"></button>
                    </div>`;
-  this.runWithLoadedTree(website, (desktop) => {
+  this.runWithLoadedTree(website, (root) => {
     this.navigator.moveTo_(this.findNodeById('button1'));
     const button1 = this.navigator.node_;
     assertFalse(
         button1 instanceof BackButtonNode,
         'button1 should not be a BackButtonNode');
     assertEquals(
-        'button1', button1.automationNode.htmlAttributes['id'],
+        'button1', button1.automationNode.htmlAttributes.id,
         'Current node is not button1');
 
     NavigationManager.moveForward();
@@ -238,7 +223,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'DISABLED_MoveForward', function() {
         button2 instanceof BackButtonNode,
         'button2 should not be a BackButtonNode');
     assertEquals(
-        'button2', button2.automationNode.htmlAttributes['id'],
+        'button2', button2.automationNode.htmlAttributes.id,
         'Current node is not button2');
 
     NavigationManager.moveForward();
@@ -253,7 +238,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'DISABLED_MoveForward', function() {
         button3 instanceof BackButtonNode,
         'button3 should not be a BackButtonNode');
     assertEquals(
-        'button3', button3.automationNode.htmlAttributes['id'],
+        'button3', button3.automationNode.htmlAttributes.id,
         'Current node is not button3');
 
     NavigationManager.moveForward();
@@ -274,14 +259,14 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveBackward', function() {
                      <button id="button2"></button>
                      <button id="button3"></button>
                    </div>`;
-  this.runWithLoadedTree(website, (desktop) => {
+  this.runWithLoadedTree(website, (root) => {
     this.navigator.moveTo_(this.findNodeById('button1'));
     const button1 = this.navigator.node_;
     assertFalse(
         button1 instanceof BackButtonNode,
         'button1 should not be a BackButtonNode');
     assertEquals(
-        'button1', button1.automationNode.htmlAttributes['id'],
+        'button1', button1.automationNode.htmlAttributes.id,
         'Current node is not button1');
 
     NavigationManager.moveBackward();
@@ -298,7 +283,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveBackward', function() {
         button3 instanceof BackButtonNode,
         'button3 should not be a BackButtonNode');
     assertEquals(
-        'button3', button3.automationNode.htmlAttributes['id'],
+        'button3', button3.automationNode.htmlAttributes.id,
         'Current node is not button3');
 
     NavigationManager.moveBackward();
@@ -311,7 +296,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveBackward', function() {
         button2 instanceof BackButtonNode,
         'button2 should not be a BackButtonNode');
     assertEquals(
-        'button2', button2.automationNode.htmlAttributes['id'],
+        'button2', button2.automationNode.htmlAttributes.id,
         'Current node is not button2');
 
     NavigationManager.moveBackward();
@@ -320,3 +305,32 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveBackward', function() {
         'button1 should come before button2');
   });
 });
+
+TEST_F(
+    'SwitchAccessNavigationManagerTest', 'NodeUndefinedBeforeTreeChangeRemoved',
+    function() {
+      const website = `<div>
+                     <button id="button1"></button>
+                   </div>`;
+      this.runWithLoadedTree(website, (root) => {
+        this.navigator.moveTo_(this.findNodeById('button1'));
+        const button1 = this.navigator.node_;
+        assertFalse(
+            button1 instanceof BackButtonNode,
+            'button1 should not be a BackButtonNode');
+        assertEquals(
+            'button1', button1.automationNode.htmlAttributes.id,
+            'Current node is not button1');
+
+        // Simulate the underlying node's deletion. Note that this is different
+        // than an orphaned node (which can have a valid AutomationNode
+        // instance, but no backing C++ object, so attributes returned like role
+        // are undefined).
+        NavigationManager.instance.node_.baseNode_ = undefined;
+
+        // Tree change removed gets sent by C++ after the tree has already
+        // applied changes (so this comes after the above clearing).
+        NavigationManager.instance.onTreeChange_(
+            {type: chrome.automation.TreeChangeType.NODE_REMOVED});
+      });
+    });

@@ -333,9 +333,8 @@ def DoGenerate(source_paths):
                       '"// GENERATED_JAVA_ENUM_PACKAGE: foo"?' %
                       source_path)
     for enum_definition in enum_definitions:
-      package_path = enum_definition.enum_package.replace('.', os.path.sep)
-      file_name = enum_definition.class_name + '.java'
-      output_path = os.path.join(package_path, file_name)
+      output_path = java_cpp_utils.GetJavaFilePath(enum_definition.enum_package,
+                                                   enum_definition.class_name)
       output = GenerateOutput(source_path, enum_definition)
       yield output_path, output
 
@@ -417,7 +416,6 @@ ${ENUM_ENTRIES}
 def DoMain(argv):
   usage = 'usage: %prog [options] [output_dir] input_file(s)...'
   parser = optparse.OptionParser(usage=usage)
-  build_utils.AddDepfileOption(parser)
 
   parser.add_option('--srcjar',
                     help='When specified, a .srcjar at the given path is '
@@ -433,9 +431,6 @@ def DoMain(argv):
     with zipfile.ZipFile(f, 'w', zipfile.ZIP_STORED) as srcjar:
       for output_path, data in DoGenerate(input_paths):
         build_utils.AddToZipHermetic(srcjar, output_path, data=data)
-
-  if options.depfile:
-    build_utils.WriteDepfile(options.depfile, options.srcjar, add_pydeps=False)
 
 
 if __name__ == '__main__':

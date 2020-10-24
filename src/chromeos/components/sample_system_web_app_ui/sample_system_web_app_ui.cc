@@ -13,6 +13,8 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "ui/webui/webui_allowlist.h"
 
 namespace chromeos {
 namespace {
@@ -34,12 +36,8 @@ SampleSystemWebAppUI::SampleSystemWebAppUI(content::WebUI* web_ui)
       content::WebUIDataSource::Create(kChromeUISampleSystemWebAppHost));
 
   trusted_source->AddResourcePath("", IDR_SAMPLE_SYSTEM_WEB_APP_INDEX_HTML);
-  trusted_source->AddResourcePath("pwa.html",
-                                  IDR_SAMPLE_SYSTEM_WEB_APP_PWA_HTML);
   trusted_source->AddResourcePath("sandbox.html",
                                   IDR_SAMPLE_SYSTEM_WEB_APP_SANDBOX_HTML);
-  trusted_source->AddResourcePath("manifest.json",
-                                  IDR_SAMPLE_SYSTEM_WEB_APP_MANIFEST);
   trusted_source->AddResourcePath("app_icon_192.png",
                                   IDR_SAMPLE_SYSTEM_WEB_APP_ICON_192);
 
@@ -54,7 +52,8 @@ SampleSystemWebAppUI::SampleSystemWebAppUI(content::WebUI* web_ui)
   // We need a CSP override to use the chrome-untrusted:// scheme in the host.
   std::string csp =
       std::string("frame-src ") + kChromeUIUntrustedSampleSystemWebAppURL + ";";
-  trusted_source->OverrideContentSecurityPolicyChildSrc(csp);
+  trusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::FrameSrc, csp);
   auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
   content::WebUIDataSource::Add(browser_context, trusted_source.release());
   content::WebUIDataSource::Add(browser_context,
@@ -62,6 +61,22 @@ SampleSystemWebAppUI::SampleSystemWebAppUI(content::WebUI* web_ui)
 
   // Add ability to request chrome-untrusted: URLs
   web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
+
+  // Register common permissions for chrome-untrusted:// pages.
+  // TODO(https://crbug.com/1113568): Remove this after common permissions are
+  // granted by default.
+  auto* webui_allowlist = WebUIAllowlist::GetOrCreate(browser_context);
+  const url::Origin untrusted_sample_system_web_app_origin =
+      url::Origin::Create(GURL(kChromeUIUntrustedSampleSystemWebAppURL));
+  for (const auto& permission : {
+           ContentSettingsType::COOKIES,
+           ContentSettingsType::JAVASCRIPT,
+           ContentSettingsType::IMAGES,
+           ContentSettingsType::SOUND,
+       }) {
+    webui_allowlist->RegisterAutoGrantedPermission(
+        untrusted_sample_system_web_app_origin, permission);
+  }
 }
 
 SampleSystemWebAppUI::~SampleSystemWebAppUI() = default;

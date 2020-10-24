@@ -14,14 +14,14 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
-import org.chromium.chrome.browser.omnibox.LocationBar;
+import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAttributeKeys;
 import org.chromium.chrome.browser.tab.TabAttributes;
@@ -87,7 +87,7 @@ public class ChromeTabModalPresenter
         mChromeActivity = chromeActivity;
         mTabObscuringHandlerSupplier = tabObscuringHandler;
         mFullscreenManager = mChromeActivity.getFullscreenManager();
-        mBrowserControlsVisibilityManager = mChromeActivity.getFullscreenManager();
+        mBrowserControlsVisibilityManager = mChromeActivity.getBrowserControlsManager();
         mBrowserControlsVisibilityManager.addObserver(this);
         mVisibilityDelegate = new TabModalBrowserControlsVisibilityDelegate();
         mTabObscuringToken = TokenHolder.INVALID_TOKEN;
@@ -128,8 +128,8 @@ public class ChromeTabModalPresenter
         MarginLayoutParams params = (MarginLayoutParams) dialogContainer.getLayoutParams();
         params.width = ViewGroup.MarginLayoutParams.MATCH_PARENT;
         params.height = ViewGroup.MarginLayoutParams.MATCH_PARENT;
-        params.topMargin = getContainerTopMargin(resources, mChromeActivity.getFullscreenManager());
-        params.bottomMargin = getContainerBottomMargin(mChromeActivity.getFullscreenManager());
+        params.topMargin = getContainerTopMargin(resources, mBrowserControlsVisibilityManager);
+        params.bottomMargin = getContainerBottomMargin(mBrowserControlsVisibilityManager);
         dialogContainer.setLayoutParams(params);
 
         int scrimVerticalMargin =
@@ -195,8 +195,7 @@ public class ChromeTabModalPresenter
             // Force toolbar to show and disable overflow menu.
             onTabModalDialogStateChanged(true);
 
-            mChromeActivity.getToolbarManager().setUrlBarFocus(
-                    false, LocationBar.OmniboxFocusReason.UNFOCUS);
+            mChromeActivity.getToolbarManager().setUrlBarFocus(false, OmniboxFocusReason.UNFOCUS);
 
             menuButton.setEnabled(false);
         } else {
@@ -219,9 +218,6 @@ public class ChromeTabModalPresenter
         mTabObscuringToken = TokenHolder.INVALID_TOKEN;
         super.removeDialogView(model);
     }
-
-    @Override
-    public void onContentOffsetChanged(int offset) {}
 
     @Override
     public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,

@@ -15,7 +15,7 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 
 namespace content {
 
@@ -65,7 +65,7 @@ bool WebGraphicsContext3DProviderImpl::IsContextLost() {
          RasterInterface()->GetGraphicsResetStatusKHR() != GL_NO_ERROR;
 }
 
-GrContext* WebGraphicsContext3DProviderImpl::GetGrContext() {
+GrDirectContext* WebGraphicsContext3DProviderImpl::GetGrContext() {
   return provider_->GrContext();
 }
 
@@ -185,7 +185,7 @@ cc::ImageDecodeCache* WebGraphicsContext3DProviderImpl::ImageDecodeCache(
       std::make_unique<cc::GpuImageDecodeCache>(
           provider_.get(), use_transfer_cache, color_type, kMaxWorkingSetBytes,
           provider_->ContextCapabilities().max_texture_size,
-          cc::PaintImage::kDefaultGeneratorClientId));
+          cc::PaintImage::kDefaultGeneratorClientId, nullptr));
   DCHECK(insertion_result.second);
   cache_iterator = insertion_result.first;
   return cache_iterator->second.get();

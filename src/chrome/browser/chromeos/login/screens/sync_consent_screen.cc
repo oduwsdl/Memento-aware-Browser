@@ -127,7 +127,7 @@ void SyncConsentScreen::Finish(Result result) {
   exit_callback_.Run(result);
 }
 
-bool SyncConsentScreen::MaybeSkip() {
+bool SyncConsentScreen::MaybeSkip(WizardContext* context) {
   Init();
 
   switch (behavior_) {
@@ -276,6 +276,11 @@ void SyncConsentScreen::MaybeEnableSyncForSkip() {
 std::unique_ptr<base::AutoReset<bool>>
 SyncConsentScreen::ForceBrandedBuildForTesting(bool value) {
   return std::make_unique<base::AutoReset<bool>>(&g_is_branded_build, value);
+}
+
+// static
+bool SyncConsentScreen::IsBrandedBuildForTesting() {
+  return g_is_branded_build;
 }
 
 void SyncConsentScreen::SetDelegateForTesting(

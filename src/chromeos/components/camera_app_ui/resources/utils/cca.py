@@ -14,6 +14,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -28,16 +29,16 @@ def shell_join(cmd):
     return ' '.join(shlex.quote(c) for c in cmd)
 
 
-def run(args):
+def run(args, cwd=None):
     logging.debug(f'$ {shell_join(args)}')
-    subprocess.check_call(args)
+    subprocess.check_call(args, cwd=cwd)
 
 
 def build_locale_strings():
     grit_cmd = [
         os.path.join(get_chromium_root(), 'tools/grit/grit.py'),
         '-i',
-        'src/strings/camera_strings.grd',
+        'strings/camera_strings.grd',
         'build',
         '-o',
         'build/strings',
@@ -151,7 +152,14 @@ def build_cca(overlay=None, key=None):
         build_mojom_bindings(mojom_bindings)
 
     shutil.rmtree('build/camera', ignore_errors=True)
-    dir_util.copy_tree('src', 'build/camera')
+
+    dir_list = [src for src in os.listdir('.') if os.path.isdir(src)]
+    for d in dir_list:
+        if d == 'build':
+            continue
+        dir_util.copy_tree(d, os.path.join('build/camera', d))
+    shutil.copy2('manifest.json', 'build/camera/manifest.json')
+
     for f in mojo_files:
         shutil.copy2(os.path.join('build/mojo', f), 'build/camera/js/mojo')
     dir_util.copy_tree('build/strings', 'build/camera')
@@ -163,7 +171,7 @@ def build_cca(overlay=None, key=None):
         commit_hash = subprocess.check_output(git_cmd, text=True).strip()[:8]
         timestamp = time.strftime("%F %T")
 
-        with open('src/manifest.json') as f:
+        with open('manifest.json') as f:
             manifest = json.load(f)
         manifest['version_name'] = f'Dev {commit_hash} @ {timestamp}'
         if key is not None:
@@ -186,6 +194,68 @@ def deploy(args):
         f'{args.device}:/opt/google/chrome/resources/chromeos/camera',
     ]
     run(cmd)
+
+
+def deploy_swa(args):
+    cca_root = os.getcwd()
+    target_dir = os.path.join(get_chromium_root(), f'out_{args.board}/Release')
+
+    build_pak_cmd = [
+        'tools/grit/grit.py',
+        '-i',
+        os.path.join(cca_root, 'camera_app_resources.grd'),
+        'build',
+        '-o',
+        os.path.join(target_dir, 'gen/chromeos'),
+        '-f',
+        os.path.join(target_dir,
+                     'gen/tools/gritsettings/default_resource_ids'),
+        '-E',
+        f'root_gen_dir={os.path.join(target_dir, "gen")}',
+    ]
+    # Since there is a constraint in grit.py which will replace ${root_gen_dir}
+    # in .grd file only if the script is executed in the parent directory of
+    # ${root_gen_dir}, execute the script in Chromium root as a workaround.
+    run(build_pak_cmd, get_chromium_root())
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        pak_util_script = os.path.join(get_chromium_root(),
+                                       'tools/grit/pak_util.py')
+        extract_resources_pak_cmd = [
+            pak_util_script,
+            'extract',
+            os.path.join(target_dir, 'resources.pak'),
+            '-o',
+            tmp_dir,
+        ]
+        run(extract_resources_pak_cmd)
+
+        extract_camera_pak_cmd = [
+            pak_util_script,
+            'extract',
+            os.path.join(target_dir,
+                         'gen/chromeos/chromeos_camera_app_resources.pak'),
+            '-o',
+            tmp_dir,
+        ]
+        run(extract_camera_pak_cmd)
+
+        create_new_resources_pak_cmd = [
+            pak_util_script,
+            'create',
+            '-i',
+            tmp_dir,
+            os.path.join(target_dir, 'resources.pak'),
+        ]
+        run(create_new_resources_pak_cmd)
+
+    deploy_new_resources_pak_cmd = [
+        'rsync',
+        '--inplace',
+        os.path.join(target_dir, 'resources.pak'),
+        f'{args.device}:/opt/google/chrome/',
+    ]
+    run(deploy_new_resources_pak_cmd)
 
 
 def test(args):
@@ -236,7 +306,7 @@ def lint(args):
     node = os.path.join(root, 'third_party/node/linux/node-linux-x64/bin/node')
     eslint = os.path.join(
         root, 'third_party/node/node_modules/eslint/bin/eslint.js')
-    subprocess.call([node, eslint, 'src/js'])
+    subprocess.call([node, eslint, 'js'])
 
 
 def parse_args(args):
@@ -249,6 +319,17 @@ def parse_args(args):
                                           description='Deploy CCA to device.')
     deploy_parser.add_argument('device')
     deploy_parser.set_defaults(func=deploy)
+
+    deploy_swa_parser = subparsers.add_parser(
+        'deploy-swa',
+        help='deploy CCA (SWA) to device',
+        description='''Deploy CCA (SWA) to device.
+            This script only works if there is no file added/deleted.
+            And please build Chrome at least once before running the command.'''
+    )
+    deploy_swa_parser.add_argument('board')
+    deploy_swa_parser.add_argument('device')
+    deploy_swa_parser.set_defaults(func=deploy_swa)
 
     test_parser = subparsers.add_parser('test',
                                         help='run tests',

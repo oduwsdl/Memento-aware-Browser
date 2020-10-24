@@ -98,6 +98,14 @@ std::vector<std::string> GetCrostiniMountOptions(
     const std::string& host_private_key,
     const std::string& container_public_key);
 
+// Convert a cracked url to a path inside a VM mounted at |vm_mount|.
+bool ConvertFileSystemURLToPathInsideVM(
+    Profile* profile,
+    const storage::FileSystemURL& file_system_url,
+    const base::FilePath& vm_mount,
+    base::FilePath* inside,
+    bool map_crostini_home = false);
+
 // Convert a cracked url to a path inside the Crostini VM.
 bool ConvertFileSystemURLToPathInsideCrostini(
     Profile* profile,
@@ -117,6 +125,12 @@ using ConvertToContentUrlsCallback =
 // Asynchronously converts Chrome OS file system URLs to content:// URLs.
 // Always returns a vector of the same size as |file_system_urls|.
 // Empty GURLs are filled in the vector if conversion fails.
+void ConvertToContentUrls(
+    Profile* profile,
+    const std::vector<storage::FileSystemURL>& file_system_urls,
+    ConvertToContentUrlsCallback callback);
+
+// Convers Chrome OS file system URLs using a primary profile.
 void ConvertToContentUrls(
     const std::vector<storage::FileSystemURL>& file_system_urls,
     ConvertToContentUrlsCallback callback);

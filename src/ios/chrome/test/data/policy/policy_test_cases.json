@@ -46,6 +46,18 @@
     ]
   },
 
+  "CloudManagementEnrollmentToken": {},
+
+  "CloudReportingEnabled": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": { "CloudReportingEnabled": true },
+        "prefs": { "enterprise_reporting.chrome_cloud_reporting": { "local_state": true } }
+      }
+    ]
+  },
+
  "ChromeVariations": {
     "os": [ "ios" ],
     "policy_pref_mapping_test": [
@@ -57,6 +69,8 @@
       }
     ]
   },
+
+  "CloudPolicyOverridesPlatformPolicy": {},
 
   "DefaultPopupsSetting": {
     "os": [ "ios" ],
@@ -274,12 +288,32 @@
     ]
   },
 
+  "DisableSafeBrowsingProceedAnyway": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": {"DisableSafeBrowsingProceedAnyway": true},
+        "prefs": { "safebrowsing.proceed_anyway_disabled": {}}
+      }
+    ]
+  },
+
   "EditBookmarksEnabled": {
     "os": [ "ios" ],
     "policy_pref_mapping_test": [
       {
         "policies": { "EditBookmarksEnabled": false },
         "prefs": { "bookmarks.editing_enabled": {} }
+      }
+    ]
+  },
+
+  "MetricsReportingEnabled": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": { "MetricsReportingEnabled": false },
+        "prefs": { "user_experience_metrics.reporting_enabled": { "local_state": true } }
       }
     ]
   },
@@ -316,6 +350,28 @@
        }
      ]
    },
+
+  "PrintingEnabled":{
+      "os":["ios"],
+      "policy_pref_mapping_test":[
+          {
+              "policies":{"PrintingEnabled": true},
+              "prefs":{
+                "printing.enabled":{
+                  "value": true
+              }
+            }
+          },
+          {
+              "policies":{"PrintingEnabled": false},
+              "prefs":{
+                "printing.enabled":{
+                  "value": false
+              }
+            }
+          }
+      ]
+  },
 
   "SafeBrowsingEnabled": {
     "os": [ "ios" ],
@@ -383,21 +439,21 @@
     ]
   },
 
-  "URLBlacklist": {
+  "URLBlocklist": {
     "os": [ "ios" ],
     "policy_pref_mapping_test": [
       {
-        "policies": {"URLBlacklist": ["google.com"]},
+        "policies": {"URLBlocklist": ["google.com"]},
         "prefs": { "policy.url_blacklist": {}}
       }
     ]
   },
 
-  "URLWhitelist": {
+  "URLAllowlist": {
     "os": [ "ios" ],
     "policy_pref_mapping_test": [
       {
-        "policies": {"URLWhitelist": ["google.com"]},
+        "policies": {"URLAllowlist": ["google.com"]},
         "prefs": { "policy.url_whitelist": {}}
       }
     ]

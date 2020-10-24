@@ -87,13 +87,10 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   static constexpr float kAppListOpacity = 0.95;
 
   // The opacity of the app list background with blur.
-  static constexpr float kAppListOpacityWithBlur = 0.74;
+  static constexpr float kAppListOpacityWithBlur = 0.8;
 
   // The preferred blend alpha with wallpaper color for background.
   static constexpr int kAppListColorDarkenAlpha = 178;
-
-  // The defualt color of the app list background.
-  static constexpr SkColor kDefaultBackgroundColor = gfx::kGoogleGrey900;
 
   // The duration the AppListView ignores scroll events which could transition
   // its state.
@@ -373,9 +370,15 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   // Returns true if the Embedded Assistant UI is currently being shown.
   bool IsShowingEmbeddedAssistantUI() const;
 
+  // Returns true if a folder is being renamed.
+  bool IsFolderBeingRenamed();
+
   // Starts or stops a timer which will reset the app list to the initial apps
   // page. Called when the app list's visibility changes.
   void UpdatePageResetTimer(bool app_list_visibility);
+
+  // Updates the title of the window that contains the launcher.
+  void UpdateWindowTitle();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AppListControllerImplTest,

@@ -42,12 +42,16 @@ import java.util.List;
  * sanity of this file.
  */
 public final class ChromePreferenceKeys {
-    /*
+    /**
      * Whether the simplified tab switcher is enabled when accessibility mode is enabled. Keep in
      * sync with accessibility_preferences.xml.
      * Default value is true.
      */
     public static final String ACCESSIBILITY_TAB_SWITCHER = "accessibility_tab_switcher";
+
+    /** The language code to override application language with. */
+    public static final String APPLICATION_OVERRIDE_LANGUAGE =
+            "Chrome.Language.ApplicationOverrideLanguage";
 
     public static final String APP_LOCALE = "locale";
 
@@ -56,6 +60,12 @@ public final class ChromePreferenceKeys {
     /** Whether the Autofill Assistant onboarding has been accepted. */
     public static final String AUTOFILL_ASSISTANT_ONBOARDING_ACCEPTED =
             "AUTOFILL_ASSISTANT_ONBOARDING_ACCEPTED";
+    /** Whether the user has seen a lite-script before or is a first-time user. */
+    public static final String AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER =
+            "Chrome.AutofillAssistant.LiteScriptFirstTimeUser";
+    /** The number of times a user has explicitly canceled a lite script. */
+    public static final String AUTOFILL_ASSISTANT_NUMBER_OF_LITE_SCRIPTS_CANCELED =
+            "Chrome.AutofillAssistant.NumberOfLiteScriptsCanceled";
     /**
      * LEGACY preference indicating whether "do not show again" was checked in the autofill
      * assistant onboarding
@@ -297,6 +307,8 @@ public final class ChromePreferenceKeys {
             "Chrome.DefaultBrowserPromo.PromoedCount";
     public static final String DEFAULT_BROWSER_PROMO_LAST_DEFAULT_STATE =
             "Chrome.DefaultBrowserPromo.LastDefaultState";
+    public static final String DEFAULT_BROWSER_PROMO_LAST_PROMO_TIME =
+            "Chrome.DefaultBrowserPromo.LastPromoTime";
     public static final String DEFAULT_BROWSER_PROMO_PROMOED_BY_SYSTEM_SETTINGS =
             "Chrome.DefaultBrowserPromo.PromoedBySystemSettings";
 
@@ -322,6 +334,7 @@ public final class ChromePreferenceKeys {
      * consistent with {@link Pref.ARTICLES_LIST_VISIBLE}.
      */
     public static final String FEED_ARTICLES_LIST_VISIBLE = "Chrome.Feed.ArticlesListVisible";
+    public static final String FEED_PLACEHOLDER_DENSE = "Chrome.Feed.PlaceholderIsDense";
 
     public static final String FIRST_RUN_CACHED_TOS_ACCEPTED = "first_run_tos_accepted";
     public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";
@@ -350,11 +363,6 @@ public final class ChromePreferenceKeys {
     public static final String FLAGS_CACHED_ADAPTIVE_TOOLBAR_ENABLED = "adaptive_toolbar_enabled";
 
     /**
-     * Whether or not the bottom toolbar is enabled.
-     * Default value is false.
-     */
-    public static final String FLAGS_CACHED_BOTTOM_TOOLBAR_ENABLED = "bottom_toolbar_enabled";
-    /**
      * Whether or not command line on non-rooted devices is enabled.
      * Default value is false.
      */
@@ -367,12 +375,6 @@ public final class ChromePreferenceKeys {
     public static final String FLAGS_CACHED_DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE =
             "download_auto_resumption_in_native";
     /**
-     * Whether or not the Duet-TabStrip integration is enabled.
-     * Default value is false.
-     */
-    public static final String FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED =
-            "Chrome.Flags.DuetTabstripIntegrationEnabled";
-    /**
      * Whether or not the grid tab switcher is enabled.
      * Default value is false.
      */
@@ -381,14 +383,6 @@ public final class ChromePreferenceKeys {
      * Key to cache whether immersive ui mode is enabled.
      */
     public static final String FLAGS_CACHED_IMMERSIVE_UI_MODE_ENABLED = "immersive_ui_mode_enabled";
-    public static final String FLAGS_CACHED_INTEREST_FEED_CONTENT_SUGGESTIONS =
-            "interest_feed_content_suggestions";
-    /**
-     * Whether or not the labeled bottom toolbar is enabled.
-     * Default value is false.
-     */
-    public static final String FLAGS_CACHED_LABELED_BOTTOM_TOOLBAR_ENABLED =
-            "labeled_bottom_toolbar_enabled";
     /**
      * Whether warming up network service is enabled.
      * Default value is false.
@@ -421,13 +415,6 @@ public final class ChromePreferenceKeys {
     public static final String FLAGS_CACHED_START_SURFACE_ENABLED = "start_surface_enabled";
 
     /**
-     * Whether or not the start surface single pane is enabled.
-     * Default value is false.
-     */
-    public static final String START_SURFACE_SINGLE_PANE_ENABLED_KEY =
-            "start_surface_single_pane_enabled";
-
-    /**
      * Key to cache whether SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT is enabled.
      */
     public static final String FLAGS_CACHED_SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT =
@@ -455,12 +442,15 @@ public final class ChromePreferenceKeys {
      */
     public static final String HOMEPAGE_LOCATION_POLICY = "Chrome.Policy.HomepageLocation";
 
-    public static final String INCOGNITO_SHORTCUT_ADDED = "incognito-shortcut-added";
-
     /**
-     * Key for UUID-based generator used for Chrome Invalidations (sync, etc.).
+     * Used for get image descriptions feature, track "Just once"/"Don't ask again" choice.
      */
-    public static final String INVALIDATIONS_UUID_PREF_KEY = "chromium.invalidations.uuid";
+    public static final String IMAGE_DESCRIPTIONS_JUST_ONCE_COUNT =
+            "Chrome.ImageDescriptions.JustOnceCount";
+    public static final String IMAGE_DESCRIPTIONS_DONT_ASK_AGAIN =
+            "Chrome.ImageDescriptions.DontAskAgain";
+
+    public static final String INCOGNITO_SHORTCUT_ADDED = "incognito-shortcut-added";
 
     /**
      * When the user is shown a badge that the current Android OS version is unsupported, and they
@@ -519,6 +509,13 @@ public final class ChromePreferenceKeys {
     /** Preference to indicate whether payment request has been completed successfully once.*/
     public static final String PAYMENTS_PAYMENT_COMPLETE_ONCE = "payment_complete_once";
 
+    /**
+     * Indicates whether or not there is any persistent (i.e. non-transient) content in chrome that
+     * can be viewed offline.
+     */
+    public static final String PERSISTENT_OFFLINE_CONTENT_AVAILABILITY_STATUS =
+            "Chrome.OfflineIndicatorV2.HasPersistentOfflineContent";
+
     public static final String PREFETCH_HAS_NEW_PAGES = "prefetch_notification_has_new_pages";
     public static final String PREFETCH_IGNORED_NOTIFICATION_COUNTER =
             "prefetch_notification_ignored_counter";
@@ -544,11 +541,6 @@ public final class ChromePreferenceKeys {
     public static final KeyPrefix PROMO_IS_DISMISSED =
             new KeyPrefix("Chrome.PromoCard.IsDismissed.*");
     public static final KeyPrefix PROMO_TIMES_SEEN = new KeyPrefix("Chrome.PromoCard.TimesSeen.*");
-
-    /**
-     * Key to cache the enabled bottom toolbar parameter.
-     */
-    public static final String VARIATION_CACHED_BOTTOM_TOOLBAR = "bottom_toolbar_variation";
 
     /**
      * Whether the promotion for data reduction has been skipped on first invocation.
@@ -602,6 +594,13 @@ public final class ChromePreferenceKeys {
             "org.chromium.chrome.browser.settings.privacy."
             + "PREF_OTHER_FORMS_OF_HISTORY_DIALOG_SHOWN";
 
+    /** Stores the timestamp of the last performed Safety check. */
+    public static final String SETTINGS_SAFETY_CHECK_LAST_RUN_TIMESTAMP =
+            "Chrome.SafetyCheck.LastRunTimestamp";
+
+    /** Stores the number of times the user has performed Safety check. */
+    public static final String SETTINGS_SAFETY_CHECK_RUN_COUNTER = "Chrome.SafetyCheck.RunCounter";
+
     public static final String SETTINGS_WEBSITE_FAILED_BUILD_VERSION =
             "ManagedSpace.FailedBuildVersion";
 
@@ -629,6 +628,8 @@ public final class ChromePreferenceKeys {
 
     public static final String SIGNIN_PROMO_IMPRESSIONS_COUNT_BOOKMARKS =
             "signin_promo_impressions_count_bookmarks";
+    public static final String SIGNIN_PROMO_IMPRESSIONS_COUNT_NTP =
+            "Chrome.SigninPromo.NTPImpressions";
     public static final String SIGNIN_PROMO_IMPRESSIONS_COUNT_SETTINGS =
             "signin_promo_impressions_count_settings";
     public static final String SIGNIN_PROMO_LAST_SHOWN_ACCOUNT_NAMES =
@@ -654,6 +655,10 @@ public final class ChromePreferenceKeys {
      */
     public static final String SIGNIN_PROMO_SETTINGS_PERSONALIZED_DISMISSED =
             "settings_personalized_signin_promo_dismissed";
+
+    // TODO(https://crbug.com/1091858): Remove this after migrating the legacy code that uses
+    //                                  the sync account before the native is loaded.
+    public static final String SIGNIN_LEGACY_SYNC_ACCOUNT_EMAIL = "google.services.username";
 
     public static final String SNAPSHOT_DATABASE_REMOVED = "snapshot_database_removed";
 
@@ -747,6 +752,8 @@ public final class ChromePreferenceKeys {
             new KeyPrefix("zero_suggest_description*");
     public static final KeyPrefix KEY_ZERO_SUGGEST_NATIVE_TYPE_PREFIX =
             new KeyPrefix("zero_suggest_native_type*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_NATIVE_SUBTYPES_PREFIX =
+            new KeyPrefix("zero_suggest_native_subtypes*");
     public static final KeyPrefix KEY_ZERO_SUGGEST_IS_SEARCH_TYPE_PREFIX =
             new KeyPrefix("zero_suggest_is_search*");
     public static final KeyPrefix KEY_ZERO_SUGGEST_ANSWER_TEXT_PREFIX =
@@ -767,6 +774,8 @@ public final class ChromePreferenceKeys {
             new KeyPrefix("zero_suggest_header_group_id*");
     public static final KeyPrefix KEY_ZERO_SUGGEST_HEADER_GROUP_TITLE_PREFIX =
             new KeyPrefix("zero_suggest_header_group_title*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_HEADER_GROUP_COLLAPSED_BY_DEFAULT_PREFIX =
+            new KeyPrefix("zero_suggest_header_group_collapsed_by_default*");
 
     /**
      * These values are currently used as SharedPreferences keys, along with the keys in
@@ -779,6 +788,9 @@ public final class ChromePreferenceKeys {
     static List<String> getKeysInUse() {
         // clang-format off
         return Arrays.asList(
+                AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER,
+                AUTOFILL_ASSISTANT_NUMBER_OF_LITE_SCRIPTS_CANCELED,
+                APPLICATION_OVERRIDE_LANGUAGE,
                 CLIPBOARD_SHARED_URI,
                 CONDITIONAL_TAB_STRIP_CONTINUOUS_DISMISS_COUNTER,
                 CONDITIONAL_TAB_STRIP_FEATURE_STATUS,
@@ -792,18 +804,25 @@ public final class ChromePreferenceKeys {
                 CONTEXT_MENU_SEARCH_SIMILAR_PRODUCTS_CLICKED,
                 CRYPTID_LAST_RENDER_TIMESTAMP,
                 DEFAULT_BROWSER_PROMO_LAST_DEFAULT_STATE,
+                DEFAULT_BROWSER_PROMO_LAST_PROMO_TIME,
                 DEFAULT_BROWSER_PROMO_PROMOED_BY_SYSTEM_SETTINGS,
                 DEFAULT_BROWSER_PROMO_PROMOED_COUNT,
                 DEFAULT_BROWSER_PROMO_SESSION_COUNT,
                 EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS,
                 FEED_ARTICLES_LIST_VISIBLE,
+                FEED_PLACEHOLDER_DENSE,
                 FLAGS_CACHED.pattern(),
-                FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED,
                 FLAGS_FIELD_TRIAL_PARAM_CACHED.pattern(),
                 HOMEPAGE_LOCATION_POLICY,
                 HOMEPAGE_USE_CHROME_NTP,
+                IMAGE_DESCRIPTIONS_JUST_ONCE_COUNT,
+                IMAGE_DESCRIPTIONS_DONT_ASK_AGAIN,
+                PERSISTENT_OFFLINE_CONTENT_AVAILABILITY_STATUS,
                 PROMO_IS_DISMISSED.pattern(),
                 PROMO_TIMES_SEEN.pattern(),
+                SETTINGS_SAFETY_CHECK_LAST_RUN_TIMESTAMP,
+                SETTINGS_SAFETY_CHECK_RUN_COUNTER,
+                SIGNIN_PROMO_IMPRESSIONS_COUNT_NTP,
                 TWA_DISCLOSURE_SEEN_PACKAGES
         );
         // clang-format on

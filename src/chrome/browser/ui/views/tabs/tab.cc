@@ -14,9 +14,9 @@
 #include "base/bind.h"
 #include "base/debug/alias.h"
 #include "base/i18n/rtl.h"
-#include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/ranges.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/scoped_observer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -76,6 +76,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/rect_based_targeting_utils.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
@@ -121,6 +122,10 @@ class TabStyleHighlightPathGenerator : public views::HighlightPathGenerator {
  public:
   explicit TabStyleHighlightPathGenerator(TabStyle* tab_style)
       : tab_style_(tab_style) {}
+  TabStyleHighlightPathGenerator(const TabStyleHighlightPathGenerator&) =
+      delete;
+  TabStyleHighlightPathGenerator& operator=(
+      const TabStyleHighlightPathGenerator&) = delete;
 
   // views::HighlightPathGenerator:
   SkPath GetHighlightPath(const views::View* view) override {
@@ -129,8 +134,6 @@ class TabStyleHighlightPathGenerator : public views::HighlightPathGenerator {
 
  private:
   TabStyle* const tab_style_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabStyleHighlightPathGenerator);
 };
 
 }  // namespace
@@ -145,6 +148,8 @@ class Tab::TabCloseButtonObserver : public views::ViewObserver {
     DCHECK(close_button_);
     tab_close_button_observer_.Add(close_button_);
   }
+  TabCloseButtonObserver(const TabCloseButtonObserver&) = delete;
+  TabCloseButtonObserver& operator=(const TabCloseButtonObserver&) = delete;
 
   ~TabCloseButtonObserver() override {
     tab_close_button_observer_.Remove(close_button_);
@@ -167,14 +172,9 @@ class Tab::TabCloseButtonObserver : public views::ViewObserver {
   Tab* tab_;
   views::View* close_button_;
   TabController* controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabCloseButtonObserver);
 };
 
 // Tab -------------------------------------------------------------------------
-
-// static
-const char Tab::kViewClassName[] = "Tab";
 
 // static
 void Tab::SetShowHoverCardOnMouseHoverForTesting(bool value) {
@@ -191,7 +191,7 @@ Tab::Tab(TabController* controller)
 
   // So we get don't get enter/exit on children and don't prematurely stop the
   // hover.
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
 
   SetID(VIEW_ID_TAB);
 
@@ -218,9 +218,10 @@ Tab::Tab(TabController* controller)
   // Unretained is safe here because this class outlives its close button, and
   // the controller outlives this Tab.
   close_button_ = new TabCloseButton(
-      this, base::BindRepeating(&TabController::OnMouseEventInTab,
-                                base::Unretained(controller_)));
-  close_button_->set_has_ink_drop_action_on_click(true);
+      base::BindRepeating(&Tab::CloseButtonPressed, base::Unretained(this)),
+      base::BindRepeating(&TabController::OnMouseEventInTab,
+                          base::Unretained(controller_)));
+  close_button_->SetHasInkDropActionOnClick(true);
   AddChildView(close_button_);
 
   tab_close_button_observer_ = std::make_unique<TabCloseButtonObserver>(
@@ -253,25 +254,6 @@ void Tab::AnimationProgressed(const gfx::Animation* animation) {
       gfx::Tween::CalculateValue(gfx::Tween::FAST_OUT_SLOW_IN,
                                  animation->GetCurrentValue()),
       start_title_bounds_, target_title_bounds_));
-}
-
-void Tab::ButtonPressed(views::Button* sender, const ui::Event& event) {
-  if (!alert_indicator_ || !alert_indicator_->GetVisible())
-    base::RecordAction(UserMetricsAction("CloseTab_NoAlertIndicator"));
-  else if (GetAlertStateToShow(data_.alert_state) ==
-           TabAlertState::AUDIO_PLAYING)
-    base::RecordAction(UserMetricsAction("CloseTab_AudioIndicator"));
-  else
-    base::RecordAction(UserMetricsAction("CloseTab_RecordingIndicator"));
-
-  const CloseTabSource source = (event.type() == ui::ET_MOUSE_RELEASED &&
-                                 !(event.flags() & ui::EF_FROM_TOUCH))
-                                    ? CLOSE_TAB_FROM_MOUSE
-                                    : CLOSE_TAB_FROM_TOUCH;
-  DCHECK_EQ(close_button_, sender);
-  controller_->CloseTab(this, source);
-  if (event.type() == ui::ET_GESTURE_TAP)
-    TouchUMA::RecordGestureAction(TouchUMA::kGestureTabCloseTap);
 }
 
 bool Tab::GetHitTestMask(SkPath* mask) const {
@@ -335,21 +317,18 @@ void Tab::Layout() {
     // for touch events.
     // TODO(pkasting): The padding should maybe be removed, see comments in
     // TabCloseButton::TargetForRect().
-    close_button_->SetBorder(views::NullBorder());
-    const gfx::Size close_button_size(close_button_->GetPreferredSize());
-    const int top = contents_rect.y() +
-                    Center(contents_rect.height(), close_button_size.height());
+    const int close_button_size = TabCloseButton::GetGlyphSize();
+    const int top =
+        contents_rect.y() + Center(contents_rect.height(), close_button_size);
     // Clamp the close button position to "centered within the tab"; this should
     // only have an effect when animating in a new active tab, which might start
     // out narrower than the minimum active tab width.
-    close_x = std::max(contents_rect.right() - close_button_size.width(),
-                       Center(width(), close_button_size.width()));
+    close_x = std::max(contents_rect.right() - close_button_size,
+                       Center(width(), close_button_size));
     const int left = std::min(after_title_padding, close_x);
-    const int bottom = height() - close_button_size.height() - top;
-    const int right =
-        std::max(0, width() - (close_x + close_button_size.width()));
-    close_button_->SetBorder(
-        views::CreateEmptyBorder(top, left, bottom, right));
+    const int bottom = height() - close_button_size - top;
+    const int right = std::max(0, width() - (close_x + close_button_size));
+    close_button_->SetButtonPadding(gfx::Insets(top, left, bottom, right));
     close_button_->SetBoundsRect(
         {gfx::Point(close_x - left, 0), close_button_->GetPreferredSize()});
   }
@@ -424,10 +403,6 @@ void Tab::Layout() {
     focus_ring_->Layout();
 }
 
-const char* Tab::GetClassName() const {
-  return kViewClassName;
-}
-
 bool Tab::OnKeyPressed(const ui::KeyEvent& event) {
   if (event.key_code() == ui::VKEY_RETURN && !IsSelected()) {
     controller_->SelectTab(this, event);
@@ -435,7 +410,7 @@ bool Tab::OnKeyPressed(const ui::KeyEvent& event) {
   }
 
   constexpr int kModifiedFlag =
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       ui::EF_COMMAND_DOWN;
 #else
       ui::EF_CONTROL_DOWN;
@@ -476,7 +451,7 @@ bool Tab::OnKeyReleased(const ui::KeyEvent& event) {
 
 namespace {
 bool IsSelectionModifierDown(const ui::MouseEvent& event) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   return event.IsCommandDown();
 #else
   return event.IsControlDown();
@@ -596,7 +571,7 @@ void Tab::MaybeUpdateHoverStatus(const ui::MouseEvent& event) {
   if (mouse_hovered_ || !GetWidget()->IsMouseEventsEnabled())
     return;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Move the hit test area for hovering up so that it is not overlapped by tab
   // hover cards when they are shown.
   // TODO(crbug/978134): Once Linux/CrOS widget transparency is solved, remove
@@ -776,6 +751,7 @@ SkColor Tab::GetAlertIndicatorColor(TabAlertState state) const {
     case TabAlertState::PIP_PLAYING:
       return theme_provider->GetColor(ThemeProperties::COLOR_TAB_PIP_PLAYING);
     case TabAlertState::BLUETOOTH_CONNECTED:
+    case TabAlertState::BLUETOOTH_SCAN_ACTIVE:
     case TabAlertState::USB_CONNECTED:
     case TabAlertState::HID_CONNECTED:
     case TabAlertState::SERIAL_CONNECTED:
@@ -902,11 +878,11 @@ void Tab::MaybeAdjustLeftForPinnedTab(gfx::Rect* bounds,
   const int pinned_width = TabStyle::GetPinnedWidth();
   const int ideal_delta = width() - pinned_width;
   const int ideal_x = (pinned_width - visual_width) / 2;
-  // TODO(pkasting): https://crbug.com/533570  This code is broken when the
-  // current width is less than the pinned width.
+  // TODO(crbug.com/533570): This code is broken when the current width is less
+  // than the pinned width.
   bounds->set_x(
       bounds->x() +
-      gfx::ToRoundedInt(
+      base::ClampRound(
           (1 - static_cast<float>(ideal_delta) /
                    static_cast<float>(kPinnedTabExtraWidthToRenderAsNormal)) *
           (ideal_x - bounds->x())));
@@ -1049,3 +1025,23 @@ void Tab::UpdateForegroundColors() {
 
   SchedulePaint();
 }
+
+void Tab::CloseButtonPressed(const ui::Event& event) {
+  if (!alert_indicator_ || !alert_indicator_->GetVisible())
+    base::RecordAction(UserMetricsAction("CloseTab_NoAlertIndicator"));
+  else if (GetAlertStateToShow(data_.alert_state) ==
+           TabAlertState::AUDIO_PLAYING)
+    base::RecordAction(UserMetricsAction("CloseTab_AudioIndicator"));
+  else
+    base::RecordAction(UserMetricsAction("CloseTab_RecordingIndicator"));
+
+  const bool from_mouse = event.type() == ui::ET_MOUSE_RELEASED &&
+                          !(event.flags() & ui::EF_FROM_TOUCH);
+  controller_->CloseTab(
+      this, from_mouse ? CLOSE_TAB_FROM_MOUSE : CLOSE_TAB_FROM_TOUCH);
+  if (event.type() == ui::ET_GESTURE_TAP)
+    TouchUMA::RecordGestureAction(TouchUMA::kGestureTabCloseTap);
+}
+
+BEGIN_METADATA(Tab, TabSlotView)
+END_METADATA

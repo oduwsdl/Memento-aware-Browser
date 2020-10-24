@@ -5,6 +5,7 @@
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
 import("//chrome/common/features.gni")
+import("//tools/grit/grit_rule.gni")
 
 android_library("internal_java") {
   deps = [
@@ -24,17 +25,21 @@ android_library("internal_java") {
     "//chrome/browser/util:java",
     "//components/autofill/android:autofill_java",
     "//components/browser_ui/android/bottomsheet:java",
+    "//components/browser_ui/modaldialog/android:java",
     "//components/browser_ui/widget/android:java",
     "//components/embedder_support/android:util_java",
     "//components/feature_engagement/public:public_java",
+    "//components/url_formatter/android:url_formatter_java",
     "//content/public/android:content_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
     "//third_party/android_deps:androidx_viewpager_viewpager_java",
-    "//third_party/android_deps:com_google_android_material_material_java",
+    "//third_party/android_deps:material_design_java",
     "//ui/android:ui_java",
     "//ui/android:ui_utils_java",
+    "//url:gurl_java",
   ]
   sources = [
     "java/src/org/chromium/chrome/browser/keyboard_accessory/AutofillKeyboardAccessoryViewBridge.java",
@@ -45,6 +50,15 @@ android_library("internal_java") {
     "java/src/org/chromium/chrome/browser/keyboard_accessory/ManualFillingProperties.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/ManualFillingState.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/ManualFillingStateCache.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetBridge.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetCoordinator.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetMediator.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetMetricsRecorder.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetProperties.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetView.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetViewBinder.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/AllPasswordsBottomSheetViewHolder.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/all_passwords_bottom_sheet/Credential.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/bar_component/KeyboardAccessoryCoordinator.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/bar_component/KeyboardAccessoryIPHUtils.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/bar_component/KeyboardAccessoryMediator.java",
@@ -56,6 +70,7 @@ android_library("internal_java") {
     "java/src/org/chromium/chrome/browser/keyboard_accessory/bar_component/KeyboardAccessoryView.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/bar_component/KeyboardAccessoryViewBinder.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/data/CachedProviderAdapter.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/helper/FaviconHelper.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_component/AccessoryPagerAdapter.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_component/AccessorySheetCoordinator.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_component/AccessorySheetMediator.java",
@@ -78,6 +93,7 @@ android_library("internal_java") {
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/DynamicInfoViewBottomSpacer.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/PasswordAccessoryInfoView.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/PasswordAccessorySheetCoordinator.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/PasswordAccessorySheetMediator.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/PasswordAccessorySheetModernViewBinder.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/PasswordAccessorySheetViewBinder.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/TouchToFillSheetCoordinator.java",
@@ -88,6 +104,7 @@ android_library("internal_java") {
     "java/src/org/chromium/chrome/browser/keyboard_accessory/tab_layout_component/KeyboardAccessoryTabLayoutViewBinder.java",
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  resources_package = "org.chromium.chrome.browser.keyboard_accessory"
 }
 
 android_resources("java_resources") {
@@ -95,6 +112,8 @@ android_resources("java_resources") {
     "java/res/drawable/autofill_chip_inset.xml",
     "java/res/drawable/ic_vpn_key_off.xml",
     "java/res/layout/address_accessory_sheet.xml",
+    "java/res/layout/all_passwords_bottom_sheet.xml",
+    "java/res/layout/all_passwords_bottom_sheet_warning_dialog.xml",
     "java/res/layout/credit_card_accessory_sheet.xml",
     "java/res/layout/keyboard_accessory.xml",
     "java/res/layout/keyboard_accessory_action.xml",
@@ -122,7 +141,6 @@ android_resources("java_resources") {
     ":java_strings_grd",
     "//chrome/android:chrome_app_java_resources",
   ]
-  custom_package = "org.chromium.chrome.browser.keyboard_accessory"
 }
 
 java_strings_grd("java_strings_grd") {

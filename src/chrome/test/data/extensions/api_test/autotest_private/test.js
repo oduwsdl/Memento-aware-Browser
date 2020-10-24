@@ -146,6 +146,27 @@ var defaultTests = [
     chrome.autotestPrivate.getVisibleNotifications(function(){});
     chrome.test.succeed();
   },
+  function removeAllNotifications() {
+    // Image data URL of a small red dot to use for the notification icon.
+    var red_dot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA' +
+        'AAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO' +
+        '9TXL0Y4OHwAAAABJRU5ErkJggg=='
+    var opts =
+        {type: 'basic', title: 'test', message: 'test', iconUrl: red_dot};
+
+    chrome.notifications.create('test', opts, function() {
+      chrome.autotestPrivate.getVisibleNotifications(function(notifications) {
+        chrome.test.assertTrue(notifications.length > 0);
+        chrome.autotestPrivate.removeAllNotifications(function() {
+          chrome.autotestPrivate.getVisibleNotifications(function(
+              notifications) {
+            chrome.test.assertEq(notifications.length, 0);
+            chrome.test.succeed();
+          });
+        });
+      });
+    });
+  },
   // In this test, ARC is available but not managed and not enabled by default.
   function getPlayStoreState() {
     chrome.autotestPrivate.getPlayStoreState(function(state) {
@@ -183,6 +204,11 @@ var defaultTests = [
                  chrome.test.succeed();
             });
         });
+  },
+  function waitForSystemWebAppsInstall() {
+    chrome.autotestPrivate.waitForSystemWebAppsInstall(
+      chrome.test.callbackPass()
+    );
   },
   // This launches and closes Chrome.
   function launchCloseApp() {
@@ -471,6 +497,7 @@ var defaultTests = [
         chrome.test.assertEq(chromium.showInLauncher, true);
         chrome.test.assertEq(chromium.showInSearch, true);
         chrome.test.assertEq(chromium.type, 'Extension');
+        chrome.test.assertEq(chromium.installSource, 'System');
     }));
   },
   // This test verifies that only Chromium is available by default.
@@ -750,33 +777,46 @@ var defaultTests = [
   function acceleratorTest() {
     // Ash level accelerator.
     var newBrowser = newAccelerator('n', false /* shift */, true /* control */);
-    chrome.autotestPrivate.activateAccelerator(
-        newBrowser,
-        function() {
-          chrome.autotestPrivate.getAppWindowList(function(list) {
-            chrome.test.assertEq(2, list.length);
-            var closeWindow =
-                newAccelerator('w', false /* shift */, true /* control */);
-            chrome.autotestPrivate.activateAccelerator(
-                closeWindow,
-                function(success) {
-                  chrome.test.assertTrue(success);
-                  // Actual window close might happen sometime later after the
-                  // accelerator. So keep trying until window count drops to 1.
-                  var timer = window.setInterval(() => {
-                    chrome.autotestPrivate.getAppWindowList(function(list) {
+    chrome.autotestPrivate.activateAccelerator(newBrowser, function() {
+      newBrowser.pressed = false;
+      chrome.autotestPrivate.activateAccelerator(newBrowser, function() {
+        chrome.autotestPrivate.getAppWindowList(function(list) {
+          chrome.test.assertEq(2, list.length);
+          var closeWindow =
+              newAccelerator('w', false /* shift */, true /* control */);
+          chrome.autotestPrivate.activateAccelerator(
+              closeWindow, function(success) {
+                chrome.test.assertTrue(success);
+                closeWindow.pressed = false;
+                chrome.autotestPrivate.activateAccelerator(
+                    closeWindow, async function(success) {
                       chrome.test.assertNoLastError();
+                      // Actual window close might happen sometime later after
+                      // the accelerator. So keep trying until window count
+                      // drops to 1.
+                      await new Promise(resolve => {
+                        function check() {
+                          chrome.autotestPrivate.getAppWindowList(function(
+                              list) {
+                            chrome.test.assertNoLastError();
 
-                      if (list.length != 1)
-                        return;
+                            if (list.length == 1) {
+                              resolve();
+                              return;
+                            }
 
-                      window.clearInterval(timer);
+                            window.setTimeout(check, 100);
+                          });
+                        };
+
+                        check();
+                      });
                       chrome.test.succeed();
                     });
-                  }, 100);
-                });
-          });
+              });
         });
+      });
+    });
   },
   // This test verifies that api to activate accelrator with number works as
   // expected.
@@ -784,12 +824,12 @@ var defaultTests = [
     // An ash accelerator with number to reset UI scale.
     var accelerator = newAccelerator('0', true /* shift */, true /* control */);
     chrome.autotestPrivate.activateAccelerator(
-        accelerator,
-        function(success) {
-          chrome.test.assertNoLastError();
+        accelerator, chrome.test.callbackPass((success) => {
           chrome.test.assertTrue(success);
-          chrome.test.succeed();
-        });
+          accelerator.pressed = false;
+          chrome.autotestPrivate.activateAccelerator(
+              accelerator, chrome.test.callbackPass());
+        }));
   },
   function setMetricsEnabled() {
     chrome.autotestPrivate.setMetricsEnabled(true, chrome.test.callbackPass());
@@ -850,9 +890,11 @@ var defaultTests = [
       // Wait for a few frames.
       await raf();
 
-      chrome.autotestPrivate.stopSmoothnessTracking(function(smoothness) {
+      chrome.autotestPrivate.stopSmoothnessTracking(function(data) {
         chrome.test.assertNoLastError();
-        chrome.test.assertTrue(smoothness >= 0 && smoothness <= 100);
+        chrome.test.assertTrue(data.hasOwnProperty('framesExpected') ||
+                               data.hasOwnProperty('framesProduced') ||
+                               data.hasOwnProperty('jankCount'));
         chrome.test.succeed();
       });
     });
@@ -872,19 +914,73 @@ var defaultTests = [
           await raf();
 
           chrome.autotestPrivate.stopSmoothnessTracking(badDisplay,
-                                                        function(smoothness) {
+                                                        function(data) {
             chrome.test.assertEq(chrome.runtime.lastError.message,
                 'Smoothness is not tracked for display: -1');
 
             chrome.autotestPrivate.stopSmoothnessTracking(displayId,
-                                                          function(smoothness) {
+                                                          function(data) {
               chrome.test.assertNoLastError();
-              chrome.test.assertTrue(smoothness >= 0 && smoothness <= 100);
+              chrome.test.assertTrue(data.hasOwnProperty('framesExpected') ||
+                                     data.hasOwnProperty('framesProduced') ||
+                                     data.hasOwnProperty('jankCount'));
               chrome.test.succeed();
             });
           });
         });
       });
+    });
+  },
+
+  function collectThoughputTrackerData() {
+    chrome.autotestPrivate.startThroughputTrackerDataCollection(function() {
+      chrome.test.assertNoLastError();
+
+      var stopAndCollectData = function() {
+        chrome.autotestPrivate.stopThroughputTrackerDataCollection(
+            function(data){
+          chrome.test.assertNoLastError();
+          chrome.test.assertTrue(data.length > 0);
+          chrome.test.succeed();
+        });
+      };
+
+      // Triggers a tracked animation, e.g. toggling the launcher.
+      var togglePeeking = newAccelerator('search', false /* shift */);
+      function closeLauncher() {
+        togglePeeking.pressed = true;
+        chrome.autotestPrivate.activateAccelerator(
+            togglePeeking,
+            function(success) {
+              chrome.test.assertFalse(success);
+              togglePeeking.pressed = false;
+              chrome.autotestPrivate.activateAccelerator(
+                  togglePeeking,
+                  function(success) {
+                    chrome.test.assertTrue(success);
+                    chrome.autotestPrivate.waitForLauncherState(
+                        'Closed',
+                        function() {
+                          chrome.test.assertNoLastError();
+                          stopAndCollectData();
+                        });
+                  });
+            });
+      }
+      chrome.autotestPrivate.activateAccelerator(
+          togglePeeking,
+          function(success) {
+            chrome.test.assertFalse(success);
+            togglePeeking.pressed = false;
+            chrome.autotestPrivate.activateAccelerator(
+                togglePeeking,
+                function(success) {
+                  chrome.test.assertTrue(success);
+                  chrome.autotestPrivate.waitForLauncherState(
+                      'Peeking',
+                      closeLauncher);
+                });
+          });
     });
   },
 
@@ -1189,6 +1285,19 @@ var shelfTests = [function fetchShelfUIInfo() {
       }));
 }];
 
+// Tests that requires a concrete system web app installation.
+var systemWebAppsTests = [
+  function getRegisteredSystemWebApps() {
+    chrome.autotestPrivate.getRegisteredSystemWebApps(
+      chrome.test.callbackPass(apps => {
+        chrome.test.assertEq(1, apps.length)
+        chrome.test.assertEq('OSSettings', apps[0].internalName);
+        chrome.test.assertEq('chrome://test-system-app/', apps[0].url);
+      })
+    );
+  },
+]
+
 var test_suites = {
   'default': defaultTests,
   'arcEnabled': arcEnabledTests,
@@ -1200,6 +1309,7 @@ var test_suites = {
   'startStopTracing': startStopTracingTests,
   'scrollableShelf': scrollableShelfTests,
   'shelf': shelfTests,
+  'systemWebApps': systemWebAppsTests,
 };
 
 chrome.test.getConfig(function(config) {

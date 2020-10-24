@@ -18,7 +18,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabList;
@@ -437,6 +436,9 @@ public class TabGroupModelFilter extends TabModelFilter {
      * @param originalGroupId The rootId before grouped.
      */
     public void undoGroupedTab(Tab tab, int originalIndex, int originalGroupId) {
+        if (!tab.isInitialized()) {
+            return;
+        }
         int currentIndex = TabModelUtils.getTabIndexById(getTabModel(), tab.getId());
         assert currentIndex != TabModel.INVALID_TAB_INDEX;
 
@@ -518,8 +520,9 @@ public class TabGroupModelFilter extends TabModelFilter {
             throw new IllegalStateException("Attempting to open tab in the wrong model");
         }
 
-        if (tab.getLaunchType() != TabLaunchType.FROM_RESTORE && !mIsResetting) {
-            Tab parentTab = TabModelUtils.getTabById(getTabModel(), tab.getParentId());
+        if (isTabModelRestored() && !mIsResetting) {
+            Tab parentTab = TabModelUtils.getTabById(
+                    getTabModel(), CriticalPersistedTabData.from(tab).getParentId());
             if (parentTab != null) {
                 setRootId(tab, getRootId(parentTab));
             }
@@ -729,7 +732,7 @@ public class TabGroupModelFilter extends TabModelFilter {
     }
 
     private static void setRootId(Tab tab, int id) {
-        ((TabImpl) tab).setRootId(id);
+        CriticalPersistedTabData.from(tab).setRootId(id);
     }
 
     private static int getRootId(Tab tab) {

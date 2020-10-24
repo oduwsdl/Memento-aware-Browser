@@ -17,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
@@ -112,6 +113,7 @@ const SessionCommand::id_type kCommandSetTabUserAgentOverride = 8;
 const SessionCommand::id_type kCommandWindow = 9;
 const SessionCommand::id_type kCommandGroup = 10;
 const SessionCommand::id_type kCommandSetTabUserAgentOverride2 = 11;
+const SessionCommand::id_type kCommandSetWindowUserTitle = 12;
 
 // Number of entries (not commands) before we clobber the file and write
 // everything.
@@ -477,7 +479,7 @@ class TabRestoreServiceImpl::PersistenceDelegate
   std::vector<std::unique_ptr<Entry>> staging_entries_;
 
   // Used when loading previous tabs/session and open tabs/session.
-  base::CancelableTaskTracker cancelable_task_tracker_;
+  base::WeakPtrFactory<PersistenceDelegate> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(PersistenceDelegate);
 };
@@ -602,9 +604,8 @@ void TabRestoreServiceImpl::PersistenceDelegate::LoadTabsFromLastSession() {
   load_state_ = LOADING;
   if (client_->HasLastSession()) {
     client_->GetLastSession(
-        base::BindRepeating(&PersistenceDelegate::OnGotPreviousSession,
-                            base::Unretained(this)),
-        &cancelable_task_tracker_);
+        base::BindOnce(&PersistenceDelegate::OnGotPreviousSession,
+                       weak_factory_.GetWeakPtr()));
   } else {
     load_state_ |= LOADED_LAST_SESSION;
   }
@@ -612,10 +613,9 @@ void TabRestoreServiceImpl::PersistenceDelegate::LoadTabsFromLastSession() {
   // Request the tabs closed in the last session. If the last session crashed,
   // this won't contain the tabs/window that were open at the point of the
   // crash (the call to GetLastSession above requests those).
-  command_storage_manager_->ScheduleGetLastSessionCommands(
+  command_storage_manager_->GetLastSessionCommands(
       base::BindOnce(&PersistenceDelegate::OnGotLastSessionCommands,
-                     base::Unretained(this)),
-      &cancelable_task_tracker_);
+                     weak_factory_.GetWeakPtr()));
 }
 
 void TabRestoreServiceImpl::PersistenceDelegate::DeleteLastSession() {
@@ -665,6 +665,11 @@ void TabRestoreServiceImpl::PersistenceDelegate::ScheduleCommandsForWindow(
   if (!window.app_name.empty()) {
     command_storage_manager_->ScheduleCommand(CreateSetWindowAppNameCommand(
         kCommandSetWindowAppName, window.id, window.app_name));
+  }
+
+  if (!window.user_title.empty()) {
+    command_storage_manager_->ScheduleCommand(CreateSetWindowUserTitleCommand(
+        kCommandSetWindowUserTitle, window.id, window.user_title));
   }
 
   for (size_t i = 0; i < window.tabs.size(); ++i) {
@@ -1057,6 +1062,22 @@ void TabRestoreServiceImpl::PersistenceDelegate::CreateEntriesFromCommands(
             std::move(user_agent_override);
         current_tab->user_agent_override.opaque_ua_metadata_override =
             std::move(opaque_ua_metadata_override);
+        break;
+      }
+
+      case kCommandSetWindowUserTitle: {
+        if (!current_window) {
+          // We should have created a window already.
+          NOTREACHED();
+          return;
+        }
+
+        SessionID window_id = SessionID::InvalidValue();
+        std::string title;
+        if (!RestoreSetWindowUserTitleCommand(command, &window_id, &title))
+          return;
+
+        current_window->user_title.swap(title);
         break;
       }
 

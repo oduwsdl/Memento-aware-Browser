@@ -19,8 +19,12 @@ const ConfirmationState = {
 Polymer({
   is: 'settings-crostini-subpage',
 
-  behaviors:
-      [PrefsBehavior, WebUIListenerBehavior, settings.RouteOriginBehavior],
+  behaviors: [
+    DeepLinkingBehavior,
+    PrefsBehavior,
+    settings.RouteOriginBehavior,
+    WebUIListenerBehavior,
+  ],
 
   properties: {
     /** Preferences state. */
@@ -105,17 +109,6 @@ Polymer({
       value: false,
     },
 
-    /**
-     * Whether the toggle to share the mic with Crostini should be shown.
-     * @private {boolean}
-     */
-    showCrostiniMic_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('showCrostiniMic');
-      },
-    },
-
     /*
      * Whether the installer is showing.
      * @private {boolean}
@@ -186,6 +179,20 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kUninstallCrostini,
+        chromeos.settings.mojom.Setting.kCrostiniDiskResize,
+        chromeos.settings.mojom.Setting.kCrostiniMicAccess,
+        chromeos.settings.mojom.Setting.kCrostiniContainerUpgrade,
+      ]),
+    },
   },
 
   /** settings.RouteOriginBehavior override */
@@ -226,7 +233,7 @@ Polymer({
     settings.CrostiniBrowserProxyImpl.getInstance()
         .getCrostiniMicSharingEnabled()
         .then(this.onCrostiniMicSharingEnabledChanged_.bind(this));
-    this.loadDiskInfo_('attached');
+    this.loadDiskInfo_();
   },
 
   ready() {
@@ -240,6 +247,19 @@ Polymer({
         r.CROSTINI_PORT_FORWARDING, '#crostini-port-forwarding');
   },
 
+  /**
+   * @param {!settings.Route} route
+   * @param {!settings.Route} oldRoute
+   */
+  currentRouteChanged(route, oldRoute) {
+    // Does not apply to this page.
+    if (route !== settings.routes.CROSTINI_DETAILS) {
+      return;
+    }
+
+    this.attemptDeepLink();
+  },
+
   /** @private */
   onCrostiniEnabledChanged_(enabled) {
     if (!enabled &&
@@ -250,7 +270,7 @@ Polymer({
     if (enabled) {
       // The disk size or type could have changed due to the user reinstalling
       // Crostini, update our info.
-      this.loadDiskInfo_('onCrostiniEnabledChanged_');
+      this.loadDiskInfo_();
     }
   },
 
@@ -271,16 +291,10 @@ Polymer({
         settings.routes.CROSTINI_ANDROID_ADB);
   },
 
-  /**
-   * @param {string} callerName
-   * @private
-   */
-  loadDiskInfo_(callerName) {
+  /** @private */
+  loadDiskInfo_() {
     // TODO(davidmunro): No magic 'termina' string.
     const vmName = 'termina';
-    console.log(
-        'crostini_subpage.js: ' + callerName +
-        ' callling \'getCrostiniDiskInfo\'');
     settings.CrostiniBrowserProxyImpl.getInstance()
         .getCrostiniDiskInfo(vmName, /*requestFullInfo=*/ false)
         .then(
@@ -288,15 +302,9 @@ Polymer({
               if (diskInfo.succeeded) {
                 this.setResizeLabels_(diskInfo);
               }
-              console.log(
-                  'crostini_subpage.js: ' + callerName +
-                  ' resolved \'getCrostiniDiskInfo\'');
             },
             reason => {
               console.log(`Unable to get info: ${reason}`);
-              console.log(
-                  'crostini_subpage.js: ' + callerName +
-                  ' resolved \'getCrostiniDiskInfo\'');
             });
   },
 
@@ -345,7 +353,7 @@ Polymer({
     this.showDiskResizeDialog_ = false;
     this.diskResizeConfirmationState_ = ConfirmationState.NOT_CONFIRMED;
     // DiskInfo could have changed.
-    this.loadDiskInfo_('onDiskResizeDialogClose_');
+    this.loadDiskInfo_();
   },
 
   /** @private */

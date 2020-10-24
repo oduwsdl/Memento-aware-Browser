@@ -107,6 +107,7 @@ public class AutofillProvider {
                 // Field has no scroll.
                 child.setDimens((int) bounds.left, (int) bounds.top, 0 /* scrollX*/,
                         0 /* scrollY */, (int) bounds.width(), (int) bounds.height());
+                child.setVisibility(field.mVisible ? View.VISIBLE : View.INVISIBLE);
 
                 ViewStructure.HtmlInfo.Builder builder =
                         child.newHtmlInfoBuilder("input")
@@ -261,6 +262,7 @@ public class AutofillProvider {
     private long mAutofillTriggeredTimeMillis;
     private Context mContext;
     private AutofillPopup mDatalistPopup;
+    private AutofillSuggestion[] mDatalistSuggestions;
     private WebContentsAccessibility mWebContentsAccessibility;
     private View mAnchorView;
 
@@ -528,10 +530,11 @@ public class AutofillProvider {
     }
 
     @CalledByNative
-    protected void hidePopup() {
+    public void hidePopup() {
         if (mDatalistPopup != null) {
             mDatalistPopup.dismiss();
             mDatalistPopup = null;
+            mDatalistSuggestions = null;
         }
         if (mWebContentsAccessibility != null) {
             mWebContentsAccessibility.onAutofillPopupDismissed();
@@ -599,11 +602,11 @@ public class AutofillProvider {
      */
     private void showDatalistPopup(
             String[] datalistValues, String[] datalistLabels, RectF bounds, boolean isRtl) {
-        final AutofillSuggestion[] suggestions = new AutofillSuggestion[datalistValues.length];
-        for (int i = 0; i < suggestions.length; i++) {
-            suggestions[i] = new AutofillSuggestion(datalistValues[i], datalistLabels[i],
-                    DropdownItem.NO_ICON, false /* isIconAtLeft */, i, false /* isDeletable */,
-                    false /* isMultilineLabel */, false /* isBoldLabel */);
+        mDatalistSuggestions = new AutofillSuggestion[datalistValues.length];
+        for (int i = 0; i < mDatalistSuggestions.length; i++) {
+            mDatalistSuggestions[i] = new AutofillSuggestion(datalistValues[i], datalistLabels[i],
+                    /* itemTag= */ "", DropdownItem.NO_ICON, false /* isIconAtLeft */, i,
+                    false /* isDeletable */, false /* isMultilineLabel */, false /* isBoldLabel */);
         }
         if (mWebContentsAccessibility == null) {
             mWebContentsAccessibility = WebContentsAccessibility.fromWebContents(mWebContents);
@@ -622,7 +625,7 @@ public class AutofillProvider {
 
                     @Override
                     public void suggestionSelected(int listIndex) {
-                        onSuggestionSelected(suggestions[listIndex].getLabel());
+                        onSuggestionSelected(mDatalistSuggestions[listIndex].getLabel());
                     }
 
                     @Override
@@ -640,7 +643,7 @@ public class AutofillProvider {
                 return;
             }
         }
-        mDatalistPopup.filterAndShow(suggestions, isRtl, false);
+        mDatalistPopup.filterAndShow(mDatalistSuggestions, isRtl, false);
         if (mWebContentsAccessibility != null) {
             mWebContentsAccessibility.onAutofillPopupDisplayed(mDatalistPopup.getListView());
         }

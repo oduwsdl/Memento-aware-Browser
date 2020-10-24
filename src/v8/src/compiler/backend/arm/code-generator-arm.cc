@@ -755,7 +755,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       } else {
         Register reg = i.InputRegister(0);
         DCHECK_IMPLIES(
-            HasCallDescriptorFlag(instr, CallDescriptor::kFixedTargetRegister),
+            instr->HasCallDescriptorFlag(CallDescriptor::kFixedTargetRegister),
             reg == kJavaScriptCallCodeStartRegister);
         __ CallCodeObject(reg);
       }
@@ -797,7 +797,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       } else {
         Register reg = i.InputRegister(0);
         DCHECK_IMPLIES(
-            HasCallDescriptorFlag(instr, CallDescriptor::kFixedTargetRegister),
+            instr->HasCallDescriptorFlag(CallDescriptor::kFixedTargetRegister),
             reg == kJavaScriptCallCodeStartRegister);
         __ JumpCodeObject(reg);
       }
@@ -825,7 +825,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       CHECK(!instr->InputAt(0)->IsImmediate());
       Register reg = i.InputRegister(0);
       DCHECK_IMPLIES(
-          HasCallDescriptorFlag(instr, CallDescriptor::kFixedTargetRegister),
+          instr->HasCallDescriptorFlag(CallDescriptor::kFixedTargetRegister),
           reg == kJavaScriptCallCodeStartRegister);
       __ Jump(reg);
       unwinding_info_writer_.MarkBlockWillExit();
@@ -962,9 +962,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArchDeoptimize: {
       DeoptimizationExit* exit =
           BuildTranslation(instr, -1, 0, OutputFrameStateCombine::Ignore());
-      CodeGenResult result = AssembleDeoptimizerCall(exit);
-      if (result != kSuccess) return result;
-      unwinding_info_writer_.MarkBlockWillExit();
+      __ b(exit->label());
       break;
     }
     case kArchRet:
@@ -1027,7 +1025,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         offset = Operand(reg);
         __ str(value, MemOperand(object, reg));
       }
-      auto ool = new (zone()) OutOfLineRecordWrite(
+      auto ool = zone()->New<OutOfLineRecordWrite>(
           this, object, offset, value, mode, DetermineStubCallMode(),
           &unwinding_info_writer_);
       __ CheckPageFlag(object, MemoryChunk::kPointersFromHereAreInterestingMask,
@@ -1456,7 +1454,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     case kArmVrintmF32: {
       CpuFeatureScope scope(tasm(), ARMv8);
-      __ vrintm(i.OutputFloatRegister(), i.InputFloatRegister(0));
+      if (instr->InputAt(0)->IsSimd128Register()) {
+        __ vrintm(NeonS32, i.OutputSimd128Register(),
+                  i.InputSimd128Register(0));
+      } else {
+        __ vrintm(i.OutputFloatRegister(), i.InputFloatRegister(0));
+      }
       break;
     }
     case kArmVrintmF64: {
@@ -1481,7 +1484,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
     case kArmVrintzF32: {
       CpuFeatureScope scope(tasm(), ARMv8);
-      __ vrintz(i.OutputFloatRegister(), i.InputFloatRegister(0));
+      if (instr->InputAt(0)->IsSimd128Register()) {
+        __ vrintz(NeonS32, i.OutputSimd128Register(),
+                  i.InputSimd128Register(0));
+      } else {
+        __ vrintz(i.OutputFloatRegister(), i.InputFloatRegister(0));
+      }
       break;
     }
     case kArmVrintzF64: {
@@ -1496,7 +1504,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
     case kArmVrintnF32: {
       CpuFeatureScope scope(tasm(), ARMv8);
-      __ vrintn(i.OutputFloatRegister(), i.InputFloatRegister(0));
+      if (instr->InputAt(0)->IsSimd128Register()) {
+        __ vrintn(NeonS32, i.OutputSimd128Register(),
+                  i.InputSimd128Register(0));
+      } else {
+        __ vrintn(i.OutputFloatRegister(), i.InputFloatRegister(0));
+      }
       break;
     }
     case kArmVrintnF64: {
@@ -1551,10 +1564,13 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       SwVfpRegister scratch = temps.AcquireS();
       __ vcvt_s32_f32(scratch, i.InputFloatRegister(0));
       __ vmov(i.OutputRegister(), scratch);
-      // Avoid INT32_MAX as an overflow indicator and use INT32_MIN instead,
-      // because INT32_MIN allows easier out-of-bounds detection.
-      __ cmn(i.OutputRegister(), Operand(1));
-      __ mov(i.OutputRegister(), Operand(INT32_MIN), SBit::LeaveCC, vs);
+      bool set_overflow_to_min_i32 = MiscField::decode(instr->opcode());
+      if (set_overflow_to_min_i32) {
+        // Avoid INT32_MAX as an overflow indicator and use INT32_MIN instead,
+        // because INT32_MIN allows easier out-of-bounds detection.
+        __ cmn(i.OutputRegister(), Operand(1));
+        __ mov(i.OutputRegister(), Operand(INT32_MIN), SBit::LeaveCC, vs);
+      }
       DCHECK_EQ(LeaveCC, i.OutputSBit());
       break;
     }
@@ -1563,10 +1579,13 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       SwVfpRegister scratch = temps.AcquireS();
       __ vcvt_u32_f32(scratch, i.InputFloatRegister(0));
       __ vmov(i.OutputRegister(), scratch);
-      // Avoid UINT32_MAX as an overflow indicator and use 0 instead,
-      // because 0 allows easier out-of-bounds detection.
-      __ cmn(i.OutputRegister(), Operand(1));
-      __ adc(i.OutputRegister(), i.OutputRegister(), Operand::Zero());
+      bool set_overflow_to_min_u32 = MiscField::decode(instr->opcode());
+      if (set_overflow_to_min_u32) {
+        // Avoid UINT32_MAX as an overflow indicator and use 0 instead,
+        // because 0 allows easier out-of-bounds detection.
+        __ cmn(i.OutputRegister(), Operand(1));
+        __ adc(i.OutputRegister(), i.OutputRegister(), Operand::Zero());
+      }
       DCHECK_EQ(LeaveCC, i.OutputSBit());
       break;
     }
@@ -1716,7 +1735,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       if (left == right) {
         __ Move(result, left);
       } else {
-        auto ool = new (zone()) OutOfLineFloat32Max(this, result, left, right);
+        auto ool = zone()->New<OutOfLineFloat32Max>(this, result, left, right);
         __ FloatMax(result, left, right, ool->entry());
         __ bind(ool->exit());
       }
@@ -1730,7 +1749,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       if (left == right) {
         __ Move(result, left);
       } else {
-        auto ool = new (zone()) OutOfLineFloat64Max(this, result, left, right);
+        auto ool = zone()->New<OutOfLineFloat64Max>(this, result, left, right);
         __ FloatMax(result, left, right, ool->entry());
         __ bind(ool->exit());
       }
@@ -1744,7 +1763,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       if (left == right) {
         __ Move(result, left);
       } else {
-        auto ool = new (zone()) OutOfLineFloat32Min(this, result, left, right);
+        auto ool = zone()->New<OutOfLineFloat32Min>(this, result, left, right);
         __ FloatMin(result, left, right, ool->entry());
         __ bind(ool->exit());
       }
@@ -1758,7 +1777,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       if (left == right) {
         __ Move(result, left);
       } else {
-        auto ool = new (zone()) OutOfLineFloat64Min(this, result, left, right);
+        auto ool = zone()->New<OutOfLineFloat64Min>(this, result, left, right);
         __ FloatMin(result, left, right, ool->entry());
         __ bind(ool->exit());
       }
@@ -1807,17 +1826,22 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     }
     case kArmPeek: {
-      // The incoming value is 0-based, but we need a 1-based value.
-      int reverse_slot = i.InputInt32(0) + 1;
+      int reverse_slot = i.InputInt32(0);
       int offset =
           FrameSlotToFPOffset(frame()->GetTotalFrameSlotCount() - reverse_slot);
       if (instr->OutputAt(0)->IsFPRegister()) {
         LocationOperand* op = LocationOperand::cast(instr->OutputAt(0));
         if (op->representation() == MachineRepresentation::kFloat64) {
           __ vldr(i.OutputDoubleRegister(), MemOperand(fp, offset));
-        } else {
-          DCHECK_EQ(MachineRepresentation::kFloat32, op->representation());
+        } else if (op->representation() == MachineRepresentation::kFloat32) {
           __ vldr(i.OutputFloatRegister(), MemOperand(fp, offset));
+        } else {
+          DCHECK_EQ(MachineRepresentation::kSimd128, op->representation());
+          UseScratchRegisterScope temps(tasm());
+          Register scratch = temps.Acquire();
+          __ add(scratch, fp, Operand(offset));
+          __ vld1(Neon8, NeonListOperand(i.OutputSimd128Register()),
+                  NeonMemOperand(scratch));
         }
       } else {
         __ ldr(i.OutputRegister(), MemOperand(fp, offset));
@@ -1896,10 +1920,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       if (left == right) {
         __ Move(result, left);
       } else {
-        auto ool_low = new (zone())
-            OutOfLineFloat64Min(this, result.low(), left.low(), right.low());
-        auto ool_high = new (zone())
-            OutOfLineFloat64Min(this, result.high(), left.high(), right.high());
+        auto ool_low = zone()->New<OutOfLineFloat64Min>(
+            this, result.low(), left.low(), right.low());
+        auto ool_high = zone()->New<OutOfLineFloat64Min>(
+            this, result.high(), left.high(), right.high());
         __ FloatMin(result.low(), left.low(), right.low(), ool_low->entry());
         __ bind(ool_low->exit());
         __ FloatMin(result.high(), left.high(), right.high(),
@@ -1916,10 +1940,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       if (left == right) {
         __ Move(result, left);
       } else {
-        auto ool_low = new (zone())
-            OutOfLineFloat64Max(this, result.low(), left.low(), right.low());
-        auto ool_high = new (zone())
-            OutOfLineFloat64Max(this, result.high(), left.high(), right.high());
+        auto ool_low = zone()->New<OutOfLineFloat64Max>(
+            this, result.low(), left.low(), right.low());
+        auto ool_high = zone()->New<OutOfLineFloat64Max>(
+            this, result.high(), left.high(), right.high());
         __ FloatMax(result.low(), left.low(), right.low(), ool_low->entry());
         __ bind(ool_low->exit());
         __ FloatMax(result.high(), left.high(), right.high(),
@@ -2000,7 +2024,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       Simd128Register rhs = i.InputSimd128Register(1);
       DCHECK_EQ(dst, lhs);
 
-      // Move rhs only when rhs is strictly greater (mi).
+      // Move rhs only when rhs is strictly lesser (mi).
       __ VFPCompareAndSetFlags(rhs.low(), lhs.low());
       __ vmov(dst.low(), rhs.low(), mi);
       __ VFPCompareAndSetFlags(rhs.high(), lhs.high());
@@ -2013,11 +2037,43 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       Simd128Register rhs = i.InputSimd128Register(1);
       DCHECK_EQ(dst, lhs);
 
-      // Move rhs only when rhs is strictly greater (mi).
+      // Move rhs only when rhs is strictly greater (gt).
       __ VFPCompareAndSetFlags(rhs.low(), lhs.low());
       __ vmov(dst.low(), rhs.low(), gt);
       __ VFPCompareAndSetFlags(rhs.high(), lhs.high());
       __ vmov(dst.high(), rhs.high(), gt);
+      break;
+    }
+    case kArmF64x2Ceil: {
+      CpuFeatureScope scope(tasm(), ARMv8);
+      Simd128Register dst = i.OutputSimd128Register();
+      Simd128Register src = i.InputSimd128Register(0);
+      __ vrintp(dst.low(), src.low());
+      __ vrintp(dst.high(), src.high());
+      break;
+    }
+    case kArmF64x2Floor: {
+      CpuFeatureScope scope(tasm(), ARMv8);
+      Simd128Register dst = i.OutputSimd128Register();
+      Simd128Register src = i.InputSimd128Register(0);
+      __ vrintm(dst.low(), src.low());
+      __ vrintm(dst.high(), src.high());
+      break;
+    }
+    case kArmF64x2Trunc: {
+      CpuFeatureScope scope(tasm(), ARMv8);
+      Simd128Register dst = i.OutputSimd128Register();
+      Simd128Register src = i.InputSimd128Register(0);
+      __ vrintz(dst.low(), src.low());
+      __ vrintz(dst.high(), src.high());
+      break;
+    }
+    case kArmF64x2NearestInt: {
+      CpuFeatureScope scope(tasm(), ARMv8);
+      Simd128Register dst = i.OutputSimd128Register();
+      Simd128Register src = i.InputSimd128Register(0);
+      __ vrintn(dst.low(), src.low());
+      __ vrintn(dst.high(), src.high());
       break;
     }
     case kArmI64x2SplatI32Pair: {
@@ -2092,7 +2148,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArmI64x2Neg: {
       Simd128Register dst = i.OutputSimd128Register();
       __ vmov(dst, uint64_t{0});
-      __ vqsub(NeonS64, dst, dst, i.InputSimd128Register(0));
+      __ vsub(Neon64, dst, dst, i.InputSimd128Register(0));
       break;
     }
     case kArmI64x2Shl: {
@@ -2419,6 +2475,19 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ VmovLow(dst, tmp2.low());
       break;
     }
+    case kArmI32x4DotI16x8S: {
+      Simd128Register dst = i.OutputSimd128Register();
+      Simd128Register lhs = i.InputSimd128Register(0);
+      Simd128Register rhs = i.InputSimd128Register(1);
+      Simd128Register tmp1 = i.TempSimd128Register(0);
+      UseScratchRegisterScope temps(tasm());
+      Simd128Register scratch = temps.AcquireQ();
+      __ vmull(NeonS16, tmp1, lhs.low(), rhs.low());
+      __ vmull(NeonS16, scratch, lhs.high(), rhs.high());
+      __ vpadd(Neon32, dst.low(), tmp1.low(), tmp1.high());
+      __ vpadd(Neon32, dst.high(), scratch.low(), scratch.high());
+      break;
+    }
     case kArmI16x8Splat: {
       __ vdup(Neon16, i.OutputSimd128Register(), i.InputRegister(0));
       break;
@@ -2468,7 +2537,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
               i.InputSimd128Register(1));
       break;
     }
-    case kArmI16x8AddSaturateS: {
+    case kArmI16x8AddSatS: {
       __ vqadd(NeonS16, i.OutputSimd128Register(), i.InputSimd128Register(0),
                i.InputSimd128Register(1));
       break;
@@ -2481,7 +2550,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
               i.InputSimd128Register(1));
       break;
     }
-    case kArmI16x8SubSaturateS: {
+    case kArmI16x8SubSatS: {
       __ vqsub(NeonS16, i.OutputSimd128Register(), i.InputSimd128Register(0),
                i.InputSimd128Register(1));
       break;
@@ -2540,12 +2609,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArmI16x8UConvertI32x4:
       ASSEMBLE_NEON_NARROWING_OP(NeonU16, NeonS16);
       break;
-    case kArmI16x8AddSaturateU: {
+    case kArmI16x8AddSatU: {
       __ vqadd(NeonU16, i.OutputSimd128Register(), i.InputSimd128Register(0),
                i.InputSimd128Register(1));
       break;
     }
-    case kArmI16x8SubSaturateU: {
+    case kArmI16x8SubSatU: {
       __ vqsub(NeonU16, i.OutputSimd128Register(), i.InputSimd128Register(0),
                i.InputSimd128Register(1));
       break;
@@ -2636,7 +2705,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
               i.InputSimd128Register(1));
       break;
     }
-    case kArmI8x16AddSaturateS: {
+    case kArmI8x16AddSatS: {
       __ vqadd(NeonS8, i.OutputSimd128Register(), i.InputSimd128Register(0),
                i.InputSimd128Register(1));
       break;
@@ -2646,7 +2715,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
               i.InputSimd128Register(1));
       break;
     }
-    case kArmI8x16SubSaturateS: {
+    case kArmI8x16SubSatS: {
       __ vqsub(NeonS8, i.OutputSimd128Register(), i.InputSimd128Register(0),
                i.InputSimd128Register(1));
       break;
@@ -2694,12 +2763,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArmI8x16UConvertI16x8:
       ASSEMBLE_NEON_NARROWING_OP(NeonU8, NeonS8);
       break;
-    case kArmI8x16AddSaturateU: {
+    case kArmI8x16AddSatU: {
       __ vqadd(NeonU8, i.OutputSimd128Register(), i.InputSimd128Register(0),
                i.InputSimd128Register(1));
       break;
     }
-    case kArmI8x16SubSaturateU: {
+    case kArmI8x16SubSatU: {
       __ vqsub(NeonU8, i.OutputSimd128Register(), i.InputSimd128Register(0),
                i.InputSimd128Register(1));
       break;
@@ -2753,9 +2822,21 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ vmov(NeonU16, dst, tmp2.low(), 0);
       break;
     }
+    case kArmS128Const: {
+      QwNeonRegister dst = i.OutputSimd128Register();
+      uint64_t imm1 = make_uint64(i.InputUint32(1), i.InputUint32(0));
+      uint64_t imm2 = make_uint64(i.InputUint32(3), i.InputUint32(2));
+      __ vmov(dst.low(), Double(imm1));
+      __ vmov(dst.high(), Double(imm2));
+      break;
+    }
     case kArmS128Zero: {
       __ veor(i.OutputSimd128Register(), i.OutputSimd128Register(),
               i.OutputSimd128Register());
+      break;
+    }
+    case kArmS128AllOnes: {
+      __ vmov(i.OutputSimd128Register(), uint64_t{0xffff'ffff'ffff'ffff});
       break;
     }
     case kArmS128Dup: {
@@ -3014,7 +3095,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
               i.InputSimd128Register(1), i.InputInt4(2));
       break;
     }
-    case kArmS8x16Swizzle: {
+    case kArmI8x16Swizzle: {
       Simd128Register dst = i.OutputSimd128Register(),
                       tbl = i.InputSimd128Register(0),
                       src = i.InputSimd128Register(1);
@@ -3023,7 +3104,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ vtbl(dst.high(), table, src.high());
       break;
     }
-    case kArmS8x16Shuffle: {
+    case kArmI8x16Shuffle: {
       Simd128Register dst = i.OutputSimd128Register(),
                       src0 = i.InputSimd128Register(0),
                       src1 = i.InputSimd128Register(1);
@@ -3038,8 +3119,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       int scratch_s_base = scratch.code() * 4;
       for (int j = 0; j < 4; j++) {
         uint32_t four_lanes = i.InputUint32(2 + j);
-        // Ensure byte indices are in [0, 31] so masks are never NaNs.
-        four_lanes &= 0x1F1F1F1F;
+        DCHECK_EQ(0, four_lanes & (table_size == 2 ? 0xF0F0F0F0 : 0xE0E0E0E0));
         __ vmov(SwVfpRegister::from_code(scratch_s_base + j),
                 Float32::FromBits(four_lanes));
       }
@@ -3127,58 +3207,58 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ mov(i.OutputRegister(), Operand(1), LeaveCC, ne);
       break;
     }
-    case kArmS8x16LoadSplat: {
+    case kArmS128Load8Splat: {
       __ vld1r(Neon8, NeonListOperand(i.OutputSimd128Register()),
                i.NeonInputOperand(0));
       break;
     }
-    case kArmS16x8LoadSplat: {
+    case kArmS128Load16Splat: {
       __ vld1r(Neon16, NeonListOperand(i.OutputSimd128Register()),
                i.NeonInputOperand(0));
       break;
     }
-    case kArmS32x4LoadSplat: {
+    case kArmS128Load32Splat: {
       __ vld1r(Neon32, NeonListOperand(i.OutputSimd128Register()),
                i.NeonInputOperand(0));
       break;
     }
-    case kArmS64x2LoadSplat: {
+    case kArmS128Load64Splat: {
       Simd128Register dst = i.OutputSimd128Register();
       __ vld1(Neon32, NeonListOperand(dst.low()), i.NeonInputOperand(0));
       __ Move(dst.high(), dst.low());
       break;
     }
-    case kArmI16x8Load8x8S: {
+    case kArmS128Load8x8S: {
       Simd128Register dst = i.OutputSimd128Register();
       __ vld1(Neon8, NeonListOperand(dst.low()), i.NeonInputOperand(0));
       __ vmovl(NeonS8, dst, dst.low());
       break;
     }
-    case kArmI16x8Load8x8U: {
+    case kArmS128Load8x8U: {
       Simd128Register dst = i.OutputSimd128Register();
       __ vld1(Neon8, NeonListOperand(dst.low()), i.NeonInputOperand(0));
       __ vmovl(NeonU8, dst, dst.low());
       break;
     }
-    case kArmI32x4Load16x4S: {
+    case kArmS128Load16x4S: {
       Simd128Register dst = i.OutputSimd128Register();
       __ vld1(Neon16, NeonListOperand(dst.low()), i.NeonInputOperand(0));
       __ vmovl(NeonS16, dst, dst.low());
       break;
     }
-    case kArmI32x4Load16x4U: {
+    case kArmS128Load16x4U: {
       Simd128Register dst = i.OutputSimd128Register();
       __ vld1(Neon16, NeonListOperand(dst.low()), i.NeonInputOperand(0));
       __ vmovl(NeonU16, dst, dst.low());
       break;
     }
-    case kArmI64x2Load32x2S: {
+    case kArmS128Load32x2S: {
       Simd128Register dst = i.OutputSimd128Register();
       __ vld1(Neon32, NeonListOperand(dst.low()), i.NeonInputOperand(0));
       __ vmovl(NeonS32, dst, dst.low());
       break;
     }
-    case kArmI64x2Load32x2U: {
+    case kArmS128Load32x2U: {
       Simd128Register dst = i.OutputSimd128Register();
       __ vld1(Neon32, NeonListOperand(dst.low()), i.NeonInputOperand(0));
       __ vmovl(NeonU32, dst, dst.low());
@@ -3469,7 +3549,7 @@ void CodeGenerator::AssembleArchTrap(Instruction* instr,
         // is added to the native module and copied into wasm code space.
         __ Call(static_cast<Address>(trap_id), RelocInfo::WASM_STUB_CALL);
         ReferenceMap* reference_map =
-            new (gen_->zone()) ReferenceMap(gen_->zone());
+            gen_->zone()->New<ReferenceMap>(gen_->zone());
         gen_->RecordSafepoint(reference_map, Safepoint::kNoLazyDeopt);
         if (FLAG_debug_code) {
           __ stop();
@@ -3480,7 +3560,7 @@ void CodeGenerator::AssembleArchTrap(Instruction* instr,
     Instruction* instr_;
     CodeGenerator* gen_;
   };
-  auto ool = new (zone()) OutOfLineTrap(this, instr);
+  auto ool = zone()->New<OutOfLineTrap>(this, instr);
   Label* tlabel = ool->entry();
   Condition cc = FlagsConditionToCondition(condition);
   __ b(cc, tlabel);
@@ -3565,9 +3645,6 @@ void CodeGenerator::AssembleConstructFrame() {
       }
     } else if (call_descriptor->IsJSFunctionCall()) {
       __ Prologue();
-      if (call_descriptor->PushArgumentCount()) {
-        __ Push(kJavaScriptCallArgCountRegister);
-      }
     } else {
       __ StubPrologue(info()->GetOutputStackFrameType());
       if (call_descriptor->IsWasmFunctionCall()) {
@@ -3639,7 +3716,7 @@ void CodeGenerator::AssembleConstructFrame() {
 
       __ Call(wasm::WasmCode::kWasmStackOverflow, RelocInfo::WASM_STUB_CALL);
       // We come from WebAssembly, there are no references for the GC.
-      ReferenceMap* reference_map = new (zone()) ReferenceMap(zone());
+      ReferenceMap* reference_map = zone()->New<ReferenceMap>(zone());
       RecordSafepoint(reference_map, Safepoint::kNoLazyDeopt);
       if (FLAG_debug_code) {
         __ stop();
@@ -3738,7 +3815,10 @@ void CodeGenerator::AssembleReturn(InstructionOperand* pop) {
 
 void CodeGenerator::FinishCode() { __ CheckConstPool(true, false); }
 
-void CodeGenerator::PrepareForDeoptimizationExits(int deopt_count) {}
+void CodeGenerator::PrepareForDeoptimizationExits(
+    ZoneDeque<DeoptimizationExit*>* exits) {
+  __ CheckConstPool(true, false);
+}
 
 void CodeGenerator::AssembleMove(InstructionOperand* source,
                                  InstructionOperand* destination) {

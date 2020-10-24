@@ -19,6 +19,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/site_engagement_helper.h"
 #include "chrome/browser/engagement/site_engagement_metrics.h"
@@ -469,8 +470,8 @@ TEST_F(SiteEngagementServiceTest, RestrictedToHTTPAndHTTPS) {
   // The https and http versions of www.google.com should be separate.
   GURL url1("ftp://www.google.com/");
   GURL url2("file://blah");
-  GURL url3("chrome://");
-  GURL url4("about://config");
+  GURL url3("chrome://version/");
+  GURL url4("chrome://config");
 
   NavigateAndCommit(url1);
   service->HandleUserInput(web_contents(),
@@ -551,7 +552,14 @@ TEST_F(SiteEngagementServiceTest, LastShortcutLaunch) {
   EXPECT_DOUBLE_EQ(0.0, service_->GetScore(url2));
 }
 
-TEST_F(SiteEngagementServiceTest, CheckHistograms) {
+// Disabled due to flakiness on Builder Linux Tests. crbug.com/1137759
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_CheckHistograms DISABLED_CheckHistograms
+#else
+#define MAYBE_CheckHistograms CheckHistograms
+#endif
+
+TEST_F(SiteEngagementServiceTest, MAYBE_CheckHistograms) {
   base::HistogramTester histograms;
 
   base::Time current_day = GetReferenceTime();

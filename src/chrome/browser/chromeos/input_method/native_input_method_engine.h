@@ -42,6 +42,10 @@ class NativeInputMethodEngine : public InputMethodEngine {
   // Returns whether this is connected to the input engine.
   bool IsConnectedForTesting() const;
 
+  AssistiveSuggester* get_assistive_suggester_for_testing() {
+    return assistive_suggester_;
+  }
+
  private:
   class ImeObserver : public InputMethodEngineBase::Observer,
                       public ime::mojom::InputChannel {
@@ -77,20 +81,28 @@ class NativeInputMethodEngine : public InputMethodEngine {
         int candidate_id,
         InputMethodEngineBase::MouseButtonEvent button) override;
     void OnAssistiveWindowButtonClicked(
-        const ui::ime::ButtonId& id,
-        const ui::ime::AssistiveWindowType& type) override;
+        const ui::ime::AssistiveWindowButton& button) override;
     void OnMenuItemActivated(const std::string& component_id,
                              const std::string& menu_id) override;
     void OnScreenProjectionChanged(bool is_projected) override;
     void OnSuggestionsChanged(
         const std::vector<std::string>& suggestions) override;
+    void OnInputMethodOptionsChanged(const std::string& engine_id) override;
 
     // mojom::InputChannel:
     void ProcessMessage(const std::vector<uint8_t>& message,
-                        ProcessMessageCallback callback) override {}
+                        ProcessMessageCallback callback) override;
+    void OnFocus() override {}
+    void OnBlur() override {}
+    void OnSurroundingTextChanged(
+        const std::string& text,
+        uint32_t offset,
+        ime::mojom::SelectionRangePtr selection_range) override {}
     void ProcessKeypressForRulebased(
-        ime::mojom::KeypressInfoForRulebasedPtr message,
+        ime::mojom::PhysicalKeyEventPtr event,
         ProcessKeypressForRulebasedCallback callback) override {}
+    void OnKeyEvent(ime::mojom::PhysicalKeyEventPtr event,
+                    OnKeyEventCallback callback) override {}
     void ResetForRulebased() override {}
     void GetRulebasedKeypressCountForTesting(
         GetRulebasedKeypressCountForTestingCallback callback) override {}
@@ -99,18 +111,18 @@ class NativeInputMethodEngine : public InputMethodEngine {
     void FlushForTesting();
 
     // Returns whether this is connected to the input engine.
-    bool IsConnectedForTesting() const { return connected_to_engine_; }
+    bool IsConnectedForTesting() const { return active_engine_id_.has_value(); }
 
    private:
     // Called when this is connected to the input engine. |bound| indicates
     // the success of the connection.
-    void OnConnected(base::Time start, bool bound);
+    void OnConnected(base::Time start, std::string engine_id, bool bound);
 
     // Called when there's a connection error.
     void OnError(base::Time start);
 
-    // Called when a key press is processed by Mojo.
-    void OnKeyEventResponse(
+    // Called when a rule-based key press is processed by Mojo.
+    void OnRuleBasedKeyEventResponse(
         base::Time start,
         ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback,
         ime::mojom::KeypressResponseForRulebasedPtr response);
@@ -119,12 +131,13 @@ class NativeInputMethodEngine : public InputMethodEngine {
     mojo::Remote<ime::mojom::InputEngineManager> remote_manager_;
     mojo::Receiver<ime::mojom::InputChannel> receiver_from_engine_;
     mojo::Remote<ime::mojom::InputChannel> remote_to_engine_;
-    bool connected_to_engine_ = false;
+    base::Optional<std::string> active_engine_id_;
 
     std::unique_ptr<AssistiveSuggester> assistive_suggester_;
   };
 
   ImeObserver* GetNativeObserver() const;
+  AssistiveSuggester* assistive_suggester_;
 };
 
 }  // namespace chromeos

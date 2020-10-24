@@ -313,7 +313,7 @@ TEST_F(ContentSettingsStoreTest, RemoveEmbedded) {
       ContentSettingsPattern::FromURL(primary_url);
   ContentSettingsPattern secondary_pattern =
       ContentSettingsPattern::FromURL(secondary_url);
-  EXPECT_CALL(observer, OnContentSettingChanged(ext_id, false)).Times(4);
+  EXPECT_CALL(observer, OnContentSettingChanged(ext_id, false)).Times(1);
 
   // Build a preference list in JSON format.
   base::ListValue pref_list;
@@ -333,43 +333,18 @@ TEST_F(ContentSettingsStoreTest, RemoveEmbedded) {
   dict_value->SetString(keys::kContentSettingKey, "allow");
   pref_list.Append(std::move(dict_value));
 
-  {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndDisableFeature(
-        permissions::features::kPermissionDelegation);
-    store()->SetExtensionContentSettingFromList(ext_id, &pref_list,
-                                                kExtensionPrefsScopeRegular);
-
-    EXPECT_EQ(CONTENT_SETTING_ALLOW,
-              GetContentSettingFromStore(store(), primary_url, secondary_url,
-                                         ContentSettingsType::COOKIES,
-                                         std::string(), false));
-    EXPECT_EQ(CONTENT_SETTING_ALLOW,
-              GetContentSettingFromStore(store(), primary_url, secondary_url,
-                                         ContentSettingsType::GEOLOCATION,
-                                         std::string(), false));
-
-    store()->ClearContentSettingsForExtension(ext_id,
+  store()->SetExtensionContentSettingFromList(ext_id, &pref_list,
                                               kExtensionPrefsScopeRegular);
-  }
 
-  {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        permissions::features::kPermissionDelegation);
-    store()->SetExtensionContentSettingFromList(ext_id, &pref_list,
-                                                kExtensionPrefsScopeRegular);
-
-    // The embedded geolocation pattern should be removed but cookies kept.
-    EXPECT_EQ(CONTENT_SETTING_ALLOW,
-              GetContentSettingFromStore(store(), primary_url, secondary_url,
-                                         ContentSettingsType::COOKIES,
-                                         std::string(), false));
-    EXPECT_EQ(CONTENT_SETTING_DEFAULT,
-              GetContentSettingFromStore(store(), primary_url, secondary_url,
-                                         ContentSettingsType::GEOLOCATION,
-                                         std::string(), false));
-  }
+  // The embedded geolocation pattern should be removed but cookies kept.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            GetContentSettingFromStore(store(), primary_url, secondary_url,
+                                       ContentSettingsType::COOKIES,
+                                       std::string(), false));
+  EXPECT_EQ(CONTENT_SETTING_DEFAULT,
+            GetContentSettingFromStore(store(), primary_url, secondary_url,
+                                       ContentSettingsType::GEOLOCATION,
+                                       std::string(), false));
 
   Mock::VerifyAndClear(&observer);
   store()->RemoveObserver(&observer);
@@ -407,6 +382,13 @@ TEST_F(ContentSettingsStoreTest, DisallowWildcardsInFlash) {
   // Here we will have one rule because wildcard patterns are allowed for
   // ContentSettingsType::COOKIES.
   ASSERT_EQ(rules.size(), 1u);
+
+  std::unique_ptr<content_settings::RuleIterator> discarded_rules_iterator =
+      store()->GetDiscardedRuleIterator(ContentSettingsType::PLUGINS,
+                                        std::string(), false);
+  ASSERT_TRUE(discarded_rules_iterator->HasNext());
+  ASSERT_EQ(discarded_rules_iterator->Next().primary_pattern, primary_pattern);
+  ASSERT_FALSE(discarded_rules_iterator->HasNext());
 }
 
 }  // namespace extensions

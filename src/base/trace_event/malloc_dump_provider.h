@@ -5,14 +5,13 @@
 #ifndef BASE_TRACE_EVENT_MALLOC_DUMP_PROVIDER_H_
 #define BASE_TRACE_EVENT_MALLOC_DUMP_PROVIDER_H_
 
-#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "build/build_config.h"
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_WIN) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) || \
+    defined(OS_WIN) || defined(OS_MAC)
 #define MALLOC_MEMORY_TRACING_SUPPORTED
 #endif
 
@@ -27,6 +26,9 @@ class BASE_EXPORT MallocDumpProvider : public MemoryDumpProvider {
   static const char kAllocatedObjects[];
 
   static MallocDumpProvider* GetInstance();
+
+  MallocDumpProvider(const MallocDumpProvider&) = delete;
+  MallocDumpProvider& operator=(const MallocDumpProvider&) = delete;
 
   // MemoryDumpProvider implementation.
   bool OnMemoryDump(const MemoryDumpArgs& args,
@@ -46,8 +48,6 @@ class BASE_EXPORT MallocDumpProvider : public MemoryDumpProvider {
 
   bool emit_metrics_on_memory_dump_ = true;
   base::Lock emit_metrics_on_memory_dump_lock_;
-
-  DISALLOW_COPY_AND_ASSIGN(MallocDumpProvider);
 };
 
 }  // namespace trace_event

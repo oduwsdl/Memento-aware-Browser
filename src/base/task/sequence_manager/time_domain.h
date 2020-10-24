@@ -8,8 +8,7 @@
 #include <map>
 
 #include "base/callback.h"
-#include "base/logging.h"
-#include "base/macros.h"
+#include "base/check.h"
 #include "base/task/common/intrusive_heap.h"
 #include "base/task/sequence_manager/lazy_now.h"
 #include "base/task/sequence_manager/task_queue_impl.h"
@@ -36,6 +35,8 @@ class TaskQueueImpl;
 // into a global wake-up, which ultimately gets passed to the ThreadController.
 class BASE_EXPORT TimeDomain {
  public:
+  TimeDomain(const TimeDomain&) = delete;
+  TimeDomain& operator=(const TimeDomain&) = delete;
   virtual ~TimeDomain();
 
   // Returns LazyNow in TimeDomain's time.
@@ -111,7 +112,6 @@ class BASE_EXPORT TimeDomain {
   // NOTE: |lazy_now| is provided in TimeDomain's time.
   void SetNextWakeUpForQueue(internal::TaskQueueImpl* queue,
                              Optional<internal::DelayedWakeUp> wake_up,
-                             internal::WakeUpResolution resolution,
                              LazyNow* lazy_now);
 
   // Remove the TaskQueue from any internal data sctructures.
@@ -123,14 +123,9 @@ class BASE_EXPORT TimeDomain {
 
   struct ScheduledDelayedWakeUp {
     internal::DelayedWakeUp wake_up;
-    internal::WakeUpResolution resolution;
     internal::TaskQueueImpl* queue;
 
     bool operator<=(const ScheduledDelayedWakeUp& other) const {
-      if (wake_up == other.wake_up) {
-        return static_cast<int>(resolution) <=
-               static_cast<int>(other.resolution);
-      }
       return wake_up <= other.wake_up;
     }
 
@@ -152,7 +147,6 @@ class BASE_EXPORT TimeDomain {
   int pending_high_res_wake_up_count_ = 0;
 
   scoped_refptr<internal::AssociatedThreadId> associated_thread_;
-  DISALLOW_COPY_AND_ASSIGN(TimeDomain);
 };
 
 }  // namespace sequence_manager

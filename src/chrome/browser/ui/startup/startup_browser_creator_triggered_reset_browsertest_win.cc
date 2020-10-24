@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -89,9 +90,9 @@ class StartupBrowserCreatorTriggeredResetTest : public InProcessBrowserTest {
 
  protected:
   void SetUpInProcessBrowserTestFixture() override {
-    will_create_browser_context_services_subscription_ =
+    create_services_subscription_ =
         BrowserContextDependencyManager::GetInstance()
-            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
+            ->RegisterCreateServicesCallbackForTesting(
                 base::Bind(&StartupBrowserCreatorTriggeredResetTest::
                                OnWillCreateBrowserContextServices,
                            base::Unretained(this)));
@@ -104,8 +105,8 @@ class StartupBrowserCreatorTriggeredResetTest : public InProcessBrowserTest {
   }
 
   std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
+      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
+      create_services_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(StartupBrowserCreatorTriggeredResetTest);
 };
@@ -142,7 +143,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
   StartupBrowserCreatorImpl launch(base::FilePath(), dummy,
                                    chrome::startup::IS_NOT_FIRST_RUN);
-  ASSERT_TRUE(launch.Launch(profile, std::vector<GURL>(), false));
+  ASSERT_TRUE(launch.Launch(profile, std::vector<GURL>(), false, nullptr));
 
   // This should have created a new browser window.  |browser()| is still
   // around at this point, even though we've closed its window.
@@ -169,7 +170,7 @@ class StartupBrowserCreatorTriggeredResetFirstRunTest
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetFirstRunTest,
                        TestTriggeredResetDoesNotShowWithFirstRunURLs) {
   // The presence of First Run tabs (in production code, these commonly come
-  // from master_preferences) should suppress the reset UI. Check that this is
+  // from initial preferences) should suppress the reset UI. Check that this is
   // the case.
   ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
@@ -189,7 +190,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetFirstRunTest,
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
   StartupBrowserCreatorImpl launch(base::FilePath(), dummy, &browser_creator,
                                    chrome::startup::IS_FIRST_RUN);
-  ASSERT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(), true));
+  ASSERT_TRUE(
+      launch.Launch(browser()->profile(), std::vector<GURL>(), true, nullptr));
 
   // This should have created a new browser window.
   Browser* new_browser = FindOneOtherBrowser(browser());
@@ -225,8 +227,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   {
     StartupBrowserCreatorImpl launch(base::FilePath(), dummy,
                                      chrome::startup::IS_NOT_FIRST_RUN);
-    ASSERT_TRUE(
-        launch.Launch(browser()->profile(), std::vector<GURL>(), false));
+    ASSERT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(), false,
+                              nullptr));
   }
 
   // This should have created a new browser window.  |browser()| is still
@@ -245,8 +247,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
         Profile::CreateProfile(path, nullptr, Profile::CREATE_MODE_SYNCHRONOUS);
   }
   Profile* other_profile_ptr = other_profile.get();
-  profile_manager->RegisterTestingProfile(std::move(other_profile), true,
-                                          false);
+  profile_manager->RegisterTestingProfile(std::move(other_profile), true);
 
   // Use a couple same-site HTTP URLs.
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -266,7 +267,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   {
     StartupBrowserCreatorImpl launch(base::FilePath(), dummy,
                                      chrome::startup::IS_NOT_FIRST_RUN);
-    ASSERT_TRUE(launch.Launch(other_profile_ptr, std::vector<GURL>(), false));
+    ASSERT_TRUE(
+        launch.Launch(other_profile_ptr, std::vector<GURL>(), false, nullptr));
   }
 
   Browser* other_profile_browser =

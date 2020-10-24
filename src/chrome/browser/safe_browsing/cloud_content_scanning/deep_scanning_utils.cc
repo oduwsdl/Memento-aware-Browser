@@ -7,9 +7,13 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
+#include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 
 namespace safe_browsing {
 
@@ -47,24 +51,6 @@ std::string MaybeGetUnscannedReason(BinaryUploadService::Result result) {
 
 }  // namespace
 
-ContentAnalysisTrigger::ContentAnalysisTrigger() = default;
-ContentAnalysisTrigger::ContentAnalysisTrigger(
-    const ContentAnalysisTrigger& other) = default;
-ContentAnalysisTrigger::ContentAnalysisTrigger(ContentAnalysisTrigger&& other) =
-    default;
-ContentAnalysisTrigger::~ContentAnalysisTrigger() = default;
-ContentAnalysisTrigger& ContentAnalysisTrigger::operator=(
-    const ContentAnalysisTrigger& other) = default;
-
-ContentAnalysisScanResult::ContentAnalysisScanResult() = default;
-ContentAnalysisScanResult::ContentAnalysisScanResult(
-    const ContentAnalysisScanResult& other) = default;
-ContentAnalysisScanResult::ContentAnalysisScanResult(
-    ContentAnalysisScanResult&& other) = default;
-ContentAnalysisScanResult::~ContentAnalysisScanResult() = default;
-ContentAnalysisScanResult& ContentAnalysisScanResult::operator=(
-    const ContentAnalysisScanResult& other) = default;
-
 void MaybeReportDeepScanningVerdict(
     Profile* profile,
     const GURL& url,
@@ -75,7 +61,8 @@ void MaybeReportDeepScanningVerdict(
     DeepScanAccessPoint access_point,
     const int64_t content_size,
     BinaryUploadService::Result result,
-    const DeepScanningClientResponse& response) {
+    const enterprise_connectors::ContentAnalysisResponse& response,
+    EventResult event_result) {
   DCHECK(std::all_of(download_digest_sha256.begin(),
                      download_digest_sha256.end(), [](const char& c) {
                        return (c >= '0' && c <= '9') ||
@@ -87,117 +74,33 @@ void MaybeReportDeepScanningVerdict(
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
         ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
                                mime_type, trigger, access_point,
-                               unscanned_reason, content_size);
+                               unscanned_reason, content_size, event_result);
   }
 
   if (result != BinaryUploadService::Result::SUCCESS)
     return;
 
-  if (response.has_malware_scan_verdict() &&
-      response.malware_scan_verdict().verdict() ==
-          MalwareDeepScanningVerdict::SCAN_FAILURE) {
-    extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
-                               mime_type, trigger, access_point,
-                               "MALWARE_SCAN_FAILED", content_size);
-  }
-
-  if (response.has_dlp_scan_verdict() &&
-      response.dlp_scan_verdict().status() != DlpDeepScanningVerdict::SUCCESS) {
-    extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
-                               mime_type, trigger, access_point,
-                               "DLP_SCAN_FAILED", content_size);
-  }
-
-  if (response.malware_scan_verdict().verdict() ==
-          MalwareDeepScanningVerdict::UWS ||
-      response.malware_scan_verdict().verdict() ==
-          MalwareDeepScanningVerdict::MALWARE) {
-    extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnAnalysisConnectorResult(
-            url, file_name, download_digest_sha256, mime_type, trigger,
-            access_point,
-            MalwareVerdictToResult(response.malware_scan_verdict()),
-            content_size);
-  }
-
-  if (response.dlp_scan_verdict().status() == DlpDeepScanningVerdict::SUCCESS) {
-    if (!response.dlp_scan_verdict().triggered_rules().empty()) {
-      extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-          ->OnAnalysisConnectorResult(
-              url, file_name, download_digest_sha256, mime_type, trigger,
-              access_point,
-              SensitiveDataVerdictToResult(response.dlp_scan_verdict()),
-              content_size);
-    }
-  }
-}
-
-void MaybeReportDeepScanningVerdict(
-    Profile* profile,
-    const GURL& url,
-    const std::string& file_name,
-    const std::string& download_digest_sha256,
-    const std::string& mime_type,
-    const std::string& trigger,
-    DeepScanAccessPoint access_point,
-    const int64_t content_size,
-    BinaryUploadService::Result result,
-    const enterprise_connectors::ContentAnalysisResponse& response) {
-  DCHECK(std::all_of(download_digest_sha256.begin(),
-                     download_digest_sha256.end(), [](const char& c) {
-                       return (c >= '0' && c <= '9') ||
-                              (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-                     }));
-
-  std::string unscanned_reason = MaybeGetUnscannedReason(result);
-  if (!unscanned_reason.empty()) {
-    extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
-                               mime_type, trigger, access_point,
-                               unscanned_reason, content_size);
-  }
-
-  if (result != BinaryUploadService::Result::SUCCESS)
-    return;
-
-  for (auto result : response.results()) {
+  for (const auto& result : response.results()) {
     if (result.status() !=
         enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS) {
+      std::string unscanned_reason = "UNSCANNED_REASON_UNKNOWN";
+      if (result.tag() == "malware")
+        unscanned_reason = "MALWARE_SCAN_FAILED";
+      else if (result.tag() == "dlp")
+        unscanned_reason = "DLP_SCAN_FAILED";
+
       extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
           ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
                                  mime_type, trigger, access_point,
-                                 "ANALYSIS_CONNECTOR_FAILED", content_size);
+                                 std::move(unscanned_reason), content_size,
+                                 event_result);
     } else if (result.triggered_rules_size() > 0) {
       extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
           ->OnAnalysisConnectorResult(url, file_name, download_digest_sha256,
-                                      mime_type, trigger, access_point,
-                                      ContentAnalysisResultToResult(result),
-                                      content_size);
+                                      mime_type, trigger, access_point, result,
+                                      content_size, event_result);
     }
   }
-}
-
-void ReportAnalysisConnectorWarningBypass(
-    Profile* profile,
-    const GURL& url,
-    const std::string& file_name,
-    const std::string& download_digest_sha256,
-    const std::string& mime_type,
-    const std::string& trigger,
-    DeepScanAccessPoint access_point,
-    const int64_t content_size,
-    const DlpDeepScanningVerdict& verdict) {
-  DCHECK(std::all_of(download_digest_sha256.begin(),
-                     download_digest_sha256.end(), [](const char& c) {
-                       return (c >= '0' && c <= '9') ||
-                              (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-                     }));
-  extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-      ->OnAnalysisConnectorWarningBypassed(
-          url, file_name, download_digest_sha256, mime_type, trigger,
-          access_point, SensitiveDataVerdictToResult(verdict), content_size);
 }
 
 void ReportAnalysisConnectorWarningBypass(
@@ -216,13 +119,33 @@ void ReportAnalysisConnectorWarningBypass(
                               (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
                      }));
 
-  auto results = ContentAnalysisResponseToResults(response);
-  for (auto result : results) {
+  for (const auto& result : response.results()) {
+    // Only report results with triggered rules.
+    if (result.triggered_rules().empty())
+      continue;
+
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
         ->OnAnalysisConnectorWarningBypassed(
             url, file_name, download_digest_sha256, mime_type, trigger,
             access_point, result, content_size);
   }
+}
+
+std::string EventResultToString(EventResult result) {
+  switch (result) {
+    case EventResult::UNKNOWN:
+      return "EVENT_RESULT_UNKNOWN";
+    case EventResult::ALLOWED:
+      return "EVENT_RESULT_ALLOWED";
+    case EventResult::WARNED:
+      return "EVENT_RESULT_WARNED";
+    case EventResult::BLOCKED:
+      return "EVENT_RESULT_BLOCKED";
+    case EventResult::BYPASSED:
+      return "EVENT_RESULT_BYPASSED";
+  }
+  NOTREACHED();
+  return "";
 }
 
 std::string DeepScanAccessPointToString(DeepScanAccessPoint access_point) {
@@ -238,6 +161,40 @@ std::string DeepScanAccessPointToString(DeepScanAccessPoint access_point) {
   }
   NOTREACHED();
   return "";
+}
+
+void RecordDeepScanMetrics(
+    DeepScanAccessPoint access_point,
+    base::TimeDelta duration,
+    int64_t total_bytes,
+    const BinaryUploadService::Result& result,
+    const enterprise_connectors::ContentAnalysisResponse& response) {
+  // Don't record UMA metrics for this result.
+  if (result == BinaryUploadService::Result::UNAUTHORIZED)
+    return;
+  bool dlp_verdict_success = true;
+  bool malware_verdict_success = true;
+  for (const auto& result : response.results()) {
+    if (result.tag() == "dlp" &&
+        result.status() !=
+            enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS) {
+      dlp_verdict_success = false;
+    }
+    if (result.tag() == "malware" &&
+        result.status() !=
+            enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS) {
+      malware_verdict_success = false;
+    }
+  }
+
+  bool success = dlp_verdict_success && malware_verdict_success;
+  std::string result_value = BinaryUploadServiceResultToString(result, success);
+
+  // Update |success| so non-SUCCESS results don't log the bytes/sec metric.
+  success &= (result == BinaryUploadService::Result::SUCCESS);
+
+  RecordDeepScanMetrics(access_point, duration, total_bytes, result_value,
+                        success);
 }
 
 void RecordDeepScanMetrics(DeepScanAccessPoint access_point,
@@ -345,29 +302,32 @@ bool FileTypeSupportedForDlp(const base::FilePath& path) {
   return std::binary_search(dlp_types.begin(), dlp_types.end(), extension);
 }
 
-DeepScanningClientResponse SimpleDeepScanningClientResponseForTesting(
-    base::Optional<bool> dlp_success,
-    base::Optional<bool> malware_success) {
-  DeepScanningClientResponse response;
+enterprise_connectors::ContentAnalysisResponse
+SimpleContentAnalysisResponseForTesting(base::Optional<bool> dlp_success,
+                                        base::Optional<bool> malware_success) {
+  enterprise_connectors::ContentAnalysisResponse response;
 
   if (dlp_success.has_value()) {
-    response.mutable_dlp_scan_verdict()->set_status(
-        DlpDeepScanningVerdict::SUCCESS);
+    auto* result = response.add_results();
+    result->set_tag("dlp");
+    result->set_status(
+        enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
     if (!dlp_success.value()) {
-      DlpDeepScanningVerdict::TriggeredRule* rule =
-          response.mutable_dlp_scan_verdict()->add_triggered_rules();
-      rule->set_rule_name("rule");
-      rule->set_action(DlpDeepScanningVerdict::TriggeredRule::BLOCK);
+      auto* rule = result->add_triggered_rules();
+      rule->set_rule_name("dlp");
+      rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
     }
   }
 
   if (malware_success.has_value()) {
-    if (malware_success.value()) {
-      response.mutable_malware_scan_verdict()->set_verdict(
-          MalwareDeepScanningVerdict::CLEAN);
-    } else {
-      response.mutable_malware_scan_verdict()->set_verdict(
-          MalwareDeepScanningVerdict::MALWARE);
+    auto* result = response.add_results();
+    result->set_tag("malware");
+    result->set_status(
+        enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
+    if (!malware_success.value()) {
+      auto* rule = result->add_triggered_rules();
+      rule->set_rule_name("malware");
+      rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
     }
   }
 
@@ -402,78 +362,20 @@ std::string BinaryUploadServiceResultToString(
   }
 }
 
-ContentAnalysisScanResult SensitiveDataVerdictToResult(
-    const safe_browsing::DlpDeepScanningVerdict& verdict) {
-  ContentAnalysisScanResult result;
-  result.tag = "dlp";
-  result.status = verdict.status();
-  for (auto rule : verdict.triggered_rules()) {
-    ContentAnalysisTrigger trigger;
-    trigger.action = rule.action();
-    trigger.id =
-        rule.has_rule_id() ? base::NumberToString(rule.rule_id()) : "0";
-    trigger.name = rule.rule_name();
-    result.triggers.push_back(std::move(trigger));
-  }
-  return result;
+std::string GetProfileEmail(Profile* profile) {
+  return profile
+             ? GetProfileEmail(IdentityManagerFactory::GetForProfile(profile))
+             : std::string();
 }
 
-ContentAnalysisScanResult ContentAnalysisResultToResult(
-    const enterprise_connectors::ContentAnalysisResponse::Result& result) {
-  ContentAnalysisScanResult result2;
-  result2.tag = result.tag();
-  result2.status = result.status();
-
-  for (auto rule : result.triggered_rules()) {
-    ContentAnalysisTrigger trigger;
-    trigger.action = rule.action();
-    trigger.id = rule.rule_id();
-    trigger.name = rule.rule_name();
-    result2.triggers.push_back(std::move(trigger));
-  }
-
-  return result2;
-}
-
-ContentAnalysisScanResult MalwareVerdictToResult(
-    const safe_browsing::MalwareDeepScanningVerdict& verdict) {
-  DCHECK_NE(MalwareDeepScanningVerdict::VERDICT_UNSPECIFIED, verdict.verdict());
-  DCHECK_NE(MalwareDeepScanningVerdict::SCAN_FAILURE, verdict.verdict());
-
-  ContentAnalysisScanResult result;
-  result.tag = "malware";
-  result.status =
-      enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS;
-
-  if (verdict.verdict() != MalwareDeepScanningVerdict::CLEAN) {
-    ContentAnalysisTrigger trigger;
-    switch (verdict.verdict()) {
-      case MalwareDeepScanningVerdict::UWS:
-        trigger.action = enterprise_connectors::ContentAnalysisResponse::
-            Result::TriggeredRule::BLOCK;
-        trigger.name = "UWS";
-        break;
-      case MalwareDeepScanningVerdict::MALWARE:
-        trigger.action = enterprise_connectors::ContentAnalysisResponse::
-            Result::TriggeredRule::BLOCK;
-        trigger.name = "MALWARE";
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
-    result.triggers.push_back(std::move(trigger));
-  }
-  return result;
-}
-
-std::vector<ContentAnalysisScanResult> ContentAnalysisResponseToResults(
-    const enterprise_connectors::ContentAnalysisResponse& response) {
-  std::vector<ContentAnalysisScanResult> results;
-  for (auto result : response.results()) {
-    results.push_back(ContentAnalysisResultToResult(result));
-  }
-  return results;
+std::string GetProfileEmail(signin::IdentityManager* identity_manager) {
+  // If the profile is not signed in, GetPrimaryAccountInfo() returns an
+  // empty account info.
+  return identity_manager
+             ? identity_manager
+                   ->GetPrimaryAccountInfo(signin::ConsentLevel::kNotRequired)
+                   .email
+             : std::string();
 }
 
 }  // namespace safe_browsing

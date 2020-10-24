@@ -19,9 +19,10 @@
 #include "components/autofill_assistant/browser/features.h"
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/protocol_utils.h"
-#include "components/autofill_assistant/browser/service_impl.h"
+#include "components/autofill_assistant/browser/service/service_impl.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/user_data.h"
+#include "components/autofill_assistant/browser/view_layout.pb.h"
 #include "components/google/core/common/google_util.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/strings/grit/components_strings.h"
@@ -30,6 +31,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "net/http/http_status_code.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -41,27 +43,20 @@ namespace {
 // message.
 static constexpr int kAutostartInitialProgress = 5;
 
-// Parameter that allows setting the color of the overlay.
-static const char* const kOverlayColorParameterName = "OVERLAY_COLORS";
-
-// Parameter that contains the current session username. Should be synced with
-// |SESSION_USERNAME_PARAMETER| from
-// .../password_manager/PasswordChangeLauncher.java
-// TODO(b/151401974): Eliminate duplicate parameter definitions.
-static const char* const kPasswordChangeUsernameParameterName =
-    "PASSWORD_CHANGE_USERNAME";
+// Experiment for toggling the new progress bar.
+const char kProgressBarExperiment[] = "4400697";
 
 // Returns true if the state requires a UI to be shown.
 //
 // Note that the UI might be shown in RUNNING state, even if it doesn't require
 // it.
-bool StateNeedsUI(AutofillAssistantState state) {
+bool StateNeedsUiInRegularScript(AutofillAssistantState state,
+                                 bool browse_mode_invisible) {
   switch (state) {
-    case AutofillAssistantState::STARTING:
     case AutofillAssistantState::PROMPT:
     case AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT:
     case AutofillAssistantState::MODAL_DIALOG:
-    case AutofillAssistantState::BROWSE:
+    case AutofillAssistantState::STARTING:
       return true;
 
     case AutofillAssistantState::INACTIVE:
@@ -69,31 +64,29 @@ bool StateNeedsUI(AutofillAssistantState state) {
     case AutofillAssistantState::STOPPED:
     case AutofillAssistantState::RUNNING:
       return false;
-  }
 
-  NOTREACHED();
-  return false;
+    case AutofillAssistantState::BROWSE:
+      return browse_mode_invisible;
+  }
 }
 
-// Returns true if reaching that state signals the end of a flow.
-bool StateEndsFlow(AutofillAssistantState state) {
+// Same as |StateNeedsUiInRegularScript|, but does not show UI in STARTING
+// state.
+bool StateNeedsUiInLiteScript(AutofillAssistantState state) {
   switch (state) {
-    case AutofillAssistantState::TRACKING:
-    case AutofillAssistantState::STOPPED:
-      return true;
-
-    case AutofillAssistantState::INACTIVE:
-    case AutofillAssistantState::STARTING:
     case AutofillAssistantState::PROMPT:
-    case AutofillAssistantState::RUNNING:
     case AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT:
     case AutofillAssistantState::MODAL_DIALOG:
+      return true;
+
+    case AutofillAssistantState::STARTING:
     case AutofillAssistantState::BROWSE:
+    case AutofillAssistantState::INACTIVE:
+    case AutofillAssistantState::TRACKING:
+    case AutofillAssistantState::STOPPED:
+    case AutofillAssistantState::RUNNING:
       return false;
   }
-
-  NOTREACHED();
-  return false;
 }
 
 // Check whether a domain is a subdomain of another domain.
@@ -109,11 +102,11 @@ bool HasSameDomainAs(const GURL& a, const GURL& b) {
   return a.host() == b.host();
 }
 
-// Check whether |subdomain| is a subdomain of a set of domains in |whitelist|.
-bool IsInWhitelist(const std::string& subdomain,
-                   const std::vector<std::string> whitelist) {
+// Check whether |subdomain| is a subdomain of a set of domains in |allowlist|.
+bool IsInAllowlist(const std::string& subdomain,
+                   const std::vector<std::string> allowlist) {
   const GURL subdomain_gurl = GURL(subdomain);
-  for (const std::string& parent_domain : whitelist) {
+  for (const std::string& parent_domain : allowlist) {
     if (HasSameDomainAs(subdomain_gurl, GURL(parent_domain)) ||
         IsSubdomainOf(subdomain, parent_domain))
       return true;
@@ -126,10 +119,12 @@ bool IsInWhitelist(const std::string& subdomain,
 Controller::Controller(content::WebContents* web_contents,
                        Client* client,
                        const base::TickClock* tick_clock,
+                       RuntimeManagerImpl* runtime_manager,
                        std::unique_ptr<Service> service)
     : content::WebContentsObserver(web_contents),
       client_(client),
       tick_clock_(tick_clock),
+      runtime_manager_(runtime_manager),
       service_(service ? std::move(service)
                        : ServiceImpl::Create(web_contents->GetBrowserContext(),
                                              client_)),
@@ -240,6 +235,15 @@ int Controller::GetProgress() const {
   return progress_;
 }
 
+base::Optional<int> Controller::GetProgressActiveStep() const {
+  return progress_active_step_;
+}
+
+base::Optional<ShowProgressBarProto::StepProgressBarConfiguration>
+Controller::GetStepProgressBarConfiguration() const {
+  return step_progress_bar_configuration_;
+}
+
 void Controller::SetInfoBox(const InfoBox& info_box) {
   if (!info_box_) {
     info_box_ = std::make_unique<InfoBox>();
@@ -272,6 +276,53 @@ void Controller::SetProgress(int progress) {
   }
 }
 
+bool Controller::SetProgressActiveStepIdentifier(
+    const std::string& active_step_identifier) {
+  if (!step_progress_bar_configuration_.has_value()) {
+    return false;
+  }
+
+  auto it = std::find_if(
+      step_progress_bar_configuration_->annotated_step_icons().cbegin(),
+      step_progress_bar_configuration_->annotated_step_icons().cend(),
+      [&](const ShowProgressBarProto::StepProgressBarIcon& icon) {
+        return icon.identifier() == active_step_identifier;
+      });
+  if (it == step_progress_bar_configuration_->annotated_step_icons().cend()) {
+    return false;
+  }
+
+  SetProgressActiveStep(std::distance(
+      step_progress_bar_configuration_->annotated_step_icons().cbegin(), it));
+  return true;
+}
+
+void Controller::SetProgressActiveStep(int active_step) {
+  if (!step_progress_bar_configuration_.has_value()) {
+    return;
+  }
+
+  // Default step progress bar has 2 steps.
+  int max_step = std::max(
+      2, step_progress_bar_configuration_->annotated_step_icons().size());
+
+  int new_active_step = active_step;
+  if (active_step < 0 || active_step > max_step) {
+    new_active_step = max_step;
+  }
+
+  // Step can only increase.
+  if (progress_active_step_.has_value() &&
+      *progress_active_step_ >= new_active_step) {
+    return;
+  }
+
+  progress_active_step_ = new_active_step;
+  for (ControllerObserver& observer : observers_) {
+    observer.OnProgressActiveStepChanged(new_active_step);
+  }
+}
+
 void Controller::SetProgressVisible(bool visible) {
   if (progress_visible_ == visible)
     return;
@@ -286,6 +337,38 @@ bool Controller::GetProgressVisible() const {
   return progress_visible_;
 }
 
+void Controller::SetStepProgressBarConfiguration(
+    const ShowProgressBarProto::StepProgressBarConfiguration& configuration) {
+  step_progress_bar_configuration_ = configuration;
+  if (!configuration.annotated_step_icons().empty() &&
+      progress_active_step_.has_value() &&
+      configuration.annotated_step_icons().size() < *progress_active_step_) {
+    progress_active_step_ = configuration.annotated_step_icons().size();
+  }
+  for (ControllerObserver& observer : observers_) {
+    observer.OnStepProgressBarConfigurationChanged(configuration);
+    if (progress_active_step_.has_value()) {
+      observer.OnProgressActiveStepChanged(*progress_active_step_);
+    }
+    observer.OnProgressBarErrorStateChanged(progress_bar_error_state_);
+  }
+}
+
+void Controller::SetProgressBarErrorState(bool error) {
+  if (progress_bar_error_state_ == error) {
+    return;
+  }
+
+  progress_bar_error_state_ = error;
+  for (ControllerObserver& observer : observers_) {
+    observer.OnProgressBarErrorStateChanged(error);
+  }
+}
+
+bool Controller::GetProgressBarErrorState() const {
+  return progress_bar_error_state_;
+}
+
 const std::vector<UserAction>& Controller::GetUserActions() const {
   static const base::NoDestructor<std::vector<UserAction>> no_user_actions_;
   return user_actions_ ? *user_actions_ : *no_user_actions_;
@@ -297,6 +380,19 @@ void Controller::SetUserActions(
     SetDefaultChipType(user_actions.get());
   }
   user_actions_ = std::move(user_actions);
+  SetVisibilityAndUpdateUserActions();
+}
+
+void Controller::SetVisibilityAndUpdateUserActions() {
+  // All non-cancel chips should be hidden while the keyboard is showing.
+  if (user_actions_) {
+    for (UserAction& user_action : *user_actions_) {
+      if (user_action.chip().type != CANCEL_ACTION) {
+        user_action.chip().visible = !is_keyboard_showing_;
+      }
+    }
+  }
+
   for (ControllerObserver& observer : observers_) {
     observer.OnUserActionsChanged(GetUserActions());
   }
@@ -311,11 +407,16 @@ bool Controller::HasNavigationError() {
 }
 
 void Controller::RequireUI() {
-  if (needs_ui_)
+  if (ui_shown_)
     return;
 
   needs_ui_ = true;
   client_->AttachUI();
+}
+
+void Controller::SetUiShown(bool shown) {
+  ui_shown_ = shown;
+  runtime_manager_->SetUIState(shown ? UIState::kShown : UIState::kNotShown);
 }
 
 void Controller::SetGenericUi(
@@ -340,20 +441,34 @@ void Controller::ClearGenericUi() {
   }
 }
 
-void Controller::AddListener(NavigationListener* listener) {
+void Controller::SetBrowseModeInvisible(bool invisible) {
+  browse_mode_invisible_ = invisible;
+}
+
+void Controller::AddNavigationListener(
+    ScriptExecutorDelegate::NavigationListener* listener) {
   navigation_listeners_.AddObserver(listener);
 }
 
-void Controller::RemoveListener(NavigationListener* listener) {
+void Controller::RemoveNavigationListener(
+    ScriptExecutorDelegate::NavigationListener* listener) {
   navigation_listeners_.RemoveObserver(listener);
+}
+
+void Controller::AddListener(ScriptExecutorDelegate::Listener* listener) {
+  listeners_.AddObserver(listener);
+}
+
+void Controller::RemoveListener(ScriptExecutorDelegate::Listener* listener) {
+  listeners_.RemoveObserver(listener);
 }
 
 void Controller::SetExpandSheetForPromptAction(bool expand) {
   expand_sheet_for_prompt_action_ = expand;
 }
 
-void Controller::SetBrowseDomainsWhitelist(std::vector<std::string> domains) {
-  browse_domains_whitelist_ = std::move(domains);
+void Controller::SetBrowseDomainsAllowlist(std::vector<std::string> domains) {
+  browse_domains_allowlist_ = std::move(domains);
 }
 
 bool Controller::PerformUserActionWithContext(
@@ -575,6 +690,22 @@ ConfigureBottomSheetProto::PeekMode Controller::GetPeekMode() {
   return peek_mode_;
 }
 
+BottomSheetState Controller::GetBottomSheetState() {
+  return bottom_sheet_state_;
+}
+
+void Controller::SetBottomSheetState(BottomSheetState state) {
+  bottom_sheet_state_ = state;
+}
+
+bool Controller::IsTabSelected() {
+  return tab_selected_;
+}
+
+void Controller::SetTabSelected(bool selected) {
+  tab_selected_ = selected;
+}
+
 void Controller::SetOverlayColors(std::unique_ptr<OverlayColors> colors) {
   overlay_colors_ = std::move(colors);
   if (overlay_colors_) {
@@ -597,6 +728,15 @@ void Controller::GetOverlayColors(OverlayColors* colors) const {
 
 const ClientSettings& Controller::GetClientSettings() const {
   return settings_;
+}
+
+void Controller::ShutdownIfNecessary() {
+  if (!tracking_) {
+    // We expect the DropOutReason to be already reported when we reach this
+    // point and therefore the reason we pass here in the argument should be
+    // ignored.
+    client_->Shutdown(Metrics::DropOutReason::UI_CLOSED_UNEXPECTEDLY);
+  }
 }
 
 void Controller::ReportNavigationStateChanged() {
@@ -624,20 +764,28 @@ bool Controller::EnterState(AutofillAssistantState state) {
   VLOG(2) << __func__ << ": " << state_ << " -> " << state;
 
   // The only valid way of leaving the STOPPED state is to go back to tracking
-  // mode.
-  DCHECK(state_ != AutofillAssistantState::STOPPED ||
-         (state == AutofillAssistantState::TRACKING && tracking_));
-
+  // mode - or going back to RUNNING if it was a recoverable STOPPED state.
+  DCHECK(
+      state_ != AutofillAssistantState::STOPPED ||
+      (state == AutofillAssistantState::TRACKING && tracking_) ||
+      (state == AutofillAssistantState::RUNNING && can_recover_from_stopped_));
+  if (state_ == AutofillAssistantState::STOPPED) {
+    can_recover_from_stopped_ = false;
+  }
   state_ = state;
 
   for (ControllerObserver& observer : observers_) {
     observer.OnStateChanged(state);
   }
 
-  if (!needs_ui_ && StateNeedsUI(state)) {
+  if (!ui_shown_ && StateNeedsUI(state)) {
     RequireUI();
-  } else if (needs_ui_ && StateEndsFlow(state)) {
+  } else if (needs_ui_ && state == AutofillAssistantState::TRACKING) {
     needs_ui_ = false;
+  } else if (browse_mode_invisible_ && ui_shown_ &&
+             state == AutofillAssistantState::BROWSE) {
+    needs_ui_ = false;
+    client_->DestroyUI();
   }
 
   if (ShouldCheckScripts()) {
@@ -646,6 +794,14 @@ bool Controller::EnterState(AutofillAssistantState state) {
     StopPeriodicScriptChecks();
   }
   return true;
+}
+
+void Controller::SetOverlayBehavior(
+    ConfigureUiStateProto::OverlayBehavior overlay_behavior) {
+  overlay_behavior_ = overlay_behavior;
+  for (ControllerObserver& observer : observers_) {
+    observer.OnShouldShowOverlayChanged(ShouldShowOverlay());
+  }
 }
 
 void Controller::SetWebControllerForTest(
@@ -658,7 +814,7 @@ void Controller::OnUrlChange() {
     PerformDelayedShutdownIfNecessary();
     return;
   }
-
+  user_model_.SetCurrentURL(GetCurrentURL());
   GetOrCheckScripts();
 }
 
@@ -743,7 +899,7 @@ void Controller::OnPeriodicScriptCheck() {
 }
 
 void Controller::OnGetScripts(const GURL& url,
-                              bool result,
+                              int http_status,
                               const std::string& response) {
   if (state_ == AutofillAssistantState::STOPPED)
     return;
@@ -753,11 +909,13 @@ void Controller::OnGetScripts(const GURL& url,
   if (!HasSameDomainAs(script_url_, url))
     return;
 
-  if (!result) {
+  if (http_status != net::HTTP_OK) {
 #ifdef NDEBUG
-    VLOG(1) << "Failed to get assistant scripts for <redacted>";
+    VLOG(1) << "Failed to get assistant scripts for <redacted>, http-status="
+            << http_status;
 #else
-    VLOG(1) << "Failed to get assistant scripts for " << script_url_.host();
+    VLOG(1) << "Failed to get assistant scripts for " << script_url_.host()
+            << ", http-status=" << http_status;
 #endif
     OnFatalError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
                  Metrics::DropOutReason::GET_SCRIPTS_FAILED);
@@ -893,7 +1051,7 @@ void Controller::OnScriptExecuted(const std::string& script_path,
     case ScriptExecutor::SHUTDOWN_GRACEFULLY:
       if (!tracking_) {
         EnterStoppedState();
-        client_->Shutdown(Metrics::DropOutReason::SCRIPT_SHUTDOWN);
+        RecordDropOutOrShutdown(Metrics::DropOutReason::SCRIPT_SHUTDOWN);
         return;
       }
       end_state = AutofillAssistantState::TRACKING;
@@ -961,7 +1119,7 @@ void Controller::InitFromParameters() {
     SetDetails(std::move(details));
 
   const base::Optional<std::string> overlay_color =
-      trigger_context_->GetParameter(kOverlayColorParameterName);
+      trigger_context_->GetOverlayColors();
   if (overlay_color) {
     std::unique_ptr<OverlayColors> colors = std::make_unique<OverlayColors>();
     std::vector<std::string> color_strings =
@@ -979,11 +1137,21 @@ void Controller::InitFromParameters() {
     SetOverlayColors(std::move(colors));
   }
   const base::Optional<std::string> password_change_username =
-      trigger_context_->GetParameter(kPasswordChangeUsernameParameterName);
+      trigger_context_->GetPasswordChangeUsername();
   if (password_change_username) {
-    user_data_->selected_login_.emplace(web_contents()->GetLastCommittedURL(),
+    DCHECK(
+        GetCurrentURL().is_valid());  // At least |deeplink_url_| must be set.
+    user_data_->selected_login_.emplace(GetCurrentURL().GetOrigin(),
                                         *password_change_username);
   }
+
+  if (trigger_context_->HasExperimentId(kProgressBarExperiment)) {
+    ShowProgressBarProto::StepProgressBarConfiguration mock_configuration;
+    mock_configuration.set_use_step_progress_bar(true);
+    SetStepProgressBarConfiguration(mock_configuration);
+  }
+
+  user_model_.SetCurrentURL(GetCurrentURL());
 }
 
 void Controller::Track(std::unique_ptr<TriggerContext> trigger_context,
@@ -1015,20 +1183,10 @@ bool Controller::Start(const GURL& deeplink_url,
       state_ != AutofillAssistantState::TRACKING) {
     return false;
   }
-  // Verify a password change intent before running.
-  // TODO(b/151391231): Remove when intent signing is implemented.
-  if (trigger_context->GetParameter(kPasswordChangeUsernameParameterName)) {
-    auto* password_manager_client = client_->GetPasswordManagerClient();
-    if (!password_manager_client ||
-        !password_manager_client->WasCredentialLeakDialogShown()) {
-      VLOG(1) << "Failed to start a password change flow.";
-      return false;
-    }
-  }
 
   trigger_context_ = std::move(trigger_context);
-  InitFromParameters();
   deeplink_url_ = deeplink_url;
+  InitFromParameters();
 
   // Force a re-evaluation of the script, to get a chance to autostart.
   if (state_ == AutofillAssistantState::TRACKING)
@@ -1044,15 +1202,30 @@ bool Controller::Start(const GURL& deeplink_url,
 }
 
 void Controller::ShowFirstMessageAndStart() {
-  SetStatusMessage(
-      l10n_util::GetStringFUTF8(IDS_AUTOFILL_ASSISTANT_LOADING,
-                                base::UTF8ToUTF16(GetCurrentURL().host())));
-  SetProgress(kAutostartInitialProgress);
+  // Only show default status message if necessary. Scripts started by lite
+  // scripts that also showed the onboarding do not show the loading message.
+  if (status_message_.empty() &&
+      !(GetTriggerContext()->is_onboarding_shown() &&
+        GetTriggerContext()->WasStartedByTriggerScript())) {
+    SetStatusMessage(
+        l10n_util::GetStringFUTF8(IDS_AUTOFILL_ASSISTANT_LOADING,
+                                  base::UTF8ToUTF16(GetCurrentURL().host())));
+  }
+  if (step_progress_bar_configuration_.has_value() &&
+      step_progress_bar_configuration_->use_step_progress_bar()) {
+    SetProgressActiveStep(0);
+  } else {
+    SetProgress(kAutostartInitialProgress);
+  }
   EnterState(AutofillAssistantState::STARTING);
 }
 
-AutofillAssistantState Controller::GetState() {
+AutofillAssistantState Controller::GetState() const {
   return state_;
+}
+
+bool Controller::ShouldShowOverlay() const {
+  return overlay_behavior_ == ConfigureUiStateProto::DEFAULT;
 }
 
 void Controller::OnScriptSelected(const ScriptHandle& handle,
@@ -1073,13 +1246,10 @@ std::string Controller::GetDebugContext() {
 
   dict.SetKey("status", base::Value(status_message_));
   if (trigger_context_) {
-    google::protobuf::RepeatedPtrField<ScriptParameterProto> parameters_proto;
-    trigger_context_->AddParameters(&parameters_proto);
     std::vector<base::Value> parameters_js;
-    for (const auto& parameter_proto : parameters_proto) {
+    for (const auto& parameter : trigger_context_->GetParameters()) {
       base::Value parameter_js = base::Value(base::Value::Type::DICTIONARY);
-      parameter_js.SetKey(parameter_proto.name(),
-                          base::Value(parameter_proto.value()));
+      parameter_js.SetKey(parameter.first, base::Value(parameter.second));
       parameters_js.push_back(std::move(parameter_js));
     }
     dict.SetKey("parameters", base::Value(parameters_js));
@@ -1107,11 +1277,6 @@ void Controller::OnCollectUserDataContinueButtonClicked() {
     return;
 
   auto callback = std::move(collect_user_data_options_->confirm_callback);
-
-  // TODO(crbug.com/806868): succeed is currently always true, but we might want
-  // to set it to false and propagate the result to CollectUserDataAction
-  // when the user clicks "Cancel" during that action.
-  user_data_->succeed_ = true;
 
   SetCollectUserDataOptions(nullptr);
   std::move(callback).Run(user_data_.get(), &user_model_);
@@ -1437,8 +1602,14 @@ void Controller::OnScriptError(const std::string& error_message,
   if (state_ == AutofillAssistantState::STOPPED)
     return;
 
-  RequireUI();
-  SetStatusMessage(error_message);
+  // For lite scripts, don't attach the UI on error, and don't show an error
+  // while shutting down.
+  if (!IsRunningLiteScript()) {
+    RequireUI();
+    SetStatusMessage(error_message);
+    SetProgressBarErrorState(true);
+  }
+
   EnterStoppedState();
 
   if (tracking_) {
@@ -1446,7 +1617,7 @@ void Controller::OnScriptError(const std::string& error_message,
     return;
   }
 
-  client_->Shutdown(reason);
+  RecordDropOutOrShutdown(reason);
 }
 
 void Controller::OnFatalError(const std::string& error_message,
@@ -1458,6 +1629,7 @@ void Controller::OnFatalError(const std::string& error_message,
     return;
 
   SetStatusMessage(error_message);
+  SetProgressBarErrorState(true);
   EnterStoppedState();
 
   // If we haven't managed to check the set of scripts yet at this point, we
@@ -1472,7 +1644,31 @@ void Controller::OnFatalError(const std::string& error_message,
     return;
   }
 
-  client_->Shutdown(reason);
+  RecordDropOutOrShutdown(reason);
+}
+
+void Controller::RecordDropOutOrShutdown(Metrics::DropOutReason reason) {
+  // If there is an UI, we wait for it to be closed before shutting down (the UI
+  // will call |ShutdownIfNecessary|).
+  // Lite scripts go away immediately, even if UI is currently being shown.
+  if (client_->HasHadUI() && !IsRunningLiteScript()) {
+    // We report right away to make sure we don't lose this reason if the client
+    // is unexpectedly destroyed while the error message is showing (for example
+    // if the tab is closed).
+    client_->RecordDropOut(reason);
+  } else {
+    client_->Shutdown(reason);
+  }
+}
+
+void Controller::OnStop(const std::string& message,
+                        const std::string& button_label) {
+  DCHECK(state_ != AutofillAssistantState::STOPPED);
+
+  can_recover_from_stopped_ = true;
+  for (auto& listener : listeners_) {
+    listener.OnPause(message, button_label);
+  }
 }
 
 void Controller::PerformDelayedShutdownIfNecessary() {
@@ -1599,6 +1795,10 @@ void Controller::DidFinishLoad(content::RenderFrameHost* render_frame_host,
   OnUrlChange();
 }
 
+void Controller::ExpectNavigation() {
+  expect_navigation_ = true;
+}
+
 void Controller::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() ||
@@ -1611,8 +1811,33 @@ void Controller::DidStartNavigation(
     ReportNavigationStateChanged();
   }
 
-  // The following types of navigations are allowed for the main frame, when
-  // in PROMPT state:
+  // The navigation is expected, do not check for errors below.
+  if (expect_navigation_) {
+    expect_navigation_ = false;
+    return;
+  }
+
+  if (state_ == AutofillAssistantState::STOPPED &&
+      !navigation_handle->IsRendererInitiated() &&
+      !navigation_handle->WasServerRedirect()) {
+    if (can_recover_from_stopped_) {
+      // Usually when in STOPPED (e.g. through |OnScriptError|) the
+      // |DropOutReason| has been recorded. In the case of a recoverable stop,
+      // e.g. with the back button, this is not the case. Record the reason as
+      // |NAVIGATION| here.
+      client_->Shutdown(Metrics::DropOutReason::NAVIGATION);
+      return;
+    }
+
+    ShutdownIfNecessary();
+    return;
+  }
+
+  // In lite scripts, navigations are allowed (the lite script will fail if the
+  // trigger condition stops being true).
+  //
+  // In regular scripts, the following types of navigations are allowed for the
+  // main frame, when in PROMPT state:
   //  - first-time URL load
   //  - script-directed navigation, while a script is running unless
   //    there's a touchable area.
@@ -1627,19 +1852,33 @@ void Controller::DidStartNavigation(
   // Everything else, such as going back to a previous page, or refreshing the
   // page is considered an end condition. If going back to a previous page is
   // required, consider using the BROWSE state instead.
-  // Note that BROWSE state end conditions are in DidFinishNavigation, in order
-  // to be able to properly evaluate the committed url.
-  if (state_ == AutofillAssistantState::PROMPT &&
+  if (!IsRunningLiteScript() && state_ == AutofillAssistantState::PROMPT &&
       web_contents()->GetLastCommittedURL().is_valid() &&
       !navigation_handle->WasServerRedirect() &&
       !navigation_handle->IsRendererInitiated()) {
     OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
                   Metrics::DropOutReason::NAVIGATION);
+    return;
   }
+
+  // When in RUNNING state, all renderer initiated navigation is allowed,
+  // user initiated navigation will cause an error.
+  if (state_ == AutofillAssistantState::RUNNING &&
+      !navigation_handle->WasServerRedirect() &&
+      !navigation_handle->IsRendererInitiated()) {
+    OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
+                  Metrics::DropOutReason::NAVIGATION_WHILE_RUNNING);
+    return;
+  }
+
+  // Note that BROWSE state end conditions are in DidFinishNavigation, in order
+  // to be able to properly evaluate the committed url.
 }
 
 void Controller::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
+  // TODO(b/159871774): Rethink how we handle navigation events. The early
+  // return here may prevent us from updating |navigating_to_new_document_|.
   if (!navigation_handle->IsInMainFrame() ||
       navigation_handle->IsSameDocument() ||
       !navigation_handle->HasCommitted() || !IsNavigatingToNewDocument()) {
@@ -1662,7 +1901,7 @@ void Controller::DidFinishNavigation(
     auto script_host = script_url_.host();
     if (current_host != script_host &&
         !IsSubdomainOf(current_host, script_host) &&
-        !IsInWhitelist(current_host, browse_domains_whitelist_)) {
+        !IsInAllowlist(current_host, browse_domains_allowlist_)) {
       OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
                     Metrics::DropOutReason::DOMAIN_CHANGE_DURING_BROWSE_MODE);
     }
@@ -1745,6 +1984,16 @@ void Controller::SetCollectUserDataOptions(CollectUserDataOptions* options) {
   }
 }
 
+void Controller::SetLastSuccessfulUserDataOptions(
+    std::unique_ptr<CollectUserDataOptions> collect_user_data_options) {
+  last_collect_user_data_options_ = std::move(collect_user_data_options);
+}
+
+const CollectUserDataOptions* Controller::GetLastSuccessfulUserDataOptions()
+    const {
+  return last_collect_user_data_options_.get();
+}
+
 void Controller::WriteUserData(
     base::OnceCallback<void(UserData*, UserData::FieldChange*)>
         write_callback) {
@@ -1756,11 +2005,23 @@ void Controller::WriteUserData(
   for (ControllerObserver& observer : observers_) {
     observer.OnUserDataChanged(user_data_.get(), field_change);
   }
+  UpdateCollectUserDataActions();
 }
 
-void Controller::WriteUserModel(
-    base::OnceCallback<void(UserModel*)> write_callback) {
-  std::move(write_callback).Run(&user_model_);
+bool Controller::StateNeedsUI(AutofillAssistantState state) {
+  if (IsRunningLiteScript()) {
+    return StateNeedsUiInLiteScript(state);
+  }
+  return StateNeedsUiInRegularScript(state, browse_mode_invisible_);
+}
+
+bool Controller::IsRunningLiteScript() const {
+  return service_ ? service_->IsLiteService() : false;
+}
+
+void Controller::OnKeyboardVisibilityChanged(bool visible) {
+  is_keyboard_showing_ = visible;
+  SetVisibilityAndUpdateUserActions();
 }
 
 ElementArea* Controller::touchable_element_area() {

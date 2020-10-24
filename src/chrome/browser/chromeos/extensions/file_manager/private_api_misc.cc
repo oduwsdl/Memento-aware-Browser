@@ -5,21 +5,18 @@
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_misc.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
-#include <algorithm>
-#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
 
 #include "ash/public/cpp/multi_user_window_manager.h"
-#include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/i18n/encoding_detection.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -64,7 +61,6 @@
 #include "components/drive/drive_pref_names.h"
 #include "components/drive/event_logger.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "components/zoom/page_zoom.h"
@@ -74,7 +70,6 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "google_apis/drive/auth_service.h"
-#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
@@ -195,17 +190,6 @@ bool IsAllowedSource(storage::FileSystemType type,
     case api::file_manager_private::SOURCE_RESTRICTION_NATIVE_SOURCE:
       return type == storage::kFileSystemTypeNativeLocal;
   }
-}
-
-// Encodes PNG data as a dataURL.
-std::string MakeThumbnailDataUrlOnThreadPool(
-    const std::vector<uint8_t>& png_data) {
-  std::string encoded;
-  base::Base64Encode(
-      base::StringPiece(reinterpret_cast<const char*>(png_data.data()),
-                        png_data.size()),
-      &encoded);
-  return base::StrCat({"data:image/png;base64,", encoded});
 }
 
 }  // namespace
@@ -338,7 +322,7 @@ FileManagerPrivateInternalZipSelectionFunction::Run() {
 }
 
 void FileManagerPrivateInternalZipSelectionFunction::OnZipDone(bool success) {
-  Respond(OneArgument(std::make_unique<base::Value>(success)));
+  Respond(OneArgument(base::Value(success)));
 }
 
 ExtensionFunction::ResponseAction FileManagerPrivateZoomFunction::Run() {
@@ -417,7 +401,7 @@ void FileManagerPrivateRequestWebStoreAccessTokenFunction::OnAccessTokenFetched(
     DCHECK(access_token == auth_service_->access_token());
     if (logger)
       logger->Log(logging::LOG_INFO, "CWS OAuth token fetch succeeded.");
-    Respond(OneArgument(std::make_unique<base::Value>(access_token)));
+    Respond(OneArgument(base::Value(access_token)));
   } else {
     if (logger) {
       logger->Log(logging::LOG_ERROR,
@@ -531,7 +515,7 @@ FileManagerPrivateInternalGetMimeTypeFunction::Run() {
 
 void FileManagerPrivateInternalGetMimeTypeFunction::OnGetMimeType(
     const std::string& mimeType) {
-  Respond(OneArgument(std::make_unique<base::Value>(mimeType)));
+  Respond(OneArgument(base::Value(mimeType)));
 }
 
 FileManagerPrivateGetProvidersFunction::FileManagerPrivateGetProvidersFunction()
@@ -564,16 +548,13 @@ FileManagerPrivateGetProvidersFunction::Run() {
     result_item.multiple_mounts = capabilities.multiple_mounts;
     switch (capabilities.source) {
       case SOURCE_FILE:
-        result_item.source =
-            api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_FILE;
+        result_item.source = api::file_manager_private::PROVIDER_SOURCE_FILE;
         break;
       case SOURCE_DEVICE:
-        result_item.source =
-            api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_DEVICE;
+        result_item.source = api::file_manager_private::PROVIDER_SOURCE_DEVICE;
         break;
       case SOURCE_NETWORK:
-        result_item.source =
-            api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_NETWORK;
+        result_item.source = api::file_manager_private::PROVIDER_SOURCE_NETWORK;
         break;
     }
     result.push_back(std::move(result_item));
@@ -1119,109 +1100,8 @@ FileManagerPrivateDetectCharacterEncodingFunction::Run() {
 
   std::string encoding;
   bool success = base::DetectEncoding(input, &encoding);
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
-      success ? std::move(encoding) : std::string())));
+  return RespondNow(
+      OneArgument(base::Value(success ? std::move(encoding) : std::string())));
 }
 
-FileManagerPrivateInternalGetThumbnailFunction::
-    FileManagerPrivateInternalGetThumbnailFunction() {}
-
-FileManagerPrivateInternalGetThumbnailFunction::
-    ~FileManagerPrivateInternalGetThumbnailFunction() = default;
-
-ExtensionFunction::ResponseAction
-FileManagerPrivateInternalGetThumbnailFunction::Run() {
-  using extensions::api::file_manager_private_internal::GetThumbnail::Params;
-  const std::unique_ptr<Params> params(Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  const ChromeExtensionFunctionDetails chrome_details(this);
-  scoped_refptr<storage::FileSystemContext> file_system_context =
-      file_manager::util::GetFileSystemContextForRenderFrameHost(
-          chrome_details.GetProfile(), render_frame_host());
-  const GURL url = GURL(params->url);
-  const storage::FileSystemURL file_system_url =
-      file_system_context->CrackURL(url);
-
-  switch (file_system_url.type()) {
-    case storage::kFileSystemTypeNativeLocal:
-      return GetLocalThumbnail(chrome_details, file_system_url,
-                               params->crop_to_square);
-    case storage::kFileSystemTypeDriveFs:
-      return GetDrivefsThumbnail(chrome_details, file_system_url,
-                                 params->crop_to_square);
-    default:
-      return RespondNow(Error(base::StringPrintf(
-          "Unsupported file system type: %d", file_system_url.type())));
-  }
-}
-
-ExtensionFunction::ResponseAction
-FileManagerPrivateInternalGetThumbnailFunction::GetLocalThumbnail(
-    const ChromeExtensionFunctionDetails& chrome_details,
-    const storage::FileSystemURL& url,
-    bool crop_to_square) {
-  base::FilePath path = file_manager::util::GetLocalPathFromURL(
-      render_frame_host(), chrome_details.GetProfile(), url.ToGURL());
-  if (path.empty() ||
-      base::FilePath::CompareIgnoreCase(path.Extension(), ".pdf") != 0) {
-    return RespondNow(Error("Can only handle PDF files"));
-  }
-  return RespondNow(Error("Not implemented"));
-}
-
-ExtensionFunction::ResponseAction
-FileManagerPrivateInternalGetThumbnailFunction::GetDrivefsThumbnail(
-    const ChromeExtensionFunctionDetails& chrome_details,
-    const storage::FileSystemURL& url,
-    bool crop_to_square) {
-  // If the thumbnail is generated by drivefs give it a bit more time
-  // before issuing warnings about slow operation.
-  SetWarningThresholds(base::TimeDelta::FromSeconds(5),
-                       base::TimeDelta::FromMinutes(1));
-  if (url.type() != storage::kFileSystemTypeDriveFs) {
-    return RespondNow(Error("Invalid URL"));
-  }
-  auto* drive_integration_service =
-      drive::DriveIntegrationServiceFactory::FindForProfile(
-          chrome_details.GetProfile());
-  if (!drive_integration_service) {
-    return RespondNow(Error("Drive service not available"));
-  }
-  base::FilePath path;
-  if (!drive_integration_service->GetRelativeDrivePath(url.path(), &path)) {
-    return RespondNow(Error("File not found"));
-  }
-  auto* drivefs_interface = drive_integration_service->GetDriveFsInterface();
-  if (!drivefs_interface) {
-    return RespondNow(Error("Drivefs not available"));
-  }
-  drivefs_interface->GetThumbnail(
-      path, crop_to_square,
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(
-              &FileManagerPrivateInternalGetThumbnailFunction::GotThumbnail,
-              this),
-          base::Optional<std::vector<uint8_t>>()));
-  return RespondLater();
-}
-
-void FileManagerPrivateInternalGetThumbnailFunction::GotThumbnail(
-    const base::Optional<std::vector<uint8_t>>& data) {
-  if (!data) {
-    Respond(OneArgument(std::make_unique<base::Value>("")));
-    return;
-  }
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, base::BindOnce(&MakeThumbnailDataUrlOnThreadPool, *data),
-      base::BindOnce(
-          &FileManagerPrivateInternalGetThumbnailFunction::SendEncodedThumbnail,
-          this));
-}
-
-void FileManagerPrivateInternalGetThumbnailFunction::SendEncodedThumbnail(
-    std::string thumbnail_data_url) {
-  Respond(OneArgument(
-      std::make_unique<base::Value>(std::move(thumbnail_data_url))));
-}
 }  // namespace extensions

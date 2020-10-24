@@ -61,7 +61,7 @@
 #include "content/child/webthemeengine_impl_default.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/child/webthemeengine_impl_mac.h"
 #endif
 
@@ -78,7 +78,7 @@ namespace {
 std::unique_ptr<blink::WebThemeEngine> GetWebThemeEngine() {
 #if defined(OS_ANDROID)
   return std::make_unique<WebThemeEngineAndroid>();
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   return std::make_unique<WebThemeEngineMac>();
 #else
   return std::make_unique<WebThemeEngineDefault>();
@@ -86,12 +86,10 @@ std::unique_ptr<blink::WebThemeEngine> GetWebThemeEngine() {
 }
 
 // This must match third_party/WebKit/public/blink_resources.grd.
-// In particular, |is_gzipped| corresponds to compress="gzip".
 struct DataResource {
   const char* name;
   int id;
   ui::ScaleFactor scale_factor;
-  bool is_gzipped;
 };
 
 class NestedMessageLoopRunnerImpl
@@ -157,17 +155,11 @@ class ThreadSafeBrowserInterfaceBrokerProxyImpl
 
 // TODO(skyostil): Ensure that we always have an active task runner when
 // constructing the platform.
-BlinkPlatformImpl::BlinkPlatformImpl()
-    : BlinkPlatformImpl(base::ThreadTaskRunnerHandle::IsSet()
-                            ? base::ThreadTaskRunnerHandle::Get()
-                            : nullptr,
-                        nullptr) {}
+BlinkPlatformImpl::BlinkPlatformImpl() : BlinkPlatformImpl(nullptr) {}
 
 BlinkPlatformImpl::BlinkPlatformImpl(
-    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner)
-    : main_thread_task_runner_(std::move(main_thread_task_runner)),
-      io_thread_task_runner_(std::move(io_thread_task_runner)),
+    : io_thread_task_runner_(std::move(io_thread_task_runner)),
       browser_interface_broker_proxy_(
           base::MakeRefCounted<ThreadSafeBrowserInterfaceBrokerProxyImpl>()),
       native_theme_engine_(GetWebThemeEngine()) {}
@@ -236,12 +228,6 @@ WebString BlinkPlatformImpl::QueryLocalizedString(int resource_id,
   values.push_back(value2.Utf16());
   return WebString::FromUTF16(base::ReplaceStringPlaceholders(
       GetContentClient()->GetLocalizedString(resource_id), values, nullptr));
-}
-
-bool BlinkPlatformImpl::AllowScriptExtensionForServiceWorker(
-    const blink::WebSecurityOrigin& script_origin) {
-  return GetContentClient()->AllowScriptExtensionForServiceWorker(
-      script_origin);
 }
 
 blink::WebCrypto* BlinkPlatformImpl::Crypto() {

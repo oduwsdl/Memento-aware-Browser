@@ -8,7 +8,11 @@
 #include <string>
 
 #include "ash/public/cpp/ash_public_export.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom-forward.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+
+namespace base {
+class TimeDelta;
+}  // namespace base
 
 namespace ash {
 
@@ -23,11 +27,23 @@ class ASH_PUBLIC_EXPORT AssistantInteractionController {
   // Returns a pointer to the underlying model.
   virtual const AssistantInteractionModel* GetModel() const = 0;
 
+  // Returns the TimeDelta since the last Assistant interaction. Note that the
+  // last interaction may have been performed in a different user session.
+  virtual base::TimeDelta GetTimeDeltaSinceLastInteraction() const = 0;
+
+  // Returns true if the user has had an interaction with the Assistant during
+  // this user session.
+  virtual bool HasHadInteraction() const = 0;
+
   // Start Assistant text interaction.
   virtual void StartTextInteraction(
       const std::string& query,
       bool allow_tts,
-      chromeos::assistant::mojom::AssistantQuerySource source) = 0;
+      chromeos::assistant::AssistantQuerySource source) = 0;
+
+  // Start Bloom interaction.
+  virtual void StartBloomInteraction() = 0;
+  virtual void ShowBloomResult(const std::string& html) = 0;
 
  protected:
   AssistantInteractionController();

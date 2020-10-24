@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/check.h"
@@ -22,13 +23,16 @@
 #include "components/payments/core/features.h"
 #include "components/payments/core/method_strings.h"
 #include "components/payments/core/payment_manifest_downloader.h"
+#include "components/payments/core/url_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/payment_app_provider.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/stored_payment_app.h"
 #include "content/public/browser/web_contents.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "ui/gfx/image/image.h"
 #include "url/url_canon.h"
 
 namespace payments {
@@ -80,7 +84,7 @@ bool AppSupportsAtLeastOneRequestedMethodData(
 }
 
 void RemovePortNumbersFromScopesForTest(
-    content::PaymentAppProvider::PaymentApps* apps) {
+    content::InstalledPaymentAppsFinder::PaymentApps* apps) {
   GURL::Replacements replacements;
   replacements.ClearPort();
   for (auto& app : *apps) {
@@ -92,7 +96,7 @@ class SelfDeletingServiceWorkerPaymentAppFinder
     : public base::SupportsUserData::Data {
  public:
   static base::WeakPtr<SelfDeletingServiceWorkerPaymentAppFinder>
-  CreateAndSetOwnedBy(base::SupportsUserData* owner) {
+  CreateAndSetOwnedBy(content::WebContents* owner) {
     auto owned =
         std::make_unique<SelfDeletingServiceWorkerPaymentAppFinder>(owner);
     auto* pointer = owned.get();
@@ -101,7 +105,7 @@ class SelfDeletingServiceWorkerPaymentAppFinder
   }
 
   explicit SelfDeletingServiceWorkerPaymentAppFinder(
-      base::SupportsUserData* owner)
+      content::WebContents* owner)
       : owner_(owner) {}
 
   SelfDeletingServiceWorkerPaymentAppFinder(
@@ -126,8 +130,11 @@ class SelfDeletingServiceWorkerPaymentAppFinder
       ServiceWorkerPaymentAppFinder::GetAllPaymentAppsCallback callback,
       base::OnceClosure finished_using_resources_callback) {
     DCHECK(!verifier_);
+    DCHECK(initiator_render_frame_host);
+    DCHECK(initiator_render_frame_host->IsCurrent());
 
     downloader_ = std::move(downloader);
+
     content::WebContents* web_contents =
         content::WebContents::FromRenderFrameHost(initiator_render_frame_host);
     parser_ = std::make_unique<PaymentManifestParser>(
@@ -139,10 +146,9 @@ class SelfDeletingServiceWorkerPaymentAppFinder
     if (may_crawl_for_installable_payment_apps &&
         base::FeatureList::IsEnabled(
             features::kWebPaymentsJustInTimePaymentApp)) {
-      // Construct crawler in constructor to allow it observe the web_contents.
       crawler_ = std::make_unique<InstallablePaymentAppCrawler>(
-          merchant_origin, initiator_render_frame_host, web_contents,
-          downloader_.get(), parser_.get(), cache_.get());
+          merchant_origin, initiator_render_frame_host, downloader_.get(),
+          parser_.get(), cache_.get());
       if (ignore_port_in_origin_comparison_for_testing_)
         crawler_->IgnorePortInOriginComparisonForTesting();
     }
@@ -156,9 +162,9 @@ class SelfDeletingServiceWorkerPaymentAppFinder
     finished_using_resources_callback_ =
         std::move(finished_using_resources_callback);
 
-    content::PaymentAppProvider::GetInstance()->GetAllPaymentApps(
-        web_contents->GetBrowserContext(),
-        base::BindOnce(
+    content::InstalledPaymentAppsFinder::GetInstance(
+        initiator_render_frame_host->GetBrowserContext())
+        ->GetAllPaymentApps(base::BindOnce(
             &SelfDeletingServiceWorkerPaymentAppFinder::OnGotAllPaymentApps,
             weak_ptr_factory_.GetWeakPtr()));
   }
@@ -175,7 +181,7 @@ class SelfDeletingServiceWorkerPaymentAppFinder
 
   static void RemoveUnrequestedMethods(
       const std::vector<mojom::PaymentMethodDataPtr>& requested_method_data,
-      content::PaymentAppProvider::PaymentApps* apps) {
+      content::InstalledPaymentAppsFinder::PaymentApps* apps) {
     std::set<std::string> requested_methods;
     for (const auto& requested_method_datum : requested_method_data) {
       requested_methods.insert(requested_method_datum->supported_method);
@@ -189,7 +195,8 @@ class SelfDeletingServiceWorkerPaymentAppFinder
     }
   }
 
-  void OnGotAllPaymentApps(content::PaymentAppProvider::PaymentApps apps) {
+  void OnGotAllPaymentApps(
+      content::InstalledPaymentAppsFinder::PaymentApps apps) {
     if (ignore_port_in_origin_comparison_for_testing_)
       RemovePortNumbersFromScopesForTest(&apps);
 
@@ -216,16 +223,40 @@ class SelfDeletingServiceWorkerPaymentAppFinder
                        weak_ptr_factory_.GetWeakPtr()));
   }
 
-  void OnPaymentAppsVerified(content::PaymentAppProvider::PaymentApps apps,
-                             const std::string& error_message) {
+  void OnPaymentAppsVerified(
+      content::InstalledPaymentAppsFinder::PaymentApps apps,
+      const std::string& error_message) {
     if (first_error_message_.empty())
       first_error_message_ = error_message;
-    if (apps.empty() && crawler_ != nullptr) {
+
+    std::set<GURL> method_manifest_urls_for_icon_refetch;
+    installed_apps_ = std::move(apps);
+    for (auto& app : installed_apps_) {
+      if (app.second->icon.get() && !app.second->icon.get()->drawsNothing()) {
+        continue;
+      }
+
+      for (const auto& method : app.second->enabled_methods) {
+        // Only payment methods with manifests are eligible for refetching the
+        // icon of their installed payment apps.
+        GURL method_manifest_url = GURL(method);
+        if (!UrlUtil::IsValidUrlBasedPaymentMethodIdentifier(
+                method_manifest_url)) {
+          continue;
+        }
+        method_manifest_urls_for_icon_refetch.insert(method_manifest_url);
+      }
+    }
+
+    if ((installed_apps_.empty() ||
+         !method_manifest_urls_for_icon_refetch.empty()) &&
+        crawler_ != nullptr) {
       // Crawls installable web payment apps if no web payment apps have been
-      // installed.
+      // installed or when an installed app is missing an icon.
       is_payment_app_crawler_finished_using_resources_ = false;
       crawler_->Start(
           requested_method_data_,
+          std::move(method_manifest_urls_for_icon_refetch),
           base::BindOnce(
               &SelfDeletingServiceWorkerPaymentAppFinder::OnPaymentAppsCrawled,
               weak_ptr_factory_.GetWeakPtr()),
@@ -239,18 +270,67 @@ class SelfDeletingServiceWorkerPaymentAppFinder
     crawler_.reset();
 
     std::move(callback_).Run(
-        std::move(apps),
+        std::move(installed_apps_),
         ServiceWorkerPaymentAppFinder::InstallablePaymentApps(),
         first_error_message_);
   }
 
   void OnPaymentAppsCrawled(
       std::map<GURL, std::unique_ptr<WebAppInstallationInfo>> apps_info,
+      std::map<GURL, std::unique_ptr<RefetchedIcon>> refetched_icons,
       const std::string& error_message) {
     if (first_error_message_.empty())
       first_error_message_ = error_message;
-    std::move(callback_).Run(content::PaymentAppProvider::PaymentApps(),
-                             std::move(apps_info), first_error_message_);
+
+    for (auto& refetched_icon : refetched_icons) {
+      GURL web_app_manifest_url = refetched_icon.first;
+      RefetchedIcon* data = refetched_icon.second.get();
+      for (auto& app : installed_apps_) {
+        // It is possible (unlikely) to have multiple apps with same origins.
+        // The proper validation is to store web_app_manifest_url in
+        // StoredPaymentApp and confirm that it is the same as the
+        // web_app_manifest_url from which icon is fetched.
+        if (crawler_->IsSameOriginWith(GURL(app.second->scope),
+                                       web_app_manifest_url)) {
+          UpdatePaymentAppIcon(app.second, data->icon, data->method_name);
+          app.second->icon = std::move(data->icon);
+          break;
+        }
+      }
+    }
+    std::move(callback_).Run(std::move(installed_apps_), std::move(apps_info),
+                             first_error_message_);
+  }
+
+  void UpdatePaymentAppIcon(
+      const std::unique_ptr<content::StoredPaymentApp>& app,
+      const std::unique_ptr<SkBitmap>& icon,
+      const std::string& method_name) {
+    number_of_app_icons_to_update_++;
+
+    DCHECK(!icon->empty());
+    std::string string_encoded_icon;
+    gfx::Image decoded_image = gfx::Image::CreateFrom1xBitmap(*(icon));
+    scoped_refptr<base::RefCountedMemory> raw_data =
+        decoded_image.As1xPNGBytes();
+    base::Base64Encode(
+        base::StringPiece(raw_data->front_as<char>(), raw_data->size()),
+        &string_encoded_icon);
+
+    content::PaymentAppProvider::GetOrCreateForWebContents(owner_)
+        ->UpdatePaymentAppIcon(
+            app->registration_id, app->scope.spec(), app->name,
+            string_encoded_icon, method_name, app->supported_delegations,
+            base::BindOnce(&SelfDeletingServiceWorkerPaymentAppFinder::
+                               OnUpdatePaymentAppIcon,
+                           weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  void OnUpdatePaymentAppIcon(payments::mojom::PaymentHandlerStatus status) {
+    DCHECK(number_of_app_icons_to_update_ > 0);
+    number_of_app_icons_to_update_--;
+    if (number_of_app_icons_to_update_ == 0)
+      FinishUsingResourcesIfReady();
   }
 
   void OnPaymentAppsCrawlerFinishedUsingResources() {
@@ -270,7 +350,8 @@ class SelfDeletingServiceWorkerPaymentAppFinder
   void FinishUsingResourcesIfReady() {
     if (is_payment_verifier_finished_using_resources_ &&
         is_payment_app_crawler_finished_using_resources_ &&
-        !finished_using_resources_callback_.is_null()) {
+        !finished_using_resources_callback_.is_null() &&
+        number_of_app_icons_to_update_ == 0) {
       downloader_.reset();
       parser_.reset();
       std::move(finished_using_resources_callback_).Run();
@@ -286,7 +367,7 @@ class SelfDeletingServiceWorkerPaymentAppFinder
 
   // |owner_| owns this SelfDeletingServiceWorkerPaymentAppFinder, so it is
   // always valid.
-  base::SupportsUserData* owner_;
+  content::WebContents* owner_;
 
   std::unique_ptr<PaymentManifestDownloader> downloader_;
   std::unique_ptr<PaymentManifestParser> parser_;
@@ -304,6 +385,10 @@ class SelfDeletingServiceWorkerPaymentAppFinder
 
   bool ignore_port_in_origin_comparison_for_testing_ = false;
 
+  content::InstalledPaymentAppsFinder::PaymentApps installed_apps_;
+
+  size_t number_of_app_icons_to_update_ = 0;
+
   base::WeakPtrFactory<SelfDeletingServiceWorkerPaymentAppFinder>
       weak_ptr_factory_{this};
 };
@@ -320,6 +405,11 @@ void ServiceWorkerPaymentAppFinder::GetAllPaymentApps(
     GetAllPaymentAppsCallback callback,
     base::OnceClosure finished_writing_cache_callback_for_testing) {
   DCHECK(!requested_method_data.empty());
+
+  auto* rfh = content::RenderFrameHost::FromID(frame_routing_id_);
+  if (!rfh || !rfh->IsCurrent())
+    return;
+
   // Do not look up payment handlers for ignored payment methods.
   base::EraseIf(requested_method_data,
                 [&](const mojom::PaymentMethodDataPtr& method_data) {
@@ -328,14 +418,13 @@ void ServiceWorkerPaymentAppFinder::GetAllPaymentApps(
                 });
   if (requested_method_data.empty()) {
     std::move(callback).Run(
-        content::PaymentAppProvider::PaymentApps(),
+        content::InstalledPaymentAppsFinder::PaymentApps(),
         std::map<GURL, std::unique_ptr<WebAppInstallationInfo>>(),
         /*error_message=*/"");
     return;
   }
 
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(rfh_);
+  auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);
   auto self_delete_factory =
       SelfDeletingServiceWorkerPaymentAppFinder::CreateAndSetOwnedBy(
           web_contents);
@@ -348,21 +437,20 @@ void ServiceWorkerPaymentAppFinder::GetAllPaymentApps(
     downloader = std::make_unique<payments::PaymentManifestDownloader>(
         std::make_unique<DeveloperConsoleLogger>(web_contents),
         content::BrowserContext::GetDefaultStoragePartition(
-            web_contents->GetBrowserContext())
+            rfh->GetBrowserContext())
             ->GetURLLoaderFactoryForBrowserProcess());
   }
 
   self_delete_factory->GetAllPaymentApps(
-      merchant_origin, rfh_, std::move(downloader), cache,
-      requested_method_data, may_crawl_for_installable_payment_apps,
-      std::move(callback),
+      merchant_origin, rfh, std::move(downloader), cache, requested_method_data,
+      may_crawl_for_installable_payment_apps, std::move(callback),
       std::move(finished_writing_cache_callback_for_testing));
 }
 
 // static
 void ServiceWorkerPaymentAppFinder::RemoveAppsWithoutMatchingMethodData(
     const std::vector<mojom::PaymentMethodDataPtr>& requested_method_data,
-    content::PaymentAppProvider::PaymentApps* apps) {
+    content::InstalledPaymentAppsFinder::PaymentApps* apps) {
   for (auto it = apps->begin(); it != apps->end();) {
     if (AppSupportsAtLeastOneRequestedMethodData(*it->second,
                                                  requested_method_data)) {
@@ -380,7 +468,9 @@ void ServiceWorkerPaymentAppFinder::IgnorePaymentMethodForTest(
 
 ServiceWorkerPaymentAppFinder::ServiceWorkerPaymentAppFinder(
     content::RenderFrameHost* rfh)
-    : rfh_(rfh),
+    : frame_routing_id_(
+          content::GlobalFrameRoutingId(rfh->GetProcess()->GetID(),
+                                        rfh->GetRoutingID())),
       ignored_methods_({methods::kGooglePlayBilling}),
       test_downloader_(nullptr) {}
 

@@ -20,10 +20,10 @@
 #include "components/send_tab_to_self/target_device_info.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/metadata_batch.h"
-#include "components/sync/model/mock_model_type_change_processor.h"
-#include "components/sync/model/model_type_store_test_util.h"
 #include "components/sync/model_impl/in_memory_metadata_change_list.h"
 #include "components/sync/protocol/model_type_state.pb.h"
+#include "components/sync/test/model/mock_model_type_change_processor.h"
+#include "components/sync/test/model/model_type_store_test_util.h"
 #include "components/sync/test/test_matchers.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/device_info_util.h"
@@ -74,10 +74,12 @@ std::unique_ptr<syncer::DeviceInfo> CreateDevice(
     bool send_tab_to_self_receiving_enabled = true) {
   return std::make_unique<syncer::DeviceInfo>(
       guid, name, "chrome_version", "user_agent",
-      sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_id",
-      base::SysInfo::HardwareInfo(), last_updated_timestamp,
+      sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_id", "manufacturer",
+      "model", last_updated_timestamp,
       syncer::DeviceInfoUtil::GetPulseInterval(),
-      send_tab_to_self_receiving_enabled, /*sharing_info=*/base::nullopt);
+      send_tab_to_self_receiving_enabled, /*sharing_info=*/base::nullopt,
+      /*fcm_registration_token=*/std::string(),
+      /*interested_data_types=*/syncer::ModelTypeSet());
 }
 
 sync_pb::ModelTypeState StateWithEncryption(
@@ -105,7 +107,13 @@ MATCHER_P(GuidIs, e, "") {
 class SendTabToSelfBridgeTest : public testing::Test {
  protected:
   SendTabToSelfBridgeTest()
-      : store_(syncer::ModelTypeStoreTestUtil::CreateInMemoryStoreForTest()) {
+      : store_(syncer::ModelTypeStoreTestUtil::CreateInMemoryStoreForTest()) {}
+
+  void InitializeLocalDeviceIfNeeded() {
+    if (local_device_) {
+      return;
+    }
+
     SetLocalDeviceCacheGuid(kLocalDeviceCacheGuid);
     local_device_ = CreateDevice(kLocalDeviceCacheGuid, "device",
                                  clock()->Now() - base::TimeDelta::FromDays(1));
@@ -115,6 +123,13 @@ class SendTabToSelfBridgeTest : public testing::Test {
   // Initialized the bridge based on the current local device and store. Can
   // only be called once per run, as it passes |store_|.
   void InitializeBridge() {
+    InitializeLocalDeviceIfNeeded();
+    InitializeBridgeWithoutDevice();
+  }
+
+  // Initializes only the bridge without creating local device. This is useful
+  // to test the case when the device info tracker is not initialized yet.
+  void InitializeBridgeWithoutDevice() {
     ON_CALL(mock_processor_, IsTrackingMetadata()).WillByDefault(Return(true));
     bridge_ = std::make_unique<SendTabToSelfBridge>(
         mock_processor_.CreateForwardingProcessor(), &clock_,
@@ -201,6 +216,10 @@ class SendTabToSelfBridgeTest : public testing::Test {
   MockSendTabToSelfModelObserver* mock_observer() { return &mock_observer_; }
 
   base::SimpleTestClock* clock() { return &clock_; }
+
+  syncer::FakeDeviceInfoTracker* device_info_tracker() {
+    return &device_info_tracker_;
+  }
 
  private:
   base::SimpleTestClock clock_;
@@ -818,6 +837,18 @@ TEST_F(SendTabToSelfBridgeTest, NotifyRemoteSendTabToSelfEntryOpened) {
                           std::move(remote_input));
 
   EXPECT_EQ(2ul, bridge()->GetAllGuids().size());
+}
+
+TEST_F(SendTabToSelfBridgeTest,
+       ShouldNotUpdateTargetDeviceInfoListWhileEmptyDeviceInfo) {
+  InitializeBridgeWithoutDevice();
+  SetLocalDeviceCacheGuid("cache_guid");
+
+  ASSERT_FALSE(bridge()->change_processor()->TrackedCacheGuid().empty());
+  ASSERT_FALSE(device_info_tracker()->IsSyncing());
+
+  EXPECT_FALSE(bridge()->ShouldUpdateTargetDeviceInfoListForTest());
+  EXPECT_FALSE(bridge()->HasValidTargetDevice());
 }
 
 }  // namespace

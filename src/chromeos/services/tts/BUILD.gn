@@ -16,6 +16,7 @@ source_set("tts") {
     ":libchrometts",
     "//base",
     "//chromeos/services/tts/public/mojom",
+    "//services/audio/public/cpp:cpp",
   ]
 }
 
@@ -30,7 +31,7 @@ source_set("sandbox_hook") {
     ":tts",
     "//base",
     "//sandbox/linux:sandbox_services",
-    "//services/service_manager/sandbox:sandbox",
+    "//sandbox/policy",
   ]
 }
 
@@ -54,5 +55,6 @@ generate_library_loader("libchrometts") {
     "GoogleTtsGetTimepointsCount",
     "GoogleTtsGetTimepointsTimeInSecsAtIndex",
     "GoogleTtsGetTimepointsCharIndexAtIndex",
+    "GoogleTtsGetFramesInAudioBuffer",
   ]
 }

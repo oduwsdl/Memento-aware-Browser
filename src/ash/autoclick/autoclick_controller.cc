@@ -137,8 +137,7 @@ void AutoclickController::SetEnabled(bool enabled,
         return;
       // Show a confirmation dialog before disabling autoclick.
       auto* dialog = new AccessibilityFeatureDisableDialog(
-          IDS_ASH_AUTOCLICK_DISABLE_CONFIRMATION_TITLE,
-          IDS_ASH_AUTOCLICK_DISABLE_CONFIRMATION_BODY,
+          IDS_ASH_AUTOCLICK_DISABLE_CONFIRMATION_TEXT,
           // Callback for if the user accepts the dialog
           base::BindOnce([]() {
             // If they accept, actually disable autoclick.
@@ -149,7 +148,8 @@ void AutoclickController::SetEnabled(bool enabled,
           // feature as enabled again in prefs.
           base::BindOnce([]() {
             // If they cancel, ensure autoclick is enabled.
-            Shell::Get()->accessibility_controller()->SetAutoclickEnabled(true);
+            Shell::Get()->accessibility_controller()->autoclick().SetEnabled(
+                true);
           }));
       disable_dialog_ = dialog->GetWeakPtr();
     } else {
@@ -269,7 +269,7 @@ void AutoclickController::OnExitedScrollButton() {
                                 -kDefaultAutoclickMovementThreshold);
 }
 
-void AutoclickController::OnAutoclickScrollableBoundsFound(
+void AutoclickController::HandleAutoclickScrollableBoundsFound(
     gfx::Rect& bounds_in_screen) {
   // The very first time scrollable bounds are found, the default first
   // position of the scrollbar to be next to the menu bubble.

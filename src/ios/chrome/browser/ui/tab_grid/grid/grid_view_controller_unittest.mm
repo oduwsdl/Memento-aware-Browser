@@ -17,17 +17,11 @@
 #endif
 
 // Test object that exposes the inner state for test verification.
-@interface TestGridViewController : GridViewController
+@interface GridViewController (Testing)
 @property(nonatomic, readonly) NSMutableArray<GridItem*>* items;
 @property(nonatomic, readonly) NSUInteger selectedIndex;
 @property(nonatomic, readonly) UICollectionView* collectionView;
 @property(nonatomic, assign, getter=isViewAppeared) BOOL viewAppeared;
-@end
-@implementation TestGridViewController
-@dynamic items;
-@dynamic selectedIndex;
-@dynamic collectionView;
-@dynamic viewAppeared;
 @end
 
 // Fake object that conforms to GridViewControllerDelegate.
@@ -57,12 +51,18 @@
   // No-op for unittests. This is only called when a user taps to close a cell,
   // not generically when items are removed from the data source.
 }
+- (void)didTapPlusSignInGridViewController:
+    (GridViewController*)gridViewController {
+  // No-op for unittests. This is only called when a user taps on a
+  // plus sign cell, not generically when items are added to the data source.
+}
 @end
 
 class GridViewControllerTest : public RootViewControllerTest {
  public:
   GridViewControllerTest() {
-    view_controller_ = [[TestGridViewController alloc] init];
+    view_controller_ = [[GridViewController alloc] init];
+    [view_controller_ loadView];
     NSArray* items = @[
       [[GridItem alloc] initWithIdentifier:@"A"],
       [[GridItem alloc] initWithIdentifier:@"B"]
@@ -74,7 +74,7 @@ class GridViewControllerTest : public RootViewControllerTest {
   }
 
  protected:
-  TestGridViewController* view_controller_;
+  GridViewController* view_controller_;
   FakeGridViewControllerDelegate* delegate_;
 };
 
@@ -188,7 +188,14 @@ TEST_F(GridViewControllerTest, MoveUnselectedItem) {
 
 // Tests that |-replaceItemID:withItem:| does not crash when updating an item
 // that is scrolled offscreen.
-TEST_F(GridViewControllerTest, ReplaceScrolledOffScreenCell) {
+TEST_F(GridViewControllerTest, DISABLED_ReplaceScrolledOffScreenCell) {
+  // TODO(crbug.com/1104872): On iOS 14 iPhone X, visibleCellsCount is always
+  // equal to the total number of cells, so the while loop below never
+  // terminates.
+  if (@available(iOS 14, *)) {
+    return;
+  }
+
   // This test requires that the collection view be placed on the screen.
   SetRootViewController(view_controller_);
   EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(

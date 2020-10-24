@@ -153,13 +153,13 @@ void ShowPrintJobConfirmationDialog(gfx::NativeWindow parent,
 
 #endif  // OS_CHROMEOS
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 
 // Bridging methods that show/hide the toolkit-views based Task Manager on Mac.
 task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser);
 void HideTaskManagerViews();
 
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 
 #if defined(TOOLKIT_VIEWS)
 
@@ -358,6 +358,12 @@ base::OnceClosure ShowDeviceChooserDialog(
     content::RenderFrameHost* owner,
     std::unique_ptr<ChooserController> controller);
 bool IsDeviceChooserShowingForTesting(Browser* browser);
+
+// Show the prompt to set a window name for browser's window, optionally with
+// the given context.
+void ShowWindowNamePrompt(Browser* browser);
+void ShowWindowNamePromptForTesting(Browser* browser,
+                                    gfx::NativeWindow context);
 
 }  // namespace chrome
 

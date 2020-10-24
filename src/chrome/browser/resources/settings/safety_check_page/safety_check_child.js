@@ -62,6 +62,24 @@ Polymer({
     // Classes of the right hand button.
     buttonClass: String,
 
+    // Should the entire row be clickable.
+    rowClickable: {
+      type: Boolean,
+      value: false,
+      reflectToAttribute: true,
+    },
+
+    // Is the row directed to external link.
+    external: {
+      type: Boolean,
+      value: false,
+    },
+
+    rowClickableIcon_: {
+      type: String,
+      computed: 'computeRowClickableIcon_(external)',
+    },
+
     // Right hand managed icon. |null| removes it from the DOM.
     managedIcon: String,
   },
@@ -157,4 +175,24 @@ Polymer({
   showManagedIcon_: function() {
     return !!this.managedIcon;
   },
+
+  /**
+   * Return the icon to show when the row is clickable.
+   * @return {string}
+   * @private
+   */
+  computeRowClickableIcon_() {
+    return this.external ? 'cr:open-in-new' : 'cr:arrow-right';
+  },
+
+  /**
+   * Return the subpage role description if the arrow right icon is used.
+   * @return {string}
+   * @private
+   */
+  getRoleDescription_() {
+    return this.rowClickableIcon_ === 'cr:arrow-right' ?
+        this.i18n('subpageArrowRoleDescription') :
+        '';
+  }
 });

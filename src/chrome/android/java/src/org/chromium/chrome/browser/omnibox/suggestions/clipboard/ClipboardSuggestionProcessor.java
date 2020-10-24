@@ -15,10 +15,10 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
+import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableState;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionSpannable;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewProperties;
 import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -72,14 +72,15 @@ public class ClipboardSuggestionProcessor extends BaseSuggestionViewProcessor {
             byte[] imageData = suggestion.getClipboardImageData();
             if (imageData != null && imageData.length > 0) {
                 Bitmap bitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.length);
+
                 if (bitmap != null) {
                     // TODO(crbug.com/1090919): This is short term solution, resize need to be
                     // handled somewhere else.
                     if (bitmap.getWidth() > 0 && bitmap.getHeight() > 0
-                            && (bitmap.getWidth() > getDesiredFaviconSize()
-                                    || bitmap.getHeight() > getDesiredFaviconSize())) {
+                            && (bitmap.getWidth() > getDecorationImageSize()
+                                    || bitmap.getHeight() > getDecorationImageSize())) {
                         float max = Math.max(bitmap.getWidth(), bitmap.getHeight());
-                        float scale = (float) getDesiredFaviconSize() / max;
+                        float scale = ((float) getDecorationImageSize()) / max;
                         float width = bitmap.getWidth();
                         float height = bitmap.getHeight();
                         bitmap = Bitmap.createScaledBitmap(bitmap, (int) Math.round(scale * width),

@@ -18,12 +18,15 @@
 #include "ash/assistant/ui/main_stage/element_animator.h"
 #include "ash/assistant/util/animation_util.h"
 #include "ash/assistant/util/assistant_util.h"
+#include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/assistant/controller/assistant_suggestions_controller.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "base/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace ash {
 
@@ -54,13 +57,19 @@ class SuggestionChipAnimator : public ElementAnimator {
   ~SuggestionChipAnimator() override = default;
 
   void AnimateIn(ui::CallbackLayerAnimationObserver* observer) override {
-    StartLayerAnimationSequence(layer()->GetAnimator(),
-                                CreateAnimateInAnimation(), observer);
+    StartLayerAnimationSequence(
+        layer()->GetAnimator(), CreateAnimateInAnimation(), observer,
+        base::BindRepeating<void(const std::string&, int)>(
+            base::UmaHistogramPercentageObsoleteDoNotUse,
+            assistant::ui::kAssistantSuggestionChipHistogram));
   }
 
   void AnimateOut(ui::CallbackLayerAnimationObserver* observer) override {
-    StartLayerAnimationSequence(layer()->GetAnimator(),
-                                CreateAnimateOutAnimation(), observer);
+    StartLayerAnimationSequence(
+        layer()->GetAnimator(), CreateAnimateOutAnimation(), observer,
+        base::BindRepeating<void(const std::string&, int)>(
+            base::UmaHistogramPercentageObsoleteDoNotUse,
+            assistant::ui::kAssistantSuggestionChipHistogram));
   }
 
   void FadeOut(ui::CallbackLayerAnimationObserver* observer) override {
@@ -73,9 +82,8 @@ class SuggestionChipAnimator : public ElementAnimator {
   bool IsSelectedChip() const { return view() == parent_->selected_chip(); }
 
   ui::LayerAnimationSequence* CreateAnimateInAnimation() const {
-    return CreateLayerAnimationSequence(
-        CreateOpacityElement(1.f, kChipFadeInDuration,
-                             gfx::Tween::Type::FAST_OUT_SLOW_IN));
+    return CreateLayerAnimationSequence(CreateOpacityElement(
+        1.f, kChipFadeInDuration, gfx::Tween::Type::FAST_OUT_SLOW_IN));
   }
 
   ui::LayerAnimationSequence* CreateAnimateOutAnimation() const {
@@ -106,10 +114,6 @@ SuggestionContainerView::~SuggestionContainerView() {
 
   if (AssistantSuggestionsController::Get())
     AssistantSuggestionsController::Get()->GetModel()->RemoveObserver(this);
-}
-
-const char* SuggestionContainerView::GetClassName() const {
-  return "SuggestionContainerView";
 }
 
 gfx::Size SuggestionContainerView::CalculatePreferredSize() const {
@@ -160,10 +164,10 @@ void SuggestionContainerView::InitLayout() {
 }
 
 void SuggestionContainerView::OnConversationStartersChanged(
-    const std::vector<const AssistantSuggestion*>& conversation_starters) {
+    const std::vector<AssistantSuggestion>& conversation_starters) {
   // We don't show conversation starters when showing onboarding since the
   // onboarding experience already provides the user w/ suggestions.
-  if (assistant::util::ShouldShowOnboarding())
+  if (delegate()->ShouldShowOnboarding())
     return;
 
   // If we've committed a query we should ignore changes to the cache of
@@ -178,7 +182,7 @@ void SuggestionContainerView::OnConversationStartersChanged(
 }
 
 std::unique_ptr<ElementAnimator> SuggestionContainerView::HandleSuggestion(
-    const AssistantSuggestion* suggestion) {
+    const AssistantSuggestion& suggestion) {
   // When no longer showing conversation starters, we start align our content.
   layout_manager_->set_main_axis_alignment(
       has_committed_query_ ? views::BoxLayout::MainAxisAlignment::kStart
@@ -193,9 +197,12 @@ void SuggestionContainerView::OnAllViewsRemoved() {
 }
 
 std::unique_ptr<ElementAnimator> SuggestionContainerView::AddSuggestionChip(
-    const AssistantSuggestion* suggestion) {
-  auto suggestion_chip_view = std::make_unique<SuggestionChipView>(
-      delegate(), suggestion, /*listener=*/this);
+    const AssistantSuggestion& suggestion) {
+  auto suggestion_chip_view =
+      std::make_unique<SuggestionChipView>(delegate(), suggestion);
+  suggestion_chip_view->SetCallback(base::BindRepeating(
+      &SuggestionContainerView::OnButtonPressed, base::Unretained(this),
+      base::Unretained(suggestion_chip_view.get())));
 
   // The chip will be animated on its own layer.
   suggestion_chip_view->SetPaintToLayer();
@@ -205,13 +212,6 @@ std::unique_ptr<ElementAnimator> SuggestionContainerView::AddSuggestionChip(
   // Add to the view hierarchy and return the animator for the suggestion chip.
   return std::make_unique<SuggestionChipAnimator>(
       contents()->AddChildView(std::move(suggestion_chip_view)), this);
-}
-
-void SuggestionContainerView::ButtonPressed(views::Button* sender,
-                                            const ui::Event& event) {
-  // Remember which chip was selected, so we can give it a special animation.
-  selected_chip_ = static_cast<SuggestionChipView*>(sender);
-  delegate()->OnSuggestionChipPressed(selected_chip_->suggestion());
 }
 
 void SuggestionContainerView::OnUiVisibilityChanged(
@@ -240,5 +240,14 @@ void SuggestionContainerView::OnUiVisibilityChanged(
   layout_manager_->set_main_axis_alignment(
       views::BoxLayout::MainAxisAlignment::kCenter);
 }
+
+void SuggestionContainerView::OnButtonPressed(SuggestionChipView* chip_view) {
+  // Remember which chip was selected, so we can give it a special animation.
+  selected_chip_ = chip_view;
+  delegate()->OnSuggestionPressed(selected_chip_->suggestion_id());
+}
+
+BEGIN_METADATA(SuggestionContainerView, AnimatedContainerView)
+END_METADATA
 
 }  // namespace ash

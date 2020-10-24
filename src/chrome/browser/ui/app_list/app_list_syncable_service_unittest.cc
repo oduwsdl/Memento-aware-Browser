@@ -17,14 +17,14 @@
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 #include "chrome/browser/ui/app_list/page_break_constants.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
-#include "chrome/common/chrome_features.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
-#include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_error_factory.h"
-#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "components/sync/test/model/fake_sync_change_processor.h"
+#include "components/sync/test/model/sync_error_factory_mock.h"
 #include "extensions/common/constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -454,8 +454,7 @@ class AppListInternalAppSyncableServiceTest
     : public AppListSyncableServiceTest {
  public:
   AppListInternalAppSyncableServiceTest() {
-    // Disable System Web Apps so the Settings Internal App is still installed.
-    scoped_feature_list_.InitAndDisableFeature(features::kSystemWebApps);
+    chrome::SettingsWindowManager::ForceDeprecatedSettingsWindowForTesting();
   }
   ~AppListInternalAppSyncableServiceTest() override = default;
 

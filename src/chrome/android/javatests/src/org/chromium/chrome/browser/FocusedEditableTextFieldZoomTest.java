@@ -9,6 +9,7 @@ import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAU
 import android.support.test.InstrumentationRegistry;
 import android.view.KeyEvent;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -20,8 +21,8 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.content_public.browser.test.util.Coordinates;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -38,8 +39,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 })
 public class FocusedEditableTextFieldZoomTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final int TEST_TIMEOUT = 5000;
     private static final String TEXTFIELD_DOM_ID = "textfield";
@@ -68,20 +68,16 @@ public class FocusedEditableTextFieldZoomTest {
         // the initial value problematic. We solve this by explicitly specifying the initial zoom
         // level via the viewport tag and waiting for the zoom level to reach that value before we
         // proceed with the rest of the test.
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mCoordinates.getPageScaleFactor() - INITIAL_SCALE < FLOAT_DELTA;
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat((double) mCoordinates.getPageScaleFactor(),
+                    Matchers.is(Matchers.closeTo(INITIAL_SCALE, FLOAT_DELTA)));
         }, TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
     }
 
     private void waitForZoomIn(final float initialZoomLevel) {
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mCoordinates.getPageScaleFactor() > initialZoomLevel;
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(
+                    mCoordinates.getPageScaleFactor(), Matchers.greaterThan(initialZoomLevel));
         }, TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
     }
 
@@ -122,11 +118,9 @@ public class FocusedEditableTextFieldZoomTest {
                 InstrumentationRegistry.getInstrumentation(), tab.getView(), KeyEvent.KEYCODE_BACK);
 
         // We should zoom out to the previous zoom level.
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return (mCoordinates.getPageScaleFactor() - initialZoomLevel) < FLOAT_DELTA;
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat((double) mCoordinates.getPageScaleFactor(),
+                    Matchers.is(Matchers.closeTo(initialZoomLevel, FLOAT_DELTA)));
         }, TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
     }
 }

@@ -13,6 +13,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "components/payments/content/web_app_manifest.h"
+#include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/installed_payment_apps_finder.h"
 #include "content/public/browser/payment_app_provider.h"
 #include "content/public/browser/render_document_host_user_data.h"
 #include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
@@ -43,7 +45,7 @@ class ServiceWorkerPaymentAppFinder
   using InstallablePaymentApps =
       std::map<GURL, std::unique_ptr<WebAppInstallationInfo>>;
   using GetAllPaymentAppsCallback =
-      base::OnceCallback<void(content::PaymentAppProvider::PaymentApps,
+      base::OnceCallback<void(content::InstalledPaymentAppsFinder::PaymentApps,
                               InstallablePaymentApps,
                               const std::string& error_message)>;
 
@@ -78,7 +80,7 @@ class ServiceWorkerPaymentAppFinder
   // the method names and method-specific capabilities.
   static void RemoveAppsWithoutMatchingMethodData(
       const std::vector<mojom::PaymentMethodDataPtr>& requested_method_data,
-      content::PaymentAppProvider::PaymentApps* apps);
+      content::InstalledPaymentAppsFinder::PaymentApps* apps);
 
   // Ignore the given |method|, so that no installed or installable service
   // workers would ever be looked up in GetAllPaymentApps(). Calling this
@@ -93,6 +95,7 @@ class ServiceWorkerPaymentAppFinder
   friend class ServiceWorkerPaymentAppFinderBrowserTest;
   friend class PaymentRequestPlatformBrowserTestBase;
   friend class PaymentMethodViewControllerTest;
+  friend class PaymentHandlerIconRefetchTest;
 
   explicit ServiceWorkerPaymentAppFinder(content::RenderFrameHost* rfh);
 
@@ -104,8 +107,8 @@ class ServiceWorkerPaymentAppFinder
 
   RENDER_DOCUMENT_HOST_USER_DATA_KEY_DECL();
 
-  // |rfh_| owns this ServiceWorkerPaymentAppFinder, so it is always valid.
-  content::RenderFrameHost* rfh_;
+  // The identifier of the frame that owns this ServiceWorkerPaymentAppFinder.
+  content::GlobalFrameRoutingId frame_routing_id_;
 
   std::set<std::string> ignored_methods_;
   std::unique_ptr<PaymentManifestDownloader> test_downloader_;

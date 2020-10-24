@@ -205,7 +205,7 @@ Polymer({
                // because there is no need to know what the information string
                // will be, just whether there is one or not.
                null, null, null, null, null, null, null, null, null, null, null,
-               null) !== '';
+               null, null) !== '';
   },
 
   /**
@@ -232,6 +232,7 @@ Polymer({
    */
   isPermissionUserControlled_(source) {
     return !(
+        source === SiteSettingSource.ALLOWLIST ||
         source === SiteSettingSource.DRM_DISABLED ||
         source === SiteSettingSource.POLICY ||
         source === SiteSettingSource.EXTENSION ||
@@ -250,7 +251,7 @@ Polymer({
         category === ContentSettingsTypes.SERIAL_PORTS ||
         category === ContentSettingsTypes.USB_DEVICES ||
         category === ContentSettingsTypes.BLUETOOTH_SCANNING ||
-        category === ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE ||
+        category === ContentSettingsTypes.FILE_SYSTEM_WRITE ||
         category === ContentSettingsTypes.HID_DEVICES ||
         category === ContentSettingsTypes.BLUETOOTH_DEVICES);
   },
@@ -272,10 +273,10 @@ Polymer({
       return true;
     }
 
-    // For Bluetooth scanning permission and Native File System write permission
+    // For Bluetooth scanning permission and File System write permission
     // 'ask' takes the place of 'allow'.
     if (category === ContentSettingsTypes.BLUETOOTH_SCANNING ||
-        category === ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE) {
+        category === ContentSettingsTypes.FILE_SYSTEM_WRITE) {
       return true;
     }
 
@@ -310,6 +311,8 @@ Polymer({
    * @param {!SiteSettingSource} source The source of the permission.
    * @param {!ContentSettingsTypes} category The permission type.
    * @param {!ContentSetting} setting The permission setting.
+   * @param {?string} allowlistString The string to show if the permission is
+   *     allowlisted.
    * @param {?string} adsBlacklistString The string to show if the site is
    *     blacklisted for showing bad ads.
    * @param {?string} adsBlockString The string to show if ads are blocked, but
@@ -328,8 +331,8 @@ Polymer({
    * @private
    */
   permissionInfoString_(
-      source, category, setting, adsBlacklistString, adsBlockString,
-      embargoString, insecureOriginString, killSwitchString,
+      source, category, setting, allowlistString, adsBlacklistString,
+      adsBlockString, embargoString, insecureOriginString, killSwitchString,
       extensionAllowString, extensionBlockString, extensionAskString,
       policyAllowString, policyBlockString, policyAskString,
       drmDisabledString) {
@@ -350,7 +353,9 @@ Polymer({
     policyStrings[ContentSetting.BLOCK] = policyBlockString;
     policyStrings[ContentSetting.ASK] = policyAskString;
 
-    if (source === SiteSettingSource.ADS_FILTER_BLACKLIST) {
+    if (source === SiteSettingSource.ALLOWLIST) {
+      return allowlistString;
+    } else if (source === SiteSettingSource.ADS_FILTER_BLACKLIST) {
       assert(
           ContentSettingsTypes.ADS === category,
           'The ads filter blacklist only applies to Ads.');

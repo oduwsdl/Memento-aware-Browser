@@ -25,8 +25,8 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.FileProviderHelper;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
@@ -394,7 +394,7 @@ public class OfflinePageUtils {
      *                      afterwards via PostTask.
      */
     public static void maybeShareOfflinePage(Tab tab, final Callback<ShareParams> shareCallback) {
-        if (tab == null) {
+        if (tab == null || !tab.isInitialized()) {
             shareCallback.onResult(null);
             return;
         }

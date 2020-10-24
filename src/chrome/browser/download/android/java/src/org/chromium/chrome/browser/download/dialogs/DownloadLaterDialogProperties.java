@@ -11,10 +11,34 @@ import org.chromium.ui.modelutil.PropertyModel;
  * Contains all the properties for the download later dialog {@link PropertyModel}.
  */
 public class DownloadLaterDialogProperties {
-    /** The initial selection to define when to start the download. */
-    public static final PropertyModel.ReadableIntPropertyKey DOWNLOAD_TIME_INITIAL_SELECTION =
+    public static final PropertyModel
+            .ReadableObjectPropertyKey<DownloadLaterDialogView.Controller> CONTROLLER =
+            new PropertyModel.ReadableObjectPropertyKey();
+
+    /** The initial choice of the download later dialog. */
+    public static final PropertyModel.ReadableIntPropertyKey INITIAL_CHOICE =
             new PropertyModel.ReadableIntPropertyKey();
 
+    /** The initial selection to define the don't show again checkbox. */
+    public static final PropertyModel.ReadableIntPropertyKey DONT_SHOW_AGAIN_SELECTION =
+            new PropertyModel.ReadableIntPropertyKey();
+
+    /** Whether the don't show again checkbox is disabled. */
+    public static final PropertyModel.WritableBooleanPropertyKey DONT_SHOW_AGAIN_DISABLED =
+            new PropertyModel.WritableBooleanPropertyKey();
+
+    /**
+     * The string representing the download location. If null, no download location edit text will
+     * be shown.
+     */
+    public static final PropertyModel.WritableObjectPropertyKey<String> LOCATION_TEXT =
+            new PropertyModel.WritableObjectPropertyKey<>();
+
+    public static final PropertyKey[] ALL_DOWNLOAD_LATER_DIALOG_PROPERTIES =
+            new PropertyKey[] {CONTROLLER, INITIAL_CHOICE, DONT_SHOW_AGAIN_SELECTION,
+                    DONT_SHOW_AGAIN_DISABLED, LOCATION_TEXT};
+
     public static final PropertyKey[] ALL_KEYS =
-            new PropertyKey[] {DOWNLOAD_TIME_INITIAL_SELECTION};
+            PropertyModel.concatKeys(ALL_DOWNLOAD_LATER_DIALOG_PROPERTIES,
+                    new PropertyKey[] {DownloadDateTimePickerDialogProperties.INITIAL_TIME});
 }

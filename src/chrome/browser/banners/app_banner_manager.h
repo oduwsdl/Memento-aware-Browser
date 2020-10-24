@@ -195,9 +195,9 @@ class AppBannerManager : public content::WebContentsObserver,
   // GetAppIdentifier() must return a valid value for this method to work.
   bool CheckIfShouldShowBanner();
 
-  // Returns whether the site would prefer a related application be installed
-  // instead of the PWA or a related application is already installed.
-  bool ShouldDeferToRelatedApplication() const;
+  // Returns whether the site would prefer a related non-web app be installed
+  // instead of the PWA or a related non-web app is already installed.
+  bool ShouldDeferToRelatedNonWebApp() const;
 
   // Return a string identifying this app for metrics.
   virtual std::string GetAppIdentifier();
@@ -219,11 +219,14 @@ class AppBannerManager : public content::WebContentsObserver,
   bool ShouldBypassEngagementChecks() const;
 
   // Returns whether installation of apps from |platform| is supported on the
-  // current device.
-  virtual bool IsSupportedAppPlatform(const base::string16& platform) const = 0;
+  // current device and the platform delivers apps considered replacements for
+  // web apps.
+  virtual bool IsSupportedNonWebAppPlatform(
+      const base::string16& platform) const = 0;
 
-  // Returns whether |related_app| is already installed.
-  virtual bool IsRelatedAppInstalled(
+  // Returns whether |related_app| is already installed and considered a
+  // replacement for the manifest's web app.
+  virtual bool IsRelatedNonWebAppInstalled(
       const blink::Manifest::RelatedApplication& related_app) const = 0;
 
   // Returns whether the current page is already installed as a web app, or
@@ -233,6 +236,11 @@ class AppBannerManager : public content::WebContentsObserver,
   // Returns whether the installed web app at the current page can be
   // overwritten with a new app install for the current page.
   virtual bool ShouldAllowWebAppReplacementInstall();
+
+  // Possibly retries the installable manager request given the current state
+  // and the result. Returns |true| if the request was restarted.
+  // Currently only called during requests to InstallationManager
+  bool DidRetryInstallableManagerRequest(const InstallableData& result);
 
   // Callback invoked by the InstallableManager once it has fetched the page's
   // manifest.
@@ -295,6 +303,9 @@ class AppBannerManager : public content::WebContentsObserver,
                      const GURL& validated_url) override;
   void DidActivatePortal(content::WebContents* predecessor_contents,
                          base::TimeTicks activation_time) override;
+  void DidUpdateWebManifestURL(
+      content::RenderFrameHost* target_frame,
+      const base::Optional<GURL>& manifest_url) override;
   void MediaStartedPlaying(const MediaPlayerInfo& media_info,
                            const content::MediaPlayerId& id) override;
   void MediaStoppedPlaying(

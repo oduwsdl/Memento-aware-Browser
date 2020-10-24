@@ -20,7 +20,6 @@
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/webui/chromeos/login/discover/discover_window_manager.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -78,15 +77,6 @@ BuiltInChromeOsApps::BuiltInChromeOsApps(
 
 BuiltInChromeOsApps::~BuiltInChromeOsApps() = default;
 
-bool BuiltInChromeOsApps::hide_settings_app_for_testing_ = false;
-
-// static
-bool BuiltInChromeOsApps::SetHideSettingsAppForTesting(bool hide) {
-  bool old_value = hide_settings_app_for_testing_;
-  hide_settings_app_for_testing_ = hide;
-  return old_value;
-}
-
 void BuiltInChromeOsApps::Connect(
     mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
     apps::mojom::ConnectOptionsPtr opts) {
@@ -97,11 +87,6 @@ void BuiltInChromeOsApps::Connect(
     for (const auto& internal_app : app_list::GetInternalAppList(profile_)) {
       apps::mojom::AppPtr app = Convert(internal_app);
       if (!app.is_null()) {
-        if (hide_settings_app_for_testing_ &&
-            (internal_app.internal_app_name == BuiltInAppName::kSettings)) {
-          app->show_in_shelf = app->show_in_search =
-              apps::mojom::OptionalBool::kFalse;
-        }
         apps.push_back(std::move(app));
       }
     }
@@ -117,20 +102,18 @@ void BuiltInChromeOsApps::Connect(
   // lifetime of the Chrome OS session. There won't be any further updates.
 }
 
-void BuiltInChromeOsApps::LoadIcon(
-    const std::string& app_id,
-    apps::mojom::IconKeyPtr icon_key,
-    apps::mojom::IconCompression icon_compression,
-    int32_t size_hint_in_dip,
-    bool allow_placeholder_icon,
-    LoadIconCallback callback) {
+void BuiltInChromeOsApps::LoadIcon(const std::string& app_id,
+                                   apps::mojom::IconKeyPtr icon_key,
+                                   apps::mojom::IconType icon_type,
+                                   int32_t size_hint_in_dip,
+                                   bool allow_placeholder_icon,
+                                   LoadIconCallback callback) {
   constexpr bool is_placeholder_icon = false;
   if (icon_key &&
       (icon_key->resource_id != apps::mojom::IconKey::kInvalidResourceId)) {
-    LoadIconFromResource(icon_compression, size_hint_in_dip,
-                         icon_key->resource_id, is_placeholder_icon,
-                         static_cast<IconEffects>(icon_key->icon_effects),
-                         std::move(callback));
+    LoadIconFromResource(
+        icon_type, size_hint_in_dip, icon_key->resource_id, is_placeholder_icon,
+        static_cast<IconEffects>(icon_key->icon_effects), std::move(callback));
     return;
   }
   // On failure, we still run the callback, with the zero IconValue.
@@ -143,14 +126,10 @@ void BuiltInChromeOsApps::Launch(const std::string& app_id,
                                  int64_t display_id) {
   if (app_id == ash::kInternalAppIdKeyboardShortcutViewer) {
     ash::ToggleKeyboardShortcutViewer();
-  } else if (app_id == ash::kInternalAppIdDiscover) {
-    base::RecordAction(base::UserMetricsAction("ShowDiscover"));
-    chromeos::DiscoverWindowManager::GetInstance()
-        ->ShowChromeDiscoverPageForProfile(profile_);
   } else if (app_id == ash::kReleaseNotesAppId) {
     base::RecordAction(
         base::UserMetricsAction("ReleaseNotes.SuggestionChipLaunched"));
-    chrome::LaunchReleaseNotes(profile_);
+    chrome::LaunchReleaseNotes(profile_, launch_source);
   }
 }
 

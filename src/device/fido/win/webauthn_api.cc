@@ -14,6 +14,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/scoped_thread_priority.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/win/logging.h"
 #include "device/fido/win/type_conversions.h"
@@ -34,8 +35,13 @@ constexpr uint32_t kWinWebAuthnTimeoutMilliseconds = 1000 * 60 * 5;
 class WinWebAuthnApiImpl : public WinWebAuthnApi {
  public:
   WinWebAuthnApiImpl() : WinWebAuthnApi(), is_bound_(false) {
-    webauthn_dll_ =
-        LoadLibraryExA("webauthn.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    {
+      // Mitigate the issues caused by loading DLLs on a background thread
+      // (http://crbug/973868).
+      SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
+      webauthn_dll_ =
+          LoadLibraryExA("webauthn.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     if (!webauthn_dll_) {
       return;
     }
@@ -89,6 +95,9 @@ class WinWebAuthnApiImpl : public WinWebAuthnApi {
   HRESULT IsUserVerifyingPlatformAuthenticatorAvailable(
       BOOL* available) override {
     DCHECK(is_bound_);
+    // Mitigate the issues caused by loading DLLs on a background thread
+    // (http://crbug/973868).
+    SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
     return is_user_verifying_platform_authenticator_available_(available);
   }
 
@@ -331,7 +340,8 @@ std::pair<CtapDeviceResponseCode,
 AuthenticatorGetAssertionBlocking(WinWebAuthnApi* webauthn_api,
                                   HWND h_wnd,
                                   GUID cancellation_id,
-                                  CtapGetAssertionRequest request) {
+                                  CtapGetAssertionRequest request,
+                                  CtapGetAssertionOptions request_options) {
   DCHECK(webauthn_api->IsAvailable());
 
   base::string16 rp_id16 = base::UTF8ToUTF16(request.rp_id);
@@ -423,8 +433,15 @@ AuthenticatorGetAssertionBlocking(WinWebAuthnApi* webauthn_api,
             base::nullopt};
   }
   FIDO_LOG(DEBUG) << "WebAuthNAuthenticatorGetAssertion()=" << *assertion;
-  return {CtapDeviceResponseCode::kSuccess,
-          ToAuthenticatorGetAssertionResponse(*assertion)};
+  base::Optional<AuthenticatorGetAssertionResponse> response =
+      ToAuthenticatorGetAssertionResponse(*assertion, request.allow_list);
+  if (response && !request_options.prf_inputs.empty()) {
+    // Windows does not yet support passing in inputs for hmac_secret.
+    response->set_hmac_secret_not_evaluated(true);
+  }
+  return {response ? CtapDeviceResponseCode::kSuccess
+                   : CtapDeviceResponseCode::kCtap2ErrOther,
+          std::move(response)};
 }
 
 bool SupportsCredProtectExtension(WinWebAuthnApi* api) {

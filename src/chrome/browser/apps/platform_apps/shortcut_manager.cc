@@ -11,6 +11,7 @@
 #include "base/one_shot_event.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -28,7 +29,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_set.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/common/mac/app_mode_common.h"
 #endif
 
@@ -36,13 +37,23 @@ using extensions::Extension;
 
 namespace {
 
+#if defined(OS_MAC)
 // This version number is stored in local prefs to check whether app shortcuts
 // need to be recreated. This might happen when we change various aspects of app
 // shortcuts like command-line flags or associated icons, binaries, etc.
-#if defined(OS_MACOSX)
 const int kCurrentAppShortcutsVersion = APP_SHIM_VERSION_NUMBER;
+
+// The architecture that was last used to create app shortcuts for this user
+// directory.
+std::string CurrentAppShortcutsArch() {
+  return base::SysInfo::OperatingSystemArchitecture();
+}
 #else
+// Non-mac platforms do not update shortcuts.
 const int kCurrentAppShortcutsVersion = 0;
+std::string CurrentAppShortcutsArch() {
+  return "";
+}
 #endif
 
 // Delay in seconds before running UpdateShortcutsForAllApps.
@@ -60,13 +71,22 @@ void CreateShortcutsForApp(Profile* profile, const Extension* app) {
                            creation_locations, profile, app, base::DoNothing());
 }
 
+// Used to disable shortcut syscalls to prevent tests from flaking.
+bool g_suppress_shortcuts_for_testing = false;
+
 }  // namespace
+
+// static
+void AppShortcutManager::SuppressShortcutsForTesting() {
+  g_suppress_shortcuts_for_testing = true;
+}
 
 // static
 void AppShortcutManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   // Indicates whether app shortcuts have been created.
   registry->RegisterIntegerPref(prefs::kAppShortcutsVersion, 0);
+  registry->RegisterStringPref(prefs::kAppShortcutsArch, "");
 }
 
 AppShortcutManager::AppShortcutManager(Profile* profile)
@@ -111,15 +131,17 @@ void AppShortcutManager::OnExtensionWillBeInstalled(
   // Bookmark apps are handled in
   // web_app::AppShortcutManager::OnWebAppInstalled() and
   // web_app::AppShortcutManager::OnWebAppManifestUpdated().
-  if (!extension->is_app() || extension->from_bookmark())
+  if (!extension->is_app() || extension->from_bookmark() ||
+      g_suppress_shortcuts_for_testing) {
     return;
+  }
 
   // If the app is being updated, update any existing shortcuts but do not
   // create new ones. If it is being installed, automatically create a
   // shortcut in the applications menu (e.g., Start Menu).
   if (is_update) {
     web_app::UpdateAllShortcuts(base::UTF8ToUTF16(old_name), profile_,
-                                extension, base::Closure());
+                                extension, base::OnceClosure());
   } else {
     CreateShortcutsForApp(profile_, extension);
   }
@@ -131,14 +153,16 @@ void AppShortcutManager::OnExtensionUninstalled(
     extensions::UninstallReason reason) {
   // Bookmark apps are handled in
   // web_app::AppShortcutManager::OnWebAppUninstalled()
-  if (!extension->from_bookmark())
+  if (!extension->from_bookmark() && !g_suppress_shortcuts_for_testing)
     web_app::DeleteAllShortcuts(profile_, extension);
 }
 
 void AppShortcutManager::OnProfileWillBeRemoved(
     const base::FilePath& profile_path) {
-  if (profile_path != profile_->GetPath())
+  if (profile_path != profile_->GetPath() || g_suppress_shortcuts_for_testing) {
     return;
+  }
+
   web_app::internals::GetShortcutIOTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&web_app::internals::DeleteAllShortcutsForProfile,
@@ -146,15 +170,19 @@ void AppShortcutManager::OnProfileWillBeRemoved(
 }
 
 void AppShortcutManager::UpdateShortcutsForAllAppsNow() {
-  web_app::UpdateShortcutsForAllApps(
-      profile_,
-      base::BindOnce(&AppShortcutManager::SetCurrentAppShortcutsVersion,
-                     weak_ptr_factory_.GetWeakPtr()));
+  if (!g_suppress_shortcuts_for_testing) {
+    web_app::UpdateShortcutsForAllApps(
+        profile_,
+        base::BindOnce(&AppShortcutManager::SetCurrentAppShortcutsVersion,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void AppShortcutManager::SetCurrentAppShortcutsVersion() {
   profile_->GetPrefs()->SetInteger(prefs::kAppShortcutsVersion,
                                    kCurrentAppShortcutsVersion);
+  profile_->GetPrefs()->SetString(prefs::kAppShortcutsArch,
+                                  CurrentAppShortcutsArch());
 }
 
 void AppShortcutManager::UpdateShortcutsForAllAppsIfNeeded() {
@@ -165,8 +193,13 @@ void AppShortcutManager::UpdateShortcutsForAllAppsIfNeeded() {
 
   int last_version =
       profile_->GetPrefs()->GetInteger(prefs::kAppShortcutsVersion);
-  if (last_version >= kCurrentAppShortcutsVersion)
+  std::string last_arch =
+      profile_->GetPrefs()->GetString(prefs::kAppShortcutsArch);
+
+  if (last_version == kCurrentAppShortcutsVersion &&
+      last_arch == CurrentAppShortcutsArch()) {
     return;
+  }
 
   content::GetUIThreadTaskRunner({})->PostDelayedTask(
       FROM_HERE,

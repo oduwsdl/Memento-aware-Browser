@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/shelf/hotseat_widget.h"
-#include <memory>
+
 #include <utility>
 
 #include "ash/focus_cycler.h"
@@ -11,9 +11,11 @@
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/wallpaper_controller_observer.h"
 #include "ash/shelf/hotseat_transition_animator.h"
 #include "ash/shelf/scrollable_shelf_view.h"
+#include "ash/shelf/shelf_app_button.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_view.h"
@@ -28,6 +30,7 @@
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window_targeter.h"
 #include "ui/compositor/animation_metrics_reporter.h"
+#include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/color_analysis.h"
@@ -35,21 +38,30 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/widget_delegate.h"
 
 namespace ash {
 namespace {
 
 void DoScopedAnimationSetting(
-    ui::ScopedLayerAnimationSettings* animation_setter,
-    ui::AnimationMetricsReporter* metrics_reporter) {
+    ui::ScopedLayerAnimationSettings* animation_setter) {
   animation_setter->SetTransitionDuration(
       ShelfConfig::Get()->shelf_animation_duration());
   animation_setter->SetTweenType(gfx::Tween::EASE_OUT);
   animation_setter->SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-  if (metrics_reporter) {
-    animation_setter->SetAnimationMetricsReporter(metrics_reporter);
+}
+
+// Returns whether there is special hotseat animation for |transition|.
+bool HasSpecialAnimation(HotseatWidget::StateTransition transition) {
+  switch (transition) {
+    case HotseatWidget::StateTransition::kHomeLauncherAndExtended:
+    case HotseatWidget::StateTransition::kHomeLauncherAndHidden:
+      return true;
+    case HotseatWidget::StateTransition::kHiddenAndExtended:
+    case HotseatWidget::StateTransition::kOther:
+      return false;
   }
 }
 
@@ -86,14 +98,13 @@ HotseatWidget::StateTransition CalculateHotseatStateTransition(
   return HotseatWidget::StateTransition::kOther;
 }
 
-// Animation implemented specifically for the transition between the home
-// launcher state and the extended state.
-class HomeAndExtendedTransitionAnimation : public ui::LayerAnimationElement {
+// Base class for hotseat animation transition.
+class HotseatStateTransitionAnimation : public ui::LayerAnimationElement {
  public:
-  HomeAndExtendedTransitionAnimation(const gfx::Rect& target_bounds_in_screen,
-                                     double target_opacity,
-                                     ui::Layer* hotseat_layer,
-                                     HotseatWidget* hotseat_widget)
+  HotseatStateTransitionAnimation(const gfx::Rect& target_bounds_in_screen,
+                                  double target_opacity,
+                                  ui::Layer* hotseat_layer,
+                                  HotseatWidget* hotseat_widget)
       : ui::LayerAnimationElement(
             LayerAnimationElement::BOUNDS | LayerAnimationElement::OPACITY,
             hotseat_layer->GetAnimator()->GetTransitionDuration()),
@@ -101,6 +112,52 @@ class HomeAndExtendedTransitionAnimation : public ui::LayerAnimationElement {
         target_opacity_(target_opacity),
         tween_type_(hotseat_layer->GetAnimator()->tween_type()),
         hotseat_widget_(hotseat_widget) {}
+
+  ~HotseatStateTransitionAnimation() override = default;
+
+  HotseatStateTransitionAnimation(const HotseatStateTransitionAnimation& rhs) =
+      delete;
+  HotseatStateTransitionAnimation& operator=(
+      const HotseatStateTransitionAnimation& rhs) = delete;
+
+ protected:
+  // ui::LayerAnimationElement:
+  void OnGetTarget(TargetValue* target) const override {
+    target->opacity = target_opacity_;
+    target->bounds = target_widget_bounds_;
+  }
+
+  ScrollableShelfView* GetScrollableShelfView() {
+    return hotseat_widget_->scrollable_shelf_view();
+  }
+
+  // Hotseat widget's target bounds in screen.
+  gfx::Rect target_widget_bounds_;
+
+  // Hotseat widget's initial opacity.
+  double start_opacity_ = 0.f;
+
+  // Hotseat widget's target opacity.
+  double target_opacity_ = 0.f;
+
+  gfx::Tween::Type tween_type_ = gfx::Tween::LINEAR;
+
+  HotseatWidget* hotseat_widget_ = nullptr;
+};
+
+// Animation implemented specifically for the transition between the home
+// launcher state and the extended state.
+class HomeAndExtendedTransitionAnimation
+    : public HotseatStateTransitionAnimation {
+ public:
+  HomeAndExtendedTransitionAnimation(const gfx::Rect& target_bounds_in_screen,
+                                     double target_opacity,
+                                     ui::Layer* hotseat_layer,
+                                     HotseatWidget* hotseat_widget)
+      : HotseatStateTransitionAnimation(target_bounds_in_screen,
+                                        target_opacity,
+                                        hotseat_layer,
+                                        hotseat_widget) {}
   ~HomeAndExtendedTransitionAnimation() override = default;
 
   HomeAndExtendedTransitionAnimation(
@@ -109,6 +166,7 @@ class HomeAndExtendedTransitionAnimation : public ui::LayerAnimationElement {
       const HomeAndExtendedTransitionAnimation& rhs) = delete;
 
  private:
+  // HotseatStateTransitionAnimation:
   void OnStart(ui::LayerAnimationDelegate* delegate) override {
     DCHECK(hotseat_widget_->GetShelfView()->shelf()->IsHorizontalAlignment());
 
@@ -134,6 +192,7 @@ class HomeAndExtendedTransitionAnimation : public ui::LayerAnimationElement {
     target_hotseat_background_in_screen_.Inset(target_padding_insets_);
   }
 
+  // HotseatStateTransitionAnimation:
   bool OnProgress(double current,
                   ui::LayerAnimationDelegate* delegate) override {
     const double tweened = gfx::Tween::CalculateValue(tween_type_, current);
@@ -177,14 +236,10 @@ class HomeAndExtendedTransitionAnimation : public ui::LayerAnimationElement {
     return true;
   }
 
-  void OnGetTarget(TargetValue* target) const override {}
+  // HotseatStateTransitionAnimation:
   void OnAbort(ui::LayerAnimationDelegate* delegate) override {
     GetScrollableShelfView()->set_is_padding_configured_externally(
         /*is_padding_configured_externally=*/false);
-  }
-
-  ScrollableShelfView* GetScrollableShelfView() {
-    return hotseat_widget_->scrollable_shelf_view();
   }
 
   // Scrollable shelf's initial padding insets.
@@ -198,19 +253,97 @@ class HomeAndExtendedTransitionAnimation : public ui::LayerAnimationElement {
 
   // Hotseat background's target bounds in screen.
   gfx::Rect target_hotseat_background_in_screen_;
+};
 
-  // Hotseat widget's target bounds in screen.
-  gfx::Rect target_widget_bounds_;
+// Animation implemented specifically for the transition between the home
+// launcher state and the hidden state.
+class HomeAndHiddenTransitionAnimation
+    : public HotseatStateTransitionAnimation {
+ public:
+  HomeAndHiddenTransitionAnimation(const gfx::Rect& target_bounds_in_screen,
+                                   double target_opacity,
+                                   ui::Layer* hotseat_layer,
+                                   HotseatWidget* hotseat_widget)
+      : HotseatStateTransitionAnimation(target_bounds_in_screen,
+                                        target_opacity,
+                                        hotseat_layer,
+                                        hotseat_widget) {}
+  ~HomeAndHiddenTransitionAnimation() override = default;
 
-  // Hotseat widget's initial opacity.
-  double start_opacity_ = 0.f;
+ protected:
+  // HotseatStateTransitionAnimation:
+  void OnStart(ui::LayerAnimationDelegate* delegate) override {
+    DCHECK(hotseat_widget_->GetShelfView()->shelf()->IsHorizontalAlignment());
 
-  // Hotseat widget's target opacity.
-  double target_opacity_ = 0.f;
+    start_opacity_ = hotseat_widget_->GetNativeView()->layer()->opacity();
 
-  gfx::Tween::Type tween_type_ = gfx::Tween::LINEAR;
+    if (hotseat_widget_->state() == HotseatState::kHidden)
+      will_be_hidden_ = true;
 
-  HotseatWidget* hotseat_widget_ = nullptr;
+    ScrollableShelfView* scrollable_shelf_view = GetScrollableShelfView();
+    const gfx::Rect current_widget_bounds =
+        hotseat_widget_->GetWindowBoundsInScreen();
+
+    // Ensure that hotseat only has vertical movement during animation.
+    if (will_be_hidden_) {
+      animation_initial_bounds_ = current_widget_bounds;
+
+      animation_target_bounds_ = current_widget_bounds;
+      animation_target_bounds_.set_y(target_widget_bounds_.y());
+    } else {
+      animation_initial_bounds_ = target_widget_bounds_;
+      animation_initial_bounds_.set_y(current_widget_bounds.y());
+
+      // Ensure that hotseat is set with the target bounds at the end of
+      // animation when hotseat is going to show in home launcher.
+      animation_target_bounds_ = target_widget_bounds_;
+      const gfx::Insets target_padding_insets =
+          scrollable_shelf_view->CalculateEdgePadding(
+              /*use_target_bounds=*/true);
+      scrollable_shelf_view->SetEdgePaddingInsets(target_padding_insets);
+      delegate->SetBoundsFromAnimation(
+          animation_initial_bounds_, ui::PropertyChangeReason::FROM_ANIMATION);
+    }
+  }
+
+  // HotseatStateTransitionAnimation:
+  bool OnProgress(double current,
+                  ui::LayerAnimationDelegate* delegate) override {
+    const double tweened = gfx::Tween::CalculateValue(tween_type_, current);
+    delegate->SetOpacityFromAnimation(
+        gfx::Tween::DoubleValueBetween(tweened, start_opacity_,
+                                       target_opacity_),
+        ui::PropertyChangeReason::FROM_ANIMATION);
+
+    const gfx::Rect widget_bounds_in_progress = gfx::Tween::RectValueBetween(
+        tweened, animation_initial_bounds_, animation_target_bounds_);
+
+    const bool reach_end = current == 1.f;
+
+    // When hotseat is going to be hidden, |animation_target_bounds_| is not
+    // equal to |target_widget_bounds_|. So hotseat is set with the target
+    // bounds at the end of animation. It does not bring animation regression
+    // since hotseat is invisible to the user when setting bounds.
+    delegate->SetBoundsFromAnimation(will_be_hidden_ && reach_end
+                                         ? target_widget_bounds_
+                                         : widget_bounds_in_progress,
+                                     ui::PropertyChangeReason::FROM_ANIMATION);
+
+    return true;
+  }
+
+  // HotseatStateTransitionAnimation:
+  void OnAbort(ui::LayerAnimationDelegate* delegate) override {}
+
+ private:
+  // Whether hotseat widget is hidden after state transition animation.
+  bool will_be_hidden_ = false;
+
+  // Note that |animation_initial_bounds_| and |animation_target_bounds_| may
+  // not be the hotseat's current bounds and |target_widget_bounds_|
+  // respectively.
+  gfx::Rect animation_initial_bounds_;
+  gfx::Rect animation_target_bounds_;
 };
 
 // Custom window targeter for the hotseat. Used so the hotseat only processes
@@ -260,13 +393,29 @@ class HotseatWindowTargeter : public aura::WindowTargeter {
 
 class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
                                     public views::WidgetDelegateView,
+                                    public views::ViewTargeterDelegate,
                                     public OverviewObserver,
                                     public WallpaperControllerObserver {
  public:
   DelegateView() : translucent_background_(ui::LAYER_SOLID_COLOR) {
     translucent_background_.SetName("hotseat/Background");
+    SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
   }
   ~DelegateView() override;
+
+  // views::ViewTargetDelegate:
+  View* TargetForRect(View* root, const gfx::Rect& rect) override {
+    // If a context menu for a shelf app button is shown, redirect all events to
+    // the shelf app button. Context menus generally capture all events, but
+    // shelf app buttons' context menu redirect gesture events to the hotseat
+    // widget so shelf app button can continue handling drag events.
+    // See also HotseatWidget::OnGestureEvent().
+    views::View* item_with_context_menu =
+        scrollable_shelf_view_->shelf_view()->GetShelfItemViewWithContextMenu();
+    if (item_with_context_menu)
+      return item_with_context_menu;
+    return views::ViewTargeterDelegate::TargetForRect(root, rect);
+  }
 
   // Initializes the view.
   void Init(ScrollableShelfView* scrollable_shelf_view,
@@ -371,8 +520,10 @@ void HotseatWidget::DelegateView::UpdateTranslucentBackground() {
     return;
   }
 
-  SetTranslucentBackground(
-      scrollable_shelf_view_->GetHotseatBackgroundBounds());
+  // Layer::SetBounds() does not mirror bounds under RTL. So set the mirrored
+  // bounds explicitly.
+  SetTranslucentBackground(scrollable_shelf_view_->GetMirroredRect(
+      scrollable_shelf_view_->GetHotseatBackgroundBounds()));
 }
 
 void HotseatWidget::DelegateView::SetTranslucentBackground(
@@ -381,15 +532,18 @@ void HotseatWidget::DelegateView::SetTranslucentBackground(
 
   translucent_background_.SetVisible(true);
   SetBackgroundBlur(/*enable_blur=*/true);
-  ui::AnimationMetricsReporter* metrics_reporter =
-      hotseat_widget_
-          ? hotseat_widget_->GetTranslucentBackgroundMetricsReporter()
-          : nullptr;
+
+  auto* animator = translucent_background_.GetAnimator();
+
+  base::Optional<ui::AnimationThroughputReporter> reporter;
+  if (hotseat_widget_ && hotseat_widget_->state() != HotseatState::kNone) {
+    reporter.emplace(animator,
+                     hotseat_widget_->GetTranslucentBackgroundReportCallback());
+  }
 
   if (ShelfConfig::Get()->GetDefaultShelfColor() != target_color_) {
-    ui::ScopedLayerAnimationSettings color_animation_setter(
-        translucent_background_.GetAnimator());
-    DoScopedAnimationSetting(&color_animation_setter, metrics_reporter);
+    ui::ScopedLayerAnimationSettings color_animation_setter(animator);
+    DoScopedAnimationSetting(&color_animation_setter);
     target_color_ = ShelfConfig::Get()->GetDefaultShelfColor();
     translucent_background_.SetColor(target_color_);
   }
@@ -403,9 +557,8 @@ void HotseatWidget::DelegateView::SetTranslucentBackground(
        !scrollable_shelf_view_->NeedUpdateToTargetBounds());
   base::Optional<ui::ScopedLayerAnimationSettings> bounds_animation_setter;
   if (animate_bounds) {
-    bounds_animation_setter.emplace(translucent_background_.GetAnimator());
-    DoScopedAnimationSetting(&bounds_animation_setter.value(),
-                             metrics_reporter);
+    bounds_animation_setter.emplace(animator);
+    DoScopedAnimationSetting(&bounds_animation_setter.value());
   }
 
   const int radius = hotseat_widget_->GetHotseatSize() / 2;
@@ -413,7 +566,7 @@ void HotseatWidget::DelegateView::SetTranslucentBackground(
   if (translucent_background_.rounded_corner_radii() != rounded_corners)
     translucent_background_.SetRoundedCornerRadius(rounded_corners);
 
-  if (translucent_background_.bounds() != background_bounds)
+  if (translucent_background_.GetTargetBounds() != background_bounds)
     translucent_background_.SetBounds(background_bounds);
 }
 
@@ -568,8 +721,25 @@ void HotseatWidget::OnGestureEvent(ui::GestureEvent* event) {
   if (event->type() == ui::ET_GESTURE_TAP_DOWN)
     keyboard::KeyboardUIController::Get()->HideKeyboardImplicitlyByUser();
 
+  // Context menus for shelf app button forward gesture events to hotseat
+  // widget, so the shelf app button can continue handling drag even after the
+  // context menu starts capturing events. Ignore events not interesting to the
+  // shelf app button in this state.
+  ShelfAppButton* item_with_context_menu =
+      scrollable_shelf_view_->shelf_view()->GetShelfItemViewWithContextMenu();
+  if (item_with_context_menu &&
+      !ShelfAppButton::ShouldHandleEventFromContextMenu(event)) {
+    event->SetHandled();
+    return;
+  }
+
   if (!event->handled())
     views::Widget::OnGestureEvent(event);
+
+  // Ensure that the app button's drag state gets cleared on gesture end even if
+  // the event doesn't get delivered to the app button.
+  if (item_with_context_menu && event->type() == ui::ET_GESTURE_END)
+    item_with_context_menu->ClearDragStateOnGestureEnd();
 }
 
 bool HotseatWidget::OnNativeWidgetActivationChanged(bool active) {
@@ -611,9 +781,8 @@ float HotseatWidget::CalculateShelfViewOpacity() const {
   return (state() == HotseatState::kExtended) ? 1.0f : target_opacity;
 }
 
-void HotseatWidget::SetTranslucentBackground(
-    const gfx::Rect& translucent_background_bounds) {
-  delegate_view_->SetTranslucentBackground(translucent_background_bounds);
+void HotseatWidget::UpdateTranslucentBackground() {
+  delegate_view_->UpdateTranslucentBackground();
 }
 
 int HotseatWidget::CalculateHotseatYInScreen(
@@ -653,59 +822,98 @@ int HotseatWidget::CalculateHotseatYInScreen(
   return hotseat_y_in_shelf + shelf_y;
 }
 
+gfx::Size HotseatWidget::CalculateTargetBoundsSize(
+    HotseatState hotseat_target_state) const {
+  const gfx::Rect shelf_bounds = shelf_->shelf_widget()->GetTargetBounds();
+
+  // |hotseat_size| is the height in horizontal alignment or the width in
+  // vertical alignment.
+  const int hotseat_size = GetHotseatSize();
+
+  if (hotseat_target_state != HotseatState::kShownHomeLauncher &&
+      hotseat_target_state != HotseatState::kShownClamshell) {
+    DCHECK(shelf_->IsHorizontalAlignment());
+    // Give the hotseat more space if it is shown outside of the shelf.
+    return gfx::Size(shelf_bounds.width(), hotseat_size);
+  }
+
+  const gfx::Size status_size =
+      shelf_->status_area_widget()->GetTargetBounds().size();
+  const gfx::Rect nav_bounds = shelf_->navigation_widget()->GetVisibleBounds();
+
+  // The navigation widget has extra padding on the hotseat side, to center the
+  // buttons inside of it. Make sure to get the extra nav widget padding and
+  // take it into account when calculating the hotseat size.
+  const int nav_widget_padding =
+      nav_bounds.size().IsEmpty()
+          ? 0
+          : ShelfConfig::Get()->control_button_edge_spacing(
+                true /* is_primary_axis_edge */);
+
+  // The minimum gap between hotseat widget and other shelf components including
+  // the status area widget and shelf navigation widget (or the edge of display,
+  // if the shelf navigation widget does not show).
+  const int group_margin = ShelfConfig::Get()->GetAppIconGroupMargin();
+
+  if (shelf_->IsHorizontalAlignment()) {
+    const int width = shelf_bounds.width() - nav_bounds.size().width() +
+                      nav_widget_padding - 2 * group_margin -
+                      status_size.width();
+    return gfx::Size(width, hotseat_size);
+  }
+
+  const int height = shelf_bounds.height() - nav_bounds.size().height() +
+                     nav_widget_padding - 2 * group_margin -
+                     status_size.height();
+  return gfx::Size(hotseat_size, height);
+}
+
 void HotseatWidget::CalculateTargetBounds() {
   ShelfLayoutManager* layout_manager = shelf_->shelf_layout_manager();
   const HotseatState hotseat_target_state =
       layout_manager->CalculateHotseatState(layout_manager->visibility_state(),
                                             layout_manager->auto_hide_state());
-  const gfx::Size status_size =
-      shelf_->status_area_widget()->GetTargetBounds().size();
+  const gfx::Size hotseat_target_size =
+      CalculateTargetBoundsSize(hotseat_target_state);
+
+  if (hotseat_target_state == HotseatState::kShownHomeLauncher) {
+    target_size_for_shown_state_ = hotseat_target_size;
+  } else {
+    target_size_for_shown_state_ =
+        CalculateTargetBoundsSize(HotseatState::kShownHomeLauncher);
+  }
+
   const gfx::Rect shelf_bounds = shelf_->shelf_widget()->GetTargetBounds();
-  const int horizontal_edge_spacing =
-      ShelfConfig::Get()->control_button_edge_spacing(
-          shelf_->IsHorizontalAlignment());
-  const int vertical_edge_spacing =
-      ShelfConfig::Get()->control_button_edge_spacing(
-          !shelf_->IsHorizontalAlignment());
-  gfx::Rect nav_bounds = shelf_->navigation_widget()->GetTargetBounds();
-  gfx::Point hotseat_origin;
-  int hotseat_width;
-  int hotseat_height;
+  const gfx::Rect status_area_bounds =
+      shelf_->status_area_widget()->GetTargetBounds();
 
   // The minimum gap between hotseat widget and other shelf components including
   // the status area widget and shelf navigation widget (or the edge of display,
   // if the shelf navigation widget does not show).
-  const int group_margin = ShelfConfig::Get()->app_icon_group_margin();
+  const int group_margin = ShelfConfig::Get()->GetAppIconGroupMargin();
 
+  gfx::Point hotseat_origin;
   if (shelf_->IsHorizontalAlignment()) {
-    hotseat_width = shelf_bounds.width() - nav_bounds.size().width() -
-                    horizontal_edge_spacing - 2 * group_margin -
-                    status_size.width();
-    int hotseat_x =
-        base::i18n::IsRTL()
-            ? nav_bounds.x() - horizontal_edge_spacing - group_margin -
-                  hotseat_width
-            : nav_bounds.right() + horizontal_edge_spacing + group_margin;
+    int hotseat_x;
     if (hotseat_target_state != HotseatState::kShownHomeLauncher &&
         hotseat_target_state != HotseatState::kShownClamshell) {
-      // Give the hotseat more space if it is shown outside of the shelf.
-      hotseat_width = shelf_bounds.width();
       hotseat_x = shelf_bounds.x();
+    } else {
+      hotseat_x = base::i18n::IsRTL()
+                      ? status_area_bounds.right() + group_margin
+                      : status_area_bounds.x() - group_margin -
+                            hotseat_target_size.width();
     }
+
     hotseat_origin =
         gfx::Point(hotseat_x, CalculateHotseatYInScreen(hotseat_target_state));
-    hotseat_height = GetHotseatSize();
   } else {
     hotseat_origin =
-        gfx::Point(shelf_bounds.x(),
-                   nav_bounds.bottom() + vertical_edge_spacing + group_margin);
-    hotseat_width = shelf_bounds.width();
-    hotseat_height = shelf_bounds.height() - nav_bounds.size().height() -
-                     vertical_edge_spacing - 2 * group_margin -
-                     status_size.height();
+        gfx::Point(shelf_bounds.x(), status_area_bounds.y() - group_margin -
+                                         hotseat_target_size.height());
   }
-  target_bounds_ =
-      gfx::Rect(hotseat_origin, gfx::Size(hotseat_width, hotseat_height));
+
+  target_bounds_ = gfx::Rect(hotseat_origin, hotseat_target_size);
 
   // Check whether |target_bounds_| will change the state of app scaling. If
   // so, update |target_bounds_| here to avoid re-layout later.
@@ -735,8 +943,12 @@ void HotseatWidget::UpdateLayout(bool animate) {
     animation_setter.SetTweenType(gfx::Tween::EASE_OUT);
     animation_setter.SetPreemptionStrategy(
         ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-    animation_setter.SetAnimationMetricsReporter(
-        shelf_->GetHotseatTransitionMetricsReporter(state_));
+
+    base::Optional<ui::AnimationThroughputReporter> reporter;
+    if (animate && state_ != HotseatState::kNone) {
+      reporter.emplace(animation_setter.GetAnimator(),
+                       shelf_->GetHotseatTransitionReportCallback(state_));
+    }
 
     shelf_view_layer->SetOpacity(new_layout_inputs.shelf_view_opacity);
   }
@@ -809,8 +1021,7 @@ int HotseatWidget::GetHotseatFullDragAmount() const {
 }
 
 bool HotseatWidget::UpdateTargetHotseatDensityIfNeeded() {
-  if (CalculateTargetHotseatDensity(target_bounds_.size(), state_) ==
-      target_hotseat_density_) {
+  if (CalculateTargetHotseatDensity() == target_hotseat_density_) {
     return false;
   }
 
@@ -830,14 +1041,23 @@ bool HotseatWidget::IsShowingShelfMenu() const {
   return GetShelfView()->IsShowingMenu();
 }
 
+bool HotseatWidget::EventTargetsShelfView(const ui::LocatedEvent& event) const {
+  DCHECK_EQ(event.target(), GetNativeWindow());
+  gfx::Point location_in_shelf_view = event.location();
+  views::View::ConvertPointFromWidget(scrollable_shelf_view_,
+                                      &location_in_shelf_view);
+  return scrollable_shelf_view_->GetHotseatBackgroundBounds().Contains(
+      location_in_shelf_view);
+}
+
 const ShelfView* HotseatWidget::GetShelfView() const {
   return const_cast<const ShelfView*>(
       const_cast<HotseatWidget*>(this)->GetShelfView());
 }
 
-ui::AnimationMetricsReporter*
-HotseatWidget::GetTranslucentBackgroundMetricsReporter() {
-  return shelf_->GetTranslucentBackgroundMetricsReporter(state_);
+metrics_util::ReportCallback
+HotseatWidget::GetTranslucentBackgroundReportCallback() {
+  return shelf_->GetTranslucentBackgroundReportCallback(state_);
 }
 
 void HotseatWidget::SetState(HotseatState state) {
@@ -865,8 +1085,7 @@ HotseatWidget::LayoutInputs HotseatWidget::GetLayoutInputs() const {
 void HotseatWidget::MaybeAdjustTargetBoundsForAppScaling(
     HotseatState hotseat_target_state) {
   // Return early if app scaling state does not change.
-  HotseatDensity new_target_hotseat_density = CalculateTargetHotseatDensity(
-      target_bounds_.size(), hotseat_target_state);
+  HotseatDensity new_target_hotseat_density = CalculateTargetHotseatDensity();
   if (new_target_hotseat_density == target_hotseat_density_)
     return;
 
@@ -882,9 +1101,7 @@ void HotseatWidget::MaybeAdjustTargetBoundsForAppScaling(
                 gfx::Size(target_bounds_.width(), GetHotseatSize()));
 }
 
-HotseatDensity HotseatWidget::CalculateTargetHotseatDensity(
-    const gfx::Size& available_size,
-    HotseatState hotseat_target_state) const {
+HotseatDensity HotseatWidget::CalculateTargetHotseatDensity() const {
   if (!ash::features::IsAppScalingEnabled())
     return HotseatDensity::kNormal;
 
@@ -893,12 +1110,13 @@ HotseatDensity HotseatWidget::CalculateTargetHotseatDensity(
   if (ShelfConfig::Get()->is_dense())
     return target_hotseat_density_;
 
-  // Currently we only update app scaling in home launcher due to performance
-  // concerns in hotseat animation transition between home launcher state
-  // and extended state.
+  // Currently the scaling animation of hotseat bounds and that of shelf icons
+  // do not synchronize due to performance issue. As a result, shelf scaling is
+  // not applied to the hotseat state transition, such as the transition from
+  // the home launcher state to the extended state. Hotseat density relies
+  // on the hotseat bounds in the home launcher state instead of the current
+  // hotseat state.
   // TODO(crbug.com/1081476).
-  if (hotseat_target_state != HotseatState::kShownHomeLauncher)
-    return target_hotseat_density_;
 
   // Try candidate button sizes in decreasing order. If shelf buttons in one
   // size can show without scrolling, return the density type corresponding to
@@ -908,7 +1126,7 @@ HotseatDensity HotseatWidget::CalculateTargetHotseatDensity(
                                                    HotseatDensity::kSemiDense};
   for (const auto& candidate : kCandidates) {
     if (!scrollable_shelf_view_->RequiresScrollingForItemSize(
-            available_size,
+            target_size_for_shown_state_,
             ShelfConfig::Get()->GetShelfButtonSize(candidate))) {
       return candidate;
     }
@@ -927,8 +1145,12 @@ void HotseatWidget::LayoutHotseatByAnimation(double target_opacity,
   animation_setter.SetTweenType(gfx::Tween::EASE_OUT);
   animation_setter.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-  animation_setter.SetAnimationMetricsReporter(
-      shelf_->GetHotseatTransitionMetricsReporter(state_));
+
+  base::Optional<ui::AnimationThroughputReporter> reporter;
+  if (state_ != HotseatState::kNone) {
+    reporter.emplace(animation_setter.GetAnimator(),
+                     shelf_->GetHotseatTransitionReportCallback(state_));
+  }
 
   if (!state_transition_in_progress_.has_value()) {
     // Hotseat animation is not triggered by the update in |state_|. So apply
@@ -937,28 +1159,36 @@ void HotseatWidget::LayoutHotseatByAnimation(double target_opacity,
     return;
   }
 
-  switch (*state_transition_in_progress_) {
-    case StateTransition::kHomeLauncherAndExtended:
-      // Start the hotseat animation specifically for the transition between
-      // the home launcher mode and the extended mode.
-      StartHomeLauncherExtendedTransitionAnimation(target_opacity,
-                                                   target_bounds);
-      break;
-    case StateTransition::kHomeLauncherAndHidden:
-    case StateTransition::kHiddenAndExtended:
-    case StateTransition::kOther:
-      StartNormalBoundsAnimation(target_opacity, target_bounds);
+  if (HasSpecialAnimation(*state_transition_in_progress_)) {
+    StartHotseatTransitionAnimation(*state_transition_in_progress_,
+                                    target_opacity, target_bounds);
+  } else {
+    StartNormalBoundsAnimation(target_opacity, target_bounds);
   }
 }
 
-void HotseatWidget::StartHomeLauncherExtendedTransitionAnimation(
+void HotseatWidget::StartHotseatTransitionAnimation(
+    StateTransition state_transition,
     double target_opacity,
     const gfx::Rect& target_bounds) {
   ui::Layer* hotseat_layer = GetNativeView()->layer();
-  auto animation_elements =
-      std::make_unique<HomeAndExtendedTransitionAnimation>(
+  std::unique_ptr<ui::LayerAnimationElement> animation_elements;
+  switch (state_transition) {
+    case StateTransition::kHomeLauncherAndExtended:
+      animation_elements = std::make_unique<HomeAndExtendedTransitionAnimation>(
           target_bounds, target_opacity, hotseat_layer,
           /*hotseat_widget=*/this);
+      break;
+    case StateTransition::kHomeLauncherAndHidden:
+      animation_elements = std::make_unique<HomeAndHiddenTransitionAnimation>(
+          target_bounds, target_opacity, hotseat_layer,
+          /*hotseat_widget=*/this);
+      break;
+    case StateTransition::kHiddenAndExtended:
+    case StateTransition::kOther:
+      NOTREACHED();
+  }
+
   auto* sequence =
       new ui::LayerAnimationSequence(std::move(animation_elements));
   hotseat_layer->GetAnimator()->StartAnimation(sequence);

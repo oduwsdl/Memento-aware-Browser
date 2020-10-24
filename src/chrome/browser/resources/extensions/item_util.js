@@ -25,6 +25,16 @@ export const EnableControl = {
   ENABLE_TOGGLE: 'ENABLE_TOGGLE',
 };
 
+// TODO(tjudkins): This should be extracted to a shared metrics module.
+/** @enum {string} */
+export const UserAction = {
+  ALL_TOGGLED_ON: 'Extensions.Settings.HostList.AllHostsToggledOn',
+  ALL_TOGGLED_OFF: 'Extensions.Settings.HostList.AllHostsToggledOff',
+  SPECIFIC_TOGGLED_ON: 'Extensions.Settings.HostList.SpecificHostToggledOn',
+  SPECIFIC_TOGGLED_OFF: 'Extensions.Settings.HostList.SpecificHostToggledOff',
+  LEARN_MORE: 'Extensions.Settings.HostList.LearnMoreActivated',
+};
+
 /**
  * Returns true if the extension is enabled, including terminated
  * extensions.
@@ -79,9 +89,7 @@ export function userCanChangeEnablement(item) {
  * @return {SourceType}
  */
 export function getItemSource(item) {
-  if (item.controlledInfo &&
-      item.controlledInfo.type ===
-          chrome.developerPrivate.ControllerType.POLICY) {
+  if (item.controlledInfo) {
     return SourceType.POLICY;
   }
 
@@ -136,6 +144,9 @@ export function computeInspectableViewLabel(view) {
   if (label === '_generated_background_page.html') {
     label = loadTimeData.getString('viewBackgroundPage');
   }
+  if (view.type === 'EXTENSION_SERVICE_WORKER_BACKGROUND') {
+    label = loadTimeData.getString('viewServiceWorker');
+  }
   // Add any qualifiers.
   if (view.incognito) {
     label += ' ' + loadTimeData.getString('viewIncognito');
@@ -169,7 +180,7 @@ export function getEnableControl(data) {
   if (isTerminated_(data.state)) {
     return EnableControl.RELOAD;
   }
-  if (data.disableReasons.corruptInstall) {
+  if (data.disableReasons.corruptInstall && data.userMayModify) {
     return EnableControl.REPAIR;
   }
   return EnableControl.ENABLE_TOGGLE;

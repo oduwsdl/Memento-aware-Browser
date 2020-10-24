@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 
 namespace base {
@@ -40,16 +41,19 @@ class EventReportValidator {
       const std::string& expected_threat_type,
       const std::string& expected_trigger,
       const std::set<std::string>* expected_mimetypes,
-      int expected_content_size);
+      int expected_content_size,
+      const std::string& expected_result);
 
   void ExpectSensitiveDataEvent(
       const std::string& expected_url,
       const std::string& expected_filename,
       const std::string& expected_sha256,
       const std::string& expected_trigger,
-      const ContentAnalysisScanResult& expected_dlp_verdict,
+      const enterprise_connectors::ContentAnalysisResponse::Result&
+          expected_dlp_verdict,
       const std::set<std::string>* expected_mimetypes,
-      int expected_content_size);
+      int expected_content_size,
+      const std::string& expected_result);
 
   void ExpectDangerousDeepScanningResultAndSensitiveDataEvent(
       const std::string& expected_url,
@@ -57,9 +61,23 @@ class EventReportValidator {
       const std::string& expected_sha256,
       const std::string& expected_threat_type,
       const std::string& expected_trigger,
-      const ContentAnalysisScanResult& expected_dlp_verdict,
+      const enterprise_connectors::ContentAnalysisResponse::Result&
+          expected_dlp_verdict,
       const std::set<std::string>* expected_mimetypes,
-      int expected_content_size);
+      int expected_content_size,
+      const std::string& expected_result);
+
+  void ExpectSensitiveDataEventAndDangerousDeepScanningResult(
+      const std::string& expected_url,
+      const std::string& expected_filename,
+      const std::string& expected_sha256,
+      const std::string& expected_threat_type,
+      const std::string& expected_trigger,
+      const enterprise_connectors::ContentAnalysisResponse::Result&
+          expected_dlp_verdict,
+      const std::set<std::string>* expected_mimetypes,
+      int expected_content_size,
+      const std::string& expected_result);
 
   void ExpectUnscannedFileEvent(const std::string& expected_url,
                                 const std::string& expected_filename,
@@ -67,7 +85,20 @@ class EventReportValidator {
                                 const std::string& expected_trigger,
                                 const std::string& expected_reason,
                                 const std::set<std::string>* expected_mimetypes,
-                                int expected_content_size);
+                                int expected_content_size,
+                                const std::string& expected_result);
+
+  void ExpectDangerousDownloadEvent(
+      const std::string& expected_url,
+      const std::string& expected_filename,
+      const std::string& expected_sha256,
+      const std::string& expected_threat_type,
+      const std::string& expected_trigger,
+      const std::set<std::string>* expected_mimetypes,
+      int expected_content_size,
+      const std::string& expected_result);
+
+  void ExpectNoReport();
 
   // Closure to run once all expected events are validated.
   void SetDoneClosure(base::RepeatingClosure closure);
@@ -77,7 +108,8 @@ class EventReportValidator {
   void ValidateMimeType(base::Value* value);
   void ValidateDlpVerdict(base::Value* value);
   void ValidateDlpRule(base::Value* value,
-                       const ContentAnalysisTrigger& expected_rule);
+                       const enterprise_connectors::ContentAnalysisResponse::
+                           Result::TriggeredRule& expected_rule);
   void ValidateField(base::Value* value,
                      const std::string& field_key,
                      const base::Optional<std::string>& expected_value);
@@ -95,12 +127,13 @@ class EventReportValidator {
   std::string filename_;
   std::string sha256_;
   std::string trigger_;
-  base::Optional<ContentAnalysisScanResult> dlp_verdict_ = base::nullopt;
+  base::Optional<enterprise_connectors::ContentAnalysisResponse::Result>
+      dlp_verdict_ = base::nullopt;
   base::Optional<std::string> threat_type_ = base::nullopt;
   base::Optional<std::string> unscanned_reason_ = base::nullopt;
-  base::Optional<bool> clicked_through_ = base::nullopt;
   base::Optional<int> content_size_ = base::nullopt;
   const std::set<std::string>* mimetypes_ = nullptr;
+  base::Optional<std::string> result_ = base::nullopt;
 
   base::RepeatingClosure done_closure_;
 };
@@ -130,6 +163,7 @@ void ClearUrlsToCheckComplianceOfUploadsForConnectors();
 void ClearUrlsToCheckForMalwareOfUploadsForConnectors();
 void ClearUrlsToCheckComplianceOfDownloadsForConnectors();
 void ClearUrlsToCheckForMalwareOfDownloadsForConnectors();
+void SetOnSecurityEventReporting(bool enabled);
 
 }  // namespace safe_browsing
 

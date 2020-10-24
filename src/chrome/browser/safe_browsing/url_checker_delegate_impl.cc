@@ -6,12 +6,15 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "build/build_config.h"
+#include "chrome/browser/android/customtabs/client_data_header_web_contents_observer.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/prerender/prerender_contents.h"
+#include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/browser/safe_browsing/user_interaction_observer.h"
+#include "components/prerender/browser/prerender_contents.h"
 #include "components/prerender/common/prerender_final_status.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/triggers/suspicious_site_trigger.h"
@@ -25,6 +28,10 @@
 #include "content/public/browser/web_contents.h"
 #include "services/network/public/cpp/features.h"
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/tab_android.h"
+#endif
+
 namespace safe_browsing {
 namespace {
 
@@ -34,7 +41,8 @@ void DestroyPrerenderContents(
   content::WebContents* web_contents = std::move(web_contents_getter).Run();
   if (web_contents) {
     prerender::PrerenderContents* prerender_contents =
-        prerender::PrerenderContents::FromWebContents(web_contents);
+        prerender::ChromePrerenderContentsDelegate::FromWebContents(
+            web_contents);
     if (prerender_contents)
       prerender_contents->Destroy(prerender::FINAL_STATUS_SAFE_BROWSING);
   }
@@ -46,12 +54,22 @@ void CreateSafeBrowsingUserInteractionObserver(
     bool is_main_frame,
     scoped_refptr<SafeBrowsingUIManager> ui_manager) {
   content::WebContents* web_contents = web_contents_getter.Run();
-  // Don't delay the interstitial for prerender pages.
+  // Don't delay the interstitial for prerender pages and portals.
   if (!web_contents ||
-      prerender::PrerenderContents::FromWebContents(web_contents)) {
+      prerender::ChromePrerenderContentsDelegate::FromWebContents(
+          web_contents) ||
+      web_contents->IsPortal()) {
     SafeBrowsingUIManager::StartDisplayingBlockingPage(ui_manager, resource);
     return;
   }
+#if defined(OS_ANDROID)
+  // Don't delay the interstitial for Chrome Custom Tabs.
+  auto* tab_android = TabAndroid::FromWebContents(web_contents);
+  if (tab_android && tab_android->IsCustomTab()) {
+    SafeBrowsingUIManager::StartDisplayingBlockingPage(ui_manager, resource);
+    return;
+  }
+#endif
   SafeBrowsingUserInteractionObserver::CreateForWebContents(
       web_contents, resource, is_main_frame, ui_manager);
 }
@@ -108,7 +126,7 @@ void UrlCheckerDelegateImpl::
                                 is_main_frame, ui_manager_));
 }
 
-bool UrlCheckerDelegateImpl::IsUrlWhitelisted(const GURL& url) {
+bool UrlCheckerDelegateImpl::IsUrlAllowlisted(const GURL& url) {
   return false;
 }
 

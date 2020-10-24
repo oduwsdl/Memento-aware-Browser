@@ -1778,8 +1778,7 @@ void TurboAssembler::Jump(Handle<Code> code, RelocInfo::Mode rmode,
 
   if (options().inline_offheap_trampolines) {
     int builtin_index = Builtins::kNoBuiltinId;
-    if (isolate()->builtins()->IsBuiltinHandle(code, &builtin_index) &&
-        Builtins::IsIsolateIndependent(builtin_index)) {
+    if (isolate()->builtins()->IsBuiltinHandle(code, &builtin_index)) {
       // Inline the trampoline.
       RecordCommentForOffHeapTrampoline(builtin_index);
       CHECK_NE(builtin_index, Builtins::kNoBuiltinId);
@@ -1833,8 +1832,7 @@ void TurboAssembler::Call(Handle<Code> code, RelocInfo::Mode rmode) {
 
   if (options().inline_offheap_trampolines) {
     int builtin_index = Builtins::kNoBuiltinId;
-    if (isolate()->builtins()->IsBuiltinHandle(code, &builtin_index) &&
-        Builtins::IsIsolateIndependent(builtin_index)) {
+    if (isolate()->builtins()->IsBuiltinHandle(code, &builtin_index)) {
       // Inline the trampoline.
       CallBuiltin(builtin_index);
       return;
@@ -1878,6 +1876,13 @@ void TurboAssembler::LoadEntryFromBuiltinIndex(Register builtin_index) {
     Ldr(builtin_index,
         MemOperand(builtin_index, IsolateData::builtin_entry_table_offset()));
   }
+}
+
+void TurboAssembler::LoadEntryFromBuiltinIndex(Builtins::Name builtin_index,
+                                               Register destination) {
+  Ldr(destination,
+      MemOperand(kRootRegister,
+                 IsolateData::builtin_entry_slot_offset(builtin_index)));
 }
 
 void TurboAssembler::CallBuiltinByIndex(Register builtin_index) {
@@ -1953,7 +1958,13 @@ void TurboAssembler::CallCodeObject(Register code_object) {
 
 void TurboAssembler::JumpCodeObject(Register code_object) {
   LoadCodeObjectEntry(code_object, code_object);
-  Jump(code_object);
+
+  UseScratchRegisterScope temps(this);
+  if (code_object != x17) {
+    temps.Exclude(x17);
+    Mov(x17, code_object);
+  }
+  Jump(x17);
 }
 
 void TurboAssembler::StoreReturnAddressAndCall(Register target) {
@@ -1999,15 +2010,11 @@ bool TurboAssembler::IsNearCallOffset(int64_t offset) {
   return is_int26(offset);
 }
 
-void TurboAssembler::CallForDeoptimization(Address target, int deopt_id,
-                                           Label* exit, DeoptimizeKind kind) {
+void TurboAssembler::CallForDeoptimization(
+    Builtins::Name target, int deopt_id, Label* exit, DeoptimizeKind kind,
+    Label* jump_deoptimization_entry_label) {
   BlockPoolsScope scope(this);
-  int64_t offset = static_cast<int64_t>(target) -
-                   static_cast<int64_t>(options().code_range_start);
-  DCHECK_EQ(offset % kInstrSize, 0);
-  offset = offset / static_cast<int>(kInstrSize);
-  DCHECK(IsNearCallOffset(offset));
-  near_call(static_cast<int>(offset), RelocInfo::RUNTIME_ENTRY);
+  bl(jump_deoptimization_entry_label);
   DCHECK_EQ(SizeOfCodeGeneratedSince(exit),
             (kind == DeoptimizeKind::kLazy)
                 ? Deoptimizer::kLazyDeoptExitSize
@@ -2180,11 +2187,7 @@ void MacroAssembler::InvokeFunctionCode(Register function, Register new_target,
 }
 
 Operand MacroAssembler::ReceiverOperand(Register arg_count) {
-#ifdef V8_REVERSE_JSARGS
   return Operand(0);
-#else
-  return Operand(arg_count, LSL, kXRegSizeLog2);
-#endif
 }
 
 void MacroAssembler::InvokeFunctionWithNewTarget(
@@ -2306,8 +2309,10 @@ void TurboAssembler::TruncateDoubleToI(Isolate* isolate, Zone* zone,
 }
 
 void TurboAssembler::Prologue() {
-  Push<TurboAssembler::kSignLR>(lr, fp, cp, x1);
-  Add(fp, sp, StandardFrameConstants::kFixedFrameSizeFromFp);
+  Push<TurboAssembler::kSignLR>(lr, fp);
+  mov(fp, sp);
+  STATIC_ASSERT(kExtraSlotClaimedByPrologue == 1);
+  Push(cp, kJSFunctionRegister, kJavaScriptCallArgCountRegister, padreg);
 }
 
 void TurboAssembler::EnterFrame(StackFrame::Type type) {

@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
@@ -18,6 +17,7 @@
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_registrar_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
+#include "components/services/app_service/public/mojom/types.mojom-forward.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -47,6 +47,8 @@ class WebAppBrowserController : public AppBrowserController,
                                 public AppRegistrarObserver {
  public:
   explicit WebAppBrowserController(Browser* browser);
+  WebAppBrowserController(const WebAppBrowserController&) = delete;
+  WebAppBrowserController& operator=(const WebAppBrowserController&) = delete;
   ~WebAppBrowserController() override;
 
   // AppBrowserController:
@@ -54,10 +56,11 @@ class WebAppBrowserController : public AppBrowserController,
   gfx::ImageSkia GetWindowAppIcon() const override;
   gfx::ImageSkia GetWindowIcon() const override;
   base::Optional<SkColor> GetThemeColor() const override;
+  base::Optional<SkColor> GetBackgroundColor() const override;
   base::string16 GetTitle() const override;
-  std::string GetAppShortName() const override;
+  base::string16 GetAppShortName() const override;
   base::string16 GetFormattedUrlOrigin() const override;
-  GURL GetAppLaunchURL() const override;
+  GURL GetAppStartUrl() const override;
   bool IsUrlInAppScope(const GURL& url) const override;
   WebAppBrowserController* AsWebAppBrowserController() override;
   bool CanUninstall() const override;
@@ -83,6 +86,11 @@ class WebAppBrowserController : public AppBrowserController,
  private:
   const AppRegistrar& registrar() const;
 
+  // Helper function to call AppServiceProxy to load icon.
+  void LoadAppIcon(bool allow_placeholder_icon) const;
+  // Invoked when the icon is loaded.
+  void OnLoadIcon(apps::mojom::IconValuePtr icon_value);
+
   void OnReadIcon(const SkBitmap& bitmap);
   void PerformDigitalAssetLinkVerification(Browser* browser);
 
@@ -107,8 +115,6 @@ class WebAppBrowserController : public AppBrowserController,
 
   base::OnceClosure callback_for_testing_;
   mutable base::WeakPtrFactory<WebAppBrowserController> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(WebAppBrowserController);
 };
 
 }  // namespace web_app

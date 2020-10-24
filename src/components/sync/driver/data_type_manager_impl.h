@@ -29,10 +29,6 @@ class DataTypeEncryptionHandler;
 class DataTypeManagerObserver;
 struct DataTypeConfigurationStats;
 
-// List of data types grouped by priority and ordered from high priority to
-// low priority.
-using TypeSetPriorityList = base::queue<ModelTypeSet>;
-
 class DataTypeManagerImpl : public DataTypeManager,
                             public ModelAssociationManagerDelegate {
  public:
@@ -56,16 +52,11 @@ class DataTypeManagerImpl : public DataTypeManager,
 
   void Stop(ShutdownReason reason) override;
   ModelTypeSet GetActiveDataTypes() const override;
-  bool IsNigoriEnabled() const override;
+  ModelTypeSet GetPurgedDataTypes() const override;
   State state() const override;
 
   // |ModelAssociationManagerDelegate| implementation.
   void OnAllDataTypesReadyForConfigure() override;
-  void OnSingleDataTypeAssociationDone(
-      ModelType type,
-      const DataTypeAssociationStats& association_stats) override;
-  void OnModelAssociationDone(
-      const DataTypeManager::ConfigureResult& result) override;
   void OnSingleDataTypeWillStop(ModelType type,
                                 const SyncError& error) override;
 
@@ -113,6 +104,8 @@ class DataTypeManagerImpl : public DataTypeManager,
     UNREADY_AT_CONFIG,
   };
 
+  void RecordConfigurationStats(ModelType type);
+
   // Return model types in |state_map| that match |state|.
   static ModelTypeSet GetDataTypesInState(
       DataTypeConfigState state,
@@ -133,7 +126,7 @@ class DataTypeManagerImpl : public DataTypeManager,
 
   // Divide |types| into sets by their priorities and return the sets from
   // high priority to low priority.
-  TypeSetPriorityList PrioritizeTypes(const ModelTypeSet& types);
+  base::queue<ModelTypeSet> PrioritizeTypes(const ModelTypeSet& types);
 
   // Update precondition state of types in data_type_status_table_ to match
   // value of DataTypeController::GetPreconditionState().
@@ -151,9 +144,10 @@ class DataTypeManagerImpl : public DataTypeManager,
   void ForceReconfiguration();
 
   void Restart();
-  void DownloadReady(ModelTypeSet types_to_download,
-                     ModelTypeSet first_sync_types,
-                     ModelTypeSet failed_configuration_types);
+
+  void DownloadCompleted(ModelTypeSet downloaded_types,
+                         ModelTypeSet first_sync_types,
+                         ModelTypeSet failed_configuration_types);
 
   void NotifyStart();
   void NotifyDone(const ConfigureResult& result);
@@ -161,8 +155,8 @@ class DataTypeManagerImpl : public DataTypeManager,
   void ConfigureImpl(ModelTypeSet desired_types,
                      const ConfigureContext& context);
 
-  // Calls data type controllers of requested types to register with backend.
-  void RegisterTypesWithBackend();
+  // Calls data type controllers of requested types to activate.
+  void ActivateDataTypes();
 
   DataTypeConfigStateMap BuildDataTypeConfigStateMap(
       const ModelTypeSet& types_being_configured) const;
@@ -232,7 +226,7 @@ class DataTypeManagerImpl : public DataTypeManager,
   DataTypeStatusTable data_type_status_table_;
 
   // Types waiting to be downloaded.
-  TypeSetPriorityList download_types_queue_;
+  base::queue<ModelTypeSet> download_types_queue_;
 
   // Types waiting for association and related time tracking info.
   struct AssociationTypesInfo {
@@ -271,7 +265,7 @@ class DataTypeManagerImpl : public DataTypeManager,
   const DataTypeEncryptionHandler* encryption_handler_;
 
   // Association and time stats of data type configuration.
-  std::vector<DataTypeConfigurationStats> configuration_stats_;
+  std::map<ModelType, DataTypeConfigurationStats> configuration_stats_;
 
   // Configuration process is started when ModelAssociationManager notifies
   // DataTypeManager that all types are ready for configure.

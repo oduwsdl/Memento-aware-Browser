@@ -149,8 +149,6 @@ bool TestSyncUserSettings::IsEncryptEverythingEnabled() const {
   return false;
 }
 
-void TestSyncUserSettings::EnableEncryptEverything() {}
-
 ModelTypeSet TestSyncUserSettings::GetEncryptedDataTypes() const {
   if (!IsUsingSecondaryPassphrase()) {
     // PASSWORDS and WIFI_CONFIGURATIONS are always encrypted.
@@ -177,6 +175,10 @@ bool TestSyncUserSettings::IsTrustedVaultKeyRequired() const {
 bool TestSyncUserSettings::IsTrustedVaultKeyRequiredForPreferredDataTypes()
     const {
   return trusted_vault_key_required_for_preferred_data_types_;
+}
+
+bool TestSyncUserSettings::IsTrustedVaultRecoverabilityDegraded() const {
+  return false;
 }
 
 bool TestSyncUserSettings::IsUsingSecondaryPassphrase() const {

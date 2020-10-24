@@ -11,7 +11,6 @@
 #include "base/time/time.h"
 #include "cc/input/browser_controls_state.h"
 #include "cc/metrics/frame_sequence_tracker_collection.h"
-#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
@@ -62,11 +61,20 @@ struct ApplyViewportChangesArgs {
 
 using ManipulationInfo = uint32_t;
 constexpr ManipulationInfo kManipulationInfoNone = 0;
-constexpr ManipulationInfo kManipulationInfoHasScrolledByWheel = 1 << 0;
-constexpr ManipulationInfo kManipulationInfoHasScrolledByTouch = 1 << 1;
-constexpr ManipulationInfo kManipulationInfoHasScrolledByPrecisionTouchPad =
-    1 << 2;
-constexpr ManipulationInfo kManipulationInfoHasPinchZoomed = 1 << 3;
+constexpr ManipulationInfo kManipulationInfoWheel = 1 << 0;
+constexpr ManipulationInfo kManipulationInfoTouch = 1 << 1;
+constexpr ManipulationInfo kManipulationInfoPrecisionTouchPad = 1 << 2;
+constexpr ManipulationInfo kManipulationInfoPinchZoom = 1 << 3;
+
+struct PaintBenchmarkResult {
+  double record_time_ms = 0;
+  double record_time_caching_disabled_ms = 0;
+  double record_time_subsequence_caching_disabled_ms = 0;
+  double record_time_partial_invalidation_ms = 0;
+  double raster_invalidation_and_convert_time_ms = 0;
+  double paint_artifact_compositor_update_time_ms = 0;
+  size_t painter_memory_usage = 0;
+};
 
 // A LayerTreeHost is bound to a LayerTreeHostClient. The main rendering
 // loop (in ProxyMain or SingleThreadProxy) calls methods on the
@@ -173,12 +181,9 @@ class LayerTreeHostClient {
   // RecordEndOfFrameMetrics.
   virtual std::unique_ptr<BeginMainFrameMetrics> GetBeginMainFrameMetrics() = 0;
   virtual void NotifyThroughputTrackerResults(CustomTrackerResults results) = 0;
-  // LayerTreeHost calls this when there is new throughput data. The client send
-  // the data to the browser process who will aggregate them and report to UKM.
-  virtual void SubmitThroughputData(ukm::SourceId source_id,
-                                    int aggregated_percent,
-                                    int impl_percent,
-                                    base::Optional<int> main_percent) = 0;
+
+  virtual void RunPaintBenchmark(int repeat_count,
+                                 PaintBenchmarkResult& result) {}
 
  protected:
   virtual ~LayerTreeHostClient() = default;

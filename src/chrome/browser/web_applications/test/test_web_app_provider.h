@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/callback_list.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 
 class Profile;
 
@@ -21,8 +21,7 @@ class BrowserContext;
 namespace web_app {
 
 class AppRegistrar;
-class AppShortcutManager;
-class FileHandlerManager;
+class OsIntegrationManager;
 class InstallFinalizer;
 class PendingAppManager;
 class SystemWebAppManager;
@@ -55,8 +54,8 @@ class TestWebAppProvider : public WebAppProvider {
 
   void SetRegistrar(std::unique_ptr<AppRegistrar> registrar);
   void SetRegistryController(std::unique_ptr<AppRegistryController> controller);
-  void SetFileHandlerManager(
-      std::unique_ptr<FileHandlerManager> file_handler_manager);
+  void SetOsIntegrationManager(
+      std::unique_ptr<OsIntegrationManager> os_integration_manager);
   void SetInstallManager(std::unique_ptr<WebAppInstallManager> install_manager);
   void SetInstallFinalizer(std::unique_ptr<InstallFinalizer> install_finalizer);
   void SetPendingAppManager(
@@ -66,7 +65,6 @@ class TestWebAppProvider : public WebAppProvider {
       std::unique_ptr<SystemWebAppManager> system_web_app_manager);
   void SetWebAppPolicyManager(
       std::unique_ptr<WebAppPolicyManager> web_app_policy_manager);
-  void SetShortcutManager(std::unique_ptr<AppShortcutManager> shortcut_manager);
 
  private:
   void CheckNotStarted() const;
@@ -99,8 +97,8 @@ class TestWebAppProviderCreator {
   CreateWebAppProviderCallback callback_;
 
   std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
+      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
+      create_services_subscription_;
 };
 
 }  // namespace web_app

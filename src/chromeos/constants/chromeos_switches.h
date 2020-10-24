@@ -45,6 +45,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kArcDisableSystemDefaultApps[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kArcDisablePlayAutoInstall[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kArcEnableNativeBridge64BitSupportExperiment[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcForceCacheAppIcons[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcForceShowOptInUi[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcPackagesCacheMode[];
@@ -82,7 +84,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kDisableFineGrainedTimeZoneDetection[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kDisableGaiaServices[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const char kDisableHIDDetectionOnOOBE[];
+extern const char kDisableHIDDetectionOnOOBEForTesting[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kDisableLoginAnimations[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -128,6 +130,8 @@ extern const char kEnterpriseEnableForcedReEnrollment[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEnterpriseEnableInitialEnrollment[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kEnterpriseEnablePrivateSetMembership[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEnterpriseEnableZeroTouchEnrollment[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEnterpriseEnrollmentInitialModulus[];
@@ -140,6 +144,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kFakeDriveFsLauncherChrootPath[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kFakeDriveFsLauncherSocketPath[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kFakeArcRecommendedAppsForTesting[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kFingerprintSensorLocation[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -162,10 +168,15 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHasChromeOSKeyboard[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kHideAndroidFilesInFilesApp[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHomedir[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kIgnoreArcVmDevConf[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kIgnoreUserProfileMappingForTests[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kKernelnextRestrictVMs[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kLacrosChromeAdditionalArgs[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLacrosChromePath[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kLacrosMojoSocketForTesting[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginManager[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginProfile[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginUser[];
@@ -204,6 +215,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowOobeDevOverlay[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kOobeScreenshotDirectory[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kTelemetryExtensionDirectory[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kTestEncryptionMigrationUI[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kTestWallpaperServer[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kTetherStub[];
@@ -214,6 +227,8 @@ extern const char kWaitForInitialPolicyFetchForTest[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kWakeOnWifiPacket[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kUnfilteredBluetoothDevices[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kUpdateRequiredAueForTest[];
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -267,6 +282,11 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsUnfilteredBluetoothDevicesEnabled();
 // the user on their first login) should show tablet mode screens when the
 // device is not in tablet mode.
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool ShouldOobeUseTabletModeFirstRun();
+
+// Returns true if device policy DeviceMinimumVersion should assume that
+// Auto Update Expiration is reached. This should only be used for testing.
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+bool IsAueReachedForUpdateRequiredForTest();
 
 }  // namespace switches
 }  // namespace chromeos

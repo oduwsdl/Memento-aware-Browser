@@ -11,10 +11,11 @@
 #include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/autofill_util.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
+#include "components/password_manager/core/browser/password_feature_manager.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
@@ -22,7 +23,6 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 
 using autofill::PasswordAndMetadata;
-using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
 using Logger = autofill::SavePasswordProgressLogger;
 
@@ -141,7 +141,11 @@ LikelyFormFilling SendFillInformationToRenderer(
   }
 
   if (best_matches.empty()) {
-    driver->InformNoSavedCredentials();
+    bool should_show_popup_without_passwords =
+        client->GetPasswordFeatureManager()->ShouldShowAccountStorageOptIn() ||
+        client->GetPasswordFeatureManager()->ShouldShowAccountStorageReSignin(
+            client->GetLastCommittedURL());
+    driver->InformNoSavedCredentials(should_show_popup_without_passwords);
     metrics_recorder->RecordFillEvent(
         PasswordFormMetricsRecorder::kManagerFillEventNoCredential);
     return LikelyFormFilling::kNoFilling;
@@ -165,13 +169,22 @@ LikelyFormFilling SendFillInformationToRenderer(
       PasswordFormMetricsRecorder::WaitForUsernameReason;
   WaitForUsernameReason wait_for_username_reason =
       WaitForUsernameReason::kDontWait;
-  if (client->IsIncognito()) {
+  if (client->RequiresReauthToFill()) {
+    wait_for_username_reason = WaitForUsernameReason::kReauthRequired;
+  } else if (client->IsIncognito()) {
     wait_for_username_reason = WaitForUsernameReason::kIncognitoMode;
   } else if (preferred_match->is_public_suffix_match) {
     wait_for_username_reason = WaitForUsernameReason::kPublicSuffixMatch;
   } else if (no_sign_in_form) {
     // If the parser did not find a current password element, don't fill.
     wait_for_username_reason = WaitForUsernameReason::kFormNotGoodForFilling;
+  } else if (observed_form.HasUsernameElement() &&
+             observed_form.HasNonEmptyPasswordValue() &&
+             observed_form.server_side_classification_successful &&
+             !observed_form.username_may_use_prefilled_placeholder) {
+    // Password is already filled in and we don't think the username is a
+    // placeholder, so don't overwrite.
+    wait_for_username_reason = WaitForUsernameReason::kPasswordPrefilled;
   } else if (!client->IsCommittedMainFrameSecure()) {
     wait_for_username_reason = WaitForUsernameReason::kInsecureOrigin;
   } else if (autofill::IsTouchToFillEnabled()) {
@@ -224,7 +237,6 @@ PasswordFormFillData CreatePasswordFormFillData(
   result.action = form_on_page.action;
   result.uses_account_store = preferred_match.IsUsingAccountStore();
   result.wait_for_username = wait_for_username;
-  result.has_renderer_ids = form_on_page.has_renderer_ids;
 
   // Note that many of the |FormFieldData| members are not initialized for
   // |username_field| and |password_field| because they are currently not used

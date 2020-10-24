@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -25,6 +26,15 @@ const int64_t kTimerDelaySeconds = 5;
 const int64_t kTimerDelaySeconds = 1;
 #endif
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class ProfileDestructionType {
+  kImmediately = 0,
+  kDelayed = 1,
+  kDelayedAndCrashed = 2,
+  kMaxValue = kDelayedAndCrashed,
+};
+
 }  // namespace
 
 ProfileDestroyer::DestroyerSet* ProfileDestroyer::pending_destroyers_ = nullptr;
@@ -38,12 +48,11 @@ void ProfileDestroyer::DestroyProfileWhenAppropriate(Profile* const profile) {
   DCHECK(profile);
   profile->MaybeSendDestroyedNotification();
 
-  // TODO(https://crbug.com/1033903): If regular profile has OTRs and they have
-  // hosts, create a |ProfileDestroyer| instead.
   if (!profile->IsOffTheRecord()) {
     DestroyRegularProfileNow(profile);
     return;
   }
+
   // Off-the-record profiles have DestroyProfileWhenAppropriate() called before
   // their RenderProcessHosts are destroyed, to ensure private data is erased
   // promptly. In this case, defer deletion until all the hosts are gone.
@@ -62,11 +71,19 @@ void ProfileDestroyer::DestroyProfileWhenAppropriate(Profile* const profile) {
 void ProfileDestroyer::DestroyOffTheRecordProfileNow(Profile* const profile) {
   DCHECK(profile);
   DCHECK(profile->IsOffTheRecord());
-  TRACE_EVENT1("shutdown", "ProfileDestroyer::DestroyOffTheRecordProfileNow",
-               "profile", profile);
-
-  RemovePendingDestroyers(profile);
+  TRACE_EVENT2("shutdown", "ProfileDestroyer::DestroyOffTheRecordProfileNow",
+               "profile", profile, "OTRProfileID",
+               profile->GetOTRProfileID().ToString());
+  if (ResetPendingDestroyers(profile)) {
+    // We want to signal this in debug builds so that we don't lose sight of
+    // these potential leaks, but we handle it in release so that we don't
+    // crash or corrupt profile data on disk.
+    NOTREACHED() << "A render process host wasn't destroyed early enough.";
+  }
+  DCHECK(profile->GetOriginalProfile());
   profile->GetOriginalProfile()->DestroyOffTheRecordProfile(profile);
+  UMA_HISTOGRAM_ENUMERATION("Profile.Destroyer.OffTheRecord",
+                            ProfileDestructionType::kImmediately);
 }
 
 // static
@@ -81,9 +98,7 @@ void ProfileDestroyer::DestroyRegularProfileNow(Profile* const profile) {
   // on later.
   HostSet profile_hosts = GetHostsForProfile(profile);
   void* profile_ptr = profile;
-  void* otr_profile_ptr = profile->HasOffTheRecordProfile()
-                              ? profile->GetOffTheRecordProfile()
-                              : nullptr;
+  std::vector<Profile*> otr_profiles = profile->GetAllOffTheRecordProfiles();
 #endif  // DCHECK_IS_ON()
 
   delete profile;
@@ -93,8 +108,9 @@ void ProfileDestroyer::DestroyRegularProfileNow(Profile* const profile) {
   // and off-the-record Profile.
   const size_t profile_hosts_count = GetHostsForProfile(profile_ptr).size();
   base::debug::Alias(&profile_hosts_count);
-  const size_t off_the_record_profile_hosts_count =
-      otr_profile_ptr ? GetHostsForProfile(otr_profile_ptr).size() : 0u;
+  size_t off_the_record_profile_hosts_count = 0;
+  for (Profile* otr : otr_profiles)
+    off_the_record_profile_hosts_count += GetHostsForProfile(otr).size();
   base::debug::Alias(&off_the_record_profile_hosts_count);
 
   // |profile| is not off-the-record, so if |profile_hosts| is not empty then
@@ -113,26 +129,24 @@ void ProfileDestroyer::DestroyRegularProfileNow(Profile* const profile) {
 #endif  // DCHECK_IS_ON()
 }
 
-void ProfileDestroyer::RemovePendingDestroyers(Profile* const profile) {
-  DCHECK(profile->IsOffTheRecord());
+bool ProfileDestroyer::ResetPendingDestroyers(Profile* const profile) {
+  DCHECK(profile);
+  bool found = false;
   if (pending_destroyers_) {
     for (auto* i : *pending_destroyers_) {
       if (i->profile_ == profile) {
-        // We want to signal this in debug builds so that we don't lose sight of
-        // these potential leaks, but we handle it in release so that we don't
-        // crash or corrupt profile data on disk.
-        LOG(WARNING) << "A render process host wasn't destroyed early enough.";
         i->profile_ = nullptr;
+        found = true;
       }
     }
   }
+  return found;
 }
 
 ProfileDestroyer::ProfileDestroyer(Profile* const profile, HostSet* hosts)
     : num_hosts_(0), profile_(profile) {
   TRACE_EVENT2("shutdown", "ProfileDestroyer::ProfileDestroyer", "profile",
                profile, "host_count", hosts->size());
-  DCHECK(profile_->IsOffTheRecord());
   if (pending_destroyers_ == NULL)
     pending_destroyers_ = new DestroyerSet;
   pending_destroyers_->insert(this);
@@ -146,37 +160,36 @@ ProfileDestroyer::ProfileDestroyer(Profile* const profile, HostSet* hosts)
   // for longer than kTimerDelaySeconds.
   if (num_hosts_) {
     timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(kTimerDelaySeconds),
-                 base::BindOnce(
-                     [](base::WeakPtr<ProfileDestroyer> ptr) {
-                       if (ptr)
-                         delete ptr.get();
-                     },
-                     weak_ptr_factory_.GetWeakPtr()));
+                 base::Bind(&ProfileDestroyer::DestroyProfile,
+                            weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
 ProfileDestroyer::~ProfileDestroyer() {
-  TRACE_EVENT1("shutdown", "ProfileDestroyer::~ProfileDestroyer", "profile",
-               profile_);
+  TRACE_EVENT2("shutdown", "ProfileDestroyer::~ProfileDestroyer", "profile",
+               profile_, "remaining_hosts", num_hosts_);
 
-  if (profile_) {
-    ProfileDestroyer::DestroyOffTheRecordProfileNow(profile_);
-    DCHECK(!profile_);
-  }
+  // Check again, in case other render hosts were added while we were
+  // waiting for the previous ones to go away...
+  if (profile_)
+    DestroyProfileWhenAppropriate(profile_);
 
-  // Once the profile is deleted, all renderer hosts must have been deleted.
-  // Crash here if this is not the case instead of having a host dereference
-  // a deleted profile. http://crbug.com/248625
+  // Don't wait for pending registrations, if any, these hosts are buggy.
+  // Note: this can happen, but if so, it's better to crash here than wait
+  // for the host to dereference a deleted Profile. http://crbug.com/248625
+  UMA_HISTOGRAM_ENUMERATION("Profile.Destroyer.OffTheRecord",
+                            num_hosts_
+                                ? ProfileDestructionType::kDelayedAndCrashed
+                                : ProfileDestructionType::kDelayed);
   CHECK_EQ(0U, num_hosts_) << "Some render process hosts were not "
                            << "destroyed early enough!";
-
-  DCHECK(pending_destroyers_ != nullptr);
+  DCHECK(pending_destroyers_ != NULL);
   auto iter = pending_destroyers_->find(this);
   DCHECK(iter != pending_destroyers_->end());
   pending_destroyers_->erase(iter);
   if (pending_destroyers_->empty()) {
     delete pending_destroyers_;
-    pending_destroyers_ = nullptr;
+    pending_destroyers_ = NULL;
   }
 }
 
@@ -184,19 +197,41 @@ void ProfileDestroyer::RenderProcessHostDestroyed(
     content::RenderProcessHost* host) {
   TRACE_EVENT2("shutdown", "ProfileDestroyer::RenderProcessHostDestroyed",
                "profile", profile_, "render_process_host", host);
-  DCHECK(num_hosts_ > 0);
+  DCHECK_GT(num_hosts_, 0u);
   --num_hosts_;
   if (num_hosts_ == 0) {
     // Delay the destruction one step further in case other observers need to
     // look at the profile attached to the host.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(
-                       [](base::WeakPtr<ProfileDestroyer> ptr) {
-                         if (ptr)
-                           delete ptr.get();
-                       },
-                       weak_ptr_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&ProfileDestroyer::DestroyProfile,
+                                  weak_ptr_factory_.GetWeakPtr()));
   }
+}
+
+void ProfileDestroyer::DestroyProfile() {
+  // We might have been cancelled externally before the timer expired.
+  if (!profile_) {
+    delete this;
+    return;
+  }
+
+  DCHECK(profile_->IsOffTheRecord());
+  DCHECK(profile_->GetOriginalProfile());
+  profile_->GetOriginalProfile()->DestroyOffTheRecordProfile(profile_);
+
+#if defined(OS_ANDROID)
+  // It is possible on Android platform that more than one destroyer
+  // is instantiated to delete a single profile. Reset the others to
+  // avoid UAF. See https://crbug.com/1029677.
+  ResetPendingDestroyers(profile_);
+#else
+  profile_ = nullptr;
+#endif
+
+  // And stop the timer so we can be released early too.
+  timer_.Stop();
+
+  delete this;
 }
 
 // static

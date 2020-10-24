@@ -9,6 +9,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -46,25 +47,12 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/public/cpp/ash_constants.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
 #else
 #include "chrome/browser/themes/theme_properties.h"
 #endif
 
 namespace {
-
-std::unique_ptr<views::ImageButton> CreateCloseButton(
-    views::ButtonListener* listener) {
-  auto close_button = CreateVectorImageButton(listener);
-  close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
-  close_button->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets(GetLayoutConstant(LOCATION_BAR_CHILD_INTERIOR_PADDING))));
-  close_button->SizeToPreferredSize();
-
-  views::InstallCircleHighlightPathGenerator(close_button.get());
-
-  return close_button;
-}
 
 bool ShouldDisplayUrl(content::WebContents* contents) {
   auto* tab_helper =
@@ -172,7 +160,7 @@ class CustomTabBarTitleOriginView : public views::View {
   }
 
   SkColor GetLocationColor() const {
-    return views::style::GetColor(*this, CONTEXT_BODY_TEXT_SMALL,
+    return views::style::GetColor(*this, CONTEXT_DIALOG_BODY_TEXT_SMALL,
                                   views::style::TextStyle::STYLE_PRIMARY);
   }
 
@@ -206,15 +194,20 @@ const char CustomTabBarView::kViewClassName[] = "CustomTabBarView";
 
 CustomTabBarView::CustomTabBarView(BrowserView* browser_view,
                                    LocationBarView::Delegate* delegate)
-    : TabStripModelObserver(),
-      delegate_(delegate),
-      browser_(browser_view->browser()) {
+    : delegate_(delegate), browser_(browser_view->browser()) {
   set_context_menu_controller(this);
 
   const gfx::FontList& font_list = views::style::GetFont(
       CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
 
-  close_button_ = AddChildView(CreateCloseButton(this));
+  close_button_ =
+      AddChildView(views::CreateVectorImageButton(base::BindRepeating(
+          &CustomTabBarView::GoBackToApp, base::Unretained(this))));
+  close_button_->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
+  close_button_->SetBorder(views::CreateEmptyBorder(
+      gfx::Insets(GetLayoutConstant(LOCATION_BAR_CHILD_INTERIOR_PADDING))));
+  close_button_->SizeToPreferredSize();
+  views::InstallCircleHighlightPathGenerator(close_button_);
 
   location_icon_view_ =
       AddChildView(std::make_unique<LocationIconView>(font_list, this, this));
@@ -224,14 +217,32 @@ CustomTabBarView::CustomTabBarView(BrowserView* browser_view,
   title_origin_view->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
-                               views::MaximumFlexSizeRule::kPreferred));
+                               views::MaximumFlexSizeRule::kUnbounded));
   title_origin_view_ = AddChildView(std::move(title_origin_view));
+
+  // (TODO): This value can change, e.g. when changing from clamshell to tablet
+  // mode. Find a better place to set it.
+  gfx::Insets interior_margin =
+      GetLayoutInsets(LayoutInset::TOOLBAR_INTERIOR_MARGIN);
+#if defined(OS_CHROMEOS)
+  if (browser_->is_type_custom_tab()) {
+    web_app_menu_button_ = AddChildView(std::make_unique<WebAppMenuButton>(
+        browser_view, l10n_util::GetStringUTF16(
+                          IDS_CUSTOM_TABS_ACTION_MENU_ACCESSIBLE_NAME)));
+
+    // Remove the vertical portion of the interior margin here to avoid
+    // increasing the height of the toolbar when |web_app_menu_button_| is drawn
+    // while maintaining its touch area.
+    interior_margin.set_top(0);
+    interior_margin.set_bottom(0);
+  }
+#endif
 
   layout_manager_ = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout_manager_->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetMainAxisAlignment(views::LayoutAlignment::kStart)
-      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
-      .SetInteriorMargin(GetLayoutInsets(LayoutInset::TOOLBAR_INTERIOR_MARGIN));
+      .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
+      .SetInteriorMargin(interior_margin);
 
   browser_->tab_strip_model()->AddObserver(this);
 }
@@ -320,6 +331,10 @@ void CustomTabBarView::OnThemeChanged() {
   SetBackground(views::CreateSolidBackground(background_color_));
 
   title_origin_view_->SetColors(background_color_);
+  if (web_app_menu_button_) {
+    web_app_menu_button_->SetColor(GetThemeProvider()->GetColor(
+        ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON));
+  }
 }
 
 void CustomTabBarView::TabChangedAt(content::WebContents* contents,
@@ -352,7 +367,7 @@ void CustomTabBarView::UpdateContents() {
   }
 
   title_origin_view_->Update(title, location);
-  location_icon_view_->Update(/*suppress animations = */ false, false);
+  location_icon_view_->Update(/*suppress animations = */ false);
 
   // Hide location icon if we're already hiding the origin.
   location_icon_view_->SetVisible(!location.empty());
@@ -408,38 +423,16 @@ bool CustomTabBarView::ShowPageInfoDialog() {
       bubble_anchor_util::Anchor::kCustomTabBar);
 }
 
-bool CustomTabBarView::Dialog() {
-  return ::ShowPageInfoDialog(
-      GetWebContents(),
-      base::BindOnce(&CustomTabBarView::AppInfoClosedCallback,
-                     weak_factory_.GetWeakPtr()),
-      bubble_anchor_util::Anchor::kCustomTabBar);
-}
-
 const LocationBarModel* CustomTabBarView::GetLocationBarModel() const {
   return delegate_->GetLocationBarModel();
 }
 
-gfx::ImageSkia CustomTabBarView::GetLocationIcon(
+ui::ImageModel CustomTabBarView::GetLocationIcon(
     LocationIconView::Delegate::IconFetchedCallback on_icon_fetched) const {
-  return gfx::CreateVectorIcon(
+  return ui::ImageModel::FromVectorIcon(
       delegate_->GetLocationBarModel()->GetVectorIcon(),
-      GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
-      GetSecurityChipColor(GetLocationBarModel()->GetSecurityLevel()));
-}
-
-gfx::ImageSkia CustomTabBarView::GetMementoIcon(
-    LocationIconView::Delegate::IconFetchedCallback on_icon_fetched) const {
-  DVLOG(0) << "CustomTabBarView::GetMementoIcon ---------- " << delegate_->GetLocationBarModel()->IsMemento();
-  return gfx::CreateVectorIcon(
-      delegate_->GetLocationBarModel()->GetMementoIcon(),
-      GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
-      GetSecurityChipColor(GetLocationBarModel()->GetSecurityLevel()));
-}
-
-void CustomTabBarView::ButtonPressed(views::Button* sender,
-                                     const ui::Event& event) {
-  GoBackToApp();
+      GetSecurityChipColor(GetLocationBarModel()->GetSecurityLevel()),
+      GetLayoutConstant(LOCATION_BAR_ICON_SIZE));
 }
 
 void CustomTabBarView::GoBackToAppForTesting() {
@@ -456,7 +449,7 @@ bool CustomTabBarView::IsShowingOriginForTesting() const {
 SkColor CustomTabBarView::GetDefaultFrameColor() const {
 #if defined(OS_CHROMEOS)
   // Ash system frames differ from ChromeOS browser frames.
-  return ash::kDefaultFrameColor;
+  return chromeos::kDefaultFrameColor;
 #else
   return ThemeProperties::GetDefaultColor(
       ThemeProperties::COLOR_FRAME_ACTIVE, false,
@@ -482,7 +475,7 @@ void CustomTabBarView::GoBackToApp() {
   // the history.
   if (!entry) {
     if (application_controller) {
-      GURL initial_url = application_controller->GetAppLaunchURL();
+      GURL initial_url = application_controller->GetAppStartUrl();
       content::NavigationController::LoadURLParams load(initial_url);
       load.should_clear_history_list = true;
       controller.LoadURLWithParams(load);

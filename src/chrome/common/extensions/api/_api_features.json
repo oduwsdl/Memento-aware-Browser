@@ -61,9 +61,6 @@
     "dependencies": ["manifest:action"],
     "contexts": ["blessed_extension"]
   },
-  "action.setIcon": {
-    "disallow_for_service_workers": true
-  },
   "activityLogPrivate": [{
     "dependencies": ["permission:activityLogPrivate"],
     "contexts": ["blessed_extension"]
@@ -193,6 +190,12 @@
     "dependencies": ["permission:certificateProvider"],
     "contexts": ["blessed_extension"]
   },
+  "certificateProvider.onCertificatesRequested": {
+    "max_manifest_version": 2
+  },
+  "certificateProvider.onSignDigestRequested": {
+    "max_manifest_version": 2
+  },
   "certificateProviderInternal": {
     "internal": true,
     "dependencies": ["permission:certificateProvider"],
@@ -258,6 +261,28 @@
     "dependencies": ["permission:cookies"],
     "contexts": ["blessed_extension"]
   },
+  "crashReportPrivate": [{
+    "dependencies": ["permission:crashReportPrivate"],
+    "contexts": ["blessed_extension"],
+    "default_parent": true
+  },
+  {
+    "channel": "stable",
+    "contexts": [
+      "webui"
+    ],
+    "matches": [
+      "chrome://media-app/*"
+    ]
+  },
+  {
+    "channel": "stable",
+    "contexts": ["webui_untrusted"],
+    "matches": [
+      "chrome-untrusted://help-app/*",
+      "chrome-untrusted://media-app/*"
+    ]
+  }],
   "cryptotokenPrivate": {
     "dependencies": ["permission:cryptotokenPrivate"],
     "contexts": ["blessed_extension"]
@@ -319,6 +344,14 @@
     "nocompile": true,
     "dependencies": ["manifest:devtools_page"],
     "contexts": ["blessed_extension"]
+  },
+  "documentScan": {
+    "dependencies": ["permission:documentScan"],
+    "contexts": ["blessed_extension"]
+  },
+  "dom": {
+    "channel": "dev",
+    "contexts": ["blessed_extension", "content_script"]
   },
   "downloads": {
     "dependencies": ["permission:downloads"],
@@ -385,10 +418,12 @@
   },
   "extension.getExtensionTabs": {
     "contexts": ["blessed_extension"],
-    "disallow_for_service_workers": true
+    "disallow_for_service_workers": true,
+    "max_manifest_version": 2
   },
   "extension.getURL": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
+    "max_manifest_version": 2
   },
   "extension.getViews": [
     {
@@ -412,13 +447,19 @@
     "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
   },
   "extension.lastError": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
+    "max_manifest_version": 2
   },
   "extension.onRequest": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
+    "max_manifest_version": 2
+  },
+  "extension.onRequestExternal": {
+    "max_manifest_version": 2
   },
   "extension.sendRequest": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
+    "max_manifest_version": 2
   },
   "extensionOptionsInternal": {
     "internal": true,
@@ -431,7 +472,7 @@
   "extensionsManifestTypes": {
     "internal": true,
     "channel": "stable",
-    "contexts": ["blessed_extension"]
+    "contexts": []
   },
   "fileBrowserHandler": {
     "dependencies": ["permission:fileBrowserHandler"],
@@ -568,7 +609,7 @@
   "manifestTypes": {
     "internal": true,
     "channel": "stable",
-    "contexts": ["blessed_extension"]
+    "contexts": []
   },
   "mediaPlayerPrivate": {
     "dependencies": ["permission:mediaPlayerPrivate"],
@@ -604,8 +645,7 @@
   },
   "pageCapture": {
     "dependencies": ["permission:pageCapture"],
-    "contexts": ["blessed_extension"],
-    "disallow_for_service_workers": true
+    "contexts": ["blessed_extension"]
   },
   "passwordsPrivate": [{
     "dependencies": ["permission:passwordsPrivate"],
@@ -691,6 +731,10 @@
     "dependencies": ["permission:safeBrowsingPrivate"],
     "contexts": ["blessed_extension"]
   },
+  "search": {
+    "dependencies": ["permission:search"],
+    "contexts": ["blessed_extension"]
+  },
   "sessions": {
     "dependencies": ["permission:sessions"],
     "contexts": ["blessed_extension"]
@@ -730,7 +774,8 @@
   "tabs": [{
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"],
-    "contexts": ["blessed_extension"]
+    "contexts": ["blessed_extension"],
+    "default_parent": true
   }, {
     "channel": "stable",
     "contexts": ["webui"],
@@ -746,6 +791,24 @@
     ],
     "platforms": ["chromeos"]
   }],
+  "tabs.getAllInWindow": {
+    "max_manifest_version": 2
+  },
+  "tabs.getSelected": {
+    "max_manifest_version": 2
+  },
+  "tabs.onActiveChanged": {
+    "max_manifest_version": 2
+  },
+  "tabs.onHighlightChanged": {
+    "max_manifest_version": 2
+  },
+  "tabs.onSelectionChanged": {
+    "max_manifest_version": 2
+  },
+  "tabs.sendRequest": {
+    "max_manifest_version": 2
+  },
   // chrome.terminalPrivate allowed for nassh extensions,
   // chrome-untrusted://crosh, and chrome-untrusted://terminal.
   "terminalPrivate": [{

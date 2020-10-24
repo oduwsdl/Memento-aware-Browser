@@ -41,7 +41,11 @@ import org.chromium.chrome.browser.feed.library.common.protoextensions.FeedExten
 import org.chromium.chrome.browser.feed.library.common.time.TimingUtils;
 import org.chromium.chrome.browser.feed.library.common.time.TimingUtils.ElapsedTimeTracker;
 import org.chromium.chrome.browser.feed.library.feedrequestmanager.internal.Utils;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.feed.shared.FeedFeatures;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.components.feed.core.proto.libraries.api.internal.StreamDataProto.StreamToken;
 import org.chromium.components.feed.core.proto.wire.ActionTypeProto;
 import org.chromium.components.feed.core.proto.wire.CapabilityProto.Capability;
@@ -63,6 +67,7 @@ import org.chromium.components.feed.core.proto.wire.SemanticPropertiesProto.Sema
 import org.chromium.components.feed.core.proto.wire.VersionProto.Version;
 import org.chromium.components.feed.core.proto.wire.VersionProto.Version.Architecture;
 import org.chromium.components.feed.core.proto.wire.VersionProto.Version.BuildType;
+import org.chromium.components.user_prefs.UserPrefs;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -72,7 +77,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Default implementation of FeedRequestManager. */
-public final class FeedRequestManagerImpl implements FeedRequestManager {
+public class FeedRequestManagerImpl implements FeedRequestManager {
     private static final String TAG = "FeedRequestManagerImpl";
 
     private final Configuration mConfiguration;
@@ -89,6 +94,7 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
     private final BasicLoggingApi mBasicLoggingApi;
     private final TooltipSupportedApi mTooltipSupportedApi;
     private final ApplicationInfo mApplicationInfo;
+    private final boolean mSignedIn;
 
     public FeedRequestManagerImpl(Configuration configuration, NetworkClient networkClient,
             ProtocolAdapter protocolAdapter, FeedExtensionRegistry extensionRegistry,
@@ -110,6 +116,7 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
         this.mMainThreadRunner = mainThreadRunner;
         this.mBasicLoggingApi = basicLoggingApi;
         this.mTooltipSupportedApi = tooltipSupportedApi;
+        this.mSignedIn = isSignedIn();
     }
 
     @Override
@@ -122,7 +129,7 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
         RequestBuilder request = newDefaultRequest(RequestReason.MANUAL_CONTINUATION)
                                          .setPageToken(streamToken.getNextPageToken())
                                          .setConsistencyToken(token);
-        executeRequest(request, consumer);
+        executeRequest(request, consumer, false);
         timeTracker.stop(
                 "task", "FeedRequestManagerImpl LoadMore", "token", streamToken.getNextPageToken());
     }
@@ -142,9 +149,9 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
             // This will make a new request, it should invalidate the existing head to delay
             // everything until the response is obtained.
             mTaskQueue.execute(Task.REQUEST_MANAGER_TRIGGER_REFRESH, TaskType.HEAD_INVALIDATE,
-                    () -> executeRequest(request, consumer));
+                    () -> executeRequest(request, consumer, true));
         } else {
-            executeRequest(request, consumer);
+            executeRequest(request, consumer, true);
         }
     }
 
@@ -177,17 +184,28 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
         }
     }
 
-    private void executeRequest(RequestBuilder requestBuilder, Consumer<Result<Model>> consumer) {
+    boolean isSignedIn() {
+        try {
+            return IdentityServicesProvider.get()
+                    .getIdentityManager(Profile.getLastUsedRegularProfile())
+                    .hasPrimaryAccount();
+        } catch (IllegalStateException e) {
+            assert !ProfileManager.isInitialized();
+        }
+        return false;
+    }
+
+    private void executeRequest(RequestBuilder requestBuilder, Consumer<Result<Model>> consumer,
+            boolean isRefreshRequest) {
         mThreadUtils.checkNotMainThread();
-        Result<List<DismissActionWithSemanticProperties>> dismissActionsResult =
-                mActionReader.getDismissActionsWithSemanticProperties();
-        if (dismissActionsResult.isSuccessful()) {
-            requestBuilder.setActions(dismissActionsResult.getValue());
-            for (DismissActionWithSemanticProperties dismiss : dismissActionsResult.getValue()) {
-                Logger.i(TAG, "Dismiss action: %s", dismiss.getContentId());
+        // Do not include Dismiss actions in the FeedQuery request for signed in users.
+        // Dismiss actions for signed in users are uploaded via the ActionsUpload endpoint.
+        if (!mSignedIn) {
+            Result<List<DismissActionWithSemanticProperties>> dismissActionsResult =
+                    mActionReader.getDismissActionsWithSemanticProperties();
+            if (dismissActionsResult.isSuccessful()) {
+                requestBuilder.setActions(dismissActionsResult.getValue());
             }
-        } else {
-            Logger.e(TAG, "Error fetching dismiss actions");
         }
 
         if (mConfiguration.getValueOrDefault(ConfigKey.CARD_MENU_TOOLTIP_ELIGIBLE, false)) {
@@ -198,12 +216,12 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
                         FeatureName.CARD_MENU_TOOLTIP, (wouldTrigger) -> {
                             mTaskQueue.execute(Task.SEND_REQUEST, TaskType.IMMEDIATE, () -> {
                                 requestBuilder.setCardMenuTooltipWouldTrigger(wouldTrigger);
-                                sendRequest(requestBuilder, consumer);
+                                sendRequest(requestBuilder, consumer, isRefreshRequest);
                             });
                         });
             });
         } else {
-            sendRequest(requestBuilder, consumer);
+            sendRequest(requestBuilder, consumer, isRefreshRequest);
         }
     }
 
@@ -212,7 +230,8 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
                 || reason == FeedQuery.RequestReason.WITH_CONTENT);
     }
 
-    private void sendRequest(RequestBuilder requestBuilder, Consumer<Result<Model>> consumer) {
+    private void sendRequest(RequestBuilder requestBuilder, Consumer<Result<Model>> consumer,
+            boolean isRefreshRequest) {
         mThreadUtils.checkNotMainThread();
         String endpoint = mConfiguration.getValueOrDefault(ConfigKey.FEED_SERVER_ENDPOINT, "");
         @HttpMethod
@@ -246,12 +265,13 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
                         "FeedRequestManagerImpl consumer", () -> consumer.accept(Result.failure()));
                 return;
             }
-            handleResponseBytes(input.getResponseBody(), consumer);
+            handleResponseBytes(
+                    input.getResponseBody(), consumer, isRefreshRequest, input.isSignedIn());
         });
     }
 
-    private void handleResponseBytes(
-            final byte[] responseBytes, final Consumer<Result<Model>> consumer) {
+    private void handleResponseBytes(final byte[] responseBytes,
+            final Consumer<Result<Model>> consumer, boolean isRefreshRequest, boolean isSignedIn) {
         mTaskQueue.execute(Task.HANDLE_RESPONSE_BYTES, TaskType.IMMEDIATE, () -> {
             Response response;
             boolean isLengthPrefixed = mConfiguration.getValueOrDefault(
@@ -267,17 +287,39 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
                         "FeedRequestManagerImpl consumer", () -> consumer.accept(Result.failure()));
                 return;
             }
-            logServerCapabilities(response);
-            mMainThreadRunner.execute("FeedRequestManagerImpl consumer",
-                    () -> consumer.accept(mProtocolAdapter.createModel(response)));
+            logServerCapabilities(response, isRefreshRequest);
+            mMainThreadRunner.execute("FeedRequestManagerImpl consumer", () -> {
+                // Update the signed in pref only when the request is a refresh. It shouldn't be
+                // done for other requests such as load more.
+                if (isRefreshRequest) {
+                    updateLastRefreshSignedPref(isSignedIn);
+                }
+                consumer.accept(mProtocolAdapter.createModel(response));
+            });
         });
     }
 
-    private static void logServerCapabilities(Response response) {
+    private void logServerCapabilities(Response response, boolean isRefreshRequest) {
         FeedResponse feedResponse = response.getExtension(FeedResponse.feedResponse);
         List<Capability> capabilities = feedResponse.getServerCapabilitiesList();
-        RecordHistogram.recordBooleanHistogram("ContentSuggestions.Feed.NoticeCardFulfilled",
-                capabilities.contains(Capability.REPORT_FEED_USER_ACTIONS_NOTICE_CARD));
+        if (isRefreshRequest) {
+            RecordHistogram.recordBooleanHistogram("ContentSuggestions.Feed.NoticeCardFulfilled",
+                    capabilities.contains(Capability.REPORT_FEED_USER_ACTIONS_NOTICE_CARD));
+            mMainThreadRunner.execute("Update notice card pref",
+                    ()
+                            -> updateNoticeCardPref(capabilities.contains(
+                                    Capability.REPORT_FEED_USER_ACTIONS_NOTICE_CARD)));
+        }
+    }
+
+    private void updateNoticeCardPref(boolean hasNoticeCard) {
+        UserPrefs.get(Profile.getLastUsedRegularProfile())
+                .setBoolean(Pref.LAST_FETCH_HAD_NOTICE_CARD, hasNoticeCard);
+    }
+
+    private void updateLastRefreshSignedPref(boolean isSignedIn) {
+        UserPrefs.get(Profile.getLastUsedRegularProfile())
+                .setBoolean(Pref.LAST_REFRESH_WAS_SIGNED_IN, isSignedIn);
     }
 
     private static final class RequestBuilder {
@@ -367,8 +409,7 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
                     Capability.UNDOABLE_ACTIONS);
             addCapabilityIfConfigEnabled(feedRequestBuilder, ConfigKey.MANAGE_INTERESTS_ENABLED,
                     Capability.MANAGE_INTERESTS);
-            addCapabilityIfConfigEnabled(
-                    feedRequestBuilder, ConfigKey.SEND_FEEDBACK_ENABLED, Capability.SEND_FEEDBACK);
+            feedRequestBuilder.addClientCapability(Capability.SEND_FEEDBACK);
             addCapabilityIfConfigEnabled(
                     feedRequestBuilder, ConfigKey.ENABLE_CAROUSELS, Capability.CAROUSELS);
             if (mCardMenuTooltipWouldTrigger) {
@@ -380,7 +421,7 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
             addCapabilityIfConfigEnabled(feedRequestBuilder, ConfigKey.USE_SECONDARY_PAGE_REQUEST,
                     Capability.USE_SECONDARY_PAGE_REQUEST);
 
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS)) {
+            if (FeedFeatures.isReportingUserActions()) {
                 feedRequestBuilder.addClientCapability(Capability.CLICK_ACTION);
                 feedRequestBuilder.addClientCapability(Capability.VIEW_ACTION);
                 feedRequestBuilder.addClientCapability(

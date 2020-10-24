@@ -10,7 +10,7 @@
 <translation id="1290373024480130896"><ph name="MODIFIER1" /><ph name="SEPARATOR1" /><ph name="MODIFIER2" /><ph name="SEPARATOR2" /><ph name="MODIFIER3" /><ph name="SEPARATOR3" /><ph name="KEY" /></translation>
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1299858300159559687">तुमचे हे पेज प्रिंट करा</translation>
-<translation id="1383876407941801731">शोधा</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1454364489140280055"><ph name="CTRL" /><ph name="SEPARATOR1" /><ph name="SHIFT1" /><ph name="SEPARATOR2" /><ph name="G" /> किंवा <ph name="SHIFT2" /><ph name="SEPARATOR3" /><ph name="ENTER" /></translation>
 <translation id="1477442857810932985">ओळीच्या शेवटी जा</translation>
 <translation id="1499072997694708844">कोणतीही उघडी असलेली शोध विंडो बंद करा किंवा तुमचे सध्याचे पेज लोड करणे थांबवा</translation>
@@ -47,6 +47,7 @@
 <translation id="2488661730534396940">डावीकडील डेस्क सुरू करा</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2530339807289914946">वेब पेज खालच्या दिशेला स्क्रोल करा</translation>
+<translation id="2530896289327917474">कॅरेट ब्राउझिंग सुरू किंवा बंद करा</translation>
 <translation id="2574014812750545982">पेजवर झूम स्तर रीसेट करा</translation>
 <translation id="2596078834055697711">विंडो स्क्रीनशॉट घ्या</translation>
 <translation id="2685170433750953446"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" />, त्यानंतर <ph name="TAB" /> किंवा <ph name="RIGHT" /></translation>
@@ -58,7 +59,7 @@
 <translation id="2830827904629746450">एखादी विंडो उजवीकडे डॉक करा</translation>
 <translation id="2840766858109427815">पुढील पेजवर जा</translation>
 <translation id="2872353916818027657">प्राथमिक मॉनिटर स्वॅप करा</translation>
-<translation id="2914313326123580426">डेव्हलपर टूल पॅनेल दाखवा किंवा लपवा</translation>
+<translation id="2914313326123580426">डेव्हलपर टूल पॅनल दाखवा किंवा लपवा</translation>
 <translation id="292495055542441795">फुल स्क्रीन टॉगल करा</translation>
 <translation id="3020183492814296499">शॉर्टकट</translation>
 <translation id="3084301071537457911">तुमच्या शेल्फवरील पुढील आयटम हायलाइट करा</translation>

@@ -8,8 +8,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 
-import androidx.annotation.VisibleForTesting;
-
 import org.chromium.base.annotations.CalledByNative;
 
 import java.util.concurrent.Callable;
@@ -120,18 +118,24 @@ public class ThreadUtils {
                 sUiThreadHandler = new Handler(looper);
             }
         }
+        TraceEvent.onUiThreadReady();
     }
 
     public static Handler getUiThreadHandler() {
+        boolean createdHandler = false;
         synchronized (sLock) {
             if (sUiThreadHandler == null) {
                 if (sWillOverride) {
                     throw new RuntimeException("Did not yet override the UI thread");
                 }
                 sUiThreadHandler = new Handler(Looper.getMainLooper());
+                createdHandler = true;
             }
-            return sUiThreadHandler;
         }
+        if (createdHandler) {
+            TraceEvent.onUiThreadReady();
+        }
+        return sUiThreadHandler;
     }
 
     /**
@@ -174,7 +178,6 @@ public class ThreadUtils {
      * @return The result of the callable
      */
     @Deprecated
-    @VisibleForTesting
     public static <T> T runOnUiThreadBlockingNoException(Callable<T> c) {
         try {
             return runOnUiThreadBlocking(c);
@@ -310,7 +313,6 @@ public class ThreadUtils {
      * @param task The Runnable to run
      * @param delayMillis The delay in milliseconds until the Runnable will be run
      */
-    @VisibleForTesting
     @Deprecated
     public static void postOnUiThreadDelayed(Runnable task, long delayMillis) {
         getUiThreadHandler().postDelayed(task, delayMillis);

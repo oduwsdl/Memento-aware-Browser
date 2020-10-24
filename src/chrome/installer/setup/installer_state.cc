@@ -17,10 +17,10 @@
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/helper.h"
+#include "chrome/installer/util/initial_preferences.h"
+#include "chrome/installer/util/initial_preferences_constants.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/work_item.h"
 #include "chrome/installer/util/work_item_list.h"
 
@@ -63,14 +63,14 @@ void InstallerState::Initialize(const base::CommandLine& command_line,
                                 const InstallationState& machine_state) {
   Clear();
 
-  set_level(GetMasterPreference(prefs, master_preferences::kSystemLevel, false)
+  set_level(GetMasterPreference(prefs, initial_preferences::kSystemLevel, false)
                 ? SYSTEM_LEVEL
                 : USER_LEVEL);
 
   verbose_logging_ =
-      GetMasterPreference(prefs, master_preferences::kVerboseLogging, false);
+      GetMasterPreference(prefs, initial_preferences::kVerboseLogging, false);
 
-  msi_ = GetMasterPreference(prefs, master_preferences::kMsi, false);
+  msi_ = GetMasterPreference(prefs, initial_preferences::kMsi, false);
   if (!msi_) {
     const ProductState* product_state =
         machine_state.GetProductState(system_install());

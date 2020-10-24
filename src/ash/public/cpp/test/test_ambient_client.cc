@@ -16,15 +16,17 @@ namespace {
 const char* kTestGaiaId = "0123456789";
 
 constexpr base::TimeDelta kDefaultTokenExpirationDelay =
-    base::TimeDelta::FromHours(1);
+    base::TimeDelta::FromSeconds(60);
 
 }  // namespace
 
-TestAmbientClient::TestAmbientClient() = default;
+TestAmbientClient::TestAmbientClient(
+    device::TestWakeLockProvider* wake_lock_provider)
+    : wake_lock_provider_(wake_lock_provider) {}
 
 TestAmbientClient::~TestAmbientClient() = default;
 
-bool TestAmbientClient::IsAmbientModeAllowedForActiveUser() {
+bool TestAmbientClient::IsAmbientModeAllowed() {
   return true;
 }
 
@@ -36,6 +38,11 @@ scoped_refptr<network::SharedURLLoaderFactory>
 TestAmbientClient::GetURLLoaderFactory() {
   // TODO: return fake URL loader facotry.
   return nullptr;
+}
+
+void TestAmbientClient::RequestWakeLockProvider(
+    mojo::PendingReceiver<device::mojom::WakeLockProvider> receiver) {
+  wake_lock_provider_->BindReceiver(std::move(receiver));
 }
 
 void TestAmbientClient::IssueAccessToken(const std::string& access_token,
@@ -53,6 +60,10 @@ void TestAmbientClient::IssueAccessToken(const std::string& access_token,
         .Run(kTestGaiaId, access_token,
              base::Time::Now() + kDefaultTokenExpirationDelay);
   }
+}
+
+bool TestAmbientClient::ShouldUseProdServer() {
+  return false;
 }
 
 bool TestAmbientClient::IsAccessTokenRequestPending() const {

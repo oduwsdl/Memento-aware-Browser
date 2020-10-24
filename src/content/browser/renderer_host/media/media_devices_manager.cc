@@ -38,7 +38,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/audio/public/mojom/device_notifications.mojom.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/bind_helpers.h"
 #include "base/single_thread_task_runner.h"
 #include "content/browser/browser_main_loop.h"
@@ -500,12 +500,12 @@ void MediaDevicesManager::StartMonitoring() {
   if (!base::SystemMonitor::Get())
     return;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (!base::FeatureList::IsEnabled(features::kDeviceMonitorMac))
     return;
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
   if (base::FeatureList::IsEnabled(features::kAudioServiceOutOfProcess)) {
     DCHECK(!audio_service_device_listener_);
     audio_service_device_listener_ =
@@ -524,14 +524,14 @@ void MediaDevicesManager::StartMonitoring() {
     }
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&MediaDevicesManager::StartMonitoringOnUIThread,
                                 base::Unretained(this)));
 #endif
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void MediaDevicesManager::StartMonitoringOnUIThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserMainLoop* browser_main_loop = content::BrowserMainLoop::GetInstance();
@@ -736,8 +736,8 @@ void MediaDevicesManager::GetAudioInputCapabilities(
   state.video_input_capabilities_requested = request_video_input_capabilities;
   state.audio_input_capabilities_requested = request_audio_input_capabilities;
   state.completion_cb = std::move(callback);
-  state.raw_enumeration_results = std::move(raw_enumeration_results);
-  state.hashed_enumeration_results = std::move(hashed_enumeration_results);
+  state.raw_enumeration_results = raw_enumeration_results;
+  state.hashed_enumeration_results = hashed_enumeration_results;
   state.num_pending_audio_input_capabilities =
       hashed_enumeration_results[blink::MEDIA_DEVICE_TYPE_AUDIO_INPUT].size();
 
@@ -913,6 +913,7 @@ void MediaDevicesManager::AudioDevicesEnumerated(
   for (const media::AudioDeviceDescription& description : device_descriptions) {
     snapshot.emplace_back(description.unique_id, description.device_name,
                           description.group_id,
+                          media::VideoCaptureControlSupport(),
                           media::VideoFacingMode::MEDIA_VIDEO_FACING_NONE);
   }
   DevicesEnumerated(type, snapshot);

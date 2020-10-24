@@ -19,7 +19,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -42,6 +41,7 @@
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -85,6 +85,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/context_menu_data/media_type.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -93,9 +94,16 @@
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_constants.h"
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_url_filter.h"
+#endif
+
 #if defined(OS_CHROMEOS)
-#include "ash/public/cpp/window_pin_type.h"
-#include "ash/public/cpp/window_properties.h"
+#include "chromeos/ui/base/window_pin_type.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/window.h"
 #endif
 
@@ -165,7 +173,7 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     params.link_text = link_text;
     params.page_url = web_contents->GetVisibleURL();
     params.source_type = source_type;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     params.writing_direction_default = 0;
     params.writing_direction_left_to_right = 0;
     params.writing_direction_right_to_left = 0;
@@ -186,10 +194,10 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     return profile_manager->GetProfile(profile_path);
   }
 
-  AppId InstallTestWebApp(const GURL& app_url, bool open_as_window = true) {
+  AppId InstallTestWebApp(const GURL& start_url, bool open_as_window = true) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = app_url;
-    web_app_info->scope = app_url;
+    web_app_info->start_url = start_url;
+    web_app_info->scope = start_url;
     web_app_info->title = base::UTF8ToUTF16("Test app \xF0\x9F\x90\x90");
     web_app_info->description =
         base::UTF8ToUTF16("Test description \xF0\x9F\x90\x90");
@@ -388,6 +396,34 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
 }
 
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
+                       SaveLinkAsEntryIsDisabledForUrlsNotAccessibleForChild) {
+  // Set up child user profile.
+  Profile* profile = browser()->profile();
+  browser()->profile()->GetPrefs()->SetString(
+      prefs::kSupervisedUserId, supervised_users::kChildAccountSUID);
+
+  // Block access to http://www.google.com/ in the URL filter.
+  SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForProfile(profile);
+  SupervisedUserURLFilter* url_filter = supervised_user_service->GetURLFilter();
+  std::map<std::string, bool> hosts;
+  hosts["www.google.com"] = false;
+  url_filter->SetManualHosts(std::move(hosts));
+
+  base::RunLoop().RunUntilIdle();
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNone(GURL("http://www.google.com/"),
+                                     GURL("http://www.google.com/"));
+
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SAVELINKAS));
+  EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
+}
+
+#endif
+
 #if defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                        ContextMenuEntriesAreDisabledInLockedFullscreen) {
@@ -405,7 +441,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
 
   // Set locked fullscreen state.
   browser()->window()->GetNativeWindow()->SetProperty(
-      ash::kWindowPinTypeKey, ash::WindowPinType::kTrustedPinned);
+      chromeos::kWindowPinTypeKey, chromeos::WindowPinType::kTrustedPinned);
 
   // All entries are disabled in locked fullscreen (testing only a subset here).
   for (auto entry : entries_to_test)
@@ -480,11 +516,6 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                        OpenInAppAbsentForURLsInNonLocallyInstalledApp) {
   const AppId app_id = InstallTestWebApp(GURL(kAppUrl1));
 
-  // Part of the installation process (setting that this is a locally installed
-  // app) runs asynchronously. Wait for that to complete before setting locally
-  // installed to false.
-  base::RunLoop().RunUntilIdle();
-
   {
     WebAppProviderBase* const provider =
         WebAppProviderBase::GetProviderBase(browser()->profile());
@@ -499,7 +530,6 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
         }));
 
     run_loop.Run();
-    base::RunLoop().RunUntilIdle();
   }
 
   std::unique_ptr<TestRenderViewContextMenu> menu =
@@ -526,6 +556,24 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
 
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
+  ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
+                                          IDC_OPEN_LINK_IN_PROFILE_LAST));
+}
+
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenInAppAbsentForIncognito) {
+  InstallTestWebApp(GURL(kAppUrl1));
+  Browser* incognito_browser = CreateIncognitoBrowser();
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNoneInWebContents(
+          incognito_browser->tab_strip_model()->GetActiveWebContents(),
+          GURL(kAppUrl1), GURL(kAppUrl1));
+
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
@@ -722,7 +770,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, RealMenu) {
   // The menu_observer will select "Open in new tab", wait for the new tab to
   // be added.
   tab = add_tab.Wait();
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   // Verify that it's the correct tab.
   EXPECT_EQ(GURL("about:blank"), tab->GetURL());
@@ -742,7 +790,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenInNewTabReferrer) {
   // Set up referrer URL with fragment.
   const GURL kReferrerWithFragment("http://foo.com/test#fragment");
   const std::string kCorrectReferrer(
-      base::FeatureList::IsEnabled(features::kReducedReferrerGranularity)
+      base::FeatureList::IsEnabled(blink::features::kReducedReferrerGranularity)
           ? "http://foo.com/"
           : "http://foo.com/test");
 
@@ -759,7 +807,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenInNewTabReferrer) {
   menu.ExecuteCommand(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, 0);
 
   content::WebContents* tab = add_tab.Wait();
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   // Verify that it's the correct tab.
   ASSERT_EQ(echoheader, tab->GetURL());
@@ -808,7 +856,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenIncognitoNoneReferrer) {
   menu.ExecuteCommand(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD, 0);
 
   content::WebContents* tab = add_tab.Wait();
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   // Verify that it's the correct tab.
   ASSERT_EQ(echoheader, tab->GetURL());
@@ -840,12 +888,12 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInWebApp) {
       browser()->tab_strip_model()->GetActiveWebContents();
   const GURL initial_url = initial_tab->GetLastCommittedURL();
 
-  const GURL app_url(kAppUrl1);
+  const GURL start_url(kAppUrl1);
   ui_test_utils::UrlLoadObserver url_observer(
-      app_url, content::NotificationService::AllSources());
+      start_url, content::NotificationService::AllSources());
   content::ContextMenuParams params;
   params.page_url = GURL("https://www.example.com/");
-  params.link_url = app_url;
+  params.link_url = start_url;
   TestRenderViewContextMenu menu(initial_tab->GetMainFrame(), params);
   menu.Init();
   menu.ExecuteCommand(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
@@ -857,9 +905,9 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInWebApp) {
   Browser* app_browser = chrome::FindLastActive();
   EXPECT_NE(browser(), app_browser);
   EXPECT_EQ(initial_url, initial_tab->GetLastCommittedURL());
-  EXPECT_EQ(app_url, app_browser->tab_strip_model()
-                         ->GetActiveWebContents()
-                         ->GetLastCommittedURL());
+  EXPECT_EQ(start_url, app_browser->tab_strip_model()
+                           ->GetActiveWebContents()
+                           ->GetLastCommittedURL());
 }
 
 // Check filename on clicking "Save Link As" via a "real" context menu.
@@ -988,6 +1036,48 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                              IDC_CONTENT_CONTEXT_RELOADFRAME,
                              IDC_CONTENT_CONTEXT_INSPECTELEMENT}));
 }
+
+#if !defined(OS_MAC)
+// Check whether correct non-located context menu shows up for image element
+// with height more than visual viewport bounds.
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
+                       NonLocatedContextMenuOnLargeImageElement) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL image_url(
+      "data:text/html,<html><img src=\"http://example.test/cat.jpg\" "
+      "width=\"200\" height=\"10000\" tabindex=\"-1\" /></html>");
+  ui_test_utils::NavigateToURL(browser(), image_url);
+
+  // Open and close a context menu.
+  ContextMenuWaiter menu_observer;
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Focus on the image element with height more than visual viewport bounds
+  // and center of element falls outside viewport area.
+  content::SimulateMouseClickAt(tab, /*modifier=*/0,
+                                blink::WebMouseEvent::Button::kLeft,
+                                gfx::Point(15, 15));
+
+  // Simulate non-located context menu on image element with Shift + F10.
+  content::SimulateKeyPress(tab, ui::DomKey::F10, ui::DomCode::F10,
+                            ui::VKEY_F10, /*control=*/false, /*shift=*/true,
+                            /*alt=*/false, /*command=*/false);
+  menu_observer.WaitForMenuOpenAndClose();
+
+  // Verify that the expected context menu items are present.
+  //
+  // Note that the assertion below doesn't use exact matching via
+  // testing::ElementsAre, because some platforms may include unexpected extra
+  // elements (e.g. an extra separator and IDC=100 has been observed on some Mac
+  // bots).
+  EXPECT_THAT(menu_observer.GetCapturedCommandIds(),
+              testing::IsSupersetOf({IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB,
+                                     IDC_CONTENT_CONTEXT_COPYIMAGE,
+                                     IDC_CONTENT_CONTEXT_COPYIMAGELOCATION,
+                                     IDC_CONTENT_CONTEXT_SAVEIMAGEAS}));
+}
+#endif
 
 // Check filename on clicking "Save Link As" is ignored for cross origin.
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, SuggestedFileNameCrossOrigin) {

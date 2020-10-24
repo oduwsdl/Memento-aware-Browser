@@ -5,6 +5,10 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_OVERLAY_PROCESSOR_ANDROID_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_OVERLAY_PROCESSOR_ANDROID_H_
 
+#include <map>
+#include <memory>
+#include <vector>
+
 #include "base/containers/circular_deque.h"
 #include "components/viz/service/display/display_resource_provider.h"
 #include "components/viz/service/display/overlay_processor_using_strategy.h"
@@ -30,13 +34,12 @@ class VIZ_SERVICE_EXPORT OverlayProcessorAndroid
  public:
   OverlayProcessorAndroid(gpu::SharedImageManager* shared_image_manager,
                           gpu::MemoryTracker* memory_tracker,
-                          gpu::GpuTaskSchedulerHelper* gpu_task_scheduler,
-                          bool enable_overlay);
+                          gpu::GpuTaskSchedulerHelper* gpu_task_scheduler);
   ~OverlayProcessorAndroid() override;
 
   bool IsOverlaySupported() const override;
 
-  bool NeedsSurfaceOccludingDamageRect() const override;
+  bool NeedsSurfaceDamageRectList() const override;
 
   void ScheduleOverlays(
       DisplayResourceProvider* display_resource_provider) override;
@@ -75,7 +78,6 @@ class VIZ_SERVICE_EXPORT OverlayProcessorAndroid
   PromotionHintInfoMap promotion_hint_info_map_;
 
   gpu::GpuTaskSchedulerHelper* gpu_task_scheduler_;
-  const bool overlay_enabled_;
   // This class is created, accessed, and destroyed on the gpu thread.
   std::unique_ptr<OverlayProcessorOnGpu> processor_on_gpu_;
 

@@ -10,8 +10,8 @@
 #include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "components/blocked_content/safe_browsing_triggered_popup_blocker.h"
 #include "components/blocked_content/test/test_popup_navigation_delegate.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
-#include "components/content_settings/browser/test_tab_specific_content_settings_delegate.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
+#include "components/content_settings/browser/test_page_specific_content_settings_delegate.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
@@ -53,11 +53,12 @@ class PopupBlockedInfoBarDelegateTest
 
     HostContentSettingsMap::RegisterProfilePrefs(pref_service_.registry());
     settings_map_ = base::MakeRefCounted<HostContentSettingsMap>(
-        &pref_service_, false, false, false, false);
-    content_settings::TabSpecificContentSettings::CreateForWebContents(
+        &pref_service_, false /* is_off_the_record */,
+        false /* store_last_modified */, false /* restore_session*/);
+    content_settings::PageSpecificContentSettings::CreateForWebContents(
         web_contents(),
         std::make_unique<
-            content_settings::TestTabSpecificContentSettingsDelegate>(
+            content_settings::TestPageSpecificContentSettingsDelegate>(
             /*prefs=*/nullptr, settings_map_.get()));
 
     PopupBlockerTabHelper::CreateForWebContents(web_contents());

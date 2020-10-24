@@ -45,9 +45,9 @@ class CONTENT_EXPORT InputRouterClient {
   // renderer.
   virtual void DidOverscroll(const ui::DidOverscrollParams& params) = 0;
 
-  // Called when the router has received a whitelisted touch action notification
+  // Called when the router has received an allowed touch action notification
   // from the renderer.
-  virtual void OnSetWhiteListedTouchAction(cc::TouchAction touch_action) = 0;
+  virtual void OnSetCompositorAllowedTouchAction(cc::TouchAction) = 0;
 
   // Called when a GSB has started scrolling a viewport.
   virtual void DidStartScrollingViewport() = 0;
@@ -80,7 +80,6 @@ class CONTENT_EXPORT InputRouterClient {
   virtual void SetMouseCapture(bool capture) = 0;
   virtual void RequestMouseLock(
       bool from_user_gesture,
-      bool privileged,
       bool unadjusted_movement,
       blink::mojom::WidgetInputHandlerHost::RequestMouseLockCallback
           response) = 0;

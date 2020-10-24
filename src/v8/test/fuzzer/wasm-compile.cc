@@ -13,10 +13,9 @@
 #include "src/objects/objects-inl.h"
 #include "src/objects/objects.h"
 #include "src/utils/ostreams.h"
-#include "src/wasm/wasm-interpreter.h"
 #include "src/wasm/wasm-module-builder.h"
 #include "src/wasm/wasm-module.h"
-#include "src/wasm/wasm-opcodes.h"
+#include "src/wasm/wasm-opcodes-inl.h"
 #include "test/common/wasm/flag-utils.h"
 #include "test/common/wasm/test-signatures.h"
 #include "test/common/wasm/wasm-module-runner.h"
@@ -275,13 +274,13 @@ class WasmGenerator {
       case kExprI64AtomicXor:
       case kExprI64AtomicExchange:
       case kExprI64AtomicCompareExchange:
-      case kExprI16x8Load8x8S:
-      case kExprI16x8Load8x8U:
-      case kExprI32x4Load16x4S:
-      case kExprI32x4Load16x4U:
-      case kExprI64x2Load32x2S:
-      case kExprI64x2Load32x2U:
-      case kExprS64x2LoadSplat:
+      case kExprS128Load8x8S:
+      case kExprS128Load8x8U:
+      case kExprS128Load16x4S:
+      case kExprS128Load16x4U:
+      case kExprS128Load32x2S:
+      case kExprS128Load32x2U:
+      case kExprS128Load64Splat:
         return 3;
       case kExprI32LoadMem:
       case kExprI64LoadMem32S:
@@ -308,7 +307,7 @@ class WasmGenerator {
       case kExprI64AtomicXor32U:
       case kExprI64AtomicExchange32U:
       case kExprI64AtomicCompareExchange32U:
-      case kExprS32x4LoadSplat:
+      case kExprS128Load32Splat:
         return 2;
       case kExprI32LoadMem16S:
       case kExprI32LoadMem16U:
@@ -334,7 +333,7 @@ class WasmGenerator {
       case kExprI64AtomicXor16U:
       case kExprI64AtomicExchange16U:
       case kExprI64AtomicCompareExchange16U:
-      case kExprS16x8LoadSplat:
+      case kExprS128Load16Splat:
         return 1;
       case kExprI32LoadMem8S:
       case kExprI32LoadMem8U:
@@ -360,7 +359,7 @@ class WasmGenerator {
       case kExprI64AtomicXor8U:
       case kExprI64AtomicExchange8U:
       case kExprI64AtomicCompareExchange8U:
-      case kExprS8x16LoadSplat:
+      case kExprS128Load8Splat:
         return 0;
       default:
         return 0;
@@ -403,6 +402,13 @@ class WasmGenerator {
     builder_->EmitWithPrefix(Op);
   }
 
+  void simd_const(DataRange* data) {
+    builder_->EmitWithPrefix(kExprS128Const);
+    for (int i = 0; i < kSimd128Size; i++) {
+      builder_->EmitByte(data->get<byte>());
+    }
+  }
+
   template <WasmOpcode Op, int lanes, ValueType::Kind... Args>
   void simd_lane_op(DataRange* data) {
     Generate<Args...>(data);
@@ -412,7 +418,7 @@ class WasmGenerator {
 
   void simd_shuffle(DataRange* data) {
     Generate<ValueType::kS128, ValueType::kS128>(data);
-    builder_->EmitWithPrefix(kExprS8x16Shuffle);
+    builder_->EmitWithPrefix(kExprI8x16Shuffle);
     for (int i = 0; i < kSimd128Size; i++) {
       builder_->EmitByte(static_cast<uint8_t>(data->get<byte>() % 32));
     }
@@ -423,9 +429,16 @@ class WasmGenerator {
     builder_->Emit(kExprDrop);
   }
 
+  enum CallDirect : bool { kCallDirect = true, kCallIndirect = false };
+
   template <ValueType::Kind wanted_type>
   void call(DataRange* data) {
-    call(data, ValueType::Primitive(wanted_type));
+    call(data, ValueType::Primitive(wanted_type), kCallDirect);
+  }
+
+  template <ValueType::Kind wanted_type>
+  void call_indirect(DataRange* data) {
+    call(data, ValueType::Primitive(wanted_type), kCallIndirect);
   }
 
   void Convert(ValueType src, ValueType dst) {
@@ -467,15 +480,40 @@ class WasmGenerator {
     }
   }
 
-  void call(DataRange* data, ValueType wanted_type) {
-    int func_index = data->get<uint8_t>() % functions_.size();
-    FunctionSig* sig = functions_[func_index];
+  void call(DataRange* data, ValueType wanted_type, CallDirect call_direct) {
+    uint8_t random_byte = data->get<uint8_t>();
+    int func_index = random_byte % functions_.size();
+    uint32_t sig_index = functions_[func_index];
+    FunctionSig* sig = builder_->builder()->GetSignature(sig_index);
     // Generate arguments.
     for (size_t i = 0; i < sig->parameter_count(); ++i) {
       Generate(sig->GetParam(i), data);
     }
     // Emit call.
-    builder_->EmitWithU32V(kExprCallFunction, func_index);
+    // If the return types of the callee happen to match the return types of the
+    // caller, generate a tail call.
+    bool use_return_call = random_byte > 127;
+    if (use_return_call &&
+        std::equal(sig->returns().begin(), sig->returns().end(),
+                   builder_->signature()->returns().begin(),
+                   builder_->signature()->returns().end())) {
+      if (call_direct) {
+        builder_->EmitWithU32V(kExprReturnCall, func_index);
+      } else {
+        builder_->EmitI32Const(func_index);
+        builder_->EmitWithU32V(kExprReturnCallIndirect, sig_index);
+        builder_->EmitByte(0);  // Table index.
+      }
+      return;
+    } else {
+      if (call_direct) {
+        builder_->EmitWithU32V(kExprCallFunction, func_index);
+      } else {
+        builder_->EmitI32Const(func_index);
+        builder_->EmitWithU32V(kExprCallIndirect, sig_index);
+        builder_->EmitByte(0);  // Table index.
+      }
+    }
     if (sig->return_count() == 0 && wanted_type != kWasmStmt) {
       // The call did not generate a value. Thus just generate it here.
       Generate(wanted_type, data);
@@ -641,8 +679,7 @@ class WasmGenerator {
   };
 
  public:
-  WasmGenerator(WasmFunctionBuilder* fn,
-                const std::vector<FunctionSig*>& functions,
+  WasmGenerator(WasmFunctionBuilder* fn, const std::vector<uint32_t>& functions,
                 const std::vector<ValueType>& globals,
                 const std::vector<uint8_t>& mutable_globals, DataRange* data)
       : builder_(fn),
@@ -685,7 +722,7 @@ class WasmGenerator {
  private:
   WasmFunctionBuilder* builder_;
   std::vector<std::vector<ValueType>> blocks_;
-  const std::vector<FunctionSig*>& functions_;
+  const std::vector<uint32_t>& functions_;
   std::vector<ValueType> locals_;
   std::vector<ValueType> globals_;
   std::vector<uint8_t> mutable_globals_;  // indexes into {globals_}.
@@ -749,6 +786,7 @@ void WasmGenerator::Generate<ValueType::kStmt>(DataRange* data) {
       &WasmGenerator::drop,
 
       &WasmGenerator::call<ValueType::kStmt>,
+      &WasmGenerator::call_indirect<ValueType::kStmt>,
 
       &WasmGenerator::set_local,
       &WasmGenerator::set_global};
@@ -921,7 +959,8 @@ void WasmGenerator::Generate<ValueType::kI32>(DataRange* data) {
                          ValueType::kI32>,
       &WasmGenerator::select_with_type<ValueType::kI32>,
 
-      &WasmGenerator::call<ValueType::kI32>};
+      &WasmGenerator::call<ValueType::kI32>,
+      &WasmGenerator::call_indirect<ValueType::kI32>};
 
   GenerateOneOf(alternatives, data);
 }
@@ -1062,7 +1101,8 @@ void WasmGenerator::Generate<ValueType::kI64>(DataRange* data) {
                          ValueType::kI32>,
       &WasmGenerator::select_with_type<ValueType::kI64>,
 
-      &WasmGenerator::call<ValueType::kI64>};
+      &WasmGenerator::call<ValueType::kI64>,
+      &WasmGenerator::call_indirect<ValueType::kI64>};
 
   GenerateOneOf(alternatives, data);
 }
@@ -1119,7 +1159,8 @@ void WasmGenerator::Generate<ValueType::kF32>(DataRange* data) {
                          ValueType::kI32>,
       &WasmGenerator::select_with_type<ValueType::kF32>,
 
-      &WasmGenerator::call<ValueType::kF32>};
+      &WasmGenerator::call<ValueType::kF32>,
+      &WasmGenerator::call_indirect<ValueType::kF32>};
 
   GenerateOneOf(alternatives, data);
 }
@@ -1176,7 +1217,8 @@ void WasmGenerator::Generate<ValueType::kF64>(DataRange* data) {
                          ValueType::kI32>,
       &WasmGenerator::select_with_type<ValueType::kF64>,
 
-      &WasmGenerator::call<ValueType::kF64>};
+      &WasmGenerator::call<ValueType::kF64>,
+      &WasmGenerator::call_indirect<ValueType::kF64>};
 
   GenerateOneOf(alternatives, data);
 }
@@ -1193,6 +1235,7 @@ void WasmGenerator::Generate<ValueType::kS128>(DataRange* data) {
   }
 
   constexpr GenerateFn alternatives[] = {
+      &WasmGenerator::simd_const,
       &WasmGenerator::simd_lane_op<kExprI8x16ReplaceLane, 16, ValueType::kS128,
                                    ValueType::kI32>,
       &WasmGenerator::simd_lane_op<kExprI16x8ReplaceLane, 8, ValueType::kS128,
@@ -1237,15 +1280,15 @@ void WasmGenerator::Generate<ValueType::kS128>(DataRange* data) {
                                      ValueType::kI32>,
       &WasmGenerator::op_with_prefix<kExprI8x16Add, ValueType::kS128,
                                      ValueType::kS128>,
-      &WasmGenerator::op_with_prefix<kExprI8x16AddSaturateS, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI8x16AddSatS, ValueType::kS128,
                                      ValueType::kS128>,
-      &WasmGenerator::op_with_prefix<kExprI8x16AddSaturateU, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI8x16AddSatU, ValueType::kS128,
                                      ValueType::kS128>,
       &WasmGenerator::op_with_prefix<kExprI8x16Sub, ValueType::kS128,
                                      ValueType::kS128>,
-      &WasmGenerator::op_with_prefix<kExprI8x16SubSaturateS, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI8x16SubSatS, ValueType::kS128,
                                      ValueType::kS128>,
-      &WasmGenerator::op_with_prefix<kExprI8x16SubSaturateU, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI8x16SubSatU, ValueType::kS128,
                                      ValueType::kS128>,
       &WasmGenerator::op_with_prefix<kExprI8x16MinS, ValueType::kS128,
                                      ValueType::kS128>,
@@ -1290,15 +1333,15 @@ void WasmGenerator::Generate<ValueType::kS128>(DataRange* data) {
                                      ValueType::kI32>,
       &WasmGenerator::op_with_prefix<kExprI16x8Add, ValueType::kS128,
                                      ValueType::kS128>,
-      &WasmGenerator::op_with_prefix<kExprI16x8AddSaturateS, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI16x8AddSatS, ValueType::kS128,
                                      ValueType::kS128>,
-      &WasmGenerator::op_with_prefix<kExprI16x8AddSaturateU, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI16x8AddSatU, ValueType::kS128,
                                      ValueType::kS128>,
       &WasmGenerator::op_with_prefix<kExprI16x8Sub, ValueType::kS128,
                                      ValueType::kS128>,
-      &WasmGenerator::op_with_prefix<kExprI16x8SubSaturateS, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI16x8SubSatS, ValueType::kS128,
                                      ValueType::kS128>,
-      &WasmGenerator::op_with_prefix<kExprI16x8SubSaturateU, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI16x8SubSatU, ValueType::kS128,
                                      ValueType::kS128>,
       &WasmGenerator::op_with_prefix<kExprI16x8Mul, ValueType::kS128,
                                      ValueType::kS128>,
@@ -1356,6 +1399,8 @@ void WasmGenerator::Generate<ValueType::kS128>(DataRange* data) {
                                      ValueType::kS128>,
       &WasmGenerator::op_with_prefix<kExprI32x4MaxU, ValueType::kS128,
                                      ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprI32x4DotI16x8S, ValueType::kS128,
+                                     ValueType::kS128>,
 
       &WasmGenerator::op_with_prefix<kExprI64x2Splat, ValueType::kI64>,
       &WasmGenerator::op_with_prefix<kExprI64x2Neg, ValueType::kS128>,
@@ -1400,6 +1445,14 @@ void WasmGenerator::Generate<ValueType::kS128>(DataRange* data) {
                                      ValueType::kS128>,
       &WasmGenerator::op_with_prefix<kExprF32x4Max, ValueType::kS128,
                                      ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF32x4Pmin, ValueType::kS128,
+                                     ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF32x4Pmax, ValueType::kS128,
+                                     ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF32x4Ceil, ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF32x4Floor, ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF32x4Trunc, ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF32x4NearestInt, ValueType::kS128>,
 
       &WasmGenerator::op_with_prefix<kExprF64x2Splat, ValueType::kF64>,
       &WasmGenerator::op_with_prefix<kExprF64x2Eq, ValueType::kS128,
@@ -1429,6 +1482,14 @@ void WasmGenerator::Generate<ValueType::kS128>(DataRange* data) {
                                      ValueType::kS128>,
       &WasmGenerator::op_with_prefix<kExprF64x2Max, ValueType::kS128,
                                      ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF64x2Pmin, ValueType::kS128,
+                                     ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF64x2Pmax, ValueType::kS128,
+                                     ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF64x2Ceil, ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF64x2Floor, ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF64x2Trunc, ValueType::kS128>,
+      &WasmGenerator::op_with_prefix<kExprF64x2NearestInt, ValueType::kS128>,
 
       &WasmGenerator::op_with_prefix<kExprI32x4SConvertF32x4, ValueType::kS128>,
       &WasmGenerator::op_with_prefix<kExprI32x4UConvertF32x4, ValueType::kS128>,
@@ -1474,20 +1535,20 @@ void WasmGenerator::Generate<ValueType::kS128>(DataRange* data) {
                                      ValueType::kS128, ValueType::kS128>,
 
       &WasmGenerator::simd_shuffle,
-      &WasmGenerator::op_with_prefix<kExprS8x16Swizzle, ValueType::kS128,
+      &WasmGenerator::op_with_prefix<kExprI8x16Swizzle, ValueType::kS128,
                                      ValueType::kS128>,
 
       &WasmGenerator::memop<kExprS128LoadMem>,
-      &WasmGenerator::memop<kExprI16x8Load8x8S>,
-      &WasmGenerator::memop<kExprI16x8Load8x8U>,
-      &WasmGenerator::memop<kExprI32x4Load16x4S>,
-      &WasmGenerator::memop<kExprI32x4Load16x4U>,
-      &WasmGenerator::memop<kExprI64x2Load32x2S>,
-      &WasmGenerator::memop<kExprI64x2Load32x2U>,
-      &WasmGenerator::memop<kExprS8x16LoadSplat>,
-      &WasmGenerator::memop<kExprS16x8LoadSplat>,
-      &WasmGenerator::memop<kExprS32x4LoadSplat>,
-      &WasmGenerator::memop<kExprS64x2LoadSplat>};
+      &WasmGenerator::memop<kExprS128Load8x8S>,
+      &WasmGenerator::memop<kExprS128Load8x8U>,
+      &WasmGenerator::memop<kExprS128Load16x4S>,
+      &WasmGenerator::memop<kExprS128Load16x4U>,
+      &WasmGenerator::memop<kExprS128Load32x2S>,
+      &WasmGenerator::memop<kExprS128Load32x2U>,
+      &WasmGenerator::memop<kExprS128Load8Splat>,
+      &WasmGenerator::memop<kExprS128Load16Splat>,
+      &WasmGenerator::memop<kExprS128Load32Splat>,
+      &WasmGenerator::memop<kExprS128Load64Splat>};
 
   GenerateOneOf(alternatives, data);
 }
@@ -1554,7 +1615,7 @@ void WasmGenerator::Generate(Vector<const ValueType> types, DataRange* data) {
   size_t split_index = data->get<uint8_t>() % (types.size() - 1) + 1;
   Vector<const ValueType> lower_half = types.SubVector(0, split_index);
   Vector<const ValueType> upper_half =
-      types.SubVector(split_index, types.size() - split_index);
+      types.SubVector(split_index, types.size());
   DataRange first_range = data->split();
   Generate(lower_half, &first_range);
   Generate(upper_half, data);
@@ -1614,14 +1675,16 @@ class WasmCompileFuzzer : public WasmExecutionFuzzer {
     WasmModuleBuilder builder(zone);
 
     DataRange range(data);
-    std::vector<FunctionSig*> function_signatures;
-    function_signatures.push_back(sigs.i_iii());
+    std::vector<uint32_t> function_signatures;
+    function_signatures.push_back(builder.AddSignature(sigs.i_iii()));
 
     static_assert(kMaxFunctions >= 1, "need min. 1 function");
     int num_functions = 1 + (range.get<uint8_t>() % kMaxFunctions);
 
     for (int i = 1; i < num_functions; ++i) {
-      function_signatures.push_back(GenerateSig(zone, &range));
+      FunctionSig* sig = GenerateSig(zone, &range);
+      uint32_t signature_index = builder.AddSignature(sig);
+      function_signatures.push_back(signature_index);
     }
 
     int num_globals = range.get<uint8_t>() % (kMaxGlobals + 1);
@@ -1643,7 +1706,7 @@ class WasmCompileFuzzer : public WasmExecutionFuzzer {
       DataRange function_range =
           i == num_functions - 1 ? std::move(range) : range.split();
 
-      FunctionSig* sig = function_signatures[i];
+      FunctionSig* sig = builder.GetSignature(function_signatures[i]);
       WasmFunctionBuilder* f = builder.AddFunction(sig);
 
       WasmGenerator gen(f, function_signatures, globals, mutable_globals,
@@ -1654,6 +1717,11 @@ class WasmCompileFuzzer : public WasmExecutionFuzzer {
 
       f->Emit(kExprEnd);
       if (i == 0) builder.AddExport(CStrVector("main"), f);
+    }
+
+    builder.AllocateIndirectFunctions(num_functions);
+    for (int i = 0; i < num_functions; ++i) {
+      builder.SetIndirectFunction(i, i);
     }
 
     builder.SetMaxMemorySize(32);

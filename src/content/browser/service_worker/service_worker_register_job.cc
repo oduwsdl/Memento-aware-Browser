@@ -27,12 +27,11 @@
 #include "content/browser/service_worker/service_worker_registry.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/url_loader_factory_getter.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/net_errors.h"
+#include "third_party/blink/public/common/service_worker/service_worker_scope_match.h"
 #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
-#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 
 namespace content {
@@ -377,8 +376,6 @@ void ServiceWorkerRegisterJob::OnUpdateCheckFinished(
   // Update check failed.
   if (result == ServiceWorkerSingleScriptUpdateChecker::Result::kFailed) {
     DCHECK(failure_info);
-    ServiceWorkerMetrics::RecordByteForByteUpdateCheckStatus(
-        failure_info->status, /*has_found_update=*/false);
     ResolvePromise(failure_info->status, failure_info->error_message, nullptr);
     // This terminates the current job (|this|).
     Complete(failure_info->status, failure_info->error_message);
@@ -390,8 +387,6 @@ void ServiceWorkerRegisterJob::OnUpdateCheckFinished(
 
   // Update check succeeded.
   if (result == ServiceWorkerSingleScriptUpdateChecker::Result::kIdentical) {
-    ServiceWorkerMetrics::RecordByteForByteUpdateCheckStatus(
-        blink::ServiceWorkerStatusCode::kOk, /*has_found_update=*/false);
     ResolvePromise(blink::ServiceWorkerStatusCode::kOk, std::string(),
                    registration());
     // This terminates the current job (|this|).
@@ -400,8 +395,6 @@ void ServiceWorkerRegisterJob::OnUpdateCheckFinished(
     return;
   }
 
-  ServiceWorkerMetrics::RecordByteForByteUpdateCheckStatus(
-      blink::ServiceWorkerStatusCode::kOk, /*has_found_update=*/true);
   CreateNewVersionForUpdate();
 }
 
@@ -425,7 +418,7 @@ void ServiceWorkerRegisterJob::ContinueWithNewRegistration(
   }
 
   set_registration(std::move(new_registration));
-  AddRegistrationToMatchingProviderHosts(registration());
+  AddRegistrationToMatchingContainerHosts(registration());
   UpdateAndContinue();
 }
 
@@ -592,7 +585,7 @@ void ServiceWorkerRegisterJob::InstallAndContinue() {
 void ServiceWorkerRegisterJob::DispatchInstallEvent(
     blink::ServiceWorkerStatusCode start_worker_status) {
   if (start_worker_status != blink::ServiceWorkerStatusCode::kOk) {
-    OnInstallFailed(start_worker_status);
+    OnInstallFailed(/*fetch_count=*/0, start_worker_status);
     return;
   }
 
@@ -603,7 +596,7 @@ void ServiceWorkerRegisterJob::DispatchInstallEvent(
   int request_id = new_version()->StartRequest(
       ServiceWorkerMetrics::EventType::INSTALL,
       base::BindOnce(&ServiceWorkerRegisterJob::OnInstallFailed,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr(), /*fetch_count=*/0));
 
   new_version()->endpoint()->DispatchInstallEvent(
       base::BindOnce(&ServiceWorkerRegisterJob::OnInstallFinished,
@@ -612,19 +605,22 @@ void ServiceWorkerRegisterJob::DispatchInstallEvent(
 
 void ServiceWorkerRegisterJob::OnInstallFinished(
     int request_id,
-    blink::mojom::ServiceWorkerEventStatus event_status) {
+    blink::mojom::ServiceWorkerEventStatus event_status,
+    uint32_t fetch_count) {
   bool succeeded =
       event_status == blink::mojom::ServiceWorkerEventStatus::COMPLETED;
-  new_version()->FinishRequest(request_id, succeeded);
+  new_version()->FinishRequestWithFetchCount(request_id, succeeded,
+                                             fetch_count);
 
   if (!succeeded) {
     OnInstallFailed(
+        fetch_count,
         mojo::ConvertTo<blink::ServiceWorkerStatusCode>(event_status));
     return;
   }
 
   ServiceWorkerMetrics::RecordInstallEventStatus(
-      blink::ServiceWorkerStatusCode::kOk);
+      blink::ServiceWorkerStatusCode::kOk, fetch_count);
 
   SetPhase(STORE);
   DCHECK(!registration()->last_update_check().is_null());
@@ -635,8 +631,9 @@ void ServiceWorkerRegisterJob::OnInstallFinished(
 }
 
 void ServiceWorkerRegisterJob::OnInstallFailed(
+    uint32_t fetch_count,
     blink::ServiceWorkerStatusCode status) {
-  ServiceWorkerMetrics::RecordInstallEventStatus(status);
+  ServiceWorkerMetrics::RecordInstallEventStatus(status, fetch_count);
   DCHECK_NE(status, blink::ServiceWorkerStatusCode::kOk)
       << "OnInstallFailed should not handle "
          "blink::ServiceWorkerStatusCode::kOk";
@@ -772,7 +769,7 @@ void ServiceWorkerRegisterJob::ResolvePromise(
   callbacks_.clear();
 }
 
-void ServiceWorkerRegisterJob::AddRegistrationToMatchingProviderHosts(
+void ServiceWorkerRegisterJob::AddRegistrationToMatchingContainerHosts(
     ServiceWorkerRegistration* registration) {
   DCHECK(registration);
   // Include bfcached clients because they need to have the correct
@@ -786,7 +783,7 @@ void ServiceWorkerRegisterJob::AddRegistrationToMatchingProviderHosts(
        !it->IsAtEnd(); it->Advance()) {
     ServiceWorkerContainerHost* container_host = it->GetContainerHost();
     DCHECK(container_host->IsContainerForClient());
-    if (!ServiceWorkerUtils::ScopeMatches(registration->scope(),
+    if (!blink::ServiceWorkerScopeMatches(registration->scope(),
                                           container_host->url())) {
       continue;
     }

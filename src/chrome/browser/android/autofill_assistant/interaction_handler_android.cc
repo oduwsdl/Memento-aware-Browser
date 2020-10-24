@@ -10,28 +10,91 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
-#include "chrome/browser/android/autofill_assistant/generic_ui_controller_android.h"
 #include "chrome/browser/android/autofill_assistant/generic_ui_interactions_android.h"
+#include "chrome/browser/android/autofill_assistant/generic_ui_nested_controller_android.h"
 #include "chrome/browser/android/autofill_assistant/view_handler_android.h"
 #include "components/autofill_assistant/browser/basic_interactions.h"
 #include "components/autofill_assistant/browser/generic_ui.pb.h"
+#include "components/autofill_assistant/browser/generic_ui_replace_placeholders.h"
 #include "components/autofill_assistant/browser/ui_delegate.h"
 #include "components/autofill_assistant/browser/user_model.h"
 #include "components/autofill_assistant/browser/value_util.h"
 
 namespace autofill_assistant {
 
+namespace {
+
+// Runs |callbacks|. Early-terminates if a callback causes the action to end.
+void RunCallbacks(
+    std::vector<InteractionHandlerAndroid::InteractionCallback> callbacks,
+    base::WeakPtr<InteractionHandlerAndroid> interaction_handler,
+    base::WeakPtr<UserModel> user_model,
+    base::WeakPtr<ViewHandlerAndroid> view_handler) {
+  if (!interaction_handler || !user_model || !view_handler) {
+    return;
+  }
+
+  for (const auto& callback : callbacks) {
+    callback.Run();
+    // A callback may have caused |interaction_handler| to go out of scope.
+    if (!interaction_handler) {
+      return;
+    }
+  }
+}
+
+void RunForEachLoop(
+    const ForEachProto& proto,
+    base::WeakPtr<InteractionHandlerAndroid> interaction_handler,
+    base::WeakPtr<UserModel> user_model,
+    base::WeakPtr<ViewHandlerAndroid> view_handler) {
+  if (!interaction_handler || !user_model || !view_handler) {
+    return;
+  }
+  auto loop_value = user_model->GetValue(proto.loop_value_model_identifier());
+  if (!loop_value.has_value()) {
+    VLOG(2) << "Error running ForEach loop: "
+            << proto.loop_value_model_identifier() << " not found in model";
+    return;
+  }
+
+  for (int i = 0; i < GetValueSize(*loop_value); ++i) {
+    std::vector<InteractionHandlerAndroid::InteractionCallback> callbacks;
+    // Note: callback protos are copied and then modified. |proto| is unchanged.
+    for (auto callback_proto_copy : proto.callbacks()) {
+      ReplacePlaceholdersInCallback(
+          &callback_proto_copy,
+          {{proto.loop_counter(), base::NumberToString(i)}});
+      auto callback = interaction_handler->CreateInteractionCallbackFromProto(
+          callback_proto_copy);
+      if (!callback.has_value()) {
+        // Should never happen.
+        VLOG(1) << "Error creating ForEach interaction: failed to create "
+                   "callback";
+        return;
+      }
+      callbacks.emplace_back(*callback);
+    }
+
+    RunCallbacks(callbacks, interaction_handler, user_model, view_handler);
+  }
+}
+
+}  // namespace
+
 InteractionHandlerAndroid::InteractionHandlerAndroid(
     EventHandler* event_handler,
     UserModel* user_model,
     BasicInteractions* basic_interactions,
     ViewHandlerAndroid* view_handler,
+    RadioButtonController* radio_button_controller,
     base::android::ScopedJavaGlobalRef<jobject> jcontext,
     base::android::ScopedJavaGlobalRef<jobject> jdelegate)
     : event_handler_(event_handler),
       user_model_(user_model),
       basic_interactions_(basic_interactions),
       view_handler_(view_handler),
+      radio_button_controller_(radio_button_controller),
       jcontext_(jcontext),
       jdelegate_(jdelegate) {}
 
@@ -68,12 +131,7 @@ bool InteractionHandlerAndroid::AddInteractionsFromProto(
     NOTREACHED() << "Interactions can not be added while listening to events!";
     return false;
   }
-  auto key = EventHandler::CreateEventKeyFromProto(proto.trigger_event());
-  if (!key) {
-    VLOG(1) << "Invalid trigger event for interaction";
-    return false;
-  }
-
+  std::vector<InteractionHandlerAndroid::InteractionCallback> callbacks;
   for (const auto& callback_proto : proto.callbacks()) {
     auto callback = CreateInteractionCallbackFromProto(callback_proto);
     if (!callback) {
@@ -87,7 +145,19 @@ bool InteractionHandlerAndroid::AddInteractionsFromProto(
           basic_interactions_->GetWeakPtr(),
           callback_proto.condition_model_identifier(), *callback));
     }
-    AddInteraction(*key, *callback);
+    callbacks.push_back(std::move(*callback));
+  }
+
+  for (const auto& trigger_event : proto.trigger_event()) {
+    auto key = EventHandler::CreateEventKeyFromProto(trigger_event);
+    if (!key) {
+      VLOG(1) << "Invalid trigger event of type " << trigger_event.kind_case();
+      return false;
+    }
+
+    for (const auto& callback : callbacks) {
+      AddInteraction(*key, callback);
+    }
   }
   return true;
 }
@@ -101,26 +171,11 @@ void InteractionHandlerAndroid::AddInteraction(
 void InteractionHandlerAndroid::OnEvent(const EventHandler::EventKey& key) {
   auto it = interactions_.find(key);
   if (it != interactions_.end()) {
-    for (auto& callback : it->second) {
-      callback.Run();
-    }
+    RunCallbacks(it->second, this->GetWeakPtr(), user_model_->GetWeakPtr(),
+                 view_handler_->GetWeakPtr());
+    // Note: it is unsafe to call any code after running callbacks, because
+    // a callback may effectively delete *this.
   }
-}
-
-void InteractionHandlerAndroid::AddRadioButtonToGroup(
-    const std::string& radio_group,
-    const std::string& model_identifier) {
-  radio_groups_[radio_group].emplace_back(model_identifier);
-}
-
-void InteractionHandlerAndroid::UpdateRadioButtonGroup(
-    const std::string& radio_group,
-    const std::string& selected_model_identifier) {
-  if (radio_groups_.find(radio_group) == radio_groups_.end()) {
-    return;
-  }
-  basic_interactions_->UpdateRadioButtonGroup(radio_groups_[radio_group],
-                                              selected_model_identifier);
 }
 
 base::Optional<InteractionHandlerAndroid::InteractionCallback>
@@ -277,6 +332,31 @@ InteractionHandlerAndroid::CreateInteractionCallbackFromProto(
           base::BindRepeating(&android_interactions::ClearViewContainer,
                               proto.clear_view_container().view_identifier(),
                               view_handler_, jdelegate_));
+    case CallbackProto::kForEach: {
+      if (proto.for_each().loop_counter().empty()) {
+        VLOG(1) << "Error creating ForEach interaction: "
+                   "loop_counter not set";
+        return base::nullopt;
+      }
+      if (proto.for_each().loop_value_model_identifier().empty()) {
+        VLOG(1) << "Error creating ForEach interaction: "
+                   "loop_value_model_identifier not set";
+        return base::nullopt;
+      }
+      // Parse the callbacks here to fail view inflation in case of invalid
+      // callbacks.
+      for (const auto& callback_proto : proto.for_each().callbacks()) {
+        auto callback = CreateInteractionCallbackFromProto(callback_proto);
+        if (!callback.has_value()) {
+          VLOG(1) << "Error creating ForEach interaction: failed to create "
+                     "callback";
+          return base::nullopt;
+        }
+      }
+      return base::Optional<InteractionCallback>(base::BindRepeating(
+          &RunForEachLoop, proto.for_each(), GetWeakPtr(),
+          user_model_->GetWeakPtr(), view_handler_->GetWeakPtr()));
+    }
     case CallbackProto::KIND_NOT_SET:
       VLOG(1) << "Error creating interaction: kind not set";
       return base::nullopt;
@@ -290,7 +370,8 @@ void InteractionHandlerAndroid::DeleteNestedUi(const std::string& identifier) {
   }
 }
 
-const GenericUiControllerAndroid* InteractionHandlerAndroid::CreateNestedUi(
+const GenericUiNestedControllerAndroid*
+InteractionHandlerAndroid::CreateNestedUi(
     const GenericUserInterfaceProto& proto,
     const std::string& identifier) {
   if (nested_ui_controllers_.find(identifier) != nested_ui_controllers_.end()) {
@@ -299,9 +380,9 @@ const GenericUiControllerAndroid* InteractionHandlerAndroid::CreateNestedUi(
                "instance with ClearViewContainerProto?)";
     return nullptr;
   }
-  auto nested_ui = GenericUiControllerAndroid::CreateFromProto(
+  auto nested_ui = GenericUiNestedControllerAndroid::CreateFromProto(
       proto, jcontext_, jdelegate_, event_handler_, user_model_,
-      basic_interactions_);
+      basic_interactions_, radio_button_controller_);
   const auto* nested_ui_ptr = nested_ui.get();
   if (nested_ui) {
     nested_ui_controllers_.emplace(identifier, std::move(nested_ui));

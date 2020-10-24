@@ -14,9 +14,11 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/android/web_contents_state.h"
+#include "base/supports_user_data.h"
 #include "chrome/browser/sync/glue/synced_tab_delegate_android.h"
+#include "chrome/browser/tab/web_contents_state.h"
 #include "components/infobars/core/infobar_manager.h"
 #include "components/omnibox/browser/location_bar_model.h"
 #include "components/sessions/core/session_id.h"
@@ -37,7 +39,7 @@ class DevToolsAgentHost;
 class WebContents;
 }
 
-class TabAndroid {
+class TabAndroid : public base::SupportsUserData {
  public:
   // A Java counterpart will be generated for this enum.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser
@@ -46,6 +48,12 @@ class TabAndroid {
     DEFAULT_PAGE_LOAD = 1,
     PARTIAL_PRERENDERED_PAGE_LOAD = 2,
     FULL_PRERENDERED_PAGE_LOAD = 3,
+  };
+
+  class Observer : public base::CheckedObserver {
+   public:
+    // Called when WebContents is initialized.
+    virtual void OnInitWebContents(TabAndroid* tab) = 0;
   };
 
   // Convenience method to retrieve the Tab associated with the passed
@@ -61,7 +69,7 @@ class TabAndroid {
   static void AttachTabHelpers(content::WebContents* web_contents);
 
   TabAndroid(JNIEnv* env, const base::android::JavaRef<jobject>& obj);
-  ~TabAndroid();
+  ~TabAndroid() override;
 
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
 
@@ -106,6 +114,12 @@ class TabAndroid {
   bool IsCustomTab();
   bool IsHidden();
 
+  // Observers -----------------------------------------------------------------
+
+  // Adds/Removes an Observer.
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
   // Methods called from Java via JNI -----------------------------------------
 
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
@@ -117,12 +131,14 @@ class TabAndroid {
       const base::android::JavaParamRef<jobject>& jweb_contents,
       jint jparent_tab_id,
       const base::android::JavaParamRef<jobject>& jweb_contents_delegate,
-      const base::android::JavaParamRef<jobject>& jcontext_menu_populator);
+      const base::android::JavaParamRef<jobject>&
+          jcontext_menu_populator_factory);
   void UpdateDelegates(
-        JNIEnv* env,
-        const base::android::JavaParamRef<jobject>& obj,
-        const base::android::JavaParamRef<jobject>& jweb_contents_delegate,
-        const base::android::JavaParamRef<jobject>& jcontext_menu_populator);
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& jweb_contents_delegate,
+      const base::android::JavaParamRef<jobject>&
+          jcontext_menu_populator_factory);
   void DestroyWebContents(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj);
   void ReleaseWebContents(JNIEnv* env,
@@ -175,6 +191,8 @@ class TabAndroid {
       web_contents_delegate_;
   scoped_refptr<content::DevToolsAgentHost> devtools_host_;
   std::unique_ptr<browser_sync::SyncedTabDelegateAndroid> synced_tab_delegate_;
+
+  base::ObserverList<Observer> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(TabAndroid);
 };

@@ -26,9 +26,13 @@ class AccessibilityExtensionLoader {
   void SetProfile(Profile* profile, const base::Closure& done_callback);
   void Load(Profile* profile, const base::Closure& done_cb);
   void Unload();
-  void LoadExtension(Profile* profile, base::Closure done_cb);
+
+  bool loaded() { return loaded_; }
 
  private:
+  void LoadExtension(Profile* profile, base::Closure done_cb);
+  void LoadExtensionImpl(Profile* profile, base::Closure done_cb);
+  void ReinstallExtensionForKiosk(Profile* profile, base::Closure done_cb);
   void UnloadExtensionFromProfile(Profile* profile);
 
   Profile* profile_;
@@ -40,6 +44,9 @@ class AccessibilityExtensionLoader {
   const base::FilePath::CharType* guest_manifest_filename_ = nullptr;
 
   bool loaded_;
+
+  // Whether this extension was reset for kiosk mode.
+  bool was_reset_for_kiosk_ = false;
 
   base::Closure unload_callback_;
 

@@ -37,9 +37,9 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.sync.AndroidSyncSettings;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
-import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.widget.Toast;
 
@@ -224,7 +224,8 @@ public class PasswordEntryViewer
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         inflater.inflate(R.menu.password_entry_viewer_action_bar_menu, menu);
         menu.findItem(R.id.action_edit_saved_password)
-                .setVisible(ChromeFeatureList.isEnabled(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
+                .setVisible(
+                        ChromeFeatureList.isEnabled(ChromeFeatureList.EDIT_PASSWORDS_IN_SETTINGS)
                         && !mException);
     }
 

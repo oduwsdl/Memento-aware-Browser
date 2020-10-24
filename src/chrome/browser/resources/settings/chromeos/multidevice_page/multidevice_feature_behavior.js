@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {MultiDeviceSettingsMode, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData } from './multidevice_constants.m.js';
+// #import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+// clang-format on
+
 /**
  * @fileoverview Polymer behavior for dealing with MultiDevice features. It is
  * intended to facilitate passing data between elements in the MultiDevice page
@@ -101,6 +106,14 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.i18n('multideviceAndroidMessagesItemTitle');
       case settings.MultiDeviceFeature.SMART_LOCK:
         return this.i18n('multideviceSmartLockItemTitle');
+      case settings.MultiDeviceFeature.PHONE_HUB:
+        return this.i18n('multidevicePhoneHubItemTitle');
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+        return this.i18n('multidevicePhoneHubNotificationsItemTitle');
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+        return this.i18n('multidevicePhoneHubTaskContinuationItemTitle');
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.i18n('multideviceWifiSyncItemTitle');
       default:
         return '';
     }
@@ -120,6 +133,13 @@ const MultiDeviceFeatureBehaviorImpl = {
         return 'os-settings:multidevice-messages';
       case settings.MultiDeviceFeature.SMART_LOCK:
         return 'os-settings:multidevice-smart-lock';
+      // TODO(https://crbug.com/1106937): Use real Phone Hub asset.
+      case settings.MultiDeviceFeature.PHONE_HUB:
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+        return 'os-settings:multidevice-better-together-suite';
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return 'os-settings:multidevice-wifi-sync';
       default:
         return '';
     }
@@ -139,6 +159,15 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.i18nAdvanced('multideviceInstantTetheringItemSummary');
       case settings.MultiDeviceFeature.MESSAGES:
         return this.i18nAdvanced('multideviceAndroidMessagesItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB:
+        return this.i18nAdvanced('multidevicePhoneHubItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+        return this.i18nAdvanced('multidevicePhoneHubNotificationsItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+        return this.i18nAdvanced(
+            'multidevicePhoneHubTaskContinuationItemSummary');
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.i18nAdvanced('multideviceWifiSyncItemSummary');
       default:
         return '';
     }
@@ -165,6 +194,14 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.pageContentData.messagesState;
       case settings.MultiDeviceFeature.SMART_LOCK:
         return this.pageContentData.smartLockState;
+      case settings.MultiDeviceFeature.PHONE_HUB:
+        return this.pageContentData.phoneHubState;
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+        return this.pageContentData.phoneHubNotificationsState;
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+        return this.pageContentData.phoneHubTaskContinuationState;
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.pageContentData.wifiSyncState;
       default:
         return null;
     }
@@ -184,7 +221,7 @@ const MultiDeviceFeatureBehaviorImpl = {
 };
 
 /** @polymerBehavior */
-const MultiDeviceFeatureBehavior = [
+/* #export */ const MultiDeviceFeatureBehavior = [
   I18nBehavior,
   MultiDeviceFeatureBehaviorImpl,
 ];

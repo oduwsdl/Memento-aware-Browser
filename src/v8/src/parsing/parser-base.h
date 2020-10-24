@@ -328,7 +328,7 @@ class ParserBase {
 
     BlockState(Zone* zone, Scope** scope_stack)
         : BlockState(scope_stack,
-                     new (zone) Scope(zone, *scope_stack, BLOCK_SCOPE)) {}
+                     zone->New<Scope>(zone, *scope_stack, BLOCK_SCOPE)) {}
 
     ~BlockState() { *scope_stack_ = outer_scope_; }
 
@@ -693,11 +693,14 @@ class ParserBase {
     // Add {label} to both {labels} and {own_labels}.
     if (*labels == nullptr) {
       DCHECK_NULL(*own_labels);
-      *labels = new (zone()) ZonePtrList<const AstRawString>(1, zone());
-      *own_labels = new (zone()) ZonePtrList<const AstRawString>(1, zone());
+      *labels =
+          zone()->template New<ZonePtrList<const AstRawString>>(1, zone());
+      *own_labels =
+          zone()->template New<ZonePtrList<const AstRawString>>(1, zone());
     } else {
       if (*own_labels == nullptr) {
-        *own_labels = new (zone()) ZonePtrList<const AstRawString>(1, zone());
+        *own_labels =
+            zone()->template New<ZonePtrList<const AstRawString>>(1, zone());
       }
     }
     (*labels)->Add(label, zone());
@@ -758,24 +761,24 @@ class ParserBase {
   }
 
   DeclarationScope* NewScriptScope(REPLMode repl_mode) const {
-    return new (zone())
-        DeclarationScope(zone(), ast_value_factory(), repl_mode);
+    return zone()->template New<DeclarationScope>(zone(), ast_value_factory(),
+                                                  repl_mode);
   }
 
   DeclarationScope* NewVarblockScope() const {
-    return new (zone()) DeclarationScope(zone(), scope(), BLOCK_SCOPE);
+    return zone()->template New<DeclarationScope>(zone(), scope(), BLOCK_SCOPE);
   }
 
   ModuleScope* NewModuleScope(DeclarationScope* parent) const {
-    return new (zone()) ModuleScope(parent, ast_value_factory());
+    return zone()->template New<ModuleScope>(parent, ast_value_factory());
   }
 
   DeclarationScope* NewEvalScope(Scope* parent) const {
-    return new (zone()) DeclarationScope(zone(), parent, EVAL_SCOPE);
+    return zone()->template New<DeclarationScope>(zone(), parent, EVAL_SCOPE);
   }
 
   ClassScope* NewClassScope(Scope* parent, bool is_anonymous) const {
-    return new (zone()) ClassScope(zone(), parent, is_anonymous);
+    return zone()->template New<ClassScope>(zone(), parent, is_anonymous);
   }
 
   Scope* NewScope(ScopeType scope_type) const {
@@ -786,13 +789,13 @@ class ParserBase {
   // should automatically use scope() as parent, and be fine with
   // NewScope(ScopeType) above.
   Scope* NewScopeWithParent(Scope* parent, ScopeType scope_type) const {
-    // Must always use the specific constructors for the blacklisted scope
+    // Must always use the specific constructors for the blocklisted scope
     // types.
     DCHECK_NE(FUNCTION_SCOPE, scope_type);
     DCHECK_NE(SCRIPT_SCOPE, scope_type);
     DCHECK_NE(MODULE_SCOPE, scope_type);
     DCHECK_NOT_NULL(parent);
-    return new (zone()) Scope(zone(), parent, scope_type);
+    return zone()->template New<Scope>(zone(), parent, scope_type);
   }
 
   // Creates a function scope that always allocates in zone(). The function
@@ -802,8 +805,8 @@ class ParserBase {
                                      Zone* parse_zone = nullptr) const {
     DCHECK(ast_value_factory());
     if (parse_zone == nullptr) parse_zone = zone();
-    DeclarationScope* result = new (zone())
-        DeclarationScope(parse_zone, scope(), FUNCTION_SCOPE, kind);
+    DeclarationScope* result = zone()->template New<DeclarationScope>(
+        parse_zone, scope(), FUNCTION_SCOPE, kind);
 
     // Record presence of an inner function scope
     function_state_->RecordFunctionOrEvalCall();
@@ -906,7 +909,9 @@ class ParserBase {
 
     if (scanner()->current_token() == Token::AWAIT && !is_async_function()) {
       ReportMessageAt(scanner()->location(),
-                      MessageTemplate::kAwaitNotInAsyncFunction);
+                      flags().allow_harmony_top_level_await()
+                          ? MessageTemplate::kAwaitNotInAsyncContext
+                          : MessageTemplate::kAwaitNotInAsyncFunction);
       return;
     }
 
@@ -1348,9 +1353,12 @@ class ParserBase {
   // Checks if the expression is a valid reference expression (e.g., on the
   // left-hand side of assignments). Although ruled out by ECMA as early errors,
   // we allow calls for web compatibility and rewrite them to a runtime throw.
+  // Modern language features can be exempted from this hack by passing
+  // early_error = true.
   ExpressionT RewriteInvalidReferenceExpression(ExpressionT expression,
                                                 int beg_pos, int end_pos,
-                                                MessageTemplate message);
+                                                MessageTemplate message,
+                                                bool early_error);
 
   bool IsValidReferenceExpression(ExpressionT expression);
 
@@ -1400,9 +1408,10 @@ class ParserBase {
   // optimizations. This checks if expression is an eval call, and if yes,
   // forwards the information to scope.
   Call::PossiblyEval CheckPossibleEvalCall(ExpressionT expression,
+                                           bool is_optional_call,
                                            Scope* scope) {
     if (impl()->IsIdentifier(expression) &&
-        impl()->IsEval(impl()->AsIdentifier(expression))) {
+        impl()->IsEval(impl()->AsIdentifier(expression)) && !is_optional_call) {
       function_state_->RecordFunctionOrEvalCall();
       scope->RecordEvalCall();
 
@@ -1829,7 +1838,7 @@ ParserBase<Impl>::ParsePrimaryExpression() {
 
     case Token::THIS: {
       Consume(Token::THIS);
-      return impl()->ThisExpression();
+      return impl()->NewThisExpression(beg_pos);
     }
 
     case Token::ASSIGN_DIV:
@@ -2819,9 +2828,12 @@ ParserBase<Impl>::ParseAssignmentExpressionCoverGrammar() {
                                           end_position());
   } else {
     DCHECK(!IsValidReferenceExpression(expression));
+    // For web compatibility reasons, throw early errors only for logical
+    // assignment, not for regular assignment.
+    const bool early_error = Token::IsLogicalAssignmentOp(op);
     expression = RewriteInvalidReferenceExpression(
         expression, lhs_beg_pos, end_position(),
-        MessageTemplate::kInvalidLhsInAssignment);
+        MessageTemplate::kInvalidLhsInAssignment, early_error);
   }
 
   Consume(op);
@@ -3136,9 +3148,10 @@ ParserBase<Impl>::ParseUnaryOrPrefixExpression() {
       expression_scope()->MarkIdentifierAsAssigned();
     }
   } else {
+    const bool early_error = false;
     expression = RewriteInvalidReferenceExpression(
         expression, expression_position, end_position(),
-        MessageTemplate::kInvalidLhsInPrefixOp);
+        MessageTemplate::kInvalidLhsInPrefixOp, early_error);
   }
 
   return factory()->NewCountOperation(op, true /* prefix */, expression,
@@ -3211,9 +3224,10 @@ typename ParserBase<Impl>::ExpressionT
 ParserBase<Impl>::ParsePostfixContinuation(ExpressionT expression,
                                            int lhs_beg_pos) {
   if (V8_UNLIKELY(!IsValidReferenceExpression(expression))) {
+    const bool early_error = false;
     expression = RewriteInvalidReferenceExpression(
         expression, lhs_beg_pos, end_position(),
-        MessageTemplate::kInvalidLhsInPostfixOp);
+        MessageTemplate::kInvalidLhsInPostfixOp, early_error);
   }
   if (impl()->IsIdentifier(expression)) {
     expression_scope()->MarkIdentifierAsAssigned();
@@ -3355,7 +3369,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
         // These calls are marked as potentially direct eval calls. Whether
         // they are actually direct calls to eval is determined at run time.
         Call::PossiblyEval is_possibly_eval =
-            CheckPossibleEvalCall(result, scope());
+            CheckPossibleEvalCall(result, is_optional, scope());
 
         if (has_spread) {
           result = impl()->SpreadCall(result, args, pos, is_possibly_eval,
@@ -4737,7 +4751,8 @@ template <typename Impl>
 typename ParserBase<Impl>::ExpressionT
 ParserBase<Impl>::RewriteInvalidReferenceExpression(ExpressionT expression,
                                                     int beg_pos, int end_pos,
-                                                    MessageTemplate message) {
+                                                    MessageTemplate message,
+                                                    bool early_error) {
   DCHECK(!IsValidReferenceExpression(expression));
   if (impl()->IsIdentifier(expression)) {
     DCHECK(is_strict(language_mode()));
@@ -4747,7 +4762,8 @@ ParserBase<Impl>::RewriteInvalidReferenceExpression(ExpressionT expression,
                     MessageTemplate::kStrictEvalArguments);
     return impl()->FailureExpression();
   }
-  if (expression->IsCall() && !expression->AsCall()->is_tagged_template()) {
+  if (expression->IsCall() && !expression->AsCall()->is_tagged_template() &&
+      !early_error) {
     expression_scope()->RecordPatternError(
         Scanner::Location(beg_pos, end_pos),
         MessageTemplate::kInvalidDestructuringTarget);
@@ -4761,6 +4777,9 @@ ParserBase<Impl>::RewriteInvalidReferenceExpression(ExpressionT expression,
     ExpressionT error = impl()->NewThrowReferenceError(message, beg_pos);
     return factory()->NewProperty(expression, error, beg_pos);
   }
+  // Tagged templates and other modern language features (which pass early_error
+  // = true) are exempt from the web compatibility hack. Throw a regular early
+  // error.
   ReportMessageAt(Scanner::Location(beg_pos, end_pos), message);
   return impl()->FailureExpression();
 }
@@ -5281,7 +5300,8 @@ typename ParserBase<Impl>::StatementT ParserBase<Impl>::ParseIfStatement(
     auto labels_copy =
         labels == nullptr
             ? labels
-            : new (zone()) ZonePtrList<const AstRawString>(*labels, zone());
+            : zone()->template New<ZonePtrList<const AstRawString>>(*labels,
+                                                                    zone());
     then_statement = ParseScopedStatement(labels_copy);
   }
 

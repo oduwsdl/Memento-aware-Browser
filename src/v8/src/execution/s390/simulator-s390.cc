@@ -761,6 +761,8 @@ void Simulator::EvalTableInit() {
   V(va, VA, 0xE7F3)       /* type = VRR_C VECTOR ADD  */                       \
   V(vs, VS, 0xE7F7)       /* type = VRR_C VECTOR SUBTRACT  */                  \
   V(vml, VML, 0xE7A2)     /* type = VRR_C VECTOR MULTIPLY LOW  */              \
+  V(vme, VME, 0xE7A6)     /* type = VRR_C VECTOR MULTIPLY EVEN  */             \
+  V(vmo, VMO, 0xE7A7)     /* type = VRR_C VECTOR MULTIPLY ODD  */              \
   V(vnc, VNC, 0xE769)     /* type = VRR_C VECTOR AND WITH COMPLEMENT */        \
   V(vsum, VSUM, 0xE764)   /* type = VRR_C VECTOR SUM ACROSS WORD  */           \
   V(vsumg, VSUMG, 0xE765) /* type = VRR_C VECTOR SUM ACROSS DOUBLEWORD  */     \
@@ -3186,6 +3188,56 @@ EVALUATE(VML) {
   return length;
 }
 
+#define VECTOR_MULTIPLY_EVEN_ODD_TYPE(r1, r2, r3, input_type, result_type, \
+                                      is_odd)                              \
+  size_t i = 0, j = 0, k = 0;                                              \
+  size_t lane_size = sizeof(input_type);                                   \
+  if (is_odd) {                                                            \
+    i = 1;                                                                 \
+    j = lane_size;                                                         \
+  }                                                                        \
+  for (; j < kSimd128Size; i += 2, j += lane_size * 2, k++) {              \
+    input_type src0 = get_simd_register_by_lane<input_type>(r2, i);        \
+    input_type src1 = get_simd_register_by_lane<input_type>(r3, i);        \
+    set_simd_register_by_lane<result_type>(r1, k, src0 * src1);            \
+  }
+#define VECTOR_MULTIPLY_EVEN_ODD(r1, r2, r3, is_odd)                      \
+  switch (m4) {                                                           \
+    case 0: {                                                             \
+      VECTOR_MULTIPLY_EVEN_ODD_TYPE(r1, r2, r3, int8_t, int16_t, is_odd)  \
+      break;                                                              \
+    }                                                                     \
+    case 1: {                                                             \
+      VECTOR_MULTIPLY_EVEN_ODD_TYPE(r1, r2, r3, int16_t, int32_t, is_odd) \
+      break;                                                              \
+    }                                                                     \
+    case 2: {                                                             \
+      VECTOR_MULTIPLY_EVEN_ODD_TYPE(r1, r2, r3, int32_t, int64_t, is_odd) \
+      break;                                                              \
+    }                                                                     \
+    default:                                                              \
+      UNREACHABLE();                                                      \
+  }
+EVALUATE(VME) {
+  DCHECK_OPCODE(VME);
+  DECODE_VRR_C_INSTRUCTION(r1, r2, r3, m6, m5, m4);
+  USE(m5);
+  USE(m6);
+  VECTOR_MULTIPLY_EVEN_ODD(r1, r2, r3, false)
+  return length;
+}
+
+EVALUATE(VMO) {
+  DCHECK_OPCODE(VMO);
+  DECODE_VRR_C_INSTRUCTION(r1, r2, r3, m6, m5, m4);
+  USE(m5);
+  USE(m6);
+  VECTOR_MULTIPLY_EVEN_ODD(r1, r2, r3, true)
+  return length;
+}
+#undef VECTOR_MULTIPLY_EVEN_ODD
+#undef VECTOR_MULTIPLY_EVEN_ODD_TYPE
+
 EVALUATE(VNC) {
   DCHECK(VNC);
   DECODE_VRR_C_INSTRUCTION(r1, r2, r3, m6, m5, m4);
@@ -3353,9 +3405,10 @@ EVALUATE(VPKLS) {
 
 template <class S, class D>
 void VectorUnpackHigh(void* dst, void* src) {
+  constexpr size_t kItemCount = kSimd128Size / sizeof(D);
   D value = 0;
-  for (size_t i = 0; i < kSimd128Size / sizeof(D); i++) {
-    value = *(reinterpret_cast<S*>(src) + i + (sizeof(S) / 2));
+  for (size_t i = 0; i < kItemCount; i++) {
+    value = *(reinterpret_cast<S*>(src) + i + kItemCount);
     memcpy(reinterpret_cast<D*>(dst) + i, &value, sizeof(D));
   }
 }
@@ -3410,10 +3463,14 @@ EVALUATE(VUPLH) {
 
 template <class S, class D>
 void VectorUnpackLow(void* dst, void* src) {
-  D value = 0;
-  for (size_t i = kSimd128Size / sizeof(D); i > 0; i--) {
-    value = *(reinterpret_cast<S*>(src) + i - 1);
-    memcpy(reinterpret_cast<D*>(dst) + i - 1, &value, sizeof(D));
+  constexpr size_t kItemCount = kSimd128Size / sizeof(D);
+  D temps[kItemCount] = {0};
+  // About overwriting if src and dst are the same register.
+  for (size_t i = 0; i < kItemCount; i++) {
+    temps[i] = static_cast<D>(*(reinterpret_cast<S*>(src) + i));
+  }
+  for (size_t i = 0; i < kItemCount; i++) {
+    memcpy(reinterpret_cast<D*>(dst) + i, &temps[i], sizeof(D));
   }
 }
 
@@ -3689,15 +3746,14 @@ EVALUATE(VPERM) {
   USE(m6);
   for (int i = 0; i < kSimd128Size; i++) {
     int8_t lane_num = get_simd_register_by_lane<int8_t>(r4, i);
+    // Get the five least significant bits.
+    lane_num = (lane_num << 3) >> 3;
     int reg = r2;
     if (lane_num >= kSimd128Size) {
       lane_num = lane_num - kSimd128Size;
       reg = r3;
     }
-    int8_t result = 0;
-    if (lane_num >= 0 && lane_num < kSimd128Size * 2) {
-      result = get_simd_register_by_lane<int8_t>(reg, lane_num);
-    }
+    int8_t result = get_simd_register_by_lane<int8_t>(reg, lane_num);
     set_simd_register_by_lane<int8_t>(r1, i, result);
   }
   return length;
@@ -5904,9 +5960,11 @@ EVALUATE(LLIHL) {
 }
 
 EVALUATE(LLILH) {
-  UNIMPLEMENTED();
-  USE(instr);
-  return 0;
+  DCHECK_OPCODE(LLILH);
+  DECODE_RI_A_INSTRUCTION(instr, r1, i2);
+  uint64_t imm = static_cast<uint64_t>(i2);
+  set_register(r1, (imm << 48) >> 32);
+  return length;
 }
 
 EVALUATE(LLILL) {

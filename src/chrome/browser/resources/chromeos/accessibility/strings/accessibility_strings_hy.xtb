@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Ցանկի միավոր</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Երկու մատը սահեցրեք աջ</translation>
+<translation id="1016393160682012902">Սեղմեք սովորական կամ թարմացվող բրայլյան ստեղնաշարի որևէ ստեղն, կամ հպեք ժեստին՝ դրա գործառույթին ծանոթանալու համար։ Դուրս գալու համար սեղմեք Control + W կամ Escape։</translation>
 <translation id="1022586497894531524">Առաջին անգա՞մ եք օգտագործում ChromeVox Next-ի ձայնային հուշումները: Այս ամփոփ ուղեցույցը կօգնի ձեզ հասկանալ ChromeVox Next-ի հիմունքները:</translation>
 <translation id="1025074108959230262">Կպչուն ռեժիմն անջատված է</translation>
 <translation id="1031961866430398710">ապա</translation>
@@ -51,6 +52,7 @@
 <translation id="1291286136605998134">Փոխարկման կոճակ</translation>
 <translation id="1299774449519412690">Բաց երկնագույն</translation>
 <translation id="1303806948938513162">Հպեք 4 մատով՝ ChromeVox-ի ընտրացանկերը բացելու համար</translation>
+<translation id="1313373992684326101">Անցնել նախորդ բաժին (օր․՝ Կարգավիճակի տող, Գործարկիչ և այլ)։</translation>
 <translation id="1325363694295259631"><ph name="NAME" />, ընտրացանկի տարրի կետակոճակն ընտրված չէ</translation>
 <translation id="1325946044405407859">Դեղնաշագանակագույն</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> / <ph name="TOTAL" /></translation>
@@ -66,6 +68,7 @@
 <translation id="1383876407941801731">Որոնում</translation>
 <translation id="1396114365388024581">tablst</translation>
 <translation id="1405567553485452995">Բաց կանաչ</translation>
+<translation id="141454040365657399">Էջագլուխ</translation>
 <translation id="1417889266572670458">Կապույտ</translation>
 <translation id="1431911867058218151">Սալորագույն</translation>
 <translation id="1439316808600711881">rgn</translation>
@@ -78,6 +81,7 @@
 <translation id="1506187449813838456">Բարձրացնել ձայնածավալը</translation>
 <translation id="151784044608172266">Հաջորդ նախադասությունը</translation>
 <translation id="1524531499102321782">Հաջորդ տողը</translation>
+<translation id="1542513807034338907">Ոլորեք մինչև նախորդ էջ</translation>
 <translation id="1546370775711804143">Ոլորագոտի</translation>
 <translation id="1555130319947370107">Կապույտ</translation>
 <translation id="1559739829547075274">Անցնել նախորդ տարրին</translation>
@@ -152,7 +156,7 @@
 <translation id="2127747486437921899">Շեղ</translation>
 <translation id="2163782704988363449">Վրիպակների ցանկ</translation>
 <translation id="2169714232367507776">Սեղմել ընթացիկ տարրի վրա</translation>
-<translation id="2179452035581866348">ChromeVox-ը ձայներն օգտագործում է` կարևոր և հավելյալ տեղեկություններ տրամադրելու համար: Այս ձայների օգնությամբ դուք կարող եք արագ անցում կատարել էջի տարրերի միջև: Սովորելով այս ձայները` դուք կարող եք անջատել ձայնային նկարագրությունները և էջի մասին անհրաժեշտ տեղեկությունները ստանալ միայն ձայների օգնությամբ: Ստորև ներկայացված են բոլոր ձայներն ու դրանց նշանակությունը:</translation>
+<translation id="2179452035581866348">ChromeVox-ը ձայներն օգտագործում է` կարևոր և հավելյալ տեղեկություններ տրամադրելու համար: Այս ձայների օգնությամբ դուք կարող եք արագ անցում կատարել էջի տարրերի միջև: Սովորելով այս ձայները՝ դուք կարող եք անջատել ձայնային նկարագրությունները և էջի մասին անհրաժեշտ տեղեկությունները ստանալ միայն ձայների օգնությամբ: Ստորև ներկայացված են բոլոր ձայներն ու դրանց նշանակությունը:</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{աջ փակագիծ}one{# աջ փակագիծ}other{# աջ փակագիծ}}</translation>
 <translation id="2197863150503783129">Թավ դարչնագույն</translation>
 <translation id="2199994615414171367">Նախորդ մաթեմատիկական արտահայտությունը</translation>
@@ -279,6 +283,7 @@
 <translation id="3103579948980282461">Միջին կարմրամանուշակագույն</translation>
 <translation id="3104705064753753826">alrt dlg</translation>
 <translation id="3109724472072898302">Կոծկված</translation>
+<translation id="311015743332597320">Չորս մատը սահեցրեք աջ</translation>
 <translation id="3112457281078985179">ChromeVox-ը միացնելու կամ անջատելու համար սեղմեք Control + Alt + Z ստեղները:</translation>
 <translation id="3131002934070407451">Կարդալ թվերը որպես՝</translation>
 <translation id="3134461040845705080">rdonly</translation>
@@ -307,7 +312,7 @@
 <translation id="3270069636408109001">Հաջորդ աղյուսակ չկա</translation>
 <translation id="3273791280096244679">Պահել պիտակը</translation>
 <translation id="3283583562490372694">նշված չէ</translation>
-<translation id="3286372614333682499">ուղղահայաց</translation>
+<translation id="3286372614333682499">ուղղաձիգ</translation>
 <translation id="3286390186030710347">Սահիչ</translation>
 <translation id="3300348286427369683">Տեքստի խմբագրման ավելի լայն հնարավորություններ։ ChromeVox-ն այժմ աջակցում է տեքստի խմբագրման ավելի շատ տարբերակներ, օրինակ՝ արագ նավարկման հրահանգներ, բրայլյան էկրանի միջոցով նշորդի տեղաշարժում, ընտրություն և ավելին։</translation>
 <translation id="3307886118343381874">Անցնել աղյուսակի վերջ</translation>
@@ -344,6 +349,8 @@
 <translation id="3549141990712742152">կտրել «<ph name="TEXT" />» տեքստը:</translation>
 <translation id="3549680091535286226">Հպեք 2 մատով՝ հնչեցումը ժամանակավորապես դադարեցնելու համար</translation>
 <translation id="3564729643041517261">Էկրանի ընթացիկ ոճը՝ կողք կողքի</translation>
+<translation id="3573145950452451508">Էջատակ</translation>
+<translation id="3587482841069643663">Բոլորը</translation>
 <translation id="3589661172894441357">Բառացանկ</translation>
 <translation id="3591784666823501596">Թագավորական կապույտ</translation>
 <translation id="3594207934078151302">Միջին կապտականաչ</translation>
@@ -435,6 +442,7 @@
 <translation id="4278486392851938658">Նախորդ այցելած հղում չկա</translation>
 <translation id="4281245629646759298">Բաց դեղին</translation>
 <translation id="4289540628985791613">Համատեսք</translation>
+<translation id="4294967782363273192">Դասավորությունը աճման կարգով</translation>
 <translation id="4300318234632215983">Հնչեցնել URL-ը հղումից հետո</translation>
 <translation id="4322625298640984693">Դարչնագույն</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{կետ}=3{բազմակետ}one{# կետ}other{# կետ}}</translation>
@@ -446,6 +454,7 @@
 <translation id="4384583879834880242">Հարց ու պատասխան</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">Մուգ երկնագույն</translation>
+<translation id="4406249099130339147">Կետադրական նշանների արձագանք՝</translation>
 <translation id="4432457053224379116">Հնդկական կարմիր</translation>
 <translation id="4437615272777527928">Մուտքագրեք տեքստը, որն անհրաժեշտ է գտնել ընտրացանկերում։ Մեկ արդյունքից մյուսն անցնելու համար օգտագործեք «վեր» և «վար» սլաքները։ Տեքստի նշորդը տեղաշարժելու և մեկ ընտրացանկից մյուսն անցնելու համար օգտագործեք «ձախ» և «աջ» սլաքները։</translation>
 <translation id="4457472090507035117">Ընտրեք ընթացիկ ձայնը`</translation>
@@ -480,6 +489,7 @@
 <translation id="4763480195061959176">video</translation>
 <translation id="4764692524839457597">կանխադրված</translation>
 <translation id="4772771694153161212">Ընդգծումն անջատված է</translation>
+<translation id="4780458943471935919">Ոլորեք մինչև հաջորդ էջ</translation>
 <translation id="4784215347943747396">Կառավարեք սարքն ընդամենը 1 կամ 2 փոխանջատիչի օգնությամբ</translation>
 <translation id="4786285211967466855">1-ին մակարդակի նախորդ վերնագիր չկա</translation>
 <translation id="4787577491510559358">Հնչեցնել ընթացիկ տարրի ձևաչափը</translation>
@@ -504,7 +514,6 @@
 <translation id="489907760999452556">Ներքին հղում</translation>
 <translation id="4909019435900810068">Մեկ բառ հետ գնալ</translation>
 <translation id="4911349081560453449">Նախորդ նշավանդակ չկա</translation>
-<translation id="4915087353619183190">Մուտք ուսուցման ռեժիմ: Սեղմեք QWERTY կամ բրայլյան ստեղնաշարի որևէ ստեղն, կամ հպեք ժեստին՝ դրա գործառույթին ծանոթանալու համար: Դուրս գալու համար սեղմեք Control+W կամ Escape:</translation>
 <translation id="492295894462528572">Ներածություն</translation>
 <translation id="495046168593986294">Ոլորել վեր</translation>
 <translation id="495170559598752135">Գործողություններ</translation>
@@ -644,9 +653,11 @@
 <translation id="5999630716831179808">Ձայներ</translation>
 <translation id="6006050241733874051">Ձև</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{ետշեղգիծ}one{# ետշեղգիծ}other{# ետշեղգիծ}}</translation>
+<translation id="6010616110396250088">Դասավորությունը նվազման կարգով</translation>
 <translation id="6017514345406065928">Կանաչ</translation>
 <translation id="602001110135236999">Ոլորել ձախ</translation>
 <translation id="6034000775414344507">Բաց մոխրագույն</translation>
+<translation id="6036135911048686884">Ուսումնասիրեք հպումով</translation>
 <translation id="6037602951055904232">Շարժվել առաջ</translation>
 <translation id="6044160928851315051">Մթնեցնել էկրանը</translation>
 <translation id="6082768461603900813">Հիմնական նավարկում</translation>
@@ -812,8 +823,9 @@
 <translation id="743783356331413498">Օրինակ</translation>
 <translation id="7439060726180460871">Գրացուցակ</translation>
 <translation id="744163271241493234">pwded</translation>
-<translation id="7484805699335881122">Փոխում է տոնը տարրերի տեսակներ և մեջբերված, ջնջված, ընդգծված, փակագծերի մեջ վերցված կամ գլխատառացված տեքստ արտասանելիս։</translation>
+<translation id="7484805699335881122">Փոխել տոնը՝ տարրերի տեսակներ և մեջբերված, ջնջված, ընդգծված, փակագծերի մեջ վերցված կամ գլխատառերով գրված տեքստ արտասանելիս։</translation>
 <translation id="7491962110804786152">tab</translation>
+<translation id="7492497529767769458">Անցնել հաջորդ բաժին (օր․՝ Կարգավիճակի տող, Գործարկիչ և այլ)։</translation>
 <translation id="7505149250476994901">Տառից առաջ արտասանեք «մեծատառ»</translation>
 <translation id="7518543783849163354">ChromeVox-ի ձայնը ժամանակավորապես անջատելու համար սեղմեք Control ստեղնը:</translation>
 <translation id="7533226154149229506">Բաց ոսկեդեղին</translation>
@@ -821,6 +833,7 @@
 <translation id="7552432549459840808">Chrome-ի օգտակար դյուրանցումներ</translation>
 <translation id="7569983096843329377">Սև</translation>
 <translation id="7579911500627256166">կետ <ph name="DOT" /></translation>
+<translation id="7592060599656252486">Որոշ նշաններ</translation>
 <translation id="7595446402663080101">Նախորդ աղյուսակ չկա</translation>
 <translation id="7596131838331109045">Բաց կարմրանարնջագույն</translation>
 <translation id="7604026522577407655">Անցնել ընթացիկ սյունակի սկիզբ</translation>
@@ -840,6 +853,7 @@
 <translation id="7684431668231950609">Տեքստի խմբագրում, URL</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">Նախորդ կետակոճակը</translation>
+<translation id="7701040980221191251">Չկա</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">Հաջորդ ցուցակով դաշտ չկա</translation>
 <translation id="772146615414628379">Շնորհավորո՛ւմ ենք։ Դուք ծանոթացաք ChromeVox Next-ի օգտագործման հիմունքներին։ Հիշեք, որ ChromeVox-ի հրամանների ընտրացանկը ցանկացած ժամանակ կարող եք բացել «Որոնում + Միջակետ» ստեղների համակցությամբ։ ChromeVox-ի և Chrome OS-ի վերաբերյալ լրացուցիչ տեղեկություններ կարող եք գտնել հետևյալ հոդվածներում։
@@ -898,7 +912,9 @@
 <translation id="812886159861361726">«<ph name="FILE_NAME" />» ֆայլի ներբեռնումը դադարեցվեց</translation>
 <translation id="8129445297241948503">Վերևում վանդակ չկա</translation>
 <translation id="8138880386467279117">Հպէկրան</translation>
+<translation id="8173092779156526980">Չորս մատը սահեցրեք ձախ</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{ընդգծում}one{# ընդգծում}other{# ընդգծում}}</translation>
+<translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">տող</translation>
 <translation id="8186185314313222077">միացնել/անջատել լիաէկրան ռեժիմը</translation>
 <translation id="8199231515320852133">Հնչեցնել ընթացիկ վանդակի էջագլուխները</translation>
@@ -923,6 +939,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ֆունտ}one{# ֆունտի նշան}other{# ֆունտի նշան}}</translation>
 <translation id="8378855320830505539">Մարզ</translation>
 <translation id="8382679411218029383">Ինքնալրացման ներտող և ցանկ</translation>
+<translation id="8394908167088220973">Մեդիայի նվագարկում/դադար</translation>
 <translation id="8428213095426709021">Կարգավորումներ</translation>
 <translation id="8428603554127842284">մակարդակ <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -958,15 +975,16 @@
 <translation id="8656888282555543604">Միացնել բրայլյան գրերի գրանցումը</translation>
 <translation id="867187640362843212">Վերնագիր 5</translation>
 <translation id="8696284982970258155">Նեկտարագույն</translation>
-<translation id="8697111817566059991">{COUNT,plural, =1{ցից}one{# ուղղահայաց ցից}other{# ուղղահայաց ցից}}</translation>
+<translation id="8697111817566059991">{COUNT,plural, =1{ցից}one{# ուղղաձիգ ցից}other{# ուղղաձիգ ցից}}</translation>
 <translation id="8743786158317878347">մուտքագրել կառուցվածքավորված բովանդակություն, օրինակ՝ աղյուսակ</translation>
 <translation id="8747966237988593539">Համարակալված ցուցակ</translation>
 <translation id="8749988712346667988">Արծաթագույն</translation>
 <translation id="875769700429317857">«<ph name="FILE_NAME" />» ֆայլի ներբեռնումն ավարտվեց</translation>
 <translation id="8767968232364267681">4-րդ մակարդակի հաջորդ վերնագիրը</translation>
-<translation id="8770473310765924354">Ավարտել կառուցվածքային բովանդակության, ինչպես օրինակ` աղյուսակի ստեղծումը</translation>
+<translation id="8770473310765924354">Ավարտել կառուցվածքային բովանդակության, ինչպես օրինակ՝ աղյուսակի ստեղծումը</translation>
 <translation id="8779057862865475116">Նախորդ հղում չկա</translation>
 <translation id="8796411681063377102">3-րդ մակարդակի հաջորդ վերնագիրը</translation>
+<translation id="8823311177246872527">Էջ <ph name="CURRENTPAGE" />/<ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Տողի վերնագիր</translation>
@@ -982,6 +1000,7 @@
 <translation id="8946628535652548639">տ<ph name="TABLECELLROWINDEX" />ս<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">Նախորդ կետակոճակ չկա</translation>
 <translation id="8970172509886453271">Նախորդ բաժին չկա</translation>
+<translation id="89720367119469899">Escape</translation>
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">Հեռացնել</translation>
 <translation id="9040132695316389094">Վերնագիր 1</translation>

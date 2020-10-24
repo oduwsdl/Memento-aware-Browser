@@ -49,6 +49,10 @@ body {
   margin: 20px;
 }
 
+.content #free-form-text {
+  margin-top: 0;  /* the content frame already gives enough margin. */
+}
+
 .content #description-text {
   border-color: #c8c8c8;
   box-sizing: border-box;
@@ -95,6 +99,11 @@ body {
 
 .content .text-field-container > input[type=checkbox] {
   margin-inline-end: 9px;
+}
+
+.content .description-empty-notification {
+  color: rgb(204, 0, 0);
+  font-weight: bold;
 }
 
 .content .checkbox-field-container {

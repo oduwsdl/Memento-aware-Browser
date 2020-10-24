@@ -40,13 +40,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   explicit NetworkState(const std::string& path);
   ~NetworkState() override;
 
-  struct CaptivePortalProviderInfo {
-    // The id used by chrome to identify the provider (i.e. an extension id).
-    std::string id;
-    // The display name for the captive portal provider (i.e. extension name).
-    std::string name;
-  };
-
   struct VpnProviderInfo {
     // The id used by chrome to identify the provider (i.e. an extension id).
     std::string id;
@@ -100,8 +93,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
 
   int priority() const { return priority_; }
 
-  const base::Value* proxy_config() const { return proxy_config_.get(); }
-  const base::Value* ipv4_config() const { return ipv4_config_.get(); }
+  const base::Value& proxy_config() const { return proxy_config_; }
+  const base::Value& ipv4_config() const { return ipv4_config_; }
   std::string GetIpAddress() const;
   std::string GetGateway() const;
   GURL GetWebProxyAutoDiscoveryUrl() const;
@@ -110,10 +103,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   bool connectable() const { return connectable_; }
   void set_connectable(bool connectable) { connectable_ = connectable; }
   bool is_captive_portal() const { return is_captive_portal_; }
-  const CaptivePortalProviderInfo* captive_portal_provider() const {
-    return captive_portal_provider_.get();
-  }
-  void SetCaptivePortalProvider(const std::string& id, const std::string& name);
   int signal_strength() const { return signal_strength_; }
   void set_signal_strength(int signal_strength) {
     signal_strength_ = signal_strength;
@@ -202,6 +191,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   // portal state, see IsCaptivePortalState in the .cc file).
   bool IsCaptivePortal() const;
 
+  // Returns true if the security type is non-empty and not 'none'.
+  bool IsSecure() const;
+
   // Returns the |raw_ssid| as a hex-encoded string
   std::string GetHexSsid() const;
 
@@ -223,6 +215,20 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   network_config::mojom::ActivationStateType GetMojoActivationState() const;
   network_config::mojom::SecurityType GetMojoSecurity() const;
 
+  // Helper for UMA stats. Corresponds to NetworkTechnology in enums.xml
+  // which is also used by Shill metrics.
+  enum class NetworkTechnologyType {
+    kCellular = 0,
+    kEthernet = 1,
+    kEthernetEap = 2,
+    kWiFi = 3,
+    kTether = 4,
+    kVPN = 5,
+    kUnknown = 6,
+    kMaxValue = kUnknown,
+  };
+  NetworkTechnologyType GetNetworkTechnologyType() const;
+
   // Setters for testing.
   void set_connection_state_for_testing(const std::string& connection_state) {
     connection_state_ = connection_state;
@@ -242,6 +248,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   static bool ErrorIsValid(const std::string& error);
   static std::unique_ptr<NetworkState> CreateDefaultCellular(
       const std::string& device_path);
+
+  // Ignore changes to signal strength less than this value.
+  constexpr static const int kSignalStrengthChangeThreshold = 5;
 
  private:
   friend class MobileActivatorTest;
@@ -281,12 +290,11 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
 
   // Cached copy of the Shill Service IPConfig object. For ipv6 properties use
   // the ip_configs_ property in the corresponding DeviceState.
-  std::unique_ptr<base::Value> ipv4_config_;
+  base::Value ipv4_config_;
 
   // Wireless properties, used for icons and Connect logic.
   bool connectable_ = false;
   bool is_captive_portal_ = false;
-  std::unique_ptr<CaptivePortalProviderInfo> captive_portal_provider_;
   int signal_strength_ = 0;
   std::string bssid_;
   int frequency_ = 0;
@@ -321,7 +329,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
 
   // TODO(pneubeck): Remove this once (Managed)NetworkConfigurationHandler
   // provides proxy configuration. crbug.com/241775
-  std::unique_ptr<base::Value> proxy_config_;
+  base::Value proxy_config_;
 
   // Set while a network connect request is queued. Cleared on connect or
   // if the request is aborted.

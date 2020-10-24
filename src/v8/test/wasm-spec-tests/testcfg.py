@@ -20,11 +20,17 @@ proposal_flags = [{
                   {
                     'name': 'js-types',
                     'flags': ['--experimental-wasm-type-reflection',
-                              '--no-experimental-wasm-bulk-memory']
+                              '--wasm-staging']
                   },
                   {
-                    'name': 'JS-BigInt-integration',
-                    'flags': ['--experimental-wasm-bigint']
+                    'name': 'tail-call',
+                    'flags': ['--experimental-wasm-return-call',
+                              '--wasm-staging']
+                  },
+                  {
+                    'name': 'simd',
+                    'flags': ['--experimental-wasm-simd',
+                              '--wasm-staging']
                   },
                   ]
 
@@ -51,8 +57,7 @@ class TestCase(testcase.D8TestCase):
     for proposal in proposal_flags:
       if os.sep.join(['proposals', proposal['name']]) in self.path:
         return proposal['flags']
-    # TODO(thibaudm): Remove the flag once multi-value is shipped in V8.
-    return ['--experimental-wasm-mv']
+    return []
 
 
 def GetSuite(*args, **kwargs):

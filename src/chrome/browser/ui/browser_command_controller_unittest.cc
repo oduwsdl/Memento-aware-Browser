@@ -239,7 +239,7 @@ TEST_F(BrowserCommandControllerTest, AvatarMenuAlwaysEnabledInIncognitoMode) {
   Browser::CreateParams profile_params(original_profile->GetPrimaryOTRProfile(),
                                        true);
   std::unique_ptr<Browser> otr_browser(
-      CreateBrowserWithTestWindowForParams(&profile_params));
+      CreateBrowserWithTestWindowForParams(profile_params));
 
   chrome::BrowserCommandController command_controller(otr_browser.get());
   const CommandUpdater* command_updater = &command_controller;
@@ -409,7 +409,7 @@ TEST_F(BrowserCommandControllerFullscreenTest,
               commands[i].reserved_in_fullscreen);
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // When the toolbar is showing, commands should be reserved as if the content
   // were in a tab; IDC_FULLSCREEN should also be reserved.
   static_cast<FullscreenTestBrowserWindow*>(window())->set_toolbar_showing(
@@ -489,7 +489,7 @@ TEST_F(BrowserCommandControllerTest, IncognitoModeOnSigninAllowedPrefChange) {
   // Create a new browser based on the off the record profile.
   Browser::CreateParams profile_params(profile1->GetPrimaryOTRProfile(), true);
   std::unique_ptr<Browser> browser2(
-      CreateBrowserWithTestWindowForParams(&profile_params));
+      CreateBrowserWithTestWindowForParams(profile_params));
 
   chrome::BrowserCommandController command_controller(browser2.get());
   const CommandUpdater* command_updater = &command_controller;

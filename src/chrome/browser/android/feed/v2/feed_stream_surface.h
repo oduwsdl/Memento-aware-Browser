@@ -28,15 +28,24 @@ class FeedStreamSurface : public FeedStreamApi::SurfaceInterface {
 
   // SurfaceInterface implementation.
   void StreamUpdate(const feedui::StreamUpdate& update) override;
+  void ReplaceDataStoreEntry(base::StringPiece key,
+                             base::StringPiece data) override;
+  void RemoveDataStoreEntry(base::StringPiece key) override;
 
   void OnStreamUpdated(const feedui::StreamUpdate& stream_update);
 
-  void LoadMore(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void LoadMore(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& obj,
+                const base::android::JavaParamRef<jobject>& callback_obj);
 
   void ProcessThereAndBackAgain(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jbyteArray>& data);
+
+  void ProcessViewAction(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj,
+                         const base::android::JavaParamRef<jbyteArray>& data);
 
   int ExecuteEphemeralChange(
       JNIEnv* env,
@@ -57,11 +66,18 @@ class FeedStreamSurface : public FeedStreamApi::SurfaceInterface {
   void SurfaceClosed(JNIEnv* env,
                      const base::android::JavaParamRef<jobject>& obj);
 
+  // Is activity Loggine enabled (ephemeral).
+  bool IsActivityLoggingEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
   // Event reporting functions. These have no side-effect beyond recording
   // metrics. See |FeedStreamApi| for definitions.
   void ReportSliceViewed(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj,
                          const base::android::JavaParamRef<jstring>& slice_id);
+  void ReportFeedViewed(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
   void ReportOpenAction(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& obj,
                         const base::android::JavaParamRef<jstring>& slice_id);
@@ -80,9 +96,7 @@ class FeedStreamSurface : public FeedStreamApi::SurfaceInterface {
   void ReportDownloadAction(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>& obj);
   void ReportNavigationStarted(JNIEnv* env,
-                               const base::android::JavaParamRef<jobject>& obj,
-                               const base::android::JavaParamRef<jstring>& url,
-                               jboolean in_new_tab);
+                               const base::android::JavaParamRef<jobject>& obj);
   void ReportPageLoaded(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& obj,
                         const base::android::JavaParamRef<jstring>& url,
@@ -102,6 +116,10 @@ class FeedStreamSurface : public FeedStreamApi::SurfaceInterface {
                             int distance_dp);
   void ReportStreamScrollStart(JNIEnv* env,
                                const base::android::JavaParamRef<jobject>& obj);
+  void ReportTurnOnAction(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj);
+  void ReportTurnOffAction(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& obj);
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;

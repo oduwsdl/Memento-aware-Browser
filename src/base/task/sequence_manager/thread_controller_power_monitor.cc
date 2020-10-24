@@ -16,7 +16,7 @@ namespace {
 
 // Activate the power management events that affect task scheduling.
 const Feature kUsePowerMonitorWithThreadController{
-    "UsePowerMonitorWithThreadController", FEATURE_DISABLED_BY_DEFAULT};
+    "UsePowerMonitorWithThreadController", FEATURE_ENABLED_BY_DEFAULT};
 
 // TODO(1074332): Remove this when the experiment becomes the default.
 bool g_use_thread_controller_power_monitor_ = false;
@@ -30,7 +30,7 @@ ThreadControllerPowerMonitor::~ThreadControllerPowerMonitor() {
 }
 
 void ThreadControllerPowerMonitor::BindToCurrentThread() {
-  // Occasionally registration happens twice (i.e. when the deprecated
+  // Occasionally registration happens twice (i.e. when the
   // ThreadController::SetDefaultTaskRunner() re-initializes the
   // ThreadController).
   if (is_observer_registered_)

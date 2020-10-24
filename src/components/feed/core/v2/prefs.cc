@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/token.h"
 #include "base/values.h"
 #include "components/feed/core/common/pref_names.h"
 #include "components/feed/core/v2/scheduling.h"
@@ -70,6 +71,39 @@ void SetPersistentMetricsData(const PersistentMetricsData& data,
 
 PersistentMetricsData GetPersistentMetricsData(PrefService& pref_service) {
   return PersistentMetricsDataFromValue(*pref_service.Get(kMetricsData));
+}
+
+std::string GetClientInstanceId(PrefService& pref_service) {
+  std::string id = pref_service.GetString(feed::prefs::kClientInstanceId);
+  if (!id.empty())
+    return id;
+  id = base::Token::CreateRandom().ToString();
+  pref_service.SetString(feed::prefs::kClientInstanceId, id);
+  return id;
+}
+
+void ClearClientInstanceId(PrefService& pref_service) {
+  pref_service.ClearPref(feed::prefs::kClientInstanceId);
+}
+
+void SetLastFetchHadNoticeCard(PrefService& pref_service, bool value) {
+  pref_service.SetBoolean(feed::prefs::kLastFetchHadNoticeCard, value);
+}
+
+bool GetLastFetchHadNoticeCard(const PrefService& pref_service) {
+  return pref_service.GetBoolean(feed::prefs::kLastFetchHadNoticeCard);
+}
+
+void SetHasReachedClickAndViewActionsUploadConditions(PrefService& pref_service,
+                                                      bool value) {
+  pref_service.SetBoolean(
+      feed::prefs::kHasReachedClickAndViewActionsUploadConditions, value);
+}
+
+bool GetHasReachedClickAndViewActionsUploadConditions(
+    const PrefService& pref_service) {
+  return pref_service.GetBoolean(
+      feed::prefs::kHasReachedClickAndViewActionsUploadConditions);
 }
 
 }  // namespace prefs

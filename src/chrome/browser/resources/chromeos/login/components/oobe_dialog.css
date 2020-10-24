@@ -56,7 +56,16 @@
 #oobe-subtitle .fallback {
   color: var(--oobe-subheader-text-color);
   line-height: var(--subtitle-line-height);
+  overflow-wrap: break-word;
   margin: 0;
+}
+
+#footerContainer ::slotted(*) {
+  line-height: var(--subtitle-line-height);
+}
+
+:host(:not([has-buttons])) #footerContainer {
+  margin-bottom: 40px;
 }
 
 #oobe-progress ::slotted(paper-progress) {
@@ -73,7 +82,7 @@
   padding-inline-start: var(--oobe-dialog-content-padding);
 
   /* TODO(https://crbug.com/1017173) Make it adaptive. */
-  padding-top: 20px;
+  padding-top: var(--oobe-dialog-content-padding-top);
 }
 
 #footerContainer[noFooterPadding] {

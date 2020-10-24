@@ -17,6 +17,7 @@
 #include "ios/web/common/features.h"
 #include "ios/web/common/url_util.h"
 #import "ios/web/js_messaging/crw_js_injector.h"
+#import "ios/web/navigation/error_page_helper.h"
 #import "ios/web/navigation/navigation_context_impl.h"
 #import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/navigation/session_storage_builder.h"
@@ -804,11 +805,25 @@ void WebStateImpl::TakeSnapshot(const gfx::RectF& rect,
                              }];
 }
 
+void WebStateImpl::CreateFullPagePdf(
+    base::OnceCallback<void(NSData*)> callback) {
+  // Move the callback to a __block pointer, which will be in scope as long
+  // as the callback is retained.
+  __block base::OnceCallback<void(NSData*)> callback_for_block =
+      std::move(callback);
+  [web_controller_
+      createFullPagePDFWithCompletion:^(NSData* pdf_document_data) {
+        std::move(callback_for_block).Run(pdf_document_data);
+      }];
+}
+
 void WebStateImpl::OnNavigationStarted(web::NavigationContextImpl* context) {
   // Navigation manager loads internal URLs to restore session history and
   // create back-forward entries for WebUI. Do not trigger external callbacks.
   if ((!base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) &&
        context->IsPlaceholderNavigation()) ||
+      (base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) &&
+       [ErrorPageHelper isErrorPageFileURL:context->GetUrl()]) ||
       wk_navigation_util::IsRestoreSessionUrl(context->GetUrl())) {
     return;
   }
@@ -827,6 +842,8 @@ void WebStateImpl::OnNavigationFinished(web::NavigationContextImpl* context) {
   // create back-forward entries for WebUI. Do not trigger external callbacks.
   if ((!base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) &&
        context->IsPlaceholderNavigation()) ||
+      (base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) &&
+       [ErrorPageHelper isErrorPageFileURL:context->GetUrl()]) ||
       wk_navigation_util::IsRestoreSessionUrl(context->GetUrl())) {
     return;
   }

@@ -22,6 +22,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace performance_manager {
 
@@ -166,8 +167,7 @@ void PerformanceManagerTabHelper::RenderFrameCreated(
           process_node, page_node_.get(), parent_frame_node,
           render_frame_host->GetFrameTreeNodeId(),
           render_frame_host->GetRoutingID(),
-          render_frame_host->GetDevToolsFrameToken(),
-          FrameToken(render_frame_host->GetFrameToken()),
+          blink::LocalFrameToken(render_frame_host->GetFrameToken()),
           site_instance->GetBrowsingInstanceId(), site_instance->GetId(),
           base::BindOnce(
               [](const GURL& url, bool is_current, FrameNodeImpl* frame_node) {
@@ -376,9 +376,6 @@ void PerformanceManagerTabHelper::InnerWebContentsAttached(
   // Determine the opened type.
   auto opened_type = PageNode::OpenedType::kInvalid;
   if (inner_web_contents->IsPortal()) {
-    // Portals don't have openers.
-    DCHECK(!inner_web_contents->HasOpener() &&
-           !inner_web_contents->HasOriginalOpener());
     opened_type = PageNode::OpenedType::kPortal;
 
     // In the case of portals there can be a temporary RFH that is created that
@@ -398,7 +395,16 @@ void PerformanceManagerTabHelper::InnerWebContentsAttached(
     // severed.
   }
   DCHECK_NE(PageNode::OpenedType::kInvalid, opened_type);
-  DCHECK(frame);
+  if (!frame) {
+    DCHECK(!render_frame_host->IsRenderFrameCreated());
+    DCHECK(!inner_web_contents->IsPortal());
+    // TODO(crbug.com/1133361):
+    // WebContentsImplBrowserTest.AttachNestedInnerWebContents calls
+    // WebContents::AttachInnerWebContents without creating RenderFrame.
+    // Removing this conditional once either the test is fixed or this function
+    // is adjusted to handle the case without the render frame.
+    return;
+  }
 
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE, base::BindOnce(&PageNodeImpl::SetOpenerFrameNodeAndOpenedType,
@@ -435,6 +441,11 @@ void PerformanceManagerTabHelper::WebContentsDestroyed() {
 void PerformanceManagerTabHelper::DidUpdateFaviconURL(
     content::RenderFrameHost* render_frame_host,
     const std::vector<blink::mojom::FaviconURLPtr>& candidates) {
+  // This favicon change might have been initiated by a different frame some
+  // time ago and the main frame might have changed.
+  if (!render_frame_host->IsCurrent())
+    return;
+
   // TODO(siggi): This logic belongs in the policy layer rather than here.
   if (!first_time_favicon_set_) {
     first_time_favicon_set_ = true;

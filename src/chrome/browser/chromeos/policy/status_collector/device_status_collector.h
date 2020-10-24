@@ -209,6 +209,7 @@ class DeviceStatusCollector : public StatusCollector,
   bool ShouldReportUsers() const override;
   bool ShouldReportHardwareStatus() const override;
   bool ShouldReportCrashReportInfo() const override;
+  bool ShouldReportAppInfoAndActivity() const override;
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
@@ -454,6 +455,7 @@ class DeviceStatusCollector : public StatusCollector,
   bool report_fan_info_ = false;
   bool report_vpd_info_ = false;
   bool report_app_info_ = false;
+  bool report_system_info_ = false;
   bool stat_reporting_pref_ = false;
 
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
@@ -494,6 +496,8 @@ class DeviceStatusCollector : public StatusCollector,
       fan_info_subscription_;
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       vpd_info_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      system_info_subscription_;
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       app_info_subscription_;
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>

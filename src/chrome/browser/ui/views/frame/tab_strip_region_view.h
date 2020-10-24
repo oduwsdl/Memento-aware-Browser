@@ -6,21 +6,43 @@
 #define CHROME_BROWSER_UI_VIEWS_FRAME_TAB_STRIP_REGION_VIEW_H_
 
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
-#include "ui/views/view.h"
+#include "ui/views/accessible_pane_view.h"
+
+class TabSearchButton;
+class TabStrip;
 
 // Container for the tabstrip, new tab button, and reserved grab handle space.
-// TODO (https://crbug.com/949660) Under construction.
-class TabStripRegionView final : public views::View {
+class TabStripRegionView final : public views::AccessiblePaneView,
+                                 views::ViewObserver {
  public:
-  TabStripRegionView();
+  explicit TabStripRegionView(std::unique_ptr<TabStrip> tab_strip);
   ~TabStripRegionView() override;
 
-  // Takes ownership of the tabstrip.
-  TabStrip* AddTabStrip(std::unique_ptr<TabStrip> tab_strip);
+  // Returns true if the specified rect intersects the window caption area of
+  // the browser window. |rect| is in the local coordinate space
+  // of |this|.
+  bool IsRectInWindowCaption(const gfx::Rect& rect);
 
-  // views::View overrides:
+  // A convenience function which calls |IsRectInWindowCaption()| with a rect of
+  // size 1x1 and an origin of |point|. |point| is in the local coordinate space
+  // of |this|.
+  bool IsPositionInWindowCaption(const gfx::Point& point);
+
+  // Called when the colors of the frame change.
+  void FrameColorsChanged();
+
+  TabSearchButton* tab_search_button() { return tab_search_button_; }
+
+  // views::AccessiblePaneView:
   const char* GetClassName() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
+  gfx::Size GetMinimumSize() const override;
+  void OnThemeChanged() override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  views::View* GetDefaultFocusableChild() override;
+
+  // views::ViewObserver:
+  void OnViewPreferredSizeChanged(View* view) override;
 
   // TODO(958173): Override OnBoundsChanged to cancel tabstrip animations.
 
@@ -29,7 +51,18 @@ class TabStripRegionView final : public views::View {
 
   int CalculateTabStripAvailableWidth();
 
+  // Scrolls the tabstrip towards the first tab in the tabstrip.
+  void ScrollTowardsLeadingTab();
+
+  // Scrolls the tabstrip towards the last tab in the tabstrip.
+  void ScrollTowardsTrailingTab();
+
   views::View* tab_strip_container_;
+  views::View* reserved_grab_handle_space_;
+  TabStrip* tab_strip_;
+  TabSearchButton* tab_search_button_ = nullptr;
+  views::ImageButton* leading_scroll_button_;
+  views::ImageButton* trailing_scroll_button_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_TAB_STRIP_REGION_VIEW_H_

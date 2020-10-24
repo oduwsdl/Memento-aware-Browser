@@ -90,6 +90,14 @@ Polymer({
       value: CookiePrimarySetting,
     },
 
+    /** @private */
+    enableContentSettingsRedesign_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('enableContentSettingsRedesign');
+      }
+    },
+
     /**
      * Used for HTML bindings. This is defined as a property rather than
      * within the ready callback, because the value needs to be available
@@ -120,14 +128,6 @@ Polymer({
     exceptionListsReadOnly_: {
       type: Boolean,
       value: false,
-    },
-
-    /** @private */
-    improvedCookieControlsEnabled_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('improvedCookieControlsEnabled');
-      }
     },
 
     /** @private {!chrome.settingsPrivate.PrefObject} */
@@ -180,7 +180,7 @@ Polymer({
 
     // If the clear on exit toggle is managed this implies a content setting
     // policy is present and the exception lists should be disabled.
-    this.exceptionListsReadOnly_ = sessionOnlyPref.enforcement ==
+    this.exceptionListsReadOnly_ = sessionOnlyPref.enforcement ===
         chrome.settingsPrivate.Enforcement.ENFORCED;
 
     // It is not currently possible to represent multiple management sources

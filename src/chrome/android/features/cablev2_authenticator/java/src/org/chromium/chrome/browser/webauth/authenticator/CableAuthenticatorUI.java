@@ -10,6 +10,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.hardware.usb.UsbAccessory;
+import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -35,6 +37,9 @@ import java.lang.ref.WeakReference;
  */
 public class CableAuthenticatorUI extends Fragment
         implements OnClickListener, QRScanDialog.Callback, CableAuthenticator.Callback {
+    /** True if this UI was created because the user connected a desktop via USB. */
+    private boolean mCreatedByUsbIntent;
+
     private AndroidPermissionDelegate mPermissionDelegate;
     private CableAuthenticator mAuthenticator;
 
@@ -46,9 +51,24 @@ public class CableAuthenticatorUI extends Fragment
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         final Context context = getContext();
+
+        Bundle arguments = getArguments();
+        final UsbAccessory accessory =
+                (UsbAccessory) arguments.getParcelable(UsbManager.EXTRA_ACCESSORY);
+        mCreatedByUsbIntent = (accessory != null);
+        final long networkContext = arguments.getLong(
+                "org.chromium.chrome.modules.cablev2_authenticator.NetworkContext");
+        final long instanceIdDriver = arguments.getLong(
+                "org.chromium.chrome.modules.cablev2_authenticator.InstanceIDDriver");
+        final String activityClassName = arguments.getString(
+                "org.chromium.chrome.modules.cablev2_authenticator.ActivityClassName");
+        final boolean isFcmNotification =
+                arguments.getBoolean("org.chromium.chrome.modules.cablev2_authenticator.FCM");
+
         mPermissionDelegate = new ActivityAndroidPermissionDelegate(
                 new WeakReference<Activity>((Activity) context));
-        mAuthenticator = new CableAuthenticator(getContext(), this);
+        mAuthenticator = new CableAuthenticator(getContext(), this, networkContext,
+                instanceIdDriver, activityClassName, isFcmNotification, accessory);
     }
 
     @Override
@@ -71,12 +91,13 @@ public class CableAuthenticatorUI extends Fragment
         mSpinner.setPadding(0, 60, 0, 60);
 
         mStatus = new TextView(context);
-        mStatus.setText("Looking for known devices nearby");
         mStatus.setPadding(0, 60, 0, 60);
 
-        mQRButton = new ButtonCompat(context, R.style.TextButtonThemeOverlay);
-        mQRButton.setText("Connect a new device");
-        mQRButton.setOnClickListener(this);
+        if (mCreatedByUsbIntent) {
+            mStatus.setText("Connected via USB. Awaiting command.");
+        } else {
+            mStatus.setText("Looking for known devices nearby");
+        }
 
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -85,9 +106,16 @@ public class CableAuthenticatorUI extends Fragment
         layout.addView(mStatus,
                 new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT));
-        layout.addView(mQRButton,
-                new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        if (!mCreatedByUsbIntent) {
+            mQRButton = new ButtonCompat(context, R.style.TextButtonThemeOverlay);
+            mQRButton.setText("Connect a new device");
+            mQRButton.setOnClickListener(this);
+
+            layout.addView(mQRButton,
+                    new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT));
+        }
 
         return layout;
     }
@@ -145,8 +173,8 @@ public class CableAuthenticatorUI extends Fragment
     }
 
     @Override
-    public void onDestroy() {
-        super.onDestroy();
+    public void onStop() {
+        super.onStop();
         mAuthenticator.close();
     }
 
@@ -187,7 +215,11 @@ public class CableAuthenticatorUI extends Fragment
                     break;
             }
             Toast.makeText(getActivity(), toast, Toast.LENGTH_SHORT).show();
-            getActivity().finish();
         });
+    }
+
+    @Override
+    public void onComplete() {
+        getActivity().runOnUiThread(() -> { getActivity().finish(); });
     }
 }

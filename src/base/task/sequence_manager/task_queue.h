@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
@@ -138,6 +137,8 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   // TODO(altimin): Make this private after TaskQueue/TaskQueueImpl refactoring.
   TaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl,
             const TaskQueue::Spec& spec);
+  TaskQueue(const TaskQueue&) = delete;
+  TaskQueue& operator=(const TaskQueue&) = delete;
 
   // Information about task execution.
   //
@@ -320,12 +321,6 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   // Returns true if the queue has a fence which is blocking execution of tasks.
   bool BlockedByFence() const;
 
-  // Returns an EnqueueOrder generated at the last transition to unblocked. A
-  // queue is unblocked when it is enabled and no fence prevents the front task
-  // from running. If the EnqueueOrder of a task is greater than this when it
-  // starts running, it means that is was never blocked.
-  EnqueueOrder GetEnqueueOrderAtWhichWeBecameUnblocked() const;
-
   void SetObserver(Observer* observer);
 
   // Controls whether or not the queue will emit traces events when tasks are
@@ -387,8 +382,6 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   int enabled_voter_count_ = 0;
   int voter_count_ = 0;
   const char* name_;
-
-  DISALLOW_COPY_AND_ASSIGN(TaskQueue);
 };
 
 }  // namespace sequence_manager

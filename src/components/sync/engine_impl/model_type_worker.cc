@@ -14,11 +14,11 @@
 #include "base/format_macros.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/memory_usage_estimator.h"
-#include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/hash_util.h"
@@ -27,28 +27,41 @@
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/model_type_processor.h"
 #include "components/sync/engine_impl/bookmark_update_preprocessing.h"
+#include "components/sync/engine_impl/cancelation_signal.h"
 #include "components/sync/engine_impl/commit_contribution.h"
-#include "components/sync/engine_impl/non_blocking_type_commit_contribution.h"
+#include "components/sync/engine_impl/commit_contribution_impl.h"
+#include "components/sync/engine_impl/cycle/entity_change_metric_recording.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 
 namespace syncer {
 
 namespace {
 
-void AdaptClientTagForWalletData(syncer::EntityData* data) {
-  // Server does not send any client tags for wallet data entities. This code
-  // manually asks the bridge to create the client tags for each entity, so that
-  // we can use ClientTagBasedModelTypeProcessor for WALLET_DATA.
+void AdaptClientTagForFullUpdateData(ModelType model_type,
+                                     syncer::EntityData* data) {
+  // Server does not send any client tags for wallet data entities or offer data
+  // entities. This code manually asks the bridge to create the client tags for
+  // each entity, so that we can use ClientTagBasedModelTypeProcessor for
+  // AUTOFILL_WALLET_DATA or AUTOFILL_WALLET_OFFER.
   if (data->parent_id == "0") {
     // Ignore the permanent root node as that one should have no client tag
     // hash.
     return;
   }
   DCHECK(!data->specifics.has_encrypted());
-  DCHECK(data->specifics.has_autofill_wallet());
-  data->client_tag_hash = ClientTagHash::FromUnhashed(
-      AUTOFILL_WALLET_DATA, GetUnhashedClientTagFromAutofillWalletSpecifics(
-                                data->specifics.autofill_wallet()));
+  if (model_type == AUTOFILL_WALLET_DATA) {
+    DCHECK(data->specifics.has_autofill_wallet());
+    data->client_tag_hash = ClientTagHash::FromUnhashed(
+        AUTOFILL_WALLET_DATA, GetUnhashedClientTagFromAutofillWalletSpecifics(
+                                  data->specifics.autofill_wallet()));
+  } else if (model_type == AUTOFILL_WALLET_OFFER) {
+    DCHECK(data->specifics.has_autofill_offer());
+    data->client_tag_hash = ClientTagHash::FromUnhashed(
+        AUTOFILL_WALLET_OFFER, GetUnhashedClientTagFromAutofillOfferSpecifics(
+                                   data->specifics.autofill_offer()));
+  } else {
+    NOTREACHED();
+  }
 }
 
 }  // namespace
@@ -61,10 +74,8 @@ ModelTypeWorker::ModelTypeWorker(
     PassphraseType passphrase_type,
     NudgeHandler* nudge_handler,
     std::unique_ptr<ModelTypeProcessor> model_type_processor,
-    DataTypeDebugInfoEmitter* debug_info_emitter,
     CancelationSignal* cancelation_signal)
     : type_(type),
-      debug_info_emitter_(debug_info_emitter),
       model_type_state_(initial_state),
       model_type_processor_(std::move(model_type_processor)),
       cryptographer_(std::move(cryptographer)),
@@ -73,6 +84,11 @@ ModelTypeWorker::ModelTypeWorker(
       cancelation_signal_(cancelation_signal) {
   DCHECK(model_type_processor_);
   DCHECK(type_ != PASSWORDS || cryptographer_);
+
+  if (!CommitOnlyTypes().Has(GetModelType())) {
+    DCHECK_EQ(type, GetModelTypeFromSpecificsFieldNumber(
+                        initial_state.progress_marker().data_type_id()));
+  }
 
   // Request an initial sync if it hasn't been completed yet.
   if (trigger_initial_sync) {
@@ -103,6 +119,10 @@ ModelTypeWorker::ModelTypeWorker(
 }
 
 ModelTypeWorker::~ModelTypeWorker() {
+  base::UmaHistogramCounts1000(
+      std::string("Sync.UndecryptedEntitiesOnDataTypeDisabled.") +
+          ModelTypeToHistogramSuffix(type_),
+      entries_pending_decryption_.size());
   model_type_processor_->DisconnectSync();
 }
 
@@ -132,33 +152,21 @@ bool ModelTypeWorker::IsInitialSyncEnded() const {
   return model_type_state_.initial_sync_done();
 }
 
-void ModelTypeWorker::GetDownloadProgress(
-    sync_pb::DataTypeProgressMarker* progress_marker) const {
+const sync_pb::DataTypeProgressMarker& ModelTypeWorker::GetDownloadProgress()
+    const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  progress_marker->CopyFrom(model_type_state_.progress_marker());
+  return model_type_state_.progress_marker();
 }
 
-void ModelTypeWorker::GetDataTypeContext(
-    sync_pb::DataTypeContext* context) const {
+const sync_pb::DataTypeContext& ModelTypeWorker::GetDataTypeContext() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  context->CopyFrom(model_type_state_.type_context());
+  return model_type_state_.type_context();
 }
 
 SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
     const sync_pb::DataTypeProgressMarker& progress_marker,
     const sync_pb::DataTypeContext& mutated_context,
     const SyncEntityList& applicable_updates,
-    StatusController* status) {
-  return ProcessGetUpdatesResponse(progress_marker, mutated_context,
-                                   applicable_updates,
-                                   /*from_uss_migrator=*/false, status);
-}
-
-SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
-    const sync_pb::DataTypeProgressMarker& progress_marker,
-    const sync_pb::DataTypeContext& mutated_context,
-    const SyncEntityList& applicable_updates,
-    bool from_uss_migrator,
     StatusController* status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -168,21 +176,17 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
   *model_type_state_.mutable_type_context() = mutated_context;
   *model_type_state_.mutable_progress_marker() = progress_marker;
 
-  UpdateCounters* counters = debug_info_emitter_->GetMutableUpdateCounters();
-
-  if (!from_uss_migrator) {
-    if (is_initial_sync) {
-      counters->num_initial_updates_received += applicable_updates.size();
-    } else {
-      counters->num_non_initial_updates_received += applicable_updates.size();
-    }
-  }
-
   for (const sync_pb::SyncEntity* update_entity : applicable_updates) {
+    RecordEntityChangeMetrics(
+        type_, is_initial_sync
+                   ? ModelTypeEntityChange::kRemoteInitialUpdate
+                   : ModelTypeEntityChange::kRemoteNonInitialUpdate);
+
     if (update_entity->deleted()) {
       status->increment_num_tombstone_updates_downloaded_by(1);
       if (!is_initial_sync) {
-        ++counters->num_non_initial_tombstone_updates_received;
+        RecordEntityChangeMetrics(type_,
+                                  ModelTypeEntityChange::kRemoteDeletion);
       }
     }
 
@@ -207,7 +211,6 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
     }
   }
 
-  debug_info_emitter_->EmitUpdateCountersUpdate();
   return SyncerError(SyncerError::SYNCER_OK);
 }
 
@@ -287,9 +290,11 @@ ModelTypeWorker::DecryptionStatus ModelTypeWorker::PopulateUpdateResponseData(
     AdaptUniquePositionForBookmark(update_entity, &data);
     AdaptTitleForBookmark(update_entity, &data.specifics,
                           specifics_were_encrypted);
-    AdaptGuidForBookmark(update_entity, &data.specifics);
-  } else if (model_type == AUTOFILL_WALLET_DATA) {
-    AdaptClientTagForWalletData(&data);
+    data.is_bookmark_guid_in_specifics_preprocessed =
+        AdaptGuidForBookmark(update_entity, &data.specifics);
+  } else if (model_type == AUTOFILL_WALLET_DATA ||
+             model_type == AUTOFILL_WALLET_OFFER) {
+    AdaptClientTagForFullUpdateData(model_type, &data);
   }
 
   response_data->entity = std::move(data);
@@ -348,14 +353,8 @@ void ModelTypeWorker::ApplyPendingUpdates() {
   DeduplicatePendingUpdatesBasedOnClientTagHash();
   DeduplicatePendingUpdatesBasedOnOriginatorClientItemId();
 
-  int num_updates_applied = pending_updates_.size();
   model_type_processor_->OnUpdateReceived(model_type_state_,
                                           std::move(pending_updates_));
-
-  UpdateCounters* counters = debug_info_emitter_->GetMutableUpdateCounters();
-  counters->num_updates_applied += num_updates_applied;
-  debug_info_emitter_->EmitUpdateCountersUpdate();
-  debug_info_emitter_->EmitStatusCountersUpdate();
 
   pending_updates_.clear();
 }
@@ -385,14 +384,15 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
   // updates it received.
   DCHECK(entries_pending_decryption_.empty());
 
-  // Request model type for local changes.
+  // Pull local changes from the processor (in the model thread/sequence). Note
+  // that this takes place independently of nudges (i.e. |has_local_changes_|),
+  // in case the processor decided a local change was not worth a nudge.
   scoped_refptr<GetLocalChangesRequest> request =
       base::MakeRefCounted<GetLocalChangesRequest>(cancelation_signal_);
-  // TODO(mamir): do we need to make this async?
   model_type_processor_->GetLocalChanges(
       max_entries,
       base::BindOnce(&GetLocalChangesRequest::SetResponse, request));
-  request->WaitForResponse();
+  request->WaitForResponseOrCancelation();
   CommitRequestDataList response;
   if (!request->WasCancelled())
     response = request->ExtractResponse();
@@ -402,13 +402,13 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
   }
 
   DCHECK(response.size() <= max_entries);
-  return std::make_unique<NonBlockingTypeCommitContribution>(
+  return std::make_unique<CommitContributionImpl>(
       GetModelType(), model_type_state_.type_context(), std::move(response),
       base::BindOnce(&ModelTypeWorker::OnCommitResponse,
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&ModelTypeWorker::OnFullCommitFailure,
                      weak_ptr_factory_.GetWeakPtr()),
-      cryptographer_.get(), passphrase_type_, debug_info_emitter_,
+      cryptographer_.get(), passphrase_type_,
       CommitOnlyTypes().Has(GetModelType()));
 }
 
@@ -432,14 +432,6 @@ void ModelTypeWorker::OnFullCommitFailure(SyncCommitError commit_error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   model_type_processor_->OnCommitFailed(commit_error);
-}
-
-void ModelTypeWorker::AbortMigration() {
-  DCHECK(!model_type_state_.initial_sync_done());
-  model_type_state_ = sync_pb::ModelTypeState();
-  entries_pending_decryption_.clear();
-  pending_updates_.clear();
-  nudge_handler_->NudgeForInitialDownload(type_);
 }
 
 size_t ModelTypeWorker::EstimateMemoryUsage() const {
@@ -640,11 +632,11 @@ GetLocalChangesRequest::GetLocalChangesRequest(
 
 GetLocalChangesRequest::~GetLocalChangesRequest() {}
 
-void GetLocalChangesRequest::OnSignalReceived() {
+void GetLocalChangesRequest::OnCancelationSignalReceived() {
   response_accepted_.Signal();
 }
 
-void GetLocalChangesRequest::WaitForResponse() {
+void GetLocalChangesRequest::WaitForResponseOrCancelation() {
   if (!cancelation_signal_->TryRegisterHandler(this)) {
     return;
   }

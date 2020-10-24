@@ -35,7 +35,7 @@
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_util.h"
-#include "ui/base/ime/chromeos/input_method_whitelist.h"
+#include "ui/base/ime/chromeos/input_method_allowlist.h"
 
 namespace base {
 class TaskRunner;
@@ -191,14 +191,14 @@ class OobeLocalizationTest
  public:
   OobeLocalizationTest();
 
-  // Verifies that the comma-separated |values| corresponds with the first
-  // values in |select_id|, optionally checking for an options group label after
+  // Verifies that the comma-separated `values` corresponds with the first
+  // values in `select_id`, optionally checking for an options group label after
   // the first set of options.
   void VerifyInitialOptions(const char* select_id,
                             const char* values,
                             bool check_separator);
 
-  // Verifies that |value| exists in |select_id|.
+  // Verifies that `value` exists in `select_id`.
   void VerifyOptionExists(const char* select_id, const char* value);
 
   // Dumps OOBE select control (language or keyboard) to string.
@@ -379,7 +379,7 @@ IN_PROC_BROWSER_TEST_P(OobeLocalizationTest, LocalizationTest) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    StructSequence,
+    All,
     OobeLocalizationTest,
     testing::Range(&oobe_localization_test_parameters[0],
                    &oobe_localization_test_parameters[base::size(

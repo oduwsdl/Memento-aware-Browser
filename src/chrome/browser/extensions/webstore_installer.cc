@@ -224,12 +224,7 @@ void WebstoreInstaller::Delegate::OnExtensionDownloadProgress(
     const std::string& id,
     download::DownloadItem* item) {}
 
-WebstoreInstaller::Approval::Approval()
-    : profile(nullptr),
-      use_app_installed_bubble(false),
-      skip_post_install_ui(false),
-      skip_install_dialog(false),
-      manifest_check_level(MANIFEST_CHECK_LEVEL_STRICT) {}
+WebstoreInstaller::Approval::Approval() = default;
 
 std::unique_ptr<WebstoreInstaller::Approval>
 WebstoreInstaller::Approval::CreateWithInstallPrompt(Profile* profile) {
@@ -284,10 +279,7 @@ WebstoreInstaller::WebstoreInstaller(Profile* profile,
       delegate_(delegate),
       id_(id),
       install_source_(source),
-      download_item_(nullptr),
-      approval_(approval.release()),
-      total_modules_(0),
-      download_started_(false) {
+      approval_(approval.release()) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(web_contents);
 
@@ -375,7 +367,7 @@ void WebstoreInstaller::OnExtensionInstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     bool is_update) {
-  CHECK(profile_->IsSameProfile(Profile::FromBrowserContext(browser_context)));
+  CHECK(profile_->IsSameOrParent(Profile::FromBrowserContext(browser_context)));
   if (pending_modules_.empty())
     return;
   SharedModuleInfo::ImportInfo info = pending_modules_.front();
@@ -629,8 +621,6 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
   // download system will then pass the crx to the CrxInstaller.
   int render_process_host_id =
       contents->GetRenderViewHost()->GetProcess()->GetID();
-  int render_view_host_routing_id =
-      contents->GetRenderViewHost()->GetRoutingID();
 
   content::RenderFrameHost* render_frame_host = contents->GetMainFrame();
   net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -656,16 +646,16 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
             "This feature cannot be disabled. It is only activated if the user "
             "triggers an extension installation."
           chrome_policy {
-            ExtensionInstallBlacklist {
-              ExtensionInstallBlacklist: {
+            ExtensionInstallBlocklist {
+              ExtensionInstallBlocklist: {
                 entries: '*'
               }
             }
           }
         })");
   std::unique_ptr<DownloadUrlParameters> params(new DownloadUrlParameters(
-      download_url_, render_process_host_id, render_view_host_routing_id,
-      render_frame_host->GetRoutingID(), traffic_annotation));
+      download_url_, render_process_host_id, render_frame_host->GetRoutingID(),
+      traffic_annotation));
   params->set_file_path(file);
   if (controller.GetVisibleEntry()) {
     content::Referrer referrer = content::Referrer::SanitizeForRequest(

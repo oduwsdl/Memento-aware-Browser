@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#import "base/ios/ios_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -16,7 +17,7 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
-#import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#import "ios/chrome/test/earl_grey/web_http_server_chrome_test_case.h"
 #import "ios/chrome/test/scoped_eg_synchronization_disabler.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/testing/earl_grey/matchers.h"
@@ -146,7 +147,7 @@ void TestFormResponseProvider::GetResponseHeadersAndBody(
 }  // namespace
 
 // Tests submition of HTTP forms POST data including cases involving navigation.
-@interface FormsTestCase : ChromeTestCase
+@interface FormsTestCase : WebHttpServerChromeTestCase
 @end
 
 @implementation FormsTestCase
@@ -528,6 +529,11 @@ id<GREYMatcher> ResendPostButtonMatcher() {
 // keyboard navigates to the correct URL and the back button works as expected
 // afterwards.
 - (void)testPostFormEntryWithKeyboard {
+  // Test fails on iPad Air 2 13.4 crbug.com/1102608.
+  if ([ChromeEarlGrey isIPadIdiom] && base::ios::IsRunningOnOrLater(13, 0, 0)) {
+    EARL_GREY_TEST_DISABLED(@"Fails in iOS 13 on iPads.");
+  }
+
   [self setUpFormTestSimpleHttpServer];
   const GURL destinationURL = GetDestinationUrl();
 

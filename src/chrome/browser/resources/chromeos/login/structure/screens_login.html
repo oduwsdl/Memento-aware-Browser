@@ -3,13 +3,17 @@
      found in the LICENSE file. -->
 
 <!-- Login-specific screens -->
-<terms-of-service id="terms-of-service" class="step right hidden">
+<terms-of-service id="terms-of-service" class="step hidden">
 </terms-of-service>
-<include src="../oobe_screen_supervision_transition.html">
+<supervision-transition id="supervision-transition" class="step hidden" hidden>
+</supervision-transition>
 <gaia-password-changed id="gaia-password-changed"
-    class="step faded hidden" hidden>
+    class="step hidden" hidden>
 </gaia-password-changed>
-<include src="../screen_active_directory_password_change.html">
-<include src="../screen_encryption_migration.html">
-<include src="../screen_update_required.html">
-
+<active-directory-password-change id="ad-password-change"
+    class="step hidden migrate" hidden>
+</active-directory-password-change>
+<encryption-migration id="encryption-migration" class="step hidden" hidden>
+</encryption-migration>
+<update-required-card id="update-required" class="step hidden" hidden>
+</update-required-card>

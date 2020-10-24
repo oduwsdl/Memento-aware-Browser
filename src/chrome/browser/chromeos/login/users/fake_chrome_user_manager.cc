@@ -279,7 +279,7 @@ void FakeChromeUserManager::RemoveUser(
 void FakeChromeUserManager::RemoveUserFromList(const AccountId& account_id) {
   WallpaperControllerClient* const wallpaper_client =
       WallpaperControllerClient::Get();
-  // |wallpaper_client| could be nullptr in tests.
+  // `wallpaper_client` could be nullptr in tests.
   if (wallpaper_client)
     wallpaper_client->RemoveUserWallpaper(account_id);
   chromeos::ProfileHelper::Get()->RemoveUserFromListForTesting(account_id);
@@ -622,8 +622,8 @@ bool FakeChromeUserManager::IsGuestSessionAllowed() const {
 bool FakeChromeUserManager::IsGaiaUserAllowed(
     const user_manager::User& user) const {
   DCHECK(user.HasGaiaAccount());
-  return CrosSettings::Get()->IsUserWhitelisted(
-      user.GetAccountId().GetUserEmail(), nullptr);
+  return CrosSettings::Get()->IsUserAllowlisted(
+      user.GetAccountId().GetUserEmail(), nullptr, user.GetType());
 }
 
 bool FakeChromeUserManager::IsUserAllowed(
@@ -714,10 +714,6 @@ void FakeChromeUserManager::DemoAccountLoggedIn() {
 }
 
 void FakeChromeUserManager::KioskAppLoggedIn(user_manager::User* user) {}
-
-void FakeChromeUserManager::ArcKioskAppLoggedIn(user_manager::User* user) {}
-
-void FakeChromeUserManager::WebKioskAppLoggedIn(user_manager::User* user) {}
 
 void FakeChromeUserManager::PublicAccountUserLoggedIn(
     user_manager::User* user) {

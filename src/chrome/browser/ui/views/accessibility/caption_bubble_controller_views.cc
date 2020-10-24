@@ -86,6 +86,16 @@ bool CaptionBubbleControllerViews::OnTranscription(
   return true;
 }
 
+void CaptionBubbleControllerViews::OnError(content::WebContents* web_contents) {
+  if (!caption_bubble_ || !caption_bubble_models_.count(web_contents) ||
+      caption_bubble_models_[web_contents]->IsClosed())
+    return;
+
+  CaptionBubbleModel* caption_bubble_model =
+      caption_bubble_models_[web_contents].get();
+  caption_bubble_model->OnError();
+}
+
 void CaptionBubbleControllerViews::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
@@ -123,6 +133,14 @@ void CaptionBubbleControllerViews::SetActiveContents(
         std::make_unique<CaptionBubbleModel>(active_contents_));
   }
   caption_bubble_->SetModel(caption_bubble_models_[active_contents_].get());
+}
+
+bool CaptionBubbleControllerViews::IsWidgetVisibleForTesting() {
+  return caption_widget_ && caption_widget_->IsVisible();
+}
+
+std::string CaptionBubbleControllerViews::GetBubbleLabelTextForTesting() {
+  return caption_bubble_ ? caption_bubble_->GetLabelTextForTesting() : "";
 }
 
 }  // namespace captions

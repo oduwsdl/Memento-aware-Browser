@@ -9,7 +9,9 @@
 #include "ash/public/cpp/app_list/app_list_controller_observer.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/model/virtual_keyboard_model.h"
+#include "ash/wm/overview/overview_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
@@ -24,7 +26,8 @@ namespace ash {
 class ASH_EXPORT ShelfConfig : public TabletModeObserver,
                                public AppListControllerObserver,
                                public display::DisplayObserver,
-                               public VirtualKeyboardModel::Observer {
+                               public VirtualKeyboardModel::Observer,
+                               public OverviewObserver {
  public:
   class Observer : public base::CheckedObserver {
    public:
@@ -45,6 +48,10 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // Remove observers from this object's dependencies.
   void Shutdown();
+
+  // OverviewObserver:
+  void OnOverviewModeWillStart() override;
+  void OnOverviewModeEnding(OverviewSession* overview_session) override;
 
   // TabletModeObserver:
   void OnTabletModeStarting() override;
@@ -117,14 +124,13 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // The extra padding added to status area tray buttons on the shelf.
   int status_area_hit_region_padding() const;
 
-  // Returns whether we are within an app.
+  // Returns whether the in app shelf should be shown.
   bool is_in_app() const;
 
   // The threshold relative to the size of the shelf that is used to determine
   // if the shelf visibility should change during a drag.
   float drag_hide_ratio_threshold() const;
 
-  int app_icon_group_margin() const { return app_icon_group_margin_; }
   SkColor shelf_control_permanent_highlight_background() const {
     return shelf_control_permanent_highlight_background_;
   }
@@ -137,12 +143,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   }
   int hidden_shelf_in_screen_portion() const {
     return hidden_shelf_in_screen_portion_;
-  }
-  SkColor shelf_ink_drop_base_color() const {
-    return shelf_ink_drop_base_color_;
-  }
-  float shelf_ink_drop_visible_opacity() const {
-    return shelf_ink_drop_visible_opacity_;
   }
   SkColor shelf_icon_color() const { return shelf_icon_color_; }
   int status_indicator_offset_from_shelf_edge() const {
@@ -177,6 +177,10 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   bool is_virtual_keyboard_shown() const { return is_virtual_keyboard_shown_; }
 
+  bool in_tablet_mode() const { return in_tablet_mode_; }
+
+  bool in_overview_mode() const { return overview_mode_; }
+
   // Gets the current color for the shelf control buttons.
   SkColor GetShelfControlButtonColor() const;
 
@@ -186,10 +190,8 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // Gets the shelf color when a window is maximized.
   SkColor GetMaximizedShelfColor() const;
 
-  // Calculates a themed color for shelf and system menu based on the wallpaper.
-  // Uses alpha value from the provided base_color, returns base_color unchanged
-  // if the wallpaper can not be used to generate a themed color.
-  SkColor GetThemedColorFromWallpaper(SkColor base_color) const;
+  // Gets the base layer type for shelf color.
+  AshColorProvider::BaseLayerType GetShelfBaseLayerType() const;
 
   // Gets the default shelf color, calculated using the wallpaper color if
   // available.
@@ -200,6 +202,9 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // The padding between the app icon and the end of the scrollable shelf.
   int GetAppIconEndPadding() const;
+
+  // Returns the margin on either side of the group of app icons.
+  int GetAppIconGroupMargin() const;
 
   // The animation time for dimming shelf icons, widgets, and buttons.
   base::TimeDelta DimAnimationDuration() const;
@@ -234,6 +239,12 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // Updates shelf config - called when the accessibility state changes.
   void UpdateConfigForAccessibilityState();
 
+  // Whether the in app shelf should be shown in overview mode.
+  bool use_in_app_shelf_in_overview_;
+
+  // True if device is currently in overview mode.
+  bool overview_mode_;
+
   // True if device is currently in tablet mode.
   bool in_tablet_mode_;
 
@@ -267,8 +278,9 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   const int shelf_status_area_hit_region_padding_;
   const int shelf_status_area_hit_region_padding_dense_;
 
-  // The margin on either side of the group of app icons.
-  const int app_icon_group_margin_;
+  // The margin on either side of the group of app icons in tablet/clamshell.
+  const int app_icon_group_margin_tablet_;
+  const int app_icon_group_margin_clamshell_;
 
   const SkColor shelf_control_permanent_highlight_background_;
 
@@ -284,12 +296,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // Portion of the shelf that's within the screen bounds when auto-hidden.
   const int hidden_shelf_in_screen_portion_;
-
-  // Ink drop color for shelf items.
-  const SkColor shelf_ink_drop_base_color_;
-
-  // Opacity of the ink drop ripple for shelf items when the ripple is visible.
-  const float shelf_ink_drop_visible_opacity_;
 
   // The foreground color of the icons used in the shelf (launcher,
   // notifications, etc).

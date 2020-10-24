@@ -6,11 +6,11 @@
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_SAVE_MANAGER_H_
 
 #include "base/macros.h"
+#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_store.h"
 
 namespace autofill {
 struct FormData;
-struct PasswordForm;
 class GaiaIdHash;
 }  // namespace autofill
 
@@ -44,40 +44,46 @@ class PasswordSaveManager {
                     scoped_refptr<PasswordFormMetricsRecorder> metrics_recorder,
                     VotesUploader* votes_uploader) = 0;
 
-  virtual const autofill::PasswordForm& GetPendingCredentials() const = 0;
+  virtual const PasswordForm& GetPendingCredentials() const = 0;
 
   virtual const base::string16& GetGeneratedPassword() const = 0;
 
   virtual FormSaver* GetFormSaver() const = 0;
 
-  // Create pending credentials from |parsed_submitted_form| and
-  // |parsed_observed_form| and |submitted_form|.
+  // Create pending credentials from |parsed_submitted_form| and |observed_form|
+  // and |submitted_form|. In the case of HTTP or proxy auth no |observed_form|
+  // exists, so this parameter is optional.
   virtual void CreatePendingCredentials(
-      const autofill::PasswordForm& parsed_submitted_form,
-      const autofill::FormData& observed_form,
+      const PasswordForm& parsed_submitted_form,
+      const autofill::FormData* observed_form,
       const autofill::FormData& submitted_form,
       bool is_http_auth,
       bool is_credential_api_save) = 0;
 
-  virtual void ResetPendingCrednetials() = 0;
+  virtual void ResetPendingCredentials() = 0;
 
-  virtual void Save(const autofill::FormData& observed_form,
-                    const autofill::PasswordForm& parsed_submitted_form) = 0;
+  // Saves `parsed_submitted_form` to the store. An optional `observed_form` is
+  // passed along to be able to send votes. This is null for HTTP or proxy auth.
+  virtual void Save(const autofill::FormData* observed_form,
+                    const PasswordForm& parsed_submitted_form) = 0;
 
-  virtual void Update(const autofill::PasswordForm& credentials_to_update,
-                      const autofill::FormData& observed_form,
-                      const autofill::PasswordForm& parsed_submitted_form) = 0;
+  // Replaces `credentials_to_update` with `parsed_submitted_form` in the store.
+  // An optional `observed_form` is passed along to be able to send votes. This
+  // is null for HTTP or proxy auth.
+  virtual void Update(const PasswordForm& credentials_to_update,
+                      const autofill::FormData* observed_form,
+                      const PasswordForm& parsed_submitted_form) = 0;
 
   virtual void PermanentlyBlacklist(
       const PasswordStore::FormDigest& form_digest) = 0;
   virtual void Unblacklist(const PasswordStore::FormDigest& form_digest) = 0;
 
   // Called when generated password is accepted or changed by user.
-  virtual void PresaveGeneratedPassword(autofill::PasswordForm parsed_form) = 0;
+  virtual void PresaveGeneratedPassword(PasswordForm parsed_form) = 0;
 
   // Called when user wants to start generation flow for |generated|.
   virtual void GeneratedPasswordAccepted(
-      autofill::PasswordForm parsed_form,
+      PasswordForm parsed_form,
       base::WeakPtr<PasswordManagerDriver> driver) = 0;
 
   // Signals that the user cancels password generation.

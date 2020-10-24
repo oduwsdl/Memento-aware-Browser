@@ -151,8 +151,19 @@ void LaunchReleaseNotesInTab(Profile* profile) {
   ShowSingletonTab(displayer->browser(), url);
 }
 
-void LaunchReleaseNotesImpl(Profile* profile) {
+void LaunchReleaseNotesImpl(Profile* profile,
+                            apps::mojom::LaunchSource source) {
   base::RecordAction(UserMetricsAction("ReleaseNotes.ShowReleaseNotes"));
+  // If the flag is enabled, launch the Help app and show the release notes.
+  if (base::FeatureList::IsEnabled(chromeos::features::kHelpAppReleaseNotes)) {
+    apps::AppServiceProxy* proxy =
+        apps::AppServiceProxyFactory::GetForProfileRedirectInIncognito(profile);
+    proxy->LaunchAppWithUrl(
+        chromeos::default_web_apps::kHelpAppId, ui::EventFlags::EF_NONE,
+        GURL("chrome://help-app/updates"), source, display::kDefaultDisplayId);
+    return;
+  }
+
   auto* provider = web_app::WebAppProviderBase::GetProviderBase(profile);
   if (provider && provider->registrar().IsInstalled(
                       chromeos::default_web_apps::kReleaseNotesAppId)) {
@@ -168,7 +179,7 @@ void LaunchReleaseNotesImpl(Profile* profile) {
     params.override_url = GURL(BuildQueryString(profile));
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
-        .LaunchAppWithParams(params);
+        ->LaunchAppWithParams(params);
     return;
   }
   DVLOG(1) << "ReleaseNotes App Not Found";
@@ -200,15 +211,9 @@ void ShowHelpImpl(Browser* browser, Profile* profile, HelpSource source) {
       NOTREACHED() << "Unhandled help source" << source;
   }
   apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy);
-
-  const char* app_id =
-      base::FeatureList::IsEnabled(chromeos::features::kHelpAppV2)
-          ? chromeos::default_web_apps::kHelpAppId
-          : extension_misc::kGeniusAppId;
-  proxy->Launch(app_id, ui::EventFlags::EF_NONE, app_launch_source,
-                display::kDefaultDisplayId);
+      apps::AppServiceProxyFactory::GetForProfileRedirectInIncognito(profile);
+  proxy->Launch(chromeos::default_web_apps::kHelpAppId, ui::EventFlags::EF_NONE,
+                app_launch_source, display::kDefaultDisplayId);
 #else
   GURL url;
   switch (source) {
@@ -277,7 +282,7 @@ void ShowSiteSettingsImpl(Browser* browser, Profile* profile, const GURL& url) {
   url::Origin site_origin = url::Origin::Create(url);
   std::string link_destination(chrome::kChromeUIContentSettingsURL);
   // TODO(https://crbug.com/444047): Site Details should work with file:// urls
-  // when this bug is fixed, so add it to the whitelist when that happens.
+  // when this bug is fixed, so add it to the allowlist when that happens.
   if (!site_origin.opaque() && (url.SchemeIsHTTPOrHTTPS() ||
                                 url.SchemeIs(extensions::kExtensionScheme))) {
     std::string origin_string = site_origin.Serialize();
@@ -344,9 +349,9 @@ void ShowHelpForProfile(Profile* profile, HelpSource source) {
   ShowHelpImpl(NULL, profile, source);
 }
 
-void LaunchReleaseNotes(Profile* profile) {
+void LaunchReleaseNotes(Profile* profile, apps::mojom::LaunchSource source) {
 #if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  LaunchReleaseNotesImpl(profile);
+  LaunchReleaseNotesImpl(profile, source);
 #endif
 }
 
@@ -463,6 +468,12 @@ void ShowPasswordCheck(Browser* browser) {
   ShowSettingsSubPage(browser, kPasswordCheckSubPage);
 }
 
+void ShowSafeBrowsingEnhancedProtection(Browser* browser) {
+  base::RecordAction(
+      UserMetricsAction("Options_ShowSafeBrowsingEnhancedProtection"));
+  ShowSettingsSubPage(browser, kSafeBrowsingEnhancedProtectionSubPage);
+}
+
 void ShowImportDialog(Browser* browser) {
   base::RecordAction(UserMetricsAction("Import_ShowDlg"));
   ShowSettingsSubPage(browser, kImportDataSubPage);
@@ -501,9 +512,15 @@ void ShowAppManagementPage(Profile* profile,
                                                                sub_page);
 }
 
-void ShowPrintManagementApp(Profile* profile) {
+void ShowPrintManagementApp(Profile* profile,
+                            PrintManagementAppEntryPoint entry_point) {
   DCHECK(
       base::FeatureList::IsEnabled(chromeos::features::kPrintJobManagementApp));
+  DCHECK(entry_point == PrintManagementAppEntryPoint::kSettings ||
+         entry_point == PrintManagementAppEntryPoint::kNotification);
+
+  base::UmaHistogramEnumeration("Printing.CUPS.PrintManagementAppEntryPoint",
+                                entry_point);
   LaunchSystemWebApp(profile, web_app::SystemAppType::PRINT_MANAGEMENT,
                      GURL(chrome::kChromeUIPrintManagementUrl));
 }

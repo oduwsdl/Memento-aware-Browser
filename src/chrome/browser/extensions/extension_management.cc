@@ -21,13 +21,11 @@
 #include "chrome/browser/extensions/extension_management_internal.h"
 #include "chrome/browser/extensions/external_policy_loader.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
-#include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker_factory.h"
 #include "chrome/browser/extensions/permissions_based_management_policy_provider.h"
 #include "chrome/browser/extensions/standard_management_policy_provider.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
@@ -45,6 +43,8 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#else
+#include "components/enterprise/browser/reporting/common_pref_names.h"
 #endif
 
 namespace extensions {
@@ -77,13 +77,18 @@ ExtensionManagement::ExtensionManagement(Profile* profile)
   pref_change_registrar_.Add(prefs::kCloudExtensionRequestEnabled,
                              pref_change_callback);
 #if !defined(OS_CHROMEOS)
-  pref_change_registrar_.Add(prefs::kCloudReportingEnabled,
+  pref_change_registrar_.Add(enterprise_reporting::kCloudReportingEnabled,
                              pref_change_callback);
 #endif
   // Note that both |global_settings_| and |default_settings_| will be null
   // before first call to Refresh(), so in order to resolve this, Refresh() must
   // be called in the initialization of ExtensionManagement.
   Refresh();
+  ReportExtensionManagementInstallCreationStage(
+      InstallStageTracker::InstallCreationStage::
+          NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_FORCED,
+      InstallStageTracker::InstallCreationStage::
+          NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_NOT_FORCED);
   providers_.push_back(
       std::make_unique<StandardManagementPolicyProvider>(this));
   providers_.push_back(
@@ -111,7 +116,7 @@ ExtensionManagement::GetProviders() const {
   return providers_;
 }
 
-bool ExtensionManagement::BlacklistedByDefault() const {
+bool ExtensionManagement::BlocklistedByDefault() const {
   return (default_settings_->installation_mode == INSTALLATION_BLOCKED ||
           default_settings_->installation_mode == INSTALLATION_REMOVED);
 }
@@ -151,7 +156,7 @@ ExtensionManagement::GetRecommendedInstallList() const {
   return GetInstallListByMode(INSTALLATION_RECOMMENDED);
 }
 
-bool ExtensionManagement::HasWhitelistedExtension() const {
+bool ExtensionManagement::HasAllowlistedExtension() const {
   if (default_settings_->installation_mode != INSTALLATION_BLOCKED &&
       default_settings_->installation_mode != INSTALLATION_REMOVED) {
     return true;
@@ -171,7 +176,7 @@ bool ExtensionManagement::IsInstallationExplicitlyAllowed(
   if (it == settings_by_id_.end())
     return false;
   // Checks if the extension is on the automatically installed list or
-  // install white-list.
+  // install allow-list.
   InstallationMode mode = it->second->installation_mode;
   return mode == INSTALLATION_FORCED || mode == INSTALLATION_RECOMMENDED ||
          mode == INSTALLATION_ALLOWED;
@@ -200,7 +205,7 @@ bool ExtensionManagement::IsOffstoreInstallAllowed(
   if (!url_patterns.MatchesURL(url))
     return false;
 
-  // The referrer URL must also be whitelisted, unless the URL has the file
+  // The referrer URL must also be allowlisted, unless the URL has the file
   // scheme (there's no referrer for those URLs).
   return url.SchemeIsFile() || url_patterns.MatchesURL(referrer_url);
 }
@@ -349,7 +354,7 @@ void ExtensionManagement::Refresh() {
       static_cast<const base::ListValue*>(LoadPreference(
           pref_names::kInstallAllowList, true, base::Value::Type::LIST));
   // Allow user to use preference to block certain extensions. Note that policy
-  // managed forcelist or whitelist will always override this.
+  // managed forcelist or allowlist will always override this.
   const base::ListValue* denied_list_pref =
       static_cast<const base::ListValue*>(LoadPreference(
           pref_names::kInstallDenyList, false, base::Value::Type::LIST));
@@ -500,6 +505,8 @@ void ExtensionManagement::Refresh() {
             continue;
           }
           internal::IndividualSettings* by_id = AccessById(extension_id);
+          const bool included_in_forcelist =
+              by_id->installation_mode == InstallationMode::INSTALLATION_FORCED;
           if (!by_id->Parse(subdict,
                             internal::IndividualSettings::SCOPE_INDIVIDUAL)) {
             settings_by_id_.erase(extension_id);
@@ -508,6 +515,16 @@ void ExtensionManagement::Refresh() {
                                   MALFORMED_EXTENSION_SETTINGS);
             SYSLOG(WARNING) << "Malformed Extension Management settings for "
                             << extension_id << ".";
+          }
+          // If applying the ExtensionSettings policy changes installation mode
+          // from force-installed to anything else, the extension might not get
+          // installed and will get stuck in CREATED stage.
+          if (included_in_forcelist &&
+              by_id->installation_mode !=
+                  InstallationMode::INSTALLATION_FORCED) {
+            install_stage_tracker->ReportFailure(
+                extension_id,
+                InstallStageTracker::FailureReason::OVERRIDDEN_BY_SETTINGS);
           }
         }
       }
@@ -538,20 +555,28 @@ void ExtensionManagement::OnExtensionPrefChanged() {
 }
 
 void ExtensionManagement::NotifyExtensionManagementPrefChanged() {
+  ReportExtensionManagementInstallCreationStage(
+      InstallStageTracker::InstallCreationStage::NOTIFIED_FROM_MANAGEMENT,
+      InstallStageTracker::InstallCreationStage::
+          NOTIFIED_FROM_MANAGEMENT_NOT_FORCED);
+  for (auto& observer : observer_list_)
+    observer.OnExtensionManagementSettingsChanged();
+}
+
+void ExtensionManagement::ReportExtensionManagementInstallCreationStage(
+    InstallStageTracker::InstallCreationStage forced_stage,
+    InstallStageTracker::InstallCreationStage other_stage) {
   InstallStageTracker* install_stage_tracker =
       InstallStageTracker::Get(profile_);
   for (const auto& entry : settings_by_id_) {
     if (entry.second->installation_mode == INSTALLATION_FORCED) {
-      install_stage_tracker->ReportInstallationStage(
-          entry.first, InstallStageTracker::Stage::NOTIFIED_FROM_MANAGEMENT);
+      install_stage_tracker->ReportInstallCreationStage(entry.first,
+                                                        forced_stage);
     } else {
-      install_stage_tracker->ReportInstallationStage(
-          entry.first,
-          InstallStageTracker::Stage::NOTIFIED_FROM_MANAGEMENT_NOT_FORCED);
+      install_stage_tracker->ReportInstallCreationStage(entry.first,
+                                                        other_stage);
     }
   }
-  for (auto& observer : observer_list_)
-    observer.OnExtensionManagementSettingsChanged();
 }
 
 std::unique_ptr<base::DictionaryValue>
@@ -591,6 +616,9 @@ void ExtensionManagement::UpdateForcedExtensions(
       by_id->update_url = update_url;
       install_stage_tracker->ReportInstallationStage(
           it.key(), InstallStageTracker::Stage::CREATED);
+      install_stage_tracker->ReportInstallCreationStage(
+          it.key(),
+          InstallStageTracker::InstallCreationStage::CREATION_INITIATED);
     } else {
       install_stage_tracker->ReportFailure(
           it.key(), InstallStageTracker::FailureReason::NO_UPDATE_URL);

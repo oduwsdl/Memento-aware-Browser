@@ -14,7 +14,7 @@
 #include "content/browser/devtools/protocol/devtools_domain_handler.h"
 #include "content/browser/devtools/protocol/protocol.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/devtools_external_agent_proxy_delegate.h"
 #include "content/public/browser/devtools_manager_delegate.h"
 #include "third_party/inspector_protocol/crdtp/cbor.h"
@@ -27,6 +27,7 @@ namespace {
 // TODO(petermarshall): find a way to share this.
 bool ShouldSendOnIO(crdtp::span<uint8_t> method) {
   static auto* kEntries = new std::vector<crdtp::span<uint8_t>>{
+      crdtp::SpanFrom("Debugger.getPossibleBreakpoints"),
       crdtp::SpanFrom("Debugger.getStackTrace"),
       crdtp::SpanFrom("Debugger.pause"),
       crdtp::SpanFrom("Debugger.removeBreakpoint"),
@@ -126,6 +127,7 @@ void DevToolsSession::AddHandler(
     std::unique_ptr<protocol::DevToolsDomainHandler> handler) {
   DCHECK(agent_host_);
   handler->Wire(dispatcher_.get());
+  handler->SetSession(this);
   handlers_[handler->name()] = std::move(handler);
 }
 

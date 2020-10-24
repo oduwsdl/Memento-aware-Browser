@@ -23,8 +23,11 @@
 #include "extensions/browser/updater/request_queue.h"
 #include "extensions/browser/updater/safe_manifest_parser.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/http/http_request_headers.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
 
 namespace crx_file {
@@ -40,16 +43,13 @@ struct AccessTokenInfo;
 namespace network {
 class SharedURLLoaderFactory;
 class SimpleURLLoader;
-namespace mojom {
-class URLLoaderFactory;
-}
 struct ResourceRequest;
 }  // namespace network
 
 namespace extensions {
 
-using ManifestInvalidErrorList =
-    std::vector<std::pair<ExtensionId, ManifestInvalidError>>;
+using ManifestInvalidFailureDataList = std::vector<
+    std::pair<ExtensionId, ExtensionDownloaderDelegate::FailureData>>;
 struct UpdateDetails {
   UpdateDetails(const std::string& id, const base::Version& version);
   ~UpdateDetails();
@@ -200,14 +200,16 @@ class ExtensionDownloader {
                    const GURL& url,
                    const std::string& package_hash,
                    const std::string& version,
-                   const std::set<int>& request_ids);
+                   const std::set<int>& request_ids,
+                   ManifestFetchData::FetchPriority fetch_priority);
     ~ExtensionFetch();
 
-    std::string id;
+    ExtensionId id;
     GURL url;
     std::string package_hash;
-    std::string version;
+    base::Version version;
     std::set<int> request_ids;
+    ManifestFetchData::FetchPriority fetch_priority;
 
     enum CredentialsMode {
       CREDENTIALS_NONE = 0,
@@ -303,7 +305,8 @@ class ExtensionDownloader {
       ExtensionDownloaderDelegate::Error error,
       const int net_error,
       const int response_code,
-      const base::Optional<ManifestInvalidErrorList>& manifest_invalid_errors);
+      const base::Optional<ManifestInvalidFailureDataList>&
+          manifest_invalid_errors);
 
   // Makes a retry attempt, reports failure by calling
   // AddFailureDataOnManifestFetchFailed when fetching of update manifest
@@ -334,7 +337,7 @@ class ExtensionDownloader {
                         const UpdateManifestResults& possible_updates,
                         std::vector<UpdateManifestResult*>* to_update,
                         std::set<std::string>* no_updates,
-                        ManifestInvalidErrorList* errors);
+                        ManifestInvalidFailureDataList* errors);
 
   // Checks whether extension is presented in cache. If yes, return path to its
   // cached CRX, base::nullopt otherwise. |manifest_fetch_failed| flag indicates
@@ -344,8 +347,11 @@ class ExtensionDownloader {
       const ExtensionFetch& fetch_data,
       bool manifest_fetch_failed);
 
-  // Begins (or queues up) download of an updated extension.
-  void FetchUpdatedExtension(std::unique_ptr<ExtensionFetch> fetch_data);
+  // Begins (or queues up) download of an updated extension. |info| represents
+  // additional information about the extension update from the info field in
+  // the update manifest.
+  void FetchUpdatedExtension(std::unique_ptr<ExtensionFetch> fetch_data,
+                             base::Optional<std::string> info);
 
   // Called by RequestQueue when a new extension load request is started.
   void CreateExtensionLoader();
@@ -358,7 +364,7 @@ class ExtensionDownloader {
       std::vector<UpdateManifestResult> results);
 
   void NotifyExtensionsManifestInvalidFailure(
-      const ManifestInvalidErrorList& errors,
+      const ManifestInvalidFailureDataList& errors,
       const std::set<int>& request_ids);
 
   // Invokes OnExtensionDownloadStageChanged() on the |delegate_| for each
@@ -366,12 +372,12 @@ class ExtensionDownloader {
   // arguments because there is no guarantee that callback won't indirectly
   // change source of IDs.
   void NotifyExtensionsDownloadStageChanged(
-      std::set<std::string> extension_ids,
+      ExtensionIdSet extension_ids,
       ExtensionDownloaderDelegate::Stage stage);
 
   // Calls NotifyExtensionsDownloadFailedWithFailureData with empty failure
   // data.
-  void NotifyExtensionsDownloadFailed(std::set<std::string> id_set,
+  void NotifyExtensionsDownloadFailed(ExtensionIdSet id_set,
                                       std::set<int> request_ids,
                                       ExtensionDownloaderDelegate::Error error);
 
@@ -380,7 +386,7 @@ class ExtensionDownloader {
   // a copy of arguments because there is no guarantee that callback won't
   // indirectly change source of IDs.
   void NotifyExtensionsDownloadFailedWithFailureData(
-      std::set<std::string> extension_ids,
+      ExtensionIdSet extension_ids,
       std::set<int> request_ids,
       ExtensionDownloaderDelegate::Error error,
       const ExtensionDownloaderDelegate::FailureData& data);
@@ -437,7 +443,7 @@ class ExtensionDownloader {
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // The URL loader factory exclusively used to load file:// URLs.
-  std::unique_ptr<network::mojom::URLLoaderFactory> file_url_loader_factory_;
+  mojo::Remote<network::mojom::URLLoaderFactory> file_url_loader_factory_;
 
   // The profile path used to load file:// URLs. It can be invalid.
   base::FilePath profile_path_for_url_loader_factory_;
@@ -462,7 +468,7 @@ class ExtensionDownloader {
   RequestQueue<ExtensionFetch> extensions_queue_;
 
   // Maps an extension-id to its PingResult data.
-  std::map<std::string, ExtensionDownloaderDelegate::PingResult> ping_results_;
+  std::map<ExtensionId, ExtensionDownloaderDelegate::PingResult> ping_results_;
 
   // Cache for .crx files.
   ExtensionCache* extension_cache_;

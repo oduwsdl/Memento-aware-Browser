@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/enterprise/reporting/browser_report_generator.h"
+#include "chrome/browser/enterprise/reporting/browser_report_generator_desktop.h"
 
 #include <memory>
 
@@ -12,12 +12,13 @@
 #include "base/test/bind_test_util.h"
 #include "base/version.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/enterprise/reporting/profile_report_generator.h"
+#include "chrome/browser/enterprise/reporting/reporting_delegate_factory_desktop.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/upgrade_detector/build_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/account_id/account_id.h"
+#include "components/enterprise/browser/reporting/browser_report_generator.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/test/browser_task_environment.h"
@@ -47,7 +48,8 @@ const char kPluginFileName[] = "plugin_file_name";
 class BrowserReportGeneratorTest : public ::testing::Test {
  public:
   BrowserReportGeneratorTest()
-      : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+      : profile_manager_(TestingBrowserProcess::GetGlobal()),
+        generator_(&delegate_factory_) {}
   ~BrowserReportGeneratorTest() override = default;
 
   void SetUp() override {
@@ -95,54 +97,76 @@ class BrowserReportGeneratorTest : public ::testing::Test {
 
   void GenerateAndVerify() {
     base::RunLoop run_loop;
-    generator_.Generate(base::BindLambdaForTesting(
-        [&run_loop](std::unique_ptr<em::BrowserReport> report) {
-          EXPECT_TRUE(report.get());
+    generator_.Generate(
+        ReportType::kFull,
+        base::BindLambdaForTesting(
+            [&run_loop](std::unique_ptr<em::BrowserReport> report) {
+              EXPECT_TRUE(report.get());
 
 #if defined(OS_CHROMEOS)
-          EXPECT_FALSE(report->has_browser_version());
-          EXPECT_FALSE(report->has_channel());
-          EXPECT_FALSE(report->has_installed_browser_version());
+              EXPECT_FALSE(report->has_browser_version());
+              EXPECT_FALSE(report->has_channel());
+              EXPECT_FALSE(report->has_installed_browser_version());
 #else
-          EXPECT_NE(std::string(), report->browser_version());
-          EXPECT_TRUE(report->has_channel());
-          const auto* build_state = g_browser_process->GetBuildState();
-          if (build_state->update_type() == BuildState::UpdateType::kNone ||
-              !build_state->installed_version()) {
-            EXPECT_FALSE(report->has_installed_browser_version());
-          } else {
-            EXPECT_EQ(report->installed_browser_version(),
-                      build_state->installed_version()->GetString());
-          }
+              EXPECT_NE(std::string(), report->browser_version());
+              EXPECT_TRUE(report->has_channel());
+              const auto* build_state = g_browser_process->GetBuildState();
+              if (build_state->update_type() == BuildState::UpdateType::kNone ||
+                  !build_state->installed_version()) {
+                EXPECT_FALSE(report->has_installed_browser_version());
+              } else {
+                EXPECT_EQ(report->installed_browser_version(),
+                          build_state->installed_version()->GetString());
+              }
 #endif
 
-          EXPECT_NE(std::string(), report->executable_path());
+              EXPECT_NE(std::string(), report->executable_path());
 
-          EXPECT_EQ(1, report->chrome_user_profile_infos_size());
-          em::ChromeUserProfileInfo profile =
-              report->chrome_user_profile_infos(0);
-          EXPECT_NE(std::string(), profile.id());
-          EXPECT_EQ(kProfileName, profile.name());
-          EXPECT_FALSE(profile.is_full_report());
+              EXPECT_EQ(1, report->chrome_user_profile_infos_size());
+              em::ChromeUserProfileInfo profile =
+                  report->chrome_user_profile_infos(0);
+              EXPECT_NE(std::string(), profile.id());
+              EXPECT_EQ(kProfileName, profile.name());
+              EXPECT_FALSE(profile.is_full_report());
 
 #if defined(OS_CHROMEOS)
-          EXPECT_EQ(0, report->plugins_size());
+              EXPECT_EQ(0, report->plugins_size());
 #else
-          EXPECT_LE(1, report->plugins_size());
-          em::Plugin plugin = report->plugins(0);
-          EXPECT_EQ(kPluginName, plugin.name());
-          EXPECT_EQ(kPluginVersion, plugin.version());
-          EXPECT_EQ(kPluginFileName, plugin.filename());
-          EXPECT_EQ(kPluginDescription, plugin.description());
+              EXPECT_LE(1, report->plugins_size());
+              em::Plugin plugin = report->plugins(0);
+              EXPECT_EQ(kPluginName, plugin.name());
+              EXPECT_EQ(kPluginVersion, plugin.version());
+              EXPECT_EQ(kPluginFileName, plugin.filename());
+              EXPECT_EQ(kPluginDescription, plugin.description());
 #endif
-          run_loop.Quit();
-        }));
+              run_loop.Quit();
+            }));
+    run_loop.Run();
+  }
+
+  void GenerateExtensinRequestReportAndVerify() {
+    base::RunLoop run_loop;
+    generator_.Generate(
+        ReportType::kExtensionRequest,
+        base::BindLambdaForTesting(
+            [&run_loop](std::unique_ptr<em::BrowserReport> report) {
+              EXPECT_TRUE(report.get());
+              EXPECT_NE(std::string(), report->executable_path());
+
+              EXPECT_FALSE(report->has_browser_version());
+              EXPECT_FALSE(report->has_channel());
+              EXPECT_FALSE(report->has_installed_browser_version());
+              EXPECT_EQ(0, report->chrome_user_profile_infos_size());
+              EXPECT_EQ(0, report->plugins_size());
+              run_loop.Quit();
+            }));
     run_loop.Run();
   }
 
   TestingProfileManager* profile_manager() { return &profile_manager_; }
 
  private:
+  ReportingDelegateFactoryDesktop delegate_factory_;
   content::BrowserTaskEnvironment task_environment_;
   TestingProfileManager profile_manager_;
   BrowserReportGenerator generator_;
@@ -166,5 +190,13 @@ TEST_F(BrowserReportGeneratorTest, GenerateBasicReportWithUpdate) {
   GenerateAndVerify();
 }
 #endif
+
+TEST_F(BrowserReportGeneratorTest, ExtensionRequestOnly) {
+  InitializeUpdate();
+  InitializeProfile();
+  InitializeIrregularProfiles();
+  InitializePlugin();
+  GenerateExtensinRequestReportAndVerify();
+}
 
 }  // namespace enterprise_reporting

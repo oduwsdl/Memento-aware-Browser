@@ -36,15 +36,21 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/renderer_id.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
+#include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/http_auth_observer.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -77,6 +83,8 @@ using base::ASCIIToUTF16;
 using base::Feature;
 using testing::_;
 using testing::ElementsAre;
+using FieldPrediction = autofill::AutofillQueryResponse::FormSuggestion::
+    FieldSuggestion::FieldPrediction;
 
 namespace password_manager {
 namespace {
@@ -440,7 +448,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, PromptForDynamicForm) {
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   GURL psl_orogin = embedded_test_server()->GetURL("psl.example.com", "/");
   signin_form.signon_realm = psl_orogin.spec();
   signin_form.url = psl_orogin;
@@ -1168,6 +1176,169 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   // The only thing we check here is that there is no use-after-free reported.
 }
 
+// Get form data for /password/nonplaceholder_username.html
+autofill::FormData GetPlaceholderUsernameFormData(
+    password_manager::PasswordForm signin_form) {
+  // Build server predictions
+  autofill::FormData form_data;
+  constexpr autofill::FormRendererId form_id(0);
+  form_data.unique_renderer_id = form_id;
+  form_data.name_attribute = ASCIIToUTF16("testform");
+  form_data.name = form_data.name_attribute;
+  form_data.action = GURL(signin_form.action.spec() + "password/done.html");
+  form_data.url = signin_form.url;
+  // Username
+  autofill::FormFieldData username_field;
+  username_field.form_control_type = "text";
+  username_field.id_attribute = ASCIIToUTF16("username_field");
+  username_field.name = username_field.id_attribute;
+  username_field.value = ASCIIToUTF16("example@example.com");
+  username_field.label = username_field.value;
+  username_field.unique_renderer_id = autofill::FieldRendererId(0);
+  form_data.fields.push_back(username_field);
+  // Password
+  autofill::FormFieldData password_field;
+  password_field.form_control_type = "password";
+  password_field.id_attribute = ASCIIToUTF16("password_field");
+  password_field.name = password_field.id_attribute;
+  password_field.value = ASCIIToUTF16("htmlPass");
+  password_field.label = password_field.value;
+  password_field.unique_renderer_id = autofill::FieldRendererId(1);
+  form_data.fields.push_back(password_field);
+
+  return form_data;
+}
+
+// If there is a username and password with prefilled values, do not overwrite
+// the password if the username does not look like a placeholder value
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
+                       NonPlaceholderPasswordNotOverwritten) {
+  // Save a credential to the password store.
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+  password_manager::PasswordForm signin_form;
+  signin_form.signon_realm = embedded_test_server()->base_url().spec();
+  signin_form.url = embedded_test_server()->base_url();
+  signin_form.action = embedded_test_server()->base_url();
+  signin_form.username_value = base::ASCIIToUTF16("example@example.com");
+  signin_form.password_value = base::ASCIIToUTF16("savedPass");
+  password_store->AddLogin(signin_form);
+
+  password_manager::PasswordFormManager::
+      set_wait_for_server_predictions_for_filling(true);
+
+  // Get form data
+  autofill::FormData form_data = GetPlaceholderUsernameFormData(signin_form);
+
+  // Username
+  bool is_placeholder = false;
+  autofill::FormStructure form_structure(form_data);
+  form_structure.field(0)->set_server_type(autofill::USERNAME);
+  std::vector<FieldPrediction> username_predictions;
+  FieldPrediction username_prediction;
+  username_prediction.set_type(autofill::USERNAME);
+  username_predictions.push_back(username_prediction);
+  form_structure.field(0)->set_server_predictions(username_predictions);
+  form_structure.field(0)->set_may_use_prefilled_placeholder(is_placeholder);
+
+  // Password
+  form_structure.field(1)->set_server_type(autofill::PASSWORD);
+  std::vector<FieldPrediction> password_predictions;
+  FieldPrediction password_prediction;
+  password_prediction.set_type(autofill::PASSWORD);
+  password_predictions.push_back(password_prediction);
+  form_structure.field(1)->set_server_predictions(password_predictions);
+
+  // Navigate to the page
+  NavigateToFile("/password/nonplaceholder_username.html");
+
+  // Use autofill predictions
+  autofill::ChromeAutofillClient* autofill_client =
+      autofill::ChromeAutofillClient::FromWebContents(WebContents());
+  autofill_client->PropagateAutofillPredictions(WebContents()->GetMainFrame(),
+                                                {&form_structure});
+
+  // Check original values before interaction
+  CheckElementValue("username_field", "example@example.com");
+  CheckElementValue("password_field", "htmlPass");
+
+  // Have user interact with the page
+  content::SimulateMouseClickAt(
+      WebContents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(1, 1));
+
+  // Now make sure the fields aren't overwritten
+  CheckElementValue("username_field", "example@example.com");
+  CheckElementValue("password_field", "htmlPass");
+}
+
+// If there is a username and password with prefilled values, overwrite the
+// password if the username looks like a placeholder value
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
+                       PlaceholderPasswordOverwritten) {
+  // Save a credential to the password store.
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+  password_manager::PasswordForm signin_form;
+  signin_form.signon_realm = embedded_test_server()->base_url().spec();
+  signin_form.url = embedded_test_server()->base_url();
+  signin_form.action = embedded_test_server()->base_url();
+  signin_form.username_value = base::ASCIIToUTF16("example@example.com");
+  signin_form.password_value = base::ASCIIToUTF16("savedPass");
+  password_store->AddLogin(signin_form);
+
+  password_manager::PasswordFormManager::
+      set_wait_for_server_predictions_for_filling(true);
+
+  // Get form data
+  autofill::FormData form_data = GetPlaceholderUsernameFormData(signin_form);
+
+  // Username
+  bool is_placeholder = true;
+  autofill::FormStructure form_structure(form_data);
+  form_structure.field(0)->set_server_type(autofill::USERNAME);
+  std::vector<FieldPrediction> username_predictions;
+  FieldPrediction username_prediction;
+  username_prediction.set_type(autofill::USERNAME);
+  username_predictions.push_back(username_prediction);
+  form_structure.field(0)->set_server_predictions(username_predictions);
+  form_structure.field(0)->set_may_use_prefilled_placeholder(is_placeholder);
+
+  // Password
+  form_structure.field(1)->set_server_type(autofill::PASSWORD);
+  std::vector<FieldPrediction> password_predictions;
+  FieldPrediction password_prediction;
+  password_prediction.set_type(autofill::PASSWORD);
+  password_predictions.push_back(password_prediction);
+  form_structure.field(1)->set_server_predictions(password_predictions);
+
+  // Navigate to the page
+  NavigateToFile("/password/nonplaceholder_username.html");
+
+  // Use autofill predictions
+  autofill::ChromeAutofillClient* autofill_client =
+      autofill::ChromeAutofillClient::FromWebContents(WebContents());
+  autofill_client->PropagateAutofillPredictions(WebContents()->GetMainFrame(),
+                                                {&form_structure});
+
+  // Check original values before interaction
+  CheckElementValue("username_field", "example@example.com");
+  CheckElementValue("password_field", "htmlPass");
+
+  // Have user interact with the page
+  content::SimulateMouseClickAt(
+      WebContents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(1, 1));
+
+  // Now make sure the fields are overwritten
+  CheckElementValue("username_field", "example@example.com");
+  WaitForElementValue("password_field", "savedPass");
+}
+
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
                        UsernameAndPasswordValueAccessible) {
   // At first let us save a credential to the password store.
@@ -1176,7 +1347,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.url = embedded_test_server()->base_url();
   signin_form.action = embedded_test_server()->base_url();
@@ -1221,7 +1392,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.url = embedded_test_server()->base_url();
   signin_form.action = embedded_test_server()->base_url();
@@ -1352,7 +1523,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.url = embedded_test_server()->base_url();
   signin_form.action = embedded_test_server()->base_url();
@@ -1384,7 +1555,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, SlowPageFill) {
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.url = embedded_test_server()->base_url();
   signin_form.action = embedded_test_server()->base_url();
@@ -1423,7 +1594,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, NoLastLoadGoodLastLoad) {
 
   // Teach the embedded server to handle requests by issuing the basic auth
   // challenge.
-  http_test_server.RegisterRequestHandler(base::Bind(&HandleTestAuthRequest));
+  http_test_server.RegisterRequestHandler(
+      base::BindRepeating(&HandleTestAuthRequest));
   ASSERT_TRUE(http_test_server.Start());
 
   LoginPromptBrowserTestObserver login_observer;
@@ -1575,7 +1747,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   GURL::Replacements rep;
   rep.SetSchemeStr(url::kHttpScheme);
   GURL http_origin = https_origin.ReplaceComponents(rep);
-  autofill::PasswordForm http_form;
+  password_manager::PasswordForm http_form;
   http_form.signon_realm = http_origin.spec();
   http_form.url = http_origin;
   // Assume that the previous action was already HTTPS one matching the current
@@ -1614,7 +1786,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   GURL::Replacements rep;
   rep.SetSchemeStr(url::kHttpScheme);
   GURL http_origin = https_origin.ReplaceComponents(rep);
-  autofill::PasswordForm http_form;
+  password_manager::PasswordForm http_form;
   http_form.signon_realm = http_origin.spec();
   http_form.url = http_origin;
   http_form.username_value = base::ASCIIToUTF16("user");
@@ -1698,7 +1870,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, ReCreatedFormsGetFilled) {
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.url = embedded_test_server()->base_url();
   signin_form.action = embedded_test_server()->base_url();
@@ -1732,7 +1904,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, DuplicateFormsGetFilled) {
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.url = embedded_test_server()->base_url();
   signin_form.action = embedded_test_server()->base_url();
@@ -1763,7 +1935,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.url = embedded_test_server()->base_url();
   signin_form.action = embedded_test_server()->base_url();
@@ -1933,7 +2105,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.username_value = base::ASCIIToUTF16("temp");
   signin_form.password_value = base::ASCIIToUTF16("random123");
@@ -2149,7 +2321,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = iframe_url.GetOrigin().spec();
   signin_form.url = iframe_url;
   signin_form.username_value = base::ASCIIToUTF16("temp");
@@ -2232,7 +2404,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = iframe_url.GetOrigin().spec();
   signin_form.url = iframe_url;
   signin_form.username_value = base::ASCIIToUTF16("temp");
@@ -2432,7 +2604,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, ChangePwd1AccountStored) {
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.password_value = base::ASCIIToUTF16("pw");
   signin_form.username_value = base::ASCIIToUTF16("temp");
@@ -2485,7 +2657,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestWithAutofillDisabled,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.username_value = base::ASCIIToUTF16("temp");
   signin_form.password_value = base::ASCIIToUTF16("pw");
@@ -2519,7 +2691,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.username_value = base::ASCIIToUTF16("temp");
   signin_form.password_value = base::ASCIIToUTF16("pw");
@@ -2595,7 +2767,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.password_value = base::ASCIIToUTF16("pw");
   signin_form.username_value = base::ASCIIToUTF16("temp");
@@ -2634,7 +2806,7 @@ IN_PROC_BROWSER_TEST_F(
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  autofill::PasswordForm login_form;
+  password_manager::PasswordForm login_form;
   login_form.signon_realm = embedded_test_server()->base_url().spec();
   login_form.action = embedded_test_server()->GetURL("/password/done.html");
   login_form.username_value = base::ASCIIToUTF16("myusername");
@@ -2663,7 +2835,7 @@ IN_PROC_BROWSER_TEST_F(
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  autofill::PasswordForm login_form;
+  password_manager::PasswordForm login_form;
   login_form.signon_realm = embedded_test_server()->base_url().spec();
   login_form.action = embedded_test_server()->GetURL("/password/done.html");
   login_form.username_value = base::ASCIIToUTF16("myusername");
@@ -2691,7 +2863,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  autofill::PasswordForm login_form;
+  password_manager::PasswordForm login_form;
   login_form.signon_realm = embedded_test_server()->base_url().spec();
   login_form.action = embedded_test_server()->GetURL("/password/done.html");
   login_form.username_value = base::ASCIIToUTF16("myusername");
@@ -2732,7 +2904,7 @@ IN_PROC_BROWSER_TEST_F(
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  autofill::PasswordForm login_form;
+  password_manager::PasswordForm login_form;
   login_form.signon_realm = embedded_test_server()->base_url().spec();
   login_form.action = embedded_test_server()->GetURL("/password/done.html");
   login_form.username_value = base::ASCIIToUTF16("myusername");
@@ -2770,7 +2942,7 @@ IN_PROC_BROWSER_TEST_F(
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  autofill::PasswordForm login_form;
+  password_manager::PasswordForm login_form;
   login_form.signon_realm = embedded_test_server()->base_url().spec();
   login_form.action = embedded_test_server()->GetURL("/password/done.html");
   login_form.username_value = base::ASCIIToUTF16("myusername");
@@ -2822,7 +2994,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, BasicAuthSeparateRealms) {
   // already started at this point and adding the request handler to it would
   // not be thread safe.
   net::EmbeddedTestServer http_test_server;
-  http_test_server.RegisterRequestHandler(base::Bind(&HandleTestAuthRequest));
+  http_test_server.RegisterRequestHandler(
+      base::BindRepeating(&HandleTestAuthRequest));
   ASSERT_TRUE(http_test_server.Start());
 
   // Save credentials for "test realm" in the store.
@@ -2831,8 +3004,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, BasicAuthSeparateRealms) {
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm creds;
-  creds.scheme = autofill::PasswordForm::Scheme::kBasic;
+  password_manager::PasswordForm creds;
+  creds.scheme = password_manager::PasswordForm::Scheme::kBasic;
   creds.signon_realm = http_test_server.base_url().spec() + "test realm";
   creds.password_value = base::ASCIIToUTF16("pw");
   creds.username_value = base::ASCIIToUTF16("temp");
@@ -2846,7 +3019,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, BasicAuthSeparateRealms) {
   HttpAuthManager* httpauth_manager =
       ChromePasswordManagerClient::FromWebContents(WebContents())
           ->GetHttpAuthManager();
-  autofill::PasswordForm other_form(creds);
+  password_manager::PasswordForm other_form(creds);
   other_form.signon_realm = "https://example.com/other realm";
   httpauth_manager->SetObserverAndDeliverCredentials(&mock_login_model_observer,
                                                      other_form);
@@ -2879,8 +3052,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, ProxyAuthFilling) {
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm creds;
-  creds.scheme = autofill::PasswordForm::Scheme::kBasic;
+  password_manager::PasswordForm creds;
+  creds.scheme = password_manager::PasswordForm::Scheme::kBasic;
   creds.url = test_page;
   creds.signon_realm = embedded_test_server()->base_url().spec() + "testrealm";
   creds.password_value = base::ASCIIToUTF16("pw");
@@ -2906,7 +3079,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  autofill::PasswordForm login_form;
+  password_manager::PasswordForm login_form;
   login_form.signon_realm = embedded_test_server()->base_url().spec();
   login_form.action = embedded_test_server()->GetURL("/password/done.html");
   login_form.username_value = base::ASCIIToUTF16("myusername");
@@ -2934,7 +3107,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  autofill::PasswordForm login_form;
+  password_manager::PasswordForm login_form;
   login_form.signon_realm = embedded_test_server()->base_url().spec();
   login_form.action = embedded_test_server()->GetURL("/password/done.html");
   login_form.username_value = base::ASCIIToUTF16("myusername");
@@ -2962,7 +3135,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  autofill::PasswordForm login_form;
+  password_manager::PasswordForm login_form;
   login_form.signon_realm = embedded_test_server()->base_url().spec();
   login_form.action = embedded_test_server()->GetURL("/password/done.html");
   login_form.username_value = base::ASCIIToUTF16("myusername");
@@ -3080,7 +3253,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.username_value = base::ASCIIToUTF16("temp");
   signin_form.password_value = base::ASCIIToUTF16("pw");
@@ -3114,7 +3287,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.username_value = base::ASCIIToUTF16("temp");
   signin_form.password_value = base::ASCIIToUTF16("pw");
@@ -3147,7 +3320,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.password_value = base::ASCIIToUTF16("password");
   signin_form.username_value = base::ASCIIToUTF16("user");
@@ -3195,7 +3368,7 @@ IN_PROC_BROWSER_TEST_F(
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.password_value = base::ASCIIToUTF16("password");
   signin_form.username_value = base::ASCIIToUTF16("user");
@@ -3227,7 +3400,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_EQ(1u, passwords_map.size());
   auto& passwords_vector = passwords_map.begin()->second;
   ASSERT_EQ(1u, passwords_vector.size());
-  const autofill::PasswordForm& form = passwords_vector[0];
+  const password_manager::PasswordForm& form = passwords_vector[0];
   EXPECT_EQ(base::ASCIIToUTF16("user"), form.username_value);
   EXPECT_EQ(base::ASCIIToUTF16("password"), form.password_value);
   EXPECT_TRUE(form.skip_zero_click);
@@ -3241,7 +3414,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.password_value = base::ASCIIToUTF16("password");
   signin_form.username_value = base::ASCIIToUTF16("user");
@@ -3270,7 +3443,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   ASSERT_EQ(1u, passwords_map.size());
   auto& passwords_vector = passwords_map.begin()->second;
   ASSERT_EQ(1u, passwords_vector.size());
-  const autofill::PasswordForm& form = passwords_vector[0];
+  const password_manager::PasswordForm& form = passwords_vector[0];
   EXPECT_EQ(base::ASCIIToUTF16("user"), form.username_value);
   EXPECT_EQ(base::ASCIIToUTF16("password"), form.password_value);
   EXPECT_TRUE(form.skip_zero_click);
@@ -3300,7 +3473,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, ReattachWebContents) {
 }
 
 // Flaky on Linux and Windows.  http://crbug.com/1022531
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 #define MAYBE_FillWhenFormWithHiddenUsername \
   DISABLED_FillWhenFormWithHiddenUsername
 #else
@@ -3314,7 +3487,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.url = embedded_test_server()->base_url();
   signin_form.action = embedded_test_server()->base_url();
@@ -3441,7 +3614,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.url = GURL(url::kAboutBlankURL);
   signin_form.signon_realm = "about:";
   GURL submit_url(embedded_test_server()->GetURL("/password/done.html"));
@@ -3517,7 +3690,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
       "document.body.appendChild(frame);\n";
   ASSERT_TRUE(content::ExecuteScript(WebContents(),
                                      inject_data_frame_with_password_form));
-  content::WaitForLoadStop(WebContents());
+  EXPECT_TRUE(content::WaitForLoadStop(WebContents()));
   content::RenderFrameHost* frame =
       ChildFrameAt(WebContents()->GetMainFrame(), 0);
   EXPECT_TRUE(frame->GetLastCommittedURL().SchemeIs(url::kDataScheme));
@@ -3570,7 +3743,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, CorrectEntryForHttpAuth) {
 
   // Teach the embedded server to handle requests by issuing the basic auth
   // challenge.
-  http_test_server.RegisterRequestHandler(base::Bind(&HandleTestAuthRequest));
+  http_test_server.RegisterRequestHandler(
+      base::BindRepeating(&HandleTestAuthRequest));
   ASSERT_TRUE(http_test_server.Start());
 
   LoginPromptBrowserTestObserver login_observer;
@@ -3642,11 +3816,11 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
                 browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
                 .get());
 
-    autofill::PasswordForm blacklisted_form;
-    blacklisted_form.scheme = autofill::PasswordForm::Scheme::kHtml;
-    blacklisted_form.signon_realm = http_test_server.base_url().spec();
-    blacklisted_form.blacklisted_by_user = true;
-    password_store->AddLogin(blacklisted_form);
+    password_manager::PasswordForm blocked_form;
+    blocked_form.scheme = password_manager::PasswordForm::Scheme::kHtml;
+    blocked_form.signon_realm = http_test_server.base_url().spec();
+    blocked_form.blocked_by_user = true;
+    password_store->AddLogin(blocked_form);
     WaitForPasswordStore();
     ASSERT_FALSE(password_store->IsEmpty());
 
@@ -3683,21 +3857,21 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   }
 }
 
-// Test that if HTML login succeeds, and there is a blacklisted entry
+// Test that if HTML login succeeds, and there is a denylisted entry
 // with the HTTP auth PasswordForm::Scheme (i.e., credentials not put
 // through web forms) for that origin, then
 // 1) The bubble is not shown if the auth realm is empty,
 // 2) The bubble is shown if the auth realm is not empty.
 // This inconsistency is a side-effect of only signon_realm, not
-// PasswordForm::Scheme, being used to match blacklisted entries to a form.
+// PasswordForm::Scheme, being used to match denylisted entries to a form.
 // It is a bug, but so rare that it has not been worth fixing yet.
 // TODO(crbug.com/862930) If the inconsistency is fixed, please ensure that the
 // code for removing duplicates in password_manager_util.cc is updated and does
-// not remove blacklisted credentials which are no longer duplicates.
+// not remove denylisted credentials which are no longer duplicates.
 //
 // Disabled due to flakiness: https://crbug.com/1030579.
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
-                       DISABLED_HTMLLoginAfterHTTPAuthIsBlacklisted) {
+                       DISABLED_HTMLLoginAfterHTTPAuthIsDenylisted) {
   for (bool is_realm_empty : {false, true}) {
     scoped_refptr<password_manager::TestPasswordStore> password_store =
         static_cast<password_manager::TestPasswordStore*>(
@@ -3705,13 +3879,13 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
                 browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
                 .get());
 
-    autofill::PasswordForm blacklisted_form;
-    blacklisted_form.scheme = autofill::PasswordForm::Scheme::kBasic;
-    blacklisted_form.signon_realm = embedded_test_server()->base_url().spec();
+    password_manager::PasswordForm blocked_form;
+    blocked_form.scheme = password_manager::PasswordForm::Scheme::kBasic;
+    blocked_form.signon_realm = embedded_test_server()->base_url().spec();
     if (!is_realm_empty)
-      blacklisted_form.signon_realm += "test realm";
-    blacklisted_form.blacklisted_by_user = true;
-    password_store->AddLogin(blacklisted_form);
+      blocked_form.signon_realm += "test realm";
+    blocked_form.blocked_by_user = true;
+    password_store->AddLogin(blocked_form);
     WaitForPasswordStore();
     ASSERT_FALSE(password_store->IsEmpty());
 
@@ -3748,7 +3922,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = url_A.GetOrigin().spec();
   signin_form.url = url_A;
   signin_form.username_value = base::ASCIIToUTF16("user");
@@ -3846,14 +4020,14 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
               .get());
 
   // Start with two logins in the password store.
-  autofill::PasswordForm admin_form;
+  password_manager::PasswordForm admin_form;
   admin_form.signon_realm = embedded_test_server()->base_url().spec();
   admin_form.url = embedded_test_server()->base_url();
   admin_form.username_value = base::ASCIIToUTF16("admin");
   admin_form.password_value = base::ASCIIToUTF16("random_secret");
   password_store->AddLogin(admin_form);
 
-  autofill::PasswordForm user_form = admin_form;
+  password_manager::PasswordForm user_form = admin_form;
   user_form.username_value = base::ASCIIToUTF16("user");
   password_store->AddLogin(user_form);
 
@@ -3920,7 +4094,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, FormDynamicallyChanged) {
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
-  autofill::PasswordForm signin_form;
+  password_manager::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
   signin_form.username_value = ASCIIToUTF16("temp");
   signin_form.password_value = ASCIIToUTF16("pw");

@@ -19,6 +19,8 @@ Polymer({
     /** @type {!settings.MultiDeviceFeature} */
     feature: Number,
 
+    toggleAriaLabel: String,
+
     /** @private {boolean} */
     checked_: Boolean,
   },
@@ -31,6 +33,11 @@ Polymer({
   // lifecycle, it must be listed as an observer dependency to ensure that
   // this.feature is defined by the time of the observer's first call.
   observers: ['resetChecked_(feature, pageContentData)'],
+
+  /** @override */
+  focus() {
+    this.$.toggle.focus();
+  },
 
   /**
    * Because MultiDevice prefs are only meant to be controlled via the
@@ -73,4 +80,12 @@ Polymer({
         'feature-toggle-clicked',
         {feature: this.feature, enabled: !this.checked_});
   },
+
+  /**
+   * Returns the A11y label for the toggle.
+   * @private
+   */
+  getToggleA11yLabel_() {
+    return this.toggleAriaLabel || this.getFeatureName(this.feature);
+  }
 });

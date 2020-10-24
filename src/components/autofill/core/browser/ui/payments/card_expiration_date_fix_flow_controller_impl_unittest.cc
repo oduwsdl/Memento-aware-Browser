@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
@@ -108,41 +107,13 @@ TEST_F(CardExpirationDateFixFlowControllerImplTest, LogDismissed) {
       1);
 }
 
-// Tests to ensure the card nickname is shown correctly in the expiration fix
-// flow prompt. The param indicates whether the nickname experiment is enabled.
-class CardExpirationDateFixFlowControllerImplTestForNickname
-    : public CardExpirationDateFixFlowControllerImplTest,
-      public ::testing::WithParamInterface<bool> {
- public:
-  CardExpirationDateFixFlowControllerImpl* GetController() {
-    return controller_.get();
-  }
-
- protected:
-  CardExpirationDateFixFlowControllerImplTestForNickname() {
-    scoped_feature_list_.InitWithFeatureState(
-        features::kAutofillEnableSurfacingServerCardNickname, GetParam());
-  }
-
-  ~CardExpirationDateFixFlowControllerImplTestForNickname() override = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(,
-                         CardExpirationDateFixFlowControllerImplTestForNickname,
-                         testing::Bool());
-
-TEST_P(CardExpirationDateFixFlowControllerImplTestForNickname,
-       CardIdentifierString) {
+TEST_F(CardExpirationDateFixFlowControllerImplTest, CardIdentifierString) {
   CreditCard card = test::GetCreditCard();
   card.SetNickname(base::ASCIIToUTF16("nickname"));
   ShowPrompt(card);
 
-  EXPECT_EQ(GetController()->GetCardLabel(),
-            GetParam() ? card.NicknameAndLastFourDigitsForTesting()
-                       : card.NetworkAndLastFourDigits());
+  EXPECT_EQ(controller_->GetCardLabel(),
+            card.NicknameAndLastFourDigitsForTesting());
 }
 
 }  // namespace autofill

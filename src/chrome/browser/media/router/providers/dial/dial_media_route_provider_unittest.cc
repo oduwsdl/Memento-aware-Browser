@@ -12,8 +12,8 @@
 #include "base/run_loop.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/media/router/discovery/dial/dial_media_sink_service_impl.h"
-#include "chrome/browser/media/router/route_message_util.h"
-#include "chrome/browser/media/router/test/test_helper.h"
+#include "chrome/browser/media/router/test/provider_test_helpers.h"
+#include "components/media_router/browser/route_message_util.h"
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -152,14 +152,14 @@ class DialMediaRouteProviderTest : public ::testing::Test {
     EXPECT_CALL(mock_router_, OnRoutesUpdated(_, _, _, _)).Times(0);
     provider_->CreateRoute(
         source_id, sink_id, presentation_id, origin, 1, base::TimeDelta(),
-        /* incognito */ false,
+        /* off_the_record */ false,
         base::BindOnce(&DialMediaRouteProviderTest::ExpectCreateRouteResult,
                        base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
 
     ASSERT_TRUE(route_);
     EXPECT_EQ(presentation_id, route_->presentation_id());
-    EXPECT_FALSE(route_->is_incognito());
+    EXPECT_FALSE(route_->is_off_the_record());
 
     const MediaRoute::Id& route_id = route_->media_route_id();
     std::vector<RouteMessagePtr> received_messages;
@@ -335,8 +335,7 @@ class DialMediaRouteProviderTest : public ::testing::Test {
     EXPECT_CALL(
         mock_router_,
         OnPresentationConnectionStateChanged(
-            route_id,
-            mojom::MediaRouter::PresentationConnectionState::TERMINATED));
+            route_id, blink::mojom::PresentationConnectionState::TERMINATED));
     EXPECT_CALL(mock_router_, OnRoutesUpdated(_, IsEmpty(), _, IsEmpty()));
     base::RunLoop().RunUntilIdle();
 

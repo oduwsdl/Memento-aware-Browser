@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "base/optional.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/input_method/input_method_engine_base.h"
 #include "chrome/browser/chromeos/input_method/suggester.h"
 #include "chrome/browser/chromeos/input_method/suggestion_enums.h"
@@ -22,11 +24,14 @@ class Profile;
 
 namespace chromeos {
 
-const char kPersonalInfoSuggesterTabAcceptanceCount[] =
-    "personal_info_suggester_tab_acceptance_count";
-const int kMaxTabAcceptanceCount = 10;
+const char kPersonalInfoSuggesterAcceptanceCount[] =
+    "personal_info_suggester_acceptance_count";
+const int kMaxAcceptanceCount = 10;
+const char kPersonalInfoSuggesterShowSettingCount[] =
+    "personal_info_suggester_show_setting_count";
+const int kMaxShowSettingCount = 10;
 
-AssistiveType ProposeAssistiveAction(const base::string16& text);
+AssistiveType ProposePersonalInfoAssistiveAction(const base::string16& text);
 
 class TtsHandler : public content::UtteranceEventDelegate {
  public:
@@ -74,6 +79,8 @@ class PersonalInfoSuggester : public Suggester {
   SuggestionStatus HandleKeyEvent(
       const InputMethodEngineBase::KeyboardEvent& event) override;
   bool Suggest(const base::string16& text) override;
+  // index defaults to 0 as not required for this suggester.
+  bool AcceptSuggestion(size_t index = 0) override;
   void DismissSuggestion() override;
   AssistiveType GetProposeActionType() override;
 
@@ -84,9 +91,15 @@ class PersonalInfoSuggester : public Suggester {
   void ShowSuggestion(const base::string16& text,
                       const size_t confirmed_length);
 
-  void AcceptSuggestion();
+  int GetPrefValue(const std::string& pref_name);
 
-  int GetTabAcceptanceCount();
+  // Increment int value for the given pref_name by 1 every time the function is
+  // called. The function has no effect after the int value becomes equal to the
+  // max_value.
+  void IncrementPrefValueTilCapped(const std::string& pref_name, int max_value);
+
+  void SetButtonHighlighted(const ui::ime::AssistiveWindowButton& button,
+                            bool highlighted);
 
   SuggestionHandlerInterface* const suggestion_handler_;
 
@@ -113,6 +126,13 @@ class PersonalInfoSuggester : public Suggester {
 
   // The current suggestion text shown.
   base::string16 suggestion_;
+
+  std::vector<ui::ime::AssistiveWindowButton> buttons_;
+  int highlighted_index_;
+  ui::ime::AssistiveWindowButton suggestion_button_;
+  ui::ime::AssistiveWindowButton settings_button_;
+
+  base::TimeTicks session_start_;
 };
 
 }  // namespace chromeos

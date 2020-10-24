@@ -15,13 +15,13 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/printing/common/print.mojom.h"
+#include "components/printing/common/printing_param_traits.h"
 #include "components/printing/common/printing_param_traits_macros.h"
 #include "ipc/ipc_message_macros.h"
 #include "printing/buildflags/buildflags.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/page_range.h"
 #include "printing/print_job_constants.h"
-#include "ui/accessibility/ax_param_traits.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
@@ -29,54 +29,6 @@
 
 #ifndef INTERNAL_COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_
 #define INTERNAL_COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_
-
-struct PrintMsg_Print_Params {
-  PrintMsg_Print_Params();
-  PrintMsg_Print_Params(const PrintMsg_Print_Params& other);
-  ~PrintMsg_Print_Params();
-
-  // Resets the members of the struct to 0.
-  void Reset();
-
-  gfx::Size page_size;
-  gfx::Size content_size;
-  gfx::Rect printable_area;
-  int margin_top;
-  int margin_left;
-  printing::mojom::PageOrientation page_orientation;
-  gfx::Size dpi;
-  double scale_factor;
-  bool rasterize_pdf;
-  int document_cookie;
-  bool selection_only;
-  bool supports_alpha_blend;
-  int32_t preview_ui_id;
-  int preview_request_id;
-  bool is_first_request;
-  printing::mojom::PrintScalingOption print_scaling_option;
-  bool print_to_pdf;
-  bool display_header_footer;
-  base::string16 title;
-  base::string16 url;
-  base::string16 header_template;
-  base::string16 footer_template;
-  bool should_print_backgrounds;
-  printing::mojom::SkiaDocumentType printed_doc_type;
-  bool prefer_css_page_size;
-  int pages_per_sheet;
-};
-
-struct PrintMsg_PrintPages_Params {
-  PrintMsg_PrintPages_Params();
-  PrintMsg_PrintPages_Params(const PrintMsg_PrintPages_Params& other);
-  ~PrintMsg_PrintPages_Params();
-
-  // Resets the members of the struct to 0.
-  void Reset();
-
-  PrintMsg_Print_Params params;
-  std::vector<int> pages;
-};
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 struct PrintHostMsg_RequestPrintPreview_Params {
@@ -89,27 +41,21 @@ struct PrintHostMsg_RequestPrintPreview_Params {
   bool has_selection;
   bool selection_only;
 };
-
-struct PrintHostMsg_PreviewIds {
-  PrintHostMsg_PreviewIds();
-  PrintHostMsg_PreviewIds(int request_id, int ui_id);
-  ~PrintHostMsg_PreviewIds();
-  int request_id;
-  int ui_id;
-};
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 #endif  // INTERNAL_COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_
 
 #define IPC_MESSAGE_START PrintMsgStart
 
+IPC_ENUM_TRAITS_MAX_VALUE(printing::mojom::PageOrientation,
+                          printing::mojom::PageOrientation::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(printing::mojom::PrintScalingOption,
                           printing::mojom::PrintScalingOption::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(printing::mojom::SkiaDocumentType,
                           printing::mojom::SkiaDocumentType::kMaxValue)
 
 // Parameters for a render request.
-IPC_STRUCT_TRAITS_BEGIN(PrintMsg_Print_Params)
+IPC_STRUCT_TRAITS_BEGIN(printing::mojom::PrintParams)
   // Physical size of the page, including non-printable margins,
   // in pixels according to dpi.
   IPC_STRUCT_TRAITS_MEMBER(page_size)
@@ -125,6 +71,9 @@ IPC_STRUCT_TRAITS_BEGIN(PrintMsg_Print_Params)
 
   // The x-offset of the printable area, in pixels according to dpi.
   IPC_STRUCT_TRAITS_MEMBER(margin_left)
+
+  // Specifies the page orientation.
+  IPC_STRUCT_TRAITS_MEMBER(page_orientation)
 
   // Specifies dots per inch in the x and y direction.
   IPC_STRUCT_TRAITS_MEMBER(dpi)
@@ -206,7 +155,7 @@ IPC_STRUCT_TRAITS_BEGIN(PrintHostMsg_RequestPrintPreview_Params)
   IPC_STRUCT_TRAITS_MEMBER(selection_only)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(PrintHostMsg_PreviewIds)
+IPC_STRUCT_TRAITS_BEGIN(printing::mojom::PreviewIds)
   IPC_STRUCT_TRAITS_MEMBER(request_id)
   IPC_STRUCT_TRAITS_MEMBER(ui_id)
 IPC_STRUCT_TRAITS_END()
@@ -221,7 +170,7 @@ IPC_STRUCT_TRAITS_BEGIN(printing::mojom::PageSizeMargins)
   IPC_STRUCT_TRAITS_MEMBER(margin_bottom)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(PrintMsg_PrintPages_Params)
+IPC_STRUCT_TRAITS_BEGIN(printing::mojom::PrintPagesParams)
   // Parameters to render the page as a printed page. It must always be the same
   // value for all the document.
   IPC_STRUCT_TRAITS_MEMBER(params)
@@ -263,113 +212,79 @@ IPC_STRUCT_TRAITS_BEGIN(printing::mojom::DidStartPreviewParams)
 IPC_STRUCT_TRAITS_END()
 
 // Parameters to describe a rendered preview page.
-IPC_STRUCT_BEGIN(PrintHostMsg_DidPreviewPage_Params)
+IPC_STRUCT_TRAITS_BEGIN(printing::mojom::DidPreviewPageParams)
   // Page's content including metafile data and subframe info.
-  IPC_STRUCT_MEMBER(printing::mojom::DidPrintContentParams, content)
+  IPC_STRUCT_TRAITS_MEMBER(content)
 
   // |page_number| is zero-based and should not be negative.
-  IPC_STRUCT_MEMBER(int, page_number)
+  IPC_STRUCT_TRAITS_MEMBER(page_number)
 
   // Cookie for the document to ensure correctness.
-  IPC_STRUCT_MEMBER(int, document_cookie)
-IPC_STRUCT_END()
+  IPC_STRUCT_TRAITS_MEMBER(document_cookie)
+IPC_STRUCT_TRAITS_END()
 
 // Parameters to describe the final rendered preview document.
-IPC_STRUCT_BEGIN(PrintHostMsg_DidPreviewDocument_Params)
+IPC_STRUCT_TRAITS_BEGIN(printing::mojom::DidPreviewDocumentParams)
   // Document's content including metafile data and subframe info.
-  IPC_STRUCT_MEMBER(printing::mojom::DidPrintContentParams, content)
+  IPC_STRUCT_TRAITS_MEMBER(content)
 
   // Cookie for the document to ensure correctness.
-  IPC_STRUCT_MEMBER(int, document_cookie)
+  IPC_STRUCT_TRAITS_MEMBER(document_cookie)
 
   // Store the expected pages count.
-  IPC_STRUCT_MEMBER(int, expected_pages_count)
-IPC_STRUCT_END()
+  IPC_STRUCT_TRAITS_MEMBER(expected_pages_count)
+IPC_STRUCT_TRAITS_END()
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 // Parameters to describe a rendered page.
-IPC_STRUCT_BEGIN(PrintHostMsg_DidPrintDocument_Params)
+IPC_STRUCT_TRAITS_BEGIN(printing::mojom::DidPrintDocumentParams)
   // Document's content including metafile data and subframe info.
-  IPC_STRUCT_MEMBER(printing::mojom::DidPrintContentParams, content)
+  IPC_STRUCT_TRAITS_MEMBER(content)
 
   // Cookie for the document to ensure correctness.
-  IPC_STRUCT_MEMBER(int, document_cookie)
+  IPC_STRUCT_TRAITS_MEMBER(document_cookie)
 
   // The size of the page the page author specified.
-  IPC_STRUCT_MEMBER(gfx::Size, page_size)
+  IPC_STRUCT_TRAITS_MEMBER(page_size)
 
   // The printable area the page author specified.
-  IPC_STRUCT_MEMBER(gfx::Rect, content_area)
+  IPC_STRUCT_TRAITS_MEMBER(content_area)
 
   // The physical offsets of the printer in DPI. Used for PS printing.
-  IPC_STRUCT_MEMBER(gfx::Point, physical_offsets)
-IPC_STRUCT_END()
+  IPC_STRUCT_TRAITS_MEMBER(physical_offsets)
+IPC_STRUCT_TRAITS_END()
 
-// TODO(dgn) Rename *ScriptedPrint messages because they are not called only
+// TODO(dgn): Rename *ScriptedPrint messages because they are not called only
 //           from scripts.
-// Parameters for the IPC message ViewHostMsg_ScriptedPrint
-IPC_STRUCT_BEGIN(PrintHostMsg_ScriptedPrint_Params)
-  IPC_STRUCT_MEMBER(int, cookie)
-  IPC_STRUCT_MEMBER(int, expected_pages_count)
-  IPC_STRUCT_MEMBER(bool, has_selection)
-  IPC_STRUCT_MEMBER(bool, is_scripted)
-  IPC_STRUCT_MEMBER(bool, is_modifiable)
-  IPC_STRUCT_MEMBER(printing::MarginType, margin_type)
-IPC_STRUCT_END()
-
+// Parameters for the IPC message PrintHostMsg_ScriptedPrint
+IPC_STRUCT_TRAITS_BEGIN(printing::mojom::ScriptedPrintParams)
+  IPC_STRUCT_TRAITS_MEMBER(cookie)
+  IPC_STRUCT_TRAITS_MEMBER(expected_pages_count)
+  IPC_STRUCT_TRAITS_MEMBER(has_selection)
+  IPC_STRUCT_TRAITS_MEMBER(is_scripted)
+  IPC_STRUCT_TRAITS_MEMBER(is_modifiable)
+  IPC_STRUCT_TRAITS_MEMBER(margin_type)
+IPC_STRUCT_TRAITS_END()
 
 // Messages sent from the renderer to the browser.
-
-// Tells the browser that the renderer is done calculating the number of
-// rendered pages according to the specified settings.
-IPC_MESSAGE_ROUTED2(PrintHostMsg_DidGetPrintedPagesCount,
-                    int /* rendered document cookie */,
-                    int /* number of rendered pages */)
-
-// Sends the document cookie of the current printer query to the browser.
-IPC_MESSAGE_ROUTED1(PrintHostMsg_DidGetDocumentCookie,
-                    int /* rendered document cookie */)
-
-// Tells the browser that the print dialog has been shown.
-IPC_MESSAGE_ROUTED0(PrintHostMsg_DidShowPrintDialog)
 
 // Sends back to the browser the rendered document that was requested by a
 // PrintMsg_PrintPages message or from scripted printing. The memory handle in
 // this message is already valid in the browser process. Waits until the
 // document is complete ready before replying.
 IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_DidPrintDocument,
-                           PrintHostMsg_DidPrintDocument_Params
+                           printing::mojom::DidPrintDocumentParams
                            /* page content */,
                            bool /* completed */)
-
-#if BUILDFLAG(ENABLE_TAGGED_PDF)
-// Sends the accessibility tree corresponding to a document being
-// printed, needed for a tagged (accessible) PDF.
-IPC_MESSAGE_ROUTED2(PrintHostMsg_AccessibilityTree,
-                    int /* rendered document cookie */,
-                    ui::AXTreeUpdate)
-#endif
-
-// The renderer wants to know the default print settings.
-IPC_SYNC_MESSAGE_ROUTED0_1(PrintHostMsg_GetDefaultPrintSettings,
-                           PrintMsg_Print_Params /* default_settings */)
-
-// The renderer wants to update the current print settings with new
-// |job_settings|.
-IPC_SYNC_MESSAGE_ROUTED2_2(PrintHostMsg_UpdatePrintSettings,
-                           int /* document_cookie */,
-                           base::DictionaryValue /* job_settings */,
-                           PrintMsg_PrintPages_Params /* current_settings */,
-                           bool /* canceled */)
 
 // It's the renderer that controls the printing process when it is generated
 // by javascript. This step is about showing UI to the user to select the
 // final print settings. The output parameter is the same as
 // PrintMsg_PrintPages which is executed implicitly.
 IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_ScriptedPrint,
-                           PrintHostMsg_ScriptedPrint_Params,
-                           PrintMsg_PrintPages_Params
-                               /* settings chosen by the user*/)
+                           printing::mojom::ScriptedPrintParams,
+                           printing::mojom::PrintPagesParams
+                           /* settings chosen by the user*/)
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 // Asks the browser to do print preview.
@@ -379,14 +294,14 @@ IPC_MESSAGE_ROUTED1(PrintHostMsg_RequestPrintPreview,
 // Notify the browser the about the to-be-rendered print preview document.
 IPC_MESSAGE_ROUTED2(PrintHostMsg_DidStartPreview,
                     printing::mojom::DidStartPreviewParams /* params */,
-                    PrintHostMsg_PreviewIds /* ids */)
+                    printing::mojom::PreviewIds /* ids */)
 
 // Notify the browser of preparing to print the document, for cases where
 // the document will be collected from the individual pages instead of being
 // provided by an extra metafile at end containing all pages.
 IPC_MESSAGE_ROUTED2(PrintHostMsg_DidPrepareDocumentForPreview,
                     int /* document_cookie */,
-                    PrintHostMsg_PreviewIds /* ids */)
+                    printing::mojom::PreviewIds /* ids */)
 
 // Notify the browser of the default page layout according to the currently
 // selected printer and page size.
@@ -398,34 +313,25 @@ IPC_MESSAGE_ROUTED4(
     printing::mojom::PageSizeMargins /* page layout in points */,
     gfx::Rect /* printable area in points */,
     bool /* has custom page size style */,
-    PrintHostMsg_PreviewIds /* ids */)
+    printing::mojom::PreviewIds /* ids */)
 
 // Notify the browser a print preview page has been rendered.
 IPC_MESSAGE_ROUTED2(PrintHostMsg_DidPreviewPage,
-                    PrintHostMsg_DidPreviewPage_Params /* params */,
-                    PrintHostMsg_PreviewIds /* ids */)
+                    printing::mojom::DidPreviewPageParams /* params */,
+                    printing::mojom::PreviewIds /* ids */)
 
 // Asks the browser whether the print preview has been cancelled.
 IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_CheckForCancel,
-                           PrintHostMsg_PreviewIds /* ids */,
+                           printing::mojom::PreviewIds /* ids */,
                            bool /* print preview cancelled */)
 
 // Sends back to the browser the complete rendered document (non-draft mode,
 // used for printing) that was requested by a PrintMsg_PrintPreview message.
 // The memory handle in this message is already valid in the browser process.
 IPC_MESSAGE_ROUTED2(PrintHostMsg_MetafileReadyForPrinting,
-                    PrintHostMsg_DidPreviewDocument_Params /* params */,
-                    PrintHostMsg_PreviewIds /* ids */)
-#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
+                    printing::mojom::DidPreviewDocumentParams /* params */,
+                    printing::mojom::PreviewIds /* ids */)
 
-// This is sent when there are invalid printer settings.
-IPC_MESSAGE_ROUTED0(PrintHostMsg_ShowInvalidPrinterSettingsError)
-
-// Tell the browser printing failed.
-IPC_MESSAGE_ROUTED1(PrintHostMsg_PrintingFailed,
-                    int /* document cookie */)
-
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 // Run a nested run loop in the renderer until print preview for
 // window.print() finishes.
 IPC_SYNC_MESSAGE_ROUTED0_0(PrintHostMsg_SetupScriptedPrintPreview)

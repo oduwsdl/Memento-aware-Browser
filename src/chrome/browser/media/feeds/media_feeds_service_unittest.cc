@@ -17,6 +17,7 @@
 #include "chrome/browser/media/feeds/media_feeds_store.mojom-shared.h"
 #include "chrome/browser/media/history/media_history_keyed_service.h"
 #include "chrome/browser/media/history/media_history_test_utils.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_prefs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -26,7 +27,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "media/base/media_switches.h"
 #include "net/base/load_flags.h"
-#include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_access_result.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -165,7 +166,9 @@ const char kFirstItemPlayNextActionURL[] = "https://www.example.com/next";
 
 class MediaFeedsServiceTest : public ChromeRenderViewHostTestHarness {
  public:
-  MediaFeedsServiceTest() = default;
+  MediaFeedsServiceTest()
+      : ChromeRenderViewHostTestHarness(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
 
   void SetUp() override {
     features_.InitWithFeatures(
@@ -189,8 +192,9 @@ class MediaFeedsServiceTest : public ChromeRenderViewHostTestHarness {
             &url_loader_factory_);
   }
 
-  void AdvanceClock(base::TimeDelta time_delta) {
-    test_clock_.SetNow(base::Time::Now() + time_delta);
+  void AdvanceTime(base::TimeDelta time_delta) {
+    test_clock_.SetNow(test_clock_.Now() + time_delta);
+    task_environment()->FastForwardBy(time_delta);
   }
 
   base::Time Now() { return test_clock_.Now(); }
@@ -342,6 +346,11 @@ class MediaFeedsServiceTest : public ChromeRenderViewHostTestHarness {
     return rv;
   }
 
+  void SetAutomaticSelectionEnabled() {
+    profile()->GetPrefs()->SetBoolean(
+        kaleidoscope::prefs::kKaleidoscopeAutoSelectMediaFeeds, true);
+  }
+
   safe_search_api::StubURLChecker* safe_search_checker() {
     return stub_url_checker_.get();
   }
@@ -429,7 +438,7 @@ class MediaFeedsServiceTest : public ChromeRenderViewHostTestHarness {
         cookie_line.push_back("Domain=" + url.host());
 
       if (expired)
-        cookie_line.push_back("Expires=Wed, 21 Oct 2015 07:28:00 GMT");
+        cookie_line.push_back("Expires=Wed, 31 Dec 1969 07:28:00 GMT");
 
       std::unique_ptr<net::CanonicalCookie> cookie =
           net::CanonicalCookie::Create(url, base::JoinString(cookie_line, ";"),
@@ -440,10 +449,11 @@ class MediaFeedsServiceTest : public ChromeRenderViewHostTestHarness {
 
       GetCookieManager()->SetCanonicalCookie(
           *cookie, url, net::CookieOptions::MakeAllInclusive(),
-          base::BindLambdaForTesting([&](net::CookieInclusionStatus status) {
-            if (--tasks == 0)
-              run_loop.Quit();
-          }));
+          base::BindLambdaForTesting(
+              [&](net::CookieAccessResult access_result) {
+                if (--tasks == 0)
+                  run_loop.Quit();
+              }));
     }
 
     run_loop.Run();
@@ -2082,25 +2092,21 @@ TEST_P(MediaFeedsSpecTest, RunOpenSourceTest) {
 // FetchTopMediaFeeds should fetch a feed with enough watchtime on that origin
 // even if it hasn't been fetched before.
 TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessNewFetch) {
+  SetAutomaticSelectionEnabled();
   base::HistogramTester histogram_tester;
 
   const GURL feed_url("https://www.google.com/feed");
-
-  SetBackgroundFetchingEnabled(true);
 
   // Store a Media Feed.
   GetMediaFeedsService()->DiscoverMediaFeed(feed_url);
   WaitForDB();
 
+  SetBackgroundFetchingEnabled(true);
+  task_environment()->RunUntilIdle();
+
   // FetchTopMediaFeeds should ignore the feed, as the origin does not have
   // enough watchtime.
-  {
-    base::RunLoop top_feeds_loop;
-    GetMediaFeedsService()->FetchTopMediaFeeds(top_feeds_loop.QuitClosure());
-    WaitForDB();
-    top_feeds_loop.Run();
-    ASSERT_FALSE(RespondToPendingFeedFetch(feed_url));
-  }
+  ASSERT_FALSE(RespondToPendingFeedFetch(feed_url));
 
   // Set the watchtime higher than the minimum threshold for top feeds.
   auto watchtime = base::TimeDelta::FromMinutes(45);
@@ -2109,14 +2115,10 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessNewFetch) {
   GetMediaHistoryService()->SavePlayback(watch_time);
   WaitForDB();
 
-  // Now that there is high watchtime, the fetch should occur.
-  {
-    base::RunLoop top_feeds_loop;
-    GetMediaFeedsService()->FetchTopMediaFeeds(top_feeds_loop.QuitClosure());
-    WaitForDB();
-    top_feeds_loop.Run();
-    ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
-  }
+  // Now that there is high watchtime, the fetch should occur the next time
+  // background fetching happens.
+  AdvanceTime(MediaFeedsService::kTimeBetweenBackgroundFetches);
+  ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
 
   auto feeds = GetMediaFeedsSync();
 
@@ -2131,11 +2133,10 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessNewFetch) {
 
 // Fetch top feeds should periodically fetch the feed from cache if available.
 TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessFromCache) {
+  SetAutomaticSelectionEnabled();
   base::HistogramTester histogram_tester;
 
   const GURL feed_url("https://www.google.com/feed");
-
-  SetBackgroundFetchingEnabled(true);
 
   // Store a Media Feed.
   GetMediaFeedsService()->DiscoverMediaFeed(feed_url);
@@ -2157,18 +2158,14 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessFromCache) {
   ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
   run_loop.Run();
 
-  // After some time, fetch top feeds should refresh the feed.
-  AdvanceClock(base::TimeDelta::FromHours(1));
+  // After some time, background fetching should refresh the feed from the
+  // cached initial fetch.
+  AdvanceTime(MediaFeedsService::kTimeBetweenBackgroundFetches);
+  SetBackgroundFetchingEnabled(true);
+  task_environment()->RunUntilIdle();
 
-  base::RunLoop top_feeds_loop;
-  GetMediaFeedsService()->FetchTopMediaFeeds(top_feeds_loop.QuitClosure());
-  WaitForDB();
-
-  // It has been < 24 hrs, so it should fetch from the cached initial fetch.
   EXPECT_FALSE(GetCurrentRequestHasBypassCacheFlag());
-
   ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
-  top_feeds_loop.Run();
 
   auto feeds = GetMediaFeedsSync();
 
@@ -2184,12 +2181,11 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessFromCache) {
 // FetchTopMediaFeeds should back off if the feed fails to fetch. But after 24
 // hours, it should fetch regardless of failures, bypassing the cache.
 TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_BacksOffFailedFetches) {
+  SetAutomaticSelectionEnabled();
   base::HistogramTester histogram_tester;
   const int times_to_fail = 10;
 
   const GURL feed_url("https://www.google.com/feed");
-
-  SetBackgroundFetchingEnabled(true);
 
   // Store a Media Feed.
   GetMediaFeedsService()->DiscoverMediaFeed(feed_url);
@@ -2214,39 +2210,27 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_BacksOffFailedFetches) {
     run_loop.Run();
   }
 
+  AdvanceTime(base::TimeDelta::FromHours(1));
+  SetBackgroundFetchingEnabled(true);
+  task_environment()->RunUntilIdle();
+
   // No fetch should happen because of the backoff from failures.
-  {
-    AdvanceClock(base::TimeDelta::FromHours(1));
-
-    base::RunLoop top_feeds_loop;
-    GetMediaFeedsService()->FetchTopMediaFeeds(top_feeds_loop.QuitClosure());
-    WaitForDB();
-
-    ASSERT_FALSE(RespondToPendingFeedFetch(feed_url));
-    top_feeds_loop.Run();
-  }
+  ASSERT_FALSE(RespondToPendingFeedFetch(feed_url));
 
   // After 24 hours, the feed should be fetched regardless of failure count.
-  {
-    AdvanceClock(base::TimeDelta::FromHours(24));
+  AdvanceTime(MediaFeedsService::kTimeBetweenNonCachedBackgroundFetches);
+  task_environment()->RunUntilIdle();
 
-    base::RunLoop top_feeds_loop;
-    GetMediaFeedsService()->FetchTopMediaFeeds(top_feeds_loop.QuitClosure());
-    WaitForDB();
+  // If we bypass failure count, we should also bypass cache.
+  EXPECT_TRUE(GetCurrentRequestHasBypassCacheFlag());
+  ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
 
-    // If we bypass failure count, we should also bypass cache.
-    EXPECT_TRUE(GetCurrentRequestHasBypassCacheFlag());
+  auto feeds = GetMediaFeedsSync();
 
-    ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
-    top_feeds_loop.Run();
-
-    auto feeds = GetMediaFeedsSync();
-
-    EXPECT_EQ(1u, feeds.size());
-    EXPECT_TRUE(feeds[0]->last_fetch_time_not_cache_hit);
-    EXPECT_EQ(media_feeds::mojom::FetchResult::kSuccess,
-              feeds[0]->last_fetch_result);
-  }
+  EXPECT_EQ(1u, feeds.size());
+  EXPECT_TRUE(feeds[0]->last_fetch_time_not_cache_hit);
+  EXPECT_EQ(media_feeds::mojom::FetchResult::kSuccess,
+            feeds[0]->last_fetch_result);
 
   histogram_tester.ExpectUniqueSample(
       MediaFeedsFetcher::kFetchSizeKbHistogramName, 15, 1);
@@ -2255,11 +2239,10 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_BacksOffFailedFetches) {
 // After 24 hours, FetchTopMediaFeeds should fetch the feed and bypass the
 // cache.
 TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessBypassCache) {
+  SetAutomaticSelectionEnabled();
   base::HistogramTester histogram_tester;
 
   const GURL feed_url("https://www.google.com/feed");
-
-  SetBackgroundFetchingEnabled(true);
 
   // Store a Media Feed.
   GetMediaFeedsService()->DiscoverMediaFeed(feed_url);
@@ -2281,17 +2264,13 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessBypassCache) {
   ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
   run_loop.Run();
 
-  AdvanceClock(base::TimeDelta::FromHours(24));
-
-  base::RunLoop top_feeds_loop;
-  GetMediaFeedsService()->FetchTopMediaFeeds(top_feeds_loop.QuitClosure());
-  WaitForDB();
+  AdvanceTime(base::TimeDelta::FromHours(24));
+  SetBackgroundFetchingEnabled(true);
+  task_environment()->RunUntilIdle();
 
   // After a long time between fetches, we should bypass the cache.
   EXPECT_TRUE(GetCurrentRequestHasBypassCacheFlag());
-
   ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
-  top_feeds_loop.Run();
 
   auto feeds = GetMediaFeedsSync();
 
@@ -2306,11 +2285,10 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessBypassCache) {
 
 // After a feed reset, FetchTopMediaFeeds should fetch anyway.
 TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessResetFeed) {
+  SetAutomaticSelectionEnabled();
   base::HistogramTester histogram_tester;
 
   const GURL feed_url("https://www.google.com/feed");
-
-  SetBackgroundFetchingEnabled(true);
 
   // Store a Media Feed.
   GetMediaFeedsService()->DiscoverMediaFeed(feed_url);
@@ -2335,11 +2313,9 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessResetFeed) {
                                          mojom::ResetReason::kVisit);
   WaitForDB();
 
-  base::RunLoop top_feeds_loop;
-  GetMediaFeedsService()->FetchTopMediaFeeds(top_feeds_loop.QuitClosure());
-  WaitForDB();
+  SetBackgroundFetchingEnabled(true);
+  task_environment()->RunUntilIdle();
   ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
-  top_feeds_loop.Run();
 
   auto feeds = GetMediaFeedsSync();
 
@@ -2350,6 +2326,112 @@ TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessResetFeed) {
 
   histogram_tester.ExpectUniqueSample(
       MediaFeedsFetcher::kFetchSizeKbHistogramName, 15, 2);
+}
+
+// After enabling the pref, top feeds should fetch immediately and then again
+// after 15 minutes.
+TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_SuccessRepeatsPeriodically) {
+  SetAutomaticSelectionEnabled();
+  base::HistogramTester histogram_tester;
+
+  const GURL feed_url("https://www.google.com/feed");
+
+  // Store a Media Feed.
+  GetMediaFeedsService()->DiscoverMediaFeed(feed_url);
+  WaitForDB();
+
+  // Set the watchtime higher than the minimum threshold for top feeds.
+  auto watchtime = base::TimeDelta::FromMinutes(45);
+  content::MediaPlayerWatchTime watch_time(
+      feed_url, feed_url.GetOrigin(), watchtime, base::TimeDelta(), true, true);
+  GetMediaHistoryService()->SavePlayback(watch_time);
+  WaitForDB();
+
+  // Once we set this, background fetching should start automatically.
+  SetBackgroundFetchingEnabled(true);
+  task_environment()->RunUntilIdle();
+
+  // There should be only one fetch ready.
+  ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
+  ASSERT_FALSE(RespondToPendingFeedFetch(feed_url));
+
+  // Wait 15 minutes and the next fetch should be queued up.
+  AdvanceTime(MediaFeedsService::kTimeBetweenBackgroundFetches);
+  task_environment()->RunUntilIdle();
+
+  ASSERT_TRUE(RespondToPendingFeedFetch(feed_url));
+
+  auto feeds = GetMediaFeedsSync();
+
+  EXPECT_EQ(1u, feeds.size());
+  EXPECT_TRUE(feeds[0]->last_fetch_time_not_cache_hit);
+  EXPECT_EQ(media_feeds::mojom::FetchResult::kSuccess,
+            feeds[0]->last_fetch_result);
+
+  histogram_tester.ExpectUniqueSample(
+      MediaFeedsFetcher::kFetchSizeKbHistogramName, 15, 2);
+}
+
+// FetchTopMediaFeeds should fetch a feed with enough watchtime on that origin
+// even if it hasn't been fetched before.
+TEST_F(MediaFeedsServiceTest, FetchTopMediaFeeds_DisableAutoSelection) {
+  base::HistogramTester histogram_tester;
+
+  const GURL feed_url_a("https://www.google.com/feed");
+  const GURL feed_url_b("https://www.google.co.uk/feed");
+
+  // Store a couple of Media Feeds.
+  GetMediaFeedsService()->DiscoverMediaFeed(feed_url_a);
+  GetMediaFeedsService()->DiscoverMediaFeed(feed_url_b);
+  WaitForDB();
+
+  // The first feed we should opt into.
+  GetMediaHistoryService()->UpdateFeedUserStatus(
+      1, media_feeds::mojom::FeedUserStatus::kEnabled);
+  WaitForDB();
+
+  SetBackgroundFetchingEnabled(true);
+  task_environment()->RunUntilIdle();
+
+  // The first feed should be fetched and the second one should be ignored since
+  // the user has not enabled it.
+  ASSERT_TRUE(RespondToPendingFeedFetch(feed_url_a));
+  ASSERT_FALSE(RespondToPendingFeedFetch(feed_url_b));
+
+  auto feeds = GetMediaFeedsSync();
+  ASSERT_EQ(2u, feeds.size());
+  EXPECT_TRUE(feeds[0]->last_fetch_time_not_cache_hit);
+  EXPECT_EQ(media_feeds::mojom::FetchResult::kSuccess,
+            feeds[0]->last_fetch_result);
+  EXPECT_EQ(media_feeds::mojom::FetchResult::kNone,
+            feeds[1]->last_fetch_result);
+
+  histogram_tester.ExpectUniqueSample(
+      MediaFeedsFetcher::kFetchSizeKbHistogramName, 15, 1);
+}
+
+TEST_F(MediaFeedsServiceTest, AggregateWatchtimeHistogram) {
+  base::HistogramTester histogram_tester;
+
+  task_environment()->RunUntilIdle();
+
+  const GURL feed_url("https://www.google.com/feed");
+
+  GetMediaFeedsService()->DiscoverMediaFeed(feed_url);
+  WaitForDB();
+
+  content::MediaPlayerWatchTime watch_time(feed_url, feed_url.GetOrigin(),
+                                           base::TimeDelta::FromMinutes(30),
+                                           base::TimeDelta(), true, true);
+  GetMediaHistoryService()->SavePlayback(watch_time);
+  WaitForDB();
+
+  GetMediaFeedsService()->RecordFeedWatchtimes();
+  WaitForDB();
+
+  histogram_tester.ExpectUniqueTimeSample(
+      MediaFeedsService::kAggregateWatchtimeHistogramName,
+      base::TimeDelta::FromMinutes(30), 1);
 }
 
 }  // namespace media_feeds

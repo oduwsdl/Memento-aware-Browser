@@ -29,14 +29,16 @@
 #include "chrome/browser/ui/app_list/search/search_result_ranker/histogram_util.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/search_result_ranker.h"
+#include "chromeos/constants/chromeos_pref_names.h"
 #include "components/metrics/structured/structured_events.h"
+#include "components/prefs/pref_service.h"
 
 namespace app_list {
 
 namespace {
 
-constexpr char kLogDisplayTypeClickedResultZeroState[] =
-    "Apps.LogDisplayTypeClickedResultZeroState";
+constexpr char kLauncherSearchQueryLengthJumped[] =
+    "Apps.LauncherSearchQueryLengthJumped";
 
 // TODO(931149): Move the string manipulation utilities into a helper class.
 
@@ -72,8 +74,7 @@ SearchController::SearchController(AppListModelUpdater* model_updater,
                                    Profile* profile)
     : profile_(profile),
       mixer_(std::make_unique<Mixer>(model_updater)),
-      metrics_observer_(
-          std::make_unique<SearchMetricsObserver>(notifier, this)),
+      metrics_observer_(std::make_unique<SearchMetricsObserver>(notifier)),
       list_controller_(list_controller) {}
 
 SearchController::~SearchController() {}
@@ -85,6 +86,12 @@ void SearchController::InitializeRankers() {
 void SearchController::Start(const base::string16& query) {
   dispatching_query_ = true;
   ash::RecordLauncherIssuedSearchQueryLength(query.length());
+  if (query.length() > 0) {
+    const int length_diff = query.length() >= last_query_.length()
+                                ? query.length() - last_query_.length()
+                                : last_query_.length() - query.length();
+    UMA_HISTOGRAM_BOOLEAN(kLauncherSearchQueryLengthJumped, length_diff > 1);
+  }
   for (const auto& provider : providers_)
     provider->Start(query);
 
@@ -106,12 +113,8 @@ void SearchController::OpenResult(ChromeSearchResult* result, int event_flags) {
   if (!result)
     return;
 
-  // Log the display type of the clicked result in zero-state
-  if (query_for_recommendation_) {
-    UMA_HISTOGRAM_ENUMERATION(kLogDisplayTypeClickedResultZeroState,
-                              result->display_type(),
-                              ash::SearchResultDisplayType::kLast);
-  }
+  // Log the length of the last query that led to the clicked result.
+  ash::RecordLauncherClickedSearchQueryLength(last_query_.length());
 
   const bool dismiss_view_on_open = result->dismiss_view_on_open();
 
@@ -133,10 +136,8 @@ void SearchController::InvokeResultAction(ChromeSearchResult* result,
   result->InvokeAction(action_index, event_flags);
 }
 
-size_t SearchController::AddGroup(size_t max_results,
-                                  double multiplier,
-                                  double boost) {
-  return mixer_->AddGroup(max_results, multiplier, boost);
+size_t SearchController::AddGroup(size_t max_results) {
+  return mixer_->AddGroup(max_results);
 }
 
 void SearchController::AddProvider(size_t group_id,
@@ -246,6 +247,9 @@ void SearchController::Train(AppLaunchData&& app_launch_data) {
           RemoveAppShortcutLabel(NormalizeId(app_launch_data.id));
     }
   }
+
+  profile_->GetPrefs()->SetBoolean(chromeos::prefs::kLauncherResultEverLaunched,
+                                   true);
 
   // CrOS action recorder.
   CrOSActionRecorder::GetCrosActionRecorder()->RecordAction(

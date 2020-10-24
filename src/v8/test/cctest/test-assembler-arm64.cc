@@ -158,16 +158,16 @@ static void InitializeVM() {
 
 #define RUN() simulator.RunFrom(reinterpret_cast<Instruction*>(code->entry()))
 
-#define END()                                                       \
-  __ Debug("End test.", __LINE__, TRACE_DISABLE | LOG_ALL);         \
-  core.Dump(&masm);                                                 \
-  __ PopCalleeSavedRegisters();                                     \
-  __ Ret();                                                         \
-  {                                                                 \
-    CodeDesc desc;                                                  \
-    __ GetCode(masm.isolate(), &desc);                              \
-    code = Factory::CodeBuilder(isolate, desc, Code::STUB).Build(); \
-    if (FLAG_print_code) code->Print();                             \
+#define END()                                                                  \
+  __ Debug("End test.", __LINE__, TRACE_DISABLE | LOG_ALL);                    \
+  core.Dump(&masm);                                                            \
+  __ PopCalleeSavedRegisters();                                                \
+  __ Ret();                                                                    \
+  {                                                                            \
+    CodeDesc desc;                                                             \
+    __ GetCode(masm.isolate(), &desc);                                         \
+    code = Factory::CodeBuilder(isolate, desc, CodeKind::FOR_TESTING).Build(); \
+    if (FLAG_print_code) code->Print();                                        \
   }
 
 #else  // ifdef USE_SIMULATOR.
@@ -204,15 +204,15 @@ static void InitializeVM() {
     f.Call();                                      \
   }
 
-#define END()                                                       \
-  core.Dump(&masm);                                                 \
-  __ PopCalleeSavedRegisters();                                     \
-  __ Ret();                                                         \
-  {                                                                 \
-    CodeDesc desc;                                                  \
-    __ GetCode(masm.isolate(), &desc);                              \
-    code = Factory::CodeBuilder(isolate, desc, Code::STUB).Build(); \
-    if (FLAG_print_code) code->Print();                             \
+#define END()                                                                  \
+  core.Dump(&masm);                                                            \
+  __ PopCalleeSavedRegisters();                                                \
+  __ Ret();                                                                    \
+  {                                                                            \
+    CodeDesc desc;                                                             \
+    __ GetCode(masm.isolate(), &desc);                                         \
+    code = Factory::CodeBuilder(isolate, desc, CodeKind::FOR_TESTING).Build(); \
+    if (FLAG_print_code) code->Print();                                        \
   }
 
 #endif  // ifdef USE_SIMULATOR.
@@ -11720,9 +11720,9 @@ TEST(system_msr) {
   const uint64_t fpcr_core = 0x07C00000;
 
   // All FPCR fields (including fields which may be read-as-zero):
-  //  Stride, Len
+  //  Stride, FZ16, Len
   //  IDE, IXE, UFE, OFE, DZE, IOE
-  const uint64_t fpcr_all = fpcr_core | 0x00379F00;
+  const uint64_t fpcr_all = fpcr_core | 0x003F9F00;
 
   SETUP();
 
@@ -11784,6 +11784,9 @@ TEST(system_msr) {
 }
 
 TEST(system_pauth_b) {
+#ifdef DEBUG
+  i::FLAG_sim_abort_on_bad_auth = false;
+#endif
   SETUP();
   START();
 
@@ -14880,7 +14883,7 @@ TEST(pool_size) {
 
   CodeDesc desc;
   masm.GetCode(isolate, &desc);
-  code = Factory::CodeBuilder(isolate, desc, Code::STUB)
+  code = Factory::CodeBuilder(isolate, desc, CodeKind::FOR_TESTING)
              .set_self_reference(masm.CodeObject())
              .Build();
 

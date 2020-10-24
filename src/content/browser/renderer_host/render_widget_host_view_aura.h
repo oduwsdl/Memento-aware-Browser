@@ -81,6 +81,7 @@ class TouchSelectionControllerClientAura;
 class CONTENT_EXPORT RenderWidgetHostViewAura
     : public RenderWidgetHostViewBase,
       public RenderWidgetHostViewEventHandler::Delegate,
+      public RenderFrameMetadataProvider::Observer,
       public TextInputManager::Observer,
       public ui::TextInputClient,
       public display::DisplayObserver,
@@ -167,8 +168,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void DidStopFlinging() override;
   void OnDidNavigateMainFrameToNewPage() override;
   const viz::FrameSinkId& GetFrameSinkId() const override;
-  const viz::LocalSurfaceIdAllocation& GetLocalSurfaceIdAllocation()
-      const override;
+  const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
   bool TransformPointToCoordSpaceForView(
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
@@ -187,10 +187,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       override;
   void TransferTouches(
       const std::vector<std::unique_ptr<ui::TouchEvent>>& touches) override;
+  // TODO(lanwei): Use TestApi interface to write functions that are used in
+  // tests and remove FRIEND_TEST_ALL_PREFIXES.
+  void SetLastPointerType(ui::EventPointerType last_pointer_type) override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
-  void ConfirmCompositionText(bool keep_selection) override;
+  uint32_t ConfirmCompositionText(bool keep_selection) override;
   void ClearCompositionText() override;
   void InsertText(const base::string16& text) override;
   void InsertChar(const ui::KeyEvent& event) override;
@@ -228,9 +231,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 #endif
 
 #if defined(OS_CHROMEOS)
-  // Set the autocorrect range
+  gfx::Range GetAutocorrectRange() const override;
+  gfx::Rect GetAutocorrectCharacterBounds() const override;
   bool SetAutocorrectRange(const base::string16& autocorrect_text,
                            const gfx::Range& range) override;
+  void ClearAutocorrectRange() override;
 #endif
 
 #if defined(OS_WIN)
@@ -297,8 +302,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void OnHostMovedInPixels(aura::WindowTreeHost* host,
                            const gfx::Point& new_origin_in_pixels) override;
 
-  // RenderFrameMetadataProvider::Observer
+  // RenderFrameMetadataProvider::Observer implementation.
+  void OnRenderFrameMetadataChangedBeforeActivation(
+      const cc::RenderFrameMetadata& metadata) override {}
   void OnRenderFrameMetadataChangedAfterActivation() override;
+  void OnRenderFrameSubmission() override {}
+  void OnLocalSurfaceIdChanged(
+      const cc::RenderFrameMetadata& metadata) override {}
 
 #if defined(OS_WIN)
   // Gets the HWND of the host window.
@@ -336,7 +346,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   RenderFrameHostImpl* GetFocusedFrame() const;
   bool NeedsMouseCapture() override;
   void SetTooltipsEnabled(bool enable) override;
-  void ShowContextMenu(const ContextMenuParams& params) override;
   void Shutdown() override;
 
   bool ShouldVirtualKeyboardOverlayContent() const;
@@ -349,11 +358,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   void ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
 
-  // TODO(lanwei): Use TestApi interface to write functions that are used in
-  // tests and remove FRIEND_TEST_ALL_PREFIXES.
-  void SetLastPointerType(ui::EventPointerType last_pointer_type) {
-    last_pointer_type_ = last_pointer_type;
-  }
   ui::EventPointerType GetLastPointerType() const { return last_pointer_type_; }
 
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
@@ -428,6 +432,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            DiscardDelegatedFramesWithMemoryPressure);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraInputMethodTest,
                            OnCaretBoundsChanged);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraInputMethodTest,
+                           OnCaretBoundsChangedInputModeNone);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraInputMethodFocusTest,
+                           OnFocusLost);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
                            KeyboardObserverDestroyed);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
@@ -438,6 +446,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            KeyboardObserverForFocusedNodeChanged);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
                            KeyboardObserverForPenInput);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
+                           KeyboardObserverDetachDuringWindowDestroy);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
                            DropFallbackWhenHidden);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
@@ -462,6 +472,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            DiscardDelegatedFrames);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessHitTestBrowserTest,
                            ScrollOOPIFEditableElement);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, OcclusionHidesTooltip);
 
   class WindowObserver;
   friend class WindowObserver;
@@ -485,8 +496,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   bool SynchronizeVisualProperties(
       const cc::DeadlinePolicy& deadline_policy,
-      const base::Optional<viz::LocalSurfaceIdAllocation>&
-          child_local_surface_id_allocation);
+      const base::Optional<viz::LocalSurfaceId>& child_local_surface_id);
 
   void OnDidUpdateVisualPropertiesComplete(
       const cc::RenderFrameMetadata& metadata);
@@ -536,7 +546,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                               RenderWidgetHostViewBase* updated_view) override;
 
   // Detaches |this| from the input method object.
-  void DetachFromInputMethod();
+  // is_removed flag is true if this is called while the window is
+  // getting removed/destroyed, false, otherwise.
+  void DetachFromInputMethod(bool is_removed);
 
   // Dismisses a Web Popup on a mouse or touch press outside the popup and its
   // parent.
@@ -574,7 +586,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   blink::mojom::FrameWidgetInputHandler*
   GetFrameWidgetInputHandlerForFocusedWidget();
 
-  // NOTE: this is null if |is_mus_browser_plugin_guest_| is true.
   aura::Window* window_;
 
   std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client_;
@@ -689,10 +700,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       ui::EventPointerType::kUnknown;
 
   bool is_first_navigation_ = true;
-  viz::LocalSurfaceIdAllocation inset_surface_id_allocation_;
+  viz::LocalSurfaceId inset_surface_id_;
 
   // See OnDisplayMetricsChanged() for details.
   bool needs_to_update_display_metrics_ = false;
+
+  // Saved value of WebPreferences' |double_tap_to_zoom_enabled|.
+  bool double_tap_to_zoom_enabled_ = false;
 
   Visibility visibility_ = Visibility::HIDDEN;
 

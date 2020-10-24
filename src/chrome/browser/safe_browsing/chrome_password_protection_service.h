@@ -103,7 +103,7 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   static ChromePasswordProtectionService* GetPasswordProtectionService(
       Profile* profile);
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   // Called by SecurityStateTabHelper to determine if page info bubble should
   // show password reuse warning.
   static bool ShouldShowPasswordReusePageInfoBubble(
@@ -203,7 +203,7 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   void ReportPasswordChanged() override;
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   // Returns true if there's any enterprise password reuses unhandled in
   // |web_contents|. "Unhandled" is defined as user hasn't clicked on
   // "Change Password" button in modal warning dialog.
@@ -246,10 +246,17 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   // Returns the profile PasswordStore associated with this instance.
   password_manager::PasswordStore* GetProfilePasswordStore() const;
 
+  // Returns the GAIA-account-scoped PasswordStore associated with this
+  // instance. The account password store contains passwords stored in the
+  // account and is accessible only when the user is signed in and non syncing.
+  password_manager::PasswordStore* GetAccountPasswordStore() const;
+
   // Gets the type of sync account associated with current profile or
   // |NOT_SIGNED_IN|.
   LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
   GetSyncAccountType() const override;
+  safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment
+  GetUrlDisplayExperiment() const override;
 
   // Stores |verdict| in the cache based on its |trigger_type|, |url|,
   // reused |password_type|, |verdict| and |receive_time|.
@@ -299,6 +306,8 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
 
   bool IsIncognito() override;
 
+  bool IsUserMBBOptedIn() override;
+
   bool IsInPasswordAlertMode(ReusedPasswordAccountType password_type) override;
 
   // Checks if pinging should be enabled based on the |trigger_type|,
@@ -333,7 +342,10 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   bool IsUnderAdvancedProtection() override;
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+  // If Safe browsing endpoint is not enabled in the country.
+  bool IsInExcludedCountry() override;
+
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   void MaybeLogPasswordReuseDetectedEvent(
       content::WebContents* web_contents) override;
 
@@ -441,6 +453,8 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
                            OnEnterpriseTriggerOff);
   FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceBrowserTest,
                            OnEnterpriseTriggerOffGSuite);
+  FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceBrowserTest,
+                           VerifyIsInExcludedCountry);
 
  private:
   friend class MockChromePasswordProtectionService;
@@ -458,7 +472,7 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   // Returns whether the profile is valid and has safe browsing service enabled.
   bool IsSafeBrowsingEnabled();
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   void MaybeLogPasswordReuseLookupResult(
       content::WebContents* web_contents,
       sync_pb::GaiaPasswordReuse::PasswordReuseLookup::LookupResult result);
@@ -548,6 +562,9 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
 
   // Code shared by both ctors.
   void Init();
+
+  password_manager::PasswordStore* GetStoreForReusedCredential(
+      const password_manager::MatchingReusedCredential& reused_credential);
 
   scoped_refptr<SafeBrowsingUIManager> ui_manager_;
   TriggerManager* trigger_manager_;

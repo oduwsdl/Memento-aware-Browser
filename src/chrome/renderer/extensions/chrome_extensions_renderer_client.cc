@@ -184,8 +184,8 @@ bool ChromeExtensionsRendererClient::OverrideCreatePlugin(
 
   bool guest_view_api_available = false;
   extension_dispatcher_->script_context_set_iterator()->ForEach(
-      render_frame, base::Bind(&IsGuestViewApiAvailableToScriptContext,
-                               &guest_view_api_available));
+      render_frame, base::BindRepeating(&IsGuestViewApiAvailableToScriptContext,
+                                        &guest_view_api_available));
   return !guest_view_api_available;
 }
 
@@ -210,9 +210,6 @@ bool ChromeExtensionsRendererClient::AllowPopup() {
       return true;
     case extensions::Feature::BLESSED_WEB_PAGE_CONTEXT:
       return !current_context->web_frame()->Parent();
-    default:
-      NOTREACHED();
-      return false;
   }
 }
 
@@ -335,7 +332,7 @@ ChromeExtensionsRendererClient::GetExtensionDispatcherForTest() {
 }
 
 // static
-content::BrowserPluginDelegate*
+guest_view::GuestViewContainer*
 ChromeExtensionsRendererClient::CreateBrowserPluginDelegate(
     content::RenderFrame* render_frame,
     const content::WebPluginInfo& info,

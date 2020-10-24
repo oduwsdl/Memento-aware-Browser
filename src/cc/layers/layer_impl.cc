@@ -34,8 +34,8 @@
 #include "cc/trees/transform_node.h"
 #include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/quads/debug_border_draw_quad.h"
-#include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/traced_value.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/quad_f.h"
@@ -68,7 +68,6 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl,
       clip_tree_index_(ClipTree::kInvalidNodeId),
       scroll_tree_index_(ScrollTree::kInvalidNodeId),
       current_draw_mode_(DRAW_MODE_NONE),
-      has_will_change_transform_hint_(false),
       needs_push_properties_(false),
       scrollbars_hidden_(false),
       needs_show_scrollbars_(false),
@@ -88,10 +87,6 @@ LayerImpl::~LayerImpl() {
   layer_tree_impl_->RemoveFromElementLayerList(element_id_);
   TRACE_EVENT_OBJECT_DELETED_WITH_ID(
       TRACE_DISABLED_BY_DEFAULT("cc.debug"), "cc::LayerImpl", this);
-}
-
-void LayerImpl::SetHasWillChangeTransformHint(bool has_will_change) {
-  has_will_change_transform_hint_ = has_will_change;
 }
 
 ElementListType LayerImpl::GetElementTypeForAnimation() const {
@@ -237,7 +232,7 @@ void LayerImpl::GetDebugBorderProperties(SkColor* color, float* width) const {
 }
 
 void LayerImpl::AppendDebugBorderQuad(
-    viz::RenderPass* render_pass,
+    viz::CompositorRenderPass* render_pass,
     const gfx::Rect& quad_rect,
     const viz::SharedQuadState* shared_quad_state,
     AppendQuadsData* append_quads_data) const {
@@ -249,7 +244,7 @@ void LayerImpl::AppendDebugBorderQuad(
 }
 
 void LayerImpl::AppendDebugBorderQuad(
-    viz::RenderPass* render_pass,
+    viz::CompositorRenderPass* render_pass,
     const gfx::Rect& quad_rect,
     const viz::SharedQuadState* shared_quad_state,
     AppendQuadsData* append_quads_data,
@@ -370,7 +365,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   // depend on it. Referencing element id on a layer is
   // deprecated. http://crbug.com/709137
   layer->SetElementId(element_id_);
-  layer->SetFrameElementId(frame_element_id_);
 
   layer->has_transform_node_ = has_transform_node_;
   layer->offset_to_transform_parent_ = offset_to_transform_parent_;
@@ -393,7 +387,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->effect_tree_index_ = effect_tree_index_;
   layer->clip_tree_index_ = clip_tree_index_;
   layer->scroll_tree_index_ = scroll_tree_index_;
-  layer->has_will_change_transform_hint_ = has_will_change_transform_hint_;
   layer->scrollbars_hidden_ = scrollbars_hidden_;
   if (needs_show_scrollbars_)
     layer->needs_show_scrollbars_ = needs_show_scrollbars_;
@@ -513,6 +506,11 @@ void LayerImpl::SetBounds(const gfx::Size& bounds) {
 
 bool LayerImpl::IsScrollbarLayer() const {
   return false;
+}
+
+bool LayerImpl::IsScrollerOrScrollbar() const {
+  return IsScrollbarLayer() ||
+         GetScrollTree().FindNodeFromElementId(element_id());
 }
 
 void LayerImpl::SetDrawsContent(bool draws_content) {
@@ -710,9 +708,6 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
 
   state->SetBoolean("hit_testable", HitTestable());
   state->SetBoolean("contents_opaque", contents_opaque());
-
-  state->SetBoolean("has_will_change_transform_hint",
-                    has_will_change_transform_hint());
 
   if (debug_info_) {
     state->SetString("layer_name", debug_info_->name);

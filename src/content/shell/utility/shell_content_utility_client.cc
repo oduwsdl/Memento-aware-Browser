@@ -31,10 +31,10 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/bindings/service_factory.h"
 #include "mojo/public/cpp/system/buffer.h"
-#include "services/service_manager/sandbox/sandbox.h"
+#include "sandbox/policy/sandbox.h"
 #include "services/test/echo/echo_service.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "services/service_manager/tests/sandbox_status_service.h"
 #endif
 
@@ -108,7 +108,7 @@ class TestUtilityServiceImpl : public mojom::TestService {
   }
 
   void IsProcessSandboxed(IsProcessSandboxedCallback callback) override {
-    std::move(callback).Run(service_manager::Sandbox::IsProcessSandboxed());
+    std::move(callback).Run(sandbox::policy::Sandbox::IsProcessSandboxed());
   }
 
  private:
@@ -143,7 +143,7 @@ void ShellContentUtilityClient::ExposeInterfacesToBrowser(
   binders->Add<mojom::PowerMonitorTest>(
       base::BindRepeating(&PowerMonitorTestImpl::MakeSelfOwnedReceiver),
       base::ThreadTaskRunnerHandle::Get());
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (register_sandbox_status_helper_) {
     binders->Add<service_manager::mojom::SandboxStatusService>(
         base::BindRepeating(
@@ -155,10 +155,10 @@ void ShellContentUtilityClient::ExposeInterfacesToBrowser(
 
 bool ShellContentUtilityClient::HandleServiceRequest(
     const std::string& service_name,
-    service_manager::mojom::ServiceRequest request) {
+    mojo::PendingReceiver<service_manager::mojom::Service> receiver) {
   std::unique_ptr<service_manager::Service> service;
   if (service_name == kTestServiceUrl) {
-    service = std::make_unique<TestService>(std::move(request));
+    service = std::make_unique<TestService>(std::move(receiver));
   }
 
   if (service) {

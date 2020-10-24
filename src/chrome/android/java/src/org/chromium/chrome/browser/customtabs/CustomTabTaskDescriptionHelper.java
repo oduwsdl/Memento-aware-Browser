@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import android.app.ActivityManager;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.text.TextUtils;
@@ -13,7 +14,7 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar;
@@ -203,8 +204,8 @@ public class CustomTabTaskDescriptionHelper implements NativeInitObserver, Destr
     }
 
     private void updateTaskDescription() {
-        ApiCompatibilityUtils.setTaskDescription(
-                mActivity, computeTitle(), computeIcon(), computeThemeColor());
+        mActivity.setTaskDescription(new ActivityManager.TaskDescription(
+                computeTitle(), computeIcon(), computeThemeColor()));
     }
 
     /**

@@ -30,7 +30,6 @@ repack("pak") {
     "$root_gen_dir/components/components_resources.pak",
     "$root_gen_dir/components/strings/components_strings_en-US.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
-    "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
     "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
     "$root_gen_dir/content/dev_ui_content_resources.pak",
@@ -59,7 +58,6 @@ repack("pak") {
     "//content:content_resources",
     "//content:dev_ui_content_resources",
     "//content/app/resources",
-    "//content/browser/devtools:resources",
     "//content/browser/tracing:resources",
     "//mojo/public/js:resources",
     "//net:net_resources",
@@ -69,6 +67,12 @@ repack("pak") {
     "//ui/resources",
     "//ui/strings",
   ]
+
+  if (!is_fuchsia) {
+    sources +=
+        [ "$root_gen_dir/content/browser/devtools/devtools_resources.pak" ]
+    deps += [ "//content/browser/devtools:devtools_resources" ]
+  }
 
   output = "$root_out_dir/headless_lib.pak"
 }
@@ -240,8 +244,8 @@ inspector_protocol_generate("protocol_sources") {
 # |headless_non_renderer| components.
 source_set("headless_shared_sources") {
   visibility = [
-    "//headless:headless_non_renderer",
     "//headless:headless",
+    "//headless:headless_non_renderer",
   ]
 
   sources = [
@@ -308,11 +312,8 @@ component("headless_non_renderer") {
     "lib/browser/headless_browser_context_options.h",
     "lib/browser/headless_browser_impl.cc",
     "lib/browser/headless_browser_impl.h",
-    "lib/browser/headless_browser_impl_mac.mm",
     "lib/browser/headless_browser_main_parts.cc",
     "lib/browser/headless_browser_main_parts.h",
-    "lib/browser/headless_browser_main_parts_linux.cc",
-    "lib/browser/headless_browser_main_parts_mac.mm",
     "lib/browser/headless_devtools.cc",
     "lib/browser/headless_devtools.h",
     "lib/browser/headless_devtools_agent_host_client.cc",
@@ -328,8 +329,6 @@ component("headless_non_renderer") {
     "lib/browser/headless_quota_permission_context.h",
     "lib/browser/headless_request_context_manager.cc",
     "lib/browser/headless_request_context_manager.h",
-    "lib/browser/headless_shell_application_mac.h",
-    "lib/browser/headless_shell_application_mac.mm",
     "lib/browser/headless_window_tree_host.h",
     "lib/browser/protocol/browser_handler.cc",
     "lib/browser/protocol/browser_handler.h",
@@ -348,6 +347,19 @@ component("headless_non_renderer") {
     "public/headless_devtools_target.h",
     "public/headless_web_contents.h",
   ]
+
+  if (is_mac) {
+    sources += [
+      "lib/browser/headless_browser_impl_mac.mm",
+      "lib/browser/headless_browser_main_parts_mac.mm",
+      "lib/browser/headless_shell_application_mac.h",
+      "lib/browser/headless_shell_application_mac.mm",
+    ]
+  }
+
+  if (is_linux || is_chromeos) {
+    sources += [ "lib/browser/headless_browser_main_parts_linux.cc" ]
+  }
 
   if (use_aura) {
     sources += [
@@ -413,12 +425,15 @@ component("headless_non_renderer") {
       "lib/browser/headless_web_contents_impl.h",
       "lib/headless_content_main_delegate.cc",
       "lib/headless_content_main_delegate.h",
-      "lib/headless_content_main_delegate_mac.mm",
       "lib/renderer/headless_content_renderer_client.cc",
       "lib/renderer/headless_content_renderer_client.h",
       "lib/utility/headless_content_utility_client.cc",
       "lib/utility/headless_content_utility_client.h",
     ]
+
+    if (is_mac) {
+      sources += [ "lib/headless_content_main_delegate_mac.mm" ]
+    }
 
     if (enable_basic_printing) {
       sources += [
@@ -470,7 +485,7 @@ component("headless_non_renderer") {
 
   if (is_mac) {
     deps += [ ":mac_helpers" ]
-    libs = [
+    frameworks = [
       "AppKit.framework",
       "CoreFoundation.framework",
     ]
@@ -514,12 +529,15 @@ if (!is_component_build) {
       "lib/browser/headless_web_contents_impl.h",
       "lib/headless_content_main_delegate.cc",
       "lib/headless_content_main_delegate.h",
-      "lib/headless_content_main_delegate_mac.mm",
       "lib/renderer/headless_content_renderer_client.cc",
       "lib/renderer/headless_content_renderer_client.h",
       "lib/utility/headless_content_utility_client.cc",
       "lib/utility/headless_content_utility_client.h",
     ]
+
+    if (is_mac) {
+      sources += [ "lib/headless_content_main_delegate_mac.mm" ]
+    }
 
     if (headless_use_embedded_resources) {
       defines = [ "HEADLESS_USE_EMBEDDED_RESOURCES" ]
@@ -613,11 +631,15 @@ test("headless_browsertests") {
     "test/headless_browser_test.cc",
     "test/headless_browser_test.h",
     "test/headless_client_browsertest.cc",
-    "test/headless_protocol_browsertest.cc",
     "test/headless_test_launcher.cc",
     "test/test_network_interceptor.cc",
     "test/test_network_interceptor.h",
   ]
+
+  # TODO(https://crbug.com/1107396): These tests flakily timeout on fuchsia.
+  if (!is_fuchsia) {
+    sources += [ "test/headless_protocol_browsertest.cc" ]
+  }
 
   data = [
     "lib/dom_tree_extraction_expected_nodes.txt",

@@ -11,8 +11,9 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/containers/span.h"
+#include "base/containers/flat_set.h"
 #include "base/files/file.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
@@ -22,8 +23,10 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/policy/messaging_layer/encryption/encryption_module.h"
 #include "chrome/browser/policy/messaging_layer/util/status.h"
 #include "chrome/browser/policy/messaging_layer/util/statusor.h"
+#include "components/policy/proto/record.pb.h"
 
 namespace reporting {
 
@@ -89,6 +92,8 @@ class StorageQueue : public base::RefCountedThreadSafe<StorageQueue> {
     // Time period the data is uploaded with.
     // If 0, uploaded immediately after a new record is stored
     // (this setting is intended for the immediate priority).
+    // Can be set to infinity - in that case Flush() is expected to be
+    // called from time to time.
     base::TimeDelta upload_period_;
   };
 
@@ -96,32 +101,35 @@ class StorageQueue : public base::RefCountedThreadSafe<StorageQueue> {
   // |StartUpload| callback (see below).
   // Every time StorageQueue starts an upload (by timer or immediately after
   // Write) it uses this interface to hand available records over to the actual
-  // uploader.
-  class UploaderInterface
-      : public base::RefCountedThreadSafe<UploaderInterface> {
+  // uploader. StorageQueue takes ownership of it and automatically discards
+  // after |Completed| returns.
+  class UploaderInterface {
    public:
-    // Asynchronously processes every record (e.g. serializes and adds to the
-    // network message). Expects |processed_cb| to be called after the record
-    // or error status has been processed, with true if next record needs to be
-    // delivered and false if the Uploader should stop.
-    virtual void ProcessBlob(StatusOr<base::span<const uint8_t>> data,
-                             base::OnceCallback<void(bool)> processed_cb) = 0;
+    virtual ~UploaderInterface() = default;
+
+    // Unserializes every record and hands ownership over for processing (e.g.
+    // to add to the network message). Expects |processed_cb| to be called after
+    // the record or error status has been processed, with true if next record
+    // needs to be delivered and false if the Uploader should stop.
+    virtual void ProcessRecord(EncryptedRecord record,
+                               base::OnceCallback<void(bool)> processed_cb) = 0;
+
+    // Makes a note of a gap [start, start + count). Expects |processed_cb| to
+    // be called after the record or error status has been processed, with true
+    // if next record needs to be delivered and false if the Uploader should
+    // stop.
+    virtual void ProcessGap(SequencingInformation start,
+                            uint64_t count,
+                            base::OnceCallback<void(bool)> processed_cb) = 0;
 
     // Finalizes the upload (e.g. sends the message to server and gets
     // response). Called always, regardless of whether there were errors.
     virtual void Completed(Status final_status) = 0;
-
-   protected:
-    // Non-public destructor is required by RefCounted.
-    virtual ~UploaderInterface() = default;
-
-   private:
-    friend class base::RefCountedThreadSafe<UploaderInterface>;
   };
 
   // Callback type for UploadInterface provider for this queue.
   using StartUploadCb =
-      base::RepeatingCallback<StatusOr<scoped_refptr<UploaderInterface>>()>;
+      base::RepeatingCallback<StatusOr<std::unique_ptr<UploaderInterface>>()>;
 
   // Creates StorageQueue instance with the specified options, and returns it
   // with the |completion_cb| callback. |start_upload_cb| is a factory callback
@@ -131,24 +139,54 @@ class StorageQueue : public base::RefCountedThreadSafe<StorageQueue> {
   static void Create(
       const Options& options,
       StartUploadCb start_upload_cb,
+      scoped_refptr<EncryptionModule> encryption_module,
       base::OnceCallback<void(StatusOr<scoped_refptr<StorageQueue>>)>
           completion_cb);
 
-  // Writes data blob into the StorageQueue (the last file of it) with the next
-  // sequencing number assigned. The write is a non-blocking operation -
+  // Wraps and serializes Record (taking ownership of it), encrypts and writes
+  // the resulting blob into the StorageQueue (the last file of it) with the
+  // next sequencing number assigned. The write is a non-blocking operation -
   // caller can "fire and forget" it (|completion_cb| allows to verify that
   // record has been successfully enqueued). If file is going to become too
   // large, it is closed and new file is created.
-  // Helper methods: AssignLastFile, WriteHeaderAndBlock.
-  void Write(base::span<const uint8_t> data,
-             base::OnceCallback<void(Status)> completion_cb);
+  // Helper methods: AssignLastFile, WriteHeaderAndBlock, OpenNewWriteableFile,
+  // WriteMetadata, DeleteOutdatedMetadata.
+  void Write(Record record, base::OnceCallback<void(Status)> completion_cb);
 
   // Confirms acceptance of the records up to |seq_number| (inclusively).
   // All records with sequencing numbers <= this one can be removed from
   // the StorageQueue, and can no longer be uploaded.
-  // Helper methods: RemoveUnusedFiles.
+  // Helper methods: RemoveConfirmedData.
   void Confirm(uint64_t seq_number,
                base::OnceCallback<void(Status)> completion_cb);
+
+  // Initiates upload of collected records. Called periodically by timer, based
+  // on upload_period of the queue, and can also be called explicitly - for
+  // a queue with an infinite or very large upload period. Multiple |Flush|
+  // calls can safely run in parallel.
+  // Starts by calling |start_upload_cb_| that instantiates |UploaderInterface
+  // uploader|. Then repeatedly reads EncryptedRecord(s) one by one from the
+  // StorageQueue starting from |first_seq_number_|, handing each one over to
+  // |uploader|->ProcessRecord (keeping ownership of the buffer) and resuming
+  // after result callback returns 'true'. Only files that have been closed are
+  // included in reading; |Upload| makes sure to close the last writeable file
+  // and create a new one before starting to send records to the |uploader|.
+  // If some records are not available or corrupt, |uploader|->ProcessGap is
+  // called. If the monotonic order of sequencing is broken, INTERNAL error
+  // Status is reported. |Upload| can be stopped after any record by returning
+  // 'false' to |processed_cb| callback - in that case |Upload| will behave as
+  // if the end of data has been reached. While one or more |Upload|s are
+  // active, files can be added to the StorageQueue but cannot be deleted. If
+  // processing of the record takes significant time, |uploader| implementation
+  // should be offset to another thread to avoid locking StorageQueue.
+  // Helper methods: SwitchLastFileIfNotEmpty, CollectFilesForUpload.
+  void Flush();
+
+  // Test only: makes specified records fail on reading.
+  void TestInjectBlockReadErrors(std::initializer_list<uint64_t> seq_numbers);
+
+  // Access queue options.
+  const Options& options() const { return options_; }
 
   StorageQueue(const StorageQueue& other) = delete;
   StorageQueue& operator=(const StorageQueue& other) = delete;
@@ -176,12 +214,12 @@ class StorageQueue : public base::RefCountedThreadSafe<StorageQueue> {
     Status Delete();
 
     // Attempts to read |size| bytes from position |pos| and returns
-    // span of data that were actually read (no more than |size|).
-    // End of file is indicated by empty span.
-    StatusOr<base::span<const uint8_t>> Read(uint32_t pos, uint32_t size);
+    // reference to the data that were actually read (no more than |size|).
+    // End of file is indicated by empty data.
+    StatusOr<base::StringPiece> Read(uint32_t pos, uint32_t size);
 
     // Appends data to the file.
-    StatusOr<uint32_t> Append(base::span<const uint8_t> data);
+    StatusOr<uint32_t> Append(base::StringPiece data);
 
     bool is_opened() const { return handle_.get() != nullptr; }
     bool is_readonly() const {
@@ -214,42 +252,38 @@ class StorageQueue : public base::RefCountedThreadSafe<StorageQueue> {
     size_t data_start_ = 0;
     size_t data_end_ = 0;
     uint64_t file_position_ = 0;
-    std::unique_ptr<uint8_t[]> buffer_;
+    std::unique_ptr<char[]> buffer_;
   };
 
   // Private constructor, to be called by Create factory method only.
-  StorageQueue(const Options& options, StartUploadCb start_upload_cb);
+  StorageQueue(const Options& options,
+               StartUploadCb start_upload_cb,
+               scoped_refptr<EncryptionModule> encryption_module);
 
   // Initializes the object by enumerating files in the assigned directory
   // and determines the sequencing information of the last record.
   // Must be called once and only once after construction.
   // Returns OK or error status, if anything failed to initialize.
-  // Called once, during initialization. Helper methods: EnumerateDataFiles,
-  // ScanLastFile.
+  // Called once, during initialization.
+  // Helper methods: EnumerateDataFiles, ScanLastFile, RestoreMetadata.
   Status Init();
 
-  // Periodically uploads previously stored but not confirmed records.
-  // Starts by calling |start_upload_cb_| that instantiates |UploaderInterface
-  // uploader|. Then repeatedly reads data blob(s) one by one from the
-  // StorageQueue starting from |first_seq_number_|, handing each one over to
-  // |uploader|->ProcessBlob (keeping ownership of the buffer) and resuming
-  // after result callback returns 'true'. Only files that have been closed are
-  // included in reading; |Upload| makes sure to close the last writeable file
-  // and create a new one before starting to send records to the |uploader|. If
-  // the monotonic order of sequencing is broken, INTERNAL error Status is
-  // reported. |Upload| can be stopped after any record by returning 'false' to
-  // |processed_cb| callback - in that case |Upload| will behave as if the end
-  // of data has been reached. While one or more |Upload|s are active, files can
-  // be added to the StorageQueue but cannot be deleted. If processing of the
-  // blob takes significant time, |uploader| implementation should be offset to
-  // another thread to avoid locking StorageQueue.
-  // Called by timer. Helper methods: SwitchLastFileIfNotEmpty,
-  // CollectFilesForUpload.
-  void PeriodicUpload();
+  // Attaches last record digest to the given record (does not exist at a
+  // generation start). Calculates the given record digest and stores it
+  // as the last one for the next record.
+  void UpdateRecordDigest(WrappedRecord* wrapped_record);
+
+  // Helper method for Init(): process single data file.
+  // Return seq_number from <prefix>.<seq_number> file name, or Status
+  // in case there is any error.
+  StatusOr<uint64_t> AddDataFile(
+      const base::FilePath& full_name,
+      const base::FileEnumerator::FileInfo& file_info);
 
   // Helper method for Init(): enumerates all data files in the directory.
   // Valid file names are <prefix>.<seq_number>, any other names are ignored.
-  Status EnumerateDataFiles();
+  // Adds used data files to the set.
+  Status EnumerateDataFiles(base::flat_set<base::FilePath>* used_files_set);
 
   // Helper method for Init(): scans the last file in StorageQueue, if there are
   // files at all, and learns the latest sequencing number. Otherwise (if there
@@ -263,9 +297,35 @@ class StorageQueue : public base::RefCountedThreadSafe<StorageQueue> {
   // file will be created and assigned to be the last one.
   StatusOr<scoped_refptr<SingleFile>> AssignLastFile(size_t size);
 
+  // Helper method for Write() and Read(): creates and opens a new empty
+  // writeable file, adding it to |files_|.
+  StatusOr<scoped_refptr<SingleFile>> OpenNewWriteableFile();
+
+  // Helper method for Write(): stores a file with metadata to match the
+  // incoming new record. Synchronously composes metadata to record, then
+  // asynchronously writes it into a file with next sequencing number and then
+  // notifies the Write operation that it can now complete. After that it
+  // asynchronously deletes all other files with lower sequencing number
+  // (multiple Writes can see the same files and attempt to delete them, and
+  // that is not an error).
+  Status WriteMetadata();
+
+  // Helper method for Init(): locates file with metadata that matches the
+  // last sequencing number and loads metadat from it.
+  // Adds used metadata file to the set.
+  Status RestoreMetadata(base::flat_set<base::FilePath>* used_files_set);
+
+  // Delete all files except those listed in the set.
+  void DeleteUnusedFiles(
+      const base::flat_set<base::FilePath>& used_files_setused_files_set);
+
+  // Helper method for Write(): deletes meta files up to, but not including
+  // |seq_number_to_keep|. Any errors are ignored.
+  void DeleteOutdatedMetadata(uint64_t seq_number_to_keep);
+
   // Helper method for Write(): composes record header and writes it to the
   // file, followed by data.
-  Status WriteHeaderAndBlock(base::span<const uint8_t> data,
+  Status WriteHeaderAndBlock(base::StringPiece data,
                              scoped_refptr<SingleFile> file);
 
   // Helper method for Upload: if the last file is not empty (has at least one
@@ -275,33 +335,50 @@ class StorageQueue : public base::RefCountedThreadSafe<StorageQueue> {
 
   // Helper method for Upload: collects and sets aside |files| in the
   // StorageQueue that have data for the Upload (all files that have records
-  // with sequence numbers equal or higher than |seq_number|). Returns sequence
-  // number the first file actually starts from (lower or equal to
-  // |seq_number|).
-  uint64_t CollectFilesForUpload(
-      uint64_t seq_number,
-      std::vector<scoped_refptr<SingleFile>>* files) const;
+  // with sequence numbers equal or higher than |seq_number|).
+  std::map<uint64_t, scoped_refptr<SingleFile>> CollectFilesForUpload(
+      uint64_t seq_number) const;
 
-  // Helper method for Confirm: Removes files that only have records with seq
-  // numbers below or equal to |seq_number|.
-  Status RemoveUnusedFiles(uint64_t seq_number);
+  // Helper method for Confirm: Moves |first_seq_number_| to (|seq_number|+1)
+  // and removes files that only have records with seq numbers below or equal to
+  // |seq_number| (below |first_seq_number_|).
+  Status RemoveConfirmedData(uint64_t seq_number);
 
   // Immutable options, stored at the time of creation.
   const Options options_;
 
+  // Current generation id, unique per device and queue.
+  // Set up once during initialization by reading from the 'gen_id.NNNN' file
+  // matching the last seq number, or generated anew as a random number if no
+  // such file found (files do not match the id).
+  uint64_t generation_id_ = 0;
+
+  // Digest of the last written record (loaded at queue initialization, absent
+  // if the new generation has just started, and no records where stored yet).
+  base::Optional<std::string> last_record_digest_;
+
   // Next sequencing number to store (not assigned yet).
   uint64_t next_seq_number_ = 0;
 
-  // First unconfirmed sequencing number (no records with lower
-  // sequencing number are guaranteed to exist in store).
+  // First sequencing number store still has (no records with lower
+  // sequencing number exist in store).
   uint64_t first_seq_number_ = 0;
+
+  // First unconfirmed sequencing number (no records with lower
+  // sequencing number will be ever uploaded). Set by the first
+  // Confirm call.
+  // If first_unconfirmed_seq_number_ < first_seq_number_,
+  // [first_unconfirmed_seq_number_, first_seq_number_) is a gap
+  // that cannot be filled in and is uploaded as such.
+  base::Optional<uint64_t> first_unconfirmed_seq_number_;
 
   // Ordered map of the files by ascending sequence number.
   std::map<uint64_t, scoped_refptr<SingleFile>> files_;
 
   // Counter of the Read operations. When not 0, none of the files_ can be
-  // deleted. Incremented by Upload context OnStart(), decremented by
-  // destructor.
+  // deleted. Incremented by |ReadContext::OnStart|, decremented by
+  // |ReadContext::OnComplete|. Accessed by |RemoveConfirmedData|.
+  // All accesses take place on sequenced_task_runner_.
   int32_t active_read_operations_ = 0;
 
   // Upload timer (active only if options_.upload_period() is not 0).
@@ -309,6 +386,12 @@ class StorageQueue : public base::RefCountedThreadSafe<StorageQueue> {
 
   // Upload provider callback.
   const StartUploadCb start_upload_cb_;
+
+  // Encryption module.
+  scoped_refptr<EncryptionModule> encryption_module_;
+
+  // Test only: records specified to fail on reading.
+  base::flat_set<uint64_t> test_injected_fail_seq_numbers_;
 
   // Sequential task runner for all activities in this StorageQueue.
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;

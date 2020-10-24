@@ -57,6 +57,13 @@ using blink::WebVector;
 
 namespace content {
 
+blink::WebTextInputType ConvertTextInputType(ui::TextInputType type) {
+  // Check the type is in the range representable by ui::TextInputType.
+  DCHECK_LE(type, static_cast<int>(ui::TEXT_INPUT_TYPE_MAX))
+      << "blink::WebTextInputType and ui::TextInputType not synchronized";
+  return static_cast<blink::WebTextInputType>(type);
+}
+
 struct PepperWebPluginImpl::InitData {
   scoped_refptr<PluginModule> module;
   RenderFrameImpl* render_frame;
@@ -199,7 +206,7 @@ bool PepperWebPluginImpl::SupportsKeyboardFocus() const {
 void PepperWebPluginImpl::Paint(cc::PaintCanvas* canvas, const WebRect& rect) {
   // Re-entrancy may cause JS to try to execute script on the plugin before it
   // is fully initialized. See: crbug.com/715747.
-  if (instance_ && !instance_->FlashIsFullscreenOrPending())
+  if (instance_)
     instance_->Paint(canvas, plugin_rect_, rect);
 }
 
@@ -209,7 +216,7 @@ void PepperWebPluginImpl::UpdateGeometry(
     const WebRect& unobscured_rect,
     bool is_visible) {
   plugin_rect_ = window_rect;
-  if (instance_ && !instance_->FlashIsFullscreenOrPending())
+  if (instance_)
     instance_->ViewChanged(plugin_rect_, clip_rect, unobscured_rect);
 }
 
@@ -253,7 +260,7 @@ blink::WebInputEventResult PepperWebPluginImpl::HandleInputEvent(
     ui::Cursor* cursor) {
   // Re-entrancy may cause JS to try to execute script on the plugin before it
   // is fully initialized. See: crbug.com/715747.
-  if (!instance_ || instance_->FlashIsFullscreenOrPending())
+  if (!instance_)
     return blink::WebInputEventResult::kNotHandled;
   return instance_->HandleCoalescedInputEvent(coalesced_event, cursor)
              ? blink::WebInputEventResult::kHandledApplication
@@ -489,6 +496,67 @@ void PepperWebPluginImpl::RotateView(RotationType type) {
 
 bool PepperWebPluginImpl::IsPlaceholder() {
   return false;
+}
+
+void PepperWebPluginImpl::DidLoseMouseLock() {
+  if (instance_)
+    instance_->OnMouseLockLost();
+}
+
+void PepperWebPluginImpl::DidReceiveMouseLockResult(bool success) {
+  if (instance_)
+    instance_->OnLockMouseACK(success);
+}
+
+bool PepperWebPluginImpl::CanComposeInline() {
+  if (!instance_)
+    return false;
+  return instance_->IsPluginAcceptingCompositionEvents();
+}
+
+void PepperWebPluginImpl::ImeCommitTextForPlugin(
+    const blink::WebString& text,
+    const std::vector<ui::ImeTextSpan>& ime_text_spans,
+    const gfx::Range& replacement_range,
+    int relative_cursor_pos) {
+  if (!instance_)
+    return;
+  instance_->OnImeCommitText(text.Utf16(), replacement_range,
+                             relative_cursor_pos);
+}
+
+void PepperWebPluginImpl::ImeSetCompositionForPlugin(
+    const blink::WebString& text,
+    const std::vector<ui::ImeTextSpan>& ime_text_spans,
+    const gfx::Range& replacement_range,
+    int selection_start,
+    int selection_end) {
+  if (!instance_)
+    return;
+  instance_->OnImeSetComposition(text.Utf16(), ime_text_spans, selection_start,
+                                 selection_end);
+}
+
+void PepperWebPluginImpl::ImeFinishComposingTextForPlugin(bool keep_selection) {
+  if (!instance_)
+    return;
+  instance_->OnImeFinishComposingText(keep_selection);
+}
+
+bool PepperWebPluginImpl::ShouldDispatchImeEventsToPlugin() {
+  return true;
+}
+
+blink::WebTextInputType PepperWebPluginImpl::GetPluginTextInputType() {
+  if (!instance_)
+    return blink::WebTextInputType::kWebTextInputTypeNone;
+  return ConvertTextInputType(instance_->text_input_type());
+}
+
+gfx::Rect PepperWebPluginImpl::GetPluginCaretBounds() {
+  if (!instance_)
+    return gfx::Rect();
+  return instance_->GetCaretBounds();
 }
 
 }  // namespace content

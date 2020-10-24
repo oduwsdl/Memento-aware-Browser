@@ -35,7 +35,7 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/template_util.h"
 #include "base/test/move_only_int.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -95,6 +95,8 @@ class Emplaceable {
     other.int_ = 0;
     other.double_ = 0.0;
   }
+  Emplaceable(const Emplaceable&) = delete;
+  Emplaceable& operator=(const Emplaceable&) = delete;
 
   Emplaceable& operator=(Emplaceable&& other) {
     int_ = other.int_;
@@ -115,8 +117,6 @@ class Emplaceable {
  private:
   int int_;
   double double_;
-
-  DISALLOW_COPY_AND_ASSIGN(Emplaceable);
 };
 
 struct TemplateConstructor {
@@ -219,8 +219,8 @@ TEST(FlatTree, Stability) {
   Tree cont({{0, 0}, {1, 0}, {0, 1}, {2, 0}, {0, 2}, {1, 1}});
 
   auto AllOfSecondsAreZero = [&cont] {
-    return std::all_of(cont.begin(), cont.end(),
-                       [](const Pair& elem) { return elem.second == 0; });
+    return ranges::all_of(cont,
+                          [](const Pair& elem) { return elem.second == 0; });
   };
 
   EXPECT_TRUE(AllOfSecondsAreZero()) << "constructor should be stable";
@@ -976,11 +976,11 @@ TEST(FlatTree, EraseEndDeath) {
 TEST(FlatTree, KeyComp) {
   ReversedTree cont({1, 2, 3, 4, 5});
 
-  EXPECT_TRUE(std::is_sorted(cont.begin(), cont.end(), cont.key_comp()));
+  EXPECT_TRUE(ranges::is_sorted(cont, cont.key_comp()));
   int new_elements[] = {6, 7, 8, 9, 10};
   std::copy(std::begin(new_elements), std::end(new_elements),
             std::inserter(cont, cont.end()));
-  EXPECT_TRUE(std::is_sorted(cont.begin(), cont.end(), cont.key_comp()));
+  EXPECT_TRUE(ranges::is_sorted(cont, cont.key_comp()));
 }
 
 // value_compare value_comp() const
@@ -988,11 +988,11 @@ TEST(FlatTree, KeyComp) {
 TEST(FlatTree, ValueComp) {
   ReversedTree cont({1, 2, 3, 4, 5});
 
-  EXPECT_TRUE(std::is_sorted(cont.begin(), cont.end(), cont.value_comp()));
+  EXPECT_TRUE(ranges::is_sorted(cont, cont.value_comp()));
   int new_elements[] = {6, 7, 8, 9, 10};
   std::copy(std::begin(new_elements), std::end(new_elements),
             std::inserter(cont, cont.end()));
-  EXPECT_TRUE(std::is_sorted(cont.begin(), cont.end(), cont.value_comp()));
+  EXPECT_TRUE(ranges::is_sorted(cont, cont.value_comp()));
 }
 
 // ----------------------------------------------------------------------------

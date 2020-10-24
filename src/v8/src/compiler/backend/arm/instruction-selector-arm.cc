@@ -502,35 +502,35 @@ void InstructionSelector::VisitLoadTransform(Node* node) {
   LoadTransformParameters params = LoadTransformParametersOf(node->op());
   InstructionCode opcode = kArchNop;
   switch (params.transformation) {
-    case LoadTransformation::kS8x16LoadSplat:
-      opcode = kArmS8x16LoadSplat;
+    case LoadTransformation::kS128Load8Splat:
+      opcode = kArmS128Load8Splat;
       break;
-    case LoadTransformation::kS16x8LoadSplat:
-      opcode = kArmS16x8LoadSplat;
+    case LoadTransformation::kS128Load16Splat:
+      opcode = kArmS128Load16Splat;
       break;
-    case LoadTransformation::kS32x4LoadSplat:
-      opcode = kArmS32x4LoadSplat;
+    case LoadTransformation::kS128Load32Splat:
+      opcode = kArmS128Load32Splat;
       break;
-    case LoadTransformation::kS64x2LoadSplat:
-      opcode = kArmS64x2LoadSplat;
+    case LoadTransformation::kS128Load64Splat:
+      opcode = kArmS128Load64Splat;
       break;
-    case LoadTransformation::kI16x8Load8x8S:
-      opcode = kArmI16x8Load8x8S;
+    case LoadTransformation::kS128Load8x8S:
+      opcode = kArmS128Load8x8S;
       break;
-    case LoadTransformation::kI16x8Load8x8U:
-      opcode = kArmI16x8Load8x8U;
+    case LoadTransformation::kS128Load8x8U:
+      opcode = kArmS128Load8x8U;
       break;
-    case LoadTransformation::kI32x4Load16x4S:
-      opcode = kArmI32x4Load16x4S;
+    case LoadTransformation::kS128Load16x4S:
+      opcode = kArmS128Load16x4S;
       break;
-    case LoadTransformation::kI32x4Load16x4U:
-      opcode = kArmI32x4Load16x4U;
+    case LoadTransformation::kS128Load16x4U:
+      opcode = kArmS128Load16x4U;
       break;
-    case LoadTransformation::kI64x2Load32x2S:
-      opcode = kArmI64x2Load32x2S;
+    case LoadTransformation::kS128Load32x2S:
+      opcode = kArmS128Load32x2S;
       break;
-    case LoadTransformation::kI64x2Load32x2U:
-      opcode = kArmI64x2Load32x2U;
+    case LoadTransformation::kS128Load32x2U:
+      opcode = kArmS128Load32x2U;
       break;
     default:
       UNIMPLEMENTED();
@@ -608,6 +608,11 @@ void InstructionSelector::VisitStore(Node* node) {
   WriteBarrierKind write_barrier_kind = store_rep.write_barrier_kind();
   MachineRepresentation rep = store_rep.representation();
 
+  if (FLAG_enable_unconditional_write_barriers &&
+      CanBeTaggedOrCompressedPointer(rep)) {
+    write_barrier_kind = kFullWriteBarrier;
+  }
+
   if (write_barrier_kind != kNoWriteBarrier &&
       V8_LIKELY(!FLAG_disable_write_barriers)) {
     DCHECK(CanBeTaggedPointer(rep));
@@ -661,7 +666,6 @@ void InstructionSelector::VisitStore(Node* node) {
       case MachineRepresentation::kWord64:             // Fall through.
       case MachineRepresentation::kNone:
         UNREACHABLE();
-        return;
     }
 
     ExternalReferenceMatcher m(base);
@@ -1466,8 +1470,6 @@ void InstructionSelector::VisitUint32Mod(Node* node) {
   V(RoundUint32ToFloat32, kArmVcvtF32U32)            \
   V(ChangeInt32ToFloat64, kArmVcvtF64S32)            \
   V(ChangeUint32ToFloat64, kArmVcvtF64U32)           \
-  V(TruncateFloat32ToInt32, kArmVcvtS32F32)          \
-  V(TruncateFloat32ToUint32, kArmVcvtU32F32)         \
   V(ChangeFloat64ToInt32, kArmVcvtS32F64)            \
   V(ChangeFloat64ToUint32, kArmVcvtU32F64)           \
   V(TruncateFloat64ToUint32, kArmVcvtU32F64)         \
@@ -1486,17 +1488,24 @@ void InstructionSelector::VisitUint32Mod(Node* node) {
   V(Float32Sqrt, kArmVsqrtF32)                       \
   V(Float64Sqrt, kArmVsqrtF64)
 
-#define RR_OP_LIST_V8(V)                 \
-  V(Float32RoundDown, kArmVrintmF32)     \
-  V(Float64RoundDown, kArmVrintmF64)     \
-  V(Float32RoundUp, kArmVrintpF32)       \
-  V(Float64RoundUp, kArmVrintpF64)       \
-  V(Float32RoundTruncate, kArmVrintzF32) \
-  V(Float64RoundTruncate, kArmVrintzF64) \
-  V(Float64RoundTiesAway, kArmVrintaF64) \
-  V(Float32RoundTiesEven, kArmVrintnF32) \
-  V(Float64RoundTiesEven, kArmVrintnF64) \
-  V(F32x4Ceil, kArmVrintpF32)
+#define RR_OP_LIST_V8(V)                  \
+  V(Float32RoundDown, kArmVrintmF32)      \
+  V(Float64RoundDown, kArmVrintmF64)      \
+  V(Float32RoundUp, kArmVrintpF32)        \
+  V(Float64RoundUp, kArmVrintpF64)        \
+  V(Float32RoundTruncate, kArmVrintzF32)  \
+  V(Float64RoundTruncate, kArmVrintzF64)  \
+  V(Float64RoundTiesAway, kArmVrintaF64)  \
+  V(Float32RoundTiesEven, kArmVrintnF32)  \
+  V(Float64RoundTiesEven, kArmVrintnF64)  \
+  V(F64x2Ceil, kArmF64x2Ceil)             \
+  V(F64x2Floor, kArmF64x2Floor)           \
+  V(F64x2Trunc, kArmF64x2Trunc)           \
+  V(F64x2NearestInt, kArmF64x2NearestInt) \
+  V(F32x4Ceil, kArmVrintpF32)             \
+  V(F32x4Floor, kArmVrintmF32)            \
+  V(F32x4Trunc, kArmVrintzF32)            \
+  V(F32x4NearestInt, kArmVrintnF32)
 
 #define RRR_OP_LIST(V)          \
   V(Int32MulHigh, kArmSmmul)    \
@@ -1657,7 +1666,7 @@ void InstructionSelector::EmitPrepareResults(
     Node* node) {
   ArmOperandGenerator g(this);
 
-  int reverse_slot = 0;
+  int reverse_slot = 1;
   for (PushParameter output : *results) {
     if (!output.location.IsCallerFrameSlot()) continue;
     // Skip any alignment holes in nodes.
@@ -1667,6 +1676,8 @@ void InstructionSelector::EmitPrepareResults(
         MarkAsFloat32(output.node);
       } else if (output.location.GetType() == MachineType::Float64()) {
         MarkAsFloat64(output.node);
+      } else if (output.location.GetType() == MachineType::Simd128()) {
+        MarkAsSimd128(output.node);
       }
       Emit(kArmPeek, g.DefineAsRegister(output.node),
            g.UseImmediate(reverse_slot));
@@ -2179,7 +2190,7 @@ void InstructionSelector::VisitWord32AtomicLoad(Node* node) {
   ArmOperandGenerator g(this);
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
-  ArchOpcode opcode = kArchNop;
+  ArchOpcode opcode;
   switch (load_rep.representation()) {
     case MachineRepresentation::kWord8:
       opcode =
@@ -2205,7 +2216,7 @@ void InstructionSelector::VisitWord32AtomicStore(Node* node) {
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
   Node* value = node->InputAt(2);
-  ArchOpcode opcode = kArchNop;
+  ArchOpcode opcode;
   switch (rep) {
     case MachineRepresentation::kWord8:
       opcode = kWord32AtomicStoreWord8;
@@ -2235,7 +2246,7 @@ void InstructionSelector::VisitWord32AtomicExchange(Node* node) {
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
   Node* value = node->InputAt(2);
-  ArchOpcode opcode = kArchNop;
+  ArchOpcode opcode;
   MachineType type = AtomicOpType(node->op());
   if (type == MachineType::Int8()) {
     opcode = kWord32AtomicExchangeInt8;
@@ -2249,7 +2260,6 @@ void InstructionSelector::VisitWord32AtomicExchange(Node* node) {
     opcode = kWord32AtomicExchangeWord32;
   } else {
     UNREACHABLE();
-    return;
   }
 
   AddressingMode addressing_mode = kMode_Offset_RR;
@@ -2271,7 +2281,7 @@ void InstructionSelector::VisitWord32AtomicCompareExchange(Node* node) {
   Node* index = node->InputAt(1);
   Node* old_value = node->InputAt(2);
   Node* new_value = node->InputAt(3);
-  ArchOpcode opcode = kArchNop;
+  ArchOpcode opcode;
   MachineType type = AtomicOpType(node->op());
   if (type == MachineType::Int8()) {
     opcode = kWord32AtomicCompareExchangeInt8;
@@ -2285,7 +2295,6 @@ void InstructionSelector::VisitWord32AtomicCompareExchange(Node* node) {
     opcode = kWord32AtomicCompareExchangeWord32;
   } else {
     UNREACHABLE();
-    return;
   }
 
   AddressingMode addressing_mode = kMode_Offset_RR;
@@ -2310,7 +2319,7 @@ void InstructionSelector::VisitWord32AtomicBinaryOperation(
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
   Node* value = node->InputAt(2);
-  ArchOpcode opcode = kArchNop;
+  ArchOpcode opcode;
   MachineType type = AtomicOpType(node->op());
   if (type == MachineType::Int8()) {
     opcode = int8_op;
@@ -2324,7 +2333,6 @@ void InstructionSelector::VisitWord32AtomicBinaryOperation(
     opcode = word32_op;
   } else {
     UNREACHABLE();
-    return;
   }
 
   AddressingMode addressing_mode = kMode_Offset_RR;
@@ -2586,10 +2594,10 @@ void InstructionSelector::VisitWord32AtomicPairCompareExchange(Node* node) {
   V(I32x4GeU, kArmI32x4GeU)                           \
   V(I16x8SConvertI32x4, kArmI16x8SConvertI32x4)       \
   V(I16x8Add, kArmI16x8Add)                           \
-  V(I16x8AddSaturateS, kArmI16x8AddSaturateS)         \
+  V(I16x8AddSatS, kArmI16x8AddSatS)                   \
   V(I16x8AddHoriz, kArmI16x8AddHoriz)                 \
   V(I16x8Sub, kArmI16x8Sub)                           \
-  V(I16x8SubSaturateS, kArmI16x8SubSaturateS)         \
+  V(I16x8SubSatS, kArmI16x8SubSatS)                   \
   V(I16x8Mul, kArmI16x8Mul)                           \
   V(I16x8MinS, kArmI16x8MinS)                         \
   V(I16x8MaxS, kArmI16x8MaxS)                         \
@@ -2598,8 +2606,8 @@ void InstructionSelector::VisitWord32AtomicPairCompareExchange(Node* node) {
   V(I16x8GtS, kArmI16x8GtS)                           \
   V(I16x8GeS, kArmI16x8GeS)                           \
   V(I16x8UConvertI32x4, kArmI16x8UConvertI32x4)       \
-  V(I16x8AddSaturateU, kArmI16x8AddSaturateU)         \
-  V(I16x8SubSaturateU, kArmI16x8SubSaturateU)         \
+  V(I16x8AddSatU, kArmI16x8AddSatU)                   \
+  V(I16x8SubSatU, kArmI16x8SubSatU)                   \
   V(I16x8MinU, kArmI16x8MinU)                         \
   V(I16x8MaxU, kArmI16x8MaxU)                         \
   V(I16x8GtU, kArmI16x8GtU)                           \
@@ -2607,9 +2615,9 @@ void InstructionSelector::VisitWord32AtomicPairCompareExchange(Node* node) {
   V(I16x8RoundingAverageU, kArmI16x8RoundingAverageU) \
   V(I8x16SConvertI16x8, kArmI8x16SConvertI16x8)       \
   V(I8x16Add, kArmI8x16Add)                           \
-  V(I8x16AddSaturateS, kArmI8x16AddSaturateS)         \
+  V(I8x16AddSatS, kArmI8x16AddSatS)                   \
   V(I8x16Sub, kArmI8x16Sub)                           \
-  V(I8x16SubSaturateS, kArmI8x16SubSaturateS)         \
+  V(I8x16SubSatS, kArmI8x16SubSatS)                   \
   V(I8x16Mul, kArmI8x16Mul)                           \
   V(I8x16MinS, kArmI8x16MinS)                         \
   V(I8x16MaxS, kArmI8x16MaxS)                         \
@@ -2618,8 +2626,8 @@ void InstructionSelector::VisitWord32AtomicPairCompareExchange(Node* node) {
   V(I8x16GtS, kArmI8x16GtS)                           \
   V(I8x16GeS, kArmI8x16GeS)                           \
   V(I8x16UConvertI16x8, kArmI8x16UConvertI16x8)       \
-  V(I8x16AddSaturateU, kArmI8x16AddSaturateU)         \
-  V(I8x16SubSaturateU, kArmI8x16SubSaturateU)         \
+  V(I8x16AddSatU, kArmI8x16AddSatU)                   \
+  V(I8x16SubSatU, kArmI8x16SubSatU)                   \
   V(I8x16MinU, kArmI8x16MinU)                         \
   V(I8x16MaxU, kArmI8x16MaxU)                         \
   V(I8x16GtU, kArmI8x16GtU)                           \
@@ -2629,6 +2637,33 @@ void InstructionSelector::VisitWord32AtomicPairCompareExchange(Node* node) {
   V(S128Or, kArmS128Or)                               \
   V(S128Xor, kArmS128Xor)                             \
   V(S128AndNot, kArmS128AndNot)
+
+void InstructionSelector::VisitI32x4DotI16x8S(Node* node) {
+  ArmOperandGenerator g(this);
+  InstructionOperand temps[] = {g.TempSimd128Register()};
+  Emit(kArmI32x4DotI16x8S, g.DefineAsRegister(node),
+       g.UseUniqueRegister(node->InputAt(0)),
+       g.UseUniqueRegister(node->InputAt(1)), arraysize(temps), temps);
+}
+
+void InstructionSelector::VisitS128Const(Node* node) {
+  ArmOperandGenerator g(this);
+  uint32_t val[kSimd128Size / sizeof(uint32_t)];
+  memcpy(val, S128ImmediateParameterOf(node->op()).data(), kSimd128Size);
+  // If all bytes are zeros, avoid emitting code for generic constants.
+  bool all_zeros = !(val[0] || val[1] || val[2] || val[3]);
+  bool all_ones = val[0] == UINT32_MAX && val[1] == UINT32_MAX &&
+                  val[2] == UINT32_MAX && val[3] == UINT32_MAX;
+  InstructionOperand dst = g.DefineAsRegister(node);
+  if (all_zeros) {
+    Emit(kArmS128Zero, dst);
+  } else if (all_ones) {
+    Emit(kArmS128AllOnes, dst);
+  } else {
+    Emit(kArmS128Const, dst, g.UseImmediate(val[0]), g.UseImmediate(val[1]),
+         g.UseImmediate(val[2]), g.UseImmediate(val[3]));
+  }
+}
 
 void InstructionSelector::VisitS128Zero(Node* node) {
   ArmOperandGenerator g(this);
@@ -2831,7 +2866,7 @@ void ArrangeShuffleTable(ArmOperandGenerator* g, Node* input0, Node* input1,
 
 }  // namespace
 
-void InstructionSelector::VisitS8x16Shuffle(Node* node) {
+void InstructionSelector::VisitI8x16Shuffle(Node* node) {
   uint8_t shuffle[kSimd128Size];
   bool is_swizzle;
   CanonicalizeShuffle(node, shuffle, &is_swizzle);
@@ -2840,12 +2875,12 @@ void InstructionSelector::VisitS8x16Shuffle(Node* node) {
   uint8_t shuffle32x4[4];
   ArmOperandGenerator g(this);
   int index = 0;
-  if (TryMatch32x4Shuffle(shuffle, shuffle32x4)) {
-    if (TryMatchDup<4>(shuffle, &index)) {
+  if (wasm::SimdShuffle::TryMatch32x4Shuffle(shuffle, shuffle32x4)) {
+    if (wasm::SimdShuffle::TryMatchSplat<4>(shuffle, &index)) {
       DCHECK_GT(4, index);
       Emit(kArmS128Dup, g.DefineAsRegister(node), g.UseRegister(input0),
            g.UseImmediate(Neon32), g.UseImmediate(index % 4));
-    } else if (TryMatchIdentity(shuffle)) {
+    } else if (wasm::SimdShuffle::TryMatchIdentity(shuffle)) {
       EmitIdentity(node);
     } else {
       // 32x4 shuffles are implemented as s-register moves. To simplify these,
@@ -2853,17 +2888,17 @@ void InstructionSelector::VisitS8x16Shuffle(Node* node) {
       InstructionOperand src0 = g.UseUniqueRegister(input0);
       InstructionOperand src1 = is_swizzle ? src0 : g.UseUniqueRegister(input1);
       Emit(kArmS32x4Shuffle, g.DefineAsRegister(node), src0, src1,
-           g.UseImmediate(Pack4Lanes(shuffle32x4)));
+           g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle32x4)));
     }
     return;
   }
-  if (TryMatchDup<8>(shuffle, &index)) {
+  if (wasm::SimdShuffle::TryMatchSplat<8>(shuffle, &index)) {
     DCHECK_GT(8, index);
     Emit(kArmS128Dup, g.DefineAsRegister(node), g.UseRegister(input0),
          g.UseImmediate(Neon16), g.UseImmediate(index % 8));
     return;
   }
-  if (TryMatchDup<16>(shuffle, &index)) {
+  if (wasm::SimdShuffle::TryMatchSplat<16>(shuffle, &index)) {
     DCHECK_GT(16, index);
     Emit(kArmS128Dup, g.DefineAsRegister(node), g.UseRegister(input0),
          g.UseImmediate(Neon8), g.UseImmediate(index % 16));
@@ -2876,7 +2911,7 @@ void InstructionSelector::VisitS8x16Shuffle(Node* node) {
     return;
   }
   uint8_t offset;
-  if (TryMatchConcat(shuffle, &offset)) {
+  if (wasm::SimdShuffle::TryMatchConcat(shuffle, &offset)) {
     Emit(kArmS8x16Concat, g.DefineAsRegister(node), g.UseRegister(input0),
          g.UseRegister(input1), g.UseImmediate(offset));
     return;
@@ -2884,18 +2919,18 @@ void InstructionSelector::VisitS8x16Shuffle(Node* node) {
   // Code generator uses vtbl, arrange sources to form a valid lookup table.
   InstructionOperand src0, src1;
   ArrangeShuffleTable(&g, input0, input1, &src0, &src1);
-  Emit(kArmS8x16Shuffle, g.DefineAsRegister(node), src0, src1,
-       g.UseImmediate(Pack4Lanes(shuffle)),
-       g.UseImmediate(Pack4Lanes(shuffle + 4)),
-       g.UseImmediate(Pack4Lanes(shuffle + 8)),
-       g.UseImmediate(Pack4Lanes(shuffle + 12)));
+  Emit(kArmI8x16Shuffle, g.DefineAsRegister(node), src0, src1,
+       g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle)),
+       g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle + 4)),
+       g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle + 8)),
+       g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle + 12)));
 }
 
-void InstructionSelector::VisitS8x16Swizzle(Node* node) {
+void InstructionSelector::VisitI8x16Swizzle(Node* node) {
   ArmOperandGenerator g(this);
   // We don't want input 0 (the table) to be the same as output, since we will
   // modify output twice (low and high), and need to keep the table the same.
-  Emit(kArmS8x16Swizzle, g.DefineAsRegister(node),
+  Emit(kArmI8x16Swizzle, g.DefineAsRegister(node),
        g.UseUniqueRegister(node->InputAt(0)), g.UseRegister(node->InputAt(1)));
 }
 
@@ -2978,6 +3013,30 @@ void InstructionSelector::VisitF64x2Pmax(Node* node) {
   VisitF64x2PminOrPMax(this, kArmF64x2Pmax, node);
 }
 
+void InstructionSelector::VisitTruncateFloat32ToInt32(Node* node) {
+  ArmOperandGenerator g(this);
+
+  InstructionCode opcode = kArmVcvtS32F32;
+  TruncateKind kind = OpParameter<TruncateKind>(node->op());
+  if (kind == TruncateKind::kSetOverflowToMin) {
+    opcode |= MiscField::encode(true);
+  }
+
+  Emit(opcode, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
+
+void InstructionSelector::VisitTruncateFloat32ToUint32(Node* node) {
+  ArmOperandGenerator g(this);
+
+  InstructionCode opcode = kArmVcvtU32F32;
+  TruncateKind kind = OpParameter<TruncateKind>(node->op());
+  if (kind == TruncateKind::kSetOverflowToMin) {
+    opcode |= MiscField::encode(true);
+  }
+
+  Emit(opcode, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
+
 // static
 MachineOperatorBuilder::Flags
 InstructionSelector::SupportedMachineOperatorFlags() {
@@ -3002,6 +3061,7 @@ InstructionSelector::SupportedMachineOperatorFlags() {
              MachineOperatorBuilder::kFloat32RoundTiesEven |
              MachineOperatorBuilder::kFloat64RoundTiesEven;
   }
+  flags |= MachineOperatorBuilder::kSatConversionIsSafe;
   return flags;
 }
 

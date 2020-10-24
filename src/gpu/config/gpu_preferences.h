@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "gpu/gpu_export.h"
 #include "media/media_buildflags.h"
 #include "ui/gfx/buffer_types.h"
@@ -32,7 +33,7 @@ const size_t kLowEndMaxProgramCacheMemoryBytes = 128 * 1024;
 enum class VulkanImplementationName : uint32_t {
   kNone = 0,
   kNative = 1,
-  kForcedNative = 2,  // Cannot override by GPU blacklist.
+  kForcedNative = 2,  // Cannot be overridden by GPU blocklist.
   kSwiftshader = 3,
   kLast = kSwiftshader,
 };
@@ -192,8 +193,8 @@ struct GPU_EXPORT GpuPreferences {
   // ===================================
   // Settings from //gpu/config/gpu_switches.h
 
-  // Ignores GPU blacklist.
-  bool ignore_gpu_blacklist = false;
+  // Ignores GPU blocklist.
+  bool ignore_gpu_blocklist = false;
 
   // Oop rasterization preferences in the GPU process.  disable wins over
   // enable, and neither means use defaults from GpuFeatureInfo.
@@ -239,6 +240,11 @@ struct GPU_EXPORT GpuPreferences {
   // Enable validation layers in Dawn backends.
   bool enable_dawn_backend_validation = false;
 
+  // Enable the toggle Toggle::DisableRobustness when creating Dawn device for
+  // the investigation of the performance issues related to the implementation
+  // of robustness in Dawn.
+  bool disable_dawn_robustness = false;
+
   // Enable measuring blocked time on GPU Main thread
   bool enable_gpu_blocked_time_metric = false;
 
@@ -260,8 +266,14 @@ struct GPU_EXPORT GpuPreferences {
   // ===================================
   // Settings from //media/base/media_switches.h
 
-  // Force to disable new VideoDecoder.
-  bool force_disable_new_accelerated_video_decoder = false;
+#if BUILDFLAG(IS_ASH)
+  // The direct VideoDecoder is disallowed in this particular SoC/platform. This
+  // flag is a reflection of whatever ChromeOS command line builder says.
+  bool platform_disallows_chromeos_direct_video_decoder = false;
+#endif
+
+  // Disables oppr debug crash dumps.
+  bool disable_oopr_debug_crash_dump = false;
 
   // Please update gpu_preferences_unittest.cc when making additions or
   // changes to this struct.

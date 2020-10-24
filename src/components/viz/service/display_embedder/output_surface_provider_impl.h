@@ -59,7 +59,8 @@ class VIZ_SERVICE_EXPORT OutputSurfaceProviderImpl
       bool gpu_compositing,
       mojom::DisplayClient* display_client,
       gpu::GpuTaskSchedulerHelper* gpu_task_scheduler,
-      const RendererSettings& renderer_settings) override;
+      const RendererSettings& renderer_settings,
+      const DebugRendererSettings* debug_settings) override;
 
   gpu::SharedImageManager* GetSharedImageManager() override;
 

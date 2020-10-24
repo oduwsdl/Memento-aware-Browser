@@ -265,7 +265,9 @@ Polymer({
     this.$['title-text'].textContent = data['valuePropTitle'];
     this.$['intro-text'].textContent = data['valuePropIntro'];
     this.$['user-name'].textContent = data['valuePropIdentity'];
+    this.$['next-button'].labelForAria = data['valuePropNextButton'];
     this.$['next-button-text'].textContent = data['valuePropNextButton'];
+    this.$['skip-button'].labelForAria = data['valuePropSkipButton'];
     this.$['skip-button-text'].textContent = data['valuePropSkipButton'];
     this.$['footer-text'].innerHTML =
         this.sanitizer_.sanitizeHtml(data['valuePropFooter']);
@@ -353,6 +355,9 @@ Polymer({
     this.$['overlay-close-button'].addEventListener(
         'click', this.hideOverlay.bind(this));
     this.valuePropView_ = this.$['value-prop-view'];
+
+    Polymer.RenderStatus.afterNextRender(
+        this, () => this.$['next-button'].focus());
 
     if (!this.initialized_) {
       this.valuePropView_.request.onErrorOccurred.addListener(

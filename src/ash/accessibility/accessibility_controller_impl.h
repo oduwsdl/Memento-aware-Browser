@@ -10,8 +10,8 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/ash_constants.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
-#include "ash/session/session_observer.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -30,18 +30,20 @@ enum class Gesture;
 
 namespace gfx {
 class Point;
+class PointF;
 struct VectorIcon;
 }  // namespace gfx
 
 namespace ash {
 
+class AccessibilityEventRewriter;
 class AccessibilityHighlightController;
 class AccessibilityObserver;
 class FloatingAccessibilityController;
+class PointScanController;
 class ScopedBacklightsForcedOff;
 class SelectToSpeakEventHandler;
 class SwitchAccessMenuBubbleController;
-class SwitchAccessEventHandler;
 
 enum AccessibilityNotificationVisibility {
   A11Y_NOTIFICATION_NONE,
@@ -184,22 +186,9 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   Feature& virtual_keyboard() const;
   Feature& cursor_color() const;
 
-  // The following functions read and write to their associated preference.
-  // These values are then used to determine whether the accelerator
-  // confirmation dialog for the respective preference has been accepted before.
-  void SetHighContrastAcceleratorDialogAccepted();
-  bool HasHighContrastAcceleratorDialogBeenAccepted() const;
-  void SetScreenMagnifierAcceleratorDialogAccepted();
-  bool HasScreenMagnifierAcceleratorDialogBeenAccepted() const;
-  void SetDockedMagnifierAcceleratorDialogAccepted();
-  bool HasDockedMagnifierAcceleratorDialogBeenAccepted() const;
-  void SetDictationAcceleratorDialogAccepted();
-  bool HasDictationAcceleratorDialogBeenAccepted() const;
   void SetDisplayRotationAcceleratorDialogBeenAccepted();
   bool HasDisplayRotationAcceleratorDialogBeenAccepted() const;
 
-  void SetAutoclickEnabled(bool enabled);
-  bool autoclick_enabled() const { return autoclick().enabled(); }
   bool IsAutoclickSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForAutoclick();
 
@@ -208,6 +197,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void SetAutoclickMenuPosition(FloatingMenuPosition position);
   FloatingMenuPosition GetAutoclickMenuPosition();
   void RequestAutoclickScrollableBoundsForPoint(gfx::Point& point_in_screen);
+  void MagnifierBoundsChanged(const gfx::Rect& bounds_in_screen);
 
   void SetFloatingMenuPosition(FloatingMenuPosition position);
   FloatingMenuPosition GetFloatingMenuPosition();
@@ -218,82 +208,57 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // virtual keyboard position).
   void UpdateAutoclickMenuBoundsIfNeeded();
 
-  void SetCaretHighlightEnabled(bool enabled);
-  bool caret_highlight_enabled() const { return caret_highlight().enabled(); }
   bool IsCaretHighlightSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForCaretHighlight();
 
-  void SetCursorHighlightEnabled(bool enabled);
-  bool cursor_highlight_enabled() const { return cursor_highlight().enabled(); }
   bool IsCursorHighlightSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForCursorHighlight();
 
-  void SetDictationEnabled(bool enabled);
-  bool dictation_enabled() const { return dictation().enabled(); }
   bool IsDictationSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForDictation();
 
-  void SetFocusHighlightEnabled(bool enabled);
-  bool focus_highlight_enabled() const { return focus_highlight().enabled(); }
   bool IsFocusHighlightSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForFocusHighlight();
 
-  void SetFullscreenMagnifierEnabled(bool enabled);
-  bool IsFullscreenMagnifierEnabledForTesting();
   bool IsFullScreenMagnifierSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForFullScreenMagnifier();
 
-  void SetDockedMagnifierEnabledForTesting(bool enabled);
-  bool IsDockedMagnifierEnabledForTesting();
   bool IsDockedMagnifierSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForDockedMagnifier();
 
-  void SetHighContrastEnabled(bool enabled);
-  bool high_contrast_enabled() const { return high_contrast().enabled(); }
   bool IsHighContrastSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForHighContrast();
 
-  void SetLargeCursorEnabled(bool enabled);
-  bool large_cursor_enabled() const { return large_cursor().enabled(); }
   bool IsLargeCursorSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForLargeCursor();
 
-  void SetMonoAudioEnabled(bool enabled);
-  bool mono_audio_enabled() const { return mono_audio().enabled(); }
   bool IsMonoAudioSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForMonoAudio();
 
   void SetSpokenFeedbackEnabled(bool enabled,
                                 AccessibilityNotificationVisibility notify);
-  bool spoken_feedback_enabled() const { return spoken_feedback().enabled(); }
   bool IsSpokenFeedbackSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForSpokenFeedback();
 
-  void SetSelectToSpeakEnabled(bool enabled);
-  bool select_to_speak_enabled() const { return select_to_speak().enabled(); }
   bool IsSelectToSpeakSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForSelectToSpeak();
 
   void RequestSelectToSpeakStateChange();
   SelectToSpeakState GetSelectToSpeakState() const;
 
-  void SetStickyKeysEnabled(bool enabled);
-  bool sticky_keys_enabled() const { return sticky_keys().enabled(); }
   bool IsStickyKeysSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForStickyKeys();
 
-  void SetSwitchAccessEnabled(bool enabled);
-  bool switch_access_enabled() const { return switch_access().enabled(); }
+  // Switch access may be disabled in prefs but still running when the disable
+  // dialog is displaying.
+  bool IsSwitchAccessRunning() const;
   bool IsSwitchAccessSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForSwitchAccess();
+  void SetAccessibilityEventRewriter(
+      AccessibilityEventRewriter* accessibility_event_rewriter);
 
-  void SetVirtualKeyboardEnabled(bool enabled);
-  bool virtual_keyboard_enabled() const { return virtual_keyboard().enabled(); }
   bool IsVirtualKeyboardSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForVirtualKeyboard();
-
-  void SetCursorColorEnabled(bool enabled);
-  bool cursor_color_enabled() const { return cursor_color().enabled(); }
 
   void SetTabletModeShelfNavigationButtonsEnabled(bool enabled);
   bool tablet_mode_shelf_navigation_buttons_enabled() const {
@@ -323,7 +288,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
 
   // Forwards an accessibility gesture from the touch exploration controller to
   // ChromeVox.
-  void HandleAccessibilityGesture(ax::mojom::Gesture gesture);
+  void HandleAccessibilityGesture(ax::mojom::Gesture gesture,
+                                  gfx::PointF location);
 
   // Toggle dictation.
   void ToggleDictation();
@@ -365,6 +331,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // accessibility tray menu.
   bool IsAdditionalSettingsSeparatorVisibleInTray();
 
+  // Starts point scanning, to select a point onscreen without using a mouse
+  // (as used by Switch Access).
+  void StartPointScanning();
+
   // AccessibilityController:
   void SetClient(AccessibilityControllerClient* client) override;
   void SetDarkenScreen(bool darken) override;
@@ -377,24 +347,22 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void SetSelectToSpeakState(SelectToSpeakState state) override;
   void SetSelectToSpeakEventHandlerDelegate(
       SelectToSpeakEventHandlerDelegate* delegate) override;
-  void SetSwitchAccessEventHandlerDelegate(
-      SwitchAccessEventHandlerDelegate* delegate) override;
   void HideSwitchAccessBackButton() override;
   void HideSwitchAccessMenu() override;
   void ShowSwitchAccessBackButton(const gfx::Rect& anchor) override;
   void ShowSwitchAccessMenu(const gfx::Rect& anchor,
                             std::vector<std::string> actions_to_show) override;
+  void StartPointScan() override;
   void SetDictationActive(bool is_active) override;
   void ToggleDictationFromSource(DictationToggleSource source) override;
-  void OnAutoclickScrollableBoundsFound(gfx::Rect& bounds_in_screen) override;
-  void ForwardKeyEventsToSwitchAccess(bool should_forward) override;
+  void HandleAutoclickScrollableBoundsFound(
+      gfx::Rect& bounds_in_screen) override;
   base::string16 GetBatteryDescription() const override;
   void SetVirtualKeyboardVisible(bool is_visible) override;
+  void PerformAcceleratorAction(AcceleratorAction accelerator_action) override;
   void NotifyAccessibilityStatusChanged() override;
   bool IsAccessibilityFeatureVisibleInTrayMenu(
       const std::string& path) override;
-  void SetSwitchAccessIgnoreVirtualKeyEventForTesting(
-      bool should_ignore) override;
   void DisablePolicyRecommendationRestorerForTesting() override;
 
   // SessionObserver:
@@ -402,7 +370,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void OnActiveUserPrefServiceChanged(PrefService* prefs) override;
 
   // Test helpers:
-  SwitchAccessEventHandler* GetSwitchAccessEventHandlerForTest();
+  AccessibilityEventRewriter* GetAccessibilityEventRewriterForTest();
   SwitchAccessMenuBubbleController* GetSwitchAccessBubbleControllerForTest() {
     return switch_access_bubble_controller_.get();
   }
@@ -445,7 +413,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
 
   void SwitchAccessDisableDialogClosed(bool disable_dialog_accepted);
   void MaybeCreateSelectToSpeakEventHandler();
-  void MaybeCreateSwitchAccessEventHandler();
+  void ActivateSwitchAccess();
+  void DeactivateSwitchAccess();
+  void SyncSwitchAccessPrefsToSignInProfile();
+  void UpdateKeyCodesAfterSwitchAccessEnabled();
 
   // Client interface in chrome browser.
   AccessibilityControllerClient* client_ = nullptr;
@@ -469,10 +440,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   std::vector<int> switch_access_keys_to_capture_;
   std::unique_ptr<SwitchAccessMenuBubbleController>
       switch_access_bubble_controller_;
-  std::unique_ptr<SwitchAccessEventHandler> switch_access_event_handler_;
-  SwitchAccessEventHandlerDelegate* switch_access_event_handler_delegate_ =
-      nullptr;
+  AccessibilityEventRewriter* accessibility_event_rewriter_ = nullptr;
   bool no_switch_access_disable_confirmation_dialog_for_testing_ = false;
+  bool switch_access_disable_dialog_showing_ = false;
+  bool skip_switch_access_notification_ = false;
 
   // Used to control the highlights of caret, cursor and focus.
   std::unique_ptr<AccessibilityHighlightController>
@@ -485,6 +456,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // postpone the showing of the menu till the splash screen closes. This value
   // makes floating menu visible as soon as it is enabled.
   bool always_show_floating_menu_when_enabled_ = false;
+
+  // Used to control point scanning, or selecting a point onscreen without using
+  // a mouse (as done by Switch Access).
+  std::unique_ptr<PointScanController> point_scan_controller_;
 
   // Used to force the backlights off to darken the screen.
   std::unique_ptr<ScopedBacklightsForcedOff> scoped_backlights_forced_off_;

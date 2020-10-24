@@ -18,6 +18,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -56,7 +57,10 @@
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
+#include "content/public/browser/device_service.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -69,11 +73,14 @@ namespace {
 
 bool g_skip_force_online_signin_for_testing = false;
 
+const char kWakeLockReason[] = "TPMLockedIssue";
+const int kWaitingOvertimeInSeconds = 1;
+
 // User dictionary keys.
 const char kKeyUsername[] = "username";
 const char kKeyDisplayName[] = "displayName";
 const char kKeyEmailAddress[] = "emailAddress";
-const char kKeyEnterpriseDisplayDomain[] = "enterpriseDisplayDomain";
+const char kKeyEnterpriseDomainManager[] = "enterpriseDomainManager";
 const char kKeyPublicAccount[] = "publicAccount";
 const char kKeyLegacySupervisedUser[] = "legacySupervisedUser";
 const char kKeyChildUser[] = "childUser";
@@ -98,12 +105,13 @@ const size_t kMaxUsers = 50;
 const int kPasswordClearTimeoutSec = 60;
 
 // Returns true if we have enterprise domain information.
-// |out_domain|:  Output value of the enterprise domain.
-bool GetEnterpriseDomain(std::string* out_domain) {
+// `out_manager`:  Output value of the manager of the device's domain. Can be
+// either a domain (foo.com) or an email address (user@foo.com)
+bool GetDeviceManager(std::string* out_manager) {
   policy::BrowserPolicyConnectorChromeOS* policy_connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   if (policy_connector->IsCloudManaged()) {
-    *out_domain = policy_connector->GetEnterpriseDisplayDomain();
+    *out_manager = policy_connector->GetEnterpriseDomainManager();
     return true;
   }
   return false;
@@ -111,10 +119,10 @@ bool GetEnterpriseDomain(std::string* out_domain) {
 
 // Get locales information of public account user.
 // Returns a list of available locales.
-// |public_session_recommended_locales|: This can be nullptr if we don't have
+// `public_session_recommended_locales`: This can be nullptr if we don't have
 // recommended locales.
-// |out_selected_locale|: Output value of the initially selected locale.
-// |out_multiple_locales|: Output value indicates whether we have multiple
+// `out_selected_locale`: Output value of the initially selected locale.
+// `out_multiple_locales`: Output value indicates whether we have multiple
 // recommended locales.
 std::unique_ptr<base::ListValue> GetPublicSessionLocales(
     const std::vector<std::string>* public_session_recommended_locales,
@@ -143,9 +151,9 @@ std::unique_ptr<base::ListValue> GetPublicSessionLocales(
 void AddPublicSessionDetailsToUserDictionaryEntry(
     base::DictionaryValue* user_dict,
     const std::vector<std::string>* public_session_recommended_locales) {
-  std::string domain;
-  if (GetEnterpriseDomain(&domain))
-    user_dict->SetString(kKeyEnterpriseDisplayDomain, domain);
+  std::string manager;
+  if (GetDeviceManager(&manager))
+    user_dict->SetString(kKeyEnterpriseDomainManager, manager);
 
   std::string selected_locale;
   bool has_multiple_locales;
@@ -153,13 +161,13 @@ void AddPublicSessionDetailsToUserDictionaryEntry(
       GetPublicSessionLocales(public_session_recommended_locales,
                               &selected_locale, &has_multiple_locales);
 
-  // Set |kKeyInitialLocales| to the list of available locales.
+  // Set `kKeyInitialLocales` to the list of available locales.
   user_dict->Set(kKeyInitialLocales, std::move(available_locales));
 
-  // Set |kKeyInitialLocale| to the initially selected locale.
+  // Set `kKeyInitialLocale` to the initially selected locale.
   user_dict->SetString(kKeyInitialLocale, selected_locale);
 
-  // Set |kKeyInitialMultipleRecommendedLocales| to indicate whether the list
+  // Set `kKeyInitialMultipleRecommendedLocales` to indicate whether the list
   // of recommended locales contains at least two entries. This is used to
   // decide whether the public session pod expands to its basic form (for zero
   // or one recommended locales) or the advanced form (two or more recommended
@@ -376,11 +384,120 @@ class UserSelectionScreen::DircryptoMigrationChecker {
   DISALLOW_COPY_AND_ASSIGN(DircryptoMigrationChecker);
 };
 
-UserSelectionScreen::UserSelectionScreen(const std::string& display_type)
+// Helper class to call cryptohome to check whether tpm is locked and update
+// UI with time left to unlocking.
+class UserSelectionScreen::TpmLockedChecker {
+ public:
+  explicit TpmLockedChecker(UserSelectionScreen* owner) : owner_(owner) {}
+  TpmLockedChecker(const TpmLockedChecker&) = delete;
+  TpmLockedChecker& operator=(const TpmLockedChecker&) = delete;
+  ~TpmLockedChecker() = default;
+
+  void Check() {
+    CryptohomeClient::Get()->WaitForServiceToBeAvailable(base::BindOnce(
+        &TpmLockedChecker::RunCryptohomeCheck, weak_ptr_factory_.GetWeakPtr()));
+  }
+
+ private:
+  void RunCryptohomeCheck(bool service_is_ready) {
+    if (!service_is_ready) {
+      LOG(ERROR) << "Cryptohome is not available.";
+      return;
+    }
+
+    chromeos::CryptohomeClient::Get()->GetTpmStatus(
+        cryptohome::GetTpmStatusRequest(),
+        base::BindOnce(&TpmLockedChecker::OnGetTpmStatus,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  // Callback invoked when GetTpmStatus call is finished.
+  void OnGetTpmStatus(base::Optional<cryptohome::BaseReply> reply) {
+    check_finised_ = base::TimeTicks::Now();
+
+    if (!reply.has_value()) {
+      return;
+    }
+    if (reply->has_error() &&
+        reply->error() != cryptohome::CRYPTOHOME_ERROR_NOT_SET) {
+      return;
+    }
+    if (!reply->HasExtension(cryptohome::GetTpmStatusReply::reply)) {
+      return;
+    }
+    auto reply_proto =
+        reply->GetExtension(cryptohome::GetTpmStatusReply::reply);
+
+    if (reply_proto.dictionary_attack_lockout_in_effect()) {
+      int time_remaining =
+          reply_proto.dictionary_attack_lockout_seconds_remaining();
+      // Add `kWaitingOvertimeInSeconds` for safetiness, i.e hiding UI and
+      // releasing `wake_lock_` happens after TPM becomes unlocked.
+      dictionary_attack_lockout_time_remaining_ = base::TimeDelta::FromSeconds(
+          time_remaining + kWaitingOvertimeInSeconds);
+      OnTpmIsLocked();
+    } else {
+      TpmIsUnlocked();
+    }
+  }
+
+  void OnTpmIsLocked() {
+    AcquireWakeLock();
+    clock_ticking_animator_.Start(FROM_HERE, base::TimeDelta::FromSeconds(1),
+                                  this, &TpmLockedChecker::UpdateUI);
+    tpm_recheck_.Start(FROM_HERE, base::TimeDelta::FromMinutes(1), this,
+                       &TpmLockedChecker::Check);
+  }
+
+  void UpdateUI() {
+    const base::TimeDelta time_spent = base::TimeTicks::Now() - check_finised_;
+    if (time_spent > dictionary_attack_lockout_time_remaining_) {
+      Check();
+    } else {
+      owner_->SetTpmLockedState(
+          true, dictionary_attack_lockout_time_remaining_ - time_spent);
+    }
+  }
+
+  void TpmIsUnlocked() {
+    clock_ticking_animator_.Stop();
+    tpm_recheck_.Stop();
+    owner_->SetTpmLockedState(false, base::TimeDelta());
+  }
+
+  void AcquireWakeLock() {
+    if (!wake_lock_) {
+      mojo::Remote<device::mojom::WakeLockProvider> provider;
+      content::GetDeviceService().BindWakeLockProvider(
+          provider.BindNewPipeAndPassReceiver());
+      provider->GetWakeLockWithoutContext(
+          device::mojom::WakeLockType::kPreventDisplaySleep,
+          device::mojom::WakeLockReason::kOther, kWakeLockReason,
+          wake_lock_.BindNewPipeAndPassReceiver());
+    }
+    // The `wake_lock_` is released once TpmLockedChecker is destroyed.
+    // It happens after successful login.
+    wake_lock_->RequestWakeLock();
+  }
+
+  UserSelectionScreen* const owner_;
+
+  base::TimeTicks check_finised_;
+  base::TimeDelta dictionary_attack_lockout_time_remaining_;
+
+  base::RepeatingTimer clock_ticking_animator_;
+  base::RepeatingTimer tpm_recheck_;
+
+  mojo::Remote<device::mojom::WakeLock> wake_lock_;
+
+  base::WeakPtrFactory<TpmLockedChecker> weak_ptr_factory_{this};
+};
+
+UserSelectionScreen::UserSelectionScreen(DisplayedScreen display_type)
     : BaseScreen(UserBoardView::kScreenId, OobeScreenPriority::DEFAULT),
       display_type_(display_type) {
   session_manager::SessionManager::Get()->AddObserver(this);
-  if (display_type_ != OobeUI::kLoginDisplay)
+  if (display_type_ != DisplayedScreen::SIGN_IN_SCREEN)
     return;
   allowed_input_methods_subscription_ =
       CrosSettings::Get()->AddSettingsObserver(
@@ -400,6 +517,13 @@ UserSelectionScreen::~UserSelectionScreen() {
 
 void UserSelectionScreen::InitEasyUnlock() {
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(this);
+}
+
+void UserSelectionScreen::SetTpmLockedState(bool is_locked,
+                                            base::TimeDelta time_left) {
+  for (user_manager::User* user : users_) {
+    view_->SetTpmLockedState(user->GetAccountId(), is_locked, time_left);
+  }
 }
 
 // static
@@ -565,7 +689,7 @@ void UserSelectionScreen::SetHandler(LoginDisplayWebUIHandler* handler) {
   handler_ = handler;
 
   if (handler_) {
-    // Forcibly refresh all of the user images, as the |handler_| instance may
+    // Forcibly refresh all of the user images, as the `handler_` instance may
     // have been reused.
     for (user_manager::User* user : users_)
       handler_->OnUserImageChanged(*user);
@@ -584,21 +708,20 @@ void UserSelectionScreen::Init(const user_manager::UserList& users) {
     activity_detector->AddObserver(this);
   if (!ime_state_.get())
     ime_state_ = input_method::InputMethodManager::Get()->GetActiveIMEState();
-}
 
-void UserSelectionScreen::OnBeforeUserRemoved(const AccountId& account_id) {
-  for (auto it = users_.cbegin(); it != users_.cend(); ++it) {
-    if ((*it)->GetAccountId() == account_id) {
-      users_.erase(it);
-      break;
-    }
+  if (users.size() > 0) {
+    sync_token_checkers_ =
+        std::make_unique<PasswordSyncTokenCheckersCollection>();
+    sync_token_checkers_->StartPasswordSyncCheckers(users, this);
+  } else {
+    sync_token_checkers_.reset();
   }
-}
 
-void UserSelectionScreen::OnUserRemoved(const AccountId& account_id) {
-  if (!handler_)
+  if (tpm_locked_checker_)
     return;
-  handler_->OnUserRemoved(account_id, users_.empty());
+
+  tpm_locked_checker_ = std::make_unique<TpmLockedChecker>(this);
+  tpm_locked_checker_->Check();
 }
 
 void UserSelectionScreen::OnUserImageChanged(const user_manager::User& user) {
@@ -684,7 +807,7 @@ void UserSelectionScreen::CheckUserStatus(const AccountId& account_id) {
   }
 
   // Run dircrypto migration check only on the login screen when necessary.
-  if (display_type_ == OobeUI::kLoginDisplay &&
+  if (display_type_ == DisplayedScreen::SIGN_IN_SCREEN &&
       ShouldCheckNeedDircryptoMigration()) {
     if (!dircrypto_migration_checker_) {
       dircrypto_migration_checker_ =
@@ -709,28 +832,38 @@ void UserSelectionScreen::HandleFocusPod(const AccountId& account_id) {
   CheckUserStatus(account_id);
   lock_screen_utils::SetUserInputMethod(
       account_id, ime_state_.get(),
-      display_type_ == OobeUI::kLoginDisplay /* honor_device_policy */);
+      display_type_ ==
+          DisplayedScreen::SIGN_IN_SCREEN /* honor_device_policy */);
   lock_screen_utils::SetKeyboardSettings(account_id);
 
   bool use_24hour_clock = false;
-  if (user_manager::known_user::GetBooleanPref(
+  if (!user_manager::known_user::GetBooleanPref(
           account_id, ::prefs::kUse24HourClock, &use_24hour_clock)) {
-    g_browser_process->platform_part()
-        ->GetSystemClock()
-        ->SetLastFocusedPodHourClockType(use_24hour_clock ? base::k24HourClock
-                                                          : base::k12HourClock);
+    focused_user_clock_type_.reset();
+  } else {
+    base::HourClockType clock_type =
+        use_24hour_clock ? base::k24HourClock : base::k12HourClock;
+    if (focused_user_clock_type_.has_value()) {
+      focused_user_clock_type_->UpdateClockType(clock_type);
+    } else {
+      focused_user_clock_type_ = g_browser_process->platform_part()
+                                     ->GetSystemClock()
+                                     ->CreateScopedHourClockType(clock_type);
+    }
   }
+
   focused_pod_account_id_ = account_id;
 }
 
 void UserSelectionScreen::HandleNoPodFocused() {
   focused_pod_account_id_ = EmptyAccountId();
-  if (display_type_ == OobeUI::kLoginDisplay)
+  focused_user_clock_type_.reset();
+  if (display_type_ == DisplayedScreen::SIGN_IN_SCREEN)
     lock_screen_utils::EnforceDevicePolicyInputMethods(std::string());
 }
 
 void UserSelectionScreen::OnAllowedInputMethodsChanged() {
-  DCHECK_EQ(display_type_, OobeUI::kLoginDisplay);
+  DCHECK_EQ(display_type_, DisplayedScreen::SIGN_IN_SCREEN);
   if (focused_pod_account_id_.is_valid()) {
     std::string user_input_method =
         lock_screen_utils::GetUserLastInputMethod(focused_pod_account_id_);
@@ -749,7 +882,6 @@ void UserSelectionScreen::OnUserStatusChecked(
     TokenHandleUtil::TokenHandleStatus status) {
   if (status == TokenHandleUtil::INVALID) {
     RecordReauthReason(account_id, ReauthReason::INVALID_TOKEN_HANDLE);
-    token_handle_util_->MarkHandleInvalid(account_id);
     SetAuthType(account_id, proximity_auth::mojom::AuthType::ONLINE_SIGN_IN,
                 base::string16());
   }
@@ -781,13 +913,16 @@ proximity_auth::mojom::AuthType UserSelectionScreen::GetAuthType(
 
 proximity_auth::ScreenlockBridge::LockHandler::ScreenType
 UserSelectionScreen::GetScreenType() const {
-  if (display_type_ == OobeUI::kLockDisplay)
-    return LOCK_SCREEN;
+  switch (display_type_) {
+    case DisplayedScreen::LOCK_SCREEN:
+      return ScreenType::LOCK_SCREEN;
 
-  if (display_type_ == OobeUI::kLoginDisplay)
-    return SIGNIN_SCREEN;
+    case DisplayedScreen::SIGN_IN_SCREEN:
+      return ScreenType::SIGNIN_SCREEN;
 
-  return OTHER_SCREEN;
+    default:
+      return ScreenType::OTHER_SCREEN;
+  }
 }
 
 void UserSelectionScreen::ShowBannerMessage(const base::string16& message,
@@ -851,6 +986,13 @@ void UserSelectionScreen::OnSessionStateChanged() {
   AccountId focused_pod(pending_focused_account_id_.value());
   pending_focused_account_id_.reset();
   HandleFocusPod(focused_pod);
+}
+
+void UserSelectionScreen::OnInvalidSyncToken(const AccountId& account_id) {
+  RecordReauthReason(account_id,
+                     ReauthReason::SAML_PASSWORD_SYNC_TOKEN_VALIDATION_FAILED);
+  SetAuthType(account_id, proximity_auth::mojom::AuthType::ONLINE_SIGN_IN,
+              base::string16());
 }
 
 void UserSelectionScreen::ShowImpl() {}
@@ -961,10 +1103,17 @@ UserSelectionScreen::UpdateAndReturnUserListForAsh() {
     user_info.can_remove = CanRemoveUser(user);
     user_info.fingerprint_state = GetInitialFingerprintState(user);
     user_info.show_pin_pad_for_password = false;
-    if (user_manager::known_user::GetIsManaged(user->GetAccountId()) &&
+    if (user_manager::known_user::GetIsEnterpriseManaged(
+            user->GetAccountId()) &&
         user->GetType() != user_manager::USER_TYPE_PUBLIC_ACCOUNT) {
-      user_info.user_enterprise_domain =
-          gaia::ExtractDomainName(user->display_email());
+      std::string account_manager;
+      if (user_manager::known_user::GetAccountManager(user->GetAccountId(),
+                                                      &account_manager)) {
+        user_info.user_account_manager = account_manager;
+      } else {
+        user_info.user_account_manager =
+            gaia::ExtractDomainName(user->display_email());
+      }
     }
     chromeos::CrosSettings::Get()->GetBoolean(
         chromeos::kDeviceShowNumericKeyboardForPassword,
@@ -984,10 +1133,10 @@ UserSelectionScreen::UpdateAndReturnUserListForAsh() {
 
     // Fill public session data.
     if (user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT) {
-      std::string domain;
+      std::string manager;
       user_info.public_account_info.emplace();
-      if (GetEnterpriseDomain(&domain))
-        user_info.public_account_info->device_enterprise_domain = domain;
+      if (GetDeviceManager(&manager))
+        user_info.public_account_info->device_enterprise_manager = manager;
 
       user_info.public_account_info->using_saml = user->using_saml();
 

@@ -9,8 +9,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -38,6 +40,13 @@ using content::BrowserThread;
 using extensions::APIPermission;
 using extensions::Extension;
 using storage::SpecialStoragePolicy;
+
+namespace {
+// Kill switch for default app protected storage. Enable this make
+// default-installed hosted apps have protected storage.
+const base::Feature kDefaultHostedAppsNeedProtection{
+    "DefaultHostedAppsNeedProtection", base::FEATURE_DISABLED_BY_DEFAULT};
+}  // namespace
 
 class ExtensionSpecialStoragePolicy::CookieSettingsObserver
     : public content_settings::CookieSettings::Observer {
@@ -73,7 +82,7 @@ class ExtensionSpecialStoragePolicy::CookieSettingsObserver
     // Post a task to avoid any potential re-entrancy issues with
     // |NotifyPolicyChangedImpl()| since it holds a lock while calling back into
     // ExtensionSpecialStoragePolicy.
-    content::GetUIThreadTaskRunner({})->PostTask(
+    content::GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&CookieSettingsObserver::NotifyPolicyChangedImpl,
                        base::Unretained(this)));
@@ -130,10 +139,10 @@ bool ExtensionSpecialStoragePolicy::IsStorageSessionOnly(const GURL& origin) {
   return cookie_settings_->IsCookieSessionOnly(origin);
 }
 
-network::SessionCleanupCookieStore::DeleteCookiePredicate
+network::DeleteCookiePredicate
 ExtensionSpecialStoragePolicy::CreateDeleteCookieOnExitPredicate() {
   if (!cookie_settings_)
-    return network::SessionCleanupCookieStore::DeleteCookiePredicate();
+    return network::DeleteCookiePredicate();
   // Fetch the list of cookies related content_settings and bind it
   // to CookieSettings::ShouldDeleteCookieOnExit to avoid fetching it on
   // every call.
@@ -170,7 +179,19 @@ bool ExtensionSpecialStoragePolicy::IsStorageDurable(const GURL& origin) {
 
 bool ExtensionSpecialStoragePolicy::NeedsProtection(
     const extensions::Extension* extension) {
-  return extension->is_hosted_app() && !extension->from_bookmark();
+  // We only consider "protecting" storage for hosted apps (excluding bookmark
+  // apps, which are only hosted apps as an implementation detail).
+  if (!extension->is_hosted_app() || extension->from_bookmark())
+    return false;
+
+  // Normally, default-installed apps shouldn't have protected storage...
+  if (extension->was_installed_by_default()) {
+    // ... However, we have a kill-switch for this, just in case.
+    return base::FeatureList::IsEnabled(kDefaultHostedAppsNeedProtection);
+  }
+  // Otherwise, this is a user-installed hosted app, and we grant it
+  // special protected storage.
+  return true;
 }
 
 const extensions::ExtensionSet*

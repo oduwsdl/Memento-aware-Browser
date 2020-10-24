@@ -85,13 +85,9 @@ void ConnectAsyncWithBackoff(
 
 // ServiceProcessControl implementation.
 ServiceProcessControl::ServiceProcessControl()
-    : apply_changes_from_upgrade_observer_(false) {
-  UpgradeDetector::GetInstance()->AddObserver(this);
-}
+    : apply_changes_from_upgrade_observer_(false) {}
 
-ServiceProcessControl::~ServiceProcessControl() {
-  UpgradeDetector::GetInstance()->RemoveObserver(this);
-}
+ServiceProcessControl::~ServiceProcessControl() = default;
 
 void ServiceProcessControl::ConnectInternal() {
   // If the channel has already been established then we run the task
@@ -207,6 +203,7 @@ void ServiceProcessControl::Disconnect() {
   mojo_connection_.reset();
   remote_interfaces_.Close();
   service_process_.reset();
+  UpgradeDetector::GetInstance()->RemoveObserver(this);
 }
 
 void ServiceProcessControl::OnProcessLaunched() {
@@ -240,6 +237,8 @@ void ServiceProcessControl::OnChannelConnected() {
 
   UMA_HISTOGRAM_ENUMERATION("CloudPrint.ServiceEvents",
                             SERVICE_EVENT_CHANNEL_CONNECTED, SERVICE_EVENT_MAX);
+
+  UpgradeDetector::GetInstance()->AddObserver(this);
 
   // We just established a channel with the service process. Notify it if an
   // upgrade is available.
@@ -350,7 +349,7 @@ void ServiceProcessControl::Launcher::Notify() {
   notify_task_.Reset();
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 void ServiceProcessControl::Launcher::DoDetectLaunched() {
   DCHECK(!notify_task_.is_null());
 
@@ -391,4 +390,4 @@ void ServiceProcessControl::Launcher::DoRun() {
         FROM_HERE, base::BindOnce(&Launcher::Notify, this));
   }
 }
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC

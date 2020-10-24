@@ -9,7 +9,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/dns_probe_test_util.h"
 #include "chrome/browser/net/secure_dns_config.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/country_codes/country_codes.h"
@@ -174,7 +173,7 @@ class SecureDnsHandlerTest : public InProcessBrowserTest {
   // Sets a policy update which will cause power pref managed change.
   void SetPolicyForPolicyKey(policy::PolicyMap* policy_map,
                              const std::string& policy_key,
-                             std::unique_ptr<base::Value> value) {
+                             base::Value value) {
     policy_map->Set(policy_key, policy::POLICY_LEVEL_MANDATORY,
                     policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
                     std::move(value), nullptr);
@@ -225,9 +224,8 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsModes) {
 
 IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsPolicy) {
   policy::PolicyMap policy_map;
-  SetPolicyForPolicyKey(
-      &policy_map, policy::key::kDnsOverHttpsMode,
-      std::make_unique<base::Value>(SecureDnsConfig::kModeAutomatic));
+  SetPolicyForPolicyKey(&policy_map, policy::key::kDnsOverHttpsMode,
+                        base::Value(SecureDnsConfig::kModeAutomatic));
 
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsMode,
@@ -245,9 +243,8 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsPolicy) {
 
 IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsPolicyChange) {
   policy::PolicyMap policy_map;
-  SetPolicyForPolicyKey(
-      &policy_map, policy::key::kDnsOverHttpsMode,
-      std::make_unique<base::Value>(SecureDnsConfig::kModeAutomatic));
+  SetPolicyForPolicyKey(&policy_map, policy::key::kDnsOverHttpsMode,
+                        base::Value(SecureDnsConfig::kModeAutomatic));
 
   std::string secure_dns_mode;
   std::vector<std::string> secure_dns_templates;
@@ -258,9 +255,8 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsPolicyChange) {
   EXPECT_EQ(static_cast<int>(SecureDnsConfig::ManagementMode::kNoOverride),
             management_mode);
 
-  SetPolicyForPolicyKey(
-      &policy_map, policy::key::kDnsOverHttpsMode,
-      std::make_unique<base::Value>(SecureDnsConfig::kModeOff));
+  SetPolicyForPolicyKey(&policy_map, policy::key::kDnsOverHttpsMode,
+                        base::Value(SecureDnsConfig::kModeOff));
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
   EXPECT_EQ(SecureDnsConfig::kModeOff, secure_dns_mode);
@@ -274,7 +270,7 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsPolicyChange) {
 IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, OtherPoliciesSet) {
   policy::PolicyMap policy_map;
   SetPolicyForPolicyKey(&policy_map, policy::key::kIncognitoModeAvailability,
-                        std::make_unique<base::Value>(1));
+                        base::Value(1));
 
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsMode,

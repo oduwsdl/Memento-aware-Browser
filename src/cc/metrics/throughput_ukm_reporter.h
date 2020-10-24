@@ -36,25 +36,6 @@ class CC_EXPORT ThroughputUkmReporter {
   void ReportAggregateThroughput(AggregationType aggregation_type,
                                  int throughput);
 
-  void ComputeUniversalThroughput(FrameSequenceMetrics* metrics);
-
-  base::Optional<int> current_universal_throughput() {
-    return current_universal_throughput_;
-  }
-
-  // Once the kUniversal tracker reported its throughput to UMA, this returns
-  // true. In this case, the |last_aggregated_percent_| and |last_impl_percent_|
-  // must have value.
-  bool HasThroughputData() const;
-  // These functions are called only when HasThroughputData is true. They return
-  // the throughput value of the corresponding thread, and reset them to nullopt
-  // to indicate the value has been reported.
-  int TakeLastAggregatedPercent();
-  int TakeLastImplPercent();
-  // This could be nullopt even if the HasThroughputData() is true, because it
-  // could happen that all the frames are generated from the compositor thread.
-  base::Optional<int> TakeLastMainPercent();
-
   uint32_t GetSamplesToNextEventForTesting(int index);
 
  private:
@@ -67,26 +48,8 @@ class CC_EXPORT ThroughputUkmReporter {
 
   // This is pointing to the LayerTreeHostImpl::ukm_manager_, which is
   // initialized right after the LayerTreeHostImpl is created. So when this
-  // pointer is initialized, there should be no trackers yet. Moreover, the
-  // LayerTreeHostImpl::ukm_manager_ lives as long as the LayerTreeHostImpl, so
-  // this pointer should never be null as long as LayerTreeHostImpl is alive.
+  // pointer is initialized, there should be no trackers yet.
   UkmManager* const ukm_manager_;
-
-  // The last "PercentDroppedFrames" reported to UMA. LayerTreeHostImpl will
-  // read this number and send to the GPU process. When this page is done, we
-  // will report to UKM using these numbers. Currently only meaningful to the
-  // kUniversal tracker.
-  // Possible values:
-  //   1. A non-negative int value which is the percent of frames dropped.
-  //   2. base::nullopt: when they are fetched by LayerTreeHostImpl, so that it
-  //      knows that the last value has been reported.
-  base::Optional<int> last_aggregated_percent_;
-  base::Optional<int> last_main_percent_;
-  base::Optional<int> last_impl_percent_;
-
-  // Use by the throughput meter.
-  // TODO(xidachen): move this into a separate class such as ThroughputMeter.
-  base::Optional<int> current_universal_throughput_;
 };
 
 }  // namespace cc

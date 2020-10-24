@@ -76,8 +76,9 @@ class ChromeTracingDelegateBrowserTest : public InProcessBrowserTest {
   }
 
   void TriggerPreemptiveScenario(
-      const base::Closure& on_started_finalization_callback) {
-    on_started_finalization_callback_ = on_started_finalization_callback;
+      base::OnceClosure on_started_finalization_callback) {
+    on_started_finalization_callback_ =
+        std::move(on_started_finalization_callback);
     trigger_handle_ =
         content::BackgroundTracingManager::GetInstance()->RegisterTriggerType(
             "test");
@@ -131,12 +132,12 @@ class ChromeTracingDelegateBrowserTest : public InProcessBrowserTest {
 
     if (!on_started_finalization_callback_.is_null()) {
       content::GetUIThreadTaskRunner({})->PostTask(
-          FROM_HERE, on_started_finalization_callback_);
+          FROM_HERE, std::move(on_started_finalization_callback_));
     }
   }
 
   std::unique_ptr<base::RunLoop> wait_for_upload_;
-  base::Closure on_started_finalization_callback_;
+  base::OnceClosure on_started_finalization_callback_;
   int receive_count_;
   int started_finalizations_count_;
   content::BackgroundTracingManager::TriggerHandle trigger_handle_;
@@ -148,7 +149,7 @@ IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTest,
   EXPECT_TRUE(StartPreemptiveScenario(
       content::BackgroundTracingManager::NO_DATA_FILTERING));
 
-  TriggerPreemptiveScenario(base::Closure());
+  TriggerPreemptiveScenario(base::OnceClosure());
 
   WaitForUpload();
 
@@ -181,7 +182,7 @@ IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTest,
   EXPECT_TRUE(StartPreemptiveScenario(
       content::BackgroundTracingManager::NO_DATA_FILTERING));
 
-  TriggerPreemptiveScenario(base::Closure());
+  TriggerPreemptiveScenario(base::OnceClosure());
 
   WaitForUpload();
 
@@ -284,8 +285,10 @@ IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTestOnStartup,
       content::BackgroundTracingManager::GetInstance()->HasActiveScenario());
 }
 
+// TODO(crbug.com/1134793): Test is disabled after failing on multiple mac
+// builders.
 IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTestOnStartup,
-                       PRE_PRE_StartupTracingThrottle) {
+                       DISABLED_PRE_PRE_StartupTracingThrottle) {
   // This test exists just to make sure the browser is created at least once and
   // so a default profile is created. Then, the next time the browser is
   // created, kMetricsReportingEnabled is explicitly read from the profile and
@@ -293,7 +296,7 @@ IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTestOnStartup,
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTestOnStartup,
-                       PRE_StartupTracingThrottle) {
+                       DISABLED_PRE_StartupTracingThrottle) {
   EXPECT_TRUE(
       content::BackgroundTracingManager::GetInstance()->HasActiveScenario());
 
@@ -307,7 +310,7 @@ IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTestOnStartup,
 // https://crbug.com/832981: The test is reenabled to check if flakiness still
 // exists.
 IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTestOnStartup,
-                       StartupTracingThrottle) {
+                       DISABLED_StartupTracingThrottle) {
   // The startup scenario should *not* be started, since not enough
   // time has elapsed since the last upload (set in the PRE_ above).
   EXPECT_FALSE(

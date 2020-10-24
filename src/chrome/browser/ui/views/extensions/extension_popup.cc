@@ -15,6 +15,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/layout/fill_layout.h"
@@ -69,7 +70,7 @@ void ExtensionPopup::AddedToWidget() {
   BubbleDialogDelegateView::AddedToWidget();
   const int radius = GetBubbleFrameView()->corner_radius();
   const bool contents_has_rounded_corners =
-      extension_view_->holder()->SetCornerRadius(radius);
+      extension_view_->holder()->SetCornerRadii(gfx::RoundedCornersF(radius));
   SetBorder(views::CreateEmptyBorder(
       gfx::Insets(contents_has_rounded_corners ? 0 : radius, 0)));
 }
@@ -128,12 +129,17 @@ void ExtensionPopup::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension,
     extensions::UnloadedExtensionReason reason) {
+  CHECK(host_);
   if (extension->id() == host_->extension_id()) {
     // To ensure |extension_view_| cannot receive any messages that cause it to
     // try to access the host during Widget closure, destroy it immediately.
     RemoveChildViewT(extension_view_);
 
     host_.reset();
+    // Stop observing the registry immediately to prevent any subsequent
+    // notifications, since Widget::Close is asynchronous.
+    extension_registry_observer_.RemoveAll();
+
     GetWidget()->Close();
   }
 }

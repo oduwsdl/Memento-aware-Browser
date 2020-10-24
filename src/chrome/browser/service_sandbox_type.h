@@ -6,12 +6,9 @@
 #define CHROME_BROWSER_SERVICE_SANDBOX_TYPE_H_
 
 #include "build/build_config.h"
-#include "content/public/browser/sandbox_type.h"
 #include "content/public/browser/service_process_host.h"
-
-#if !defined(OS_ANDROID)
-#include "chrome/services/speech/buildflags.h"
-#endif  // !defined(OS_ANDROID)
+#include "media/base/media_switches.h"
+#include "sandbox/policy/sandbox_type.h"
 
 // This file maps service classes to sandbox types.  Services which
 // require a non-utility sandbox can be added here.  See
@@ -25,14 +22,29 @@ class RemovableStorageWriter;
 }  // namespace chrome
 
 template <>
-inline content::SandboxType
+inline sandbox::policy::SandboxType
 content::GetServiceSandboxType<chrome::mojom::RemovableStorageWriter>() {
 #if defined(OS_WIN)
-  return SandboxType::kNoSandboxAndElevatedPrivileges;
+  return sandbox::policy::SandboxType::kNoSandboxAndElevatedPrivileges;
 #else
-  return SandboxType::kNoSandbox;
+  return sandbox::policy::SandboxType::kNoSandbox;
 #endif  // !defined(OS_WIN)
 }
+
+// chrome::mojom::UtilReadIcon
+#if defined(OS_WIN)
+namespace chrome {
+namespace mojom {
+class UtilReadIcon;
+}
+}  // namespace chrome
+
+template <>
+inline sandbox::policy::SandboxType
+content::GetServiceSandboxType<chrome::mojom::UtilReadIcon>() {
+  return sandbox::policy::SandboxType::kIconReader;
+}
+#endif  // defined(OS_WIN)
 
 // chrome::mojom::UtilWin
 #if defined(OS_WIN)
@@ -43,9 +55,9 @@ class UtilWin;
 }  // namespace chrome
 
 template <>
-inline content::SandboxType
+inline sandbox::policy::SandboxType
 content::GetServiceSandboxType<chrome::mojom::UtilWin>() {
-  return content::SandboxType::kNoSandbox;
+  return sandbox::policy::SandboxType::kNoSandbox;
 }
 #endif  // defined(OS_WIN)
 
@@ -57,14 +69,13 @@ class ProfileImport;
 }  // namespace chrome
 
 template <>
-inline content::SandboxType
+inline sandbox::policy::SandboxType
 content::GetServiceSandboxType<chrome::mojom::ProfileImport>() {
-  return content::SandboxType::kNoSandbox;
+  return sandbox::policy::SandboxType::kNoSandbox;
 }
 
 // media::mojom::SpeechRecognitionService
 #if !defined(OS_ANDROID)
-#if BUILDFLAG(ENABLE_SODA)
 namespace media {
 namespace mojom {
 class SpeechRecognitionService;
@@ -72,11 +83,14 @@ class SpeechRecognitionService;
 }  // namespace media
 
 template <>
-inline content::SandboxType
+inline sandbox::policy::SandboxType
 content::GetServiceSandboxType<media::mojom::SpeechRecognitionService>() {
-  return content::SandboxType::kSpeechRecognition;
+  if (base::FeatureList::IsEnabled(media::kUseSodaForLiveCaption)) {
+    return sandbox::policy::SandboxType::kSpeechRecognition;
+  } else {
+    return sandbox::policy::SandboxType::kUtility;
+  }
 }
-#endif  // BUILDFLAG(ENABLE_SODA)
 #endif  // !defined(OS_ANDROID)
 
 // printing::mojom::PrintingService
@@ -88,9 +102,9 @@ class PrintingService;
 }  // namespace printing
 
 template <>
-inline content::SandboxType
+inline sandbox::policy::SandboxType
 content::GetServiceSandboxType<printing::mojom::PrintingService>() {
-  return content::SandboxType::kPdfConversion;
+  return sandbox::policy::SandboxType::kPdfConversion;
 }
 #endif  // defined(OS_WIN)
 
@@ -103,9 +117,9 @@ class ProxyResolverFactory;
 }  // namespace proxy_resolver
 
 template <>
-inline content::SandboxType
+inline sandbox::policy::SandboxType
 content::GetServiceSandboxType<proxy_resolver::mojom::ProxyResolverFactory>() {
-  return content::SandboxType::kProxyResolver;
+  return sandbox::policy::SandboxType::kProxyResolver;
 }
 #endif  // defined(OS_WIN)
 
@@ -118,14 +132,14 @@ class Quarantine;
 }  // namespace quarantine
 
 template <>
-inline content::SandboxType
+inline sandbox::policy::SandboxType
 content::GetServiceSandboxType<quarantine::mojom::Quarantine>() {
-  return content::SandboxType::kNoSandbox;
+  return sandbox::policy::SandboxType::kNoSandbox;
 }
 #endif  // defined(OS_WIN)
 
 // sharing::mojom::Sharing
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 namespace sharing {
 namespace mojom {
 class Sharing;
@@ -133,10 +147,10 @@ class Sharing;
 }  // namespace sharing
 
 template <>
-inline content::SandboxType
+inline sandbox::policy::SandboxType
 content::GetServiceSandboxType<sharing::mojom::Sharing>() {
-  return content::SandboxType::kSharingService;
+  return sandbox::policy::SandboxType::kSharingService;
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 #endif  // CHROME_BROWSER_SERVICE_SANDBOX_TYPE_H_

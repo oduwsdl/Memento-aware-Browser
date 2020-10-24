@@ -10,7 +10,6 @@ import android.graphics.Bitmap;
 import androidx.annotation.DrawableRes;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcher;
@@ -18,9 +17,9 @@ import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
+import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableState;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionHost;
 import org.chromium.components.omnibox.AnswerType;
 import org.chromium.components.omnibox.SuggestionAnswer;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -74,20 +73,6 @@ public class AnswerSuggestionProcessor extends BaseSuggestionViewProcessor {
     public void populateModel(OmniboxSuggestion suggestion, PropertyModel model, int position) {
         super.populateModel(suggestion, model, position);
         setStateForSuggestion(model, suggestion, position);
-    }
-
-    @Override
-    public void recordItemPresented(PropertyModel model) {
-        // Note: At the time of writing this functionality, AiS was offering at most one answer to
-        // any query. If this changes before the metric is expired, the code below may need either
-        // revisiting or a secondary metric telling us how many answer suggestions have been shown.
-        // SuggestionUsed bookkeeping handled in C++:
-        // https://cs.chromium.org/Omnibox.SuggestionUsed.AnswerInSuggest
-        int type = model.get(AnswerSuggestionViewProperties.ANSWER_TYPE);
-        if (type != AnswerType.INVALID) {
-            RecordHistogram.recordEnumeratedHistogram(
-                    "Omnibox.AnswerInSuggestShown", type, AnswerType.TOTAL_COUNT);
-        }
     }
 
     private void maybeFetchAnswerIcon(PropertyModel model, OmniboxSuggestion suggestion) {
@@ -150,12 +135,6 @@ public class AnswerSuggestionProcessor extends BaseSuggestionViewProcessor {
 
         model.set(AnswerSuggestionViewProperties.TEXT_LINE_1_MAX_LINES, details[0].mMaxLines);
         model.set(AnswerSuggestionViewProperties.TEXT_LINE_2_MAX_LINES, details[1].mMaxLines);
-
-        if (suggestion.hasAnswer()) {
-            model.set(AnswerSuggestionViewProperties.ANSWER_TYPE, suggestion.getAnswer().getType());
-        } else {
-            model.set(AnswerSuggestionViewProperties.ANSWER_TYPE, AnswerType.INVALID);
-        }
 
         setSuggestionDrawableState(model,
                 SuggestionDrawableState.Builder

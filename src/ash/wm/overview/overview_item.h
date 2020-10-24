@@ -140,10 +140,6 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
   // Increases the bounds of the dragged item.
   void ScaleUpSelectedItem(OverviewAnimationType animation_type);
 
-  // Shift the window item up and then animates it to its original spot. Used
-  // to transition from the home launcher.
-  void SlideWindowIn();
-
   // Translate and fade the window (or minimized widget) and |item_widget_|. It
   // should remain in the same spot relative to the grids origin, which is given
   // by |new_grid_y|. Returns the settings object of the layer the caller should
@@ -196,7 +192,6 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
   // Handles events forwarded from |overview_item_view_|.
   void HandleMouseEvent(const ui::MouseEvent& event);
   void HandleGestureEvent(ui::GestureEvent* event);
-  bool ShouldIgnoreGestureEvents();
   void OnHighlightedViewActivated();
   void OnHighlightedViewClosed();
 
@@ -215,9 +210,9 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
 
   // WindowStateObserver:
   void OnPreWindowStateTypeChange(WindowState* window_state,
-                                  WindowStateType old_type) override;
+                                  chromeos::WindowStateType old_type) override;
   void OnPostWindowStateTypeChange(WindowState* window_state,
-                                   WindowStateType old_type) override;
+                                   chromeos::WindowStateType old_type) override;
 
   // Returns the root window on which this item is shown.
   aura::Window* root_window() { return root_window_; }
@@ -262,8 +257,6 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
 
   void set_disable_mask(bool disable) { disable_mask_ = disable; }
 
-  void set_activate_on_unminimized(bool val) { activate_on_unminimized_ = val; }
-
   void set_unclipped_size(base::Optional<gfx::Size> unclipped_size) {
     unclipped_size_ = unclipped_size;
   }
@@ -283,6 +276,10 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
   // Returns the target bounds of |window_|. Same as |target_bounds_|, with some
   // insets.
   gfx::RectF GetWindowTargetBoundsWithInsets() const;
+
+  // The shadow should match the size of the transformed window or preview
+  // window if unclipped.
+  gfx::RectF GetUnclippedShadowBounds() const;
 
   // Functions to be called back when their associated animations complete.
   void OnWindowCloseAnimationCompleted();
@@ -415,13 +412,6 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
   bool disable_mask_ = false;
 
   bool prepared_for_overview_ = false;
-
-  // If true, the next time |window_| is uniminimized, we will activate it (and
-  // end overview). Done this way because some windows (ARC app windows) have
-  // their window states changed async, so we need to wait until the window is
-  // fully unminimized before activation as opposed to having two consecutive
-  // calls.
-  bool activate_on_unminimized_ = false;
 
   // This has a value when there is a snapped window, or a window about to be
   // snapped (triggering a splitview preview area). This will be set when items

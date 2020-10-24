@@ -112,10 +112,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // interstitial.
   virtual void RenderViewCreated(RenderViewHost* render_view_host) {}
 
-  // Called for every RenderFrameHost that's created for an interstitial.
-  virtual void RenderFrameForInterstitialPageCreated(
-      RenderFrameHost* render_frame_host) {}
-
   // This method is invoked when the RenderView of the current RenderViewHost
   // is ready, e.g. because we recreated it after a crash.
   virtual void RenderViewReady() {}
@@ -212,6 +208,13 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   //
   // Note that |navigation_handle| will be destroyed at the end of this call,
   // so do not keep a reference to it afterward.
+  //
+  // Note that using DidFinishNavigation to detect changes in the currently
+  // active document and reset per-document state is strongly discouraged.
+  // Please use RenderDocumentHostUserData to store such data instead.
+  // (In particular, the page might be stored in back-forward cache instead
+  // of being deleted. See the comment in RenderDocumentHostUserData for more
+  // details).
   virtual void DidFinishNavigation(NavigationHandle* navigation_handle) {}
 
   // Called after the contents replaces the |predecessor_contents| in its
@@ -350,13 +353,13 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void NavigationStopped() {}
 
   // Called when there has been direct user interaction with the WebContents.
-  // The type argument specifies the kind of interaction. Direct user input
+  // The type of the event specifies the kind of interaction. Direct user input
   // signalled through this callback includes:
   // 1) any mouse down event (blink::WebInputEvent::MouseDown);
   // 2) the start of a scroll (blink::WebInputEvent::GestureScrollBegin);
   // 3) any raw key down event (blink::WebInputEvent::RawKeyDown); and
   // 4) any touch event (inc. scrolls) (blink::WebInputEvent::TouchStart).
-  virtual void DidGetUserInteraction(const blink::WebInputEvent::Type type) {}
+  virtual void DidGetUserInteraction(const blink::WebInputEvent& event) {}
 
   // This method is invoked when a RenderViewHost of this WebContents was
   // configured to ignore UI events, and an UI event took place.
@@ -479,11 +482,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // Invoked when the WebContents is muted/unmuted.
   virtual void DidUpdateAudioMutingState(bool muted) {}
 
-  // Invoked when a pepper plugin creates and shows or destroys a fullscreen
-  // RenderWidget.
-  virtual void DidShowFullscreenWidget() {}
-  virtual void DidDestroyFullscreenWidget() {}
-
   // Invoked when the renderer process has toggled the tab into/out of
   // fullscreen mode.
   virtual void DidToggleFullscreenModeForTab(bool entered_fullscreen,
@@ -517,6 +515,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // Invoked when a user cancels a before unload dialog.
   virtual void BeforeUnloadDialogCancelled() {}
 
+  // Called whenever the AXTreeID for the main frame has changed.
+  virtual void AXTreeIDForMainFrameHasChanged() {}
+
   // Called when accessibility events or location changes are received
   // from a render frame, but only when the accessibility mode has the
   // ui::AXMode::kWebContents flag set.
@@ -527,6 +528,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
 
   // Invoked when theme color is changed.
   virtual void DidChangeThemeColor() {}
+
+  // Invoked when background color is changed.
+  virtual void OnBackgroundColorChanged() {}
 
   // Called when a message is added to the console of the WebContents. This is
   // invoked before forwarding the message to the WebContents' delegate.
@@ -572,6 +576,8 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void MediaEffectivelyFullscreenChanged(bool is_fullscreen) {}
   virtual void MediaPictureInPictureChanged(bool is_picture_in_picture) {}
   virtual void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) {}
+  virtual void MediaBufferUnderflow(const MediaPlayerId& id) {}
+  virtual void MediaPlayerSeek(const MediaPlayerId& id) {}
 
   // Invoked when the renderer process changes the page scale factor.
   virtual void OnPageScaleFactorChanged(float page_scale_factor) {}

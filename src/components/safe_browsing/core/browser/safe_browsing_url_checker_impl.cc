@@ -124,17 +124,22 @@ SafeBrowsingUrlCheckerImpl::SafeBrowsingUrlCheckerImpl(
 SafeBrowsingUrlCheckerImpl::SafeBrowsingUrlCheckerImpl(
     ResourceType resource_type,
     scoped_refptr<UrlCheckerDelegate> url_checker_delegate,
-    const base::RepeatingCallback<web::WebState*()>& web_state_getter)
+    const base::RepeatingCallback<web::WebState*()>& web_state_getter,
+    bool real_time_lookup_enabled,
+    bool can_rt_check_subresource_url,
+    base::WeakPtr<RealTimeUrlLookupServiceBase> url_lookup_service_on_ui)
     : load_flags_(0),
       resource_type_(resource_type),
       has_user_gesture_(false),
       web_state_getter_(web_state_getter),
       url_checker_delegate_(url_checker_delegate),
       database_manager_(url_checker_delegate_->GetDatabaseManager()),
-      real_time_lookup_enabled_(false),
-      can_rt_check_subresource_url_(false),
-      can_check_db_(true) {
+      real_time_lookup_enabled_(real_time_lookup_enabled),
+      can_rt_check_subresource_url_(can_rt_check_subresource_url),
+      can_check_db_(true),
+      url_lookup_service_on_ui_(url_lookup_service_on_ui) {
   DCHECK(!web_state_getter_.is_null());
+  DCHECK(!can_rt_check_subresource_url_ || real_time_lookup_enabled_);
 }
 
 SafeBrowsingUrlCheckerImpl::~SafeBrowsingUrlCheckerImpl() {
@@ -165,7 +170,8 @@ void SafeBrowsingUrlCheckerImpl::CheckUrl(const GURL& url,
 security_interstitials::UnsafeResource
 SafeBrowsingUrlCheckerImpl::MakeUnsafeResource(const GURL& url,
                                                SBThreatType threat_type,
-                                               const ThreatMetadata& metadata) {
+                                               const ThreatMetadata& metadata,
+                                               bool is_from_real_time_check) {
   security_interstitials::UnsafeResource resource;
   resource.url = url;
   resource.original_url = urls_[0].url;
@@ -186,7 +192,9 @@ SafeBrowsingUrlCheckerImpl::MakeUnsafeResource(const GURL& url,
       base::CreateSingleThreadTaskRunner(CreateTaskTraits(ThreadID::IO));
   resource.web_contents_getter = web_contents_getter_;
   resource.web_state_getter = web_state_getter_;
-  resource.threat_source = database_manager_->GetThreatSource();
+  resource.threat_source = is_from_real_time_check
+                               ? ThreatSource::REAL_TIME_CHECK
+                               : database_manager_->GetThreatSource();
   return resource;
 }
 
@@ -194,12 +202,13 @@ void SafeBrowsingUrlCheckerImpl::OnCheckBrowseUrlResult(
     const GURL& url,
     SBThreatType threat_type,
     const ThreatMetadata& metadata) {
-  OnUrlResult(url, threat_type, metadata);
+  OnUrlResult(url, threat_type, metadata, /*is_from_real_time_check=*/false);
 }
 
 void SafeBrowsingUrlCheckerImpl::OnUrlResult(const GURL& url,
                                              SBThreatType threat_type,
-                                             const ThreatMetadata& metadata) {
+                                             const ThreatMetadata& metadata,
+                                             bool is_from_real_time_check) {
   DCHECK_EQ(STATE_CHECKING_URL, state_);
   DCHECK_LT(next_index_, urls_.size());
   DCHECK_EQ(urls_[next_index_].url, url);
@@ -220,7 +229,8 @@ void SafeBrowsingUrlCheckerImpl::OnUrlResult(const GURL& url,
       // happens. Create an interaction observer and continue like there wasn't
       // a warning. The observer will create the interstitial when necessary.
       security_interstitials::UnsafeResource unsafe_resource =
-          MakeUnsafeResource(url, threat_type, metadata);
+          MakeUnsafeResource(url, threat_type, metadata,
+                             is_from_real_time_check);
       unsafe_resource.is_delayed_warning = true;
       url_checker_delegate_
           ->StartObservingInteractionsForDelayedBlockingPageHelper(
@@ -266,7 +276,7 @@ void SafeBrowsingUrlCheckerImpl::OnUrlResult(const GURL& url,
   UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes2.Unsafe", resource_type_);
 
   security_interstitials::UnsafeResource resource =
-      MakeUnsafeResource(url, threat_type, metadata);
+      MakeUnsafeResource(url, threat_type, metadata, is_from_real_time_check);
 
   state_ = STATE_DISPLAYING_BLOCKING_PAGE;
   url_checker_delegate_->StartDisplayingBlockingPageHelper(
@@ -285,7 +295,7 @@ void SafeBrowsingUrlCheckerImpl::OnTimeout() {
   weak_factory_.InvalidateWeakPtrs();
 
   OnUrlResult(urls_[next_index_].url, safe_browsing::SB_THREAT_TYPE_SAFE,
-              ThreatMetadata());
+              ThreatMetadata(), /*is_from_real_time_check=*/false);
 }
 
 void SafeBrowsingUrlCheckerImpl::CheckUrlImpl(const GURL& url,
@@ -316,7 +326,7 @@ void SafeBrowsingUrlCheckerImpl::ProcessUrls() {
     DCHECK_EQ(STATE_NONE, state_);
 
     const GURL& url = urls_[next_index_].url;
-    if (url_checker_delegate_->IsUrlWhitelisted(url)) {
+    if (url_checker_delegate_->IsUrlAllowlisted(url)) {
       if (!RunNextCallback(true, false))
         return;
 
@@ -367,6 +377,8 @@ void SafeBrowsingUrlCheckerImpl::ProcessUrls() {
 
     bool safe_synchronously;
     bool can_perform_full_url_lookup = CanPerformFullURLLookup(url);
+    base::UmaHistogramBoolean("SafeBrowsing.RT.CanCheckDatabase",
+                              can_check_db_);
     if (can_perform_full_url_lookup) {
       UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.RT.ResourceTypes.Checked",
                                 resource_type_);
@@ -405,8 +417,6 @@ void SafeBrowsingUrlCheckerImpl::ProcessUrls() {
           break;
       }
     } else {
-      // TODO(crbug.com/1085261): Add a metric to track how often
-      // |can_check_db_| is false.
       safe_synchronously =
           can_check_db_
               ? database_manager_->CheckBrowseUrl(
@@ -562,7 +572,62 @@ void SafeBrowsingUrlCheckerImpl::PerformHashBasedCheck(const GURL& url) {
           url, url_checker_delegate_->GetThreatTypes(), this)) {
     // No match found in the local database. Safe to call |OnUrlResult| here
     // directly.
-    OnUrlResult(url, SB_THREAT_TYPE_SAFE, ThreatMetadata());
+    OnUrlResult(url, SB_THREAT_TYPE_SAFE, ThreatMetadata(),
+                /*is_from_real_time_check=*/false);
+  }
+}
+
+bool SafeBrowsingUrlCheckerImpl::CanPerformFullURLLookup(const GURL& url) {
+  return real_time_lookup_enabled_ &&
+         RealTimePolicyEngine::CanPerformFullURLLookupForResourceType(
+             resource_type_, can_rt_check_subresource_url_) &&
+         RealTimeUrlLookupServiceBase::CanCheckUrl(url);
+}
+
+void SafeBrowsingUrlCheckerImpl::OnRTLookupRequest(
+    std::unique_ptr<RTLookupRequest> request,
+    std::string oauth_token) {
+  DCHECK(CurrentlyOnThread(ThreadID::IO));
+
+  LogRTLookupRequest(*request, oauth_token);
+}
+
+void SafeBrowsingUrlCheckerImpl::OnRTLookupResponse(
+    bool is_rt_lookup_successful,
+    bool is_cached_response,
+    std::unique_ptr<RTLookupResponse> response) {
+  DCHECK(CurrentlyOnThread(ThreadID::IO));
+  bool is_expected_resource_type =
+      (ResourceType::kMainFrame == resource_type_) ||
+      ((ResourceType::kSubFrame == resource_type_) &&
+       can_rt_check_subresource_url_);
+  DCHECK(is_expected_resource_type);
+
+  const GURL& url = urls_[next_index_].url;
+
+  if (!is_rt_lookup_successful) {
+    PerformHashBasedCheck(url);
+    return;
+  }
+
+  LogRTLookupResponse(*response);
+
+  SBThreatType sb_threat_type = SB_THREAT_TYPE_SAFE;
+  if (response && (response->threat_info_size() > 0) &&
+      response->threat_info(0).verdict_type() ==
+          RTLookupResponse::ThreatInfo::DANGEROUS) {
+    // TODO(crbug.com/1033692): Only take the first threat info into account
+    // because threat infos are returned in decreasing order of severity.
+    // Consider extend it to support multiple threat types.
+    sb_threat_type =
+        RealTimeUrlLookupServiceBase::GetSBThreatTypeForRTThreatType(
+            response->threat_info(0).threat_type());
+  }
+  if (is_cached_response && sb_threat_type == SB_THREAT_TYPE_SAFE) {
+    PerformHashBasedCheck(url);
+  } else {
+    OnUrlResult(url, sb_threat_type, ThreatMetadata(),
+                /*is_from_real_time_check=*/true);
   }
 }
 

@@ -18,7 +18,6 @@
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -28,13 +27,13 @@
 #include "chrome/browser/ui/extensions/extension_message_bubble_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
-#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model_factory.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/pref_names.h"
@@ -153,7 +152,7 @@ void ToolbarActionsModel::SetVisibleIconCount(size_t count) {
 }
 
 void ToolbarActionsModel::OnExtensionActionUpdated(
-    ExtensionAction* extension_action,
+    extensions::ExtensionAction* extension_action,
     content::WebContents* web_contents,
     content::BrowserContext* browser_context) {
   // Notify observers if the extension exists and is in the model.
@@ -519,11 +518,11 @@ void ToolbarActionsModel::InitializeActionList() {
     if (!profile_->IsOffTheRecord() && !action_ids_.empty()) {
       base::UmaHistogramCounts100("Extensions.Toolbar.PinnedExtensionCount2",
                                   pinned_action_ids_.size());
-      double percentage_double =
-          pinned_action_ids_.size() / action_ids_.size() * 100.0;
+      double percentage_double = double{pinned_action_ids_.size()} /
+                                 double{action_ids_.size()} * 100.0;
       int percentage = int{percentage_double};
-      base::UmaHistogramPercentage(
-          "Extensions.Toolbar.PinnedExtensionPercentage2", percentage);
+      base::UmaHistogramPercentageObsoleteDoNotUse(
+          "Extensions.Toolbar.PinnedExtensionPercentage3", percentage);
     }
   }
 }

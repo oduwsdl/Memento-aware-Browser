@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/payments/content/developer_console_logger.h"
+#include "components/payments/content/initialization_task.h"
 #include "components/payments/content/payment_handler_host.h"
 #include "components/payments/content/payment_request_display_manager.h"
 #include "components/payments/content/payment_request_spec.h"
@@ -43,7 +44,8 @@ class PaymentRequestWebContentsManager;
 class PaymentRequest : public mojom::PaymentRequest,
                        public PaymentHandlerHost::Delegate,
                        public PaymentRequestSpec::Observer,
-                       public PaymentRequestState::Delegate {
+                       public PaymentRequestState::Delegate,
+                       public InitializationTask::Observer {
  public:
   class ObserverForTest {
    public:
@@ -51,8 +53,8 @@ class PaymentRequest : public mojom::PaymentRequest,
     virtual void OnCanMakePaymentReturned() = 0;
     virtual void OnHasEnrolledInstrumentCalled() = 0;
     virtual void OnHasEnrolledInstrumentReturned() = 0;
-    virtual void OnShowAppsReady(
-        base::WeakPtr<PaymentRequest> payment_request) {}
+    virtual void OnAppListReady(base::WeakPtr<PaymentRequest> payment_request) {
+    }
     virtual void OnNotSupportedError() = 0;
     virtual void OnConnectionTerminated() = 0;
     virtual void OnAbortCalled() = 0;
@@ -63,7 +65,6 @@ class PaymentRequest : public mojom::PaymentRequest,
   };
 
   PaymentRequest(content::RenderFrameHost* render_frame_host,
-                 content::WebContents* web_contents,
                  std::unique_ptr<ContentPaymentRequestDelegate> delegate,
                  PaymentRequestWebContentsManager* manager,
                  PaymentRequestDisplayManager* display_manager,
@@ -83,7 +84,7 @@ class PaymentRequest : public mojom::PaymentRequest,
   void Abort() override;
   void Complete(mojom::PaymentComplete result) override;
   void CanMakePayment() override;
-  void HasEnrolledInstrument(bool per_method_quota) override;
+  void HasEnrolledInstrument() override;
 
   // PaymentHandlerHost::Delegate
   bool ChangePaymentMethod(const std::string& method_name,
@@ -111,6 +112,12 @@ class PaymentRequest : public mojom::PaymentRequest,
   // another document, but before the PaymentRequest is destroyed.
   void DidStartMainFrameNavigationToDifferentDocument(bool is_user_initiated);
 
+  // Called when the frame attached to this PaymentRequest is about to be
+  // destroyed. This is used to clean up before the RenderFrameHost is actually
+  // destroyed because some objects held by the PaymentRequest (e.g.
+  // InternalAuthenticator) must be out-lived by the RenderFrameHost.
+  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host);
+
   // As a result of a browser-side error or renderer-initiated mojo channel
   // closure (e.g. there was an error on the renderer side, or payment was
   // successful), this method is called. It is responsible for cleaning up,
@@ -128,18 +135,29 @@ class PaymentRequest : public mojom::PaymentRequest,
   // Called when the payment handler requests to open a payment handler window.
   void OnPaymentHandlerOpenWindowCalled();
 
-  content::WebContents* web_contents() { return web_contents_; }
+  content::WebContents* web_contents();
+
+  const content::GlobalFrameRoutingId& initiator_frame_routing_id() const {
+    return initiator_frame_routing_id_;
+  }
 
   bool skipped_payment_request_ui() { return skipped_payment_request_ui_; }
   bool is_show_user_gesture() const { return is_show_user_gesture_; }
 
-  PaymentRequestSpec* spec() { return spec_.get(); }
-  PaymentRequestState* state() { return state_.get(); }
+  base::WeakPtr<PaymentRequestSpec> spec() { return spec_->AsWeakPtr(); }
+  base::WeakPtr<PaymentRequestState> state() { return state_->AsWeakPtr(); }
 
-  PaymentRequestSpec* spec() const { return spec_.get(); }
-  PaymentRequestState* state() const { return state_.get(); }
+  base::WeakPtr<PaymentRequestSpec> spec() const { return spec_->AsWeakPtr(); }
+  base::WeakPtr<PaymentRequestState> state() const {
+    return state_->AsWeakPtr();
+  }
+
+  base::WeakPtr<PaymentRequest> GetWeakPtr();
 
  private:
+  // InitializationTask::Observer.
+  void OnInitialized(InitializationTask* initialization_task) override;
+
   // Returns true after init() has been called and the mojo connection has been
   // established. If the mojo connection gets later disconnected, this will
   // returns false.
@@ -169,8 +187,7 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // The callback for PaymentRequestState::HasEnrolledInstrument. Checks for
   // query quota and may send QUERY_QUOTA_EXCEEDED.
-  void HasEnrolledInstrumentCallback(bool per_method_quota,
-                                     bool has_enrolled_instrument);
+  void HasEnrolledInstrumentCallback(bool has_enrolled_instrument);
 
   // The callback for PaymentRequestState::AreRequestedMethodsSupported.
   void AreRequestedMethodsSupportedCallback(bool methods_supported,
@@ -187,7 +204,6 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   void OnAbortResult(bool aborted);
 
-  content::WebContents* web_contents_;
   const content::GlobalFrameRoutingId initiator_frame_routing_id_;
   DeveloperConsoleLogger log_;
   std::unique_ptr<ContentPaymentRequestDelegate> delegate_;
@@ -203,7 +219,7 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // The end-point for the payment handler renderer process to call into the
   // browser process.
-  PaymentHandlerHost payment_handler_host_;
+  std::unique_ptr<PaymentHandlerHost> payment_handler_host_;
 
   // The scheme, host, and port of the top level frame that has invoked
   // PaymentRequest API as formatted by

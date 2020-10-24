@@ -10,12 +10,11 @@
 
 #include "base/memory/weak_ptr.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
+#include "components/password_manager/core/browser/password_form_forward.h"
+#include "components/password_manager/core/browser/ui/password_check_referrer.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 
-namespace autofill {
-struct PasswordForm;
-}
 namespace content {
 class WebContents;
 }
@@ -56,24 +55,27 @@ class PasswordsModelDelegate {
   // Returns the pending password in PENDING_PASSWORD_STATE and
   // PENDING_PASSWORD_UPDATE_STATE, the saved password in CONFIRMATION_STATE,
   // the returned credential in AUTO_SIGNIN_STATE.
-  virtual const autofill::PasswordForm& GetPendingPassword() const = 0;
+  virtual const password_manager::PasswordForm& GetPendingPassword() const = 0;
 
   // Returns unsynced credentials being deleted upon signout.
-  virtual const std::vector<autofill::PasswordForm>& GetUnsyncedCredentials()
-      const = 0;
+  virtual const std::vector<password_manager::PasswordForm>&
+  GetUnsyncedCredentials() const = 0;
 
   // Returns the source of the credential to be saved.
   virtual password_manager::metrics_util::CredentialSourceType
   GetCredentialSource() const = 0;
 
   // Returns current local forms for the current page.
-  virtual const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+  virtual const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
   GetCurrentForms() const = 0;
 
   // For PENDING_PASSWORD_STATE state returns the current statistics for
   // the pending username.
   virtual const password_manager::InteractionsStats*
   GetCurrentInteractionStats() const = 0;
+
+  // For PASSWORD_UPDATED_* return # compromised passwords in the store.
+  virtual size_t GetTotalNumberCompromisedPasswords() const = 0;
 
   // Users need to reauth to their account to opt-in using their password
   // account storage. This method returns whether account auth attempt during
@@ -107,10 +109,11 @@ class PasswordsModelDelegate {
   virtual void SavePassword(const base::string16& username,
                             const base::string16& password) = 0;
 
-  // Called when the user chooses to save locally the unsynced credentials
-  // deleted from the account store on signout (the ones returned by
-  // GetUnsyncedCredentials()).
-  virtual void SaveUnsyncedCredentialsInProfileStore() = 0;
+  // Called when the user chooses to save locally some of the unsynced
+  // credentials that were deleted from the account store on signout.
+  virtual void SaveUnsyncedCredentialsInProfileStore(
+      const std::vector<password_manager::PasswordForm>&
+          selected_credentials) = 0;
 
   // Called when the user chooses not to save locally the unsynced credentials
   // deleted from the account store on signout (the ones returned by
@@ -121,10 +124,14 @@ class PasswordsModelDelegate {
   // used credential to their account store.
   virtual void MovePasswordToAccountStore() = 0;
 
+  // Called from the dialog controller when a user rejects moving the recently
+  // used credential to their account store.
+  virtual void BlockMovingPasswordToAccountStore() = 0;
+
   // Called from the dialog controller when the user chooses a credential.
   // Controller can be destroyed inside the method.
   virtual void ChooseCredential(
-      const autofill::PasswordForm& form,
+      const password_manager::PasswordForm& form,
       password_manager::CredentialType credential_type) = 0;
 
   // Open a new tab, pointing to passwords.google.com.
@@ -133,10 +140,12 @@ class PasswordsModelDelegate {
   // Open a new tab, pointing to the password manager settings page.
   virtual void NavigateToPasswordManagerSettingsPage(
       password_manager::ManagePasswordsReferrer referrer) = 0;
+  // Open a new tab, pointing to the password check in the settings page.
+  virtual void NavigateToPasswordCheckup(
+      password_manager::PasswordCheckReferrer referrer) = 0;
   // Called by the view when the "Sign in to Chrome" button or the "Sync to"
   // button in the promo bubble are clicked.
-  virtual void EnableSync(const AccountInfo& account,
-                          bool is_default_promo_account) = 0;
+  virtual void EnableSync(const AccountInfo& account) = 0;
 
   // Called from the dialog controller when the dialog is hidden.
   virtual void OnDialogHidden() = 0;
@@ -156,6 +165,11 @@ class PasswordsModelDelegate {
   virtual void AuthenticateUserForAccountStoreOptInAndSavePassword(
       const base::string16& username,
       const base::string16& password) = 0;
+
+  // Called from the Move bubble controller when gaia re-auth is needed
+  // to move passwords. This method triggers the reauth flow. Upon successful
+  // reauth, it moves the password.
+  virtual void AuthenticateUserForAccountStoreOptInAndMovePassword() = 0;
 
   // Returns true if the password values should be revealed when the bubble is
   // opened.

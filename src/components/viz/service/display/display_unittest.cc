@@ -4,6 +4,8 @@
 
 #include "components/viz/service/display/display.h"
 
+#include <limits>
+#include <map>
 #include <utility>
 
 #include "base/bind.h"
@@ -13,16 +15,22 @@
 #include "base/test/null_task_runner.h"
 #include "cc/base/math_util.h"
 #include "cc/test/scheduler_test_common.h"
+#include "components/viz/common/delegated_ink_metadata.h"
+#include "components/viz/common/delegated_ink_point.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/quads/aggregated_render_pass.h"
+#include "components/viz/common/quads/aggregated_render_pass_draw_quad.h"
 #include "components/viz/common/quads/compositor_frame.h"
-#include "components/viz/common/quads/render_pass.h"
-#include "components/viz/common/quads/render_pass_draw_quad.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass_draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/service/display/aggregated_frame.h"
+#include "components/viz/service/display/delegated_ink_point_renderer_skia.h"
 #include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display/display_scheduler.h"
@@ -34,6 +42,7 @@
 #include "components/viz/service/surfaces/surface_manager.h"
 #include "components/viz/test/compositor_frame_helpers.h"
 #include "components/viz/test/fake_output_surface.h"
+#include "components/viz/test/fake_skia_output_surface.h"
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
 #include "components/viz/test/test_gles2_interface.h"
 #include "components/viz/test/viz_test_suite.h"
@@ -88,8 +97,9 @@ class TestDisplayScheduler : public DisplayScheduler {
 class StubDisplayClient : public DisplayClient {
  public:
   void DisplayOutputSurfaceLost() override {}
-  void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              RenderPassList* render_passes) override {}
+  void DisplayWillDrawAndSwap(
+      bool will_draw_and_swap,
+      AggregatedRenderPassList* render_passes) override {}
   void DisplayDidDrawAndSwap() override {}
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override {}
@@ -160,6 +170,17 @@ class DisplayTest : public testing::Test {
                                      std::move(output_surface));
   }
 
+  void SetUpGpuDisplaySkia(const RendererSettings& settings) {
+    scoped_refptr<TestContextProvider> provider = TestContextProvider::Create();
+    provider->BindToCurrentThread();
+    std::unique_ptr<FakeSkiaOutputSurface> skia_output_surface =
+        FakeSkiaOutputSurface::Create3d(std::move(provider));
+    skia_output_surface_ = skia_output_surface.get();
+
+    CreateDisplaySchedulerAndDisplay(settings, kArbitraryFrameSinkId,
+                                     std::move(skia_output_surface));
+  }
+
   void CreateDisplaySchedulerAndDisplay(
       const RendererSettings& settings,
       const FrameSinkId& frame_sink_id,
@@ -186,7 +207,7 @@ class DisplayTest : public testing::Test {
     // processor is a stub and the output surface is test only as well, so there
     // is no need to pass in a real gpu::GpuTaskSchedulerHelper.
     auto display = std::make_unique<Display>(
-        &shared_bitmap_manager_, settings, frame_sink_id,
+        &shared_bitmap_manager_, settings, &debug_settings_, frame_sink_id,
         nullptr /* gpu::GpuTaskSchedulerHelper */, std::move(output_surface),
         std::move(overlay_processor), std::move(scheduler), task_runner_);
     display->SetVisible(true);
@@ -211,7 +232,7 @@ class DisplayTest : public testing::Test {
       manager_.UnregisterBeginFrameSource(begin_frame_source_.get());
   }
 
-  void SubmitCompositorFrame(RenderPassList* pass_list,
+  void SubmitCompositorFrame(CompositorRenderPassList* pass_list,
                              const LocalSurfaceId& local_surface_id) {
     CompositorFrame frame = CompositorFrameBuilder()
                                 .SetRenderPassList(std::move(*pass_list))
@@ -231,6 +252,7 @@ class DisplayTest : public testing::Test {
     return display_->pending_presentation_group_timings_.size();
   }
 
+  DebugRendererSettings debug_settings_;
   ServerSharedBitmapManager shared_bitmap_manager_;
   FrameSinkManagerImpl manager_;
   std::unique_ptr<CompositorFrameSinkSupport> support_;
@@ -240,6 +262,7 @@ class DisplayTest : public testing::Test {
   std::unique_ptr<Display> display_;
   TestSoftwareOutputDevice* software_output_device_ = nullptr;
   FakeOutputSurface* output_surface_ = nullptr;
+  FakeSkiaOutputSurface* skia_output_surface_ = nullptr;
   TestDisplayScheduler* scheduler_ = nullptr;
 };
 
@@ -259,23 +282,19 @@ TEST_F(DisplayTest, DisplayDamaged) {
 
   EXPECT_FALSE(scheduler_->damaged());
   id_allocator_.GenerateId();
-  display_->SetLocalSurfaceId(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-      1.f);
+  display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
   display_->Resize(gfx::Size(100, 100));
 
   // First draw from surface should have full damage.
-  RenderPassList pass_list;
-  auto pass = RenderPass::Create();
+  CompositorRenderPassList pass_list;
+  auto pass = CompositorRenderPass::Create();
   pass->output_rect = gfx::Rect(0, 0, 100, 100);
   pass->damage_rect = gfx::Rect(10, 10, 1, 1);
-  pass->id = 1u;
+  pass->id = CompositorRenderPassId{1u};
   pass_list.push_back(std::move(pass));
 
   ResetDamageForTest();
-  SubmitCompositorFrame(
-      &pass_list,
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+  SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
   EXPECT_TRUE(scheduler_->damaged());
 
   EXPECT_FALSE(scheduler_->swapped());
@@ -292,16 +311,14 @@ TEST_F(DisplayTest, DisplayDamaged) {
   // Only a small area is damaged but the color space changes which should
   // result in full damage.
   {
-    pass = RenderPass::Create();
+    pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
 
     pass_list.push_back(std::move(pass));
     ResetDamageForTest();
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
     EXPECT_TRUE(scheduler_->damaged());
 
     scheduler_->reset_swapped_for_test();
@@ -322,16 +339,14 @@ TEST_F(DisplayTest, DisplayDamaged) {
   // Same frame as above but no color space change. Only partial area should be
   // drawn.
   {
-    pass = RenderPass::Create();
+    pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
 
     pass_list.push_back(std::move(pass));
     ResetDamageForTest();
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
     EXPECT_TRUE(scheduler_->damaged());
 
     scheduler_->reset_swapped_for_test();
@@ -350,16 +365,14 @@ TEST_F(DisplayTest, DisplayDamaged) {
 
   // Pass has no damage so shouldn't be swapped.
   {
-    pass = RenderPass::Create();
+    pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 0, 0);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
 
     pass_list.push_back(std::move(pass));
     ResetDamageForTest();
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
     EXPECT_TRUE(scheduler_->damaged());
 
     scheduler_->reset_swapped_for_test();
@@ -372,9 +385,7 @@ TEST_F(DisplayTest, DisplayDamaged) {
   // result in latency info being stored for the next swap.
   {
     id_allocator_.GenerateId();
-    display_->SetLocalSurfaceId(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        1.f);
+    display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
 
     ResetDamageForTest();
 
@@ -385,9 +396,8 @@ TEST_F(DisplayTest, DisplayDamaged) {
                                 .AddLatencyInfo(ui::LatencyInfo())
                                 .Build();
 
-    support_->SubmitCompositorFrame(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        std::move(frame));
+    support_->SubmitCompositorFrame(id_allocator_.GetCurrentLocalSurfaceId(),
+                                    std::move(frame));
     EXPECT_TRUE(scheduler_->damaged());
 
     scheduler_->reset_swapped_for_test();
@@ -398,21 +408,17 @@ TEST_F(DisplayTest, DisplayDamaged) {
 
   // Previous frame wasn't swapped, so next swap should have full damage.
   {
-    pass = RenderPass::Create();
+    pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 0, 0);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
 
     id_allocator_.GenerateId();
-    display_->SetLocalSurfaceId(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        1.f);
+    display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
 
     pass_list.push_back(std::move(pass));
     ResetDamageForTest();
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
     EXPECT_TRUE(scheduler_->damaged());
 
     scheduler_->reset_swapped_for_test();
@@ -427,7 +433,7 @@ TEST_F(DisplayTest, DisplayDamaged) {
 
   // Pass has copy output request so should be swapped.
   {
-    pass = RenderPass::Create();
+    pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 0, 0);
     base::RunLoop copy_run_loop;
@@ -436,13 +442,11 @@ TEST_F(DisplayTest, DisplayDamaged) {
         CopyOutputRequest::ResultFormat::RGBA_BITMAP,
         base::BindOnce(&CopyCallback, &copy_called,
                        copy_run_loop.QuitClosure())));
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
 
     pass_list.push_back(std::move(pass));
     ResetDamageForTest();
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
     EXPECT_TRUE(scheduler_->damaged());
 
     scheduler_->reset_swapped_for_test();
@@ -464,13 +468,12 @@ TEST_F(DisplayTest, DisplayDamaged) {
                                 .AddRenderPass(kOutputRect, kDamageRect)
                                 .AddLatencyInfo(ui::LatencyInfo())
                                 .Build();
+    frame.metadata.latency_info.push_back(ui::LatencyInfo());
 
-    support_->SubmitCompositorFrame(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        std::move(frame));
+    support_->SubmitCompositorFrame(id_allocator_.GetCurrentLocalSurfaceId(),
+                                    std::move(frame));
     EXPECT_TRUE(scheduler_->damaged());
 
-    frame.metadata.latency_info.push_back(ui::LatencyInfo());
     scheduler_->reset_swapped_for_test();
     display_->DrawAndSwap(base::TimeTicks::Now());
     EXPECT_TRUE(scheduler_->swapped());
@@ -481,9 +484,7 @@ TEST_F(DisplayTest, DisplayDamaged) {
   // previous size.
   {
     id_allocator_.GenerateId();
-    display_->SetLocalSurfaceId(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        1.f);
+    display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
     scheduler_->reset_swapped_for_test();
     display_->Resize(gfx::Size(200, 200));
     EXPECT_FALSE(scheduler_->swapped());
@@ -496,9 +497,8 @@ TEST_F(DisplayTest, DisplayDamaged) {
                                 .AddRenderPass(kOutputRect, kDamageRect)
                                 .Build();
 
-    support_->SubmitCompositorFrame(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        std::move(frame));
+    support_->SubmitCompositorFrame(id_allocator_.GetCurrentLocalSurfaceId(),
+                                    std::move(frame));
     EXPECT_TRUE(scheduler_->damaged());
 
     scheduler_->reset_swapped_for_test();
@@ -512,19 +512,15 @@ TEST_F(DisplayTest, DisplayDamaged) {
   // Surface that's damaged completely should be resized and swapped.
   {
     id_allocator_.GenerateId();
-    display_->SetLocalSurfaceId(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        1.0f);
-    pass = RenderPass::Create();
+    display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.0f);
+    pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 99, 99);
     pass->damage_rect = gfx::Rect(0, 0, 99, 99);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
 
     pass_list.push_back(std::move(pass));
     ResetDamageForTest();
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
     EXPECT_TRUE(scheduler_->damaged());
 
     scheduler_->reset_swapped_for_test();
@@ -547,8 +543,7 @@ void DisplayTest::LatencyInfoCapTest(bool over_capacity) {
   display_->Initialize(&client, manager_.surface_manager());
 
   id_allocator_.GenerateId();
-  LocalSurfaceId local_surface_id(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+  LocalSurfaceId local_surface_id(id_allocator_.GetCurrentLocalSurfaceId());
   display_->SetLocalSurfaceId(local_surface_id, 1.f);
 
   display_->Resize(gfx::Size(100, 100));
@@ -612,11 +607,9 @@ TEST_F(DisplayTest, OverLatencyInfoCap) {
 
 TEST_F(DisplayTest, DisableSwapUntilResize) {
   id_allocator_.GenerateId();
-  LocalSurfaceId local_surface_id1(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+  LocalSurfaceId local_surface_id1(id_allocator_.GetCurrentLocalSurfaceId());
   id_allocator_.GenerateId();
-  LocalSurfaceId local_surface_id2(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+  LocalSurfaceId local_surface_id2(id_allocator_.GetCurrentLocalSurfaceId());
 
   RendererSettings settings;
   settings.partial_swap_enabled = true;
@@ -631,11 +624,11 @@ TEST_F(DisplayTest, DisableSwapUntilResize) {
   display_->Resize(gfx::Size(100, 100));
 
   {
-    RenderPassList pass_list;
-    auto pass = RenderPass::Create();
+    CompositorRenderPassList pass_list;
+    auto pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
     pass_list.push_back(std::move(pass));
 
     SubmitCompositorFrame(&pass_list, local_surface_id1);
@@ -664,11 +657,11 @@ TEST_F(DisplayTest, DisableSwapUntilResize) {
   display_->Resize(gfx::Size(200, 200));
 
   {
-    RenderPassList pass_list;
-    auto pass = RenderPass::Create();
+    CompositorRenderPassList pass_list;
+    auto pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 200, 200);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
     pass_list.push_back(std::move(pass));
 
     SubmitCompositorFrame(&pass_list, local_surface_id2);
@@ -690,7 +683,7 @@ TEST_F(DisplayTest, BackdropFilterTest) {
   settings.partial_swap_enabled = true;
   id_allocator_.GenerateId();
   const LocalSurfaceId local_surface_id(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+      id_allocator_.GetCurrentLocalSurfaceId());
 
   // Set up first display.
   SetUpSoftwareDisplay(settings);
@@ -726,21 +719,21 @@ TEST_F(DisplayTest, BackdropFilterTest) {
   const gfx::Rect sub_surface_rect(5, 5, 25, 25);
   const gfx::Rect no_damage;
 
-  uint64_t next_render_pass_id = 1;
+  CompositorRenderPassId::Generator render_pass_id_generator;
   for (size_t frame_num = 1; frame_num <= 2; ++frame_num) {
     bool first_frame = frame_num == 1;
     ResetDamageForTest();
     {
       // Sub-surface with backdrop-filter.
-      RenderPassList pass_list;
-      auto bd_pass = RenderPass::Create();
+      CompositorRenderPassList pass_list;
+      auto bd_pass = CompositorRenderPass::Create();
       cc::FilterOperations backdrop_filters;
       backdrop_filters.Append(cc::FilterOperation::CreateBlurFilter(5.0));
-      bd_pass->SetAll(
-          next_render_pass_id++, sub_surface_rect, no_damage, gfx::Transform(),
-          cc::FilterOperations(), backdrop_filters,
-          gfx::RRectF(gfx::RectF(sub_surface_rect), 0),
-          gfx::ContentColorUsage::kSRGB, false, false, false, false);
+      bd_pass->SetAll(render_pass_id_generator.GenerateNextId(),
+                      sub_surface_rect, no_damage, gfx::Transform(),
+                      cc::FilterOperations(), backdrop_filters,
+                      gfx::RRectF(gfx::RectF(sub_surface_rect), 0), false,
+                      false, false, false);
       pass_list.push_back(std::move(bd_pass));
 
       CompositorFrame frame = CompositorFrameBuilder()
@@ -752,11 +745,11 @@ TEST_F(DisplayTest, BackdropFilterTest) {
 
     {
       // Sub-surface with damage.
-      RenderPassList pass_list;
-      auto other_pass = RenderPass::Create();
+      CompositorRenderPassList pass_list;
+      auto other_pass = CompositorRenderPass::Create();
       other_pass->output_rect = gfx::Rect(display_size);
       other_pass->damage_rect = damage_rect;
-      other_pass->id = next_render_pass_id++;
+      other_pass->id = render_pass_id_generator.GenerateNextId();
       pass_list.push_back(std::move(other_pass));
 
       CompositorFrame frame = CompositorFrameBuilder()
@@ -767,11 +760,11 @@ TEST_F(DisplayTest, BackdropFilterTest) {
     }
 
     {
-      RenderPassList pass_list;
-      auto pass = RenderPass::Create();
+      CompositorRenderPassList pass_list;
+      auto pass = CompositorRenderPass::Create();
       pass->output_rect = gfx::Rect(display_size);
       pass->damage_rect = damage_rect;
-      pass->id = next_render_pass_id++;
+      pass->id = render_pass_id_generator.GenerateNextId();
 
       // Embed sub surface 1, with backdrop filter.
       auto* shared_quad_state1 = pass->CreateAndAppendSharedQuadState();
@@ -863,8 +856,7 @@ TEST_F(DisplayTest, ContextLossInformsClient) {
 TEST_F(DisplayTest, CompositorFrameDamagesCorrectDisplay) {
   RendererSettings settings;
   id_allocator_.GenerateId();
-  LocalSurfaceId local_surface_id(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+  LocalSurfaceId local_surface_id(id_allocator_.GetCurrentLocalSurfaceId());
 
   // Set up first display.
   SetUpSoftwareDisplay(settings);
@@ -898,11 +890,11 @@ TEST_F(DisplayTest, CompositorFrameDamagesCorrectDisplay) {
   EXPECT_FALSE(scheduler2->damaged());
 
   // Submit a frame for display_ with full damage.
-  RenderPassList pass_list;
-  auto pass = RenderPass::Create();
+  CompositorRenderPassList pass_list;
+  auto pass = CompositorRenderPass::Create();
   pass->output_rect = gfx::Rect(0, 0, 100, 100);
   pass->damage_rect = gfx::Rect(10, 10, 1, 1);
-  pass->id = 1;
+  pass->id = CompositorRenderPassId{1};
   pass_list.push_back(std::move(pass));
 
   SubmitCompositorFrame(&pass_list, local_surface_id);
@@ -921,10 +913,8 @@ TEST_F(DisplayTest, DrawOcclusionWithBlending) {
   SetUpGpuDisplay(settings);
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
-  CompositorFrame frame = CompositorFrameBuilder()
-                              .AddDefaultRenderPass()
-                              .AddDefaultRenderPass()
-                              .Build();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame(/*num_render_passes=*/2);
+
   bool is_clipped = false;
   bool are_contents_opaque = true;
   float opacity = 1.f;
@@ -971,10 +961,7 @@ TEST_F(DisplayTest, DrawOcclusionWithIntersectingBackdropFilter) {
   SetUpGpuDisplay(settings);
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
-  CompositorFrame frame = CompositorFrameBuilder()
-                              .AddDefaultRenderPass()
-                              .AddDefaultRenderPass()
-                              .Build();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame(/*num_render_passes=*/2);
 
   bool is_clipped = false;
   bool are_contents_opaque = true;
@@ -997,9 +984,10 @@ TEST_F(DisplayTest, DrawOcclusionWithIntersectingBackdropFilter) {
   cc::FilterOperations backdrop_filters;
   backdrop_filters.Append(cc::FilterOperation::CreateBlurFilter(5.0));
   bd_render_pass->SetAll(
-      2, bd_filter_rect, gfx::Rect(), gfx::Transform(), cc::FilterOperations(),
-      backdrop_filters, gfx::RRectF(gfx::RectF(bd_filter_rect), 0),
-      gfx::ContentColorUsage::kSRGB, false, false, false, false);
+      AggregatedRenderPassId{2}, bd_filter_rect, gfx::Rect(), gfx::Transform(),
+      cc::FilterOperations(), backdrop_filters,
+      gfx::RRectF(gfx::RectF(bd_filter_rect), 0), gfx::ContentColorUsage::kSRGB,
+      false, false, false, false);
 
   // Add quads to root render pass
   for (int i = 0; i < 3; i++) {
@@ -1009,8 +997,9 @@ TEST_F(DisplayTest, DrawOcclusionWithIntersectingBackdropFilter) {
         is_clipped, are_contents_opaque, opacity, SkBlendMode::kSrcOver, 0);
 
     if (i == 0) {  // Backdrop filter quad
-      auto* new_quad = root_render_pass->quad_list
-                           .AllocateAndConstruct<RenderPassDrawQuad>();
+      auto* new_quad =
+          root_render_pass->quad_list
+              .AllocateAndConstruct<AggregatedRenderPassDrawQuad>();
       new_quad->SetNew(shared_quad_states[i], rects[i], rects[i],
                        bd_render_pass->id, 2, gfx::RectF(), gfx::Size(),
                        gfx::Vector2dF(1, 1), gfx::PointF(), gfx::RectF(), false,
@@ -1047,7 +1036,8 @@ TEST_F(DisplayTest, DrawOcclusionWithNonCoveringDrawQuad) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
+
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(50, 50, 100, 100);
   gfx::Rect rect3(25, 25, 50, 100);
@@ -1269,7 +1259,8 @@ TEST_F(DisplayTest, DrawOcclusionWithSingleOverlapBehindDisjointedDrawQuads) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
+
   std::vector<gfx::Rect> rects;
   rects.emplace_back(0, 0, 100, 100);
   rects.emplace_back(150, 0, 150, 150);
@@ -1324,7 +1315,7 @@ TEST_F(DisplayTest, DrawOcclusionWithMultipleOverlapBehindDisjointedDrawQuads) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   std::vector<gfx::Rect> rects;
   rects.emplace_back(0, 0, 100, 100);
   rects.emplace_back(150, 0, 150, 150);
@@ -1377,7 +1368,7 @@ TEST_F(DisplayTest, CompositorFrameWithOverlapDrawQuad) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(25, 25, 50, 50);
   gfx::Rect rect3(50, 50, 50, 25);
@@ -1508,7 +1499,7 @@ TEST_F(DisplayTest, CompositorFrameWithTransformer) {
 
   // Rect 2, 3, 4 are contained in rect 1 only after applying the half scale
   // matrix. They are repetition of CompositorFrameWithOverlapDrawQuad.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(50, 50, 100, 100);
   gfx::Rect rect3(100, 100, 100, 50);
@@ -1776,7 +1767,7 @@ TEST_F(DisplayTest, CompositorFrameWithEpsilonScaleTransform) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect(0, 0, 100, 100);
 
   SkScalar epsilon = 0.000000001f;
@@ -1886,7 +1877,7 @@ TEST_F(DisplayTest, CompositorFrameWithNegativeScaleTransform) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect(0, 0, 100, 100);
 
   gfx::Transform negative_scale;
@@ -2008,7 +1999,7 @@ TEST_F(DisplayTest, CompositorFrameWithRotation) {
   display_->Initialize(&client, manager_.surface_manager());
 
   // rect 2 is inside rect 1 initially.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(75, 75, 10, 10);
 
@@ -2135,7 +2126,7 @@ TEST_F(DisplayTest, CompositorFrameWithPerspective) {
   display_->Initialize(&client, manager_.surface_manager());
 
   // rect 2 is inside rect 1 initially.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(10, 10, 1, 1);
 
@@ -2208,7 +2199,7 @@ TEST_F(DisplayTest, CompositorFrameWithOpacityChange) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(25, 25, 10, 10);
 
@@ -2272,7 +2263,7 @@ TEST_F(DisplayTest, CompositorFrameWithOpaquenessChange) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(25, 25, 10, 10);
 
@@ -2337,7 +2328,7 @@ TEST_F(DisplayTest, CompositorFrameZTranslate) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(0, 0, 200, 100);
 
@@ -2391,7 +2382,7 @@ TEST_F(DisplayTest, CompositorFrameWithTranslateTransformer) {
   display_->Initialize(&client, manager_.surface_manager());
 
   // rect 2 and 3 are outside rect 1 initially.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(120, 120, 10, 10);
   gfx::Rect rect3(100, 100, 100, 20);
@@ -2510,7 +2501,7 @@ TEST_F(DisplayTest, CompositorFrameWithCombinedSharedQuadState) {
   display_->Initialize(&client, manager_.surface_manager());
 
   // rect 3 is inside of combined rect of rect 1 and rect 2.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(100, 0, 60, 60);
   gfx::Rect rect3(10, 10, 120, 30);
@@ -2634,10 +2625,7 @@ TEST_F(DisplayTest, DrawOcclusionWithMultipleRenderPass) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = CompositorFrameBuilder()
-                              .AddDefaultRenderPass()
-                              .AddDefaultRenderPass()
-                              .Build();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame(/*num_render_passes=*/2);
 
   // rect 3 is inside of combined rect of rect 1 and rect 2.
   // rect 4 is identical to rect 3, but in a separate render pass.
@@ -2686,12 +2674,13 @@ TEST_F(DisplayTest, CompositorFrameWithMultipleRenderPass) {
   display_->Initialize(&client, manager_.surface_manager());
 
   // rect 3 is inside of combined rect of rect 1 and rect 2.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(100, 0, 60, 60);
 
-  std::unique_ptr<RenderPass> render_pass2 = RenderPass::Create();
-  render_pass2->SetNew(1, gfx::Rect(), gfx::Rect(), gfx::Transform());
+  auto render_pass2 = std::make_unique<AggregatedRenderPass>();
+  render_pass2->SetNew(AggregatedRenderPassId{1}, gfx::Rect(), gfx::Rect(),
+                       gfx::Transform());
   frame.render_pass_list.push_back(std::move(render_pass2));
   gfx::Rect rect3(10, 10, 120, 30);
 
@@ -2759,17 +2748,18 @@ TEST_F(DisplayTest, CompositorFrameWithCoveredRenderPass) {
   display_->Initialize(&client, manager_.surface_manager());
 
   // rect 3 is inside of combined rect of rect 1 and rect 2.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
 
-  std::unique_ptr<RenderPass> render_pass2 = RenderPass::Create();
-  render_pass2->SetNew(1, gfx::Rect(), gfx::Rect(), gfx::Transform());
+  auto render_pass2 = std::make_unique<AggregatedRenderPass>();
+  render_pass2->SetNew(AggregatedRenderPassId{1}, gfx::Rect(), gfx::Rect(),
+                       gfx::Transform());
   frame.render_pass_list.push_back(std::move(render_pass2));
 
   bool is_clipped = false;
   bool opaque_content = true;
   float opacity = 1.f;
-  RenderPassId render_pass_id = 1;
+  AggregatedRenderPassId render_pass_id{1};
   ResourceId mask_resource_id = 2;
 
   SharedQuadState* shared_quad_state =
@@ -2778,12 +2768,13 @@ TEST_F(DisplayTest, CompositorFrameWithCoveredRenderPass) {
                    ->quad_list.AllocateAndConstruct<SolidColorDrawQuad>();
   SharedQuadState* shared_quad_state2 =
       frame.render_pass_list.at(1)->CreateAndAppendSharedQuadState();
-  auto* quad1 = frame.render_pass_list.front()
-                    ->quad_list.AllocateAndConstruct<RenderPassDrawQuad>();
+  auto* quad1 =
+      frame.render_pass_list.front()
+          ->quad_list.AllocateAndConstruct<AggregatedRenderPassDrawQuad>();
 
   {
     // rect1 is a DrawQuad from SQS1 and which is also the RenderPass rect
-    // from SQS2. The RenderPassDrawQuad should not be occluded.
+    // from SQS2. The AggregatedRenderPassDrawQuad should not be occluded.
     //  rect1
     //   +----+
     //   |    |
@@ -2826,7 +2817,7 @@ TEST_F(DisplayTest, CompositorFrameWithClip) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(50, 50, 25, 25);
   gfx::Rect clip_rect(0, 0, 60, 60);
@@ -2941,7 +2932,7 @@ TEST_F(DisplayTest, CompositorFrameWithCopyRequest) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(50, 50, 25, 25);
 
@@ -2987,7 +2978,7 @@ TEST_F(DisplayTest, CompositorFrameWithRenderPass) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(50, 0, 100, 100);
   gfx::Rect rect3(0, 0, 25, 25);
@@ -2998,17 +2989,19 @@ TEST_F(DisplayTest, CompositorFrameWithRenderPass) {
 
   bool is_clipped = false;
   bool opaque_content = true;
-  RenderPassId render_pass_id = 1;
+  AggregatedRenderPassId render_pass_id{1};
   ResourceId mask_resource_id = 2;
   float opacity = 1.f;
   SharedQuadState* shared_quad_state =
       frame.render_pass_list.front()->CreateAndAppendSharedQuadState();
-  auto* R1 = frame.render_pass_list.front()
-                 ->quad_list.AllocateAndConstruct<RenderPassDrawQuad>();
+  auto* R1 =
+      frame.render_pass_list.front()
+          ->quad_list.AllocateAndConstruct<AggregatedRenderPassDrawQuad>();
   SharedQuadState* shared_quad_state2 =
       frame.render_pass_list.front()->CreateAndAppendSharedQuadState();
-  auto* R2 = frame.render_pass_list.front()
-                 ->quad_list.AllocateAndConstruct<RenderPassDrawQuad>();
+  auto* R2 =
+      frame.render_pass_list.front()
+          ->quad_list.AllocateAndConstruct<AggregatedRenderPassDrawQuad>();
   SharedQuadState* shared_quad_state3 =
       frame.render_pass_list.front()->CreateAndAppendSharedQuadState();
   auto* D1 = frame.render_pass_list.front()
@@ -3048,8 +3041,8 @@ TEST_F(DisplayTest, CompositorFrameWithRenderPass) {
     EXPECT_EQ(4u, NumVisibleRects(frame.render_pass_list.front()->quad_list));
     display_->RemoveOverdrawQuads(&frame);
     // As shown in the image above, the opaque region |d1| and |d2| does not
-    // occlude each other. Since RenderPassDrawQuad |r1| and |r2| cannot be
-    // removed to reduce overdraw, |quad_list| remains unchanged.
+    // occlude each other. Since AggregatedRenderPassDrawQuad |r1| and |r2|
+    // cannot be removed to reduce overdraw, |quad_list| remains unchanged.
     EXPECT_EQ(4u, NumVisibleRects(frame.render_pass_list.front()->quad_list));
     EXPECT_EQ(rect1.ToString(), frame.render_pass_list.front()
                                     ->quad_list.ElementAt(0)
@@ -3096,8 +3089,8 @@ TEST_F(DisplayTest, CompositorFrameWithRenderPass) {
     EXPECT_EQ(4u, NumVisibleRects(frame.render_pass_list.front()->quad_list));
     display_->RemoveOverdrawQuads(&frame);
     // As shown in the image above, the opaque region |d1| and |d2| does not
-    // occlude each other. Since RenderPassDrawQuad |r1| and |r2| cannot be
-    // removed to reduce overdraw, |quad_list| remains unchanged.
+    // occlude each other. Since AggregatedRenderPassDrawQuad |r1| and |r2|
+    // cannot be removed to reduce overdraw, |quad_list| remains unchanged.
     EXPECT_EQ(4u, NumVisibleRects(frame.render_pass_list.front()->quad_list));
     EXPECT_EQ(rect5.ToString(), frame.render_pass_list.front()
                                     ->quad_list.ElementAt(0)
@@ -3143,8 +3136,8 @@ TEST_F(DisplayTest, CompositorFrameWithRenderPass) {
     EXPECT_EQ(4u, NumVisibleRects(frame.render_pass_list.front()->quad_list));
     display_->RemoveOverdrawQuads(&frame);
     // As shown in the image above, the opaque region |d2| is contained in |d1|
-    // Since RenderPassDrawQuad |r1| and |r2| cannot be removed to reduce
-    // overdraw, |quad_list| is reduced by 1.
+    // Since AggregatedRenderPassDrawQuad |r1| and |r2| cannot be removed to
+    // reduce overdraw, |quad_list| is reduced by 1.
     EXPECT_EQ(3u, NumVisibleRects(frame.render_pass_list.front()->quad_list));
     EXPECT_EQ(rect5.ToString(), frame.render_pass_list.front()
                                     ->quad_list.ElementAt(0)
@@ -3165,7 +3158,7 @@ TEST_F(DisplayTest, CompositorFrameWithMultipleDrawQuadInSharedQuadState) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect1_1(0, 0, 50, 50);
   gfx::Rect rect1_2(50, 0, 50, 50);
@@ -3340,7 +3333,7 @@ TEST_F(DisplayTest, CompositorFrameWithNonInvertibleTransform) {
 
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect rect1(0, 0, 100, 100);
   gfx::Rect rect2(10, 10, 50, 50);
   gfx::Rect rect3(0, 0, 10, 10);
@@ -3443,7 +3436,7 @@ TEST_F(DisplayTest, DrawOcclusionWithLargeDrawQuad) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   // The size of this DrawQuad will be 237790x237790 > 2^32 (uint32_t.max())
   // which caused the integer overflow in the bug.
   gfx::Rect rect1(237790, 237790);
@@ -3481,7 +3474,7 @@ TEST_F(DisplayTest, CompositorFrameWithPresentationToken) {
   RendererSettings settings;
   id_allocator_.GenerateId();
   const LocalSurfaceId local_surface_id(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+      id_allocator_.GetCurrentLocalSurfaceId());
 
   // Set up first display.
   SetUpSoftwareDisplay(settings);
@@ -3516,11 +3509,11 @@ TEST_F(DisplayTest, CompositorFrameWithPresentationToken) {
 
   {
     // Submit a frame for display_ with full damage.
-    RenderPassList pass_list;
-    auto pass = RenderPass::Create();
+    CompositorRenderPassList pass_list;
+    auto pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(display_size);
     pass->damage_rect = gfx::Rect(display_size);
-    pass->id = 1;
+    pass->id = CompositorRenderPassId{1};
 
     auto* shared_quad_state1 = pass->CreateAndAppendSharedQuadState();
     gfx::Rect rect1(display_size);
@@ -3594,23 +3587,19 @@ TEST_F(DisplayTest, BeginFrameThrottling) {
 
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
-  display_->SetLocalSurfaceId(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-      1.f);
+  display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
   support_->SetNeedsBeginFrame(true);
 
   // Helper fn to submit a CF.
   auto submit_frame = [this]() {
-    RenderPassList pass_list;
-    auto pass = RenderPass::Create();
+    CompositorRenderPassList pass_list;
+    auto pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
     pass_list.push_back(std::move(pass));
 
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
   };
 
   // Submit kUndrawnFrameLimit+1 frames. BeginFrames should be throttled only
@@ -3669,23 +3658,19 @@ TEST_F(DisplayTest, BeginFrameThrottlingMultipleSurfaces) {
 
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
-  display_->SetLocalSurfaceId(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-      1.f);
+  display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
   support_->SetNeedsBeginFrame(true);
 
   // Helper fn to submit a CF.
   auto submit_frame = [this]() {
-    RenderPassList pass_list;
-    auto pass = RenderPass::Create();
+    CompositorRenderPassList pass_list;
+    auto pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
     pass_list.push_back(std::move(pass));
 
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
   };
 
   // Submit kUndrawnFrameLimit frames. BeginFrames should be throttled only
@@ -3719,9 +3704,7 @@ TEST_F(DisplayTest, BeginFrameThrottlingMultipleSurfaces) {
 
   // Now the last surface is drawn. This should unblock us to submit
   // kUndrawnFrameLimit+1 frames again.
-  display_->SetLocalSurfaceId(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-      1.f);
+  display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
   display_->DrawAndSwap(base::TimeTicks::Now());
   id_allocator_.GenerateId();
   for (uint32_t i = 0; i < CompositorFrameSinkSupport::kUndrawnFrameLimit + 1;
@@ -3744,9 +3727,7 @@ TEST_F(DisplayTest, DontThrottleWhenParentBlocked) {
 
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
-  display_->SetLocalSurfaceId(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-      1.f);
+  display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
   support_->SetNeedsBeginFrame(true);
 
   // Create frame sink for a sub surface.
@@ -3791,9 +3772,8 @@ TEST_F(DisplayTest, DontThrottleWhenParentBlocked) {
                                      std::numeric_limits<uint32_t>::max(),
                                      base::TimeDelta::FromSeconds(1), false))
           .Build();
-  support_->SubmitCompositorFrame(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-      std::move(frame));
+  support_->SubmitCompositorFrame(id_allocator_.GetCurrentLocalSurfaceId(),
+                                  std::move(frame));
 
   for (uint32_t i = 0; i < CompositorFrameSinkSupport::kUndrawnFrameLimit * 3;
        ++i) {
@@ -3825,7 +3805,7 @@ TEST_F(DisplayTest, InvalidPresentationTimestamps) {
   RendererSettings settings;
   id_allocator_.GenerateId();
   const LocalSurfaceId local_surface_id(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+      id_allocator_.GetCurrentLocalSurfaceId());
 
   // Set up first display.
   SetUpSoftwareDisplay(settings);
@@ -3953,7 +3933,7 @@ TEST_F(DisplayTest, DrawOcclusionWithRoundedCornerDoesNotOcclude) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
 
   // The quad with rounded corner does not completely cover the quad below it.
   // The corners of the below quad are visiblg through the clipped corners.
@@ -4010,7 +3990,7 @@ TEST_F(DisplayTest, DrawOcclusionWithRoundedCornerDoesOcclude) {
   display_->Initialize(&client, manager_.surface_manager());
 
   // The quad with rounded corner completely covers the quad below it.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
   gfx::Rect quad_rect(10, 10, 1000, 1000);
   gfx::RRectF rounded_corner_bounds(gfx::RectF(quad_rect), 10.f);
   gfx::Rect occluded_quad_rect(13, 13, 994, 994);
@@ -4065,7 +4045,7 @@ TEST_F(DisplayTest, DrawOcclusionSplit) {
 
   // The two partially occluded quads will be split into two additional quads,
   // preserving only the visible regions.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
 
   //  +--------------------------------+
   //  |***+----------------------+ <- Large occluding Rect
@@ -4158,7 +4138,7 @@ TEST_F(DisplayTest, FirstPassVisibleComplexityReduction) {
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
 
   const bool is_clipped = false;
   const bool are_contents_opaque = true;
@@ -4269,12 +4249,10 @@ TEST_F(DisplayTest, DrawOcclusionSplitDeviceScaleFactorFractional) {
 
   StubDisplayClient client;
   display_->Initialize(&client, manager_.surface_manager());
-  display_->SetLocalSurfaceId(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-      1.5f);
+  display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.5f);
   display_->Resize(gfx::Size(1000, 1000));
 
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
 
   const bool is_clipped = false;
   const bool are_contents_opaque = true;
@@ -4319,7 +4297,7 @@ TEST_F(DisplayTest, DrawOcclusionWithRoundedCornerPartialOcclude) {
   display_->Initialize(&client, manager_.surface_manager());
 
   // The quad with rounded corner completely covers the quad below it.
-  CompositorFrame frame = MakeDefaultCompositorFrame();
+  AggregatedFrame frame = MakeDefaultAggregatedFrame();
 
   //      +----------------------+
   //      |                      | <- Large occluding Rect
@@ -4433,8 +4411,7 @@ TEST_F(DisplayTest, DisplayTransformHint) {
   display_->Initialize(&client, manager_.surface_manager());
 
   id_allocator_.GenerateId();
-  LocalSurfaceId local_surface_id(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+  LocalSurfaceId local_surface_id(id_allocator_.GetCurrentLocalSurfaceId());
   display_->SetLocalSurfaceId(local_surface_id, 1.f);
 
   constexpr gfx::Size kSize = gfx::Size(100, 80);
@@ -4498,15 +4475,13 @@ TEST_F(DisplayTest, DisplaySizeMismatch) {
   display_->Initialize(&client, manager_.surface_manager());
 
   id_allocator_.GenerateId();
-  display_->SetLocalSurfaceId(
-      id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-      1.f);
+  display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
   display_->Resize(gfx::Size(100, 100));
 
   // Pass has copy output request but wrong size so it should be drawn, but not
   // swapped.
   {
-    std::unique_ptr<RenderPass> pass = RenderPass::Create();
+    auto pass = CompositorRenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 99, 99);
     pass->damage_rect = gfx::Rect(10, 10, 0, 0);
     base::RunLoop copy_run_loop;
@@ -4515,14 +4490,12 @@ TEST_F(DisplayTest, DisplaySizeMismatch) {
         CopyOutputRequest::ResultFormat::RGBA_BITMAP,
         base::BindOnce(&CopyCallback, &copy_called,
                        copy_run_loop.QuitClosure())));
-    pass->id = 1u;
+    pass->id = CompositorRenderPassId{1u};
 
-    RenderPassList pass_list;
+    CompositorRenderPassList pass_list;
     pass_list.push_back(std::move(pass));
 
-    SubmitCompositorFrame(
-        &pass_list,
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    SubmitCompositorFrame(&pass_list, id_allocator_.GetCurrentLocalSurfaceId());
     EXPECT_TRUE(scheduler_->damaged());
 
     display_->DrawAndSwap(base::TimeTicks::Now());
@@ -4538,6 +4511,235 @@ TEST_F(DisplayTest, DisplaySizeMismatch) {
     // Expect there is no pending
     EXPECT_EQ(pending_presentation_group_timings_size(), 0u);
   }
+}
+
+class SkiaDelegatedInkRendererTest : public DisplayTest {
+ public:
+  void SetUpRenderers() {
+    // First set up the display to use the Skia renderer.
+    RendererSettings settings;
+    settings.use_skia_renderer = true;
+    SetUpGpuDisplaySkia(settings);
+
+    // Initialize the renderer and create an ink renderer.
+    StubDisplayClient client;
+    display_->Initialize(&client, manager_.surface_manager());
+    display_->renderer_for_testing()->CreateDelegatedInkPointRenderer();
+  }
+
+  DelegatedInkPointRendererBase* ink_renderer() {
+    return display_->renderer_for_testing()->GetDelegatedInkPointRenderer();
+  }
+
+  const std::map<base::TimeTicks, gfx::PointF>& stored_points() {
+    return ink_renderer()->GetPointsMapForTest();
+  }
+
+  void CreateAndStoreDelegatedInkPoint(const gfx::PointF& point,
+                                       base::TimeTicks timestamp) {
+    ink_points_.emplace_back(point, timestamp);
+    ink_renderer()->StoreDelegatedInkPoint(ink_points_.back());
+  }
+
+  void StoreAlreadyCreatedDelegatedInkPoints() {
+    for (DelegatedInkPoint ink_point : ink_points_)
+      ink_renderer()->StoreDelegatedInkPoint(ink_point);
+  }
+
+  void SendMetadata(DelegatedInkMetadata metadata) {
+    ink_renderer()->SetDelegatedInkMetadata(
+        std::make_unique<DelegatedInkMetadata>(metadata));
+  }
+
+  DelegatedInkMetadata MakeAndSendMetadataFromStoredInkPoint(
+      int index,
+      float diameter,
+      SkColor color,
+      const gfx::RectF& presentation_area) {
+    EXPECT_GE(index, 0);
+    EXPECT_LT(index, ink_points_size());
+
+    DelegatedInkMetadata metadata(ink_points_[index].point(), diameter, color,
+                                  ink_points_[index].timestamp(),
+                                  presentation_area, base::TimeTicks::Now());
+    SendMetadata(metadata);
+    return metadata;
+  }
+
+  // |expected_bucket| containing base::TimeDelta::Min() is interpreted to mean
+  // that expected total count of the histogram should be 0.
+  void FinalizePathAndCheckHistograms(base::TimeDelta expected_bucket) {
+    base::HistogramTester histograms;
+    ink_renderer()->FinalizePathForDraw();
+
+    if (expected_bucket == base::TimeDelta::Min()) {
+      histograms.ExpectTotalCount(
+          "Renderer.DelegatedInkTrail.LatencyImprovement.Skia."
+          "WithoutPrediction",
+          0);
+    } else {
+      histograms.ExpectTotalCount(
+          "Renderer.DelegatedInkTrail.LatencyImprovement.Skia."
+          "WithoutPrediction",
+          1);
+
+      histograms.ExpectTimeBucketCount(
+          "Renderer.DelegatedInkTrail.LatencyImprovement.Skia."
+          "WithoutPrediction",
+          expected_bucket, 1);
+    }
+  }
+
+  void DrawDelegatedInkTrail() {
+    SkCanvas canvas;
+    static_cast<DelegatedInkPointRendererSkia*>(ink_renderer())
+        ->DrawDelegatedInkTrail(&canvas);
+  }
+
+  int GetPathPointCount() { return ink_renderer()->GetPathPointCountForTest(); }
+
+  // Explicitly get the metadata that is stored on the renderer.
+  const DelegatedInkMetadata* GetMetadataFromRenderer() {
+    return ink_renderer()->GetMetadataForTest();
+  }
+
+  const DelegatedInkPoint& ink_point(int index) {
+    EXPECT_GE(index, 0);
+    EXPECT_LT(index, ink_points_size());
+    return ink_points_[index];
+  }
+
+  int ink_points_size() { return ink_points_.size(); }
+
+ private:
+  std::vector<DelegatedInkPoint> ink_points_;
+};
+
+// Testing filtering points in the the delegated ink renderer when the skia
+// renderer is in use.
+TEST_F(SkiaDelegatedInkRendererTest, SkiaDelegatedInkRendererFilteringPoints) {
+  SetUpRenderers();
+
+  // First, a sanity check.
+  EXPECT_EQ(0, static_cast<int>(stored_points().size()));
+
+  // Insert 3 arbitrary points into the ink renderer to confirm that they go
+  // where we expect and are all stored correctly.
+  const int kInitialDelegatedPoints = 3;
+  base::TimeTicks timestamp = base::TimeTicks::Now();
+  gfx::PointF point(10, 10);
+  for (int i = 0; i < kInitialDelegatedPoints; ++i) {
+    CreateAndStoreDelegatedInkPoint(point, timestamp);
+    point.Offset(10, 10);
+    timestamp += base::TimeDelta::FromMilliseconds(5);
+  }
+
+  EXPECT_EQ(kInitialDelegatedPoints, static_cast<int>(stored_points().size()));
+
+  // No metadata has been provided yet, so filtering shouldn't occur and all
+  // points should still exist after a FinalizePath() call.
+  FinalizePathAndCheckHistograms(base::TimeDelta::Min());
+
+  EXPECT_EQ(kInitialDelegatedPoints, static_cast<int>(stored_points().size()));
+
+  // Now provide metadata with a timestamp matching one of the points to
+  // confirm that earlier points are removed and later points remain.
+  const int kInkPointForMetadata = 1;
+  const float kDiameter = 1.f;
+  DelegatedInkMetadata metadata = MakeAndSendMetadataFromStoredInkPoint(
+      kInkPointForMetadata, kDiameter, SK_ColorBLACK, gfx::RectF());
+
+  // The histogram should count one in the bucket that is the difference between
+  // the latest point stored and the metadata.
+  FinalizePathAndCheckHistograms(ink_point(ink_points_size() - 1).timestamp() -
+                                 metadata.timestamp());
+
+  EXPECT_EQ(kInitialDelegatedPoints - kInkPointForMetadata,
+            static_cast<int>(stored_points().size()));
+  EXPECT_EQ(metadata.point(), stored_points().begin()->second);
+  EXPECT_EQ(ink_point(ink_points_size() - 1).point(),
+            stored_points().rbegin()->second);
+
+  // Confirm that the metadata is cleared when DrawDelegatedInkTrail() is
+  // called.
+  DrawDelegatedInkTrail();
+  EXPECT_FALSE(GetMetadataFromRenderer());
+
+  // Add more points than the maximum that will be stored to confirm only the
+  // max is stored and the correct ones are removed first.
+  const int kPointsBeyondMaxAllowed = 2;
+  StoreAlreadyCreatedDelegatedInkPoints();
+  while (ink_points_size() <
+         kMaximumDelegatedInkPointsStored + kPointsBeyondMaxAllowed) {
+    CreateAndStoreDelegatedInkPoint(point, timestamp);
+    point.Offset(10, 10);
+    timestamp += base::TimeDelta::FromMilliseconds(10);
+  }
+
+  EXPECT_EQ(kMaximumDelegatedInkPointsStored,
+            static_cast<int>(stored_points().size()));
+  EXPECT_EQ(ink_point(kPointsBeyondMaxAllowed).point(),
+            stored_points().begin()->second);
+  EXPECT_EQ(ink_point(ink_points_size() - 1).point(),
+            stored_points().rbegin()->second);
+
+  // Now send metadata with a timestamp before all of the points that are
+  // currently stored to confirm that no points are filtered out and the number
+  // stored remains the same while the histogram records 0 improvement.
+  const uint64_t kExpectedPoints = stored_points().size();
+  SendMetadata(metadata);
+  FinalizePathAndCheckHistograms(base::TimeDelta::FromMilliseconds(0));
+  EXPECT_EQ(kExpectedPoints, stored_points().size());
+}
+
+// Confirm that the delegated ink trail histograms record latency correctly.
+TEST_F(SkiaDelegatedInkRendererTest, LatencyHistograms) {
+  SetUpRenderers();
+
+  // Confirm that nothing is counted in histogram when there is no metadata or
+  // points to draw.
+  FinalizePathAndCheckHistograms(base::TimeDelta::Min());
+
+  // Insert 4 arbitrary points into the ink renderer to later draw.
+  base::TimeTicks timestamp = base::TimeTicks::Now();
+  CreateAndStoreDelegatedInkPoint(gfx::PointF(20, 19), timestamp);
+  CreateAndStoreDelegatedInkPoint(
+      gfx::PointF(15, 19), timestamp + base::TimeDelta::FromMilliseconds(8));
+  CreateAndStoreDelegatedInkPoint(
+      gfx::PointF(16, 28), timestamp + base::TimeDelta::FromMilliseconds(16));
+  CreateAndStoreDelegatedInkPoint(
+      gfx::PointF(29, 35), timestamp + base::TimeDelta::FromMilliseconds(24));
+
+  // Provide a metadata so that points can be drawn, based on the first ink
+  // point that was sent.
+  const float kDiameter = 11.99f;
+  MakeAndSendMetadataFromStoredInkPoint(/*index*/ 0, kDiameter, SK_ColorBLACK,
+                                        gfx::RectF());
+
+  // 24 ms bucket should have one counted because that's the difference between
+  // the latest point and the metadata.
+  FinalizePathAndCheckHistograms(base::TimeDelta::FromMilliseconds(24));
+
+  // Now provide metadata that matches the final ink point provided, so that
+  // everything earlier is filtered out. Then the histogram will count 1 in the
+  // 0 ms bucket.
+  MakeAndSendMetadataFromStoredInkPoint(/*index*/ 3, kDiameter, SK_ColorBLACK,
+                                        gfx::RectF());
+  FinalizePathAndCheckHistograms(base::TimeDelta::FromMilliseconds(0));
+
+  // DrawDelegatedInkTrail should clear the metadata, so finalizing the path
+  // shouldn't record anything in the histogram.
+  DrawDelegatedInkTrail();
+  FinalizePathAndCheckHistograms(base::TimeDelta::Min());
+
+  // Send a few more points but no metadata to confirm that nothing is counted.
+  timestamp = base::TimeTicks::Now();
+  CreateAndStoreDelegatedInkPoint(gfx::PointF(85, 56), timestamp);
+  CreateAndStoreDelegatedInkPoint(
+      gfx::PointF(96, 70), timestamp + base::TimeDelta::FromMilliseconds(2));
+  CreateAndStoreDelegatedInkPoint(
+      gfx::PointF(112, 94), timestamp + base::TimeDelta::FromMilliseconds(10));
+  FinalizePathAndCheckHistograms(base::TimeDelta::Min());
 }
 
 }  // namespace viz

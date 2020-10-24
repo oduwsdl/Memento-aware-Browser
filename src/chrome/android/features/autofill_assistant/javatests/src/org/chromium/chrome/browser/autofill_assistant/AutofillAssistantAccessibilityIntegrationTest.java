@@ -40,6 +40,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
@@ -48,8 +49,8 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ClientSettingsProto.
 import org.chromium.chrome.browser.autofill_assistant.proto.CollectUserDataProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto.Rectangle;
-import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ShowCastProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.TextInputProto;
@@ -98,7 +99,10 @@ public class AutofillAssistantAccessibilityIntegrationTest {
         mTestRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
                 InstrumentationRegistry.getTargetContext(),
                 mTestRule.getTestServer().getURL(TEST_PAGE)));
-        mTestRule.getActivity().getScrim().disableAnimationForTesting(true);
+        mTestRule.getActivity()
+                .getRootUiCoordinatorForTesting()
+                .getScrimCoordinator()
+                .disableAnimationForTesting(true);
     }
 
     private void setAccessibilityEnabledForTesting(Boolean value) {
@@ -131,9 +135,9 @@ public class AutofillAssistantAccessibilityIntegrationTest {
                                                 "#touch_area_four"))))
                         .build();
         list.add((ActionProto) ActionProto.newBuilder()
-                         .setFocusElement(FocusElementProto.newBuilder()
-                                                  .setElement(element)
-                                                  .setTouchableElementArea(elementArea))
+                         .setShowCast(ShowCastProto.newBuilder()
+                                              .setElementToPresent(element)
+                                              .setTouchableElementArea(elementArea))
                          .build());
 
         // Create enough additional sections to fill up more than the height of the screen.
@@ -189,6 +193,7 @@ public class AutofillAssistantAccessibilityIntegrationTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "Flaky test.  crbug.com/1114867")
     public void testBottomSheetListensToAccessibilityChanges() throws Exception {
         ArrayList<ActionProto> list = new ArrayList<>();
 
@@ -207,9 +212,9 @@ public class AutofillAssistantAccessibilityIntegrationTest {
                                                 "#touch_area_four"))))
                         .build();
         list.add((ActionProto) ActionProto.newBuilder()
-                         .setFocusElement(FocusElementProto.newBuilder()
-                                                  .setElement(element)
-                                                  .setTouchableElementArea(elementArea))
+                         .setShowCast(ShowCastProto.newBuilder()
+                                              .setElementToPresent(element)
+                                              .setTouchableElementArea(elementArea))
                          .build());
 
         // Create enough additional sections to fill up more than the height of the screen.

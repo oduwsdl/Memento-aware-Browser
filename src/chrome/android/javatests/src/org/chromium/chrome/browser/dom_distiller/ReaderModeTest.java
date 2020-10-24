@@ -15,6 +15,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyFloat;
@@ -25,6 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.chromium.chrome.browser.dom_distiller.ReaderModeManager.DOM_DISTILLER_SCHEME;
 
 import android.app.Activity;
+import android.os.Build.VERSION_CODES;
 import android.support.test.InstrumentationRegistry;
 
 import androidx.annotation.NonNull;
@@ -45,10 +47,11 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.download.DownloadTestRule;
 import org.chromium.chrome.browser.download.DownloadTestRule.CustomMainActivityStart;
@@ -58,7 +61,6 @@ import org.chromium.chrome.browser.infobar.ReaderModeInfoBar;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
@@ -68,8 +70,10 @@ import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.dom_distiller.core.DistilledPagePrefs;
 import org.chromium.components.dom_distiller.core.DomDistillerService;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
+import org.chromium.components.infobars.InfoBar;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.NetworkChangeNotifier;
@@ -136,7 +140,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
         });
         CustomTabActivity customTabActivity = waitForCustomTabActivity();
         CriteriaHelper.pollUiThread(
-                () -> Assert.assertThat(customTabActivity.getActivityTab(), notNullValue()));
+                () -> Criteria.checkThat(customTabActivity.getActivityTab(), notNullValue()));
         @NonNull
         Tab distillerViewerTab = Objects.requireNonNull(customTabActivity.getActivityTab());
         waitForDistillation(TITLE, distillerViewerTab);
@@ -159,7 +163,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
         });
         CustomTabActivity customTabActivity = waitForCustomTabActivity();
         CriteriaHelper.pollUiThread(
-                () -> Assert.assertThat(customTabActivity.getActivityTab(), notNullValue()));
+                () -> Criteria.checkThat(customTabActivity.getActivityTab(), notNullValue()));
         @NonNull
         Tab distillerViewerTab = Objects.requireNonNull(customTabActivity.getActivityTab());
         waitForDistillation(TITLE, distillerViewerTab);
@@ -185,7 +189,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
         });
         CustomTabActivity customTabActivity = waitForCustomTabActivity();
         CriteriaHelper.pollUiThread(
-                () -> Assert.assertThat(customTabActivity.getActivityTab(), notNullValue()));
+                () -> Criteria.checkThat(customTabActivity.getActivityTab(), notNullValue()));
         @NonNull
         Tab distillerViewerTab = Objects.requireNonNull(customTabActivity.getActivityTab());
         waitForDistillation(TITLE, distillerViewerTab);
@@ -207,7 +211,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
         // Load the page that has an offline copy. The offline page should be shown.
         Tab tab = mDownloadTestRule.getActivity().getActivityTab();
         Assert.assertFalse(isOfflinePage(tab));
-        mDownloadTestRule.loadUrl(tab.getUrl().getSpec());
+        mDownloadTestRule.loadUrl(ChromeTabUtils.getUrlOnUiThread(tab).getSpec());
         Assert.assertTrue(isOfflinePage(tab));
     }
 
@@ -254,6 +258,8 @@ public class ReaderModeTest implements CustomMainActivityStart {
     @Test
     @MediumTest
     @DisableFeatures(ChromeFeatureList.READER_MODE_IN_CCT)
+    @DisableIf.Build(sdk_is_less_than = VERSION_CODES.M,
+            message = "Failing on Lollipop Phone Tester. https://crbug.com/1120830")
     public void testPreferenceInTab() throws TimeoutException {
         mDownloadTestRule.loadUrl(
                 DomDistillerUrlUtils.getDistillerViewUrlFromUrl(DOM_DISTILLER_SCHEME, mURL, TITLE));
@@ -383,8 +389,13 @@ public class ReaderModeTest implements CustomMainActivityStart {
      */
     private void waitForBackgroundColor(Tab tab, String expectedColor) {
         String query = "window.getComputedStyle(document.body)['backgroundColor']";
-        CriteriaHelper.pollInstrumentationThread(
-                Criteria.equals(expectedColor, () -> runJavaScript(tab, query)));
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                Criteria.checkThat(runJavaScript(tab, query), is(expectedColor));
+            } catch (TimeoutException ex) {
+                throw new CriteriaNotSatisfiedException(ex);
+            }
+        });
     }
 
     /**
@@ -394,8 +405,13 @@ public class ReaderModeTest implements CustomMainActivityStart {
      */
     private void waitForFontSize(Tab tab, String expectedSize) {
         String query = "window.getComputedStyle(document.body)['fontSize']";
-        CriteriaHelper.pollInstrumentationThread(
-                Criteria.equals(expectedSize, () -> runJavaScript(tab, query)));
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                Criteria.checkThat(runJavaScript(tab, query), is(expectedSize));
+            } catch (TimeoutException ex) {
+                throw new CriteriaNotSatisfiedException(ex);
+            }
+        });
     }
 
     /**
@@ -418,10 +434,12 @@ public class ReaderModeTest implements CustomMainActivityStart {
     private void waitForDistillation(@SuppressWarnings("SameParameterValue") String expectedTitle,
             Tab tab) throws TimeoutException {
         CriteriaHelper.pollUiThread(
-                Criteria.equals("chrome-distiller", () -> tab.getUrl().getScheme()));
+                ()
+                        -> Criteria.checkThat(ChromeTabUtils.getUrlOnUiThread(tab).getScheme(),
+                                is("chrome-distiller")));
         ChromeTabUtils.waitForTabPageLoaded(tab, null);
         // Distiller Viewer load the content dynamically, so waitForTabPageLoaded() is not enough.
-        CriteriaHelper.pollUiThread(Criteria.equals(expectedTitle, tab::getTitle));
+        CriteriaHelper.pollUiThread(() -> Criteria.checkThat(tab.getTitle(), is(expectedTitle)));
 
         String innerHtml = getInnerHtml(tab);
         assertThat(innerHtml).contains("article-header");

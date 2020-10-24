@@ -290,7 +290,7 @@ class StaleHostResolverTest : public testing::Test {
     // Run until resolve completes or timeout.
     resolve_closure_ = run_loop.QuitWhenIdleClosure();
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitWhenIdleClosure(),
+        FROM_HERE, resolve_closure_,
         base::TimeDelta::FromSeconds(kWaitTimeoutSec));
     run_loop.Run();
   }
@@ -364,7 +364,7 @@ class StaleHostResolverTest : public testing::Test {
   bool resolve_complete_;
   int resolve_error_;
 
-  base::Closure resolve_closure_;
+  base::RepeatingClosure resolve_closure_;
 };
 
 // Make sure that test harness can be created and destroyed without crashing.
@@ -705,7 +705,7 @@ TEST_F(StaleHostResolverTest, CreatedByContext) {
   std::unique_ptr<net::URLRequestContext> context(builder.Build());
 
   // Experimental options ensure context's resolver is a StaleHostResolver.
-  SetResolver(reinterpret_cast<StaleHostResolver*>(context->host_resolver()),
+  SetResolver(static_cast<StaleHostResolver*>(context->host_resolver()),
               context.get());
   // Note: Experimental config above sets 0ms stale delay.
   CreateCacheEntry(kAgeExpiredSec, net::OK);

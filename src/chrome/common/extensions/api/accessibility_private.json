@@ -35,7 +35,7 @@
       {
         "id": "Gesture",
         "type": "string",
-        "enum": [ "click", "swipeLeft1", "swipeUp1", "swipeRight1", "swipeDown1", "swipeLeft2", "swipeUp2", "swipeRight2", "swipeDown2", "swipeLeft3", "swipeUp3", "swipeRight3", "swipeDown3", "swipeLeft4", "swipeUp4", "swipeRight4", "swipeDown4", "tap2", "tap3", "tap4" ],
+        "enum": [ "click", "swipeLeft1", "swipeUp1", "swipeRight1", "swipeDown1", "swipeLeft2", "swipeUp2", "swipeRight2", "swipeDown2", "swipeLeft3", "swipeUp3", "swipeRight3", "swipeDown3", "swipeLeft4", "swipeUp4", "swipeRight4", "swipeDown4", "tap2", "tap3", "tap4", "touchExplore" ],
         "description": "Accessibility gestures fired by the touch exploration controller."
       },
       {
@@ -53,7 +53,7 @@
       {
         "id": "SwitchAccessMenuAction",
         "type": "string",
-        "enum": [ "copy", "cut", "decrement", "dictation", "endTextSelection", "increment", "jumpToBeginningOfText", "jumpToEndOfText", "keyboard", "moveBackwardOneCharOfText", "moveBackwardOneWordOfText", "moveCursor", "moveDownOneLineOfText", "moveForwardOneCharOfText", "moveForwardOneWordOfText", "moveUpOneLineOfText", "paste", "scrollDown", "scrollLeft", "scrollRight", "scrollUp", "select", "settings", "startTextSelection" ],
+        "enum": [ "copy", "cut", "decrement", "dictation", "endTextSelection", "increment", "jumpToBeginningOfText", "jumpToEndOfText", "keyboard", "moveBackwardOneCharOfText", "moveBackwardOneWordOfText", "moveCursor", "moveDownOneLineOfText", "moveForwardOneCharOfText", "moveForwardOneWordOfText", "moveUpOneLineOfText", "paste", "pointScan", "scrollDown", "scrollLeft", "scrollRight", "scrollUp", "select", "settings", "startTextSelection" ],
         "description": "Available actions to be shown in the Switch Access menu. Must be kept in sync with the strings in ash/system/accessibility/switch_access_menu_view.cc"
       },
       {
@@ -113,7 +113,12 @@
         "properties": {
           "type": {"$ref": "SyntheticMouseEventType"},
           "x": {"type": "integer", "description": "X coordinate for mouse event in global screen coordinates"},
-          "y": {"type": "integer", "description": "Y coordinate for mouse event in global screen coordinates"}
+          "y": {"type": "integer", "description": "Y coordinate for mouse event in global screen coordinates"},
+          "touchAccessibility": {
+            "type": "boolean",
+            "description": "True if the touch accessibility flag should be set.",
+            "optional": true
+          }
         }
       },
       {
@@ -161,6 +166,12 @@
             "optional": true
           }
         }
+      },
+      {
+        "id": "AcceleratorAction",
+        "type": "string",
+        "enum": [ "focusPreviousPane", "focusNextPane" ],
+        "description": "A subset of accelerator actions used by accessibility."
       }
     ],
     "functions": [
@@ -321,6 +332,19 @@
         "platforms": ["chromeos"]
       },
       {
+        "name": "enablePointScan",
+        "type": "function",
+        "description": "Enables or disables point scanning in Switch Access.",
+        "parameters": [
+          {
+            "name": "enabled",
+            "type": "boolean",
+            "description": "True for start point scanning, false for end point scanning."
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
         "name": "setNativeChromeVoxArcSupportForCurrentApp",
         "type": "function",
         "description": "Sets current ARC app to use native ARC support.",
@@ -373,7 +397,7 @@
         "platforms": ["chromeos"]
       },
       {
-        "name": "onSelectToSpeakStateChanged",
+        "name": "setSelectToSpeakState",
         "type": "function",
         "description": "Called by the Select-to-Speak extension when Select-to-Speak has changed states, between selecting with the mouse, speaking, and inactive.",
         "parameters": [
@@ -385,13 +409,26 @@
         "platforms": ["chromeos"]
       },
       {
-        "name": "onScrollableBoundsForPointFound",
+        "name": "handleScrollableBoundsForPointFound",
         "type": "function",
-        "description": "Called by the Autoclick extension when findScrollableBoundsForPoint has found a scrolling container. |rect| will be the bounds of the nearest scrollable ancestor of the node at the point requested using findScrollableBoundsForPoint.",
+        "description": "Called by the Accessibility Common extension when onScrollableBoundsForPointRequested has found a scrolling container. |rect| will be the bounds of the nearest scrollable ancestor of the node at the point requested using onScrollableBoundsForPointRequested.",
         "parameters": [
           {
             "name": "rect",
             "$ref": "ScreenRect"
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
+        "name": "moveMagnifierToRect",
+        "type": "function",
+        "description": "Called by the Accessibility Common extension to move |rect| within the magnifier viewport (e.g. when focus has changed). If |rect| is already completely within the viewport, magnifier doesn't move. If any edge of |rect| is outside the viewport (e.g. if rect is larger than or extends partially beyond the viewport), magnifier will center the overflowing dimensions of the viewport on center of |rect| (e.g. center viewport vertically if |rect| extends beyond bottom of screen).",
+        "parameters": [
+          {
+            "name": "rect",
+            "$ref": "ScreenRect",
+            "description": "Rect to ensure visible in the magnified viewport."
           }
         ],
         "platforms": ["chromeos"]
@@ -426,6 +463,18 @@
           }
         ],
         "platforms": ["chromeos"]
+      },
+      {
+        "name": "performAcceleratorAction",
+        "type": "function",
+        "description": "Performs an accelerator action.",
+        "parameters": [
+          {
+            "name": "acceleratorAction",
+            "$ref": "AcceleratorAction"
+          }
+        ],
+        "platforms": ["chromeos"]
       }
     ],
     "events": [
@@ -442,6 +491,14 @@
           {
             "name": "gesture",
             "$ref": "Gesture"
+          },
+          {
+            "name": "x",
+            "type": "integer"
+          },
+          {
+            "name": "y",
+            "type": "integer"
           }
         ]
       },
@@ -491,7 +548,7 @@
         "platforms": ["chromeos"]
       },
       {
-        "name": "findScrollableBoundsForPoint",
+        "name": "onScrollableBoundsForPointRequested",
         "type": "function",
         "description": "Fired when an internal component within accessibility wants to find the nearest scrolling container at a given screen coordinate. Used in Automatic Clicks.",
         "parameters": [
@@ -504,6 +561,19 @@
             "name": "y",
             "type": "number",
             "description": "Y screen coordinate of the point."
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
+        "name": "onMagnifierBoundsChanged",
+        "type": "function",
+        "description": "Fired when Chrome OS magnifier bounds are updated.",
+        "parameters": [
+          {
+            "name": "magnifierBounds",
+            "$ref": "ScreenRect",
+            "description": "Updated bounds of magnifier viewport."
           }
         ],
         "platforms": ["chromeos"]

@@ -17,16 +17,16 @@ import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.TwaFinishHandler;
 import org.chromium.chrome.browser.compositor.CompositorView;
 import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabOrientationController;
+import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
+import org.chromium.chrome.browser.customtabs.content.TabCreationMode;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar.CustomTabTabObserver;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
@@ -87,6 +87,7 @@ public class SplashController
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final TabObserverRegistrar mTabObserverRegistrar;
     private final TwaFinishHandler mFinishHandler;
+    private final CustomTabActivityTabProvider mTabProvider;
 
     private SplashDelegate mDelegate;
 
@@ -122,13 +123,15 @@ public class SplashController
     public SplashController(ChromeActivity<?> activity,
             ActivityLifecycleDispatcher lifecycleDispatcher,
             TabObserverRegistrar tabObserverRegistrar,
-            CustomTabOrientationController orientationController, TwaFinishHandler finishHandler) {
+            CustomTabOrientationController orientationController, TwaFinishHandler finishHandler,
+            CustomTabActivityTabProvider tabProvider) {
         mActivity = activity;
         mLifecycleDispatcher = lifecycleDispatcher;
         mTabObserverRegistrar = tabObserverRegistrar;
         mObservers = new ObserverList<>();
         mTranslucencyRemovalStrategy = TranslucencyRemoval.NONE;
         mFinishHandler = finishHandler;
+        mTabProvider = tabProvider;
 
         boolean isWindowInitiallyTranslucent =
                 BaseCustomTabActivity.isWindowInitiallyTranslucent(activity);
@@ -217,6 +220,15 @@ public class SplashController
     }
 
     @Override
+    public void onInteractabilityChanged(Tab tab, boolean isInteractable) {
+        if (!tab.isLoading() && isInteractable
+                && mTabProvider.getInitialTabCreationMode() == TabCreationMode.RESTORED
+                && canHideSplashScreen()) {
+            hideSplash(tab, false /* loadFailed */);
+        }
+    }
+
+    @Override
     public void onCrash(Tab tab) {
         hideSplash(tab, true /* loadFailed */);
     }
@@ -281,6 +293,10 @@ public class SplashController
 
     /** Hides the splash screen. */
     private void hideSplash(final Tab tab, boolean loadFailed) {
+        if (mActivity.isActivityFinishingOrDestroyed()) {
+            return;
+        }
+
         if (mTranslucencyRemovalStrategy == TranslucencyRemoval.ON_SPLASH_HIDDEN
                 && !mRemovedTranslucency) {
             removeTranslucency();
@@ -316,10 +332,6 @@ public class SplashController
             method.setAccessible(true);
             method.invoke(mActivity);
         } catch (ReflectiveOperationException e) {
-            // Method not found or threw an exception.
-            RecordHistogram.recordBooleanHistogram("Mobile.Splash.TranslucencyRemovalFailed", true);
-            assert false : "Failed to remove activity translucency reflectively";
-            Log.e(TAG, "Failed to remove activity translucency reflectively");
         }
 
         notifyTranslucencyRemoved();

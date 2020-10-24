@@ -172,7 +172,7 @@ int NativeRegExpMacroAssembler::CheckStackGuardState(
   DisallowHeapAllocation no_gc;
   Address old_pc = PointerAuthentication::AuthenticatePC(return_address, 0);
   DCHECK_LE(re_code.raw_instruction_start(), old_pc);
-  DCHECK_LE(old_pc, re_code.raw_instruction_end());
+  DCHECK_LE(old_pc, re_code.raw_instruction_end_future());
 
   StackLimitCheck check(isolate);
   bool js_has_overflowed = check.JsHasOverflowed();
@@ -315,7 +315,7 @@ int NativeRegExpMacroAssembler::Execute(
   int result =
       fn.Call(input.ptr(), start_offset, input_start, input_end, output,
               output_size, stack_base, call_origin, isolate, regexp.ptr());
-  DCHECK(result >= RETRY);
+  DCHECK_GE(result, SMALLEST_REGEXP_RESULT);
 
   if (result == EXCEPTION && !isolate->has_pending_exception()) {
     // We detected a stack overflow (on the backtrack stack) in RegExp code,

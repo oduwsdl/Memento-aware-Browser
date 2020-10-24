@@ -13,9 +13,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "components/sync/engine/sync_encryption_handler.h"
-#include "components/sync/nigori/cryptographer_impl.h"
 #include "components/sync/nigori/keystore_keys_handler.h"
-#include "components/sync/syncable/nigori_handler.h"
 
 namespace syncer {
 
@@ -26,8 +24,7 @@ namespace syncer {
 // Note: NOT thread safe. If threads attempt to check encryption state
 // while another thread is modifying it, races can occur.
 class FakeSyncEncryptionHandler : public KeystoreKeysHandler,
-                                  public SyncEncryptionHandler,
-                                  public syncable::NigoriHandler {
+                                  public SyncEncryptionHandler {
  public:
   FakeSyncEncryptionHandler();
   ~FakeSyncEncryptionHandler() override;
@@ -40,23 +37,8 @@ class FakeSyncEncryptionHandler : public KeystoreKeysHandler,
   void SetDecryptionPassphrase(const std::string& passphrase) override;
   void AddTrustedVaultDecryptionKeys(
       const std::vector<std::vector<uint8_t>>& keys) override;
-  void EnableEncryptEverything() override;
-  bool IsEncryptEverythingEnabled() const override;
   base::Time GetKeystoreMigrationTime() const override;
   KeystoreKeysHandler* GetKeystoreKeysHandler() override;
-
-  // NigoriHandler implemenation.
-  bool ApplyNigoriUpdate(const sync_pb::NigoriSpecifics& nigori,
-                         syncable::BaseTransaction* const trans) override;
-  void UpdateNigoriFromEncryptedTypes(
-      sync_pb::NigoriSpecifics* nigori,
-      const syncable::BaseTransaction* const trans) const override;
-  const Cryptographer* GetCryptographer(
-      const syncable::BaseTransaction* const trans) const override;
-  ModelTypeSet GetEncryptedTypes(
-      const syncable::BaseTransaction* const trans) const override;
-  PassphraseType GetPassphraseType(
-      const syncable::BaseTransaction* const trans) const override;
 
   // KeystoreKeysHandler implementation.
   bool NeedKeystoreKey() const override;
@@ -64,11 +46,6 @@ class FakeSyncEncryptionHandler : public KeystoreKeysHandler,
 
  private:
   base::ObserverList<SyncEncryptionHandler::Observer>::Unchecked observers_;
-  ModelTypeSet encrypted_types_;
-  bool encrypt_everything_;
-  PassphraseType passphrase_type_;
-
-  std::unique_ptr<CryptographerImpl> cryptographer_;
   std::vector<uint8_t> keystore_key_;
 };
 

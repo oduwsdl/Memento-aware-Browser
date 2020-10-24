@@ -35,6 +35,7 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/user_modifiable_provider.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
@@ -106,7 +107,7 @@ bool SupportsResourceIdentifier(ContentSettingsType content_type) {
   return content_type == ContentSettingsType::PLUGINS;
 }
 
-bool SchemeCanBeWhitelisted(const std::string& scheme) {
+bool SchemeCanBeAllowlisted(const std::string& scheme) {
   return scheme == content_settings::kChromeDevToolsScheme ||
          scheme == content_settings::kExtensionScheme ||
          scheme == content_settings::kChromeUIScheme;
@@ -243,7 +244,6 @@ HostContentSettingsMap::HostContentSettingsMap(
     PrefService* prefs,
     bool is_off_the_record,
     bool store_last_modified,
-    bool migrate_requesting_and_top_level_origin_settings,
     bool restore_session)
     : RefcountedKeyedService(base::ThreadTaskRunnerHandle::Get()),
 #ifndef NDEBUG
@@ -251,7 +251,8 @@ HostContentSettingsMap::HostContentSettingsMap(
 #endif
       prefs_(prefs),
       is_off_the_record_(is_off_the_record),
-      store_last_modified_(store_last_modified) {
+      store_last_modified_(store_last_modified),
+      allow_invalid_secondary_pattern_for_testing_(false) {
   TRACE_EVENT0("startup", "HostContentSettingsMap::HostContentSettingsMap");
 
   auto policy_provider_ptr =
@@ -282,8 +283,7 @@ HostContentSettingsMap::HostContentSettingsMap(
   content_settings_providers_[DEFAULT_PROVIDER] = std::move(default_provider);
 
   InitializePluginsDataSettings();
-  if (migrate_requesting_and_top_level_origin_settings)
-    MigrateRequestingAndTopLevelOriginSettings();
+  MigrateSettingsPrecedingPermissionDelegationActivation();
   RecordExceptionMetrics();
 }
 
@@ -433,6 +433,30 @@ void HostContentSettingsMap::GetSettingsForOneType(
   }
 }
 
+void HostContentSettingsMap::GetDiscardedSettingsForOneType(
+    ContentSettingsType content_type,
+    const std::string& resource_identifier,
+    ContentSettingsForOneType* settings) const {
+  DCHECK(SupportsResourceIdentifier(content_type) ||
+         resource_identifier.empty());
+  DCHECK(settings);
+  UsedContentSettingsProviders();
+
+  for (const auto& provider_pair : content_settings_providers_) {
+    std::unique_ptr<content_settings::RuleIterator> discarded_rule_iterator(
+        provider_pair.second->GetDiscardedRuleIterator(
+            content_type, resource_identifier, is_off_the_record_));
+    while (discarded_rule_iterator->HasNext()) {
+      content_settings::Rule discarded_rule = discarded_rule_iterator->Next();
+      settings->emplace_back(
+          discarded_rule.primary_pattern, discarded_rule.secondary_pattern,
+          std::move(discarded_rule.value),
+          kProviderNamesSourceMap[provider_pair.first].provider_name,
+          is_off_the_record_, discarded_rule.expiration);
+    }
+  }
+}
+
 void HostContentSettingsMap::SetDefaultContentSetting(
     ContentSettingsType content_type,
     ContentSetting setting) {
@@ -475,15 +499,8 @@ void HostContentSettingsMap::SetWebsiteSettingCustomScope(
     const std::string& resource_identifier,
     std::unique_ptr<base::Value> value,
     const content_settings::ContentSettingConstraints& constraints) {
-  DCHECK(primary_pattern == secondary_pattern ||
-         secondary_pattern == ContentSettingsPattern::Wildcard() ||
-         content_settings::WebsiteSettingsRegistry::GetInstance()
-             ->Get(content_type)
-             ->SupportsEmbeddedExceptions() ||
-         content_settings::WebsiteSettingsRegistry::GetInstance()
-                 ->Get(content_type)
-                 ->scoping_type() ==
-             WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_LEVEL_ORIGIN_SCOPE);
+  DCHECK(IsSecondaryPatternAllowed(primary_pattern, secondary_pattern,
+                                   content_type, value.get()));
   DCHECK(SupportsResourceIdentifier(content_type) ||
          resource_identifier.empty());
   // TODO(crbug.com/731126): Verify that assumptions for notification content
@@ -878,7 +895,7 @@ std::unique_ptr<base::Value> HostContentSettingsMap::GetWebsiteSetting(
   DCHECK(SupportsResourceIdentifier(content_type) ||
          resource_identifier.empty());
 
-  // Check if the requested setting is whitelisted.
+  // Check if the requested setting is allowlisted.
   // TODO(raymes): Move this into GetContentSetting. This has nothing to do with
   // website settings
   const content_settings::ContentSettingsInfo* content_settings_info =
@@ -886,8 +903,8 @@ std::unique_ptr<base::Value> HostContentSettingsMap::GetWebsiteSetting(
           content_type);
   if (content_settings_info) {
     for (const std::string& scheme :
-         content_settings_info->whitelisted_schemes()) {
-      DCHECK(SchemeCanBeWhitelisted(scheme));
+         content_settings_info->allowlisted_schemes()) {
+      DCHECK(SchemeCanBeAllowlisted(scheme));
 
       if (primary_url.SchemeIs(scheme)) {
         if (info) {
@@ -1059,23 +1076,24 @@ void HostContentSettingsMap::InitializePluginsDataSettings() {
   }
 }
 
-void HostContentSettingsMap::MigrateRequestingAndTopLevelOriginSettings() {
+void HostContentSettingsMap::
+    MigrateSettingsPrecedingPermissionDelegationActivation() {
   content_settings::ContentSettingsRegistry* registry =
       content_settings::ContentSettingsRegistry::GetInstance();
   for (const content_settings::ContentSettingsInfo* info : *registry) {
-    // Only 3 types should be migrated.
-    ContentSettingsType type = info->website_settings_info()->type();
-    if (type != ContentSettingsType::GEOLOCATION &&
-        type != ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER &&
-        type != ContentSettingsType::MIDI_SYSEX) {
+    // Only migrate settings that don't support secondary patterns.
+    if (info->website_settings_info()->SupportsSecondaryPattern())
       continue;
-    }
+
+    ContentSettingsType type = info->website_settings_info()->type();
 
     ContentSettingsForOneType host_settings;
     GetSettingsForOneType(type, std::string(), &host_settings);
     for (ContentSettingPatternSource pattern : host_settings) {
-      if (pattern.source != "preference")
+      if (pattern.source != "preference" ||
+          pattern.secondary_pattern == ContentSettingsPattern::Wildcard()) {
         continue;
+      }
 
       // Users were never allowed to add user-specified patterns for these types
       // so we can assume they are all origin scoped.
@@ -1083,8 +1101,7 @@ void HostContentSettingsMap::MigrateRequestingAndTopLevelOriginSettings() {
       DCHECK(GURL(pattern.secondary_pattern.ToString()).is_valid());
 
       if (pattern.secondary_pattern.IsValid() &&
-          pattern.secondary_pattern != pattern.primary_pattern &&
-          pattern.secondary_pattern != ContentSettingsPattern::Wildcard()) {
+          pattern.secondary_pattern != pattern.primary_pattern) {
         SetContentSettingCustomScope(pattern.primary_pattern,
                                      pattern.secondary_pattern, type,
                                      std::string(), CONTENT_SETTING_DEFAULT);
@@ -1099,7 +1116,33 @@ void HostContentSettingsMap::MigrateRequestingAndTopLevelOriginSettings() {
         SetContentSettingCustomScope(pattern.secondary_pattern,
                                      ContentSettingsPattern::Wildcard(), type,
                                      std::string(), CONTENT_SETTING_DEFAULT);
+      } else if (pattern.primary_pattern.IsValid() &&
+                 pattern.primary_pattern == pattern.secondary_pattern) {
+        // Migrate settings from (x,x) -> (x,*).
+        SetContentSettingCustomScope(pattern.primary_pattern,
+                                     pattern.secondary_pattern, type,
+                                     std::string(), CONTENT_SETTING_DEFAULT);
+        SetContentSettingCustomScope(
+            pattern.primary_pattern, ContentSettingsPattern::Wildcard(), type,
+            std::string(), pattern.GetContentSetting());
       }
     }
   }
+}
+
+bool HostContentSettingsMap::IsSecondaryPatternAllowed(
+    const ContentSettingsPattern& primary_pattern,
+    const ContentSettingsPattern& secondary_pattern,
+    ContentSettingsType content_type,
+    base::Value* value) {
+  // A secondary pattern is normally only allowed if the content type supports
+  // secondary patterns. One exception is made when deleting content settings
+  // (aka setting them to CONTENT_SETTING_DEFAULT).
+  return allow_invalid_secondary_pattern_for_testing_ ||
+         secondary_pattern == ContentSettingsPattern::Wildcard() ||
+         content_settings::WebsiteSettingsRegistry::GetInstance()
+             ->Get(content_type)
+             ->SupportsSecondaryPattern() ||
+         content_settings::ValueToContentSetting(value) ==
+             CONTENT_SETTING_DEFAULT;
 }

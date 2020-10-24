@@ -27,9 +27,18 @@ class PrefRegistrySimple;
 class Profile;
 
 // Trigger identifiers currently used; duplicates not allowed.
+extern const char kHatsSurveyTriggerTesting[];
 extern const char kHatsSurveyTriggerSatisfaction[];
 extern const char kHatsSurveyTriggerSettings[];
 extern const char kHatsSurveyTriggerSettingsPrivacy[];
+
+// The Trigger ID for a test HaTS Next survey which is available for testing
+// and demo purposes when the migration feature flag is enabled.
+extern const char kHatsNextSurveyTriggerIDTesting[];
+
+// The name of the histogram which records if a survey was shown, or if not, the
+// reason why not.
+extern const char kHatsShouldShowSurveyReasonHistogram[];
 
 // This class provides the client side logic for determining if a
 // survey should be shown for any trigger based on input from a finch
@@ -53,10 +62,14 @@ class HatsService : public KeyedService {
     SurveyMetadata();
     ~SurveyMetadata();
 
+    // Trigger specific metadata.
     base::Optional<int> last_major_version;
     base::Optional<base::Time> last_survey_started_time;
     base::Optional<bool> is_survey_full;
     base::Optional<base::Time> last_survey_check_time;
+
+    // Metadata affecting all triggers.
+    base::Optional<base::Time> any_last_survey_started_time;
   };
 
   class DelayedSurveyTask : public content::WebContentsObserver {
@@ -92,6 +105,29 @@ class HatsService : public KeyedService {
     base::WeakPtrFactory<DelayedSurveyTask> weak_ptr_factory_{this};
   };
 
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class ShouldShowSurveyReasons {
+    kYes = 0,
+    kNoOffline = 1,
+    kNoLastSessionCrashed = 2,
+    kNoReceivedSurveyInCurrentMilestone = 3,
+    kNoProfileTooNew = 4,
+    kNoLastSurveyTooRecent = 5,
+    kNoBelowProbabilityLimit = 6,
+    kNoTriggerStringMismatch = 7,
+    kNoNotRegularBrowser = 8,
+    kNoIncognitoDisabled = 9,
+    kNoCookiesBlocked = 10,            // Unused.
+    kNoThirdPartyCookiesBlocked = 11,  // Unused.
+    kNoSurveyUnreachable = 12,
+    kNoSurveyOverCapacity = 13,
+    kNoSurveyAlreadyInProgress = 14,
+    kNoAnyLastSurveyTooRecent = 15,
+    kNoRejectedByHatsService = 16,
+    kMaxValue = kNoRejectedByHatsService,
+  };
+
   ~HatsService() override;
 
   explicit HatsService(Profile* profile);
@@ -119,6 +155,16 @@ class HatsService : public KeyedService {
       content::WebContents* web_contents,
       int timeout_ms);
 
+  // Updates the user preferences to record that the survey associated with
+  // |survey_id| was shown to the user. |survey_id| is the unique_id provided
+  // to the HaTS Service to identify a survey. This is the trigger ID for HaTS
+  // Next, and the site ID for HaTS v1.
+  void RecordSurveyAsShown(std::string survey_id);
+
+  // Indicates to the service that the HaTS Next dialog has been closed.
+  // Virtual to allow mocking in tests.
+  virtual void HatsNextDialogClosed();
+
   void SetSurveyMetadataForTesting(const SurveyMetadata& metadata);
   void GetSurveyMetadataForTesting(HatsService::SurveyMetadata* metadata) const;
   void SetSurveyCheckerForTesting(
@@ -127,6 +173,7 @@ class HatsService : public KeyedService {
 
  private:
   friend class DelayedSurveyTask;
+  FRIEND_TEST_ALL_PREFIXES(HatsServiceHatsNext, SingleHatsNextDialog);
 
   void LaunchSurveyForWebContents(const std::string& trigger,
                                   content::WebContents* web_contents);
@@ -155,6 +202,10 @@ class HatsService : public KeyedService {
   std::set<DelayedSurveyTask> pending_tasks_;
 
   base::flat_map<std::string, SurveyConfig> survey_configs_by_triggers_;
+
+  // Whether a HaTS Next dialog currently exists (regardless of whether it
+  // is being shown to the user).
+  bool hats_next_dialog_exists_ = false;
 
   base::WeakPtrFactory<HatsService> weak_ptr_factory_{this};
 

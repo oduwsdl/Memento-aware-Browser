@@ -11,8 +11,10 @@ js_type_check("closure_compile_module") {
   closure_flags = settings_closure_flags
   deps = [
     ":address_edit_dialog",
+    ":address_remove_confirmation_dialog",
     ":autofill_page",
     ":autofill_section",
+    ":avatar_icon",
     ":blocking_request_manager",
     ":credit_card_edit_dialog",
     ":credit_card_list_entry",
@@ -71,6 +73,7 @@ js_library("autofill_page") {
 js_library("autofill_section") {
   deps = [
     ":address_edit_dialog",
+    ":address_remove_confirmation_dialog",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/cr_elements/cr_action_menu:cr_action_menu.m",
     "//ui/webui/resources/js:assert.m",
@@ -84,7 +87,22 @@ js_library("autofill_section") {
   ]
 }
 
+js_library("avatar_icon") {
+  deps = [
+    "../people_page:sync_browser_proxy.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
+  ]
+}
+
 js_library("blocking_request_manager") {
+}
+
+js_library("address_remove_confirmation_dialog") {
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_dialog:cr_dialog.m",
+  ]
 }
 
 js_library("credit_card_edit_dialog") {
@@ -209,19 +227,24 @@ js_library("passwords_list_handler") {
     ":password_manager_proxy",
     ":password_move_to_account_dialog",
     ":password_remove_dialog",
+    "../people_page:sync_browser_proxy.m",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/cr_elements/cr_action_menu:cr_action_menu.m",
-    "//ui/webui/resources/cr_elements/cr_toast:cr_toast_manager.m",
+    "//ui/webui/resources/cr_elements/cr_button:cr_button.m",
+    "//ui/webui/resources/cr_elements/cr_toast:cr_toast.m",
     "//ui/webui/resources/js:assert.m",
     "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
     "//ui/webui/resources/js/cr/ui:focus_without_ink.m",
   ]
 }
 
 js_library("password_move_to_account_dialog") {
   deps = [
+    ":avatar_icon",
     ":multi_store_password_ui_entry",
     ":password_manager_proxy",
+    "//third_party/polymer/v3_0/components-chromium/iron-icon",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/cr_elements/cr_button:cr_button.m",
     "//ui/webui/resources/cr_elements/cr_dialog:cr_dialog.m",
@@ -238,12 +261,15 @@ js_library("password_manager_proxy") {
 
 js_library("password_remove_dialog") {
   deps = [
+    ":avatar_icon",
     ":multi_store_password_ui_entry",
+    "../people_page:sync_browser_proxy.m",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/cr_elements/cr_button:cr_button.m",
     "//ui/webui/resources/cr_elements/cr_checkbox:cr_checkbox.m",
     "//ui/webui/resources/cr_elements/cr_dialog:cr_dialog.m",
     "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
   ]
 }
 
@@ -256,6 +282,7 @@ js_library("passwords_export_dialog") {
 
 js_library("passwords_section") {
   deps = [
+    ":avatar_icon",
     ":merge_exceptions_store_copies_behavior",
     ":merge_passwords_store_copies_behavior",
     ":multi_store_exception_entry",
@@ -285,15 +312,20 @@ js_library("passwords_section") {
 
 js_library("passwords_device_section") {
   deps = [
+    ":avatar_icon",
     ":merge_passwords_store_copies_behavior",
     ":multi_store_password_ui_entry",
     ":password_list_item",
     ":password_manager_proxy",
     ":passwords_list_handler",
+    "..:i18n_setup",
+    "..:open_window_proxy",
     "..:route",
+    "../people_page:sync_browser_proxy.m",
     "//third_party/polymer/v3_0/components-chromium/iron-a11y-keys-behavior:iron-a11y-keys-behavior",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/js:util.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
   ]
 }
 
@@ -360,7 +392,9 @@ js_library("upi_id_list_entry") {
 html_to_js("web_components") {
   js_files = [
     "address_edit_dialog.js",
+    "address_remove_confirmation_dialog.js",
     "autofill_page.js",
+    "avatar_icon.js",
     "autofill_section.js",
     "passwords_list_handler.js",
     "credit_card_edit_dialog.js",

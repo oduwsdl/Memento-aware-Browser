@@ -258,8 +258,9 @@ public class GeolocationHeaderUnitTest {
 
     @Test
     public void testGetGeoHeaderOldLocationLocationOff() {
-        GeolocationHeader.setLocationSourceForTesting(GeolocationHeader.LocationSource.MASTER_OFF);
-        // If the master switch is off, networks should never be included (old location might).
+        GeolocationHeader.setLocationSourceForTesting(
+                GeolocationHeader.LocationSource.LOCATION_OFF);
+        // If the location switch is off, networks should never be included (old location might).
         checkOldLocation("X-Geo: w " + ENCODED_PROTO_LOCATION);
     }
 
@@ -270,6 +271,13 @@ public class GeolocationHeaderUnitTest {
         GeolocationHeader.setAppPermissionGrantedForTesting(false);
         // Nothing should be included when app permission is missing.
         checkOldLocation(null);
+    }
+
+    @Test
+    public void testGetGeoHeaderNoProfile() {
+        when(mProfileJniMock.fromWebContents(any(WebContents.class))).thenReturn(null);
+        String header = GeolocationHeader.getGeoHeader(SEARCH_URL, mTab);
+        assertNull(header);
     }
 
     @Test

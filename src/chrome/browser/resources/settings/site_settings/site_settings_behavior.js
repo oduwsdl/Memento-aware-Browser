@@ -169,6 +169,7 @@ const SiteSettingsBehaviorImpl = {
       embeddingOrigin: embeddingOrigin,
       incognito: exception.incognito,
       isEmbargoed: exception.isEmbargoed,
+      isDiscarded: exception.isDiscarded,
       origin: origin,
       displayName: exception.displayName,
       setting: exception.setting,
@@ -222,20 +223,13 @@ const SiteSettingsBehaviorImpl = {
         ContentSettingsTypes.PAYMENT_HANDLER,
         'enablePaymentHandlerContentSetting');
     addOrRemoveSettingWithFlag(
-        ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE,
-        'enableNativeFileSystemWriteContentSetting');
-    addOrRemoveSettingWithFlag(
-        ContentSettingsTypes.MIXEDSCRIPT,
-        'enableInsecureContentContentSetting');
-    addOrRemoveSettingWithFlag(
-        ContentSettingsTypes.HID_DEVICES,
-        'enableExperimentalWebPlatformFeatures');
-    addOrRemoveSettingWithFlag(
         ContentSettingsTypes.BLUETOOTH_DEVICES,
         'enableWebBluetoothNewPermissionsBackend');
     addOrRemoveSettingWithFlag(
         ContentSettingsTypes.WINDOW_PLACEMENT,
         'enableExperimentalWebPlatformFeatures');
+    addOrRemoveSettingWithFlag(
+        ContentSettingsTypes.FONT_ACCESS, 'enableFontAccessContentSetting');
     return this.contentTypes_.slice(0);
   },
 

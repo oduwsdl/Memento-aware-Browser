@@ -6,7 +6,7 @@
 
 #include "include/cppgc/internal/persistent-node.h"
 #include "src/base/macros.h"
-#include "src/heap/cppgc/heap-page-inl.h"
+#include "src/heap/cppgc/heap-page.h"
 #include "src/heap/cppgc/heap.h"
 
 namespace cppgc {
@@ -29,6 +29,18 @@ PersistentRegion& StrongPersistentPolicy::GetPersistentRegion(void* object) {
 PersistentRegion& WeakPersistentPolicy::GetPersistentRegion(void* object) {
   auto* heap = BasePage::FromPayload(object)->heap();
   return heap->GetWeakPersistentRegion();
+}
+
+PersistentRegion& StrongCrossThreadPersistentPolicy::GetPersistentRegion(
+    void* object) {
+  auto* heap = BasePage::FromPayload(object)->heap();
+  return heap->GetStrongCrossThreadPersistentRegion();
+}
+
+PersistentRegion& WeakCrossThreadPersistentPolicy::GetPersistentRegion(
+    void* object) {
+  auto* heap = BasePage::FromPayload(object)->heap();
+  return heap->GetWeakCrossThreadPersistentRegion();
 }
 
 }  // namespace internal

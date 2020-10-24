@@ -10,6 +10,7 @@
 #include "base/test/task_environment.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/test/test_helpers.h"
+#include "chromeos/components/quick_answers/utils/quick_answers_utils.h"
 #include "chromeos/services/assistant/public/shared/constants.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -61,9 +62,9 @@ class SearchResultLoaderTest : public testing::Test {
   void TearDown() override { loader_.reset(); }
 
  protected:
+  base::test::SingleThreadTaskEnvironment task_environment_;
   std::unique_ptr<SearchResultLoader> loader_;
   std::unique_ptr<MockResultLoaderDelegate> mock_delegate_;
-  base::test::SingleThreadTaskEnvironment task_environment_;
   data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
   network::TestURLLoaderFactory test_url_loader_factory_;
 };
@@ -76,9 +77,9 @@ TEST_F(SearchResultLoaderTest, Success) {
                                        kValidResponse);
   EXPECT_CALL(
       *mock_delegate_,
-      OnQuickAnswerReceived(QuickAnswerEqual(&(*expected_quick_answer))));
+      OnQuickAnswerReceived(QuickAnswerEqual(expected_quick_answer.get())));
   EXPECT_CALL(*mock_delegate_, OnNetworkError()).Times(0);
-  loader_->Fetch("23cm");
+  loader_->Fetch(PreprocessRequest(IntentInfo("23cm", IntentType::kUnknown)));
   base::RunLoop().RunUntilIdle();
 }
 
@@ -89,7 +90,7 @@ TEST_F(SearchResultLoaderTest, NetworkError) {
       network::URLLoaderCompletionStatus(net::HTTP_NOT_FOUND));
   EXPECT_CALL(*mock_delegate_, OnNetworkError());
   EXPECT_CALL(*mock_delegate_, OnQuickAnswerReceived(testing::_)).Times(0);
-  loader_->Fetch("23cm");
+  loader_->Fetch(PreprocessRequest(IntentInfo("23cm", IntentType::kUnknown)));
   base::RunLoop().RunUntilIdle();
 }
 
@@ -98,7 +99,7 @@ TEST_F(SearchResultLoaderTest, EmptyResponse) {
                                        std::string());
   EXPECT_CALL(*mock_delegate_, OnQuickAnswerReceived(testing::Eq(nullptr)));
   EXPECT_CALL(*mock_delegate_, OnNetworkError()).Times(0);
-  loader_->Fetch("23cm");
+  loader_->Fetch(PreprocessRequest(IntentInfo("23cm", IntentType::kUnknown)));
   base::RunLoop().RunUntilIdle();
 }
 

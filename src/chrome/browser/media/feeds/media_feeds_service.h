@@ -11,6 +11,7 @@
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "chrome/browser/media/feeds/media_feeds_converter.h"
 #include "chrome/browser/media/feeds/media_feeds_fetcher.h"
 #include "chrome/browser/media/feeds/media_feeds_store.mojom.h"
@@ -42,7 +43,18 @@ class CookieChangeListener;
 
 class MediaFeedsService : public KeyedService {
  public:
+  static const char kAggregateWatchtimeHistogramName[];
   static const char kSafeSearchResultHistogramName[];
+
+  // Time to wait between background fetch delayed tasks.
+  static constexpr base::TimeDelta kTimeBetweenBackgroundFetches =
+      base::TimeDelta::FromMinutes(15);
+
+  // If this much time has passed since the last time we got a non-cached, fresh
+  // version of the feed, we should bypass the cache on the next background
+  // fetch of the feed.
+  static constexpr base::TimeDelta kTimeBetweenNonCachedBackgroundFetches =
+      base::TimeDelta::FromHours(24);
 
   using FetchMediaFeedCallback =
       base::OnceCallback<void(const std::string& logs)>;
@@ -101,6 +113,10 @@ class MediaFeedsService : public KeyedService {
 
   bool HasCookieObserverForTest() const;
 
+  void EnsureCookieObserver();
+
+  void RecordFeedWatchtimes();
+
  private:
   friend class MediaFeedsServiceTest;
 
@@ -148,12 +164,17 @@ class MediaFeedsService : public KeyedService {
 
   void OnSafeSearchPrefChanged();
 
+  void OnBackgroundFetchingPrefChanged();
+
   void OnResetOriginFromCookie(const url::Origin& origin,
                                const bool include_subdomains,
                                const std::string& name,
                                const net::CookieChangeCause& cause);
 
   void OnDiscoveredFeed();
+
+  void OnGotFeedsForMetrics(
+      std::vector<media_feeds::mojom::MediaFeedPtr> feeds);
 
   // Settings related to fetching a feed in the background.
   struct BackgroundFetchFeedSettings {

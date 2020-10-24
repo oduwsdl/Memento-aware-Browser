@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/address_normalizer_factory.h"
 #include "chrome/browser/autofill/autocomplete_history_manager_factory.h"
+#include "chrome/browser/autofill/autofill_offer_manager_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/risk_util.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
@@ -173,9 +174,16 @@ ukm::SourceId ChromeAutofillClient::GetUkmSourceId() {
 }
 
 AddressNormalizer* ChromeAutofillClient::GetAddressNormalizer() {
-  if (base::FeatureList::IsEnabled(features::kAutofillAddressNormalizer))
-    return AddressNormalizerFactory::GetInstance();
-  return nullptr;
+  return AddressNormalizerFactory::GetInstance();
+}
+
+AutofillOfferManager* ChromeAutofillClient::GetAutofillOfferManager() {
+  return AutofillOfferManagerFactory::GetForBrowserContext(
+      web_contents()->GetBrowserContext());
+}
+
+const GURL& ChromeAutofillClient::GetLastCommittedURL() {
+  return web_contents()->GetLastCommittedURL();
 }
 
 security_state::SecurityLevel
@@ -192,14 +200,14 @@ ChromeAutofillClient::GetSecurityLevelForUmaHistograms() {
   return helper->GetSecurityLevel();
 }
 
-std::string ChromeAutofillClient::GetPageLanguage() const {
+const translate::LanguageState* ChromeAutofillClient::GetLanguageState() {
   // TODO(crbug.com/912597): iOS vs other platforms extracts language from
   // the top level frame vs whatever frame directly holds the form.
   auto* translate_manager =
       ChromeTranslateClient::GetManagerFromWebContents(web_contents());
   if (translate_manager)
-    return translate_manager->GetLanguageState().original_language();
-  return std::string();
+    return translate_manager->GetLanguageState();
+  return nullptr;
 }
 
 std::string ChromeAutofillClient::GetVariationConfigCountryCode() const {
@@ -260,7 +268,7 @@ void ChromeAutofillClient::OnUnmaskVerificationResult(
 
 #if !defined(OS_ANDROID)
 std::vector<std::string>
-ChromeAutofillClient::GetMerchantWhitelistForVirtualCards() {
+ChromeAutofillClient::GetAllowedMerchantsForVirtualCards() {
   if (!prefs::IsAutofillCreditCardEnabled(GetPrefs()))
     return std::vector<std::string>();
 
@@ -269,7 +277,7 @@ ChromeAutofillClient::GetMerchantWhitelistForVirtualCards() {
 }
 
 std::vector<std::string>
-ChromeAutofillClient::GetBinRangeWhitelistForVirtualCards() {
+ChromeAutofillClient::GetAllowedBinRangesForVirtualCards() {
   if (!prefs::IsAutofillCreditCardEnabled(GetPrefs()))
     return std::vector<std::string>();
 
@@ -493,6 +501,12 @@ void ChromeAutofillClient::ShowAutofillPopup(
   popup_controller_->Show(open_args.suggestions,
                           open_args.autoselect_first_suggestion.value(),
                           open_args.popup_type);
+
+  // When testing, try to keep popup open when the reason to hide is from an
+  // external browser frame resize that is extraneous to our testing goals.
+  if (keep_popup_open_for_testing_ && popup_controller_.get()) {
+    popup_controller_->KeepPopupOpenForTesting();
+  }
 }
 
 void ChromeAutofillClient::UpdateAutofillPopupDataListValues(
@@ -537,6 +551,17 @@ void ChromeAutofillClient::UpdatePopup(
     PopupType popup_type) {
   if (!popup_controller_.get())
     return;  // Update only if there is a popup.
+
+  // When a form changes dynamically, |popup_controller_| may hold a delegate of
+  // the wrong type, so updating the popup would call into the wrong delegate.
+  // Hence, just close the existing popup (crbug/1113241).
+  // The cast is needed to access AutofillPopupController::GetPopupType().
+  if (popup_type !=
+      static_cast<const AutofillPopupController*>(popup_controller_.get())
+          ->GetPopupType()) {
+    popup_controller_->Hide(PopupHidingReason::kStaleData);
+    return;
+  }
 
   // Calling show will reuse the existing view automatically
   popup_controller_->Show(suggestions, /*autoselect_first_suggestion=*/false,

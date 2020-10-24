@@ -9,6 +9,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -26,6 +27,7 @@ import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
 import org.chromium.components.browser_ui.site_settings.PermissionInfo;
 import org.chromium.components.content_settings.ContentSettingValues;
+import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -92,7 +94,7 @@ public class PermissionUpdateInfobarTest {
                     @Override
                     public PermissionInfo call() {
                         return new PermissionInfo(
-                                PermissionInfo.Type.GEOLOCATION, locationUrl, null, false);
+                                ContentSettingsType.GEOLOCATION, locationUrl, null, false);
                     }
                 });
 
@@ -125,22 +127,15 @@ public class PermissionUpdateInfobarTest {
 
             ChromeTabUtils.closeCurrentTab(
                     InstrumentationRegistry.getInstrumentation(), mActivityTestRule.getActivity());
-            CriteriaHelper.pollUiThread(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    return webContents.isDestroyed();
-                }
-            });
+            CriteriaHelper.pollUiThread(() -> webContents.isDestroyed());
 
-            CriteriaHelper.pollUiThread(Criteria.equals(1, new Callable<Integer>() {
-                @Override
-                public Integer call() {
-                    return mActivityTestRule.getActivity()
-                            .getTabModelSelector()
-                            .getModel(false)
-                            .getCount();
-                }
-            }));
+            CriteriaHelper.pollUiThread(() -> {
+                Criteria.checkThat(mActivityTestRule.getActivity()
+                                           .getTabModelSelector()
+                                           .getModel(false)
+                                           .getCount(),
+                        Matchers.is(1));
+            });
         } finally {
             TestThreadUtils.runOnUiThreadBlocking(
                     ()

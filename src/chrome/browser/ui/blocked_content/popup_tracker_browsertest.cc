@@ -21,7 +21,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/safe_browsing/core/db/v4_embedded_test_server_util.h"
 #include "components/safe_browsing/core/db/v4_test_util.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -55,6 +55,7 @@ const char kUkmWindowOpenDisposition[] = "WindowOpenDisposition";
 const char kUkmNumActivationInteractions[] = "NumActivationInteractions";
 const char kUkmNumGestureScrollBeginInteractions[] =
     "NumGestureScrollBeginInteractions";
+const char kUkmRedirectCount[] = "RedirectCount";
 }  // namespace
 
 using UkmEntry = ukm::builders::Popup_Closed;
@@ -203,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, ControlClick_HasTracker) {
 
   // Mac uses command instead of control for the new tab action.
   bool is_mac = false;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   is_mac = true;
 #endif
 
@@ -281,7 +282,7 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, ShiftClick_HasTracker) {
       entry, kUkmNumGestureScrollBeginInteractions, 0u);
 }
 
-IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, WhitelistedPopup_HasTracker) {
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, AllowlistedPopup_HasTracker) {
   base::HistogramTester tester;
   const GURL url =
       embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html");
@@ -290,8 +291,8 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, WhitelistedPopup_HasTracker) {
 
   // Is blocked by the popup blocker.
   ui_test_utils::NavigateToURL(browser(), url);
-  EXPECT_TRUE(content_settings::TabSpecificContentSettings::FromWebContents(
-                  web_contents)
+  EXPECT_TRUE(content_settings::PageSpecificContentSettings::GetForFrame(
+                  web_contents->GetMainFrame())
                   ->IsContentBlocked(ContentSettingsType::POPUPS));
 
   // Click through to open the popup.
@@ -569,4 +570,107 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, PopupInWindow_IsWindowTrue) {
   test_ukm_recorder_->ExpectEntryMetric(
       entry, kUkmWindowOpenDisposition,
       static_cast<int>(WindowOpenDisposition::NEW_POPUP));
+}
+
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest,
+                       PopupNoRedirect_RedirectCountZero) {
+  const GURL first_url = embedded_test_server()->GetURL("/title1.html");
+  ui_test_utils::NavigateToURL(browser(), first_url);
+
+  content::TestNavigationObserver navigation_observer(nullptr, 1);
+  navigation_observer.StartWatchingNewWebContents();
+  EXPECT_TRUE(content::ExecJs(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.open('/title1.html', 'new_window', "
+      "'location=yes,height=570,width=520,scrollbars=yes,status=yes')"));
+  navigation_observer.Wait();
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+
+  Browser* created_browser = chrome::FindLastActive();
+
+  EXPECT_EQ(1, created_browser->tab_strip_model()->count());
+  content::WebContents* popup =
+      created_browser->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(blocked_content::PopupTracker::FromWebContents(popup));
+
+  // Close the popup and check that the pop up did not redirect.
+  int active_index = created_browser->tab_strip_model()->active_index();
+  content::WebContentsDestroyedWatcher destroyed_watcher(popup);
+  created_browser->tab_strip_model()->CloseWebContentsAt(
+      active_index, TabStripModel::CLOSE_USER_GESTURE);
+  destroyed_watcher.Wait();
+
+  auto* entry = ExpectAndGetEntry(first_url);
+  test_ukm_recorder_->ExpectEntryMetric(entry, kUkmRedirectCount, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest,
+                       PopupRedirectsTwice_RedirectCountTwo) {
+  const GURL first_url = embedded_test_server()->GetURL("/title1.html");
+  ui_test_utils::NavigateToURL(browser(), first_url);
+
+  content::TestNavigationObserver navigation_observer(nullptr, 1);
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Redirect the popup using /server-redirect twice.
+  EXPECT_TRUE(content::ExecJs(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.open('/server-redirect?/server-redirect?/title1.html',"
+      "'new_window', 'location=yes,height=570,width=520,scrollbars=yes,"
+      "status=yes')"));
+  navigation_observer.Wait();
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+
+  Browser* created_browser = chrome::FindLastActive();
+
+  EXPECT_EQ(1, created_browser->tab_strip_model()->count());
+  content::WebContents* popup =
+      created_browser->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(blocked_content::PopupTracker::FromWebContents(popup));
+
+  // Close the popup and check metric.
+  int active_index = created_browser->tab_strip_model()->active_index();
+  content::WebContentsDestroyedWatcher destroyed_watcher(popup);
+  created_browser->tab_strip_model()->CloseWebContentsAt(
+      active_index, TabStripModel::CLOSE_USER_GESTURE);
+  destroyed_watcher.Wait();
+
+  auto* entry = ExpectAndGetEntry(first_url);
+  test_ukm_recorder_->ExpectEntryMetric(entry, kUkmRedirectCount, 2);
+}
+
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest,
+                       PopupJavascriptRenavigation_RedirectCountZero) {
+  const GURL first_url = embedded_test_server()->GetURL("/title1.html");
+  ui_test_utils::NavigateToURL(browser(), first_url);
+
+  content::TestNavigationObserver navigation_observer(nullptr, 1);
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Redirect the popup using /server-redirect twice.
+  EXPECT_TRUE(content::ExecJs(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "var w = window.open('',"
+      "'new_window', 'location=yes,height=570,width=520,scrollbars=yes,"
+      "status=yes'); "
+      "w.location = '/title1.html'"));
+  navigation_observer.Wait();
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+
+  Browser* created_browser = chrome::FindLastActive();
+
+  EXPECT_EQ(1, created_browser->tab_strip_model()->count());
+  content::WebContents* popup =
+      created_browser->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(blocked_content::PopupTracker::FromWebContents(popup));
+
+  // Close the popup and check metric.
+  int active_index = created_browser->tab_strip_model()->active_index();
+  content::WebContentsDestroyedWatcher destroyed_watcher(popup);
+  created_browser->tab_strip_model()->CloseWebContentsAt(
+      active_index, TabStripModel::CLOSE_USER_GESTURE);
+  destroyed_watcher.Wait();
+
+  auto* entry = ExpectAndGetEntry(first_url);
+  test_ukm_recorder_->ExpectEntryMetric(entry, kUkmRedirectCount, 0);
 }

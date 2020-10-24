@@ -20,7 +20,6 @@
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache_factory.h"
 #include "chrome/browser/ui/webui/theme_handler.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -30,6 +29,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
@@ -57,7 +57,7 @@ NewTabUI::NewTabUI(content::WebUI* web_ui) : content::WebUIController(web_ui) {
 
   Profile* profile = GetProfile();
 
-  if (!profile->IsGuestSession()) {
+  if (!profile->IsGuestSession() && !profile->IsEphemeralGuestProfile()) {
     web_ui->AddMessageHandler(std::make_unique<ThemeHandler>());
     if (profile->IsOffTheRecord()) {
       web_ui->AddMessageHandler(
@@ -190,23 +190,30 @@ bool NewTabUI::NewTabHTMLSource::ShouldReplaceExistingSource() {
   return false;
 }
 
-std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyScriptSrc() {
-  // 'unsafe-inline' and google resources are added to script-src.
-  return "script-src chrome://resources 'self' 'unsafe-eval' 'unsafe-inline' "
-      "*.google.com *.gstatic.com;";
-}
+std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicy(
+    network::mojom::CSPDirectiveName directive) {
+  if (directive == network::mojom::CSPDirectiveName::ScriptSrc) {
+    // 'unsafe-inline' and google resources are added to script-src.
+    return "script-src chrome://resources 'self' 'unsafe-eval' 'unsafe-inline' "
+           "*.google.com *.gstatic.com;";
+  } else if (directive == network::mojom::CSPDirectiveName::StyleSrc) {
+    return "style-src 'self' chrome://resources 'unsafe-inline' "
+           "chrome://theme;";
+  } else if (directive == network::mojom::CSPDirectiveName::ImgSrc) {
+    return "img-src chrome-search://thumb chrome-search://thumb2 "
+           "chrome-search://theme chrome://theme data:;";
+  } else if (directive == network::mojom::CSPDirectiveName::ChildSrc) {
+    return "child-src chrome-search://most-visited;";
+  } else if (directive ==
+                 network::mojom::CSPDirectiveName::RequireTrustedTypesFor ||
+             directive == network::mojom::CSPDirectiveName::TrustedTypes) {
+    // TODO(crbug.com/1098687): Trusted Type New Tab Page
+    // This removes require-trusted-types-for and trusted-types directives
+    // from the CSP header.
+    return std::string();
+  }
 
-std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyStyleSrc() {
-  return "style-src 'self' chrome://resources 'unsafe-inline' chrome://theme;";
-}
-
-std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyImgSrc() {
-  return "img-src chrome-search://thumb chrome-search://thumb2 "
-      "chrome-search://theme chrome://theme data:;";
-}
-
-std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyChildSrc() {
-  return "child-src chrome-search://most-visited;";
+  return content::URLDataSource::GetContentSecurityPolicy(directive);
 }
 
 NewTabUI::NewTabHTMLSource::~NewTabHTMLSource() {}

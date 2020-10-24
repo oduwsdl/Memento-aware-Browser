@@ -58,6 +58,9 @@ void ImportBookmarksFromVersion(base::StringPiece firefox_version,
 // TODO(jschuh): Disabled on Win64 build. http://crbug.com/179688
 #if defined(OS_WIN) && defined(ARCH_CPU_X86_64)
 #define MAYBE_NSS(x) DISABLED_##x
+#elif defined(OS_MAC) && defined(ARCH_CPU_ARM_FAMILY)
+// No NSS dylibs are available for arm64: https://crbug.com/1121685
+#define MAYBE_NSS(x) DISABLED_##x
 #else
 #define MAYBE_NSS(x) x
 #endif
@@ -68,11 +71,11 @@ void ImportBookmarksFromVersion(base::StringPiece firefox_version,
 TEST(FirefoxImporterTest, MAYBE_NSS(Firefox3NSS3Decryptor)) {
   base::FilePath nss_path;
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &nss_path));
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   nss_path = nss_path.AppendASCII("firefox3_nss_mac");
 #else
   nss_path = nss_path.AppendASCII("firefox3_nss");
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC
   base::FilePath db_path;
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &db_path));
   db_path = db_path.AppendASCII("firefox3_profile");
@@ -139,11 +142,11 @@ TEST(FirefoxImporterTest, MAYBE_NSS(FirefoxNSSDecryptorDeduceAuthScheme)) {
 
   base::FilePath nss_path;
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &nss_path));
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   nss_path = nss_path.AppendASCII("firefox3_nss_mac");
 #else
   nss_path = nss_path.AppendASCII("firefox3_nss");
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC
   base::FilePath db_path;
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &db_path));
   db_path = db_path.AppendASCII("firefox3_profile");

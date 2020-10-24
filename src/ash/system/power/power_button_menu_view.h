@@ -40,6 +40,8 @@ class ASH_EXPORT PowerButtonMenuView : public views::View,
 
   explicit PowerButtonMenuView(
       PowerButtonController::PowerButtonPosition power_button_position);
+  PowerButtonMenuView(const PowerButtonMenuView&) = delete;
+  PowerButtonMenuView& operator=(const PowerButtonMenuView&) = delete;
   ~PowerButtonMenuView() override;
 
   PowerButtonMenuItemView* sign_out_item_for_test() const {
@@ -64,17 +66,18 @@ class ASH_EXPORT PowerButtonMenuView : public views::View,
   // Gets the transform displacement, which contains direction and distance.
   TransformDisplacement GetTransformDisplacement() const;
 
+  // Called whenever the associated widget is shown and when |this| is
+  // constructed. Adds/removes menu items as needed.
+  void RecreateItems();
+
   // views::View:
   const char* GetClassName() const override;
 
  private:
-  // Creates the items that in the menu.
-  void CreateItems();
-
   // views::View:
   void Layout() override;
-  void OnPaint(gfx::Canvas* canvas) override;
   gfx::Size CalculatePreferredSize() const override;
+  void OnThemeChanged() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -90,8 +93,6 @@ class ASH_EXPORT PowerButtonMenuView : public views::View,
 
   // The physical display side of power button in landscape primary.
   PowerButtonController::PowerButtonPosition power_button_position_;
-
-  DISALLOW_COPY_AND_ASSIGN(PowerButtonMenuView);
 };
 
 }  // namespace ash

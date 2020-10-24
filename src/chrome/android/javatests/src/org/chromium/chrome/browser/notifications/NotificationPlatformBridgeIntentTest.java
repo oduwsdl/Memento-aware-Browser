@@ -12,6 +12,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -147,7 +148,7 @@ public class NotificationPlatformBridgeIntentTest {
                                   .getApplicationContext();
 
         Intent intent = new Intent(NotificationConstants.ACTION_CLICK_NOTIFICATION);
-        intent.setClass(context, NotificationService.Receiver.class);
+        intent.setClass(context, NotificationServiceImpl.Receiver.class);
 
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_ID, "42");
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_PROFILE_ID, "Default");
@@ -160,11 +161,9 @@ public class NotificationPlatformBridgeIntentTest {
         // Send the pending intent. This will begin starting up the browser process.
         pendingIntent.send();
 
-        CriteriaHelper.pollUiThread(new Criteria("Browser process was never started.") {
-            @Override
-            public boolean isSatisfied() {
-                return NotificationPlatformBridge.getInstanceForTests() != null;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat("Browser process was never started.",
+                    NotificationPlatformBridge.getInstanceForTests(), Matchers.notNullValue());
         });
 
         Assert.assertTrue("The native library should be loaded now",

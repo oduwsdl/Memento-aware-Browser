@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SESSION_USER_SESSION_INITIALIZER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SESSION_USER_SESSION_INITIALIZER_H_
 
+#include <memory>
+
 #include "components/session_manager/core/session_manager_observer.h"
 #include "components/user_manager/user.h"
 
+class ClipboardImageModelFactoryImpl;
 class Profile;
 
 namespace user_manager {
@@ -52,12 +55,12 @@ class UserSessionInitializer : public session_manager::SessionManagerObserver {
   // Initialize RLZ.
   void InitRlz(Profile* profile);
 
-  // Get the NSS cert database for the user represented with |profile|
+  // Get the NSS cert database for the user represented with `profile`
   // and start certificate loader with it.
   void InitializeCerts(Profile* profile);
 
   // Starts loading CRL set.
-  void InitializeCRLSetFetcher(const user_manager::User* user);
+  void InitializeCRLSetFetcher();
 
   // Initializes Certificate Transparency-related components.
   void InitializeCertificateTransparencyComponents(
@@ -67,10 +70,14 @@ class UserSessionInitializer : public session_manager::SessionManagerObserver {
   void InitializePrimaryProfileServices(Profile* profile,
                                         const user_manager::User* user);
 
-  // Initializes RLZ. If |disabled| is true, RLZ pings are disabled.
+  // Initializes RLZ. If `disabled` is true, RLZ pings are disabled.
   void InitRlzImpl(Profile* profile, const RlzInitParams& params);
 
   base::OnceClosure init_rlz_impl_closure_for_testing_;
+
+  // Clipboard html image generator for the primary user.
+  std::unique_ptr<ClipboardImageModelFactoryImpl>
+      clipboard_image_model_factory_impl_;
 
   base::WeakPtrFactory<UserSessionInitializer> weak_factory_{this};
 };

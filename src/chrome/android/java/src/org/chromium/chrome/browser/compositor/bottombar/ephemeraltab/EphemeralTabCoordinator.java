@@ -17,18 +17,19 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.content.ContentUtils;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
@@ -44,6 +45,7 @@ import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.ViewAndroidDelegate;
+import org.chromium.url.GURL;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -72,9 +74,9 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
 
     private String mUrl;
     private int mCurrentMaxSheetHeight;
-    private Profile mProfile;
-    private boolean mOpened;
-    private boolean mFullStateLogged;
+    private boolean mPeeked;
+    private boolean mViewed; // Moved up from peek state by user
+    private boolean mFullyOpened;
 
     /**
      * Constructor.
@@ -114,7 +116,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
      * Checks if the preview tab is in open (peek) state.
      */
     public boolean isOpened() {
-        return mOpened;
+        return mPeeked;
     }
 
     /**
@@ -126,9 +128,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
      */
     public void requestOpenSheet(String url, String title, boolean isIncognito) {
         mUrl = url;
-        Profile profile = isIncognito ? Profile.getLastUsedRegularProfile().getOffTheRecordProfile()
-                                      : Profile.getLastUsedRegularProfile();
-
+        Profile profile = getProfile(isIncognito);
         if (mMediator == null) {
             float topControlsHeight =
                     mContext.getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow)
@@ -138,7 +138,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
         }
         if (mWebContents == null) {
             assert mSheetContent == null;
-            createWebContents(isIncognito);
+            createWebContents(profile);
             mSheetObserver = new EmptyBottomSheetObserver() {
                 private int mCloseReason;
 
@@ -146,8 +146,16 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
                 public void onSheetContentChanged(BottomSheetContent newContent) {
                     if (newContent != mSheetContent) {
                         mMetrics.recordMetricsForClosed(mCloseReason);
-                        mOpened = false;
+                        mPeeked = false;
                         destroyWebContents();
+                    }
+                }
+
+                @Override
+                public void onSheetOpened(@StateChangeReason int reason) {
+                    if (!mViewed) {
+                        mMetrics.recordMetricsForViewed();
+                        mViewed = true;
                     }
                 }
 
@@ -156,15 +164,15 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
                     if (mSheetContent == null) return;
                     switch (newState) {
                         case SheetState.PEEK:
-                            if (!mOpened) {
+                            if (!mPeeked) {
                                 mMetrics.recordMetricsForPeeked();
-                                mOpened = true;
+                                mPeeked = true;
                             }
                             break;
                         case SheetState.FULL:
-                            if (!mFullStateLogged) {
+                            if (!mFullyOpened) {
                                 mMetrics.recordMetricsForOpened();
-                                mFullStateLogged = true;
+                                mFullyOpened = true;
                             }
                             break;
                     }
@@ -190,19 +198,27 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
             mLayoutView.addOnLayoutChangeListener(this);
         }
 
-        mOpened = false;
-        mFullStateLogged = false;
+        mPeeked = false;
+        mViewed = false;
+        mFullyOpened = false;
         mMediator.requestShowContent(url, title);
 
         Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
         if (tracker.isInitialized()) tracker.notifyEvent(EventConstants.EPHEMERAL_TAB_USED);
     }
 
-    private void createWebContents(boolean incognito) {
+    private Profile getProfile(boolean isIncognito) {
+        if (!isIncognito) return Profile.getLastUsedRegularProfile();
+        Profile otrProfile = IncognitoUtils.getNonPrimaryOTRProfileFromWindowAndroid(mWindow);
+        return (otrProfile == null) ? Profile.getLastUsedRegularProfile().getPrimaryOTRProfile()
+                                    : otrProfile;
+    }
+
+    private void createWebContents(Profile profile) {
         assert mWebContents == null;
 
         // Creates an initially hidden WebContents which gets shown when the panel is opened.
-        mWebContents = WebContentsFactory.createWebContents(incognito, true);
+        mWebContents = WebContentsFactory.createWebContents(profile, true);
 
         mContentView = ContentView.createContentView(
                 mContext, null /* eventOffsetHandler */, mWebContents);
@@ -300,7 +316,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
          * @param callback The callback to be invoked to display the final image.
          * @param profile The profile for which favicon service is used.
          */
-        public void loadFavicon(final String url, Callback<Drawable> callback, Profile profile) {
+        public void loadFavicon(final GURL url, Callback<Drawable> callback, Profile profile) {
             assert profile != null;
             FaviconHelper.FaviconImageCallback imageCallback = (bitmap, iconUrl) -> {
                 Drawable drawable;
@@ -315,7 +331,8 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
                 callback.onResult(drawable);
             };
 
-            mFaviconHelper.getLocalFaviconImageForURL(profile, url, mFaviconSize, imageCallback);
+            mFaviconHelper.getLocalFaviconImageForURL(
+                    profile, url.getSpec(), mFaviconSize, imageCallback);
         }
     }
 }

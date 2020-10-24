@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/content/test/data/web_ui_test.test-mojom",
+    "/Users/macuser/chromium/src/content/test/data/web_ui_test_types.test-mojom"
+  ]
+}

@@ -146,6 +146,14 @@ void CollectHardwareOverlayInfo(OverlayInfo* overlay_info) {
         overlay_info->supports_overlays,
         gl::DirectCompositionSurfaceWin::GetOverlaySupportFlags(
             DXGI_FORMAT_YUY2));
+    overlay_info->bgra8_overlay_support = FlagsToOverlaySupport(
+        overlay_info->supports_overlays,
+        gl::DirectCompositionSurfaceWin::GetOverlaySupportFlags(
+            DXGI_FORMAT_B8G8R8A8_UNORM));
+    overlay_info->rgb10a2_overlay_support = FlagsToOverlaySupport(
+        overlay_info->supports_overlays,
+        gl::DirectCompositionSurfaceWin::GetOverlaySupportFlags(
+            DXGI_FORMAT_R10G10B10A2_UNORM));
   }
 }
 
@@ -228,15 +236,13 @@ bool CollectDriverInfoD3D(GPUInfo* gpu_info) {
 }
 
 // DirectX 12 are included with Windows 10 and Server 2016.
-void GetGpuSupportedD3D12Version(Dx12VulkanVersionInfo* info) {
+uint32_t GetGpuSupportedD3D12Version() {
   TRACE_EVENT0("gpu", "GetGpuSupportedD3D12Version");
-  info->supports_dx12 = false;
-  info->d3d12_feature_level = 0;
 
   base::ScopedNativeLibrary d3d12_library(
       base::FilePath(FILE_PATH_LITERAL("d3d12.dll")));
   if (!d3d12_library.is_valid())
-    return;
+    return 0;
 
   // The order of feature levels to attempt to create in D3D CreateDevice
   const D3D_FEATURE_LEVEL feature_levels[] = {
@@ -253,12 +259,11 @@ void GetGpuSupportedD3D12Version(Dx12VulkanVersionInfo* info) {
     for (auto level : feature_levels) {
       if (SUCCEEDED(D3D12CreateDevice(nullptr, level, _uuidof(ID3D12Device),
                                       nullptr))) {
-        info->d3d12_feature_level = level;
-        info->supports_dx12 = (level >= D3D_FEATURE_LEVEL_12_0) ? true : false;
-        break;
+        return level;
       }
     }
   }
+  return 0;
 }
 
 // The old graphics drivers are installed to the Windows system directory
@@ -296,7 +301,7 @@ bool BadAMDVulkanDriverVersion() {
 }
 
 // Vulkan 1.1 was released by the Khronos Group on March 7, 2018.
-// Blacklist all driver versions without Vulkan 1.1 support and those that cause
+// Blocklist all driver versions without Vulkan 1.1 support and those that cause
 // lots of crashes.
 bool BadGraphicsDriverVersions(const gpu::GPUInfo::GPUDevice& gpu_device) {
   // GPU Device info is not available in gpu_integration_test.info-collection
@@ -308,21 +313,13 @@ bool BadGraphicsDriverVersions(const gpu::GPUInfo::GPUDevice& gpu_device) {
   if (!driver_version.IsValid())
     return true;
 
-  // Intel Vulkan drivers - igvk64.dll
-  // 24.20.100.6025 supports 1.1,  April 30, 2018.
-  // https://www.khronos.org/news/permalink/intel-graphics-driver-for-windows-10-64-bit-with-vulkan-1.1-support-released
-  // TODO (magchen@): constexpr uint32_t kIntelVendorId = 0x8086;
-
   // AMD Vulkan drivers - amdvlk64.dll
-  // https://raw.githubusercontent.com/GPUOpen-Drivers/amd-vulkan-versions/master/amdversions.xml
   constexpr uint32_t kAMDVendorId = 0x1002;
   if (gpu_device.vendor_id == kAMDVendorId) {
     // 26.20.12028.2 (2019)- number of crashes 1,188,048 as of 5/14/2020.
     // Returns -1, 0, 1 for <, ==, >.
     if (driver_version.CompareTo(base::Version("26.20.12028.2")) == 0)
       return true;
-
-    // TODO (magchen@): 1.1 support detection
   }
 
   return false;
@@ -408,12 +405,9 @@ bool InitVulkanInstanceProc(
   return false;
 }
 
-void GetGpuSupportedVulkanVersionAndExtensions(
-    const gpu::GPUInfo::GPUDevice& gpu_device,
-    Dx12VulkanVersionInfo* info,
-    const std::vector<const char*>& requested_vulkan_extensions,
-    std::vector<bool>* extension_support) {
-  TRACE_EVENT0("gpu", "GetGpuSupportedVulkanVersionAndExtensions");
+uint32_t GetGpuSupportedVulkanVersion(
+    const gpu::GPUInfo::GPUDevice& gpu_device) {
+  TRACE_EVENT0("gpu", "GetGpuSupportedVulkanVersion");
 
   base::NativeLibrary vulkan_library;
   PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
@@ -422,27 +416,26 @@ void GetGpuSupportedVulkanVersionAndExtensions(
   PFN_vkEnumerateDeviceExtensionProperties vkEnumerateDeviceExtensionProperties;
   VkInstance vk_instance = VK_NULL_HANDLE;
   uint32_t physical_device_count = 0;
-  info->supports_vulkan = false;
-  info->vulkan_version = 0;
 
   // Skip if the system has an older AMD Vulkan driver amdvlk64.dll or
   // amdvlk32.dll which crashes when vkCreateInstance() is called. This bug has
   // been fixed in the latest AMD driver.
   // Detected by the file version of amdvlk64.dll.
   if (BadAMDVulkanDriverVersion()) {
-    return;
+    return 0;
   }
 
-  // Don't collect any info if the graphics vulkan driver is blacklisted or
+  // Don't collect any info if the graphics vulkan driver is blocklisted or
   // doesn't support Vulkan 1.1
   // Detected by the graphic driver version returned by DXGI
   if (BadGraphicsDriverVersions(gpu_device))
-    return;
+    return 0;
 
   // Only supports a version >= 1.1.0.
+  uint32_t vulkan_version = 0;
   if (!InitVulkan(&vulkan_library, &vkGetInstanceProcAddr, &vkCreateInstance,
-                  &info->vulkan_version)) {
-    return;
+                  &vulkan_version)) {
+    return 0;
   }
 
   VkApplicationInfo app_info = {};
@@ -458,7 +451,7 @@ void GetGpuSupportedVulkanVersionAndExtensions(
   create_info.ppEnabledExtensionNames = enabled_instance_extensions.data();
 
   // Get the Vulkan API version supported in the GPU driver
-  int highest_minor_version = VK_VERSION_MINOR(info->vulkan_version);
+  int highest_minor_version = VK_VERSION_MINOR(vulkan_version);
   for (int minor_version = highest_minor_version; minor_version >= 1;
        --minor_version) {
     app_info.apiVersion = VK_MAKE_VERSION(1, minor_version, 0);
@@ -470,46 +463,13 @@ void GetGpuSupportedVulkanVersionAndExtensions(
       result = vkEnumeratePhysicalDevices(vk_instance, &physical_device_count,
                                           nullptr);
       if (result == VK_SUCCESS && physical_device_count > 0) {
-        info->supports_vulkan = true;
-        info->vulkan_version = app_info.apiVersion;
-        break;
+        return app_info.apiVersion;
       } else {
         // Skip destroy here. GPU process shutdown will unload all loaded DLLs.
         // vkDestroyInstance(vk_instance, nullptr);
         vk_instance = VK_NULL_HANDLE;
       }
     }
-  }
-
-  // Check whether the requested_vulkan_extensions are supported
-  if (info->supports_vulkan) {
-    std::vector<VkPhysicalDevice> physical_devices(physical_device_count);
-    vkEnumeratePhysicalDevices(vk_instance, &physical_device_count,
-                               physical_devices.data());
-
-    // physical_devices[0]: Only query the default device for now
-    uint32_t property_count;
-    vkEnumerateDeviceExtensionProperties(physical_devices[0], nullptr,
-                                         &property_count, nullptr);
-
-    std::vector<VkExtensionProperties> extension_properties(property_count);
-    if (property_count > 0) {
-      vkEnumerateDeviceExtensionProperties(physical_devices[0], nullptr,
-                                           &property_count,
-                                           extension_properties.data());
-    }
-
-    for (size_t i = 0; i < requested_vulkan_extensions.size(); ++i) {
-      for (size_t p = 0; p < property_count; ++p) {
-        if (strcmp(requested_vulkan_extensions[i],
-                   extension_properties[p].extensionName) == 0) {
-          (*extension_support)[i] = true;
-          break;
-        }
-      }
-    }
-  } else {
-    info->vulkan_version = VK_MAKE_VERSION(1, 0, 0);
   }
 
   // From the crash reports, calling the following two functions might cause a
@@ -520,36 +480,16 @@ void GetGpuSupportedVulkanVersionAndExtensions(
   //   vkDestroyInstance(vk_instance, nullptr);
   // }
   // base::UnloadNativeLibrary(vulkan_library);
+  return 0;
 }
 
-void RecordGpuSupportedRuntimeVersionHistograms(
-    const gpu::GPUInfo::GPUDevice& gpu_device,
-    Dx12VulkanVersionInfo* info) {
-  // D3D
-  GetGpuSupportedD3D12Version(info);
-  UMA_HISTOGRAM_BOOLEAN("GPU.SupportsDX12", info->supports_dx12);
+void RecordGpuSupportedDx12VersionHistograms(uint32_t d3d12_feature_level) {
+  bool supports_dx12 =
+      (d3d12_feature_level >= D3D_FEATURE_LEVEL_12_0) ? true : false;
+  UMA_HISTOGRAM_BOOLEAN("GPU.SupportsDX12", supports_dx12);
   UMA_HISTOGRAM_ENUMERATION(
       "GPU.D3D12FeatureLevel",
-      ConvertToHistogramFeatureLevel(info->d3d12_feature_level));
-
-  // Vulkan
-  const std::vector<const char*> vulkan_extensions = {
-      "VK_KHR_external_memory_win32", "VK_KHR_external_semaphore_win32",
-      "VK_KHR_win32_keyed_mutex"};
-  std::vector<bool> extension_support(vulkan_extensions.size(), false);
-  GetGpuSupportedVulkanVersionAndExtensions(gpu_device, info, vulkan_extensions,
-                                            &extension_support);
-
-  UMA_HISTOGRAM_BOOLEAN("GPU.SupportsVulkan", info->supports_vulkan);
-  UMA_HISTOGRAM_ENUMERATION(
-      "GPU.VulkanVersion",
-      ConvertToHistogramVulkanVersion(info->vulkan_version));
-
-  for (size_t i = 0; i < vulkan_extensions.size(); ++i) {
-    std::string name = "GPU.VulkanExtSupport.";
-    name.append(vulkan_extensions[i]);
-    base::UmaHistogramBoolean(name, extension_support[i]);
-  }
+      ConvertToHistogramFeatureLevel(d3d12_feature_level));
 }
 
 bool CollectD3D11FeatureInfo(D3D_FEATURE_LEVEL* d3d11_feature_level,

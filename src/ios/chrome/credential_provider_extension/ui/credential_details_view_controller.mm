@@ -4,8 +4,11 @@
 
 #import "ios/chrome/credential_provider_extension/ui/credential_details_view_controller.h"
 
+#import <MobileCoreServices/UTCoreTypes.h>
+
 #import "base/mac/foundation_util.h"
 #include "ios/chrome/common/app_group/app_group_metrics.h"
+#import "ios/chrome/common/constants.h"
 #import "ios/chrome/common/credential_provider/credential.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/credential_provider_extension/metrics_util.h"
@@ -90,6 +93,7 @@ typedef NS_ENUM(NSInteger, RowIdentifier) {
   cell.detailTextLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
   cell.contentView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
   cell.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+  cell.accessibilityTraits |= UIAccessibilityTraitButton;
 
   switch (indexPath.row) {
     case RowIdentifier::RowIdentifierURL:
@@ -164,7 +168,7 @@ typedef NS_ENUM(NSInteger, RowIdentifier) {
 // Copy credential URL to clipboard.
 - (void)copyURL {
   UIPasteboard* generalPasteboard = [UIPasteboard generalPasteboard];
-  generalPasteboard.string = self.credential.serviceName;
+  generalPasteboard.string = self.credential.serviceIdentifier;
   UpdateUMACountForKey(app_group::kCredentialExtensionCopyURLCount);
 }
 
@@ -177,8 +181,11 @@ typedef NS_ENUM(NSInteger, RowIdentifier) {
 
 // Copy password to clipboard.
 - (void)copyPassword {
-  UIPasteboard* generalPasteboard = [UIPasteboard generalPasteboard];
-  generalPasteboard.string = self.clearPassword;
+  NSDictionary* item = @{(NSString*)kUTTypePlainText : self.clearPassword};
+  NSDate* expirationDate =
+      [NSDate dateWithTimeIntervalSinceNow:kSecurePasteboardExpiration];
+  NSDictionary* options = @{UIPasteboardOptionExpirationDate : expirationDate};
+  [[UIPasteboard generalPasteboard] setItems:@[ item ] options:options];
   UpdateUMACountForKey(app_group::kCredentialExtensionCopyPasswordCount);
 }
 
@@ -280,6 +287,8 @@ typedef NS_ENUM(NSInteger, RowIdentifier) {
                                                          target:self
                                                          action:action];
   [tooltip showMessage:message atBottomOf:cell];
+  UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
+                                  tooltip);
 }
 
 @end

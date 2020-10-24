@@ -48,6 +48,7 @@
 #include "media/gpu/buildflags.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "third_party/angle/src/gpu_info_util/SystemInfo.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_context.h"
@@ -77,6 +78,7 @@
 #endif
 
 #if defined(USE_X11)
+#include "ui/base/x/x11_ui_thread.h"                     // nogncheck
 #include "ui/base/x/x11_util.h"                          // nogncheck
 #include "ui/gfx/linux/gpu_memory_buffer_support_x11.h"  // nogncheck
 #include "ui/gfx/x/x11.h"                                // nogncheck
@@ -84,21 +86,20 @@
 #include "ui/gfx/x/x11_types.h"                          // nogncheck
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "content/gpu/gpu_sandbox_hook_linux.h"
 #include "content/public/common/sandbox_init.h"
-#include "services/service_manager/sandbox/linux/sandbox_linux.h"
-#include "services/service_manager/zygote/common/common_sandbox_support_linux.h"
+#include "sandbox/policy/linux/sandbox_linux.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/message_loop/message_pump_mac.h"
 #include "components/metal_util/device_removal.h"
 #include "components/metal_util/test_shader.h"
 #include "content/public/common/content_features.h"
 #include "media/gpu/mac/vt_video_decode_accelerator_mac.h"
 #include "sandbox/mac/seatbelt.h"
-#include "services/service_manager/sandbox/mac/sandbox_mac.h"
+#include "sandbox/policy/mac/sandbox_mac.h"
 #endif
 
 #if BUILDFLAG(USE_VAAPI)
@@ -109,7 +110,7 @@ namespace content {
 
 namespace {
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 bool StartSandboxLinux(gpu::GpuWatchdogThread*,
                        const gpu::GPUInfo*,
                        const gpu::GpuPreferences&);
@@ -140,14 +141,21 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
     }
 
 #if BUILDFLAG(USE_VAAPI)
+// TODO(andrescj) Make this work on LaCrOS, not just ASH.
+#if BUILDFLAG(IS_ASH)
     media::VaapiWrapper::PreSandboxInitialization();
+#else  // For any non-ash chrome (ie: linux or lacros) that can support vaapi.
+    const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
+    if (cmd_line->HasSwitch(switches::kEnableAcceleratedVideoDecode))
+      media::VaapiWrapper::PreSandboxInitialization();
 #endif
+#endif  // BUILDFLAG(USE_VAAPI)
 #if defined(OS_WIN)
     media::DXVAVideoDecodeAccelerator::PreSandboxInitialization();
     media::MediaFoundationVideoEncodeAccelerator::PreSandboxInitialization();
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     if (base::FeatureList::IsEnabled(features::kMacV2GPUSandbox)) {
       TRACE_EVENT0("gpu", "Initialize VideoToolbox");
       media::InitializeVideoToolbox();
@@ -162,11 +170,11 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
   bool EnsureSandboxInitialized(gpu::GpuWatchdogThread* watchdog_thread,
                                 const gpu::GPUInfo* gpu_info,
                                 const gpu::GpuPreferences& gpu_prefs) override {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     return StartSandboxLinux(watchdog_thread, gpu_info, gpu_prefs);
 #elif defined(OS_WIN)
     return StartSandboxWindows(sandbox_info_);
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
     return sandbox::Seatbelt::IsSandboxed();
 #else
     return false;
@@ -180,7 +188,7 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
   DISALLOW_COPY_AND_ASSIGN(ContentSandboxHelper);
 };
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void TestShaderCallback(metal::TestShaderComponent component,
                         metal::TestShaderResult result,
                         const base::TimeDelta& callback_time) {
@@ -274,25 +282,35 @@ int GpuMain(const MainFunctionParams& parameters) {
     main_thread_task_executor =
         std::make_unique<base::SingleThreadTaskExecutor>(
             base::MessagePumpType::DEFAULT);
-#elif defined(USE_X11)
-    // We need a UI loop so that we can grab the Expose events. See GLSurfaceGLX
-    // and https://crbug.com/326995.
-    ui::SetDefaultX11ErrorHandlers();
-    if (!gfx::GetXDisplay())
-      return RESULT_CODE_GPU_DEAD_ON_ARRIVAL;
-    main_thread_task_executor =
-        std::make_unique<base::SingleThreadTaskExecutor>(
-            base::MessagePumpType::UI);
-    event_source = ui::PlatformEventSource::CreateDefault();
-#elif defined(USE_OZONE)
+#elif defined(USE_X11) || defined(USE_OZONE)
+#if defined(USE_X11)
+    if (!features::IsUsingOzonePlatform()) {
+      // We need a UI loop so that we can grab the Expose events. See
+      // GLSurfaceGLX and https://crbug.com/326995.
+      if (!gfx::GetXDisplay())
+        return RESULT_CODE_GPU_DEAD_ON_ARRIVAL;
+      main_thread_task_executor =
+          std::make_unique<base::SingleThreadTaskExecutor>(
+              base::MessagePumpType::UI);
+      event_source = ui::PlatformEventSource::CreateDefault();
+      // Set up the X11UiThread before the sandbox gets set up.  This cannot be
+      // done later since opening the connection requires socket() and
+      // connect().
+      ui::X11UiThread::SetConnection(x11::Connection::Get()->Clone().release());
+    }
+#endif
+#if defined(USE_OZONE)
     // The MessagePump type required depends on the Ozone platform selected at
     // runtime.
-    main_thread_task_executor =
-        std::make_unique<base::SingleThreadTaskExecutor>(
-            gpu_preferences.message_pump_type);
-#elif defined(OS_LINUX)
+    if (!main_thread_task_executor) {
+      main_thread_task_executor =
+          std::make_unique<base::SingleThreadTaskExecutor>(
+              gpu_preferences.message_pump_type);
+    }
+#endif
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
 #error "Unsupported Linux platform."
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
     // Cross-process CoreAnimation requires a CFRunLoop to function at all, and
     // requires a NSRunLoop to not starve under heavy load. See:
     // https://crbug.com/312462#c51 and https://crbug.com/783298
@@ -312,7 +330,7 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   base::PlatformThread::SetName("CrGpuMain");
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority)) {
     // Set thread priority before sandbox initialization.
     base::PlatformThread::SetCurrentThreadPriority(
@@ -328,9 +346,14 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   gpu_init->set_sandbox_helper(&sandbox_helper);
 
-  // Since GPU initialization calls into skia, its important to initialize skia
+  // Since GPU initialization calls into skia, it's important to initialize skia
   // before it.
   InitializeSkia();
+
+  // Create the ThreadPool before invoking |gpu_init| as it needs the ThreadPool
+  // (in angle::InitializePlatform()). Do not start it until after the sandbox
+  // is initialized however to avoid creating threads outside the sandbox.
+  base::ThreadPoolInstance::Create("GPU");
 
   // Gpu initialization may fail for various reasons, in which case we will need
   // to tear down this process. However, we can not do so safely until the IPC
@@ -346,11 +369,14 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   GetContentClient()->SetGpuInfo(gpu_init->gpu_info());
 
+  // Start the ThreadPoolInstance now that the sandbox is initialized.
+  base::ThreadPoolInstance::Get()->StartWithDefaultParams();
+
   const base::ThreadPriority io_thread_priority =
       base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority)
           ? base::ThreadPriority::DISPLAY
           : base::ThreadPriority::NORMAL;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Increase the thread priority to get more reliable values in performance
   // test of mac_os.
   GpuProcess gpu_process(
@@ -364,7 +390,8 @@ int GpuMain(const MainFunctionParams& parameters) {
 #if defined(USE_X11)
   // ui::GbmDevice() takes >50ms with amdgpu, so kick off
   // GpuMemoryBufferSupportX11 creation on another thread now.
-  if (gpu_preferences.enable_native_gpu_memory_buffers) {
+  if (!features::IsUsingOzonePlatform() &&
+      gpu_preferences.enable_native_gpu_memory_buffers) {
     base::ThreadPool::PostTask(
         FROM_HERE, base::BindOnce([]() {
           SCOPED_UMA_HISTOGRAM_TIMER("Linux.X11.GbmSupportX11CreationTime");
@@ -384,16 +411,16 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   gpu_process.set_main_thread(child_thread);
 
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MAC)
   // Startup tracing is usually enabled earlier, but if we forked from a zygote,
   // we can only enable it after mojo IPC support is brought up initialized by
   // GpuChildThread, because the mojo broker has to create the tracing SMB on
   // our behalf due to the zygote sandbox.
   if (parameters.zygote_child)
     tracing::EnableStartupTracingIfNeeded();
-#endif  // OS_POSIX && !OS_ANDROID && !!OS_MACOSX
+#endif  // OS_POSIX && !OS_ANDROID && !OS_MAC
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // A GPUEjectPolicy of 'wait' is set in the Info.plist of the browser
   // process, meaning it is "responsible" for making sure it and its
   // subordinate processes (i.e. the GPU process) drop references to the
@@ -434,7 +461,7 @@ int GpuMain(const MainFunctionParams& parameters) {
 
 namespace {
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
                        const gpu::GPUInfo* gpu_info,
                        const gpu::GpuPreferences& gpu_prefs) {
@@ -443,12 +470,12 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
   if (watchdog_thread) {
     // SandboxLinux needs to be able to ensure that the thread
     // has really been stopped.
-    service_manager::SandboxLinux::GetInstance()->StopThread(watchdog_thread);
+    sandbox::policy::SandboxLinux::GetInstance()->StopThread(watchdog_thread);
   }
 
   // SandboxLinux::InitializeSandbox() must always be called
   // with only one thread.
-  service_manager::SandboxLinux::Options sandbox_options;
+  sandbox::policy::SandboxLinux::Options sandbox_options;
   sandbox_options.use_amd_specific_policies =
       gpu_info && angle::IsAMD(gpu_info->active_gpu().vendor_id);
   sandbox_options.use_intel_specific_policies =
@@ -458,8 +485,8 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
   sandbox_options.accelerated_video_encode_enabled =
       !gpu_prefs.disable_accelerated_video_encode;
 
-  bool res = service_manager::SandboxLinux::GetInstance()->InitializeSandbox(
-      service_manager::SandboxTypeFromCommandLine(
+  bool res = sandbox::policy::SandboxLinux::GetInstance()->InitializeSandbox(
+      sandbox::policy::SandboxTypeFromCommandLine(
           *base::CommandLine::ForCurrentProcess()),
       base::BindOnce(GpuProcessPreSandboxHook), sandbox_options);
 
@@ -471,7 +498,7 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
 
   return res;
 }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
 bool StartSandboxWindows(const sandbox::SandboxInterfaceInfo* sandbox_info) {

@@ -4,6 +4,7 @@
 
 #include "content/renderer/render_view_impl.h"
 
+#include "skia/ext/legacy_display_globals.h"
 #include "third_party/blink/public/platform/web_font_render_style.h"
 
 namespace content {
@@ -11,7 +12,7 @@ namespace content {
 namespace {
 
 SkFontHinting RendererPreferencesToSkiaHinting(
-    const blink::mojom::RendererPreferences& prefs) {
+    const blink::RendererPreferences& prefs) {
   switch (prefs.hinting) {
     case gfx::FontRenderParams::HINTING_NONE:
       return SkFontHinting::kNone;
@@ -30,16 +31,13 @@ SkFontHinting RendererPreferencesToSkiaHinting(
 }  // namespace
 
 void RenderViewImpl::UpdateFontRenderingFromRendererPrefs() {
-  const blink::mojom::RendererPreferences& prefs = renderer_preferences_;
+  const blink::RendererPreferences& prefs = renderer_preferences_;
   blink::WebFontRenderStyle::SetHinting(
       RendererPreferencesToSkiaHinting(prefs));
   blink::WebFontRenderStyle::SetAutoHint(prefs.use_autohinter);
   blink::WebFontRenderStyle::SetUseBitmaps(prefs.use_bitmaps);
-  SkFontLCDConfig::SetSubpixelOrder(
-      gfx::FontRenderParams::SubpixelRenderingToSkiaLCDOrder(
-          prefs.subpixel_rendering));
-  SkFontLCDConfig::SetSubpixelOrientation(
-      gfx::FontRenderParams::SubpixelRenderingToSkiaLCDOrientation(
+  skia::LegacyDisplayGlobals::SetCachedPixelGeometry(
+      gfx::FontRenderParams::SubpixelRenderingToSkiaPixelGeometry(
           prefs.subpixel_rendering));
   blink::WebFontRenderStyle::SetAntiAlias(prefs.should_antialias_text);
   blink::WebFontRenderStyle::SetSubpixelRendering(

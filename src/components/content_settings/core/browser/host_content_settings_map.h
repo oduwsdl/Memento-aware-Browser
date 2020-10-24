@@ -79,7 +79,6 @@ class HostContentSettingsMap : public content_settings::Observer,
   HostContentSettingsMap(PrefService* prefs,
                          bool is_off_the_record,
                          bool store_last_modified,
-                         bool migrate_requesting_and_top_level_origin_settings,
                          bool restore_session);
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
@@ -108,7 +107,7 @@ class HostContentSettingsMap : public content_settings::Observer,
                                           std::string* provider_id) const;
 
   // Returns a single |ContentSetting| which applies to the given URLs.  Note
-  // that certain internal schemes are whitelisted. For |CONTENT_TYPE_COOKIES|,
+  // that certain internal schemes are allowlisted. For |CONTENT_TYPE_COOKIES|,
   // |CookieSettings| should be used instead. For content types that can't be
   // converted to a |ContentSetting|, |GetContentSettingValue| should be called.
   // If there is no content setting, returns CONTENT_SETTING_DEFAULT.
@@ -133,7 +132,7 @@ class HostContentSettingsMap : public content_settings::Observer,
   // source of the returned |Value| (POLICY, EXTENSION, USER, ...) and the
   // |primary_pattern| and the |secondary_pattern| fields of |info| are set to
   // the patterns of the applying rule.  Note that certain internal schemes are
-  // whitelisted. For whitelisted schemes the |source| field of |info| is set
+  // allowlisted. For allowlisted schemes the |source| field of |info| is set
   // the |SETTING_SOURCE_ALLOWLIST| and the |primary_pattern| and
   // |secondary_pattern| are set to a wildcard pattern.  If there is no content
   // setting, NULL is returned and the |source| field of |info| is set to
@@ -152,8 +151,9 @@ class HostContentSettingsMap : public content_settings::Observer,
   // |settings| must be a non-NULL outparam. |session_model| can be
   // specified to limit the type of setting results returned. Any entries in
   // |settings| are guaranteed to be unexpired at the time they are retrieved
-  // from their respective providers. If |settings| are not used immediately the
-  // validity of each entry should be checked using IsExpired().
+  // from their respective providers and incognito inheritance behavior is
+  // applied. If |settings| are not used immediately the validity of each entry
+  // should be checked using IsExpired().
   //
   // This may be called on any thread.
   void GetSettingsForOneType(ContentSettingsType content_type,
@@ -161,6 +161,14 @@ class HostContentSettingsMap : public content_settings::Observer,
                              ContentSettingsForOneType* settings,
                              base::Optional<content_settings::SessionModel>
                                  session_model = base::nullopt) const;
+
+  // Returns settings that are not applied.
+  // Example: Pattern for flash that are still set through enterprise policy but
+  // won't have any effect because they are deprecated.
+  void GetDiscardedSettingsForOneType(
+      ContentSettingsType content_type,
+      const std::string& resource_identifier,
+      ContentSettingsForOneType* settings) const;
 
   // Sets the default setting for a particular content type. This method must
   // not be invoked on an incognito map.
@@ -284,7 +292,8 @@ class HostContentSettingsMap : public content_settings::Observer,
 
   // If |pattern_predicate| is null, this method is equivalent to the above.
   // Otherwise, it only deletes exceptions matched by |pattern_predicate| that
-  // were modified at or after |begin_time| and before |end_time|.
+  // were modified at or after |begin_time| and before |end_time|. To delete
+  // an individual setting, use SetWebsiteSetting/SetContentSetting methods.
   void ClearSettingsForOneTypeWithPredicate(
       ContentSettingsType content_type,
       base::Time begin_time,
@@ -329,6 +338,11 @@ class HostContentSettingsMap : public content_settings::Observer,
   // Returns the provider that contains content settings from user preferences.
   content_settings::PrefProvider* GetPrefProvider() const {
     return pref_provider_;
+  }
+
+  // Only use for testing.
+  void AllowInvalidSecondaryPatternForTesting(bool allow) {
+    allow_invalid_secondary_pattern_for_testing_ = allow;
   }
 
  private:
@@ -418,9 +432,16 @@ class HostContentSettingsMap : public content_settings::Observer,
   // (http://y.com, *). The reason the second pattern is removed is to ensure
   // that permission won't automatically be granted to x.com when it's embedded
   // in y.com when permission delegation is enabled.
-  // TODO(raymes): Remove 2 milestones after permission delegation ships.
-  // https://crbug.com/818004.
-  void MigrateRequestingAndTopLevelOriginSettings();
+  // It also ensures that we move away from (http://x.com, http://x.com)
+  // patterns by replacing these patterns with (http://x.com, *).
+  void MigrateSettingsPrecedingPermissionDelegationActivation();
+
+  // Verifies that this secondary pattern is allowed.
+  bool IsSecondaryPatternAllowed(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsType content_type,
+      base::Value* value);
 
 #ifndef NDEBUG
   // This starts as the thread ID of the thread that constructs this
@@ -460,6 +481,11 @@ class HostContentSettingsMap : public content_settings::Observer,
   base::ThreadChecker thread_checker_;
 
   base::ObserverList<content_settings::Observer>::Unchecked observers_;
+
+  // When true, allows setting secondary patterns even for types that should not
+  // allow them. Only used for testing that inserts previously valid patterns in
+  // order to ensure the migration logic is sound.
+  bool allow_invalid_secondary_pattern_for_testing_;
 
   base::WeakPtrFactory<HostContentSettingsMap> weak_ptr_factory_{this};
 

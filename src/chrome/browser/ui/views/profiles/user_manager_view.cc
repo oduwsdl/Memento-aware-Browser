@@ -19,11 +19,14 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/profile_picker.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -50,7 +53,7 @@
 #include "ui/views/win/hwnd_util.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/app_controller_mac.h"
 #endif
 
@@ -167,12 +170,24 @@ void UserManager::Show(
     profiles::UserManagerAction user_manager_action) {
   DCHECK(profile_path_to_focus != ProfileManager::GetGuestProfilePath());
 
+  if (!signin_util::IsForceSigninEnabled() &&
+      (user_manager_action == profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION ||
+       user_manager_action == profiles::USER_MANAGER_OPEN_CREATE_USER_PAGE) &&
+      base::FeatureList::IsEnabled(features::kNewProfilePicker)) {
+    // Use the new profile picker instead.
+    ProfilePicker::Show(
+        user_manager_action == profiles::USER_MANAGER_OPEN_CREATE_USER_PAGE
+            ? ProfilePicker::EntryPoint::kProfileMenuAddNewProfile
+            : ProfilePicker::EntryPoint::kProfileMenuManageProfiles);
+    return;
+  }
+
   if (g_user_manager_view) {
     // If we are showing the User Manager after locking a profile, change the
     // active profile to Guest.
     profiles::SetActiveProfileToGuestIfLocked();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     app_controller_mac::CreateGuestProfileIfNeeded();
 #endif
 
@@ -205,13 +220,16 @@ void UserManager::Show(
 
 // static
 void UserManager::Hide() {
+  // Hide the profile picker, in case it was opened by UserManager::Show().
+  ProfilePicker::Hide();
+
   if (g_user_manager_view)
     g_user_manager_view->GetWidget()->Close();
 }
 
 // static
 bool UserManager::IsShowing() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Widget activation works differently on Mac: the UserManager is a child
   // widget, so it is not active in the IsActive() sense even when showing
   // and interactable. Test for IsVisible instead - this is what the Cocoa
@@ -248,6 +266,9 @@ void UserManager::AddOnUserManagerShownCallbackForTesting(
 
 // static
 base::FilePath UserManager::GetSigninProfilePath() {
+  if (!g_user_manager_view)
+    return base::FilePath();
+
   return g_user_manager_view->GetSigninProfilePath();
 }
 
@@ -346,7 +367,7 @@ void UserManagerView::OnSystemProfileCreated(
   // active profile to Guest.
   profiles::SetActiveProfileToGuestIfLocked();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   app_controller_mac::CreateGuestProfileIfNeeded();
 #endif
 
@@ -387,6 +408,11 @@ void UserManagerView::Init(Profile* system_profile, const GURL& url) {
   SetLayoutManager(std::make_unique<views::FillLayout>());
   AddAccelerator(ui::Accelerator(ui::VKEY_W, ui::EF_CONTROL_DOWN));
   AddAccelerator(ui::Accelerator(ui::VKEY_F4, ui::EF_ALT_DOWN));
+
+  // Make the user manager WebContents show up in the task manager.
+  content::WebContents* web_contents = web_view_->GetWebContents();
+  task_manager::WebContentsTags::CreateForToolContents(
+      web_contents, IDS_PROFILES_MANAGE_USERS_BUTTON);
 
   // If the user manager is being displayed from an existing profile, use
   // its last active browser to determine where the user manager should be
@@ -429,14 +455,13 @@ void UserManagerView::Init(Profile* system_profile, const GURL& url) {
 #if defined(OS_WIN)
   // Set the app id for the user manager to the app id of its parent.
   ui::win::SetAppIdForWindow(
-      shell_integration::win::GetChromiumModelIdForProfile(
+      shell_integration::win::GetAppUserModelIdForBrowser(
           system_profile->GetPath()),
       views::HWNDForWidget(GetWidget()));
 #endif
 
   web_view_->LoadInitialURL(url);
-  content::RenderWidgetHostView* rwhv =
-      web_view_->GetWebContents()->GetRenderWidgetHostView();
+  content::RenderWidgetHostView* rwhv = web_contents->GetRenderWidgetHostView();
   if (rwhv)
     rwhv->SetBackgroundColor(profiles::kUserManagerBackgroundColor);
 

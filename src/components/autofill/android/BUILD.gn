@@ -4,6 +4,7 @@
 
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
+import("//tools/grit/grit_rule.gni")
 
 java_strings_grd("autofill_strings_grd") {
   grd_file = "java/strings/autofill_strings.grd"
@@ -14,7 +15,6 @@ java_strings_grd("autofill_strings_grd") {
 }
 
 android_resources("autofill_java_resources") {
-  custom_package = "org.chromium.components.autofill"
   sources = [
     "java/res/layout/autofill_dropdown_footer_item_refresh.xml",
     "java/res/layout/autofill_dropdown_item.xml",
@@ -40,9 +40,10 @@ android_library("autofill_java") {
     ":autofill_java_resources",
     "//base:base_java",
     "//content/public/android:content_java",
-    "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
-    "//ui/android:ui_java",
+    "//third_party/android_deps:androidx_core_core_java",
+    "//ui/android:ui_no_recycler_view_java",
   ]
   sources = [
     "java/src/org/chromium/components/autofill/AutofillDelegate.java",
@@ -54,4 +55,5 @@ android_library("autofill_java") {
     "java/src/org/chromium/components/autofill/EditableOption.java",
   ]
   srcjar_deps = [ ":autofill_core_browser_java_enums" ]
+  resources_package = "org.chromium.components.autofill"
 }

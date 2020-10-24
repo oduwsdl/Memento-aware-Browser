@@ -33,11 +33,14 @@ import static org.hamcrest.Matchers.anything;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.lessThan;
 
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.getElementValue;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.isNextAfterSibling;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.startAutofillAssistant;
+import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewInRootMatchesCondition;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
+import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.withTextId;
 
 import android.support.test.InstrumentationRegistry;
 import android.widget.RadioButton;
@@ -559,6 +562,8 @@ public class AutofillAssistantPersonalDataManagerTest {
         onView(withContentDescription("Continue")).perform(click());
         waitUntilViewMatchesCondition(withId(R.id.card_unmask_input), isCompletelyDisplayed());
         onView(withId(R.id.card_unmask_input)).perform(typeText("123"));
+        waitUntilViewMatchesCondition(
+                withId(R.id.positive_button), allOf(isDisplayed(), isEnabled()));
         onView(withId(R.id.positive_button)).perform(click());
         waitUntilViewMatchesCondition(withText("Prompt"), isCompletelyDisplayed());
         assertThat(getElementValue(getWebContents(), "name"), is("John Doe"));
@@ -824,7 +829,7 @@ public class AutofillAssistantPersonalDataManagerTest {
      */
     @Test
     @MediumTest
-    public void testCreateShippingAddressAndCreditCard() throws Exception {
+    public void testCreateShippingAddressAndCreditCard() {
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add((ActionProto) ActionProto.newBuilder()
                          .setCollectUserData(CollectUserDataProto.newBuilder()
@@ -857,6 +862,20 @@ public class AutofillAssistantPersonalDataManagerTest {
         onView(withContentDescription("ZIP code*")).perform(scrollTo(), typeText("1234"));
         onView(withContentDescription("Phone*")).perform(scrollTo(), typeText("8008080808"));
         onView(withText("Done")).perform(scrollTo(), click());
+
+        addCreditCardAndSelectAddress();
+        int tryNumber = 0;
+        int maxRetries = 3;
+        while (!hasAddress() && tryNumber++ < maxRetries) {
+            // If the new address is not yet present, we first need to close the popup dialog.
+            Espresso.pressBack();
+            onView(withText("Cancel")).perform(scrollTo(), click());
+            addCreditCardAndSelectAddress();
+        }
+        assertThat(tryNumber, lessThan(maxRetries));
+    }
+
+    private void addCreditCardAndSelectAddress() {
         waitUntilViewMatchesCondition(
                 allOf(withId(R.id.section_title_add_button_label), withText("Add card")),
                 isCompletelyDisplayed());
@@ -867,11 +886,79 @@ public class AutofillAssistantPersonalDataManagerTest {
         Espresso.closeSoftKeyboard();
         onView(allOf(withId(org.chromium.chrome.R.id.spinner), withChild(withText("Select"))))
                 .perform(scrollTo(), click());
-        onData(anything())
-                .atPosition(1 /* address of John, 0 is SELECT (empty) */)
-                .inRoot(withDecorView(withClassName(containsString("Popup"))))
+    }
+
+    private boolean hasAddress() {
+        try {
+            waitUntilViewInRootMatchesCondition(withText(containsString("John Doe")),
+                    withDecorView(withClassName(containsString("Popup"))), isDisplayed());
+            return true;
+        } catch (AssertionError e) {
+            return false;
+        }
+    }
+
+    /**
+     * Add a shipping address with Autofill Assistant UI and fill it into the form.
+     */
+    @Test
+    @MediumTest
+    public void testCreateAndEnterAddress() throws Exception {
+        ArrayList<ActionProto> list = new ArrayList<>();
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setCollectUserData(CollectUserDataProto.newBuilder()
+                                                     .setShippingAddressName("shipping")
+                                                     .setRequestTermsAndConditions(false))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setUseAddress(
+                                 UseAddressProto.newBuilder()
+                                         .setName("shipping")
+                                         .setFormFieldElement(SelectorProto.newBuilder().addFilters(
+                                                 SelectorProto.Filter.newBuilder().setCssSelector(
+                                                         "#address_name"))))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setPrompt(PromptProto.newBuilder().setMessage("Prompt").addChoices(
+                                 PromptProto.Choice.newBuilder()))
+                         .build());
+        AutofillAssistantTestScript script = new AutofillAssistantTestScript(
+                (SupportedScriptProto) SupportedScriptProto.newBuilder()
+                        .setPath("form_target_website.html")
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
+                                ChipProto.newBuilder().setText("Address")))
+                        .build(),
+                list);
+        runScript(script);
+
+        waitUntilViewMatchesCondition(allOf(withId(R.id.section_title_add_button_label),
+                                              withTextId(R.string.payments_add_address)),
+                isCompletelyDisplayed());
+        onView(allOf(withId(R.id.section_title_add_button_label),
+                       withTextId(R.string.payments_add_address)))
                 .perform(click());
-        waitUntilViewMatchesCondition(withText(containsString("John Doe")), isDisplayed());
+        waitUntilViewMatchesCondition(
+                withContentDescription("Name*"), allOf(isDisplayed(), isEnabled()));
+        onView(withContentDescription("Name*")).perform(scrollTo(), typeText("John Doe"));
+        onView(withContentDescription("Street address*"))
+                .perform(scrollTo(), typeText("123 Main St"));
+        onView(withContentDescription("City*")).perform(scrollTo(), typeText("Mountain View"));
+        onView(withContentDescription("State*")).perform(scrollTo(), typeText("California"));
+        onView(withContentDescription("ZIP code*")).perform(scrollTo(), typeText("1234"));
+        onView(withContentDescription("Phone*")).perform(scrollTo(), typeText("8008080808"));
+        Espresso.closeSoftKeyboard();
+        onView(withId(org.chromium.chrome.R.id.editor_dialog_done_button))
+                .perform(scrollTo(), click());
+        waitUntilViewMatchesCondition(withContentDescription("Continue"), isEnabled());
+        waitUntilViewMatchesCondition(
+                allOf(withParent(withId(R.id.address_summary)), withId(R.id.full_name)),
+                allOf(withText("John Doe"), isCompletelyDisplayed()));
+        onView(withText("Continue")).perform(click());
+        waitUntilViewMatchesCondition(withText("Prompt"), isCompletelyDisplayed());
+        assertThat(getElementValue(getWebContents(), "address_name"), is("John Doe"));
+        assertThat(getElementValue(getWebContents(), "street"), is("123 Main St"));
+        assertThat(getElementValue(getWebContents(), "zip"), is("1234"));
+        assertThat(getElementValue(getWebContents(), "state"), is("California"));
     }
 
     private void runScript(AutofillAssistantTestScript script) {

@@ -11,6 +11,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
 
 import static org.chromium.chrome.test.util.ViewUtils.waitForView;
 
@@ -44,7 +45,6 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.feed.FeedProcessScopeFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
@@ -92,8 +92,9 @@ import java.util.concurrent.TimeUnit;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "disable-features=IPH_FeedHeaderMenu"})
-@Features.DisableFeatures({ChromeFeatureList.EXPLORE_SITES,
-        ChromeFeatureList.REPORT_FEED_USER_ACTIONS, ChromeFeatureList.QUERY_TILES})
+@Features.
+DisableFeatures({ChromeFeatureList.EXPLORE_SITES, ChromeFeatureList.REPORT_FEED_USER_ACTIONS,
+        ChromeFeatureList.QUERY_TILES, ChromeFeatureList.VIDEO_TUTORIALS})
 public class NewTabPageTest {
     private static final int ARTICLE_SECTION_HEADER_POSITION = 1;
     private static final int SIGNIN_PROMO_POSITION = 2;
@@ -104,7 +105,8 @@ public class NewTabPageTest {
     public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
 
     @Rule
-    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
     private static final String TEST_FEED =
@@ -143,7 +145,6 @@ public class NewTabPageTest {
     @After
     public void tearDown() {
         mTestServer.stopAndDestroyServer();
-        FeedProcessScopeFactory.setTestNetworkClient(null);
     }
 
     @Test
@@ -160,7 +161,6 @@ public class NewTabPageTest {
         scrimCoordinator.disableAnimationForTesting(false);
     }
 
-    @DisabledTest(message = "https://crbug.com/898165")
     @Test
     @SmallTest
     @Feature({"NewTabPage", "FeedNewTabPage", "RenderTest"})
@@ -250,14 +250,15 @@ public class NewTabPageTest {
     @SmallTest
     @Feature({"NewTabPage", "FeedNewTabPage"})
     public void testClickMostVisitedItem() {
-        ChromeTabUtils.waitForTabPageLoaded(mTab, mSiteSuggestions.get(0).url, new Runnable() {
-            @Override
-            public void run() {
-                View mostVisitedItem = mTileGridLayout.getChildAt(0);
-                TouchCommon.singleClickView(mostVisitedItem);
-            }
-        });
-        Assert.assertEquals(mSiteSuggestions.get(0).url, mTab.getUrlString());
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTab, mSiteSuggestions.get(0).url.getSpec(), new Runnable() {
+                    @Override
+                    public void run() {
+                        View mostVisitedItem = mTileGridLayout.getChildAt(0);
+                        TouchCommon.singleClickView(mostVisitedItem);
+                    }
+                });
+        Assert.assertEquals(mSiteSuggestions.get(0).url, ChromeTabUtils.getUrlOnUiThread(mTab));
     }
 
     /**
@@ -270,7 +271,7 @@ public class NewTabPageTest {
     public void testOpenMostVisitedItemInNewTab() throws ExecutionException {
         ChromeTabUtils.invokeContextMenuAndOpenInANewTab(mActivityTestRule,
                 mTileGridLayout.getChildAt(0), ContextMenuManager.ContextMenuItemId.OPEN_IN_NEW_TAB,
-                false, mSiteSuggestions.get(0).url);
+                false, mSiteSuggestions.get(0).url.getSpec());
     }
 
     /**
@@ -283,7 +284,7 @@ public class NewTabPageTest {
         ChromeTabUtils.invokeContextMenuAndOpenInANewTab(mActivityTestRule,
                 mTileGridLayout.getChildAt(0),
                 ContextMenuManager.ContextMenuItemId.OPEN_IN_INCOGNITO_TAB, true,
-                mSiteSuggestions.get(0).url);
+                mSiteSuggestions.get(0).url.getSpec());
     }
 
     /**
@@ -305,7 +306,7 @@ public class NewTabPageTest {
         Assert.assertTrue(InstrumentationRegistry.getInstrumentation().invokeContextMenuAction(
                 mActivityTestRule.getActivity(), ContextMenuManager.ContextMenuItemId.REMOVE, 0));
 
-        Assert.assertTrue(mMostVisitedSites.isUrlBlacklisted(testSite.url));
+        Assert.assertTrue(mMostVisitedSites.isUrlBlocklisted(testSite.url));
     }
 
     @Test
@@ -438,11 +439,9 @@ public class NewTabPageTest {
 
             ntpLayout.getTileGroup().onSwitchToForeground(false); // Force tile refresh.
         });
-        CriteriaHelper.pollUiThread(new Criteria("The tile grid was not updated.") {
-            @Override
-            public boolean isSatisfied() {
-                return mTileGridLayout.getChildCount() == 0;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    "The tile grid was not updated.", mTileGridLayout.getChildCount(), is(0));
         });
         Assert.assertNotNull(ntpLayout.getPlaceholder());
         Assert.assertEquals(View.VISIBLE, ntpLayout.getPlaceholder().getVisibility());
@@ -517,21 +516,12 @@ public class NewTabPageTest {
     }
 
     private void waitForUrlFocusAnimationsDisabledState(boolean disabled) {
-        CriteriaHelper.pollInstrumentationThread(Criteria.equals(disabled, new Callable<Boolean>() {
-            @Override
-            public Boolean call() {
-                return getUrlFocusAnimationsDisabled();
-            }
-        }));
+        CriteriaHelper.pollInstrumentationThread(
+                () -> Criteria.checkThat(getUrlFocusAnimationsDisabled(), is(disabled)));
     }
 
     private void waitForTabLoading() {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mTab.isLoading();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> mTab.isLoading());
     }
 
     private void waitForFakeboxFocusAnimationComplete(NewTabPage ntp) {
@@ -539,12 +529,10 @@ public class NewTabPageTest {
     }
 
     private void waitForUrlFocusPercent(final NewTabPage ntp, float percent) {
-        CriteriaHelper.pollUiThread(Criteria.equals(percent, new Callable<Float>() {
-            @Override
-            public Float call() {
-                return ntp.getNewTabPageLayout().getUrlFocusChangeAnimationPercent();
-            }
-        }));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    ntp.getNewTabPageLayout().getUrlFocusChangeAnimationPercent(), is(percent));
+        });
     }
 
     private void clickFakebox() {
@@ -571,11 +559,6 @@ public class NewTabPageTest {
      * Waits until the top of the fakebox reaches the given position.
      */
     private void waitForFakeboxTopPosition(final NewTabPage ntp, int position) {
-        CriteriaHelper.pollUiThread(Criteria.equals(position, new Callable<Integer>() {
-            @Override
-            public Integer call() {
-                return getFakeboxTop(ntp);
-            }
-        }));
+        CriteriaHelper.pollUiThread(() -> Criteria.checkThat(getFakeboxTop(ntp), is(position)));
     }
 }

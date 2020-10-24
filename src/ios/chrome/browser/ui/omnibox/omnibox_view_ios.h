@@ -39,6 +39,8 @@ class OmniboxViewIOS : public OmniboxView,
                  ChromeBrowserState* browser_state,
                  id<OmniboxCommands> omnibox_focuser);
 
+  ~OmniboxViewIOS() override;
+
   void SetPopupProvider(OmniboxPopupProvider* provider) {
     popup_provider_ = provider;
   }
@@ -48,6 +50,41 @@ class OmniboxViewIOS : public OmniboxView,
   static UIColor* GetSecureTextColor(
       security_state::SecurityLevel security_level,
       bool in_dark_mode);
+
+  void OnReceiveClipboardURLForOpenMatch(
+      const AutocompleteMatch& match,
+      WindowOpenDisposition disposition,
+      const GURL& alternate_nav_url,
+      const base::string16& pasted_text,
+      size_t selected_line,
+      base::TimeTicks match_selection_timestamp,
+      base::Optional<GURL> optional_gurl);
+
+  void OnReceiveClipboardTextForOpenMatch(
+      const AutocompleteMatch& match,
+      WindowOpenDisposition disposition,
+      const GURL& alternate_nav_url,
+      const base::string16& pasted_text,
+      size_t selected_line,
+      base::TimeTicks match_selection_timestamp,
+      base::Optional<base::string16> optional_text);
+
+  void OnReceiveClipboardImageForOpenMatch(
+      const AutocompleteMatch& match,
+      WindowOpenDisposition disposition,
+      const GURL& alternate_nav_url,
+      const base::string16& pasted_text,
+      size_t selected_line,
+      base::TimeTicks match_selection_timestamp,
+      base::Optional<gfx::Image> optional_image);
+
+  void OnReceiveImageMatchForOpenMatch(
+      WindowOpenDisposition disposition,
+      const GURL& alternate_nav_url,
+      const base::string16& pasted_text,
+      size_t selected_line,
+      base::TimeTicks match_selection_timestamp,
+      base::Optional<AutocompleteMatch> optional_match);
 
   // OmniboxView implementation.
   void OpenMatch(const AutocompleteMatch& match,
@@ -69,7 +106,7 @@ class OmniboxViewIOS : public OmniboxView,
                                    bool save_original_selection,
                                    bool notify_text_changed) override;
   void OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
-                                            size_t user_text_start,
+                                            std::vector<gfx::Range> selections,
                                             size_t user_text_length) override;
   void OnBeforePossibleChange() override;
   bool OnAfterPossibleChange(bool allow_keyword_ui_change) override;
@@ -199,6 +236,9 @@ class OmniboxViewIOS : public OmniboxView,
   NSMutableAttributedString* attributing_display_string_;
 
   OmniboxPopupProvider* popup_provider_;  // weak
+
+  // Used to cancel clipboard callbacks if this is deallocated;
+  base::WeakPtrFactory<OmniboxViewIOS> weak_ptr_factory_{this};
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_VIEW_IOS_H_

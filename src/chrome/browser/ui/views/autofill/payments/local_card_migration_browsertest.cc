@@ -1011,7 +1011,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForStatusChip,
 }
 
 // TODO(crbug.com/999510): Crashes flakily on Linux.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_ClickingOmniboxIconReshowsBubble \
   DISABLED_ClickingOmniboxIconReshowsBubble
 #else
@@ -1048,7 +1048,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForStatusChip,
           Bucket(AutofillMetrics::LOCAL_CARD_MIGRATION_BUBBLE_SHOWN, 1)));
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // TODO(crbug.com/823543): Widget activation doesn't work on Mac.
 #define MAYBE_ActivateFirstInactiveBubbleForAccessibility \
   DISABLED_ActivateFirstInactiveBubbleForAccessibility
@@ -1233,29 +1233,8 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForFixedLogging,
 }
 
 // Tests to ensure the card nickname is shown correctly in the local card
-// migration dialog. The param indicates whether the nickname experiment is
-// enabled.
-class LocalCardMigrationBrowserTestForNickname
-    : public LocalCardMigrationBrowserTest,
-      public ::testing::WithParamInterface<bool> {
- protected:
-  LocalCardMigrationBrowserTestForNickname() {
-    scoped_feature_list_.InitWithFeatureState(
-        features::kAutofillEnableSurfacingServerCardNickname, GetParam());
-  }
-
-  ~LocalCardMigrationBrowserTestForNickname() override = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(,
-                         LocalCardMigrationBrowserTestForNickname,
-                         testing::Bool());
-
-IN_PROC_BROWSER_TEST_P(LocalCardMigrationBrowserTestForNickname,
-                       CardIdentifierString) {
+// migration dialog.
+IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest, CardIdentifierString) {
   base::HistogramTester histogram_tester;
 
   CreditCard first_card = SaveLocalCard(
@@ -1275,8 +1254,7 @@ IN_PROC_BROWSER_TEST_P(LocalCardMigrationBrowserTestForNickname,
             second_card.NetworkAndLastFourDigits());
   EXPECT_EQ(static_cast<MigratableCardView*>(card_list_view->children()[1])
                 ->GetCardIdentifierString(),
-            GetParam() ? first_card.NicknameAndLastFourDigitsForTesting()
-                       : first_card.NetworkAndLastFourDigits());
+            first_card.NicknameAndLastFourDigitsForTesting());
 }
 
 // TODO(crbug.com/897998):

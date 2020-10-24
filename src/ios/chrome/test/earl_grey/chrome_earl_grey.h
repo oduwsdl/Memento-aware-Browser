@@ -39,6 +39,11 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // will properly synchronize the UI for Earl Grey tests.
 @interface ChromeEarlGreyImpl : BaseEGTestHelperImpl
 
+#pragma mark - Test Utilities
+
+// Wait until |matcher| is accessible (not nil) on the device.
+- (void)waitForMatcher:(id<GREYMatcher>)matcher;
+
 #pragma mark - Device Utilities
 
 // Simulate the user action to rotate the device to a certain orientation.
@@ -136,6 +141,10 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Waits for there to be |count| number of incognito tabs within a timeout, or a
 // GREYAssert is induced.
 - (void)waitForIncognitoTabCount:(NSUInteger)count;
+
+// Waits for there to be |count| number of browsers within a timeout,
+// or a GREYAssert is induced.
+- (void)waitForBrowserCount:(NSUInteger)count;
 
 // Loads |URL| as if it was opened from an external application.
 - (void)openURLFromExternalApp:(const GURL&)URL;
@@ -294,6 +303,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns the number of incognito tabs.
 - (NSUInteger)incognitoTabCount WARN_UNUSED_RESULT;
 
+// Returns the number of browsers.
+- (NSUInteger)browserCount WARN_UNUSED_RESULT;
+
 // Returns the index of active tab in normal (non-incognito) mode.
 - (NSUInteger)indexOfActiveNormalTab;
 
@@ -340,11 +352,6 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // accounts were correctly removed from the keychain. Induces a GREYAssert if
 // the operation fails.
 - (void)signOutAndClearIdentities;
-
-// Same as signOutAndClearIdentities.
-//
-// DEPRECATED in favor of signOutAndClearIdentities
-- (void)signOutAndClearAccounts;
 
 #pragma mark - Sync Utilities (EG2)
 
@@ -496,12 +503,6 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns YES if CreditCardScanner feature is enabled.
 - (BOOL)isCreditCardScannerEnabled WARN_UNUSED_RESULT;
 
-// Returns YES if AutofillEnableCompanyName feature is enabled.
-- (BOOL)isAutofillCompanyNameEnabled WARN_UNUSED_RESULT;
-
-// Returns YES if kChangeTabSwitcherPosition feature is enabled.
-- (BOOL)isChangeTabSwitcherPositionEnabled WARN_UNUSED_RESULT;
-
 // Returns YES if DemographicMetricsReporting feature is enabled.
 - (BOOL)isDemographicMetricsReportingEnabled WARN_UNUSED_RESULT;
 
@@ -512,6 +513,15 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // system frameworks. Always returns YES if the app was not requested to run
 // with custom WebKit frameworks.
 - (BOOL)isCustomWebKitLoadedIfRequested WARN_UNUSED_RESULT;
+
+// Returns whether the mobile version of the websites are requested by default.
+- (BOOL)isMobileModeByDefault WARN_UNUSED_RESULT;
+
+// Returns whether the illustrated empty stated feature is enabled.
+- (BOOL)isIllustratedEmptyStatesEnabled;
+
+// Returns whether the native context menus feature is enabled or not.
+- (BOOL)isNativeContextMenusEnabled;
 
 #pragma mark - Popup Blocking
 
@@ -554,6 +564,38 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Resets the BrowsingDataPrefs, which defines if its selected or not when
 // clearing Browsing data.
 - (void)resetBrowsingDataPrefs;
+
+#pragma mark - Pasteboard Utilities (EG2)
+
+// Verifies that |text| was copied to the pasteboard.
+- (void)verifyStringCopied:(NSString*)text;
+
+#pragma mark - Context Menus Utilities (EG2)
+
+// Taps on the Copy Link context menu action and verifies that the |text| has
+// been copied to the pasteboard. |useNewString| determines which action string
+// to use.
+- (void)verifyCopyLinkActionWithText:(NSString*)text
+                        useNewString:(BOOL)useNewString;
+
+// Taps on the Open in New Tab context menu action and waits for the |URL| to be
+// present in the omnibox.
+- (void)verifyOpenInNewTabActionWithURL:(const std::string&)URL;
+
+// Taps on the Open in Incognito context menu action and waits for the |URL| to
+// be present in the omnibox. |useNewString| determines which action string
+// to use.
+- (void)verifyOpenInIncognitoActionWithURL:(const std::string&)URL
+                              useNewString:(BOOL)useNewString;
+
+// Taps on the Share context menu action and validates that the ActivityView
+// was brought up with |pageTitle| in its header.
+- (void)verifyShareActionWithPageTitle:(NSString*)pageTitle;
+
+#pragma mark - Unified Consent utilities
+
+// Enables or disables URL-keyed anonymized data collection.
+- (void)setURLKeyedAnonymizedDataCollectionEnabled:(BOOL)enabled;
 
 @end
 

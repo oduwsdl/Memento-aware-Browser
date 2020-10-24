@@ -7,31 +7,41 @@
 
 #include <stdint.h>
 
+#include "base/time/time.h"
+#include "components/optimization_guide/proto/lite_video_metadata.pb.h"
+
 namespace lite_video {
 
 class LiteVideoHint {
  public:
   LiteVideoHint(int target_downlink_bandwidth_kbps,
-                int target_downlink_rtt_latency_ms,
-                int kilobytes_to_buffer_before_throttle);
+                base::TimeDelta target_downlink_rtt_latency,
+                int kilobytes_to_buffer_before_throttle,
+                base::TimeDelta max_throttling_delay);
+  // This uses default values for any empty fields in |lite_video_hint|.
+  explicit LiteVideoHint(
+      const optimization_guide::proto::LiteVideoHint& lite_video_hint);
   ~LiteVideoHint() = default;
 
-  int target_downlink_bandwidth_kbps() {
+  int target_downlink_bandwidth_kbps() const {
     return target_downlink_bandwidth_kbps_;
   }
 
-  int target_downlink_rtt_latency_ms() {
-    return target_downlink_rtt_latency_ms_;
+  base::TimeDelta target_downlink_rtt_latency() const {
+    return target_downlink_rtt_latency_;
   }
 
-  int kilobytes_to_buffer_before_throttle() {
+  int kilobytes_to_buffer_before_throttle() const {
     return kilobytes_to_buffer_before_throttle_;
   }
 
+  base::TimeDelta max_throttling_delay() const { return max_throttling_delay_; }
+
  private:
-  const int target_downlink_bandwidth_kbps_;
-  const int target_downlink_rtt_latency_ms_;
-  const int kilobytes_to_buffer_before_throttle_;
+  int target_downlink_bandwidth_kbps_;
+  base::TimeDelta target_downlink_rtt_latency_;
+  int kilobytes_to_buffer_before_throttle_;
+  base::TimeDelta max_throttling_delay_;
 };
 
 }  // namespace lite_video

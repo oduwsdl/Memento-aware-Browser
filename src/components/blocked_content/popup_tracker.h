@@ -59,7 +59,7 @@ class PopupTracker : public content::WebContentsObserver,
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
   void OnVisibilityChanged(content::Visibility visibility) override;
-  void DidGetUserInteraction(const blink::WebInputEvent::Type type) override;
+  void DidGetUserInteraction(const blink::WebInputEvent& event) override;
 
   // subresource_filter::SubresourceFilterObserver:
   void OnSafeBrowsingChecksComplete(
@@ -87,6 +87,10 @@ class PopupTracker : public content::WebContentsObserver,
   // user activation and gesture scroll begin events.
   int num_activation_events_ = 0;
   int num_gesture_scroll_begin_events_ = 0;
+
+  // Number of redirects taken by the pop-up during navigation.
+  int num_redirects_ = 0;
+  bool first_navigation_committed_ = false;
 
   // The id of the web contents that created the popup at the time of creation.
   // SourceIds are permanent so it's okay to use at any point so long as it's

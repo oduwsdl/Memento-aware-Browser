@@ -45,6 +45,8 @@ class Command(object):
   SCREENSHOT = (_Method.GET, '/session/:sessionId/screenshot')
   ELEMENT_SCREENSHOT = (
       _Method.GET, '/session/:sessionId/element/:id/screenshot')
+  FULL_PAGE_SCREENSHOT = (_Method.GET, '/session/:sessionId/screenshot/full')
+  PRINT = (_Method.POST, '/session/:sessionId/print')
   SET_BROWSER_VISIBLE = (_Method.POST, '/session/:sessionId/visible')
   IS_BROWSER_VISIBLE = (_Method.GET, '/session/:sessionId/visible')
   FIND_ELEMENT = (_Method.POST, '/session/:sessionId/element')
@@ -77,6 +79,10 @@ class Command(object):
       _Method.GET, '/session/:sessionId/element/:id/attribute/:name')
   GET_ELEMENT_PROPERTY = (
       _Method.GET, '/session/:sessionId/element/:id/property/:name')
+  GET_ELEMENT_COMPUTED_LABEL = (
+      _Method.GET, '/session/:sessionId/element/:id/computedlabel')
+  GET_ELEMENT_COMPUTED_ROLE = (
+      _Method.GET, '/session/:sessionId/element/:id/computedrole')
   ELEMENT_EQUALS = (
       _Method.GET, '/session/:sessionId/element/:id/equals/:other')
   GET_COOKIES = (_Method.GET, '/session/:sessionId/cookie')

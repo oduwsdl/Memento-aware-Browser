@@ -285,7 +285,8 @@ class MediaHistoryBrowserTest : public InProcessBrowserTest,
 
   void SimulateNavigationToCommit(Browser* browser) {
     // Navigate to trigger the session to be saved.
-    ui_test_utils::NavigateToURL(browser, embedded_test_server()->base_url());
+    ui_test_utils::NavigateToURL(browser,
+                                 embedded_test_server()->GetURL("/empty.html"));
 
     // Wait until the session has finished saving.
     WaitForDB(GetMediaHistoryService(browser));
@@ -1173,7 +1174,7 @@ IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest,
   {
     // Clear the browsing data for another origin.
     auto filter = content::BrowsingDataFilterBuilder::Create(
-        content::BrowsingDataFilterBuilder::WHITELIST);
+        content::BrowsingDataFilterBuilder::Mode::kDelete);
     filter->AddOrigin(url::Origin::Create(GURL("https://www.example.org")));
     content::BrowsingDataRemover* remover =
         content::BrowserContext::GetBrowsingDataRemover(browser->profile());
@@ -1205,7 +1206,7 @@ IN_PROC_BROWSER_TEST_P(MediaHistoryBrowserTest,
   {
     // Clear the browsing data for the feed origin.
     auto filter = content::BrowsingDataFilterBuilder::Create(
-        content::BrowsingDataFilterBuilder::WHITELIST);
+        content::BrowsingDataFilterBuilder::Mode::kDelete);
     filter->AddOrigin(url::Origin::Create(feed_url));
     content::BrowsingDataRemover* remover =
         content::BrowserContext::GetBrowsingDataRemover(browser->profile());

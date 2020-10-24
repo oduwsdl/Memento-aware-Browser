@@ -15,10 +15,10 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/no_destructor.h"
 #include "base/optional.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/sequence_manager/real_time_domain.h"
 #include "base/task/sequence_manager/task_time_observer.h"
 #include "base/task/sequence_manager/thread_controller_impl.h"
@@ -143,7 +143,8 @@ char* PrependHexAddress(char* output, const void* address) {
 
 }  // namespace
 
-class SequenceManagerImpl::NativeWorkHandleImpl : public NativeWorkHandle {
+class SequenceManagerImpl::NativeWorkHandleImpl final
+    : public NativeWorkHandle {
  public:
   NativeWorkHandleImpl(SequenceManagerImpl* sequence_manager,
                        TaskQueue::QueuePriority priority)
@@ -280,9 +281,10 @@ SequenceManagerImpl::CreateThreadControllerImplForCurrentThread(
 // static
 std::unique_ptr<SequenceManagerImpl> SequenceManagerImpl::CreateOnCurrentThread(
     SequenceManager::Settings settings) {
+  auto thread_controller =
+      CreateThreadControllerImplForCurrentThread(settings.clock);
   std::unique_ptr<SequenceManagerImpl> manager(new SequenceManagerImpl(
-      CreateThreadControllerImplForCurrentThread(settings.clock),
-      std::move(settings)));
+      std::move(thread_controller), std::move(settings)));
   manager->BindToCurrentThread();
   return manager;
 }
@@ -290,9 +292,10 @@ std::unique_ptr<SequenceManagerImpl> SequenceManagerImpl::CreateOnCurrentThread(
 // static
 std::unique_ptr<SequenceManagerImpl> SequenceManagerImpl::CreateUnbound(
     SequenceManager::Settings settings) {
-  return WrapUnique(new SequenceManagerImpl(
-      ThreadControllerWithMessagePumpImpl::CreateUnbound(settings),
-      std::move(settings)));
+  auto thread_controller =
+      ThreadControllerWithMessagePumpImpl::CreateUnbound(settings);
+  return WrapUnique(new SequenceManagerImpl(std::move(thread_controller),
+                                            std::move(settings)));
 }
 
 void SequenceManagerImpl::BindToMessagePump(std::unique_ptr<MessagePump> pump) {
@@ -460,8 +463,8 @@ void SequenceManagerImpl::OnExitNestedRunLoop() {
     while (!main_thread_only().non_nestable_task_queue.empty()) {
       internal::TaskQueueImpl::DeferredNonNestableTask& non_nestable_task =
           main_thread_only().non_nestable_task_queue.back();
-      non_nestable_task.task_queue->RequeueDeferredNonNestableTask(
-          std::move(non_nestable_task));
+      auto* const task_queue = non_nestable_task.task_queue;
+      task_queue->RequeueDeferredNonNestableTask(std::move(non_nestable_task));
       main_thread_only().non_nestable_task_queue.pop_back();
     }
   }
@@ -540,8 +543,7 @@ void SequenceManagerImpl::LogTaskDebugInfo(
     case Settings::TaskLogging::kEnabledWithBacktrace: {
       std::array<const void*, PendingTask::kTaskBacktraceLength + 1> task_trace;
       task_trace[0] = task->posted_from.program_counter();
-      std::copy(task->task_backtrace.begin(), task->task_backtrace.end(),
-                task_trace.begin() + 1);
+      ranges::copy(task->task_backtrace, task_trace.begin() + 1);
       size_t length = 0;
       while (length < task_trace.size() && task_trace[length])
         ++length;
@@ -1131,12 +1133,12 @@ std::unique_ptr<NativeWorkHandle> SequenceManagerImpl::OnNativeWorkPending(
 }
 
 void SequenceManagerImpl::AddDestructionObserver(
-    MessageLoopCurrent::DestructionObserver* destruction_observer) {
+    CurrentThread::DestructionObserver* destruction_observer) {
   main_thread_only().destruction_observers.AddObserver(destruction_observer);
 }
 
 void SequenceManagerImpl::RemoveDestructionObserver(
-    MessageLoopCurrent::DestructionObserver* destruction_observer) {
+    CurrentThread::DestructionObserver* destruction_observer) {
   main_thread_only().destruction_observers.RemoveObserver(destruction_observer);
 }
 

@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
-#include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_response.mojom.h"
@@ -34,6 +33,10 @@ void FakeServiceWorker::RunUntilInitializeGlobalScope() {
   base::RunLoop loop;
   quit_closure_for_initialize_global_scope_ = loop.QuitClosure();
   loop.Run();
+}
+
+void FakeServiceWorker::FlushForTesting() {
+  receiver_.FlushForTesting();
 }
 
 void FakeServiceWorker::InitializeGlobalScope(
@@ -79,7 +82,8 @@ void FakeServiceWorker::InitializeGlobalScope(
 
 void FakeServiceWorker::DispatchInstallEvent(
     DispatchInstallEventCallback callback) {
-  std::move(callback).Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED);
+  std::move(callback).Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED,
+                          /*fetch_count=*/0);
 }
 
 void FakeServiceWorker::DispatchActivateEvent(
@@ -169,14 +173,14 @@ void FakeServiceWorker::DispatchSyncEvent(const std::string& tag,
                                           bool last_chance,
                                           base::TimeDelta timeout,
                                           DispatchSyncEventCallback callback) {
-  NOTIMPLEMENTED();
+  std::move(callback).Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED);
 }
 
 void FakeServiceWorker::DispatchPeriodicSyncEvent(
     const std::string& tag,
     base::TimeDelta timeout,
     DispatchPeriodicSyncEventCallback callback) {
-  NOTIMPLEMENTED();
+  std::move(callback).Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED);
 }
 
 void FakeServiceWorker::DispatchAbortPaymentEvent(

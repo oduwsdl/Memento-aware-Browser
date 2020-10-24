@@ -8,7 +8,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate_mock.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -30,7 +30,7 @@ class SaveUnsyncedCredentialsLocallyBubbleControllerTest
 
  protected:
   NiceMock<PasswordsModelDelegateMock> model_delegate_mock_;
-  std::vector<autofill::PasswordForm> unsynced_credentials_;
+  std::vector<password_manager::PasswordForm> unsynced_credentials_;
 };
 
 TEST_F(SaveUnsyncedCredentialsLocallyBubbleControllerTest,
@@ -39,19 +39,26 @@ TEST_F(SaveUnsyncedCredentialsLocallyBubbleControllerTest,
       .WillOnce(ReturnRef(unsynced_credentials_));
   SaveUnsyncedCredentialsLocallyBubbleController controller(
       model_delegate_mock_.AsWeakPtr());
-  EXPECT_EQ(controller.GetUnsyncedCredentials(), unsynced_credentials_);
+  EXPECT_EQ(controller.unsynced_credentials(), unsynced_credentials_);
 }
 
 TEST_F(SaveUnsyncedCredentialsLocallyBubbleControllerTest,
-       ShouldSaveCredentialsInProfileStoreOnSaveButtonClicked) {
+       ShouldSaveSelectedCredentialsInProfileStoreOnSaveButtonClicked) {
+  EXPECT_CALL(model_delegate_mock_, GetUnsyncedCredentials())
+      .WillOnce(ReturnRef(unsynced_credentials_));
   SaveUnsyncedCredentialsLocallyBubbleController controller(
       model_delegate_mock_.AsWeakPtr());
-  EXPECT_CALL(model_delegate_mock_, SaveUnsyncedCredentialsInProfileStore);
-  controller.OnSaveClicked();
+  EXPECT_CALL(model_delegate_mock_,
+              SaveUnsyncedCredentialsInProfileStore(
+                  std::vector<password_manager::PasswordForm>{
+                      unsynced_credentials_[1]}));
+  controller.OnSaveClicked({false, true});
 }
 
 TEST_F(SaveUnsyncedCredentialsLocallyBubbleControllerTest,
        ShouldDiscardCredentialsInProfileStoreOnCancelButtonClicked) {
+  EXPECT_CALL(model_delegate_mock_, GetUnsyncedCredentials())
+      .WillOnce(ReturnRef(unsynced_credentials_));
   SaveUnsyncedCredentialsLocallyBubbleController controller(
       model_delegate_mock_.AsWeakPtr());
   EXPECT_CALL(model_delegate_mock_, DiscardUnsyncedCredentials);

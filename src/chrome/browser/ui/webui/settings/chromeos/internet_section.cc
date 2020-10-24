@@ -9,15 +9,18 @@
 #include "base/bind.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/ui/webui/chromeos/cellular_setup/cellular_setup_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/chromeos/network_element_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/internet_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/webui_util.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -85,6 +88,18 @@ const std::vector<SearchConcept>& GetEthernetConnectedSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>& GetEthernetNotConnectedSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_ETHERNET,
+       mojom::kNetworkSectionPath,
+       mojom::SearchResultIcon::kEthernet,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSection,
+       {.section = mojom::Section::kNetwork}},
+  });
+  return *tags;
+}
+
 const std::vector<SearchConcept>& GetWifiSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_WIFI,
@@ -115,6 +130,12 @@ const std::vector<SearchConcept>& GetWifiOnSearchConcepts() {
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kWifiOnOff},
        {IDS_OS_SETTINGS_TAG_WIFI_TURN_OFF_ALT1, SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_ADD_WIFI,
+       mojom::kWifiNetworksSubpagePath,
+       mojom::SearchResultIcon::kWifi,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kWifiAddNetwork}},
   });
   return *tags;
 }
@@ -148,12 +169,6 @@ const std::vector<SearchConcept>& GetWifiConnectedSearchConcepts() {
        {.setting = mojom::Setting::kPreferWifiNetwork},
        {IDS_OS_SETTINGS_TAG_PREFER_WIFI_NETWORK_ALT1,
         SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_WIFI_CONFIGURE,
-       mojom::kWifiDetailsSubpagePath,
-       mojom::SearchResultIcon::kWifi,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kConfigureWifi}},
       {IDS_OS_SETTINGS_TAG_FORGET_WIFI,
        mojom::kWifiDetailsSubpagePath,
        mojom::SearchResultIcon::kWifi,
@@ -198,6 +213,18 @@ const std::vector<SearchConcept>& GetWifiConnectedSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>& GetWifiMeteredSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_SETTINGS_INTERNET_NETWORK_METERED,
+       mojom::kWifiDetailsSubpagePath,
+       mojom::SearchResultIcon::kWifi,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kWifiMetered}},
+  });
+  return *tags;
+}
+
 const std::vector<SearchConcept>& GetCellularSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_CELLULAR,
@@ -208,12 +235,6 @@ const std::vector<SearchConcept>& GetCellularSearchConcepts() {
        {.subpage = mojom::Subpage::kCellularDetails},
        {IDS_OS_SETTINGS_TAG_CELLULAR_ALT1, IDS_OS_SETTINGS_TAG_CELLULAR_ALT2,
         IDS_OS_SETTINGS_TAG_CELLULAR_ALT3, SearchConcept::kAltTagEnd}},
-  });
-  return *tags;
-}
-
-const std::vector<SearchConcept>& GetCellularOnSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_CELLULAR_SIM_LOCK,
        mojom::kCellularDetailsSubpagePath,
        mojom::SearchResultIcon::kCellular,
@@ -227,6 +248,18 @@ const std::vector<SearchConcept>& GetCellularOnSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kCellularRoaming}},
+      {IDS_OS_SETTINGS_TAG_CELLULAR_APN,
+       mojom::kCellularDetailsSubpagePath,
+       mojom::SearchResultIcon::kCellular,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCellularApn}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetCellularOnSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_CELLULAR_TURN_OFF,
        mojom::kNetworkSectionPath,
        mojom::SearchResultIcon::kCellular,
@@ -234,12 +267,6 @@ const std::vector<SearchConcept>& GetCellularOnSearchConcepts() {
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kMobileOnOff},
        {IDS_OS_SETTINGS_TAG_CELLULAR_TURN_OFF_ALT1, SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_CELLULAR_APN,
-       mojom::kCellularDetailsSubpagePath,
-       mojom::SearchResultIcon::kCellular,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kCellularApn}},
   });
   return *tags;
 }
@@ -299,6 +326,51 @@ const std::vector<SearchConcept>& GetCellularConnectedSearchConcepts() {
        {.setting = mojom::Setting::kCellularAutoConnectToNetwork},
        {IDS_OS_SETTINGS_TAG_AUTO_CONNECT_NETWORK_ALT1,
         SearchConcept::kAltTagEnd}},
+  });
+  return *tags;
+}
+
+// TODO(1093185): Merge GetCellularSetupAndDetailMenuSearchConcepts() with
+// GetCellularConnectedSearchConcepts() when flag is enabled.
+const std::vector<SearchConcept>&
+GetCellularSetupAndDetailMenuSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_ADD_CELLULAR,
+       mojom::kMobileDataNetworksSubpagePath,
+       mojom::SearchResultIcon::kCellular,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCellularAddNetwork},
+       {IDS_OS_SETTINGS_TAG_ADD_CELLULAR_ALT1,
+        IDS_OS_SETTINGS_TAG_ADD_CELLULAR_ALT2, SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_CELLULAR_REMOVE_PROFILE,
+       mojom::kCellularDetailsSubpagePath,
+       mojom::SearchResultIcon::kCellular,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCellularRemoveESimNetwork},
+       {IDS_OS_SETTINGS_TAG_CELLULAR_REMOVE_PROFILE_ALT1,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_CELLULAR_RENAME_PROFILE,
+       mojom::kCellularDetailsSubpagePath,
+       mojom::SearchResultIcon::kCellular,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCellularRenameESimNetwork},
+       {IDS_OS_SETTINGS_TAG_CELLULAR_RENAME_PROFILE_ALT1,
+        SearchConcept::kAltTagEnd}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetCellularMeteredSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_SETTINGS_INTERNET_NETWORK_METERED,
+       mojom::kCellularDetailsSubpagePath,
+       mojom::SearchResultIcon::kCellular,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCellularMetered}},
   });
   return *tags;
 }
@@ -388,11 +460,11 @@ const std::vector<mojom::Setting>& GetWifiDetailsSettings() {
       mojom::Setting::kDisconnectWifiNetwork,
       mojom::Setting::kPreferWifiNetwork,
       mojom::Setting::kForgetWifiNetwork,
-      mojom::Setting::kConfigureWifi,
       mojom::Setting::kWifiAutoConfigureIp,
       mojom::Setting::kWifiDns,
       mojom::Setting::kWifiProxy,
       mojom::Setting::kWifiAutoConnectToNetwork,
+      mojom::Setting::kWifiMetered,
   });
   return *settings;
 }
@@ -407,6 +479,10 @@ const std::vector<mojom::Setting>& GetCellularDetailsSettings() {
       mojom::Setting::kCellularDns,
       mojom::Setting::kCellularProxy,
       mojom::Setting::kCellularAutoConnectToNetwork,
+      mojom::Setting::kCellularMetered,
+      mojom::Setting::kCellularAddNetwork,
+      mojom::Setting::kCellularRemoveESimNetwork,
+      mojom::Setting::kCellularRenameESimNetwork,
   });
   return *settings;
 }
@@ -456,7 +532,9 @@ bool IsPartOfDetailsSubpage(mojom::SearchResultType type,
 
 std::string GetDetailsSubpageUrl(const std::string& url_to_modify,
                                  const std::string& guid) {
-  return base::StringPrintf("%s?guid=%s", url_to_modify.c_str(), guid.c_str());
+  return base::StringPrintf(
+      "%s%sguid=%s", url_to_modify.c_str(),
+      url_to_modify.find('?') == std::string::npos ? "?" : "&", guid.c_str());
 }
 
 }  // namespace
@@ -464,8 +542,10 @@ std::string GetDetailsSubpageUrl(const std::string& url_to_modify,
 InternetSection::InternetSection(Profile* profile,
                                  SearchTagRegistry* search_tag_registry)
     : OsSettingsSection(profile, search_tag_registry) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   // General network search tags are always added.
-  registry()->AddSearchTags(GetNetworkSearchConcepts());
+  updater.AddSearchTags(GetNetworkSearchConcepts());
 
   // Receive updates when devices (e.g., Ethernet, Wi-Fi) go on/offline.
   ash::GetNetworkConfigService(
@@ -474,13 +554,14 @@ InternetSection::InternetSection(Profile* profile,
 
   // Fetch initial list of devices and active networks.
   FetchDeviceList();
-  FetchActiveNetworks();
+  FetchNetworkList();
 }
 
 InternetSection::~InternetSection() = default;
 
 void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"internetAddCellular", IDS_SETTINGS_INTERNET_ADD_CELLULAR},
       {"internetAddConnection", IDS_SETTINGS_INTERNET_ADD_CONNECTION},
       {"internetAddConnectionExpandA11yLabel",
        IDS_SETTINGS_INTERNET_ADD_CONNECTION_EXPAND_ACCESSIBILITY_LABEL},
@@ -541,10 +622,15 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"networkIPAddress", IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS},
       {"networkIPConfigAuto", IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO},
       {"networkMetered", IDS_SETTINGS_INTERNET_NETWORK_METERED},
+      {"networkMeteredDesc", IDS_SETTINGS_INTERNET_NETWORK_METERED_DESC},
       {"networkNameserversLearnMore", IDS_LEARN_MORE},
       {"networkPrefer", IDS_SETTINGS_INTERNET_NETWORK_PREFER},
       {"networkPrimaryUserControlled",
        IDS_SETTINGS_INTERNET_NETWORK_PRIMARY_USER_CONTROLLED},
+      {"networkDetailMenuRemoveESim",
+       IDS_SETTINGS_INTERNET_NETWORK_MENU_REMOVE},
+      {"networkDetailMenuRenameESim",
+       IDS_SETTINGS_INTERNET_NETWORK_MENU_RENAME},
       {"networkScanningLabel", IDS_NETWORK_SCANNING_MESSAGE},
       {"networkSectionAdvanced",
        IDS_SETTINGS_INTERNET_NETWORK_SECTION_ADVANCED},
@@ -565,6 +651,8 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_INTERNET_CELLULAR_CONTACT_SPECIFIC_CARRIER},
       {"cellularContactDefaultCarrier",
        IDS_SETTINGS_INTERNET_CELLULAR_CONTACT_DEFAULT_CARRIER},
+      {"cellularSetupDialogTitle",
+       IDS_SETTINGS_INTERNET_CELLULAR_SETUP_DIALOG_TITLE},
       {"tetherPhoneOutOfRange",
        IDS_SETTINGS_INTERNET_TETHER_PHONE_OUT_OF_RANGE},
       {"gmscoreNotificationsTitle",
@@ -609,17 +697,28 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
-  chromeos::network_element::AddLocalizedStrings(html_source);
-  chromeos::network_element::AddOncLocalizedStrings(html_source);
-  chromeos::network_element::AddDetailsLocalizedStrings(html_source);
-  chromeos::network_element::AddConfigLocalizedStrings(html_source);
-  chromeos::network_element::AddErrorLocalizedStrings(html_source);
+  network_element::AddLocalizedStrings(html_source);
+  network_element::AddOncLocalizedStrings(html_source);
+  network_element::AddDetailsLocalizedStrings(html_source);
+  network_element::AddConfigLocalizedStrings(html_source);
+  network_element::AddErrorLocalizedStrings(html_source);
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kUpdatedCellularActivationUi)) {
+    cellular_setup::AddLocalizedStrings(html_source);
+  }
 
   html_source->AddBoolean("showTechnologyBadge",
                           !ash::features::IsSeparateNetworkIconsEnabled());
+  html_source->AddBoolean(
+      "showMeteredToggle",
+      base::FeatureList::IsEnabled(::features::kMeteredShowToggle));
 
   html_source->AddString("networkGoogleNameserversLearnMoreUrl",
                          chrome::kGoogleNameserversLearnMoreURL);
+  html_source->AddBoolean(
+      "updatedCellularActivationUi",
+      base::FeatureList::IsEnabled(
+          chromeos::features::kUpdatedCellularActivationUi));
 
   html_source->AddString(
       "networkNotSynced",
@@ -663,6 +762,12 @@ std::string InternetSection::GetSectionPath() const {
   return mojom::kNetworkSectionPath;
 }
 
+bool InternetSection::LogMetric(mojom::Setting setting,
+                                base::Value& value) const {
+  // Unimplemented.
+  return false;
+}
+
 void InternetSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   // Ethernet details.
   generator->RegisterTopLevelSubpage(IDS_SETTINGS_INTERNET_ETHERNET_DETAILS,
@@ -678,8 +783,12 @@ void InternetSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       IDS_SETTINGS_INTERNET_WIFI_NETWORKS, mojom::Subpage::kWifiNetworks,
       mojom::SearchResultIcon::kWifi, mojom::SearchResultDefaultRank::kMedium,
       mojom::kWifiNetworksSubpagePath);
-  generator->RegisterNestedSetting(mojom::Setting::kWifiOnOff,
-                                   mojom::Subpage::kWifiNetworks);
+  static constexpr mojom::Setting kWifiNetworksSettings[] = {
+      mojom::Setting::kWifiOnOff,
+      mojom::Setting::kWifiAddNetwork,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kWifiNetworks,
+                            kWifiNetworksSettings, generator);
   generator->RegisterTopLevelAltSetting(mojom::Setting::kWifiOnOff);
 
   // Wi-Fi details.
@@ -751,23 +860,26 @@ std::string InternetSection::ModifySearchResultUrl(
     mojom::SearchResultType type,
     OsSettingsIdentifier id,
     const std::string& url_to_modify) const {
+  std::string modified_url =
+      OsSettingsSection::ModifySearchResultUrl(type, id, url_to_modify);
+
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kEthernetDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_ethernet_guid_);
+    return GetDetailsSubpageUrl(modified_url, *connected_ethernet_guid_);
 
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kWifiDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_wifi_guid_);
+    return GetDetailsSubpageUrl(modified_url, *connected_wifi_guid_);
 
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kCellularDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_cellular_guid_);
+    return GetDetailsSubpageUrl(modified_url, *cellular_guid_);
 
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kTetherDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_tether_guid_);
+    return GetDetailsSubpageUrl(modified_url, *connected_tether_guid_);
 
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kVpnDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_vpn_guid_);
+    return GetDetailsSubpageUrl(modified_url, *connected_vpn_guid_);
 
-  // URL does not need to be modified; use default implementation.
-  return OsSettingsSection::ModifySearchResultUrl(type, id, url_to_modify);
+  // Use default implementation.
+  return modified_url;
 }
 
 void InternetSection::OnDeviceStateListChanged() {
@@ -776,7 +888,7 @@ void InternetSection::OnDeviceStateListChanged() {
 
 void InternetSection::OnActiveNetworksChanged(
     std::vector<network_config::mojom::NetworkStatePropertiesPtr> networks) {
-  OnActiveNetworks(std::move(networks));
+  FetchNetworkList();
 }
 
 void InternetSection::FetchDeviceList() {
@@ -789,40 +901,51 @@ void InternetSection::OnDeviceList(
   using network_config::mojom::DeviceStateType;
   using network_config::mojom::NetworkType;
 
-  registry()->RemoveSearchTags(GetWifiSearchConcepts());
-  registry()->RemoveSearchTags(GetWifiOnSearchConcepts());
-  registry()->RemoveSearchTags(GetWifiOffSearchConcepts());
-  registry()->RemoveSearchTags(GetCellularSearchConcepts());
-  registry()->RemoveSearchTags(GetCellularOnSearchConcepts());
-  registry()->RemoveSearchTags(GetCellularOffSearchConcepts());
-  registry()->RemoveSearchTags(GetInstantTetheringSearchConcepts());
-  registry()->RemoveSearchTags(GetInstantTetheringOnSearchConcepts());
-  registry()->RemoveSearchTags(GetInstantTetheringOffSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
+  updater.RemoveSearchTags(GetWifiSearchConcepts());
+  updater.RemoveSearchTags(GetWifiOnSearchConcepts());
+  updater.RemoveSearchTags(GetWifiOffSearchConcepts());
+  updater.RemoveSearchTags(GetCellularOnSearchConcepts());
+  updater.RemoveSearchTags(GetCellularOffSearchConcepts());
+  updater.RemoveSearchTags(GetInstantTetheringSearchConcepts());
+  updater.RemoveSearchTags(GetInstantTetheringOnSearchConcepts());
+  updater.RemoveSearchTags(GetInstantTetheringOffSearchConcepts());
+
+  // Keep track of ethernet devices to handle an edge case where Ethernet device
+  // is present but no network is connected.
+  does_ethernet_device_exist_ = false;
 
   for (const auto& device : devices) {
     switch (device->type) {
       case NetworkType::kWiFi:
-        registry()->AddSearchTags(GetWifiSearchConcepts());
+        updater.AddSearchTags(GetWifiSearchConcepts());
         if (device->device_state == DeviceStateType::kEnabled)
-          registry()->AddSearchTags(GetWifiOnSearchConcepts());
+          updater.AddSearchTags(GetWifiOnSearchConcepts());
         else if (device->device_state == DeviceStateType::kDisabled)
-          registry()->AddSearchTags(GetWifiOffSearchConcepts());
+          updater.AddSearchTags(GetWifiOffSearchConcepts());
         break;
 
       case NetworkType::kCellular:
-        registry()->AddSearchTags(GetCellularSearchConcepts());
+        // Note: Cellular search concepts all point to the cellular details
+        // page, which is only available if a cellular network exists. This
+        // check is in OnNetworkList().
         if (device->device_state == DeviceStateType::kEnabled)
-          registry()->AddSearchTags(GetCellularOnSearchConcepts());
+          updater.AddSearchTags(GetCellularOnSearchConcepts());
         else if (device->device_state == DeviceStateType::kDisabled)
-          registry()->AddSearchTags(GetCellularOffSearchConcepts());
+          updater.AddSearchTags(GetCellularOffSearchConcepts());
         break;
 
       case NetworkType::kTether:
-        registry()->AddSearchTags(GetInstantTetheringSearchConcepts());
+        updater.AddSearchTags(GetInstantTetheringSearchConcepts());
         if (device->device_state == DeviceStateType::kEnabled)
-          registry()->AddSearchTags(GetInstantTetheringOnSearchConcepts());
+          updater.AddSearchTags(GetInstantTetheringOnSearchConcepts());
         else if (device->device_state == DeviceStateType::kDisabled)
-          registry()->AddSearchTags(GetInstantTetheringOffSearchConcepts());
+          updater.AddSearchTags(GetInstantTetheringOffSearchConcepts());
+        break;
+
+      case NetworkType::kEthernet:
+        does_ethernet_device_exist_ = true;
         break;
 
       default:
@@ -833,65 +956,95 @@ void InternetSection::OnDeviceList(
   }
 }
 
-void InternetSection::FetchActiveNetworks() {
+void InternetSection::FetchNetworkList() {
   cros_network_config_->GetNetworkStateList(
       network_config::mojom::NetworkFilter::New(
-          network_config::mojom::FilterType::kActive,
+          network_config::mojom::FilterType::kVisible,
           network_config::mojom::NetworkType::kAll,
           network_config::mojom::kNoLimit),
-      base::Bind(&InternetSection::OnActiveNetworks, base::Unretained(this)));
+      base::Bind(&InternetSection::OnNetworkList, base::Unretained(this)));
 }
 
-void InternetSection::OnActiveNetworks(
+void InternetSection::OnNetworkList(
     std::vector<network_config::mojom::NetworkStatePropertiesPtr> networks) {
   using network_config::mojom::NetworkType;
 
-  registry()->RemoveSearchTags(GetEthernetConnectedSearchConcepts());
-  registry()->RemoveSearchTags(GetWifiConnectedSearchConcepts());
-  registry()->RemoveSearchTags(GetCellularConnectedSearchConcepts());
-  registry()->RemoveSearchTags(GetInstantTetheringConnectedSearchConcepts());
-  registry()->RemoveSearchTags(GetVpnConnectedSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
+  updater.RemoveSearchTags(GetEthernetConnectedSearchConcepts());
+  updater.RemoveSearchTags(GetEthernetNotConnectedSearchConcepts());
+  updater.RemoveSearchTags(GetWifiConnectedSearchConcepts());
+  updater.RemoveSearchTags(GetWifiMeteredSearchConcepts());
+  updater.RemoveSearchTags(GetCellularSearchConcepts());
+  updater.RemoveSearchTags(GetCellularConnectedSearchConcepts());
+  updater.RemoveSearchTags(GetCellularSetupAndDetailMenuSearchConcepts());
+  updater.RemoveSearchTags(GetCellularMeteredSearchConcepts());
+  updater.RemoveSearchTags(GetInstantTetheringConnectedSearchConcepts());
+  updater.RemoveSearchTags(GetVpnConnectedSearchConcepts());
+
+  cellular_guid_.reset();
 
   connected_ethernet_guid_.reset();
   connected_wifi_guid_.reset();
-  connected_cellular_guid_.reset();
   connected_tether_guid_.reset();
   connected_vpn_guid_.reset();
 
   for (const auto& network : networks) {
+    // Special case: Some cellular search functionality is available even if the
+    // network is not connected.
+    if (network->type == NetworkType::kCellular) {
+      cellular_guid_ = network->guid;
+      updater.AddSearchTags(GetCellularSearchConcepts());
+    }
+
     if (!IsConnected(network->connection_state))
       continue;
 
     switch (network->type) {
       case NetworkType::kEthernet:
         connected_ethernet_guid_ = network->guid;
-        registry()->AddSearchTags(GetEthernetConnectedSearchConcepts());
+        updater.AddSearchTags(GetEthernetConnectedSearchConcepts());
         break;
 
       case NetworkType::kWiFi:
         connected_wifi_guid_ = network->guid;
-        registry()->AddSearchTags(GetWifiConnectedSearchConcepts());
+        updater.AddSearchTags(GetWifiConnectedSearchConcepts());
+        if (base::FeatureList::IsEnabled(::features::kMeteredShowToggle))
+          updater.AddSearchTags(GetWifiMeteredSearchConcepts());
         break;
 
       case NetworkType::kCellular:
-        connected_cellular_guid_ = network->guid;
-        registry()->AddSearchTags(GetCellularConnectedSearchConcepts());
+        // Note: GUID is set above.
+        updater.AddSearchTags(GetCellularConnectedSearchConcepts());
+        if (base::FeatureList::IsEnabled(::features::kMeteredShowToggle))
+          updater.AddSearchTags(GetCellularMeteredSearchConcepts());
+
+        if (base::FeatureList::IsEnabled(
+                chromeos::features::kUpdatedCellularActivationUi)) {
+          updater.AddSearchTags(GetCellularSetupAndDetailMenuSearchConcepts());
+        }
         break;
 
       case NetworkType::kTether:
         connected_tether_guid_ = network->guid;
-        registry()->AddSearchTags(GetInstantTetheringConnectedSearchConcepts());
+        updater.AddSearchTags(GetInstantTetheringConnectedSearchConcepts());
         break;
 
       case NetworkType::kVPN:
         connected_vpn_guid_ = network->guid;
-        registry()->AddSearchTags(GetVpnConnectedSearchConcepts());
+        updater.AddSearchTags(GetVpnConnectedSearchConcepts());
         break;
 
       default:
         // Note: Category types such as Mobile/Wireless do not have search tags.
         break;
     }
+  }
+
+  // Edge case where Ethernet device is present but no network is connected,
+  // i.e. on Chromeboxes. http://crbug.com/1096768
+  if (does_ethernet_device_exist_ && !connected_ethernet_guid_.has_value()) {
+    updater.AddSearchTags(GetEthernetNotConnectedSearchConcepts());
   }
 }
 

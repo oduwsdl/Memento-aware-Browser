@@ -4,7 +4,6 @@
 
 #include "base/trace_event/trace_log.h"
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -17,19 +16,19 @@
 #include "base/debug/leak_annotations.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/no_destructor.h"
 #include "base/process/process.h"
 #include "base/process/process_metrics.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
+#include "base/task/current_thread.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
@@ -138,11 +137,12 @@ class AutoThreadLocalBoolean {
     DCHECK(!thread_local_boolean_->Get());
     thread_local_boolean_->Set(true);
   }
+  AutoThreadLocalBoolean(const AutoThreadLocalBoolean&) = delete;
+  AutoThreadLocalBoolean& operator=(const AutoThreadLocalBoolean&) = delete;
   ~AutoThreadLocalBoolean() { thread_local_boolean_->Set(false); }
 
  private:
   ThreadLocalBoolean* thread_local_boolean_;
-  DISALLOW_COPY_AND_ASSIGN(AutoThreadLocalBoolean);
 };
 
 // Use this function instead of TraceEventHandle constructor to keep the
@@ -186,7 +186,10 @@ bool DefaultIsTraceEventArgsAllowlisted(
 // and unlocks at the end of scope if locked.
 class TraceLog::OptionalAutoLock {
  public:
-  explicit OptionalAutoLock(Lock* lock) : lock_(lock), locked_(false) {}
+  explicit OptionalAutoLock(Lock* lock) : lock_(lock) {}
+
+  OptionalAutoLock(const OptionalAutoLock&) = delete;
+  OptionalAutoLock& operator=(const OptionalAutoLock&) = delete;
 
   ~OptionalAutoLock() {
     if (locked_)
@@ -204,15 +207,16 @@ class TraceLog::OptionalAutoLock {
 
  private:
   Lock* lock_;
-  bool locked_;
-  DISALLOW_COPY_AND_ASSIGN(OptionalAutoLock);
+  bool locked_ = false;
 };
 
 class TraceLog::ThreadLocalEventBuffer
-    : public MessageLoopCurrent::DestructionObserver,
+    : public CurrentThread::DestructionObserver,
       public MemoryDumpProvider {
  public:
   explicit ThreadLocalEventBuffer(TraceLog* trace_log);
+  ThreadLocalEventBuffer(const ThreadLocalEventBuffer&) = delete;
+  ThreadLocalEventBuffer& operator=(const ThreadLocalEventBuffer&) = delete;
   ~ThreadLocalEventBuffer() override;
 
   TraceEvent* AddTraceEvent(TraceEventHandle* handle);
@@ -229,7 +233,7 @@ class TraceLog::ThreadLocalEventBuffer
   int generation() const { return generation_; }
 
  private:
-  // MessageLoopCurrent::DestructionObserver
+  // CurrentThread::DestructionObserver
   void WillDestroyCurrentMessageLoop() override;
 
   // MemoryDumpProvider implementation.
@@ -246,19 +250,16 @@ class TraceLog::ThreadLocalEventBuffer
   // as long as the thread exists.
   TraceLog* trace_log_;
   std::unique_ptr<TraceBufferChunk> chunk_;
-  size_t chunk_index_;
+  size_t chunk_index_ = 0;
   int generation_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThreadLocalEventBuffer);
 };
 
 TraceLog::ThreadLocalEventBuffer::ThreadLocalEventBuffer(TraceLog* trace_log)
     : trace_log_(trace_log),
-      chunk_index_(0),
       generation_(trace_log->generation()) {
   // ThreadLocalEventBuffer is created only if the thread has a message loop, so
   // the following message_loop won't be NULL.
-  MessageLoopCurrent::Get()->AddDestructionObserver(this);
+  CurrentThread::Get()->AddDestructionObserver(this);
 
   // This is to report the local memory usage when memory-infra is enabled.
   MemoryDumpManager::GetInstance()->RegisterDumpProvider(
@@ -272,7 +273,7 @@ TraceLog::ThreadLocalEventBuffer::ThreadLocalEventBuffer(TraceLog* trace_log)
 
 TraceLog::ThreadLocalEventBuffer::~ThreadLocalEventBuffer() {
   CheckThisIsCurrentBuffer();
-  MessageLoopCurrent::Get()->RemoveDestructionObserver(this);
+  CurrentThread::Get()->RemoveDestructionObserver(this);
   MemoryDumpManager::GetInstance()->UnregisterDumpProvider(this);
 
   {
@@ -401,7 +402,7 @@ TraceLog::TraceLog()
 
 // Linux renderer processes and Android O processes are not allowed to read
 // "proc/stat" file, crbug.com/788870.
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_MAC)
   process_creation_time_ = Process::Current().CreationTime();
 #else
   // Use approximate time when creation time is not available.
@@ -423,7 +424,7 @@ void TraceLog::InitializeThreadLocalEventBufferIfSupported() {
   // - to handle the final flush.
   // For a thread without a message loop or if the message loop may be blocked,
   // the trace events will be added into the main buffer directly.
-  if (thread_blocks_message_loop_.Get() || !MessageLoopCurrent::IsSet() ||
+  if (thread_blocks_message_loop_.Get() || !CurrentThread::IsSet() ||
       !ThreadTaskRunnerHandle::IsSet()) {
     return;
   }
@@ -716,8 +717,6 @@ void TraceLog::SetDisabled(uint8_t modes_to_disable) {
 }
 
 void TraceLog::SetDisabledWhileLocked(uint8_t modes_to_disable) {
-  lock_.AssertAcquired();
-
   if (!(enabled_modes_ & modes_to_disable))
     return;
 
@@ -779,8 +778,7 @@ void TraceLog::AddEnabledStateObserver(EnabledStateObserver* listener) {
 void TraceLog::RemoveEnabledStateObserver(EnabledStateObserver* listener) {
   AutoLock lock(observers_lock_);
   enabled_state_observers_.erase(
-      std::remove(enabled_state_observers_.begin(),
-                  enabled_state_observers_.end(), listener),
+      ranges::remove(enabled_state_observers_, listener),
       enabled_state_observers_.end());
 }
 
@@ -830,8 +828,6 @@ bool TraceLog::BufferIsFull() const {
 TraceEvent* TraceLog::AddEventToThreadSharedChunkWhileLocked(
     TraceEventHandle* handle,
     bool check_buffer_is_full) {
-  lock_.AssertAcquired();
-
   if (thread_shared_chunk_ && thread_shared_chunk_->IsFull()) {
     logged_events_->ReturnChunk(thread_shared_chunk_index_,
                                 std::move(thread_shared_chunk_));
@@ -856,7 +852,6 @@ TraceEvent* TraceLog::AddEventToThreadSharedChunkWhileLocked(
 }
 
 void TraceLog::CheckIfBufferIsFullWhileLocked() {
-  lock_.AssertAcquired();
   if (logged_events_->IsFull()) {
     if (buffer_limit_reached_timestamp_.is_null()) {
       buffer_limit_reached_timestamp_ = OffsetNow();
@@ -1554,8 +1549,6 @@ void TraceLog::AddMetadataEventWhileLocked(int thread_id,
 }
 
 void TraceLog::AddMetadataEventsWhileLocked() {
-  lock_.AssertAcquired();
-
   auto trace_event_override =
       add_trace_event_override_.load(std::memory_order_relaxed);
 
@@ -1718,6 +1711,7 @@ void TraceLog::SetTimeOffset(TimeDelta offset) {
 }
 
 size_t TraceLog::GetObserverCountForTest() const {
+  AutoLock lock(observers_lock_);
   return enabled_state_observers_.size();
 }
 

@@ -4,10 +4,16 @@
 
 #include "cc/paint/paint_op_buffer.h"
 
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "cc/paint/decoded_draw_image.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/paint/image_provider.h"
@@ -45,7 +51,7 @@ namespace {
 // unit test suite as generally deserialized ops are smaller.
 static constexpr size_t kBufferBytesPerOp = 1000 + sizeof(LargestPaintOp);
 
-#ifndef OS_ANDROID
+#if !defined(OS_ANDROID)
 // A skottie animation with solid green color for the first 2.5 seconds and then
 // a solid blue color for the next 2.5 seconds.
 constexpr char kSkottieData[] =
@@ -77,7 +83,7 @@ constexpr char kSkottieData[] =
     "    }"
     "  ]"
     "}";
-#endif  // OS_ANDROID
+#endif  // !defined(OS_ANDROID)
 
 template <typename T>
 void ValidateOps(PaintOpBuffer* buffer) {
@@ -2636,9 +2642,8 @@ TEST(PaintOpBufferTest, BoundingRect_DrawImageOp) {
   for (auto* base_op : PaintOpBuffer::Iterator(&buffer)) {
     auto* op = static_cast<DrawImageOp*>(base_op);
 
-    SkRect image_rect =
-        SkRect::MakeXYWH(op->left, op->top, op->image.GetSkImage()->width(),
-                         op->image.GetSkImage()->height());
+    SkRect image_rect = SkRect::MakeXYWH(op->left, op->top, op->image.width(),
+                                         op->image.height());
     ASSERT_TRUE(PaintOp::GetBounds(op, &rect));
     EXPECT_EQ(rect, image_rect.makeSorted());
   }
@@ -2804,8 +2809,8 @@ class MockImageProvider : public ImageProvider {
                             SkBitmap::kZeroPixels_AllocFlag);
     sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
     size_t i = index_++;
-    return ScopedResult(DecodedDrawImage(image, src_rect_offset_[i], scale_[i],
-                                         quality_[i], true));
+    return ScopedResult(
+        DecodedDrawImage(image, src_rect_offset_[i], scale_[i], quality_[i]));
   }
 
   void SetRecord(sk_sp<PaintRecord> record) { record_ = std::move(record); }
@@ -3373,7 +3378,7 @@ TEST(PaintOpBufferTest, PaintRecordShaderSerialization) {
   EXPECT_TRUE(!!rect_op->flags.getShader()->GetSkShader());
 }
 
-#ifndef OS_ANDROID
+#if !defined(OS_ANDROID)
 TEST(PaintOpBufferTest, DrawSkottieOpSerialization) {
   std::unique_ptr<char, base::AlignedFreeDeleter> memory(
       static_cast<char*>(base::AlignedAlloc(PaintOpBuffer::kInitialBufferSize,
@@ -3470,7 +3475,7 @@ TEST(PaintOpBufferTest, DrawSkottieOpSerializationFailure) {
       memory.get(), serializer.written(), d_options);
   ASSERT_FALSE(deserialized_buffer);
 }
-#endif  // OS_ANDROID
+#endif  // !defined(OS_ANDROID
 
 TEST(PaintOpBufferTest, CustomData) {
   // Basic tests: size, move, comparison.
@@ -3679,7 +3684,7 @@ TEST(PaintOpBufferTest, RecordShadersCached) {
   std::vector<uint8_t> scratch_buffer;
   PaintOp::DeserializeOptions deserialize_options(
       transfer_cache, options_provider.service_paint_cache(),
-      options_provider.strike_client(), &scratch_buffer, true);
+      options_provider.strike_client(), &scratch_buffer, true, nullptr);
 
   // Several deserialization test cases:
   // (0) deserialize once, verify cached is the same as deserialized version
@@ -3767,7 +3772,7 @@ TEST(PaintOpBufferTest, RecordShadersCachedSize) {
   std::vector<uint8_t> scratch_buffer;
   PaintOp::DeserializeOptions deserialize_options(
       transfer_cache, options_provider.service_paint_cache(),
-      options_provider.strike_client(), &scratch_buffer, true);
+      options_provider.strike_client(), &scratch_buffer, true, nullptr);
   auto record = PaintOpBuffer::MakeFromMemory(
       memory.get(), serializer.written(), deserialize_options);
   auto* shader_entry =

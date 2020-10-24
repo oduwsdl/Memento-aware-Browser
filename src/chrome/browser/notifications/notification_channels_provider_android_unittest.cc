@@ -17,7 +17,6 @@
 #include "base/time/default_clock.h"
 #include "base/values.h"
 #include "chrome/browser/content_settings/content_settings_mock_observer.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/content_settings_pref.h"
@@ -47,6 +46,10 @@ class FakeNotificationChannelsBridge
     should_use_channels_ = should_use_channels;
   }
 
+  FakeNotificationChannelsBridge(const FakeNotificationChannelsBridge&) =
+      delete;
+  FakeNotificationChannelsBridge& operator=(
+      const FakeNotificationChannelsBridge&) = delete;
   ~FakeNotificationChannelsBridge() override = default;
 
   void SetChannelStatus(const std::string& origin,
@@ -105,8 +108,6 @@ class FakeNotificationChannelsBridge
 
   // Map from channel_id - channel.
   std::map<std::string, NotificationChannel> channels_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeNotificationChannelsBridge);
 };
 
 class NotificationChannelsProviderAndroidTest : public testing::Test {

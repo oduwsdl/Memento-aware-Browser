@@ -20,8 +20,8 @@ namespace cc {
 // latency metrics.
 class CC_EXPORT EventMetrics {
  public:
-  // Whitelisted event types. This list should be in the same order as values of
-  // EventLatencyEventType enum from enums.xml file.
+  // Event types we are interested in. This list should be in the same order as
+  // values of EventLatencyEventType enum from enums.xml file.
   enum class EventType {
     kMousePressed,
     kMouseReleased,
@@ -46,7 +46,8 @@ class CC_EXPORT EventMetrics {
     kGestureTapDown,
     kGestureTapUnconfirmed,
     kGestureTwoFingerTap,
-    kMaxValue = kGestureTwoFingerTap,
+    kFirstGestureScrollUpdate,
+    kMaxValue = kFirstGestureScrollUpdate,
   };
 
   // Type of scroll events. This list should be in the same order as values of
@@ -59,10 +60,19 @@ class CC_EXPORT EventMetrics {
     kMaxValue = kWheel,
   };
 
-  // Returns a new instance if |type| is a whitelisted event type. Otherwise,
-  // returns nullptr.
+  // Determines whether a scroll-update event is the first one in a gesture
+  // scroll sequence or not.
+  enum class ScrollUpdateType {
+    kStarted,
+    kContinued,
+    kMaxValue = kContinued,
+  };
+
+  // Returns a new instance if |type| is an event type we are interested in.
+  // Otherwise, returns nullptr.
   static std::unique_ptr<EventMetrics> Create(
       ui::EventType type,
+      base::Optional<ScrollUpdateType> scroll_update_type,
       base::TimeTicks time_stamp,
       base::Optional<ui::ScrollInputType> scroll_input_type);
 

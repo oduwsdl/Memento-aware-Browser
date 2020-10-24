@@ -89,12 +89,14 @@ std::string IntAttrToString(const BrowserAccessibility& node,
       return ui::ToString(static_cast<ax::mojom::Restriction>(value));
     case ax::mojom::IntAttribute::kSortDirection:
       return ui::ToString(static_cast<ax::mojom::SortDirection>(value));
+    case ax::mojom::IntAttribute::kTextAlign:
+      return ui::ToString(static_cast<ax::mojom::TextAlign>(value));
     case ax::mojom::IntAttribute::kTextOverlineStyle:
     case ax::mojom::IntAttribute::kTextStrikethroughStyle:
     case ax::mojom::IntAttribute::kTextUnderlineStyle:
       return ui::ToString(static_cast<ax::mojom::TextDecorationStyle>(value));
     case ax::mojom::IntAttribute::kTextDirection:
-      return ui::ToString(static_cast<ax::mojom::TextDirection>(value));
+      return ui::ToString(static_cast<ax::mojom::WritingDirection>(value));
     case ax::mojom::IntAttribute::kTextPosition:
       return ui::ToString(static_cast<ax::mojom::TextPosition>(value));
     case ax::mojom::IntAttribute::kImageAnnotationStatus:
@@ -158,20 +160,19 @@ AccessibilityTreeFormatterBlink::AccessibilityTreeFormatterBlink()
 AccessibilityTreeFormatterBlink::~AccessibilityTreeFormatterBlink() {}
 
 void AccessibilityTreeFormatterBlink::AddDefaultFilters(
-    std::vector<PropertyFilter>* property_filters) {
+    std::vector<AXPropertyFilter>* property_filters) {
   // Noisy, perhaps add later:
   //   editable, focus*, horizontal, linked, richlyEditable, vertical
   // Too flaky: hovered, offscreen
   // States
   AddPropertyFilter(property_filters, "collapsed");
-  AddPropertyFilter(property_filters, "haspopup");
   AddPropertyFilter(property_filters, "invisible");
   AddPropertyFilter(property_filters, "multiline");
   AddPropertyFilter(property_filters, "protected");
   AddPropertyFilter(property_filters, "required");
   AddPropertyFilter(property_filters, "select*");
   AddPropertyFilter(property_filters, "selectedFromFocus=*",
-                    PropertyFilter::DENY);
+                    AXPropertyFilter::DENY);
   AddPropertyFilter(property_filters, "visited");
   // Other attributes
   AddPropertyFilter(property_filters, "busy=true");
@@ -188,7 +189,7 @@ void AccessibilityTreeFormatterBlink::AddDefaultFilters(
   AddPropertyFilter(property_filters, "invalidState=*");
   AddPropertyFilter(property_filters, "ignored*");
   AddPropertyFilter(property_filters, "invalidState=false",
-                    PropertyFilter::DENY);  // Don't show false value
+                    AXPropertyFilter::DENY);  // Don't show false value
   AddPropertyFilter(property_filters, "roleDescription=*");
   AddPropertyFilter(property_filters, "errormessageId=*");
 }
@@ -214,13 +215,6 @@ AccessibilityTreeFormatterBlink::BuildAccessibilityTree(
 }
 
 std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForProcess(
-    base::ProcessId pid) {
-  NOTREACHED();
-  return nullptr;
-}
-
-std::unique_ptr<base::DictionaryValue>
 AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForWindow(
     gfx::AcceleratedWidget widget) {
   NOTREACHED();
@@ -228,8 +222,8 @@ AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForWindow(
 }
 
 std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForPattern(
-    const base::StringPiece& pattern) {
+AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForSelector(
+    const AXTreeSelector& selector) {
   NOTREACHED();
   return nullptr;
 }
@@ -412,22 +406,22 @@ void AccessibilityTreeFormatterBlink::AddProperties(
     dict->SetString("actions", base::JoinString(actions_strings, ","));
 }
 
-base::string16 AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
+std::string AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
     const base::DictionaryValue& dict,
     base::DictionaryValue* filtered_dict_result) {
-  base::string16 error_value;
+  std::string error_value;
   if (dict.GetString("error", &error_value))
     return error_value;
 
-  base::string16 line;
+  std::string line;
 
   if (show_ids()) {
     int id_value;
     dict.GetInteger("id", &id_value);
-    WriteAttribute(true, base::NumberToString16(id_value), &line);
+    WriteAttribute(true, base::NumberToString(id_value), &line);
   }
 
-  base::string16 role_value;
+  std::string role_value;
   dict.GetString("internalRole", &role_value);
   WriteAttribute(true, role_value, &line);
 
@@ -629,6 +623,10 @@ const std::string AccessibilityTreeFormatterBlink::GetDenyString() {
 
 const std::string AccessibilityTreeFormatterBlink::GetDenyNodeString() {
   return "@BLINK-DENY-NODE:";
+}
+
+const std::string AccessibilityTreeFormatterBlink::GetRunUntilEventString() {
+  return "@BLINK-RUN-UNTIL-EVENT:";
 }
 
 }  // namespace content

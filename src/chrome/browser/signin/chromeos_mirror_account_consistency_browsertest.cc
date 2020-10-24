@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -126,11 +125,17 @@ IN_PROC_BROWSER_TEST_F(ChromeOsMirrorAccountConsistencyTest,
   PrefService* prefs = profile->GetPrefs();
   prefs->SetInteger(prefs::kIncognitoModeAvailability,
                     IncognitoModePrefs::DISABLED);
-
   ASSERT_EQ(1, signin::PROFILE_MODE_INCOGNITO_DISABLED);
-  TestMirrorRequestForProfile(test_server_.get(), profile,
-                              "mode=1,enable_account_consistency=true,"
-                              "consistency_enabled_by_default=false");
+
+  // TODO(http://crbug.com/1134144): This test seems to test supervised profiles
+  // instead of child accounts. With the current implementation,
+  // X-Chrome-Connected header gets a supervised=true argument only for child
+  // profiles. Verify if these tests needs to be updated to use child accounts
+  // or whether supervised profiles need to be supported as well.
+  TestMirrorRequestForProfile(
+      test_server_.get(), profile,
+      "source=Chrome,mode=1,enable_account_consistency=true,supervised=false,"
+      "consistency_enabled_by_default=false");
 }
 
 // Mirror is enabled for non-child accounts.
@@ -147,7 +152,8 @@ IN_PROC_BROWSER_TEST_F(ChromeOsMirrorAccountConsistencyTest,
   // With Chrome OS Account Manager enabled, this should be true.
   EXPECT_TRUE(
       AccountConsistencyModeManager::IsMirrorEnabledForProfile(profile));
-  TestMirrorRequestForProfile(test_server_.get(), profile,
-                              "mode=0,enable_account_consistency=true,"
-                              "consistency_enabled_by_default=false");
+  TestMirrorRequestForProfile(
+      test_server_.get(), profile,
+      "source=Chrome,mode=0,enable_account_consistency=true,supervised=false,"
+      "consistency_enabled_by_default=false");
 }

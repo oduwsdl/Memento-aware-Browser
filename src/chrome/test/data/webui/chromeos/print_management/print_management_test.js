@@ -78,13 +78,15 @@ function decodeString16(arr) {
  * @param {string} id
  * @param {string} title
  * @param {number} date
+ * @param {number} printerErrorCode
  * @param {?chromeos.printing.printingManager.mojom.CompletedPrintJobInfo}
  *     completedInfo
  * @param {?chromeos.printing.printingManager.mojom.ActivePrintJobInfo}
  *     activeInfo
  * @return {!Object}
  */
-function createJobEntry(id, title, date, completedInfo, activeInfo) {
+function createJobEntry(
+    id, title, date, printerErrorCode, completedInfo, activeInfo) {
   // Assert that only one of either |completedInfo| or |activeInfo| is non-null.
   assert(completedInfo ? !activeInfo : activeInfo);
 
@@ -94,7 +96,8 @@ function createJobEntry(id, title, date, completedInfo, activeInfo) {
     'creationTime': {internalValue: date},
     'printerName': strToMojoString16('printerName'),
     'printerUri': {url: '192.168.1.1'},
-    'numberOfPages': 4
+    'numberOfPages': 4,
+    'printerErrorCode': printerErrorCode,
   };
 
   if (completedInfo) {
@@ -107,14 +110,10 @@ function createJobEntry(id, title, date, completedInfo, activeInfo) {
 
 /**
  * @param {number} completionStatus
- * @param {number} printerErrorCode
  * @return {!chromeos.printing.printingManager.mojom.CompletedPrintJobInfo}
  */
-function createCompletedPrintJobInfo(completionStatus, printerErrorCode) {
-  let completedInfo = {
-    'completionStatus': completionStatus,
-    'printerErrorCode': printerErrorCode,
-  };
+function createCompletedPrintJobInfo(completionStatus) {
+  let completedInfo = {'completionStatus': completionStatus};
   return completedInfo;
 }
 
@@ -126,7 +125,10 @@ function createCompletedPrintJobInfo(completionStatus, printerErrorCode) {
  * @return {!chromeos.printing.printingManager.mojom.ActivePrintJobInfo}
  */
 function createOngoingPrintJobInfo(printedPages, activeState) {
-  let activeInfo = {'printedPages': printedPages, 'activeState': activeState};
+  let activeInfo = {
+    'printedPages': printedPages,
+    'activeState': activeState,
+  };
   return activeInfo;
 }
 
@@ -148,6 +150,7 @@ function verifyPrintJobs(expected, actual) {
     assertEquals(
         decodeString16(expected[i].printerName),
         decodeString16(actualJobInfo.printerName));
+    assertEquals(expected[i].printerErrorCode, actualJobInfo.printerErrorCode);
 
     if (actualJobInfo.completedInfo) {
       assertEquals(
@@ -205,6 +208,9 @@ class FakePrintingMetadataProvider {
      */
     this.printJobsObserverRemote_;
 
+    /** @private {number} */
+    this.expirationPeriod_ = 90;
+
     this.resetForTest();
   }
 
@@ -222,6 +228,8 @@ class FakePrintingMetadataProvider {
     this.resolverMap_.set('cancelPrintJob', new PromiseResolver());
     this.resolverMap_.set(
         'getDeletePrintJobHistoryAllowedByPolicy', new PromiseResolver());
+    this.resolverMap_.set(
+        'getPrintJobHistoryExpirationPeriod', new PromiseResolver());
   }
 
   /**
@@ -270,6 +278,11 @@ class FakePrintingMetadataProvider {
     this.printJobs_ = printJobs;
   }
 
+  /** @param {number} expirationPeriod */
+  setExpirationPeriod(expirationPeriod) {
+    this.expirationPeriod_ = expirationPeriod;
+  }
+
   /**
    * @param {boolean} shouldAttemptCancel
    */
@@ -305,8 +318,8 @@ class FakePrintingMetadataProvider {
       // Create copy of |job| to modify.
       let updatedJob = Object.assign({}, job);
       updatedJob.activePrintJobInfo = null;
-      updatedJob.completedInfo = createCompletedPrintJobInfo(
-          CompletionStatus.PRINTED, PrinterErrorCode.NO_ERROR);
+      updatedJob.completedInfo =
+          createCompletedPrintJobInfo(CompletionStatus.PRINTED);
       // Replace with updated print job.
       const idx =
           this.printJobs_.findIndex(arr_job => arr_job.id === updatedJob.id);
@@ -344,6 +357,17 @@ class FakePrintingMetadataProvider {
     return new Promise(resolve => {
       this.methodCalled('getDeletePrintJobHistoryAllowedByPolicy');
       resolve({isAllowedByPolicy: this.isAllowedByPolicy_});
+    });
+  }
+
+  /** @return {!Promise<{expirationPeriod: number}>} */
+  getPrintJobHistoryExpirationPeriod() {
+    return new Promise(resolve => {
+      this.methodCalled('getPrintJobHistoryExpirationPeriod');
+      resolve({
+        expirationPeriodInDays: this.expirationPeriod_,
+        isFromPolicy: true,
+      });
     });
   }
 
@@ -430,7 +454,8 @@ suite('PrintManagementTest', () => {
       // Create copy of |jobEntryElement.jobEntry| to modify.
       let updatedJob = Object.assign({}, jobEntryElement.jobEntry);
       updatedJob.activePrintJobInfo = createOngoingPrintJobInfo(
-          /*printedPages=*/ 0, ActivePrintJobState.kDocumentDone);
+          /*printedPages=*/ 0, ActivePrintJobState.kDocumentDone,
+          PrinterErrorCode.NO_ERROR);
       // Simulate print jobs cancelled notification update sent.
       mojoApi.getObserverRemote().onPrintJobUpdate(updatedJob);
 
@@ -439,23 +464,127 @@ suite('PrintManagementTest', () => {
       return mojoApi.whenCalled('getPrintJobs');
     });
   }
-
-  test('PrintHistoryListIsSortedReverseChronologically', () => {
-    const completedInfo = createCompletedPrintJobInfo(
-        CompletionStatus.PRINTED, PrinterErrorCode.NO_ERROR);
+  test('PrintJobHistoryExpirationPeriodOneDay', () => {
+    const completedInfo = createCompletedPrintJobInfo(CompletionStatus.PRINTED);
+    const expectedText = 'Print jobs older than 1 day will be removed';
     const expectedArr = [
       createJobEntry(
           'newest', 'titleA',
           convertToMojoTime(new Date(Date.UTC(2020, 3, 1, 1, 1, 1))),
-          completedInfo, /*activeInfo=*/ null),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
+    ];
+    // Print job metadata will be stored for 1 day.
+    mojoApi_.setExpirationPeriod(1);
+    return initializePrintManagementApp(expectedArr.slice().reverse())
+        .then(() => {
+          return mojoApi_.whenCalled('getPrintJobs');
+        })
+        .then(() => {
+          flush();
+          return mojoApi_.whenCalled('getPrintJobHistoryExpirationPeriod');
+        })
+        .then(() => {
+          const historyInfoTooltip = page.$$('paper-tooltip');
+          assertEquals(expectedText, historyInfoTooltip.textContent.trim());
+        });
+  });
+
+  test('PrintJobHistoryExpirationPeriodDefault', () => {
+    const completedInfo = createCompletedPrintJobInfo(CompletionStatus.PRINTED);
+    const expectedText = 'Print jobs older than 90 days will be removed';
+    const expectedArr = [
+      createJobEntry(
+          'newest', 'titleA',
+          convertToMojoTime(new Date(Date.UTC(2020, 3, 1, 1, 1, 1))),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
+    ];
+
+    // Print job metadata will be stored for 90 days which is the default
+    // period when the policy is not controlled.
+    mojoApi_.setExpirationPeriod(90);
+    return initializePrintManagementApp(expectedArr.slice().reverse())
+        .then(() => {
+          return mojoApi_.whenCalled('getPrintJobs');
+        })
+        .then(() => {
+          flush();
+          return mojoApi_.whenCalled('getPrintJobHistoryExpirationPeriod');
+        })
+        .then(() => {
+          const historyInfoTooltip = page.$$('paper-tooltip');
+          assertEquals(expectedText, historyInfoTooltip.textContent.trim());
+        });
+  });
+
+  test('PrintJobHistoryExpirationPeriodIndefinte', () => {
+    const completedInfo = createCompletedPrintJobInfo(CompletionStatus.PRINTED);
+    const expectedText = 'Print jobs will appear in history unless they are ' +
+        'removed manually';
+    const expectedArr = [
+      createJobEntry(
+          'newest', 'titleA',
+          convertToMojoTime(new Date(Date.UTC(2020, 3, 1, 1, 1, 1))),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
+    ];
+
+    // When this policy is set to a value of -1, the print jobs metadata is
+    // stored indefinitely.
+    mojoApi_.setExpirationPeriod(-1);
+    return initializePrintManagementApp(expectedArr.slice().reverse())
+        .then(() => {
+          return mojoApi_.whenCalled('getPrintJobs');
+        })
+        .then(() => {
+          flush();
+          return mojoApi_.whenCalled('getPrintJobHistoryExpirationPeriod');
+        })
+        .then(() => {
+          const historyInfoTooltip = page.$$('paper-tooltip');
+          assertEquals(expectedText, historyInfoTooltip.textContent.trim());
+        });
+  });
+
+  test('PrintJobHistoryExpirationPeriodNDays', () => {
+    const completedInfo = createCompletedPrintJobInfo(CompletionStatus.PRINTED);
+    const expectedText = 'Print jobs older than 4 days will be removed';
+    const expectedArr = [
+      createJobEntry(
+          'newest', 'titleA',
+          convertToMojoTime(new Date(Date.UTC(2020, 3, 1, 1, 1, 1))),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
+    ];
+
+    // Print job metadata will be stored for 4 days.
+    mojoApi_.setExpirationPeriod(4);
+    return initializePrintManagementApp(expectedArr.slice().reverse())
+        .then(() => {
+          return mojoApi_.whenCalled('getPrintJobs');
+        })
+        .then(() => {
+          flush();
+          return mojoApi_.whenCalled('getPrintJobHistoryExpirationPeriod');
+        })
+        .then(() => {
+          const historyInfoTooltip = page.$$('paper-tooltip');
+          assertEquals(expectedText, historyInfoTooltip.textContent.trim());
+        });
+  });
+
+  test('PrintHistoryListIsSortedReverseChronologically', () => {
+    const completedInfo = createCompletedPrintJobInfo(CompletionStatus.PRINTED);
+    const expectedArr = [
+      createJobEntry(
+          'newest', 'titleA',
+          convertToMojoTime(new Date(Date.UTC(2020, 3, 1, 1, 1, 1))),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
       createJobEntry(
           'middle', 'titleB',
           convertToMojoTime(new Date(Date.UTC(2020, 2, 1, 1, 1, 1))),
-          completedInfo, /*activeInfo=*/ null),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
       createJobEntry(
           'oldest', 'titleC',
           convertToMojoTime(new Date(Date.UTC(2020, 1, 1, 1, 1, 1))),
-          completedInfo, /*activeInfo=*/ null)
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null)
     ];
 
     // Initialize with a reversed array of |expectedArr|, since we expect the
@@ -489,6 +618,7 @@ suite('PrintManagementTest', () => {
     const expectedArr = [createJobEntry(
         'newest', 'titleA',
         convertToMojoTime(new Date(Date.UTC(2020, 3, 1, 1, 1, 1))),
+        PrinterErrorCode.NO_ERROR,
         createCompletedPrintJobInfo(CompletionStatus.PRINTED),
         /*activeInfo=*/ null)];
     // Set policy to prevent user from deleting history.
@@ -505,21 +635,20 @@ suite('PrintManagementTest', () => {
   });
 
   test('ClearAllPrintHistory', () => {
-    const completedInfo = createCompletedPrintJobInfo(
-        CompletionStatus.PRINTED, PrinterErrorCode.NO_ERROR);
+    const completedInfo = createCompletedPrintJobInfo(CompletionStatus.PRINTED);
     const expectedArr = [
       createJobEntry(
           'fileA', 'titleA',
           convertToMojoTime(new Date(Date('February 5, 2020 03:24:00'))),
-          completedInfo, /*activeInfo=*/ null),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
       createJobEntry(
           'fileB', 'titleB',
           convertToMojoTime(new Date(Date('February 5, 2020 03:24:00'))),
-          completedInfo, /*activeInfo=*/ null),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
       createJobEntry(
           'fileC', 'titleC',
           convertToMojoTime(new Date(Date('February 5, 2020 03:24:00'))),
-          completedInfo, /*activeInfo=*/ null),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
     ];
 
     return initializePrintManagementApp(expectedArr)
@@ -557,21 +686,20 @@ suite('PrintManagementTest', () => {
   });
 
   test('PrintJobDeletesFromObserver', () => {
-    const completedInfo = createCompletedPrintJobInfo(
-        CompletionStatus.PRINTED, PrinterErrorCode.NO_ERROR);
+    const completedInfo = createCompletedPrintJobInfo(CompletionStatus.PRINTED);
     const expectedArr = [
       createJobEntry(
           'fileA', 'titleA',
           convertToMojoTime(new Date(Date('February 5, 2020 03:24:00'))),
-          completedInfo, /*activeInfo=*/ null),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
       createJobEntry(
           'fileB', 'titleB',
           convertToMojoTime(new Date(Date('February 6, 2020 03:24:00'))),
-          completedInfo, /*activeInfo=*/ null),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
       createJobEntry(
           'fileC', 'titleC',
           convertToMojoTime(new Date(Date('February 7, 2020 03:24:00'))),
-          completedInfo, /*activeInfo=*/ null),
+          PrinterErrorCode.NO_ERROR, completedInfo, /*activeInfo=*/ null),
     ];
 
     return initializePrintManagementApp(expectedArr)
@@ -619,11 +747,11 @@ suite('PrintManagementTest', () => {
       createJobEntry(
           'fileA', 'titleA',
           convertToMojoTime(new Date(Date('February 5, 2020 03:23:00'))),
-          /*completedInfo=*/ null, activeInfo1),
+          PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null, activeInfo1),
       createJobEntry(
           'fileB', 'titleB',
           convertToMojoTime(new Date(Date('February 5, 2020 03:24:00'))),
-          /*completedInfo=*/ null, activeInfo2),
+          PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null, activeInfo2),
     ];
 
     return initializePrintManagementApp(expectedArr)
@@ -640,8 +768,8 @@ suite('PrintManagementTest', () => {
     const expectedArr = [
       createJobEntry(
           'fileA', 'titleA',
-          convertToMojoTime(new Date(Date('February 5, 2020 03:24:00'))),
-          /*completedInfo=*/ null,
+          convertToMojoTime(new Date('February 5, 2020 03:24:00')),
+          PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null,
           createOngoingPrintJobInfo(
               /*printedPages=*/ 0, ActivePrintJobState.kStarted)),
     ];
@@ -652,7 +780,42 @@ suite('PrintManagementTest', () => {
       createJobEntry(
           'fileA', 'titleA',
           convertToMojoTime(new Date(Date('February 5, 2020 03:24:00'))),
-          /*completedInfo=*/ null, activeInfo2),
+          PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null, activeInfo2),
+    ];
+
+    return initializePrintManagementApp(expectedArr)
+        .then(() => {
+          return mojoApi_.whenCalled('getPrintJobs');
+        })
+        .then(() => {
+          flush();
+          verifyPrintJobs(expectedArr, getOngoingPrintJobEntries(page));
+          mojoApi_.simulateUpdatePrintJob(expectedUpdatedArr[0]);
+          return flushTasks();
+        })
+        .then(() => {
+          flush();
+          verifyPrintJobs(expectedUpdatedArr, getOngoingPrintJobEntries(page));
+        });
+  });
+
+  test('OngoingPrintJobUpdatedToStopped', () => {
+    const expectedArr = [
+      createJobEntry(
+          'fileA', 'titleA',
+          convertToMojoTime(new Date('February 5, 2020 03:24:00')),
+          PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null,
+          createOngoingPrintJobInfo(
+              /*printedPages=*/ 0, ActivePrintJobState.kStarted)),
+    ];
+
+    const activeInfo2 = createOngoingPrintJobInfo(
+        /*printedPages=*/ 0, ActivePrintJobState.kStarted);
+    const expectedUpdatedArr = [
+      createJobEntry(
+          'fileA', 'titleA',
+          convertToMojoTime(new Date('February 5, 2020 03:24:00')),
+          PrinterErrorCode.OUT_OF_PAPER, /*completedInfo=*/ null, activeInfo2),
     ];
 
     return initializePrintManagementApp(expectedArr)
@@ -674,15 +837,15 @@ suite('PrintManagementTest', () => {
   test('NewOngoingPrintJobsDetected', () => {
     const initialJob = [createJobEntry(
         'fileA', 'titleA',
-        convertToMojoTime(new Date(Date('February 5, 2020 03:24:00'))),
-        /*completedInfo=*/ null,
+        convertToMojoTime(new Date('February 5, 2020 03:24:00')),
+        PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null,
         createOngoingPrintJobInfo(
             /*printedPages=*/ 0, ActivePrintJobState.kStarted))];
 
     const newOngoingJob = createJobEntry(
         'fileB', 'titleB',
         convertToMojoTime(new Date(Date('February 5, 2020 03:25:00'))),
-        /*completedInfo=*/ null,
+        PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null,
         createOngoingPrintJobInfo(
             /*printedPages=*/ 1, ActivePrintJobState.kStarted));
 
@@ -709,14 +872,13 @@ suite('PrintManagementTest', () => {
     const date = convertToMojoTime(new Date(Date('February 5, 2020 03:24:00')));
 
     const activeJob = createJobEntry(
-        id, title, date, /*completedInfo=*/ null,
+        id, title, date, PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null,
         createOngoingPrintJobInfo(
             /*printedPages=*/ 0, ActivePrintJobState.kStarted));
 
     const expectedPrintJobArr = [createJobEntry(
-        id, title, date,
-        createCompletedPrintJobInfo(
-            CompletionStatus.PRINTED, PrinterErrorCode.NO_ERROR),
+        id, title, date, PrinterErrorCode.NO_ERROR,
+        createCompletedPrintJobInfo(CompletionStatus.PRINTED),
         /*activeInfo=*/ '')];
 
     return initializePrintManagementApp([activeJob])
@@ -760,15 +922,15 @@ suite('PrintManagementTest', () => {
         convertToMojoTime(new Date(Date('February 5, 2020 03:23:00')));
     const expectedArr = [
       createJobEntry(
-          kId, kTitle, kTime, /*completedInfo=*/ null,
+          kId, kTitle, kTime, PrinterErrorCode.NO_ERROR,
+          /*completedInfo=*/ null,
           createOngoingPrintJobInfo(
               /*printedPages=*/ 0, ActivePrintJobState.STARTED)),
     ];
 
     const expectedHistoryList = [createJobEntry(
-        kId, kTitle, kTime,
-        createCompletedPrintJobInfo(
-            CompletionStatus.CANCELED, PrinterErrorCode.NO_ERROR))];
+        kId, kTitle, kTime, PrinterErrorCode.NO_ERROR,
+        createCompletedPrintJobInfo(CompletionStatus.CANCELED))];
 
     return initializePrintManagementApp(expectedArr)
         .then(() => {
@@ -800,13 +962,14 @@ suite('PrintManagementTest', () => {
 
     const expectedArr = [
       createJobEntry(
-          kId, kTitle, kTime, /*completedInfo=*/ null,
+          kId, kTitle, kTime, PrinterErrorCode.NO_ERROR,
+          /*completedInfo=*/ null,
           createOngoingPrintJobInfo(
               /*printedPages=*/ 0, ActivePrintJobState.STARTED)),
     ];
 
     const expectedHistoryList = [createJobEntry(
-        kId, kTitle, kTime,
+        kId, kTitle, kTime, PrinterErrorCode.NO_ERROR,
         createCompletedPrintJobInfo(CompletionStatus.CANCELED))];
 
     return initializePrintManagementApp(expectedArr)
@@ -877,11 +1040,10 @@ suite('PrintJobEntryTest', () => {
     const expectedPrinterError = PrinterErrorCode.NO_ERROR;
     const expectedCreationTime = convertToMojoTime(new Date());
 
-    const completedInfo =
-        createCompletedPrintJobInfo(expectedStatus, expectedPrinterError);
+    const completedInfo = createCompletedPrintJobInfo(expectedStatus);
     jobEntryTestElement.jobEntry = createJobEntry(
-        /*id=*/ '1', expectedTitle, expectedCreationTime, completedInfo,
-        /*activeInfo=*/ null);
+        /*id=*/ '1', expectedTitle, expectedCreationTime, expectedPrinterError,
+        completedInfo, /*activeInfo=*/ null);
 
     flush();
 
@@ -910,8 +1072,8 @@ suite('PrintJobEntryTest', () => {
     jobEntryTestElement.jobEntry = createJobEntry(
         /*id=*/ '1', expectedTitle,
         convertToMojoTime(new Date('February 5, 2020 03:24:00')),
-        createCompletedPrintJobInfo(
-            CompletionStatus.FAILED, PrinterErrorCode.OUT_OF_PAPER),
+        PrinterErrorCode.OUT_OF_PAPER,
+        createCompletedPrintJobInfo(CompletionStatus.FAILED),
         /*activeInfo=*/ null);
 
     flush();
@@ -938,7 +1100,7 @@ suite('PrintJobEntryTest', () => {
 
     jobEntryTestElement.jobEntry = createJobEntry(
         /*id=*/ '1', expectedTitle, expectedCreationTime,
-        /*completedInfo=*/ null,
+        PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null,
         createOngoingPrintJobInfo(/*printedPages=*/ 1, expectedPrinterError));
 
     flush();
@@ -951,6 +1113,65 @@ suite('PrintJobEntryTest', () => {
         jobEntryTestElement.$$('#creationTime').textContent.trim());
     assertEquals(
         '1/4', jobEntryTestElement.$$('#numericalProgress').textContent.trim());
+    assertEquals(
+        'print-management:file-generic',
+        jobEntryTestElement.$$('#fileIcon').icon);
+  });
+
+  test('initializeStoppedOngoingJobEntry', () => {
+    const expectedTitle = 'title';
+    const expectedCreationTime =
+        convertToMojoTime(new Date('February 5, 2020 03:24:00'));
+    const expectedPrinterError = ActivePrintJobState.kStarted;
+    const expectedOngoingError = PrinterErrorCode.OUT_OF_PAPER;
+
+    jobEntryTestElement.jobEntry = createJobEntry(
+        /*id=*/ '1', expectedTitle, expectedCreationTime, expectedOngoingError,
+        /*completedInfo=*/ null,
+        createOngoingPrintJobInfo(/*printedPages=*/ 1, expectedPrinterError));
+
+    flush();
+
+    // Assert the title, creation time, and status are displayed correctly.
+    assertEquals(
+        expectedTitle, jobEntryTestElement.$$('#jobTitle').textContent.trim());
+    assertEquals(
+        'Feb 5, 2020',
+        jobEntryTestElement.$$('#creationTime').textContent.trim());
+    assertEquals(
+        'Stopped - Out of paper',
+        jobEntryTestElement.$$('#ongoingError').textContent.trim());
+    assertEquals(
+        'print-management:file-generic',
+        jobEntryTestElement.$$('#fileIcon').icon);
+  });
+
+  test('ensureGoogleFileIconIsShown', () => {
+    jobEntryTestElement.jobEntry = createJobEntry(
+        /*id=*/ '1', /*fileName=*/ '.test - Google Docs',
+        /*date=*/ convertToMojoTime(new Date('February 5, 2020 03:24:00')),
+        PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null,
+        createOngoingPrintJobInfo(
+            /*printedPages=*/ 1,
+            /*printerError=*/ ActivePrintJobState.kStarted));
+
+    flush();
+
+    assertEquals(
+        'print-management:file-gdoc', jobEntryTestElement.$$('#fileIcon').icon);
+  });
+
+  test('ensureGenericFileIconIsShown', () => {
+    jobEntryTestElement.jobEntry = createJobEntry(
+        /*id=*/ '1', /*fileName=*/ '.test',
+        /*date=*/ convertToMojoTime(new Date('February 5, 2020 03:24:00')),
+        PrinterErrorCode.NO_ERROR, /*completedInfo=*/ null,
+        createOngoingPrintJobInfo(
+            /*printedPages=*/ 1,
+            /*printerError=*/ ActivePrintJobState.kStarted));
+
+    flush();
+
     assertEquals(
         'print-management:file-generic',
         jobEntryTestElement.$$('#fileIcon').icon);

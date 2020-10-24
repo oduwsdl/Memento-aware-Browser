@@ -32,6 +32,12 @@ std::string FakeOsSettingsSection::GetSectionPath() const {
   return std::string();
 }
 
+bool FakeOsSettingsSection::LogMetric(mojom::Setting setting,
+                                      base::Value& value) const {
+  logged_metrics_.push_back(setting);
+  return true;
+}
+
 std::string FakeOsSettingsSection::ModifySearchResultUrl(
     mojom::SearchResultType type,
     OsSettingsIdentifier id,

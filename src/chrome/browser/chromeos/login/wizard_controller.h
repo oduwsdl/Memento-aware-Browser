@@ -22,24 +22,34 @@
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
+#include "chrome/browser/chromeos/login/screens/active_directory_login_screen.h"
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
 #include "chrome/browser/chromeos/login/screens/assistant_optin_flow_screen.h"
 #include "chrome/browser/chromeos/login/screens/demo_preferences_screen.h"
 #include "chrome/browser/chromeos/login/screens/demo_setup_screen.h"
-#include "chrome/browser/chromeos/login/screens/discover_screen.h"
+#include "chrome/browser/chromeos/login/screens/edu_coexistence_login_screen.h"
 #include "chrome/browser/chromeos/login/screens/enable_adb_sideloading_screen.h"
 #include "chrome/browser/chromeos/login/screens/enable_debugging_screen.h"
 #include "chrome/browser/chromeos/login/screens/eula_screen.h"
+#include "chrome/browser/chromeos/login/screens/family_link_notice_screen.h"
 #include "chrome/browser/chromeos/login/screens/fingerprint_setup_screen.h"
+#include "chrome/browser/chromeos/login/screens/gaia_screen.h"
 #include "chrome/browser/chromeos/login/screens/gesture_navigation_screen.h"
+#include "chrome/browser/chromeos/login/screens/hid_detection_screen.h"
 #include "chrome/browser/chromeos/login/screens/kiosk_autolaunch_screen.h"
 #include "chrome/browser/chromeos/login/screens/marketing_opt_in_screen.h"
+#include "chrome/browser/chromeos/login/screens/multidevice_setup_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_screen.h"
 #include "chrome/browser/chromeos/login/screens/packaged_license_screen.h"
+#include "chrome/browser/chromeos/login/screens/parental_handoff_screen.h"
+#include "chrome/browser/chromeos/login/screens/pin_setup_screen.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps_screen.h"
+#include "chrome/browser/chromeos/login/screens/signin_fatal_error_screen.h"
 #include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/screens/terms_of_service_screen.h"
 #include "chrome/browser/chromeos/login/screens/update_screen.h"
+#include "chrome/browser/chromeos/login/screens/user_creation_screen.h"
+#include "chrome/browser/chromeos/login/screens/welcome_screen.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
 #include "components/account_id/account_id.h"
 
@@ -64,6 +74,12 @@ struct TimeZoneResponseData;
 // interacts with screen controllers to move the user between screens.
 class WizardController {
  public:
+  class ScreenObserver : public base::CheckedObserver {
+   public:
+    virtual void OnCurrentScreenChanged(BaseScreen* new_screen) = 0;
+    virtual void OnShutdown() = 0;
+  };
+
   WizardController();
   ~WizardController();
 
@@ -98,14 +114,25 @@ class WizardController {
   // Zero-Touch Hands-Off Enrollment Flow.
   static bool UsingHandsOffEnrollment();
 
+  static bool IsBrandedBuildForTesting() { return is_branded_build_; }
+
   bool is_initialized() { return is_initialized_; }
 
-  // Shows the first screen defined by |first_screen| or by default if the
+  // Shows the first screen defined by `first_screen` or by default if the
   // parameter is empty.
   void Init(OobeScreenId first_screen);
 
-  // Advances to screen defined by |screen| and shows it.
+  // Advances to screen defined by `screen` and shows it. Might show HID
+  // detection screen in case HID connection is needed and screen_id ==
+  // OobeScreen::SCREEN_UNKNOWN.
   void AdvanceToScreen(OobeScreenId screen_id);
+
+  // Advances to screen defined by `screen` and shows it.
+  void AdvanceToScreenAfterHIDDetection(OobeScreenId first_screen);
+
+  // Returns `true` if accelerator `action` was handled by current screen
+  // or WizardController itself.
+  bool HandleAccelerator(ash::LoginAcceleratorAction action);
 
   // Starts Demo Mode setup flow. The flow starts from network screen and reuses
   // some of regular OOBE screens. It consists of the following screens:
@@ -117,7 +144,7 @@ class WizardController {
   //    chromeos::DemoSetupScreenView::kScreenId
   void StartDemoModeSetup();
 
-  // Simulates demo mode setup environment. If |demo_config| has a value, it
+  // Simulates demo mode setup environment. If `demo_config` has a value, it
   // is explicitly set on DemoSetupController and going through demo settings
   // screens can be skipped.
   void SimulateDemoModeSetupForTesting(
@@ -152,6 +179,11 @@ class WizardController {
   // Returns the current ScreenManager instance.
   ScreenManager* screen_manager() const { return screen_manager_.get(); }
 
+  // Returns the current WizardContext instance.
+  WizardContext* get_wizard_context_for_testing() const {
+    return wizard_context_.get();
+  }
+
   // Volume percent at which spoken feedback is still audible.
   static const int kMinAudibleOutputVolumePercent;
 
@@ -161,15 +193,35 @@ class WizardController {
   void SetSharedURLLoaderFactoryForTesting(
       scoped_refptr<network::SharedURLLoaderFactory> factory);
 
-  // Resets |current_screen_| when login screen has started.
-  void LoginScreenStarted();
-
   // Configure and show GAIA password changed screen.
   void ShowGaiaPasswordChangedScreen(const AccountId& account_id,
                                      bool has_error);
 
+  // Configure and show active directory password change screen.
+  void ShowActiveDirectoryPasswordChangeScreen(const std::string& username);
+
+  // Configure and show the signin fatal error screen.
+  void ShowSignInFatalErrorScreen(SignInFatalErrorScreen::Error error,
+                                  const base::Value* params);
+
+  // Show Family Link notice screen.
+  void ShowFamilyLinkNoticeScreen();
+
+  // Set pref value for first run.
+  void PrepareFirstRunPrefs();
+
+  // Returns true if we are in user creation screen or gaia signin screen.
+  static bool IsSigninScreen(OobeScreenId screen_id);
+
+  OobeScreenId first_screen_for_testing() const {
+    return first_screen_for_testing_;
+  }
+
+  void AddObserver(ScreenObserver* obs);
+  void RemoveObserver(ScreenObserver* obs);
+
  private:
-  // Create BaseScreen instances. These are owned by |screen_manager_|.
+  // Create BaseScreen instances. These are owned by `screen_manager_`.
   std::vector<std::unique_ptr<BaseScreen>> CreateScreens();
 
   // Show specific screen.
@@ -200,15 +252,17 @@ class WizardController {
   void ShowAssistantOptInFlowScreen();
   void ShowMultiDeviceSetupScreen();
   void ShowGestureNavigationScreen();
-  void ShowDiscoverScreen();
+  void ShowPinSetupScreen();
   void ShowMarketingOptInScreen();
   void ShowPackagedLicenseScreen();
+  void ShowEduCoexistenceLoginScreen();
+  void ShowParentalHandoffScreen();
 
   // Shows images login screen.
   void ShowLoginScreen();
 
-  // Check if advancing to |screen| is allowed using screen priorities. Return
-  // true if the priority of |screen| is higher or equal to current screen.
+  // Check if advancing to `screen` is allowed using screen priorities. Return
+  // true if the priority of `screen` is higher or equal to current screen.
   bool CanNavigateTo(OobeScreenId screen_id);
 
   // Shows default screen depending on device ownership.
@@ -216,13 +270,13 @@ class WizardController {
       DeviceSettingsService::OwnershipStatus status);
 
   // Shared actions to be performed on a screen exit.
-  // |exit_reason| is the screen specific exit reason reported by the screen.
+  // `exit_reason` is the screen specific exit reason reported by the screen.
   void OnScreenExit(OobeScreenId screen, const std::string& exit_reason);
 
   // Exit handlers:
   void OnWrongHWIDScreenExit();
-  void OnHidDetectionScreenExit();
-  void OnWelcomeScreenExit();
+  void OnHidDetectionScreenExit(HIDDetectionScreen::Result result);
+  void OnWelcomeScreenExit(WelcomeScreen::Result result);
   void OnNetworkScreenExit(NetworkScreen::Result result);
   bool ShowEulaOrArcTosAfterNetworkScreen();
   void OnEulaScreenExit(EulaScreen::Result result);
@@ -241,20 +295,30 @@ class WizardController {
   void OnTermsOfServiceScreenExit(TermsOfServiceScreen::Result result);
   void OnFingerprintSetupScreenExit(FingerprintSetupScreen::Result result);
   void OnSyncConsentScreenExit(SyncConsentScreen::Result result);
-  void OnDiscoverScreenExit(DiscoverScreen::Result result);
+  void OnPinSetupScreenExit(PinSetupScreen::Result result);
   void OnArcTermsOfServiceScreenExit(ArcTermsOfServiceScreen::Result result);
   void OnArcTermsOfServiceAccepted();
   void OnRecommendAppsScreenExit(RecommendAppsScreen::Result result);
   void OnAppDownloadingScreenExit();
   void OnAssistantOptInFlowScreenExit(AssistantOptInFlowScreen::Result result);
-  void OnMultiDeviceSetupScreenExit();
+  void OnMultiDeviceSetupScreenExit(MultiDeviceSetupScreen::Result result);
   void OnGestureNavigationScreenExit(GestureNavigationScreen::Result result);
   void OnMarketingOptInScreenExit(MarketingOptInScreen::Result result);
   void OnResetScreenExit();
   void OnDeviceModificationCanceled();
   void OnSupervisionTransitionScreenExit();
+  void OnUpdateRequiredScreenExit();
   void OnOobeFlowFinished();
   void OnPackagedLicenseScreenExit(PackagedLicenseScreen::Result result);
+  void OnActiveDirectoryPasswordChangeScreenExit();
+  void OnFamilyLinkNoticeScreenExit(FamilyLinkNoticeScreen::Result result);
+  void OnUserCreationScreenExit(UserCreationScreen::Result result);
+  void OnGaiaScreenExit(GaiaScreen::Result result);
+  void OnActiveDirectoryLoginScreenExit();
+  void OnSignInFatalErrorScreenExit();
+  void OnEduCoexistenceLoginScreenExit(
+      EduCoexistenceLoginScreen::Result result);
+  void OnParentalHandoffScreenExit(ParentalHandoffScreen::Result result);
 
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
@@ -289,7 +353,7 @@ class WizardController {
   // Switches from one screen to another.
   void SetCurrentScreen(BaseScreen* screen);
 
-  // Update the status area visibility for |screen|.
+  // Update the status area visibility for `screen`.
   void UpdateStatusAreaVisibilityForScreen(OobeScreenId screen_id);
 
   // Launched kiosk app configured for auto-launch.
@@ -304,8 +368,6 @@ class WizardController {
   static void set_local_state_for_testing(PrefService* local_state) {
     local_state_for_testing_ = local_state;
   }
-
-  OobeScreenId first_screen() const { return first_screen_; }
 
   // Starts a network request to resolve the timezone. Skips the request
   // completely when the timezone is overridden through the command line.
@@ -329,15 +391,13 @@ class WizardController {
   bool SetOnTimeZoneResolvedForTesting(const base::Closure& callback);
 
   // Start the enrollment screen using the config from
-  // |prescribed_enrollment_config_|. If |force_interactive| is true,
+  // `prescribed_enrollment_config_`. If `force_interactive` is true,
   // the user will be presented with a manual enrollment screen requiring
   // Gaia credentials. If it is false, the screen may return after trying
   // attestation-based enrollment if appropriate.
   void StartEnrollmentScreen(bool force_interactive);
 
-  void OnConfigurationLoaded(
-      OobeScreenId first_screen,
-      std::unique_ptr<base::DictionaryValue> configuration);
+  void NotifyScreenChanged();
 
   // Returns auto enrollment controller (lazily initializes one if it doesn't
   // exist already).
@@ -345,6 +405,7 @@ class WizardController {
 
   std::unique_ptr<AutoEnrollmentController> auto_enrollment_controller_;
   std::unique_ptr<ScreenManager> screen_manager_;
+  std::unique_ptr<WizardContext> wizard_context_;
 
   // Whether to skip any screens that may normally be shown after login
   // (registration, Terms of Service, user image selection).
@@ -365,11 +426,7 @@ class WizardController {
   bool is_out_of_box_ = false;
 
   // Value of the screen name that WizardController was started with.
-  OobeScreenId first_screen_ = OobeScreen::SCREEN_UNKNOWN;
-
-  // If true then update check is cancelled and enrollment is started after
-  // EULA is accepted.
-  bool skip_update_enroll_after_eula_ = false;
+  OobeScreenId first_screen_for_testing_ = OobeScreen::SCREEN_UNKNOWN;
 
   // The prescribed enrollment configuration for the device.
   policy::EnrollmentConfig prescribed_enrollment_config_;
@@ -392,6 +449,8 @@ class WizardController {
 
   FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenTest, TestCancel);
   FRIEND_TEST_ALL_PREFIXES(WizardControllerFlowTest, Accelerators);
+  FRIEND_TEST_ALL_PREFIXES(WizardControllerFlowTest,
+                           ControlFlowSkipUpdateEnroll);
   FRIEND_TEST_ALL_PREFIXES(WizardControllerDeviceStateTest,
                            ControlFlowNoForcedReEnrollmentOnFirstBoot);
 
@@ -423,12 +482,9 @@ class WizardController {
   bool timezone_resolved_ = false;
   base::Closure on_timezone_resolved_for_testing_;
 
-  // Configuration (dictionary) for automating OOBE screens.
-  base::Value oobe_configuration_{base::Value::Type::DICTIONARY};
-
-  BaseScreen* hid_screen_ = nullptr;
-
   bool is_initialized_ = false;
+
+  base::ObserverList<ScreenObserver> screen_observers_;
 
   base::WeakPtrFactory<WizardController> weak_factory_{this};
 

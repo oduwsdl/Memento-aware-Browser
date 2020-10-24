@@ -27,7 +27,6 @@
 #include "chrome/browser/browser_about_handler.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -43,6 +42,7 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/common/url_constants.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
@@ -231,6 +231,14 @@ bool TabAndroid::IsHidden() {
   return Java_TabImpl_isHidden(env, weak_java_tab_.get(env));
 }
 
+void TabAndroid::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void TabAndroid::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 void TabAndroid::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   delete this;
 }
@@ -243,7 +251,7 @@ void TabAndroid::InitWebContents(
     const JavaParamRef<jobject>& jweb_contents,
     jint jparent_tab_id,
     const JavaParamRef<jobject>& jweb_contents_delegate,
-    const JavaParamRef<jobject>& jcontext_menu_populator) {
+    const JavaParamRef<jobject>& jcontext_menu_populator_factory) {
   web_contents_.reset(content::WebContents::FromJavaWebContents(jweb_contents));
   DCHECK(web_contents_.get());
 
@@ -257,8 +265,8 @@ void TabAndroid::InitWebContents(
 
   SetWindowSessionID(session_window_id_);
 
-  ContextMenuHelper::FromWebContents(web_contents())->SetPopulator(
-      jcontext_menu_populator);
+  ContextMenuHelper::FromWebContents(web_contents())
+      ->SetPopulatorFactory(jcontext_menu_populator_factory);
 
   synced_tab_delegate_->SetWebContents(web_contents(), jparent_tab_id);
 
@@ -274,15 +282,18 @@ void TabAndroid::InitWebContents(
 
   // Shows a warning notification for dangerous flags in about:flags.
   chrome::ShowBadFlagsPrompt(web_contents());
+
+  for (Observer& observer : observers_)
+    observer.OnInitWebContents(this);
 }
 
 void TabAndroid::UpdateDelegates(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& jweb_contents_delegate,
-    const JavaParamRef<jobject>& jcontext_menu_populator) {
-  ContextMenuHelper::FromWebContents(web_contents())->SetPopulator(
-      jcontext_menu_populator);
+    const JavaParamRef<jobject>& jcontext_menu_populator_factory) {
+  ContextMenuHelper::FromWebContents(web_contents())
+      ->SetPopulatorFactory(jcontext_menu_populator_factory);
   web_contents_delegate_ =
       std::make_unique<android::TabWebContentsDelegateAndroid>(
           env, jweb_contents_delegate);
@@ -374,14 +385,6 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
   if (gurl.is_empty())
     return PAGE_LOAD_FAILED;
 
-  // If the page was prerendered, use it.
-  // Note in incognito mode, we don't have a PrerenderManager.
-  bool loaded;
-  if (prerender::PrerenderManager::MaybeUsePrerenderedPage(
-          GetProfile(), web_contents(), gurl, &loaded)) {
-    return loaded ? FULL_PRERENDERED_PAGE_LOAD : PARTIAL_PRERENDERED_PAGE_LOAD;
-  }
-
   GURL fixed_url(
       url_formatter::FixupURL(gurl.possibly_invalid_spec(), std::string()));
   if (!fixed_url.is_valid())
@@ -470,6 +473,20 @@ scoped_refptr<content::DevToolsAgentHost> TabAndroid::GetDevToolsAgentHost() {
 void TabAndroid::SetDevToolsAgentHost(
     scoped_refptr<content::DevToolsAgentHost> host) {
   devtools_host_ = std::move(host);
+}
+
+base::android::ScopedJavaLocalRef<jobject> JNI_TabImpl_FromWebContents(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jweb_contents) {
+  base::android::ScopedJavaLocalRef<jobject> jtab;
+
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(jweb_contents);
+  TabAndroid* tab =
+      web_contents ? TabAndroid::FromWebContents(web_contents) : nullptr;
+  if (tab)
+    jtab = tab->GetJavaObject();
+  return jtab;
 }
 
 static void JNI_TabImpl_Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {

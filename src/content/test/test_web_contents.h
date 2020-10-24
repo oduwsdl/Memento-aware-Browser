@@ -16,6 +16,7 @@
 
 #include "base/optional.h"
 #include "base/unguessable_token.h"
+#include "content/browser/site_instance_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/test/web_contents_tester.h"
 #include "content/test/test_render_frame_host.h"
@@ -32,13 +33,8 @@ namespace gfx {
 class Size;
 }
 
-namespace net {
-class HttpResponseHeaders;
-}
-
 namespace content {
 
-class NavigationHandle;
 struct Referrer;
 class RenderViewHost;
 class TestRenderViewHost;
@@ -76,10 +72,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       const GURL& url,
       ui::PageTransition transition = ui::PAGE_TRANSITION_LINK) override;
 
-  void NavigateAndFail(
-      const GURL& url,
-      int error_code,
-      scoped_refptr<net::HttpResponseHeaders> response_headers) override;
+  void NavigateAndFail(const GURL& url, int error_code) override;
   void TestSetIsLoading(bool value) override;
   void TestDidNavigate(RenderFrameHost* render_frame_host,
                        int nav_entry_id,
@@ -95,9 +88,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
                                          bool was_within_same_document,
                                          int item_sequence_number,
                                          int document_sequence_number);
-  void SetHttpResponseHeaders(
-      NavigationHandle* navigation_handle,
-      scoped_refptr<net::HttpResponseHeaders> response_headers) override;
   void SetOpener(WebContents* opener) override;
   const std::string& GetSaveFrameHeaders() override;
   const base::string16& GetSuggestedFileName() override;
@@ -110,8 +100,9 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void SetLastCommittedURL(const GURL& url) override;
   void SetTitle(const base::string16& new_title) override;
   void SetMainFrameMimeType(const std::string& mime_type) override;
+  const std::string& GetContentsMimeType() override;
   void SetIsCurrentlyAudible(bool audible) override;
-  void TestDidReceiveInputEvent(blink::WebInputEvent::Type type) override;
+  void TestDidReceiveMouseDownEvent() override;
   void TestDidFinishLoad(const GURL& url) override;
   void TestDidFailLoadWithError(const GURL& url, int error_code) override;
 
@@ -160,9 +151,17 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
 
   base::UnguessableToken GetAudioGroupId() override;
 
-  const base::UnguessableToken& CreatePortal(
+  const blink::PortalToken& CreatePortal(
       std::unique_ptr<WebContents> portal_web_contents) override;
-  WebContents* GetPortalContents(const base::UnguessableToken&) override;
+  WebContents* GetPortalContents(const blink::PortalToken&) override;
+
+  void OnWebPreferencesChanged() override;
+
+  // If set, *web_preferences_changed_counter_ is incremented when
+  // OnWebPreferencesChanged() is called.
+  void set_web_preferences_changed_counter(int* counter) {
+    web_preferences_changed_counter_ = counter;
+  }
 
  protected:
   // The deprecated WebContentsTester still needs to subclass this.
@@ -176,20 +175,16 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       bool is_new_browsing_instance,
       bool has_user_gesture,
       SessionStorageNamespace* session_storage_namespace) override;
-  void CreateNewWidget(int32_t render_process_id,
-                       int32_t route_id,
-                       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
-                           blink_widget_host,
-                       mojo::PendingAssociatedRemote<blink::mojom::Widget>
-                           blink_widget) override;
-  void CreateNewFullscreenWidget(
-      int32_t render_process_id,
+  RenderWidgetHostImpl* CreateNewPopupWidget(
+      AgentSchedulingGroupHost& agent_scheduling_group,
       int32_t route_id,
+      mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
+          blink_popup_widget_host,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget)
       override;
-  void ShowCreatedWindow(int process_id,
+  void ShowCreatedWindow(RenderFrameHost* opener,
                          int route_id,
                          WindowOpenDisposition disposition,
                          const gfx::Rect& initial_rect,
@@ -197,7 +192,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void ShowCreatedWidget(int process_id,
                          int route_id,
                          const gfx::Rect& initial_rect) override;
-  void ShowCreatedFullscreenWidget(int process_id, int route_id) override;
   void SaveFrameWithHeaders(const GURL& url,
                             const Referrer& referrer,
                             const std::string& headers,
@@ -206,6 +200,8 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
 
   RenderViewHostDelegateView* delegate_view_override_;
 
+  // See set_web_preferences_changed_counter() above. May be nullptr.
+  int* web_preferences_changed_counter_;
   // Expectations for arguments of |SetHistoryOffsetAndLength()|.
   bool expect_set_history_offset_and_length_;
   int expect_set_history_offset_and_length_history_offset_;

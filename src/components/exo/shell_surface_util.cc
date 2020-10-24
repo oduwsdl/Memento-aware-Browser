@@ -22,6 +22,10 @@
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_util.h"
 
+#if defined(OS_CHROMEOS)
+#include "chromeos/ui/base/window_properties.h"
+#endif  // defined(OS_CHROMEOS)
+
 DEFINE_UI_CLASS_PROPERTY_TYPE(exo::Permission*)
 
 namespace exo {
@@ -30,7 +34,9 @@ namespace {
 
 DEFINE_UI_CLASS_PROPERTY_KEY(Surface*, kMainSurfaceKey, nullptr)
 
-// Application Id set by the client.
+// Application Id set by the client. For example:
+// "org.chromium.arc.<task-id>" for ARC++ shell surfaces.
+// "org.chromium.lacros.<window-id>" for Lacros browser shell surfaces.
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(std::string, kApplicationIdKey, nullptr)
 
 // Startup Id set by the client.
@@ -91,6 +97,11 @@ void SetArcAppType(aura::Window* window) {
                       static_cast<int>(ash::AppType::ARC_APP));
 }
 
+void SetLacrosAppType(aura::Window* window) {
+  window->SetProperty(aura::client::kAppType,
+                      static_cast<int>(ash::AppType::LACROS));
+}
+
 void SetShellStartupId(aura::Window* window,
                        const base::Optional<std::string>& id) {
   TRACE_EVENT1("exo", "SetStartupId", "startup_id", id ? *id : "null");
@@ -103,6 +114,16 @@ void SetShellStartupId(aura::Window* window,
 
 const std::string* GetShellStartupId(aura::Window* window) {
   return window->GetProperty(kStartupIdKey);
+}
+
+void SetShellUseImmersiveForFullscreen(aura::Window* window, bool value) {
+#if defined(OS_CHROMEOS)
+  window->SetProperty(chromeos::kImmersiveImpliedByFullscreen, value);
+
+  // Ensure the shelf is fully hidden in plain fullscreen, but shown
+  // (auto-hides based on mouse movement) when in immersive fullscreen.
+  window->SetProperty(chromeos::kHideShelfWhenFullscreenKey, !value);
+#endif  // defined(OS_CHROMEOS)
 }
 
 void SetShellClientAccessibilityId(aura::Window* window,
@@ -162,7 +183,6 @@ Surface* GetTargetSurfaceForLocatedEvent(
     if (!main_surface)
       return nullptr;
   }
-  DCHECK_EQ(window, static_cast<aura::Window*>(original_event->target()));
 
   // Create a clone of the event as targeter may update it during the
   // search.

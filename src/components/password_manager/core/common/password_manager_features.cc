@@ -17,20 +17,24 @@ namespace features {
 const base::Feature kBiometricTouchToFill = {"BiometricTouchToFill",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables the editing of passwords in chrome://settings/passwords, i.e. the
-// Desktop passwords settings page.
-const base::Feature kEditPasswordsInDesktopSettings = {
-    "EditPasswordsInDesktopSettings", base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables creating Affiliation Service and prefetching change password info for
+// requested sites.
+const base::Feature kChangePasswordAffiliationInfo = {
+    "ChangePasswordAffiliationInfo", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Recovers lost passwords on Mac by deleting the ones that cannot be decrypted
-// with the present encryption key from the Keychain.
-const base::Feature kDeleteCorruptedPasswords = {
-    "DeleteCorruptedPasswords", base::FEATURE_DISABLED_BY_DEFAULT};
+// After saving/updating a password show a bubble reminder about the status of
+// other compromised credentials.
+const base::Feature kCompromisedPasswordsReengagement = {
+    "CompromisedPasswordsReengagement", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the editing of passwords in Chrome settings.
+const base::Feature kEditPasswordsInSettings = {
+    "EditPasswordsInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the overwriting of prefilled username fields if the server predicted
 // the field to contain a placeholder value.
 const base::Feature kEnableOverwritingPlaceholderUsernames{
-    "EnableOverwritingPlaceholderUsernames", base::FEATURE_ENABLED_BY_DEFAULT};
+    "EnableOverwritingPlaceholderUsernames", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables a second, Gaia-account-scoped password store for users who are signed
 // in but not syncing.
@@ -41,18 +45,24 @@ const base::Feature KEnablePasswordGenerationForClearTextFields = {
     "EnablePasswordGenerationForClearTextFields",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables showing UI button in password fallback sheet.
+// The button opens a different sheet that allows filling a password from any
+// origin.
+const base::Feature kFillingPasswordsFromAnyOrigin{
+    "FillingPasswordsFromAnyOrigin", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the experiment for the password manager to only fill on account
 // selection, rather than autofilling on page load, with highlighting of fields.
 const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Integration with Google's Password Manager for signed-in and sync users.
-const base::Feature kGooglePasswordManager = {
-    "google-password-manager", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables password change flow from leaked password dialog.
 const base::Feature kPasswordChange = {"PasswordChange",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables password change flow from bulk leak check in settings.
+const base::Feature kPasswordChangeInSettings = {
+    "PasswordChangeInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the bulk Password Check feature for signed in users.
 const base::Feature kPasswordCheck = {"PasswordCheck",
@@ -63,23 +73,27 @@ const base::Feature kPasswordCheck = {"PasswordCheck",
 #endif
 };
 
-// Enables editing saved passwords for Android.
-const base::Feature kPasswordEditingAndroid = {
-    "PasswordEditingAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Controls the ability to import passwords from Chrome's settings page.
 const base::Feature kPasswordImport = {"PasswordImport",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Controls whether the password manager onboarding experience is shown
-// on Android.
-const base::Feature kPasswordManagerOnboardingAndroid = {
-    "PasswordManagerOnboardingAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables password scripts fetching for the |PasswordChangeInSettings| feature.
+const base::Feature kPasswordScriptsFetching = {
+    "PasswordScriptsFetching", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables checking credentials for weakness in Password Check.
+const base::Feature kPasswordsWeaknessCheck = {
+    "PasswordsWeaknessCheck", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables showing UI which allows users to easily revert their choice to
 // never save passwords on a certain website.
 const base::Feature kRecoverFromNeverSaveAndroid = {
     "RecoverFromNeverSaveAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Treat heuritistics to find new password fields as reliable. This enables
+// password generation on more forms, but could lead to false positives.
+const base::Feature kTreatNewPasswordHeuristicsAsReliable = {
+    "TreatNewPasswordHeuristicsAsReliable", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables support of filling and saving on username first flow.
 const base::Feature kUsernameFirstFlow = {"UsernameFirstFlow",
@@ -112,6 +126,19 @@ const char kGenerationRequirementsTimeout[] = "timeout";
 // Enables showing leaked dialog after every successful form submission.
 const char kPasswordChangeWithForcedDialogAfterEverySuccessfulSubmission[] =
     "should_force_dialog_after_every_sucessful_form_submission";
+
+// Enables showing leaked warning for every site while doing bulk leak check in
+// settings.
+const char kPasswordChangeInSettingsWithForcedWarningForEverySite[] =
+    "should_force_warning_for_every_site_in_settings";
+
+// Number of times the user can refuse an offer to move a password to the
+// account before Chrome stops offering this flow. Only applies to users who
+// haven't gone through the opt-in flow for passwords account storage.
+const char kMaxMoveToAccountOffersForNonOptedInUser[] =
+    "max_move_to_account_offers_for_non_opted_in_user";
+
+const int kMaxMoveToAccountOffersForNonOptedInUserDefaultValue = 5;
 
 }  // namespace features
 

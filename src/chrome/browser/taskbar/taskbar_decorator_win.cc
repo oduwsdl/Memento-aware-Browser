@@ -23,6 +23,7 @@
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "skia/ext/image_operations.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -79,7 +80,7 @@ void SetOverlayIcon(HWND hwnd,
     // way profile icons are rendered in the profile switcher.
     SkBitmap offscreen_bitmap;
     offscreen_bitmap.allocN32Pixels(kOverlayIconSize, kOverlayIconSize);
-    SkCanvas offscreen_canvas(offscreen_bitmap);
+    SkCanvas offscreen_canvas(offscreen_bitmap, SkSurfaceProps{});
     offscreen_canvas.clear(SK_ColorTRANSPARENT);
 
     static const SkRRect overlay_icon_clip =
@@ -131,7 +132,8 @@ void DrawTaskbarDecorationString(gfx::NativeWindow window,
   auto badge = std::make_unique<SkBitmap>();
   badge->allocN32Pixels(kOverlayIconSize, kOverlayIconSize);
 
-  SkCanvas canvas(*badge.get());
+  SkCanvas canvas(*badge.get(),
+                  skia::LegacyDisplayGlobals::GetSkSurfaceProps());
 
   SkPaint paint;
   paint.setAntiAlias(true);
@@ -184,7 +186,7 @@ void DrawTaskbarDecoration(gfx::NativeWindow window, const gfx::Image* image) {
 }
 
 void UpdateTaskbarDecoration(Profile* profile, gfx::NativeWindow window) {
-  if (profile->IsGuestSession() ||
+  if (profile->IsGuestSession() || profile->IsEphemeralGuestProfile() ||
       // Browser process and profile manager may be null in tests.
       (g_browser_process && g_browser_process->profile_manager() &&
        g_browser_process->profile_manager()
@@ -205,15 +207,12 @@ void UpdateTaskbarDecoration(Profile* profile, gfx::NativeWindow window) {
   AvatarMenu::ImageLoadStatus status =
       AvatarMenu::GetImageForMenuButton(profile->GetPath(), &decoration);
 
-  UMA_HISTOGRAM_ENUMERATION(
-      "Profile.AvatarLoadStatus", status,
-      static_cast<int>(AvatarMenu::ImageLoadStatus::MAX) + 1);
-
   // If the user is using a Gaia picture and the picture is still being loaded,
   // wait until the load finishes. This taskbar decoration will be triggered
   // again upon the finish of the picture load.
   if (status == AvatarMenu::ImageLoadStatus::LOADING ||
-      status == AvatarMenu::ImageLoadStatus::PROFILE_DELETED) {
+      status == AvatarMenu::ImageLoadStatus::PROFILE_DELETED ||
+      status == AvatarMenu::ImageLoadStatus::BROWSER_SHUTTING_DOWN) {
     return;
   }
 

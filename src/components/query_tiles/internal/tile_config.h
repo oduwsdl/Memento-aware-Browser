@@ -47,10 +47,20 @@ extern const char kBackoffInitDelayInMsKey[];
 // Finch parameter key for Backoff policy maximum delay in ms.
 extern const char kBackoffMaxDelayInMsKey[];
 
+// Finch parameter key for lambda in tile score decay calculation.
+extern const char kTileScoreDecayLambdaKey[];
+
+// Finch parameter key representing the minimum scores for new tiles that are in
+// front of others.
+extern const char kMinimumScoreForNewFrontTilesKey[];
+
 class TileConfig {
  public:
   // Gets the URL for the Query Tiles server.
   static GURL GetQueryTilesServerUrl();
+
+  // Gets the URL for the Query Tiles server, given the server address.
+  static GURL GetQueryTilesServerUrl(const std::string& base_url);
 
   // Gets whether running the background task requires unmeter network
   // condition.
@@ -81,6 +91,12 @@ class TileConfig {
 
   // Get the max delay (unit:ms) argument for backoff policy.
   static int GetBackoffPolicyArgsMaxDelayInMs();
+
+  // Get the lambda value used for calculating the tile score decay over time.
+  static double GetTileScoreDecayLambda();
+
+  // Get the minimum scrore for newly showing tiles that are in front of others.
+  static double GetMinimumScoreForNewFrontTiles();
 };
 
 }  // namespace query_tiles

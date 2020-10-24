@@ -33,7 +33,6 @@
 #include "content/public/renderer/plugin_instance_throttler.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "content/renderer/mouse_lock_dispatcher.h"
 #include "gin/handle.h"
 #include "ppapi/c/dev/pp_cursor_type_dev.h"
 #include "ppapi/c/dev/ppp_printing_dev.h"
@@ -104,7 +103,6 @@ class MetafileSkia;
 
 namespace content {
 
-class FullscreenContainer;
 class MessageChannel;
 class PepperAudioController;
 class PepperGraphics2DHost;
@@ -230,6 +228,15 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
                    const gfx::Rect& unobscured);
 
   // Handlers for composition events.
+  void OnImeSetComposition(const base::string16& text,
+                           const std::vector<ui::ImeTextSpan>& ime_text_spans,
+                           int selection_start,
+                           int selection_end);
+  void OnImeCommitText(const base::string16& text,
+                       const gfx::Range& replacement_range,
+                       int relative_cursor_pos);
+  void OnImeFinishComposingText(bool keep_selection);
+  void HandlePepperImeCommit(const base::string16& text);
   bool HandleCompositionStart(const base::string16& text);
   bool HandleCompositionUpdate(
       const base::string16& text,
@@ -247,7 +254,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
 
   // Notifications about focus changes, see has_webkit_focus_ below.
   void SetWebKitFocus(bool has_focus);
-  void SetContentAreaFocus(bool has_focus);
 
   // Notification about page visibility. The default is "visible".
   void PageVisibilityChanged(bool is_visible);
@@ -280,38 +286,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   bool CanRotateView();
   void RotateView(blink::WebPlugin::RotationType type);
 
-  // There are 2 implementations of the fullscreen interface
-  // PPB_FlashFullscreen is used by Pepper Flash.
-  // PPB_Fullscreen is intended for other applications including NaCl.
-  // The two interface are mutually exclusive.
-
-  // Implementation of PPB_FlashFullscreen.
-
-  // Because going to fullscreen is asynchronous (but going out is not), there
-  // are 3 states:
-  // - normal            : fullscreen_container_ == NULL
-  //                       flash_fullscreen_ == false
-  // - fullscreen pending: fullscreen_container_ != NULL
-  //                       flash_fullscreen_ == false
-  // - fullscreen        : fullscreen_container_ != NULL
-  //                       flash_fullscreen_ == true
-  //
-  // In normal state, events come from webkit and painting goes back to it.
-  // In fullscreen state, events come from the fullscreen container, and
-  // painting goes back to it.
-  // In pending state, events from webkit are ignored, and as soon as we
-  // receive events from the fullscreen container, we go to the fullscreen
-  // state.
-  bool FlashIsFullscreenOrPending();
-
-  // Updates |flash_fullscreen_| and sends focus change notification if
-  // necessary.
-  void UpdateFlashFullscreenState(bool flash_fullscreen);
-
-  FullscreenContainer* fullscreen_container() const {
-    return fullscreen_container_;
-  }
-
   // Implementation of PPB_Fullscreen.
 
   // Because going to/from fullscreen is asynchronous, there are 4 states:
@@ -324,8 +298,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // - normal pending    : desired_fullscreen_state_ = false
   //                       view_data_.is_fullscreen = true
   bool IsFullscreenOrPending();
-
-  bool flash_fullscreen() const { return flash_fullscreen_; }
 
   // Switches between fullscreen and normal mode. The transition is
   // asynchronous. WebKit will trigger corresponding ViewChanged calls.  Returns
@@ -392,11 +364,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
       int plugin_child_id) override;
   void SetAlwaysOnTop(bool on_top) override;
   bool IsFullPagePlugin() override;
-  bool FlashSetFullscreen(bool fullscreen, bool delay_report) override;
   bool IsRectTopmost(const gfx::Rect& rect) override;
-  int32_t Navigate(const ppapi::URLRequestInfoData& request,
-                   const char* target,
-                   bool from_user_action) override;
   int MakePendingFileRefRendererHost(const base::FilePath& path) override;
   void SetEmbedProperty(PP_Var key, PP_Var value) override;
   void SetSelectedText(const base::string16& selected_text) override;
@@ -422,7 +390,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   PP_Bool BindGraphics(PP_Instance instance, PP_Resource device) override;
   PP_Bool IsFullFrame(PP_Instance instance) override;
   const ppapi::ViewData* GetViewData(PP_Instance instance) override;
-  PP_Bool FlashIsFullscreen(PP_Instance instance) override;
   PP_Var GetWindowObject(PP_Instance instance) override;
   PP_Var GetOwnerElementObject(PP_Instance instance) override;
   PP_Var ExecuteScript(PP_Instance instance,
@@ -518,9 +485,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
     return *audio_controller_;
   }
 
-  // Should be used only for logging.
-  bool is_flash_plugin() const { return is_flash_plugin_; }
-
   bool SupportsKeyboardFocus();
 
  private:
@@ -614,7 +578,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // container if:
   // - we have a bound Graphics3D and the Graphics3D has a texture, OR
   //   we have a bound Graphics2D and are using software compositing
-  // - we are not in Flash full-screen mode (or transitioning to it)
+  // - we are not in full-screen mode (or transitioning to it)
   // Otherwise it destroys the layer.
   // It does either operation lazily.
   // force_creation: Force UpdateLayer() to recreate the layer and attaches
@@ -646,14 +610,8 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   void SetSizeAttributesForFullscreen();
   void ResetSizeAttributesAfterFullscreen();
 
-  // Shared code between SetFullscreen() and FlashSetFullscreen().
-  bool SetFullscreenCommon(bool fullscreen) const;
-
   bool IsMouseLocked();
   bool LockMouse(bool request_unadjusted_movement);
-  MouseLockDispatcher* GetMouseLockDispatcher();
-  MouseLockDispatcher::LockTarget* GetOrCreateLockTargetAdapter();
-  void UnSetAndDeleteLockTargetAdapter();
 
   void DidDataFromWebURLResponse(const blink::WebURLResponse& response,
                                  int pending_host_id,
@@ -705,16 +663,12 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // NULL until we have been initialized.
   blink::WebPluginContainer* container_;
   scoped_refptr<cc::TextureLayer> texture_layer_;
-  bool layer_bound_to_fullscreen_;
   bool layer_is_hardware_;
 
   // Plugin URL.
   const GURL plugin_url_;
 
   GURL document_url_;
-
-  // Used to track Flash-specific metrics.
-  const bool is_flash_plugin_;
 
   // Set to true the first time the plugin is clicked. Used to collect metrics.
   bool has_been_clicked_;
@@ -745,12 +699,8 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   scoped_refptr<PPB_Graphics3D_Impl> bound_graphics_3d_;
   PepperGraphics2DHost* bound_graphics_2d_platform_;
 
-  // We track two types of focus, one from WebKit, which is the focus among
-  // all elements of the page, one one from the browser, which is whether the
-  // tab/window has focus. We tell the plugin it has focus only when both of
-  // these values are set to true.
+  // Whether the plugin has focus or not.
   bool has_webkit_focus_;
-  bool has_content_area_focus_;
 
   // The id of the current find operation, or -1 if none is in process.
   int find_identifier_;
@@ -806,18 +756,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // to use a more optimized painting path in some cases.
   bool always_on_top_;
 
-  // Implementation of PPB_FlashFullscreen.
-
-  // Plugin container for fullscreen mode. NULL if not in fullscreen mode. Note:
-  // there is a transition state where fullscreen_container_ is non-NULL but
-  // flash_fullscreen_ is false (see above).
-  FullscreenContainer* fullscreen_container_;
-
-  // True if we are in "flash" fullscreen mode. False if we are in normal mode
-  // or in transition to fullscreen. Normal fullscreen mode is indicated in
-  // the ViewData.
-  bool flash_fullscreen_;
-
   // Implementation of PPB_Fullscreen.
 
   // Since entering fullscreen mode is an asynchronous operation, we set this
@@ -869,11 +807,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
 
   scoped_refptr<ppapi::TrackedCallback> lock_mouse_callback_;
 
-  // Last mouse position from mouse event, used for calculating movements. Null
-  // means no mouse event received yet. This value is updated by
-  // |CreateInputEventData|.
-  std::unique_ptr<gfx::PointF> last_mouse_position_;
-
   // We store the arguments so we can re-send them if we are reset to talk to
   // NaCl via the IPC NaCl proxy.
   std::vector<std::string> argn_;
@@ -892,8 +825,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // We store the isolate at construction so that we can be sure to use the
   // Isolate in which this Instance was created when interacting with v8.
   v8::Isolate* isolate_;
-
-  std::unique_ptr<MouseLockDispatcher::LockTarget> lock_target_;
 
   bool is_deleted_;
 
@@ -921,6 +852,10 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
 
   // The controller for all active audios of this pepper instance.
   std::unique_ptr<PepperAudioController> audio_controller_;
+
+  // Current text input composition text. Empty if no composition is in
+  // progress.
+  base::string16 composition_text_;
 
   // We use a weak ptr factory for scheduling DidChangeView events so that we
   // can tell whether updates are pending and consolidate them. When there's

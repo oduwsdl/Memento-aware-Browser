@@ -7,6 +7,8 @@
 
 #include <map>
 #include <memory>
+#include <set>
+#include <string>
 #include <vector>
 
 #include "base/optional.h"
@@ -15,6 +17,7 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_icon_container_view.h"
+#include "ui/views/widget/widget_observer.h"
 
 class Browser;
 class ExtensionsToolbarButton;
@@ -54,6 +57,9 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   explicit ExtensionsToolbarContainer(
       Browser* browser,
       DisplayMode display_mode = DisplayMode::kNormal);
+  ExtensionsToolbarContainer(const ExtensionsToolbarContainer&) = delete;
+  ExtensionsToolbarContainer& operator=(const ExtensionsToolbarContainer&) =
+      delete;
   ~ExtensionsToolbarContainer() override;
 
   ExtensionsToolbarButton* extensions_button() const {
@@ -120,6 +126,7 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   // ToolbarActionView::Delegate:
   content::WebContents* GetCurrentWebContents() override;
   bool ShownInsideMenu() const override;
+  bool CanShowIconInToolbar() const override;
   void OnToolbarActionViewDragDone() override;
   views::LabelButton* GetOverflowReferenceView() const override;
   gfx::Size GetToolbarActionSize() override;
@@ -238,8 +245,6 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   std::unique_ptr<DropInfo> drop_info_;
 
   base::WeakPtrFactory<ExtensionsToolbarContainer> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionsToolbarContainer);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSIONS_TOOLBAR_CONTAINER_H_

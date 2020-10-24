@@ -47,6 +47,7 @@ import androidx.test.espresso.action.Press;
 import androidx.test.espresso.action.Swipe;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -65,10 +66,10 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ConfigureBottomSheet
 import org.chromium.chrome.browser.autofill_assistant.proto.ConfigureBottomSheetProto.PeekMode;
 import org.chromium.chrome.browser.autofill_assistant.proto.ConfigureBottomSheetProto.ViewportResizing;
 import org.chromium.chrome.browser.autofill_assistant.proto.DetailsProto;
-import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto.Choice;
 import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ShowCastProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowDetailsProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
@@ -105,7 +106,10 @@ public class AutofillAssistantBottomsheetTest {
         mTestRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
                 InstrumentationRegistry.getTargetContext(),
                 mTestRule.getTestServer().getURL(TEST_PAGE)));
-        mTestRule.getActivity().getScrim().disableAnimationForTesting(true);
+        mTestRule.getActivity()
+                .getRootUiCoordinatorForTesting()
+                .getScrimCoordinator()
+                .disableAnimationForTesting(true);
     }
 
     private AutofillAssistantTestScript makeScriptWithActionArray(
@@ -139,7 +143,7 @@ public class AutofillAssistantBottomsheetTest {
                          .build());
         // Focus on the bottom element.
         list.add((ActionProto) ActionProto.newBuilder()
-                         .setFocusElement(FocusElementProto.newBuilder().setElement(
+                         .setShowCast(ShowCastProto.newBuilder().setElementToPresent(
                                  SelectorProto.newBuilder().addFilters(
                                          SelectorProto.Filter.newBuilder().setCssSelector(
                                                  "p.bottom"))))
@@ -405,6 +409,7 @@ public class AutofillAssistantBottomsheetTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "Flaky test.  crbug.com/1114818")
     public void testBottomSheetAutoCollapseAndExpand() {
         ArrayList<ActionProto> list = new ArrayList<>();
         // Prompt.
@@ -418,7 +423,7 @@ public class AutofillAssistantBottomsheetTest {
                          .build());
         // Focus on the bottom element.
         list.add((ActionProto) ActionProto.newBuilder()
-                         .setFocusElement(FocusElementProto.newBuilder().setElement(
+                         .setShowCast(ShowCastProto.newBuilder().setElementToPresent(
                                  SelectorProto.newBuilder().addFilters(
                                          SelectorProto.Filter.newBuilder().setCssSelector(
                                                  "p.bottom"))))
@@ -552,20 +557,22 @@ public class AutofillAssistantBottomsheetTest {
     }
 
     private void checkElementIsCoveredByBottomsheet(String elementId, boolean shouldBeCovered) {
-        CriteriaHelper.pollInstrumentationThread(new Criteria("Timeout while waiting for element '"
-                + elementId + "' to become " + (shouldBeCovered ? "covered" : "not covered")
-                + " by the bottomsheet") {
-            @Override
-            public boolean isSatisfied() {
-                try {
-                    float y = GeneralLocation.TOP_CENTER.calculateCoordinates(
-                            mTestRule.getActivity().findViewById(
-                                    R.id.autofill_assistant_bottom_sheet_toolbar))[1];
-                    Rect el = getAbsoluteBoundingRect(mTestRule, elementId);
-                    return el.bottom > y == shouldBeCovered;
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            float y = GeneralLocation.TOP_CENTER.calculateCoordinates(
+                    mTestRule.getActivity().findViewById(
+                            R.id.autofill_assistant_bottom_sheet_toolbar))[1];
+            Rect el = null;
+            try {
+                el = getAbsoluteBoundingRect(mTestRule, elementId);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+            String errorMsg = "Timeout while waiting for element '" + elementId + "' to become "
+                    + (shouldBeCovered ? "covered" : "not covered") + " by the bottomsheet";
+            if (shouldBeCovered) {
+                Criteria.checkThat(errorMsg, (float) el.bottom, Matchers.greaterThan(y));
+            } else {
+                Criteria.checkThat(errorMsg, (float) el.bottom, Matchers.lessThanOrEqualTo(y));
             }
         });
     }

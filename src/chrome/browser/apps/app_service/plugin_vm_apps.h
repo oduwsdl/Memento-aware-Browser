@@ -8,6 +8,10 @@
 #include <memory>
 #include <string>
 
+#include "base/scoped_observer.h"
+#include "chrome/browser/apps/app_service/icon_key_util.h"
+#include "chrome/browser/chromeos/guest_os/guest_os_registry_service.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/services/app_service/public/cpp/publisher_base.h"
@@ -24,7 +28,9 @@ namespace apps {
 // An app publisher (in the App Service sense) of Plugin VM apps.
 //
 // See components/services/app_service/README.md.
-class PluginVmApps : public apps::PublisherBase {
+class PluginVmApps : public apps::PublisherBase,
+                     public plugin_vm::PluginVmPermissionsObserver,
+                     public guest_os::GuestOsRegistryService::Observer {
  public:
   PluginVmApps(const mojo::Remote<apps::mojom::AppService>& app_service,
                Profile* profile);
@@ -39,7 +45,7 @@ class PluginVmApps : public apps::PublisherBase {
                apps::mojom::ConnectOptionsPtr opts) override;
   void LoadIcon(const std::string& app_id,
                 apps::mojom::IconKeyPtr icon_key,
-                apps::mojom::IconCompression icon_compression,
+                apps::mojom::IconType icon_type,
                 int32_t size_hint_in_dip,
                 bool allow_placeholder_icon,
                 LoadIconCallback callback) override;
@@ -50,6 +56,7 @@ class PluginVmApps : public apps::PublisherBase {
   void SetPermission(const std::string& app_id,
                      apps::mojom::PermissionPtr permission) override;
   void Uninstall(const std::string& app_id,
+                 apps::mojom::UninstallSource uninstall_source,
                  bool clear_site_data,
                  bool report_abuse) override;
   void GetMenuModel(const std::string& app_id,
@@ -57,15 +64,38 @@ class PluginVmApps : public apps::PublisherBase {
                     int64_t display_id,
                     GetMenuModelCallback callback) override;
 
+  // GuestOsRegistryService::Observer overrides.
+  void OnRegistryUpdated(
+      guest_os::GuestOsRegistryService* registry_service,
+      guest_os::GuestOsRegistryService::VmType vm_type,
+      const std::vector<std::string>& updated_apps,
+      const std::vector<std::string>& removed_apps,
+      const std::vector<std::string>& inserted_apps) override;
+
+  apps::mojom::AppPtr Convert(
+      const guest_os::GuestOsRegistryService::Registration& registration,
+      bool new_icon_key);
   void OnPluginVmAllowedChanged(bool is_allowed);
   void OnPluginVmConfiguredChanged();
+  // plugin_vm::PluginVmPermissionsObserver
+  void OnPluginVmPermissionsChanged(plugin_vm::PermissionType permission_type,
+                                    bool allowed) override;
 
   mojo::RemoteSet<apps::mojom::Subscriber> subscribers_;
 
   Profile* const profile_;
+  guest_os::GuestOsRegistryService* registry_;
+
+  apps_util::IncrementingIconKeyFactory icon_key_factory_;
 
   // Whether the Plugin VM app is allowed by policy.
   bool is_allowed_;
+
+  ScopedObserver<plugin_vm::PluginVmManager,
+                 plugin_vm::PluginVmPermissionsObserver,
+                 &plugin_vm::PluginVmManager::AddPluginVmPermissionsObserver,
+                 &plugin_vm::PluginVmManager::RemovePluginVmPermissionsObserver>
+      permissions_observer_;
 
   std::unique_ptr<plugin_vm::PluginVmPolicySubscription> policy_subscription_;
   PrefChangeRegistrar pref_registrar_;

@@ -4,74 +4,45 @@
 
 #include "chrome/browser/ui/views/tab_search/tab_search_bubble_view.h"
 
-#include "chrome/browser/profiles/profile.h"
+#include "base/metrics/histogram_functions.h"
+#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
+#include "chrome/browser/ui/webui/tab_search/tab_search_ui.h"
 #include "chrome/common/webui_url_constants.h"
 #include "ui/views/controls/webview/webview.h"
-#include "ui/views/layout/fill_layout.h"
+#include "ui/views/widget/widget.h"
 
-namespace {
+// static.
+views::Widget* TabSearchBubbleView::CreateTabSearchBubble(
+    content::BrowserContext* browser_context,
+    views::View* anchor_view) {
+  return views::WebBubbleDialogView::CreateWebBubbleDialog<TabSearchUI>(
+      std::make_unique<TabSearchBubbleView>(browser_context, anchor_view),
+      GURL(chrome::kChromeUITabSearchURL));
+}
 
-// The min / max size available to the TabSearchBubbleView.
-// These are arbitrary sizes that match those set by ExtensionPopup.
-// TODO(tluk): Determine the correct size constraints for the
-// TabSearchBubbleView.
-constexpr gfx::Size kMinSize(25, 25);
-constexpr gfx::Size kMaxSize(800, 600);
+TabSearchBubbleView::TabSearchBubbleView(
+    content::BrowserContext* browser_context,
+    views::View* anchor_view)
+    : WebBubbleDialogView(browser_context, anchor_view) {
+  extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
+      web_view()->GetWebContents());
+}
 
-class TabSearchWebView : public views::WebView {
- public:
-  TabSearchWebView(Profile* profile, TabSearchBubbleView* parent)
-      : WebView(profile), parent_(parent) {}
-
-  ~TabSearchWebView() override = default;
-
-  // WebView:
-  void PreferredSizeChanged() override {
-    View::PreferredSizeChanged();
-    parent_->OnWebViewSizeChanged();
+TabSearchBubbleView::~TabSearchBubbleView() {
+  if (timer_.has_value()) {
+    UmaHistogramMediumTimes("Tabs.TabSearch.WindowDisplayedDuration2",
+                            timer_->Elapsed());
   }
-
- private:
-  TabSearchBubbleView* parent_;
-};
-
-}  // namespace
-
-void TabSearchBubbleView::CreateTabSearchBubble(Profile* profile,
-                                                views::View* anchor_view) {
-  auto delegate =
-      base::WrapUnique(new TabSearchBubbleView(profile, anchor_view));
-  BubbleDialogDelegateView::CreateBubble(delegate.release())->Show();
 }
 
-gfx::Size TabSearchBubbleView::CalculatePreferredSize() const {
-  // Constrain the size to popup min/max.
-  gfx::Size preferred_size = views::View::CalculatePreferredSize();
-  preferred_size.SetToMax(kMinSize);
-  preferred_size.SetToMin(kMaxSize);
-  return preferred_size;
+void TabSearchBubbleView::AddedToWidget() {
+  WebBubbleDialogView::AddedToWidget();
+  observed_bubble_widget_.Add(GetWidget());
 }
 
-void TabSearchBubbleView::OnWebViewSizeChanged() {
-  SizeToContents();
-}
-
-TabSearchBubbleView::TabSearchBubbleView(Profile* profile,
-                                         views::View* anchor_view)
-    : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
-      web_view_(
-          AddChildView(std::make_unique<TabSearchWebView>(profile, this))) {
-  SetButtons(ui::DIALOG_BUTTON_NONE);
-  set_margins(gfx::Insets());
-
-  SetLayoutManager(std::make_unique<views::FillLayout>());
-  web_view_->EnableSizingFromWebContents(kMinSize, kMaxSize);
-  web_view_->LoadInitialURL(GURL("chrome://about"));
-
-  // TODO(crbug.com/1010589) WebContents are initially assumed to be visible by
-  // default unless explicitly hidden. The WebContents need to be set to hidden
-  // so that the visibility state of the document in JavaScript is correctly
-  // initially set to 'hidden', and the 'visibilitychange' events correctly get
-  // fired.
-  web_view_->GetWebContents()->WasHidden();
+void TabSearchBubbleView::OnWidgetVisibilityChanged(views::Widget* widget,
+                                                    bool visible) {
+  if (GetWidget() == widget && visible && !timer_.has_value()) {
+    timer_ = base::ElapsedTimer();
+  }
 }

@@ -56,6 +56,8 @@ class FakeS3Server {
   void SetAccessTokenForMode(FakeS3Mode mode);
   void SetFakeS3ServerURI();
   void UnsetFakeS3ServerURI();
+  void SetDeviceId();
+  void UnsetDeviceId();
   void StartS3ServerProcess(FakeS3Mode mode);
   void StopS3ServerProcess();
   std::string GetTestDataFileName();
@@ -65,6 +67,7 @@ class FakeS3Server {
   std::string access_token_{"FAKE_ACCESS_TOKEN"};
   std::string fake_s3_server_uri_;
   int data_file_version_;
+  bool process_running_ = false;
 
   std::unique_ptr<PortSelector> port_selector_;
 

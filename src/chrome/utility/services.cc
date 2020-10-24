@@ -10,6 +10,10 @@
 #include "base/macros.h"
 #include "base/no_destructor.h"
 #include "build/build_config.h"
+#include "chrome/services/machine_learning/machine_learning_service.h"  // nogncheck
+#include "chrome/services/machine_learning/public/mojom/machine_learning_service.mojom.h"  // nogncheck
+#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"  // nogncheck
+#include "chrome/services/qrcode_generator/qrcode_generator_service_impl.h"  // nogncheck
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/services/language_detection/language_detection_service_impl.h"
@@ -25,7 +29,9 @@
 #include "printing/buildflags/buildflags.h"
 
 #if defined(OS_WIN)
+#include "chrome/services/util_win/public/mojom/util_read_icon.mojom.h"
 #include "chrome/services/util_win/public/mojom/util_win.mojom.h"
+#include "chrome/services/util_win/util_read_icon.h"
 #include "chrome/services/util_win/util_win_impl.h"
 #include "components/services/quarantine/public/cpp/quarantine_features_win.h"  // nogncheck
 #include "components/services/quarantine/public/mojom/quarantine.mojom.h"  // nogncheck
@@ -34,8 +40,6 @@
 
 #if !defined(OS_ANDROID)
 #include "chrome/common/importer/profile_import.mojom.h"
-#include "chrome/services/sharing/public/mojom/sharing.mojom.h"
-#include "chrome/services/sharing/sharing_impl.h"
 #include "chrome/services/speech/speech_recognition_service_impl.h"
 #include "chrome/utility/importer/profile_import_impl.h"
 #include "components/mirroring/service/mirroring_service.h"
@@ -52,9 +56,6 @@
 #if BUILDFLAG(FULL_SAFE_BROWSING) || defined(OS_CHROMEOS)
 #include "chrome/services/file_util/file_util_service.h"  // nogncheck
 #endif
-
-#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"  // nogncheck
-#include "chrome/services/qrcode_generator/qrcode_generator_service_impl.h"  // nogncheck
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/services/removable_storage_writer/public/mojom/removable_storage_writer.mojom.h"
@@ -81,9 +82,11 @@
 #include "components/services/paint_preview_compositor/public/mojom/paint_preview_compositor.mojom.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/services/sharing/sharing_impl.h"
 #include "chromeos/assistant/buildflags.h"  // nogncheck
 #include "chromeos/services/ime/ime_service.h"
 #include "chromeos/services/ime/public/mojom/input_engine.mojom.h"
+#include "chromeos/services/nearby/public/mojom/sharing.mojom.h"  // nogncheck
 #include "chromeos/services/tts/public/mojom/tts_service.mojom.h"
 #include "chromeos/services/tts/tts_service.h"
 
@@ -116,6 +119,13 @@ auto RunQRCodeGeneratorService(
       std::move(receiver));
 }
 
+auto RunMachineLearningService(
+    mojo::PendingReceiver<machine_learning::mojom::MachineLearningService>
+        receiver) {
+  return std::make_unique<machine_learning::MachineLearningService>(
+      std::move(receiver));
+}
+
 #if defined(OS_WIN)
 auto RunQuarantineService(
     mojo::PendingReceiver<quarantine::mojom::Quarantine> receiver) {
@@ -125,6 +135,11 @@ auto RunQuarantineService(
 
 auto RunWindowsUtility(mojo::PendingReceiver<chrome::mojom::UtilWin> receiver) {
   return std::make_unique<UtilWinImpl>(std::move(receiver));
+}
+
+auto RunWindowsIconReader(
+    mojo::PendingReceiver<chrome::mojom::UtilReadIcon> receiver) {
+  return std::make_unique<UtilReadIcon>(std::move(receiver));
 }
 #endif  // defined(OS_WIN)
 
@@ -145,10 +160,6 @@ auto RunMirroringService(
     mojo::PendingReceiver<mirroring::mojom::MirroringService> receiver) {
   return std::make_unique<mirroring::MirroringService>(
       std::move(receiver), content::UtilityThread::Get()->GetIOTaskRunner());
-}
-
-auto RunSharing(mojo::PendingReceiver<sharing::mojom::Sharing> receiver) {
-  return std::make_unique<sharing::SharingImpl>(std::move(receiver));
 }
 
 auto RunSpeechRecognitionService(
@@ -219,6 +230,11 @@ auto RunImeService(
   return std::make_unique<chromeos::ime::ImeService>(std::move(receiver));
 }
 
+auto RunSharing(mojo::PendingReceiver<sharing::mojom::Sharing> receiver) {
+  return std::make_unique<sharing::SharingImpl>(
+      std::move(receiver), content::UtilityThread::Get()->GetIOTaskRunner());
+}
+
 auto RunTtsService(
     mojo::PendingReceiver<chromeos::tts::mojom::TtsService> receiver) {
   return std::make_unique<chromeos::tts::TtsService>(std::move(receiver));
@@ -257,17 +273,18 @@ mojo::ServiceFactory* GetMainThreadServiceFactory() {
     RunUnzipper,
     RunLanguageDetectionService,
     RunQRCodeGeneratorService,
+    RunMachineLearningService,
 
 #if !defined(OS_ANDROID)
     RunProfileImporter,
     RunMirroringService,
-    RunSharing,
     RunSpeechRecognitionService,
 #endif
 
 #if defined(OS_WIN)
     RunQuarantineService,
     RunWindowsUtility,
+    RunWindowsIconReader,
 #endif  // defined(OS_WIN)
 
 #if BUILDFLAG(ENABLE_PRINTING) && defined(OS_CHROMEOS)
@@ -302,6 +319,7 @@ mojo::ServiceFactory* GetMainThreadServiceFactory() {
 
 #if defined(OS_CHROMEOS)
     RunImeService,
+    RunSharing,
     RunTtsService,
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
     RunAssistantAudioDecoder,

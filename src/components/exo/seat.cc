@@ -4,6 +4,9 @@
 
 #include "components/exo/seat.h"
 
+#include <memory>
+#include "ui/gfx/geometry/point_f.h"
+
 #if defined(OS_CHROMEOS)
 #include "ash/shell.h"
 #endif  // defined(OS_CHROMEOS)
@@ -22,9 +25,12 @@
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
+#include "components/exo/xkb_tracker.h"
 #include "services/data_decoder/public/cpp/decode_image.h"
 #include "ui/aura/client/focus_client.h"
+#include "ui/base/clipboard/clipboard_data_endpoint.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/platform/platform_event_source.h"
 
@@ -55,10 +61,31 @@ Seat::Seat() : changing_clipboard_data_to_selection_source_(false) {
   // null. https://crbug.com/856230
   if (ui::PlatformEventSource::GetInstance())
     ui::PlatformEventSource::GetInstance()->AddPlatformEventObserver(this);
+#if defined(OS_CHROMEOS)
+  ui_lock_controller_ = std::make_unique<UILockController>(this);
+
+  // Seat needs to be registered as observers before any Keyboard,
+  // because Keyboard expects that the XkbTracker is up-to-date when its
+  // observer method is called.
+  xkb_tracker_ = std::make_unique<XkbTracker>();
+  ash::ImeControllerImpl* ime_controller = ash::Shell::Get()->ime_controller();
+  xkb_tracker_->UpdateKeyboardLayout(ime_controller->keyboard_layout_name());
+  ime_controller->AddObserver(this);
+#endif
 }
 
 Seat::~Seat() {
+  Shutdown();
+}
+
+void Seat::Shutdown() {
+  if (shutdown_)
+    return;
+  shutdown_ = true;
   DCHECK(!selection_source_) << "DataSource must be released before Seat";
+#if defined(OS_CHROMEOS)
+  ash::Shell::Get()->ime_controller()->RemoveObserver(this);
+#endif
   WMHelper::GetInstance()->RemoveFocusObserver(this);
   WMHelper::GetInstance()->RemovePreTargetHandler(this);
   ui::ClipboardMonitor::GetInstance()->RemoveObserver(this);
@@ -81,14 +108,14 @@ Surface* Seat::GetFocusedSurface() {
 void Seat::StartDrag(DataSource* source,
                      Surface* origin,
                      Surface* icon,
-                     ui::DragDropTypes::DragEventSource event_source) {
+                     ui::mojom::DragEventSource event_source) {
   // DragDropOperation manages its own lifetime.
   drag_drop_operation_ = DragDropOperation::Create(
-      source, origin, icon, last_location_, event_source);
+      source, origin, icon, last_pointer_location_, event_source);
 }
 
-void Seat::SetLastLocation(const gfx::Point& last_location) {
-  last_location_ = last_location;
+void Seat::SetLastPointerLocation(const gfx::PointF& last_pointer_location) {
+  last_pointer_location_ = last_pointer_location;
 }
 
 void Seat::AbortPendingDragOperation() {
@@ -108,8 +135,7 @@ void Seat::SetSelection(DataSource* source) {
   }
   selection_source_ = std::make_unique<ScopedDataSource>(source, this);
   scoped_refptr<RefCountedScopedClipboardWriter> writer =
-      base::MakeRefCounted<RefCountedScopedClipboardWriter>(
-          ui::ClipboardBuffer::kCopyPaste);
+      base::MakeRefCounted<RefCountedScopedClipboardWriter>();
 
   base::RepeatingClosure data_read_callback = base::BarrierClosure(
       kMaxClipboardDataTypes,
@@ -127,6 +153,20 @@ void Seat::SetSelection(DataSource* source) {
                      data_read_callback),
       data_read_callback);
 }
+
+class Seat::RefCountedScopedClipboardWriter
+    : public ui::ScopedClipboardWriter,
+      public base::RefCounted<RefCountedScopedClipboardWriter> {
+ public:
+  explicit RefCountedScopedClipboardWriter()
+      : ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste,
+                              std::make_unique<ui::ClipboardDataEndpoint>(
+                                  ui::EndpointType::kGuestOs)) {}
+
+ private:
+  friend class base::RefCounted<RefCountedScopedClipboardWriter>;
+  virtual ~RefCountedScopedClipboardWriter() = default;
+};
 
 void Seat::OnTextRead(scoped_refptr<RefCountedScopedClipboardWriter> writer,
                       base::OnceClosure callback,
@@ -263,7 +303,9 @@ void Seat::OnKeyEvent(ui::KeyEvent* event) {
         break;
     }
   }
-  modifier_flags_ = event->flags();
+#if defined(OS_CHROMEOS)
+  xkb_tracker_->UpdateKeyboardModifiers(event->flags());
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -275,6 +317,17 @@ void Seat::OnClipboardDataChanged() {
   selection_source_->get()->Cancelled();
   selection_source_.reset();
 }
+
+#if defined(OS_CHROMEOS)
+////////////////////////////////////////////////////////////////////////////////
+// ash::ImeControllerImpl::Observer overrides:
+
+void Seat::OnCapsLockChanged(bool enabled) {}
+
+void Seat::OnKeyboardLayoutNameChanged(const std::string& layout_name) {
+  xkb_tracker_->UpdateKeyboardLayout(layout_name);
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // DataSourceObserver overrides:

@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/services/device/public/mojom/generic_sensor.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/services/device/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/services/device/public/mojom/usb.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/services/device/public/mojom/usb_test.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/device/public/mojom/device_service.mojom"
+  ]
+}

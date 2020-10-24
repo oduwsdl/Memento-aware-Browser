@@ -10,8 +10,8 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/reauth_result.h"
 #include "chrome/browser/signin/signin_features.h"
@@ -33,17 +33,35 @@
 #include "google_apis/gaia/gaia_switches.h"
 #include "net/base/escape.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 
+using ::testing::ElementsAre;
+
 namespace {
+
+const char kReauthUserActionHistogramName[] =
+    "Signin.TransactionalReauthUserAction";
+const char kReauthUserActionToFillPasswordHistogramName[] =
+    "Signin.TransactionalReauthUserAction.ToFillPassword";
+const char kReauthGaiaNavigationDurationFromReauthStartHistogramName[] =
+    "Signin.TransactionalReauthGaiaNavigationDuration.FromReauthStart";
+const char kReauthGaiaNavigationDurationFromConfirmClickHistogramName[] =
+    "Signin.TransactionalReauthGaiaNavigationDuration.FromConfirmClick";
 
 const base::TimeDelta kReauthDialogTimeout = base::TimeDelta::FromSeconds(30);
 const char kReauthDonePath[] = "/embedded/xreauth/chrome?done";
+const char kReauthUnexpectedResponsePath[] =
+    "/embedded/xreauth/chrome?unexpected";
 const char kReauthPath[] = "/embedded/xreauth/chrome";
 const char kChallengePath[] = "/challenge";
+constexpr char kTransactionalReauthResultToFillPasswordHistogram[] =
+    "Signin.TransactionalReauthResult.ToFillPassword";
+constexpr char kTransactionalReauthResultHistogram[] =
+    "Signin.TransactionalReauthResult";
 
 std::unique_ptr<net::test_server::BasicHttpResponse> CreateRedirectResponse(
     const GURL& redirect_url) {
@@ -51,6 +69,21 @@ std::unique_ptr<net::test_server::BasicHttpResponse> CreateRedirectResponse(
   http_response->set_code(net::HTTP_TEMPORARY_REDIRECT);
   http_response->AddCustomHeader("Location", redirect_url.spec());
   http_response->AddCustomHeader("Access-Control-Allow-Origin", "*");
+  return http_response;
+}
+
+std::unique_ptr<net::test_server::BasicHttpResponse> CreateEmptyResponse(
+    net::HttpStatusCode code) {
+  auto http_response = std::make_unique<net::test_server::BasicHttpResponse>();
+  http_response->set_code(code);
+  return http_response;
+}
+
+std::unique_ptr<net::test_server::BasicHttpResponse> CreateNonEmptyResponse(
+    net::HttpStatusCode code) {
+  auto http_response = std::make_unique<net::test_server::BasicHttpResponse>();
+  http_response->set_code(code);
+  http_response->set_content("<html>");
   return http_response;
 }
 
@@ -72,10 +105,14 @@ std::unique_ptr<net::test_server::HttpResponse> HandleReauthURL(
 
   if (parameter == "done") {
     // On success, the reauth returns HTTP_NO_CONTENT response.
-    auto http_response =
-        std::make_unique<net::test_server::BasicHttpResponse>();
-    http_response->set_code(net::HTTP_NO_CONTENT);
-    return http_response;
+    return CreateEmptyResponse(net::HTTP_NO_CONTENT);
+  }
+
+  if (parameter == "unexpected") {
+    // Returns a response that isn't expected by Chrome. Note that we shouldn't
+    // return an empty response here because that will result in an error page
+    // being committed for the navigation.
+    return CreateNonEmptyResponse(net::HTTP_NOT_IMPLEMENTED);
   }
 
   NOTREACHED();
@@ -84,28 +121,32 @@ std::unique_ptr<net::test_server::HttpResponse> HandleReauthURL(
 
 class ReauthTestObserver : SigninReauthViewController::Observer {
  public:
-  explicit ReauthTestObserver(SigninReauthViewController* controller) {
-    controller->SetObserverForTesting(this);
+  explicit ReauthTestObserver(SigninReauthViewController* controller)
+      : controller_(controller) {
+    controller_->AddObserver(this);
   }
 
   void WaitUntilGaiaReauthPageIsShown() { run_loop_.Run(); }
 
-  void OnGaiaReauthPageShown() override { run_loop_.Quit(); }
+  void OnGaiaReauthPageShown() override {
+    controller_->RemoveObserver(this);
+    run_loop_.Quit();
+  }
 
  private:
+  SigninReauthViewController* controller_;
   base::RunLoop run_loop_;
 };
+
+base::Bucket OnceUserAction(SigninReauthViewController::UserAction action) {
+  return base::Bucket(static_cast<int>(action), 1);
+}
 
 }  // namespace
 
 // Browser tests for SigninReauthViewController.
 class SigninReauthViewControllerBrowserTest : public InProcessBrowserTest {
  public:
-  SigninReauthViewControllerBrowserTest()
-      : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
-    scoped_feature_list_.InitAndEnableFeature(kSigninReauthPrompt);
-  }
-
   void SetUp() override {
     ASSERT_TRUE(https_server()->InitializeAndListen());
     InProcessBrowserTest::SetUp();
@@ -121,7 +162,7 @@ class SigninReauthViewControllerBrowserTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
 
-    https_server()->ServeFilesFromSourceDirectory("chrome/test/data");
+    https_server()->AddDefaultHandlers(GetChromeTestDataDir());
     https_server()->RegisterRequestHandler(
         base::BindRepeating(&HandleReauthURL, base_url()));
     reauth_challenge_response_ =
@@ -162,6 +203,12 @@ class SigninReauthViewControllerBrowserTest : public InProcessBrowserTest {
     return reauth_result_;
   }
 
+  // The test cannot depend on Views implementation so it simulates clicking on
+  // the close button through calling the close event.
+  void SimulateCloseButtonClick() {
+    signin_reauth_view_controller()->OnModalSigninClosed();
+  }
+
   void ResetAbortHandle() { abort_handle_.reset(); }
 
   net::EmbeddedTestServer* https_server() { return &https_server_; }
@@ -180,9 +227,11 @@ class SigninReauthViewControllerBrowserTest : public InProcessBrowserTest {
         signin_view_controller->GetModalDialogDelegateForTesting());
   }
 
+  base::HistogramTester* histogram_tester() { return &histogram_tester_; }
+
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-  net::EmbeddedTestServer https_server_;
+  net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
+  base::HistogramTester histogram_tester_;
   std::unique_ptr<net::test_server::ControllableHttpResponse>
       reauth_challenge_response_;
   CoreAccountId account_id_;
@@ -208,56 +257,155 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kCancelled);
 }
 
-// Tests closing the reauth dialog through by clicking on the close button (the
-// X).
+// Tests closing the reauth dialog by closing a hosting tab.
 IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
-                       CloseReauthDialog) {
+                       AbortReauthDialog_CloseHostingTab) {
   ShowReauthPrompt();
-  // The test cannot depend on Views implementation so it simulates clicking on
-  // the close button through calling the close event.
-  signin_reauth_view_controller()->OnModalSigninClosed();
+  auto* tab_strip_model = browser()->tab_strip_model();
+  tab_strip_model->CloseWebContentsAt(tab_strip_model->active_index(),
+                                      TabStripModel::CLOSE_USER_GESTURE);
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kDismissedByUser);
+  histogram_tester()->ExpectUniqueSample(
+      kReauthUserActionHistogramName,
+      SigninReauthViewController::UserAction::kCloseConfirmationDialog, 1);
+}
+
+// Tests closing the reauth confirmation dialog through by clicking on the close
+// button (the X).
+IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
+                       CloseReauthConfirmationDialog) {
+  ShowReauthPrompt();
+  SimulateCloseButtonClick();
+  EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kDismissedByUser);
+  histogram_tester()->ExpectUniqueSample(
+      kReauthUserActionHistogramName,
+      SigninReauthViewController::UserAction::kCloseConfirmationDialog, 1);
+}
+
+// Tests closing the Gaia reauth dialog through by clicking on the close button
+// (the X).
+IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
+                       CloseGaiaReauthDialog) {
+  ShowReauthPrompt();
+  RedirectGaiaChallengeTo(https_server()->GetURL("/title1.html"));
+
+  ReauthTestObserver reauth_observer(signin_reauth_view_controller());
+  ASSERT_TRUE(login_ui_test_utils::ConfirmReauthConfirmationDialog(
+      browser(), kReauthDialogTimeout));
+  reauth_observer.WaitUntilGaiaReauthPageIsShown();
+
+  SimulateCloseButtonClick();
+  EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kDismissedByUser);
+  EXPECT_THAT(
+      histogram_tester()->GetAllSamples(kReauthUserActionHistogramName),
+      ElementsAre(
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kClickNextButton),
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kCloseGaiaReauthDialog)));
 }
 
 // Tests clicking on the cancel button in the reauth dialog.
 IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
                        CancelReauthDialog) {
   ShowReauthPrompt();
+  RedirectGaiaChallengeTo(https_server()->GetURL(kReauthDonePath));
   ASSERT_TRUE(login_ui_test_utils::CancelReauthConfirmationDialog(
       browser(), kReauthDialogTimeout));
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kDismissedByUser);
+  histogram_tester()->ExpectUniqueSample(
+      kReauthUserActionHistogramName,
+      SigninReauthViewController::UserAction::kClickCancelButton, 1);
 }
 
-// Tests the reauth result in case Gaia page failed to load.
+// Tests the error page being displayed in case Gaia page failed to load.
 IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
                        GaiaChallengeLoadFailed) {
   ShowReauthPrompt();
+
+  // Make the Gaia page fail to load.
+  const GURL target_url = https_server()->GetURL("/close-socket");
+  content::TestNavigationObserver target_content_observer(target_url);
+  target_content_observer.WatchExistingWebContents();
+  RedirectGaiaChallengeTo(target_url);
+  target_content_observer.Wait();
+
+  EXPECT_TRUE(browser()->signin_view_controller()->ShowsModalDialog());
+  EXPECT_FALSE(target_content_observer.last_navigation_succeeded());
+
+  // Now confirm the pre-reauth confirmation dialog, and wait for the Gaia page
+  // (an error page in this case) to show up.
+  ReauthTestObserver reauth_observer(signin_reauth_view_controller());
   ASSERT_TRUE(login_ui_test_utils::ConfirmReauthConfirmationDialog(
       browser(), kReauthDialogTimeout));
-  RedirectGaiaChallengeTo(https_server()->GetURL("/close-socket"));
+  reauth_observer.WaitUntilGaiaReauthPageIsShown();
+
+  // Close the modal dialog and check that |kLoadFailed| is returned as the
+  // result.
+  SimulateCloseButtonClick();
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kLoadFailed);
+  EXPECT_THAT(
+      histogram_tester()->GetAllSamples(kReauthUserActionHistogramName),
+      ElementsAre(
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kClickNextButton),
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kCloseGaiaReauthDialog)));
 }
 
 // Tests clicking on the confirm button in the reauth dialog. Reauth completes
 // before the confirmation.
 IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
-                       ConfirmReauthDialog_AfterReauthSuccess) {
+                       ConfirmReauthDialog) {
   ShowReauthPrompt();
   RedirectGaiaChallengeTo(https_server()->GetURL(kReauthDonePath));
   ASSERT_TRUE(login_ui_test_utils::ConfirmReauthConfirmationDialog(
       browser(), kReauthDialogTimeout));
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kSuccess);
+  histogram_tester()->ExpectUniqueSample(
+      kReauthUserActionHistogramName,
+      SigninReauthViewController::UserAction::kClickConfirmButton, 1);
+  histogram_tester()->ExpectUniqueSample(
+      kReauthUserActionToFillPasswordHistogramName,
+      SigninReauthViewController::UserAction::kClickConfirmButton, 1);
+  histogram_tester()->ExpectTotalCount(
+      kReauthGaiaNavigationDurationFromReauthStartHistogramName, 1);
+  histogram_tester()->ExpectTotalCount(
+      kReauthGaiaNavigationDurationFromConfirmClickHistogramName, 1);
 }
 
-// Tests clicking on the confirm button in the reauth dialog. Reauth completes
-// after the confirmation.
+// Tests completing the Gaia reauth challenge in a dialog.
 IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
-                       ConfirmReauthDialog_BeforeReauthSuccess) {
+                       CompleteReauthInDialog) {
+  // The URL contains a link that navigates to the reauth success URL.
+  const std::string target_path = net::test_server::GetFilePathWithReplacements(
+      "/signin/link_with_replacements.html",
+      {{"REPLACE_WITH_URL", https_server()->GetURL(kReauthDonePath).spec()}});
+  const GURL target_url = https_server()->GetURL(target_path);
+
+  content::TestNavigationObserver target_content_observer(target_url);
+  target_content_observer.StartWatchingNewWebContents();
   ShowReauthPrompt();
+  RedirectGaiaChallengeTo(target_url);
+
+  ReauthTestObserver reauth_observer(signin_reauth_view_controller());
   ASSERT_TRUE(login_ui_test_utils::ConfirmReauthConfirmationDialog(
       browser(), kReauthDialogTimeout));
-  RedirectGaiaChallengeTo(https_server()->GetURL(kReauthDonePath));
+  reauth_observer.WaitUntilGaiaReauthPageIsShown();
+  target_content_observer.Wait();
+
+  content::WebContents* target_contents =
+      signin_reauth_view_controller()->GetWebContents();
+  ASSERT_TRUE(content::ExecuteScript(
+      target_contents, "document.getElementsByTagName('a')[0].click();"));
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kSuccess);
+  EXPECT_THAT(
+      histogram_tester()->GetAllSamples(kReauthUserActionHistogramName),
+      ElementsAre(
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kClickNextButton),
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kPassGaiaReauth)));
 }
 
 // Tests that links from the Gaia page are opened in a new tab.
@@ -329,6 +477,13 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
   ASSERT_TRUE(content::ExecuteScript(
       target_contents, "document.getElementsByTagName('a')[0].click();"));
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kSuccess);
+  EXPECT_THAT(
+      histogram_tester()->GetAllSamples(kReauthUserActionHistogramName),
+      ElementsAre(
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kClickNextButton),
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kPassGaiaReauth)));
 }
 
 // Tests that closing of the SAML tab aborts the reauth flow.
@@ -348,4 +503,41 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest, CloseSAMLTab) {
   tab_strip_model->CloseWebContentsAt(tab_strip_model->active_index(),
                                       TabStripModel::CLOSE_USER_GESTURE);
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kDismissedByUser);
+  EXPECT_THAT(
+      histogram_tester()->GetAllSamples(kReauthUserActionHistogramName),
+      ElementsAre(
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kClickNextButton),
+          OnceUserAction(
+              SigninReauthViewController::UserAction::kCloseGaiaReauthTab)));
+}
+
+// Tests verifying that reauth results are recorded.
+IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
+                       RecordsReauthResultsMetrics) {
+  base::HistogramTester histograms;
+
+  ShowReauthPrompt();
+  RedirectGaiaChallengeTo(https_server()->GetURL(kReauthDonePath));
+  ASSERT_TRUE(login_ui_test_utils::ConfirmReauthConfirmationDialog(
+      browser(), kReauthDialogTimeout));
+  EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kSuccess);
+
+  histograms.ExpectUniqueSample(
+      kTransactionalReauthResultToFillPasswordHistogram,
+      signin::ReauthResult::kSuccess, 1);
+  histograms.ExpectTotalCount(kTransactionalReauthResultToFillPasswordHistogram,
+                              1);
+  histograms.ExpectTotalCount(kTransactionalReauthResultHistogram, 1);
+}
+
+// Tests an unexpected response from Gaia.
+IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
+                       GaiaChallengeUnexpectedResponse) {
+  ShowReauthPrompt();
+  RedirectGaiaChallengeTo(
+      https_server()->GetURL(kReauthUnexpectedResponsePath));
+  ASSERT_TRUE(login_ui_test_utils::ConfirmReauthConfirmationDialog(
+      browser(), kReauthDialogTimeout));
+  EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kUnexpectedResponse);
 }

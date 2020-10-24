@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
@@ -21,22 +22,22 @@ import("//media/media_options.gni")
 import("//ppapi/buildflags/buildflags.gni")
 import("//third_party/blink/public/public_features.gni")
 import("//third_party/widevine/cdm/widevine.gni")
-import("//tools/resources/generate_resource_whitelist.gni")
+import("//tools/resources/generate_resource_allowlist.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 import("//ui/gl/features.gni")
 import("//v8/gni/v8.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
-} else if (is_linux) {
+} else if (is_linux || is_chromeos) {
   import("//build/linux/extract_symbols.gni")
 } else if (is_mac) {
+  import("//build/apple/tweak_info_plist.gni")
   import("//build/compiled_action.gni")
   import("//build/config/mac/base_rules.gni")
   import("//build/config/mac/mac_sdk.gni")
   import("//build/config/mac/rules.gni")
   import("//build/config/mac/symbols.gni")
-  import("//build/mac/tweak_info_plist.gni")
   import("//build/util/branding.gni")
   import("//build/util/version.gni")
   import("//content/public/app/mac_helpers.gni")
@@ -53,7 +54,7 @@ declare_args() {
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
-if (enable_resource_whitelist_generation) {
+if (enable_resource_allowlist_generation) {
   chrome_resource_whitelist = "$target_gen_dir/chrome_resource_whitelist.txt"
 }
 
@@ -131,11 +132,14 @@ if (!is_android && !is_mac) {
     deps = [ "//printing/buildflags" ]
 
     data = [ "$root_out_dir/resources.pak" ]
-    if (is_linux || is_win) {
+    if (is_linux || is_chromeos || is_win) {
       data_deps = [ "//chrome:packed_resources" ]
     }
 
     data_deps = []
+    if (chromeos_is_browser_only && also_build_ash_chrome) {
+      data_deps += [ "//chrome:chrome(//build/toolchain/linux:ash_clang_x64)" ]
+    }
 
     if (is_win) {
       sources += [
@@ -157,23 +161,28 @@ if (!is_android && !is_mac) {
         "//chrome/app/version_assembly:chrome_exe_manifest",
         "//chrome/browser:active_use_util",
         "//chrome/browser:chrome_process_finder",
+        "//chrome/browser/policy:path_parser",
         "//chrome/chrome_elf",
         "//chrome/common:constants",
+        "//chrome/install_static:install_static_util",
         "//chrome/install_static:secondary_module",
         "//chrome/installer/util:constants",
         "//chrome/installer/util:did_run_support",
         "//components/browser_watcher:browser_watcher_client",
+        "//components/crash/core/app",
         "//components/crash/core/app:run_as_crashpad_handler",
         "//components/crash/core/common",
         "//components/flags_ui:switches",
         "//content:sandbox_helper_win",
         "//content/public/common:static_switches",
         "//crypto",
+        "//gpu/command_buffer/service",
         "//sandbox",
-        "//services/service_manager/sandbox",
+        "//sandbox/policy",
         "//third_party/breakpad:breakpad_handler",
         "//third_party/breakpad:breakpad_sender",
         "//third_party/crashpad/crashpad/util",
+        "//ui/gl",
       ]
       data_deps = [
         "//chrome/app/version_assembly:version_assembly_manifest",
@@ -198,10 +207,13 @@ if (!is_android && !is_mac) {
       ]
 
       if (current_cpu == "x86") {
-        # Increase the initial stack size. The default is 1MB, this is 1.5MB.
-        # To mitigate address space pressure, |CreateThreadInternal| sets the
-        # default back to 1MB for non-main threads.
-        ldflags = [ "/STACK:0x180000" ]
+        # Set the initial stack size to 0.5MiB, instead of the 1.5MiB needed by
+        # Chrome's main thread. This saves significant memory on threads (like
+        # those in the Windows thread pool, and others) whose stack size we can
+        # only control through this setting. Because Chrome's main thread needs
+        # a minimum 1.5 MiB stack, the main thread (in 32-bit builds only) uses
+        # fibers to switch to a 1.5 MiB stack before running any other code.
+        ldflags = [ "/STACK:0x80000" ]
       } else {
         # Increase the initial stack size. The default is 1MB, this is 8MB.
         ldflags = [ "/STACK:0x800000" ]
@@ -211,7 +223,7 @@ if (!is_android && !is_mac) {
       sources += [ "app/chrome_exe_main_aura.cc" ]
     }
 
-    if (is_linux) {
+    if (is_linux || is_chromeos) {
       sources += [
         "app/chrome_dll_resource.h",
         "app/chrome_main.cc",
@@ -235,7 +247,6 @@ if (!is_android && !is_mac) {
 
         # For headless mode.
         "//headless:headless_shell_lib",
-        "//services/service_manager/embedder",
       ]
 
       public_deps = [
@@ -251,7 +262,7 @@ if (!is_android && !is_mac) {
         ldflags += [ "-Wl,--long-plt" ]
       }
 
-      if (is_desktop_linux && !is_component_build && !using_sanitizer) {
+      if (is_linux && !is_component_build && !using_sanitizer) {
         version_script = "//build/linux/chrome.map"
         inputs = [ version_script ]
         ldflags += [ "-Wl,--version-script=" +
@@ -332,7 +343,7 @@ if (is_win) {
       "//headless:headless_shell_browser_lib",
       "//net:net_resources",
       "//ppapi/buildflags",
-      "//services/service_manager/embedder",
+      "//sandbox/win:sandbox",
       "//third_party/cld_3/src/src:cld_3",
       "//third_party/wtl",
       "//ui/views",
@@ -573,8 +584,6 @@ if (is_win) {
 
     outputs = [ _stamp_file ]
 
-    _old_versions_dir =
-        "$root_out_dir/$chrome_product_full_name.app/Contents/Versions"
     _versions_dir = "$root_out_dir/$chrome_product_full_name.app/Contents/Frameworks/$chrome_framework_name.framework/Versions"
 
     args = [
@@ -586,8 +595,6 @@ if (is_win) {
       chrome_version_full,
       "--keep",
       "Current",
-      "--delete",
-      rebase_path(_old_versions_dir, root_build_dir),
     ]
   }
 
@@ -602,6 +609,11 @@ if (is_win) {
 
   compile_entitlements("entitlements") {
     entitlements_templates = [ "app/app-entitlements.plist" ]
+    if (is_chrome_branded) {
+      # These entitlements are bound to the official Google Chrome signing
+      # certificate and will not necessarily work in any other build.
+      entitlements_templates += [ "app/app-entitlements-chrome.plist" ]
+    }
     output_name = "$target_gen_dir/app-entitlements.plist"
     substitutions = [
       "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
@@ -940,12 +952,11 @@ if (is_win) {
       "//content/public/app",
       "//content/public/common:service_names",
       "//headless:headless_shell_lib",
-      "//services/service_manager/embedder",
       "//third_party/cld_3/src/src:cld_3",
     ]
 
     if (is_component_build) {
-      libs = [ "Carbon.framework" ]
+      frameworks = [ "Carbon.framework" ]
     }
 
     ldflags = [
@@ -1162,11 +1173,18 @@ if (is_win) {
 
 group("browser_dependencies") {
   public_deps = [
+    "//build:branding_buildflags",
+    "//build:chromeos_buildflags",
+    "//chrome/app:shutdown_signal_handlers",
     "//chrome/browser",
+    "//chrome/browser/policy:path_parser",
     "//chrome/common",
+    "//components/crash/core/app",
     "//components/gwp_asan/buildflags",
     "//components/heap_profiling/in_process",
+    "//components/startup_metric_utils/browser",
     "//components/sync",
+    "//components/upload_list:upload_list",
     "//services/tracing/public/cpp",
   ]
   if (enable_plugins) {
@@ -1182,6 +1200,23 @@ group("browser_dependencies") {
 
   if (enable_gwp_asan) {
     public_deps += [ "//components/gwp_asan/client" ]
+  }
+
+  if (enable_nacl) {
+    public_deps += [ "//components/nacl/browser" ]
+  }
+
+  if (chromeos_is_browser_only) {
+    public_deps += [ "//chromeos/lacros" ]
+  }
+
+  if (is_chromeos) {
+    public_deps += [
+      "//chrome/browser/chromeos",
+      "//chromeos",
+      "//chromeos/constants",
+      "//chromeos/memory",
+    ]
   }
 
   if (!is_component_build) {
@@ -1217,9 +1252,11 @@ group("child_dependencies") {
     "//components/services/heap_profiling",
     "//content/public/child",
     "//pdf",
+    "//pdf:pdf_ppapi",
     "//services/tracing/public/cpp",
     "//third_party/blink/public:blink_devtools_frontend_resources",
     "//third_party/blink/public:blink_devtools_inspector_resources",
+    "//v8:v8_headers",
   ]
 
   if (enable_nacl) {
@@ -1314,6 +1351,7 @@ group("extra_resources") {
       "//chrome/browser/resources:history_resources",
       "//chrome/browser/resources:local_ntp_resources",
       "//chrome/browser/resources:new_tab_page_resources",
+      "//chrome/browser/resources:read_later_resources",
       "//chrome/browser/resources:settings_resources",
     ]
   }
@@ -1321,12 +1359,21 @@ group("extra_resources") {
   if (is_chromeos) {
     public_deps += [
       "//chrome/browser/resources:bluetooth_pairing_dialog_resources",
+      "//chrome/browser/resources:multidevice_internals_resources",
+      "//chrome/browser/resources:nearby_internals_resources",
+      "//chrome/browser/resources:nearby_share_dialog_resources",
+      "//chrome/browser/resources:nearby_shared_resources",
+      "//chrome/browser/resources:nearby_shared_resources_v3",
       "//chrome/browser/resources:os_settings_resources",
       "//chrome/browser/resources/chromeos:cellular_setup_resources",
       "//chrome/browser/resources/chromeos:multidevice_setup_resources",
       "//chrome/browser/resources/chromeos/accessibility:build",
       "//third_party/ink:ink_resources",
     ]
+  }
+
+  if (is_linux || is_chromeos) {
+    public_deps += [ "//chrome/browser/resources:webui_js_exception_resources" ]
   }
 
   if (!is_android && !is_chromeos) {
@@ -1344,10 +1391,11 @@ group("extra_resources") {
   }
 
   if (enable_print_preview) {
-    public_deps += [
-      "//chrome/browser/resources:print_preview_pdf_resources",
-      "//chrome/browser/resources:print_preview_resources",
-    ]
+    public_deps += [ "//chrome/browser/resources:print_preview_resources" ]
+  }
+
+  if (enable_tab_search) {
+    public_deps += [ "//chrome/browser/resources:tab_search_resources" ]
   }
 }
 
@@ -1395,8 +1443,8 @@ if (!is_android) {
       output_dir = root_out_dir
     }
 
-    if (enable_resource_whitelist_generation) {
-      repack_whitelist = chrome_resource_whitelist
+    if (enable_resource_allowlist_generation) {
+      repack_allowlist = chrome_resource_whitelist
       deps = [ "//chrome:resource_whitelist" ]
     }
 
@@ -1432,10 +1480,6 @@ if (is_android) {
     sources = [ "browser/android/bookmarks/partner_bookmarks_reader.h" ]
   }
 
-  java_cpp_enum("payments_journey_logger_enum_javagen") {
-    sources = [ "../components/payments/core/journey_logger.h" ]
-  }
-
   java_cpp_enum("quick_action_category_enum_javagen") {
     sources = [ "browser/android/contextualsearch/resolved_search_term.h" ]
   }
@@ -1460,7 +1504,8 @@ if (is_android) {
   }
 
   java_cpp_enum("context_menu_image_format_enum_javagen") {
-    sources = [ "browser/android/context_menu/chrome_context_menu_populator.h" ]
+    sources =
+        [ "browser/android/context_menu/context_menu_native_delegate_impl.h" ]
   }
 
   source_set("chrome_android_core") {
@@ -1486,6 +1531,8 @@ if (is_android) {
     ]
 
     deps = [
+      ":browser_dependencies",
+      ":child_dependencies",
       "//chrome/browser/ui",
       "//chrome/child",
       "//chrome/common",
@@ -1496,11 +1543,11 @@ if (is_android) {
       "//components/heap_profiling/in_process",
       "//components/minidump_uploader",
       "//components/safe_browsing:buildflags",
+      "//components/safe_browsing/android:safe_browsing_api_handler",
       "//components/safe_browsing/android:safe_browsing_mobile",
       "//components/services/heap_profiling",
       "//content/public/app",
       "//content/public/common:service_names",
-      "//services/service_manager/embedder",
     ]
 
     # Explicit dependency required for JNI registration to be able to
@@ -1523,8 +1570,8 @@ if (is_android) {
   }
 }
 
-if (enable_resource_whitelist_generation) {
-  generate_resource_whitelist("resource_whitelist") {
+if (enable_resource_allowlist_generation) {
+  generate_resource_allowlist("resource_whitelist") {
     if (is_android) {
       deps = [ "//chrome/android:libchrome" ]
       inputs = [ "$root_out_dir/lib.unstripped/libchrome$shlib_extension" ]
@@ -1538,7 +1585,7 @@ if (enable_resource_whitelist_generation) {
   }
 }
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   if (is_official_build) {
     group("linux_symbols") {
       deps = [

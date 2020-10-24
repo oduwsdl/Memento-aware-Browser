@@ -56,7 +56,8 @@ base::FilePath GetBaseAssistantDir() {
 }
 
 std::string CreateLibAssistantConfig(
-    base::Optional<std::string> s3_server_uri_override) {
+    base::Optional<std::string> s3_server_uri_override,
+    base::Optional<std::string> device_id_override) {
   using Value = base::Value;
   using Type = base::Value::Type;
 
@@ -147,14 +148,19 @@ std::string CreateLibAssistantConfig(
                          GetBaseAssistantDir().AsUTF8Unsafe());
   }
 
-  if (features::IsLibAssistantBetaBackendEnabled())
+  if (features::IsLibAssistantBetaBackendEnabled() ||
+      features::IsAssistantDebuggingEnabled()) {
     config.SetStringPath("internal.backend_type", "BETA_DOGFOOD");
+  }
 
   // Use http unless we're using the fake s3 server, which requires grpc.
   if (s3_server_uri_override)
     config.SetStringPath("internal.transport_type", "GRPC");
   else
     config.SetStringPath("internal.transport_type", "HTTP");
+
+  if (device_id_override)
+    config.SetStringPath("internal.cast_device_id", device_id_override.value());
 
   config.SetBoolPath("internal.enable_on_device_assistant_tts_as_text", true);
 

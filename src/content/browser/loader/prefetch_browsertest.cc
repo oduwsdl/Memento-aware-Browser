@@ -142,16 +142,7 @@ IN_PROC_BROWSER_TEST_P(PrefetchBrowserTestPrivacyChanges, RedirectNotFollowed) {
   EXPECT_EQ(1, main_page_counter->GetRequestCount());
 
   NavigateToURLAndWaitTitle(destination_url, "Prefetch Target");
-  // PrefetchPrivacyChanges relies on kError redirect_mode, and it is handled
-  // in CorsURLLoader which code path is activated only if OOR-CORS is enabled.
-  // OOR-CORS enabled case is running only at linux-oor-cors-rel bot until the
-  // feature is enabled by default.
-  // See https://ci.chromium.org/p/chromium/builders/ci/linux-oor-cors-rel.
-  const int expected_request_count =
-      (privacy_changes_enabled_ &&
-       network::features::ShouldEnableOutOfBlinkCorsForTesting())
-          ? 1
-          : 2;
+  const int expected_request_count = privacy_changes_enabled_ ? 1 : 2;
   EXPECT_EQ(expected_request_count, destination_counter->GetRequestCount());
   EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
 }
@@ -200,8 +191,8 @@ IN_PROC_BROWSER_TEST_P(PrefetchBrowserTest,
   ASSERT_TRUE(request->trusted_params);
   url::Origin cross_origin = url::Origin::Create(cross_origin_target_url);
   EXPECT_TRUE(net::IsolationInfo::Create(
-                  net::IsolationInfo::RedirectMode::kUpdateNothing,
-                  cross_origin, cross_origin, net::SiteForCookies())
+                  net::IsolationInfo::RequestType::kOther, cross_origin,
+                  cross_origin, net::SiteForCookies())
                   .IsEqualForTesting(request->trusted_params->isolation_info));
 }
 
@@ -710,8 +701,8 @@ IN_PROC_BROWSER_TEST_P(PrefetchBrowserTest,
   ASSERT_TRUE(request->trusted_params);
   url::Origin cross_origin = url::Origin::Create(cross_origin_target_url);
   EXPECT_TRUE(net::IsolationInfo::Create(
-                  net::IsolationInfo::RedirectMode::kUpdateNothing,
-                  cross_origin, cross_origin, net::SiteForCookies())
+                  net::IsolationInfo::RequestType::kOther, cross_origin,
+                  cross_origin, net::SiteForCookies())
                   .IsEqualForTesting(request->trusted_params->isolation_info));
 }
 

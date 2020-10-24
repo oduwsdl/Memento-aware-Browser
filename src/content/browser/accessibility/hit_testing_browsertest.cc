@@ -262,19 +262,16 @@ void AccessibilityHitTestingBrowserTest::SimulatePinchZoom(
   accessibility_waiter.WaitForNotification();
 }
 
-base::string16
+std::string
 AccessibilityHitTestingBrowserTest::FormatHitTestAccessibilityTree() {
   std::unique_ptr<AccessibilityTreeFormatter> accessibility_tree_formatter =
       AccessibilityTreeFormatterBlink::CreateBlink();
   accessibility_tree_formatter->set_show_ids(true);
   accessibility_tree_formatter->SetPropertyFilters(
-      {{base::ASCIIToUTF16("name=*"),
-        AccessibilityTreeFormatter::PropertyFilter::ALLOW},
-       {base::ASCIIToUTF16("location=*"),
-        AccessibilityTreeFormatter::PropertyFilter::ALLOW},
-       {base::ASCIIToUTF16("size=*"),
-        AccessibilityTreeFormatter::PropertyFilter::ALLOW}});
-  base::string16 accessibility_tree;
+      {{"name=*", ui::AXPropertyFilter::ALLOW},
+       {"location=*", ui::AXPropertyFilter::ALLOW},
+       {"size=*", ui::AXPropertyFilter::ALLOW}});
+  std::string accessibility_tree;
   accessibility_tree_formatter->FormatAccessibilityTreeForTesting(
       GetRootAndAssertNonNull(), &accessibility_tree);
   return accessibility_tree;
@@ -573,9 +570,18 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
   }
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#if !defined(OS_ANDROID) && !defined(OS_MAC)
+// Fails flakily with compared ID differences. TODO(crbug.com/1121099): Re-nable
+// this test.
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_CachingAsyncHitTest_WithPinchZoom \
+  DISABLED_CachingAsyncHitTest_WithPinchZoom
+#else
+#define MAYBE_CachingAsyncHitTest_WithPinchZoom \
+  CachingAsyncHitTest_WithPinchZoom
+#endif
 IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
-                       CachingAsyncHitTest_WithPinchZoom) {
+                       MAYBE_CachingAsyncHitTest_WithPinchZoom) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
@@ -665,7 +671,7 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
 }
 
 // Timeouts on Linux. TODO(crbug.com/1083805): Enable this test.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_CachingAsyncHitTestMissesElement_WithPinchZoom \
   DISABLED_CachingAsyncHitTestMissesElement_WithPinchZoom
 #else
@@ -728,7 +734,7 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
   }
 }
 
-#endif  // !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#endif  // !defined(OS_ANDROID) && !defined(OS_MAC)
 
 // GetAXPlatformNode is currently only supported on windows and linux (excluding
 // Chrome OS or Chromecast)

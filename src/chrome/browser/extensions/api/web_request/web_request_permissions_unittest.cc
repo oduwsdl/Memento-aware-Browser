@@ -83,10 +83,10 @@ void ExtensionWebRequestHelpersTestWithThreadsTest::SetUp() {
   ExtensionRegistry::Get(browser_context())->AddEnabled(com_policy_extension_);
 }
 
-// Ensures that requests to extension blacklist urls can't be intercepted by
+// Ensures that requests to extension blocklist urls can't be intercepted by
 // extensions.
 TEST_F(ExtensionWebRequestHelpersTestWithThreadsTest,
-       BlacklistUpdateUrlsHidden) {
+       BlocklistUpdateUrlsHidden) {
   auto create_request_params = [](const std::string& url) {
     const int kRendererProcessId = 2;
     WebRequestInfoInitParams request;
@@ -96,12 +96,12 @@ TEST_F(ExtensionWebRequestHelpersTestWithThreadsTest,
   };
 
   WebRequestInfo request_1(create_request_params(
-      "http://www.gstatic.com/chrome/extensions/blacklist"));
+      "http://www.gstatic.com/chrome/extensions/blocklist"));
   EXPECT_TRUE(
       WebRequestPermissions::HideRequest(permission_helper_, request_1));
 
   WebRequestInfo request_2(create_request_params(
-      "https://www.gstatic.com/chrome/extensions/blacklist"));
+      "https://www.gstatic.com/chrome/extensions/blocklist"));
   EXPECT_TRUE(
       WebRequestPermissions::HideRequest(permission_helper_, request_2));
 }
@@ -262,7 +262,7 @@ TEST_F(ExtensionWebRequestHelpersTestWithThreadsTest,
   chromeos::ScopedTestPublicSessionLoginState login_state;
 
   // Host permission checks are disabled in Public Sessions, instead all URLs
-  // are whitelisted.
+  // are allowlisted.
   EXPECT_EQ(PermissionsData::PageAccess::kAllowed,
             WebRequestPermissions::CanExtensionAccessURL(
                 permission_helper_, com_policy_extension_->id(), org_url,

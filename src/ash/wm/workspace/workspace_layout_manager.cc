@@ -40,6 +40,8 @@
 
 namespace ash {
 
+using ::chromeos::WindowStateType;
+
 WorkspaceLayoutManager::BubbleWindowObserver::BubbleWindowObserver(
     WorkspaceLayoutManager* workspace_layout_manager)
     : workspace_layout_manager_(workspace_layout_manager) {}
@@ -547,7 +549,7 @@ void WorkspaceLayoutManager::NotifySystemUiAreaChanged() {
 }
 
 void WorkspaceLayoutManager::NotifyAccessibilityWorkspaceChanged() {
-  if (Shell::Get()->accessibility_controller()->autoclick_enabled()) {
+  if (Shell::Get()->accessibility_controller()->autoclick().enabled()) {
     Shell::Get()
         ->accessibility_controller()
         ->UpdateAutoclickMenuBoundsIfNeeded();

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <set>
 #include <string>
 
 #include "base/bind.h"
@@ -14,10 +15,10 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_dialog_delegate.h"
+#include "chrome/browser/enterprise/connectors/content_analysis_delegate.h"
+#include "chrome/browser/enterprise/connectors/fake_content_analysis_delegate.h"
+#include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/fake_deep_scanning_dialog_delegate.h"
-#include "chrome/browser/safe_browsing/dm_token_utils.h"
 #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_handle_drop.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -30,38 +31,23 @@
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-class ChromeWebContentsViewDelegateHandleOnPerformDrop
-    : public testing::TestWithParam<bool> {
+class ChromeWebContentsViewDelegateHandleOnPerformDrop : public testing::Test {
  public:
   ChromeWebContentsViewDelegateHandleOnPerformDrop() {
     EXPECT_TRUE(profile_manager_.SetUp());
     profile_ = profile_manager_.CreateTestingProfile("test-user");
-    if (use_legacy_policies()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          safe_browsing::kContentComplianceEnabled);
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {safe_browsing::kContentComplianceEnabled,
-           enterprise_connectors::kEnterpriseConnectorsEnabled},
-          {});
-    }
+    scoped_feature_list_.InitWithFeatures(
+        {enterprise_connectors::kEnterpriseConnectorsEnabled}, {});
   }
 
   void SetUp() override {
-    if (!use_legacy_policies()) {
-      enterprise_connectors::ConnectorsManager::GetInstance()
-          ->SetUpForTesting();
-    }
+    enterprise_connectors::ConnectorsManager::GetInstance()->SetUpForTesting();
   }
 
   void TearDown() override {
-    if (!use_legacy_policies()) {
-      enterprise_connectors::ConnectorsManager::GetInstance()
-          ->TearDownForTesting();
-    }
+    enterprise_connectors::ConnectorsManager::GetInstance()
+        ->TearDownForTesting();
   }
-
-  bool use_legacy_policies() const { return GetParam(); }
 
   void RunUntilDone() { run_loop_->Run(); }
 
@@ -79,27 +65,32 @@ class ChromeWebContentsViewDelegateHandleOnPerformDrop
 
     run_loop_.reset(new base::RunLoop());
 
-    using FakeDelegate = safe_browsing::FakeDeepScanningDialogDelegate;
-    using Verdict = safe_browsing::DlpDeepScanningVerdict;
-    auto callback = base::BindLambdaForTesting(
-        [this, scan_succeeds](const base::FilePath&) {
-          current_requests_count_++;
-          return scan_succeeds
-                     ? FakeDelegate::SuccessfulResponse()
-                     : FakeDelegate::DlpResponse(Verdict::SUCCESS, "block_rule",
-                                                 Verdict::TriggeredRule::BLOCK);
-        });
+    using FakeDelegate = enterprise_connectors::FakeContentAnalysisDelegate;
     auto is_encrypted_callback =
         base::BindRepeating([](const base::FilePath&) { return false; });
 
-    safe_browsing::SetDMTokenForTesting(
+    policy::SetDMTokenForTesting(
         policy::DMToken::CreateValidTokenForTesting("dm_token"));
-    safe_browsing::DeepScanningDialogDelegate::SetFactoryForTesting(
+    auto callback = base::BindLambdaForTesting(
+        [this, scan_succeeds](const base::FilePath&)
+            -> enterprise_connectors::ContentAnalysisResponse {
+          std::set<std::string> dlp_tag = {"dlp"};
+          current_requests_count_++;
+          return scan_succeeds
+                     ? FakeDelegate::SuccessfulResponse(std::move(dlp_tag))
+                     : FakeDelegate::DlpResponse(
+                           enterprise_connectors::ContentAnalysisResponse::
+                               Result::SUCCESS,
+                           "block_rule",
+                           enterprise_connectors::ContentAnalysisResponse::
+                               Result::TriggeredRule::BLOCK);
+        });
+    enterprise_connectors::ContentAnalysisDelegate::SetFactoryForTesting(
         base::BindRepeating(
-            &safe_browsing::FakeDeepScanningDialogDelegate::Create,
+            &enterprise_connectors::FakeContentAnalysisDelegate::Create,
             run_loop_->QuitClosure(), callback, is_encrypted_callback,
             "dm_token"));
-    safe_browsing::DeepScanningDialogDelegate::DisableUIForTesting();
+    enterprise_connectors::ContentAnalysisDelegate::DisableUIForTesting();
   }
 
   // Common code for running the test cases.
@@ -134,19 +125,17 @@ class ChromeWebContentsViewDelegateHandleOnPerformDrop
 
   void SetExpectedRequestsCount(int count) { expected_requests_count_ = count; }
 
+  // Helpers to get text with sizes relative to the minimum required size of 100
+  // bytes for scans to trigger.
+  std::string large_text() const { return std::string(100, 'a'); }
+
+  std::string small_text() const { return "random small text"; }
+
  private:
   void SetScanPolicies(safe_browsing::CheckContentComplianceValues state) {
-    if (use_legacy_policies()) {
-      PrefService* pref_service =
-          TestingBrowserProcess::GetGlobal()->local_state();
-      pref_service->SetInteger(prefs::kCheckContentCompliance, state);
-      pref_service->SetInteger(prefs::kDelayDeliveryUntilVerdict,
-                               safe_browsing::DELAY_UPLOADS);
-    } else {
-      safe_browsing::SetDlpPolicyForConnectors(state);
-      safe_browsing::SetDelayDeliveryUntilVerdictPolicyForConnectors(
-          safe_browsing::DELAY_UPLOADS);
-    }
+    safe_browsing::SetDlpPolicyForConnectors(state);
+    safe_browsing::SetDelayDeliveryUntilVerdictPolicyForConnectors(
+        safe_browsing::DELAY_UPLOADS);
   }
 
   content::BrowserTaskEnvironment task_environment_;
@@ -159,13 +148,9 @@ class ChromeWebContentsViewDelegateHandleOnPerformDrop
   int current_requests_count_ = 0;
 };
 
-INSTANTIATE_TEST_SUITE_P(,
-                         ChromeWebContentsViewDelegateHandleOnPerformDrop,
-                         testing::Bool());
-
 // When no drop data is specified, HandleOnPerformDrop() should indicate
 // the caller can proceed, whether scanning is enabled or not.
-TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, NoData) {
+TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, NoData) {
   content::DropData data;
 
   SetExpectedRequestsCount(0);
@@ -174,48 +159,60 @@ TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, NoData) {
 }
 
 // Make sure DropData::url_title is handled correctly.
-TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, UrlTitle) {
+TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, UrlTitle) {
   content::DropData data;
-  data.url_title = base::UTF8ToUTF16("title");
+  data.url_title = base::UTF8ToUTF16(large_text());
 
   SetExpectedRequestsCount(0);
   RunTest(data, /*enable=*/false, /*scan_succeeds=*/true);
 
   SetExpectedRequestsCount(1);
   RunTest(data, /*enable=*/true, /*scan_succeeds=*/false);
+  RunTest(data, /*enable=*/true, /*scan_succeeds=*/true);
+
+  data.url_title = base::UTF8ToUTF16(small_text());
+  SetExpectedRequestsCount(0);
   RunTest(data, /*enable=*/true, /*scan_succeeds=*/true);
 }
 
 // Make sure DropData::text is handled correctly.
-TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, Text) {
+TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, Text) {
   content::DropData data;
-  data.text = base::UTF8ToUTF16("text");
+  data.text = base::UTF8ToUTF16(large_text());
 
   SetExpectedRequestsCount(0);
   RunTest(data, /*enable=*/false, /*scan_succeeds=*/true);
 
   SetExpectedRequestsCount(1);
   RunTest(data, /*enable=*/true, /*scan_succeeds=*/false);
+  RunTest(data, /*enable=*/true, /*scan_succeeds=*/true);
+
+  data.text = base::UTF8ToUTF16(small_text());
+  SetExpectedRequestsCount(0);
   RunTest(data, /*enable=*/true, /*scan_succeeds=*/true);
 }
 
 // Make sure DropData::html is handled correctly.
-TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, Html) {
+TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, Html) {
   content::DropData data;
-  data.html = base::UTF8ToUTF16("<html></html>");
+  data.html = base::UTF8ToUTF16(large_text());
 
   SetExpectedRequestsCount(0);
   RunTest(data, /*enable=*/false, /*scan_succeeds=*/true);
 
   SetExpectedRequestsCount(1);
   RunTest(data, /*enable=*/true, /*scan_succeeds=*/false);
+  RunTest(data, /*enable=*/true, /*scan_succeeds=*/true);
+
+  data.html = base::UTF8ToUTF16(small_text());
+  SetExpectedRequestsCount(0);
   RunTest(data, /*enable=*/true, /*scan_succeeds=*/true);
 }
 
 // Make sure DropData::file_contents is handled correctly.
-TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, FileContents) {
+TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, FileContents) {
   content::DropData data;
-  data.file_contents = "file_contents";
+  data.file_contents = large_text();
 
   SetExpectedRequestsCount(0);
   RunTest(data, /*enable=*/false, /*scan_succeeds=*/true);
@@ -223,10 +220,14 @@ TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, FileContents) {
   SetExpectedRequestsCount(1);
   RunTest(data, /*enable=*/true, /*scan_succeeds=*/false);
   RunTest(data, /*enable=*/true, /*scan_succeeds=*/true);
+
+  data.file_contents = small_text();
+  SetExpectedRequestsCount(0);
+  RunTest(data, /*enable=*/true, /*scan_succeeds=*/true);
 }
 
 // Make sure DropData::filenames is handled correctly.
-TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, Files) {
+TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, Files) {
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
@@ -252,7 +253,7 @@ TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, Files) {
 }
 
 // Make sure DropData::filenames directories are handled correctly.
-TEST_P(ChromeWebContentsViewDelegateHandleOnPerformDrop, Directories) {
+TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, Directories) {
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 

@@ -1,5 +1,7 @@
 include_rules = [
+  "+media/base",
   "+mojo/public",
   "+sandbox",
-  "+services/service_manager/sandbox",
+  "+sandbox/policy",
+  "+services/audio/public/cpp",
 ]

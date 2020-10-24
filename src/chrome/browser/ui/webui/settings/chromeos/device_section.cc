@@ -10,12 +10,13 @@
 #include "ash/public/cpp/stylus_utils.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_display_handler.h"
-#include "chrome/browser/ui/webui/settings/chromeos/device_dlc_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_keyboard_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_pointer_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_power_handler.h"
@@ -168,12 +169,6 @@ const std::vector<SearchConcept>& GetTouchpadSearchConcepts() {
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kPointers},
        {IDS_OS_SETTINGS_TAG_TOUCHPAD_ALT1, SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_TOUCHPAD_SCROLL_ACCELERATION,
-       mojom::kPointersSubpagePath,
-       mojom::SearchResultIcon::kLaptop,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kTouchpadScrollAcceleration}},
       {IDS_OS_SETTINGS_TAG_TOUCHPAD_REVERSE_SCROLLING,
        mojom::kPointersSubpagePath,
        mojom::SearchResultIcon::kLaptop,
@@ -186,6 +181,19 @@ const std::vector<SearchConcept>& GetTouchpadSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kTouchpadAcceleration}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>&
+GetTouchpadScrollAccelerationSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_TOUCHPAD_SCROLL_ACCELERATION,
+       mojom::kPointersSubpagePath,
+       mojom::SearchResultIcon::kLaptop,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kTouchpadScrollAcceleration}},
   });
   return *tags;
 }
@@ -323,6 +331,12 @@ const std::vector<SearchConcept>& GetDisplayExternalSearchConcepts() {
        {IDS_OS_SETTINGS_TAG_DISPLAY_RESOLUTION_ALT1,
         IDS_OS_SETTINGS_TAG_DISPLAY_RESOLUTION_ALT2,
         SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_DISPLAY_OVERSCAN,
+       mojom::kDisplaySubpagePath,
+       mojom::SearchResultIcon::kDisplay,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kDisplayOverscan}},
   });
   return *tags;
 }
@@ -389,30 +403,6 @@ const std::vector<SearchConcept>& GetDisplayNightLightOnSearchConcepts() {
        mojom::SearchResultDefaultRank::kLow,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kNightLightColorTemperature}},
-  });
-  return *tags;
-}
-
-const std::vector<SearchConcept>& GetDlcSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_DOWNLOADED_CONTENT,
-       mojom::kDlcSubpagePath,
-       mojom::SearchResultIcon::kHardDrive,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kDlc},
-       {IDS_OS_SETTINGS_TAG_DOWNLOADED_CONTENT_ALT1,
-        SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_REMOVE_DOWNLOADED_CONTENT,
-       mojom::kDlcSubpagePath,
-       mojom::SearchResultIcon::kHardDrive,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kRemoveDlc},
-       {IDS_OS_SETTINGS_TAG_REMOVE_DOWNLOADED_CONTENT_ALT1,
-        IDS_OS_SETTINGS_TAG_REMOVE_DOWNLOADED_CONTENT_ALT2,
-        IDS_OS_SETTINGS_TAG_REMOVE_DOWNLOADED_CONTENT_ALT3,
-        SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -505,6 +495,7 @@ void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_KEYBOARD_SHOW_SHORTCUT_VIEWER},
       {"keyboardShowLanguageAndInput",
        IDS_SETTINGS_KEYBOARD_SHOW_LANGUAGE_AND_INPUT},
+      {"keyboardShowInputSettings", IDS_SETTINGS_KEYBOARD_SHOW_INPUT_SETTINGS},
   };
   AddLocalizedStringsBulk(html_source, keyboard_strings);
 
@@ -648,6 +639,10 @@ void AddDeviceDisplayStrings(content::WebUIDataSource* html_source) {
 
   html_source->AddString("invalidDisplayId",
                          base::NumberToString(display::kInvalidDisplayId));
+
+  html_source->AddBoolean(
+      "allowDisplayAlignmentApi",
+      base::FeatureList::IsEnabled(ash::features::kDisplayAlignAssist));
 }
 
 void AddDeviceStorageStrings(content::WebUIDataSource* html_source,
@@ -681,10 +676,7 @@ void AddDeviceStorageStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_STORAGE_EXTERNAL_STORAGE_EMPTY_LIST_HEADER},
       {"storageExternalStorageListHeader",
        IDS_SETTINGS_STORAGE_EXTERNAL_STORAGE_LIST_HEADER},
-      {"storageManageDownloadedContentRowTitle",
-       IDS_SETTINGS_STORAGE_MANAGE_DOWNLOADED_CONTENT_ROW_TITLE},
-      {"storageOverviewAriaLabel", IDS_SETTINGS_STORAGE_OVERVIEW_ARIA_LABEL},
-  };
+      {"storageOverviewAriaLabel", IDS_SETTINGS_STORAGE_OVERVIEW_ARIA_LABEL}};
   AddLocalizedStringsBulk(html_source, kStorageStrings);
 
   html_source->AddBoolean("androidEnabled", is_external_storage_page_available);
@@ -694,17 +686,6 @@ void AddDeviceStorageStrings(content::WebUIDataSource* html_source,
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_STORAGE_ANDROID_APPS_ACCESS_EXTERNAL_DRIVES_NOTE,
           base::ASCIIToUTF16(chrome::kArcExternalStorageLearnMoreURL)));
-}
-
-void AddDeviceDlcSubpageStrings(content::WebUIDataSource* html_source) {
-  static constexpr webui::LocalizedString kDlcSubpageStrings[] = {
-      {"dlcSubpageTitle", IDS_SETTINGS_DLC_SUBPAGE_TITLE},
-      {"dlcSubpageDescription", IDS_SETTINGS_DLC_SUBPAGE_DESCRIPTION},
-      {"removeDlc", IDS_SETTINGS_DLC_REMOVE},
-  };
-  AddLocalizedStringsBulk(html_source, kDlcSubpageStrings);
-
-  html_source->AddBoolean("allowDlcSubpage", features::ShouldShowDlcSettings());
 }
 
 void AddDevicePowerStrings(content::WebUIDataSource* html_source) {
@@ -728,13 +709,25 @@ void AddDevicePowerStrings(content::WebUIDataSource* html_source) {
       {"powerIdleDisplayOffSleep", IDS_SETTINGS_POWER_IDLE_DISPLAY_OFF_SLEEP},
       {"powerIdleDisplayOff", IDS_SETTINGS_POWER_IDLE_DISPLAY_OFF},
       {"powerIdleDisplayOn", IDS_SETTINGS_POWER_IDLE_DISPLAY_ON},
-      {"powerIdleOther", IDS_SETTINGS_POWER_IDLE_OTHER},
+      {"powerIdleDisplayShutDown", IDS_SETTINGS_POWER_IDLE_SHUT_DOWN},
+      {"powerIdleDisplayStopSession", IDS_SETTINGS_POWER_IDLE_STOP_SESSION},
       {"powerLidSleepLabel", IDS_SETTINGS_POWER_LID_CLOSED_SLEEP_LABEL},
       {"powerLidSignOutLabel", IDS_SETTINGS_POWER_LID_CLOSED_SIGN_OUT_LABEL},
       {"powerLidShutDownLabel", IDS_SETTINGS_POWER_LID_CLOSED_SHUT_DOWN_LABEL},
   };
   AddLocalizedStringsBulk(html_source, kPowerStrings);
 }
+
+// Mirrors enum of the same name in enums.xml.
+enum class TouchpadSensitivity {
+  kNONE = 0,
+  kSlowest = 1,
+  kSlow = 2,
+  kMedium = 3,
+  kFast = 4,
+  kFastest = 5,
+  kMaxValue = kFastest,
+};
 
 }  // namespace
 
@@ -743,10 +736,11 @@ DeviceSection::DeviceSection(Profile* profile,
                              PrefService* pref_service)
     : OsSettingsSection(profile, search_tag_registry),
       pref_service_(pref_service) {
-  registry()->AddSearchTags(GetDeviceSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetDeviceSearchConcepts());
 
   if (features::ShouldShowExternalStorageSettings(profile))
-    registry()->AddSearchTags(GetExternalStorageSearchConcepts());
+    updater.AddSearchTags(GetExternalStorageSearchConcepts());
 
   PowerManagerClient* power_manager_client = PowerManagerClient::Get();
   if (power_manager_client) {
@@ -788,14 +782,6 @@ DeviceSection::DeviceSection(Profile* profile,
     OnNightLightEnabledChanged(
         ash::NightLightController::GetInstance()->GetEnabled());
   }
-
-  // DLC settings search tags are added/removed dynamically.
-  DlcserviceClient* dlcservice_client = DlcserviceClient::Get();
-  if (features::ShouldShowDlcSettings() && dlcservice_client) {
-    dlcservice_client->AddObserver(this);
-    dlcservice_client->GetExistingDlcs(base::BindOnce(
-        &DeviceSection::OnGetExistingDlcs, weak_ptr_factory_.GetWeakPtr()));
-  }
 }
 
 DeviceSection::~DeviceSection() {
@@ -810,22 +796,20 @@ DeviceSection::~DeviceSection() {
       ash::NightLightController::GetInstance();
   if (night_light_controller)
     night_light_controller->RemoveObserver(this);
-
-  DlcserviceClient* dlcservice_client = DlcserviceClient::Get();
-  if (features::ShouldShowDlcSettings() && dlcservice_client)
-    dlcservice_client->RemoveObserver(this);
 }
 
 void DeviceSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kDeviceStrings[] = {
       {"devicePageTitle", IDS_SETTINGS_DEVICE_TITLE},
-      {"scrollLabel", IDS_SETTINGS_SCROLL_LABEL},
       {"touchPadScrollLabel", IDS_OS_SETTINGS_TOUCHPAD_REVERSE_SCROLL_LABEL},
   };
   AddLocalizedStringsBulk(html_source, kDeviceStrings);
 
   html_source->AddBoolean("isDemoSession",
                           chromeos::DemoSession::IsDeviceInDemoMode());
+  html_source->AddBoolean("enableLanguageSettingsV2",
+                          base::FeatureList::IsEnabled(
+                              ::chromeos::features::kLanguageSettingsUpdate));
 
   AddDevicePointersStrings(html_source);
   AddDeviceKeyboardStrings(html_source);
@@ -834,18 +818,13 @@ void DeviceSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   AddDeviceStorageStrings(
       html_source, features::ShouldShowExternalStorageSettings(profile()));
   AddDevicePowerStrings(html_source);
-  AddDeviceDlcSubpageStrings(html_source);
 }
 
 void DeviceSection::AddHandlers(content::WebUI* web_ui) {
-  if (ash::features::IsDisplayIdentificationEnabled()) {
+  if (ash::features::IsDisplayIdentificationEnabled() ||
+      ash::features::IsDisplayAlignmentAssistanceEnabled()) {
     web_ui->AddMessageHandler(
         std::make_unique<chromeos::settings::DisplayHandler>());
-  }
-
-  if (features::ShouldShowDlcSettings()) {
-    web_ui->AddMessageHandler(
-        std::make_unique<chromeos::settings::DlcHandler>());
   }
 
   web_ui->AddMessageHandler(
@@ -872,6 +851,25 @@ mojom::SearchResultIcon DeviceSection::GetSectionIcon() const {
 
 std::string DeviceSection::GetSectionPath() const {
   return mojom::kDeviceSectionPath;
+}
+
+bool DeviceSection::LogMetric(mojom::Setting setting,
+                              base::Value& value) const {
+  switch (setting) {
+    case mojom::Setting::kTouchpadSpeed:
+      base::UmaHistogramEnumeration(
+          "ChromeOS.Settings.Device.TouchpadSpeedValue",
+          static_cast<TouchpadSensitivity>(value.GetInt()));
+      return true;
+
+    case mojom::Setting::kKeyboardFunctionKeys:
+      base::UmaHistogramBoolean("ChromeOS.Settings.Device.KeyboardFunctionKeys",
+                                value.GetBool());
+      return true;
+
+    default:
+      return false;
+  }
 }
 
 void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
@@ -940,6 +938,7 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::Setting::kAmbientColors,
       mojom::Setting::kTouchscreenCalibration,
       mojom::Setting::kNightLightColorTemperature,
+      mojom::Setting::kDisplayOverscan,
   };
   RegisterNestedSettingBulk(mojom::Subpage::kDisplay, kDisplaySettings,
                             generator);
@@ -954,12 +953,6 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::Subpage::kStorage, mojom::SearchResultIcon::kHardDrive,
       mojom::SearchResultDefaultRank::kMedium,
       mojom::kExternalStorageSubpagePath);
-  generator->RegisterNestedSubpage(
-      IDS_SETTINGS_DLC_SUBPAGE_TITLE, mojom::Subpage::kDlc,
-      mojom::Subpage::kStorage, mojom::SearchResultIcon::kHardDrive,
-      mojom::SearchResultDefaultRank::kMedium, mojom::kDlcSubpagePath);
-  generator->RegisterNestedSetting(mojom::Setting::kRemoveDlc,
-                                   mojom::Subpage::kDlc);
 
   // Power.
   generator->RegisterTopLevelSubpage(
@@ -976,17 +969,28 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
 }
 
 void DeviceSection::TouchpadExists(bool exists) {
-  if (exists)
-    registry()->AddSearchTags(GetTouchpadSearchConcepts());
-  else
-    registry()->RemoveSearchTags(GetTouchpadSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.RemoveSearchTags(GetTouchpadSearchConcepts());
+  updater.RemoveSearchTags(GetTouchpadScrollAccelerationSearchConcepts());
+
+  if (exists) {
+    updater.AddSearchTags(GetTouchpadSearchConcepts());
+    if (base::FeatureList::IsEnabled(chromeos::features::kAllowScrollSettings))
+      updater.AddSearchTags(GetTouchpadScrollAccelerationSearchConcepts());
+  }
 }
 
 void DeviceSection::MouseExists(bool exists) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (exists)
-    registry()->AddSearchTags(GetMouseSearchConcepts());
+    updater.AddSearchTags(GetMouseSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetMouseSearchConcepts());
+    updater.RemoveSearchTags(GetMouseSearchConcepts());
+}
+
+void DeviceSection::PointingStickExists(bool exists) {
+  // TODO(crbug.com/1114828): manage search tags when the UI is implemented.
 }
 
 void DeviceSection::OnDeviceListsComplete() {
@@ -1006,26 +1010,12 @@ void DeviceSection::OnDisplayConfigChanged() {
 
 void DeviceSection::PowerChanged(
     const power_manager::PowerSupplyProperties& properties) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (properties.battery_state() !=
       power_manager::PowerSupplyProperties_BatteryState_NOT_PRESENT) {
-    registry()->AddSearchTags(GetPowerWithBatterySearchConcepts());
+    updater.AddSearchTags(GetPowerWithBatterySearchConcepts());
   }
-}
-
-void DeviceSection::OnGetExistingDlcs(
-    const std::string& err,
-    const dlcservice::DlcsWithContent& dlcs_with_content) {
-  if (err != dlcservice::kErrorNone ||
-      dlcs_with_content.dlc_infos_size() == 0) {
-    registry()->RemoveSearchTags(GetDlcSearchConcepts());
-    return;
-  }
-  registry()->AddSearchTags(GetDlcSearchConcepts());
-}
-
-void DeviceSection::OnDlcStateChanged(const dlcservice::DlcState& dlc_state) {
-  DlcserviceClient::Get()->GetExistingDlcs(base::BindOnce(
-      &DeviceSection::OnGetExistingDlcs, weak_ptr_factory_.GetWeakPtr()));
 }
 
 void DeviceSection::OnGetDisplayUnitInfoList(
@@ -1057,67 +1047,71 @@ void DeviceSection::OnGetDisplayLayoutInfo(
                                 ash::mojom::DisplayLayoutMode::kUnified;
   }
 
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   // Arrangement UI.
   if (has_multiple_displays || is_mirrored)
-    registry()->AddSearchTags(GetDisplayArrangementSearchConcepts());
+    updater.AddSearchTags(GetDisplayArrangementSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayArrangementSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayArrangementSearchConcepts());
 
   // Mirror toggle.
   if (is_mirrored || (!unified_desktop_mode && has_multiple_displays))
-    registry()->AddSearchTags(GetDisplayMirrorSearchConcepts());
+    updater.AddSearchTags(GetDisplayMirrorSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayMirrorSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayMirrorSearchConcepts());
 
   // Unified Desktop toggle.
   if (unified_desktop_mode ||
       (IsUnifiedDesktopAvailable() && has_multiple_displays && !is_mirrored)) {
-    registry()->AddSearchTags(GetDisplayUnifiedDesktopSearchConcepts());
+    updater.AddSearchTags(GetDisplayUnifiedDesktopSearchConcepts());
   } else {
-    registry()->RemoveSearchTags(GetDisplayUnifiedDesktopSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayUnifiedDesktopSearchConcepts());
   }
 
   // External display settings.
   if (has_external_display)
-    registry()->AddSearchTags(GetDisplayExternalSearchConcepts());
+    updater.AddSearchTags(GetDisplayExternalSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayExternalSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayExternalSearchConcepts());
 
   // Refresh Rate dropdown.
   if (has_external_display && IsListAllDisplayModesEnabled())
-    registry()->AddSearchTags(GetDisplayExternalWithRefreshSearchConcepts());
+    updater.AddSearchTags(GetDisplayExternalWithRefreshSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayExternalWithRefreshSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayExternalWithRefreshSearchConcepts());
 
   // Orientation settings.
   if (!unified_desktop_mode)
-    registry()->AddSearchTags(GetDisplayOrientationSearchConcepts());
+    updater.AddSearchTags(GetDisplayOrientationSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayOrientationSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayOrientationSearchConcepts());
 
   // Ambient color settings.
   if (DoesDeviceSupportAmbientColor() && has_internal_display)
-    registry()->AddSearchTags(GetDisplayAmbientSearchConcepts());
+    updater.AddSearchTags(GetDisplayAmbientSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayAmbientSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayAmbientSearchConcepts());
 
   // Touch calibration settings.
   if (IsTouchCalibrationAvailable())
-    registry()->AddSearchTags(GetDisplayTouchCalibrationSearchConcepts());
+    updater.AddSearchTags(GetDisplayTouchCalibrationSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayTouchCalibrationSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayTouchCalibrationSearchConcepts());
 
   // Night Light on settings.
   if (ash::NightLightController::GetInstance()->GetEnabled())
-    registry()->AddSearchTags(GetDisplayNightLightOnSearchConcepts());
+    updater.AddSearchTags(GetDisplayNightLightOnSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetDisplayNightLightOnSearchConcepts());
+    updater.RemoveSearchTags(GetDisplayNightLightOnSearchConcepts());
 }
 
 void DeviceSection::OnGotSwitchStates(
     base::Optional<PowerManagerClient::SwitchStates> result) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (result && result->lid_state != PowerManagerClient::LidState::NOT_PRESENT)
-    registry()->AddSearchTags(GetPowerWithLaptopLidSearchConcepts());
+    updater.AddSearchTags(GetPowerWithLaptopLidSearchConcepts());
 }
 
 void DeviceSection::UpdateStylusSearchTags() {
@@ -1125,19 +1119,22 @@ void DeviceSection::UpdateStylusSearchTags() {
   if (!ui::DeviceDataManager::GetInstance()->AreDeviceListsComplete())
     return;
 
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   // TODO(https://crbug.com/1071905): Only show stylus settings if a stylus has
   // been set up. HasStylusInput() will return true for any stylus-compatible
   // device, even if it doesn't have a stylus.
   if (ash::stylus_utils::HasStylusInput())
-    registry()->AddSearchTags(GetStylusSearchConcepts());
+    updater.AddSearchTags(GetStylusSearchConcepts());
   else
-    registry()->RemoveSearchTags(GetStylusSearchConcepts());
+    updater.RemoveSearchTags(GetStylusSearchConcepts());
 }
 
 void DeviceSection::AddDevicePointersStrings(
     content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kPointersStrings[] = {
       {"mouseTitle", IDS_SETTINGS_MOUSE_TITLE},
+      {"pointingStickTitle", IDS_SETTINGS_POINTING_STICK_TITLE},
       {"touchpadTitle", IDS_SETTINGS_TOUCHPAD_TITLE},
       {"mouseAndTouchpadTitle", IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE},
       {"touchpadTapToClickEnabledLabel",
@@ -1148,6 +1145,9 @@ void DeviceSection::AddDevicePointersStrings(
       {"mouseScrollSpeed", IDS_SETTINGS_MOUSE_SCROLL_SPEED_LABEL},
       {"mouseSpeed", IDS_SETTINGS_MOUSE_SPEED_LABEL},
       {"mouseSwapButtons", IDS_SETTINGS_MOUSE_SWAP_BUTTONS_LABEL},
+      {"primaryMouseButtonLeft", IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_LEFT_LABEL},
+      {"primaryMouseButtonRight",
+       IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_RIGHT_LABEL},
       {"mouseReverseScroll", IDS_SETTINGS_MOUSE_REVERSE_SCROLL_LABEL},
       {"mouseAccelerationLabel", IDS_SETTINGS_MOUSE_ACCELERATION_LABEL},
       {"mouseScrollAccelerationLabel",
@@ -1168,6 +1168,9 @@ void DeviceSection::AddDevicePointersStrings(
   html_source->AddBoolean(
       "allowScrollSettings",
       base::FeatureList::IsEnabled(::chromeos::features::kAllowScrollSettings));
+  html_source->AddBoolean(
+      "separatePointingStickSettings",
+      base::FeatureList::IsEnabled(::features::kSeparatePointingStickSettings));
 }
 
 }  // namespace settings

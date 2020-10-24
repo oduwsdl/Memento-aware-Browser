@@ -278,13 +278,6 @@ jboolean ProfileSyncServiceAndroid::IsEncryptEverythingEnabled(
   return sync_service_->GetUserSettings()->IsEncryptEverythingEnabled();
 }
 
-void ProfileSyncServiceAndroid::EnableEncryptEverything(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  sync_service_->GetUserSettings()->EnableEncryptEverything();
-}
-
 jboolean ProfileSyncServiceAndroid::IsPassphraseRequiredForPreferredDataTypes(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
@@ -390,6 +383,20 @@ jboolean ProfileSyncServiceAndroid::RequiresClientUpgrade(
     const JavaParamRef<jobject>&) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return sync_service_->RequiresClientUpgrade();
+}
+
+void ProfileSyncServiceAndroid::SetDecoupledFromAndroidMasterSync(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  sync_service_->SetDecoupledFromAndroidMasterSync();
+}
+
+jboolean ProfileSyncServiceAndroid::GetDecoupledFromAndroidMasterSync(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  return sync_service_->GetDecoupledFromAndroidMasterSync();
 }
 
 jboolean ProfileSyncServiceAndroid::IsPassphrasePrompted(

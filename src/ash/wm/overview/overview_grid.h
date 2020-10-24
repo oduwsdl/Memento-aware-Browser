@@ -31,7 +31,6 @@ class Widget;
 namespace ash {
 
 class DesksBarView;
-class FpsCounter;
 class OverviewGridEventHandler;
 class OverviewItem;
 class PresentationTimeRecorder;
@@ -58,6 +57,12 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
                                 public ScreenRotationAnimatorObserver,
                                 public WallpaperControllerObserver {
  public:
+  class MetricsTracker {
+   public:
+    MetricsTracker() = default;
+    virtual ~MetricsTracker() = default;
+  };
+
   OverviewGrid(aura::Window* root_window,
                const std::vector<aura::Window*>& window_list,
                OverviewSession* overview_session);
@@ -97,6 +102,9 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // will be adjusted after the animation. If |restack| is true but at least one
   // of |reposition| and |animate| is false, the stacking order will be adjusted
   // immediately.
+  // Note: OverviewSession has versions of the Add/Remove items. Those are
+  // preferred as they update other things like the overview accessibility
+  // annotator.
   void AddItem(aura::Window* window,
                bool reposition,
                bool animate,
@@ -253,11 +261,6 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
 
   // Clears |nudge_data_|.
   void EndNudge();
-
-  // Called after PositionWindows when entering overview from the home launcher
-  // screen. Translates all windows vertically and animates to their final
-  // locations.
-  void SlideWindowsIn();
 
   // Update the y position and opacity of the entire grid. Does this by
   // transforming the windows in |window_list_|. If |callback| is non null, the
@@ -439,6 +442,9 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
 
   void UpdateCannotSnapWarningVisibility();
 
+  // Updates frame throttling on overview item windows.
+  void UpdateFrameThrottling();
+
   // Root window the grid is in.
   aura::Window* root_window_;
 
@@ -488,7 +494,7 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   std::vector<NudgeData> nudge_data_;
 
   // Measures the animation smoothness of overview animation.
-  std::unique_ptr<FpsCounter> fps_counter_;
+  std::unique_ptr<MetricsTracker> metrics_tracker_;
 
   // True to skip |PositionWindows()|. Used to avoid O(n^2) layout when
   // reposition windows in tablet overview mode.

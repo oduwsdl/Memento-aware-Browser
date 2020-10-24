@@ -4,17 +4,8 @@
 
 GEN_INCLUDE(['switch_access_e2e_test_base.js']);
 
-/**
- * @constructor
- * @extends {SwitchAccessE2ETest}
- */
-function SwitchAccessTextNavigationManagerTest() {
-  SwitchAccessE2ETest.call(this);
-}
-
-SwitchAccessTextNavigationManagerTest.prototype = {
-  __proto__: SwitchAccessE2ETest.prototype,
-
+/** Text fixture for the text navigation manager. */
+SwitchAccessTextNavigationManagerTest = class extends SwitchAccessE2ETest {
   /** @override */
   setUp() {
     TextNavigationManager.initialize();
@@ -54,7 +45,7 @@ function runTextNavigationTest(testHelper, textParams) {
   const website = generateWebsiteWithTextArea(
       textId, textContent, initialTextIndex, textCols, textWrap);
 
-  testHelper.runWithLoadedTree(website, function(desktop) {
+  testHelper.runWithLoadedTree(website, function(root) {
     const inputNode = this.findNodeById(textId);
     assertNotEquals(inputNode, null);
 
@@ -113,7 +104,7 @@ function runTextSelectionTest(testHelper, textParams) {
     navigationTargetIndex = targetTextStartIndex;
   }
 
-  testHelper.runWithLoadedTree(website, function(desktop) {
+  testHelper.runWithLoadedTree(website, function(root) {
     const inputNode = this.findNodeById(textId);
     assertNotEquals(inputNode, null);
     checkNodeIsFocused(inputNode);
@@ -323,7 +314,7 @@ TEST_F(
       const website =
           generateWebsiteWithTextArea('test', 'test123', 3, 20, 'hard');
 
-      this.runWithLoadedTree(website, function(desktop) {
+      this.runWithLoadedTree(website, function(root) {
         const inputNode = this.findNodeById('test');
         assertNotEquals(inputNode, null);
         checkNodeIsFocused(inputNode);
@@ -344,7 +335,7 @@ TEST_F(
       const website =
           generateWebsiteWithTextArea('test', 'test 123', 6, 20, 'hard');
 
-      this.runWithLoadedTree(website, function(desktop) {
+      this.runWithLoadedTree(website, function(root) {
         const inputNode = this.findNodeById('test');
         assertNotEquals(inputNode, null);
         checkNodeIsFocused(inputNode);

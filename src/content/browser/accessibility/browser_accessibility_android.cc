@@ -55,8 +55,6 @@ enum { ANDROID_VIEW_ACCESSIBILITY_RANGE_TYPE_FLOAT = 1 };
 
 namespace content {
 
-const float kContentInvalidTimeoutMillisecs = 6000.0;
-
 // static
 BrowserAccessibility* BrowserAccessibility::Create() {
   return new BrowserAccessibilityAndroid();
@@ -93,31 +91,8 @@ void BrowserAccessibilityAndroid::OnLocationChanged() {
   manager->FireLocationChanged(this);
 }
 
-base::string16 BrowserAccessibilityAndroid::GetValue() const {
-  base::string16 value = BrowserAccessibility::GetValue();
-
-  // Optionally replace entered password text with bullet characters
-  // based on a user preference.
-  if (IsPasswordField()) {
-    auto* manager =
-        static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
-    if (manager->ShouldRespectDisplayedPasswordText()) {
-      // In the Chrome accessibility tree, the value of a password node is
-      // unobscured. However, if ShouldRespectDisplayedPasswordText() returns
-      // true we should try to expose whatever's actually visually displayed,
-      // whether that's the actual password or dots or whatever. To do this
-      // we rely on the password field's shadow dom.
-      value = BrowserAccessibility::GetInnerText();
-    } else if (!manager->ShouldExposePasswordText()) {
-      value = base::string16(value.size(), ui::kSecurePasswordBullet);
-    }
-  }
-
-  return value;
-}
-
 bool BrowserAccessibilityAndroid::IsCheckable() const {
-  return HasIntAttribute(ax::mojom::IntAttribute::kCheckedState);
+  return GetData().HasCheckedState();
 }
 
 bool BrowserAccessibilityAndroid::IsChecked() const {
@@ -176,20 +151,6 @@ bool BrowserAccessibilityAndroid::IsCollectionItem() const {
 }
 
 bool BrowserAccessibilityAndroid::IsContentInvalid() const {
-  if (IsFocused()) {
-    // When a node has focus, only report that it's invalid for a short period
-    // of time. Otherwise it's annoying to hear the invalid message every time
-    // a character is entered.
-    if (content_invalid_timer_.Elapsed().InMillisecondsF() <
-        kContentInvalidTimeoutMillisecs) {
-      bool invalid_state =
-          HasIntAttribute(ax::mojom::IntAttribute::kInvalidState) &&
-          GetData().GetInvalidState() != ax::mojom::InvalidState::kFalse;
-      if (invalid_state)
-        return true;
-    }
-    return false;
-  }
   return HasIntAttribute(ax::mojom::IntAttribute::kInvalidState) &&
          GetData().GetInvalidState() != ax::mojom::InvalidState::kFalse;
 }
@@ -269,16 +230,25 @@ bool BrowserAccessibilityAndroid::IsMultiLine() const {
   return HasState(ax::mojom::State::kMultiline);
 }
 
-bool BrowserAccessibilityAndroid::IsRangeType() const {
-  return (GetRole() == ax::mojom::Role::kProgressIndicator ||
-          GetRole() == ax::mojom::Role::kMeter ||
-          GetRole() == ax::mojom::Role::kScrollBar ||
-          GetRole() == ax::mojom::Role::kSlider ||
-          (GetRole() == ax::mojom::Role::kSplitter && IsFocusable()));
+bool BrowserAccessibilityAndroid::IsMultiselectable() const {
+  return HasState(ax::mojom::State::kMultiselectable);
+}
+
+bool BrowserAccessibilityAndroid::IsReportingCheckable() const {
+  // To communicate kMixed state Checkboxes, we will rely on state description,
+  // so we will not report node as checkable to avoid duplicate utterances.
+  return IsCheckable() &&
+         GetData().GetCheckedState() != ax::mojom::CheckedState::kMixed;
 }
 
 bool BrowserAccessibilityAndroid::IsScrollable() const {
   return GetBoolAttribute(ax::mojom::BoolAttribute::kScrollable);
+}
+
+bool BrowserAccessibilityAndroid::IsSeekControl() const {
+  // Range types should have seek control options, except progress bars.
+  return GetData().IsRangeValueSupported() &&
+         (GetRole() != ax::mojom::Role::kProgressIndicator);
 }
 
 bool BrowserAccessibilityAndroid::IsSelected() const {
@@ -333,6 +303,11 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
   if (ui::IsControl(GetRole()))
     return true;
 
+  // Mark progress indicators as interesting, since they are not focusable and
+  // not a control, but users should be able to swipe/navigate to them.
+  if (GetRole() == ax::mojom::Role::kProgressIndicator)
+    return true;
+
   // If we are the direct descendant of a link and have no siblings/children,
   // then we are not interesting, return false
   parent = PlatformGetParent();
@@ -378,7 +353,7 @@ BrowserAccessibilityAndroid::GetSoleInterestingNodeFromSubtree() const {
 }
 
 bool BrowserAccessibilityAndroid::AreInlineTextBoxesLoaded() const {
-  if (GetRole() == ax::mojom::Role::kStaticText)
+  if (IsText())
     return InternalChildCount() > 0;
 
   // Return false if any descendant needs to load inline text boxes.
@@ -477,7 +452,7 @@ base::string16 BrowserAccessibilityAndroid::GetInnerText() const {
 
   // First, always return the |value| attribute if this is an
   // input field.
-  base::string16 value = GetValue();
+  base::string16 value = GetValueForControl();
   if (ShouldExposeValueAsName())
     return value;
 
@@ -524,6 +499,29 @@ base::string16 BrowserAccessibilityAndroid::GetInnerText() const {
   return text;
 }
 
+base::string16 BrowserAccessibilityAndroid::GetValueForControl() const {
+  base::string16 value = BrowserAccessibility::GetValueForControl();
+
+  // Optionally replace entered password text with bullet characters
+  // based on a user preference.
+  if (IsPasswordField()) {
+    auto* manager =
+        static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
+    if (manager->ShouldRespectDisplayedPasswordText()) {
+      // In the Chrome accessibility tree, the value of a password node is
+      // unobscured. However, if ShouldRespectDisplayedPasswordText() returns
+      // true we should try to expose whatever's actually visually displayed,
+      // whether that's the actual password or dots or whatever. To do this
+      // we rely on the password field's shadow dom.
+      value = BrowserAccessibility::GetInnerText();
+    } else if (!manager->ShouldExposePasswordText()) {
+      value = base::string16(value.size(), ui::kSecurePasswordBullet);
+    }
+  }
+
+  return value;
+}
+
 base::string16 BrowserAccessibilityAndroid::GetHint() const {
   std::vector<base::string16> strings;
 
@@ -548,6 +546,128 @@ base::string16 BrowserAccessibilityAndroid::GetHint() const {
     strings.push_back(description);
 
   return base::JoinString(strings, base::ASCIIToUTF16(" "));
+}
+
+base::string16 BrowserAccessibilityAndroid::GetStateDescription() const {
+  std::vector<base::string16> state_descs;
+
+  // For multiselectable state, generate a state description. We do not set a
+  // state description for pop up/<select> to prevent double utterances.
+  if (IsMultiselectable() && GetRole() != ax::mojom::Role::kPopUpButton)
+    state_descs.push_back(GetMultiselectableStateDescription());
+
+  // For Checkboxes, if we are in a kMixed state, we will communicate
+  // "partially checked" through the state description. This is mutually
+  // exclusive with the on/off of toggle buttons below.
+  if (IsCheckable() && !IsReportingCheckable()) {
+    state_descs.push_back(GetCheckboxStateDescription());
+  } else if (GetRole() == ax::mojom::Role::kToggleButton) {
+    // For Toggle buttons, we will append "on"/"off" in the state description.
+    state_descs.push_back(GetToggleButtonStateDescription());
+  }
+
+  // For list boxes, use state description to communicate child item count. We
+  // will not communicate this in the case that the listbox is also
+  // multiselectable and has some items selected, since the same info would be
+  // communicated as "x of y selected".
+  if (GetRole() == ax::mojom::Role::kListBox &&
+      (!IsMultiselectable() || !GetSelectedItemCount()))
+    state_descs.push_back(GetListBoxStateDescription());
+
+  // For list box items, use state description to communicate index of item.
+  if (GetRole() == ax::mojom::Role::kListBoxOption)
+    state_descs.push_back(GetListBoxItemStateDescription());
+
+  // Concatenate all state descriptions and return.
+  return base::JoinString(state_descs, base::ASCIIToUTF16(" "));
+}
+
+base::string16 BrowserAccessibilityAndroid::GetMultiselectableStateDescription()
+    const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  // Count the number of children and selected children.
+  int child_count = 0;
+  int selected_count = 0;
+  for (PlatformChildIterator it = PlatformChildrenBegin();
+       it != PlatformChildrenEnd(); ++it) {
+    child_count++;
+    BrowserAccessibilityAndroid* child =
+        static_cast<BrowserAccessibilityAndroid*>(it.get());
+    if (child->IsSelected())
+      selected_count++;
+  }
+
+  // If none are selected, return special case.
+  if (!selected_count)
+    return content_client->GetLocalizedString(
+        IDS_AX_MULTISELECTABLE_STATE_DESCRIPTION_NONE);
+
+  // Generate a state description of the form: "multiselectable, x of y
+  // selected.".
+  std::vector<base::string16> values;
+  values.push_back(base::NumberToString16(selected_count));
+  values.push_back(base::NumberToString16(child_count));
+  return base::ReplaceStringPlaceholders(
+      content_client->GetLocalizedString(
+          IDS_AX_MULTISELECTABLE_STATE_DESCRIPTION),
+      values, nullptr);
+}
+
+base::string16 BrowserAccessibilityAndroid::GetToggleButtonStateDescription()
+    const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  // For checked Toggle buttons, we will return "on", otherwise "off".
+  if (IsChecked())
+    return content_client->GetLocalizedString(IDS_AX_TOGGLE_BUTTON_ON);
+
+  return content_client->GetLocalizedString(IDS_AX_TOGGLE_BUTTON_OFF);
+}
+
+base::string16 BrowserAccessibilityAndroid::GetCheckboxStateDescription()
+    const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  return content_client->GetLocalizedString(IDS_AX_CHECKBOX_PARTIALLY_CHECKED);
+}
+
+base::string16 BrowserAccessibilityAndroid::GetListBoxStateDescription() const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  // For empty list boxes, we will return an empty string.
+  int item_count = GetItemCount();
+  if (!item_count)
+    return base::string16();
+
+  // Otherwise, we will communicate "x items" as the state description.
+  return base::ReplaceStringPlaceholders(
+      content_client->GetLocalizedString(IDS_AX_LIST_BOX_STATE_DESCRIPTION),
+      base::NumberToString16(item_count), nullptr);
+}
+
+base::string16 BrowserAccessibilityAndroid::GetListBoxItemStateDescription()
+    const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  BrowserAccessibilityAndroid* parent =
+      static_cast<BrowserAccessibilityAndroid*>(PlatformGetParent());
+
+  // If we cannot find the parent collection, escape with an empty string.
+  if (!parent)
+    return base::string16();
+
+  // For list box items, we will communicate "in list, item x of y". We add
+  // one (1) to our index to offset from counting at 0.
+  int item_index = GetItemIndex() + 1;
+  int item_count = parent->GetItemCount();
+
+  return base::ReplaceStringPlaceholders(
+      content_client->GetLocalizedString(
+          IDS_AX_LIST_BOX_ITEM_STATE_DESCRIPTION),
+      std::vector<base::string16>({base::NumberToString16(item_index),
+                                   base::NumberToString16(item_count)}),
+      nullptr);
 }
 
 std::string BrowserAccessibilityAndroid::GetRoleString() const {
@@ -797,6 +917,12 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kDocPageBreak:
       message_id = IDS_AX_ROLE_DOC_PAGE_BREAK;
       break;
+    case ax::mojom::Role::kDocPageFooter:
+      message_id = IDS_AX_ROLE_DOC_PAGE_FOOTER;
+      break;
+    case ax::mojom::Role::kDocPageHeader:
+      message_id = IDS_AX_ROLE_DOC_PAGE_HEADER;
+      break;
     case ax::mojom::Role::kDocPageList:
       message_id = IDS_AX_ROLE_DOC_PAGE_LIST;
       break;
@@ -962,9 +1088,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
       break;
     case ax::mojom::Role::kMenuBar:
       message_id = IDS_AX_ROLE_MENU_BAR;
-      break;
-    case ax::mojom::Role::kMenuButton:
-      message_id = IDS_AX_ROLE_MENU_BUTTON;
       break;
     case ax::mojom::Role::kMenuItem:
       message_id = IDS_AX_ROLE_MENU_ITEM;
@@ -1169,7 +1292,7 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
 
 int BrowserAccessibilityAndroid::GetItemIndex() const {
   int index = 0;
-  if (IsRangeType()) {
+  if (GetData().IsRangeValueSupported()) {
     // Return a percentage here for live feedback in an AccessibilityEvent.
     // The exact value is returned in RangeCurrentValue.
     float min = GetFloatAttribute(ax::mojom::FloatAttribute::kMinValueForRange);
@@ -1187,7 +1310,7 @@ int BrowserAccessibilityAndroid::GetItemIndex() const {
 
 int BrowserAccessibilityAndroid::GetItemCount() const {
   int count = 0;
-  if (IsRangeType()) {
+  if (GetData().IsRangeValueSupported()) {
     // An AccessibilityEvent can only return integer information about a
     // seek control, so we return a percentage. The real range is returned
     // in RangeMin and RangeMax.
@@ -1197,6 +1320,20 @@ int BrowserAccessibilityAndroid::GetItemCount() const {
       count = *node()->GetSetSize();
   }
   return count;
+}
+
+int BrowserAccessibilityAndroid::GetSelectedItemCount() const {
+  // Count the number of selected children.
+  int selected_count = 0;
+  for (PlatformChildIterator it = PlatformChildrenBegin();
+       it != PlatformChildrenEnd(); ++it) {
+    BrowserAccessibilityAndroid* child =
+        static_cast<BrowserAccessibilityAndroid*>(it.get());
+    if (child->IsSelected())
+      selected_count++;
+  }
+
+  return selected_count;
 }
 
 bool BrowserAccessibilityAndroid::CanScrollForward() const {
@@ -1472,8 +1609,9 @@ int BrowserAccessibilityAndroid::GetSelectionEnd() const {
 }
 
 int BrowserAccessibilityAndroid::GetEditableTextLength() const {
-  base::string16 value = GetValue();
-  return value.length();
+  if (IsTextField())
+    return int{GetValueForControl().size()};
+  return 0;
 }
 
 int BrowserAccessibilityAndroid::AndroidInputType() const {
@@ -1724,7 +1862,7 @@ void BrowserAccessibilityAndroid::GetSuggestions(
   BrowserAccessibility* node = InternalGetFirstChild();
   int start_offset = 0;
   while (node && node != this) {
-    if (node->IsTextOnlyObject()) {
+    if (node->IsText()) {
       const std::vector<int32_t>& marker_types =
           node->GetData().GetIntListAttribute(
               ax::mojom::IntListAttribute::kMarkerTypes);
@@ -1771,7 +1909,7 @@ void BrowserAccessibilityAndroid::GetSuggestions(
 }
 
 bool BrowserAccessibilityAndroid::HasNonEmptyValue() const {
-  return IsTextField() && !GetValue().empty();
+  return IsTextField() && !GetValueForControl().empty();
 }
 
 bool BrowserAccessibilityAndroid::HasCharacterLocations() const {
@@ -1801,7 +1939,7 @@ bool BrowserAccessibilityAndroid::HasOnlyTextChildren() const {
   // This is called from IsLeaf, so don't call PlatformChildCount
   // from within this!
   for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd(); ++it) {
-    if (!it->IsTextOnlyObject())
+    if (!it->IsText())
       return false;
   }
   return true;
@@ -1812,8 +1950,7 @@ bool BrowserAccessibilityAndroid::HasOnlyTextAndImageChildren() const {
   // from within this!
   for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd(); ++it) {
     BrowserAccessibility* child = it.get();
-    if (child->GetRole() != ax::mojom::Role::kStaticText &&
-        !ui::IsImageOrVideo(child->GetRole())) {
+    if (!child->IsText() && !ui::IsImageOrVideo(child->GetRole())) {
       return false;
     }
   }
@@ -1830,18 +1967,22 @@ bool BrowserAccessibilityAndroid::ShouldExposeValueAsName() const {
     case ax::mojom::Role::kDate:
     case ax::mojom::Role::kDateTime:
       return true;
+    case ax::mojom::Role::kColorWell:
+      return false;
     default:
       break;
   }
 
+  if (GetData().IsRangeValueSupported())
+    return false;
+
   if (IsTextField())
     return true;
 
-  if (GetValue().empty())
-    return false;
-
-  if (GetRole() == ax::mojom::Role::kPopUpButton)
+  if (GetRole() == ax::mojom::Role::kPopUpButton &&
+      !GetValueForControl().empty()) {
     return true;
+  }
 
   return false;
 }
@@ -1850,7 +1991,7 @@ void BrowserAccessibilityAndroid::OnDataChanged() {
   BrowserAccessibility::OnDataChanged();
 
   if (IsTextField()) {
-    base::string16 value = GetValue();
+    base::string16 value = GetValueForControl();
     if (value != new_value_) {
       old_value_ = new_value_;
       new_value_ = value;
@@ -1906,10 +2047,6 @@ base::string16 BrowserAccessibilityAndroid::GetContentInvalidErrorMessage()
     return content_client->GetLocalizedString(message_id);
 
   return base::string16();
-}
-
-void BrowserAccessibilityAndroid::ResetContentInvalidTimer() {
-  content_invalid_timer_ = base::ElapsedTimer();
 }
 
 }  // namespace content

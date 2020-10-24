@@ -7,6 +7,9 @@
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/metrics/field_trial_params.h"
+#include "base/sequenced_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "components/viz/common/features.h"
@@ -20,7 +23,10 @@
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_surface.h"
 
 namespace gpu {
 
@@ -29,49 +35,75 @@ namespace gpu {
 const base::Feature kGPUMemoryAblationFeature{
     "GPUMemoryAblation", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// TODO(jonross): Replace these feature flags with Field Trial Param lookup.
-const base::Feature kGPUMemoryAblationGPUSmall{
-    "GPUMemoryAblationGPUSmall", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kGPUMemoryAblationGPUMedium{
-    "GPUMemoryAblationGPUMedium", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kGPUMemoryAblationGPULarge{
-    "GPUMemoryAblationGPULarge", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// The size to use when allocating images. The sizes vary based on the chosen
-// experiment.
-constexpr gfx::Size kSmallSize(256, 256);
-constexpr gfx::Size kMediumSize(256 * 4, 256 * 4);
-constexpr gfx::Size kLargeSize(256 * 8, 256 * 8);
+// Field Trial Parameter that defines the size of memory allocations.
+const char kGPUMemoryAblationFeatureSizeParam[] = "Size";
 
 // Image allocation parameters.
 constexpr viz::ResourceFormat kFormat = viz::ResourceFormat::RGBA_8888;
 constexpr uint32_t kUsage = SHARED_IMAGE_USAGE_DISPLAY;
 
-GpuMemoryAblationExperiment::GpuMemoryAblationExperiment(
-    GpuChannelManager* channel_manager)
-    : enabled_(base::FeatureList::IsEnabled(kGPUMemoryAblationFeature)),
-      channel_manager_(channel_manager) {}
+bool GpuMemoryAblationExperiment::ExperimentSupported() {
+  if (!base::FeatureList::IsEnabled(kGPUMemoryAblationFeature))
+    return false;
+  gl::GLImplementation gl_impl = gl::GetGLImplementation();
+  // Mock and Stub implementations are used in tests. It is not possible to
+  // create a valid GrContext with these. A disabled implementation is used by
+  // the GPU Info Collection Process. This also has no graphical output
+  // possible.
+  if (gl_impl == gl::kGLImplementationNone ||
+      gl_impl == gl::kGLImplementationMockGL ||
+      gl_impl == gl::kGLImplementationStubGL ||
+      gl_impl == gl::kGLImplementationDisabled) {
+    return false;
+  }
+  return true;
+}
 
-GpuMemoryAblationExperiment::~GpuMemoryAblationExperiment() = default;
+GpuMemoryAblationExperiment::GpuMemoryAblationExperiment(
+    GpuChannelManager* channel_manager,
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
+    : channel_manager_(channel_manager), task_runner_(task_runner) {
+  if (!GpuMemoryAblationExperiment::ExperimentSupported())
+    init_status_ = Status::DISABLED;
+}
+
+GpuMemoryAblationExperiment::~GpuMemoryAblationExperiment() {
+  // Some unittests don't properly clean up. Clean up our allocations if
+  // necessary.
+  if (mailboxes_.empty())
+    return;
+  bool have_context = context_state_->MakeCurrent(context_state_->surface());
+  factory_->DestroyAllSharedImages(have_context);
+}
 
 void GpuMemoryAblationExperiment::OnMemoryAllocated(uint64_t old_size,
                                                     uint64_t new_size) {
-  if (!enabled_)
+  if (init_status_ == Status::DISABLED) {
     return;
-  if (!init_) {
-    InitGpu(channel_manager_);
+  } else if (init_status_ == Status::UNINITIALIZED) {
+    if (InitGpu(channel_manager_)) {
+      init_status_ = Status::ENABLED;
+    } else {
+      init_status_ = Status::DISABLED;
+      context_state_ = nullptr;
+      return;
+    }
   }
   // TODO(jonross): Investigate why there are 0 size allocations.
   if (new_size > old_size) {
     // TODO(jonross): Impl CPU ablation
-    if (gpu_enabled_)
-      AllocateGpuMemory();
+    AllocateGpuMemory();
   } else if (old_size > new_size) {
     // TODO(jonross): Impl CPU ablation
-    if (gpu_enabled_ && !mailboxes_.empty()) {
-      DeleteGpuMemory();
+    if (!mailboxes_.empty()) {
+      // We need to perform this as a PostTask. Though the delete calls are
+      // similarly nested to the allocations, attempting to restore the
+      // previous context will attempt to restore bindings or surfaces which
+      // were in the process of being deleted. (https://crbug.com/1106926)
+      task_runner_->PostTask(
+          FROM_HERE,
+          base::BindOnce(&GpuMemoryAblationExperiment::DeleteGpuMemory,
+                         weak_factory_.GetWeakPtr()));
     }
   }
 }
@@ -105,15 +137,18 @@ void GpuMemoryAblationExperiment::StopSequence(uint32_t sequence_num) {
 void GpuMemoryAblationExperiment::AllocateGpuMemory() {
   // We can't successfully create an image without a context, so do not even
   // perform the initial allocations.
-  if (!MakeContextCurrent())
+  std::unique_ptr<ui::ScopedMakeCurrent> scoped_current =
+      ScopedMakeContextCurrent();
+  if (!scoped_current)
     return;
   base::Time start = base::Time::Now();
 
   auto mailbox = Mailbox::GenerateForSharedImage();
   auto color_space = gfx::ColorSpace::CreateSRGB();
 
-  if (!factory_->CreateSharedImage(mailbox, kFormat, size_, color_space,
-                                   gpu::kNullSurfaceHandle, kUsage)) {
+  if (!factory_->CreateSharedImage(
+          mailbox, kFormat, size_, color_space, kTopLeft_GrSurfaceOrigin,
+          kPremul_SkAlphaType, gpu::kNullSurfaceHandle, kUsage)) {
     return;
   }
 
@@ -145,7 +180,13 @@ void GpuMemoryAblationExperiment::DeleteGpuMemory() {
   auto mailbox = mailboxes_.front();
   // We can't successfully destroy the image if we cannot get the context,
   // however we still need to cleanup our internal state.
-  if (MakeContextCurrent())
+  //
+  // Unlike in initialization and allocating memory, we cannot use an
+  // ui::ScopedMakeCurrent here. Though we use a PostTask to separate the
+  // delete calls from the nesting, attempting to restore the previous context
+  // will attempt to restore bindings or surfaces which were in the process of
+  // being deleted. (https://crbug.com/1106926)
+  if (context_state_->MakeCurrent(nullptr))
     factory_->DestroySharedImage(mailbox);
 
   mailboxes_.erase(mailboxes_.begin());
@@ -155,26 +196,26 @@ void GpuMemoryAblationExperiment::DeleteGpuMemory() {
     it.second.deallocs_ += delta;
 }
 
-void GpuMemoryAblationExperiment::InitGpu(GpuChannelManager* channel_manager) {
-  // GPU Info Collection Process can be created, with no graphical output
-  // possible. Don't init there, as all future image operations will fail.
-  if (gl::GetGLImplementation() == gl::kGLImplementationDisabled)
-    return;
-
-  if (base::FeatureList::IsEnabled(kGPUMemoryAblationGPUSmall)) {
-    size_ = kSmallSize;
-  } else if (base::FeatureList::IsEnabled(kGPUMemoryAblationGPUMedium)) {
-    size_ = kMediumSize;
-  } else if (base::FeatureList::IsEnabled(kGPUMemoryAblationGPULarge)) {
-    size_ = kLargeSize;
-  }
-
+bool GpuMemoryAblationExperiment::InitGpu(GpuChannelManager* channel_manager) {
   ContextResult result;
   context_state_ = channel_manager->GetSharedContextState(&result);
-  if (result != ContextResult::kSuccess || !MakeContextCurrent()) {
-    context_state_ = nullptr;
-    return;
-  }
+  if (result != ContextResult::kSuccess)
+    return false;
+
+  const int default_value = 0;
+  int arg_value = base::GetFieldTrialParamByFeatureAsInt(
+      kGPUMemoryAblationFeature, kGPUMemoryAblationFeatureSizeParam,
+      default_value);
+  if (arg_value == default_value)
+    return false;
+  int texture_size =
+      std::min(256 * arg_value, context_state_->gr_context()->maxTextureSize());
+  size_ = gfx::Size(texture_size, texture_size);
+
+  std::unique_ptr<ui::ScopedMakeCurrent> scoped_current =
+      ScopedMakeContextCurrent();
+  if (!scoped_current)
+    return false;
 
   gpu::GpuMemoryBufferFactory* gmb_factory =
       channel_manager->gpu_memory_buffer_factory();
@@ -189,12 +230,17 @@ void GpuMemoryAblationExperiment::InitGpu(GpuChannelManager* channel_manager) {
 
   rep_factory_ = std::make_unique<SharedImageRepresentationFactory>(
       channel_manager->shared_image_manager(), this);
-  gpu_enabled_ = true;
-  init_ = true;
+  return true;
 }
 
-bool GpuMemoryAblationExperiment::MakeContextCurrent() {
-  return context_state_->MakeCurrent(nullptr);
+std::unique_ptr<ui::ScopedMakeCurrent>
+GpuMemoryAblationExperiment::ScopedMakeContextCurrent() {
+  std::unique_ptr<ui::ScopedMakeCurrent> scoped_current =
+      std::make_unique<ui::ScopedMakeCurrent>(context_state_->context(),
+                                              context_state_->surface());
+  if (!context_state_->IsCurrent(context_state_->surface()))
+    return nullptr;
+  return scoped_current;
 }
 
 // MemoryTracker:

@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/chrome/common/importer/interfaces.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/components/autofill/core/common/mojom/mojo_types.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/utility/importer/firefox_importer_unittest_utils_mac.mojom"
+  ]
+}

@@ -7,78 +7,123 @@
 #import <Foundation/Foundation.h>
 #include <xpc/xpc.h>
 
+#include "base/bind.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/post_task.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/updater/app/app.h"
+#include "chrome/updater/app/app_server.h"
+#import "chrome/updater/app/server/mac/app_server.h"
 #include "chrome/updater/app/server/mac/service_delegate.h"
-#import "chrome/updater/configurator.h"
-#import "chrome/updater/mac/setup/info_plist.h"
+#include "chrome/updater/configurator.h"
+#include "chrome/updater/constants.h"
+#include "chrome/updater/control_service.h"
+#include "chrome/updater/mac/setup/setup.h"
 #import "chrome/updater/mac/xpc_service_names.h"
 #include "chrome/updater/prefs.h"
-#include "chrome/updater/update_service_in_process.h"
+#include "chrome/updater/update_service.h"
 
 namespace updater {
 
-class AppServer : public App {
- public:
-  AppServer();
+AppServerMac::AppServerMac()
+    : main_task_runner_(base::SequencedTaskRunnerHandle::Get()) {}
+AppServerMac::~AppServerMac() = default;
 
- private:
-  ~AppServer() override;
-  void Initialize() override;
-  void FirstTaskRun() override;
+void AppServerMac::Uninitialize() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // These delegates need to have a reference to the AppServer. To break the
+  // circular reference, we need to reset them.
+  update_check_delegate_.reset();
+  control_service_delegate_.reset();
 
-  scoped_refptr<Configurator> config_;
-  base::scoped_nsobject<CRUUpdateCheckXPCServiceDelegate>
-      update_check_delegate_;
-  base::scoped_nsobject<NSXPCListener> update_check_listener_;
-  base::scoped_nsobject<CRUAdministrationXPCServiceDelegate>
-      administration_delegate_;
-  base::scoped_nsobject<NSXPCListener> administration_listener_;
-};
-
-AppServer::AppServer() = default;
-AppServer::~AppServer() = default;
-
-void AppServer::Initialize() {
-  config_ = base::MakeRefCounted<Configurator>(CreateGlobalPrefs());
+  AppServer::Uninitialize();
 }
 
-void AppServer::FirstTaskRun() {
-  @autoreleasepool {
-    // Sets up a listener and delegate for the CRUUpdateChecking XPC connection
-    update_check_delegate_.reset([[CRUUpdateCheckXPCServiceDelegate alloc]
-        initWithUpdateService:base::MakeRefCounted<UpdateServiceInProcess>(
-                                  config_)]);
+void AppServerMac::ActiveDuty(scoped_refptr<UpdateService> update_service,
+                              scoped_refptr<ControlService> control_service) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (!command_line.HasSwitch(kServerServiceSwitch)) {
+    LOG(ERROR) << "Command line is missing " << kServerServiceSwitch
+               << " switch.";
+    return;
+  }
+  std::string service = command_line.GetSwitchValueASCII(kServerServiceSwitch);
 
-    update_check_listener_.reset([[NSXPCListener alloc]
-        initWithMachServiceName:GetGoogleUpdateServiceMachName().get()]);
-    update_check_listener_.get().delegate = update_check_delegate_.get();
+  if (service == kServerControlServiceSwitchValue) {
+    @autoreleasepool {
+      // Sets up a listener and delegate for the CRUControlling XPC connection.
+      control_service_delegate_.reset([[CRUControlServiceXPCDelegate alloc]
+          initWithControlService:control_service
+                       appServer:scoped_refptr<AppServerMac>(this)]);
 
-    [update_check_listener_ resume];
+      control_service_listener_.reset([[NSXPCListener alloc]
+          initWithMachServiceName:GetVersionedServiceMachName().get()]);
+      control_service_listener_.get().delegate =
+          control_service_delegate_.get();
 
-    // Sets up a listener and delegate for the CRUAdministering XPC connection
-    const std::unique_ptr<InfoPlist> info_plist =
-        InfoPlist::Create(InfoPlistPath());
-    CHECK(info_plist);
-    administration_delegate_.reset([[CRUAdministrationXPCServiceDelegate alloc]
-        initWithUpdateService:base::MakeRefCounted<UpdateServiceInProcess>(
-                                  config_)]);
+      [control_service_listener_ resume];
+    }
+  } else if (service == kServerUpdateServiceSwitchValue) {
+    @autoreleasepool {
+      // Sets up a listener and delegate for the CRUUpdateChecking XPC
+      // connection.
+      update_check_delegate_.reset([[CRUUpdateCheckServiceXPCDelegate alloc]
+          initWithUpdateService:update_service
+                      appServer:scoped_refptr<AppServerMac>(this)]);
 
-    administration_listener_.reset([[NSXPCListener alloc]
-        initWithMachServiceName:
-            base::mac::CFToNSCast(
-                info_plist->GoogleUpdateServiceLaunchdNameVersioned().get())]);
-    administration_listener_.get().delegate = administration_delegate_.get();
+      update_check_listener_.reset([[NSXPCListener alloc]
+          initWithMachServiceName:GetServiceMachName().get()]);
+      update_check_listener_.get().delegate = update_check_delegate_.get();
 
-    [administration_listener_ resume];
+      [update_check_listener_ resume];
+    }
+  } else {
+    LOG(ERROR) << "Unexpected value of command line switch "
+               << kServerServiceSwitch << ": " << service;
+    return;
+  }
+}
+
+void AppServerMac::UninstallSelf() {
+  UninstallCandidate();
+}
+
+bool AppServerMac::SwapRPCInterfaces() {
+  return PromoteCandidate() == setup_exit_codes::kSuccess;
+}
+
+void AppServerMac::TaskStarted() {
+  main_task_runner_->PostTask(FROM_HERE,
+                              BindOnce(&AppServerMac::MarkTaskStarted, this));
+}
+
+void AppServerMac::MarkTaskStarted() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  ++tasks_running_;
+}
+
+void AppServerMac::TaskCompleted() {
+  main_task_runner_->PostDelayedTask(
+      FROM_HERE, base::BindOnce(&AppServerMac::AcknowledgeTaskCompletion, this),
+      base::TimeDelta::FromSeconds(10));
+}
+
+void AppServerMac::AcknowledgeTaskCompletion() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (--tasks_running_ < 1) {
+    main_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&AppServerMac::Shutdown, this, 0));
   }
 }
 
 scoped_refptr<App> MakeAppServer() {
-  return base::MakeRefCounted<AppServer>();
+  return base::MakeRefCounted<AppServerMac>();
 }
 
 }  // namespace updater

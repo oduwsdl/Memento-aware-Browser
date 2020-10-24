@@ -30,6 +30,7 @@
 #include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_util.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_media_view_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
@@ -213,7 +214,7 @@ void RecordDownloadsDiskUsageStats(base::FilePath downloads_path) {
     int percentage_space_used = std::lround(
         (download_directory_size_in_bytes * 100.0) / total_disk_space_in_bytes);
 
-    base::UmaHistogramPercentage(
+    base::UmaHistogramPercentageObsoleteDoNotUse(
         "FileBrowser.Downloads.DirectoryPercentageOfDiskUsage",
         percentage_space_used);
   }
@@ -371,13 +372,15 @@ std::unique_ptr<Volume> Volume::CreateForMediaView(
 
 // static
 std::unique_ptr<Volume> Volume::CreateForSshfsCrostini(
-    const base::FilePath& sshfs_mount_path) {
+    const base::FilePath& sshfs_mount_path,
+    const base::FilePath& remote_mount_path) {
   std::unique_ptr<Volume> volume(new Volume());
   volume->type_ = VOLUME_TYPE_CROSTINI;
   volume->device_type_ = chromeos::DEVICE_TYPE_UNKNOWN;
   // Keep source_path empty.
   volume->source_ = SOURCE_SYSTEM;
   volume->mount_path_ = sshfs_mount_path;
+  volume->remote_mount_path_ = remote_mount_path;
   volume->mount_condition_ = chromeos::disks::MOUNT_CONDITION_NONE;
   volume->volume_id_ = GenerateVolumeId(*volume);
   volume->watchable_ = false;
@@ -664,10 +667,11 @@ base::WeakPtr<Volume> VolumeManager::FindVolumeById(
 }
 
 void VolumeManager::AddSshfsCrostiniVolume(
-    const base::FilePath& sshfs_mount_path) {
+    const base::FilePath& sshfs_mount_path,
+    const base::FilePath& remote_mount_path) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   std::unique_ptr<Volume> volume =
-      Volume::CreateForSshfsCrostini(sshfs_mount_path);
+      Volume::CreateForSshfsCrostini(sshfs_mount_path, remote_mount_path);
   // Ignore if volume already exists.
   if (mounted_volumes_.find(volume->volume_id()) != mounted_volumes_.end())
     return;
@@ -762,7 +766,7 @@ bool VolumeManager::RegisterCrostiniDirectoryForTesting(
           path);
   DoMountEvent(
       success ? chromeos::MOUNT_ERROR_NONE : chromeos::MOUNT_ERROR_INVALID_PATH,
-      Volume::CreateForSshfsCrostini(path));
+      Volume::CreateForSshfsCrostini(path, base::FilePath("/home/testuser")));
   return true;
 }
 
@@ -968,6 +972,45 @@ void VolumeManager::OnFormatEvent(
                                    error_code == chromeos::FORMAT_ERROR_NONE);
       }
 
+      return;
+  }
+  NOTREACHED();
+}
+
+void VolumeManager::OnPartitionEvent(
+    chromeos::disks::DiskMountManager::PartitionEvent event,
+    chromeos::PartitionError error_code,
+    const std::string& device_path,
+    const std::string& device_label) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DVLOG(1) << "OnPartitionEvent: " << event << ", " << error_code << ", "
+           << device_path;
+
+  switch (event) {
+    case chromeos::disks::DiskMountManager::PARTITION_STARTED:
+      for (auto& observer : observers_) {
+        observer.OnPartitionStarted(
+            device_path, device_label,
+            error_code == chromeos::PARTITION_ERROR_NONE);
+      }
+      return;
+    case chromeos::disks::DiskMountManager::PARTITION_COMPLETED:
+      // If partitioning failed, try to mount the device so the user can retry.
+      // MountPath auto-detects filesystem format if second argument is
+      // empty. The third argument (mount label) is not used in a disk mount
+      // operation.
+      if (error_code != chromeos::PARTITION_ERROR_NONE) {
+        disk_mount_manager_->MountPath(device_path, std::string(),
+                                       std::string(), {},
+                                       chromeos::MOUNT_TYPE_DEVICE,
+                                       GetExternalStorageAccessMode(profile_));
+      }
+
+      for (auto& observer : observers_) {
+        observer.OnPartitionCompleted(
+            device_path, device_label,
+            error_code == chromeos::PARTITION_ERROR_NONE);
+      }
       return;
   }
   NOTREACHED();
@@ -1438,8 +1481,9 @@ void VolumeManager::OnSshfsCrostiniUnmountCallback(
       (error_code == chromeos::MOUNT_ERROR_PATH_NOT_MOUNTED)) {
     // Remove metadata associated with the mount. It will be a no-op if it
     // wasn't mounted or unmounted out of band.
-    DoUnmountEvent(chromeos::MOUNT_ERROR_NONE,
-                   *Volume::CreateForSshfsCrostini(sshfs_mount_path));
+    DoUnmountEvent(
+        chromeos::MOUNT_ERROR_NONE,
+        *Volume::CreateForSshfsCrostini(sshfs_mount_path, base::FilePath()));
     if (callback)
       std::move(callback).Run(true);
     return;

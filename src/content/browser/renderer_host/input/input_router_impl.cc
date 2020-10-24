@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/input/gesture_event_queue.h"
 #include "content/browser/renderer_host/input/input_disposition_handler.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
@@ -28,6 +29,7 @@
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-shared.h"
+#include "third_party/blink/public/mojom/input/touch_event.mojom.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/blink/blink_features.h"
 #include "ui/events/blink/web_input_event_traits.h"
@@ -87,7 +89,7 @@ InputRouterImpl::InputRouterImpl(
     const Config& config)
     : client_(client),
       disposition_handler_(disposition_handler),
-      frame_tree_node_id_(-1),
+      frame_tree_node_id_(FrameTreeNode::kFrameTreeNodeInvalidId),
       touch_scroll_started_sent_(false),
       wheel_event_queue_(this),
       touch_event_queue_(this, config.touch_config),
@@ -200,7 +202,6 @@ void InputRouterImpl::SendGestureEventWithoutQueueing(
       touch_scroll_started_sent_ = true;
       touch_event_queue_.PrependTouchScrollNotification();
     }
-    touch_event_queue_.OnGestureScrollEvent(gesture_event);
   }
 
   if (gesture_event.event.IsTouchpadZoomEvent() &&
@@ -286,12 +287,12 @@ void InputRouterImpl::SetTouchActionFromMain(cc::TouchAction touch_action) {
   UpdateTouchAckTimeoutEnabled();
 }
 
-void InputRouterImpl::OnSetWhiteListedTouchAction(
+void InputRouterImpl::OnSetCompositorAllowedTouchAction(
     cc::TouchAction touch_action) {
-  TRACE_EVENT1("input", "InputRouterImpl::OnSetWhiteListedTouchAction",
+  TRACE_EVENT1("input", "InputRouterImpl::OnSetCompositorAllowedTouchAction",
                "action", cc::TouchActionToString(touch_action));
-  touch_action_filter_.OnSetWhiteListedTouchAction(touch_action);
-  client_->OnSetWhiteListedTouchAction(touch_action);
+  touch_action_filter_.OnSetCompositorAllowedTouchAction(touch_action);
+  client_->OnSetCompositorAllowedTouchAction(touch_action);
   if (touch_action == cc::TouchAction::kAuto)
     FlushDeferredGestureQueue();
   UpdateTouchAckTimeoutEnabled();
@@ -328,10 +329,9 @@ void InputRouterImpl::SetMouseCapture(bool capture) {
 }
 
 void InputRouterImpl::RequestMouseLock(bool from_user_gesture,
-                                       bool privileged,
                                        bool unadjusted_movement,
                                        RequestMouseLockCallback response) {
-  client_->RequestMouseLock(from_user_gesture, privileged, unadjusted_movement,
+  client_->RequestMouseLock(from_user_gesture, unadjusted_movement,
                             std::move(response));
 }
 
@@ -639,12 +639,9 @@ void InputRouterImpl::TouchEventHandled(
   // send it in the input event ack to ensure it is available at the
   // time the ACK is handled.
   if (touch_action) {
+    // For main thread ACKs, Blink will directly call SetTouchActionFromMain.
     if (source == blink::mojom::InputEventResultSource::kCompositorThread)
-      OnSetWhiteListedTouchAction(touch_action->touch_action);
-    else if (source == blink::mojom::InputEventResultSource::kMainThread)
-      OnSetTouchAction(touch_action->touch_action);
-    else
-      NOTREACHED();
+      OnSetCompositorAllowedTouchAction(touch_action->touch_action);
   }
 
   // TODO(crbug.com/953547): find a proper way to stop the timeout monitor.
@@ -700,12 +697,16 @@ void InputRouterImpl::MouseWheelEventHandled(
   std::move(callback).Run(event, source, state);
 }
 
-void InputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
+void InputRouterImpl::OnHasTouchEventConsumers(
+    blink::mojom::TouchEventConsumersPtr consumers) {
   TRACE_EVENT1("input", "InputRouterImpl::OnHasTouchEventHandlers",
-               "has_handlers", has_handlers);
+               "has_handlers", consumers->has_touch_event_handlers);
 
-  touch_action_filter_.OnHasTouchEventHandlers(has_handlers);
-  touch_event_queue_.OnHasTouchEventHandlers(has_handlers);
+  touch_action_filter_.OnHasTouchEventHandlers(
+      consumers->has_touch_event_handlers);
+  touch_event_queue_.OnHasTouchEventHandlers(
+      consumers->has_touch_event_handlers ||
+      consumers->has_hit_testable_scrollbar);
 }
 
 void InputRouterImpl::WaitForInputProcessed(base::OnceClosure callback) {
@@ -736,37 +737,18 @@ bool InputRouterImpl::IsFlingActiveForTest() {
   return gesture_event_queue_.IsFlingActiveForTest();
 }
 
-void InputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
-  TRACE_EVENT1("input", "InputRouterImpl::OnSetTouchAction", "action",
-               cc::TouchActionToString(touch_action));
-
-  // It is possible we get a touch action for a touch start that is no longer
-  // in the queue. eg. Events that have fired the Touch ACK timeout.
-  if (!touch_event_queue_.IsPendingAckTouchStart())
-    return;
-
-  touch_action_filter_.AppendToGestureSequenceForDebugging("S");
-  touch_action_filter_.AppendToGestureSequenceForDebugging(
-      base::NumberToString(static_cast<int>(touch_action)).c_str());
-  touch_action_filter_.OnSetTouchAction(touch_action);
-  touch_event_queue_.StopTimeoutMonitor();
-
-  // TouchAction::kNone should disable the touch ack timeout.
-  UpdateTouchAckTimeoutEnabled();
-}
-
 void InputRouterImpl::UpdateTouchAckTimeoutEnabled() {
   // TouchAction::kNone will prevent scrolling, in which case the timeout serves
   // little purpose. It's also a strong signal that touch handling is critical
   // to page functionality, so the timeout could do more harm than good.
   base::Optional<cc::TouchAction> allowed_touch_action =
       touch_action_filter_.allowed_touch_action();
-  cc::TouchAction white_listed_touch_action =
-      touch_action_filter_.white_listed_touch_action();
+  cc::TouchAction compositor_allowed_touch_action =
+      touch_action_filter_.compositor_allowed_touch_action();
   const bool touch_ack_timeout_disabled =
       (allowed_touch_action.has_value() &&
        allowed_touch_action.value() == cc::TouchAction::kNone) ||
-      (white_listed_touch_action == cc::TouchAction::kNone);
+      (compositor_allowed_touch_action == cc::TouchAction::kNone);
   touch_event_queue_.SetAckTimeoutEnabled(!touch_ack_timeout_disabled);
 }
 

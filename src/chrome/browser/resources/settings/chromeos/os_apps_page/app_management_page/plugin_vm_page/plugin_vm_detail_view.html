@@ -8,6 +8,7 @@
 <link rel="import" href="../store_client.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="plugin_vm_permission_dialog.html">
 
 <dom-module id="app-management-plugin-vm-detail-view">
   <template>
@@ -27,16 +28,20 @@
         <div class="permission-list indented-permission-block">
           <template is="dom-if" if="[[showCameraPermissions_]]">
             <app-management-permission-item
+                id="camera-permission"
                 class="subpermission-row" icon="app-management:camera"
                 permission-label="$i18n{appManagementCameraPermissionLabel}"
-                permission-type="CAMERA">
+                permission-type="CAMERA"
+                on-change="onPermissionChanged_">
             </app-management-permission-item>
           </template>
           <template is="dom-if" if="[[showMicrophonePermissions_]]">
             <app-management-permission-item
+                id="microphone-permission"
                 class="subpermission-row" icon="app-management:microphone"
                 permission-label="$i18n{appManagementMicrophonePermissionLabel}"
-                permission-type="MICROPHONE">
+                permission-type="MICROPHONE"
+                on-change="onPermissionChanged_">
             </app-management-permission-item>
           </template>
           <app-management-permission-item
@@ -49,16 +54,35 @@
 
       <div class="permission-card-row separated-row header-text clickable"
           on-click="onSharedPathsClick_">
-        <div id="label" class="header-text" aria-hidden="true">
+        <div id="sharedPathsLabel" class="header-text" aria-hidden="true">
           $i18n{pluginVmSharedPaths}
         </div>
         <div class="permission-row-controls">
           <cr-icon-button class="subpage-arrow app-management-item-arrow"
-            role="link" tabindex="0" aria-labelledby="label">
+              role="link" tabindex="0" aria-labelledby="sharedPathsLabel">
+          </cr-icon-button>
+        </div>
+      </div>
+      <div class="permission-card-row separated-row header-text clickable"
+          on-click="onSharedUsbDevicesClick_">
+        <div id="sharedUsbDevicesLabel" class="header-text" aria-hidden="true">
+          $i18n{pluginVmSharedUsbDevicesLabel}
+        </div>
+        <div class="permission-row-controls">
+          <cr-icon-button class="subpage-arrow app-management-item-arrow"
+              role="link" tabindex="0" aria-labelledby="sharedUsbDevicesLabel">
           </cr-icon-button>
         </div>
       </div>
     </div>
+
+    <template is="dom-if" if="[[showPluginVmPermissionDialog_]]" restamp>
+      <app-management-plugin-vm-permission-dialog
+          on-close="onPluginVmPermissionDialogClose_"
+          pending-permission-change="[[pendingPermissionChange_]]"
+          reset-permission-change="{{resetPermissionChange}}">
+      </app-management-plugin-vm-permission-dialog>
+    </template>
   </template>
   <script src="plugin_vm_detail_view.js"></script>
 </dom-module>

@@ -4,15 +4,15 @@
 
 #include "chrome/browser/ui/views/media_router/cast_toolbar_button.h"
 
-#include "chrome/browser/media/router/media_router.h"
-#include "chrome/browser/media/router/media_router_dialog_controller.h"
-#include "chrome/browser/media/router/media_router_factory.h"
-#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/media_router/media_router_ui_service.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/media_router/browser/media_router.h"
+#include "components/media_router/browser/media_router_dialog_controller.h"
+#include "components/media_router/browser/media_router_factory.h"
+#include "components/media_router/browser/media_router_metrics.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/menu_model.h"
@@ -46,7 +46,8 @@ CastToolbarButton::CastToolbarButton(
     Browser* browser,
     MediaRouter* media_router,
     std::unique_ptr<MediaRouterContextualMenu> context_menu)
-    : ToolbarButton(this,
+    : ToolbarButton(base::BindRepeating(&CastToolbarButton::ButtonPressed,
+                                        base::Unretained(this)),
                     context_menu->CreateMenuModel(),
                     /** tab_strip_model*/ nullptr,
                     /** trigger_menu_on_long_press */ false),
@@ -58,10 +59,9 @@ CastToolbarButton::CastToolbarButton(
   button_controller()->set_notify_action(
       views::ButtonController::NotifyAction::kOnPress);
 
-  EnableCanvasFlippingForRTLUI(false);
+  SetFlipCanvasOnPaintForRTLUI(false);
   SetTooltipText(l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_ICON_TOOLTIP_TEXT));
 
-  ToolbarButton::Init();
   IssuesObserver::Init();
 
   DCHECK(GetActionController());
@@ -72,24 +72,6 @@ CastToolbarButton::CastToolbarButton(
 CastToolbarButton::~CastToolbarButton() {
   if (GetActionController())
     GetActionController()->RemoveObserver(this);
-}
-
-const gfx::VectorIcon& CastToolbarButton::GetCurrentIcon() const {
-  // Highest priority is to indicate whether there's an issue.
-  if (current_issue_) {
-    media_router::IssueInfo::Severity severity = current_issue_->severity;
-    switch (severity) {
-      case media_router::IssueInfo::Severity::FATAL:
-        return ::vector_icons::kMediaRouterErrorIcon;
-      case media_router::IssueInfo::Severity::WARNING:
-        return ::vector_icons::kMediaRouterWarningIcon;
-      case media_router::IssueInfo::Severity::NOTIFICATION:
-        // There is no icon specific to notification issues.
-        break;
-    }
-  }
-  return has_local_display_route_ ? ::vector_icons::kMediaRouterActiveIcon
-                                  : ::vector_icons::kMediaRouterIdleIcon;
 }
 
 void CastToolbarButton::ShowIcon() {
@@ -159,8 +141,46 @@ void CastToolbarButton::OnGestureEvent(ui::GestureEvent* event) {
   ToolbarButton::OnGestureEvent(event);
 }
 
-void CastToolbarButton::ButtonPressed(views::Button* sender,
-                                      const ui::Event& event) {
+void CastToolbarButton::UpdateIcon() {
+  using Severity = media_router::IssueInfo::Severity;
+  const auto severity =
+      current_issue_ ? current_issue_->severity : Severity::NOTIFICATION;
+  if (severity == Severity::NOTIFICATION && !has_local_display_route_) {
+    UpdateIconsWithStandardColors(vector_icons::kMediaRouterIdleIcon);
+    UpdateLayoutInsetDelta();
+    return;
+  }
+
+  const gfx::VectorIcon* icon = &vector_icons::kMediaRouterActiveIcon;
+  SkColor icon_color = gfx::kGoogleBlue500;
+  // Highest priority is to indicate whether there's an issue.
+  if (severity == Severity::FATAL) {
+    icon = &vector_icons::kMediaRouterErrorIcon;
+    icon_color = GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_AlertSeverityHigh);
+  } else if (severity == Severity::WARNING) {
+    icon = &vector_icons::kMediaRouterWarningIcon;
+    icon_color = GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_AlertSeverityMedium);
+  }
+
+  for (auto state : kButtonStates)
+    SetImageModel(state, ui::ImageModel::FromVectorIcon(*icon, icon_color));
+  UpdateLayoutInsetDelta();
+}
+
+MediaRouterActionController* CastToolbarButton::GetActionController() const {
+  return MediaRouterUIService::Get(profile_)->action_controller();
+}
+
+void CastToolbarButton::UpdateLayoutInsetDelta() {
+  // This icon is smaller than the touchable-UI expected 24dp, so we need to pad
+  // the insets to match.
+  SetLayoutInsetDelta(
+      gfx::Insets(ui::TouchUiController::Get()->touch_ui() ? 4 : 0));
+}
+
+void CastToolbarButton::ButtonPressed() {
   MediaRouterDialogController* dialog_controller =
       MediaRouterDialogController::GetOrCreateForWebContents(
           browser_->tab_strip_model()->GetActiveWebContents());
@@ -172,46 +192,6 @@ void CastToolbarButton::ButtonPressed(views::Button* sender,
     MediaRouterMetrics::RecordMediaRouterDialogOrigin(
         MediaRouterDialogOpenOrigin::TOOLBAR);
   }
-}
-
-void CastToolbarButton::AddedToWidget() {
-  ToolbarButton::AddedToWidget();
-  UpdateIcon();
-}
-
-void CastToolbarButton::UpdateIcon() {
-  // If widget isn't set, the button doesn't have access to the theme provider
-  // to set colors. Defer updating until AddedToWidget()
-  if (!GetWidget())
-    return;
-  const gfx::VectorIcon& icon = GetCurrentIcon();
-  UpdateIconsWithColors(icon, GetIconColor(views::Button::STATE_NORMAL, &icon),
-                        GetIconColor(views::Button::STATE_HOVERED, &icon),
-                        GetIconColor(views::Button::STATE_PRESSED, &icon),
-                        GetIconColor(views::Button::STATE_DISABLED, &icon));
-  // This icon is smaller than the touchable-UI expected 24dp, so we need to pad
-  // the insets to match.
-  SetLayoutInsetDelta(
-      gfx::Insets(ui::TouchUiController::Get()->touch_ui() ? 4 : 0));
-}
-
-MediaRouterActionController* CastToolbarButton::GetActionController() const {
-  return MediaRouterUIService::Get(profile_)->action_controller();
-}
-
-SkColor CastToolbarButton::GetIconColor(ButtonState state,
-                                        const gfx::VectorIcon* icon_id) const {
-  if (icon_id == &::vector_icons::kMediaRouterIdleIcon)
-    return GetForegroundColor(state);
-  if (icon_id == &::vector_icons::kMediaRouterActiveIcon)
-    return gfx::kGoogleBlue500;
-  if (icon_id == &::vector_icons::kMediaRouterWarningIcon) {
-    return GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_AlertSeverityMedium);
-  }
-  DCHECK(icon_id == &::vector_icons::kMediaRouterErrorIcon);
-  return GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_AlertSeverityHigh);
 }
 
 }  // namespace media_router

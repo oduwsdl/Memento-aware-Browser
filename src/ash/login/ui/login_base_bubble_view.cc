@@ -28,7 +28,7 @@ namespace {
 // Total width of the bubble view.
 constexpr int kBubbleTotalWidthDp = 192;
 
-// Margin around the bubble view.
+// Padding around the bubble view.
 constexpr int kBubblePaddingDp = 16;
 
 // Spacing between the child view inside the bubble view.
@@ -137,8 +137,7 @@ void LoginBaseBubbleView::EnsureLayer() {
   // Layer rendering is needed for animation.
   SetPaintToLayer();
   SkColor background_color = AshColorProvider::Get()->GetBaseLayerColor(
-      AshColorProvider::BaseLayerType::kTransparent80,
-      AshColorProvider::AshColorMode::kDark);
+      AshColorProvider::BaseLayerType::kTransparent80);
   layer()->SetBackgroundBlur(
       static_cast<float>(AshColorProvider::LayerBlurSigma::kBlurDefault));
   SetBackground(views::CreateRoundedRectBackground(background_color,

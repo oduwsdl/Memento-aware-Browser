@@ -33,10 +33,6 @@
 #include "components/zoom/zoom_observer.h"
 #endif
 
-namespace content {
-class WebContents;
-}
-
 namespace autofill {
 
 class AutofillPopupControllerImpl;
@@ -67,8 +63,10 @@ class ChromeAutofillClient
   ukm::UkmRecorder* GetUkmRecorder() override;
   ukm::SourceId GetUkmSourceId() override;
   AddressNormalizer* GetAddressNormalizer() override;
+  AutofillOfferManager* GetAutofillOfferManager() override;
+  const GURL& GetLastCommittedURL() override;
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
-  std::string GetPageLanguage() const override;
+  const translate::LanguageState* GetLanguageState() override;
   std::string GetVariationConfigCountryCode() const override;
   std::unique_ptr<InternalAuthenticator> CreateCreditCardInternalAuthenticator(
       content::RenderFrameHost* rfh) override;
@@ -79,8 +77,8 @@ class ChromeAutofillClient
                         base::WeakPtr<CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
 #if !defined(OS_ANDROID)
-  std::vector<std::string> GetMerchantWhitelistForVirtualCards() override;
-  std::vector<std::string> GetBinRangeWhitelistForVirtualCards() override;
+  std::vector<std::string> GetAllowedMerchantsForVirtualCards() override;
+  std::vector<std::string> GetAllowedBinRangesForVirtualCards() override;
   void ShowLocalCardMigrationDialog(
       base::OnceClosure show_migration_dialog_closure) override;
   void ConfirmMigrateLocalCardToCloud(
@@ -162,6 +160,7 @@ class ChromeAutofillClient
   base::WeakPtr<AutofillPopupControllerImpl> popup_controller_for_testing() {
     return popup_controller_;
   }
+  void KeepPopupOpenForTesting() { keep_popup_open_for_testing_ = true; }
 
 #if !defined(OS_ANDROID)
   // ZoomObserver implementation.
@@ -182,6 +181,9 @@ class ChromeAutofillClient
   base::WeakPtr<AutofillPopupControllerImpl> popup_controller_;
   CardUnmaskPromptControllerImpl unmask_controller_;
   std::unique_ptr<LogManager> log_manager_;
+  // If set to true, the popup will stay open regardless of external changes on
+  // the test machine, that may normally cause the popup to be hidden
+  bool keep_popup_open_for_testing_ = false;
 #if defined(OS_ANDROID)
   CardExpirationDateFixFlowControllerImpl
       card_expiration_date_fix_flow_controller_;

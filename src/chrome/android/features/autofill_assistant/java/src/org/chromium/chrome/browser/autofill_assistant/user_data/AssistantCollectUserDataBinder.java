@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.task.PostTask;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorDialog;
 import org.chromium.chrome.browser.autofill_assistant.generic_ui.AssistantValue;
 import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantAdditionalSection.Delegate;
@@ -20,10 +19,11 @@ import org.chromium.chrome.browser.payments.AddressEditor;
 import org.chromium.chrome.browser.payments.AutofillAddress;
 import org.chromium.chrome.browser.payments.AutofillContact;
 import org.chromium.chrome.browser.payments.AutofillPaymentInstrument;
-import org.chromium.chrome.browser.payments.BasicCardUtils;
 import org.chromium.chrome.browser.payments.CardEditor;
 import org.chromium.chrome.browser.payments.ContactEditor;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
+import org.chromium.components.payments.BasicCardUtils;
 import org.chromium.components.payments.MethodStrings;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
@@ -675,7 +675,7 @@ class AssistantCollectUserDataBinder
                 /*deleteRunnable =*/null, profile));
 
         CardEditor cardEditor = new CardEditor(webContents, addressEditor,
-                /* includeOrgLabel= */ false, /* observerForTest= */ null);
+                /* includeOrgLabel= */ false);
         List<String> supportedCardNetworks =
                 model.get(AssistantCollectUserDataModel.SUPPORTED_BASIC_CARD_NETWORKS);
         if (supportedCardNetworks != null) {

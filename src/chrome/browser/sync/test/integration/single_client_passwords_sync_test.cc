@@ -44,12 +44,21 @@ class SingleClientPasswordsSyncTest : public SyncTest {
  public:
   SingleClientPasswordsSyncTest() : SyncTest(SINGLE_CLIENT) {}
   ~SingleClientPasswordsSyncTest() override = default;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SingleClientPasswordsSyncTest);
 };
 
-IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTest, Sanity) {
+class SingleClientPasswordsSyncTestWithVerifier
+    : public SingleClientPasswordsSyncTest {
+ public:
+  SingleClientPasswordsSyncTestWithVerifier() = default;
+  ~SingleClientPasswordsSyncTestWithVerifier() override = default;
+
+  bool UseVerifier() override {
+    // TODO(crbug.com/1137740): rewrite tests to not use verifier.
+    return true;
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTestWithVerifier, Sanity) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   PasswordForm form = CreateTestPasswordForm(0);
@@ -66,7 +75,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTest, Sanity) {
 // Verifies that committed passwords contain the appropriate proto fields, and
 // in particular lack some others that could potentially contain unencrypted
 // data. In this test, custom passphrase is NOT set.
-IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTest,
+IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTestWithVerifier,
                        CommitWithoutCustomPassphrase) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
@@ -91,7 +100,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTest,
 
 // Same as above but with custom passphrase set, which requires to prune commit
 // data even further.
-IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTest,
+IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTestWithVerifier,
                        CommitWithCustomPassphrase) {
   SetEncryptionPassphraseForClient(/*index=*/0, "hunter2");
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -115,7 +124,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTest,
 
 // Tests the scenario when a syncing user enables a custom passphrase. PASSWORDS
 // should be recommitted with the new encryption key.
-IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTest,
+IN_PROC_BROWSER_TEST_F(SingleClientPasswordsSyncTestWithVerifier,
                        ReencryptsDataWhenPassphraseIsSet) {
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(ServerNigoriChecker(GetSyncService(0), fake_server_.get(),
@@ -531,6 +540,11 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
       signin::ClearPrimaryAccountPolicy::KEEP_ALL_ACCOUNTS);
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
+
+  // The account-storage opt-in gets cleared when turning off Sync, so opt in
+  // again.
+  OptInToAccountStorage(GetProfile(0)->GetPrefs(), GetSyncService(0));
+  PasswordSyncActiveChecker(GetSyncService(0)).Wait();
 
   // Now the password should be in both stores: The profile store does *not* get
   // cleared when Sync gets disabled.

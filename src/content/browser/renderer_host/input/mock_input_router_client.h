@@ -31,7 +31,7 @@ class MockInputRouterClient : public InputRouterClient,
   void DecrementInFlightEventCount(
       blink::mojom::InputEventResultSource ack_source) override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
-  void OnSetWhiteListedTouchAction(cc::TouchAction touch_action) override;
+  void OnSetCompositorAllowedTouchAction(cc::TouchAction touch_action) override;
   void DidStartScrollingViewport() override;
   void ForwardWheelEventWithLatencyInfo(
       const blink::WebMouseWheelEvent& wheel_event,
@@ -44,7 +44,6 @@ class MockInputRouterClient : public InputRouterClient,
   void SetMouseCapture(bool capture) override {}
   void RequestMouseLock(
       bool user_gesture,
-      bool privileged,
       bool unadjusted_movement,
       blink::mojom::WidgetInputHandlerHost::RequestMouseLockCallback response)
       override {}
@@ -53,7 +52,7 @@ class MockInputRouterClient : public InputRouterClient,
 
   bool GetAndResetFilterEventCalled();
   ui::DidOverscrollParams GetAndResetOverscroll();
-  cc::TouchAction GetAndResetWhiteListedTouchAction();
+  cc::TouchAction GetAndResetCompositorAllowedTouchAction();
 
   void set_input_router(InputRouter* input_router) {
     input_router_ = input_router;
@@ -93,7 +92,7 @@ class MockInputRouterClient : public InputRouterClient,
 
   ui::DidOverscrollParams overscroll_;
 
-  cc::TouchAction white_listed_touch_action_;
+  cc::TouchAction compositor_allowed_touch_action_;
 
   bool is_wheel_scroll_in_progress_ = false;
 };

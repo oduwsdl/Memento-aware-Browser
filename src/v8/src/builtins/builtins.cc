@@ -118,6 +118,30 @@ const char* Builtins::Lookup(Address pc) {
   return nullptr;
 }
 
+Handle<Code> Builtins::CallFunction(ConvertReceiverMode mode) {
+  switch (mode) {
+    case ConvertReceiverMode::kNullOrUndefined:
+      return builtin_handle(kCallFunction_ReceiverIsNullOrUndefined);
+    case ConvertReceiverMode::kNotNullOrUndefined:
+      return builtin_handle(kCallFunction_ReceiverIsNotNullOrUndefined);
+    case ConvertReceiverMode::kAny:
+      return builtin_handle(kCallFunction_ReceiverIsAny);
+  }
+  UNREACHABLE();
+}
+
+Handle<Code> Builtins::Call(ConvertReceiverMode mode) {
+  switch (mode) {
+    case ConvertReceiverMode::kNullOrUndefined:
+      return builtin_handle(kCall_ReceiverIsNullOrUndefined);
+    case ConvertReceiverMode::kNotNullOrUndefined:
+      return builtin_handle(kCall_ReceiverIsNotNullOrUndefined);
+    case ConvertReceiverMode::kAny:
+      return builtin_handle(kCall_ReceiverIsAny);
+  }
+  UNREACHABLE();
+}
+
 Handle<Code> Builtins::NonPrimitiveToPrimitive(ToPrimitiveHint hint) {
   switch (hint) {
     case ToPrimitiveHint::kDefault:
@@ -350,8 +374,8 @@ constexpr int OffHeapTrampolineGenerator::kBufferSize;
 Handle<Code> Builtins::GenerateOffHeapTrampolineFor(
     Isolate* isolate, Address off_heap_entry, int32_t kind_specfic_flags,
     bool generate_jump_to_instruction_stream) {
-  DCHECK_NOT_NULL(isolate->embedded_blob());
-  DCHECK_NE(0, isolate->embedded_blob_size());
+  DCHECK_NOT_NULL(isolate->embedded_blob_code());
+  DCHECK_NE(0, isolate->embedded_blob_code_size());
 
   OffHeapTrampolineGenerator generator(isolate);
 
@@ -360,7 +384,7 @@ Handle<Code> Builtins::GenerateOffHeapTrampolineFor(
                                              ? TrampolineType::kJump
                                              : TrampolineType::kAbort);
 
-  return Factory::CodeBuilder(isolate, desc, Code::BUILTIN)
+  return Factory::CodeBuilder(isolate, desc, CodeKind::BUILTIN)
       .set_read_only_data_container(kind_specfic_flags)
       .set_self_reference(generator.CodeObject())
       .set_is_executable(generate_jump_to_instruction_stream)
@@ -460,6 +484,7 @@ bool Builtins::CodeObjectIsExecutable(int builtin_index) {
     case Builtins::kArgumentsAdaptorTrampoline:
     case Builtins::kHandleApiCall:
     case Builtins::kInstantiateAsmJs:
+    case Builtins::kGenericJSToWasmWrapper:
 
     // TODO(delphick): Remove this when calls to it have the trampoline inlined
     // or are converted to use kCallBuiltinPointer.

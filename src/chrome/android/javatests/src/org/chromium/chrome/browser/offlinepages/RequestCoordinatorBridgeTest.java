@@ -15,11 +15,11 @@ import org.junit.runner.RunWith;
 import org.chromium.base.Callback;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.profiles.OTRProfileID;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.offlinepages.background.UpdateRequestResult;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -37,22 +37,17 @@ import java.util.concurrent.atomic.AtomicReference;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class RequestCoordinatorBridgeTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final int TIMEOUT_MS = 5000;
 
     private RequestCoordinatorBridge mRequestCoordinatorBridge;
+    private Profile mProfile;
 
-    private void initializeBridgeForProfile(final boolean incognitoProfile)
-            throws InterruptedException {
+    private void initializeBridgeForProfile() throws InterruptedException {
         final Semaphore semaphore = new Semaphore(0);
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
-            Profile profile = Profile.getLastUsedRegularProfile();
-            if (incognitoProfile) {
-                profile = profile.getOffTheRecordProfile();
-            }
-            mRequestCoordinatorBridge = RequestCoordinatorBridge.getForProfile(profile);
+            mRequestCoordinatorBridge = RequestCoordinatorBridge.getForProfile(mProfile);
             semaphore.release();
         });
         Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
@@ -70,7 +65,10 @@ public class RequestCoordinatorBridgeTest {
             }
         });
 
-        initializeBridgeForProfile(false);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { mProfile = Profile.getLastUsedRegularProfile(); });
+
+        initializeBridgeForProfile();
     }
 
     @Test
@@ -108,8 +106,21 @@ public class RequestCoordinatorBridgeTest {
 
     @Test
     @MediumTest
-    public void testRequestCoordinatorBridgeDisabledInIncognito() throws Exception {
-        initializeBridgeForProfile(true);
+    public void testRequestCoordinatorBridgeDisabledInIncognitoTabbedActivity() throws Exception {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { mProfile = Profile.getLastUsedRegularProfile().getPrimaryOTRProfile(); });
+        initializeBridgeForProfile();
+        Assert.assertEquals(null, mRequestCoordinatorBridge);
+    }
+
+    @Test
+    @MediumTest
+    public void testRequestCoordinatorBridgeDisabledInIncognitoCCT() throws Exception {
+        OTRProfileID otrProfileID = OTRProfileID.createUnique("CCT:Incognito");
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mProfile = Profile.getLastUsedRegularProfile().getOffTheRecordProfile(otrProfileID);
+        });
+        initializeBridgeForProfile();
         Assert.assertEquals(null, mRequestCoordinatorBridge);
     }
 

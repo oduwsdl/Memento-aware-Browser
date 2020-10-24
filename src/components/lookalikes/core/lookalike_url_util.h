@@ -10,6 +10,8 @@
 
 #include "base/callback.h"
 #include "base/time/time.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "url/gurl.h"
 
@@ -17,23 +19,13 @@ class GURL;
 
 namespace lookalikes {
 extern const char kHistogramName[];
+
+// Register applicable preferences with the provided registry.
+void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 }
 
 using LookalikeTargetAllowlistChecker =
-    base::RepeatingCallback<bool(const GURL&)>;
-
-// Common words are allow listed in target embedding (e.g. weather.jp.com should
-// not be considered a lookalike for weather.com). However, some of the common
-// words are well-known brand names when paired with a specific TLD. For
-// example, "office.com-foo.com" should be considered a lookalike for
-// "office.com", but "office.jp-foo.com" should not.
-enum class CommonWordType {
-  // The word is a common word when paired with any TLD.
-  kAllTLDs = 0,
-  // The word is a common word only when it is paired with TLDs other than the
-  // TLD representing a brand name (e.g. office.com and office.jp).
-  kNonMatchingTLDs = 1,
-};
+    base::RepeatingCallback<bool(const std::string&)>;
 
 // Used for |GetTargetEmbeddingType| return value. It shows if the target
 // embedding triggers on the input domain, and if it does, what type of warning
@@ -57,9 +49,14 @@ enum class LookalikeUrlMatchType {
   kSkeletonMatchTop5k = 7,
   kTargetEmbeddingForSafetyTips = 8,
 
+  // The domain name failed IDN spoof checks but didn't match a safe hostname.
+  // As a result, there is no URL to suggest to the user in the form of "Did
+  // you mean <url>?".
+  kFailedSpoofChecks = 9,
+
   // Append new items to the end of the list above; do not modify or replace
   // existing values. Comment out obsolete items.
-  kMaxValue = kTargetEmbeddingForSafetyTips,
+  kMaxValue = kFailedSpoofChecks,
 };
 
 // Used for UKM. There is only a single LookalikeUrlBlockingPageUserAction per
@@ -90,10 +87,11 @@ enum class NavigationSuggestionEvent {
   kMatchSkeletonTop500 = 8,
   kMatchSkeletonTop5k = 9,
   kMatchTargetEmbeddingForSafetyTips = 10,
+  kFailedSpoofChecks = 11,
 
   // Append new items to the end of the list above; do not modify or
   // replace existing values. Comment out obsolete items.
-  kMaxValue = kMatchTargetEmbeddingForSafetyTips,
+  kMaxValue = kFailedSpoofChecks,
 };
 
 struct DomainInfo {
@@ -123,9 +121,12 @@ struct DomainInfo {
   DomainInfo(const DomainInfo& other);
 };
 
-// Returns a DomainInfo instance computed from |url|. Will return empty fields
-// for non-unique hostnames (e.g. site.test), localhost or sites whose eTLD+1 is
-// empty.
+// Returns a DomainInfo instance computed from |hostname|. Will return empty
+// fields for non-unique hostnames (e.g. site.test), localhost or sites whose
+// eTLD+1 is empty.
+DomainInfo GetDomainInfo(const std::string& hostname);
+
+// Convenience function for returning GetDomainInfo(url.host()).
 DomainInfo GetDomainInfo(const GURL& url);
 
 // Returns true if the Levenshtein distance between |str1| and |str2| is at most
@@ -133,6 +134,13 @@ DomainInfo GetDomainInfo(const GURL& url);
 // distance computation.
 bool IsEditDistanceAtMostOne(const base::string16& str1,
                              const base::string16& str2);
+
+// Returns whether |navigated_domain| and |matched_domain| are likely to be edit
+// distance false positives, and thus the user should *not* be warned.
+//
+// Assumes |navigated_domain| and |matched_domain| are edit distance matches.
+bool IsLikelyEditDistanceFalsePositive(const DomainInfo& navigated_domain,
+                                       const DomainInfo& matched_domain);
 
 // Returns true if the domain given by |domain_info| is a top domain.
 bool IsTopDomain(const DomainInfo& domain_info);
@@ -144,8 +152,7 @@ bool IsTopDomain(const DomainInfo& domain_info);
 std::string GetETLDPlusOne(const std::string& hostname);
 
 // Returns true if a lookalike interstitial should be shown.
-bool ShouldBlockLookalikeUrlNavigation(LookalikeUrlMatchType match_type,
-                                       const DomainInfo& navigated_domain);
+bool ShouldBlockLookalikeUrlNavigation(LookalikeUrlMatchType match_type);
 
 // Returns true if a domain is visually similar to the hostname of |url|. The
 // matching domain can be a top domain or an engaged site. Similarity
@@ -182,5 +189,17 @@ TargetEmbeddingType GetTargetEmbeddingType(
     const std::vector<DomainInfo>& engaged_sites,
     const LookalikeTargetAllowlistChecker& in_target_allowlist,
     std::string* safe_hostname);
+
+// Returns true if a navigation to an IDN should be blocked.
+bool ShouldBlockBySpoofCheckResult(const DomainInfo& navigated_domain);
+
+// Checks whether the given url is allowlisted by enterprise policy, and
+// thus no warnings should be shown on that host.
+bool IsAllowedByEnterprisePolicy(const PrefService* pref_service,
+                                 const GURL& url);
+
+// Add the given hosts to the allowlist policy setting.
+void SetEnterpriseAllowlistForTesting(PrefService* pref_service,
+                                      const std::vector<std::string>& hosts);
 
 #endif  // COMPONENTS_LOOKALIKES_CORE_LOOKALIKE_URL_UTIL_H_

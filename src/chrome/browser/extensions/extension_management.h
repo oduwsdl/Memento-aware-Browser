@@ -15,6 +15,7 @@
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
 #include "base/values.h"
+#include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -88,10 +89,10 @@ class ExtensionManagement : public KeyedService {
   const std::vector<std::unique_ptr<ManagementPolicy::Provider>>& GetProviders()
       const;
 
-  // Checks if extensions are blacklisted by default, by policy. When true,
-  // this means that even extensions without an ID should be blacklisted (e.g.
+  // Checks if extensions are blocklisted by default, by policy. When true,
+  // this means that even extensions without an ID should be blocklisted (e.g.
   // from the command line, or when loaded as an unpacked extension).
-  bool BlacklistedByDefault() const;
+  bool BlocklistedByDefault() const;
 
   // Returns installation mode for an extension.
   InstallationMode GetInstallationMode(const Extension* extension) const;
@@ -111,7 +112,7 @@ class ExtensionManagement : public KeyedService {
   // Returns |true| if there is at least one extension with
   // |INSTALLATION_ALLOWED| as installation mode. This excludes force installed
   // extensions.
-  bool HasWhitelistedExtension() const;
+  bool HasAllowlistedExtension() const;
 
   // Returns if an extension with id |id| is explicitly allowed by enterprise
   // policy or not.
@@ -219,6 +220,14 @@ class ExtensionManagement : public KeyedService {
 
   void OnExtensionPrefChanged();
   void NotifyExtensionManagementPrefChanged();
+
+  // Reports install creation stage to InstallStageTracker for the extensions.
+  // |forced_stage| is reported for the extensions which have installation mode
+  // as INSTALLATION_FORCED, and |other_stage| is reported for all other
+  // installation modes.
+  void ReportExtensionManagementInstallCreationStage(
+      InstallStageTracker::InstallCreationStage forced_stage,
+      InstallStageTracker::InstallCreationStage other_stage);
 
   // Helper to return an extension install list, in format specified by
   // ExternalPolicyLoader::AddExtension().

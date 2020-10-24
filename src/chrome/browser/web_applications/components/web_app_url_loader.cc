@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "content/public/browser/navigation_controller.h"
@@ -47,6 +48,8 @@ bool EqualsWithComparison(const GURL& a,
 class LoaderTask : public content::WebContentsObserver {
  public:
   LoaderTask() = default;
+  LoaderTask(const LoaderTask&) = delete;
+  LoaderTask& operator=(const LoaderTask&) = delete;
   ~LoaderTask() override = default;
 
   void LoadUrl(const GURL& url,
@@ -150,7 +153,6 @@ class LoaderTask : public content::WebContentsObserver {
 
   base::WeakPtrFactory<LoaderTask> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(LoaderTask);
 };
 
 }  // namespace
@@ -174,6 +176,18 @@ void WebAppUrlLoader::LoadUrl(const GURL& url,
             task.reset();
           },
           std::move(callback), std::move(loader_task)));
+}
+
+void WebAppUrlLoader::PrepareForLoad(content::WebContents* web_contents,
+                                     ResultCallback callback) {
+  LoadUrl(GURL(url::kAboutBlankURL), web_contents, UrlComparison::kExact,
+          base::BindOnce(
+              [](ResultCallback callback, Result result) {
+                base::UmaHistogramEnumeration(
+                    "Webapp.WebAppUrlLoaderPrepareForLoadResult", result);
+                std::move(callback).Run(result);
+              },
+              std::move(callback)));
 }
 
 }  // namespace web_app

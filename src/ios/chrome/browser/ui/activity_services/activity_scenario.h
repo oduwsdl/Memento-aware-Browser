@@ -11,8 +11,14 @@
 enum class ActivityScenario {
   TabShareButton = 0,
   QRCodeImage = 1,
+  HistoryEntry = 2,
+  ReadingListEntry = 3,
+  BookmarkEntry = 4,
+  MostVisitedEntry = 5,
+  RecentTabsEntry = 6,
+  SharedHighlight = 7,
   // Highest enumerator. Recommended by Histogram metrics best practices.
-  kMaxValue = QRCodeImage
+  kMaxValue = SharedHighlight
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_ACTIVITY_SERVICES_ACTIVITY_SCENARIO_H_

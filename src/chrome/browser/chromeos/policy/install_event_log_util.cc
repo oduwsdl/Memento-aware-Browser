@@ -40,7 +40,16 @@ constexpr char kAndroidAppInstallEvent[] = "androidAppInstallEvent";
 // Key names used for extensions when building the dictionary to pass to the
 // Chrome Reporting API.
 constexpr char kExtensionId[] = "extensionId";
-constexpr char kExtensionInstallEvent[] = "extensionInstallEvent";
+constexpr char kExtensionInstallEvent[] = "extensionAppInstallEvent";
+constexpr char kDownloadingStage[] = "downloadingStage";
+constexpr char kFailureReason[] = "failureReason";
+constexpr char kInstallationStage[] = "installationStage";
+constexpr char kExtensionType[] = "extensionType";
+constexpr char kUserType[] = "userType";
+constexpr char kIsNewUser[] = "isNewUser";
+constexpr char kIsMisconfigurationFailure[] = "isMisconfigurationFailure";
+constexpr char kInstallCreationStage[] = "installCreationStage";
+constexpr char kDownloadCacheStatus[] = "downloadCacheStatus";
 
 // Calculates hash for the given |event| and |context|, and stores the hash in
 // |hash|. Returns true if |event| and |context| are json serializable and
@@ -159,7 +168,51 @@ base::Value ConvertExtensionEventToValue(
         extension_install_report_log_event.session_state_change_type());
   }
 
+  if (extension_install_report_log_event.has_downloading_stage()) {
+    event.SetIntKey(kDownloadingStage,
+                    extension_install_report_log_event.downloading_stage());
+  }
+
   event.SetStringKey(kSerialNumber, GetSerialNumber());
+
+  if (extension_install_report_log_event.has_failure_reason()) {
+    event.SetIntKey(kFailureReason,
+                    extension_install_report_log_event.failure_reason());
+  }
+
+  if (extension_install_report_log_event.has_user_type()) {
+    event.SetIntKey(kUserType, extension_install_report_log_event.user_type());
+    DCHECK(extension_install_report_log_event.has_is_new_user());
+    event.SetBoolKey(kIsNewUser,
+                     extension_install_report_log_event.is_new_user());
+  }
+
+  if (extension_install_report_log_event.has_installation_stage()) {
+    event.SetIntKey(kInstallationStage,
+                    extension_install_report_log_event.installation_stage());
+  }
+
+  if (extension_install_report_log_event.has_extension_type()) {
+    event.SetIntKey(kExtensionType,
+                    extension_install_report_log_event.extension_type());
+  }
+
+  if (extension_install_report_log_event.has_is_misconfiguration_failure()) {
+    event.SetBoolKey(
+        kIsMisconfigurationFailure,
+        extension_install_report_log_event.is_misconfiguration_failure());
+  }
+
+  if (extension_install_report_log_event.has_install_creation_stage()) {
+    event.SetIntKey(
+        kInstallCreationStage,
+        extension_install_report_log_event.install_creation_stage());
+  }
+
+  if (extension_install_report_log_event.has_download_cache_status()) {
+    event.SetIntKey(kDownloadCacheStatus,
+                    extension_install_report_log_event.download_cache_status());
+  }
 
   base::Value wrapper(base::Value::Type::DICTIONARY);
   wrapper.SetKey(kExtensionInstallEvent, std::move(event));

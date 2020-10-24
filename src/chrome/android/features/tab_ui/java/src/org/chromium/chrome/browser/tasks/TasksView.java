@@ -25,15 +25,14 @@ import androidx.core.view.ViewCompat;
 import com.google.android.material.appbar.AppBarLayout;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.chrome.browser.coordinator.CoordinatorLayoutForPointer;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.feed.shared.FeedFeatures;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.ntp.IncognitoDescriptionView;
 import org.chromium.chrome.browser.ntp.search.SearchBoxCoordinator;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.components.browser_ui.widget.CoordinatorLayoutForPointer;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.ui.base.ViewUtils;
 
@@ -77,15 +76,18 @@ class TasksView extends CoordinatorLayoutForPointer {
         mSearchBoxCoordinator = new SearchBoxCoordinator(getContext(), this);
         mHeaderView = (AppBarLayout) findViewById(R.id.task_surface_header);
         AppBarLayout.LayoutParams layoutParams =
-                (AppBarLayout.LayoutParams) mSearchBoxCoordinator.getView().getLayoutParams();
+                (AppBarLayout.LayoutParams) (findViewById(R.id.scroll_component_container)
+                                                     .getLayoutParams());
         layoutParams.setScrollFlags(SCROLL_FLAG_SCROLL);
-        adjustOmniboxScrollMode(layoutParams);
+        adjustScrollMode(layoutParams);
         setTabCarouselTitleStyle();
     }
 
-    private void adjustOmniboxScrollMode(AppBarLayout.LayoutParams layoutParams) {
-        if (!StartSurfaceConfiguration.START_SURFACE_VARIATION.getValue().equals("omniboxonly")) {
-            // Omnibox scroll mode is only relevant in omnibox-only variation.
+    private void adjustScrollMode(AppBarLayout.LayoutParams layoutParams) {
+        if (!StartSurfaceConfiguration.START_SURFACE_VARIATION.getValue().equals("omniboxonly")
+                && !StartSurfaceConfiguration.START_SURFACE_VARIATION.getValue().equals(
+                        "trendyterms")) {
+            // Scroll mode is only relevant in omnibox-only variation and trendy-terms variation.
             return;
         }
         String scrollMode = StartSurfaceConfiguration.START_SURFACE_OMNIBOX_SCROLL_MODE.getValue();
@@ -106,13 +108,11 @@ class TasksView extends CoordinatorLayoutForPointer {
 
     private void setTabCarouselTitleStyle() {
         // Match the tab carousel title style with the feed header.
-        // TODO(crbug.com/1016952): Migrate ChromeFeatureList.isEnabled to using cached flags for
-        // instant start. There are many places checking REPORT_FEED_USER_ACTIONS, like in
+        // There are many places checking FeedFeatures.isReportingUserActions, like in
         // ExploreSurfaceCoordinator.
         TextView titleDescription = (TextView) findViewById(R.id.tab_switcher_title_description);
         TextView moreTabs = (TextView) findViewById(R.id.more_tabs);
-        if (!CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS)) {
+        if (FeedFeatures.cachedIsReportingUserActions()) {
             ApiCompatibilityUtils.setTextAppearance(
                     titleDescription, R.style.TextAppearance_TextSmall_Secondary);
             ApiCompatibilityUtils.setTextAppearance(
@@ -329,5 +329,13 @@ class TasksView extends CoordinatorLayoutForPointer {
                 (MarginLayoutParams) mHeaderView.findViewById(R.id.tab_switcher_title)
                         .getLayoutParams();
         params.topMargin = topMargin;
+    }
+
+    /**
+     * Set the visibility of the trendy terms section.
+     * @param isVisible whether the trendy terms section is visible or not.
+     */
+    void setTrendyTermsVisibility(boolean isVisible) {
+        findViewById(R.id.trendy_terms_recycler_view).setVisibility(isVisible ? VISIBLE : GONE);
     }
 }

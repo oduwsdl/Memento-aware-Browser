@@ -320,10 +320,9 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // The return address on the stack is used by frame iteration.
   void StoreReturnAddressAndCall(Register target);
 
-  // This should only be used when assembling a deoptimizer call because of
-  // the CheckConstPool invocation, which is only needed for deoptimization.
-  void CallForDeoptimization(Address target, int deopt_id, Label* exit,
-                             DeoptimizeKind kind);
+  void CallForDeoptimization(Builtins::Name target, int deopt_id, Label* exit,
+                             DeoptimizeKind kind,
+                             Label* jump_deoptimization_entry_label);
 
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
@@ -731,11 +730,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   // TODO(victorgomes): Remove this function once we stick with the reversed
   // arguments order.
   MemOperand ReceiverOperand(Register argc) {
-#ifdef V8_REVERSE_JSARGS
     return MemOperand(sp, 0);
-#else
-    return MemOperand(sp, argc, LSL, kSystemPointerSizeLog2);
-#endif
   }
 
   // ---------------------------------------------------------------------------

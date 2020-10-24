@@ -15,6 +15,7 @@
 #include "base/bind_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_value_converter.h"
 #include "base/json/json_writer.h"
@@ -27,6 +28,8 @@
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_util.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_media_view_util.h"
@@ -45,6 +48,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/smb_client/smb_service.h"
 #include "chrome/browser/chromeos/smb_client/smb_service_factory.h"
+#include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/sync_file_system/mock_remote_file_sync_service.h"
@@ -105,6 +109,7 @@
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
 #include "ui/shell_dialogs/select_file_policy.h"
+#include "url/url_util.h"
 
 using ::testing::_;
 
@@ -332,6 +337,7 @@ struct AddEntriesMessage {
     EntryType type;                  // Entry type: file or directory.
     SharedOption shared_option;      // File entry sharing option.
     std::string source_file_name;    // Source file name prototype.
+    std::string thumbnail_file_name;  // DocumentsProvider thumbnail file name.
     std::string target_path;         // Target file or directory path.
     std::string name_text;           // Display file name.
     std::string team_drive_name;     // Name of team drive this entry is in.
@@ -344,6 +350,11 @@ struct AddEntriesMessage {
 
     TestEntryInfo& SetSharedOption(SharedOption option) {
       shared_option = option;
+      return *this;
+    }
+
+    TestEntryInfo& SetThumbnailFileName(const std::string& file_name) {
+      thumbnail_file_name = file_name;
       return *this;
     }
 
@@ -391,6 +402,8 @@ struct AddEntriesMessage {
                                      &MapStringToEntryType);
       converter->RegisterStringField("sourceFileName",
                                      &TestEntryInfo::source_file_name);
+      converter->RegisterStringField("thumbnailFileName",
+                                     &TestEntryInfo::thumbnail_file_name);
       converter->RegisterStringField("targetPath", &TestEntryInfo::target_path);
       converter->RegisterStringField("nameText", &TestEntryInfo::name_text);
       converter->RegisterStringField("teamDriveName",
@@ -711,8 +724,10 @@ std::ostream& operator<<(std::ostream& out,
   PRINT_IF_NOT_DEFAULT(mount_volumes)
   PRINT_IF_NOT_DEFAULT(native_smb)
   PRINT_IF_NOT_DEFAULT(offline)
+  PRINT_IF_NOT_DEFAULT(single_partition_format)
   PRINT_IF_NOT_DEFAULT(smbfs)
   PRINT_IF_NOT_DEFAULT(tablet_mode)
+  PRINT_IF_NOT_DEFAULT(trash)
   PRINT_IF_NOT_DEFAULT(zip)
   PRINT_IF_NOT_DEFAULT(zip_no_nacl)
 
@@ -1133,7 +1148,8 @@ class DriveFsTestVolume : public TestVolume {
          entry.capabilities.can_add_children},
         {entry.folder_feature.is_machine_root,
          entry.folder_feature.is_arbitrary_sync_folder,
-         entry.folder_feature.is_external_media});
+         entry.folder_feature.is_external_media},
+        "");
 
     ASSERT_TRUE(UpdateModifiedTime(entry));
   }
@@ -1272,16 +1288,31 @@ class DocumentsProviderTestVolume : public TestVolume {
   ~DocumentsProviderTestVolume() override = default;
 
   virtual void CreateEntry(const AddEntriesMessage::TestEntryInfo& entry) {
-    // Register a document to the fake FileSystemInstance.
+    // Create and add an entry Document to the fake arc::FileSystemInstance.
     arc::FakeFileSystemInstance::Document document(
         authority_, entry.name_text, root_document_id_, entry.name_text,
         GetMimeType(entry), GetFileSize(entry),
         entry.last_modified_time.ToJavaTime(), entry.capabilities.can_delete,
-        entry.capabilities.can_rename, entry.capabilities.can_add_children);
+        entry.capabilities.can_rename, entry.capabilities.can_add_children,
+        !entry.thumbnail_file_name.empty());
     file_system_instance_->AddDocument(document);
+
+    if (entry.type != AddEntriesMessage::FILE)
+      return;
+
+    std::string canonical_url = base::StrCat(
+        {"content://", authority_, "/document/", EncodeURI(entry.name_text)});
+    arc::FakeFileSystemInstance::File file(
+        canonical_url, GetTestFileContent(entry.source_file_name),
+        GetMimeType(entry), arc::FakeFileSystemInstance::File::Seekable::NO);
+    if (!entry.thumbnail_file_name.empty()) {
+      file.thumbnail_content = GetTestFileContent(entry.thumbnail_file_name);
+    }
+    file_system_instance_->AddFile(file);
   }
 
   virtual bool Mount(Profile* profile) {
+    // Register the volume root document.
     RegisterRoot();
 
     // Tell VolumeManager that a new DocumentsProvider volume is added.
@@ -1297,12 +1328,10 @@ class DocumentsProviderTestVolume : public TestVolume {
   const std::string root_document_id_;
   const bool read_only_;
 
-  // Register a root document of this volume.
   void RegisterRoot() {
-    arc::FakeFileSystemInstance::Document document(
-        authority_, root_document_id_, "", "", arc::kAndroidDirectoryMimeType,
-        0, 0);
-    file_system_instance_->AddDocument(document);
+    const auto* root_mime_type = arc::kAndroidDirectoryMimeType;
+    file_system_instance_->AddDocument(arc::FakeFileSystemInstance::Document(
+        authority_, root_document_id_, "", "", root_mime_type, 0, 0));
   }
 
  private:
@@ -1321,6 +1350,21 @@ class DocumentsProviderTestVolume : public TestVolume {
     return entry.type == AddEntriesMessage::FILE
                ? entry.mime_type
                : arc::kAndroidDirectoryMimeType;
+  }
+
+  std::string GetTestFileContent(const std::string& test_file_name) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string contents;
+    base::FilePath path = TestVolume::GetTestDataFilePath(test_file_name);
+    CHECK(base::ReadFileToString(path, &contents))
+        << "failed reading test data file " << test_file_name;
+    return contents;
+  }
+
+  std::string EncodeURI(const std::string& component) {
+    url::RawCanonOutputT<char> encoded;
+    url::EncodeURIComponent(component.c_str(), component.size(), &encoded);
+    return {encoded.data(), encoded.length()};
   }
 
   DISALLOW_COPY_AND_ASSIGN(DocumentsProviderTestVolume);
@@ -1481,6 +1525,65 @@ FileManagerBrowserTestBase::FileManagerBrowserTestBase() = default;
 
 FileManagerBrowserTestBase::~FileManagerBrowserTestBase() = default;
 
+static bool ShouldInspect(content::DevToolsAgentHost* host) {
+  // TODO(crbug.com/v8/10820): Add background_page back in once
+  // coverage can be collected when a background_page and app
+  // share the same v8 isolate.
+  if (host->GetTitle() == "Files" && host->GetType() == "app")
+    return true;
+
+  return false;
+}
+
+bool FileManagerBrowserTestBase::ShouldForceDevToolsAgentHostCreation() {
+  return devtools_code_coverage_;
+}
+
+void FileManagerBrowserTestBase::DevToolsAgentHostCreated(
+    content::DevToolsAgentHost* host) {
+  CHECK(devtools_agent_.find(host) == devtools_agent_.end());
+
+  if (ShouldInspect(host)) {
+    devtools_agent_[host].reset(new DevToolsListener(host, process_id_));
+  }
+}
+
+void FileManagerBrowserTestBase::DevToolsAgentHostAttached(
+    content::DevToolsAgentHost* host) {
+  if (auto* content = host->GetWebContents()) {
+    auto* manager = extensions::ProcessManager::Get(profile());
+    if (auto* extension = manager->GetExtensionForWebContents(content)) {
+      LOG(INFO) << "DevToolsAgentHostAttached: " << extension->name();
+      manager->IncrementLazyKeepaliveCount(
+          extension, extensions::Activity::Type::DEV_TOOLS, "");
+    }
+  }
+}
+
+void FileManagerBrowserTestBase::DevToolsAgentHostNavigated(
+    content::DevToolsAgentHost* host) {
+  if (devtools_agent_.find(host) == devtools_agent_.end())
+    return;
+
+  if (ShouldInspect(host)) {
+    LOG(INFO) << DevToolsListener::HostString(host, __FUNCTION__);
+    devtools_agent_.find(host)->second->Navigated(host);
+  } else {
+    devtools_agent_.find(host)->second->Detach(host);
+  }
+}
+
+void FileManagerBrowserTestBase::DevToolsAgentHostDetached(
+    content::DevToolsAgentHost* host) {}
+
+void FileManagerBrowserTestBase::DevToolsAgentHostCrashed(
+    content::DevToolsAgentHost* host,
+    base::TerminationStatus status) {
+  if (devtools_agent_.find(host) == devtools_agent_.end())
+    return;
+  NOTREACHED();
+}
+
 void FileManagerBrowserTestBase::SetUp() {
   net::NetworkChangeNotifier::SetTestNotificationsOnly(true);
   extensions::ExtensionApiTest::SetUp();
@@ -1566,9 +1669,31 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
   }
 
   if (options.zip_no_nacl) {
-    enabled_features.push_back(chromeos::features::kFilesZipNoNaCl);
+    enabled_features.push_back(chromeos::features::kFilesZipMount);
+    enabled_features.push_back(chromeos::features::kFilesZipPack);
+    enabled_features.push_back(chromeos::features::kFilesZipUnpack);
   } else {
-    disabled_features.push_back(chromeos::features::kFilesZipNoNaCl);
+    disabled_features.push_back(chromeos::features::kFilesZipMount);
+    disabled_features.push_back(chromeos::features::kFilesZipPack);
+    disabled_features.push_back(chromeos::features::kFilesZipUnpack);
+  }
+
+  if (options.enable_sharesheet) {
+    enabled_features.push_back(features::kSharesheet);
+  } else {
+    disabled_features.push_back(features::kSharesheet);
+  }
+
+  if (options.single_partition_format) {
+    enabled_features.push_back(chromeos::features::kFilesSinglePartitionFormat);
+  }
+
+  if (options.trash) {
+    enabled_features.push_back(chromeos::features::kFilesTrash);
+  }
+
+  if (command_line->HasSwitch("devtools-code-coverage")) {
+    devtools_code_coverage_ = options.guest_mode != IN_INCOGNITO;
   }
 
   // This is destroyed in |TearDown()|. We cannot initialize this in the
@@ -1664,9 +1789,8 @@ void FileManagerBrowserTestBase::SetUpOnMainThread() {
                                 base::Unretained(this)));
 
     if (arc::IsArcAvailable()) {
-      // When ARC is marked as available, we create fake FileSystemInstance and
-      // register it so that ARC-related services can work without real ARC
-      // container.
+      // When ARC is available, create and register a fake FileSystemInstance
+      // so ARC-related services work without a real ARC container.
       arc_file_system_instance_ =
           std::make_unique<arc::FakeFileSystemInstance>();
       arc::ArcServiceManager::Get()
@@ -1715,6 +1839,10 @@ void FileManagerBrowserTestBase::SetUpOnMainThread() {
   display_service_ =
       std::make_unique<NotificationDisplayServiceTester>(profile());
 
+  process_id_ = base::GetUniqueIdForProcess().GetUnsafeValue();
+  if (devtools_code_coverage_)
+    content::DevToolsAgentHost::AddObserver(this);
+
   content::NetworkConnectionChangeSimulator network_change_simulator;
   network_change_simulator.SetConnectionType(
       options.offline ? network::mojom::ConnectionType::CONNECTION_NONE
@@ -1745,11 +1873,39 @@ void FileManagerBrowserTestBase::TearDown() {
 }
 
 void FileManagerBrowserTestBase::StartTest() {
-  LOG(INFO) << "FileManagerBrowserTest::StartTest " << GetFullTestCaseName();
+  const std::string full_test_name = GetFullTestCaseName();
+  LOG(INFO) << "FileManagerBrowserTest::StartTest " << full_test_name;
   static const base::FilePath test_extension_dir =
       base::FilePath(FILE_PATH_LITERAL("ui/file_manager/integration_tests"));
   LaunchExtension(test_extension_dir, GetTestExtensionManifestName());
   RunTestMessageLoop();
+
+  if (!devtools_code_coverage_)
+    return;
+
+  content::DevToolsAgentHost::RemoveObserver(this);
+  content::RunAllTasksUntilIdle();
+
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  base::FilePath store;
+  CHECK(base::PathService::Get(base::DIR_EXE, &store));
+  store = store.AppendASCII("coverage").AppendASCII("devtools_code_coverage");
+  CHECK(base::CreateDirectory(store));
+
+  base::FilePath tests = store.AppendASCII("tests");
+  if (!base::PathExists(tests))
+    CHECK(base::CreateDirectory(tests));
+
+  for (auto& agent : devtools_agent_) {
+    auto* host = agent.first;
+    if (agent.second->HasCoverage(host))
+      agent.second->GetCoverage(host, store, full_test_name);
+    agent.second->Detach(host);
+  }
+
+  content::DevToolsAgentHost::DetachAllClients();
+  content::RunAllTasksUntilIdle();
 }
 
 void FileManagerBrowserTestBase::LaunchExtension(const base::FilePath& path,
@@ -2297,6 +2453,24 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
+  if (name == "hasSwaStarted") {
+    std::string swa_app_id;
+    ASSERT_TRUE(value.GetString("swaAppId", &swa_app_id));
+
+    *output = "false";
+
+    auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
+    proxy->InstanceRegistry().ForEachInstance(
+        [&swa_app_id, &output](const apps::InstanceUpdate& update) {
+          if (update.AppId() == swa_app_id &&
+              update.State() & apps::InstanceState::kStarted) {
+            *output = "true";
+          }
+        });
+
+    return;
+  }
+
   if (name == "countAppWindows") {
     std::string app_id;
     ASSERT_TRUE(value.GetString("appId", &app_id));
@@ -2449,6 +2623,14 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     static_cast<chromeos::FakeCrosDisksClient*>(
         dbus_thread_manager->GetCrosDisksClient())
         ->BlockMount();
+    return;
+  }
+
+  if (name == "setLastDownloadDir") {
+    base::FilePath downloads_path(util::GetDownloadsMountPointName(profile()));
+    downloads_path = downloads_path.AppendASCII("Downloads");
+    auto* download_prefs = DownloadPrefs::FromBrowserContext(profile());
+    download_prefs->SetSaveFilePath(downloads_path);
     return;
   }
 

@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/power_monitor/power_monitor_source.h"
 #include "base/trace_event/base_tracing.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -51,6 +52,18 @@ void PowerMonitor::ShutdownForTesting() {
 bool PowerMonitor::IsProcessSuspended() {
   return g_is_process_suspended.load(std::memory_order_relaxed);
 }
+
+PowerObserver::DeviceThermalState PowerMonitor::GetCurrentThermalState() {
+  DCHECK(IsInitialized());
+  return GetInstance()->source_->GetCurrentThermalState();
+}
+
+#if defined(OS_ANDROID)
+int PowerMonitor::GetRemainingBatteryCapacity() {
+  DCHECK(IsInitialized());
+  return GetInstance()->source_->GetRemainingBatteryCapacity();
+}
+#endif  // defined(OS_ANDROID)
 
 void PowerMonitor::NotifyPowerStateChange(bool battery_in_use) {
   DCHECK(IsInitialized());

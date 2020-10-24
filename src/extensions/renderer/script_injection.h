@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/ukm_source_id.h"
 #include "base/optional.h"
 #include "extensions/common/user_script.h"
 #include "extensions/renderer/injection_host.h"
@@ -104,9 +105,9 @@ class ScriptInjection {
   void InjectJs(std::set<std::string>* executing_scripts,
                 size_t* num_injected_js_scripts);
 
-  // Inject any CSS source into the frame for the injection.
-  void InjectCss(std::set<std::string>* injected_stylesheets,
-                 size_t* num_injected_stylesheets);
+  // Inject or remove any CSS source into the frame for the injection.
+  void InjectOrRemoveCss(std::set<std::string>* injected_stylesheets,
+                         size_t* num_injected_stylesheets);
 
   // Notify that we will not inject, and mark it as acknowledged.
   void NotifyWillNotInject(ScriptInjector::InjectFailureReason reason);
@@ -126,6 +127,9 @@ class ScriptInjection {
   // This injection's request id. This will be -1 unless the injection is
   // currently waiting on permission.
   int64_t request_id_;
+
+  // Identifies the frame we're injecting into.
+  base::UkmSourceId ukm_source_id_;
 
   // Whether or not the injection is complete, either via injecting the script
   // or because it will never complete.

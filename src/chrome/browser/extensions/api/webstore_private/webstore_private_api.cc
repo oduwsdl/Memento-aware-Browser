@@ -54,7 +54,6 @@
 #include "extensions/common/manifest_handlers/permissions_parser.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "net/base/load_flags.h"
-#include "net/url_request/url_request.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -121,7 +120,7 @@ std::unique_ptr<WebstoreInstaller::Approval> PendingApprovals::PopApproval(
     const std::string& id) {
   for (auto iter = approvals_.begin(); iter != approvals_.end(); ++iter) {
     if (iter->get()->extension_id == id &&
-        profile->IsSameProfile(iter->get()->profile)) {
+        profile->IsSameOrParent(iter->get()->profile)) {
       std::unique_ptr<WebstoreInstaller::Approval> approval = std::move(*iter);
       approvals_.erase(iter);
       return approval;
@@ -252,7 +251,7 @@ ConvertExtensionInstallStatusForAPI(ExtensionInstallStatus status) {
     case kTerminated:
       return api::webstore_private::ExtensionInstallStatus::
           EXTENSION_INSTALL_STATUS_TERMINATED;
-    case kBlacklisted:
+    case kBlocklisted:
       return api::webstore_private::ExtensionInstallStatus::
           EXTENSION_INSTALL_STATUS_BLACKLISTED;
     case kCustodianApprovalRequired:
@@ -589,7 +588,7 @@ bool WebstorePrivateBeginInstallWithManifest3Function::
 
   parent_permission_dialog_ =
       ParentPermissionDialog::CreateParentPermissionDialogForExtension(
-          profile, web_contents, web_contents->GetTopLevelNativeWindow(),
+          profile, web_contents->GetTopLevelNativeWindow(),
           gfx::ImageSkia::CreateFrom1xBitmap(icon_), dummy_extension_.get(),
           std::move(done_callback));
   parent_permission_dialog_->ShowDialog();
@@ -672,8 +671,8 @@ void WebstorePrivateBeginInstallWithManifest3Function::
 
 void WebstorePrivateBeginInstallWithManifest3Function::HandleInstallProceed() {
   // This gets cleared in CrxInstaller::ConfirmInstall(). TODO(asargent) - in
-  // the future we may also want to add time-based expiration, where a whitelist
-  // entry is only valid for some number of minutes.
+  // the future we may also want to add time-based expiration, where an
+  // allowlist entry is only valid for some number of minutes.
   std::unique_ptr<WebstoreInstaller::Approval> approval(
       WebstoreInstaller::Approval::CreateWithNoInstallPrompt(
           chrome_details_.GetProfile(), details().id,
@@ -813,7 +812,7 @@ WebstorePrivateCompleteInstallFunction::Run() {
   AddRef();
 
   // The extension will install through the normal extension install flow, but
-  // the whitelist entry will bypass the normal permissions install dialog.
+  // the allowlist entry will bypass the normal permissions install dialog.
   scoped_refptr<WebstoreInstaller> installer = new WebstoreInstaller(
       chrome_details_.GetProfile(), this, web_contents, params->expected_id,
       std::move(approval_), WebstoreInstaller::INSTALL_SOURCE_OTHER);
@@ -1024,7 +1023,7 @@ WebstorePrivateIsPendingCustodianApprovalFunction::Run() {
 
 ExtensionFunction::ResponseValue
 WebstorePrivateIsPendingCustodianApprovalFunction::BuildResponse(bool result) {
-  return OneArgument(std::make_unique<base::Value>(result));
+  return OneArgument(base::Value(result));
 }
 
 WebstorePrivateGetReferrerChainFunction::
@@ -1121,7 +1120,7 @@ WebstorePrivateGetExtensionStatusFunction::BuildResponseWithoutManifest(
       GetWebstoreExtensionInstallStatus(extension_id, profile);
   api::webstore_private::ExtensionInstallStatus api_status =
       ConvertExtensionInstallStatusForAPI(status);
-  return OneArgument(GetExtensionStatus::Results::Create(api_status));
+  return ArgumentList(GetExtensionStatus::Results::Create(api_status));
 }
 
 void WebstorePrivateGetExtensionStatusFunction::OnManifestParsed(
@@ -1153,7 +1152,7 @@ void WebstorePrivateGetExtensionStatusFunction::OnManifestParsed(
       PermissionsParser::GetRequiredPermissions(dummy_extension.get()));
   api::webstore_private::ExtensionInstallStatus api_status =
       ConvertExtensionInstallStatusForAPI(status);
-  Respond(OneArgument(GetExtensionStatus::Results::Create(api_status)));
+  Respond(ArgumentList(GetExtensionStatus::Results::Create(api_status)));
 }
 
 WebstorePrivateRequestExtensionFunction::
@@ -1178,7 +1177,8 @@ WebstorePrivateRequestExtensionFunction::Run() {
 
   api::webstore_private::ExtensionInstallStatus api_status =
       ConvertExtensionInstallStatusForAPI(status);
-  return RespondNow(OneArgument(RequestExtension::Results::Create(api_status)));
+  return RespondNow(
+      ArgumentList(RequestExtension::Results::Create(api_status)));
 }
 
 }  // namespace extensions

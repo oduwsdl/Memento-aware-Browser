@@ -28,17 +28,17 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/web_contents.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
-#include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "google_apis/gaia/gaia_constants.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_types.h"
@@ -118,7 +118,7 @@ class ParentPermissionInputSection : public views::TextfieldController {
       auto select_parent_label = std::make_unique<views::Label>(
           l10n_util::GetStringUTF16(
               IDS_PARENT_PERMISSION_PROMPT_SELECT_PARENT_LABEL),
-          CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_PRIMARY);
+          views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_PRIMARY);
       select_parent_label->SetHorizontalAlignment(
           gfx::HorizontalAlignment::ALIGN_LEFT);
       view->AddChildView(std::move(select_parent_label));
@@ -164,14 +164,15 @@ class ParentPermissionInputSection : public views::TextfieldController {
       auto parent_account_label = std::make_unique<views::Label>(
           l10n_util::GetStringUTF16(
               IDS_PARENT_PERMISSION_PROMPT_PARENT_ACCOUNT_LABEL),
-          CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_PRIMARY);
+          views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_PRIMARY);
       parent_account_label->SetHorizontalAlignment(
           gfx::HorizontalAlignment::ALIGN_LEFT);
       view->AddChildView(std::move(parent_account_label));
 
-      auto parent_email_label = std::make_unique<views::Label>(
-          parent_permission_email_addresses[0], CONTEXT_BODY_TEXT_LARGE,
-          views::style::STYLE_SECONDARY);
+      auto parent_email_label =
+          std::make_unique<views::Label>(parent_permission_email_addresses[0],
+                                         views::style::CONTEXT_DIALOG_BODY_TEXT,
+                                         views::style::STYLE_SECONDARY);
       parent_email_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       parent_email_label->SetMultiLine(true);
       parent_email_label->SizeToFit(available_width);
@@ -186,7 +187,7 @@ class ParentPermissionInputSection : public views::TextfieldController {
     base::string16 enter_password_string = l10n_util::GetStringUTF16(
         IDS_PARENT_PERMISSION_PROMPT_ENTER_PASSWORD_LABEL);
     auto enter_password_label = std::make_unique<views::Label>(
-        enter_password_string, CONTEXT_BODY_TEXT_LARGE,
+        enter_password_string, views::style::CONTEXT_DIALOG_BODY_TEXT,
         views::style::STYLE_SECONDARY);
     enter_password_label->SetHorizontalAlignment(
         gfx::HorizontalAlignment::ALIGN_LEFT);
@@ -257,11 +258,8 @@ struct ParentPermissionDialogView::Params {
   // The user's profile
   Profile* profile = nullptr;
 
-  // The parent window to this window.
+  // The parent window to this window. This member may be nullptr.
   gfx::NativeWindow window = nullptr;
-
-  // The web contents that initiated the dialog.
-  content::WebContents* web_contents = nullptr;
 
   // The callback to call on completion.
   ParentPermissionDialog::DoneCallback done_callback;
@@ -317,7 +315,7 @@ base::string16 ParentPermissionDialogView::GetActiveUserFirstName() const {
 
 gfx::Size ParentPermissionDialogView::CalculatePreferredSize() const {
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
+                        views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
                     margins().width();
   return gfx::Size(width, GetHeightForWidth(width));
 }
@@ -438,8 +436,8 @@ void ParentPermissionDialogView::CreateContents() {
         IDS_PARENT_PERMISSION_PROMPT_CHILD_WANTS_TO_INSTALL_LABEL,
         GetActiveUserFirstName(), extension_type);
 
-    views::Label* permissions_header =
-        new views::Label(permission_header_label, CONTEXT_BODY_TEXT_LARGE);
+    views::Label* permissions_header = new views::Label(
+        permission_header_label, views::style::CONTEXT_DIALOG_BODY_TEXT);
     permissions_header->SetMultiLine(true);
     permissions_header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     permissions_header->SizeToFit(content_width);
@@ -462,7 +460,8 @@ void ParentPermissionDialogView::CreateContents() {
 
     // Add section container to an enclosing scroll view.
     auto scroll_view = std::make_unique<views::ScrollView>();
-    scroll_view->SetHideHorizontalScrollBar(true);
+    scroll_view->SetHorizontalScrollBarMode(
+        views::ScrollView::ScrollBarMode::kDisabled);
     scroll_view->SetContents(std::move(install_permissions_section_container));
     scroll_view->ClipHeightTo(
         0, provider->GetDistanceMetric(
@@ -530,7 +529,10 @@ void ParentPermissionDialogView::ShowDialogInternal() {
   CreateContents();
   chrome::RecordDialogCreation(chrome::DialogIdentifier::PARENT_PERMISSION);
   views::Widget* widget =
-      constrained_window::CreateBrowserModalDialogViews(this, params_->window);
+      params_->window
+          ? constrained_window::CreateBrowserModalDialogViews(this,
+                                                              params_->window)
+          : views::DialogDelegate::CreateDialogWidget(this, nullptr, nullptr);
   widget->Show();
 
   if (test_view_observer)
@@ -581,23 +583,15 @@ void ParentPermissionDialogView::OnExtensionIconLoaded(
 
 void ParentPermissionDialogView::LoadExtensionIcon() {
   DCHECK(params_->extension);
-  extensions::ExtensionResource image = extensions::IconsInfo::GetIconResource(
-      params_->extension, extension_misc::EXTENSION_ICON_LARGE,
-      ExtensionIconSet::MATCH_BIGGER);
 
   // Load the image asynchronously. The response will be sent to
   // OnExtensionIconLoaded.
   extensions::ImageLoader* loader =
       extensions::ImageLoader::Get(params_->profile);
-
-  std::vector<extensions::ImageLoader::ImageRepresentation> images_list;
-  images_list.push_back(extensions::ImageLoader::ImageRepresentation(
-      image, extensions::ImageLoader::ImageRepresentation::NEVER_RESIZE,
-      gfx::Size(),
-      ui::GetScaleFactorForNativeView(params_->web_contents->GetNativeView())));
-
-  loader->LoadImagesAsync(
-      params_->extension, images_list,
+  loader->LoadImageAtEveryScaleFactorAsync(
+      params_->extension,
+      gfx::Size(extension_misc::EXTENSION_ICON_LARGE,
+                extension_misc::EXTENSION_ICON_LARGE),
       base::BindOnce(&ParentPermissionDialogView::OnExtensionIconLoaded,
                      weak_factory_.GetWeakPtr()));
 }
@@ -808,7 +802,6 @@ void ParentPermissionDialogImpl::OnParentPermissionDialogViewDestroyed() {
 std::unique_ptr<ParentPermissionDialog>
 ParentPermissionDialog::CreateParentPermissionDialog(
     Profile* profile,
-    content::WebContents* web_contents,
     gfx::NativeWindow window,
     const gfx::ImageSkia& icon,
     const base::string16& message,
@@ -817,7 +810,6 @@ ParentPermissionDialog::CreateParentPermissionDialog(
   params->message = message;
   params->icon = icon;
   params->profile = profile;
-  params->web_contents = web_contents;
   params->window = window;
   params->done_callback = std::move(done_callback);
 
@@ -828,7 +820,6 @@ ParentPermissionDialog::CreateParentPermissionDialog(
 std::unique_ptr<ParentPermissionDialog>
 ParentPermissionDialog::CreateParentPermissionDialogForExtension(
     Profile* profile,
-    content::WebContents* web_contents,
     gfx::NativeWindow window,
     const gfx::ImageSkia& icon,
     const extensions::Extension* extension,
@@ -837,7 +828,6 @@ ParentPermissionDialog::CreateParentPermissionDialogForExtension(
   params->extension = extension;
   params->icon = icon;
   params->profile = profile;
-  params->web_contents = web_contents;
   params->window = window;
   params->done_callback = std::move(done_callback);
 

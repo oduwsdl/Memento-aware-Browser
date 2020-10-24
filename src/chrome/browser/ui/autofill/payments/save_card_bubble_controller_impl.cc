@@ -349,13 +349,12 @@ bool SaveCardBubbleControllerImpl::ShouldShowSignInPromo() const {
 
 void SaveCardBubbleControllerImpl::OnSyncPromoAccepted(
     const AccountInfo& account,
-    signin_metrics::AccessPoint access_point,
-    bool is_default_promo_account) {
+    signin_metrics::AccessPoint access_point) {
   DCHECK(current_bubble_type_ == BubbleType::SIGN_IN_PROMO ||
          current_bubble_type_ == BubbleType::MANAGE_CARDS);
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
-  signin_ui_util::EnableSyncFromPromo(browser, account, access_point,
-                                      is_default_promo_account);
+  signin_ui_util::EnableSyncFromSingleAccountPromo(browser, account,
+                                                   access_point);
 }
 
 void SaveCardBubbleControllerImpl::OnSaveButton(
@@ -515,8 +514,8 @@ void SaveCardBubbleControllerImpl::OnBubbleClosed(
         metric = AutofillMetrics::SAVE_CARD_PROMPT_LOST_FOCUS;
         break;
       case PaymentsBubbleClosedReason::kUnknown:
-        NOTREACHED();
-        return;
+        metric = AutofillMetrics::SAVE_CARD_PROMPT_RESULT_UNKNOWN;
+        break;
     }
     AutofillMetrics::LogSaveCardPromptResultMetric(
         metric, is_upload_save_, is_reshow_, options_,
@@ -575,9 +574,6 @@ void SaveCardBubbleControllerImpl::OnBubbleClosed(
   }
 
   UpdateSaveCardIcon();
-
-  if (observer_for_testing_)
-    observer_for_testing_->OnBubbleClosed();
 }
 
 const LegalMessageLines& SaveCardBubbleControllerImpl::GetLegalMessageLines()
@@ -866,6 +862,9 @@ void SaveCardBubbleControllerImpl::ShowIconOnly() {
     case BubbleType::INACTIVE:
       NOTREACHED();
   }
+
+  if (observer_for_testing_)
+    observer_for_testing_->OnIconShown();
 }
 
 void SaveCardBubbleControllerImpl::UpdateSaveCardIcon() {

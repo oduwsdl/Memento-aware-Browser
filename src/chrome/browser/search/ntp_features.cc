@@ -5,10 +5,9 @@
 #include "chrome/browser/search/ntp_features.h"
 
 #include "base/feature_list.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/common/omnibox_features.h"
-#include "ui/base/ui_base_features.h"
 
 namespace ntp_features {
 
@@ -24,7 +23,12 @@ const base::Feature kDismissPromos{"DismissNtpPromos",
 
 // If enabled, the OneGooleBar is loaded in an iframe. Otherwise, it is inlined.
 const base::Feature kIframeOneGoogleBar{"IframeOneGoogleBar",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
+
+// If enabled, queries that are frequently repeated by the user (and are
+// expected to be issued again) are shown as most visited tiles.
+const base::Feature kNtpRepeatableQueries{"NtpRepeatableQueries",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, the iframed OneGooleBar shows the overlays modally with a
 // backdrop.
@@ -41,11 +45,6 @@ const base::Feature kRealboxMatchOmniboxTheme{
 const base::Feature kRealboxUseGoogleGIcon{"NtpRealboxUseGoogleGIcon",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
-// If enabled, the search box in the middle of the NTP will accept input
-// directly (i.e. not be a "fake" box) and search results will show directly
-// below the non-fake input ("realbox").
-const base::Feature kRealbox{"NtpRealbox", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // If enabled, shows Vasco suggestion chips in the NTP below fakebox/realbox
 // despite other config except DisableSearchSuggestChips below.
 const base::Feature kSearchSuggestChips{"SearchSuggestChips",
@@ -58,28 +57,75 @@ const base::Feature kDisableSearchSuggestChips{
 
 // If enabled, the WebUI new tab page will load when a new tab is created
 // instead of the local NTP.
-const base::Feature kWebUI{"NtpWebUI", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If disabled, the realbox will not show on the WebUI new tab page.
-const base::Feature kWebUIRealbox{"WebUIRealbox",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kWebUI{"NtpWebUI", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // If enabled, the Doodle will be shown on themed and dark mode NTPs.
 const base::Feature kWebUIThemeModeDoodles{"WebUIThemeModeDoodles",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-bool IsRealboxEnabled() {
-  if (!base::FeatureList::IsEnabled(omnibox::kNewSearchFeatures))
-    return false;
+// If enabled, modules will be shown.
+const base::Feature kModules{"NtpModules", base::FEATURE_DISABLED_BY_DEFAULT};
 
-  return base::FeatureList::IsEnabled(kRealbox) ||
-         base::FeatureList::IsEnabled(omnibox::kZeroSuggestionsOnNTPRealbox) ||
-         base::FeatureList::IsEnabled(
-             omnibox::kReactiveZeroSuggestionsOnNTPRealbox) ||
-         (base::FeatureList::IsEnabled(omnibox::kOnFocusSuggestions) &&
-          !OmniboxFieldTrial::GetZeroSuggestVariants(
-               metrics::OmniboxEventProto::NTP_REALBOX)
-               .empty());
+// If enabled, recipe tasks module will be shown.
+const base::Feature kNtpRecipeTasksModule{"NtpRecipeTasksModule",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, shopping tasks module will be shown.
+const base::Feature kNtpShoppingTasksModule{"NtpShoppingTasksModule",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const char kNtpRepeatableQueriesAgeThresholdDaysParam[] =
+    "NtpRepeatableQueriesAgeThresholdDays";
+const char kNtpRepeatableQueriesRecencyHalfLifeSecondsParam[] =
+    "NtpRepeatableQueriesRecencyHalfLifeSeconds";
+const char kNtpRepeatableQueriesFrequencyExponentParam[] =
+    "NtpRepeatableQueriesFrequencyExponent";
+
+base::Time GetLocalHistoryRepeatableQueriesAgeThreshold() {
+  const base::TimeDelta kLocalHistoryRepeatableQueriesAgeThreshold =
+      base::TimeDelta::FromDays(180);  // Six months.
+  std::string param_value = base::GetFieldTrialParamValueByFeature(
+      kNtpRepeatableQueries, kNtpRepeatableQueriesAgeThresholdDaysParam);
+
+  // If the field trial param is not found or cannot be parsed to an unsigned
+  // integer, return the default value.
+  unsigned int param_value_as_int = 0;
+  if (!base::StringToUint(param_value, &param_value_as_int)) {
+    return base::Time::Now() - kLocalHistoryRepeatableQueriesAgeThreshold;
+  }
+
+  return (base::Time::Now() - base::TimeDelta::FromDays(param_value_as_int));
+}
+
+int GetLocalHistoryRepeatableQueriesRecencyHalfLifeSeconds() {
+  const base::TimeDelta kLocalHistoryRepeatableQueriesRecencyHalfLife =
+      base::TimeDelta::FromDays(7);  // One week.
+  std::string param_value = base::GetFieldTrialParamValueByFeature(
+      kNtpRepeatableQueries, kNtpRepeatableQueriesRecencyHalfLifeSecondsParam);
+
+  // If the field trial param is not found or cannot be parsed to an unsigned
+  // integer, return the default value.
+  unsigned int param_value_as_int = 0;
+  if (!base::StringToUint(param_value, &param_value_as_int)) {
+    return kLocalHistoryRepeatableQueriesRecencyHalfLife.InSeconds();
+  }
+
+  return param_value_as_int;
+}
+
+double GetLocalHistoryRepeatableQueriesFrequencyExponent() {
+  const double kLocalHistoryRepeatableQueriesFrequencyExponent = 2.0;
+  std::string param_value = base::GetFieldTrialParamValueByFeature(
+      kNtpRepeatableQueries, kNtpRepeatableQueriesFrequencyExponentParam);
+
+  // If the field trial param is not found or cannot be parsed to an unsigned
+  // integer, return the default value.
+  double param_value_as_double = 0;
+  if (!base::StringToDouble(param_value, &param_value_as_double)) {
+    return kLocalHistoryRepeatableQueriesFrequencyExponent;
+  }
+
+  return param_value_as_double;
 }
 
 }  // namespace ntp_features

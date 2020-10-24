@@ -19,11 +19,17 @@ extern NSString* const kSettingsAccountCellId;
 // The accessibility identifier of the Search Engine cell.
 extern NSString* const kSettingsSearchEngineCellId;
 
+// The accessibility identifier of the Managed Search Engine cell.
+extern NSString* const kSettingsManagedSearchEngineCellId;
+
 // The accessibility identifier of the Voice Search cell.
 extern NSString* const kSettingsVoiceSearchCellId;
 
 // The accessibility identifier of the Sync and Google services cell.
 extern NSString* const kSettingsGoogleSyncAndServicesCellId;
+
+// The accessibility identifier of the Google services cell.
+extern NSString* const kSettingsGoogleServicesCellId;
 
 // The accessibility identifier of the Passwords cell.
 extern NSString* const kSettingsPasswordsCellId;

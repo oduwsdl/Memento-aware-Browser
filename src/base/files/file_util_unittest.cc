@@ -42,6 +42,7 @@
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 #include "testing/platform_test.h"
@@ -65,7 +66,7 @@
 #include <unistd.h>
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <linux/fs.h>
 #endif
 
@@ -186,6 +187,8 @@ class ReparsePoint {
                      NULL));
     created_ = dir_.IsValid() && SetReparsePoint(dir_.Get(), target);
   }
+  ReparsePoint(const ReparsePoint&) = delete;
+  ReparsePoint& operator=(const ReparsePoint&) = delete;
 
   ~ReparsePoint() {
     if (created_)
@@ -197,7 +200,6 @@ class ReparsePoint {
  private:
   win::ScopedHandle dir_;
   bool created_;
-  DISALLOW_COPY_AND_ASSIGN(ReparsePoint);
 };
 
 #endif
@@ -913,6 +915,7 @@ TEST_F(FileUtilTest, ChangeFilePermissionsAndRead) {
   FilePath file_name =
       temp_dir_.GetPath().Append(FPL("Test Readable File.txt"));
   EXPECT_FALSE(PathExists(file_name));
+  EXPECT_FALSE(PathIsReadable(file_name));
 
   static constexpr char kData[] = "hello";
   static constexpr int kDataSize = sizeof(kData) - 1;
@@ -926,11 +929,13 @@ TEST_F(FileUtilTest, ChangeFilePermissionsAndRead) {
   int32_t mode = 0;
   EXPECT_TRUE(GetPosixFilePermissions(file_name, &mode));
   EXPECT_TRUE(mode & FILE_PERMISSION_READ_BY_USER);
+  EXPECT_TRUE(PathIsReadable(file_name));
 
   // Get rid of the read permission.
   EXPECT_TRUE(SetPosixFilePermissions(file_name, 0u));
   EXPECT_TRUE(GetPosixFilePermissions(file_name, &mode));
   EXPECT_FALSE(mode & FILE_PERMISSION_READ_BY_USER);
+  EXPECT_FALSE(PathIsReadable(file_name));
   // Make sure the file can't be read.
   EXPECT_EQ(-1, ReadFile(file_name, buffer, kDataSize));
 
@@ -938,6 +943,7 @@ TEST_F(FileUtilTest, ChangeFilePermissionsAndRead) {
   EXPECT_TRUE(SetPosixFilePermissions(file_name, FILE_PERMISSION_READ_BY_USER));
   EXPECT_TRUE(GetPosixFilePermissions(file_name, &mode));
   EXPECT_TRUE(mode & FILE_PERMISSION_READ_BY_USER);
+  EXPECT_TRUE(PathIsReadable(file_name));
   // Make sure the file can be read.
   EXPECT_EQ(kDataSize, ReadFile(file_name, buffer, kDataSize));
 
@@ -1028,7 +1034,7 @@ TEST_F(FileUtilTest, ChangeDirectoryPermissionsAndEnumerate) {
   EXPECT_EQ(1, c2.size());
 
   // Delete the file.
-  EXPECT_TRUE(DeleteFileRecursively(subdir_path));
+  EXPECT_TRUE(DeletePathRecursively(subdir_path));
   EXPECT_FALSE(PathExists(subdir_path));
 }
 
@@ -1114,9 +1120,9 @@ TEST_F(FileUtilTest, CopyDirectoryPermissions) {
   int mode = 0;
   int expected_mode;
   ASSERT_TRUE(GetPosixFilePermissions(file_name_to, &mode));
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   expected_mode = 0755;
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1124,9 +1130,9 @@ TEST_F(FileUtilTest, CopyDirectoryPermissions) {
   EXPECT_EQ(expected_mode, mode);
 
   ASSERT_TRUE(GetPosixFilePermissions(file2_name_to, &mode));
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   expected_mode = 0755;
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1134,9 +1140,9 @@ TEST_F(FileUtilTest, CopyDirectoryPermissions) {
   EXPECT_EQ(expected_mode, mode);
 
   ASSERT_TRUE(GetPosixFilePermissions(file3_name_to, &mode));
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   expected_mode = 0600;
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1284,9 +1290,9 @@ TEST_F(FileUtilTest, CopyFileExecutablePermission) {
 
   ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
   int expected_mode;
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   expected_mode = 0755;
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1302,9 +1308,9 @@ TEST_F(FileUtilTest, CopyFileExecutablePermission) {
   EXPECT_EQ(file_contents, ReadTextFile(dst));
 
   ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   expected_mode = 0755;
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1320,9 +1326,9 @@ TEST_F(FileUtilTest, CopyFileExecutablePermission) {
   EXPECT_EQ(file_contents, ReadTextFile(dst));
 
   ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   expected_mode = 0600;
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1406,7 +1412,7 @@ TEST_F(FileUtilTest, DeleteNonExistent) {
 
   EXPECT_TRUE(DeleteFile(non_existent));
   ASSERT_FALSE(PathExists(non_existent));
-  EXPECT_TRUE(DeleteFileRecursively(non_existent));
+  EXPECT_TRUE(DeletePathRecursively(non_existent));
   ASSERT_FALSE(PathExists(non_existent));
 }
 
@@ -1417,7 +1423,7 @@ TEST_F(FileUtilTest, DeleteNonExistentWithNonExistentParent) {
 
   EXPECT_TRUE(DeleteFile(non_existent));
   ASSERT_FALSE(PathExists(non_existent));
-  EXPECT_TRUE(DeleteFileRecursively(non_existent));
+  EXPECT_TRUE(DeletePathRecursively(non_existent));
   ASSERT_FALSE(PathExists(non_existent));
 }
 
@@ -1437,7 +1443,7 @@ TEST_F(FileUtilTest, DeleteFile) {
   ASSERT_TRUE(PathExists(file_name));
 
   // Make sure it's deleted
-  EXPECT_TRUE(DeleteFileRecursively(file_name));
+  EXPECT_TRUE(DeletePathRecursively(file_name));
   EXPECT_FALSE(PathExists(file_name));
 }
 
@@ -1493,7 +1499,7 @@ TEST_F(FileUtilTest, DeleteWildCard) {
   EXPECT_TRUE(PathExists(subdir_path));
 
   // Delete recursively and make sure all contents are deleted
-  EXPECT_TRUE(DeleteFileRecursively(directory_contents));
+  EXPECT_TRUE(DeletePathRecursively(directory_contents));
   EXPECT_FALSE(PathExists(file_name));
   EXPECT_FALSE(PathExists(subdir_path));
 }
@@ -1515,7 +1521,7 @@ TEST_F(FileUtilTest, DeleteNonExistantWildCard) {
   EXPECT_TRUE(PathExists(subdir_path));
 
   // Delete recursively and check nothing got deleted
-  EXPECT_TRUE(DeleteFileRecursively(directory_contents));
+  EXPECT_TRUE(DeletePathRecursively(directory_contents));
   EXPECT_TRUE(PathExists(subdir_path));
 }
 #endif
@@ -1571,11 +1577,11 @@ TEST_F(FileUtilTest, DeleteDirRecursive) {
   ASSERT_TRUE(PathExists(subdir_path2));
 
   // Delete recursively and check that the empty dir got deleted
-  EXPECT_TRUE(DeleteFileRecursively(subdir_path2));
+  EXPECT_TRUE(DeletePathRecursively(subdir_path2));
   EXPECT_FALSE(PathExists(subdir_path2));
 
   // Delete recursively and check that everything got deleted
-  EXPECT_TRUE(DeleteFileRecursively(test_subdir));
+  EXPECT_TRUE(DeletePathRecursively(test_subdir));
   EXPECT_FALSE(PathExists(file_name));
   EXPECT_FALSE(PathExists(subdir_path1));
   EXPECT_FALSE(PathExists(test_subdir));
@@ -1602,7 +1608,7 @@ TEST_F(FileUtilTest, DeleteDirRecursiveWithOpenFile) {
              File::FLAG_CREATE | File::FLAG_READ | File::FLAG_WRITE);
   ASSERT_TRUE(PathExists(file_name3));
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // On Windows, holding the file open in sufficient to make it un-deletable.
   // The POSIX code is verifiable on Linux by creating an "immutable" file but
   // this is best-effort because it's not supported by all file systems. Both
@@ -1620,10 +1626,10 @@ TEST_F(FileUtilTest, DeleteDirRecursiveWithOpenFile) {
 
   // Delete recursively and check that at least the second file got deleted.
   // This ensures that un-deletable files don't impact those that can be.
-  DeleteFileRecursively(test_subdir);
+  DeletePathRecursively(test_subdir);
   EXPECT_FALSE(PathExists(file_name2));
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Make sure that the test can clean up after itself.
   if (file_attrs_supported) {
     flags &= ~FS_IMMUTABLE_FL;
@@ -1633,7 +1639,7 @@ TEST_F(FileUtilTest, DeleteDirRecursiveWithOpenFile) {
 #endif
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // This test will validate that files which would block when read result in a
 // failure on a call to ReadFileToStringNonBlocking. To accomplish this we will
 // use a named pipe because it appears as a file on disk and we can control how
@@ -1666,7 +1672,7 @@ TEST_F(FileUtilTest, TestNonBlockingFileReadLinux) {
   ASSERT_EQ(result.size(), 1u);
   EXPECT_EQ(result[0], 'a');
 }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 TEST_F(FileUtilTest, MoveFileNew) {
   // Create a file
@@ -2827,7 +2833,7 @@ TEST_F(FileUtilTest, CreateDirectoryTest) {
   EXPECT_TRUE(PathExists(test_path));
   EXPECT_FALSE(CreateDirectory(test_path));
 
-  EXPECT_TRUE(DeleteFileRecursively(test_root));
+  EXPECT_TRUE(DeletePathRecursively(test_root));
   EXPECT_FALSE(PathExists(test_root));
   EXPECT_FALSE(PathExists(test_path));
 
@@ -2874,7 +2880,7 @@ TEST_F(FileUtilTest, DetectDirectoryTest) {
   EXPECT_FALSE(DirectoryExists(test_path));
   EXPECT_TRUE(DeleteFile(test_path));
 
-  EXPECT_TRUE(DeleteFileRecursively(test_root));
+  EXPECT_TRUE(DeletePathRecursively(test_root));
 }
 
 TEST_F(FileUtilTest, FileEnumeratorTest) {
@@ -3031,13 +3037,13 @@ TEST_F(FileUtilTest, AppendToFile) {
 
   // Create a fresh, empty copy of this directory.
   if (PathExists(data_dir)) {
-    ASSERT_TRUE(DeleteFileRecursively(data_dir));
+    ASSERT_TRUE(DeletePathRecursively(data_dir));
   }
   ASSERT_TRUE(CreateDirectory(data_dir));
 
   // Create a fresh, empty copy of this directory.
   if (PathExists(data_dir)) {
-    ASSERT_TRUE(DeleteFileRecursively(data_dir));
+    ASSERT_TRUE(DeletePathRecursively(data_dir));
   }
   ASSERT_TRUE(CreateDirectory(data_dir));
   FilePath foobar(data_dir.Append(FILE_PATH_LITERAL("foobar.txt")));
@@ -3501,7 +3507,7 @@ TEST_F(FileUtilTest, ReadFileToStringWithNamedPipe) {
 }
 #endif  // defined(OS_WIN)
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_APPLE)
 TEST_F(FileUtilTest, ReadFileToStringWithProcFileSystem) {
   FilePath file_path("/proc/cpuinfo");
   std::string data = "temp";
@@ -3519,7 +3525,7 @@ TEST_F(FileUtilTest, ReadFileToStringWithProcFileSystem) {
 
   EXPECT_FALSE(ReadFileToStringWithMaxSize(file_path, nullptr, 4));
 }
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
+#endif  // defined(OS_POSIX) && !defined(OS_APPLE)
 
 TEST_F(FileUtilTest, ReadFileToStringWithLargeFile) {
   std::string data(kLargeFileSize, 'c');
@@ -3578,7 +3584,7 @@ TEST_F(FileUtilTest, TouchFile) {
 
   // Create a fresh, empty copy of this directory.
   if (PathExists(data_dir)) {
-    ASSERT_TRUE(DeleteFileRecursively(data_dir));
+    ASSERT_TRUE(DeletePathRecursively(data_dir));
   }
   ASSERT_TRUE(CreateDirectory(data_dir));
 
@@ -4084,15 +4090,16 @@ TEST_F(FileUtilTest, PreReadFile_ExistingFile_NoSize) {
   FilePath text_file = temp_dir_.GetPath().Append(FPL("text_file"));
   CreateTextFile(text_file, bogus_content);
 
-  EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false));
+  EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false).succeeded());
 }
 
 TEST_F(FileUtilTest, PreReadFile_ExistingFile_ExactSize) {
   FilePath text_file = temp_dir_.GetPath().Append(FPL("text_file"));
   CreateTextFile(text_file, bogus_content);
 
-  EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false,
-                          base::size(bogus_content)));
+  EXPECT_TRUE(
+      PreReadFile(text_file, /*is_executable=*/false, base::size(bogus_content))
+          .succeeded());
 }
 
 TEST_F(FileUtilTest, PreReadFile_ExistingFile_OverSized) {
@@ -4100,7 +4107,8 @@ TEST_F(FileUtilTest, PreReadFile_ExistingFile_OverSized) {
   CreateTextFile(text_file, bogus_content);
 
   EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false,
-                          base::size(bogus_content) * 2));
+                          base::size(bogus_content) * 2)
+                  .succeeded());
 }
 
 TEST_F(FileUtilTest, PreReadFile_ExistingFile_UnderSized) {
@@ -4108,14 +4116,16 @@ TEST_F(FileUtilTest, PreReadFile_ExistingFile_UnderSized) {
   CreateTextFile(text_file, bogus_content);
 
   EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false,
-                          base::size(bogus_content) / 2));
+                          base::size(bogus_content) / 2)
+                  .succeeded());
 }
 
 TEST_F(FileUtilTest, PreReadFile_ExistingFile_ZeroSize) {
   FilePath text_file = temp_dir_.GetPath().Append(FPL("text_file"));
   CreateTextFile(text_file, bogus_content);
 
-  EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false, /*max_bytes=*/0));
+  EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false, /*max_bytes=*/0)
+                  .succeeded());
 }
 
 TEST_F(FileUtilTest, PreReadFile_ExistingEmptyFile_NoSize) {
@@ -4130,12 +4140,14 @@ TEST_F(FileUtilTest, PreReadFile_ExistingEmptyFile_NoSize) {
 TEST_F(FileUtilTest, PreReadFile_ExistingEmptyFile_ZeroSize) {
   FilePath text_file = temp_dir_.GetPath().Append(FPL("text_file"));
   CreateTextFile(text_file, L"");
-  EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false, /*max_bytes=*/0));
+  EXPECT_TRUE(PreReadFile(text_file, /*is_executable=*/false, /*max_bytes=*/0)
+                  .succeeded());
 }
 
 TEST_F(FileUtilTest, PreReadFile_InexistentFile) {
   FilePath inexistent_file = temp_dir_.GetPath().Append(FPL("inexistent_file"));
-  EXPECT_FALSE(PreReadFile(inexistent_file, /*is_executable=*/false));
+  EXPECT_FALSE(
+      PreReadFile(inexistent_file, /*is_executable=*/false).succeeded());
 }
 
 #endif  // !defined(OS_NACL_NONSFI)

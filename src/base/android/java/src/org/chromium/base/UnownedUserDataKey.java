@@ -8,11 +8,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import java.lang.ref.WeakReference;
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.WeakHashMap;
 
 /**
  * UnownedUserDataKey is used in conjunction with a particular {@link UnownedUserData} as the key
@@ -60,17 +60,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * @see UnownedUserData for the marker interface used for this type of data.
  */
 public final class UnownedUserDataKey<T extends UnownedUserData> {
-    private interface Predicate<T> {
-        boolean test(T t);
-    }
-
-    private interface Action<T> {
-        void execute(T t, WeakReference<T> weakT);
-    }
-
     @NonNull
     private final Class<T> mClazz;
-    private final Set<WeakReference<UnownedUserDataHost>> mHostAttachments = new HashSet<>();
+    // A Set that uses WeakReference<UnownedUserDataHost> internally.
+    private final Set<UnownedUserDataHost> mWeakHostAttachments =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     /**
      * Constructs a key to use for attaching to a particular {@link UnownedUserDataHost}.
@@ -94,15 +88,14 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
      * @param object The object to attach.
      */
     public final void attachToHost(@NonNull UnownedUserDataHost host, @NonNull T object) {
-        checkNotNull(host);
-        checkNotNull(object);
+        Objects.requireNonNull(object);
         // Setting a new value might lead to detachment of previously attached data, including
         // re-entry to this key, to happen before we update the {@link #mHostAttachments}.
         host.set(this, object);
 
-        AtomicReference<UnownedUserDataHost> retrievedHost = new AtomicReference<>();
-        executeHostAction(host::equals, (attachedHost, unused) -> retrievedHost.set(attachedHost));
-        if (retrievedHost.get() == null) mHostAttachments.add(new WeakReference<>(host));
+        if (!isAttachedToHost(host)) {
+            mWeakHostAttachments.add(host);
+        }
     }
 
     /**
@@ -116,12 +109,13 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
      */
     @Nullable
     public final T retrieveDataFromHost(@NonNull UnownedUserDataHost host) {
-        checkNotNull(host);
-
-        AtomicReference<T> retrievedValue = new AtomicReference<>();
-        executeHostAction(
-                host::equals, (attachedHost, unused) -> retrievedValue.set(host.get(this)));
-        return retrievedValue.get();
+        assertNoDestroyedAttachments();
+        for (UnownedUserDataHost attachedHost : mWeakHostAttachments) {
+            if (host.equals(attachedHost)) {
+                return host.get(this);
+            }
+        }
+        return null;
     }
 
     /**
@@ -131,11 +125,12 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
      * @param host The host to detach from.
      */
     public final void detachFromHost(@NonNull UnownedUserDataHost host) {
-        checkNotNull(host);
-        executeHostAction(host::equals, (attachedHost, weakAttachedHost) -> {
-            attachedHost.remove(this);
-            mHostAttachments.remove(weakAttachedHost);
-        });
+        assertNoDestroyedAttachments();
+        for (UnownedUserDataHost attachedHost : new ArrayList<>(mWeakHostAttachments)) {
+            if (host.equals(attachedHost)) {
+                removeHostAttachment(attachedHost);
+            }
+        }
     }
 
     /**
@@ -143,13 +138,12 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
      * this key. It is OK to call this for already detached objects.
      */
     public final void detachFromAllHosts(@NonNull T object) {
-        checkNotNull(object);
-        executeHostAction((attachedHost)
-                                  -> object.equals(attachedHost.get(this)),
-                (attachedHost, weakAttachedHost) -> {
-                    attachedHost.remove(this);
-                    mHostAttachments.remove(weakAttachedHost);
-                });
+        assertNoDestroyedAttachments();
+        for (UnownedUserDataHost attachedHost : new ArrayList<>(mWeakHostAttachments)) {
+            if (object.equals(attachedHost.get(this))) {
+                removeHostAttachment(attachedHost);
+            }
+        }
     }
 
     /**
@@ -159,7 +153,6 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
      * @return true if currently attached, false otherwise.
      */
     public final boolean isAttachedToHost(@NonNull UnownedUserDataHost host) {
-        checkNotNull(host);
         T t = retrieveDataFromHost(host);
         return t != null;
     }
@@ -168,46 +161,34 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
      * @return Whether the {@link UnownedUserData} is currently attached to any hosts with this key.
      */
     public final boolean isAttachedToAnyHost(@NonNull T object) {
-        checkNotNull(object);
         return getHostAttachmentCount(object) > 0;
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     /* package */ int getHostAttachmentCount(@NonNull T object) {
-        AtomicInteger count = new AtomicInteger(0);
-        executeHostAction((attachedHost)
-                                  -> object.equals(attachedHost.get(this)),
-                (attachedHost, unused) -> count.incrementAndGet());
-        return count.get();
-    }
-
-    private void executeHostAction(@NonNull Predicate<UnownedUserDataHost> predicate,
-            @NonNull Action<UnownedUserDataHost> action) {
-        Set<WeakReference<UnownedUserDataHost>> hosts = new HashSet<>(mHostAttachments);
-        for (WeakReference<UnownedUserDataHost> hostWeakReference : hosts) {
-            UnownedUserDataHost hostStrongReference = hostWeakReference.get();
-            if (hostStrongReference == null) {
-                mHostAttachments.remove(hostWeakReference);
-                continue;
+        assertNoDestroyedAttachments();
+        int ret = 0;
+        for (UnownedUserDataHost attachedHost : mWeakHostAttachments) {
+            if (object.equals(attachedHost.get(this))) {
+                ret++;
             }
-            if (hostStrongReference.isDestroyed()) {
-                throw new IllegalStateException("Host should have been removed already.");
+        }
+        return ret;
+    }
+
+    private void removeHostAttachment(UnownedUserDataHost host) {
+        host.remove(this);
+        mWeakHostAttachments.remove(host);
+    }
+
+    private void assertNoDestroyedAttachments() {
+        if (BuildConfig.DCHECK_IS_ON) {
+            for (UnownedUserDataHost attachedHost : mWeakHostAttachments) {
+                if (attachedHost.isDestroyed()) {
+                    assert false : "Host should have been removed already.";
+                    throw new IllegalStateException();
+                }
             }
-            if (!predicate.test(hostStrongReference)) continue;
-
-            action.execute(hostStrongReference, hostWeakReference);
-        }
-    }
-
-    private void checkNotNull(T unownedUserData) {
-        if (unownedUserData == null) {
-            throw new IllegalArgumentException("UnownedUserData can not be null.");
-        }
-    }
-
-    private static void checkNotNull(UnownedUserDataHost host) {
-        if (host == null) {
-            throw new IllegalArgumentException("UnownedUserDataHost can not be null.");
         }
     }
 }

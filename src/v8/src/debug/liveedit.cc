@@ -1025,7 +1025,7 @@ void TranslateSourcePositionTable(Isolate* isolate, Handle<BytecodeArray> code,
 
   Handle<ByteArray> new_source_position_table(
       builder.ToSourcePositionTable(isolate));
-  code->set_source_position_table(*new_source_position_table);
+  code->set_source_position_table(*new_source_position_table, kReleaseStore);
   LOG_CODE_EVENT(isolate,
                  CodeLinePosInfoRecordEvent(code->GetFirstBytecodeAddress(),
                                             *new_source_position_table));
@@ -1154,7 +1154,7 @@ void LiveEdit::PatchScript(Isolate* isolate, Handle<Script> script,
           *isolate->factory()->many_closures_cell());
       if (!js_function->is_compiled()) continue;
       IsCompiledScope is_compiled_scope(
-          js_function->shared().is_compiled_scope());
+          js_function->shared().is_compiled_scope(isolate));
       JSFunction::EnsureFeedbackVector(js_function, &is_compiled_scope);
     }
 
@@ -1197,7 +1197,7 @@ void LiveEdit::PatchScript(Isolate* isolate, Handle<Script> script,
           *isolate->factory()->many_closures_cell());
       if (!js_function->is_compiled()) continue;
       IsCompiledScope is_compiled_scope(
-          js_function->shared().is_compiled_scope());
+          js_function->shared().is_compiled_scope(isolate));
       JSFunction::EnsureFeedbackVector(js_function, &is_compiled_scope);
     }
   }

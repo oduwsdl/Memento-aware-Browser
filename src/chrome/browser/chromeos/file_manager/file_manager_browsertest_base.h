@@ -16,8 +16,10 @@
 #include "base/values.h"
 #include "chrome/browser/chromeos/crostini/fake_crostini_features.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
+#include "chrome/browser/chromeos/file_manager/devtools_listener.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/devtools_agent_host_observer.h"
 
 class NotificationDisplayServiceTester;
 class SelectFileDialogExtensionTestFactory;
@@ -40,7 +42,8 @@ class DocumentsProviderTestVolume;
 class MediaViewTestVolume;
 class SmbfsTestVolume;
 
-class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
+class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
+                                   public extensions::ExtensionApiTest {
  public:
   struct Options {
     Options();
@@ -62,9 +65,11 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
     bool browser = false;
 
     // Whether test requires zip/unzip support.
+    // TODO(crbug.com/912236) Remove once transition to new ZIP system is done.
     bool zip = false;
 
-    // Whether test should have zip-no-nacl active.
+    // Whether test uses the new ZIP system.
+    // TODO(crbug.com/912236) Remove once transition to new ZIP system is done.
     bool zip_no_nacl = false;
 
     // Whether Drive should act as if offline.
@@ -79,6 +84,9 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
     // Whether test needs smbfs for native SMB integration.
     bool smbfs = false;
 
+    // Whether test needs trash.
+    bool trash = false;
+
     // Whether test needs the unified media view feature.
     bool unified_media_view = false;
 
@@ -87,11 +95,26 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
 
     // Whether test should observe file tasks.
     bool observe_file_tasks = true;
+
+    // Whether test should enable sharesheet.
+    bool enable_sharesheet = true;
+
+    // Whether test needs the single partition format feature.
+    bool single_partition_format = false;
   };
 
  protected:
   FileManagerBrowserTestBase();
   ~FileManagerBrowserTestBase() override;
+
+  // content::DevToolsAgentHostObserver:
+  bool ShouldForceDevToolsAgentHostCreation() override;
+  void DevToolsAgentHostCreated(content::DevToolsAgentHost* host) override;
+  void DevToolsAgentHostAttached(content::DevToolsAgentHost* host) override;
+  void DevToolsAgentHostNavigated(content::DevToolsAgentHost* host) override;
+  void DevToolsAgentHostDetached(content::DevToolsAgentHost* host) override;
+  void DevToolsAgentHostCrashed(content::DevToolsAgentHost* host,
+                                base::TerminationStatus status) override;
 
   // extensions::ExtensionApiTest:
   void SetUp() override;
@@ -173,16 +196,19 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
   std::unique_ptr<drive::DriveIntegrationServiceFactory::ScopedFactoryForTest>
       service_factory_for_test_;
 
-  std::unique_ptr<NotificationDisplayServiceTester> display_service_;
   std::unique_ptr<arc::FakeFileSystemInstance> arc_file_system_instance_;
 
+  std::unique_ptr<NotificationDisplayServiceTester> display_service_;
   std::unique_ptr<MockFileTasksObserver> file_tasks_observer_;
+  SelectFileDialogExtensionTestFactory* select_factory_;  // Not owned.
 
   base::HistogramTester histograms_;
   base::UserActionTester user_actions_;
 
-  // Not owned.
-  SelectFileDialogExtensionTestFactory* select_factory_;
+  bool devtools_code_coverage_ = false;
+  std::map<content::DevToolsAgentHost*, std::unique_ptr<DevToolsListener>>
+      devtools_agent_;
+  uint32_t process_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(FileManagerBrowserTestBase);
 };

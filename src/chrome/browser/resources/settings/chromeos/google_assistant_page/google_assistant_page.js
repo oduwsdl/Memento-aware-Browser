@@ -6,7 +6,7 @@
  * The types of Hotword enable status without Dsp support.
  * @enum {number}
  */
-const DspHotwordState = {
+/* #export */ const DspHotwordState = {
   DEFAULT_ON: 0,
   ALWAYS_ON: 1,
   OFF: 2,
@@ -19,7 +19,7 @@ const DspHotwordState = {
  * chromeos/services/assistant/public/cpp/assistant_prefs.h
  * @enum {number}
  */
-const ConsentStatus = {
+/* #export */ const ConsentStatus = {
   // The status is unknown.
   kUnknown: 0,
 
@@ -41,7 +41,13 @@ const ConsentStatus = {
 Polymer({
   is: 'settings-google-assistant-page',
 
-  behaviors: [I18nBehavior, PrefsBehavior, WebUIListenerBehavior],
+  behaviors: [
+    DeepLinkingBehavior,
+    I18nBehavior,
+    PrefsBehavior,
+    settings.RouteObserverBehavior,
+    WebUIListenerBehavior
+  ],
 
   properties: {
     /** @private */
@@ -96,6 +102,23 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kAssistantOnOff,
+        chromeos.settings.mojom.Setting.kAssistantRelatedInfo,
+        chromeos.settings.mojom.Setting.kAssistantQuickAnswers,
+        chromeos.settings.mojom.Setting.kAssistantOkGoogle,
+        chromeos.settings.mojom.Setting.kAssistantNotifications,
+        chromeos.settings.mojom.Setting.kAssistantVoiceInput,
+        chromeos.settings.mojom.Setting.kTrainAssistantVoiceModel,
+      ]),
+    },
   },
 
   observers: [
@@ -123,6 +146,19 @@ Polymer({
     });
 
     chrome.send('initializeGoogleAssistantPage');
+  },
+
+  /**
+   * @param {!settings.Route} route
+   * @param {!settings.Route} oldRoute
+   */
+  currentRouteChanged(route, oldRoute) {
+    // Does not apply to this page.
+    if (route !== settings.routes.GOOGLE_ASSISTANT) {
+      return;
+    }
+
+    this.attemptDeepLink();
   },
 
   /**
@@ -198,10 +234,7 @@ Polymer({
 
     this.shouldShowVoiceMatchSettings_ =
         !loadTimeData.getBoolean('voiceMatchDisabled') &&
-        !!this.getPref('settings.voice_interaction.hotword.enabled').value &&
-        (this.getPref(
-                 'settings.voice_interaction.activity_control.consent_status')
-             .value == ConsentStatus.kActivityControlAccepted);
+        !!this.getPref('settings.voice_interaction.hotword.enabled').value;
 
     const hotwordEnabled =
         this.getPref('settings.voice_interaction.hotword.enabled');

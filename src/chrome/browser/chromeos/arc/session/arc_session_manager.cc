@@ -22,6 +22,7 @@
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_migration_guide_notification.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
@@ -67,6 +68,8 @@
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "crypto/random.h"
+#include "crypto/sha2.h"
 #include "ui/display/types/display_constants.h"
 
 namespace arc {
@@ -87,6 +90,35 @@ base::Optional<bool> g_enable_check_android_management_in_tests;
 
 constexpr const char kPropertyFilesPathVm[] = "/usr/share/arcvm/properties";
 constexpr const char kPropertyFilesPath[] = "/usr/share/arc/properties";
+constexpr const char kArcSaltPath[] = "/var/lib/misc/arc_salt";
+constexpr const size_t kArcSaltFileSize = 16;
+
+// Generates a unique, 20-character hex string from |chromeos_user| and
+// |salt| which can be used as Android's ro.boot.serialno and ro.serialno
+// properties. Note that Android treats serialno in a case-insensitive manner.
+// |salt| cannot be the hex-encoded one.
+// Note: The function must be the exact copy of the one in platform2/arc/setup/.
+std::string GenerateFakeSerialNumber(const std::string& chromeos_user,
+                                     const std::string& salt) {
+  constexpr size_t kMaxHardwareIdLen = 20;
+  const std::string hash(crypto::SHA256HashString(chromeos_user + salt));
+  return base::HexEncode(hash.data(), hash.length())
+      .substr(0, kMaxHardwareIdLen);
+}
+
+// Returns true if the hex-encoded salt in Local State is valid.
+bool IsValidHexSalt(const std::string& hex_salt) {
+  std::string salt;
+  if (!base::HexStringToString(hex_salt, &salt)) {
+    LOG(WARNING) << "Not a hex string: " << hex_salt;
+    return false;
+  }
+  if (salt.size() != kArcSaltFileSize) {
+    LOG(WARNING) << "Salt size invalid: " << salt.size();
+    return false;
+  }
+  return true;
+}
 
 // Maximum amount of time we'll wait for ARC to finish booting up. Once this
 // timeout expires, keep ARC running in case the user wants to file feedback,
@@ -154,6 +186,32 @@ bool ShouldLaunchPlayStoreApp(Profile* profile,
   return true;
 }
 
+// Defines the conditions that require UI to present eventual error conditions
+// to the end user.
+//
+// Don't show UI for ARC Kiosk because the only one UI in kiosk mode must
+// be the kiosk app. In case of error the UI will be useless as well, because
+// in typical use case there will be no one nearby the kiosk device, who can
+// do some action to solve the problem be means of UI.
+// Same considerations apply for MGS sessions in Demo Mode.
+// All other managed sessions will be attended by a user and require an error
+// UI.
+bool ShouldUseErrorDialog() {
+  if (!g_ui_enabled)
+    return false;
+
+  if (IsArcOptInVerificationDisabled())
+    return false;
+
+  if (IsArcKioskMode())
+    return false;
+
+  if (chromeos::DemoSession::IsDeviceInDemoMode())
+    return false;
+
+  return true;
+}
+
 void ResetStabilityMetrics() {
   // TODO(shaochuan): Make this an event observable by StabilityMetricsManager
   // and eliminate this null check.
@@ -172,30 +230,156 @@ void SetArcEnabledStateMetric(bool enabled) {
   stability_metrics_manager->SetArcEnabledState(enabled);
 }
 
-std::string GetOrCreateSerialNumber(PrefService* prefs) {
-  DCHECK(prefs);
-  std::string serial_number = prefs->GetString(prefs::kArcSerialNumber);
-  if (!serial_number.empty())
-    return serial_number;
-  constexpr size_t kRandSize = 256;
-  constexpr size_t kMaxHardwareIdLen = 20;
-  serial_number =
-      base::HexEncode(base::RandBytesAsString(kRandSize).data(), kRandSize)
-          .substr(0, kMaxHardwareIdLen);
-  prefs->SetString(prefs::kArcSerialNumber, serial_number);
-  return serial_number;
+// Generates and returns a serial number from the salt in |local_state| and
+// |chromeos_user|. When |local_state| does not have it (or has a corrupted
+// one), this function creates a new random salt. When creates it, the function
+// copies |arc_salt_on_disk| to |local_state| if |arc_salt_on_disk| is not
+// empty.
+std::string GetOrCreateSerialNumber(PrefService* local_state,
+                                    const std::string& chromeos_user,
+                                    const std::string& arc_salt_on_disk) {
+  DCHECK(local_state);
+  DCHECK(!chromeos_user.empty());
+
+  std::string hex_salt = local_state->GetString(prefs::kArcSerialNumberSalt);
+  if (hex_salt.empty() || !IsValidHexSalt(hex_salt)) {
+    // This path is taken 1) on the very first ARC boot, 2) on the first boot
+    // after powerwash, 3) on the first boot after upgrading to ARCVM, or 4)
+    // when the salt in local state is corrupted.
+    if (arc_salt_on_disk.empty()) {
+      // The device doesn't have the salt file for ARC container. Create it from
+      // scratch in the same way as ARC container.
+      char rand_value[kArcSaltFileSize];
+      crypto::RandBytes(rand_value, kArcSaltFileSize);
+      hex_salt = base::HexEncode(rand_value, kArcSaltFileSize);
+    } else {
+      // The device has the one for container. Reuse it for ARCVM.
+      DCHECK_EQ(kArcSaltFileSize, arc_salt_on_disk.size());
+      hex_salt =
+          base::HexEncode(arc_salt_on_disk.data(), arc_salt_on_disk.size());
+    }
+    local_state->SetString(prefs::kArcSerialNumberSalt, hex_salt);
+  }
+
+  // We store hex-encoded version of the salt in the local state, but to compute
+  // the serial number, we use the decoded version to be compatible with the
+  // arc-setup code for P.
+  std::string decoded_salt;
+  const bool result = base::HexStringToString(hex_salt, &decoded_salt);
+  DCHECK(result) << hex_salt;
+  return GenerateFakeSerialNumber(chromeos_user, decoded_salt);
 }
 
-bool ExpandPropertyFilesInternal(const base::FilePath& source_path,
-                                 const base::FilePath& dest_path,
-                                 bool single_file) {
-  if (!arc::ExpandPropertyFiles(source_path, dest_path, single_file))
-    return false;
-  if (!arc::IsArcVmEnabled())
+// Reads a salt from |salt_path| and stores it in |out_salt|. Returns true
+// when the file read is successful or the file does not exist.
+bool ReadSaltOnDisk(const base::FilePath& salt_path, std::string* out_salt) {
+  DCHECK(out_salt);
+  if (!base::PathExists(salt_path)) {
+    VLOG(2) << "ARC salt file doesn't exist: " << salt_path;
     return true;
+  }
+  if (!base::ReadFileToString(salt_path, out_salt)) {
+    PLOG(ERROR) << "Failed to read " << salt_path;
+    return false;
+  }
+  if (out_salt->size() != kArcSaltFileSize) {
+    LOG(WARNING) << "Ignoring invalid ARC salt on disk. size="
+                 << out_salt->size();
+    out_salt->clear();
+  }
+  VLOG(1) << "Successfully read ARC salt on disk: " << salt_path;
+  return true;
+}
+
+int GetSignInErrorCode(arc::mojom::ArcSignInErrorPtr signin_error) {
+  if (!signin_error)
+    return 0;
+
+  if (signin_error->is_cloud_provision_flow_error())
+    return static_cast<std::underlying_type_t<mojom::CloudProvisionFlowError>>(
+        signin_error->get_cloud_provision_flow_error());
+
+  return 0;
+}
+
+ArcSupportHost::Error GetCloudProvisionFlowError(
+    mojom::CloudProvisionFlowError cloud_provision_flow_error) {
+  switch (cloud_provision_flow_error) {
+    case mojom::CloudProvisionFlowError::ERROR_ENROLLMENT_TOKEN_INVALID:
+      return ArcSupportHost::Error::
+          SIGN_IN_CLOUD_PROVISION_FLOW_ENROLLMENT_TOKEN_INVALID;
+
+    case mojom::CloudProvisionFlowError::ERROR_DEVICE_QUOTA_EXCEEDED:
+      return ArcSupportHost::Error::
+          SIGN_IN_CLOUD_PROVISION_FLOW_DOMAIN_JOIN_FAIL_ERROR;
+
+    case mojom::CloudProvisionFlowError::ERROR_NETWORK_UNAVAILABLE:
+      return ArcSupportHost::Error::SIGN_IN_CLOUD_PROVISION_FLOW_NETWORK_ERROR;
+
+    case mojom::CloudProvisionFlowError::ERROR_USER_CANCEL:
+      return ArcSupportHost::Error::
+          SIGN_IN_CLOUD_PROVISION_FLOW_INTERRUPTED_ERROR;
+
+    case mojom::CloudProvisionFlowError::ERROR_NO_ACCOUNT_IN_WORK_PROFILE:
+      return ArcSupportHost::Error::
+          SIGN_IN_CLOUD_PROVISION_FLOW_ACCOUNT_MISSING_ERROR;
+
+    case mojom::CloudProvisionFlowError::ERROR_ACCOUNT_NOT_READY:
+    case mojom::CloudProvisionFlowError::ERROR_ACCOUNT_NOT_ALLOWLISTED:
+    case mojom::CloudProvisionFlowError::ERROR_DPC_SUPPORT:
+    case mojom::CloudProvisionFlowError::ERROR_ENTERPRISE_INVALID:
+      return ArcSupportHost::Error::
+          SIGN_IN_CLOUD_PROVISION_FLOW_PERMANENT_ERROR;
+
+    case mojom::CloudProvisionFlowError::ERROR_ACCOUNT_OTHER:
+    case mojom::CloudProvisionFlowError::ERROR_ADD_ACCOUNT_FAILED:
+    case mojom::CloudProvisionFlowError::ERROR_CHECKIN_FAILED:
+    case mojom::CloudProvisionFlowError::ERROR_INVALID_POLICY_STATE:
+    case mojom::CloudProvisionFlowError::ERROR_INVALID_SETUP_ACTION:
+    case mojom::CloudProvisionFlowError::ERROR_JSON:
+    case mojom::CloudProvisionFlowError::ERROR_MANAGED_PROVISIONING_FAILED:
+    case mojom::CloudProvisionFlowError::
+        ERROR_OAUTH_TOKEN_AUTHENTICATOR_EXCEPTION:
+    case mojom::CloudProvisionFlowError::ERROR_OAUTH_TOKEN_IO_EXCEPTION:
+    case mojom::CloudProvisionFlowError::
+        ERROR_OAUTH_TOKEN_OPERATION_CANCELED_EXCEPTION:
+    case mojom::CloudProvisionFlowError::ERROR_OAUTH_TOKEN:
+    case mojom::CloudProvisionFlowError::ERROR_OTHER:
+    case mojom::CloudProvisionFlowError::ERROR_QUARANTINE:
+    case mojom::CloudProvisionFlowError::ERROR_REMOVE_ACCOUNT_FAILED:
+    case mojom::CloudProvisionFlowError::ERROR_REQUEST_ANDROID_ID_FAILED:
+    case mojom::CloudProvisionFlowError::ERROR_SERVER_TRANSIENT_ERROR:
+    case mojom::CloudProvisionFlowError::ERROR_SERVER:
+    case mojom::CloudProvisionFlowError::ERROR_TIMEOUT:
+    default:
+      return ArcSupportHost::Error::
+          SIGN_IN_CLOUD_PROVISION_FLOW_TRANSIENT_ERROR;
+  }
+}
+
+ArcSessionManager::ExpansionResult ExpandPropertyFilesAndReadSaltInternal(
+    const base::FilePath& source_path,
+    const base::FilePath& dest_path,
+    bool single_file,
+    bool add_native_bridge_64bit_support) {
+  if (!arc::ExpandPropertyFiles(source_path, dest_path, single_file,
+                                add_native_bridge_64bit_support)) {
+    return ArcSessionManager::ExpansionResult{{}, false};
+  }
+  if (!arc::IsArcVmEnabled())
+    return ArcSessionManager::ExpansionResult{{}, true};
+
   // For ARCVM, the first stage fstab file needs to be generated.
-  return arc::GenerateFirstStageFstab(dest_path,
-                                      dest_path.DirName().Append("fstab"));
+  if (!arc::GenerateFirstStageFstab(dest_path,
+                                    dest_path.DirName().Append("fstab"))) {
+    return ArcSessionManager::ExpansionResult{{}, false};
+  }
+
+  // Finally, for ARCVM, read |kArcSaltPath| if that exists.
+  std::string salt;
+  if (!ReadSaltOnDisk(base::FilePath(kArcSaltPath), &salt))
+    return ArcSessionManager::ExpansionResult{{}, false};
+  return ArcSessionManager::ExpansionResult{salt, true};
 }
 
 }  // namespace
@@ -257,9 +441,13 @@ class ArcSessionManager::ScopedOptInFlowTracker {
 };
 
 ArcSessionManager::ArcSessionManager(
-    std::unique_ptr<ArcSessionRunner> arc_session_runner)
+    std::unique_ptr<ArcSessionRunner> arc_session_runner,
+    std::unique_ptr<AdbSideloadingAvailabilityDelegateImpl>
+        adb_sideloading_availability_delegate)
     : arc_session_runner_(std::move(arc_session_runner)),
-      attempt_user_exit_callback_(base::Bind(chrome::AttemptUserExit)),
+      adb_sideloading_availability_delegate_(
+          std::move(adb_sideloading_availability_delegate)),
+      attempt_user_exit_callback_(base::BindRepeating(chrome::AttemptUserExit)),
       property_files_source_dir_(base::FilePath(
           IsArcVmEnabled() ? kPropertyFilesPathVm : kPropertyFilesPath)),
       property_files_dest_dir_(
@@ -272,10 +460,14 @@ ArcSessionManager::ArcSessionManager(
   if (chromeos::SessionManagerClient::Get())
     chromeos::SessionManagerClient::Get()->AddObserver(this);
   ResetStabilityMetrics();
+  chromeos::DBusThreadManager::Get()->GetConciergeClient()->AddVmObserver(this);
 }
 
 ArcSessionManager::~ArcSessionManager() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  chromeos::DBusThreadManager::Get()->GetConciergeClient()->RemoveVmObserver(
+      this);
 
   if (chromeos::SessionManagerClient::Get())
     chromeos::SessionManagerClient::Get()->RemoveObserver(this);
@@ -309,13 +501,34 @@ void ArcSessionManager::EnableCheckAndroidManagementForTesting(bool enable) {
   g_enable_check_android_management_in_tests = enable;
 }
 
+// static
+std::string ArcSessionManager::GenerateFakeSerialNumberForTesting(
+    const std::string& chromeos_user,
+    const std::string& salt) {
+  return GenerateFakeSerialNumber(chromeos_user, salt);
+}
+
+// static
+std::string ArcSessionManager::GetOrCreateSerialNumberForTesting(
+    PrefService* local_state,
+    const std::string& chromeos_user,
+    const std::string& arc_salt_on_disk) {
+  return GetOrCreateSerialNumber(local_state, chromeos_user, arc_salt_on_disk);
+}
+
+// static
+bool ArcSessionManager::ReadSaltOnDiskForTesting(
+    const base::FilePath& salt_path,
+    std::string* out_salt) {
+  return ReadSaltOnDisk(salt_path, out_salt);
+}
+
 void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
                                          bool restarting) {
   if (restarting) {
     DCHECK_EQ(state_, State::ACTIVE);
     // If ARC is being restarted, here do nothing, and just wait for its
     // next run.
-    VLOG(1) << "ARC session is stopped, but being restarted: " << reason;
     return;
   }
 
@@ -324,7 +537,7 @@ void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
 
   // TODO(crbug.com/625923): Use |reason| to report more detailed errors.
   if (arc_sign_in_timer_.IsRunning())
-    OnProvisioningFinished(ProvisioningResult::ARC_STOPPED);
+    OnProvisioningFinished(ProvisioningResult::ARC_STOPPED, nullptr);
 
   for (auto& observer : observer_list_)
     observer.OnArcSessionStopped(reason);
@@ -337,7 +550,9 @@ void ArcSessionManager::OnSessionRestarting() {
     observer.OnArcSessionRestarting();
 }
 
-void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
+void ArcSessionManager::OnProvisioningFinished(
+    ProvisioningResult result,
+    mojom::ArcSignInErrorPtr signin_error) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // If the Mojo message to notify finishing the provisioning is already sent
@@ -397,8 +612,12 @@ void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
     UpdateProvisioningTiming(base::TimeTicks::Now() - sign_in_start_time_,
                              provisioning_successful, profile_);
     UpdateProvisioningResultUMA(result, profile_);
+    if (signin_error && signin_error->is_cloud_provision_flow_error())
+      UpdateCloudProvisionFlowErrorUMA(
+          signin_error->get_cloud_provision_flow_error(), profile_);
+
     if (!provisioning_successful)
-      UpdateOptInCancelUMA(OptInCancelReason::CLOUD_PROVISION_FLOW_FAIL);
+      UpdateOptInCancelUMA(OptInCancelReason::PROVISIONING_FAILED);
   }
 
   if (provisioning_successful) {
@@ -455,10 +674,10 @@ void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
     case ProvisioningResult::DEVICE_CHECK_IN_INTERNAL_ERROR:
       error = ArcSupportHost::Error::SIGN_IN_GMS_NOT_AVAILABLE_ERROR;
       break;
-    case ProvisioningResult::CLOUD_PROVISION_FLOW_FAILED:
-    case ProvisioningResult::CLOUD_PROVISION_FLOW_TIMEOUT:
-    case ProvisioningResult::CLOUD_PROVISION_FLOW_INTERNAL_ERROR:
-      error = ArcSupportHost::Error::SIGN_IN_CLOUD_PROVISION_FLOW_FAIL_ERROR;
+    case ProvisioningResult::CLOUD_PROVISION_FLOW_ERROR:
+      DCHECK(signin_error && signin_error->is_cloud_provision_flow_error());
+      error = GetCloudProvisionFlowError(
+          signin_error->get_cloud_provision_flow_error());
       break;
     case ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR:
       error = ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR;
@@ -482,14 +701,13 @@ void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
       result == ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR) {
     if (profile_->GetPrefs()->HasPrefPath(prefs::kArcSignedIn))
       profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, false);
+    VLOG(1) << "Stopping ARC due to provisioning failure";
     ShutdownSession();
-    ShowArcSupportHostError(error, true);
+    ShowArcSupportHostError(error, 0 /* error_code */, true);
     return;
   }
 
-  if (result == ProvisioningResult::CLOUD_PROVISION_FLOW_FAILED ||
-      result == ProvisioningResult::CLOUD_PROVISION_FLOW_TIMEOUT ||
-      result == ProvisioningResult::CLOUD_PROVISION_FLOW_INTERNAL_ERROR ||
+  if (result == ProvisioningResult::CLOUD_PROVISION_FLOW_ERROR ||
       // OVERALL_SIGN_IN_TIMEOUT might be an indication that ARC believes it is
       // fully setup, but Chrome does not.
       result == ProvisioningResult::OVERALL_SIGN_IN_TIMEOUT ||
@@ -501,7 +719,9 @@ void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
 
   // We'll delay shutting down the ARC instance in this case to allow people
   // to send feedback.
-  ShowArcSupportHostError(error, true /* = show send feedback button */);
+  int error_code = GetSignInErrorCode(std::move(signin_error));
+  ShowArcSupportHostError(error, error_code,
+                          true /* = show send feedback button */);
 }
 
 bool ArcSessionManager::IsAllowed() const {
@@ -514,9 +734,31 @@ void ArcSessionManager::SetProfile(Profile* profile) {
   DCHECK(!profile_);
   DCHECK(IsArcAllowedForProfile(profile));
   profile_ = profile;
+  adb_sideloading_availability_delegate_->SetProfile(profile);
   // RequestEnable() requires |profile_| set, therefore shouldn't have been
   // called at this point.
   SetArcEnabledStateMetric(false);
+}
+
+void ArcSessionManager::SetUserInfo() {
+  DCHECK(profile_);
+  DCHECK(arc_salt_on_disk_);
+
+  const AccountId account(multi_user_util::GetAccountIdFromProfile(profile_));
+  const cryptohome::Identification cryptohome_id(account);
+  const std::string user_id_hash =
+      chromeos::ProfileHelper::GetUserIdHashFromProfile(profile_);
+
+  std::string serialno;
+  // ARC container doesn't need the serial number.
+  if (arc::IsArcVmEnabled()) {
+    const std::string chromeos_user =
+        cryptohome::CreateAccountIdentifierFromAccountId(account).account_id();
+    serialno = GetOrCreateSerialNumber(g_browser_process->local_state(),
+                                       chromeos_user, *arc_salt_on_disk_);
+  }
+
+  arc_session_runner_->SetUserInfo(cryptohome_id, user_id_hash, serialno);
 }
 
 void ArcSessionManager::Initialize() {
@@ -526,29 +768,26 @@ void ArcSessionManager::Initialize() {
   DCHECK_EQ(state_, State::NOT_INITIALIZED);
   state_ = State::STOPPED;
 
-  auto* prefs = profile_->GetPrefs();
-  const cryptohome::Identification cryptohome_id(
-      multi_user_util::GetAccountIdFromProfile(profile_));
-  arc_session_runner_->SetUserInfo(
-      cryptohome_id,
-      chromeos::ProfileHelper::GetUserIdHashFromProfile(profile_),
-      GetOrCreateSerialNumber(prefs));
+  // If ExpandPropertyFilesAndReadSaltInternal() takes time to finish,
+  // Initialize() may be called before it finishes. In that case,
+  // SetUserInfo() is called in OnExpandPropertyFilesAndReadSalt().
+  if (arc_salt_on_disk_) {
+    VLOG(1) << "Calling SetUserInfo() in ArcSessionManager::Initialize";
+    SetUserInfo();
+  }
 
   // Create the support host at initialization. Note that, practically,
   // ARC support Chrome app is rarely used (only opt-in and re-auth flow).
   // So, it may be better to initialize it lazily.
   // TODO(hidehiko): Revisit to think about lazy initialization.
-  //
-  // Don't show UI for ARC Kiosk because the only one UI in kiosk mode must
-  // be the kiosk app. In case of error the UI will be useless as well, because
-  // in typical use case there will be no one nearby the kiosk device, who can
-  // do some action to solve the problem be means of UI.
-  if (g_ui_enabled && !IsArcOptInVerificationDisabled() &&
-      !IsRobotOrOfflineDemoAccountMode()) {
+  if (ShouldUseErrorDialog()) {
     DCHECK(!support_host_);
     support_host_ = std::make_unique<ArcSupportHost>(profile_);
     support_host_->SetErrorDelegate(this);
   }
+  auto* prefs = profile_->GetPrefs();
+  const cryptohome::Identification cryptohome_id(
+      multi_user_util::GetAccountIdFromProfile(profile_));
   data_remover_ = std::make_unique<ArcDataRemover>(prefs, cryptohome_id);
 
   if (g_enable_check_android_management_in_tests.value_or(g_ui_enabled))
@@ -571,6 +810,7 @@ void ArcSessionManager::Initialize() {
 }
 
 void ArcSessionManager::Shutdown() {
+  VLOG(1) << "Shutting down session manager";
   enable_requested_ = false;
   ResetArcState();
   arc_session_runner_->OnShutdown();
@@ -598,9 +838,14 @@ void ArcSessionManager::ShutdownSession() {
       // Ignore in NOT_INITIALIZED case. This is called in initial SetProfile
       // invocation.
       // TODO(hidehiko): Remove this along with the clean up.
-      break;
     case State::STOPPED:
       // Currently, ARC is stopped. Do nothing.
+    case State::REMOVING_DATA_DIR:
+      // When data removing is done, |state_| will be set to STOPPED.
+      // Do nothing here.
+    case State::STOPPING:
+      // Now ARC is stopping. Do nothing here.
+      VLOG(1) << "Skipping session shutdown because state is: " << state_;
       break;
     case State::NEGOTIATING_TERMS_OF_SERVICE:
     case State::CHECKING_ANDROID_MANAGEMENT:
@@ -611,9 +856,7 @@ void ArcSessionManager::ShutdownSession() {
       // immediately.
       state_ = State::STOPPED;
       break;
-    case State::REMOVING_DATA_DIR:
-      // When data removing is done, |state_| will be set to STOPPED.
-      // Do nothing here.
+
       break;
     case State::ACTIVE:
       // Request to stop the ARC. |state_| will be set to STOPPED eventually.
@@ -622,9 +865,6 @@ void ArcSessionManager::ShutdownSession() {
       // |state_| might be changed.
       state_ = State::STOPPING;
       arc_session_runner_->RequestStop();
-      break;
-    case State::STOPPING:
-      // Now ARC is stopping. Do nothing here.
       break;
   }
 }
@@ -636,14 +876,14 @@ void ArcSessionManager::ResetArcState() {
   android_management_checker_.reset();
 }
 
-void ArcSessionManager::AddObserver(Observer* observer) {
+void ArcSessionManager::AddObserver(ArcSessionManagerObserver* observer) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   observer_list_.AddObserver(observer);
   if (property_files_expansion_result_)
     observer->OnPropertyFilesExpanded(*property_files_expansion_result_);
 }
 
-void ArcSessionManager::RemoveObserver(Observer* observer) {
+void ArcSessionManager::RemoveObserver(ArcSessionManagerObserver* observer) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   observer_list_.RemoveObserver(observer);
 }
@@ -664,7 +904,7 @@ void ArcSessionManager::StopAndEnableArc() {
 
 void ArcSessionManager::OnArcSignInTimeout() {
   LOG(ERROR) << "Timed out waiting for first sign in.";
-  OnProvisioningFinished(ProvisioningResult::OVERALL_SIGN_IN_TIMEOUT);
+  OnProvisioningFinished(ProvisioningResult::OVERALL_SIGN_IN_TIMEOUT, nullptr);
 }
 
 void ArcSessionManager::CancelAuthCode() {
@@ -689,6 +929,7 @@ void ArcSessionManager::CancelAuthCode() {
   }
 
   MaybeUpdateOptInCancelUMA(support_host_.get());
+  VLOG(1) << "Auth cancelled. Stopping ARC. state: " << state_;
   StopArc();
   SetArcPlayStoreEnabledForProfile(profile_, false);
 }
@@ -713,6 +954,25 @@ void ArcSessionManager::RequestEnable() {
 
 bool ArcSessionManager::IsPlaystoreLaunchRequestedForTesting() const {
   return playstore_launcher_.get();
+}
+
+void ArcSessionManager::OnVmStarted(
+    const vm_tools::concierge::VmStartedSignal& vm_signal) {
+  // When an ARCVM starts, store the vm info.
+  if (vm_signal.name() == kArcVmName)
+    vm_info_ = vm_signal.vm_info();
+}
+
+void ArcSessionManager::OnVmStopped(
+    const vm_tools::concierge::VmStoppedSignal& vm_signal) {
+  // When an ARCVM stops, clear the stored vm info.
+  if (vm_signal.name() == kArcVmName)
+    vm_info_ = base::nullopt;
+}
+
+const base::Optional<vm_tools::concierge::VmInfo>&
+ArcSessionManager::GetVmInfo() const {
+  return vm_info_;
 }
 
 bool ArcSessionManager::RequestEnableImpl() {
@@ -852,7 +1112,7 @@ void ArcSessionManager::RequestArcDataRemoval() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile_);
   DCHECK(data_remover_);
-  VLOG(1) << "Removing user ARC data.";
+  VLOG(1) << "Scheduling ARC data removal.";
 
   // TODO(hidehiko): DCHECK the previous state. This is called for four cases;
   // 1) Supporting managed user initial disabled case (Please see also
@@ -948,8 +1208,8 @@ void ArcSessionManager::MaybeStartTermsOfServiceNegotiation() {
   arc_session_runner_->RequestStartMiniInstance();
 
   terms_of_service_negotiator_->StartNegotiation(
-      base::Bind(&ArcSessionManager::OnTermsOfServiceNegotiated,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&ArcSessionManager::OnTermsOfServiceNegotiated,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcSessionManager::OnTermsOfServiceNegotiated(bool accepted) {
@@ -1006,8 +1266,8 @@ void ArcSessionManager::StartAndroidManagementCheck() {
   android_management_checker_ = std::make_unique<ArcAndroidManagementChecker>(
       profile_, false /* retry_on_error */);
   android_management_checker_->StartCheck(
-      base::Bind(&ArcSessionManager::OnAndroidManagementChecked,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&ArcSessionManager::OnAndroidManagementChecked,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcSessionManager::OnAndroidManagementChecked(
@@ -1020,11 +1280,6 @@ void ArcSessionManager::OnAndroidManagementChecked(
   switch (result) {
     case policy::AndroidManagementClient::Result::UNMANAGED:
       VLOG(1) << "Starting ARC for first sign in.";
-      sign_in_start_time_ = base::TimeTicks::Now();
-      arc_sign_in_timer_.Start(
-          FROM_HERE, GetArcSignInTimeout(),
-          base::BindOnce(&ArcSessionManager::OnArcSignInTimeout,
-                         weak_ptr_factory_.GetWeakPtr()));
       StartArc();
       // Since opt-in is an explicit user (or admin) action, relax the
       // cgroups restriction now.
@@ -1032,12 +1287,13 @@ void ArcSessionManager::OnAndroidManagementChecked(
       break;
     case policy::AndroidManagementClient::Result::MANAGED:
       ShowArcSupportHostError(
-          ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR, false);
+          ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR,
+          0 /* error_code */, false);
       UpdateOptInCancelUMA(OptInCancelReason::ANDROID_MANAGEMENT_REQUIRED);
       break;
     case policy::AndroidManagementClient::Result::ERROR:
       ShowArcSupportHostError(ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR,
-                              true);
+                              0 /* error_code */, true);
       UpdateOptInCancelUMA(OptInCancelReason::NETWORK_ERROR);
       break;
   }
@@ -1060,8 +1316,8 @@ void ArcSessionManager::StartBackgroundAndroidManagementCheck() {
   android_management_checker_ = std::make_unique<ArcAndroidManagementChecker>(
       profile_, true /* retry_on_error */);
   android_management_checker_->StartCheck(
-      base::Bind(&ArcSessionManager::OnBackgroundAndroidManagementChecked,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&ArcSessionManager::OnBackgroundAndroidManagementChecked,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcSessionManager::OnBackgroundAndroidManagementChecked(
@@ -1090,6 +1346,8 @@ void ArcSessionManager::StartArc() {
          state_ == State::CHECKING_ANDROID_MANAGEMENT)
       << state_;
   state_ = State::ACTIVE;
+
+  MaybeStartTimer();
 
   // ARC must be started only if no pending data removal request exists.
   DCHECK(!profile_->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));
@@ -1210,6 +1468,22 @@ void ArcSessionManager::MaybeReenableArc() {
   RequestEnableImpl();
 }
 
+// Starts a timer to check if provisioning takes too loong.
+// The timer will not be set if this device was previously provisioned
+// successfully.
+void ArcSessionManager::MaybeStartTimer() {
+  if (IsArcProvisioned(profile_)) {
+    return;
+  }
+
+  VLOG(1) << "Setup provisioning timer";
+  sign_in_start_time_ = base::TimeTicks::Now();
+  arc_sign_in_timer_.Start(
+      FROM_HERE, GetArcSignInTimeout(),
+      base::BindOnce(&ArcSessionManager::OnArcSignInTimeout,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
 void ArcSessionManager::OnWindowClosed() {
   CancelAuthCode();
 }
@@ -1222,6 +1496,8 @@ void ArcSessionManager::OnRetryClicked() {
   DCHECK(!g_ui_enabled || !support_host_->HasAuthDelegate());
 
   UpdateOptInActionUMA(OptInActionType::RETRY);
+
+  VLOG(1) << "Retry button clicked";
 
   if (state_ == State::ACTIVE) {
     // ERROR_WITH_FEEDBACK is set in OnSignInFailed(). In the case, stopping
@@ -1270,16 +1546,17 @@ ArcSessionRunner* ArcSessionManager::GetArcSessionRunnerForTesting() {
 }
 
 void ArcSessionManager::SetAttemptUserExitCallbackForTesting(
-    const base::Closure& callback) {
+    const base::RepeatingClosure& callback) {
   DCHECK(!callback.is_null());
   attempt_user_exit_callback_ = callback;
 }
 
 void ArcSessionManager::ShowArcSupportHostError(
     ArcSupportHost::Error error,
+    int error_code,
     bool should_show_send_feedback) {
   if (support_host_)
-    support_host_->ShowError(error, should_show_send_feedback);
+    support_host_->ShowError(error, error_code, should_show_send_feedback);
   for (auto& observer : observer_list_)
     observer.OnArcErrorShowRequested(error);
 }
@@ -1294,31 +1571,59 @@ void ArcSessionManager::EmitLoginPromptVisibleCalled() {
   arc_session_runner_->RequestStartMiniInstance();
 }
 
-void ArcSessionManager::ExpandPropertyFiles() {
+void ArcSessionManager::ExpandPropertyFilesAndReadSalt() {
   VLOG(1) << "Started expanding *.prop files";
 
   // For ARCVM, generate <dest_path>/{combined.prop,fstab}. For ARC, generate
   // <dest_path>/{default,build,vendor_build}.prop.
   const bool is_arcvm = arc::IsArcVmEnabled();
+  bool add_native_bridge_64bit_support = false;
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kArcEnableNativeBridge64BitSupportExperiment)) {
+    PrefService* local_pref_service = g_browser_process->local_state();
+    if (base::FeatureList::IsEnabled(
+            arc::kNativeBridge64BitSupportExperimentFeature)) {
+      // Note that we treat this experiment as a one-way off->on switch, across
+      // all users of the device, as the lifetime of ARC mini-container and user
+      // sessions are different in different scenarios, and removing the
+      // experiment after it has been in effect for a user's ARC instance can
+      // lead to unexpected, and unsupported, results.
+      local_pref_service->SetBoolean(
+          prefs::kNativeBridge64BitSupportExperimentEnabled, true);
+    }
+    add_native_bridge_64bit_support = local_pref_service->GetBoolean(
+        prefs::kNativeBridge64BitSupportExperimentEnabled);
+  }
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&ExpandPropertyFilesInternal, property_files_source_dir_,
+      base::BindOnce(&ExpandPropertyFilesAndReadSaltInternal,
+                     property_files_source_dir_,
                      is_arcvm ? property_files_dest_dir_.Append("combined.prop")
                               : property_files_dest_dir_,
-                     /*single_file=*/is_arcvm),
-      base::BindOnce(&ArcSessionManager::OnExpandPropertyFiles,
+                     /*single_file=*/is_arcvm, add_native_bridge_64bit_support),
+      base::BindOnce(&ArcSessionManager::OnExpandPropertyFilesAndReadSalt,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void ArcSessionManager::OnExpandPropertyFiles(bool result) {
-  // ExpandPropertyFiles() should be called only once.
+void ArcSessionManager::OnExpandPropertyFilesAndReadSalt(
+    ExpansionResult result) {
+  // ExpandPropertyFilesAndReadSalt() should be called only once.
   DCHECK(!property_files_expansion_result_);
 
-  property_files_expansion_result_ = result;
-  if (result)
+  arc_salt_on_disk_ = result.first;
+  property_files_expansion_result_ = result.second;
+
+  // See the comment in Initialize().
+  if (profile_) {
+    VLOG(1) << "Calling SetUserInfo() in "
+            << "ArcSessionManager::OnExpandPropertyFilesAndReadSalt";
+    SetUserInfo();
+  }
+
+  if (result.second)
     arc_session_runner_->ResumeRunner();
   for (auto& observer : observer_list_)
-    observer.OnPropertyFilesExpanded(result);
+    observer.OnPropertyFilesExpanded(*property_files_expansion_result_);
 }
 
 std::ostream& operator<<(std::ostream& os,

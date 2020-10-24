@@ -25,7 +25,12 @@
 Polymer({
   is: 'settings-bluetooth-page',
 
-  behaviors: [I18nBehavior, PrefsBehavior],
+  behaviors: [
+    I18nBehavior,
+    DeepLinkingBehavior,
+    PrefsBehavior,
+    settings.RouteObserverBehavior,
+  ],
 
   properties: {
     /** Preferences state. */
@@ -123,6 +128,15 @@ Polymer({
       },
       readOnly: true,
     },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([chromeos.settings.mojom.Setting.kBluetoothOnOff]),
+    },
   },
 
   observers: ['deviceListChanged_(deviceList_.*)'],
@@ -161,6 +175,21 @@ Polymer({
       this.bluetooth.onAdapterStateChanged.removeListener(
           this.bluetoothAdapterStateChangedListener_);
     }
+  },
+
+  /**
+   * settings.RouteObserverBehavior
+   * @param {!settings.Route} newRoute
+   * @param {!settings.Route} oldRoute
+   * @protected
+   */
+  currentRouteChanged(newRoute, oldRoute) {
+    // Does not apply to this page.
+    if (newRoute != settings.routes.BLUETOOTH) {
+      return;
+    }
+
+    this.attemptDeepLink();
   },
 
   /**
@@ -207,6 +236,18 @@ Polymer({
     if (this.isToggleEnabled_()) {
       this.bluetoothToggleState_ = state.powered;
     }
+  },
+
+  /**
+   * Listens for toggle change events (rather than state changes) to handle
+   * just user-triggered changes to the bluetoothToggleState_.
+   * @private
+   */
+  onBluetoothToggledByUser_() {
+    // Record that the user manually enabled/disabled Bluetooth.
+    settings.recordSettingChange(
+        chromeos.settings.mojom.Setting.kBluetoothOnOff,
+        {boolValue: this.bluetoothToggleState_});
   },
 
   /** @private */

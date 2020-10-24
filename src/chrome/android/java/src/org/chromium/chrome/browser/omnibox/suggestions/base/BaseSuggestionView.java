@@ -5,20 +5,17 @@
 package org.chromium.chrome.browser.omnibox.suggestions.base;
 
 import android.content.Context;
-import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.ImageView;
 
-import androidx.annotation.DrawableRes;
 import androidx.annotation.LayoutRes;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.widget.AppCompatImageView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewDelegate;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.browser_ui.widget.RoundedCornerImageView;
 
@@ -33,9 +30,8 @@ import java.util.List;
  */
 public class BaseSuggestionView<T extends View> extends SimpleHorizontalLayoutView {
     private final List<ImageView> mActionButtons;
-    private final @DrawableRes int mSelectableBackgroundRes;
     private final DecoratedSuggestionView<T> mDecoratedView;
-    private SuggestionViewDelegate mDelegate;
+    private @Nullable Runnable mOnFocusViaSelectionListener;
 
     /**
      * Constructs a new suggestion view.
@@ -45,16 +41,7 @@ public class BaseSuggestionView<T extends View> extends SimpleHorizontalLayoutVi
     public BaseSuggestionView(T view) {
         super(view.getContext());
 
-        TypedValue themeRes = new TypedValue();
-        getContext().getTheme().resolveAttribute(R.attr.selectableItemBackground, themeRes, true);
-        mSelectableBackgroundRes = themeRes.resourceId;
-
-        mDecoratedView = new DecoratedSuggestionView<>(getContext(), mSelectableBackgroundRes);
-        mDecoratedView.setOnClickListener(v -> mDelegate.onSelection());
-        mDecoratedView.setOnLongClickListener(v -> {
-            mDelegate.onLongPress();
-            return true;
-        });
+        mDecoratedView = new DecoratedSuggestionView<>(getContext());
         mDecoratedView.setLayoutParams(LayoutParams.forDynamicView());
         addView(mDecoratedView);
 
@@ -93,7 +80,6 @@ public class BaseSuggestionView<T extends View> extends SimpleHorizontalLayoutVi
     private void increaseActionButtonsCount(int desiredViewCount) {
         for (int index = mActionButtons.size(); index < desiredViewCount; index++) {
             ImageView actionView = new AppCompatImageView(getContext());
-            actionView.setBackgroundResource(mSelectableBackgroundRes);
             actionView.setClickable(true);
             actionView.setFocusable(true);
             actionView.setScaleType(ImageView.ScaleType.CENTER);
@@ -130,18 +116,6 @@ public class BaseSuggestionView<T extends View> extends SimpleHorizontalLayoutVi
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
-        // Whenever the suggestion dropdown is touched, we dispatch onGestureDown which is
-        // used to let autocomplete controller know that it should stop updating suggestions.
-        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
-            mDelegate.onGestureDown();
-        } else if (ev.getActionMasked() == MotionEvent.ACTION_UP) {
-            mDelegate.onGestureUp(ev.getEventTime());
-        }
-        return super.dispatchTouchEvent(ev);
-    }
-
-    @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         if ((!isRtl && KeyNavigationUtil.isGoRight(event))
@@ -157,8 +131,8 @@ public class BaseSuggestionView<T extends View> extends SimpleHorizontalLayoutVi
     @Override
     public void setSelected(boolean selected) {
         mDecoratedView.setSelected(selected);
-        if (selected) {
-            mDelegate.onSetUrlToSuggestion();
+        if (selected && mOnFocusViaSelectionListener != null) {
+            mOnFocusViaSelectionListener.run();
         }
     }
 
@@ -177,18 +151,18 @@ public class BaseSuggestionView<T extends View> extends SimpleHorizontalLayoutVi
     }
 
     /** @return Decorated suggestion view. */
-    @VisibleForTesting
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public DecoratedSuggestionView<T> getDecoratedSuggestionView() {
         return mDecoratedView;
     }
 
     /**
-     * Set the delegate for the actions on the suggestion view.
+     * Specify the listener receiving a call when the user highlights this Suggestion.
      *
-     * @param delegate Delegate receiving user events.
+     * @param listener The listener to be notified about selection.
      */
-    void setDelegate(SuggestionViewDelegate delegate) {
-        mDelegate = delegate;
+    void setOnFocusViaSelectionListener(@Nullable Runnable listener) {
+        mOnFocusViaSelectionListener = listener;
     }
 
     /** @return Widget holding suggestion decoration icon. */

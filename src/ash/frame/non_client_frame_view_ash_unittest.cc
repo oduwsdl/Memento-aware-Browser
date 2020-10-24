@@ -10,11 +10,7 @@
 #include "ash/frame/header_view.h"
 #include "ash/frame/wide_frame_view.h"
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/public/cpp/default_frame_header.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
-#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
@@ -28,6 +24,10 @@
 #include "ash/wm/wm_event.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller_test_api.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_targeter.h"
@@ -49,6 +49,11 @@
 
 namespace ash {
 
+using ::chromeos::FrameCaptionButtonContainerView;
+using ::chromeos::ImmersiveFullscreenController;
+using ::chromeos::ImmersiveFullscreenControllerDelegate;
+using ::chromeos::ImmersiveFullscreenControllerTestApi;
+
 // A views::WidgetDelegate which uses a NonClientFrameViewAsh.
 class NonClientFrameViewAshTestWidgetDelegate
     : public views::WidgetDelegateView {
@@ -56,10 +61,12 @@ class NonClientFrameViewAshTestWidgetDelegate
   NonClientFrameViewAshTestWidgetDelegate() = default;
   ~NonClientFrameViewAshTestWidgetDelegate() override = default;
 
-  views::NonClientFrameView* CreateNonClientFrameView(
+  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override {
-    non_client_frame_view_ = new NonClientFrameViewAsh(widget);
-    return non_client_frame_view_;
+    auto non_client_frame_view =
+        std::make_unique<NonClientFrameViewAsh>(widget);
+    non_client_frame_view_ = non_client_frame_view.get();
+    return non_client_frame_view;
   }
 
   int GetNonClientFrameViewTopBorderHeight() {
@@ -415,7 +422,7 @@ TEST_F(NonClientFrameViewAshTest, HeaderVisibilityInFullscreen) {
 
 namespace {
 
-class TestButtonModel : public CaptionButtonModel {
+class TestButtonModel : public chromeos::CaptionButtonModel {
  public:
   TestButtonModel() = default;
   ~TestButtonModel() override = default;
@@ -635,10 +642,10 @@ TEST_F(NonClientFrameViewAshTest, CustomButtonModel) {
   model_ptr->set_zoom_mode(true);
   non_client_frame_view->SizeConstraintsChanged();
   widget->LayoutRootViewIfNecessary();
-  EXPECT_STREQ(kWindowControlZoomIcon.name,
+  EXPECT_STREQ(chromeos::kWindowControlZoomIcon.name,
                test_api.size_button()->icon_definition_for_test()->name);
   widget->Maximize();
-  EXPECT_STREQ(kWindowControlDezoomIcon.name,
+  EXPECT_STREQ(chromeos::kWindowControlDezoomIcon.name,
                test_api.size_button()->icon_definition_for_test()->name);
 }
 
@@ -776,7 +783,7 @@ class TestWidgetDelegate : public TestWidgetConstraintsDelegate {
   ~TestWidgetDelegate() override = default;
 
   // views::WidgetDelegate:
-  views::NonClientFrameView* CreateNonClientFrameView(
+  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override {
     if (custom_) {
       WindowState* window_state = WindowState::Get(widget->GetNativeWindow());

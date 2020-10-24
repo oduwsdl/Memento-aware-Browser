@@ -126,8 +126,6 @@ class AccountManagerUIHandlerTest
       delete;
 
   void SetUpOnMainThread() override {
-    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
-        std::make_unique<chromeos::FakeChromeUserManager>());
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     TestingProfile::Builder profile_builder;
     profile_builder.SetPath(temp_dir_.GetPath().AppendASCII("TestProfile"));
@@ -138,6 +136,7 @@ class AccountManagerUIHandlerTest
     }
     profile_ = profile_builder.Build();
 
+    auto user_manager = std::make_unique<chromeos::FakeChromeUserManager>();
     const user_manager::User* user;
     if (GetDeviceAccountInfo().user_type ==
         user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY) {
@@ -156,6 +155,12 @@ class AccountManagerUIHandlerTest
                                          GetDeviceAccountInfo().id),
           true, GetDeviceAccountInfo().user_type, profile_.get());
     }
+    primary_account_id_ = user->GetAccountId();
+    user_manager->LoginUser(primary_account_id_);
+    ProfileHelper::Get()->SetUserToProfileMappingForTesting(user,
+                                                            profile_.get());
+    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
+        std::move(user_manager));
 
     identity_manager_ = IdentityManagerFactory::GetForProfile(profile_.get());
 
@@ -178,7 +183,9 @@ class AccountManagerUIHandlerTest
 
   void TearDownOnMainThread() override {
     handler_.reset();
+    ProfileHelper::Get()->RemoveUserFromListForTesting(primary_account_id_);
     profile_.reset();
+    base::RunLoop().RunUntilIdle();
     user_manager_enabler_.reset();
   }
 
@@ -205,6 +212,22 @@ class AccountManagerUIHandlerTest
     return accounts;
   }
 
+  bool HasDummyGaiaToken(const AccountManager::AccountKey& account_key) {
+    bool has_dummy_token_result;
+
+    base::RunLoop run_loop;
+    account_manager_->HasDummyGaiaToken(
+        account_key,
+        base::BindLambdaForTesting(
+            [&has_dummy_token_result, &run_loop](bool has_dummy_token) {
+              has_dummy_token_result = has_dummy_token;
+              run_loop.Quit();
+            }));
+    run_loop.Run();
+
+    return has_dummy_token_result;
+  }
+
   DeviceAccountInfo GetDeviceAccountInfo() const { return GetParam(); }
 
   content::TestWebUI* web_ui() { return &web_ui_; }
@@ -223,6 +246,7 @@ class AccountManagerUIHandlerTest
   chromeos::AccountManager* account_manager_ = nullptr;
   signin::IdentityManager* identity_manager_ = nullptr;
   content::TestWebUI web_ui_;
+  AccountId primary_account_id_;
   std::unique_ptr<TestingAccountManagerUIHandler> handler_;
 };
 
@@ -258,8 +282,16 @@ IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
             ValueOrEmpty(device_account.FindStringKey("email")));
   EXPECT_EQ(GetDeviceAccountInfo().id,
             ValueOrEmpty(device_account.FindStringKey("id")));
-  EXPECT_EQ(GetDeviceAccountInfo().organization,
-            ValueOrEmpty(device_account.FindStringKey("organization")));
+  if (GetDeviceAccountInfo().user_type ==
+      user_manager::UserType::USER_TYPE_CHILD) {
+    std::string organization = GetDeviceAccountInfo().organization;
+    base::ReplaceSubstringsAfterOffset(&organization, 0, " ", "&nbsp;");
+    EXPECT_EQ(organization,
+              ValueOrEmpty(device_account.FindStringKey("organization")));
+  } else {
+    EXPECT_EQ(GetDeviceAccountInfo().organization,
+              ValueOrEmpty(device_account.FindStringKey("organization")));
+  }
 }
 
 IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
@@ -295,8 +327,16 @@ IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
             ValueOrEmpty(device_account.FindStringKey("email")));
   EXPECT_EQ(GetDeviceAccountInfo().id,
             ValueOrEmpty(device_account.FindStringKey("id")));
-  EXPECT_EQ(GetDeviceAccountInfo().organization,
-            ValueOrEmpty(device_account.FindStringKey("organization")));
+  if (GetDeviceAccountInfo().user_type ==
+      user_manager::UserType::USER_TYPE_CHILD) {
+    std::string organization = GetDeviceAccountInfo().organization;
+    base::ReplaceSubstringsAfterOffset(&organization, 0, " ", "&nbsp;");
+    EXPECT_EQ(organization,
+              ValueOrEmpty(device_account.FindStringKey("organization")));
+  } else {
+    EXPECT_EQ(GetDeviceAccountInfo().organization,
+              ValueOrEmpty(device_account.FindStringKey("organization")));
+  }
 
   // Check secondary accounts.
   for (const base::Value& account : result) {
@@ -312,7 +352,7 @@ IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
         user_manager::UserType::USER_TYPE_CHILD) {
       EXPECT_FALSE(account.FindBoolKey("unmigrated").value());
     } else {
-      EXPECT_EQ(account_manager()->HasDummyGaiaToken(expected_account.key),
+      EXPECT_EQ(HasDummyGaiaToken(expected_account.key),
                 account.FindBoolKey("unmigrated").value());
     }
     EXPECT_EQ(expected_account.key.account_type,

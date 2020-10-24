@@ -5,18 +5,20 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
+#include "base/task/current_thread.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/intent_helper/arc_settings_service.h"
 #include "chrome/browser/chromeos/policy/configuration_policy_handler_chromeos.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill/shill_profile_client.h"
@@ -188,12 +190,15 @@ constexpr char kSetProxyBroadcastAction[] =
 // all their extras match with |extras|.
 int CountProxyBroadcasts(
     const std::vector<FakeIntentHelperInstance::Broadcast>& broadcasts,
-    const base::Value* extras) {
-  int count = 0;
+    const std::vector<base::Value*> extras) {
+  unsigned long count = 0;
   for (const FakeIntentHelperInstance::Broadcast& broadcast : broadcasts) {
     if (broadcast.action == kSetProxyBroadcastAction) {
-      EXPECT_TRUE(
-          base::JSONReader::ReadDeprecated(broadcast.extras)->Equals(extras));
+      DCHECK(count < extras.size())
+          << "The expected proxy broadcast count is smaller than "
+             "the actual count.";
+      EXPECT_TRUE(base::JSONReader::ReadDeprecated(broadcast.extras)
+                      ->Equals(extras[count]));
       count++;
     }
   }
@@ -201,7 +206,7 @@ int CountProxyBroadcasts(
 }
 
 void RunUntilIdle() {
-  DCHECK(base::MessageLoopCurrent::Get());
+  DCHECK(base::CurrentThread::Get());
   base::RunLoop loop;
   loop.RunUntilIdle();
 }
@@ -491,7 +496,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, ProxyModePolicyTest) {
       "mode", base::Value(ProxyPrefs::kAutoDetectProxyModeName));
   expected_proxy_config.SetKey("pacUrl", base::Value("http://wpad/wpad.dat"));
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_proxy_config),
+                                 {&expected_proxy_config}),
             1);
 }
 
@@ -510,7 +515,80 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, ONCProxyPolicyTest) {
   expected_proxy_config.SetKey("pacUrl", base::Value(kONCPacUrl));
 
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_proxy_config),
+                                 {&expected_proxy_config}),
+            1);
+}
+
+// Test to verify that, when enabled, the local proxy address is synced instead
+// of the real proxy set via policy.
+IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest,
+                       SystemProxyAddressForwardedTest) {
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  policy::PolicyMap policy;
+  policy.Set(policy::key::kOpenNetworkConfiguration,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD, base::Value(kONCPolicy), nullptr);
+  UpdatePolicy(policy);
+
+  base::Value expected_proxy_config(base::Value::Type::DICTIONARY);
+  expected_proxy_config.SetKey(
+      "mode", base::Value(ProxyPrefs::kPacScriptProxyModeName));
+  expected_proxy_config.SetKey("pacUrl", base::Value(kONCPacUrl));
+
+  // Set the user preference to indicate that ARC should connect to
+  // System-proxy.
+  browser()->profile()->GetPrefs()->Set(
+      ::prefs::kSystemProxyUserTrafficHostAndPort,
+      base::Value("local_proxy:3128"));
+  RunUntilIdle();
+
+  base::Value expected_proxy_config_system_proxy(base::Value::Type::DICTIONARY);
+  expected_proxy_config_system_proxy.SetKey(
+      "mode", base::Value(ProxyPrefs::kFixedServersProxyModeName));
+  expected_proxy_config_system_proxy.SetKey("host", base::Value("local_proxy"));
+  expected_proxy_config_system_proxy.SetIntKey("port", 3128);
+
+  // Unset the System-proxy preference to verify that ARC syncs proxy configs
+  // correctly when System-proxy is disabled.
+  browser()->profile()->GetPrefs()->Set(
+      ::prefs::kSystemProxyUserTrafficHostAndPort, base::Value(""));
+  RunUntilIdle();
+
+  EXPECT_EQ(CountProxyBroadcasts(
+                fake_intent_helper_instance_->broadcasts(),
+                {&expected_proxy_config, &expected_proxy_config_system_proxy,
+                 &expected_proxy_config}),
+            3);
+}
+
+// Test to verify that the address of the local proxy is not forwarded if
+// there's no proxy set in the browser.
+IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest,
+                       SystemProxyAddressNotForwardedForDirectMode) {
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  policy::PolicyMap policy;
+  // Apply ONC policy with direct proxy.
+  policy.Set(policy::key::kDeviceOpenNetworkConfiguration,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_MACHINE,
+             policy::POLICY_SOURCE_CLOUD, base::Value(kDeviceONCPolicy),
+             nullptr);
+  UpdatePolicy(policy);
+
+  // Set the user preference to indicate that ARC should connect to
+  // System-proxy.
+  browser()->profile()->GetPrefs()->Set(
+      ::prefs::kSystemProxyUserTrafficHostAndPort,
+      base::Value("local_proxy:3128"));
+  RunUntilIdle();
+
+  base::Value expected_proxy_config(base::Value::Type::DICTIONARY);
+  expected_proxy_config.SetKey("mode",
+                               base::Value(ProxyPrefs::kDirectProxyModeName));
+
+  EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
+                                 {&expected_proxy_config}),
             1);
 }
 
@@ -544,8 +622,9 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, TwoSourcesTest) {
       "mode", base::Value(ProxyPrefs::kFixedServersProxyModeName));
   expected_proxy_config.SetKey("host", base::Value("proxy"));
   expected_proxy_config.SetKey("port", base::Value(8888));
+
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_proxy_config),
+                                 {&expected_proxy_config}),
             1);
 }
 
@@ -564,7 +643,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, ProxyPrefTest) {
       "mode", base::Value(ProxyPrefs::kPacScriptProxyModeName));
   expected_proxy_config.SetKey("pacUrl", base::Value("http://proxy"));
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_proxy_config),
+                                 {&expected_proxy_config}),
             1);
 }
 
@@ -584,7 +663,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, DefaultNetworkProxyConfigTest) {
   expected_proxy_config.SetKey("host", base::Value("proxy"));
   expected_proxy_config.SetKey("port", base::Value(8080));
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_proxy_config),
+                                 {&expected_proxy_config}),
             1);
 }
 
@@ -618,7 +697,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest,
   expected_proxy_config.SetKey("bypassList", base::Value(kArcProxyBypassList));
 
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_proxy_config),
+                                 {&expected_proxy_config}),
             1);
 }
 
@@ -650,7 +729,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, DefaultNetworkDisconnectedTest) {
   expected_default_proxy_config.SetKey("host", base::Value("default/proxy"));
   expected_default_proxy_config.SetKey("port", base::Value(8080));
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_default_proxy_config),
+                                 {&expected_default_proxy_config}),
             1);
 
   // Disconnect default network.
@@ -665,7 +744,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, DefaultNetworkDisconnectedTest) {
   expected_wifi_proxy_config.SetKey("port", base::Value(8080));
 
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_wifi_proxy_config),
+                                 {&expected_wifi_proxy_config}),
             1);
 }
 
@@ -675,8 +754,7 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, NoNetworkConnectedTest) {
   DisconnectNetworkService(kDefaultServicePath);
 
   EXPECT_EQ(
-      CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(), nullptr),
-      0);
+      CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(), {}), 0);
 }
 
 IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, TwoONCProxyPolicyTest) {
@@ -704,9 +782,14 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, TwoONCProxyPolicyTest) {
   expected_proxy_config.SetKey("host", base::Value("proxy"));
   expected_proxy_config.SetKey("port", base::Value(5000));
 
-  EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_proxy_config),
-            1);
+  base::Value expected_proxy_config_direct(base::Value::Type::DICTIONARY);
+  expected_proxy_config_direct.SetKey(
+      "mode", base::Value(ProxyPrefs::kDirectProxyModeName));
+
+  EXPECT_EQ(CountProxyBroadcasts(
+                fake_intent_helper_instance_->broadcasts(),
+                {&expected_proxy_config, &expected_proxy_config_direct}),
+            2);
 
   DisconnectNetworkService(kWifi1ServicePath);
   fake_intent_helper_instance_->clear_broadcasts();
@@ -720,8 +803,56 @@ IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, TwoONCProxyPolicyTest) {
   expected_proxy_config.SetKey("port", base::Value(3000));
 
   EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
-                                 &expected_proxy_config),
+                                 {&expected_proxy_config}),
             1);
+}
+
+// Test that on consumer devices, the proxy is correctly synced when the user
+// changes network configurations.
+IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, ProxySyncUnmanagedDevice) {
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  std::vector<base::Value*> expected_proxy_configs;
+  base::Value expected_proxy_config1(base::Value::Type::DICTIONARY);
+  expected_proxy_config1.SetKey(
+      "mode", base::Value(ProxyPrefs::kFixedServersProxyModeName));
+  expected_proxy_config1.SetKey("host", base::Value("proxy"));
+  expected_proxy_config1.SetKey("port", base::Value(1111));
+
+  base::Value expected_proxy_config2(base::Value::Type::DICTIONARY);
+  expected_proxy_config2.SetKey(
+      "mode", base::Value(ProxyPrefs::kFixedServersProxyModeName));
+  expected_proxy_config2.SetKey("host", base::Value("proxy"));
+  expected_proxy_config2.SetKey("port", base::Value(2222));
+
+  // The number of times to sync is randomly chosen. The only constraint is that
+  // it has to be larger than two, as the proxy settings will be synced once at
+  // ARC boot time and once when the default network is first changed.
+  int proxy_sync_count = 10;
+
+  for (int i = 0; i < proxy_sync_count; i += 2) {
+    base::Value proxy_config1(base::Value::Type::DICTIONARY);
+    proxy_config1.SetKey("mode",
+                         base::Value(ProxyPrefs::kFixedServersProxyModeName));
+    proxy_config1.SetKey("server", base::Value("proxy:1111"));
+    SetProxyConfigForNetworkService(kDefaultServicePath,
+                                    std::move(proxy_config1));
+    expected_proxy_configs.push_back(&expected_proxy_config1);
+    RunUntilIdle();
+
+    base::Value proxy_config2(base::Value::Type::DICTIONARY);
+    proxy_config2.SetKey("mode",
+                         base::Value(ProxyPrefs::kFixedServersProxyModeName));
+    proxy_config2.SetKey("server", base::Value("proxy:2222"));
+    SetProxyConfigForNetworkService(kDefaultServicePath,
+                                    std::move(proxy_config2));
+    expected_proxy_configs.push_back(&expected_proxy_config2);
+    RunUntilIdle();
+  }
+
+  EXPECT_EQ(CountProxyBroadcasts(fake_intent_helper_instance_->broadcasts(),
+                                 expected_proxy_configs),
+            proxy_sync_count);
 }
 
 }  // namespace arc

@@ -110,7 +110,9 @@ class FakeUpdateClient : public update_client::UpdateClient {
                          update_client::Callback callback) override {
     uninstall_pings_.emplace_back(id, version, reason);
   }
-
+  void SendRegistrationPing(const std::string& id,
+                            const base::Version& version,
+                            update_client::Callback Callback) override {}
   void FireEvent(Observer::Events event, const std::string& extension_id) {
     for (Observer* observer : observers_)
       observer->OnEvent(event, extension_id);
@@ -137,7 +139,6 @@ class FakeUpdateClient : public update_client::UpdateClient {
   }
 
  protected:
-  friend class base::RefCounted<FakeUpdateClient>;
   ~FakeUpdateClient() override = default;
 
   std::vector<base::Optional<update_client::CrxComponent>> data_;
@@ -257,7 +258,7 @@ class FakeExtensionSystem : public MockExtensionSystem {
                      const base::FilePath& temp_dir,
                      bool install_immediately,
                      InstallUpdateCallback install_update_callback) override {
-    base::DeleteFileRecursively(temp_dir);
+    base::DeletePathRecursively(temp_dir);
     install_requests_.push_back(
         InstallUpdateRequest(extension_id, temp_dir, install_immediately));
     if (!next_install_callback_.is_null()) {
@@ -298,7 +299,7 @@ class UpdateServiceTest : public ExtensionsTest {
     ExtensionsTest::SetUp();
     extensions_browser_client()->set_extension_system_factory(
         &fake_extension_system_factory_);
-    extensions_browser_client()->SetUpdateClientFactory(base::Bind(
+    extensions_browser_client()->SetUpdateClientFactory(base::BindRepeating(
         &UpdateServiceTest::CreateUpdateClient, base::Unretained(this)));
 
     update_service_ = UpdateService::Get(browser_context());
@@ -441,7 +442,7 @@ TEST_F(UpdateServiceTest, BasicUpdateOperations_NotInstallImmediately) {
 
 TEST_F(UpdateServiceTest, UninstallPings) {
   UninstallPingSender sender(ExtensionRegistry::Get(browser_context()),
-                             base::Bind(&ShouldPing));
+                             base::BindRepeating(&ShouldPing));
 
   // Build 3 extensions.
   scoped_refptr<const Extension> extension1 =
@@ -495,6 +496,36 @@ TEST_F(UpdateServiceTest, UninstallPings) {
 
     pings.clear();
   }
+}
+
+TEST_F(UpdateServiceTest, NoPerformAction) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      extensions_features::kDisableMalwareExtensionsRemotely);
+  std::string extension_id = "lpcaedmchfhocbbapmcbpinfpgnhiddi";
+  ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context());
+  scoped_refptr<const Extension> extension1 =
+      ExtensionBuilder("1").SetVersion("1.2").SetID(extension_id).Build();
+  EXPECT_TRUE(registry->AddEnabled(extension1));
+
+  update_client()->set_is_malware_update_item();
+  update_client()->set_delay_update();
+
+  ExtensionUpdateCheckParams update_check_params;
+  update_check_params.update_info[extension_id] = ExtensionUpdateData();
+
+  bool executed = false;
+  update_service()->StartUpdateCheck(
+      update_check_params,
+      base::BindOnce([](bool* executed) { *executed = true; }, &executed));
+  EXPECT_FALSE(executed);
+
+  const auto& request = update_client()->update_request(0);
+  EXPECT_THAT(request.extension_ids, testing::ElementsAre(extension_id));
+
+  update_client()->RunDelayedUpdate(
+      0, UpdateClientEvents::COMPONENT_CHECKING_FOR_UPDATES);
+  EXPECT_FALSE(registry->disabled_extensions().GetByID(extension_id));
 }
 
 TEST_F(UpdateServiceTest, CheckOmahaAttributes) {

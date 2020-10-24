@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_PERFORMANCE_MANAGER_PERSISTENCE_SITE_DATA_SITE_DATA_CACHE_FACADE_FACTORY_H_
 #define CHROME_BROWSER_PERFORMANCE_MANAGER_PERSISTENCE_SITE_DATA_SITE_DATA_CACHE_FACADE_FACTORY_H_
 
+#include "base/auto_reset.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/threading/sequence_bound.h"
+#include "base/util/type_safety/pass_key.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
 class Profile;
@@ -42,15 +44,17 @@ class SiteDataCacheFacadeTest;
 //   - When a browser context is destroyed the corresponding SiteDataCacheFacade
 //     is destroyed and this also destroys the corresponding SiteDataCache on
 //     the proper sequence (via the SequenceBound object).
-//   - At shutdown, the SiteDataCacheFacadeFactory is destroyed shortly before
-//     terminating the thread pool. Destruction of this object causes the
-//     SiteDataCacheFactory to be destroyed on its sequence.
+//   - At shutdown, when the last SiteDataCacheFacade is destroyed, a task is
+//     posted to ensure that the SiteDataCacheFactory is destroyed on its
+//     sequence.
 class SiteDataCacheFacadeFactory : public BrowserContextKeyedServiceFactory {
  public:
   ~SiteDataCacheFacadeFactory() override;
 
-  static SiteDataCacheFacade* GetForProfile(Profile* profile);
   static SiteDataCacheFacadeFactory* GetInstance();
+
+  static std::unique_ptr<base::AutoReset<bool>> EnableForTesting();
+  static void DisassociateForTesting(Profile* profile);
 
  protected:
   friend class base::NoDestructor<SiteDataCacheFacadeFactory>;
@@ -63,6 +67,14 @@ class SiteDataCacheFacadeFactory : public BrowserContextKeyedServiceFactory {
     return &cache_factory_;
   }
 
+  // Should be called early in the creation of a SiteDataCacheFacade to make
+  // sure that |cache_factory_| gets created.
+  void OnBeforeFacadeCreated(util::PassKey<SiteDataCacheFacade> key);
+
+  // Should be called at the end of the destruction of a SiteDataCacheFacade to
+  // release |cache_factory_| if there's no more profile needing it.
+  void OnFacadeDestroyed(util::PassKey<SiteDataCacheFacade> key);
+
  private:
   // BrowserContextKeyedServiceFactory:
   KeyedService* BuildServiceInstanceFor(
@@ -74,6 +86,9 @@ class SiteDataCacheFacadeFactory : public BrowserContextKeyedServiceFactory {
 
   // The counterpart of this factory living on the SiteDataCache's sequence.
   base::SequenceBound<SiteDataCacheFactory> cache_factory_;
+
+  // The number of SiteDataCacheFacade currently in existence.
+  size_t service_instance_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(SiteDataCacheFacadeFactory);
 };

@@ -15,7 +15,6 @@
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/syncer_error.h"
-#include "components/sync/engine/model_safe_worker.h"
 #include "components/sync/engine_impl/commit_contribution.h"
 #include "components/sync/engine_impl/cycle/nudge_tracker.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -43,7 +42,6 @@ class Commit {
          const sync_pb::ClientToServerMessage& message,
          ExtensionsActivity::Records extensions_activity_buffer);
 
-  // This destructor will DCHECK if CleanUp() has not been called.
   ~Commit();
 
   // |extensions_activity| may be null.
@@ -64,10 +62,6 @@ class Commit {
 
   ModelTypeSet GetContributingDataTypes() const;
 
-  // Cleans up state associated with this commit.  Must be called before the
-  // destructor.
-  void CleanUp();
-
  private:
   // Report commit failure to each contribution.
   void ReportFullCommitFailure(SyncerError syncer_error);
@@ -76,9 +70,6 @@ class Commit {
 
   sync_pb::ClientToServerMessage message_;
   ExtensionsActivity::Records extensions_activity_buffer_;
-
-  // Debug only flag used to indicate if it's safe to destruct the object.
-  bool cleaned_up_;
 
   DISALLOW_COPY_AND_ASSIGN(Commit);
 };

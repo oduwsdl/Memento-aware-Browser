@@ -205,7 +205,6 @@ void FakeCrasAudioClient::SetHotwordModel(uint64_t node_id,
                                           VoidDBusMethodCallback callback) {}
 
 void FakeCrasAudioClient::SetFixA2dpPacketSize(bool enabled) {}
-void FakeCrasAudioClient::SetNextHandsfreeProfile(bool enabled) {}
 
 void FakeCrasAudioClient::AddActiveInputNode(uint64_t node_id) {
   for (size_t i = 0; i < node_list_.size(); ++i) {
@@ -245,6 +244,11 @@ void FakeCrasAudioClient::AddActiveOutputNode(uint64_t node_id) {
     if (node_list_[i].id == node_id)
       node_list_[i].active = true;
   }
+}
+
+void FakeCrasAudioClient::ResendBluetoothBattery() {
+  for (auto& observer : observers_)
+    observer.BluetoothBatteryChanged("11:22:33:44:55:66", battery_level_);
 }
 
 void FakeCrasAudioClient::WaitForServiceToBeAvailable(
@@ -301,6 +305,10 @@ void FakeCrasAudioClient::NotifyHotwordTriggeredForTesting(uint64_t tv_sec,
                                                            uint64_t tv_nsec) {
   for (auto& observer : observers_)
     observer.HotwordTriggered(tv_sec, tv_nsec);
+}
+
+void FakeCrasAudioClient::SetBluetoothBattteryLevelForTesting(uint32_t level) {
+  battery_level_ = level;
 }
 
 AudioNodeList::iterator FakeCrasAudioClient::FindNode(uint64_t node_id) {

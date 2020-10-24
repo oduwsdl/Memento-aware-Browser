@@ -21,7 +21,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/test_utils.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
 
@@ -74,7 +74,6 @@ class ExclusiveAccessTest : public InProcessBrowserTest {
   bool IsExclusiveAccessBubbleDisplayed();
   void GoBack();
   void Reload();
-  void SetPrivilegedFullscreen(bool is_privileged);
   void EnterActiveTabFullscreen();
   void ToggleBrowserFullscreen();
   void EnterExtensionInitiatedFullscreen();
@@ -108,7 +107,7 @@ class ExclusiveAccessTest : public InProcessBrowserTest {
   void ToggleTabFullscreen_Internal(bool enter_fullscreen,
                                     bool retry_until_success);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On Mac, entering into the system fullscreen mode can tickle crashes in
   // the WindowServer (c.f. https://crbug.com/828031), so provide a fake for
   // testing.

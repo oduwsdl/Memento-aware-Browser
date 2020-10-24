@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "base/strings/stringprintf.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_metrics.h"
+#include "chromeos/components/quick_answers/utils/quick_answers_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "third_party/icu/source/common/unicode/locid.h"
 
@@ -18,43 +18,11 @@ namespace {
 
 using network::mojom::URLLoaderFactory;
 
-constexpr char kUnitConversionQueryRewriteTemplate[] = "Convert:%s";
-constexpr char kDictionaryQueryRewriteTemplate[] = "Define:%s";
-constexpr char kTranslationQueryRewriteTemplate[] = "Translate:%s";
-
 QuickAnswersClient::ResultLoaderFactoryCallback*
     g_testing_result_factory_callback = nullptr;
 
 QuickAnswersClient::IntentGeneratorFactoryCallback*
     g_testing_intent_generator_factory_callback = nullptr;
-
-const PreprocessedOutput PreprocessRequest(const QuickAnswersRequest& request,
-                                           const std::string& intent_text,
-                                           IntentType intent_type) {
-  PreprocessedOutput processed_output;
-  processed_output.intent_text = intent_text;
-  processed_output.query = intent_text;
-  processed_output.intent_type = intent_type;
-
-  switch (intent_type) {
-    case IntentType::kUnit:
-      processed_output.query = base::StringPrintf(
-          kUnitConversionQueryRewriteTemplate, intent_text.c_str());
-      break;
-    case IntentType::kDictionary:
-      processed_output.query = base::StringPrintf(
-          kDictionaryQueryRewriteTemplate, intent_text.c_str());
-      break;
-    case IntentType::kTranslation:
-      processed_output.query = base::StringPrintf(
-          kTranslationQueryRewriteTemplate, intent_text.c_str());
-      break;
-    case IntentType::kUnknown:
-      // TODO(llin): Update to NOTREACHED after integrating with TCLib.
-      break;
-  }
-  return processed_output;
-}
 
 }  // namespace
 
@@ -67,6 +35,18 @@ void QuickAnswersClient::SetResultLoaderFactoryForTesting(
 void QuickAnswersClient::SetIntentGeneratorFactoryForTesting(
     IntentGeneratorFactoryCallback* factory) {
   g_testing_intent_generator_factory_callback = factory;
+}
+
+bool QuickAnswersClient::IsQuickAnswersAllowedForLocale(
+    const std::string& locale,
+    const std::string& runtime_locale) {
+  // String literals used in some cases in the array because their
+  // constant equivalents don't exist in:
+  // third_party/icu/source/common/unicode/uloc.h
+  const std::string kAllowedLocales[] = {ULOC_CANADA, ULOC_UK, ULOC_US,
+                                         "en_AU",     "en_IN", "en_NZ"};
+  return base::Contains(kAllowedLocales, locale) ||
+         base::Contains(kAllowedLocales, runtime_locale);
 }
 
 QuickAnswersClient::QuickAnswersClient(URLLoaderFactory* url_loader_factory,
@@ -109,15 +89,8 @@ void QuickAnswersClient::OnAssistantQuickAnswersEnabled(bool enabled) {
 }
 
 void QuickAnswersClient::OnLocaleChanged(const std::string& locale) {
-  // String literals used in some cases in the array because their
-  // constant equivalents don't exist in:
-  // third_party/icu/source/common/unicode/uloc.h
-  const std::string kAllowedLocales[] = {ULOC_CANADA, ULOC_UK, ULOC_US,
-                                         "en_AU",     "en_IN", "en_NZ"};
-
-  const std::string kRuntimeLocale = icu::Locale::getDefault().getName();
-  locale_supported_ = (base::Contains(kAllowedLocales, locale) ||
-                       base::Contains(kAllowedLocales, kRuntimeLocale));
+  locale_supported_ = IsQuickAnswersAllowedForLocale(
+      locale, icu::Locale::getDefault().getName());
   NotifyEligibilityChanged();
 }
 
@@ -134,10 +107,10 @@ void QuickAnswersClient::FetchQuickAnswers(
     const QuickAnswersRequest& preprocessed_request) {
   DCHECK(!preprocessed_request.preprocessed_output.query.empty());
 
-  result_loader_ =
-      CreateResultLoader(preprocessed_request.preprocessed_output.intent_type);
+  result_loader_ = CreateResultLoader(
+      preprocessed_request.preprocessed_output.intent_info.intent_type);
   // Load and parse search result.
-  result_loader_->Fetch(preprocessed_request.preprocessed_output.query);
+  result_loader_->Fetch(preprocessed_request.preprocessed_output);
 }
 
 void QuickAnswersClient::SendRequest(
@@ -161,7 +134,8 @@ void QuickAnswersClient::NotifyEligibilityChanged() {
   bool is_eligible =
       (chromeos::features::IsQuickAnswersEnabled() && assistant_state_ &&
        assistant_enabled_ && locale_supported_ && assistant_context_enabled_ &&
-       quick_answers_settings_enabled_ &&
+       (!chromeos::features::IsQuickAnswersSettingToggleEnabled() ||
+        quick_answers_settings_enabled_) &&
        assistant_allowed_state_ ==
            chromeos::assistant::AssistantAllowedState::ALLOWED);
 
@@ -213,21 +187,18 @@ void QuickAnswersClient::SendRequestInternal(
 void QuickAnswersClient::IntentGeneratorCallback(
     const QuickAnswersRequest& quick_answers_request,
     bool skip_fetch,
-    const std::string& intent_text,
-    IntentType intent_type) {
+    const IntentInfo& intent_info) {
   DCHECK(delegate_);
 
   // Preprocess the request.
   QuickAnswersRequest processed_request = quick_answers_request;
-  processed_request.preprocessed_output =
-      PreprocessRequest(quick_answers_request, intent_text, intent_type);
+  processed_request.preprocessed_output = PreprocessRequest(intent_info);
 
   delegate_->OnRequestPreprocessFinished(processed_request);
 
   if (features::IsQuickAnswersTextAnnotatorEnabled()) {
-    RecordIntentType(processed_request.preprocessed_output.intent_type);
-    if (processed_request.preprocessed_output.intent_type ==
-        IntentType::kUnknown) {
+    RecordIntentType(intent_info.intent_type);
+    if (intent_info.intent_type == IntentType::kUnknown) {
       // Don't fetch answer if no intent is generated.
       return;
     }

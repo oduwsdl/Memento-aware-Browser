@@ -5,7 +5,6 @@
 #include "components/sync/driver/profile_sync_service.h"
 
 #include "base/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
@@ -111,7 +110,7 @@ class ProfileSyncServiceStartupTest : public testing::Test {
   FakeSyncEngine* SetUpFakeSyncEngine() {
     auto sync_engine = std::make_unique<FakeSyncEngine>();
     FakeSyncEngine* sync_engine_raw = sync_engine.get();
-    ON_CALL(*component_factory(), CreateSyncEngine(_, _, _))
+    ON_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
         .WillByDefault(Return(ByMove(std::move(sync_engine))));
     return sync_engine_raw;
   }
@@ -119,7 +118,7 @@ class ProfileSyncServiceStartupTest : public testing::Test {
   MockSyncEngine* SetUpMockSyncEngine() {
     auto sync_engine = std::make_unique<NiceMock<MockSyncEngine>>();
     MockSyncEngine* sync_engine_raw = sync_engine.get();
-    ON_CALL(*component_factory(), CreateSyncEngine(_, _, _))
+    ON_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
         .WillByDefault(Return(ByMove(std::move(sync_engine))));
     return sync_engine_raw;
   }
@@ -342,7 +341,6 @@ TEST_F(ProfileSyncServiceStartupTest, StartNormal) {
   CreateSyncService(ProfileSyncService::MANUAL_START);
   SetUpFakeSyncEngine();
   DataTypeManagerMock* data_type_manager = SetUpDataTypeManagerMock();
-  ON_CALL(*data_type_manager, IsNigoriEnabled()).WillByDefault(Return(true));
 
   // Since all conditions for starting Sync are already fulfilled, calling
   // Initialize should immediately create and initialize the engine and
@@ -367,7 +365,6 @@ TEST_F(ProfileSyncServiceStartupTest, StopSync) {
   DataTypeManagerMock* data_type_manager = SetUpDataTypeManagerMock();
   ON_CALL(*data_type_manager, state())
       .WillByDefault(Return(DataTypeManager::CONFIGURED));
-  ON_CALL(*data_type_manager, IsNigoriEnabled()).WillByDefault(Return(true));
 
   sync_service()->Initialize();
 
@@ -393,7 +390,6 @@ TEST_F(ProfileSyncServiceStartupTest, DisableSync) {
   DataTypeManagerMock* data_type_manager = SetUpDataTypeManagerMock();
   ON_CALL(*data_type_manager, state())
       .WillByDefault(Return(DataTypeManager::CONFIGURED));
-  ON_CALL(*data_type_manager, IsNigoriEnabled()).WillByDefault(Return(true));
 
   sync_service()->Initialize();
   ASSERT_TRUE(sync_service()->IsSyncFeatureActive());
@@ -435,7 +431,6 @@ TEST_F(ProfileSyncServiceStartupTest, StartRecoverDatatypePrefs) {
   EXPECT_CALL(*data_type_manager, Configure(_, _));
   ON_CALL(*data_type_manager, state())
       .WillByDefault(Return(DataTypeManager::CONFIGURED));
-  ON_CALL(*data_type_manager, IsNigoriEnabled()).WillByDefault(Return(true));
 
   sync_service()->Initialize();
 
@@ -460,7 +455,6 @@ TEST_F(ProfileSyncServiceStartupTest, StartDontRecoverDatatypePrefs) {
   EXPECT_CALL(*data_type_manager, Configure(_, _));
   ON_CALL(*data_type_manager, state())
       .WillByDefault(Return(DataTypeManager::CONFIGURED));
-  ON_CALL(*data_type_manager, IsNigoriEnabled()).WillByDefault(Return(true));
 
   sync_service()->Initialize();
 
@@ -477,7 +471,7 @@ TEST_F(ProfileSyncServiceStartupTest, ManagedStartup) {
   CreateSyncService(ProfileSyncService::MANUAL_START);
 
   // Service should not be started by Initialize() since it's managed.
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _)).Times(0);
+  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _)).Times(0);
   EXPECT_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
       .Times(0);
   sync_service()->Initialize();
@@ -497,7 +491,6 @@ TEST_F(ProfileSyncServiceStartupTest, SwitchManaged) {
   EXPECT_CALL(*data_type_manager, Configure(_, _));
   ON_CALL(*data_type_manager, state())
       .WillByDefault(Return(DataTypeManager::CONFIGURED));
-  ON_CALL(*data_type_manager, IsNigoriEnabled()).WillByDefault(Return(true));
 
   // Initialize() should be enough to kick off Sync startup (which is instant in
   // this test).
@@ -568,7 +561,6 @@ TEST_F(ProfileSyncServiceStartupTest, StartFailure) {
                                       base::BindRepeating(&SetError), result)));
   EXPECT_CALL(*data_type_manager, state())
       .WillOnce(Return(DataTypeManager::STOPPED));
-  ON_CALL(*data_type_manager, IsNigoriEnabled()).WillByDefault(Return(true));
   sync_service()->Initialize();
   EXPECT_TRUE(sync_service()->HasUnrecoverableError());
   EXPECT_EQ(SyncService::DisableReasonSet(

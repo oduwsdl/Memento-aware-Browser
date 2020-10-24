@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "base/memory/weak_ptr.h"
-#include "content/browser/frame_host/navigation_request_info.h"
 #include "content/browser/loader/navigation_url_loader.h"
+#include "content/browser/renderer_host/navigation_request_info.h"
 #include "content/common/navigation_params.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 
@@ -36,7 +36,7 @@ class TestNavigationURLLoader
       const std::vector<std::string>& removed_headers,
       const net::HttpRequestHeaders& modified_headers,
       const net::HttpRequestHeaders& modified_cors_exempt_headers,
-      PreviewsState new_previews_state) override;
+      blink::PreviewsState new_previews_state) override;
 
   NavigationRequestInfo* request_info() const { return request_info_.get(); }
 

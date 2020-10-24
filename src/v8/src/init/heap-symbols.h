@@ -54,6 +54,7 @@
   V(_, ignorePunctuation_string, "ignorePunctuation")               \
   V(_, Invalid_Date_string, "Invalid Date")                         \
   V(_, integer_string, "integer")                                   \
+  V(_, isWordLike_string, "isWordLike")                             \
   V(_, kana_string, "kana")                                         \
   V(_, language_string, "language")                                 \
   V(_, letter_string, "letter")                                     \
@@ -88,6 +89,7 @@
   V(_, second_string, "second")                                     \
   V(_, segment_string, "segment")                                   \
   V(_, SegmentIterator_string, "Segment Iterator")                  \
+  V(_, Segments_string, "Segments")                                 \
   V(_, sensitivity_string, "sensitivity")                           \
   V(_, sep_string, "sep")                                           \
   V(_, shared_string, "shared")                                     \
@@ -131,6 +133,7 @@
   V(_, ArrayBuffer_string, "ArrayBuffer")                            \
   V(_, ArrayIterator_string, "Array Iterator")                       \
   V(_, as_string, "as")                                              \
+  V(_, assert_string, "assert")                                      \
   V(_, async_string, "async")                                        \
   V(_, auto_string, "auto")                                          \
   V(_, await_string, "await")                                        \
@@ -363,6 +366,7 @@
   V(_, wasm_exception_tag_symbol)                     \
   V(_, wasm_exception_values_symbol)                  \
   V(_, wasm_uncatchable_symbol)                       \
+  V(_, wasm_wrapped_object_symbol)                    \
   V(_, uninitialized_symbol)
 
 #define PUBLIC_SYMBOL_LIST_GENERATOR(V, _)          \
@@ -415,10 +419,12 @@
   F(HEAP_EMBEDDER_TRACING_EPILOGUE)                  \
   F(HEAP_EPILOGUE)                                   \
   F(HEAP_EPILOGUE_REDUCE_NEW_SPACE)                  \
+  F(HEAP_EPILOGUE_SAFEPOINT)                         \
   F(HEAP_EXTERNAL_EPILOGUE)                          \
   F(HEAP_EXTERNAL_PROLOGUE)                          \
   F(HEAP_EXTERNAL_WEAK_GLOBAL_HANDLES)               \
   F(HEAP_PROLOGUE)                                   \
+  F(HEAP_PROLOGUE_SAFEPOINT)                         \
   TOP_MC_SCOPES(F)                                   \
   F(MC_CLEAR_DEPENDENT_CODE)                         \
   F(MC_CLEAR_FLUSHABLE_BYTECODE)                     \
@@ -499,11 +505,13 @@
   F(SCAVENGER_SCAVENGE_UPDATE_REFS)                  \
   F(SCAVENGER_SCAVENGE_WEAK)                         \
   F(SCAVENGER_SCAVENGE_FINALIZE)                     \
-  F(SCAVENGER_SWEEP_ARRAY_BUFFERS)
+  F(SCAVENGER_SWEEP_ARRAY_BUFFERS)                   \
+  F(STOP_THE_WORLD)
 
 #define TRACER_BACKGROUND_SCOPES(F)               \
   F(BACKGROUND_ARRAY_BUFFER_FREE)                 \
   F(BACKGROUND_ARRAY_BUFFER_SWEEP)                \
+  F(BACKGROUND_COLLECTION)                        \
   F(BACKGROUND_STORE_BUFFER)                      \
   F(BACKGROUND_UNMAPPER)                          \
   F(MC_BACKGROUND_EVACUATE_COPY)                  \

@@ -13,6 +13,8 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -21,6 +23,7 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/dbus/constants/attestation_constants.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -52,12 +55,13 @@ std::unique_ptr<TpmChallengeKeySubtle> TpmChallengeKeySubtleFactory::Create() {
 std::unique_ptr<TpmChallengeKeySubtle>
 TpmChallengeKeySubtleFactory::CreateForPreparedKey(
     AttestationKeyType key_type,
+    bool will_register_key,
     const std::string& key_name,
-    Profile* profile,
-    const std::string& key_name_for_spkac) {
+    const std::string& public_key,
+    Profile* profile) {
   auto result = TpmChallengeKeySubtleFactory::Create();
-  result->RestorePreparedKeyState(key_type, key_name, profile,
-                                  key_name_for_spkac);
+  result->RestorePreparedKeyState(key_type, will_register_key, key_name,
+                                  public_key, profile);
   return result;
 }
 
@@ -90,15 +94,10 @@ bool IsUserConsentRequired() {
   return !IsEnterpriseDevice();
 }
 
-// Returns the key name that should be used for the attestation platform APIs.
-std::string GetKeyNameWithDefault(AttestationKeyType key_type,
-                                  const std::string& key_name) {
-  if (!key_name.empty())
-    return key_name;
-
-  // If no key name was given, use default well-known key names so they can be
-  // reused across attestation operations (multiple challenge responses can be
-  // generated using the same key).
+// If no key name was given, use default well-known key names so they can be
+// reused across attestation operations (multiple challenge responses can be
+// generated using the same key).
+std::string GetDefaultKeyName(AttestationKeyType key_type) {
   switch (key_type) {
     case KEY_DEVICE:
       return kEnterpriseMachineKey;
@@ -106,6 +105,15 @@ std::string GetKeyNameWithDefault(AttestationKeyType key_type,
       return kEnterpriseUserKey;
   }
   NOTREACHED();
+}
+
+// Returns the key name that should be used for the attestation platform APIs.
+std::string GetKeyNameWithDefault(AttestationKeyType key_type,
+                                  const std::string& key_name) {
+  if (!key_name.empty())
+    return key_name;
+
+  return GetDefaultKeyName(key_type);
 }
 
 }  // namespace
@@ -127,34 +135,44 @@ TpmChallengeKeySubtleImpl::~TpmChallengeKeySubtleImpl() {
 
 void TpmChallengeKeySubtleImpl::RestorePreparedKeyState(
     AttestationKeyType key_type,
+    bool will_register_key,
     const std::string& key_name,
-    Profile* profile,
-    const std::string& key_name_for_spkac) {
+    const std::string& public_key,
+    Profile* profile) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!will_register_key || !public_key.empty());
+
+  // For user keys, a |profile| is strictly necessary.
+  DCHECK(key_type != KEY_USER || profile);
+
   key_type_ = key_type;
+  will_register_key_ = will_register_key;
   key_name_ = GetKeyNameWithDefault(key_type, key_name);
+  public_key_ = public_key;
   profile_ = profile;
-  key_name_for_spkac_ = key_name_for_spkac;
 }
 
 void TpmChallengeKeySubtleImpl::StartPrepareKeyStep(
     AttestationKeyType key_type,
+    bool will_register_key,
     const std::string& key_name,
     Profile* profile,
-    const std::string& key_name_for_spkac,
     TpmChallengeKeyCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(callback_.is_null());
+  // For device key: if |will_register_key| is true, |key_name| should not be
+  // empty, if |register_key| is false, |key_name| will not be used.
+  DCHECK((key_type != KEY_DEVICE) || (will_register_key == !key_name.empty()))
+      << "Invalid arguments: " << will_register_key << " " << !key_name.empty();
 
-  // |key_name_for_spkac| was designed to only be used with KEY_DEVICE.
-  DCHECK((key_type != KEY_USER) || key_name_for_spkac.empty())
-      << "Key name for SPKAC will be unused.";
+  // For user keys, a |profile| is strictly necessary.
+  DCHECK(key_type != KEY_USER || profile);
 
   key_type_ = key_type;
+  will_register_key_ = will_register_key;
   key_name_ = GetKeyNameWithDefault(key_type, key_name);
   profile_ = profile;
   callback_ = std::move(callback);
-  key_name_for_spkac_ = key_name_for_spkac;
 
   switch (key_type_) {
     case KEY_DEVICE:
@@ -177,7 +195,7 @@ void TpmChallengeKeySubtleImpl::PrepareMachineKey() {
     return;
   }
 
-  // Check whether the user is managed unless the signin profile is used.
+  // Check whether the user is managed unless this is a device-wide instance.
   if (GetUser() && !IsUserAffiliated()) {
     std::move(callback_).Run(
         Result::MakeError(ResultCode::kUserNotManagedError));
@@ -234,10 +252,10 @@ bool TpmChallengeKeySubtleImpl::IsUserAffiliated() const {
 
 bool TpmChallengeKeySubtleImpl::IsRemoteAttestationEnabledForUser() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(profile_);
 
   PrefService* prefs = profile_->GetPrefs();
-  // TODO(crbug.com/1000589): Check it's mandatory after fixing corp policy.
-  if (prefs) {
+  if (prefs && prefs->IsManagedPreference(prefs::kAttestationEnabled)) {
     return prefs->GetBoolean(prefs::kAttestationEnabled);
   }
   return false;
@@ -268,20 +286,10 @@ AttestationCertificateProfile TpmChallengeKeySubtleImpl::GetCertificateProfile()
   NOTREACHED();
 }
 
-std::string TpmChallengeKeySubtleImpl::GetKeyNameForRegister() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  switch (key_type_) {
-    case KEY_DEVICE:
-      return key_name_for_spkac_;
-    case KEY_USER:
-      return key_name_;
-  }
-  NOTREACHED();
-}
-
 const user_manager::User* TpmChallengeKeySubtleImpl::GetUser() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!profile_)
+    return nullptr;
   return ProfileHelper::Get()->GetUserByProfile(profile_);
 }
 
@@ -362,18 +370,6 @@ void TpmChallengeKeySubtleImpl::IsAttestationPreparedCallback(
     return;
   }
 
-  if (!key_name_for_spkac_.empty()) {
-    // Generate a new key and have it signed by PCA.
-    attestation_flow_->GetCertificate(
-        GetCertificateProfile(), GetAccountId(),
-        std::string(),  // Not used.
-        true,           // Force a new key to be generated.
-        key_name_for_spkac_,
-        base::BindOnce(&TpmChallengeKeySubtleImpl::GetCertificateCallback,
-                       weak_factory_.GetWeakPtr()));
-    return;
-  }
-
   // Attestation is available, see if the key we need already exists.
   CryptohomeClient::Get()->TpmAttestationDoesKeyExist(
       key_type_,
@@ -450,9 +446,8 @@ void TpmChallengeKeySubtleImpl::AskForUserConsentCallback(bool result) {
   // Generate a new key and have it signed by PCA.
   attestation_flow_->GetCertificate(
       GetCertificateProfile(), GetAccountId(),
-      std::string(),  // Not used.
-      true,           // Force a new key to be generated.
-      key_name_,
+      /*request_origin=*/std::string(),  // Not used.
+      /*force_new_key=*/true, key_name_,
       base::BindOnce(&TpmChallengeKeySubtleImpl::GetCertificateCallback,
                      weak_factory_.GetWeakPtr()));
 }
@@ -474,12 +469,10 @@ void TpmChallengeKeySubtleImpl::GetCertificateCallback(
 void TpmChallengeKeySubtleImpl::GetPublicKey() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  const std::string& key =
-      (!key_name_for_spkac_.empty()) ? key_name_for_spkac_ : key_name_;
-
   CryptohomeClient::Get()->TpmAttestationGetPublicKey(
       key_type_,
-      cryptohome::CreateAccountIdentifierFromAccountId(GetAccountId()), key,
+      cryptohome::CreateAccountIdentifierFromAccountId(GetAccountId()),
+      key_name_,
       base::BindOnce(&TpmChallengeKeySubtleImpl::PrepareKeyFinished,
                      weak_factory_.GetWeakPtr()));
 }
@@ -495,26 +488,43 @@ void TpmChallengeKeySubtleImpl::PrepareKeyFinished(
     return;
   }
 
+  if (profile_ && will_register_key_) {
+    public_key_ = prepare_key_result->data;
+  }
+
   std::move(callback_).Run(Result::MakePublicKey(prepare_key_result->data));
 }
 
 void TpmChallengeKeySubtleImpl::StartSignChallengeStep(
     const std::string& challenge,
-    bool include_signed_public_key,
     TpmChallengeKeyCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(callback_.is_null());
 
   callback_ = std::move(callback);
 
+  // See http://go/chromeos-va-registering-device-wide-keys-support for details
+  // about both key names.
+
+  // Name of the key that will be used to sign challenge.
+  // Device key challenges are signed using a stable key.
+  std::string key_name_for_challenge =
+      (key_type_ == KEY_DEVICE) ? GetDefaultKeyName(key_type_) : key_name_;
+  // Name of the key that will be included in SPKAC, it is used only when SPKAC
+  // should be included for device key.
+  std::string key_name_for_spkac =
+      (will_register_key_ && key_type_ == KEY_DEVICE) ? key_name_
+                                                      : std::string();
+
   // Everything is checked. Sign the challenge.
   cryptohome::AsyncMethodCaller::GetInstance()
       ->TpmAttestationSignEnterpriseChallenge(
-          key_type_, cryptohome::Identification(GetAccountId()), key_name_,
-          GetEmail(), InstallAttributes::Get()->GetDeviceId(),
-          include_signed_public_key ? CHALLENGE_INCLUDE_SIGNED_PUBLIC_KEY
-                                    : CHALLENGE_OPTION_NONE,
-          challenge, key_name_for_spkac_,
+          key_type_, cryptohome::Identification(GetAccountId()),
+          key_name_for_challenge, GetEmail(),
+          InstallAttributes::Get()->GetDeviceId(),
+          will_register_key_ ? CHALLENGE_INCLUDE_SIGNED_PUBLIC_KEY
+                             : CHALLENGE_OPTION_NONE,
+          challenge, key_name_for_spkac,
           base::BindOnce(&TpmChallengeKeySubtleImpl::SignChallengeCallback,
                          weak_factory_.GetWeakPtr()));
 }
@@ -537,12 +547,12 @@ void TpmChallengeKeySubtleImpl::StartRegisterKeyStep(
     TpmChallengeKeyCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(callback_.is_null());
+  DCHECK(will_register_key_);
 
   callback_ = std::move(callback);
 
   cryptohome::AsyncMethodCaller::GetInstance()->TpmAttestationRegisterKey(
-      key_type_, cryptohome::Identification(GetAccountId()),
-      GetKeyNameForRegister(),
+      key_type_, cryptohome::Identification(GetAccountId()), key_name_,
       base::BindOnce(&TpmChallengeKeySubtleImpl::RegisterKeyCallback,
                      weak_factory_.GetWeakPtr()));
 }
@@ -558,17 +568,33 @@ void TpmChallengeKeySubtleImpl::RegisterKeyCallback(
     return;
   }
 
-  std::move(callback_).Run(Result::MakeSuccess());
+  if (!profile_ || (key_type_ == AttestationKeyType::KEY_DEVICE)) {
+    std::move(callback_).Run(Result::MakeSuccess());
+    return;
+  }
+
+  // TODO(1082459, 1113115): For now only user keys are being explicitly marked
+  // as corporate. All device keys are assumed to be corporate as well. It is
+  // better to mark device keys as well, when there is a way to get
+  // KeyPermissionsService without a profile.
+  platform_keys::KeyPermissionsServiceFactory::GetForBrowserContext(profile_)
+      ->SetCorporateKey(
+          public_key_,
+          base::BindOnce(&TpmChallengeKeySubtleImpl::MarkCorporateKeyCallback,
+                         weak_factory_.GetWeakPtr()));
 }
 
-void TpmChallengeKeySubtleImpl::RunCallback(
-    const TpmChallengeKeyResult& result) {
+void TpmChallengeKeySubtleImpl::MarkCorporateKeyCallback(
+    platform_keys::Status status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!callback_.is_null());
-  TpmChallengeKeyCallback local_callback = std::move(callback_);
-  callback_.Reset();
-  std::move(local_callback).Run(result);
-  // |this| may be destructed after |callback_| is run.
+
+  if (status != platform_keys::Status::kSuccess) {
+    std::move(callback_).Run(
+        Result::MakeError(ResultCode::kMarkCorporateKeyFailedError));
+    return;
+  }
+
+  std::move(callback_).Run(Result::MakeSuccess());
 }
 
 }  // namespace attestation

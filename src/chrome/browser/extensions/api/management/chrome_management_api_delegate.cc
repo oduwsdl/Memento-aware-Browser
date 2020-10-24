@@ -236,12 +236,12 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
       const favicon_base::FaviconImageResult& image_result) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
     web_app_info->title = base::UTF8ToUTF16(title);
-    web_app_info->app_url = launch_url;
+    web_app_info->start_url = launch_url;
     web_app_info->display_mode = web_app::DisplayMode::kBrowser;
     web_app_info->open_as_window = false;
 
     if (!image_result.image.IsEmpty()) {
-      web_app_info->icon_bitmaps[image_result.image.Width()] =
+      web_app_info->icon_bitmaps_any[image_result.image.Width()] =
           image_result.image.AsBitmap();
     }
 
@@ -273,7 +273,7 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
     info.is_app = true;
     info.type = extensions::api::management::EXTENSION_TYPE_HOSTED_APP;
     info.app_launch_url =
-        std::make_unique<std::string>(registrar.GetAppLaunchURL(app_id).spec());
+        std::make_unique<std::string>(registrar.GetAppStartUrl(app_id).spec());
 
     info.icons =
         std::make_unique<std::vector<extensions::api::management::IconInfo>>();
@@ -302,6 +302,8 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
         info.launch_type =
             extensions::api::management::LAUNCH_TYPE_OPEN_FULL_SCREEN;
         break;
+      // This mode is not supported by the extension app backend.
+      case web_app::DisplayMode::kWindowControlsOverlay:
       case web_app::DisplayMode::kUndefined:
         info.launch_type = extensions::api::management::LAUNCH_TYPE_NONE;
         break;
@@ -332,7 +334,7 @@ void LaunchWebApp(const web_app::AppId& app_id, Profile* profile) {
 
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           app_id, launch_container, WindowOpenDisposition::NEW_FOREGROUND_TAB,
           apps::mojom::AppLaunchSource::kSourceManagementApi));
 }
@@ -369,7 +371,8 @@ void OnWebAppInstallabilityChecked(
           displayer.browser(), nullptr, std::move(web_contents), url,
           WindowOpenDisposition::NEW_FOREGROUND_TAB, gfx::Rect());
       web_app::CreateWebAppFromManifest(
-          containing_contents, WebappInstallSource::MANAGEMENT_API,
+          containing_contents, /*bypass_service_worker_check=*/true,
+          WebappInstallSource::MANAGEMENT_API,
           base::BindOnce(&OnWebAppInstallCompleted, std::move(callback)));
       return;
   }
@@ -397,7 +400,7 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   Profile* profile = Profile::FromBrowserContext(context);
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), launch_container,
           WindowOpenDisposition::NEW_FOREGROUND_TAB,
           apps::mojom::AppLaunchSource::kSourceManagementApi));
@@ -521,7 +524,7 @@ void ChromeManagementAPIDelegate::InstallOrLaunchReplacementWebApp(
     return;
   }
 
-  provider->install_manager().LoadWebAppAndCheckInstallability(
+  provider->install_manager().LoadWebAppAndCheckManifest(
       web_app_url, WebappInstallSource::MANAGEMENT_API,
       base::BindOnce(&OnWebAppInstallabilityChecked, profile,
                      std::move(callback)));

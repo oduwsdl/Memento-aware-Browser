@@ -4,8 +4,8 @@
 
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 
-#include "base/task/thread_pool.h"
-#include "base/task/thread_pool/thread_pool_instance.h"
+#include <utility>
+
 #include "gpu/vulkan/buildflags.h"
 #include "gpu/vulkan/init/gr_vk_memory_allocator_impl.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
@@ -14,29 +14,8 @@
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_instance.h"
 #include "gpu/vulkan/vulkan_util.h"
-#include "third_party/skia/include/core/SkExecutor.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkExtensions.h"
-
-namespace {
-
-class VizExecutor : public SkExecutor {
- public:
-  VizExecutor() = default;
-  ~VizExecutor() override = default;
-  VizExecutor(const VizExecutor&) = delete;
-  VizExecutor& operator=(const VizExecutor&) = delete;
-
-  // std::function is used by SkExecutor in //third_party/skia. nocheck
-  using Fn = std::function<void(void)>;  // nocheck
-  // SkExecutor:
-  void add(Fn task) override {
-    base::ThreadPool::PostTask(
-        FROM_HERE, base::BindOnce([](Fn task) { task(); }, std::move(task)));
-  }
-};
-
-}  // namespace
 
 namespace viz {
 
@@ -125,16 +104,7 @@ bool VulkanInProcessContextProvider::Initialize(
       vulkan_implementation_->enforce_protected_memory() ? GrProtected::kYes
                                                          : GrProtected::kNo;
 
-  GrContextOptions options;
-  if (base::ThreadPoolInstance::Get()) {
-    // For some tests, ThreadPoolInstance is not initialized. VizExecutor will
-    // not be used for this case.
-    // TODO(penghuang): Make sure ThreadPoolInstance is initialized for related
-    // tests.
-    executor_ = std::make_unique<VizExecutor>();
-    options.fExecutor = executor_.get();
-  }
-  gr_context_ = GrContext::MakeVulkan(backend_context, options);
+  gr_context_ = GrDirectContext::MakeVulkan(backend_context, context_options);
 
   return gr_context_ != nullptr;
 }
@@ -154,8 +124,6 @@ void VulkanInProcessContextProvider::Destroy() {
     gr_context_.reset();
   }
 
-  executor_.reset();
-
   if (device_queue_) {
     device_queue_->Destroy();
     device_queue_.reset();
@@ -171,7 +139,7 @@ gpu::VulkanDeviceQueue* VulkanInProcessContextProvider::GetDeviceQueue() {
   return device_queue_.get();
 }
 
-GrContext* VulkanInProcessContextProvider::GetGrContext() {
+GrDirectContext* VulkanInProcessContextProvider::GetGrContext() {
   return gr_context_.get();
 }
 

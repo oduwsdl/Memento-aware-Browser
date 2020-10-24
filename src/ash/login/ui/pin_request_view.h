@@ -107,7 +107,6 @@ class ASH_EXPORT PinRequestView : public views::DialogDelegateView,
     LoginPinView* pin_keyboard_view();
 
     views::Textfield* GetInputTextField(int index);
-
     PinRequestViewState state() const;
 
    private:
@@ -131,7 +130,6 @@ class ASH_EXPORT PinRequestView : public views::DialogDelegateView,
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // views::DialogDelegateView:
-  ui::ModalType GetModalType() const override;
   views::View* GetInitiallyFocusedView() override;
   base::string16 GetAccessibleWindowTitle() const override;
 

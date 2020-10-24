@@ -13,7 +13,7 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_install_delegate.h"
 #include "components/sync/model/metadata_batch.h"
-#include "components/sync/model/mock_model_type_change_processor.h"
+#include "components/sync/test/model/mock_model_type_change_processor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
 
@@ -41,6 +41,8 @@ class TestWebAppRegistryController : public SyncInstallDelegate {
   void UnregisterAll();
 
   void ApplySyncChanges_AddApps(std::vector<GURL> apps_to_add);
+  void ApplySyncChanges_UpdateApps(
+      const std::vector<std::unique_ptr<WebApp>>& apps_server_state);
   void ApplySyncChanges_DeleteApps(std::vector<AppId> app_ids_to_delete);
 
   using InstallWebAppsAfterSyncDelegate =

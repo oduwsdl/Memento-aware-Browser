@@ -25,6 +25,7 @@ Here's what works well:
     well, even though startup times can be fairly high (~40 seconds with
     gdb on Linux, much lower on Windows). You can step through code, inspect
     variables, view call stacks for multiple threads etc.
+    *   For more information on debugging Python code, see [here](vscode_python.md).
 *   Opening files and searching solution-wide works well now after having
     problems in earlier versions.
 *   Building works well. Build tools are easy to integrate. Warnings and errors
@@ -259,12 +260,12 @@ in the Explorer tab) is chromium/src. If this is not the case, replace any
 references to ${workspaceFolder} with the path to chromium/src.
 
 ### Tasks
-Next, we'll tell VS Code how to compile our code and how to read warnings and
-errors from the build output. Open the file
-[//tools/vscode/tasks.json5](/tools/vscode/tasks.json5). This will provide 5
-tasks to do basic things. You might have to adjust the commands to your
-situation and needs. To use these settings wholesale, enter the following
-command into your terminal:
+Next, we'll tell VS Code how to compile our code, run tests, and to read
+warnings and errors from the build output. Open the file
+[//tools/vscode/tasks.json5](/tools/vscode/tasks.json5). This will provide tasks
+to do basic things. You might have to adjust the commands to your situation and
+needs. To use these settings wholesale, enter the following command into your
+terminal:
 ```
 $ cp tools/vscode/tasks.json5 .vscode/tasks.json
 ```

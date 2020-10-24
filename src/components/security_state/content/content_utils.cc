@@ -23,12 +23,12 @@
 #include "content/public/browser/security_style_explanations.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/origin_util.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/platform/web_mixed_content_context_type.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -422,14 +422,8 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
 
   content::NavigationEntry* entry =
       web_contents->GetController().GetVisibleEntry();
-
-  /*content::RenderFrameHost* frame = web_contents->GetMainFrame();
-
-  frame->GetLastCommittedURL();*/
-
   if (!entry)
     return state;
-
   // Set fields that are not dependent on the connection info.
   state->is_error_page = entry->GetPageType() == content::PAGE_TYPE_ERROR;
   state->is_view_source =
@@ -447,17 +441,6 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->certificate = ssl.certificate;
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
-  state->mixed_memento = true;
-  if (entry->GetMementoDatetime() != "") {
-    state->memento_status = true;
-    state->mixed_memento = false;
-  }
-  else if (entry->GetMementoDates().size() > 1) {
-    DVLOG(0) << "Detected Mixed Archival Content.";
-    state->memento_status = true;
-  }
-  state->memento_datetime = entry->GetMementoDatetime();
-  //state->mixed_memento = true;//entry->GetMixedMementoContentInfo();
   state->key_exchange_group = ssl.key_exchange_group;
   state->peer_signature_algorithm = ssl.peer_signature_algorithm;
   state->pkp_bypassed = ssl.pkp_bypassed;
@@ -529,7 +512,7 @@ blink::SecurityStyle GetSecurityStyle(
     // Some origins are considered secure even if they're not cryptographic, so
     // display a more precise summary.
     if (security_level == security_state::NONE &&
-        content::IsOriginSecure(visible_security_state.url)) {
+        blink::network_utils::IsOriginSecure(visible_security_state.url)) {
       security_style_explanations->summary =
           l10n_util::GetStringUTF8(IDS_NON_CRYPTO_SECURE_SUMMARY);
     }

@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/grit/components_scaled_resources.h"
@@ -51,6 +52,7 @@ const PaymentRequestData kPaymentRequestData[]{
     {autofill::kMasterCard, "mastercard", IDR_AUTOFILL_CC_MASTERCARD,
      IDS_AUTOFILL_CC_MASTERCARD},
     {autofill::kMirCard, "mir", IDR_AUTOFILL_CC_MIR, IDS_AUTOFILL_CC_MIR},
+    {autofill::kTroyCard, "troy", IDR_AUTOFILL_CC_TROY, IDS_AUTOFILL_CC_TROY},
     {autofill::kUnionPay, "unionpay", IDR_AUTOFILL_CC_UNIONPAY,
      IDS_AUTOFILL_CC_UNION_PAY},
     {autofill::kVisaCard, "visa", IDR_AUTOFILL_CC_VISA, IDS_AUTOFILL_CC_VISA},
@@ -230,19 +232,40 @@ bool SplitCJKName(const std::vector<base::StringPiece16>& name_tokens,
           1, StartsWithAny(name, common_cjk_multi_char_surnames,
                            base::size(common_cjk_multi_char_surnames)));
     }
-    parts->family = name.substr(0, surname_length).as_string();
-    parts->given = name.substr(surname_length).as_string();
+    parts->family = base::string16(name.substr(0, surname_length));
+    parts->given = base::string16(name.substr(surname_length));
     return true;
   }
   if (name_tokens.size() == 2) {
     // The user entered a space between the two name parts. This makes our job
     // easier. Family name first, given name second.
-    parts->family = name_tokens[0].as_string();
-    parts->given = name_tokens[1].as_string();
+    parts->family = base::string16(name_tokens[0]);
+    parts->given = base::string16(name_tokens[1]);
     return true;
   }
   // We don't know what to do if there are more than 2 tokens.
   return false;
+}
+
+void AddGroupToBitmask(uint32_t* group_bitmask, ServerFieldType type) {
+  const FieldTypeGroup group =
+      AutofillType(AutofillType(type).GetStorableType()).group();
+  switch (group) {
+    case autofill::NAME:
+      *group_bitmask |= kName;
+      break;
+    case autofill::ADDRESS_HOME:
+      *group_bitmask |= kAddress;
+      break;
+    case autofill::EMAIL:
+      *group_bitmask |= kEmail;
+      break;
+    case autofill::PHONE_HOME:
+      *group_bitmask |= kPhone;
+      break;
+    default:
+      break;
+  }
 }
 
 }  // namespace
@@ -263,27 +286,19 @@ bool ContainsPhone(uint32_t groups) {
   return groups & kPhone;
 }
 
+uint32_t DetermineGroups(const FormStructure& form) {
+  uint32_t group_bitmask = 0;
+  for (const auto& field : form) {
+    ServerFieldType type = field->Type().GetStorableType();
+    AddGroupToBitmask(&group_bitmask, type);
+  }
+  return group_bitmask;
+}
+
 uint32_t DetermineGroups(const std::vector<ServerFieldType>& types) {
   uint32_t group_bitmask = 0;
-  for (const ServerFieldType& type : types) {
-    const FieldTypeGroup group =
-        AutofillType(AutofillType(type).GetStorableType()).group();
-    switch (group) {
-      case autofill::NAME:
-        group_bitmask |= kName;
-        break;
-      case autofill::ADDRESS_HOME:
-        group_bitmask |= kAddress;
-        break;
-      case autofill::EMAIL:
-        group_bitmask |= kEmail;
-        break;
-      case autofill::PHONE_HOME:
-        group_bitmask |= kPhone;
-        break;
-      default:
-        break;
-    }
+  for (const auto& type : types) {
+    AddGroupToBitmask(&group_bitmask, type);
   }
   return group_bitmask;
 }
@@ -313,6 +328,8 @@ std::string GetSuffixForProfileFormType(uint32_t bitmask) {
     case kName | kEmail:
     case kName | kPhone:
       return ".ContactOnly";
+    case kPhone:
+      return ".PhoneOnly";
     default:
       return ".Other";
   }
@@ -396,13 +413,13 @@ NameParts SplitName(base::StringPiece16 name) {
 
   if (name_tokens.empty()) {
     // Bad things have happened; just assume the whole thing is a given name.
-    parts.given = name.as_string();
+    parts.given = base::string16(name);
     return parts;
   }
 
   // Only one token, assume given name.
   if (name_tokens.size() == 1) {
-    parts.given = name_tokens[0].as_string();
+    parts.given = base::string16(name_tokens[0]);
     return parts;
   }
 
@@ -425,7 +442,7 @@ NameParts SplitName(base::StringPiece16 name) {
   // Take the last remaining token as the middle name (if there are at least 2
   // tokens).
   if (name_tokens.size() >= 2) {
-    parts.middle = name_tokens.back().as_string();
+    parts.middle = base::string16(name_tokens.back());
     name_tokens.pop_back();
   }
 

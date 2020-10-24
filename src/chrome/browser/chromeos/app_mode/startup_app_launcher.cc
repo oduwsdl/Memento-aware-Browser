@@ -254,12 +254,16 @@ void StartupAppLauncher::OnExtensionUpdateCheckFinished(bool update_found) {
   SYSLOG(INFO) << "OnExtensionUpdateCheckFinished";
   update_checker_.reset();
   if (update_found) {
+    SYSLOG(INFO) << "Start to reload extension with id " << app_id_;
+
     // Reload the primary app to make sure any reference to the previous version
     // of the shared module, extension, etc will be cleaned up andthe new
     // version will be loaded.
     extensions::ExtensionSystem::Get(profile_)
             ->extension_service()
             ->ReloadExtension(app_id_);
+
+    SYSLOG(INFO) << "Finish to reload extension with id " << app_id_;
   }
 
   MaybeLaunchApp();
@@ -425,7 +429,7 @@ void StartupAppLauncher::LaunchApp() {
   // Always open the app in a window.
   apps::AppServiceProxyFactory::GetForProfile(profile_)
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), apps::mojom::LaunchContainer::kLaunchContainerWindow,
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::AppLaunchSource::kSourceKiosk));

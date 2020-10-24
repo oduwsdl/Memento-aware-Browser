@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ash/accelerators/accelerator_controller_impl.h"
+#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/accessibility/accessibility_delegate.h"
 #include "ash/display/root_window_transformers.h"
 #include "ash/host/ash_window_tree_host.h"
@@ -27,13 +28,14 @@
 #include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
-#include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/gestures/gesture_provider_aura.h"
+#include "ui/events/types/event_type.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -60,8 +62,8 @@ constexpr int kDefaultAnimationDurationInMs = 100;
 constexpr gfx::Tween::Type kCenterCaretAnimationTweenType = gfx::Tween::LINEAR;
 
 // The delay of the timer for moving magnifier window for centering the text
-// input focus.
-constexpr int kMoveMagnifierDelayInMs = 10;
+// input focus. Keep under one frame length (~16ms at 60hz).
+constexpr int kMoveMagnifierDelayInMs = 15;
 
 // Threshold of panning. If the cursor moves to within pixels (in DIP) of
 // |kCursorPanningMargin| from the edge, the view-port moves.
@@ -265,6 +267,16 @@ void MagnificationController::HandleFocusedNodeChanged(
   MoveMagnifierWindowFollowRect(node_bounds_in_root);
 }
 
+void MagnificationController::HandleMoveMagnifierToRect(
+    const gfx::Rect& rect_in_screen) {
+  gfx::Rect node_bounds_in_root = rect_in_screen;
+  ::wm::ConvertRectFromScreen(root_window_, &node_bounds_in_root);
+  if (GetViewportRect().Contains(node_bounds_in_root))
+    return;
+
+  MoveMagnifierWindowFollowRect(node_bounds_in_root);
+}
+
 void MagnificationController::SwitchTargetRootWindow(
     aura::Window* new_root_window,
     bool redraw_original_root_window) {
@@ -428,21 +440,37 @@ void MagnificationController::OnWindowBoundsChanged(
 void MagnificationController::OnMouseEvent(ui::MouseEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
   aura::Window* current_root = target->GetRootWindow();
-  gfx::Rect root_bounds = current_root->bounds();
+  gfx::Point root_location = event->root_location();
 
-  if (root_bounds.Contains(event->root_location())) {
+  if (event->type() == ui::ET_MOUSE_DRAGGED) {
+    auto* screen = display::Screen::GetScreen();
+    const gfx::Point cursor_screen_location = screen->GetCursorScreenPoint();
+
+    auto* window = screen->GetWindowAtScreenPoint(cursor_screen_location);
+    // Update the |current_root| to be the one that contains the cursor
+    // currently. This will make sure the magnifier be activated in the display
+    // that contains the cursor while drag a window across displays.
+    current_root =
+        window ? window->GetRootWindow() : Shell::GetPrimaryRootWindow();
+    root_location = cursor_screen_location;
+    wm::ConvertPointFromScreen(current_root, &root_location);
+  }
+
+  if (current_root->bounds().Contains(root_location)) {
     // This must be before |SwitchTargetRootWindow()|.
     if (event->type() != ui::ET_MOUSE_CAPTURE_CHANGED)
-      point_of_interest_in_root_ = event->root_location();
+      point_of_interest_in_root_ = root_location;
 
     if (current_root != root_window_) {
       DCHECK(current_root);
       SwitchTargetRootWindow(current_root, true);
     }
 
-    if (IsMagnified() && event->type() == ui::ET_MOUSE_MOVED &&
+    const bool dragged_or_moved = event->type() == ui::ET_MOUSE_MOVED ||
+                                  event->type() == ui::ET_MOUSE_DRAGGED;
+    if (IsMagnified() && dragged_or_moved &&
         event->pointer_details().pointer_type != ui::EventPointerType::kPen) {
-      OnMouseMove(event->root_location());
+      OnMouseMove(root_location);
     }
   }
 }
@@ -576,13 +604,14 @@ ui::EventDispatchDetails MagnificationController::RewriteEvent(
   return SendEvent(continuation, &event);
 }
 
-bool MagnificationController::Redraw(const gfx::PointF& position,
-                                     float scale,
-                                     bool animate) {
-  const gfx::PointF position_in_dip =
-      ui::ConvertPointToDIP(root_window_->layer(), position);
-  return RedrawDIP(position_in_dip, scale,
-                   animate ? kDefaultAnimationDurationInMs : 0,
+bool MagnificationController::Redraw(
+    const gfx::PointF& position_in_physical_pixels,
+    float scale,
+    bool animate) {
+  gfx::PointF position =
+      gfx::ConvertPointToDips(position_in_physical_pixels,
+                              root_window_->layer()->device_scale_factor());
+  return RedrawDIP(position, scale, animate ? kDefaultAnimationDurationInMs : 0,
                    kDefaultAnimationTweenType);
 }
 
@@ -650,7 +679,7 @@ bool MagnificationController::RedrawDIP(const gfx::PointF& position_in_dip,
         root_window_->GetChildById(kShellWindowId_ImeWindowParentContainer)};
 
     aura::Window* display_identification_highlight =
-        root_window_->GetChildById(kShellWindowId_ScreenRotationContainer)
+        root_window_->GetChildById(kShellWindowId_ScreenAnimationContainer)
             ->GetChildById(kShellWindowId_DisplayIdentificationHighlightWindow);
 
     if (display_identification_highlight)
@@ -672,6 +701,9 @@ bool MagnificationController::RedrawDIP(const gfx::PointF& position_in_dip,
 
   if (duration_in_ms > 0)
     is_on_animation_ = true;
+
+  Shell::Get()->accessibility_controller()->MagnifierBoundsChanged(
+      GetViewportRect());
 
   return true;
 }

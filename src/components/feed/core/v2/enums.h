@@ -31,7 +31,7 @@ enum class LoadStreamStatus {
   // The timestamp for stored data is in the future, so we're treating stored
   // data as it it is stale.
   kDataInStoreIsStaleTimestampInFuture = 9,
-  kCannotLoadFromNetworkSupressedForHistoryDelete = 10,
+  kCannotLoadFromNetworkSupressedForHistoryDelete_DEPRECATED = 10,
   kCannotLoadFromNetworkOffline = 11,
   kCannotLoadFromNetworkThrottled = 12,
   kLoadNotAllowedEulaNotAccepted = 13,
@@ -40,7 +40,8 @@ enum class LoadStreamStatus {
   kLoadMoreModelIsNotLoaded = 16,
   kLoadNotAllowedDisabledByEnterprisePolicy = 17,
   kNetworkFetchFailed = 18,
-  kMaxValue = kNetworkFetchFailed,
+  kCannotLoadMoreNoNextPageToken = 19,
+  kMaxValue = kCannotLoadMoreNoNextPageToken,
 };
 
 std::ostream& operator<<(std::ostream& out, LoadStreamStatus value);
@@ -53,7 +54,9 @@ enum class UploadActionsStatus {
   kStoredPendingAction = 3,
   kUpdatedConsistencyToken = 4,
   kFinishedWithoutUpdatingConsistencyToken = 5,
-  kMaxValue = kFinishedWithoutUpdatingConsistencyToken,
+  kAbortUploadForSignedOutUser = 6,
+  kAbortUploadBecauseDisabled = 7,
+  kMaxValue = kAbortUploadBecauseDisabled,
 };
 
 // Keep this in sync with FeedUploadActionsBatchStatus in enums.xml.

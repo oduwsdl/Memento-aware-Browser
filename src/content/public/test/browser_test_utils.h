@@ -25,6 +25,7 @@
 #include "base/strings/string16.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "cc/test/pixel_test_utils.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/notification_observer.h"
@@ -34,9 +35,11 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/page_type.h"
 #include "content/public/common/untrustworthy_context_menu_params.h"
+#include "content/public/test/fake_frame_widget.h"
 #include "ipc/message_filter.h"
 #include "net/base/load_flags.h"
 #include "services/network/public/mojom/network_service.mojom.h"
@@ -49,6 +52,7 @@
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_update.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -95,14 +99,18 @@ typedef int PROPERTYID;
 // If it only works with content_browsertests, it should be in
 // content\test\content_browser_test_utils.h.
 
+namespace blink {
+struct FrameVisualProperties;
+}
+
 namespace content {
 
 class BrowserContext;
-struct FrameVisualProperties;
 class FrameTreeNode;
 class NavigationHandle;
 class NavigationRequest;
 class RenderFrameMetadataProviderImpl;
+class RenderFrameProxyHost;
 class RenderWidgetHost;
 class RenderWidgetHostView;
 class ScopedAllowRendererCrashes;
@@ -212,6 +220,11 @@ void SimulateMouseClickAt(WebContents* web_contents,
                           blink::WebMouseEvent::Button button,
                           const gfx::Point& point);
 
+// Retrieves the center coordinates of the element with id |id| and simulates a
+// mouse click there using SimulateMouseClickAt().
+void SimulateMouseClickOrTapElementWithId(content::WebContents* web_contents,
+                                          const std::string& id);
+
 // Simulates MouseDown at the center of the given RenderWidgetHost's area.
 // This does not send a corresponding MouseUp.
 void SendMouseDownToWidget(RenderWidgetHost* target,
@@ -234,7 +247,7 @@ void SimulateMouseWheelEvent(WebContents* web_contents,
                              const gfx::Vector2d& delta,
                              const blink::WebMouseWheelEvent::Phase phase);
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 // Simulate a mouse wheel event with the ctrl modifier set.
 void SimulateMouseWheelCtrlZoomEvent(WebContents* web_contents,
                                      const gfx::Point& point,
@@ -246,7 +259,7 @@ void SimulateTouchscreenPinch(WebContents* web_contents,
                               float scale_change,
                               base::OnceClosure on_complete);
 
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 // Sends a GesturePinch Begin/Update/End sequence.
 void SimulateGesturePinchSequence(WebContents* web_contents,
@@ -325,7 +338,6 @@ void ResetTouchAction(RenderWidgetHost* host);
 // Requests mouse lock on the implementation of the given RenderWidgetHost
 void RequestMouseLock(RenderWidgetHost* host,
                       bool user_gesture,
-                      bool privileged,
                       bool request_unadjusted_movement);
 
 // Spins a run loop until effects of previously forwarded input are fully
@@ -337,6 +349,15 @@ void RunUntilInputProcessed(RenderWidgetHost* host);
 // tests. The value `no-meta` indicates no tag should be created.
 std::string ReferrerPolicyToString(
     network::mojom::ReferrerPolicy referrer_policy);
+
+// For testing, bind FakeFrameWidget to a RenderWidgetHost associated
+// with a given RenderFrameHost
+mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
+BindFakeFrameWidgetInterfaces(RenderFrameHost* frame);
+
+// Set |active| state for a RenderWidgetHost associated with a given
+// RenderFrameHost
+void SimulateActiveStateForWidget(RenderFrameHost* frame, bool active);
 
 // Holds down modifier keys for the duration of its lifetime and releases them
 // upon destruction. This allows simulating multiple input events without
@@ -881,6 +902,11 @@ void SetupCrossSiteRedirector(net::EmbeddedTestServer* embedded_test_server);
 // message is handled properly.
 bool WaitForRenderFrameReady(RenderFrameHost* rfh) WARN_UNUSED_RESULT;
 
+// Removes the interface from the associated interface receiver sets attached to
+// the WebContents.
+void RemoveWebContentsReceiverSet(WebContents* web_contents,
+                                  const std::string& interface_name);
+
 // Enable accessibility support for all of the frames in this WebContents
 void EnableAccessibilityForWebContents(WebContents* web_contents);
 
@@ -938,10 +964,6 @@ void UiaGetPropertyValueVtArrayVtUnknownValidate(
     ui::AXPlatformNodeDelegate* target_node,
     const std::vector<std::string>& expected_names);
 #endif
-
-// Find out if the BrowserPlugin for a guest WebContents is focused. Returns
-// false if the WebContents isn't a guest with a BrowserPlugin.
-bool IsWebContentsBrowserPluginFocused(content::WebContents* web_contents);
 
 // Returns the RenderWidgetHost that holds the mouse lock.
 RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents);
@@ -1298,26 +1320,21 @@ class RenderFrameSubmissionObserver
 // This is accomplished by sending an IPC to RenderWidget, then blocking until
 // the ACK is received and processed.
 //
-// When the main thread receives the ACK it is enqueued. The queue is not
-// processed until a new FrameToken is received.
-//
-// So while the ACK can arrive before a CompositorFrame submission occurs. The
-// processing does not occur until after the FrameToken for that frame
-// submission arrives to the main thread.
-class MainThreadFrameObserver : public IPC::Listener {
+// The ACK is sent from compositor thread, when the CompositorFrame is submited
+// to the display compositor
+// TODO(danakj): This class seems to provide the same as
+// RenderFrameSubmissionObserver, consider using that instead.
+class MainThreadFrameObserver {
  public:
   explicit MainThreadFrameObserver(RenderWidgetHost* render_widget_host);
-  ~MainThreadFrameObserver() override;
+  ~MainThreadFrameObserver();
 
   // Synchronizes the browser main thread with the renderer main thread and impl
   // thread.
   void Wait();
 
-  // Overridden IPC::Listener methods.
-  bool OnMessageReceived(const IPC::Message& msg) override;
-
  private:
-  void Quit();
+  void Quit(bool);
 
   RenderWidgetHost* render_widget_host_;
   base::OnceClosure quit_closure_;
@@ -1493,6 +1510,9 @@ class TestNavigationManager : public WebContentsObserver {
   NavigationHandle* GetNavigationHandle();
 
   // Whether the navigation successfully committed.
+  bool was_committed() const { return was_committed_; }
+
+  // Whether the navigation successfully committed and was not an error page.
   bool was_successful() const { return was_successful_; }
 
   // Allows nestable tasks when running a message loop in the Wait* functions.
@@ -1538,6 +1558,7 @@ class TestNavigationManager : public WebContentsObserver {
   bool navigation_paused_;
   NavigationState current_state_;
   NavigationState desired_state_;
+  bool was_committed_ = false;
   bool was_successful_ = false;
   base::OnceClosure quit_closure_;
   base::RunLoop::Type message_loop_type_ = base::RunLoop::Type::kDefault;
@@ -1568,9 +1589,6 @@ class NavigationHandleCommitObserver : public content::WebContentsObserver {
 // A test utility that monitors console messages sent to a WebContents. This
 // can be used to wait for a message that matches a specific filter, an
 // arbitrary message, or monitor all messages sent to the WebContents' console.
-// TODO(devlin): Convert existing tests to Use this in lieu of
-// ConsoleObserverDelegate, since it doesn't require overriding the WebContents'
-// delegate (which isn't always appropriate in a test).
 class WebContentsConsoleObserver : public WebContentsObserver {
  public:
   struct Message {
@@ -1619,46 +1637,11 @@ class WebContentsConsoleObserver : public WebContentsObserver {
   std::vector<Message> messages_;
 };
 
-// A WebContentsDelegate that catches messages sent to the console.
-// DEPRECATED. Prefer WebContentsConsoleObserver.
-// TODO(devlin): Update usages and remove this.
-class ConsoleObserverDelegate : public WebContentsDelegate {
- public:
-  ConsoleObserverDelegate(WebContents* web_contents, const std::string& filter);
-  ~ConsoleObserverDelegate() override;
-
-  // WebContentsDelegate method:
-  bool DidAddMessageToConsole(WebContents* source,
-                              blink::mojom::ConsoleMessageLevel log_level,
-                              const base::string16& message,
-                              int32_t line_no,
-                              const base::string16& source_id) override;
-
-  // Returns all the messages sent to the console.
-  std::vector<std::string> messages() { return messages_; }
-
-  // Returns the most recent message sent to the console.
-  std::string message();
-
-  // Waits for the next message captured by the filter to be sent to the
-  // console.
-  void Wait();
-
- private:
-  WebContents* web_contents_;
-  std::string filter_;
-  std::vector<std::string> messages_;
-
-  base::RunLoop run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(ConsoleObserverDelegate);
-};
-
-// Static methods that inject particular IPCs into the message pipe as if they
-// came from |process|. Used to simulate a compromised renderer.
+// Static methods that simulates Mojo methods as if they were called by a
+// renderer. Used to simulate a compromised renderer.
 class PwnMessageHelper {
  public:
-  // Sends FileSystemHostMsg_Create
+  // Calls Create method in FileSystemHost Mojo interface.
   static void FileSystemCreate(RenderProcessHost* process,
                                int request_id,
                                GURL path,
@@ -1666,17 +1649,15 @@ class PwnMessageHelper {
                                bool is_directory,
                                bool recursive);
 
-  // Sends FileSystemHostMsg_Write
+  // Calls Write method in FileSystemHost Mojo interface.
   static void FileSystemWrite(RenderProcessHost* process,
                               int request_id,
                               GURL file_path,
                               std::string blob_uuid,
                               int64_t position);
 
-  // Sends FrameHostMsg_OpenURL
-  static void OpenURL(RenderProcessHost* process,
-                      int routing_id,
-                      const GURL& url);
+  // Calls OpenURL method in FrameHost Mojo interface.
+  static void OpenURL(RenderFrameHost* render_frame_host, const GURL& url);
 
  private:
   PwnMessageHelper();  // Not instantiable.
@@ -1698,10 +1679,15 @@ void VerifyStaleContentOnFrameEviction(
 // sent by the renderer.
 class ContextMenuFilter : public content::BrowserMessageFilter {
  public:
-  ContextMenuFilter();
+  // Whether or not the ContextMenu should be prevented from performing
+  // its default action, preventing the context menu from showing.
+  enum ShowBehavior { kShow, kPreventShow };
+
+  explicit ContextMenuFilter(ShowBehavior behavior = ShowBehavior::kShow);
 
   bool OnMessageReceived(const IPC::Message& message) override;
   void Wait();
+  void Reset();
 
   content::UntrustworthyContextMenuParams get_params() { return last_params_; }
 
@@ -1713,6 +1699,7 @@ class ContextMenuFilter : public content::BrowserMessageFilter {
   std::unique_ptr<base::RunLoop> run_loop_;
   base::OnceClosure quit_closure_;
   content::UntrustworthyContextMenuParams last_params_;
+  const ShowBehavior show_behavior_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextMenuFilter);
 };
@@ -1729,7 +1716,8 @@ class UpdateUserActivationStateInterceptor
 
   blink::mojom::LocalFrameHost* GetForwardingInterface() override;
   void UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType update_type) override;
+      blink::mojom::UserActivationUpdateType update_type,
+      blink::mojom::UserActivationNotificationType notification_type) override;
 
  private:
   content::RenderFrameHost* render_frame_host_;
@@ -1741,11 +1729,21 @@ class UpdateUserActivationStateInterceptor
 WebContents* GetEmbedderForGuest(content::WebContents* guest);
 
 // Load the given |url| with |network_context| and return the |net::Error| code.
+//
+// This overload simulates loading through a URLLoaderFactory created for a
+// Browser process.
 int LoadBasicRequest(network::mojom::NetworkContext* network_context,
                      const GURL& url,
-                     int process_id = 0,
-                     int render_frame_id = 0,
                      int load_flags = net::LOAD_NORMAL);
+
+// Load the given |url| via URLLoaderFactory created by |frame|.  Return the
+// |net::Error| code.
+//
+// This overload simulates loading through a URLLoaderFactory created for a
+// Renderer process (the factory is driven from the Test/Browser process, but
+// has the same properties as factories vended to the Renderer process that
+// hosts the |frame|).
+int LoadBasicRequest(RenderFrameHost* frame, const GURL& url);
 
 // Ensures that all StoragePartitions for the given BrowserContext have their
 // cookies flushed to disk.
@@ -1774,11 +1772,6 @@ class SynchronizeVisualPropertiesMessageFilter
   void WaitForRect();
   void ResetRectRunLoop();
 
-  // Returns the new viz::FrameSinkId immediately if the IPC has been received.
-  // Otherwise this will block the UI thread until it has been received, then it
-  // will return the new viz::FrameSinkId.
-  viz::FrameSinkId GetOrWaitForId();
-
   // Waits for the next viz::LocalSurfaceId be received and returns it.
   viz::LocalSurfaceId WaitForSurfaceId();
 
@@ -1792,11 +1785,9 @@ class SynchronizeVisualPropertiesMessageFilter
 
  private:
   void OnSynchronizeFrameHostVisualProperties(
-      const viz::FrameSinkId& frame_sink_id,
-      const FrameVisualProperties& visual_properties);
+      const blink::FrameVisualProperties& visual_properties);
   void OnSynchronizeVisualProperties(
-      const viz::FrameSinkId& frame_sink_id,
-      const FrameVisualProperties& visual_properties);
+      const blink::FrameVisualProperties& visual_properties);
   // |rect| is in DIPs.
   void OnUpdatedFrameRectOnUI(const gfx::Rect& rect);
   void OnUpdatedFrameSinkIdOnUI();
@@ -1804,8 +1795,7 @@ class SynchronizeVisualPropertiesMessageFilter
 
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  viz::FrameSinkId frame_sink_id_;
-  base::RunLoop frame_sink_id_run_loop_;
+  base::RunLoop run_loop_;
 
   std::unique_ptr<base::RunLoop> screen_space_rect_run_loop_;
   bool screen_space_rect_received_;
@@ -1869,6 +1859,75 @@ class DidStartNavigationObserver : public WebContentsObserver {
   NavigationHandle* navigation_handle_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(DidStartNavigationObserver);
+};
+
+// Tracks the creation of RenderFrameProxyHosts that have
+// CrossProcessFrameConnectors, and records the initial (post-construction)
+// device scale factor in the CrossProcessFrameConnector.
+class ProxyDSFObserver {
+ public:
+  ProxyDSFObserver();
+  ~ProxyDSFObserver();
+
+  // Waits until a single RenderFrameProxyHost with a CrossProcessFrameConnector
+  // has been created. If a creation occurs before this function is called, it
+  // returns immediately.
+  void WaitForOneProxyHostCreation();
+
+  size_t num_creations() { return proxy_host_created_dsf_.size(); }
+
+  float get_proxy_host_dsf(unsigned index) {
+    return proxy_host_created_dsf_[index];
+  }
+
+ private:
+  void OnCreation(RenderFrameProxyHost* rfph);
+
+  // Make this a vector, just in case we encounter multiple creations prior to
+  // calling WaitForOneProxyHostCreation(). That way we can confirm we're
+  // getting the device scale factor we expect.
+  // Note: We can modify the vector to collect a void* id for each
+  // RenderFrameProxyHost if we want to expand to cases where multiple creations
+  // must be observed.
+  std::vector<float> proxy_host_created_dsf_;
+  std::unique_ptr<base::RunLoop> runner_;
+};
+
+// Helper used by the wrapper class below. Compares the output of the given
+// |web_contents| to the PNG file at |expected_path| across the region defined
+// by |snapshot_size| and returns true if the images are equivalent. Uses a
+// ManhattanDistancePixelComparator which allows some small differences.  If
+// the flag switches::kRebaselinePixelTests (--rebaseline-pixel-tests) is set,
+// this function will (over)write the reference file with the produced output.
+bool CompareWebContentsOutputToReference(
+    WebContents* web_contents,
+    const base::FilePath& expected_path,
+    const gfx::Size& snapshot_size,
+    const cc::PixelComparator& comparator =
+        cc::ManhattanDistancePixelComparator());
+
+typedef base::OnceCallback<void(RenderFrameHost*, RenderFrameHost*)>
+    RenderFrameHostChangedCallback;
+
+// Runs callback at RenderFrameHostChanged time. On cross-RFH navigations, this
+// will run the callback after the new RenderFrameHost committed and is set as
+// the current RenderFrameHost, etc. but before the old RenderFrameHost gets
+// unloaded.
+class RenderFrameHostChangedCallbackRunner : public WebContentsObserver {
+ public:
+  explicit RenderFrameHostChangedCallbackRunner(
+      WebContents* content,
+      RenderFrameHostChangedCallback callback);
+
+  ~RenderFrameHostChangedCallbackRunner() override;
+
+ private:
+  void RenderFrameHostChanged(RenderFrameHost* old_host,
+                              RenderFrameHost* new_host) override;
+
+  RenderFrameHostChangedCallback callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderFrameHostChangedCallbackRunner);
 };
 
 }  // namespace content

@@ -7,6 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/favicon/ios/web_favicon_driver.h"
+#import "components/previous_session_info/previous_session_info.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/main/browser.h"
@@ -70,9 +71,6 @@ SessionRestorationBrowserAgent::~SessionRestorationBrowserAgent() {
 
 void SessionRestorationBrowserAgent::SetSessionID(
     const std::string& session_identifier) {
-  // It's probably incorrect to set this more than once.
-  DCHECK(session_identifier_.empty() ||
-         session_identifier_ == session_identifier);
   session_identifier_ = session_identifier;
 }
 
@@ -170,8 +168,14 @@ bool SessionRestorationBrowserAgent::RestoreSessionWindow(
 }
 
 bool SessionRestorationBrowserAgent::RestoreSession() {
-  NSString* path =
-      base::SysUTF8ToNSString(GetSessionStoragePath().AsUTF8Unsafe());
+  PreviousSessionInfo* session_info = [PreviousSessionInfo sharedInstance];
+  BOOL is_previous_session_multi_window =
+      session_info.isMultiWindowEnabledSession;
+  BOOL force_single_window =
+      IsMultiwindowSupported() && !is_previous_session_multi_window;
+  NSString* path = base::SysUTF8ToNSString(
+      GetSessionStoragePath(force_single_window).AsUTF8Unsafe());
+  auto scoped_restore = [session_info startSessionRestoration];
   SessionIOS* session = [session_service_ loadSessionFromDirectory:path];
   SessionWindowIOS* session_window = nil;
 
@@ -191,8 +195,8 @@ void SessionRestorationBrowserAgent::SaveSession(bool immediately) {
   if (!CanSaveSession())
     return;
 
-  NSString* path =
-      base::SysUTF8ToNSString(GetSessionStoragePath().AsUTF8Unsafe());
+  NSString* path = base::SysUTF8ToNSString(
+      GetSessionStoragePath(/*force_single_window=*/false).AsUTF8Unsafe());
   [session_service_ saveSession:session_ios_factory_
                       directory:path
                     immediately:immediately];
@@ -231,9 +235,11 @@ void SessionRestorationBrowserAgent::WebStateActivatedAt(
   SaveSession(/*immediately=*/false);
 }
 
-base::FilePath SessionRestorationBrowserAgent::GetSessionStoragePath() {
+base::FilePath SessionRestorationBrowserAgent::GetSessionStoragePath(
+    bool force_single_window) {
   base::FilePath path = browser_state_->GetStatePath();
-  if (IsMultiwindowSupported() && !session_identifier_.empty()) {
+  if (!force_single_window && IsMultiwindowSupported() &&
+      !session_identifier_.empty()) {
     path = path.Append(kSessionDirectory)
                .Append(session_identifier_)
                .AsEndingWithSeparator();

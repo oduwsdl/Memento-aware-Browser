@@ -4,6 +4,10 @@
 
 package org.chromium.chrome.browser.webapps;
 
+import static org.chromium.components.webapk.lib.common.WebApkConstants.WEBAPK_PACKAGE_PREFIX;
+import static org.chromium.webapk.lib.common.WebApkConstants.EXTRA_SPLASH_PROVIDED_BY_WEBAPK;
+import static org.chromium.webapk.lib.common.WebApkConstants.EXTRA_WEBAPK_SELECTED_SHARE_TARGET_ACTIVITY_CLASS_NAME;
+
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -33,10 +37,9 @@ import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.webapps.WebApkExtras.ShortcutItem;
-import org.chromium.content_public.common.ScreenOrientationValues;
+import org.chromium.components.webapk.lib.common.WebApkMetaDataKeys;
+import org.chromium.device.mojom.ScreenOrientationLockType;
 import org.chromium.webapk.lib.common.WebApkCommonUtils;
-import org.chromium.webapk.lib.common.WebApkConstants;
-import org.chromium.webapk.lib.common.WebApkMetaDataKeys;
 import org.chromium.webapk.lib.common.WebApkMetaDataUtils;
 import org.chromium.webapk.lib.common.splash.SplashLayout;
 
@@ -90,7 +93,7 @@ public class WebApkIntentDataProviderFactory {
         ShareData shareData = null;
 
         String shareDataActivityClassName = IntentUtils.safeGetStringExtra(
-                intent, WebApkConstants.EXTRA_WEBAPK_SELECTED_SHARE_TARGET_ACTIVITY_CLASS_NAME);
+                intent, EXTRA_WEBAPK_SELECTED_SHARE_TARGET_ACTIVITY_CLASS_NAME);
 
         // Presence of {@link shareDataActivityClassName} indicates that this is a share.
         if (!TextUtils.isEmpty(shareDataActivityClassName)) {
@@ -110,8 +113,8 @@ public class WebApkIntentDataProviderFactory {
         String url = WebappIntentUtils.getUrl(intent);
         int source = computeSource(intent, shareData);
 
-        boolean canUseSplashFromContentProvider = IntentUtils.safeGetBooleanExtra(
-                intent, WebApkConstants.EXTRA_SPLASH_PROVIDED_BY_WEBAPK, false);
+        boolean canUseSplashFromContentProvider =
+                IntentUtils.safeGetBooleanExtra(intent, EXTRA_SPLASH_PROVIDED_BY_WEBAPK, false);
 
         return create(intent, webApkPackageName, url, source, forceNavigation,
                 canUseSplashFromContentProvider, shareData, shareDataActivityClassName);
@@ -140,9 +143,8 @@ public class WebApkIntentDataProviderFactory {
             }
             return WebApkDistributor.OTHER;
         }
-        return packageName.startsWith(WebApkConstants.WEBAPK_PACKAGE_PREFIX)
-                ? WebApkDistributor.BROWSER
-                : WebApkDistributor.OTHER;
+        return packageName.startsWith(WEBAPK_PACKAGE_PREFIX) ? WebApkDistributor.BROWSER
+                                                             : WebApkDistributor.OTHER;
     }
 
     /**
@@ -406,8 +408,8 @@ public class WebApkIntentDataProviderFactory {
         }
 
         WebappExtras webappExtras = new WebappExtras(
-                WebappRegistry.webApkIdForPackage(webApkPackageName), url, scope, primaryIcon, name,
-                shortName, displayMode, orientation, source,
+                WebappIntentUtils.getIdForWebApkPackage(webApkPackageName), url, scope, primaryIcon,
+                name, shortName, displayMode, orientation, source,
                 WebappIntentUtils.colorFromLongColor(backgroundColor), defaultBackgroundColor,
                 false /* isIconGenerated */, isPrimaryIconMaskable, forceNavigation);
         WebApkExtras webApkExtras = new WebApkExtras(webApkPackageName, splashIcon,
@@ -508,34 +510,35 @@ public class WebApkIntentDataProviderFactory {
     }
 
     /**
-     * Returns the ScreenOrientationValue which matches {@link orientation}.
+     * Returns the ScreenOrientationLockType which matches {@link orientation}.
      * @param orientation One of https://w3c.github.io/screen-orientation/#orientationlocktype-enum
-     * @return The matching ScreenOrientationValue. {@link ScreenOrientationValues#DEFAULT} if there
+     * @return The matching ScreenOrientationLockType. {@link ScreenOrientationLockType#DEFAULT} if
+     *         there
      * is no match.
      */
     private static int orientationFromString(String orientation) {
         if (orientation == null) {
-            return ScreenOrientationValues.DEFAULT;
+            return ScreenOrientationLockType.DEFAULT;
         }
 
         if (orientation.equals("any")) {
-            return ScreenOrientationValues.ANY;
+            return ScreenOrientationLockType.ANY;
         } else if (orientation.equals("natural")) {
-            return ScreenOrientationValues.NATURAL;
+            return ScreenOrientationLockType.NATURAL;
         } else if (orientation.equals("landscape")) {
-            return ScreenOrientationValues.LANDSCAPE;
+            return ScreenOrientationLockType.LANDSCAPE;
         } else if (orientation.equals("landscape-primary")) {
-            return ScreenOrientationValues.LANDSCAPE_PRIMARY;
+            return ScreenOrientationLockType.LANDSCAPE_PRIMARY;
         } else if (orientation.equals("landscape-secondary")) {
-            return ScreenOrientationValues.LANDSCAPE_SECONDARY;
+            return ScreenOrientationLockType.LANDSCAPE_SECONDARY;
         } else if (orientation.equals("portrait")) {
-            return ScreenOrientationValues.PORTRAIT;
+            return ScreenOrientationLockType.PORTRAIT;
         } else if (orientation.equals("portrait-primary")) {
-            return ScreenOrientationValues.PORTRAIT_PRIMARY;
+            return ScreenOrientationLockType.PORTRAIT_PRIMARY;
         } else if (orientation.equals("portrait-secondary")) {
-            return ScreenOrientationValues.PORTRAIT_SECONDARY;
+            return ScreenOrientationLockType.PORTRAIT_SECONDARY;
         } else {
-            return ScreenOrientationValues.DEFAULT;
+            return ScreenOrientationLockType.DEFAULT;
         }
     }
 

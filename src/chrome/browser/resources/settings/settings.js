@@ -16,7 +16,7 @@ export {DefaultBrowserBrowserProxyImpl} from './default_browser_page/default_bro
 export {ExtensionControlBrowserProxyImpl} from './extension_control_browser_proxy.m.js';
 export {HatsBrowserProxy, HatsBrowserProxyImpl} from './hats_browser_proxy.js';
 export {LifetimeBrowserProxy, LifetimeBrowserProxyImpl} from './lifetime_browser_proxy.m.js';
-export {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyElementInteractions, SafetyCheckInteractions} from './metrics_browser_proxy.js';
+export {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyElementInteractions, SafeBrowsingInteractions, SafetyCheckInteractions} from './metrics_browser_proxy.js';
 export {OnStartupBrowserProxy, OnStartupBrowserProxyImpl} from './on_startup_page/on_startup_browser_proxy.js';
 export {EDIT_STARTUP_URL_EVENT} from './on_startup_page/startup_url_entry.js';
 export {StartupUrlsPageBrowserProxy, StartupUrlsPageBrowserProxyImpl} from './on_startup_page/startup_urls_page_browser_proxy.js';
@@ -27,7 +27,7 @@ export {AccountManagerBrowserProxyImpl} from './people_page/account_manager_brow
 // </if>
 export {ProfileInfoBrowserProxyImpl} from './people_page/profile_info_browser_proxy.m.js';
 export {MAX_SIGNIN_PROMO_IMPRESSION} from './people_page/sync_account_control.m.js';
-export {PageStatus, StatusAction, SyncBrowserProxy, SyncBrowserProxyImpl, SyncStatus} from './people_page/sync_browser_proxy.m.js';
+export {PageStatus, StatusAction, StoredAccount, SyncBrowserProxy, SyncBrowserProxyImpl, SyncStatus} from './people_page/sync_browser_proxy.m.js';
 export {prefToString, stringToPrefValue} from './prefs/pref_util.m.js';
 export {CrSettingsPrefs} from './prefs/prefs_types.m.js';
 export {MetricsReporting, PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl, ResolverOption, SecureDnsMode, SecureDnsSetting, SecureDnsUiManagementMode} from './privacy_page/privacy_page_browser_proxy.m.js';

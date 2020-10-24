@@ -50,8 +50,6 @@ class APP_LIST_EXPORT SearchResultListView : public SearchResultContainerView {
 
   // Overridden from SearchResultContainerView:
   SearchResultView* GetResultViewAt(size_t index) override;
-  int GetYSize() override;
-  SearchResultBaseView* GetFirstResultView() override;
 
   AppListMainView* app_list_main_view() const { return main_view_; }
 
@@ -72,6 +70,12 @@ class APP_LIST_EXPORT SearchResultListView : public SearchResultContainerView {
   // Logs the set of recommendations (impressions) that were shown to the user
   // after a period of time.
   void LogImpressions();
+
+  // Returns search results specific to Assistant if any are available.
+  std::vector<SearchResult*> GetAssistantResults();
+
+  // Returns regular search results with Assistant search results appended.
+  std::vector<SearchResult*> GetSearchResults();
 
   AppListMainView* main_view_;          // Owned by views hierarchy.
   AppListViewDelegate* view_delegate_;  // Not owned.

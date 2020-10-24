@@ -35,10 +35,10 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowNotificationManager;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerDelegate.ListenerService;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.components.browser_ui.media.MediaNotificationController;
 import org.chromium.components.browser_ui.media.MediaNotificationInfo;
+import org.chromium.components.browser_ui.media.MediaNotificationManager;
 import org.chromium.services.media_session.MediaMetadata;
 
 /**
@@ -63,7 +63,7 @@ public class MediaNotificationServiceLifecycleTest extends MediaNotificationTest
         assertNotNull(mService);
         verify(mService).onStartCommand(intent, 0, 0);
 
-        mService.stopListenerService();
+        mService.getImpl().stopListenerService();
         assertNull(mService);
     }
 
@@ -72,10 +72,11 @@ public class MediaNotificationServiceLifecycleTest extends MediaNotificationTest
         MediaNotificationController controller = getController();
         setUpService();
 
-        ListenerService service = mService;
-        doReturn(false).when(mService).processIntent(any(Intent.class));
+        MockListenerService service = mService;
+        MockListenerServiceImpl impl = service.getImpl();
+        doReturn(false).when(impl).processIntent(any(Intent.class));
         mMockContext.startService(new Intent());
-        verify(service).stopListenerService();
+        verify(service.getImpl()).stopListenerService();
         assertNull(getController());
         verify(controller).onServiceDestroyed();
     }
@@ -83,26 +84,26 @@ public class MediaNotificationServiceLifecycleTest extends MediaNotificationTest
     @Test
     public void testProcessNullIntent() {
         setUpService();
-        assertFalse(mService.processIntent(null));
+        assertFalse(mService.getImpl().processIntent(null));
     }
 
     @Test
     public void testProcessIntentWhenManagerIsNull() {
         setUpService();
         MediaNotificationManager.setControllerForTesting(getNotificationId(), null);
-        assertFalse(mService.processIntent(new Intent()));
+        assertFalse(mService.getImpl().processIntent(new Intent()));
     }
 
     @Test
     public void testProcessIntentWhenNotificationInfoIsNull() {
         setUpService();
         getController().mMediaNotificationInfo = null;
-        assertFalse(mService.processIntent(new Intent()));
+        assertFalse(mService.getImpl().processIntent(new Intent()));
     }
 
     @Test
     public void testShowNotificationIsNoOpWhenInfoMatches() {
-        doCallRealMethod().when(getController()).onServiceStarted(any(ListenerService.class));
+        doCallRealMethod().when(getController()).onServiceStarted(any(MockListenerService.class));
         setUpServiceAndClearInvocations();
 
         MediaNotificationInfo newInfo = mMediaNotificationInfoBuilder.build();
@@ -117,7 +118,7 @@ public class MediaNotificationServiceLifecycleTest extends MediaNotificationTest
 
     @Test
     public void testShowNotificationIsNoOpWhenInfoIsPausedAndFromAnotherTab() {
-        doCallRealMethod().when(getController()).onServiceStarted(any(ListenerService.class));
+        doCallRealMethod().when(getController()).onServiceStarted(any(MockListenerService.class));
         mMediaNotificationInfoBuilder.setInstanceId(0);
         setUpServiceAndClearInvocations();
 
@@ -146,7 +147,7 @@ public class MediaNotificationServiceLifecycleTest extends MediaNotificationTest
 
     @Test
     public void testShowNotificationWhenServiceAlreadyCreated() {
-        doCallRealMethod().when(getController()).onServiceStarted(any(ListenerService.class));
+        doCallRealMethod().when(getController()).onServiceStarted(any(MockListenerService.class));
         setUpServiceAndClearInvocations();
 
         mMediaNotificationInfoBuilder.setPaused(true);
@@ -162,7 +163,7 @@ public class MediaNotificationServiceLifecycleTest extends MediaNotificationTest
 
     @Test
     public void testShowNotificationBeforeServiceCreatedUpdatesNotificationInfoAndLogsUma() {
-        doCallRealMethod().when(getController()).onServiceStarted(any(ListenerService.class));
+        doCallRealMethod().when(getController()).onServiceStarted(any(MockListenerService.class));
 
         // The initial call to |showNotification()| should update the notification info and request
         // to start the service.
@@ -190,7 +191,7 @@ public class MediaNotificationServiceLifecycleTest extends MediaNotificationTest
                 .startForegroundService(any(Intent.class));
         order.verify(getController(), never()).updateNotification(anyBoolean(), eq(false));
 
-        verify(getController(), never()).onServiceStarted(any(ListenerService.class));
+        verify(getController(), never()).onServiceStarted(any(MockListenerService.class));
 
         // Simulate the service has started.
         mMockContext.startService(getController().mDelegate.createServiceIntent());

@@ -2,7 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-(function() {
+// clang-format off
+// #import {CrSettingsPrefs} from 'chrome://os-settings/chromeos/os_settings.js'
+// #import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+// #import {assert} from 'chrome://resources/js/assert.m.js';
+// #import {flush} from'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
+// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+// #import {TimeZoneAutoDetectMethod, TimeZoneBrowserProxyImpl} from 'chrome://os-settings/chromeos/lazy_load.js';
+// #import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+// #import {waitAfterNextRender} from 'chrome://test/test_util.m.js';
+// clang-format on
 
 /** @implements {settings.TimeZoneBrowserProxy} */
 class TestTimeZoneBrowserProxy extends TestBrowserProxy {
@@ -140,8 +150,7 @@ function initializeDateTime(prefs, hasPolicy, opt_autoDetectPolicyValue) {
     isChild: false,
   };
 
-  window.loadTimeData = new LoadTimeData;
-  loadTimeData.data = data;
+  loadTimeData.overrideValues(data);
 
   const dateTime =
       prefs.cros.flags.fine_grained_time_zone_detection_enabled.value ?
@@ -228,6 +237,10 @@ suite('settings-date-time-page', function() {
       getTimeZonesCalled = true;
       cr.webUIResponse(callback, true, fakeTimeZones);
     });
+  });
+
+  teardown(function() {
+    settings.Router.getInstance().resetRouteForTesting();
   });
 
   function checkDateTimePageReadyCalled() {
@@ -330,6 +343,28 @@ suite('settings-date-time-page', function() {
       assertFalse(resolveMethodDropdown.disabled);
       done();
     });
+  });
+
+  test('Deep link to auto set time zone on main page', async () => {
+    loadTimeData.overrideValues({
+      isDeepLinkingEnabled: true,
+    });
+    const prefs = getFakePrefs();
+    // Set fine grained time zone off so that toggle appears on this page.
+    prefs.cros.flags.fine_grained_time_zone_detection_enabled.value = false;
+    dateTime = initializeDateTime(prefs, false);
+
+    const params = new URLSearchParams;
+    params.append('settingId', '1001');
+    settings.Router.getInstance().navigateTo(settings.routes.DATETIME, params);
+
+    Polymer.dom.flush();
+
+    const deepLinkElement = dateTime.$$('#timeZoneAutoDetect').$$('cr-toggle');
+    await test_util.waitAfterNextRender(deepLinkElement);
+    assertEquals(
+        deepLinkElement, getDeepActiveElement(),
+        'Auto set time zone toggle should be focused for settingId=1001.');
   });
 
   test('auto-detect forced on', function(done) {
@@ -508,4 +543,3 @@ suite('settings-date-time-page', function() {
     });
   });
 });
-})();

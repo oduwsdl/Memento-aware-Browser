@@ -163,12 +163,10 @@ void TurboAssembler::Jump(Handle<Code> code, RelocInfo::Mode rmode,
                  Builtins::IsIsolateIndependentBuiltin(*code));
 
   int builtin_index = Builtins::kNoBuiltinId;
-  bool target_is_isolate_independent_builtin =
-      isolate()->builtins()->IsBuiltinHandle(code, &builtin_index) &&
-      Builtins::IsIsolateIndependent(builtin_index);
+  bool target_is_builtin =
+      isolate()->builtins()->IsBuiltinHandle(code, &builtin_index);
 
-  if (options().use_pc_relative_calls_and_jumps &&
-      target_is_isolate_independent_builtin) {
+  if (options().use_pc_relative_calls_and_jumps && target_is_builtin) {
     int32_t code_target_index = AddCodeTarget(code);
     b(code_target_index * kInstrSize, cond, RelocInfo::RELATIVE_CODE_TARGET);
     return;
@@ -178,13 +176,12 @@ void TurboAssembler::Jump(Handle<Code> code, RelocInfo::Mode rmode,
     // size s.t. pc-relative calls may be used.
     UseScratchRegisterScope temps(this);
     Register scratch = temps.Acquire();
-    int offset = code->builtin_index() * kSystemPointerSize +
-                 IsolateData::builtin_entry_table_offset();
+    int offset = IsolateData::builtin_entry_slot_offset(
+        static_cast<Builtins::Name>(code->builtin_index()));
     ldr(scratch, MemOperand(kRootRegister, offset));
     Jump(scratch, cond);
     return;
-  } else if (options().inline_offheap_trampolines &&
-             target_is_isolate_independent_builtin) {
+  } else if (options().inline_offheap_trampolines && target_is_builtin) {
     // Inline the trampoline.
     RecordCommentForOffHeapTrampoline(builtin_index);
     EmbeddedData d = EmbeddedData::FromBlob();
@@ -258,12 +255,10 @@ void TurboAssembler::Call(Handle<Code> code, RelocInfo::Mode rmode,
                  Builtins::IsIsolateIndependentBuiltin(*code));
 
   int builtin_index = Builtins::kNoBuiltinId;
-  bool target_is_isolate_independent_builtin =
-      isolate()->builtins()->IsBuiltinHandle(code, &builtin_index) &&
-      Builtins::IsIsolateIndependent(builtin_index);
+  bool target_is_builtin =
+      isolate()->builtins()->IsBuiltinHandle(code, &builtin_index);
 
-  if (target_is_isolate_independent_builtin &&
-      options().use_pc_relative_calls_and_jumps) {
+  if (target_is_builtin && options().use_pc_relative_calls_and_jumps) {
     int32_t code_target_index = AddCodeTarget(code);
     bl(code_target_index * kInstrSize, cond, RelocInfo::RELATIVE_CODE_TARGET);
     return;
@@ -271,13 +266,12 @@ void TurboAssembler::Call(Handle<Code> code, RelocInfo::Mode rmode,
     // This branch is taken only for specific cctests, where we force isolate
     // creation at runtime. At this point, Code space isn't restricted to a
     // size s.t. pc-relative calls may be used.
-    int offset = code->builtin_index() * kSystemPointerSize +
-                 IsolateData::builtin_entry_table_offset();
+    int offset = IsolateData::builtin_entry_slot_offset(
+        static_cast<Builtins::Name>(code->builtin_index()));
     ldr(ip, MemOperand(kRootRegister, offset));
     Call(ip, cond);
     return;
-  } else if (target_is_isolate_independent_builtin &&
-             options().inline_offheap_trampolines) {
+  } else if (target_is_builtin && options().inline_offheap_trampolines) {
     // Inline the trampoline.
     CallBuiltin(builtin_index);
     return;
@@ -879,6 +873,7 @@ void TurboAssembler::PushStandardFrame(Register function_reg) {
   int offset = -StandardFrameConstants::kContextOffset;
   offset += function_reg.is_valid() ? kPointerSize : 0;
   add(fp, sp, Operand(offset));
+  Push(kJavaScriptCallArgCountRegister);
 }
 
 void TurboAssembler::VFPCanonicalizeNaN(const DwVfpRegister dst,
@@ -2490,26 +2485,18 @@ void TurboAssembler::ResetSpeculationPoisonRegister() {
   mov(kSpeculationPoisonRegister, Operand(-1));
 }
 
-void TurboAssembler::CallForDeoptimization(Address target, int deopt_id,
-                                           Label* exit, DeoptimizeKind kind) {
+void TurboAssembler::CallForDeoptimization(Builtins::Name target, int,
+                                           Label* exit, DeoptimizeKind kind,
+                                           Label*) {
+  BlockConstPoolScope block_const_pool(this);
+  ldr(ip, MemOperand(kRootRegister,
+                     IsolateData::builtin_entry_slot_offset(target)));
+  Call(ip);
+  DCHECK_EQ(SizeOfCodeGeneratedSince(exit),
+            (kind == DeoptimizeKind::kLazy)
+                ? Deoptimizer::kLazyDeoptExitSize
+                : Deoptimizer::kNonLazyDeoptExitSize);
   USE(exit, kind);
-  NoRootArrayScope no_root_array(this);
-
-  // Save the deopt id in r10 (we don't need the roots array from now on).
-  DCHECK_LE(deopt_id, 0xFFFF);
-  if (CpuFeatures::IsSupported(ARMv7)) {
-    // On ARMv7, we can use movw (with a maximum immediate of 0xFFFF)
-    movw(r10, deopt_id);
-  } else {
-    // On ARMv6, we might need two instructions.
-    mov(r10, Operand(deopt_id & 0xFF));  // Set the low byte.
-    if (deopt_id >= 0xFF) {
-      orr(r10, r10, Operand(deopt_id & 0xFF00));  // Set the high byte.
-    }
-  }
-
-  Call(target, RelocInfo::RUNTIME_ENTRY);
-  CheckConstPool(false, false);
 }
 
 void TurboAssembler::Trap() { stop(); }

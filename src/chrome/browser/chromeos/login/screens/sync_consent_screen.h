@@ -79,7 +79,7 @@ class SyncConsentScreen : public BaseScreen,
                     const ScreenExitCallback& exit_callback);
   ~SyncConsentScreen() override;
 
-  // Inits |user_|, its |profile_| and |behavior_| before using the screen.
+  // Inits `user_`, its `profile_` and `behavior_` before using the screen.
   void Init();
 
   // syncer::SyncServiceObserver:
@@ -107,6 +107,8 @@ class SyncConsentScreen : public BaseScreen,
   static std::unique_ptr<base::AutoReset<bool>> ForceBrandedBuildForTesting(
       bool value);
 
+  static bool IsBrandedBuildForTesting();
+
   // Sets internal condition "Sync disabled by policy" for tests.
   void SetProfileSyncDisabledByPolicyForTesting(bool value);
 
@@ -127,18 +129,18 @@ class SyncConsentScreen : public BaseScreen,
   }
 
  private:
-  // Marks the dialog complete and runs |exit_callback_|.
+  // Marks the dialog complete and runs `exit_callback_`.
   void Finish(Result result);
 
   // BaseScreen:
-  bool MaybeSkip() override;
+  bool MaybeSkip(WizardContext* context) override;
   void ShowImpl() override;
   void HideImpl() override;
 
   // Returns new SyncScreenBehavior value.
   SyncScreenBehavior GetSyncScreenBehavior() const;
 
-  // Calculates updated |behavior_| and performs required update actions.
+  // Calculates updated `behavior_` and performs required update actions.
   void UpdateScreen();
 
   // Records user Sync consent.

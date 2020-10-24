@@ -203,9 +203,8 @@ void MockPooledTaskRunnerDelegate::PostTaskWithSequenceNow(
   }
 }
 
-bool MockPooledTaskRunnerDelegate::ShouldYield(
-    const TaskSource* task_source) const {
-  return thread_group_->ShouldYield(task_source->priority_racy());
+bool MockPooledTaskRunnerDelegate::ShouldYield(const TaskSource* task_source) {
+  return thread_group_->ShouldYield(task_source->GetSortKey());
 }
 
 bool MockPooledTaskRunnerDelegate::EnqueueJobTaskSource(
@@ -258,7 +257,7 @@ MockJobTask::MockJobTask(base::OnceClosure worker_task)
           base::Passed(std::move(worker_task)))),
       remaining_num_tasks_to_run_(1) {}
 
-size_t MockJobTask::GetMaxConcurrency() const {
+size_t MockJobTask::GetMaxConcurrency(size_t /* worker_count */) const {
   return remaining_num_tasks_to_run_.load();
 }
 

@@ -7,6 +7,7 @@
 
 #include "components/arc/mojom/accessibility_helper.mojom.h"
 
+#include <string>
 #include <vector>
 
 namespace ui {
@@ -38,11 +39,13 @@ class AccessibilityInfoDataWrapper {
   virtual bool IsVisibleToUser() const = 0;
   virtual bool IsVirtualNode() const = 0;
   virtual bool IsIgnored() const = 0;
+  virtual bool IsImportantInAndroid() const = 0;
   virtual bool CanBeAccessibilityFocused() const = 0;
   virtual bool IsAccessibilityFocusableContainer() const = 0;
   virtual void PopulateAXRole(ui::AXNodeData* out_data) const = 0;
   virtual void PopulateAXState(ui::AXNodeData* out_data) const = 0;
   virtual void Serialize(ui::AXNodeData* out_data) const = 0;
+  virtual std::string ComputeAXName(bool do_recursive) const = 0;
   virtual void GetChildren(
       std::vector<AccessibilityInfoDataWrapper*>* children) const = 0;
 

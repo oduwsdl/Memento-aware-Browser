@@ -12,6 +12,7 @@ import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
 import android.view.View;
@@ -36,13 +37,13 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Matchers;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.LocationBarModel;
-import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.browser.toolbar.NewTabPageDelegate;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -64,8 +65,7 @@ import java.util.concurrent.ExecutionException;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class LocationBarLayoutTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final String SEARCH_TERMS = "machine learning";
     private static final String SEARCH_TERMS_URL = "testing.com";
@@ -86,7 +86,7 @@ public class LocationBarLayoutTest {
         private Integer mSecurityLevel;
 
         public TestLocationBarModel() {
-            super(ContextUtils.getApplicationContext());
+            super(ContextUtils.getApplicationContext(), NewTabPageDelegate.EMPTY);
             initializeWithNative();
         }
 
@@ -215,8 +215,9 @@ public class LocationBarLayoutTest {
         setUrlBarTextAndFocus("testing");
         Assert.assertEquals(getDeleteButton().getVisibility(), VISIBLE);
         ClickUtils.clickButton(getDeleteButton());
-        CriteriaHelper.pollUiThread(
-                () -> Assert.assertThat(getDeleteButton().getVisibility(), Matchers.not(VISIBLE)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(getDeleteButton().getVisibility(), Matchers.not(VISIBLE));
+        });
         Assert.assertEquals("", getUrlText(getUrlBar()));
     }
 
@@ -263,7 +264,7 @@ public class LocationBarLayoutTest {
         onView(withId(R.id.location_bar_status)).check((view, e) -> {
             Assert.assertEquals(iconView.getVisibility(), VISIBLE);
             Assert.assertEquals(R.drawable.omnibox_https_valid,
-                    locationBar.getStatusViewCoordinatorForTesting()
+                    locationBar.getStatusCoordinatorForTesting()
                             .getSecurityIconResourceIdForTesting());
         });
     }
@@ -284,7 +285,7 @@ public class LocationBarLayoutTest {
         onView(withId(R.id.location_bar_status)).check((view, e) -> {
             Assert.assertEquals(statusIconView.getVisibility(), VISIBLE);
             Assert.assertEquals(R.drawable.ic_logo_googleg_20dp,
-                    locationBar.getStatusViewCoordinatorForTesting()
+                    locationBar.getStatusCoordinatorForTesting()
                             .getSecurityIconResourceIdForTesting());
         });
     }
@@ -554,7 +555,7 @@ public class LocationBarLayoutTest {
                 0, RecordHistogram.getHistogramTotalCountForTesting("Android.OmniboxFocusReason"));
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             locationBar.setUrlBarFocus(
-                    true, SEARCH_TERMS_URL, LocationBar.OmniboxFocusReason.FAKE_BOX_LONG_PRESS);
+                    true, SEARCH_TERMS_URL, OmniboxFocusReason.FAKE_BOX_LONG_PRESS);
         });
         Assert.assertTrue(locationBar.isUrlBarFocused());
         Assert.assertTrue(locationBar.didFocusUrlFromFakebox());
@@ -563,8 +564,7 @@ public class LocationBarLayoutTest {
                 1, RecordHistogram.getHistogramTotalCountForTesting("Android.OmniboxFocusReason"));
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            locationBar.setUrlBarFocus(
-                    true, SEARCH_TERMS, LocationBar.OmniboxFocusReason.SEARCH_QUERY);
+            locationBar.setUrlBarFocus(true, SEARCH_TERMS, OmniboxFocusReason.SEARCH_QUERY);
         });
         Assert.assertTrue(locationBar.isUrlBarFocused());
         Assert.assertTrue(locationBar.didFocusUrlFromFakebox());
@@ -572,17 +572,15 @@ public class LocationBarLayoutTest {
         Assert.assertEquals(
                 1, RecordHistogram.getHistogramTotalCountForTesting("Android.OmniboxFocusReason"));
 
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            locationBar.setUrlBarFocus(false, null, LocationBar.OmniboxFocusReason.UNFOCUS);
-        });
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { locationBar.setUrlBarFocus(false, null, OmniboxFocusReason.UNFOCUS); });
         Assert.assertFalse(locationBar.isUrlBarFocused());
         Assert.assertFalse(locationBar.didFocusUrlFromFakebox());
         Assert.assertEquals(
                 1, RecordHistogram.getHistogramTotalCountForTesting("Android.OmniboxFocusReason"));
 
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            locationBar.setUrlBarFocus(true, null, LocationBar.OmniboxFocusReason.OMNIBOX_TAP);
-        });
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { locationBar.setUrlBarFocus(true, null, OmniboxFocusReason.OMNIBOX_TAP); });
         Assert.assertTrue(locationBar.isUrlBarFocused());
         Assert.assertFalse(locationBar.didFocusUrlFromFakebox());
         Assert.assertEquals(
@@ -602,14 +600,20 @@ public class LocationBarLayoutTest {
             return mActivityTestRule.getActivity().getWindow().getAttributes().softInputMode;
         };
         OmniboxTestUtils.toggleUrlBarFocus(urlBar, true);
-        CriteriaHelper.pollUiThread(Criteria.equals(true, urlBar::hasFocus));
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN, softInputModeCallable));
+        CriteriaHelper.pollUiThread(urlBar::hasFocus);
+        CriteriaHelper.pollUiThread(() -> {
+            int inputMode =
+                    mActivityTestRule.getActivity().getWindow().getAttributes().softInputMode;
+            Criteria.checkThat(inputMode, is(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN));
+        });
 
         OmniboxTestUtils.toggleUrlBarFocus(urlBar, false);
-        CriteriaHelper.pollUiThread(Criteria.equals(false, urlBar::hasFocus));
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE, softInputModeCallable));
+        CriteriaHelper.pollUiThread(() -> !urlBar.hasFocus());
+        CriteriaHelper.pollUiThread(() -> {
+            int inputMode =
+                    mActivityTestRule.getActivity().getWindow().getAttributes().softInputMode;
+            Criteria.checkThat(inputMode, is(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE));
+        });
     }
 
     /** Test NPE when focus callback triggers after LocationBarLayout is destroyed. */

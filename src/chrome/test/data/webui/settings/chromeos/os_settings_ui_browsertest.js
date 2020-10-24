@@ -46,14 +46,11 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
     let ui;
     let userActionRecorder;
 
-    suiteSetup(() => {
-      testing.Test.disableAnimationsAndTransitions();
-      ui = assert(document.querySelector('os-settings-ui'));
-      Polymer.dom.flush();
-      ui.$$('#drawerTemplate').restamp = true;
-    });
-
-    setup(() => {
+    setup(async () => {
+      PolymerTest.clearBody();
+      ui = document.createElement('os-settings-ui');
+      document.body.appendChild(ui);
+      await CrSettingsPrefs.initialized;
       userActionRecorder = new settings.FakeUserActionRecorder();
       settings.setUserActionRecorderForTesting(userActionRecorder);
       ui.$$('#drawerTemplate').if = false;
@@ -61,7 +58,9 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
     });
 
     teardown(() => {
+      ui.remove();
       settings.setUserActionRecorderForTesting(null);
+      settings.Router.getInstance().resetRouteForTesting();
     });
 
     test('top container shadow always shows for sub-pages', () => {
@@ -102,7 +101,6 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
       assertTrue(!!ui.$$('cr-drawer os-settings-menu'));
 
       drawer.cancel();
-      await test_util.eventToPromise('close', drawer);
       // Drawer is closed, but menu is still stamped so its contents remain
       // visible as the drawer slides out.
       assertTrue(!!ui.$$('cr-drawer os-settings-menu'));
@@ -213,6 +211,12 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
       assertEquals(userActionRecorder.pageBlurCount, 0);
       ui.fire('blur');
       assertEquals(userActionRecorder.pageBlurCount, 1);
+    });
+
+    test('userActionClickEvent', () => {
+      assertEquals(userActionRecorder.clickCount, 0);
+      ui.fire('click');
+      assertEquals(userActionRecorder.clickCount, 1);
     });
 
     test('userActionFocusEvent', function() {

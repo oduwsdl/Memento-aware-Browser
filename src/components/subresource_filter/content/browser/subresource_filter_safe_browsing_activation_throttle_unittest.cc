@@ -19,6 +19,7 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/safe_browsing/core/db/database_manager.h"
 #include "components/safe_browsing/core/db/test_database_manager.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"
@@ -87,6 +88,13 @@ class MockSubresourceFilterClient : public SubresourceFilterClient {
 
   MOCK_METHOD0(ShowNotification, void());
   MOCK_METHOD0(ForceActivationInCurrentWebContents, bool());
+  MOCK_METHOD2(OnAdsViolationTriggered,
+               void(content::RenderFrameHost*,
+                    subresource_filter::mojom::AdsViolation));
+  MOCK_METHOD0(
+      GetSafeBrowsingDatabaseManager,
+      const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>());
+  MOCK_METHOD0(OnReloadRequested, void());
 
   void AllowlistInCurrentWebContents(const GURL& url) {
     ASSERT_TRUE(url.SchemeIsHTTPOrHTTPS());
@@ -160,11 +168,13 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
                                               base::DoNothing());
 
     auto* contents = RenderViewHostTestHarness::web_contents();
-    client_ =
+    auto subresource_filter_client =
         std::make_unique<::testing::NiceMock<MockSubresourceFilterClient>>();
+    client_ = subresource_filter_client.get();
     throttle_manager_ =
         std::make_unique<ContentSubresourceFilterThrottleManager>(
-            client_.get(), ruleset_dealer_.get(), contents);
+            std::move(subresource_filter_client), ruleset_dealer_.get(),
+            contents);
     fake_safe_browsing_database_ = new FakeSafeBrowsingDatabaseManager();
     NavigateAndCommit(GURL("https://test.com"));
     Observe(contents);
@@ -324,7 +334,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
 
   const base::HistogramTester& tester() const { return tester_; }
 
-  MockSubresourceFilterClient* client() { return client_.get(); }
+  MockSubresourceFilterClient* client() { return client_; }
 
   base::TestMockTimeTaskRunner* test_io_task_runner() const {
     return test_io_task_runner_.get();
@@ -346,7 +356,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
   std::unique_ptr<ContentSubresourceFilterThrottleManager> throttle_manager_;
 
   std::unique_ptr<content::NavigationSimulator> navigation_simulator_;
-  std::unique_ptr<MockSubresourceFilterClient> client_;
+  MockSubresourceFilterClient* client_;
   std::unique_ptr<TestSubresourceFilterObserver> observer_;
   scoped_refptr<FakeSafeBrowsingDatabaseManager> fake_safe_browsing_database_;
   base::HistogramTester tester_;

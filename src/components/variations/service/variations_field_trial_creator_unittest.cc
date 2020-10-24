@@ -246,10 +246,10 @@ class TestVariationsFieldTrialCreator : public VariationsFieldTrialCreator {
   bool SetupFieldTrials() {
     TestPlatformFieldTrials platform_field_trials;
     return VariationsFieldTrialCreator::SetupFieldTrials(
-        "", "", "", std::set<std::string>(), std::vector<std::string>(),
+        "", "", "", std::vector<std::string>(),
         std::vector<base::FeatureList::FeatureOverrideInfo>(), nullptr,
         std::make_unique<base::FeatureList>(), &platform_field_trials,
-        safe_seed_manager_);
+        safe_seed_manager_, base::nullopt);
   }
 
   TestVariationsSeedStore* seed_store() { return &seed_store_; }
@@ -497,10 +497,10 @@ TEST_F(FieldTrialCreatorTest, SetupFieldTrials_LoadsCountryOnFirstRun) {
   // |initial_seed| included the country code for India, this study should be
   // active.
   EXPECT_TRUE(field_trial_creator.SetupFieldTrials(
-      "", "", "", std::set<std::string>(), std::vector<std::string>(),
+      "", "", "", std::vector<std::string>(),
       std::vector<base::FeatureList::FeatureOverrideInfo>(), nullptr,
       std::make_unique<base::FeatureList>(), &platform_field_trials,
-      &safe_seed_manager));
+      &safe_seed_manager, base::nullopt));
 
   EXPECT_EQ(kTestSeedExperimentName,
             base::FieldTrialList::FindFullName(kTestSeedStudyName));

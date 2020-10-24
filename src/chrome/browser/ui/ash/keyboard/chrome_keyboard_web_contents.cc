@@ -56,7 +56,7 @@ class ChromeKeyboardContentsDelegate : public content::WebContentsDelegate,
 
   bool CanDragEnter(content::WebContents* source,
                     const content::DropData& data,
-                    blink::WebDragOperationsMask operations_allowed) override {
+                    blink::DragOperationsMask operations_allowed) override {
     return false;
   }
 
@@ -110,6 +110,11 @@ class ChromeKeyboardContentsDelegate : public content::WebContentsDelegate,
       case blink::WebInputEvent::Type::kGestureScrollUpdate:
       case blink::WebInputEvent::Type::kGestureFlingStart:
       case blink::WebInputEvent::Type::kGestureFlingCancel:
+        return false;
+      // Allow tap events to allow browser scrollbars to be draggable by touch.
+      case blink::WebInputEvent::Type::kGestureTapDown:
+      case blink::WebInputEvent::Type::kGestureTap:
+      case blink::WebInputEvent::Type::kGestureTapCancel:
         return false;
       default:
         // Stop gesture events from being passed to renderer to suppress the

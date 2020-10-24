@@ -30,7 +30,7 @@
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/media/webrtc/system_media_capture_permissions_mac.h"
 #endif
 
@@ -116,7 +116,7 @@ void DisplayMediaAccessHandler::HandleRequest(
     return;
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Do not allow picker UI to be shown on a page that isn't in the foreground
   // in Mac, because the UI implementation in Mac pops a window over any content
   // which might be confusing for the users. See https://crbug.com/1407733 for
@@ -129,7 +129,7 @@ void DisplayMediaAccessHandler::HandleRequest(
         blink::mojom::MediaStreamRequestResult::INVALID_STATE, nullptr);
     return;
   }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
   std::unique_ptr<DesktopMediaPicker> picker = picker_factory_->CreatePicker();
   if (!picker) {
@@ -194,8 +194,8 @@ void DisplayMediaAccessHandler::ProcessQueuedAccessRequest(
   gfx::NativeWindow parent_window = web_contents->GetTopLevelNativeWindow();
   picker_params.context = parent_window;
   picker_params.parent = parent_window;
-  picker_params.app_name = url_formatter::FormatUrlForSecurityDisplay(
-      web_contents->GetLastCommittedURL(),
+  picker_params.app_name = url_formatter::FormatOriginForSecurityDisplay(
+      url::Origin::Create(web_contents->GetLastCommittedURL()),
       url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
   picker_params.target_name = picker_params.app_name;
   picker_params.request_audio =
@@ -231,7 +231,7 @@ void DisplayMediaAccessHandler::OnPickerDialogResults(
     request_result = blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED;
   } else {
     request_result = blink::mojom::MediaStreamRequestResult::OK;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Check screen capture permissions on Mac if necessary.
     if ((media_id.type == content::DesktopMediaID::TYPE_SCREEN ||
          media_id.type == content::DesktopMediaID::TYPE_WINDOW) &&

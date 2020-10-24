@@ -101,9 +101,8 @@ void ExitHandler::ExitWhenPossibleOnUIThread(int signal) {
 
 ExitHandler::ExitHandler() {
   on_session_restored_callback_subscription_ =
-      SessionRestore::RegisterOnSessionRestoredCallback(
-          base::Bind(&ExitHandler::OnSessionRestoreDone,
-                     base::Unretained(this)));
+      SessionRestore::RegisterOnSessionRestoredCallback(base::BindRepeating(
+          &ExitHandler::OnSessionRestoreDone, base::Unretained(this)));
 }
 
 ExitHandler::~ExitHandler() {
@@ -141,7 +140,7 @@ ChromeBrowserMainPartsPosix::ChromeBrowserMainPartsPosix(
 
 int ChromeBrowserMainPartsPosix::PreEarlyInitialization() {
   const int result = ChromeBrowserMainParts::PreEarlyInitialization();
-  if (result != service_manager::RESULT_CODE_NORMAL_EXIT)
+  if (result != content::RESULT_CODE_NORMAL_EXIT)
     return result;
 
   // We need to accept SIGCHLD, even though our handler is a no-op because
@@ -151,7 +150,7 @@ int ChromeBrowserMainPartsPosix::PreEarlyInitialization() {
   action.sa_handler = SIGCHLDHandler;
   CHECK_EQ(0, sigaction(SIGCHLD, &action, NULL));
 
-  return service_manager::RESULT_CODE_NORMAL_EXIT;
+  return content::RESULT_CODE_NORMAL_EXIT;
 }
 
 void ChromeBrowserMainPartsPosix::PostMainMessageLoopStart() {
@@ -166,7 +165,7 @@ void ChromeBrowserMainPartsPosix::PostMainMessageLoopStart() {
 void ChromeBrowserMainPartsPosix::ShowMissingLocaleMessageBox() {
 #if defined(OS_CHROMEOS)
   NOTREACHED();  // Should not ever happen on ChromeOS.
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   // Not called on Mac because we load the locale files differently.
   NOTREACHED();
 #elif defined(USE_AURA)

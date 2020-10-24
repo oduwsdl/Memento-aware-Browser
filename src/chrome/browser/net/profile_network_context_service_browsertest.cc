@@ -8,10 +8,10 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/logging.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -39,6 +39,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/policy/core/common/policy_map.h"
@@ -196,8 +197,7 @@ class ProfileNetworkContextServiceCacheSameBrowsertest
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
         {}, {net::features::kSplitCacheByNetworkIsolationKey,
-             net::features::kAppendFrameOriginToNetworkIsolationKey,
-             net::features::kUseRegistrableDomainInNetworkIsolationKey});
+             net::features::kAppendFrameOriginToNetworkIsolationKey});
     ProfileNetworkContextServiceBrowsertest::SetUp();
   }
 
@@ -241,8 +241,7 @@ class ProfileNetworkContextServiceCacheChangeBrowsertest
   ProfileNetworkContextServiceCacheChangeBrowsertest() {
     scoped_feature_list_.InitWithFeaturesAndParameters(
         {{net::features::kAppendFrameOriginToNetworkIsolationKey, {}}},
-        {net::features::kSplitCacheByNetworkIsolationKey,
-         net::features::kUseRegistrableDomainInNetworkIsolationKey});
+        {net::features::kSplitCacheByNetworkIsolationKey});
   }
   ~ProfileNetworkContextServiceCacheChangeBrowsertest() override = default;
 
@@ -291,12 +290,11 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceCacheChangeBrowsertest,
 
 class AmbientAuthenticationTestWithPolicy
     : public policy::PolicyTest,
-      public testing::WithParamInterface<AmbientAuthenticationFeatureState> {
+      public ::testing::WithParamInterface<bool> {
  public:
   AmbientAuthenticationTestWithPolicy() {
-    feature_state_ = GetParam();
-    AmbientAuthenticationTestHelper::CookTheFeatureList(scoped_feature_list_,
-                                                        feature_state_);
+    TestingProfile::SetScopedFeatureListForEphemeralGuestProfiles(
+        scoped_feature_list_, GetParam());
     policy::PolicyTest::SetUpInProcessBrowserTestFixture();
   }
 
@@ -316,42 +314,29 @@ class AmbientAuthenticationTestWithPolicy
         non_primary_otr_profile));
     EXPECT_EQ(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
                   incognito_profile),
-              AmbientAuthenticationTestHelper::IsIncognitoAllowedInFeature(
-                  feature_state_) ||
-                  AmbientAuthenticationTestHelper::IsIncognitoAllowedInPolicy(
-                      policy_value));
+              AmbientAuthenticationTestHelper::IsIncognitoAllowedInPolicy(
+                  policy_value));
 // ChromeOS guest sessions don't have the capability to
 // do ambient authentications.
 #if !defined(OS_CHROMEOS)
-    EXPECT_EQ(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
-                  AmbientAuthenticationTestHelper::GetGuestProfile()),
-              AmbientAuthenticationTestHelper::IsGuestAllowedInFeature(
-                  feature_state_) ||
-                  AmbientAuthenticationTestHelper::IsGuestAllowedInPolicy(
-                      policy_value));
+    EXPECT_EQ(
+        AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
+            CreateGuestBrowser()->profile()),
+        AmbientAuthenticationTestHelper::IsGuestAllowedInPolicy(policy_value));
 #endif
   }
 
   void EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes value) {
     SetPolicy(&policies_,
               policy::key::kAmbientAuthenticationInPrivateModesEnabled,
-              std::make_unique<base::Value>(static_cast<int>(value)));
+              base::Value(static_cast<int>(value)));
     UpdateProviderPolicy(policies_);
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-  AmbientAuthenticationFeatureState feature_state_;
   policy::PolicyMap policies_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
-
-INSTANTIATE_TEST_CASE_P(
-    AmbientAuthAllFeatureValuesTest,
-    AmbientAuthenticationTestWithPolicy,
-    testing::Values(AmbientAuthenticationFeatureState::GUEST_OFF_INCOGNITO_OFF,
-                    AmbientAuthenticationFeatureState::GUEST_OFF_INCOGNITO_ON,
-                    AmbientAuthenticationFeatureState::GUEST_ON_INCOGNITO_OFF,
-                    AmbientAuthenticationFeatureState::GUEST_ON_INCOGNITO_ON));
 
 IN_PROC_BROWSER_TEST_P(AmbientAuthenticationTestWithPolicy, RegularOnly) {
   EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes::REGULAR_ONLY);
@@ -374,6 +359,10 @@ IN_PROC_BROWSER_TEST_P(AmbientAuthenticationTestWithPolicy, All) {
   EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes::ALL);
   IsAmbientAuthAllowedForProfilesTest();
 }
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         AmbientAuthenticationTestWithPolicy,
+                         /*ephemeral_guest_profile_enabled=*/testing::Bool());
 
 // Test subclass that adds switches::kDiskCacheDir and switches::kDiskCacheSize
 // to the command line, to make sure they're respected.
@@ -475,16 +464,10 @@ class ProfileNetworkContextServiceCertVerifierBuiltinFeaturePolicyTest
       disabled_features.push_back(net::features::kCertVerifierBuiltinFeature);
     }
     if (enable_cert_verifier_service()) {
-#if defined(OS_CHROMEOS)
-      // TODO(crbug.com/1085379): remove this GTEST_SKIP().
-      GTEST_SKIP() << "Skipping test, CertVerifierService feature not yet "
-                      "available on ChromeOS.";
-#else
       enabled_features.push_back(network::features::kCertVerifierService);
       test_cert_verifier_service_factory_.emplace();
       content::SetCertVerifierServiceFactoryForTesting(
           &test_cert_verifier_service_factory_.value());
-#endif
     } else {
       disabled_features.push_back(network::features::kCertVerifierService);
     }
@@ -570,7 +553,7 @@ IN_PROC_BROWSER_TEST_P(
   // the feature flag.
   policy::PolicyMap policies;
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
-            std::make_unique<base::Value>(true));
+            base::Value(true));
   UpdateProviderPolicy(policies);
 
   {
@@ -585,7 +568,7 @@ IN_PROC_BROWSER_TEST_P(
   }
 
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
-            std::make_unique<base::Value>(false));
+            base::Value(false));
   UpdateProviderPolicy(policies);
 
   {
@@ -638,7 +621,7 @@ IN_PROC_BROWSER_TEST_P(
   // the feature flag.
   policy::PolicyMap policies;
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
-            std::make_unique<base::Value>(true));
+            base::Value(true));
   UpdateProviderPolicy(policies);
 
   {
@@ -650,7 +633,7 @@ IN_PROC_BROWSER_TEST_P(
   }
 
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
-            std::make_unique<base::Value>(false));
+            base::Value(false));
   UpdateProviderPolicy(policies);
 
   {
@@ -668,188 +651,3 @@ INSTANTIATE_TEST_SUITE_P(
     ProfileNetworkContextServiceCertVerifierBuiltinFeaturePolicyTestWithService,
     ::testing::Bool());
 #endif  // BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-
-enum class CorsTestMode {
-  kWithCorsMitigationListPolicy,
-  kWithoutCorsMitigationListPolicy,
-  kWithHiddenCorsMitigationListPolicy,
-};
-
-class CorsExtraSafelistedHeaderNamesTest
-    : public policy::PolicyTest,
-      public ::testing::WithParamInterface<CorsTestMode> {
- public:
-  CorsExtraSafelistedHeaderNamesTest() {
-    switch (GetParam()) {
-      case CorsTestMode::kWithCorsMitigationListPolicy:
-        SetUpPolicy();
-        scoped_feature_list_.InitWithFeaturesAndParameters(
-            {{network::features::kOutOfBlinkCors, {}},
-             {features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
-              {{"extra-safelisted-request-headers-for-enterprise", "foo"}}}},
-            {{features::kHideCorsMitigationListPolicySupport}, {}});
-        break;
-      case CorsTestMode::kWithoutCorsMitigationListPolicy:
-        scoped_feature_list_.InitWithFeaturesAndParameters(
-            {{network::features::kOutOfBlinkCors, {}},
-             {features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
-              {{"extra-safelisted-request-headers", "foo,bar"}}}},
-            {});
-        break;
-      case CorsTestMode::kWithHiddenCorsMitigationListPolicy:
-        SetUpPolicy();
-        scoped_feature_list_.InitWithFeaturesAndParameters(
-            {{network::features::kOutOfBlinkCors, {}},
-             {features::kHideCorsMitigationListPolicySupport, {}},
-             {features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
-              {{"extra-safelisted-request-headers-for-enterprise",
-                "foo,bar"}}}},
-            {});
-        break;
-    }
-  }
-
-  // Override to avoid conflict between the |scoped_feature_list_| and
-  // |command_line| that PolicyTest::SetUpCommandLine will introduce.
-  // TODO(crbug.com/1002483): Remove this workaround.
-  void SetUpCommandLine(base::CommandLine* command_line) override {}
-
-  void SetUpOnMainThread() override {
-    ASSERT_TRUE(embedded_test_server()->Start());
-
-    // This base::Unretained is safe because |this| outlives
-    // |cross_origin_test_server_|.
-    cross_origin_test_server_.RegisterRequestHandler(
-        base::BindRepeating(&CorsExtraSafelistedHeaderNamesTest::HandleRequest,
-                            base::Unretained(this)));
-    ASSERT_TRUE(cross_origin_test_server_.Start());
-
-    PolicyTest::SetUpOnMainThread();
-  }
-
-  void LoadAndWait(const GURL& url) {
-    content::WebContents* web_contents =
-        browser()->tab_strip_model()->GetActiveWebContents();
-    base::string16 expected_title(base::ASCIIToUTF16("OK"));
-    content::TitleWatcher title_watcher(web_contents, expected_title);
-    title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("FAIL"));
-    ui_test_utils::NavigateToURL(browser(), url);
-    ASSERT_EQ(expected_title, title_watcher.WaitAndGetTitle());
-  }
-
-  uint16_t cross_origin_port() { return cross_origin_test_server_.port(); }
-  size_t options_count() {
-    base::AutoLock lock(lock_);
-    return options_count_;
-  }
-  size_t get_count() {
-    base::AutoLock lock(lock_);
-    return get_count_;
-  }
-
-  const net::EmbeddedTestServer& cross_origin_test_server() const {
-    return cross_origin_test_server_;
-  }
-
-  static constexpr char kTestPath[] =
-      "/cors-extra-safelisted-header-names.html";
-
- private:
-  void SetUpPolicy() {
-    auto list = std::make_unique<base::ListValue>();
-    list->AppendString("bar");
-    policy::PolicyMap policies;
-    policies.Set(policy::key::kCorsMitigationList,
-                 policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                 policy::POLICY_SOURCE_CLOUD, std::move(list), nullptr);
-    provider_.UpdateChromePolicy(policies);
-  }
-
-  std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
-      const net::test_server::HttpRequest& request) {
-    std::unique_ptr<net::test_server::BasicHttpResponse> response =
-        std::make_unique<net::test_server::BasicHttpResponse>();
-    response->set_code(net::HTTP_OK);
-    response->AddCustomHeader(
-        network::cors::header_names::kAccessControlAllowOrigin, "*");
-    if (request.method == net::test_server::METHOD_OPTIONS) {
-      response->AddCustomHeader(
-          network::cors::header_names::kAccessControlAllowMethods,
-          "GET, OPTIONS");
-      response->AddCustomHeader(
-          network::cors::header_names::kAccessControlAllowHeaders, "baz");
-      response->AddCustomHeader(
-          network::cors::header_names::kAccessControlMaxAge, "60");
-      base::AutoLock lock(lock_);
-      options_count_++;
-    } else if (request.method == net::test_server::METHOD_GET) {
-      base::AutoLock lock(lock_);
-      get_count_++;
-    }
-    return response;
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-  net::EmbeddedTestServer cross_origin_test_server_;
-  base::Lock lock_;
-
-  size_t options_count_ GUARDED_BY(lock_) = 0;
-  size_t get_count_ GUARDED_BY(lock_) = 0;
-};
-
-constexpr char CorsExtraSafelistedHeaderNamesTest::kTestPath[];
-
-IN_PROC_BROWSER_TEST_P(CorsExtraSafelistedHeaderNamesTest, RequestWithFoo) {
-  GURL url(cross_origin_test_server().GetURL("/hello"));
-  LoadAndWait(embedded_test_server()->GetURL(base::StringPrintf(
-      "%s?url=%s&headers=foo", kTestPath, url.spec().c_str())));
-  EXPECT_EQ(0u, options_count());
-  EXPECT_EQ(1u, get_count());
-}
-
-IN_PROC_BROWSER_TEST_P(CorsExtraSafelistedHeaderNamesTest, RequestWithBar) {
-  GURL url(cross_origin_test_server().GetURL("/hello"));
-  LoadAndWait(embedded_test_server()->GetURL(base::StringPrintf(
-      "%s?url=%s&headers=bar", kTestPath, url.spec().c_str())));
-  EXPECT_EQ(0u, options_count());
-  EXPECT_EQ(1u, get_count());
-}
-
-IN_PROC_BROWSER_TEST_P(CorsExtraSafelistedHeaderNamesTest, RequestWithFooBar) {
-  GURL url(cross_origin_test_server().GetURL("/hello"));
-  LoadAndWait(embedded_test_server()->GetURL(base::StringPrintf(
-      "%s?url=%s&headers=foo,bar", kTestPath, url.spec().c_str())));
-  EXPECT_EQ(0u, options_count());
-  EXPECT_EQ(1u, get_count());
-}
-
-IN_PROC_BROWSER_TEST_P(CorsExtraSafelistedHeaderNamesTest, RequestWithBaz) {
-  GURL url(cross_origin_test_server().GetURL("/hello"));
-  LoadAndWait(embedded_test_server()->GetURL(base::StringPrintf(
-      "%s?url=%s&headers=baz", kTestPath, url.spec().c_str())));
-  EXPECT_EQ(1u, options_count());
-  EXPECT_EQ(1u, get_count());
-}
-
-IN_PROC_BROWSER_TEST_P(CorsExtraSafelistedHeaderNamesTest, RequestWithFooBaz) {
-  GURL url(cross_origin_test_server().GetURL("/hello"));
-  LoadAndWait(embedded_test_server()->GetURL(base::StringPrintf(
-      "%s?url=%s&headers=foo,baz", kTestPath, url.spec().c_str())));
-  EXPECT_EQ(1u, options_count());
-  EXPECT_EQ(1u, get_count());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    WithCorsMitigationListPolicy,
-    CorsExtraSafelistedHeaderNamesTest,
-    testing::Values(CorsTestMode::kWithCorsMitigationListPolicy));
-
-INSTANTIATE_TEST_SUITE_P(
-    WithoutCorsMitigationListPolicy,
-    CorsExtraSafelistedHeaderNamesTest,
-    testing::Values(CorsTestMode::kWithoutCorsMitigationListPolicy));
-
-INSTANTIATE_TEST_SUITE_P(
-    WithHiddenCorsMitigationListPolicy,
-    CorsExtraSafelistedHeaderNamesTest,
-    testing::Values(CorsTestMode::kWithHiddenCorsMitigationListPolicy));

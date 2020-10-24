@@ -21,9 +21,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegateImpl;
@@ -35,7 +37,6 @@ import org.chromium.chrome.browser.util.ChromeFileProvider;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
-import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -140,11 +141,6 @@ public class ShareIntentTest {
         }
 
         @Override
-        public BottomSheetController getBottomSheetController() {
-            return mActivity.getBottomSheetController();
-        }
-
-        @Override
         public TabModelSelector getTabModelSelector() {
             // TabModelSelector remains uninitialized for this test. Return a mock instead.
             return new MockTabModelSelector(1, 0, null);
@@ -175,7 +171,8 @@ public class ShareIntentTest {
         RootUiCoordinator rootUiCoordinator = TestThreadUtils.runOnUiThreadBlocking(() -> {
             return new RootUiCoordinator(mockActivity, null,
                     mockActivity.getShareDelegateSupplier(), mockActivity.getActivityTabProvider(),
-                    null, null, mockActivity.getOverviewModeBehaviorSupplier(), null);
+                    null, null, mockActivity.getOverviewModeBehaviorSupplier(), null, null,
+                    new OneshotSupplierImpl<>());
         });
         ShareHelper.setLastShareComponentName(new ComponentName("test.package", "test.activity"));
         // Skips the capture of screenshot and notifies with an empty file.

@@ -19,6 +19,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/ranges.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/paint_recorder.h"
@@ -106,21 +107,22 @@ int64_t GetDisplayIdForView(const views::View* view) {
 }
 
 void ReportSmoothness(bool tablet_mode, bool launcher_visible, int smoothness) {
-  base::UmaHistogramPercentage(kAnimationSmoothnessHistogram, smoothness);
+  base::UmaHistogramPercentageObsoleteDoNotUse(kAnimationSmoothnessHistogram,
+                                               smoothness);
   if (tablet_mode) {
     if (launcher_visible) {
-      base::UmaHistogramPercentage(
+      base::UmaHistogramPercentageObsoleteDoNotUse(
           kAnimationSmoothnessTabletLauncherVisibleHistogram, smoothness);
     } else {
-      base::UmaHistogramPercentage(
+      base::UmaHistogramPercentageObsoleteDoNotUse(
           kAnimationSmoothnessTabletLauncherHiddenHistogram, smoothness);
     }
   } else {
     if (launcher_visible) {
-      base::UmaHistogramPercentage(
+      base::UmaHistogramPercentageObsoleteDoNotUse(
           kAnimationSmoothnessClamshellLauncherVisibleHistogram, smoothness);
     } else {
-      base::UmaHistogramPercentage(
+      base::UmaHistogramPercentageObsoleteDoNotUse(
           kAnimationSmoothnessClamshellLauncherHiddenHistogram, smoothness);
     }
   }
@@ -757,6 +759,10 @@ bool ScrollableShelfView::IsAnyCornerButtonInkDropActivatedForTest() const {
   return activated_corner_buttons_ > 0;
 }
 
+float ScrollableShelfView::GetScrollUpperBoundForTest() const {
+  return CalculateScrollUpperBound(GetSpaceForIcons());
+}
+
 int ScrollableShelfView::GetSumOfButtonSizeAndSpacing() const {
   return shelf_view_->GetButtonSize() + ShelfConfig::Get()->button_spacing();
 }
@@ -1280,7 +1286,7 @@ void ScrollableShelfView::CreateDragIconProxyByLocationWithNoAnimation(
     int blur_radius) {
   drag_icon_widget_ =
       DragImageView::Create(GetWidget()->GetNativeWindow()->GetRootWindow(),
-                            ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
+                            ui::mojom::DragEventSource::kMouse);
   DragImageView* drag_icon =
       static_cast<DragImageView*>(drag_icon_widget_->GetContentsView());
   drag_icon->SetImage(icon);
@@ -1569,12 +1575,12 @@ bool ScrollableShelfView::ProcessGestureEvent(const ui::GestureEvent& event) {
     }
     return true;
   }
-  if (event.type() == ui::ET_GESTURE_SCROLL_END) {
-    presentation_time_recorder_.reset();
-    return true;
-  }
 
   if (event.type() == ui::ET_GESTURE_END) {
+    // Do not reset |presentation_time_recorder_| in ui::ET_GESTURE_SCROLL_END
+    // event because it may not exist due to gesture fling.
+    presentation_time_recorder_.reset();
+
     // The type of scrolling offset is float to ensure that ScrollableShelfView
     // is responsive to slow gesture scrolling. However, after offset
     // adjustment, the scrolling offset should be floored.
@@ -1618,16 +1624,32 @@ bool ScrollableShelfView::ProcessGestureEvent(const ui::GestureEvent& event) {
   if (event.type() != ui::ET_GESTURE_SCROLL_UPDATE)
     return false;
 
+  float scroll_delta = 0.f;
+  const bool is_horizontal = GetShelf()->IsHorizontalAlignment();
+  if (is_horizontal) {
+    scroll_delta = -event.details().scroll_x();
+    scroll_delta = ShouldAdaptToRTL() ? -scroll_delta : scroll_delta;
+  } else {
+    scroll_delta = -event.details().scroll_y();
+  }
+
+  // Return early if scrollable shelf cannot be scrolled anymore because it has
+  // reached to the end.
+  const float current_scroll_offset = CalculateMainAxisScrollDistance();
+  if ((current_scroll_offset == 0.f && scroll_delta <= 0.f) ||
+      (current_scroll_offset == CalculateScrollUpperBound(GetSpaceForIcons()) &&
+       scroll_delta >= 0.f)) {
+    return true;
+  }
+
   DCHECK(presentation_time_recorder_);
   presentation_time_recorder_->RequestNext();
 
-  const float scroll_x = -event.details().scroll_x();
-  if (GetShelf()->IsHorizontalAlignment()) {
-    ScrollByXOffset(ShouldAdaptToRTL() ? -scroll_x : scroll_x,
-                    /*animate=*/false);
-  } else {
-    ScrollByYOffset(-event.details().scroll_y(), /*animate=*/false);
-  }
+  if (is_horizontal)
+    ScrollByXOffset(scroll_delta, /*animate=*/false);
+  else
+    ScrollByYOffset(scroll_delta, /*animate=*/false);
+
   return true;
 }
 
@@ -2081,10 +2103,8 @@ void ScrollableShelfView::UpdateAvailableSpace() {
 
   // The hotseat uses |available_space_| to determine where to show its
   // background, so notify it when it is recalculated.
-  if (HotseatWidget::ShouldShowHotseatBackground()) {
-    GetShelf()->hotseat_widget()->SetTranslucentBackground(
-        GetHotseatBackgroundBounds());
-  }
+  if (HotseatWidget::ShouldShowHotseatBackground())
+    GetShelf()->hotseat_widget()->UpdateTranslucentBackground();
 }
 
 gfx::Rect ScrollableShelfView::CalculateVisibleSpace(

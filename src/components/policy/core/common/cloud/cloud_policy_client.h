@@ -302,9 +302,10 @@ class POLICY_EXPORT CloudPolicyClient {
           chrome_os_user_report,
       StatusCallback callback);
 
-  // Uploads |report| using the real-time reporting API.  As above, the client
-  // must be in a registered state.  The |callback| will be called when the
-  // operation completes.
+  // Uploads a report containing enterprise connectors real-time security
+  // events. As above, the client must be in a registered state.  The |callback|
+  // will be called when the operation completes.
+  // TODO(crbug.com/1098437): Pick a more specific name.
   virtual void UploadRealtimeReport(base::Value report,
                                     StatusCallback callback);
 
@@ -319,6 +320,18 @@ class POLICY_EXPORT CloudPolicyClient {
 
   // Cancels the pending app push-install status report upload, if exists.
   virtual void CancelAppInstallReportUpload();
+
+  // Uploads a report on the status of extension installs. The client must be in
+  // a registered state. The |callback| will be called when the operation
+  // completes.
+  // Only one outstanding extension install report upload is allowed.
+  // In case the new installs report upload is started, the previous one
+  // will be canceled.
+  virtual void UploadExtensionInstallReport(base::Value report,
+                                            StatusCallback callback);
+
+  // Cancels the pending extension install status report upload, if exists.
+  virtual void CancelExtensionInstallReportUpload();
 
   // Attempts to fetch remote commands, with |last_command_id| being the ID of
   // the last command that finished execution and |command_results| being
@@ -539,6 +552,10 @@ class POLICY_EXPORT CloudPolicyClient {
 
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory();
 
+  void add_connector_url_params(bool value) {
+    add_connector_url_params_ = value;
+  }
+
   // Returns the number of active requests.
   int GetActiveRequestCountForTest() const;
 
@@ -736,6 +753,10 @@ class POLICY_EXPORT CloudPolicyClient {
   // be accessible so that it can be canceled.
   DeviceManagementService::Job* app_install_report_request_job_ = nullptr;
 
+  // Only one outstanding extension install report upload is allowed, and it
+  // must be accessible so that it can be canceled.
+  DeviceManagementService::Job* extension_install_report_request_job_ = nullptr;
+
   // The policy responses returned by the last policy fetch operation.
   ResponseMap responses_;
   DeviceManagementStatus status_ = DM_STATUS_SUCCESS;
@@ -747,6 +768,17 @@ class POLICY_EXPORT CloudPolicyClient {
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
  private:
+  // Creates a new real-time reporting job and appends it to |request_jobs_|.
+  // The job will send its report to the |server_url| endpoint.  If
+  // |add_connector_url_params| is true then URL paramaters specific to
+  // enterprise connectors are added to the request uploading the report.
+  // |callback| is invoked once the report is uploaded.
+  DeviceManagementService::Job* CreateNewRealtimeReportingJob(
+      base::Value report,
+      const std::string& server_url,
+      bool add_connector_url_params,
+      StatusCallback callback);
+
   void SetClientId(const std::string& client_id);
   // Fills in the common fields of a DeviceRegisterRequest for |Register| and
   // |RegisterWithCertificate|.
@@ -774,6 +806,11 @@ class POLICY_EXPORT CloudPolicyClient {
   // during re-registration, which gets triggered by a failed policy fetch with
   // error |DM_STATUS_SERVICE_DEVICE_NOT_FOUND|.
   std::string reregistration_dm_token_;
+
+  // Whether extra enterprise connectors URL parameters should be included
+  // in real-time reports.  Only reports uploaded using UploadRealtimeReport()
+  // are affected.
+  bool add_connector_url_params_ = false;
 
   // Used to create tasks which run delayed on the UI thread.
   base::WeakPtrFactory<CloudPolicyClient> weak_ptr_factory_{this};

@@ -13,7 +13,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "build/build_config.h"
@@ -30,8 +29,6 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-using autofill::PasswordForm;
 
 using base::ASCIIToUTF16;
 using base::TestMockTimeTaskRunner;
@@ -53,8 +50,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_CONST_METHOD1(IsSavingAndFillingEnabled, bool(const GURL&));
   MOCK_CONST_METHOD1(IsFillingEnabled, bool(const GURL&));
   MOCK_METHOD2(AutofillHttpAuth,
-               void(const autofill::PasswordForm&,
-                    const PasswordFormManagerForUI*));
+               void(const PasswordForm&, const PasswordFormManagerForUI*));
   MOCK_CONST_METHOD0(GetProfilePasswordStore, PasswordStore*());
   MOCK_CONST_METHOD0(GetAccountPasswordStore, PasswordStore*());
   MOCK_METHOD0(PromptUserToSaveOrUpdatePasswordPtr, void());
@@ -79,15 +75,9 @@ class MockHttpAuthObserver : public HttpAuthObserver {
   DISALLOW_COPY_AND_ASSIGN(MockHttpAuthObserver);
 };
 
-// Invokes the password store consumer with a single copy of |form|.
-ACTION_P(InvokeConsumer, form) {
-  std::vector<std::unique_ptr<PasswordForm>> result;
-  result.push_back(std::make_unique<PasswordForm>(form));
-  arg0->OnGetPasswordStoreResults(std::move(result));
-}
-
-ACTION(InvokeEmptyConsumerWithForms) {
-  arg0->OnGetPasswordStoreResults(std::vector<std::unique_ptr<PasswordForm>>());
+ACTION_P(InvokeEmptyConsumerWithForms, store) {
+  arg0->OnGetPasswordStoreResultsFrom(
+      store, std::vector<std::unique_ptr<PasswordForm>>());
 }
 }  // namespace
 
@@ -112,7 +102,8 @@ class HttpAuthManagerTest : public testing::Test {
       // so that not every test has to set this up individually. Individual
       // tests that do cover the account store can still override this.
       ON_CALL(*account_store_, GetLogins(_, _))
-          .WillByDefault(WithArg<1>(InvokeEmptyConsumerWithForms()));
+          .WillByDefault(
+              WithArg<1>(InvokeEmptyConsumerWithForms(account_store_.get())));
     }
 
     ON_CALL(client_, GetProfilePasswordStore())
@@ -176,7 +167,7 @@ TEST_F(HttpAuthManagerTest, HttpAuthFilling) {
     ASSERT_TRUE(consumer);
     std::vector<std::unique_ptr<PasswordForm>> result;
     result.push_back(std::make_unique<PasswordForm>(stored_form));
-    consumer->OnGetPasswordStoreResults(std::move(result));
+    consumer->OnGetPasswordStoreResultsFrom(store_.get(), std::move(result));
     testing::Mock::VerifyAndClearExpectations(&store_);
     httpauth_manager()->DetachObserver(&observer);
   }
@@ -196,7 +187,7 @@ TEST_F(HttpAuthManagerTest, HttpAuthSaving) {
 
     MockHttpAuthObserver observer;
     EXPECT_CALL(*store_, GetLogins(_, _))
-        .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+        .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms(store_.get())));
 
     // Initiate creating a form manager.
     httpauth_manager()->SetObserverAndDeliverCredentials(&observer,
@@ -228,7 +219,7 @@ TEST_F(HttpAuthManagerTest, NavigationWithoutSubmission) {
 
   MockHttpAuthObserver observer;
   EXPECT_CALL(*store_, GetLogins(_, _))
-      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms(store_.get())));
 
   // Initiate creating a form manager.
   httpauth_manager()->SetObserverAndDeliverCredentials(&observer,

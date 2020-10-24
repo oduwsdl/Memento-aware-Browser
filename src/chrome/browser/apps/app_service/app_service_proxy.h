@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/containers/unique_ptr_adapters.h"
@@ -26,6 +27,7 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/apps/app_service/borealis_apps.h"
 #include "chrome/browser/apps/app_service/built_in_chromeos_apps.h"
 #include "chrome/browser/apps/app_service/crostini_apps.h"
 #include "chrome/browser/apps/app_service/extension_apps_chromeos.h"
@@ -37,7 +39,6 @@
 #include "chrome/browser/apps/app_service/web_apps.h"
 #endif  // OS_CHROMEOS
 
-class PrefRegistrySimple;
 class Profile;
 
 namespace apps {
@@ -55,14 +56,21 @@ struct PauseData {
 };
 #endif
 
+struct IntentLaunchInfo {
+  std::string app_id;
+  std::string activity_name;
+  std::string activity_label;
+};
+
 // Singleton (per Profile) proxy and cache of an App Service's apps.
 //
 // Singleton-ness means that //chrome/browser code (e.g UI code) can find *the*
 // proxy for a given Profile, and therefore share its caches.
 // Observe AppRegistryCache to delete the preferred app on app removed.
 //
-// On Chrome OS, an instance is created for the lock screen apps profile, but
-// not for the signin profile.
+// On all platforms, there is no instance for incognito profiles.
+// On Chrome OS, an instance is created for the guest session profile and the
+// lock screen apps profile, but not for the signin profile.
 //
 // See components/services/app_service/README.md.
 class AppServiceProxy : public KeyedService,
@@ -77,8 +85,6 @@ class AppServiceProxy : public KeyedService,
   explicit AppServiceProxy(Profile* profile);
   ~AppServiceProxy() override;
 
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
-
   void ReInitializeForTesting(Profile* profile);
 
   mojo::Remote<apps::mojom::AppService>& AppService();
@@ -88,7 +94,7 @@ class AppServiceProxy : public KeyedService,
   apps::InstanceRegistry& InstanceRegistry();
 #endif
 
-  apps::BrowserAppLauncher& BrowserAppLauncher();
+  apps::BrowserAppLauncher* BrowserAppLauncher();
 
   apps::PreferredAppsList& PreferredApps();
 
@@ -98,7 +104,7 @@ class AppServiceProxy : public KeyedService,
       apps::mojom::AppType app_type,
       const std::string& app_id,
       apps::mojom::IconKeyPtr icon_key,
-      apps::mojom::IconCompression icon_compression,
+      apps::mojom::IconType icon_type,
       int32_t size_hint_in_dip,
       bool allow_placeholder_icon,
       apps::mojom::Publisher::LoadIconCallback callback) override;
@@ -125,6 +131,18 @@ class AppServiceProxy : public KeyedService,
                           int32_t event_flags,
                           apps::mojom::LaunchSource launch_source,
                           apps::mojom::FilePathsPtr file_paths);
+
+  // Launches the app for the given |app_id| with files from |file_urls| and
+  // their |mime_types|.
+  // |event_flags| provides additional context about the action which launches
+  // the app (e.g. a middle click indicating opening a background tab).
+  // |launch_source| is the possible app launch sources, e.g. from Shelf, from
+  // the search box, etc.
+  void LaunchAppWithFileUrls(const std::string& app_id,
+                             int32_t event_flags,
+                             apps::mojom::LaunchSource launch_source,
+                             const std::vector<GURL>& file_urls,
+                             const std::vector<std::string>& mime_types);
 
   // Launches an app for the given |app_id|, passing |intent| to the app.
   // |event_flags| provides additional context about the action which launch the
@@ -159,7 +177,8 @@ class AppServiceProxy : public KeyedService,
 
   // Uninstalls an app for the given |app_id| without prompting the user to
   // confirm.
-  void UninstallSilently(const std::string& app_id);
+  void UninstallSilently(const std::string& app_id,
+                         apps::mojom::UninstallSource uninstall_source);
 
 #if defined(OS_CHROMEOS)
   // Pauses apps. |pause_data|'s key is the app_id. |pause_data|'s PauseData
@@ -184,6 +203,14 @@ class AppServiceProxy : public KeyedService,
                     int64_t display_id,
                     apps::mojom::Publisher::GetMenuModelCallback callback);
 
+  // Executes a shortcut menu |command_id| and |shortcut_id| for a menu item
+  // previously built with GetMenuModel(). |app_id| is the menu app.
+  // |display_id| is the id of the display from which the app is launched.
+  void ExecuteContextMenuCommand(const std::string& app_id,
+                                 int command_id,
+                                 const std::string& shortcut_id,
+                                 int64_t display_id);
+
   // Opens native settings for the app with |app_id|.
   void OpenNativeSettings(const std::string& app_id);
 
@@ -199,11 +226,22 @@ class AppServiceProxy : public KeyedService,
 #endif
 
   // Returns a list of apps (represented by their ids) which can handle |url|.
-  std::vector<std::string> GetAppIdsForUrl(const GURL& url);
+  // If |exclude_browsers| is true, then exclude the browser apps.
+  std::vector<std::string> GetAppIdsForUrl(const GURL& url,
+                                           bool exclude_browsers = false);
 
-  // Returns a list of apps (represented by their ids) which can handle
-  // |intent|.
-  std::vector<std::string> GetAppIdsForIntent(apps::mojom::IntentPtr intent);
+  // Returns a list of apps (represented by their ids) and activities (if
+  // applied) which can handle |intent|. If |exclude_browsers| is true, then
+  // exclude the browser apps.
+  std::vector<IntentLaunchInfo> GetAppsForIntent(
+      const apps::mojom::IntentPtr& intent,
+      bool exclude_browsers = false);
+
+  // Returns a list of apps (represented by their ids) and activities (if
+  // applied) which can handle |filesystem_urls| and |mime_types|.
+  std::vector<IntentLaunchInfo> GetAppsForFiles(
+      const std::vector<GURL>& filesystem_urls,
+      const std::vector<std::string>& mime_types);
 
   // Sets |extension_apps_| and |web_apps_| to observe the ARC apps to set the
   // badge on the equivalent Chrome app's icon, when ARC is available.
@@ -266,7 +304,7 @@ class AppServiceProxy : public KeyedService,
         apps::mojom::AppType app_type,
         const std::string& app_id,
         apps::mojom::IconKeyPtr icon_key,
-        apps::mojom::IconCompression icon_compression,
+        apps::mojom::IconType icon_type,
         int32_t size_hint_in_dip,
         bool allow_placeholder_icon,
         apps::mojom::Publisher::LoadIconCallback callback) override;
@@ -391,6 +429,7 @@ class AppServiceProxy : public KeyedService,
   // nullptr.
   std::unique_ptr<ExtensionAppsChromeOs> extension_web_apps_;
   std::unique_ptr<WebAppsChromeOs> web_apps_;
+  std::unique_ptr<BorealisApps> borealis_apps_;
 
   bool arc_is_registered_ = false;
 
@@ -410,6 +449,7 @@ class AppServiceProxy : public KeyedService,
   // TODO(crbug.com/877898): Erase extension_web_apps_ when BMO is on.
   std::unique_ptr<ExtensionApps> extension_web_apps_;
   std::unique_ptr<WebApps> web_apps_;
+  std::unique_ptr<ExtensionApps> extension_apps_;
 #endif
 
   Profile* profile_;

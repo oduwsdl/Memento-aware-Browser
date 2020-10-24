@@ -23,8 +23,9 @@ extern const char kSecondaryPatternKey[];
 extern const char kIncognitoContextError[];
 extern const char kIncognitoSessionOnlyError[];
 extern const char kInvalidUrlError[];
-
-}
+extern const char kWildcardPatternsForPluginsDisallowed[];
+extern const char kSettingPluginContentSettingsIsDisallowed[];
+}  // namespace content_settings_api_constants
 }  // namespace extensions
 
 #endif  // CHROME_BROWSER_EXTENSIONS_API_CONTENT_SETTINGS_CONTENT_SETTINGS_API_CONSTANTS_H__

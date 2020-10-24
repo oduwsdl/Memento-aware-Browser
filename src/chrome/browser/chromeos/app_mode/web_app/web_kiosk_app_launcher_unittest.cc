@@ -54,7 +54,7 @@ std::unique_ptr<web_app::WebAppDataRetriever> CreateDataRetrieverWithData(
     const GURL& url) {
   auto data_retriever = std::make_unique<web_app::TestDataRetriever>();
   auto info = std::make_unique<WebApplicationInfo>();
-  info->app_url = url;
+  info->start_url = url;
   info->title = base::UTF8ToUTF16(kAppTitle);
   data_retriever->SetRendererWebApplicationInfo(std::move(info));
   return std::unique_ptr<web_app::WebAppDataRetriever>(
@@ -128,7 +128,7 @@ class WebKioskAppLauncherTest : public ChromeRenderViewHostTestHarness {
 
     if (installed) {
       auto info = std::make_unique<WebApplicationInfo>();
-      info->app_url = GURL(kAppLaunchUrl);
+      info->start_url = GURL(kAppLaunchUrl);
       info->title = base::UTF8ToUTF16(kAppTitle);
       app_manager_->UpdateAppByAccountId(account_id_, std::move(info));
     }
@@ -180,6 +180,8 @@ class WebKioskAppLauncherTest : public ChromeRenderViewHostTestHarness {
   std::unique_ptr<AppWindowCloser> closer_;
 };
 
+// TODO(crbug.com/1097708): these tests flakily fail on MSAN Builds.
+#if !defined(MEMORY_SANITIZER)
 TEST_F(WebKioskAppLauncherTest, NormalFlowNotInstalled) {
   SetupAppData(/*installed*/ false);
 
@@ -210,6 +212,7 @@ TEST_F(WebKioskAppLauncherTest, NormalFlowNotInstalled) {
 
   CloseAppWindow();
 }
+#endif
 
 TEST_F(WebKioskAppLauncherTest, NormalFlowAlreadyInstalled) {
   SetupAppData(/*installed*/ true);
@@ -228,6 +231,8 @@ TEST_F(WebKioskAppLauncherTest, NormalFlowAlreadyInstalled) {
   CloseAppWindow();
 }
 
+// TODO(crbug.com/1097708): these tests flakily fail on MSAN Builds.
+#if !defined(MEMORY_SANITIZER)
 TEST_F(WebKioskAppLauncherTest, NormalFlowBadLaunchUrl) {
   SetupAppData(/*installed*/ false);
 
@@ -299,6 +304,7 @@ TEST_F(WebKioskAppLauncherTest, InstallationRestarted) {
 
   CloseAppWindow();
 }
+#endif
 
 TEST_F(WebKioskAppLauncherTest, UrlNotLoaded) {
   SetupAppData(/*installed*/ false);

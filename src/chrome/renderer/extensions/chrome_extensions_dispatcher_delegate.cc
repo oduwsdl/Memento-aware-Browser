@@ -158,7 +158,7 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
                              IDR_FILE_SYSTEM_PROVIDER_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("platformKeys",
                              IDR_PLATFORM_KEYS_CUSTOM_BINDINGS_JS);
-  source_map->RegisterSource("platformKeys.getPublicKey",
+  source_map->RegisterSource("platformKeys.getPublicKeyUtil",
                              IDR_PLATFORM_KEYS_GET_PUBLIC_KEY_JS);
   source_map->RegisterSource("platformKeys.internalAPI",
                              IDR_PLATFORM_KEYS_INTERNAL_API_JS);
@@ -178,6 +178,14 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
   source_map->RegisterSource("chromeos.tts.mojom.tts_stream.mojom",
                              IDR_TTS_STREAM_MOJOM_JS);
   source_map->RegisterSource("chromeos.tts.stream", IDR_TTS_STREAM_BINDINGS_JS);
+
+  // Imprivata API.
+  source_map->RegisterSource("chromeos.remote_apps.mojom-lite",
+                             IDR_REMOTE_APPS_MOJOM_LITE_JS);
+  source_map->RegisterSource("chromeos.remote_apps",
+                             IDR_REMOTE_APPS_BINDINGS_JS);
+  source_map->RegisterSource("url/mojom/url.mojom-lite",
+                             IDR_MOJO_URL_MOJOM_LITE_JS);
 #endif  // defined(OS_CHROMEOS)
 
   source_map->RegisterSource(
@@ -193,13 +201,13 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
 
   // Media router.
   source_map->RegisterSource(
-      "chrome/common/media_router/mojom/media_controller.mojom",
+      "components/media_router/common/mojom/media_controller.mojom",
       IDR_MEDIA_CONTROLLER_MOJOM_JS);
   source_map->RegisterSource(
-      "chrome/common/media_router/mojom/media_router.mojom",
+      "components/media_router/common/mojom/media_router.mojom",
       IDR_MEDIA_ROUTER_MOJOM_JS);
   source_map->RegisterSource(
-      "chrome/common/media_router/mojom/media_status.mojom",
+      "components/media_router/common/mojom/media_status.mojom",
       IDR_MEDIA_STATUS_MOJOM_JS);
   source_map->RegisterSource("media_router_bindings",
                              IDR_MEDIA_ROUTER_BINDINGS_JS);
@@ -216,9 +224,6 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
   source_map->RegisterSource("media/mojo/mojom/remoting_common.mojom",
                              IDR_REMOTING_COMMON_JS);
   source_map->RegisterSource(
-      "media/mojo/mojom/mirror_service_remoting.mojom",
-      IDR_MEDIA_REMOTING_JS);
-  source_map->RegisterSource(
       "components/mirroring/mojom/mirroring_service_host.mojom",
       IDR_MIRRORING_SERVICE_HOST_MOJOM_JS);
   source_map->RegisterSource(
@@ -230,6 +235,9 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
   source_map->RegisterSource(
       "components/mirroring/mojom/session_parameters.mojom",
       IDR_MIRRORING_SESSION_PARAMETERS_JS);
+  source_map->RegisterSource(
+      "third_party/blink/public/mojom/presentation/presentation.mojom",
+      IDR_PRESENTATION_JS);
 }
 
 void ChromeExtensionsDispatcherDelegate::RequireWebViewModules(

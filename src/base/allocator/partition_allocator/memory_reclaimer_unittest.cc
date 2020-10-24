@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/allocator/partition_allocator/partition_alloc.h"
+#include "base/logging.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -72,31 +73,33 @@ TEST_F(PartitionAllocMemoryReclaimerTest, Simple) {
 TEST_F(PartitionAllocMemoryReclaimerTest, FreesMemory) {
   PartitionRoot<internal::ThreadSafe>* root = allocator_->root();
 
-  size_t committed_initially = root->total_size_of_committed_pages;
+  size_t committed_initially =
+      root->total_size_of_committed_pages_for_testing();
   AllocateAndFree();
-  size_t committed_before = root->total_size_of_committed_pages;
+  size_t committed_before = root->total_size_of_committed_pages_for_testing();
 
   EXPECT_GT(committed_before, committed_initially);
 
   StartReclaimer();
   task_environment_.FastForwardBy(
       task_environment_.NextMainThreadPendingTaskDelay());
-  size_t committed_after = root->total_size_of_committed_pages;
+  size_t committed_after = root->total_size_of_committed_pages_for_testing();
   EXPECT_LT(committed_after, committed_before);
   EXPECT_LE(committed_initially, committed_after);
 }
 
 TEST_F(PartitionAllocMemoryReclaimerTest, Reclaim) {
   PartitionRoot<internal::ThreadSafe>* root = allocator_->root();
-  size_t committed_initially = root->total_size_of_committed_pages;
+  size_t committed_initially =
+      root->total_size_of_committed_pages_for_testing();
 
   {
     AllocateAndFree();
 
-    size_t committed_before = root->total_size_of_committed_pages;
+    size_t committed_before = root->total_size_of_committed_pages_for_testing();
     EXPECT_GT(committed_before, committed_initially);
     PartitionAllocMemoryReclaimer::Instance()->Reclaim();
-    size_t committed_after = root->total_size_of_committed_pages;
+    size_t committed_after = root->total_size_of_committed_pages_for_testing();
 
     EXPECT_LT(committed_after, committed_before);
     EXPECT_LE(committed_initially, committed_after);

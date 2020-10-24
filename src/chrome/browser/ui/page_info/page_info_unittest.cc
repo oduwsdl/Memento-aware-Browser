@@ -18,10 +18,11 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/infobars/mock_infobar_service.h"
 #include "chrome/browser/ssl/stateful_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/ssl/tls_deprecation_test_utils.h"
+#include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_delegate.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
@@ -38,9 +39,12 @@
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/security_state/core/features.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
+#include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/web_contents_tester.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
@@ -148,9 +152,9 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
     ASSERT_TRUE(cert_);
 
     MockInfoBarService::CreateForWebContents(web_contents());
-    content_settings::TabSpecificContentSettings::CreateForWebContents(
+    content_settings::PageSpecificContentSettings::CreateForWebContents(
         web_contents(),
-        std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+        std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
             web_contents()));
 
     // Setup mock ui.
@@ -158,9 +162,18 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
   }
 
   void TearDown() override {
-    ASSERT_TRUE(page_info_.get()) << "No PageInfo instance created.";
+    ASSERT_TRUE(page_info_ || incognito_page_info_)
+        << "No PageInfo instance created.";
+    incognito_web_contents_.reset();
     RenderViewHostTestHarness::TearDown();
     page_info_.reset();
+    incognito_page_info_.reset();
+  }
+
+  TestingProfile::TestingFactories GetTestingFactories() const override {
+    return {
+        {StatefulSSLHostStateDelegateFactory::GetInstance(),
+         StatefulSSLHostStateDelegateFactory::GetDefaultFactoryForTesting()}};
   }
 
   void SetDefaultUIExpectations(MockPageInfoUI* mock_ui) {
@@ -227,12 +240,49 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
     return page_info_.get();
   }
 
+  PageInfo* incognito_page_info() {
+    if (!incognito_page_info_.get()) {
+      // Build the incognito profile manually in order to override testing
+      // factories.
+      TestingProfile::Builder incognito_profile_builder;
+      incognito_profile_builder.AddTestingFactories(GetTestingFactories());
+      incognito_profile_builder.BuildIncognito(profile());
+
+      incognito_web_contents_ =
+          content::WebContentsTester::CreateTestWebContents(
+              profile()->GetPrimaryOTRProfile(), nullptr);
+
+      content_settings::PageSpecificContentSettings::CreateForWebContents(
+          incognito_web_contents_.get(),
+          std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
+              incognito_web_contents_.get()));
+
+      incognito_mock_ui_ = std::make_unique<MockPageInfoUI>();
+      incognito_mock_ui_->set_permission_info_callback_ =
+          base::Bind(&PageInfoTest::SetPermissionInfo, base::Unretained(this));
+
+      auto delegate = std::make_unique<ChromePageInfoDelegate>(
+          incognito_web_contents_.get());
+      delegate->SetSecurityStateForTests(security_level_,
+                                         visible_security_state_);
+      incognito_page_info_ = std::make_unique<PageInfo>(
+          std::move(delegate), incognito_web_contents_.get(), url());
+      incognito_page_info_->InitializeUiState(incognito_mock_ui_.get());
+    }
+    return incognito_page_info_.get();
+  }
+
   security_state::SecurityLevel security_level_;
   security_state::VisibleSecurityState visible_security_state_;
 
  private:
   std::unique_ptr<PageInfo> page_info_;
   std::unique_ptr<MockPageInfoUI> mock_ui_;
+
+  std::unique_ptr<content::WebContents> incognito_web_contents_;
+  std::unique_ptr<PageInfo> incognito_page_info_;
+  std::unique_ptr<MockPageInfoUI> incognito_mock_ui_;
+
   scoped_refptr<net::X509Certificate> cert_;
   GURL url_;
   url::Origin origin_;
@@ -250,6 +300,16 @@ bool PermissionInfoListContainsPermission(const PermissionInfoList& permissions,
   return false;
 }
 
+void ExpectPermissionInfoList(
+    const std::set<ContentSettingsType>& expected_permissions,
+    const PermissionInfoList& permissions) {
+  EXPECT_EQ(expected_permissions.size(), permissions.size());
+  for (ContentSettingsType type : expected_permissions) {
+    EXPECT_TRUE(PermissionInfoListContainsPermission(permissions, type))
+        << "expected: " << static_cast<int>(type);
+  }
+}
+
 }  // namespace
 
 TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
@@ -262,8 +322,8 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // on because this test isn't testing with a default search engine origin.
   expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
 #endif
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
 
   // Change some default-ask settings away from the default.
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
@@ -275,56 +335,99 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_ALLOW);
   expected_visible_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
 
   expected_visible_permissions.insert(ContentSettingsType::POPUPS);
   // Change a default-block setting to a user-preference block instead.
   page_info()->OnSitePermissionChanged(ContentSettingsType::POPUPS,
                                        CONTENT_SETTING_BLOCK);
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
 
   expected_visible_permissions.insert(ContentSettingsType::JAVASCRIPT);
   // Change a default-allow setting away from the default.
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
                                        CONTENT_SETTING_BLOCK);
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
 
   // Make sure changing a setting to its default causes it to show up, since it
   // has been recently changed.
   expected_visible_permissions.insert(ContentSettingsType::MEDIASTREAM_CAMERA);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
                                        CONTENT_SETTING_DEFAULT);
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
 
   // Set the Javascript setting to default should keep it shown.
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
                                        CONTENT_SETTING_DEFAULT);
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
 
   // Change the default setting for Javascript away from the factory default.
   page_info()->GetContentSettings()->SetDefaultContentSetting(
       ContentSettingsType::JAVASCRIPT, CONTENT_SETTING_BLOCK);
   page_info()->PresentSitePermissions();
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
 
   // Change it back to ALLOW, which is its factory default, but has a source
   // from the user preference (i.e. it counts as non-factory default).
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
                                        CONTENT_SETTING_ALLOW);
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
+}
 
-  // Sanity check the correct permissions are being shown.
-  for (ContentSettingsType type : expected_visible_permissions) {
-    EXPECT_TRUE(PermissionInfoListContainsPermission(
-        last_permission_info_list(), type));
-  }
+TEST_F(PageInfoTest, IncognitoPermissionsEmptyByDefault) {
+  incognito_page_info()->PresentSitePermissions();
+  EXPECT_EQ(0u, last_permission_info_list().size());
+}
+
+TEST_F(PageInfoTest, IncognitoPermissionsDontShowAsk) {
+  page_info()->PresentSitePermissions();
+  std::set<ContentSettingsType> expected_permissions;
+  std::set<ContentSettingsType> expected_incognito_permissions;
+#if defined(OS_ANDROID)
+  // Geolocation is always allowed to pass through to Android-specific logic to
+  // check for DSE settings (so expect 1 item), but isn't actually shown later
+  // on because this test isn't testing with a default search engine origin.
+  expected_permissions.insert(ContentSettingsType::GEOLOCATION);
+#endif
+  ExpectPermissionInfoList(expected_permissions, last_permission_info_list());
+
+  // Add some permissions to regular page info.
+  page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
+                                       CONTENT_SETTING_ALLOW);
+
+  page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
+                                       CONTENT_SETTING_BLOCK);
+  expected_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
+  expected_incognito_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
+
+  // Both permissions should show in regular page info.
+  EXPECT_EQ(2u, last_permission_info_list().size());
+
+  // Only the block permissions should show in incognito mode as ALLOW
+  // permissions are inherited as ASK.
+  incognito_page_info()->PresentSitePermissions();
+  ExpectPermissionInfoList(expected_incognito_permissions,
+                           last_permission_info_list());
+
+  // Changing the permission to BLOCK should show it.
+  incognito_page_info()->OnSitePermissionChanged(
+      ContentSettingsType::GEOLOCATION, CONTENT_SETTING_BLOCK);
+  expected_incognito_permissions.insert(ContentSettingsType::GEOLOCATION);
+  ExpectPermissionInfoList(expected_incognito_permissions,
+                           last_permission_info_list());
+
+  // Switching a permission back to default should not hide the permission.
+  incognito_page_info()->OnSitePermissionChanged(
+      ContentSettingsType::GEOLOCATION, CONTENT_SETTING_DEFAULT);
+  ExpectPermissionInfoList(expected_incognito_permissions,
+                           last_permission_info_list());
 }
 
 TEST_F(PageInfoTest, OnPermissionsChanged) {
@@ -1152,7 +1255,13 @@ TEST_F(PageInfoTest, TimeOpenMetrics) {
 
 // Tests that metrics are recorded on a PageInfo for pages with
 // various Safety Tip statuses.
-TEST_F(PageInfoTest, SafetyTipMetrics) {
+// See https://crbug.com/1114659 for why the test is disabled on Android.
+#if defined(OS_ANDROID)
+#define MAYBE_SafetyTipMetrics DISABLED_SafetyTipMetrics
+#else
+#define MAYBE_SafetyTipMetrics SafetyTipMetrics
+#endif
+TEST_F(PageInfoTest, MAYBE_SafetyTipMetrics) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
       security_state::features::kSafetyTipUI);
@@ -1396,13 +1505,18 @@ TEST_F(PageInfoTest, SubresourceFilterSetting_MatchesActivation) {
   ClearPageInfo();
   SetDefaultUIExpectations(mock_ui());
 
-  // Now, simulate activation on that origin, which is encoded by the existence
-  // of the website setting. The setting should then appear in page_info.
-  HostContentSettingsMap* content_settings =
-      HostContentSettingsMapFactory::GetForProfile(profile());
-  content_settings->SetWebsiteSettingDefaultScope(
-      url(), GURL(), ContentSettingsType::ADS_DATA, std::string(),
-      std::make_unique<base::DictionaryValue>());
+  // Now, explicitly set site activation metadata to simulate activation on
+  // that origin, which is encoded by the existence of the website setting. The
+  // setting should then appear in page_info.
+  subresource_filter::SubresourceFilterContentSettingsManager*
+      settings_manager =
+          SubresourceFilterProfileContextFactory::GetForProfile(profile())
+              ->settings_manager();
+  settings_manager->SetSiteMetadataBasedOnActivation(
+      url(), true,
+      subresource_filter::SubresourceFilterContentSettingsManager::
+          ActivationSource::kSafeBrowsing);
+
   page_info();
   EXPECT_TRUE(showing_setting(last_permission_info_list()));
 }

@@ -5,15 +5,16 @@
 #ifndef CHROME_TEST_BASE_TESTING_PROFILE_H_
 #define CHROME_TEST_BASE_TESTING_PROFILE_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/buildflags.h"
@@ -54,7 +55,11 @@ namespace policy {
 class PolicyService;
 class ProfilePolicyConnector;
 class SchemaRegistryService;
+#if defined(OS_CHROMEOS)
+class UserCloudPolicyManagerChromeOS;
+#else
 class UserCloudPolicyManager;
+#endif  // defined(OS_CHROMEOS)
 }  // namespace policy
 
 namespace storage {
@@ -76,6 +81,15 @@ class TestingProfile : public Profile {
   // always "Default", because they are runnining without logged-in user.
   static const char kTestUserProfileDir[];
 
+  // Sets the feature list to enable/disable ephemeral Guest profiles.
+  // Returns true if ephemeral Guest profiles are supported on the platform and
+  // feature list is initialized.
+  // TODO(https://crbug.com/1125474): Expand to cover ChromeOS when ChromeOS
+  // code supports ephemeral Guest profiles.
+  static bool SetScopedFeatureListForEphemeralGuestProfiles(
+      base::test::ScopedFeatureList& scoped_feature_list,
+      bool enabled);
+
   // Default constructor that cannot be used with multi-profiles.
   TestingProfile();
 
@@ -90,6 +104,8 @@ class TestingProfile : public Profile {
   class Builder {
    public:
     Builder();
+    Builder(const Builder&) = delete;
+    Builder& operator=(const Builder&) = delete;
     ~Builder();
 
     // Sets a Delegate to be called back during profile init. This causes the
@@ -137,9 +153,15 @@ class TestingProfile : public Profile {
     // a non-empty string, the profile is supervised.
     void SetSupervisedUserId(const std::string& supervised_user_id);
 
+#if defined(OS_CHROMEOS)
+    void SetUserCloudPolicyManagerChromeOS(
+        std::unique_ptr<policy::UserCloudPolicyManagerChromeOS>
+            user_cloud_policy_manager);
+#else
     void SetUserCloudPolicyManager(
         std::unique_ptr<policy::UserCloudPolicyManager>
             user_cloud_policy_manager);
+#endif  // defined(OS_CHROMEOS)
 
     // Sets the PolicyService to be used by this profile.
     void SetPolicyService(
@@ -176,13 +198,16 @@ class TestingProfile : public Profile {
     bool allows_browser_windows_;
     base::Optional<bool> is_new_profile_;
     std::string supervised_user_id_;
+#if defined(OS_CHROMEOS)
+    std::unique_ptr<policy::UserCloudPolicyManagerChromeOS>
+        user_cloud_policy_manager_;
+#else
     std::unique_ptr<policy::UserCloudPolicyManager> user_cloud_policy_manager_;
+#endif
     std::unique_ptr<policy::PolicyService> policy_service_;
     TestingFactories testing_factories_;
     std::string profile_name_;
     base::Optional<bool> override_policy_connector_is_managed_;
-
-    DISALLOW_COPY_AND_ASSIGN(Builder);
   };
 
   // Multi-profile aware constructor that takes the path to a directory managed
@@ -200,28 +225,30 @@ class TestingProfile : public Profile {
 
   // Full constructor allowing the setting of all possible instance data.
   // Callers should use Builder::Build() instead of invoking this constructor.
-  TestingProfile(const base::FilePath& path,
-                 Delegate* delegate,
+  TestingProfile(
+      const base::FilePath& path,
+      Delegate* delegate,
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-                 scoped_refptr<ExtensionSpecialStoragePolicy> extension_policy,
+      scoped_refptr<ExtensionSpecialStoragePolicy> extension_policy,
 #endif
-                 std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs,
-                 TestingProfile* parent,
-                 bool guest_session,
-                 bool allows_browser_windows,
-                 base::Optional<bool> is_new_profile,
-                 const std::string& supervised_user_id,
-                 std::unique_ptr<policy::UserCloudPolicyManager> policy_manager,
-                 std::unique_ptr<policy::PolicyService> policy_service,
-                 TestingFactories testing_factories,
-                 const std::string& profile_name,
-                 base::Optional<bool> override_policy_connector_is_managed,
-                 base::Optional<OTRProfileID> otr_profile_id);
+      std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs,
+      TestingProfile* parent,
+      bool guest_session,
+      bool allows_browser_windows,
+      base::Optional<bool> is_new_profile,
+      const std::string& supervised_user_id,
+#if defined(OS_CHROMEOS)
+      std::unique_ptr<policy::UserCloudPolicyManagerChromeOS> policy_manager,
+#else
+      std::unique_ptr<policy::UserCloudPolicyManager> policy_manager,
+#endif  // defined(OS_CHROMEOS)
+      std::unique_ptr<policy::PolicyService> policy_service,
+      TestingFactories testing_factories,
+      const std::string& profile_name,
+      base::Optional<bool> override_policy_connector_is_managed,
+      base::Optional<OTRProfileID> otr_profile_id);
 
   ~TestingProfile() override;
-
-  // Creates the favicon service. Consequent calls would recreate the service.
-  void CreateFaviconService();
 
   // !!!!!!!! WARNING: THIS IS GENERALLY NOT SAFE TO CALL! !!!!!!!!
   // This bypasses the BrowserContextDependencyManager, and in particular, it
@@ -230,35 +257,13 @@ class TestingProfile : public Profile {
   // pointers.
   // Instead, use Builder::AddTestingFactory to inject your own factories.
   // !!!!!!!! WARNING: THIS IS GENERALLY NOT SAFE TO CALL! !!!!!!!!
-  // Creates the history service. If |delete_file| is true, the history file is
-  // deleted first, then the HistoryService is created. As TestingProfile
-  // deletes the directory containing the files used by HistoryService, this
-  // only matters if you're recreating the HistoryService.  If |no_db| is true,
-  // the history backend will fail to initialize its database; this is useful
-  // for testing error conditions. Returns true on success.
-  bool CreateHistoryService(bool delete_file, bool no_db) WARN_UNUSED_RESULT;
-
-  // Creates the BookmarkBarModel. If not invoked the bookmark bar model is
-  // NULL. If |delete_file| is true, the bookmarks file is deleted first, then
-  // the model is created. As TestingProfile deletes the directory containing
-  // the files used by HistoryService, the boolean only matters if you're
-  // recreating the BookmarkModel.
-  //
-  // NOTE: this does not block until the bookmarks are loaded. For that use
-  // WaitForBookmarkModelToLoad().
-  void CreateBookmarkModel(bool delete_file);
+  // Creates the history service. Returns true on success.
+  // TODO(crbug.com/1106699): Remove this API and adopt the Builder instead.
+  bool CreateHistoryService() WARN_UNUSED_RESULT;
 
   // Creates a WebDataService. If not invoked, the web data service is NULL.
+  // TODO(crbug.com/1106699): Remove this API and adopt the Builder instead.
   void CreateWebDataService();
-
-  // Blocks until the HistoryService finishes restoring its in-memory cache.
-  // This is NOT invoked from CreateHistoryService.
-  void BlockUntilHistoryIndexIsRefreshed();
-
-  // Blocks until the HistoryBackend is completely destroyed. This is mostly
-  // useful to ensure the destruction tasks do not outlive this class on which
-  // they depend.
-  void BlockUntilHistoryBackendDestroyed();
 
   // Allow setting a profile as Guest after-the-fact to simplify some tests.
   void SetGuestSession(bool guest);
@@ -316,14 +321,10 @@ class TestingProfile : public Profile {
   // Profile
   std::string GetProfileUserName() const override;
 
-  // TODO(https://crbug.com/1033903): Remove the default value.
-  Profile* GetOffTheRecordProfile(
-      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
+  Profile* GetOffTheRecordProfile(const OTRProfileID& otr_profile_id) override;
   std::vector<Profile*> GetAllOffTheRecordProfiles() override;
   void DestroyOffTheRecordProfile(Profile* otr_profile) override;
-  // TODO(https://crbug.com/1033903): Remove the default value.
-  bool HasOffTheRecordProfile(
-      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
+  bool HasOffTheRecordProfile(const OTRProfileID& otr_profile_id) override;
   bool HasAnyOffTheRecordProfile() override;
   Profile* GetOriginalProfile() override;
   const Profile* GetOriginalProfile() const override;
@@ -347,7 +348,7 @@ class TestingProfile : public Profile {
   void set_last_session_exited_cleanly(bool value) {
     last_session_exited_cleanly_ = value;
   }
-  bool IsSameProfile(Profile* profile) override;
+  bool IsSameOrParent(Profile* profile) override;
   base::Time GetStartTime() const override;
   ProfileKey* GetProfileKey() const override;
   policy::SchemaRegistryService* GetPolicySchemaRegistryService() override;
@@ -366,9 +367,9 @@ class TestingProfile : public Profile {
   void set_last_selected_directory(const base::FilePath& path) override;
   bool WasCreatedByVersionOrLater(const std::string& version) override;
   bool IsGuestSession() const override;
-  bool IsNewProfile() override;
+  bool IsNewProfile() const override;
   void SetExitType(ExitType exit_type) override {}
-  ExitType GetLastSessionExitType() override;
+  ExitType GetLastSessionExitType() const override;
   void ConfigureNetworkContextParams(
       bool in_memory,
       const base::FilePath& relative_partition_path,
@@ -393,9 +394,10 @@ class TestingProfile : public Profile {
   GURL GetHomePage() override;
 
   void SetCreationTimeForTesting(base::Time creation_time) override;
-  bool ShouldEnableOutOfBlinkCors() override;
 
   PrefService* GetOffTheRecordPrefs() override;
+
+  void RecordMainFrameNavigation() override {}
 
   void set_profile_name(const std::string& profile_name) {
     profile_name_ = profile_name;
@@ -407,13 +409,6 @@ class TestingProfile : public Profile {
   }
 
  private:
-  // We use a temporary directory to store testing profile data. This
-  // must be declared before anything that may make use of the
-  // directory so as to ensure files are closed before cleanup.  In a
-  // multi-profile environment, this is invalid and the directory is
-  // managed by the TestingProfileManager.
-  base::ScopedTempDir temp_dir_;
-
   // Called when profile is deleted.
   ProfileDestructionCallback profile_destruction_callback_;
 
@@ -429,9 +424,6 @@ class TestingProfile : public Profile {
   sync_preferences::TestingPrefServiceSyncable* testing_prefs_;
 
  private:
-  // Creates a temporary directory for use by this profile.
-  void CreateTempProfileDir();
-
   // Common initialization between the two constructors.
   void Init();
 
@@ -497,7 +489,12 @@ class TestingProfile : public Profile {
   content::MockResourceContext* resource_context_;
 
   std::unique_ptr<policy::SchemaRegistryService> schema_registry_service_;
+#if defined(OS_CHROMEOS)
+  std::unique_ptr<policy::UserCloudPolicyManagerChromeOS>
+      user_cloud_policy_manager_;
+#else
   std::unique_ptr<policy::UserCloudPolicyManager> user_cloud_policy_manager_;
+#endif  // defined(OS_CHROMEOS)
   std::unique_ptr<policy::ProfilePolicyConnector> profile_policy_connector_;
 
   // Weak pointer to a delegate for indicating that a profile was created.

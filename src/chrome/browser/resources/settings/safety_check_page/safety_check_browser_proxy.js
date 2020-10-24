@@ -88,6 +88,7 @@ export const SafetyCheckSafeBrowsingStatus = {
   DISABLED_BY_EXTENSION: 4,
   ENABLED_STANDARD: 5,
   ENABLED_ENHANCED: 6,
+  ENABLED_STANDARD_AVAILABLE_ENHANCED: 7,
 };
 
 /**
@@ -113,23 +114,16 @@ export const SafetyCheckExtensionsStatus = {
  * @enum {number}
  */
 export const SafetyCheckChromeCleanerStatus = {
-  CHECKING: 0,
-  INITIAL: 1,
-  REPORTER_FOUND_NOTHING: 2,
-  REPORTER_FAILED: 3,
-  SCANNING_FOUND_NOTHING: 4,
-  SCANNING_FAILED: 5,
-  CONNECTION_LOST: 6,
-  USER_DECLINED_CLEANUP: 7,
-  CLEANING_FAILED: 8,
-  CLEANING_SUCCEEDED: 9,
-  CLEANER_DOWNLOAD_FAILED: 10,
-  REPORTER_RUNNING: 11,
-  SCANNING: 12,
-  INFECTED: 13,
-  CLEANING: 14,
-  REBOOT_REQUIRED: 15,
-  DISABLED_BY_ADMIN: 16,
+  HIDDEN: 0,
+  CHECKING: 1,
+  INFECTED: 2,
+  REBOOT_REQUIRED: 3,
+  SCANNING_FOR_UWS: 4,
+  REMOVING_UWS: 5,
+  DISABLED_BY_ADMIN: 6,
+  ERROR: 7,
+  NO_UWS_FOUND_WITH_TIMESTAMP: 8,
+  NO_UWS_FOUND_WITHOUT_TIMESTAMP: 9,
 };
 
 /** @interface */
@@ -139,7 +133,8 @@ export class SafetyCheckBrowserProxy {
 
   /**
    * Get the display string for the safety check parent, showing how long ago
-   * safety check last ran.`
+   * safety check last ran. Also triggers string updates to be sent to all SC
+   * children that have timestamp-based display strings.
    * @return {!Promise<string>}
    */
   getParentRanDisplayString() {}

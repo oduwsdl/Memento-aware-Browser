@@ -13,6 +13,8 @@ import android.view.ViewGroup;
 import android.widget.AbsListView;
 import android.widget.ListView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.view.ViewCompat;
 
@@ -29,8 +31,8 @@ import java.util.ArrayList;
 @VisibleForTesting
 public class OmniboxSuggestionsList
         extends ListView implements OmniboxSuggestionsDropdown, AbsListView.OnScrollListener {
-    private final OmniboxSuggestionsDropdownDelegate mDropdownDelegate;
-    private OmniboxSuggestionsDropdown.Observer mObserver;
+    private final @NonNull OmniboxSuggestionsDropdownDelegate mDropdownDelegate;
+    private @Nullable OmniboxSuggestionsDropdown.Observer mObserver;
 
     private final int[] mTempMeasureSpecs = new int[2];
 
@@ -75,8 +77,13 @@ public class OmniboxSuggestionsList
     }
 
     @Override
-    public int getItemCount() {
+    public int getDropdownItemViewCountForTest() {
         return getCount();
+    }
+
+    @Override
+    public View getDropdownItemViewForTest(int index) {
+        return getChildAt(index);
     }
 
     @Override
@@ -85,6 +92,12 @@ public class OmniboxSuggestionsList
 
         setVisibility(VISIBLE);
         if (getSelectedItemPosition() != 0) setSelection(0);
+    }
+
+    @Override
+    public void hide() {
+        if (getVisibility() != VISIBLE) return;
+        setVisibility(GONE);
     }
 
     @Override
@@ -165,9 +178,29 @@ public class OmniboxSuggestionsList
             AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {}
 
     @Override
+    protected boolean overScrollBy(int deltaX, int deltaY, int scrollX, int scrollY, int rangeX,
+            int rangeY, int maxX, int maxY, boolean isTouchEvent) {
+        if (scrollY == 0 && deltaY < 0) {
+            mObserver.onSuggestionDropdownOverscrolledToTop();
+        }
+        return super.overScrollBy(
+                deltaX, deltaY, scrollX, scrollY, rangeX, rangeY, maxX, maxY, isTouchEvent);
+    }
+
+    @Override
     public void onScrollStateChanged(AbsListView view, int scrollState) {
         if (scrollState == SCROLL_STATE_TOUCH_SCROLL && mObserver != null) {
             mObserver.onSuggestionDropdownScroll();
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        final int eventType = ev.getActionMasked();
+        if ((eventType == MotionEvent.ACTION_UP || eventType == MotionEvent.ACTION_DOWN)
+                && mObserver != null) {
+            mObserver.onGesture(eventType == MotionEvent.ACTION_UP, ev.getEventTime());
+        }
+        return super.dispatchTouchEvent(ev);
     }
 }

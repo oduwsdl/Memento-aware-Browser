@@ -13,6 +13,7 @@ import android.widget.TextView;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -25,15 +26,14 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.chrome.browser.ui.messages.infobar.SimpleConfirmInfoBarBuilder;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.InfoBarUtil;
+import org.chromium.components.infobars.InfoBar;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -52,8 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class InfoBarContainerTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final String MESSAGE_TEXT = "Ding dong. Woof. Translate french? Bears!";
 
@@ -324,12 +323,7 @@ public class InfoBarContainerTest {
 
         // A layout must occur to recalculate the transparent region.
         CriteriaHelper.pollUiThread(
-                new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return layoutCount.get() > 0;
-                    }
-                });
+                () -> Criteria.checkThat(layoutCount.get(), Matchers.greaterThan(0)));
 
         final Rect fullDisplayFrame = new Rect();
         final Rect fullDisplayFrameMinusContainer = new Rect();
@@ -363,12 +357,7 @@ public class InfoBarContainerTest {
 
         // A layout must occur to recalculate the transparent region.
         CriteriaHelper.pollUiThread(
-                new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return layoutCount.get() > 0;
-                    }
-                });
+                () -> Criteria.checkThat(layoutCount.get(), Matchers.greaterThan(0)));
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override

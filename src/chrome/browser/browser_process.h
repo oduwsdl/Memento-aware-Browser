@@ -54,6 +54,11 @@ namespace subresource_filter {
 class RulesetService;
 }
 
+namespace federated_learning {
+class FlocBlocklistService;
+class FlocSortingLshClustersService;
+}
+
 namespace variations {
 class VariationsService;
 }
@@ -215,6 +220,15 @@ class BrowserProcess {
   virtual subresource_filter::RulesetService*
   subresource_filter_ruleset_service() = 0;
 
+  // Returns the service providing versioned storage for a blocklist of flocs.
+  virtual federated_learning::FlocBlocklistService*
+  floc_blocklist_service() = 0;
+
+  // Returns the service providing versioned storage for a list of limit values
+  // for calculating the floc based on SortingLSH.
+  virtual federated_learning::FlocSortingLshClustersService*
+  floc_sorting_lsh_clusters_service() = 0;
+
   // Returns the service used to provide hints for what optimizations can be
   // performed on slow page loads.
   virtual optimization_guide::OptimizationGuideService*
@@ -248,7 +262,10 @@ class BrowserProcess {
 
   virtual network_time::NetworkTimeTracker* network_time_tracker() = 0;
 
+#if !defined(OS_ANDROID)
+  // Avoid using this. Prefer using GCMProfileServiceFactory.
   virtual gcm::GCMDriver* gcm_driver() = 0;
+#endif
 
   // Returns the tab manager. On non-supported platforms, this returns null.
   // TODO(sebmarchand): Update callers to

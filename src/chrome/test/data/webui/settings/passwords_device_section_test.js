@@ -4,25 +4,36 @@
 
 /** @fileoverview Runs the Polymer tests for the PasswordsDeviceSection page. */
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {MultiStorePasswordUiEntry, PasswordManagerImpl, PasswordManagerProxy} from 'chrome://settings/settings.js';
+import {MultiStorePasswordUiEntry, PasswordManagerImpl, Router, routes, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
 import {createMultiStorePasswordEntry, createPasswordEntry} from 'chrome://test/settings/passwords_and_autofill_fake_data.js';
 import {simulateStoredAccounts, simulateSyncStatus} from 'chrome://test/settings/sync_test_util.m.js';
 import {TestPasswordManagerProxy} from 'chrome://test/settings/test_password_manager_proxy.js';
+import {TestSyncBrowserProxy} from 'chrome://test/settings/test_sync_browser_proxy.m.js';
 
 /**
- * Sets the fake data and creates the element for testing.
+ * Sets the fake password data, the appropriate route and creates the element.
+ * @param {!TestSyncBrowserProxy} syncBrowserProxy
  * @param {!TestPasswordManagerProxy} passwordManager
  * @param {!Array<!chrome.passwordsPrivate.PasswordUiEntry>} passwordList
  * @return {!Object}
  */
-function createPasswordsDeviceSection(passwordManager, passwordList) {
+async function createPasswordsDeviceSection(
+    syncBrowserProxy, passwordManager, passwordList) {
   passwordManager.data.passwords = passwordList;
+  Router.getInstance().setCurrentRoute(
+      routes.DEVICE_PASSWORDS, new URLSearchParams());
   const passwordsDeviceSection =
       document.createElement('passwords-device-section');
   document.body.appendChild(passwordsDeviceSection);
   flush();
+
+  // Wait for the initial state of sync and account storage opt in to be queried
+  // since this could cause a redirect.
+  await syncBrowserProxy.whenCalled('getSyncStatus');
+  await syncBrowserProxy.whenCalled('getStoredAccounts');
+  await passwordManager.whenCalled('isOptedInForAccountStorage');
+
   return passwordsDeviceSection;
 }
 
@@ -51,33 +62,32 @@ function validatePasswordsSubsection(subsection, expectedPasswords) {
 suite('PasswordsDeviceSection', function() {
   /** @type {TestPasswordManagerProxy} */
   let passwordManager = null;
-
-  suiteSetup(function() {
-    // Enable feature flag.
-    loadTimeData.overrideValues({enableAccountStorage: true});
-  });
+  /** @type {TestSyncBrowserProxy} */
+  let syncBrowserProxy = null;
+  /** @type {!settings.StoredAccount} */
+  const SIGNED_IN_ACCOUNT = {email: 'john@gmail.com'};
 
   setup(function() {
     PolymerTest.clearBody();
     passwordManager = new TestPasswordManagerProxy();
     PasswordManagerImpl.instance_ = passwordManager;
+    syncBrowserProxy = new TestSyncBrowserProxy();
+    SyncBrowserProxyImpl.instance_ = syncBrowserProxy;
 
     // The user only enters this page when they are eligible (signed-in but not
     // syncing) and opted-in to account storage.
-    simulateStoredAccounts([{
-      fullName: 'john doe',
-      givenName: 'john',
-      email: 'john@gmail.com',
-    }]);
-    simulateSyncStatus({signedIn: false});
-    passwordManager.setIsOptedInForAccountStorageAndNotify(false);
+    syncBrowserProxy.storedAccounts = [SIGNED_IN_ACCOUNT];
+    simulateStoredAccounts(syncBrowserProxy.storedAccounts);
+    syncBrowserProxy.syncStatus = {signedIn: false};
+    simulateSyncStatus(syncBrowserProxy.syncStatus);
+    passwordManager.setIsOptedInForAccountStorageAndNotify(true);
   });
 
   // Test verifies that the fallback text is displayed when passwords are not
   // present.
-  test('verifyPasswordsEmptySubsections', function() {
-    const passwordsDeviceSection =
-        createPasswordsDeviceSection(passwordManager, []);
+  test('verifyPasswordsEmptySubsections', async function() {
+    const passwordsDeviceSection = await createPasswordsDeviceSection(
+        syncBrowserProxy, passwordManager, []);
     assertFalse(passwordsDeviceSection.shadowRoot
                     .querySelector('#noDeviceOnlyPasswordsLabel')
                     .hidden);
@@ -88,7 +98,7 @@ suite('PasswordsDeviceSection', function() {
 
   // Test verifies that account passwords are not displayed, whereas
   // device-only and device-and-account ones end up in the correct subsection.
-  test('verifyPasswordsFilledSubsections', function() {
+  test('verifyPasswordsFilledSubsections', async function() {
     const devicePassword = createPasswordEntry(
         {username: 'device', id: 0, fromAccountStore: false});
     const accountPassword = createPasswordEntry(
@@ -101,7 +111,7 @@ suite('PasswordsDeviceSection', function() {
 
     // Shuffle entries a little.
     const passwordsDeviceSection =
-        createPasswordsDeviceSection(passwordManager, [
+        await createPasswordsDeviceSection(syncBrowserProxy, passwordManager, [
           devicePassword,
           deviceCopyPassword,
           accountPassword,
@@ -127,14 +137,14 @@ suite('PasswordsDeviceSection', function() {
 
   // Test verifies that removing the device copy of a duplicated password
   // removes it from both lists.
-  test('verifyPasswordListRemoveDeviceCopy', function() {
+  test('verifyPasswordListRemoveDeviceCopy', async function() {
     const passwordList = [
       createPasswordEntry({frontendId: 42, id: 10, fromAccountStore: true}),
       createPasswordEntry({frontendId: 42, id: 20, fromAccountStore: false}),
     ];
 
-    const passwordsDeviceSection =
-        createPasswordsDeviceSection(passwordManager, passwordList);
+    const passwordsDeviceSection = await createPasswordsDeviceSection(
+        syncBrowserProxy, passwordManager, passwordList);
     validatePasswordsSubsection(
         passwordsDeviceSection.$.deviceOnlyPasswordList, []);
     validatePasswordsSubsection(
@@ -155,14 +165,14 @@ suite('PasswordsDeviceSection', function() {
 
   // Test verifies that removing the account copy of a duplicated password
   // moves it to the other subsection.
-  test('verifyPasswordListRemoveDeviceCopy', function() {
+  test('verifyPasswordListRemoveDeviceCopy', async function() {
     const passwordList = [
       createPasswordEntry({frontendId: 42, id: 10, fromAccountStore: true}),
       createPasswordEntry({frontendId: 42, id: 20, fromAccountStore: false}),
     ];
 
-    const passwordsDeviceSection =
-        createPasswordsDeviceSection(passwordManager, passwordList);
+    const passwordsDeviceSection = await createPasswordsDeviceSection(
+        syncBrowserProxy, passwordManager, passwordList);
     validatePasswordsSubsection(
         passwordsDeviceSection.$.deviceOnlyPasswordList, []);
     validatePasswordsSubsection(
@@ -182,18 +192,52 @@ suite('PasswordsDeviceSection', function() {
         passwordsDeviceSection.$.deviceAndAccountPasswordList, []);
   });
 
-  // Test verifies that the overflow menu offers an option to move a password
-  // to the account and that it has the right text.
-  test('hasMoveToAccountOption', function() {
-    const passwordsDeviceSection =
-        createPasswordsDeviceSection(passwordManager, [], []);
-    const moveToAccountButton =
-        passwordsDeviceSection.$.passwordsListHandler.$$(
-            '#menuMovePasswordToAccount');
-    assertTrue(!!moveToAccountButton);
-    assertEquals(
-        passwordsDeviceSection.i18n('movePasswordToAccount'),
-        moveToAccountButton.innerText);
+  // Test checks that when the overflow menu is opened for any password not
+  // corresponding to the first signed-in account, an option to move it to that
+  // account is shown.
+  test(
+      'hasMoveToAccountOptionIfIsNotSignedInAccountPassword', async function() {
+        const nonGooglePasswordWithSameEmail = createPasswordEntry(
+            {username: SIGNED_IN_ACCOUNT.email, url: 'not-google.com'});
+        const googlePasswordWithDifferentEmail = createPasswordEntry(
+            {username: 'another-user', url: 'accounts.google.com'});
+        const passwordsDeviceSection = await createPasswordsDeviceSection(
+            syncBrowserProxy, passwordManager,
+            [nonGooglePasswordWithSameEmail, googlePasswordWithDifferentEmail]);
+        const passwordElements =
+            passwordsDeviceSection.root.querySelectorAll('password-list-item');
+
+        passwordElements[0].$.moreActionsButton.click();
+        flush();
+        let moveToAccountOption = passwordsDeviceSection.$.passwordsListHandler
+                                      .$.menuMovePasswordToAccount;
+        assertFalse(moveToAccountOption.hidden);
+
+        passwordsDeviceSection.$.passwordsListHandler.$.menu.close();
+
+        passwordElements[1].$.moreActionsButton.click();
+        flush();
+        moveToAccountOption = passwordsDeviceSection.$.passwordsListHandler.$
+                                  .menuMovePasswordToAccount;
+        assertFalse(moveToAccountOption.hidden);
+      });
+
+  // Test checks that when the overflow menu is opened for the password
+  // corresponding to the first signed-in account, no option to move it to the
+  // same account is shown.
+  test('hasNoMoveToAccountOptionIfIsSignedInAccountPassword', async function() {
+    const signedInGoogleAccountPassword = createPasswordEntry(
+        {username: SIGNED_IN_ACCOUNT.email, url: 'accounts.google.com'});
+    const passwordsDeviceSection = await createPasswordsDeviceSection(
+        syncBrowserProxy, passwordManager, [signedInGoogleAccountPassword]);
+    const [password] =
+        passwordsDeviceSection.root.querySelectorAll('password-list-item');
+
+    password.$.moreActionsButton.click();
+    flush();
+    const moveToAccountOption = passwordsDeviceSection.$.passwordsListHandler.$
+                                    .menuMovePasswordToAccount;
+    assertTrue(moveToAccountOption.hidden);
   });
 
 
@@ -205,8 +249,8 @@ suite('PasswordsDeviceSection', function() {
         {user: 'both', id: 2, frontendId: 42, fromAccountStore: true});
     const deviceCopy = createPasswordEntry(
         {user: 'both', id: 1, frontendId: 42, fromAccountStore: false});
-    const passwordsDeviceSection = createPasswordsDeviceSection(
-        passwordManager, [deviceCopy, accountCopy], []);
+    const passwordsDeviceSection = await createPasswordsDeviceSection(
+        syncBrowserProxy, passwordManager, [deviceCopy, accountCopy]);
 
     // At first the dialog is not shown.
     assertFalse(!!passwordsDeviceSection.$.passwordsListHandler.$$(
@@ -216,9 +260,8 @@ suite('PasswordsDeviceSection', function() {
     // dialog is now open.
     const [password] =
         passwordsDeviceSection.root.querySelectorAll('password-list-item');
-    password.$.passwordMenu.click();
-    passwordsDeviceSection.$.passwordsListHandler
-        .$$('#menuMovePasswordToAccount')
+    password.$.moreActionsButton.click();
+    passwordsDeviceSection.$.passwordsListHandler.$.menuMovePasswordToAccount
         .click();
     flush();
     const moveToAccountDialog =
@@ -230,6 +273,36 @@ suite('PasswordsDeviceSection', function() {
     // for the device copy. Verify the dialog disappears.
     moveToAccountDialog.$.moveButton.click();
     const movedId = await passwordManager.whenCalled('movePasswordToAccount');
-    assertEquals(deviceCopy.id, movedId);
+    assertEquals(deviceCopy.id, movedId[0]);
+  });
+
+  // Test verifies that Chrome navigates to the standard passwords page if the
+  // user enables sync.
+  test('leavesPageIfSyncIsEnabled', async function() {
+    await createPasswordsDeviceSection(syncBrowserProxy, passwordManager, []);
+    assertEquals(Router.getInstance().currentRoute, routes.DEVICE_PASSWORDS);
+    simulateSyncStatus({signedIn: true});
+    flush();
+    assertEquals(Router.getInstance().currentRoute, routes.PASSWORDS);
+  });
+
+  // Test verifies that Chrome navigates to the standard passwords page if the
+  // user signs out.
+  test('leavesPageIfUserSignsOut', async function() {
+    await createPasswordsDeviceSection(syncBrowserProxy, passwordManager, []);
+    assertEquals(Router.getInstance().currentRoute, routes.DEVICE_PASSWORDS);
+    simulateStoredAccounts([]);
+    flush();
+    assertEquals(Router.getInstance().currentRoute, routes.PASSWORDS);
+  });
+
+  // Test verifies that Chrome navigates to the standard passwords page if the
+  // user opts out of the account-scoped password storage.
+  test('leavesPageIfUserOptsOut', async function() {
+    await createPasswordsDeviceSection(syncBrowserProxy, passwordManager, []);
+    assertEquals(Router.getInstance().currentRoute, routes.DEVICE_PASSWORDS);
+    passwordManager.setIsOptedInForAccountStorageAndNotify(false);
+    flush();
+    assertEquals(Router.getInstance().currentRoute, routes.PASSWORDS);
   });
 });

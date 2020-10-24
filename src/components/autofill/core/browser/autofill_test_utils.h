@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "components/autofill/core/browser/autofill_field.h"
+#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
@@ -31,6 +32,26 @@ class AutofillProfile;
 class AutofillTable;
 struct FormData;
 struct FormFieldData;
+struct FormDataPredictions;
+struct FormFieldDataPredictions;
+
+// Defined by pair-wise equality of all members.
+bool operator==(const FormFieldDataPredictions& a,
+                const FormFieldDataPredictions& b);
+
+inline bool operator!=(const FormFieldDataPredictions& a,
+                       const FormFieldDataPredictions& b) {
+  return !(a == b);
+}
+
+// Holds iff the underlying FormDatas sans field values are equal and the
+// remaining members are pairwise equal.
+bool operator==(const FormDataPredictions& a, const FormDataPredictions& b);
+
+inline bool operator!=(const FormDataPredictions& a,
+                       const FormDataPredictions& b) {
+  return !(a == b);
+}
 
 // Common utilities shared amongst Autofill tests.
 namespace test {
@@ -162,6 +183,13 @@ CreditCardCloudTokenData GetCreditCardCloudTokenData1();
 // one above.
 CreditCardCloudTokenData GetCreditCardCloudTokenData2();
 
+// Returns an autofill card linked offer data full of dummy info.
+AutofillOfferData GetCardLinkedOfferData1();
+
+// Returns an autofill card linked offer data full of dummy info, different from
+// the one above.
+AutofillOfferData GetCardLinkedOfferData2();
+
 // A unit testing utility that is common to a number of the Autofill unit
 // tests.  |SetProfileInfo| provides a quick way to populate a profile with
 // c-strings.
@@ -178,7 +206,8 @@ void SetProfileInfo(AutofillProfile* profile,
                     const char* state,
                     const char* zipcode,
                     const char* country,
-                    const char* phone);
+                    const char* phone,
+                    bool finalize = true);
 
 // This one doesn't require the |dependent_locality|.
 void SetProfileInfo(AutofillProfile* profile,
@@ -193,7 +222,8 @@ void SetProfileInfo(AutofillProfile* profile,
                     const char* state,
                     const char* zipcode,
                     const char* country,
-                    const char* phone);
+                    const char* phone,
+                    bool finalize = true);
 
 void SetProfileInfoWithGuid(AutofillProfile* profile,
                             const char* guid,
@@ -208,7 +238,8 @@ void SetProfileInfoWithGuid(AutofillProfile* profile,
                             const char* state,
                             const char* zipcode,
                             const char* country,
-                            const char* phone);
+                            const char* phone,
+                            bool finalize = true);
 
 // A unit testing utility that is common to a number of the Autofill unit
 // tests.  |SetCreditCardInfo| provides a quick way to populate a credit card
@@ -289,8 +320,8 @@ void FillQueryField(AutofillPageQueryRequest_Form_Field* field,
 // FormStructure::ParseApiQueryResponse().
 //
 // Perhaps a neater way would be to move this to TestFormStructure.
-FormAndFieldSignatures GetEncodedSignatures(const FormStructure& form);
-FormAndFieldSignatures GetEncodedSignatures(
+std::vector<FormSignature> GetEncodedSignatures(const FormStructure& form);
+std::vector<FormSignature> GetEncodedSignatures(
     const std::vector<FormStructure*>& forms);
 
 // Calls the required functions on the given external delegate to cause the

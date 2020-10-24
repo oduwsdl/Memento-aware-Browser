@@ -44,9 +44,15 @@ DeepScanningFailureModalDialog::DeepScanningFailureModalDialog(
                      IDS_DEEP_SCANNING_TIMED_OUT_DIALOG_CANCEL_BUTTON));
   SetAcceptCallback(std::move(accept_callback));
   SetCancelCallback(std::move(cancel_callback));
-  open_now_button_ = SetExtraView(views::MdTextButton::Create(
-      this, l10n_util::GetStringUTF16(
-                IDS_DEEP_SCANNING_INFO_DIALOG_OPEN_NOW_BUTTON)));
+  SetExtraView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(
+          [](DeepScanningFailureModalDialog* dialog) {
+            std::move(dialog->open_now_callback_).Run();
+            dialog->CancelDialog();
+          },
+          base::Unretained(this)),
+      l10n_util::GetStringUTF16(
+          IDS_DEEP_SCANNING_INFO_DIALOG_OPEN_NOW_BUTTON)));
 
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::TEXT, views::TEXT));
@@ -63,8 +69,7 @@ DeepScanningFailureModalDialog::DeepScanningFailureModalDialog(
   // Add the message label.
   auto label = std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(IDS_DEEP_SCANNING_TIMED_OUT_DIALOG_MESSAGE),
-      views::style::CONTEXT_MESSAGE_BOX_BODY_TEXT,
-      views::style::STYLE_SECONDARY);
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_SECONDARY);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->SetMultiLine(true);
   label->SizeToFit(kMaxMessageWidth);
@@ -85,14 +90,6 @@ bool DeepScanningFailureModalDialog::ShouldShowCloseButton() const {
 
 ui::ModalType DeepScanningFailureModalDialog::GetModalType() const {
   return ui::MODAL_TYPE_CHILD;
-}
-
-void DeepScanningFailureModalDialog::ButtonPressed(views::Button* sender,
-                                                   const ui::Event& event) {
-  if (sender == open_now_button_) {
-    std::move(open_now_callback_).Run();
-    CancelDialog();
-  }
 }
 
 }  // namespace safe_browsing

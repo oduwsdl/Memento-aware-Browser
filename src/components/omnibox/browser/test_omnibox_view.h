@@ -7,7 +7,6 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
@@ -22,10 +21,13 @@ class TestOmniboxView : public OmniboxView {
   explicit TestOmniboxView(OmniboxEditController* controller)
       : OmniboxView(controller, nullptr) {}
 
+  TestOmniboxView(const TestOmniboxView&) = delete;
+  TestOmniboxView& operator=(const TestOmniboxView&) = delete;
+
   void SetModel(std::unique_ptr<OmniboxEditModel> model);
 
-  const base::string16& inline_autocomplete_text() const {
-    return inline_autocomplete_text_;
+  const base::string16& inline_autocompletion() const {
+    return inline_autocompletion_;
   }
 
   static State CreateState(std::string text,
@@ -62,7 +64,7 @@ class TestOmniboxView : public OmniboxView {
                                    bool save_original_selection,
                                    bool notify_text_changed) override;
   void OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
-                                            size_t user_text_start,
+                                            std::vector<gfx::Range> selections,
                                             size_t user_text_length) override;
   void OnInlineAutocompleteTextCleared() override;
   void OnRevertTemporaryText(const base::string16& display_text,
@@ -80,11 +82,9 @@ class TestOmniboxView : public OmniboxView {
 
  private:
   base::string16 text_;
-  base::string16 inline_autocomplete_text_;
+  base::string16 inline_autocompletion_;
   gfx::Range selection_;
   gfx::Range saved_temporary_selection_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestOmniboxView);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_TEST_OMNIBOX_VIEW_H_

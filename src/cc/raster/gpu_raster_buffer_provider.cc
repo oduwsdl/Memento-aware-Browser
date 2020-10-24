@@ -7,7 +7,9 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -32,9 +34,10 @@
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkSurface.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "ui/gfx/geometry/axis_transform2d.h"
 #include "url/gurl.h"
 
@@ -77,8 +80,7 @@ class ScopedSkSurfaceForUnpremultiplyAndDither {
                                                      intermediate_size.height(),
                                                      std::move(color_space));
     SkSurfaceProps surface_props =
-        viz::ClientResourceProvider::ScopedSkSurface::ComputeSurfaceProps(
-            can_use_lcd_text);
+        skia::LegacyDisplayGlobals::ComputeSurfaceProps(can_use_lcd_text);
     surface_ = SkSurface::MakeRenderTarget(
         context_provider->GrContext(), SkBudgeted::kNo, n32Info,
         msaa_sample_count, kTopLeft_GrSurfaceOrigin, &surface_props);
@@ -138,8 +140,9 @@ static void RasterizeSourceOOP(
                      gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
     if (texture_is_overlay_candidate)
       flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
-    *mailbox = sii->CreateSharedImage(resource_format, resource_size,
-                                      color_space, flags);
+    *mailbox = sii->CreateSharedImage(
+        resource_format, resource_size, color_space, kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType, flags, gpu::kNullSurfaceHandle);
     ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
   } else {
     ri->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
@@ -192,8 +195,9 @@ static void RasterizeSource(
                      gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT;
     if (texture_is_overlay_candidate)
       flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
-    *mailbox = sii->CreateSharedImage(resource_format, resource_size,
-                                      color_space, flags);
+    *mailbox = sii->CreateSharedImage(
+        resource_format, resource_size, color_space, kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType, flags, gpu::kNullSurfaceHandle);
     ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
   } else {
     // Wait on the SyncToken that was created on the compositor thread after
@@ -214,7 +218,9 @@ static void RasterizeSource(
     if (!unpremultiply_and_dither) {
       scoped_surface.emplace(context_provider->GrContext(), sk_color_space,
                              texture_id, texture_target, resource_size,
-                             resource_format, playback_settings.use_lcd_text,
+                             resource_format,
+                             skia::LegacyDisplayGlobals::ComputeSurfaceProps(
+                                 playback_settings.use_lcd_text),
                              playback_settings.msaa_sample_count);
       surface = scoped_surface->surface();
     } else {
@@ -352,6 +358,11 @@ void GpuRasterBufferProvider::RasterBufferImpl::Playback(
       depends_on_hardware_accelerated_webp_candidates_);
 }
 
+bool GpuRasterBufferProvider::RasterBufferImpl::
+    SupportsBackgroundThreadPriority() const {
+  return true;
+}
+
 GpuRasterBufferProvider::GpuRasterBufferProvider(
     viz::ContextProvider* compositor_context_provider,
     viz::RasterContextProvider* worker_context_provider,
@@ -369,7 +380,7 @@ GpuRasterBufferProvider::GpuRasterBufferProvider(
       unpremultiply_and_dither_low_bit_depth_tiles_(
           unpremultiply_and_dither_low_bit_depth_tiles),
       enable_oop_rasterization_(enable_oop_rasterization),
-      random_generator_((uint32_t)base::RandUint64()),
+      random_generator_(static_cast<uint32_t>(base::RandUint64())),
       bernoulli_distribution_(raster_metric_probability) {
   DCHECK(compositor_context_provider);
   DCHECK(worker_context_provider);

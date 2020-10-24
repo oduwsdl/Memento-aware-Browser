@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "include/cppgc/internal/pointer-policies.h"
-#include "src/heap/cppgc/heap-object-header-inl.h"
 #include "src/heap/cppgc/heap-object-header.h"
 #include "src/heap/cppgc/marker.h"
 #include "test/unittests/heap/cppgc/tests.h"
@@ -22,35 +21,35 @@ namespace {
 
 class IncrementalMarkingScope {
  public:
-  explicit IncrementalMarkingScope(Marker* marker) : marker_(marker) {
-    marker_->StartMarking(kIncrementalConfig);
-  }
+  explicit IncrementalMarkingScope(MarkerBase* marker) : marker_(marker) {}
 
   ~IncrementalMarkingScope() V8_NOEXCEPT {
-    marker_->FinishMarking(kIncrementalConfig);
+    marker_->FinishMarking(kIncrementalConfig.stack_state);
   }
 
- private:
   static constexpr Marker::MarkingConfig kIncrementalConfig{
       Marker::MarkingConfig::CollectionType::kMajor,
       Marker::MarkingConfig::StackState::kNoHeapPointers,
       Marker::MarkingConfig::MarkingType::kIncremental};
 
-  Marker* marker_;
+ private:
+  MarkerBase* marker_;
 };
 
 constexpr Marker::MarkingConfig IncrementalMarkingScope::kIncrementalConfig;
 
 class ExpectWriteBarrierFires final : private IncrementalMarkingScope {
  public:
-  ExpectWriteBarrierFires(Marker* marker, std::initializer_list<void*> objects)
+  ExpectWriteBarrierFires(MarkerBase* marker,
+                          std::initializer_list<void*> objects)
       : IncrementalMarkingScope(marker),
-        marking_worklist_(marker->marking_worklist(), Marker::kMutatorThreadId),
-        write_barrier_worklist_(marker->write_barrier_worklist(),
-                                Marker::kMutatorThreadId),
+        marking_worklist_(
+            marker->MutatorMarkingStateForTesting().marking_worklist()),
+        write_barrier_worklist_(
+            marker->MutatorMarkingStateForTesting().write_barrier_worklist()),
         objects_(objects) {
-    EXPECT_TRUE(marking_worklist_.IsGlobalPoolEmpty());
-    EXPECT_TRUE(write_barrier_worklist_.IsGlobalPoolEmpty());
+    EXPECT_TRUE(marking_worklist_.IsGlobalEmpty());
+    EXPECT_TRUE(write_barrier_worklist_.IsGlobalEmpty());
     for (void* object : objects) {
       headers_.push_back(&HeapObjectHeader::FromPayload(object));
       EXPECT_FALSE(headers_.back()->IsMarked());
@@ -59,7 +58,7 @@ class ExpectWriteBarrierFires final : private IncrementalMarkingScope {
 
   ~ExpectWriteBarrierFires() V8_NOEXCEPT {
     {
-      Marker::MarkingItem item;
+      MarkingWorklists::MarkingItem item;
       while (marking_worklist_.Pop(&item)) {
         auto pos = std::find(objects_.begin(), objects_.end(),
                              item.base_object_payload);
@@ -78,27 +77,28 @@ class ExpectWriteBarrierFires final : private IncrementalMarkingScope {
       EXPECT_TRUE(header->IsMarked());
       header->Unmark();
     }
-    EXPECT_TRUE(marking_worklist_.IsGlobalPoolEmpty());
-    EXPECT_TRUE(write_barrier_worklist_.IsGlobalPoolEmpty());
+    EXPECT_TRUE(marking_worklist_.IsGlobalEmpty());
+    EXPECT_TRUE(write_barrier_worklist_.IsGlobalEmpty());
   }
 
  private:
-  Marker::MarkingWorklist::View marking_worklist_;
-  Marker::WriteBarrierWorklist::View write_barrier_worklist_;
+  MarkingWorklists::MarkingWorklist::Local& marking_worklist_;
+  MarkingWorklists::WriteBarrierWorklist::Local& write_barrier_worklist_;
   std::vector<void*> objects_;
   std::vector<HeapObjectHeader*> headers_;
 };
 
 class ExpectNoWriteBarrierFires final : private IncrementalMarkingScope {
  public:
-  ExpectNoWriteBarrierFires(Marker* marker,
+  ExpectNoWriteBarrierFires(MarkerBase* marker,
                             std::initializer_list<void*> objects)
       : IncrementalMarkingScope(marker),
-        marking_worklist_(marker->marking_worklist(), Marker::kMutatorThreadId),
-        write_barrier_worklist_(marker->write_barrier_worklist(),
-                                Marker::kMutatorThreadId) {
-    EXPECT_TRUE(marking_worklist_.IsGlobalPoolEmpty());
-    EXPECT_TRUE(write_barrier_worklist_.IsGlobalPoolEmpty());
+        marking_worklist_(
+            marker->MutatorMarkingStateForTesting().marking_worklist()),
+        write_barrier_worklist_(
+            marker->MutatorMarkingStateForTesting().write_barrier_worklist()) {
+    EXPECT_TRUE(marking_worklist_.IsGlobalEmpty());
+    EXPECT_TRUE(write_barrier_worklist_.IsGlobalEmpty());
     for (void* object : objects) {
       auto* header = &HeapObjectHeader::FromPayload(object);
       headers_.emplace_back(header, header->IsMarked());
@@ -106,16 +106,16 @@ class ExpectNoWriteBarrierFires final : private IncrementalMarkingScope {
   }
 
   ~ExpectNoWriteBarrierFires() {
-    EXPECT_TRUE(marking_worklist_.IsGlobalPoolEmpty());
-    EXPECT_TRUE(write_barrier_worklist_.IsGlobalPoolEmpty());
+    EXPECT_TRUE(marking_worklist_.IsGlobalEmpty());
+    EXPECT_TRUE(write_barrier_worklist_.IsGlobalEmpty());
     for (const auto& pair : headers_) {
       EXPECT_EQ(pair.second, pair.first->IsMarked());
     }
   }
 
  private:
-  Marker::MarkingWorklist::View marking_worklist_;
-  Marker::WriteBarrierWorklist::View write_barrier_worklist_;
+  MarkingWorklists::MarkingWorklist::Local& marking_worklist_;
+  MarkingWorklists::WriteBarrierWorklist::Local& write_barrier_worklist_;
   std::vector<std::pair<HeapObjectHeader*, bool /* was marked */>> headers_;
 };
 
@@ -143,7 +143,9 @@ class GCed : public GarbageCollected<GCed> {
 class WriteBarrierTest : public testing::TestWithHeap {
  public:
   WriteBarrierTest() : internal_heap_(Heap::From(GetHeap())) {
-    GetMarkerRef() = std::make_unique<Marker>(internal_heap_->AsBase());
+    GetMarkerRef() = MarkerFactory::CreateAndStartMarking<Marker>(
+        *internal_heap_, GetPlatformHandle().get(),
+        IncrementalMarkingScope::kIncrementalConfig);
     marker_ = GetMarkerRef().get();
   }
 
@@ -152,12 +154,14 @@ class WriteBarrierTest : public testing::TestWithHeap {
     GetMarkerRef().reset();
   }
 
-  Marker* marker() const { return marker_; }
+  MarkerBase* marker() const { return marker_; }
 
  private:
   Heap* internal_heap_;
-  Marker* marker_;
+  MarkerBase* marker_;
 };
+
+class NoWriteBarrierTest : public testing::TestWithHeap {};
 
 // =============================================================================
 // Basic support. ==============================================================
@@ -181,7 +185,7 @@ TEST_F(WriteBarrierTest, TriggersWhenMarkingIsOn) {
   }
 }
 
-TEST_F(WriteBarrierTest, BailoutWhenMarkingIsOff) {
+TEST_F(NoWriteBarrierTest, BailoutWhenMarkingIsOff) {
   auto* object1 = MakeGarbageCollected<GCed>(GetAllocationHandle());
   auto* object2 = MakeGarbageCollected<GCed>(GetAllocationHandle());
   EXPECT_FALSE(object1->IsMarked());
@@ -264,8 +268,6 @@ class ClassWithVirtual {
 class Child : public GarbageCollected<Child>,
               public ClassWithVirtual,
               public Mixin {
-  USING_GARBAGE_COLLECTED_MIXIN();
-
  public:
   Child() : ClassWithVirtual(), Mixin() {}
   ~Child() = default;

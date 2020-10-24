@@ -16,7 +16,6 @@
 #include "base/component_export.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
@@ -93,6 +92,8 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   class Observer {
    public:
     Observer();
+    Observer(const Observer&) = delete;
+    Observer& operator=(const Observer&) = delete;
     virtual ~Observer();
 
     // Called when the token for |account| is updated/inserted.
@@ -110,13 +111,12 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
     // |AccountManager::CreateAccessTokenFetcher|), must clear their cache entry
     // for this |account| on receiving this callback.
     virtual void OnAccountRemoved(const Account& account) = 0;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(Observer);
   };
 
   // Note: |Initialize| MUST be called at least once on this object.
   AccountManager();
+  AccountManager(const AccountManager&) = delete;
+  AccountManager& operator=(const AccountManager&) = delete;
   virtual ~AccountManager();
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -126,7 +126,8 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   void SetPrefService(PrefService* pref_service);
 
   // |home_dir| is the path of the Device Account's home directory (root of the
-  // user's cryptohome).
+  // user's cryptohome). If |home_dir| is |base::FilePath::empty()|, then |this|
+  // |AccountManager| does not persist any data to disk.
   // |request_context| is a non-owning pointer.
   // |delay_network_call_runner| is basically a wrapper for
   // |chromeos::DelayNetworkCall|. Cannot use |chromeos::DelayNetworkCall| due
@@ -148,6 +149,18 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
       const base::FilePath& home_dir,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       DelayNetworkCallRunner delay_network_call_runner,
+      base::OnceClosure initialization_callback);
+
+  // Initializes |AccountManager| for ephemeral / in-memory usage.
+  // Useful for tests that cannot afford to write to disk and clean up after
+  // themselves.
+  void InitializeInEphemeralMode(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+
+  // Same as above, except it allows clients to provide a callback which will be
+  // called after initialization.
+  void InitializeInEphemeralMode(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       base::OnceClosure initialization_callback);
 
   // Returns |true| if |AccountManager| has been fully initialized.
@@ -209,9 +222,6 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   // not in the list of known observers.
   void RemoveObserver(Observer* observer);
 
-  // Gets AccountManager's URL Loader Factory.
-  scoped_refptr<network::SharedURLLoaderFactory> GetUrlLoaderFactory();
-
   // Sets the provided URL Loader Factory. Used only by tests.
   void SetUrlLoaderFactoryForTests(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
@@ -221,7 +231,6 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   // |account_key|, otherwise a |nullptr| is returned.
   std::unique_ptr<OAuth2AccessTokenFetcher> CreateAccessTokenFetcher(
       const AccountKey& account_key,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       OAuth2AccessTokenConsumer* consumer) const;
 
   // Returns |true| if an LST is available for |account_key|. Note that
@@ -232,11 +241,18 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   // initialized yet.
   bool IsTokenAvailable(const AccountKey& account_key) const;
 
-  // Returns true if the token stored against |account_key| is a dummy Gaia
-  // token. This is meant to be used only by
-  // |ProfileOAuth2TokenServiceDelegateChromeOS| to pre-emptively reject access
-  // token requests for |account_key|.
-  bool HasDummyGaiaToken(const AccountKey& account_key) const;
+  // Calls the |callback| with true if the token stored against |account_key| is
+  // a dummy Gaia token.
+  void HasDummyGaiaToken(const AccountKey& account_key,
+                         base::OnceCallback<void(bool)> callback) const;
+
+  // Calls the |callback| with a list of pairs of |account_key| and boolean
+  // which is set to true if the token stored against |account_key| is a dummy
+  // Gaia token, for all accounts stored in AccountManager. See
+  // |HasDummyGaiaToken|.
+  void CheckDummyGaiaTokenForAllAccounts(
+      base::OnceCallback<void(const std::vector<std::pair<Account, bool>>&)>
+          callback) const;
 
  private:
   enum InitializationState {
@@ -355,6 +371,10 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   // Deletes |request| from |pending_token_revocation_requests_|, if present.
   void DeletePendingTokenRevocationRequest(GaiaTokenRevocationRequest* request);
 
+  // Returns |true| if |AccountManager| is operating in ephemeral / in-memory
+  // mode, and not persisting anything to disk.
+  bool IsEphemeralMode() const;
+
   // Status of this object's initialization.
   InitializationState init_state_ = InitializationState::kNotStarted;
 
@@ -370,8 +390,17 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   PrefService* pref_service_ = nullptr;
 
   // A task runner for disk I/O.
+  // Will be |nullptr| if |AccountManager| is operating in ephemeral mode.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  // Writes |AccountManager|'s state to disk.
+  // Will be |nullptr| if |AccountManager| is operating in ephemeral mode.
   std::unique_ptr<base::ImportantFileWriter> writer_;
+
+  // Cryptohome root.
+  // Will be |base::FilePath::empty()| if |AccountManager| is operating in
+  // ephemeral mode.
+  base::FilePath home_dir_;
 
   // A map from |AccountKey|s to |AccountInfo|.
   AccountMap accounts_;
@@ -393,7 +422,6 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<AccountManager> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(AccountManager);
 };
 
 // For logging.

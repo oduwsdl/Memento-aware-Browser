@@ -18,6 +18,12 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
+class GURL;
+
+namespace content {
+class RenderFrameHost;
+}
+
 namespace test {
 class PermissionRequestManagerTestApi;
 }
@@ -35,6 +41,14 @@ extern const char kAbusiveNotificationRequestsEnforcementMessage[];
 // The message to be printed in the Developer Tools console when the site is on
 // the warning list for abusive permission request flows.
 extern const char kAbusiveNotificationRequestsWarningMessage[];
+
+// The message to be printed in the Developer Tools console when the site is on
+// the blocking list for showing abusive notification content.
+extern const char kAbusiveNotificationContentEnforcementMessage[];
+
+// The message to be printed in the Developer Tools console when the site is on
+// the warning list for showing abusive notification content.
+extern const char kAbusiveNotificationContentWarningMessage[];
 
 // Provides access to permissions bubbles. Allows clients to add a request
 // callback interface to the existing permission bubble configuration.
@@ -76,7 +90,8 @@ class PermissionRequestManager
   // bubble closes. A request with message text identical to an outstanding
   // request will be merged with the outstanding request, and will have the same
   // callbacks called as the outstanding request.
-  void AddRequest(PermissionRequest* request);
+  void AddRequest(content::RenderFrameHost* source_frame,
+                  PermissionRequest* request);
 
   // Will reposition the bubble (may change parent if necessary).
   void UpdateAnchorPosition();
@@ -117,9 +132,12 @@ class PermissionRequestManager
 
   // PermissionPrompt::Delegate:
   const std::vector<PermissionRequest*>& Requests() override;
+  GURL GetRequestingOrigin() const override;
+  GURL GetEmbeddingOrigin() const override;
   void Accept() override;
   void Deny() override;
   void Closing() override;
+  bool WasCurrentRequestAlreadyDisplayed() override;
 
   void set_web_contents_supports_permission_requests(
       bool web_contents_supports_permission_requests) {
@@ -199,6 +217,8 @@ class PermissionRequestManager
 
   void DoAutoResponseForTesting();
 
+  int CountQueuedPermissionRequests(PermissionRequest* request);
+
   // Factory to be used to create views when needed.
   PermissionPrompt::Factory view_factory_;
 
@@ -214,7 +234,16 @@ class PermissionRequestManager
   // When this is non-empty, the |view_| is generally non-null as long as the
   // tab is visible.
   std::vector<PermissionRequest*> requests_;
-  base::circular_deque<PermissionRequest*> queued_requests_;
+
+  struct RequestAndSource {
+    int render_process_id;
+    int render_frame_id;
+    PermissionRequest* request;
+
+    bool IsSourceFrameInactiveAndDisallowReactivation() const;
+  };
+
+  base::circular_deque<RequestAndSource> queued_requests_;
   // Maps from the first request of a kind to subsequent requests that were
   // duped against it.
   std::unordered_multimap<PermissionRequest*, PermissionRequest*>
@@ -234,7 +263,7 @@ class PermissionRequestManager
 
   // Whether the view for the current |requests_| has been shown to the user at
   // least once.
-  bool current_request_view_shown_to_user_ = false;
+  bool current_request_already_displayed_ = false;
 
   // Whether to use the normal or quiet UI to display the current permission
   // |requests_|, and whether to show warnings. This will be nullopt if we are

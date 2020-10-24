@@ -8,7 +8,6 @@
 #include "base/bind_helpers.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_metrics.h"
 #include "chrome/browser/media/router/providers/cast/cast_media_route_provider.h"
@@ -16,9 +15,9 @@
 #include "chrome/browser/media/router/providers/wired_display/wired_display_media_route_provider.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
-#include "chrome/common/media_router/media_source.h"
 #include "components/cast_channel/cast_socket_service.h"
+#include "components/media_router/browser/media_router_factory.h"
+#include "components/media_router/common/media_source.h"
 #include "components/openscreen_platform/network_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/extension.h"
@@ -50,7 +49,7 @@ void MediaRouterDesktop::OnUserGesture() {
   MediaRouterMojoImpl::OnUserGesture();
   // Allow MRPM to intelligently update sinks and observers by passing in a
   // media source.
-  UpdateMediaSinks(MediaSource::ForDesktop().id());
+  UpdateMediaSinks(MediaSource::ForUnchosenDesktop().id());
 
   media_sink_service_->OnUserGesture();
 
@@ -103,6 +102,7 @@ MediaRouterDesktop::MediaRouterDesktop(content::BrowserContext* context,
       cast_provider_(nullptr, base::OnTaskRunnerDeleter(nullptr)),
       dial_provider_(nullptr, base::OnTaskRunnerDeleter(nullptr)),
       media_sink_service_(media_sink_service) {
+  media_sink_service_->BindLogger(GetLogger());
   InitializeMediaRouteProviders();
 }
 

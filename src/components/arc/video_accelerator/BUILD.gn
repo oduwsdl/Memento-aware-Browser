@@ -29,14 +29,12 @@ source_set("common") {
   sources = [
     "arc_video_accelerator_util.cc",
     "arc_video_accelerator_util.h",
-    "decoder_buffer.cc",
-    "decoder_buffer.h",
     "video_frame_plane.h",
   ]
 
   deps = [
     "//media",
-    "//media/gpu:common",
+    "//media/gpu:gpu",
     "//mojo/public/cpp/system:system",
     "//ui/gfx:memory_buffer",
   ]

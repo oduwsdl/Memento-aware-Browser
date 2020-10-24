@@ -130,8 +130,9 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void Trap() override;
   void DebugBreak() override;
 
-  void CallForDeoptimization(Address target, int deopt_id, Label* exit,
-                             DeoptimizeKind kind);
+  void CallForDeoptimization(Builtins::Name target, int deopt_id, Label* exit,
+                             DeoptimizeKind kind,
+                             Label* jump_deoptimization_entry_label);
 
   // Jump the register contains a smi.
   inline void JumpIfSmi(Register value, Label* smi_label,
@@ -207,6 +208,9 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 
   void Popcnt(Register dst, Register src) { Popcnt(dst, Operand(src)); }
   void Popcnt(Register dst, Operand src);
+
+  void PushReturnAddressFrom(Register src) { push(src); }
+  void PopReturnAddressTo(Register dst) { pop(dst); }
 
   void Ret();
 
@@ -294,6 +298,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   AVX_OP2_WITH_TYPE(Movaps, movaps, XMMRegister, XMMRegister)
   AVX_OP2_WITH_TYPE(Movapd, movapd, XMMRegister, XMMRegister)
   AVX_OP2_WITH_TYPE(Movapd, movapd, XMMRegister, const Operand&)
+  AVX_OP2_WITH_TYPE(Movupd, movupd, XMMRegister, const Operand&)
   AVX_OP2_WITH_TYPE(Pmovmskb, pmovmskb, Register, XMMRegister)
   AVX_OP2_WITH_TYPE(Movmskps, movmskps, Register, XMMRegister)
 
@@ -819,8 +824,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
 
   void Pop(Register dst) { pop(dst); }
   void Pop(Operand dst) { pop(dst); }
-  void PushReturnAddressFrom(Register src) { push(src); }
-  void PopReturnAddressTo(Register dst) { pop(dst); }
 
   // ---------------------------------------------------------------------------
   // In-place weak references.
@@ -852,7 +855,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
 
   // Needs access to SafepointRegisterStackIndex for compiled frame
   // traversal.
-  friend class StandardFrame;
+  friend class CommonFrame;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(MacroAssembler);
 };

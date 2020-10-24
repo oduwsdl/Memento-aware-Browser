@@ -5,6 +5,7 @@
 #include "base/run_loop.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -12,8 +13,10 @@
 #include "chrome/browser/ui/views/location_bar/permission_chip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/permissions/permission_request_manager_test_api.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/views/test/button_test_api.h"
 
 class PermissionChipPromptBrowserTest : public DialogBrowserTest {
  public:
@@ -31,7 +34,8 @@ class PermissionChipPromptBrowserTest : public DialogBrowserTest {
     std::unique_ptr<test::PermissionRequestManagerTestApi> test_api_ =
         std::make_unique<test::PermissionRequestManagerTestApi>(browser());
     EXPECT_TRUE(test_api_->manager());
-    test_api_->AddSimpleRequest(ContentSettingsType::GEOLOCATION);
+    test_api_->AddSimpleRequest(GetActiveMainFrame(),
+                                ContentSettingsType::GEOLOCATION);
 
     base::RunLoop().RunUntilIdle();
 
@@ -41,10 +45,14 @@ class PermissionChipPromptBrowserTest : public DialogBrowserTest {
         browser_view->toolbar()->location_bar()->permission_chip();
     ASSERT_TRUE(permission_chip);
 
-    permission_chip->ButtonPressed(
-        permission_chip->button(),
-        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+    views::test::ButtonTestApi(permission_chip->button())
+        .NotifyClick(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
+                                    gfx::Point(), ui::EventTimeForNow(),
+                                    ui::EF_LEFT_MOUSE_BUTTON, 0));
+  }
+
+  content::RenderFrameHost* GetActiveMainFrame() {
+    return browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame();
   }
 
  private:

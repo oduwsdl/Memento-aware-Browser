@@ -11,12 +11,14 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_test_base.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/mock_password_feature_manager.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#include "components/sync/driver/test_sync_service.h"
 #include "content/public/test/navigation_simulator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -25,6 +27,15 @@
 
 using ::testing::Return;
 using ::testing::ReturnRef;
+
+namespace {
+
+std::unique_ptr<KeyedService> BuildTestSyncService(
+    content::BrowserContext* context) {
+  return std::make_unique<syncer::TestSyncService>();
+}
+
+}  // namespace
 
 class PasswordSaveUpdateWithAccountStoreViewTest
     : public PasswordBubbleViewTestBase {
@@ -81,13 +92,16 @@ PasswordSaveUpdateWithAccountStoreViewTest::
           &password_manager::BuildPasswordStore<
               content::BrowserContext,
               testing::NiceMock<password_manager::MockPasswordStore>>));
+  ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(
+      profile(), base::BindRepeating(&BuildTestSyncService));
 }
 
 void PasswordSaveUpdateWithAccountStoreViewTest::CreateViewAndShow() {
   CreateAnchorViewAndShow();
 
   view_ = new PasswordSaveUpdateWithAccountStoreView(
-      web_contents(), anchor_view(), LocationBarBubbleDelegateView::AUTOMATIC);
+      web_contents(), anchor_view(), LocationBarBubbleDelegateView::AUTOMATIC,
+      /*promo_controller=*/nullptr);
   views::BubbleDialogDelegateView::CreateBubble(view_)->Show();
 }
 
@@ -106,14 +120,14 @@ TEST_F(PasswordSaveUpdateWithAccountStoreViewTest, HasTitleAndTwoButtons) {
 }
 
 TEST_F(PasswordSaveUpdateWithAccountStoreViewTest, ShouldNotShowAccountPicker) {
-  ON_CALL(*feature_manager_mock(), ShouldShowPasswordStorePicker)
+  ON_CALL(*feature_manager_mock(), ShouldShowAccountStorageBubbleUi)
       .WillByDefault(Return(false));
   CreateViewAndShow();
   EXPECT_FALSE(account_picker());
 }
 
 TEST_F(PasswordSaveUpdateWithAccountStoreViewTest, ShouldShowAccountPicker) {
-  ON_CALL(*feature_manager_mock(), ShouldShowPasswordStorePicker)
+  ON_CALL(*feature_manager_mock(), ShouldShowAccountStorageBubbleUi)
       .WillByDefault(Return(true));
   SimulateSignIn();
   CreateViewAndShow();
@@ -123,7 +137,7 @@ TEST_F(PasswordSaveUpdateWithAccountStoreViewTest, ShouldShowAccountPicker) {
 
 TEST_F(PasswordSaveUpdateWithAccountStoreViewTest,
        ShouldSelectAccountStoreByDefault) {
-  ON_CALL(*feature_manager_mock(), ShouldShowPasswordStorePicker)
+  ON_CALL(*feature_manager_mock(), ShouldShowAccountStorageBubbleUi)
       .WillByDefault(Return(true));
   ON_CALL(*feature_manager_mock(), GetDefaultPasswordStore)
       .WillByDefault(Return(autofill::PasswordForm::Store::kAccountStore));
@@ -142,7 +156,7 @@ TEST_F(PasswordSaveUpdateWithAccountStoreViewTest,
 
 TEST_F(PasswordSaveUpdateWithAccountStoreViewTest,
        ShouldSelectProfileStoreByDefault) {
-  ON_CALL(*feature_manager_mock(), ShouldShowPasswordStorePicker)
+  ON_CALL(*feature_manager_mock(), ShouldShowAccountStorageBubbleUi)
       .WillByDefault(Return(true));
   ON_CALL(*feature_manager_mock(), GetDefaultPasswordStore)
       .WillByDefault(Return(autofill::PasswordForm::Store::kProfileStore));

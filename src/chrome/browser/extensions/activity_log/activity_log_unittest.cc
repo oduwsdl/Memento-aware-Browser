@@ -18,14 +18,14 @@
 #include "chrome/browser/extensions/activity_log/activity_log_task_runner.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
-#include "chrome/browser/prerender/prerender_handle.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/prerender/prerender_test_utils.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/prerender/browser/prerender_handle.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/browser/extension_registry.h"
@@ -258,7 +258,7 @@ TEST_F(ActivityLogTest, LogPrerender) {
       prerender_manager->GetAllNoStatePrefetchingContentsForTesting();
   ASSERT_EQ(1U, contentses.size());
   content::WebContents *contents = contentses[0];
-  ASSERT_TRUE(prerender_manager->IsWebContentsPrerendering(contents, NULL));
+  ASSERT_TRUE(prerender_manager->IsWebContentsPrerendering(contents));
 
   activity_log->OnScriptsExecuted(contents, {{extension->id(), {"script"}}},
                                   url);
@@ -427,9 +427,9 @@ TEST_F(ActivityLogTestWithoutSwitch, TestShouldLog) {
   // Since the command line switch for logging isn't enabled and there's no
   // watchdog app active, the activity log shouldn't log anything.
   EXPECT_FALSE(activity_log->ShouldLog(empty_extension->id()));
-  const char kWhitelistedExtensionId[] = "eplckmlabaanikjjcgnigddmagoglhmp";
+  const char kAllowlistedExtensionId[] = "eplckmlabaanikjjcgnigddmagoglhmp";
   scoped_refptr<const Extension> activity_log_extension =
-      ExtensionBuilder("Test").SetID(kWhitelistedExtensionId).Build();
+      ExtensionBuilder("Test").SetID(kAllowlistedExtensionId).Build();
   extension_service_->AddExtension(activity_log_extension.get());
   // Loading a watchdog app means the activity log should log other extension
   // activities...

@@ -7,6 +7,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/strcat.h"
 #include "base/test/trace_event_analyzer.h"
+#include "build/build_config.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -129,4 +130,19 @@ IN_PROC_BROWSER_TEST_F(MetricIntegrationTest, LargestContentfulPaint) {
   ExpectUniqueUMAPageLoadMetricNear(
       "PageLoad.PaintTiming.NavigationToLargestContentfulPaint.MainFrame",
       lcp_timestamps[2].value());
+}
+
+// TODO(crbug.com/1135527): Flaky.
+IN_PROC_BROWSER_TEST_F(MetricIntegrationTest,
+                       DISABLED_LargestContentfulPaint_SubframeInput) {
+  Start();
+  Load("/lcp_subframe_input.html");
+  auto* sub = ChildFrameAt(web_contents()->GetMainFrame(), 0);
+  EXPECT_EQ(EvalJs(sub, "test_step_1()").value.GetString(), "green-16x16.png");
+
+  content::SimulateMouseClickAt(web_contents(), 0,
+                                blink::WebMouseEvent::Button::kLeft,
+                                gfx::Point(100, 100));
+
+  EXPECT_EQ(EvalJs(sub, "test_step_2()").value.GetString(), "green-16x16.png");
 }

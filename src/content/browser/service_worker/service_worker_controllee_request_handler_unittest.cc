@@ -13,7 +13,6 @@
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
@@ -102,15 +101,15 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
     options.scope = scope_;
     registration_ =
         new ServiceWorkerRegistration(options, 1L, context()->AsWeakPtr());
-    version_ = new ServiceWorkerVersion(registration_.get(), script_url_,
-                                        blink::mojom::ScriptType::kClassic, 1L,
-                                        context()->AsWeakPtr());
-    context()->storage()->LazyInitializeForTest();
+    version_ = new ServiceWorkerVersion(
+        registration_.get(), script_url_, blink::mojom::ScriptType::kClassic,
+        1L, mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
+        context()->AsWeakPtr());
 
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     records.push_back(WriteToDiskCacheSync(
-        context()->storage(), version_->script_url(), {} /* headers */,
-        "I'm a body", "I'm a meta data"));
+        context()->GetStorageControl(), version_->script_url(),
+        {} /* headers */, "I'm a body", "I'm a meta data"));
     version_->script_cache_map()->SetResources(records);
     version_->SetMainScriptResponse(
         EmbeddedWorkerTestHelper::CreateMainScriptResponse());
@@ -226,6 +225,8 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, DoesNotExist) {
   test_resources.MaybeCreateLoader();
   EXPECT_FALSE(test_resources.loader());
 
+  base::RunLoop().RunUntilIdle();
+
   histogram_tester.ExpectTotalCount(
       "ServiceWorker.LookupRegistration.MainResource.Time.DoesNotExist", 1);
 
@@ -236,7 +237,7 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, Error) {
   base::HistogramTester histogram_tester;
 
   // Disabling the storage makes looking up the registration return an error.
-  context()->storage()->Disable();
+  context()->GetStorageControl()->Disable();
 
   histogram_tester.ExpectTotalCount(
       "ServiceWorker.LookupRegistration.MainResource.Time.Error", 0);
@@ -247,6 +248,8 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, Error) {
       blink::mojom::ResourceType::kMainFrame);
   test_resources.MaybeCreateLoader();
   EXPECT_FALSE(test_resources.loader());
+
+  base::RunLoop().RunUntilIdle();
 
   histogram_tester.ExpectTotalCount(
       "ServiceWorker.LookupRegistration.MainResource.Time.Error", 1);

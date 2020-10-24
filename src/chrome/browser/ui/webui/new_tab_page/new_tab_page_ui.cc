@@ -7,16 +7,25 @@
 #include <memory>
 #include <utility>
 
+#include "chrome/browser/buildflags.h"
+#include "chrome/browser/media/kaleidoscope/constants.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_data_provider_impl.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_ui.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/ntp_features.h"
+#include "chrome/browser/search/recipe_tasks/recipe_tasks_handler.h"
+#include "chrome/browser/search/shopping_tasks/shopping_tasks_handler.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/search/omnibox_mojo_utils.h"
+#include "chrome/browser/ui/webui/customize_themes/chrome_customize_themes_handler.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
+#include "chrome/browser/ui/webui/new_tab_page/promo_browser_command/promo_browser_command_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/untrusted_source.h"
+#include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
@@ -30,11 +39,17 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "media/base/media_switches.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/resources/grit/webui_resources.h"
 #include "url/url_util.h"
+
+#if !defined(OFFICIAL_BUILD)
+#include "chrome/browser/ui/webui/new_tab_page/foo/foo_handler.h"
+#endif
 
 using content::BrowserContext;
 using content::WebContents;
@@ -59,10 +74,7 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
                         .spec());
 
   // Realbox.
-  const bool realbox_enabled =
-      ntp_features::IsRealboxEnabled() &&
-      base::FeatureList::IsEnabled(ntp_features::kWebUIRealbox);
-  source->AddBoolean("realboxEnabled", realbox_enabled);
+  source->AddBoolean("realboxEnabled", true);
   source->AddBoolean(
       "realboxMatchOmniboxTheme",
       base::FeatureList::IsEnabled(ntp_features::kRealboxMatchOmniboxTheme));
@@ -82,6 +94,8 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "themeModeDoodlesEnabled",
       base::FeatureList::IsEnabled(ntp_features::kWebUIThemeModeDoodles));
+  source->AddBoolean("modulesEnabled",
+                     base::FeatureList::IsEnabled(ntp_features::kModules));
 
   static constexpr webui::LocalizedString kStrings[] = {
       {"doneButton", IDS_DONE},
@@ -118,12 +132,15 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"defaultThemeLabel", IDS_NTP_CUSTOMIZE_DEFAULT_LABEL},
       {"hideShortcuts", IDS_NTP_CUSTOMIZE_HIDE_SHORTCUTS_LABEL},
       {"hideShortcutsDesc", IDS_NTP_CUSTOMIZE_HIDE_SHORTCUTS_DESC},
+      {"hideModules", IDS_NTP_CUSTOMIZE_HIDE_MODULES_LABEL},
+      {"hideModulesDesc", IDS_NTP_CUSTOMIZE_HIDE_MODULES_DESC},
       {"mostVisited", IDS_NTP_CUSTOMIZE_MOST_VISITED_LABEL},
       {"myShortcuts", IDS_NTP_CUSTOMIZE_MY_SHORTCUTS_LABEL},
       {"noBackground", IDS_NTP_CUSTOMIZE_NO_BACKGROUND_LABEL},
       {"refreshDaily", IDS_NTP_CUSTOM_BG_DAILY_REFRESH},
       {"shortcutsCurated", IDS_NTP_CUSTOMIZE_MY_SHORTCUTS_DESC},
       {"shortcutsMenuItem", IDS_NTP_CUSTOMIZE_MENU_SHORTCUTS_LABEL},
+      {"modulesMenuItem", IDS_NTP_CUSTOMIZE_MENU_MODULES_LABEL},
       {"shortcutsOption", IDS_NTP_CUSTOMIZE_MENU_SHORTCUTS_LABEL},
       {"shortcutsSuggested", IDS_NTP_CUSTOMIZE_MOST_VISITED_DESC},
       {"themesMenuItem", IDS_NTP_CUSTOMIZE_MENU_COLOR_LABEL},
@@ -167,13 +184,33 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
 
       // Theme.
       {"themeCreatedBy", IDS_NEW_TAB_ATTRIBUTION_INTRO},
+
+      // Modules.
+      {"dismissModuleToastMessage", IDS_NTP_MODULES_DISMISS_TOAST_MESSAGE},
+      {"moduleInfoButtonTitle", IDS_NTP_MODULES_INFO_BUTTON_TITLE},
+      {"moduleDismissButtonTitle", IDS_NTP_MODULES_DISMISS_BUTTON_TITLE},
+      {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
+      {"modulesDummy2Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesKaleidoscopeTitle", IDS_NTP_MODULES_KALEIDOSCOPE_TITLE},
+      {"modulesTasksInfoTitle", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_TITLE},
+      {"modulesTasksInfoClose", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_CLOSE},
   };
   AddLocalizedStringsBulk(source, kStrings);
+
+  source->AddString("modulesTasksInfo1",
+                    l10n_util::GetStringFUTF16(
+                        IDS_NTP_MODULES_SHOPPING_TASKS_INFO_1,
+                        base::UTF8ToUTF16("https://myactivity.google.com/")));
+  source->AddString("modulesTasksInfo2",
+                    l10n_util::GetStringFUTF16(
+                        IDS_NTP_MODULES_SHOPPING_TASKS_INFO_2,
+                        base::UTF8ToUTF16("https://policies.google.com/")));
 
   // Register images that are purposefully not inlined in the HTML and instead
   // are set in Javascript.
   static constexpr webui::ResourcePath kImages[] = {
-      {omnibox::kGoogleGIconResourceName, IDR_WEBUI_IMAGES_200_LOGO_GOOGLE_G},
+      {omnibox::kGoogleGIconResourceName,
+       IDR_WEBUI_IMAGES_200_LOGO_GOOGLE_G_PNG},
       {omnibox::kBookmarkIconResourceName, IDR_LOCAL_NTP_ICONS_BOOKMARK},
       {omnibox::kCalculatorIconResourceName, IDR_LOCAL_NTP_ICONS_CALCULATOR},
       {omnibox::kClockIconResourceName, IDR_LOCAL_NTP_ICONS_CLOCK},
@@ -189,13 +226,39 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {omnibox::kExtensionAppIconResourceName,
        IDR_LOCAL_NTP_ICONS_EXTENSION_APP},
       {omnibox::kPageIconResourceName, IDR_LOCAL_NTP_ICONS_PAGE},
-      {omnibox::kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH}};
+      {omnibox::kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH_SVG},
+      {omnibox::kTrendingUpIconResourceName, IDR_LOCAL_NTP_ICONS_TRENDING_UP}};
   webui::AddResourcePathsBulk(source, kImages);
+
+#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
+  source->AddBoolean("kaleidoscopeModuleEnabled",
+                     base::FeatureList::IsEnabled(media::kKaleidoscopeModule));
+#else
+  source->AddBoolean("kaleidoscopeModuleEnabled", false);
+#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+  source->AddBoolean(
+      "recipeTasksModuleEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpRecipeTasksModule));
+  source->AddBoolean(
+      "shoppingTasksModuleEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpShoppingTasksModule));
 
   source->AddResourcePath("new_tab_page.mojom-lite.js",
                           IDR_NEW_TAB_PAGE_MOJO_LITE_JS);
   source->AddResourcePath("omnibox.mojom-lite.js",
                           IDR_NEW_TAB_PAGE_OMNIBOX_MOJO_LITE_JS);
+  source->AddResourcePath("promo_browser_command.mojom-lite.js",
+                          IDR_NEW_TAB_PAGE_PROMO_BROWSER_COMMAND_MOJO_LITE_JS);
+  source->AddResourcePath(
+      "modules/recipe_tasks/recipe_tasks.mojom-lite.js",
+      IDR_NEW_TAB_PAGE_MODULES_RECIPE_TASKS_RECIPE_TASKS_MOJO_LITE_JS);
+  source->AddResourcePath(
+      "modules/shopping_tasks/shopping_tasks.mojom-lite.js",
+      IDR_NEW_TAB_PAGE_MODULES_SHOPPING_TASKS_SHOPPING_TASKS_MOJO_LITE_JS);
+#if !defined(OFFICIAL_BUILD)
+  source->AddResourcePath("foo.mojom-lite.js",
+                          IDR_NEW_TAB_PAGE_FOO_MOJO_LITE_JS);
+#endif
 #if BUILDFLAG(OPTIMIZE_WEBUI)
   source->AddResourcePath("new_tab_page.js", IDR_NEW_TAB_PAGE_NEW_TAB_PAGE_JS);
 #endif  // BUILDFLAG(OPTIMIZE_WEBUI)
@@ -208,15 +271,19 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   // TODO(crbug.com/1076506): remove when changing to iframed OneGoogleBar.
   // Needs to happen after |webui::SetupWebUIDataSource()| since also overrides
   // script-src.
-  source->OverrideContentSecurityPolicyScriptSrc(
-      "script-src chrome://resources chrome://test 'self' 'unsafe-inline' "
-      "https:;");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
+      "script-src chrome://resources chrome://test chrome://kaleidoscope "
+      "'self' 'unsafe-inline' https:;");
   // Allow embedding of iframes from the One Google Bar and
-  // chrome-untrusted://new-tab-page for other external content and resources.
-  source->OverrideContentSecurityPolicyChildSrc(
-      base::StringPrintf("child-src https: %s %s;",
+  // chrome-untrusted://new-tab-page for other external content and resources
+  // and chrome-untrusted://kaleidoscope for Kaleidoscope.
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ChildSrc,
+      base::StringPrintf("child-src https: %s %s %s;",
                          google_util::CommandLineGoogleBaseURL().spec().c_str(),
-                         chrome::kChromeUIUntrustedNewTabPageUrl));
+                         chrome::kChromeUIUntrustedNewTabPageUrl,
+                         kKaleidoscopeUntrustedContentUIURL));
 
   return source;
 }
@@ -224,9 +291,10 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
 }  // namespace
 
 NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
-    : ui::MojoWebUIController(web_ui, true),
+    : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/false),
       content::WebContentsObserver(web_ui->GetWebContents()),
       page_factory_receiver_(this),
+      customize_themes_factory_receiver_(this),
       profile_(Profile::FromWebUI(web_ui)),
       instant_service_(InstantServiceFactory::GetForProfile(profile_)),
       web_contents_(web_ui->GetWebContents()),
@@ -239,6 +307,8 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
                      instant_service_->IsCustomBackgroundDisabledByPolicy());
   content::WebUIDataSource::Add(profile_, source);
 
+  content::URLDataSource::Add(profile_,
+                              std::make_unique<SanitizedImageSource>(profile_));
   content::URLDataSource::Add(
       profile_, std::make_unique<FaviconSource>(
                     profile_, chrome::FaviconUrlFormat::kFavicon2));
@@ -247,6 +317,12 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
   content::URLDataSource::Add(
       profile_,
       std::make_unique<ThemeSource>(profile_, /*serve_untrusted=*/true));
+
+  content::WebUIDataSource::Add(profile_,
+                                KaleidoscopeUI::CreateWebUIDataSource());
+
+  content::WebUIDataSource::Add(
+      profile_, KaleidoscopeUI::CreateUntrustedWebUIDataSource());
 
   web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
 
@@ -275,6 +351,50 @@ void NewTabPageUI::BindInterface(
   page_factory_receiver_.Bind(std::move(pending_receiver));
 }
 
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<promo_browser_command::mojom::CommandHandler>
+        pending_page_handler) {
+  promo_browser_command_handler_ = std::make_unique<PromoBrowserCommandHandler>(
+      std::move(pending_page_handler), profile_);
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<
+        customize_themes::mojom::CustomizeThemesHandlerFactory>
+        pending_receiver) {
+  if (customize_themes_factory_receiver_.is_bound()) {
+    customize_themes_factory_receiver_.reset();
+  }
+  customize_themes_factory_receiver_.Bind(std::move(pending_receiver));
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<media::mojom::KaleidoscopeDataProvider>
+        pending_page_handler) {
+  kaleidoscope_data_provider_ = std::make_unique<KaleidoscopeDataProviderImpl>(
+      std::move(pending_page_handler), profile_, nullptr);
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<recipe_tasks::mojom::RecipeTasksHandler>
+        pending_receiver) {
+  recipe_tasks_handler_ = std::make_unique<RecipeTasksHandler>(
+      std::move(pending_receiver), profile_);
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<shopping_tasks::mojom::ShoppingTasksHandler>
+        pending_receiver) {
+  shopping_tasks_handler_ = std::make_unique<ShoppingTasksHandler>(
+      std::move(pending_receiver), profile_);
+}
+#if !defined(OFFICIAL_BUILD)
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<foo::mojom::FooHandler> pending_page_handler) {
+  foo_handler_ = std::make_unique<FooHandler>(std::move(pending_page_handler));
+}
+#endif
+
 void NewTabPageUI::CreatePageHandler(
     mojo::PendingRemote<new_tab_page::mojom::Page> pending_page,
     mojo::PendingReceiver<new_tab_page::mojom::PageHandler>
@@ -285,6 +405,16 @@ void NewTabPageUI::CreatePageHandler(
       instant_service_, web_contents_,
       NTPUserDataLogger::GetOrCreateFromWebContents(web_contents_),
       navigation_start_time_);
+}
+
+void NewTabPageUI::CreateCustomizeThemesHandler(
+    mojo::PendingRemote<customize_themes::mojom::CustomizeThemesClient>
+        pending_client,
+    mojo::PendingReceiver<customize_themes::mojom::CustomizeThemesHandler>
+        pending_handler) {
+  customize_themes_handler_ = std::make_unique<ChromeCustomizeThemesHandler>(
+      std::move(pending_client), std::move(pending_handler), web_contents_,
+      profile_);
 }
 
 void NewTabPageUI::NtpThemeChanged(const NtpTheme& theme) {

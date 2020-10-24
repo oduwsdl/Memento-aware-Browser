@@ -5,8 +5,8 @@
 #ifndef BASE_MAC_SCOPED_TYPEREF_H_
 #define BASE_MAC_SCOPED_TYPEREF_H_
 
+#include "base/check.h"
 #include "base/compiler_specific.h"
-#include "base/logging.h"
 #include "base/memory/scoped_policy.h"
 
 namespace base {
@@ -95,6 +95,10 @@ class ScopedTypeRef {
   element_type* InitializeInto() WARN_UNUSED_RESULT {
     DCHECK(!object_);
     return &object_;
+  }
+
+  void reset(const ScopedTypeRef<T, Traits>& that) {
+    reset(that.get(), base::scoped_policy::RETAIN);
   }
 
   void reset(element_type object = Traits::InvalidValue(),

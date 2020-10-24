@@ -25,6 +25,7 @@
 #include "chrome/browser/component_updater/tls_deprecation_config_component_installer.h"
 #include "chrome/browser/net/chrome_mojo_proxy_resolver_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/ssl/sct_reporting_service.h"
 #include "chrome/browser/ssl/ssl_config_service_manager.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
@@ -48,7 +49,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_context_client_base.h"
 #include "content/public/browser/network_service_instance.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/common/service_names.mojom.h"
@@ -132,18 +132,18 @@ network::mojom::HttpAuthDynamicParamsPtr CreateHttpAuthDynamicParams(
       network::mojom::HttpAuthDynamicParams::New();
 
   auth_dynamic_params->server_allowlist =
-      local_state->GetString(prefs::kAuthServerWhitelist);
+      local_state->GetString(prefs::kAuthServerAllowlist);
   auth_dynamic_params->delegate_allowlist =
-      local_state->GetString(prefs::kAuthNegotiateDelegateWhitelist);
+      local_state->GetString(prefs::kAuthNegotiateDelegateAllowlist);
   auth_dynamic_params->negotiate_disable_cname_lookup =
       local_state->GetBoolean(prefs::kDisableAuthNegotiateCnameLookup);
   auth_dynamic_params->enable_negotiate_port =
       local_state->GetBoolean(prefs::kEnableAuthNegotiatePort);
 
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_CHROMEOS)
   auth_dynamic_params->delegate_by_kdc_policy =
       local_state->GetBoolean(prefs::kAuthNegotiateDelegateByKdcPolicy);
-#endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#endif  // defined(OS_LINUX) || defined(OS_MAC) || defined(OS_CHROMEOS)
 
 #if defined(OS_POSIX)
   auth_dynamic_params->ntlm_v2_enabled =
@@ -347,18 +347,19 @@ SystemNetworkContextManager::SystemNetworkContextManager(
 
   PrefChangeRegistrar::NamedChangeCallback auth_pref_callback =
       base::BindRepeating(&OnAuthPrefsChanged, base::Unretained(local_state_));
-  pref_change_registrar_.Add(prefs::kAuthServerWhitelist, auth_pref_callback);
-  pref_change_registrar_.Add(prefs::kAuthNegotiateDelegateWhitelist,
+
+  pref_change_registrar_.Add(prefs::kAuthServerAllowlist, auth_pref_callback);
+  pref_change_registrar_.Add(prefs::kAuthNegotiateDelegateAllowlist,
                              auth_pref_callback);
   pref_change_registrar_.Add(prefs::kDisableAuthNegotiateCnameLookup,
                              auth_pref_callback);
   pref_change_registrar_.Add(prefs::kEnableAuthNegotiatePort,
                              auth_pref_callback);
 
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_CHROMEOS)
   pref_change_registrar_.Add(prefs::kAuthNegotiateDelegateByKdcPolicy,
                              auth_pref_callback);
-#endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#endif  // defined(OS_LINUX) || defined(OS_MAC) || defined(OS_CHROMEOS)
 
 #if defined(OS_POSIX)
   pref_change_registrar_.Add(prefs::kNtlmV2Enabled, auth_pref_callback);
@@ -402,13 +403,13 @@ void SystemNetworkContextManager::RegisterPrefs(PrefRegistrySimple* registry) {
   // Dynamic auth params.
   registry->RegisterBooleanPref(prefs::kDisableAuthNegotiateCnameLookup, false);
   registry->RegisterBooleanPref(prefs::kEnableAuthNegotiatePort, false);
-  registry->RegisterStringPref(prefs::kAuthServerWhitelist, std::string());
-  registry->RegisterStringPref(prefs::kAuthNegotiateDelegateWhitelist,
+  registry->RegisterStringPref(prefs::kAuthServerAllowlist, std::string());
+  registry->RegisterStringPref(prefs::kAuthNegotiateDelegateAllowlist,
                                std::string());
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_CHROMEOS)
   registry->RegisterBooleanPref(prefs::kAuthNegotiateDelegateByKdcPolicy,
                                 false);
-#endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#endif  // defined(OS_LINUX) || defined(OS_MAC) || defined(OS_CHROMEOS)
 
 #if defined(OS_POSIX)
   registry->RegisterBooleanPref(
@@ -448,6 +449,15 @@ SystemNetworkContextManager::GetStubResolverConfigReader() {
 
 void SystemNetworkContextManager::OnNetworkServiceCreated(
     network::mojom::NetworkService* network_service) {
+  // On network service restart, it's possible for |url_loader_factory_| to not
+  // be disconnected yet (so any consumers of GetURLLoaderFactory() in network
+  // service restart handling code could end up getting the old factory, which
+  // will then get disconnected later). Resetting the Remote is a no-op for the
+  // initial creation of the network service, but for restarts this guarantees
+  // that GetURLLoaderFactory() works as expected.
+  // (See crbug.com/1131803 for a motivating example and investigation.)
+  url_loader_factory_.reset();
+
   // Disable QUIC globally, if needed.
   if (!is_quic_allowed_)
     network_service->DisableQuic();
@@ -505,7 +515,7 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
   chrome::GetDefaultUserDataDirectory(&config->user_data_path);
   content::GetNetworkService()->SetCryptConfig(std::move(config));
 #endif
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
   // The OSCrypt keys are process bound, so if network service is out of
   // process, send it the required key.
   if (content::IsOutOfProcessNetworkService()) {
@@ -520,6 +530,9 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
   // Asynchronously reapply the most recently received TLS deprecation config.
   component_updater::TLSDeprecationConfigComponentInstallerPolicy::
       ReconfigureAfterNetworkRestart();
+
+  // Configure SCT Auditing in the NetworkService.
+  SCTReportingService::ReconfigureAfterNetworkRestart();
 }
 
 void SystemNetworkContextManager::DisableQuic() {
@@ -707,7 +720,7 @@ SystemNetworkContextManager::CreateNetworkContextParams() {
   // These are needed for PAC scripts that use FTP URLs.
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
   network_context_params->enable_ftp_url_support =
-      base::FeatureList::IsEnabled(features::kFtpProtocol);
+      base::FeatureList::IsEnabled(blink::features::kFtpProtocol);
 #endif
 
   proxy_config_monitor_.AddToNetworkContextParams(network_context_params.get());

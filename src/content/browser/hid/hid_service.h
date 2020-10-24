@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "content/public/browser/frame_service_base.h"
@@ -39,6 +38,9 @@ class HidService : public content::FrameServiceBase<blink::mojom::HidService>,
                      mojo::PendingReceiver<blink::mojom::HidService>);
 
   // blink::mojom::HidService:
+  void RegisterClient(
+      mojo::PendingAssociatedRemote<device::mojom::HidManagerClient> client)
+      override;
   void GetDevices(GetDevicesCallback callback) override;
   void RequestDevice(std::vector<blink::mojom::HidDeviceFilterPtr> filters,
                      RequestDeviceCallback callback) override;
@@ -58,7 +60,7 @@ class HidService : public content::FrameServiceBase<blink::mojom::HidService>,
   HidService(RenderFrameHost*, mojo::PendingReceiver<blink::mojom::HidService>);
   ~HidService() override;
 
-  void OnWatcherConnectionError();
+  void OnWatcherRemoved(bool cleanup_watcher_ids);
   void DecrementActiveFrameCount();
 
   void FinishGetDevices(GetDevicesCallback callback,
@@ -78,11 +80,13 @@ class HidService : public content::FrameServiceBase<blink::mojom::HidService>,
   // Used to bind with Blink.
   mojo::AssociatedRemoteSet<device::mojom::HidManagerClient> clients_;
 
-  ScopedObserver<HidDelegate, HidDelegate::Observer> delegate_observer_{this};
-
   // Each pipe here watches a connection created by Connect() in order to notify
   // the WebContentsImpl when an active connection indicator should be shown.
   mojo::ReceiverSet<device::mojom::HidConnectionWatcher> watchers_;
+
+  // Maps every receiver to a guid to allow closing particular connections when
+  // the user revokes a permission.
+  std::multimap<std::string, mojo::ReceiverId> watcher_ids_;
 
   base::WeakPtrFactory<HidService> weak_factory_{this};
 };

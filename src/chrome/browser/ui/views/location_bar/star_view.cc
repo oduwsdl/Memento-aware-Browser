@@ -15,9 +15,11 @@
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
-#include "chrome/browser/ui/views/feature_promos/feature_promo_bubble_view.h"
+#include "chrome/browser/ui/views/in_product_help/feature_promo_bubble_view.h"
+#include "chrome/browser/ui/views/location_bar/star_menu_model.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/omnibox/browser/vector_icons.h"
@@ -27,25 +29,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
-
-namespace {
-
-// For bookmark in-product help.
-int GetBookmarkPromoStringSpecifier() {
-  static constexpr int kTextIds[] = {IDS_BOOKMARK_PROMO_0, IDS_BOOKMARK_PROMO_1,
-                                     IDS_BOOKMARK_PROMO_2};
-  const std::string& str = variations::GetVariationParamValue(
-      "BookmarkInProductHelp", "x_promo_string");
-  size_t text_specifier;
-  if (!base::StringToSizeT(str, &text_specifier) ||
-      text_specifier >= base::size(kTextIds)) {
-    text_specifier = 0;
-  }
-
-  return kTextIds[text_specifier];
-}
-
-}  // namespace
+#include "ui/views/controls/menu/menu_runner.h"
 
 StarView::StarView(CommandUpdater* command_updater,
                    Browser* browser,
@@ -57,6 +41,7 @@ StarView::StarView(CommandUpdater* command_updater,
                          page_action_icon_delegate),
       browser_(browser) {
   DCHECK(browser_);
+
   edit_bookmarks_enabled_.Init(
       bookmarks::prefs::kEditBookmarksEnabled, browser_->profile()->GetPrefs(),
       base::BindRepeating(&StarView::EditBookmarksPrefUpdated,
@@ -66,21 +51,6 @@ StarView::StarView(CommandUpdater* command_updater,
 }
 
 StarView::~StarView() {}
-
-void StarView::ShowPromo() {
-  FeaturePromoBubbleView* bookmark_promo_bubble =
-      FeaturePromoBubbleView::CreateOwned(
-          this, views::BubbleBorder::TOP_RIGHT,
-          FeaturePromoBubbleView::ActivationAction::ACTIVATE,
-          /*title_string_specifier=*/base::nullopt,
-          GetBookmarkPromoStringSpecifier());
-  if (!bookmark_promo_observer_.IsObserving(
-          bookmark_promo_bubble->GetWidget())) {
-    bookmark_promo_observer_.Add(bookmark_promo_bubble->GetWidget());
-    SetActive(false);
-    UpdateIconImage();
-  }
-}
 
 void StarView::UpdateImpl() {
   SetVisible(browser_defaults::bookmarks_enabled &&
@@ -105,8 +75,20 @@ void StarView::OnExecuting(PageActionIconView::ExecuteSource execute_source) {
 }
 
 void StarView::ExecuteCommand(ExecuteSource source) {
-  OnExecuting(source);
-  chrome::BookmarkCurrentTab(browser_);
+  if (base::FeatureList::IsEnabled(features::kReadLater)) {
+    menu_model_ = std::make_unique<StarMenuModel>(
+        this, active(), chrome::CanMoveActiveTabToReadLater(browser_),
+        chrome::IsCurrentTabUnreadInReadLater(browser_));
+    menu_runner_ = std::make_unique<views::MenuRunner>(
+        menu_model_.get(),
+        views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::FIXED_ANCHOR);
+    menu_runner_->RunMenuAt(GetWidget(), nullptr, GetAnchorBoundsInScreen(),
+                            views::MenuAnchorPosition::kTopRight,
+                            ui::MENU_SOURCE_NONE);
+  } else {
+    OnExecuting(source);
+    chrome::BookmarkCurrentTab(browser_);
+  }
 }
 
 views::BubbleDialogDelegate* StarView::GetBubble() const {
@@ -126,21 +108,30 @@ const char* StarView::GetClassName() const {
   return "StarView";
 }
 
-SkColor StarView::GetInkDropBaseColor() const {
-  return bookmark_promo_observer_.IsObservingSources()
-             ? GetNativeTheme()->GetSystemColor(
-                   ui::NativeTheme::kColorId_ProminentButtonColor)
-             : PageActionIconView::GetInkDropBaseColor();
+void StarView::EditBookmarksPrefUpdated() {
+  Update();
 }
 
-void StarView::OnWidgetDestroying(views::Widget* widget) {
-  if (bookmark_promo_observer_.IsObserving(widget)) {
-    bookmark_promo_observer_.Remove(widget);
-    SetActive(false);
-    UpdateIconImage();
+void StarView::ExecuteCommand(int command_id, int event_flags) {
+  switch (command_id) {
+    case StarMenuModel::CommandBookmark:
+      chrome::BookmarkCurrentTab(browser_);
+      break;
+    case StarMenuModel::CommandMoveToReadLater:
+      chrome::MoveCurrentTabToReadLater(browser_);
+      break;
+    case StarMenuModel::CommandMarkAsRead:
+      chrome::MarkCurrentTabAsReadInReadLater(browser_);
+      break;
+    default:
+      NOTREACHED();
   }
 }
 
-void StarView::EditBookmarksPrefUpdated() {
-  Update();
+void StarView::MenuClosed(ui::SimpleMenuModel* source) {
+  if (!GetBubble() || !GetBubble()->GetWidget() ||
+      !GetBubble()->GetWidget()->IsVisible()) {
+    SetHighlighted(false);
+  }
+  menu_runner_.reset();
 }

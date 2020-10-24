@@ -37,6 +37,7 @@ namespace apps {
 // any handling apps.
 class AppsNavigationThrottle : public content::NavigationThrottle {
  public:
+  using ThrottleCheckResult = content::NavigationThrottle::ThrottleCheckResult;
   // Restricts the amount of apps displayed to the user without the need of a
   // ScrollView.
   enum { kMaxAppResults = 3 };
@@ -88,9 +89,8 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
 
   // content::NavigationHandle overrides
   const char* GetNameForLogging() override;
-  content::NavigationThrottle::ThrottleCheckResult WillStartRequest() override;
-  content::NavigationThrottle::ThrottleCheckResult WillRedirectRequest()
-      override;
+  ThrottleCheckResult WillStartRequest() override;
+  ThrottleCheckResult WillRedirectRequest() override;
 
   // These enums are used to define the buckets for an enumerated UMA histogram
   // and need to be synced with the ArcIntentHandlerAction enum in enums.xml.
@@ -121,8 +121,8 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
     ERROR_BEFORE_PICKER = 10,
     INVALID = 11,
     DEVICE_PRESSED = 12,
-    MAC_NATIVE_APP_PRESSED = 13,
-    kMaxValue = MAC_NATIVE_APP_PRESSED,
+    MAC_OS_APP_PRESSED = 13,
+    kMaxValue = MAC_OS_APP_PRESSED,
   };
 
   // As for PickerAction, these define the buckets for an UMA histogram, so this
@@ -134,8 +134,8 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
     CHROME = 1,
     PWA = 2,
     DEVICE = 3,
-    MAC_NATIVE = 4,
-    kMaxValue = MAC_NATIVE,
+    MAC_OS = 4,
+    kMaxValue = MAC_OS,
   };
 
   // TODO(ajlinker): move these two functions below to IntentHandlingMetrics.
@@ -199,7 +199,7 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
 
   virtual bool ShouldCancelNavigation(content::NavigationHandle* handle);
 
-  void ShowIntentPickerForApps(
+  virtual void ShowIntentPickerForApps(
       content::WebContents* web_contents,
       IntentPickerAutoDisplayService* ui_auto_display_service,
       const GURL& url,
@@ -236,12 +236,14 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
   FRIEND_TEST_ALL_PREFIXES(chromeos::ChromeOsAppsNavigationThrottleTest,
                            TestGetDestinationPlatform);
 
-  // Returns whether navigation to |url| was captured by a web app
-  bool CaptureExperimentalTabStripWebAppScopeNavigations(
+  // Returns whether navigation to |url| was captured by a web app and what to
+  // do next if so.
+  base::Optional<ThrottleCheckResult>
+  CaptureExperimentalTabStripWebAppScopeNavigations(
       content::WebContents* web_contents,
       content::NavigationHandle* handle) const;
 
-  content::NavigationThrottle::ThrottleCheckResult HandleRequest();
+  ThrottleCheckResult HandleRequest();
 
   // A reference to the starting GURL.
   GURL starting_url_;

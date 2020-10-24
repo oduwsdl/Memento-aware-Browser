@@ -9,6 +9,10 @@ namespace autofill_assistant {
 ViewHandlerAndroid::ViewHandlerAndroid() = default;
 ViewHandlerAndroid::~ViewHandlerAndroid() = default;
 
+base::WeakPtr<ViewHandlerAndroid> ViewHandlerAndroid::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 base::Optional<base::android::ScopedJavaGlobalRef<jobject>>
 ViewHandlerAndroid::GetView(const std::string& view_identifier) const {
   auto it = views_.find(view_identifier);

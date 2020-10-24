@@ -12,7 +12,6 @@
 #include "content/browser/renderer_host/pepper/pepper_file_io_host.h"
 #include "content/browser/renderer_host/pepper/pepper_file_ref_host.h"
 #include "content/browser/renderer_host/pepper/pepper_file_system_browser_host.h"
-#include "content/browser/renderer_host/pepper/pepper_flash_file_message_filter.h"
 #include "content/browser/renderer_host/pepper/pepper_gamepad_host.h"
 #include "content/browser/renderer_host/pepper/pepper_host_resolver_message_filter.h"
 #include "content/browser/renderer_host/pepper/pepper_network_monitor_host.h"
@@ -21,8 +20,6 @@
 #include "content/browser/renderer_host/pepper/pepper_printing_host.h"
 #include "content/browser/renderer_host/pepper/pepper_tcp_server_socket_message_filter.h"
 #include "content/browser/renderer_host/pepper/pepper_tcp_socket_message_filter.h"
-#include "content/browser/renderer_host/pepper/pepper_truetype_font_host.h"
-#include "content/browser/renderer_host/pepper/pepper_truetype_font_list_host.h"
 #include "content/browser/renderer_host/pepper/pepper_udp_socket_message_filter.h"
 #include "ppapi/host/message_filter_host.h"
 #include "ppapi/host/ppapi_host.h"
@@ -175,25 +172,6 @@ ContentBrowserPepperHostFactory::CreateResourceHost(
             new PepperPrintingHost(host_->GetPpapiHost(), instance, resource,
                                    std::move(manager)));
       }
-      case PpapiHostMsg_TrueTypeFont_Create::ID: {
-        ppapi::proxy::SerializedTrueTypeFontDesc desc;
-        if (!ppapi::UnpackMessage<PpapiHostMsg_TrueTypeFont_Create>(message,
-                                                                    &desc)) {
-          NOTREACHED();
-          return std::unique_ptr<ppapi::host::ResourceHost>();
-        }
-        // Check that the family name is valid UTF-8 before passing it to the
-        // host OS.
-        if (!base::IsStringUTF8(desc.family))
-          return std::unique_ptr<ppapi::host::ResourceHost>();
-
-        return std::unique_ptr<ppapi::host::ResourceHost>(
-            new PepperTrueTypeFontHost(host_, instance, resource, desc));
-      }
-      case PpapiHostMsg_TrueTypeFontSingleton_Create::ID: {
-        return std::unique_ptr<ppapi::host::ResourceHost>(
-            new PepperTrueTypeFontListHost(host_, instance, resource));
-      }
 #if defined(OS_CHROMEOS)
       case PpapiHostMsg_VpnProvider_Create::ID: {
         scoped_refptr<PepperVpnProviderMessageFilter> vpn_provider(
@@ -230,19 +208,6 @@ ContentBrowserPepperHostFactory::CreateResourceHost(
   if (message.type() == PpapiHostMsg_NetworkMonitor_Create::ID) {
     return std::unique_ptr<ppapi::host::ResourceHost>(
         new PepperNetworkMonitorHost(host_, instance, resource));
-  }
-
-  // Flash interfaces.
-  if (GetPermissions().HasPermission(ppapi::PERMISSION_FLASH)) {
-    switch (message.type()) {
-      case PpapiHostMsg_FlashFile_Create::ID: {
-        scoped_refptr<ppapi::host::ResourceMessageFilter> file_filter(
-            new PepperFlashFileMessageFilter(instance, host_));
-        return std::unique_ptr<ppapi::host::ResourceHost>(
-            new ppapi::host::MessageFilterHost(host_->GetPpapiHost(), instance,
-                                               resource, file_filter));
-      }
-    }
   }
 
   return std::unique_ptr<ppapi::host::ResourceHost>();

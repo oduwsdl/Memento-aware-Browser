@@ -13,7 +13,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/in_product_help/in_product_help.h"
+#include "chrome/browser/ui/in_product_help/feature_promo_controller.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
@@ -31,7 +31,8 @@ ReopenTabInProductHelp::ReopenTabInProductHelp(Profile* profile,
   // currently living browsers.
   BrowserList::AddObserver(this);
   for (Browser* browser : *BrowserList::GetInstance()) {
-    active_tab_tracker_.AddTabStripModel(browser->tab_strip_model());
+    if (browser->profile() == profile_)
+      active_tab_tracker_.AddTabStripModel(browser->tab_strip_model());
   }
 
   // |base::Unretained| is safe here since this is a member.
@@ -42,7 +43,8 @@ ReopenTabInProductHelp::ReopenTabInProductHelp(Profile* profile,
 ReopenTabInProductHelp::~ReopenTabInProductHelp() {
   BrowserList::RemoveObserver(this);
   for (Browser* browser : *BrowserList::GetInstance()) {
-    active_tab_tracker_.RemoveTabStripModel(browser->tab_strip_model());
+    if (browser->profile() == profile_)
+      active_tab_tracker_.RemoveTabStripModel(browser->tab_strip_model());
   }
 }
 
@@ -54,10 +56,6 @@ void ReopenTabInProductHelp::TabReopened() {
   GetTracker()->NotifyEvent(feature_engagement::events::kTabReopened);
 }
 
-void ReopenTabInProductHelp::HelpDismissed() {
-  trigger_.HelpDismissed();
-}
-
 void ReopenTabInProductHelp::OnActiveTabClosed(
     TabStripModel* tab_strip_model,
     base::TimeDelta active_duration) {
@@ -66,16 +64,20 @@ void ReopenTabInProductHelp::OnActiveTabClosed(
 
 void ReopenTabInProductHelp::OnShowHelp() {
   auto* browser = BrowserList::GetInstance()->GetLastActive();
-  DCHECK(browser);
-  browser->window()->ShowInProductHelpPromo(InProductHelpFeature::kReopenTab);
+  if (!browser)
+    return;
+  browser->window()->GetFeaturePromoController()->MaybeShowPromo(
+      feature_engagement::kIPHReopenTabFeature);
 }
 
 void ReopenTabInProductHelp::OnBrowserAdded(Browser* browser) {
-  active_tab_tracker_.AddTabStripModel(browser->tab_strip_model());
+  if (browser->profile() == profile_)
+    active_tab_tracker_.AddTabStripModel(browser->tab_strip_model());
 }
 
 void ReopenTabInProductHelp::OnBrowserRemoved(Browser* browser) {
-  active_tab_tracker_.RemoveTabStripModel(browser->tab_strip_model());
+  if (browser->profile() == profile_)
+    active_tab_tracker_.RemoveTabStripModel(browser->tab_strip_model());
 }
 
 feature_engagement::Tracker* ReopenTabInProductHelp::GetTracker() {

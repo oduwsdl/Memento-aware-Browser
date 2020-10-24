@@ -7,10 +7,7 @@
 
 #include <vector>
 #include "components/autofill/core/common/form_data.h"
-
-namespace autofill {
-struct PasswordForm;
-}
+#include "components/password_manager/core/browser/password_form_forward.h"
 
 namespace content {
 class RenderFrameHost;
@@ -34,7 +31,7 @@ enum class BadMessageReason {
   CPMD_BAD_ORIGIN_PASSWORD_NO_LONGER_GENERATED = 6,
   CPMD_BAD_ORIGIN_PRESAVE_GENERATED_PASSWORD = 7,
   CPMD_BAD_ORIGIN_SAVE_GENERATION_FIELD_DETECTED_BY_CLASSIFIER = 8,
-  CPMD_BAD_ORIGIN_SHOW_FALLBACK_FOR_SAVING = 9,
+  CPMD_BAD_ORIGIN_UPON_USER_INPUT_CHANGE = 9,
   CPMD_BAD_ORIGIN_AUTOMATIC_GENERATION_STATUS_CHANGED = 10,
   CPMD_BAD_ORIGIN_SHOW_MANUAL_PASSWORD_GENERATION_POPUP = 11,
   CPMD_BAD_ORIGIN_SHOW_PASSWORD_EDITING_POPUP = 12,
@@ -61,17 +58,15 @@ bool CheckChildProcessSecurityPolicyForURL(content::RenderFrameHost* frame,
 // on |password_form|. If the origin mismatches, the process for |frame| is
 // terminated and the function returns false.
 // TODO: Delete this signature after transferring all driver calls to FormData
-bool CheckChildProcessSecurityPolicy(
-    content::RenderFrameHost* frame,
-    const autofill::PasswordForm& password_form,
-    BadMessageReason reason);
+bool CheckChildProcessSecurityPolicy(content::RenderFrameHost* frame,
+                                     const PasswordForm& password_form,
+                                     BadMessageReason reason);
 
 // Same as above but checks every form in |forms|.
 // TODO: Delete this signature after transferring all driver calls to FormData
-bool CheckChildProcessSecurityPolicy(
-    content::RenderFrameHost* frame,
-    const std::vector<autofill::PasswordForm>& forms,
-    BadMessageReason reason);
+bool CheckChildProcessSecurityPolicy(content::RenderFrameHost* frame,
+                                     const std::vector<PasswordForm>& forms,
+                                     BadMessageReason reason);
 
 bool CheckChildProcessSecurityPolicy(
     content::RenderFrameHost* frame,

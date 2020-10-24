@@ -87,8 +87,6 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
   jboolean IsEncryptEverythingEnabled(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
-  void EnableEncryptEverything(JNIEnv* env,
-                               const base::android::JavaParamRef<jobject>& obj);
   jboolean IsPassphraseRequiredForPreferredDataTypes(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -129,6 +127,12 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
       const base::android::JavaParamRef<jobject>& obj,
       jboolean personalized);
   jboolean RequiresClientUpgrade(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void SetDecoupledFromAndroidMasterSync(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  jboolean GetDecoupledFromAndroidMasterSync(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 

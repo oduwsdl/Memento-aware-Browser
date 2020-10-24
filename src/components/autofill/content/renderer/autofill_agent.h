@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/containers/mru_cache.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -20,8 +19,6 @@
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/form_cache.h"
 #include "components/autofill/content/renderer/form_tracker.h"
-#include "components/autofill/core/common/renderer_id.h"
-#include "components/autofill/core/common/signatures.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -132,12 +129,6 @@ class AutofillAgent : public content::RenderFrameObserver,
  private:
   friend class FormControlClickDetectionTest;
 
-  // Functor used as a simplified comparison function for FormData. Only
-  // compares forms at a high level (notably name, origin, action).
-  struct FormDataCompare {
-    bool operator()(const FormData& lhs, const FormData& rhs) const;
-  };
-
   // Flags passed to ShowSuggestions.
   struct ShowSuggestionsOptions {
     // All fields are default initialized to false.
@@ -151,57 +142,14 @@ class AutofillAgent : public content::RenderFrameObserver,
     // after the last character in the element.
     bool requires_caret_at_end;
 
-    // Specifies that all of <datalist> suggestions and no autofill suggestions
-    // are shown. |autofill_on_empty_values| and |requires_caret_at_end| are
-    // ignored if |datalist_only| is true.
-    bool datalist_only;
-
     // Specifies that all autofill suggestions should be shown and none should
     // be elided because of the current value of |element| (relevant for inline
     // autocomplete).
     bool show_full_suggestion_list;
 
-    // Specifies that only show a suggestions box if |element| is part of a
-    // password form, otherwise show no suggestions.
-    bool show_password_suggestions_only;
-
     // Specifies that the first suggestion must be auto-selected when the
     // dropdown is shown. Enabled when the user presses ARROW_DOWN on a field.
     bool autoselect_first_suggestion;
-  };
-
-  // Utility class for logging how dynamic forms are.
-  class UmaFormDynamicityLogger {
-   public:
-    UmaFormDynamicityLogger();
-    UmaFormDynamicityLogger(const UmaFormDynamicityLogger&) = delete;
-    UmaFormDynamicityLogger& operator=(const UmaFormDynamicityLogger&) = delete;
-    ~UmaFormDynamicityLogger();
-
-    void LogForm(const FormData& form);
-    void FlushCache();
-
-   private:
-    struct FormStats {
-      FormStats();
-      FormStats(const FormStats&);
-      FormStats& operator=(const FormStats&);
-      ~FormStats();
-
-      FormRendererId form_renderer_id;
-      FormSignature form_signature;
-      std::map<FieldRendererId, FieldSignature> fields;
-
-      bool form_signature_changed = false;
-      bool some_field_signature_changed = false;
-      bool some_field_renderer_id_added = false;
-    };
-
-    using Cache = base::MRUCache<FormRendererId, FormStats>;
-
-    static constexpr size_t kCacheSize = 32;
-
-    Cache cache_{kCacheSize};
   };
 
   // content::RenderFrameObserver:
@@ -249,7 +197,7 @@ class AutofillAgent : public content::RenderFrameObserver,
   // Helper method which collects unowned elements (i.e., those not inside a
   // form tag) and writes them into |output|. Returns true if the process is
   // successful, and all conditions for firing events are true.
-  bool CollectFormlessElements(FormData* output);
+  bool CollectFormlessElements(FormData* output) const;
   FRIEND_TEST_ALL_PREFIXES(FormAutocompleteTest, CollectFormlessElements);
 
   void OnTextFieldDidChange(const blink::WebInputElement& element);
@@ -287,7 +235,10 @@ class AutofillAgent : public content::RenderFrameObserver,
 
   // Attempt to get submitted FormData from last_interacted_form_ or
   // provisionally_saved_form_, return true if |form| is set.
-  bool GetSubmittedForm(FormData* form);
+  base::Optional<FormData> GetSubmittedForm() const;
+
+  // Pushes the value of GetSubmittedForm() to the AutofillDriver.
+  void SendPotentiallySubmittedFormToBrowser();
 
   void ResetLastInteractedElements();
   void UpdateLastInteractedForm(blink::WebFormElement form);
@@ -359,8 +310,7 @@ class AutofillAgent : public content::RenderFrameObserver,
   // WILL_SEND_SUBMIT_EVENT and form submitted are both fired for same form.
   // The submitted_forms_ is cleared when we know no more submission could
   // happen for that form.
-  // We use a simplified comparison function.
-  std::set<FormData, FormDataCompare> submitted_forms_;
+  std::set<FormRendererId> submitted_forms_;
 
   // The query node autofill state prior to previewing the form.
   blink::WebAutofillState query_node_autofill_state_;
@@ -412,8 +362,6 @@ class AutofillAgent : public content::RenderFrameObserver,
   bool is_screen_reader_enabled_ = false;
 
   const scoped_refptr<FieldDataManager> field_data_manager_;
-
-  UmaFormDynamicityLogger form_dynamicity_logger_;
 
   base::WeakPtrFactory<AutofillAgent> weak_ptr_factory_{this};
 

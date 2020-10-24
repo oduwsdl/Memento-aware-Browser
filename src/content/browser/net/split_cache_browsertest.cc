@@ -83,8 +83,12 @@ class SplitCacheContentBrowserTest : public ContentBrowserTest {
       http_response->set_code(net::HTTP_OK);
 
       GURL resource = GenURL("3p.com", "/script");
-      std::string content =
-          base::StringPrintf("importScripts('%s');", resource.spec().c_str());
+      // Self-terminate the worker just after loading the third party
+      // script, so that the parent context doesn't need to wait for the
+      // worker's termination when cleaning up the test. See
+      // https://crbug.com/1104847 for more details.
+      std::string content = base::StringPrintf("importScripts('%s');\nclose();",
+                                               resource.spec().c_str());
 
       http_response->set_content(content);
       http_response->set_content_type("application/javascript");
@@ -101,7 +105,7 @@ class SplitCacheContentBrowserTest : public ContentBrowserTest {
       return http_response;
     }
 
-    // A cacheable worker that loads a nested /worker.js on an origin provided
+    // A cacheable worker that loads a nested worker on an origin provided
     // as a query param.
     if (absolute_url.path() == "/embedding_worker.js") {
       auto http_response =
@@ -335,6 +339,7 @@ class SplitCacheContentBrowserTest : public ContentBrowserTest {
     EXPECT_TRUE(ExecuteScript(host_to_load_resource, GetWorkerScript(worker)));
 
     observer.WaitForResourceCompletion(GenURL("3p.com", "/script"));
+    observer.WaitForResourceCompletion(worker);
 
     return (*observer.FindResource(worker))->was_cached;
   }
@@ -392,9 +397,10 @@ class SplitCacheRegistrableDomainContentBrowserTest
  public:
   SplitCacheRegistrableDomainContentBrowserTest() {
     feature_list.InitWithFeatures(
+        // enabled_features
         {net::features::kSplitCacheByNetworkIsolationKey,
-         net::features::kUseRegistrableDomainInNetworkIsolationKey,
          net::features::kAppendFrameOriginToNetworkIsolationKey},
+        // disabled_features
         {});
   }
 
@@ -613,14 +619,8 @@ IN_PROC_BROWSER_TEST_F(SplitCacheContentBrowserTestDisabled, NonSplitCache) {
                                GenURL("c.com", "/title1.html")));
 }
 
-// TODO(http://crbug.com/997808): Flaky on Linux ASAN.
-#if defined(OS_LINUX) && (defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER))
-#define MAYBE_SplitCacheDedicatedWorkers DISABLED_SplitCacheDedicatedWorkers
-#else
-#define MAYBE_SplitCacheDedicatedWorkers SplitCacheDedicatedWorkers
-#endif
 IN_PROC_BROWSER_TEST_F(SplitCacheWithFrameOriginContentBrowserTest,
-                       MAYBE_SplitCacheDedicatedWorkers) {
+                       SplitCacheDedicatedWorkers) {
   // Load 3p.com/script from a.com's worker. The first time it's loaded from the
   // network and the second it's cached.
   EXPECT_FALSE(TestResourceLoadFromDedicatedWorker(
@@ -719,7 +719,7 @@ IN_PROC_BROWSER_TEST_F(SplitCacheWithFrameOriginContentBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled,
-                       MAYBE_SplitCacheDedicatedWorkers) {
+                       SplitCacheDedicatedWorkers) {
   // Load 3p.com/script from a.com's worker. The first time it's loaded from the
   // network and the second it's cached.
   EXPECT_FALSE(TestResourceLoadFromDedicatedWorker(
@@ -762,15 +762,8 @@ IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled,
       GenURL("e.com", "/worker.js")));
 }
 
-// TODO(http://crbug.com/997732): Flaky on Linux.
-#if defined(OS_LINUX)
-#define MAYBE_SplitCacheDedicatedWorkerScripts \
-  DISABLED_SplitCacheDedicatedWorkersScripts
-#else
-#define MAYBE_SplitCacheDedicatedWorkerScripts SplitCacheDedicatedWorkersScripts
-#endif
 IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled,
-                       MAYBE_SplitCacheDedicatedWorkerScripts) {
+                       SplitCacheDedicatedWorkersScripts) {
   // Load a.com's worker. The first time the worker script is loaded from the
   // network and the second it's cached.
   EXPECT_FALSE(DedicatedWorkerScriptCached(
@@ -810,7 +803,7 @@ IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled,
 }
 
 IN_PROC_BROWSER_TEST_F(SplitCacheContentBrowserTestDisabled,
-                       MAYBE_SplitCacheDedicatedWorkers) {
+                       SplitCacheDedicatedWorkers) {
   // Load 3p.com/script from a.com's worker. The first time it's loaded from the
   // network and the second it's cached.
   EXPECT_FALSE(TestResourceLoadFromDedicatedWorker(

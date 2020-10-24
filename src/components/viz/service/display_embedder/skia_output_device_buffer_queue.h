@@ -5,11 +5,17 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SKIA_OUTPUT_DEVICE_BUFFER_QUEUE_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SKIA_OUTPUT_DEVICE_BUFFER_QUEUE_H_
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "base/cancelable_callback.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "components/viz/service/display_embedder/output_presenter.h"
 #include "components/viz/service/display_embedder/skia_output_device.h"
 #include "components/viz/service/viz_service_export.h"
+#include "gpu/command_buffer/common/mailbox.h"
 
 namespace viz {
 
@@ -17,11 +23,15 @@ class SkiaOutputSurfaceDependency;
 
 class VIZ_SERVICE_EXPORT SkiaOutputDeviceBufferQueue : public SkiaOutputDevice {
  public:
+  class OverlayData;
+
   SkiaOutputDeviceBufferQueue(
       std::unique_ptr<OutputPresenter> presenter,
       SkiaOutputSurfaceDependency* deps,
+      gpu::SharedImageRepresentationFactory* representation_factory,
       gpu::MemoryTracker* memory_tracker,
-      const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback);
+      const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback,
+      bool needs_background_image);
 
   ~SkiaOutputDeviceBufferQueue() override;
 
@@ -30,6 +40,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputDeviceBufferQueue : public SkiaOutputDevice {
       delete;
 
   // SkiaOutputDevice overrides.
+  void PreGrContextSubmit() override;
   void SwapBuffers(BufferPresentedCallback feedback,
                    std::vector<ui::LatencyInfo> latency_info) override;
   void PostSubBuffer(const gfx::Rect& rect,
@@ -45,11 +56,11 @@ class VIZ_SERVICE_EXPORT SkiaOutputDeviceBufferQueue : public SkiaOutputDevice {
   SkSurface* BeginPaint(
       std::vector<GrBackendSemaphore>* end_semaphores) override;
   void EndPaint() override;
-  bool supports_alpha() { return true; }
 
   bool IsPrimaryPlaneOverlay() const override;
   void SchedulePrimaryPlane(
-      const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane)
+      const base::Optional<
+          OverlayProcessorInterface::OutputSurfaceOverlayPlane>& plane)
       override;
   void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays) override;
 
@@ -67,15 +78,19 @@ class VIZ_SERVICE_EXPORT SkiaOutputDeviceBufferQueue : public SkiaOutputDevice {
   void DoFinishSwapBuffers(const gfx::Size& size,
                            std::vector<ui::LatencyInfo> latency_info,
                            const base::WeakPtr<OutputPresenter::Image>& image,
-                           std::vector<OutputPresenter::OverlayData> overlays,
+                           std::vector<gpu::Mailbox> overlay_mailboxes,
                            gfx::SwapCompletionResult result);
+
+  gfx::Size GetSwapBuffersSize();
 
   std::unique_ptr<OutputPresenter> presenter_;
 
   SkiaOutputSurfaceDependency* const dependency_;
+  gpu::SharedImageRepresentationFactory* const representation_factory_;
   // Format of images
   gfx::ColorSpace color_space_;
   gfx::Size image_size_;
+  gfx::OverlayTransform overlay_transform_ = gfx::OVERLAY_TRANSFORM_NONE;
 
   // All allocated images.
   std::vector<std::unique_ptr<OutputPresenter::Image>> images_;
@@ -94,10 +109,31 @@ class VIZ_SERVICE_EXPORT SkiaOutputDeviceBufferQueue : public SkiaOutputDevice {
   // from being destructed outside SkiaOutputDeviceBufferQueue life span.
   base::circular_deque<std::unique_ptr<CancelableSwapCompletionCallback>>
       swap_completion_callbacks_;
-  // Scheduled overlays for the next SwapBuffers call.
-  std::vector<OutputPresenter::OverlayData> pending_overlays_;
-  // Committed overlays for the last SwapBuffers call.
-  std::vector<OutputPresenter::OverlayData> committed_overlays_;
+  // Mailboxes of scheduled overlays for the next SwapBuffers call.
+  std::vector<gpu::Mailbox> pending_overlay_mailboxes_;
+  // Mailboxes of committed overlays for the last SwapBuffers call.
+  std::vector<gpu::Mailbox> committed_overlay_mailboxes_;
+
+  class OverlayDataComparator {
+   public:
+    using is_transparent = void;
+    bool operator()(const OverlayData& lhs, const OverlayData& rhs) const;
+    bool operator()(const OverlayData& lhs, const gpu::Mailbox& rhs) const;
+    bool operator()(const gpu::Mailbox& lhs, const OverlayData& rhs) const;
+  };
+  // A set for all overlays. The set uses overlay_data.mailbox() as the unique
+  // key.
+  base::flat_set<OverlayData, OverlayDataComparator> overlays_;
+
+  // Set to true if no image is to be used for the primary plane of this frame.
+  bool current_frame_has_no_primary_plane_ = false;
+  // Whether the platform needs an occluded background image. Wayland needs it
+  // for opaque accelerated widgets and event wiring.
+  bool needs_background_image_ = false;
+  // A 4x4 small image that will be scaled to cover an opaque region.
+  std::unique_ptr<OutputPresenter::Image> background_image_ = nullptr;
+  // Set to true if background has been scheduled in a frame.
+  bool background_image_is_scheduled_ = false;
 };
 
 }  // namespace viz

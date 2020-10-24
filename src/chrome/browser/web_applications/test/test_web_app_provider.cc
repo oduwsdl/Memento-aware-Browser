@@ -9,9 +9,8 @@
 #include "base/bind.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
-#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
-#include "chrome/browser/web_applications/components/file_handler_manager.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
 #include "chrome/browser/web_applications/components/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
@@ -20,7 +19,6 @@
 #include "chrome/browser/web_applications/test/test_system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 
 namespace web_app {
 
@@ -74,12 +72,6 @@ void TestWebAppProvider::SetRegistryController(
   registry_controller_ = std::move(controller);
 }
 
-void TestWebAppProvider::SetFileHandlerManager(
-    std::unique_ptr<FileHandlerManager> file_handler_manager) {
-  CheckNotStarted();
-  file_handler_manager_ = std::move(file_handler_manager);
-}
-
 void TestWebAppProvider::SetInstallManager(
     std::unique_ptr<WebAppInstallManager> install_manager) {
   CheckNotStarted();
@@ -116,10 +108,10 @@ void TestWebAppProvider::SetWebAppPolicyManager(
   web_app_policy_manager_ = std::move(web_app_policy_manager);
 }
 
-void TestWebAppProvider::SetShortcutManager(
-    std::unique_ptr<AppShortcutManager> shortcut_manager) {
+void TestWebAppProvider::SetOsIntegrationManager(
+    std::unique_ptr<OsIntegrationManager> os_integration_manager) {
   CheckNotStarted();
-  shortcut_manager_ = std::move(shortcut_manager);
+  os_integration_manager_ = std::move(os_integration_manager);
 }
 
 void TestWebAppProvider::CheckNotStarted() const {
@@ -137,12 +129,11 @@ void TestWebAppProvider::StartImpl() {
 TestWebAppProviderCreator::TestWebAppProviderCreator(
     CreateWebAppProviderCallback callback)
     : callback_(std::move(callback)) {
-  will_create_browser_context_services_subscription_ =
+  create_services_subscription_ =
       BrowserContextDependencyManager::GetInstance()
-          ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-              base::BindRepeating(&TestWebAppProviderCreator::
-                                      OnWillCreateBrowserContextServices,
-                                  base::Unretained(this)));
+          ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
+              &TestWebAppProviderCreator::OnWillCreateBrowserContextServices,
+              base::Unretained(this)));
 }
 
 TestWebAppProviderCreator::~TestWebAppProviderCreator() = default;

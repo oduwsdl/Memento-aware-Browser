@@ -5,20 +5,20 @@
 <!-- OOBE-specific screens roughly in order of appearance -->
 
 <!-- Due to implementation details Welcome screen have to be first -->
-<oobe-welcome-md id="connect" class="step hidden" full-screen-dialog hidden>
+<oobe-welcome-md id="connect" class="step hidden" hidden>
 </oobe-welcome-md>
-<hid-detection id="hid-detection" class="step right hidden"
-               full-screen-dialog>
+<hid-detection id="hid-detection" class="step hidden">
 </hid-detection>
 <include src="../oobe_screen_enable_debugging.html">
-<include src="../oobe_screen_demo_setup.html">
-<oobe-network id="network-selection" class="step hidden animated" hidden>
+<demo-setup id="demo-setup" class="step hidden" hidden></demo-setup>
+<oobe-network id="network-selection" class="step hidden" hidden>
 </oobe-network>
-<include src="../oobe_screen_eula.html">
-<oobe-update id="oobe-update" class="step right hidden animated" hidden>
+<oobe-eula-md id="oobe-eula-md" class="step hidden" hidden></oobe-eula-md>
+<oobe-update id="oobe-update" class="step hidden" hidden>
 </oobe-update>
 <include src="../oobe_screen_auto_enrollment_check.html">
-<include src="../oobe_screen_demo_preferences.html">
+<demo-preferences id="demo-preferences" class="step hidden" hidden>
+</demo-preferences>
 <enterprise-enrollment id="enterprise-enrollment" class="step hidden" hidden>
 </enterprise-enrollment>
 <packaged-license-screen id="packaged-license" class="step hidden">

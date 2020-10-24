@@ -50,12 +50,9 @@
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "mojo/public/cpp/bindings/scoped_message_error_crash_key.h"
 #include "mojo/public/cpp/system/platform_handle.h"
-#include "net/websockets/websocket_basic_stream.h"
-#include "net/websockets/websocket_channel.h"
-#include "services/service_manager/embedder/switches.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/browser/child_process_task_port_provider_mac.h"
 #include "content/browser/sandbox_support_mac_impl.h"
 #include "content/common/sandbox_support_mac.mojom.h"
@@ -164,7 +161,7 @@ BrowserChildProcessHost* BrowserChildProcessHost::FromID(int child_process_id) {
   return nullptr;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 base::PortProvider* BrowserChildProcessHost::GetPortProvider() {
   return ChildProcessTaskPortProvider::GetInstance();
 }
@@ -328,9 +325,7 @@ void BrowserChildProcessHostImpl::LaunchWithoutExtraCommandLineSwitches(
   const base::CommandLine& browser_command_line =
       *base::CommandLine::ForCurrentProcess();
   static const char* const kForwardSwitches[] = {
-      net::kWebSocketReadBufferSize,
-      net::kWebSocketReceiveQuotaThreshold,
-      service_manager::switches::kDisableInProcessStackTraces,
+      switches::kDisableInProcessStackTraces,
       switches::kDisableBestEffortTasks,
       switches::kDisableLogging,
       switches::kEnableLogging,
@@ -406,7 +401,7 @@ void BrowserChildProcessHostImpl::OnChannelConnected(int32_t peer_pid) {
   is_channel_connected_ = true;
   notify_child_disconnected_ = true;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   ChildProcessTaskPortProvider::GetInstance()->OnChildProcessLaunched(
       peer_pid, static_cast<ChildProcessHostImpl*>(child_process_host_.get())
                     ->child_process());
@@ -646,6 +641,14 @@ void BrowserChildProcessHostImpl::OnProcessLaunched() {
         FROM_HERE,
         base::BindOnce(&NotifyProcessLaunchedAndConnected, data_.Duplicate()));
   }
+
+#if defined(OS_CHROMEOS)
+  // In ChromeOS, there are still child processes of NaCl modules, and they
+  // don't contribute to tracing actually. So do not register those clients
+  // to the tracing service. See https://crbug.com/1101468.
+  if (data_.process_type >= PROCESS_TYPE_CONTENT_END)
+    return;
+#endif
 
   tracing_registration_ = TracingServiceController::Get().RegisterClient(
       process.Pid(), base::BindRepeating(&BindTracedProcessFromUIThread,

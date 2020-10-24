@@ -8,16 +8,19 @@
 #include "ash/keyboard/ui/keyboard_util.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/keyboard/keyboard_controller.h"
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/exo/input_trace.h"
 #include "components/exo/keyboard_delegate.h"
 #include "components/exo/keyboard_device_configuration_delegate.h"
+#include "components/exo/keyboard_modifiers.h"
 #include "components/exo/seat.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
+#include "components/exo/xkb_tracker.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
@@ -31,14 +34,6 @@ namespace {
 
 // Delay until a key state change expected to be acknowledged is expired.
 const int kExpirationDelayForPendingKeyAcksMs = 1000;
-
-// These modifiers reflect what clients are supposed to be aware of.
-// I.e. EF_SCROLL_LOCK_ON is missing because clients are not supposed
-// to be aware scroll lock.
-const int kModifierMask = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
-                          ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN |
-                          ui::EF_ALTGR_DOWN | ui::EF_MOD3_DOWN |
-                          ui::EF_NUM_LOCK_ON | ui::EF_CAPS_LOCK_ON;
 
 // The accelerator keys reserved to be processed by chrome.
 const struct {
@@ -146,15 +141,21 @@ bool ProcessAcceleratorIfReserved(Surface* surface, ui::KeyEvent* event) {
   return IsReservedAccelerator(event) && ProcessAccelerator(surface, event);
 }
 
-// Returns true if surface belongs to an ARC application.
+// Returns true if the surface needs to support IME.
 // TODO(yhanada, https://crbug.com/847500): Remove this when we find a way
-// to fix https://crbug.com/847500 without breaking ARC++ apps.
-bool IsArcSurface(Surface* surface) {
+// to fix https://crbug.com/847500 without breaking ARC apps/Lacros browser.
+bool IsImeSupportedSurface(Surface* surface) {
   aura::Window* window = surface->window();
   for (; window; window = window->parent()) {
-    if (window->GetProperty(aura::client::kAppType) ==
-        static_cast<int>(ash::AppType::ARC_APP)) {
-      return true;
+    const auto app_type =
+        static_cast<ash::AppType>(window->GetProperty(aura::client::kAppType));
+    switch (app_type) {
+      case ash::AppType::ARC_APP:
+      case ash::AppType::LACROS:
+        return true;
+      default:
+        // Do nothing.
+        break;
     }
   }
   return false;
@@ -165,15 +166,18 @@ bool IsArcSurface(Surface* surface) {
 ////////////////////////////////////////////////////////////////////////////////
 // Keyboard, public:
 
-Keyboard::Keyboard(KeyboardDelegate* delegate, Seat* seat)
-    : delegate_(delegate),
+Keyboard::Keyboard(std::unique_ptr<KeyboardDelegate> delegate, Seat* seat)
+    : delegate_(std::move(delegate)),
       seat_(seat),
       expiration_delay_for_pending_key_acks_(base::TimeDelta::FromMilliseconds(
           kExpirationDelayForPendingKeyAcksMs)) {
   AddEventHandler();
   seat_->AddObserver(this);
   ash::KeyboardController::Get()->AddObserver(this);
+  ash::ImeControllerImpl* ime_controller = ash::Shell::Get()->ime_controller();
+  ime_controller->AddObserver(this);
 
+  delegate_->OnKeyboardLayoutUpdated(seat_->xkb_tracker()->GetKeymap().get());
   OnSurfaceFocused(seat_->GetFocusedSurface());
   OnKeyRepeatSettingsChanged(
       ash::KeyboardController::Get()->GetKeyRepeatSettings());
@@ -184,9 +188,11 @@ Keyboard::~Keyboard() {
     observer.OnKeyboardDestroying(this);
   if (focus_)
     focus_->RemoveSurfaceObserver(this);
-  RemoveEventHandler();
-  seat_->RemoveObserver(this);
+
+  ash::Shell::Get()->ime_controller()->RemoveObserver(this);
   ash::KeyboardController::Get()->RemoveObserver(this);
+  seat_->RemoveObserver(this);
+  RemoveEventHandler();
 }
 
 bool Keyboard::HasDeviceConfigurationDelegate() const {
@@ -280,18 +286,22 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
       ConsumedByIme(focus_, event);
 
   // Always update modifiers.
-  int modifier_flags = event->flags() & kModifierMask;
-  if (modifier_flags != modifier_flags_) {
-    modifier_flags_ = modifier_flags;
-    delegate_->OnKeyboardModifiers(modifier_flags_);
-  }
+  // XkbTracker must be updated in the Seat, before calling this method.
+  // Ensured by the observer registration order.
+  delegate_->OnKeyboardModifiers(seat_->xkb_tracker()->GetModifiers());
 
+  // Currently, physical keycode is tracked in Seat, assuming that the
+  // Keyboard::OnKeyEvent is called between Seat::WillProcessEvent and
+  // Seat::DidProcessEvent. However, if IME is enabled, it is no longer true,
+  // because IME work in async approach, and on its dispatching, call stack
+  // is split so actually Keyboard::OnKeyEvent is called after
+  // Seat::DidProcessEvent.
   // TODO(yhanada): This is a quick fix for https://crbug.com/859071. Remove
-  // ARC-specific code path once we can find a way to manage press/release
-  // events pair for synthetic events.
+  // ARC-/Lacros-specific code path once we can find a way to manage
+  // press/release events pair for synthetic events.
   ui::DomCode physical_code =
       seat_->physical_code_for_currently_processing_event();
-  if (physical_code == ui::DomCode::NONE && focus_belongs_to_arc_app_) {
+  if (physical_code == ui::DomCode::NONE && focused_on_ime_supported_surface_) {
     // This key event is a synthetic event.
     // Consider DomCode field of the event as a physical code
     // for synthetic events when focus surface belongs to an ARC application.
@@ -402,6 +412,17 @@ void Keyboard::OnKeyRepeatSettingsChanged(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ash::ImeControllerImpl::Observer overrides:
+
+void Keyboard::OnCapsLockChanged(bool enabled) {}
+
+void Keyboard::OnKeyboardLayoutNameChanged(const std::string& layout_name) {
+  // XkbTracker must be updated in the Seat, before calling this method.
+  // Ensured by the observer registration order.
+  delegate_->OnKeyboardLayoutUpdated(seat_->xkb_tracker()->GetKeymap().get());
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Keyboard, private:
 
 void Keyboard::SetFocus(Surface* surface) {
@@ -412,13 +433,12 @@ void Keyboard::SetFocus(Surface* surface) {
     pending_key_acks_.clear();
   }
   if (surface) {
-    modifier_flags_ = seat_->modifier_flags() & kModifierMask;
     pressed_keys_ = seat_->pressed_keys();
-    delegate_->OnKeyboardModifiers(modifier_flags_);
+    delegate_->OnKeyboardModifiers(seat_->xkb_tracker()->GetModifiers());
     delegate_->OnKeyboardEnter(surface, pressed_keys_);
     focus_ = surface;
     focus_->AddSurfaceObserver(this);
-    focus_belongs_to_arc_app_ = IsArcSurface(surface);
+    focused_on_ime_supported_surface_ = IsImeSupportedSurface(surface);
   }
 }
 

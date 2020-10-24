@@ -7,17 +7,24 @@ package org.chromium.chrome.browser.banners;
 import android.content.Context;
 import android.text.TextUtils;
 
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
+import org.chromium.components.feature_engagement.FeatureConstants;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Manages an AppBannerInfoBar for a Tab.
@@ -28,6 +35,28 @@ import org.chromium.content_public.browser.WebContents;
  */
 @JNINamespace("banners")
 public class AppBannerManager {
+    /**
+     * A struct containing the string resources IDs for the strings to show in the install
+     * dialog (both the dialog title and the accept button).
+     */
+    public static class InstallStringPair {
+        public final @StringRes int titleTextId;
+        public final @StringRes int buttonTextId;
+
+        public InstallStringPair(@StringRes int titleText, @StringRes int buttonText) {
+            titleTextId = titleText;
+            buttonTextId = buttonText;
+        }
+    }
+
+    public static final InstallStringPair PWA_PAIR = new InstallStringPair(
+            R.string.menu_add_to_homescreen_install, R.string.app_banner_install);
+    public static final InstallStringPair NON_PWA_PAIR =
+            new InstallStringPair(R.string.menu_add_to_homescreen, R.string.add);
+
+    /** The key to use to store and retrieve (from the menu data) what was shown in the menu. */
+    public static final String MENU_TITLE_KEY = "AppMenuTitleShown";
+
     private static final String TAG = "AppBannerManager";
 
     /** Retrieves information about a given package. */
@@ -105,6 +134,31 @@ public class AppBannerManager {
                 createAppDetailsObserver(), url, packageName, referrer, iconSizeInPx);
     }
 
+    /**
+     * Request to show the in-product help for installing a PWA.
+     * @param webContents The current WebContents.
+     * @return An error message, if unsuccessful. Blank if the request was made.
+     */
+    @CalledByNative
+    private String showInProductHelp(WebContents webContents) {
+        // Consult the tracker to see if the IPH can be shown.
+        Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.fromWebContents(webContents));
+        if (!tracker.wouldTriggerHelpUI(FeatureConstants.PWA_INSTALL_AVAILABLE_FEATURE)) {
+            // Tracker replied that the request to show will not be honored. Return whether the
+            // limit of how often to show has been exceeded.
+            return "Trigger state: "
+                    + tracker.getTriggerState(FeatureConstants.PWA_INSTALL_AVAILABLE_FEATURE);
+        }
+
+        WindowAndroid window = webContents.getTopLevelNativeWindow();
+        if (window == null) return "No window";
+        AppBannerInProductHelpController controller =
+                AppBannerInProductHelpControllerProvider.from(window);
+        if (controller == null) return "No controller";
+        controller.requestInProductHelp();
+        return "";
+    }
+
     private AppDetailsDelegate.Observer createAppDetailsObserver() {
         return new AppDetailsDelegate.Observer() {
             /**
@@ -127,18 +181,25 @@ public class AppBannerManager {
     }
 
     /** Returns the language option to use for the add to homescreen dialog and menu item. */
-    public static int getHomescreenLanguageOption() {
-        int languageOption = AppBannerManagerJni.get().getHomescreenLanguageOption();
-        if (languageOption == LanguageOption.INSTALL) {
-            return R.string.menu_add_to_homescreen_install;
+    public static InstallStringPair getHomescreenLanguageOption(Tab currentTab) {
+        AppBannerManager manager = currentTab != null ? AppBannerManager.forTab(currentTab) : null;
+        if (manager != null && manager.getIsPwa(currentTab)) {
+            return PWA_PAIR;
+        } else {
+            return NON_PWA_PAIR;
         }
-        return R.string.menu_add_to_homescreen;
     }
 
     /** Overrides whether the system supports add to home screen. Used in testing. */
     @VisibleForTesting
     public static void setIsSupported(boolean state) {
         sIsSupported = state;
+    }
+
+    /** Sets the app-banner-showing logic to ignore the Chrome channel. */
+    @VisibleForTesting
+    public static void ignoreChromeChannelForTesting() {
+        AppBannerManagerJni.get().ignoreChromeChannelForTesting();
     }
 
     /** Returns whether the native AppBannerManager is working. */
@@ -167,16 +228,28 @@ public class AppBannerManager {
 
     /** Returns the AppBannerManager object. This is owned by the C++ banner manager. */
     public static AppBannerManager forTab(Tab tab) {
+        ThreadUtils.assertOnUiThread();
         return AppBannerManagerJni.get().getJavaBannerManagerForWebContents(tab.getWebContents());
+    }
+
+    /**
+     * Checks whether the tab has navigated to a PWA.
+     * @param tab The tab to check.
+     * @return true if the tab has been determined to contain a PWA.
+     */
+    public boolean getIsPwa(Tab tab) {
+        return !TextUtils.equals(
+                "", AppBannerManagerJni.get().getInstallableWebAppName(tab.getWebContents()));
     }
 
     @NativeMethods
     interface Natives {
-        int getHomescreenLanguageOption();
         AppBannerManager getJavaBannerManagerForWebContents(WebContents webContents);
+        String getInstallableWebAppName(WebContents webContents);
         boolean onAppDetailsRetrieved(long nativeAppBannerManagerAndroid, AppBannerManager caller,
                 AppData data, String title, String packageName, String imageUrl);
         // Testing methods.
+        void ignoreChromeChannelForTesting();
         boolean isRunningForTesting(long nativeAppBannerManagerAndroid, AppBannerManager caller);
         void setDaysAfterDismissAndIgnoreToTrigger(int dismissDays, int ignoreDays);
         void setTimeDeltaForTesting(int days);

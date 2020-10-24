@@ -285,19 +285,19 @@ void InstantService::OnNewTabPageOpened() {
 
 void InstantService::DeleteMostVisitedItem(const GURL& url) {
   if (most_visited_sites_) {
-    most_visited_sites_->AddOrRemoveBlacklistedUrl(url, true);
+    most_visited_sites_->AddOrRemoveBlockedUrl(url, true);
   }
 }
 
 void InstantService::UndoMostVisitedDeletion(const GURL& url) {
   if (most_visited_sites_) {
-    most_visited_sites_->AddOrRemoveBlacklistedUrl(url, false);
+    most_visited_sites_->AddOrRemoveBlockedUrl(url, false);
   }
 }
 
 void InstantService::UndoAllMostVisitedDeletions() {
   if (most_visited_sites_) {
-    most_visited_sites_->ClearBlacklistedUrls();
+    most_visited_sites_->ClearBlockedUrls();
   }
 }
 
@@ -413,15 +413,6 @@ void InstantService::UpdateBackgroundFromSync() {
 
 void InstantService::UpdateMostVisitedInfo() {
   NotifyAboutMostVisitedInfo();
-}
-
-void InstantService::SendNewTabPageURLToRenderer(
-    content::RenderProcessHost* rph) {
-  if (auto* channel = rph->GetChannel()) {
-    mojo::AssociatedRemote<search::mojom::SearchBouncer> client;
-    channel->GetRemoteAssociatedInterface(&client);
-    client->SetNewTabPageURL(search::GetNewTabPageURL(profile_));
-  }
 }
 
 void InstantService::ResetCustomBackgroundInfo() {
@@ -550,12 +541,6 @@ void InstantService::Observe(int type,
                              const content::NotificationDetails& details) {
   switch (type) {
     case content::NOTIFICATION_RENDERER_PROCESS_CREATED: {
-      content::RenderProcessHost* rph =
-          content::Source<content::RenderProcessHost>(source).ptr();
-      Profile* renderer_profile =
-          static_cast<Profile*>(rph->GetBrowserContext());
-      if (profile_ == renderer_profile)
-        SendNewTabPageURLToRenderer(rph);
       break;
     }
     case content::NOTIFICATION_RENDERER_PROCESS_TERMINATED: {

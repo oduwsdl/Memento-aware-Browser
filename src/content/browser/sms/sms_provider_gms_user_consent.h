@@ -27,8 +27,11 @@ class CONTENT_EXPORT SmsProviderGmsUserConsent : public SmsProvider {
 
   // Implements JNI method SmsUserConsentReceiver.Natives.onTimeout().
   void OnTimeout(JNIEnv* env);
+  // Implements JNI method SmsUserConsentReceiver.Natives.onCancel().
+  void OnCancel(JNIEnv* env);
 
-  base::android::ScopedJavaGlobalRef<jobject> GetSmsReceiverForTesting() const;
+  base::android::ScopedJavaGlobalRef<jobject> GetWebOTPServiceForTesting()
+      const;
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> j_sms_receiver_;

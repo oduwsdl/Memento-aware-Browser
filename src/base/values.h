@@ -36,10 +36,10 @@
 #include "base/containers/checked_range.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
-#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/value_iterators.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace base {
 
@@ -89,9 +89,6 @@ class BASE_EXPORT Value {
   using ListView = CheckedContiguousRange<ListStorage>;
   using ConstListView = CheckedContiguousConstRange<ListStorage>;
 
-  // See technical note below explaining why this is used.
-  using DoubleStorage = struct { alignas(4) char v[sizeof(double)]; };
-
   enum class Type : unsigned char {
     NONE = 0,
     BOOLEAN,
@@ -120,11 +117,8 @@ class BASE_EXPORT Value {
   static const DictionaryValue& AsDictionaryValue(const Value& val);
   static const ListValue& AsListValue(const Value& val);
 
+  Value() noexcept;
   Value(Value&& that) noexcept;
-  Value() noexcept {}  // A null value
-  // Fun fact: using '= default' above instead of '{}' does not work because
-  // the compiler complains that the default constructor was deleted since
-  // the inner union contains fields with non-default constructors.
 
   // Value's copy constructor and copy assignment operator are deleted. Use this
   // to obtain a deep copy explicitly.
@@ -156,6 +150,8 @@ class BASE_EXPORT Value {
   explicit Value(ListStorage&& in_list) noexcept;
 
   Value& operator=(Value&& that) noexcept;
+  Value(const Value&) = delete;
+  Value& operator=(const Value&) = delete;
 
   ~Value();
 
@@ -163,7 +159,7 @@ class BASE_EXPORT Value {
   static const char* GetTypeName(Type type);
 
   // Returns the type of the value stored by the current Value object.
-  Type type() const { return type_; }
+  Type type() const { return static_cast<Type>(data_.index()); }
 
   // Returns true if the current object represents a given type.
   bool is_none() const { return type() == Type::NONE; }
@@ -190,9 +186,9 @@ class BASE_EXPORT Value {
   ListView GetList();
   ConstListView GetList() const;
 
-  // Transfers ownership of the the underlying list to the caller. Subsequent
+  // Transfers ownership of the underlying list to the caller. Subsequent
   // calls to GetList() will return an empty list.
-  // Note: This CHECKs that type() is Type::LIST.
+  // Note: This requires that type() is Type::LIST.
   ListStorage TakeList();
 
   // Appends |value| to the end of the list.
@@ -215,32 +211,31 @@ class BASE_EXPORT Value {
 
   // Erases the Value pointed to by |iter|. Returns false if |iter| is out of
   // bounds.
-  // Note: This CHECKs that type() is Type::LIST.
+  // Note: This requires that type() is Type::LIST.
   bool EraseListIter(CheckedContiguousConstIterator<Value> iter);
 
   // Erases all Values that compare equal to |val|. Returns the number of
   // deleted Values.
-  // Note: This CHECKs that type() is Type::LIST.
+  // Note: This requires that type() is Type::LIST.
   size_t EraseListValue(const Value& val);
 
   // Erases all Values for which |pred| returns true. Returns the number of
   // deleted Values.
-  // Note: This CHECKs that type() is Type::LIST.
+  // Note: This requires that type() is Type::LIST.
   template <typename Predicate>
   size_t EraseListValueIf(Predicate pred) {
-    CHECK(is_list());
-    return base::EraseIf(list_, pred);
+    return base::EraseIf(list(), pred);
   }
 
   // Erases all Values from the list.
-  // Note: This CHECKs that type() is Type::LIST.
+  // Note: This requires that type() is Type::LIST.
   void ClearList();
 
   // |FindKey| looks up |key| in the underlying dictionary. If found, it returns
   // a pointer to the element. Otherwise it returns nullptr.
   // returned. Callers are expected to perform a check against null before using
   // the pointer.
-  // Note: This CHECKs that type() is Type::DICTIONARY.
+  // Note: This requires that type() is Type::DICTIONARY.
   //
   // Example:
   //   auto* found = FindKey("foo");
@@ -252,7 +247,7 @@ class BASE_EXPORT Value {
   // different type nullptr is returned.
   // Callers are expected to perform a check against null before using the
   // pointer.
-  // Note: This CHECKs that type() is Type::DICTIONARY.
+  // Note: This requires that type() is Type::DICTIONARY.
   //
   // Example:
   //   auto* found = FindKey("foo", Type::DOUBLE);
@@ -286,7 +281,7 @@ class BASE_EXPORT Value {
   // |SetKey| looks up |key| in the underlying dictionary and sets the mapped
   // value to |value|. If |key| could not be found, a new element is inserted.
   // A pointer to the modified item is returned.
-  // Note: This CHECKs that type() is Type::DICTIONARY.
+  // Note: This requires that type() is Type::DICTIONARY.
   // Note: Prefer Set<Type>Key() for simple values.
   //
   // Example:
@@ -315,7 +310,7 @@ class BASE_EXPORT Value {
   // failure, e.g. the key does not exist, false is returned and the underlying
   // dictionary is not changed. In case of success, |key| is deleted from the
   // dictionary and the method returns true.
-  // Note: This CHECKs that type() is Type::DICTIONARY.
+  // Note: This requires that type() is Type::DICTIONARY.
   //
   // Example:
   //   bool success = dict.RemoveKey("foo");
@@ -325,7 +320,7 @@ class BASE_EXPORT Value {
   // failure, e.g. the key does not exist, nullopt is returned and the
   // underlying dictionary is not changed. In case of success, |key| is deleted
   // from the dictionary and the method returns the extracted Value.
-  // Note: This CHECKs that type() is Type::DICTIONARY.
+  // Note: This requires that type() is Type::DICTIONARY.
   //
   // Example:
   //   Optional<Value> maybe_value = dict.ExtractKey("foo");
@@ -435,10 +430,6 @@ class BASE_EXPORT Value {
   //   bool success = value.RemovePath("foo.bar");
   bool RemovePath(StringPiece path);
 
-  // Deprecated versions
-  bool RemovePath(std::initializer_list<StringPiece> path);
-  bool RemovePath(span<const StringPiece> path);
-
   // Tries to extract a Value at the given path.
   //
   // If the current value is not a dictionary or any path component does not
@@ -481,7 +472,7 @@ class BASE_EXPORT Value {
   // passed in dictionary takes precedence and data already present will be
   // replaced. Values within |dictionary| are deep-copied, so |dictionary| may
   // be freed any time after this call.
-  // Note: This CHECKs that type() and dictionary->type() is Type::DICTIONARY.
+  // Note: This requires that type() and dictionary->type() is Type::DICTIONARY.
   void MergeDictionary(const Value* dictionary);
 
   // These methods allow the convenient retrieval of the contents of the Value.
@@ -539,6 +530,13 @@ class BASE_EXPORT Value {
   size_t EstimateMemoryUsage() const;
 
  protected:
+  // Checked convenience accessors for dict and list.
+  const DictStorage& dict() const { return absl::get<DictStorage>(data_); }
+  DictStorage& dict() { return absl::get<DictStorage>(data_); }
+  const ListStorage& list() const { return absl::get<ListStorage>(data_); }
+  ListStorage& list() { return absl::get<ListStorage>(data_); }
+
+ private:
   // Special case for doubles, which are aligned to 8 bytes on some
   // 32-bit architectures. In this case, a simple declaration as a
   // double member would make the whole union 8 byte-aligned, which
@@ -547,30 +545,29 @@ class BASE_EXPORT Value {
   //
   // To override this, store the value as an array of 32-bit integers, and
   // perform the appropriate bit casts when reading / writing to it.
-  Type type_ = Type::NONE;
+  using DoubleStorage = struct { alignas(4) char v[sizeof(double)]; };
 
-  union {
-    bool bool_value_;
-    int int_value_;
-    DoubleStorage double_value_;
-    std::string string_value_;
-    BlobStorage binary_value_;
-    DictStorage dict_;
-    ListStorage list_;
-  };
+  // Internal constructors, allowing the simplify the implementation of Clone().
+  explicit Value(absl::monostate);
+  explicit Value(DoubleStorage storage);
 
- private:
   friend class ValuesTest_SizeOfValue_Test;
   double AsDoubleInternal() const;
-  void InternalMoveConstructFrom(Value&& that);
-  void InternalCleanup();
 
   // NOTE: Using a movable reference here is done for performance (it avoids
   // creating + moving + destroying a temporary unique ptr).
   Value* SetKeyInternal(StringPiece key, std::unique_ptr<Value>&& val_ptr);
   Value* SetPathInternal(StringPiece path, std::unique_ptr<Value>&& value_ptr);
 
-  DISALLOW_COPY_AND_ASSIGN(Value);
+  absl::variant<absl::monostate,
+                bool,
+                int,
+                DoubleStorage,
+                std::string,
+                BlobStorage,
+                DictStorage,
+                ListStorage>
+      data_;
 };
 
 // DictionaryValue provides a key-value dictionary with (optional) "path"
@@ -593,10 +590,10 @@ class BASE_EXPORT DictionaryValue : public Value {
   bool HasKey(StringPiece key) const;
 
   // Returns the number of Values in this dictionary.
-  size_t size() const { return dict_.size(); }
+  size_t size() const { return dict().size(); }
 
   // Returns whether the dictionary is empty.
-  bool empty() const { return dict_.empty(); }
+  bool empty() const { return dict().empty(); }
 
   // Clears any current contents of this dictionary.
   void Clear();
@@ -624,10 +621,10 @@ class BASE_EXPORT DictionaryValue : public Value {
   Value* SetString(StringPiece path, StringPiece in_value);
   // DEPRECATED, use Value::SetStringPath().
   Value* SetString(StringPiece path, const string16& in_value);
-  // DEPRECATED, use Value::SetPath() or Value::SetDictPath()
+  // DEPRECATED, use Value::SetPath().
   DictionaryValue* SetDictionary(StringPiece path,
                                  std::unique_ptr<DictionaryValue> in_value);
-  // DEPRECATED, use Value::SetPath() or Value::SetListPath()
+  // DEPRECATED, use Value::SetPath().
   ListValue* SetList(StringPiece path, std::unique_ptr<ListValue> in_value);
 
   // Like Set(), but without special treatment of '.'.  This allows e.g. URLs to
@@ -672,8 +669,7 @@ class BASE_EXPORT DictionaryValue : public Value {
   // DEPRECATED, use Value::FindBlobPath(path) instead.
   bool GetBinary(StringPiece path, Value** out_value);
   // DEPRECATED, use Value::FindPath(path) and Value's Dictionary API instead.
-  bool GetDictionary(StringPiece path,
-                     const DictionaryValue** out_value) const;
+  bool GetDictionary(StringPiece path, const DictionaryValue** out_value) const;
   // DEPRECATED, use Value::FindPath(path) and Value's Dictionary API instead.
   bool GetDictionary(StringPiece path, DictionaryValue** out_value);
   // DEPRECATED, use Value::FindPath(path) and Value::GetList() instead.
@@ -752,7 +748,7 @@ class BASE_EXPORT DictionaryValue : public Value {
     Iterator(const Iterator& other);
     ~Iterator();
 
-    bool IsAtEnd() const { return it_ == target_.dict_.end(); }
+    bool IsAtEnd() const { return it_ == target_.end(); }
     void Advance() { ++it_; }
 
     const std::string& key() const { return it_->first; }
@@ -765,12 +761,12 @@ class BASE_EXPORT DictionaryValue : public Value {
 
   // Iteration.
   // DEPRECATED, use Value::DictItems() instead.
-  iterator begin() { return dict_.begin(); }
-  iterator end() { return dict_.end(); }
+  iterator begin() { return dict().begin(); }
+  iterator end() { return dict().end(); }
 
   // DEPRECATED, use Value::DictItems() instead.
-  const_iterator begin() const { return dict_.begin(); }
-  const_iterator end() const { return dict_.end(); }
+  const_iterator begin() const { return dict().begin(); }
+  const_iterator end() const { return dict().end(); }
 
   // DEPRECATED, use Value::Clone() instead.
   // TODO(crbug.com/646113): Delete this and migrate callsites.
@@ -799,15 +795,11 @@ class BASE_EXPORT ListValue : public Value {
 
   // Returns the number of Values in this list.
   // DEPRECATED, use GetList()::size() instead.
-  size_t GetSize() const { return list_.size(); }
+  size_t GetSize() const { return list().size(); }
 
   // Returns whether the list is empty.
   // DEPRECATED, use GetList()::empty() instead.
-  bool empty() const { return list_.empty(); }
-
-  // Reserves storage for at least |n| values.
-  // DEPRECATED, use GetList()::reserve() instead.
-  void Reserve(size_t n);
+  bool empty() const { return list().empty(); }
 
   // Sets the list item at the given index to be the Value specified by
   // the value given.  If the index beyond the current end of the list, null
@@ -884,7 +876,6 @@ class BASE_EXPORT ListValue : public Value {
   void AppendString(const string16& in_value);
   // DEPRECATED, use Value::Append() in a loop instead.
   void AppendStrings(const std::vector<std::string>& in_values);
-  void AppendStrings(const std::vector<string16>& in_values);
 
   // Appends a Value if it's not already present. Returns true if successful,
   // or false if the value was already
@@ -943,12 +934,42 @@ class BASE_EXPORT ValueDeserializer {
 
   // This method deserializes the subclass-specific format into a Value object.
   // If the return value is non-NULL, the caller takes ownership of returned
-  // Value. If the return value is NULL, and if error_code is non-NULL,
-  // error_code will be set with the underlying error.
-  // If |error_message| is non-null, it will be filled in with a formatted
+  // Value.
+  //
+  // If the return value is nullptr, and if |error_code| is non-nullptr,
+  // |*error_code| will be set to an integer value representing the underlying
+  // error. See "enum ErrorCode" below for more detail about the integer value.
+  //
+  // If |error_message| is non-nullptr, it will be filled in with a formatted
   // error message including the location of the error if appropriate.
   virtual std::unique_ptr<Value> Deserialize(int* error_code,
-                                             std::string* error_str) = 0;
+                                             std::string* error_message) = 0;
+
+  // The integer-valued error codes form four groups:
+  //  - The value 0 means no error.
+  //  - Values between 1 and 999 inclusive mean an error in the data (i.e.
+  //    content). The bytes being deserialized are not in the right format.
+  //  - Values 1000 and above mean an error in the metadata (i.e. context). The
+  //    file could not be read, the network is down, etc.
+  //  - Negative values are reserved.
+  enum ErrorCode {
+    kErrorCodeNoError = 0,
+    // kErrorCodeInvalidFormat is a generic error code for "the data is not in
+    // the right format". Subclasses of ValueDeserializer may return other
+    // values for more specific errors.
+    kErrorCodeInvalidFormat = 1,
+    // kErrorCodeFirstMetadataError is the minimum value (inclusive) of the
+    // range of metadata errors.
+    kErrorCodeFirstMetadataError = 1000,
+  };
+
+  // The |error_code| argument can be one of the ErrorCode values, but it is
+  // not restricted to only being 0, 1 or 1000. Subclasses of ValueDeserializer
+  // can define their own error code values.
+  static inline bool ErrorCodeIsDataError(int error_code) {
+    return (kErrorCodeInvalidFormat <= error_code) &&
+           (error_code < kErrorCodeFirstMetadataError);
+  }
 };
 
 // Stream operator so Values can be used in assertion statements.  In order that

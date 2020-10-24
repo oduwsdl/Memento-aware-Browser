@@ -80,6 +80,7 @@ class POLICY_EXPORT DeviceManagementService {
   static constexpr int kPendingApproval = 412;
   static constexpr int kRequestTooLarge = 413;
   static constexpr int kConsumerAccountWithPackagedLicense = 417;
+  static constexpr int kTooManyRequests = 429;
   static constexpr int kInternalServerError = 500;
   static constexpr int kServiceUnavailable = 503;
   static constexpr int kPolicyNotFound = 902;
@@ -109,7 +110,14 @@ class POLICY_EXPORT DeviceManagementService {
     virtual std::string GetPlatformParameter() = 0;
 
     // Server at which to contact the real time reporting service.
-    virtual std::string GetReportingServerUrl() = 0;
+    virtual std::string GetRealtimeReportingServerUrl() = 0;
+
+    // Server endpoint for encrypted events.
+    virtual std::string GetEncryptedReportingServerUrl() = 0;
+
+    // Server at which to contact the real time reporting service for
+    // enterprise connectors.
+    virtual std::string GetReportingConnectorServerUrl() = 0;
   };
 
   // A DeviceManagementService job manages network requests to the device
@@ -178,6 +186,7 @@ class POLICY_EXPORT DeviceManagementService {
       TYPE_REQUEST_SAML_URL = 23,
       TYPE_CHROME_OS_USER_REPORT = 24,
       TYPE_CERT_PROVISIONING_REQUEST = 25,
+      TYPE_PSM_HAS_DEVICE_STATE_REQUEST = 26,
     };
 
     // The set of HTTP query parameters of the request.

@@ -36,6 +36,7 @@ POLICY_EXPORT extern const char kEnrollmentTokenAuthHeaderPrefix[];
 POLICY_EXPORT extern const char kValueAppType[];
 POLICY_EXPORT extern const char kValueDeviceType[];
 POLICY_EXPORT extern const char kValueRequestAutoEnrollment[];
+POLICY_EXPORT extern const char kValueRequestPsmHasDeviceState[];
 POLICY_EXPORT extern const char kValueRequestPolicy[];
 POLICY_EXPORT extern const char kValueRequestRegister[];
 POLICY_EXPORT extern const char kValueRequestApiAuthorization[];
@@ -67,6 +68,7 @@ POLICY_EXPORT extern const char kChromePublicAccountPolicyType[];
 POLICY_EXPORT extern const char kChromeExtensionPolicyType[];
 POLICY_EXPORT extern const char kChromeSigninExtensionPolicyType[];
 POLICY_EXPORT extern const char kChromeMachineLevelUserCloudPolicyType[];
+POLICY_EXPORT extern const char kChromeMachineLevelUserCloudPolicyIOSType[];
 POLICY_EXPORT extern const char kChromeMachineLevelExtensionCloudPolicyType[];
 POLICY_EXPORT extern const char kChromeRemoteCommandPolicyType[];
 
@@ -127,6 +129,8 @@ enum DeviceManagementStatus {
   DM_STATUS_CANNOT_SIGN_REQUEST = 15,
   // Client error: Request body is too large.
   DM_STATUS_REQUEST_TOO_LARGE = 16,
+  // Client error: Too many request.
+  DM_STATUS_SERVICE_TOO_MANY_REQUESTS = 17,
   // Service error: Policy not found. Error code defined by the DM folks.
   DM_STATUS_SERVICE_POLICY_NOT_FOUND = 902,
   // Service error: ARC is not enabled on this domain.

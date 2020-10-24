@@ -102,6 +102,7 @@ void PopupTracker::WebContentsDestroyed() {
             num_activation_events_, kMaxSubcatagoryInteractions))
         .SetNumGestureScrollBeginInteractions(CappedUserInteractions(
             num_gesture_scroll_begin_events_, kMaxSubcatagoryInteractions))
+        .SetRedirectCount(num_redirects_)
         .Record(ukm::UkmRecorder::Get());
   }
 }
@@ -111,6 +112,13 @@ void PopupTracker::DidFinishNavigation(
   if (!navigation_handle->HasCommitted() ||
       navigation_handle->IsSameDocument()) {
     return;
+  }
+
+  if (navigation_handle->IsInMainFrame() && !first_navigation_committed_) {
+    first_navigation_committed_ = true;
+    // The last page in the redirect chain is the current page, the number of
+    // redirects is one less than the size of the chain.
+    num_redirects_ = navigation_handle->GetRedirectChain().size() - 1;
   }
 
   if (!first_load_visible_time_start_) {
@@ -131,13 +139,12 @@ void PopupTracker::OnVisibilityChanged(content::Visibility visibility) {
     visibility_tracker_.OnShown();
 }
 
-void PopupTracker::DidGetUserInteraction(
-    const blink::WebInputEvent::Type type) {
+void PopupTracker::DidGetUserInteraction(const blink::WebInputEvent& event) {
   // TODO(csharrison): It would be nice if ctrl-W could be filtered out here,
   // but the initial ctrl key press is registered as a kRawKeyDown.
   num_interactions_++;
 
-  if (type == blink::WebInputEvent::Type::kGestureScrollBegin) {
+  if (event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin) {
     num_gesture_scroll_begin_events_++;
   } else {
     num_activation_events_++;

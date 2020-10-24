@@ -1,5 +1,0 @@
-specific_include_rules = {
-  "nearby_decoder_fuzzer.cc": [
-    "+mojo/core/embedder/embedder.h",
-  ]
-}

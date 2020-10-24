@@ -116,6 +116,7 @@ RegExpMacroAssemblerIA32::~RegExpMacroAssemblerIA32() {
   exit_label_.Unuse();
   check_preempt_label_.Unuse();
   stack_overflow_label_.Unuse();
+  fallback_label_.Unuse();
 }
 
 
@@ -148,8 +149,13 @@ void RegExpMacroAssemblerIA32::Backtrack() {
     __ cmp(Operand(ebp, kBacktrackCount), Immediate(backtrack_limit()));
     __ j(not_equal, &next);
 
-    // Exceeded limits are treated as a failed match.
-    Fail();
+    // Backtrack limit exceeded.
+    if (can_fallback()) {
+      __ jmp(&fallback_label_);
+    } else {
+      // Can't fallback, so we treat it as a failed match.
+      Fail();
+    }
 
     __ bind(&next);
   }
@@ -940,11 +946,18 @@ Handle<HeapObject> RegExpMacroAssemblerIA32::GetCode(Handle<String> source) {
     __ jmp(&return_eax);
   }
 
+  if (fallback_label_.is_linked()) {
+    __ bind(&fallback_label_);
+    __ mov(eax, FALLBACK_TO_EXPERIMENTAL);
+    __ jmp(&return_eax);
+  }
+
   CodeDesc code_desc;
   masm_->GetCode(masm_->isolate(), &code_desc);
-  Handle<Code> code = Factory::CodeBuilder(isolate(), code_desc, Code::REGEXP)
-                          .set_self_reference(masm_->CodeObject())
-                          .Build();
+  Handle<Code> code =
+      Factory::CodeBuilder(isolate(), code_desc, CodeKind::REGEXP)
+          .set_self_reference(masm_->CodeObject())
+          .Build();
   PROFILE(masm_->isolate(),
           RegExpCodeCreateEvent(Handle<AbstractCode>::cast(code), source));
   return Handle<HeapObject>::cast(code);

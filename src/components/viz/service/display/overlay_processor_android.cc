@@ -4,6 +4,10 @@
 
 #include "components/viz/service/display/overlay_processor_android.h"
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "base/synchronization/waitable_event.h"
 #include "components/viz/common/quads/stream_video_draw_quad.h"
 #include "components/viz/service/display/overlay_processor_on_gpu.h"
@@ -16,14 +20,8 @@ namespace viz {
 OverlayProcessorAndroid::OverlayProcessorAndroid(
     gpu::SharedImageManager* shared_image_manager,
     gpu::MemoryTracker* memory_tracker,
-    gpu::GpuTaskSchedulerHelper* gpu_task_scheduler,
-    bool enable_overlay)
-    : OverlayProcessorUsingStrategy(),
-      gpu_task_scheduler_(gpu_task_scheduler),
-      overlay_enabled_(enable_overlay) {
-  if (!overlay_enabled_)
-    return;
-
+    gpu::GpuTaskSchedulerHelper* gpu_task_scheduler)
+    : OverlayProcessorUsingStrategy(), gpu_task_scheduler_(gpu_task_scheduler) {
   // In unittests, we don't have the gpu_task_scheduler_ set up, but still want
   // to test ProcessForOverlays functionalities where we are making overlay
   // candidates correctly.
@@ -86,10 +84,10 @@ void OverlayProcessorAndroid::DestroyOverlayProcessorOnGpu(
 }
 
 bool OverlayProcessorAndroid::IsOverlaySupported() const {
-  return overlay_enabled_;
+  return true;
 }
 
-bool OverlayProcessorAndroid::NeedsSurfaceOccludingDamageRect() const {
+bool OverlayProcessorAndroid::NeedsSurfaceDamageRectList() const {
   return false;
 }
 

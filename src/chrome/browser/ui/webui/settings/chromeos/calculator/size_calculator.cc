@@ -11,13 +11,11 @@
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "chrome/browser/browsing_data/browsing_data_file_system_util.h"
-#include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/dbus/cryptohome/cryptohome_client.h"
-#include "chromeos/dbus/dlcservice/dlcservice_client.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/arc/storage_manager/arc_storage_manager.h"
@@ -185,8 +183,7 @@ void BrowsingDataSizeCalculator::PerformCalculation() {
         new browsing_data::ServiceWorkerHelper(
             storage_partition->GetServiceWorkerContext()),
         new browsing_data::CacheStorageHelper(
-            storage_partition->GetCacheStorageContext()),
-        BrowsingDataFlashLSOHelper::Create(profile_));
+            storage_partition->GetCacheStorageContext()));
   }
   site_data_size_collector_->Fetch(
       base::BindOnce(&BrowsingDataSizeCalculator::OnGetBrowsingDataSize,
@@ -391,32 +388,6 @@ void OtherUsersSizeCalculator::OnGetOtherUserSize(
     other_users_total_bytes = -1;
   }
   NotifySizeCalculated(other_users_total_bytes);
-}
-
-DlcsSizeCalculator::DlcsSizeCalculator()
-    : SizeCalculator(CalculationType::kDlcs) {}
-
-DlcsSizeCalculator::~DlcsSizeCalculator() = default;
-
-void DlcsSizeCalculator::PerformCalculation() {
-  DlcserviceClient::Get()->GetExistingDlcs(base::BindOnce(
-      &DlcsSizeCalculator::OnGetExistingDlcs, weak_ptr_factory_.GetWeakPtr()));
-}
-
-void DlcsSizeCalculator::OnGetExistingDlcs(
-    const std::string& err,
-    const dlcservice::DlcsWithContent& dlcs_with_content) {
-  if (err != dlcservice::kErrorNone) {
-    NotifySizeCalculated(0);
-    return;
-  }
-  base::ListValue dlc_metadata_list;
-  int64_t dlc_total_size_in_bytes = 0;
-  for (int i = 0; i < dlcs_with_content.dlc_infos_size(); i++) {
-    const auto& dlc_info = dlcs_with_content.dlc_infos(i);
-    dlc_total_size_in_bytes += dlc_info.used_bytes_on_disk();
-  }
-  NotifySizeCalculated(dlc_total_size_in_bytes);
 }
 
 }  // namespace calculator

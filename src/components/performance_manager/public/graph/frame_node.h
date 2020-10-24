@@ -7,17 +7,16 @@
 
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/util/type_safety/strong_alias.h"
-#include "components/performance_manager/public/frame_priority/frame_priority.h"
+#include "components/performance_manager/public/execution_context_priority/execution_context_priority.h"
 #include "components/performance_manager/public/graph/node.h"
 #include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
 #include "components/performance_manager/public/mojom/lifecycle.mojom.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
+#include "ui/gfx/geometry/rect.h"
 
 class GURL;
-
-namespace base {
-class UnguessableToken;
-}  // namespace base
 
 namespace performance_manager {
 
@@ -27,9 +26,7 @@ class ProcessNode;
 class RenderFrameHostProxy;
 class WorkerNode;
 
-// A strongly typed unguessable token for the frame tokens.
-using FrameToken =
-    util::StrongAlias<class FrameTokenTag, base::UnguessableToken>;
+using execution_context_priority::PriorityAndReason;
 
 // Frame nodes form a tree structure, each FrameNode at most has one parent that
 // is a FrameNode. Conceptually, a frame corresponds to a
@@ -63,11 +60,16 @@ class FrameNode : public Node {
   using LifecycleState = mojom::LifecycleState;
   using Observer = FrameNodeObserver;
   using PageNodeVisitor = base::RepeatingCallback<bool(const PageNode*)>;
-  using PriorityAndReason = frame_priority::PriorityAndReason;
 
   class ObserverDefaultImpl;
 
   static const char* kDefaultPriorityReason;
+
+  enum class Visibility {
+    kUnknown,
+    kVisible,
+    kNotVisible,
+  };
 
   FrameNode();
   ~FrameNode() override;
@@ -90,13 +92,9 @@ class FrameNode : public Node {
   // be current at a time. This is a constant over the lifetime of the frame.
   virtual int GetFrameTreeNodeId() const = 0;
 
-  // Gets the devtools token associated with this frame. This is a constant over
-  // the lifetime of the frame.
-  virtual const base::UnguessableToken& GetDevToolsToken() const = 0;
-
   // Gets the unique token associated with this frame. This is a constant over
   // the lifetime of the frame and unique across all frames for all time.
-  virtual const FrameToken& GetFrameToken() const = 0;
+  virtual const blink::LocalFrameToken& GetFrameToken() const = 0;
 
   // Gets the ID of the browsing instance to which this frame belongs. This is a
   // constant over the lifetime of the frame.
@@ -184,6 +182,15 @@ class FrameNode : public Node {
   // Returns true if the frame is audible, false otherwise.
   virtual bool IsAudible() const = 0;
 
+  // Returns the intersection of this frame with the viewport. This is initially
+  // null on node creation and is initialized during layout when the viewport
+  // intersection is first calculated. May only be called for a child frame.
+  virtual const base::Optional<gfx::Rect>& GetViewportIntersection() const = 0;
+
+  // Returns true if the frame is visible. This value is based on the viewport
+  // intersection of the frame, and the visibility of the page.
+  virtual Visibility GetVisibility() const = 0;
+
   // Returns a proxy to the RenderFrameHost associated with this node. The
   // proxy may only be dereferenced on the UI thread.
   virtual const RenderFrameHostProxy& GetRenderFrameHostProxy() const = 0;
@@ -197,7 +204,6 @@ class FrameNode : public Node {
 class FrameNodeObserver {
  public:
   using InterventionPolicy = mojom::InterventionPolicy;
-  using PriorityAndReason = frame_priority::PriorityAndReason;
 
   FrameNodeObserver();
   virtual ~FrameNodeObserver();
@@ -251,6 +257,12 @@ class FrameNodeObserver {
   // Invoked when the IsAudible property changes.
   virtual void OnIsAudibleChanged(const FrameNode* frame_node) = 0;
 
+  // Invoked when a frame's intersection with the viewport changes
+  virtual void OnViewportIntersectionChanged(const FrameNode* frame_node) = 0;
+
+  // Invoked when the visibility property changes.
+  virtual void OnFrameVisibilityChanged(const FrameNode* frame_node) = 0;
+
   // Events with no property changes.
 
   // Invoked when a non-persistent notification has been issued by the frame.
@@ -298,6 +310,8 @@ class FrameNode::ObserverDefaultImpl : public FrameNodeObserver {
       const PriorityAndReason& previous_value) override {}
   void OnHadFormInteractionChanged(const FrameNode* frame_node) override {}
   void OnIsAudibleChanged(const FrameNode* frame_node) override {}
+  void OnViewportIntersectionChanged(const FrameNode* frame_node) override {}
+  void OnFrameVisibilityChanged(const FrameNode* frame_node) override {}
   void OnNonPersistentNotificationCreated(
       const FrameNode* frame_node) override {}
   void OnFirstContentfulPaint(

@@ -20,6 +20,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "base/process/kill.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/input/input_device_change_observer.h"
 #include "content/browser/renderer_host/page_lifecycle_state_manager.h"
@@ -33,6 +34,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_states.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/page/page.mojom.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/public/web/web_console_message.h"
@@ -41,14 +43,27 @@
 #include "ui/gl/gpu_preference.h"
 #include "ui/gl/gpu_switching_observer.h"
 
+namespace blink {
+namespace web_pref {
+struct WebPreferences;
+}
+}  // namespace blink
+
 namespace content {
 
+class AgentSchedulingGroupHost;
+class RenderProcessHost;
 class TimeoutMonitor;
 
 // A callback which will be called immediately before EnterBackForwardCache
 // starts.
 using WillEnterBackForwardCacheCallbackForTesting =
     base::RepeatingCallback<void()>;
+
+// A callback which will be called immediately before sending the
+// RendererPreferences information to the renderer.
+using WillSendRendererPreferencesCallbackForTesting =
+    base::RepeatingCallback<void(const blink::RendererPreferences&)>;
 
 // This implements the RenderViewHost interface that is exposed to
 // embedders of content, and adds things only visible to content.
@@ -85,8 +100,15 @@ class CONTENT_EXPORT RenderViewHostImpl
   // Convenience function, just like RenderViewHost::From.
   static RenderViewHostImpl* From(RenderWidgetHost* rwh);
 
-  static void GetPlatformSpecificPrefs(
-      blink::mojom::RendererPreferences* prefs);
+  static void GetPlatformSpecificPrefs(blink::RendererPreferences* prefs);
+
+  // Checks whether any RenderViewHostImpl instance associated with a given
+  // process is not currently in the back-forward cache.
+  // TODO(https://crbug.com/1125996): Remove once a well-behaved frozen
+  // RenderFrame never send IPCs messages, even if there are active pages in the
+  // process.
+  static bool HasNonBackForwardCachedInstancesForProcess(
+      RenderProcessHost* process);
 
   RenderViewHostImpl(SiteInstance* instance,
                      std::unique_ptr<RenderWidgetHostImpl> widget,
@@ -110,9 +132,10 @@ class CONTENT_EXPORT RenderViewHostImpl
   SiteInstanceImpl* GetSiteInstance() override;
   bool IsRenderViewLive() override;
   void NotifyMoveOrResizeStarted() override;
-  WebPreferences GetWebkitPreferences() override;
-  void UpdateWebkitPreferences(const WebPreferences& prefs) override;
-  void OnWebkitPreferencesChanged() override;
+
+  void SendWebPreferencesToRenderer();
+  void SendRendererPreferencesToRenderer(
+      const blink::RendererPreferences& preferences);
 
   // RenderProcessHostObserver implementation
   void RenderProcessExited(RenderProcessHost* host,
@@ -161,6 +184,10 @@ class CONTENT_EXPORT RenderViewHostImpl
   // https://crbug.com/763548.
   void DispatchRenderViewCreated();
 
+  // Returns the `AgentSchedulingGroupHost` this view is associated with (via
+  // the widget).
+  AgentSchedulingGroupHost& GetAgentSchedulingGroup();
+
   // Tells the renderer process to request a page-scale animation based on the
   // specified point/rect.
   void AnimateDoubleTapZoom(const gfx::Point& point, const gfx::Rect& rect);
@@ -192,8 +219,8 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   // Passes current web preferences to the renderer after recomputing all of
   // them, including the slow-to-compute hardware preferences.
-  // (RenderViewHost::OnWebkitPreferencesChanged is a faster alternate that
-  // avoids slow recomputations.)
+  // (WebContents::OnWebPreferencesChanged is a faster alternate that avoids
+  // slow recomputations.)
   void OnHardwareConfigurationChanged();
 
   // Sets the routing id for the main frame. When set to MSG_ROUTING_NONE, the
@@ -207,15 +234,24 @@ class CONTENT_EXPORT RenderViewHostImpl
   // Called when the RenderFrameHostImpls/RenderFrameProxyHosts that own this
   // RenderViewHost leave the BackForwardCache. This occurs immediately before a
   // restored document is committed.
-  // |navigation_start| is the timestamp corresponding to the start of the
-  // back-forward cached navigation, which would be communicated to the page
-  // to allow it to record the latency of this navigation.
-  void LeaveBackForwardCache(base::TimeTicks navigation_start);
+  // |page_restore_params| includes information that is needed by the page after
+  // getting restored, which includes the latest history information (offset,
+  // length) and the timestamp corresponding to the start of the back-forward
+  // cached navigation, which would be communicated to the page to allow it to
+  // record the latency of this navigation.
+  void LeaveBackForwardCache(
+      blink::mojom::PageRestoreParamsPtr page_restore_params);
+
+  bool is_in_back_forward_cache() const { return is_in_back_forward_cache_; }
 
   void SetVisibility(blink::mojom::PageVisibilityState visibility);
 
   void SetIsFrozen(bool frozen);
   void OnBackForwardCacheTimeout();
+
+  PageLifecycleStateManager* GetPageLifecycleStateManager() {
+    return page_lifecycle_state_manager_.get();
+  }
 
   // Called during frame eviction to return all SurfaceIds in the frame tree.
   // Marks all views in the frame tree as evicted.
@@ -234,9 +270,19 @@ class CONTENT_EXPORT RenderViewHostImpl
   void OnThemeColorChanged(RenderFrameHostImpl* rfh,
                            const base::Optional<SkColor>& theme_color);
 
+  void DidChangeBackgroundColor(RenderFrameHostImpl* rfh,
+                                const SkColor& background_color);
+
   base::Optional<SkColor> theme_color() const {
     return main_frame_theme_color_;
   }
+
+  base::Optional<SkColor> background_color() const {
+    return main_frame_background_color_;
+  }
+
+  void SetContentsMimeType(std::string mime_type);
+  const std::string& contents_mime_type() { return contents_mime_type_; }
 
   // Notifies that / returns whether main document's onload() handler was
   // completed.
@@ -248,6 +294,13 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   void SetWillEnterBackForwardCacheCallbackForTesting(
       const WillEnterBackForwardCacheCallbackForTesting& callback);
+
+  void SetWillSendRendererPreferencesCallbackForTesting(
+      const WillSendRendererPreferencesCallbackForTesting& callback);
+
+  void BindPageBroadcast(
+      mojo::PendingAssociatedRemote<blink::mojom::PageBroadcast>
+          page_broadcast);
 
   // The remote mojom::PageBroadcast interface that is used to send messages to
   // the renderer's blink::WebViewImpl when broadcasting messages to all
@@ -266,7 +319,6 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   // RenderWidgetHostOwnerDelegate overrides.
   void RenderWidgetDidInit() override;
-  void RenderWidgetDidClose() override;
   void RenderWidgetDidFirstVisuallyNonEmptyPaint() override;
   void RenderWidgetGotFocus() override;
   void RenderWidgetLostFocus() override;
@@ -279,11 +331,7 @@ class CONTENT_EXPORT RenderViewHostImpl
   void SetBackgroundOpaque(bool opaque) override;
   bool IsMainFrameActive() override;
   bool IsNeverComposited() override;
-  WebPreferences GetWebkitPreferencesForWidget() override;
-  FrameTreeNode* GetFocusedFrame() override;
-
-  void ShowContextMenu(RenderFrameHost* render_frame_host,
-                       const ContextMenuParams& params) override;
+  blink::web_pref::WebPreferences GetWebkitPreferencesForWidget() override;
 
   // IPC message handlers.
   void OnShowView(int route_id,
@@ -291,9 +339,6 @@ class CONTENT_EXPORT RenderViewHostImpl
                   const gfx::Rect& initial_rect,
                   bool user_gesture);
   void OnShowWidget(int widget_route_id, const gfx::Rect& initial_rect);
-  void OnShowFullscreenWidget(int widget_route_id);
-  void OnRouteCloseEvent();
-  void OnUpdateTargetURL(const GURL& url);
   void OnDidContentsPreferredSizeChange(const gfx::Size& new_size);
   void OnPasteFromSelectionClipboard();
   void OnTakeFocus(bool reverse);
@@ -324,22 +369,8 @@ class CONTENT_EXPORT RenderViewHostImpl
   // TODO(creis): Move to a private namespace on RenderFrameHostImpl.
   // Delay to wait on closing the WebContents for a beforeunload/unload handler
   // to fire.
-  static const int64_t kUnloadTimeoutMS;
-
-  // Returns the content specific preferences for this RenderViewHost.
-  // Recomputes only the "fast" preferences (those not requiring slow
-  // platform/device polling); the remaining "slow" ones are recomputed only if
-  // the preference cache is empty.
-  //
-  // TODO(creis): Move most of this method to RenderProcessHost, since it's
-  // mostly the same across all RVHs in a process.  Move the rest to RFH.
-  // See https://crbug.com/304341.
-  const WebPreferences ComputeWebPreferences();
-
-  // Sets the hardware-related fields in |prefs| that are slow to compute.  The
-  // fields are set from cache if available, otherwise recomputed.
-  void SetSlowWebPreferences(const base::CommandLine& command_line,
-                             WebPreferences* prefs);
+  static constexpr base::TimeDelta kUnloadTimeout =
+      base::TimeDelta::FromMilliseconds(500);
 
   // The RenderWidgetHost.
   const std::unique_ptr<RenderWidgetHostImpl> render_widget_host_;
@@ -367,11 +398,6 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   // True if the render view can be shut down suddenly.
   bool sudden_termination_allowed_ = false;
-
-  // This is updated every time UpdateWebkitPreferences is called. That method
-  // is in turn called when any of the settings change that the WebPreferences
-  // values depend on.
-  std::unique_ptr<WebPreferences> web_preferences_;
 
   // The timeout monitor that runs from when the page close is started in
   // ClosePage() until either the render process ACKs the close with an IPC to
@@ -405,6 +431,13 @@ class CONTENT_EXPORT RenderViewHostImpl
   // by theme-color meta tag.
   base::Optional<SkColor> main_frame_theme_color_;
 
+  // The background color for the underlying document as computed by CSS.
+  base::Optional<SkColor> main_frame_background_color_;
+
+  // Contents MIME type for the main document. It can be used to check whether
+  // we can do something for special contents.
+  std::string contents_mime_type_;
+
   // ---------- Per page state END --------------------------------------------
 
   // BackForwardCache:
@@ -415,6 +448,9 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   WillEnterBackForwardCacheCallbackForTesting
       will_enter_back_forward_cache_callback_for_testing_;
+
+  WillSendRendererPreferencesCallbackForTesting
+      will_send_renderer_preferences_callback_for_testing_;
 
   mojo::AssociatedRemote<blink::mojom::PageBroadcast> page_broadcast_;
 

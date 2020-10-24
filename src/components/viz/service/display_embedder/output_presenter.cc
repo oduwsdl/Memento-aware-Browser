@@ -4,10 +4,14 @@
 
 #include "components/viz/service/display_embedder/output_presenter.h"
 
+#include <utility>
+
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
+#include "gpu/command_buffer/service/shared_image_factory.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 
 namespace viz {
 
@@ -49,9 +53,8 @@ void OutputPresenter::Image::BeginWriteSkia() {
   DCHECK(end_semaphores_.empty());
 
   std::vector<GrBackendSemaphore> begin_semaphores;
-  // LegacyFontHost will get LCD text and skia figures out what type to use.
-  SkSurfaceProps surface_props(0 /* flags */,
-                               SkSurfaceProps::kLegacyFontHost_InitType);
+  SkSurfaceProps surface_props =
+      skia::LegacyDisplayGlobals::GetSkSurfaceProps();
 
   // Buffer queue is internal to GPU proc and handles texture initialization,
   // so allow uncleared access.
@@ -62,8 +65,10 @@ void OutputPresenter::Image::BeginWriteSkia() {
       gpu::SharedImageRepresentation::AllowUnclearedAccess::kYes);
   DCHECK(scoped_skia_write_access_);
   if (!begin_semaphores.empty()) {
-    scoped_skia_write_access_->surface()->wait(begin_semaphores.size(),
-                                               begin_semaphores.data());
+    scoped_skia_write_access_->surface()->wait(
+        begin_semaphores.size(),
+        begin_semaphores.data(),
+        /*deleteSemaphoresAfterWait=*/false);
   }
 }
 
@@ -85,14 +90,15 @@ void OutputPresenter::Image::EndWriteSkia() {
   DCHECK(scoped_skia_write_access_);
   if (!end_semaphores_.empty()) {
     GrFlushInfo flush_info = {
-        .fFlags = kNone_GrFlushFlags,
         .fNumSemaphores = end_semaphores_.size(),
         .fSignalSemaphores = end_semaphores_.data(),
     };
-    scoped_skia_write_access_->surface()->flush(
-        SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
-    DCHECK(scoped_skia_write_access_->surface()->getContext());
-    scoped_skia_write_access_->surface()->getContext()->submit();
+    scoped_skia_write_access_->surface()->flush(flush_info);
+    auto* direct_context = scoped_skia_write_access_->surface()
+                               ->recordingContext()
+                               ->asDirectContext();
+    DCHECK(direct_context);
+    direct_context->submit();
   }
   scoped_skia_write_access_.reset();
   end_semaphores_.clear();
@@ -101,15 +107,22 @@ void OutputPresenter::Image::EndWriteSkia() {
   skia_representation_->SetCleared();
 }
 
-OutputPresenter::OverlayData::OverlayData(
-    std::unique_ptr<gpu::SharedImageRepresentationOverlay> representation,
-    std::unique_ptr<gpu::SharedImageRepresentationOverlay::ScopedReadAccess>
-        scoped_read_access)
-    : representation_(std::move(representation)),
-      scoped_read_access_(std::move(scoped_read_access)) {}
-OutputPresenter::OverlayData::OverlayData(OverlayData&&) = default;
-OutputPresenter::OverlayData::~OverlayData() = default;
-OutputPresenter::OverlayData& OutputPresenter::OverlayData::operator=(
-    OverlayData&&) = default;
+void OutputPresenter::Image::PreGrContextSubmit() {
+  DCHECK(scoped_skia_write_access_);
+  if (scoped_skia_write_access_->end_state()) {
+    scoped_skia_write_access_->surface()->flush(
+        {}, scoped_skia_write_access_->end_state());
+  }
+}
+
+std::unique_ptr<OutputPresenter::Image>
+OutputPresenter::AllocateBackgroundImage(gfx::ColorSpace color_space,
+                                         gfx::Size image_size) {
+  return nullptr;
+}
+
+void OutputPresenter::ScheduleBackground(Image* image) {
+  NOTREACHED();
+}
 
 }  // namespace viz

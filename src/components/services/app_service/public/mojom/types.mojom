@@ -7,6 +7,7 @@ module apps.mojom;
 import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/image/mojom/image.mojom";
+import "url/mojom/url.mojom";
 
 // Information about an app. See components/services/app_service/README.md.
 struct App {
@@ -92,15 +93,17 @@ enum AppType {
   kExtension,  // Extension-backed app.
   kWeb,        // Web app.
   kMacNative,  // Native Mac app.
-  kPluginVm,   // Plugin VM app.
-  kLacros,     // Lacros app.
+  kPluginVm,   // Plugin VM app, see go/pluginvm.
+  kLacros,     // Lacros browser app, see //docs/lacros.md.
+  kRemote,     // Remote app.
+  kBorealis,   // Borealis app, see go/borealis-app.
 };
 
 // Whether an app is ready to launch, i.e. installed.
 enum Readiness {
   kUnknown = 0,
   kReady,                // Installed and launchable.
-  kDisabledByBlacklist,  // Disabled by SafeBrowsing.
+  kDisabledByBlocklist,  // Disabled by SafeBrowsing.
   kDisabledByPolicy,     // Disabled by admin policy.
   kDisabledByUser,       // Disabled by explicit user action.
   kTerminated,           // Renderer process crashed.
@@ -116,6 +119,13 @@ enum InstallSource {
   kDefault,    // Preinstalled by default, but is not considered a system app.
   kSync,       // Installed by sync.
   kUser,       // Installed by user action.
+};
+
+// What caused the app to be uninstalled.
+enum UninstallSource {
+  kUnknown = 0,
+  kUser,       // Uninstall by user action.
+  kMigration,  // Uninstall by app migration.
 };
 
 // Augments a bool to include an 'unknown' value.
@@ -159,7 +169,7 @@ struct IconKey {
   // components/services/app_service/public/cpp/icon_loader.*
 };
 
-enum IconCompression {
+enum IconType {
   // Sentinel value used in error cases.
   kUnknown,
   // Icon as an uncompressed gfx::ImageSkia with no standard Chrome OS mask.
@@ -172,7 +182,7 @@ enum IconCompression {
 };
 
 struct IconValue {
-  IconCompression icon_compression;
+  IconType icon_type;
   gfx.mojom.ImageSkia? uncompressed;
   array<uint8>? compressed;
   bool is_placeholder_icon;
@@ -183,25 +193,28 @@ struct IconValue {
 // should not be re-ordered or removed.
 enum LaunchSource {
   kUnknown = 0,
-  kFromAppListGrid = 1,             // Grid of apps, not the search box.
-  kFromAppListGridContextMenu = 2,  // Grid of apps; context menu.
-  kFromAppListQuery = 3,            // Query-dependent results (larger icons).
-  kFromAppListQueryContextMenu = 4, // Query-dependent results; context menu.
-  kFromAppListRecommendation = 5,   // Query-less recommendations (smaller
-                                    // icons).
-  kFromParentalControls = 6,        // Parental Controls Settings Section and
-                                    // Per App time notification.
-  kFromShelf = 7,                   // Shelf.
-  kFromFileManager = 8,             // FileManager.
-  kFromLink = 9,                    // Left-licking on links in the browser.
-  kFromOmnibox = 10,                // Enter URL in the Omnibox in the browser.
-  kFromChromeInternal = 11,         // Chrome internal call.
-  kFromKeyboard = 12,               // Keyboard shortcut for opening app.
-  kFromOtherApp = 13,               // Clicking link in another app or webui.
-  kFromMenu = 14,                   // Menu.
-  kFromInstalledNotification = 15,  // Installed notification
-  kFromTest = 16,                   // Test
-  kFromArc = 17,                    // Arc.
+  kFromAppListGrid = 1,               // Grid of apps, not the search box.
+  kFromAppListGridContextMenu = 2,    // Grid of apps; context menu.
+  kFromAppListQuery = 3,              // Query-dependent results (larger icons).
+  kFromAppListQueryContextMenu = 4,   // Query-dependent results; context menu.
+  kFromAppListRecommendation = 5,     // Query-less recommendations (smaller
+                                      // icons).
+  kFromParentalControls = 6,          // Parental Controls Settings Section and
+                                      // Per App time notification.
+  kFromShelf = 7,                     // Shelf.
+  kFromFileManager = 8,               // FileManager.
+  kFromLink = 9,                      // Left-licking on links in the browser.
+  kFromOmnibox = 10,                  // Enter URL in the Omnibox in the
+                                      // browser.
+  kFromChromeInternal = 11,           // Chrome internal call.
+  kFromKeyboard = 12,                 // Keyboard shortcut for opening app.
+  kFromOtherApp = 13,                 // Clicking link in another app or webui.
+  kFromMenu = 14,                     // Menu.
+  kFromInstalledNotification = 15,    // Installed notification
+  kFromTest = 16,                     // Test
+  kFromArc = 17,                      // Arc.
+  kFromSharesheet = 18,               // Sharesheet.
+  kFromReleaseNotesNotification = 19, // Release Notes Notification.
 };
 
 enum TriState {
@@ -224,7 +237,7 @@ enum PermissionValueType {
 // kRadio      -> [command_id, string_id, radio_group_id].
 // kSeparator  -> [command_id].
 // kSubmenu    -> [command_id, string_id, submenu].
-// kArcCommand -> [command_id, shortcut_id, label, image].
+// kPublisherCommand -> [command_id, shortcut_id, label, image].
 //
 struct MenuItems {
   array<MenuItem> items;
@@ -247,7 +260,7 @@ enum MenuItemType {
   kRadio,      // Can be selected/checked among a group of choices.
   kSeparator,  // Shows a horizontal line separator.
   kSubmenu,    // Presents a submenu within another menu.
-  kArcCommand, // Performs an ARC shortcut action when selected.
+  kPublisherCommand, // Performs an app publisher shortcut action when selected.
 };
 
 // Which component requests context menus, the app list or shelf.
@@ -295,17 +308,28 @@ struct Condition {
 // matches against an intent.
 struct IntentFilter {
   array<Condition> conditions;
+
+  // Activity which registered this filter. We only fill this field for ARC
+  // share intent filters.
+  string? activity_name;
+
+  // The label shown to the user for this activity.
+  string? activity_label;
 };
 
 // Action and resource handling request. This includes the scheme and URL at
 // the moment, and will be extended to handle files in the future.
 struct Intent {
   string? action; // Intent action. e.g. view, send.
-  string? scheme; // URL scheme. e.g. https.
-  string? host;   // URL host. e.g. www.google.com.
-  string? port;   // URL host. e.g. 8080.
-  string? path;   // URL path. e.g. /abc.
+  url.mojom.Url? url; // The URL of the intent. e.g. https://www.google.com/.
   string? mime_type; // MIME type. e.g. text/plain, image/*.
+  array<url.mojom.Url>? file_urls; // The URLs of the files to share.
+  string? activity_name; // The activity for the app to launch.
+
+  // The Drive share URL, this is only filled if the intent contains a file
+  // from Google Drive.
+  url.mojom.Url? drive_share_url;
+  string? share_text; // Text to share. e.g. Share link to other app.
 };
 
 // Represents a group of |app_ids| that is no longer preferred app of their

@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
 
@@ -77,10 +78,14 @@ enum class CrostiniResult {
   LOAD_COMPONENT_UPDATE_IN_PROGRESS = 48,
   NEVER_FINISHED = 49,
   CONTAINER_SETUP_FAILED = 50,
-  kMaxValue = CONTAINER_SETUP_FAILED,
+  START_LXD_FAILED = 51,
+  kMaxValue = START_LXD_FAILED,
   // When adding a new value, check you've followed the steps in the comment at
   // the top of this enum.
 };
+
+using CrostiniSuccessCallback =
+    base::OnceCallback<void(bool success, const std::string& failure_reason)>;
 
 enum class InstallLinuxPackageProgressStatus {
   SUCCEEDED,
@@ -132,7 +137,6 @@ enum class ContainerVersion {
 struct VmInfo {
   VmState state;
   vm_tools::concierge::VmInfo info;
-  bool usb_devices_shared = false;
 };
 
 struct StreamingExportStatus {

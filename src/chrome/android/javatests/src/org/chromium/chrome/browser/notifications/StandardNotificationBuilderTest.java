@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.notifications;
 
 import static android.content.Context.NOTIFICATION_SERVICE;
 
-import android.annotation.TargetApi;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -23,7 +22,6 @@ import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -37,7 +35,7 @@ import org.chromium.components.browser_ui.notifications.NotificationMetadata;
 import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.embedder_support.util.UrlUtilities;
-import org.chromium.content_public.browser.test.NativeLibraryTestRule;
+import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 
 /**
  * Instrumentation unit tests for StandardNotificationBuilder.
@@ -52,14 +50,11 @@ public class StandardNotificationBuilderTest {
     private static final String NOTIFICATION_TAG = "TestNotificationTag";
     private static final int NOTIFICATION_ID = 99;
 
-    @Rule
-    public NativeLibraryTestRule mLibraryTestRule = new NativeLibraryTestRule();
-
     @Before
     public void setUp() {
         // Not initializing the browser process is safe because GetDomainAndRegistry() is
         // stand-alone.
-        mLibraryTestRule.loadNativeLibraryNoBrowserProcess();
+        NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
     }
 
     private NotificationBuilderBase createAllOptionsBuilder(
@@ -126,16 +121,11 @@ public class StandardNotificationBuilderTest {
         Assert.assertEquals("title", NotificationTestUtil.getExtraTitle(notification));
         Assert.assertEquals("body", NotificationTestUtil.getExtraText(notification));
         Assert.assertEquals("origin", NotificationTestUtil.getExtraSubText(notification));
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-            Assert.assertEquals(
-                    NotificationConstants.GROUP_WEB_PREFIX + "origin", notification.getGroup());
-        }
+        Assert.assertEquals(
+                NotificationConstants.GROUP_WEB_PREFIX + "origin", notification.getGroup());
         Assert.assertEquals("ticker", notification.tickerText.toString());
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            // EXTRA_TEMPLATE was added in Android L; style cannot be verified in earlier versions.
-            Assert.assertEquals("android.app.Notification$BigPictureStyle",
-                    notification.extras.getString(Notification.EXTRA_TEMPLATE));
-        }
+        Assert.assertEquals("android.app.Notification$BigPictureStyle",
+                notification.extras.getString(Notification.EXTRA_TEMPLATE));
         Bitmap picture = NotificationTestUtil.getExtraPicture(notification);
         Assert.assertNotNull(picture);
         Assert.assertTrue(picture.getWidth() > 0 && picture.getHeight() > 0);
@@ -157,16 +147,13 @@ public class StandardNotificationBuilderTest {
         Assert.assertEquals("button 2", NotificationTestUtil.getActionTitle(actions[1]));
         Assert.assertEquals("settings", NotificationTestUtil.getActionTitle(actions[2]));
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            // Notification.publicVersion was added in Android L.
-            Assert.assertNotNull(notification.publicVersion);
-            Assert.assertEquals(context.getString(R.string.notification_hidden_text),
-                    NotificationTestUtil.getExtraText(notification.publicVersion));
-        }
+        Assert.assertNotNull(notification.publicVersion);
+        Assert.assertEquals(context.getString(R.string.notification_hidden_text),
+                NotificationTestUtil.getExtraText(notification.publicVersion));
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
             Assert.assertEquals(
                     "origin", NotificationTestUtil.getExtraSubText(notification.publicVersion));
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        } else {
             Assert.assertEquals(
                     "origin", NotificationTestUtil.getExtraTitle(notification.publicVersion));
         }
@@ -180,12 +167,8 @@ public class StandardNotificationBuilderTest {
         NotificationBuilderBase builder = createAllOptionsBuilder(contentAndDeleteIntents);
         builder.setImage(null);
         Notification notification = buildNotification(builder);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            // EXTRA_TEMPLATE was added in Android L; style cannot be verified in earlier versions.
-            Assert.assertEquals("android.app.Notification$BigTextStyle",
-                    notification.extras.getString(Notification.EXTRA_TEMPLATE));
-        }
+        Assert.assertEquals("android.app.Notification$BigTextStyle",
+                notification.extras.getString(Notification.EXTRA_TEMPLATE));
     }
 
     @Test
@@ -261,8 +244,6 @@ public class StandardNotificationBuilderTest {
     }
 
     @Test
-    @MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT_WATCH)
-    @TargetApi(Build.VERSION_CODES.KITKAT_WATCH) // RemoteInputs were only added in KITKAT_WATCH.
     @SmallTest
     @Feature({"Browser", "Notifications"})
     public void testAddTextActionSetsRemoteInput() {

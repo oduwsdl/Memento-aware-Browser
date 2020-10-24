@@ -32,7 +32,8 @@ void FakeLocalFrame::SendInterventionReport(const std::string& id,
 void FakeLocalFrame::SetFrameOwnerProperties(
     blink::mojom::FrameOwnerPropertiesPtr properties) {}
 
-void FakeLocalFrame::NotifyUserActivation() {}
+void FakeLocalFrame::NotifyUserActivation(
+    blink::mojom::UserActivationNotificationType notification_type) {}
 
 void FakeLocalFrame::NotifyVirtualKeyboardOverlayRect(const gfx::Rect&) {}
 
@@ -102,9 +103,13 @@ void FakeLocalFrame::PostMessageEvent(
 void FakeLocalFrame::GetSavableResourceLinks(
     GetSavableResourceLinksCallback callback) {}
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void FakeLocalFrame::GetCharacterIndexAtPoint(const gfx::Point& point) {}
 void FakeLocalFrame::GetFirstRectForRange(const gfx::Range& range) {}
+void FakeLocalFrame::GetStringForRange(const gfx::Range& range,
+                                       GetStringForRangeCallback callback) {
+  std::move(callback).Run(nullptr, gfx::Point());
+}
 #endif
 
 void FakeLocalFrame::BindReportingObserver(
@@ -112,6 +117,15 @@ void FakeLocalFrame::BindReportingObserver(
 
 void FakeLocalFrame::UpdateOpener(
     const base::Optional<base::UnguessableToken>& opener_frame_token) {}
+
+void FakeLocalFrame::MixedContentFound(
+    const GURL& main_resource_url,
+    const GURL& mixed_content_url,
+    blink::mojom::RequestContextType request_context,
+    bool was_allowed,
+    const GURL& url_before_redirects,
+    bool had_redirect,
+    network::mojom::SourceLocationPtr source_location) {}
 
 void FakeLocalFrame::BindFrameHostReceiver(
     mojo::ScopedInterfaceEndpointHandle handle) {

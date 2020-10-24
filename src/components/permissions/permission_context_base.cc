@@ -34,7 +34,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/origin_util.h"
+#include "third_party/blink/public/common/loader/network_utils.h"
 #include "url/gurl.h"
 
 namespace permissions {
@@ -188,11 +188,12 @@ void PermissionContextBase::RequestPermission(
     return;
   }
 
-  // Make sure we do not show a UI for cached documents
-  if (content::BackForwardCache::EvictIfCached(
-          content::GlobalFrameRoutingId(id.render_process_id(),
-                                        id.render_frame_id()),
-          "PermissionContextBase::RequestPermission")) {
+  // Don't show request permission UI for an inactive RenderFrameHost. If this
+  // is called when RenderFrameHost is in BackForwardCache, evict the document
+  // as the page might not distinguish properly between user denying the
+  // permission and automatic rejection, leading to an inconsistent UX after
+  // restoring the page from the cache.
+  if (rfh->IsInactiveAndDisallowReactivation()) {
     std::move(callback).Run(result.content_setting);
     return;
   }
@@ -288,7 +289,7 @@ bool PermissionContextBase::IsPermissionAvailableToOrigins(
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
   if (IsRestrictedToSecureOrigins()) {
-    if (!content::IsOriginSecure(requesting_origin))
+    if (!blink::network_utils::IsOriginSecure(requesting_origin))
       return false;
 
     // TODO(raymes): We should check the entire chain of embedders here whenever
@@ -297,7 +298,7 @@ bool PermissionContextBase::IsPermissionAvailableToOrigins(
     // the top level and requesting origins.
     if (!PermissionsClient::Get()->CanBypassEmbeddingOriginCheck(
             requesting_origin, embedding_origin) &&
-        !content::IsOriginSecure(embedding_origin)) {
+        !blink::network_utils::IsOriginSecure(embedding_origin)) {
       return false;
     }
   }
@@ -355,8 +356,7 @@ void PermissionContextBase::DecidePermission(
   // origin displayed in the prompt should never differ from the top-level
   // origin. Storage access API requests are excluded as they are expected to
   // request permissions from the frame origin needing access.
-  DCHECK(!base::FeatureList::IsEnabled(features::kPermissionDelegation) ||
-         PermissionsClient::Get()->CanBypassEmbeddingOriginCheck(
+  DCHECK(PermissionsClient::Get()->CanBypassEmbeddingOriginCheck(
              requesting_origin, embedding_origin) ||
          requesting_origin == embedding_origin ||
          content_settings_type_ == ContentSettingsType::STORAGE_ACCESS);
@@ -370,8 +370,7 @@ void PermissionContextBase::DecidePermission(
 
   std::unique_ptr<PermissionRequest> request_ptr =
       std::make_unique<PermissionRequestImpl>(
-          embedding_origin, requesting_origin, content_settings_type_,
-          user_gesture,
+          requesting_origin, content_settings_type_, user_gesture,
           base::BindOnce(&PermissionContextBase::PermissionDecided,
                          weak_factory_.GetWeakPtr(), id, requesting_origin,
                          embedding_origin, std::move(callback)),
@@ -384,7 +383,17 @@ void PermissionContextBase::DecidePermission(
           .insert(std::make_pair(id.ToString(), std::move(request_ptr)))
           .second;
   DCHECK(inserted) << "Duplicate id " << id.ToString();
-  permission_request_manager->AddRequest(request);
+
+  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
+      id.render_process_id(), id.render_frame_id());
+
+  if (!rfh) {
+    request->Cancelled();
+    request->RequestFinished();
+    return;
+  }
+
+  permission_request_manager->AddRequest(rfh, request);
 }
 
 void PermissionContextBase::PermissionDecided(

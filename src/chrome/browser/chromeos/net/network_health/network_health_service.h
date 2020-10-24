@@ -5,11 +5,19 @@
 #ifndef CHROME_BROWSER_CHROMEOS_NET_NETWORK_HEALTH_NETWORK_HEALTH_SERVICE_H_
 #define CHROME_BROWSER_CHROMEOS_NET_NETWORK_HEALTH_NETWORK_HEALTH_SERVICE_H_
 
-#include "chrome/browser/chromeos/net/network_health/network_health.h"
-#include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_diagnostics.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_health.mojom.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 
 namespace chromeos {
+
+namespace network_diagnostics {
+class NetworkDiagnostics;
+}
+
 namespace network_health {
+
+class NetworkHealth;
 
 class NetworkHealthService {
  public:
@@ -18,10 +26,20 @@ class NetworkHealthService {
   NetworkHealthService();
   ~NetworkHealthService() = delete;
 
-  void BindRemote(mojo::PendingReceiver<mojom::NetworkHealthService> receiver);
+  mojo::PendingRemote<mojom::NetworkHealthService>
+  GetHealthRemoteAndBindReceiver();
+  mojo::PendingRemote<network_diagnostics::mojom::NetworkDiagnosticsRoutines>
+  GetDiagnosticsRemoteAndBindReceiver();
+
+  void BindHealthReceiver(
+      mojo::PendingReceiver<mojom::NetworkHealthService> receiver);
+  void BindDiagnosticsReceiver(
+      mojo::PendingReceiver<
+          network_diagnostics::mojom::NetworkDiagnosticsRoutines> receiver);
 
  private:
-  NetworkHealth network_health_;
+  std::unique_ptr<NetworkHealth> network_health_;
+  std::unique_ptr<network_diagnostics::NetworkDiagnostics> network_diagnostics_;
 };
 
 }  // namespace network_health

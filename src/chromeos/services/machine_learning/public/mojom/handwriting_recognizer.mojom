@@ -7,9 +7,12 @@
 // NOTE: This mojom exists in two places and must be kept in sync:
 //       Chromium:  //chromeos/services/machine_learning/public/mojom/
 //       Chrome OS: src/platform2/ml/mojom/
+//       Note: Other repos downstream of Chromium might also use this mojom.
 // Example: A backwards-compatible mojom change (and corresponding
 // implementation change) can be made in Chrome OS first, then replicated to the
-// client (Chromium) later.
+// clients (Chromium, other downstream repos) later.
+// Use //chromeos/services/machine_learning/public/mojom/roll_mojom.sh to help
+// replicate Chrome OS-side changes over to Chromium.
 
 module chromeos.machine_learning.mojom;
 
@@ -115,10 +118,59 @@ struct HandwritingRecognizerResult {
   array<HandwritingRecognizerCandidate> candidates;
 };
 
+// The specification of a handwriting recognizer.
+struct HandwritingRecognizerSpec {
+  // The language the recognizer will handle. Only "en" (for english) and
+  // "gesture_in_context" (for gesture) are supported.
+  string language;
+};
+
 // The mojom interface for performing the recognition of handwritten text.
 interface HandwritingRecognizer {
   // Performs handwriting recognition on a set of ink strokes, and returns a set
   // of alternative recognition results.
   Recognize(HandwritingRecognitionQuery query) =>
       (HandwritingRecognizerResult result);
+};
+
+// Enum indicates the result of LoadHandwritingModel in mlservice.
+enum LoadHandwritingModelResult {
+  OK = 0,
+
+  // Deprecated enum values.
+  DEPRECATED_MODEL_SPEC_ERROR = 1,
+  LOAD_MODEL_ERROR = 2,
+
+  // If both USE.ondevice_handwriting and USE.ondevice_handwriting_dlc
+  // are not defined. (checked in chrome)
+  FEATURE_NOT_SUPPORTED_ERROR = 3,
+
+  // If the required language is not in an allowlist, "en" and
+  // "gesture_in_context" for now. (checked in chrome)
+  LANGUAGE_NOT_SUPPORTED_ERROR = 4,
+
+  // If the user goes to chrome://flag page and manually disable
+  // handwriting or handwriting_dlc. (checked in chrome)
+  FEATURE_DISABLED_BY_USER = 5,
+
+  // if the USE.ondevice_handwriting_dlc is enabled, but dlc is not
+  // on the device. (checked in chrome)
+  DLC_DOES_NOT_EXIST = 6,
+
+  // If the dlc is on the device, but InstallDlc returns an error.
+  // (checked in chrome).
+  DLC_INSTALL_ERROR = 7,
+
+  // If dlc is installed successfully, but GetDlcState returns an error.
+  // (checked inside MachineLearningServiceImpl)
+  DLC_GET_PATH_ERROR = 8,
+
+  // if loading libhandwriting.so fails. (checked inside HandWritingLibrary)
+  LOAD_NATIVE_LIB_ERROR = 9,
+
+  // if getting the function pointers fails. (checked inside HandWritingLibrary)
+  LOAD_FUNC_PTR_ERROR = 10,
+
+  // If loading model files fails. (checked inside HandWritingLibrary)
+  LOAD_MODEL_FILES_ERROR = 11,
 };

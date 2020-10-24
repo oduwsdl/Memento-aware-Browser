@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/third_party/blink/public/mojom/mojom_core.build_metadata",
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom"
+  ]
+}

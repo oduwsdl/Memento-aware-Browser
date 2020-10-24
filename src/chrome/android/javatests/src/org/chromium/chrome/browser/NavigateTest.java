@@ -6,12 +6,12 @@ package org.chromium.chrome.browser;
 
 import android.content.pm.ActivityInfo;
 import android.support.test.InstrumentationRegistry;
-import android.text.TextUtils;
 import android.util.Base64;
 import android.view.KeyEvent;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -93,26 +93,17 @@ public class NavigateTest {
         new TabLoadObserver(mActivityTestRule.getActivity().getActivityTab())
                 .fullyLoadUrl(startUrl);
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                final UrlBar urlBar =
-                        (UrlBar) mActivityTestRule.getActivity().findViewById(R.id.url_bar);
-                Assert.assertNotNull("urlBar is null", urlBar);
+        CriteriaHelper.pollUiThread(() -> {
+            final UrlBar urlBar =
+                    (UrlBar) mActivityTestRule.getActivity().findViewById(R.id.url_bar);
+            Criteria.checkThat("urlBar is null", urlBar, Matchers.notNullValue());
+            Criteria.checkThat("UrlBar text wrong", urlBar.getText().toString(),
+                    Matchers.is(expectedLocation(endUrl)));
 
-                if (!TextUtils.equals(expectedLocation(endUrl), urlBar.getText().toString())) {
-                    updateFailureReason(String.format("Expected url bar text: %s, actual: %s",
-                            expectedLocation(endUrl), urlBar.getText().toString()));
-                    return false;
-                }
-                if (!TextUtils.equals(endUrl,
-                            mActivityTestRule.getActivity().getActivityTab().getUrlString())) {
-                    updateFailureReason(String.format("Expected tab url: %s, actual: %s", endUrl,
-                            mActivityTestRule.getActivity().getActivityTab().getUrlString()));
-                    return false;
-                }
-                return true;
-            }
+            Criteria.checkThat("Tab url wrong",
+                    ChromeTabUtils.getUrlStringOnUiThread(
+                            mActivityTestRule.getActivity().getActivityTab()),
+                    Matchers.is(endUrl));
         });
     }
 
@@ -245,7 +236,8 @@ public class NavigateTest {
         DOMUtils.clickNode(tab.getWebContents(), "aboutLink");
         ChromeTabUtils.waitForTabPageLoaded(tab, url2);
         Assert.assertEquals("Desired Link not open", url2,
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 
     /**
@@ -315,6 +307,32 @@ public class NavigateTest {
     }
 
     /**
+     * Test 'Request Desktop Site' option properly affects UA client hints with Critical-CH
+     */
+    @Test
+    @MediumTest
+    @Feature({"Navigation"})
+    @CommandLineFlags.
+    Add({"enable-features=UserAgentClientHint, FeaturePolicyForClientHints, CriticalClientHint"})
+    // TODO(https://crbug.com/928669) Remove switch when UA-CH-* launched.
+    public void testRequestDesktopSiteCriticalClientHints() throws Exception {
+        // TODO(https://crbug.com/1138913): Move EchoCriticalHeader request handler here when
+        // implemented
+        String url = mTestServer.getURL("/echocriticalheader");
+        final Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> tab.getWebContents().getNavigationController().setUseDesktopUserAgent(
+                                true /* useDesktop */, true /* reloadOnChange */));
+
+        navigateAndObserve(url, url);
+        ChromeTabUtils.waitForTabPageLoaded(tab, url);
+        String content = JavaScriptUtils.executeJavaScriptAndWaitForResult(
+                tab.getWebContents(), "document.body.textContent");
+        // Note: |content| is JSON, hence lots of escaping.
+        Assert.assertEquals("Proper headers", "\"?0\\\"Linux\\\"\"", content);
+    }
+    /**
      * Test Opening a link and verify that TabObserver#onPageLoadStarted gives the old and new URL.
      */
     @Test
@@ -331,7 +349,7 @@ public class NavigateTest {
             @Override
             public void onPageLoadStarted(Tab tab, String newUrl) {
                 tab.removeObserver(this);
-                Assert.assertEquals(url1, tab.getUrlString());
+                Assert.assertEquals(url1, ChromeTabUtils.getUrlStringOnUiThread(tab));
                 Assert.assertEquals(url2, newUrl);
             }
         };
@@ -340,7 +358,8 @@ public class NavigateTest {
         DOMUtils.clickNode(tab.getWebContents(), "aboutLink");
         ChromeTabUtils.waitForTabPageLoaded(tab, url2);
         Assert.assertEquals("Desired Link not open", url2,
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 
     /**
@@ -357,8 +376,11 @@ public class NavigateTest {
                 mTestServer.getURL("/chrome/test/data/android/redirect/one.html");
         typeInOmniboxAndNavigate(initialUrl, null);
 
-        CriteriaHelper.pollInstrumentationThread(Criteria.equals(redirectedUrl,
-                () -> mActivityTestRule.getActivity().getActivityTab().getUrlString()));
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(ChromeTabUtils.getUrlStringOnUiThread(
+                                       mActivityTestRule.getActivity().getActivityTab()),
+                    Matchers.is(redirectedUrl));
+        });
     }
 
     /**
@@ -370,8 +392,9 @@ public class NavigateTest {
     @Feature({"Navigation"})
     public void testIntentFallbackRedirection() throws Exception {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        Assert.assertEquals(
-                NEW_TAB_PAGE, mActivityTestRule.getActivity().getActivityTab().getUrlString());
+        Assert.assertEquals(NEW_TAB_PAGE,
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
 
         final String fallbackUrl =
                 mTestServer.getURL("/chrome/test/data/android/redirect/about.html");
@@ -390,8 +413,11 @@ public class NavigateTest {
         typeInOmniboxAndNavigate(initialUrl, null);
 
         // Now intent fallback should be triggered assuming 'non_existent' scheme cannot be handled.
-        CriteriaHelper.pollInstrumentationThread(Criteria.equals(
-                targetUrl, () -> mActivityTestRule.getActivity().getActivityTab().getUrlString()));
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(ChromeTabUtils.getUrlStringOnUiThread(
+                                       mActivityTestRule.getActivity().getActivityTab()),
+                    Matchers.is(targetUrl));
+        });
 
         // Check if Java redirections were removed from the history.
         // Note that if we try to go back in the test: NavigateToEntry() is called, but
@@ -441,7 +467,9 @@ public class NavigateTest {
                             "URL mismatch after pressing back button for the 1st time in repetition"
                                     + "%d.",
                             i),
-                    urls[1], mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                    urls[1],
+                    ChromeTabUtils.getUrlStringOnUiThread(
+                            mActivityTestRule.getActivity().getActivityTab()));
 
             TouchCommon.singleClickView(
                     mActivityTestRule.getActivity().findViewById(R.id.back_button));
@@ -451,7 +479,9 @@ public class NavigateTest {
                             "URL mismatch after pressing back button for the 2nd time in repetition"
                                     + "%d.",
                             i),
-                    urls[0], mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                    urls[0],
+                    ChromeTabUtils.getUrlStringOnUiThread(
+                            mActivityTestRule.getActivity().getActivityTab()));
 
             TouchCommon.singleClickView(
                     mActivityTestRule.getActivity().findViewById(R.id.forward_button));
@@ -461,7 +491,9 @@ public class NavigateTest {
                             "URL mismatch after pressing fwd button for the 1st time in repetition"
                                     + "%d.",
                             i),
-                    urls[1], mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                    urls[1],
+                    ChromeTabUtils.getUrlStringOnUiThread(
+                            mActivityTestRule.getActivity().getActivityTab()));
 
             TouchCommon.singleClickView(
                     mActivityTestRule.getActivity().findViewById(R.id.forward_button));
@@ -471,7 +503,9 @@ public class NavigateTest {
                             "URL mismatch after pressing fwd button for the 2nd time in repetition"
                                     + "%d.",
                             i),
-                    urls[2], mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                    urls[2],
+                    ChromeTabUtils.getUrlStringOnUiThread(
+                            mActivityTestRule.getActivity().getActivityTab()));
         }
     }
 
@@ -535,8 +569,9 @@ public class NavigateTest {
             // Wait for the url to change.
             final Tab tab = TabModelUtils.getCurrentTab(model);
             mActivityTestRule.assertWaitForPageScaleFactorMatch(0.75f);
-            CriteriaHelper.pollInstrumentationThread(
-                    Criteria.equals(mockedUrl, () -> getTabUrlOnUIThread(tab)), 5000, 50);
+            CriteriaHelper.pollInstrumentationThread(() -> {
+                Criteria.checkThat(getTabUrlOnUIThread(tab), Matchers.is(mockedUrl));
+            }, 5000, 50);
 
             // Make sure that we're showing new content now.
             Assert.assertEquals("Still showing spoofed data", "\"Real\"", getTabBodyText(tab));
@@ -553,6 +588,7 @@ public class NavigateTest {
     @Test
     @MediumTest
     @Feature({"Navigation"})
+    @DisabledTest
     public void testRendererInitiatedIntentNavigate() throws Exception {
         final String finalUrl =
                 mTestServer.getURL("/chrome/test/data/android/renderer_initiated/final.html");
@@ -609,7 +645,8 @@ public class NavigateTest {
 
     private String getTabUrlOnUIThread(final Tab tab) {
         try {
-            return TestThreadUtils.runOnUiThreadBlocking(() -> tab.getUrlString());
+            return TestThreadUtils.runOnUiThreadBlocking(
+                    () -> ChromeTabUtils.getUrlStringOnUiThread(tab));
         } catch (ExecutionException ex) {
             assert false : "Unexpected ExecutionException";
         }

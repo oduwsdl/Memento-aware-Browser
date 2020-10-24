@@ -129,7 +129,7 @@ class AutofillAssistantClient {
     public void destroyUi() {
         if (mNativeClientAndroid == 0) return;
 
-        AutofillAssistantClientJni.get().destroyUI(
+        AutofillAssistantClientJni.get().onJavaDestroyUI(
                 mNativeClientAndroid, AutofillAssistantClient.this);
     }
 
@@ -191,7 +191,7 @@ class AutofillAssistantClient {
      *
      * @param actionId id of the action
      * @param experimentIds comma-separated set of experiments to use while running the flow
-     * @param arguments report these as autobot parameters while performing this specific action
+     * @param arguments report these as script parameters while performing this specific action
      * @param onboardingCoordinator if non-null, reuse existing UI elements, usually created to show
      *         onboarding.
      * @return true if the action was found started, false otherwise. The action can still fail
@@ -284,7 +284,9 @@ class AutofillAssistantClient {
             return;
         }
 
-        IdentityServicesProvider.get().getIdentityManager().getAccessToken(
+        IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
+                AutofillAssistantUiController.getProfile());
+        identityManager.getAccessToken(
                 mAccount, AUTH_TOKEN_TYPE, new IdentityManager.GetAccessTokenCallback() {
                     @Override
                     public void onGetTokenSuccess(AccessTokenData token) {
@@ -310,7 +312,9 @@ class AutofillAssistantClient {
             return;
         }
 
-        IdentityServicesProvider.get().getIdentityManager().invalidateAccessToken(accessToken);
+        IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
+                AutofillAssistantUiController.getProfile());
+        identityManager.invalidateAccessToken(accessToken);
     }
 
     /** Returns the e-mail address that corresponds to the access token or an empty string. */
@@ -386,7 +390,7 @@ class AutofillAssistantClient {
         void onAccessToken(long nativeClientAndroid, AutofillAssistantClient caller,
                 boolean success, String accessToken);
         String getPrimaryAccountName(long nativeClientAndroid, AutofillAssistantClient caller);
-        void destroyUI(long nativeClientAndroid, AutofillAssistantClient caller);
+        void onJavaDestroyUI(long nativeClientAndroid, AutofillAssistantClient caller);
         void transferUITo(
                 long nativeClientAndroid, AutofillAssistantClient caller, Object otherWebContents);
         void fetchWebsiteActions(long nativeClientAndroid, AutofillAssistantClient caller,

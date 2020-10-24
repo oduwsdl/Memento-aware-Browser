@@ -73,7 +73,7 @@ base::Value FetchCapabilitiesAsync(const std::string& device_name,
                                    const PrinterBasicInfo& basic_info,
                                    bool has_secure_protocol,
                                    const std::string& locale) {
-  auto print_backend = PrintBackend::CreateInstance(nullptr, locale);
+  auto print_backend = PrintBackend::CreateInstance(locale);
   return GetSettingsOnBlockingTaskRunner(
       device_name, basic_info, PrinterSemanticCapsAndDefaults::Papers(),
       has_secure_protocol, print_backend);
@@ -302,31 +302,33 @@ void LocalPrinterHandlerChromeos::HandlePrinterSetup(
       FetchCapabilities(printer, GetNativePrinterPolicies(), std::move(cb));
       return;
     }
-    case chromeos::PrinterSetupResult::kPpdNotFound:
-      LOG(WARNING) << "Could not find PPD.  Check printer configuration.";
-      // Prompt user to update configuration.
-      // TODO(skau): Fill me in
-      break;
-    case chromeos::PrinterSetupResult::kPpdUnretrievable:
-      LOG(WARNING) << "Could not download PPD.  Check Internet connection.";
-      // Could not download PPD.  Connect to Internet.
-      // TODO(skau): Fill me in
-      break;
     case chromeos::PrinterSetupResult::kPrinterUnreachable:
+    case chromeos::PrinterSetupResult::kPrinterSentWrongResponse:
+    case chromeos::PrinterSetupResult::kPpdNotFound:
+    case chromeos::PrinterSetupResult::kPpdUnretrievable:
+      // Prompt user to update configuration or check internet connection.
+      // TODO(skau): Fill me in
+      LOG(WARNING) << ResultCodeToMessage(result);
+      break;
+    case chromeos::PrinterSetupResult::kFatalError:
     case chromeos::PrinterSetupResult::kDbusError:
-    case chromeos::PrinterSetupResult::kComponentUnavailable:
+    case chromeos::PrinterSetupResult::kNativePrintersNotAllowed:
     case chromeos::PrinterSetupResult::kPpdTooLarge:
     case chromeos::PrinterSetupResult::kInvalidPpd:
-    case chromeos::PrinterSetupResult::kFatalError:
-    case chromeos::PrinterSetupResult::kNativePrintersNotAllowed:
-    case chromeos::PrinterSetupResult::kInvalidPrinterUpdate:
+    case chromeos::PrinterSetupResult::kIoError:
+    case chromeos::PrinterSetupResult::kMemoryAllocationError:
+    case chromeos::PrinterSetupResult::kBadUri:
     case chromeos::PrinterSetupResult::kDbusNoReply:
     case chromeos::PrinterSetupResult::kDbusTimeout:
-    case chromeos::PrinterSetupResult::kEditSuccess:
-      LOG(ERROR) << "Unexpected error in printer setup. " << result;
+      LOG(ERROR) << ResultCodeToMessage(result);
       break;
+    case chromeos::PrinterSetupResult::kInvalidPrinterUpdate:
+    case chromeos::PrinterSetupResult::kEditSuccess:
+    case chromeos::PrinterSetupResult::kPrinterIsNotAutoconfigurable:
+    case chromeos::PrinterSetupResult::kComponentUnavailable:
     case chromeos::PrinterSetupResult::kMaxValue:
-      NOTREACHED() << "This value is not expected";
+      LOG(ERROR) << "Unexpected error in printer setup: "
+                 << ResultCodeToMessage(result);
       break;
   }
 

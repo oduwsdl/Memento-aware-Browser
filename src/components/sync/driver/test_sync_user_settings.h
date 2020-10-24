@@ -48,13 +48,13 @@ class TestSyncUserSettings : public SyncUserSettings {
 
   bool IsEncryptEverythingAllowed() const override;
   bool IsEncryptEverythingEnabled() const override;
-  void EnableEncryptEverything() override;
 
   syncer::ModelTypeSet GetEncryptedDataTypes() const override;
   bool IsPassphraseRequired() const override;
   bool IsPassphraseRequiredForPreferredDataTypes() const override;
   bool IsTrustedVaultKeyRequired() const override;
   bool IsTrustedVaultKeyRequiredForPreferredDataTypes() const override;
+  bool IsTrustedVaultRecoverabilityDegraded() const override;
   bool IsUsingSecondaryPassphrase() const override;
   base::Time GetExplicitPassphraseTime() const override;
   PassphraseType GetPassphraseType() const override;

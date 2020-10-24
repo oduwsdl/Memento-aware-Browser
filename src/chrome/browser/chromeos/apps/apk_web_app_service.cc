@@ -299,11 +299,11 @@ void ApkWebAppService::OnPackageInstalled(
   // The package is a web app but we don't have a corresponding browser-side
   // artifact. Install it.
   auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_app_list_prefs_->app_connection_holder(), RequestPackageIcon);
+      arc_app_list_prefs_->app_connection_holder(), GetPackageIcon);
   if (!instance)
     return;
 
-  instance->RequestPackageIcon(
+  instance->GetPackageIcon(
       package_info.package_name, kDefaultIconSize, /*normalize=*/false,
       base::BindOnce(&ApkWebAppService::OnDidGetWebAppIcon,
                      weak_ptr_factory_.GetWeakPtr(), package_info.package_name,
@@ -442,9 +442,9 @@ void ApkWebAppService::OnWebAppUninstalled(const web_app::AppId& web_app_id) {
 void ApkWebAppService::OnDidGetWebAppIcon(
     const std::string& package_name,
     arc::mojom::WebAppInfoPtr web_app_info,
-    const std::vector<uint8_t>& icon_png_data) {
+    arc::mojom::RawIconPngDataPtr icon) {
   ApkWebAppInstaller::Install(
-      profile_, std::move(web_app_info), icon_png_data,
+      profile_, std::move(web_app_info), std::move(icon),
       base::BindOnce(&ApkWebAppService::OnDidFinishInstall,
                      weak_ptr_factory_.GetWeakPtr(), package_name),
       weak_ptr_factory_.GetWeakPtr());

@@ -117,6 +117,9 @@ Output = class {
 
     /** @private {!Object} */
     this.initialSpeechProps_ = {};
+
+    /** @private {boolean} */
+    this.drawFocusRing_ = true;
   }
 
   /**
@@ -126,12 +129,10 @@ Output = class {
    * @param {QueueMode|undefined} mode
    */
   static forceModeForNextSpeechUtterance(mode) {
-    // If previous calls to force the mode went unprocessed, try to honor the
-    // first caller's setting which is generally set by key and gesture events
-    // rather than automation events. Make an exception when a caller explicitly
-    // clears the mode .e.g in editing.
     if (Output.forceModeForNextSpeechUtterance_ === undefined ||
-        mode === undefined) {
+        mode === undefined ||
+        // Only allow setting to higher queue modes.
+        mode < Output.forceModeForNextSpeechUtterance_) {
       Output.forceModeForNextSpeechUtterance_ = mode;
     }
   }
@@ -360,6 +361,15 @@ Output = class {
   }
 
   /**
+   * Don't draw a focus ring based on this output.
+   * @return {!Output}
+   */
+  withoutFocusRing() {
+    this.drawFocusRing_ = false;
+    return this;
+  }
+
+  /**
    * Supply initial speech properties that will be applied to all output.
    * @param {!Object} speechProps
    * @return {!Output}
@@ -556,7 +566,7 @@ Output = class {
     }
 
     // Display.
-    if (this.speechCategory_ != TtsCategory.LIVE) {
+    if (this.speechCategory_ != TtsCategory.LIVE && this.drawFocusRing_) {
       ChromeVoxState.instance.setFocusBounds(this.locations_);
     }
   }
@@ -1062,8 +1072,8 @@ Output = class {
             this.node_(
                 related, related, Output.EventType.NAVIGATE, buff, ruleStr);
           }
-        } else if (token == 'nameOrTextContent') {
-          if (node.name) {
+        } else if (token == 'nameOrTextContent' || token == 'textContent') {
+          if (node.name && token == 'nameOrTextContent') {
             ruleStr.writeToken(token);
             this.format_({
               node,
@@ -1355,7 +1365,10 @@ Output = class {
 
     if (!prevRange && range.start.node.root) {
       prevRange = cursors.Range.fromNode(range.start.node.root);
+    } else if (!prevRange) {
+      return;
     }
+
     let cursor = cursors.Cursor.fromNode(range.start.node);
     let prevNode = prevRange.start.node;
 
@@ -1772,6 +1785,25 @@ Output = class {
     if (node.errorMessage) {
       ret.push({outputFormat: '$node(errorMessage)'});
     }
+
+    // Provide a hint for sort direction.
+    let sortDirectionNode = node;
+    while (sortDirectionNode && sortDirectionNode != sortDirectionNode.root) {
+      if (!sortDirectionNode.sortDirection) {
+        sortDirectionNode = sortDirectionNode.parent;
+        continue;
+      }
+      if (sortDirectionNode.sortDirection ===
+          chrome.automation.SortDirectionType.ASCENDING) {
+        ret.push({msgId: 'sort_ascending'});
+      } else if (
+          sortDirectionNode.sortDirection ===
+          chrome.automation.SortDirectionType.DESCENDING) {
+        ret.push({msgId: 'sort_descending'});
+      }
+      break;
+    }
+
     return ret;
   }
 
@@ -2067,7 +2099,7 @@ Output = class {
    */
   toString() {
     return this.speechBuffer_.reduce(function(prev, cur) {
-      if (prev === null) {
+      if (prev === null || prev == '') {
         return cur.toString();
       }
       prev += ' ' + cur.toString();
@@ -2145,6 +2177,7 @@ Output.ROLE_INFO_ = {
   alertDialog: {msgId: 'role_alertdialog', outputContextFirst: true},
   article: {msgId: 'role_article', inherits: 'abstractItem'},
   application: {msgId: 'role_application', inherits: 'abstractContainer'},
+  audio: {msgId: 'tag_audio', inherits: 'abstractContainer'},
   banner: {msgId: 'role_banner', inherits: 'abstractContainer'},
   button: {msgId: 'role_button', earconId: 'BUTTON'},
   buttonDropDown: {msgId: 'role_button', earconId: 'BUTTON'},
@@ -2215,6 +2248,8 @@ Output.ROLE_INFO_ = {
   docNoteRef: {msgId: 'role_doc_note_ref', earconId: 'LINK', inherits: 'link'},
   docNotice: {msgId: 'role_doc_notice', inherits: 'abstractContainer'},
   docPageBreak: {msgId: 'role_doc_page_break', inherits: 'abstractContainer'},
+  docPageFooter: {msgId: 'role_doc_page_footer', inherits: 'abstractContainer'},
+  docPageHeader: {msgId: 'role_doc_page_header', inherits: 'abstractContainer'},
   docPageList: {msgId: 'role_doc_page_list', inherits: 'abstractContainer'},
   docPart: {msgId: 'role_doc_part', inherits: 'abstractContainer'},
   docPreface: {msgId: 'role_doc_preface', inherits: 'abstractContainer'},
@@ -2250,6 +2285,7 @@ Output.ROLE_INFO_ = {
       {msgId: 'role_listitem', earconId: 'LIST_ITEM', inherits: 'abstractItem'},
   log: {msgId: 'role_log', inherits: 'abstractNameFromContents'},
   main: {msgId: 'role_main', inherits: 'abstractContainer'},
+  mark: {msgId: 'role_mark', inherits: 'abstractContainer'},
   marquee: {msgId: 'role_marquee', inherits: 'abstractNameFromContents'},
   math: {msgId: 'role_math', inherits: 'abstractContainer'},
   menu: {msgId: 'role_menu', outputContextFirst: true, ignoreAncestry: true},
@@ -2297,6 +2333,7 @@ Output.ROLE_INFO_ = {
   toggleButton: {msgId: 'role_toggle_button', inherits: 'checkBox'},
   tree: {msgId: 'role_tree'},
   treeItem: {msgId: 'role_treeitem'},
+  video: {msgId: 'tag_video', inherits: 'abstractContainer'},
   window: {ignoreAncestry: true}
 };
 
@@ -2368,6 +2405,12 @@ Output.PRESSED_STATE_MAP = {
 /**
  * Rules specifying format of AutomationNodes for output.
  * @type {!Object<Object<Object<string>>>}
+ * Please see below for more information on properties.
+ * speak: The speech rule for when ChromeVox range lands exactly on the node.
+ * braille: The braille rule for when ChromeVox range lands exactly on the node.
+ * enter: The rule for when ChromeVox range enters the node's subtree.
+ *    Can contain speak and braille properties.
+ * leave: The rule for when ChromeVox range exits the node's subtree.
  */
 Output.RULES = {
   navigate: {
@@ -2411,9 +2454,13 @@ Output.RULES = {
           $state`
     },
     alertDialog: {
-      enter: `$earcon(ALERT_MODAL) $name $state $description`,
+      enter: `$earcon(ALERT_MODAL) $name $state $description $textContent`,
       speak: `$earcon(ALERT_MODAL) $name $nameOrTextContent $description $state
           $role`
+    },
+    button: {
+      speak: `$name $node(activeDescendant) $state $restriction $role
+          $description`
     },
     cell: {
       enter: {
@@ -2430,7 +2477,8 @@ Output.RULES = {
     },
     checkBox: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
-          $name $role $checked $description $state $restriction`
+          $name $role $if($checkedStateDescription, $checkedStateDescription, $checked)
+          $description $state $restriction`
     },
     client: {speak: `$name`},
     comboBoxMenuButton: {
@@ -2438,7 +2486,7 @@ Output.RULES = {
           $state $restriction $role $description`,
     },
     date: {enter: `$nameFromNode $role $state $restriction $description`},
-    dialog: {enter: `$nameFromNode $role $description`},
+    dialog: {enter: `$nameFromNode $role $description $textContent`},
     genericContainer: {
       enter: `$nameFromNode $description $state`,
       speak: `$nameOrTextContent $description $state`
@@ -2528,6 +2576,7 @@ Output.RULES = {
     popUpButton: {
       speak: `$name $if($value, $value, $descendants) $role @aria_has_popup
           $if($expanded, @@list_with_items($setSize)) $state $restriction
+          $if($posInSet, @describe_index($posInSet, $setSize))
           $description`
     },
     radioButton: {
@@ -2543,10 +2592,6 @@ Output.RULES = {
       enter: `$node(tableRowHeader)`,
       speak: `$name $node(activeDescendant) $value $state $restriction $role
           $if($selected, @aria_selected_true) $description`
-    },
-    rowHeader: {
-      speak: `$nameOrTextContent $description $roleDescription
-        $state $if($selected, @aria_selected_true)`
     },
     staticText: {speak: `$name= $description`},
     switch: {

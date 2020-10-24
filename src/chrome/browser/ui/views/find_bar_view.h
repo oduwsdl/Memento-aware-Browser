@@ -10,6 +10,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/ui/views/chrome_views_export.h"
 #include "chrome/browser/ui/views/dropdown_bar_host_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
@@ -17,6 +18,7 @@
 #include "ui/views/view.h"
 
 class FindBarHost;
+class FindBarMatchCountLabel;
 
 namespace find_in_page {
 class FindNotificationDetails;
@@ -41,11 +43,14 @@ class Textfield;
 ////////////////////////////////////////////////////////////////////////////////
 class FindBarView : public views::View,
                     public DropdownBarHostDelegate,
-                    public views::ButtonListener,
                     public views::TextfieldController {
  public:
-  explicit FindBarView(FindBarHost* host);
+  METADATA_HEADER(FindBarView);
+
+  explicit FindBarView(FindBarHost* host = nullptr);
   ~FindBarView() override;
+
+  void SetHost(FindBarHost* host);
 
   // Accessors for the text and selection displayed in the text box.
   void SetFindTextAndSelectedRange(const base::string16& find_text,
@@ -68,16 +73,12 @@ class FindBarView : public views::View,
   void ClearMatchCount();
 
   // views::View:
-  const char* GetClassName() const override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   gfx::Size CalculatePreferredSize() const override;
   void OnThemeChanged() override;
 
   // DropdownBarHostDelegate:
   void FocusAndSelectAll() override;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // views::TextfieldController:
   bool HandleKeyEvent(views::Textfield* sender,
@@ -86,10 +87,14 @@ class FindBarView : public views::View,
   void OnAfterPaste() override;
 
  private:
-  class MatchCountLabel;
-
   // Starts finding |search_text|.  If the text is empty, stops finding.
   void Find(const base::string16& search_text);
+
+  // Find the next/previous occurrence of search text when clicking the
+  // next/previous button.
+  void FindNext(bool reverse = false);
+  // End the current find session and close the find bubble.
+  void EndFindSession();
 
   // Updates the appearance for the match count label.
   void UpdateMatchCountAppearance(bool no_match);
@@ -108,16 +113,17 @@ class FindBarView : public views::View,
   // The controls in the window.
   views::Textfield* find_text_;
   std::unique_ptr<views::Painter> find_text_border_;
-  MatchCountLabel* match_count_text_;
+  FindBarMatchCountLabel* match_count_text_;
   views::Separator* separator_;
   views::ImageButton* find_previous_button_;
   views::ImageButton* find_next_button_;
   views::ImageButton* close_button_;
 
-  // The preferred height of the find bar.
-  int preferred_height_;
-
   DISALLOW_COPY_AND_ASSIGN(FindBarView);
 };
+
+BEGIN_VIEW_BUILDER(/* no export */, FindBarView, views::View)
+VIEW_BUILDER_PROPERTY(FindBarHost*, Host)
+END_VIEW_BUILDER(/* no export */, FindBarView)
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FIND_BAR_VIEW_H_

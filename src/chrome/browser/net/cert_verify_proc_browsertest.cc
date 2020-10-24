@@ -41,9 +41,8 @@ class NetLogPlatformBrowserTestBase : public PlatformBrowserTest {
     // started before this method is called, but completes asynchronously.
     //
     // Try for up to 5 seconds to read the netlog file.
-    constexpr base::TimeDelta kMaxWaitTime = base::TimeDelta::FromSeconds(5);
-    constexpr base::TimeDelta kWaitInterval =
-        base::TimeDelta::FromMilliseconds(50);
+    constexpr auto kMaxWaitTime = base::TimeDelta::FromSeconds(5);
+    constexpr auto kWaitInterval = base::TimeDelta::FromMilliseconds(50);
     int tries_left = kMaxWaitTime / kWaitInterval;
 
     base::Optional<base::Value> parsed_net_log;
@@ -91,14 +90,8 @@ class CertVerifyProcNetLogBrowserTest
  public:
   void SetUpInProcessBrowserTestFixture() override {
     if (GetParam()) {
-#if defined(OS_CHROMEOS)
-      // TODO(crbug.com/1085379): remove this GTEST_SKIP().
-      GTEST_SKIP() << "Skipping test, CertVerifierService feature not yet "
-                      "available on ChromeOS.";
-#else
       scoped_feature_list_.InitAndEnableFeature(
           network::features::kCertVerifierService);
-#endif
     } else {
       scoped_feature_list_.InitAndDisableFeature(
           network::features::kCertVerifierService);

@@ -20,22 +20,44 @@ const Role = chrome.automation.RoleType;
 const State = chrome.automation.StateType;
 
 /**
- * A helper to find any actionable children.
+ * A helper to check if |node| or any descendant is actionable.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+const isActionableOrHasActionableDescendant = function(node) {
+  // DefaultActionVerb does not have value 'none' even though it gets set.
+  // Static text nodes are never actionable for the purposes of navigation even
+  // if they have default action verb set.
+  if (node.role != Role.STATIC_TEXT && node.defaultActionVerb != 'none') {
+    return true;
+  }
+
+  if (node.clickable) {
+    return true;
+  }
+
+  for (let i = 0; i < node.children.length; i++) {
+    if (isActionableOrHasActionableDescendant(node.children[i])) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * A helper to check if any descendants of |node| are actionable.
  * @param {!AutomationNode} node
  * @return {boolean}
  */
 const hasActionableDescendant = function(node) {
-  // DefaultActionVerb does not have value 'none' even though it gets set.
-  if (node.defaultActionVerb != 'none') {
-    return true;
-  }
-
-  let result = false;
   for (let i = 0; i < node.children.length; i++) {
-    result = hasActionableDescendant(node.children[i]);
+    if (isActionableOrHasActionableDescendant(node.children[i])) {
+      return true;
+    }
   }
 
-  return result;
+  return false;
 };
 
 /**
@@ -49,7 +71,7 @@ const hasActionableDescendant = function(node) {
 const nodeNameContainedInStaticTextChildren = function(node) {
   const name = node.name;
   let child = node.firstChild;
-  if (!child) {
+  if (name === undefined || !child) {
     return false;
   }
   let nameIndex = 0;
@@ -159,8 +181,10 @@ AutomationPredicate = class {
    */
   static touchLeaf(node) {
     return !!(!node.firstChild && node.name) || node.role == Role.BUTTON ||
-        node.role == Role.POP_UP_BUTTON || node.role == Role.PORTAL ||
-        node.role == Role.SLIDER || node.role == Role.TEXT_FIELD ||
+        node.role == Role.CHECK_BOX || node.role == Role.POP_UP_BUTTON ||
+        node.role == Role.PORTAL || node.role == Role.RADIO_BUTTON ||
+        node.role == Role.SLIDER || node.role == Role.SWITCH ||
+        node.role == Role.TEXT_FIELD ||
         (node.role == Role.MENU_ITEM && !hasActionableDescendant(node));
   }
 
@@ -173,9 +197,9 @@ AutomationPredicate = class {
         // A node acting as a label should be a leaf if it has no actionable
         // controls.
         (!!node.labelFor && node.labelFor.length > 0 &&
-         !hasActionableDescendant(node)) ||
+         !isActionableOrHasActionableDescendant(node)) ||
         (!!node.descriptionFor && node.descriptionFor.length > 0 &&
-         !hasActionableDescendant(node)) ||
+         !isActionableOrHasActionableDescendant(node)) ||
         (node.activeDescendantFor && node.activeDescendantFor.length > 0) ||
         node.state[State.INVISIBLE] || node.children.every(function(n) {
           return n.state[State.INVISIBLE];
@@ -237,6 +261,12 @@ AutomationPredicate = class {
       return false;
     }
 
+    // Things explicitly marked clickable (used only on ARC++) should be
+    // visited.
+    if (node.clickable) {
+      return true;
+    }
+
     // Given no other information, ChromeVox wants to visit focusable
     // (e.g. tabindex=0) nodes only when it has a name or is a control.
     if (node.state[State.FOCUSABLE] &&
@@ -293,7 +323,10 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static linebreak(first, second) {
-    // TODO(dtseng): Use next/previousOnLine once available.
+    if (first.nextOnLine == second) {
+      return false;
+    }
+
     const fl = first.unclippedLocation;
     const sl = second.unclippedLocation;
     return fl.top != sl.top || (fl.top + fl.height != sl.top + sl.height);
@@ -317,6 +350,14 @@ AutomationPredicate = class {
     if (node.state[State.FOCUSABLE] &&
         nodeNameContainedInStaticTextChildren(node)) {
       return false;
+    }
+
+    // Always try to dive into subtrees with actionable descendants for some
+    // roles even if these roles are not naturally containers.
+    if ((node.role == Role.BUTTON || node.role == Role.CHECK_BOX ||
+         node.role == Role.RADIO_BUTTON || node.role == Role.SWITCH) &&
+        hasActionableDescendant(node)) {
+      return true;
     }
 
     return AutomationPredicate.match({
@@ -415,13 +456,13 @@ AutomationPredicate = class {
     // Ignore nodes acting as labels for another control, that don't
     // have actionable descendants.
     if (node.labelFor && node.labelFor.length > 0 &&
-        !hasActionableDescendant(node)) {
+        !isActionableOrHasActionableDescendant(node)) {
       return true;
     }
 
     // Similarly, ignore nodes acting as descriptions.
     if (node.descriptionFor && node.descriptionFor.length > 0 &&
-        !hasActionableDescendant(node)) {
+        !isActionableOrHasActionableDescendant(node)) {
       return true;
     }
 
@@ -724,7 +765,8 @@ AutomationPredicate.structuralContainer = AutomationPredicate.roles([
   Role.ALERT_DIALOG, Role.CLIENT, Role.DIALOG, Role.LAYOUT_TABLE,
   Role.LAYOUT_TABLE_CELL, Role.LAYOUT_TABLE_ROW, Role.ROOT_WEB_AREA,
   Role.WEB_VIEW, Role.WINDOW, Role.EMBEDDED_OBJECT, Role.IFRAME,
-  Role.IFRAME_PRESENTATIONAL, Role.PLUGIN_OBJECT, Role.IGNORED, Role.UNKNOWN
+  Role.IFRAME_PRESENTATIONAL, Role.PLUGIN_OBJECT, Role.IGNORED, Role.UNKNOWN,
+  Role.PANE
 ]);
 
 

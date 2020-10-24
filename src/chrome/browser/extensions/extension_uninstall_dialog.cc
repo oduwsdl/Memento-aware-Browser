@@ -73,6 +73,7 @@ ExtensionUninstallDialog::ExtensionUninstallDialog(
     gfx::NativeWindow parent,
     ExtensionUninstallDialog::Delegate* delegate)
     : profile_(profile), parent_(parent), delegate_(delegate) {
+  DCHECK(delegate_);
   if (parent)
     parent_window_tracker_ = NativeWindowTracker::Create(parent);
 }
@@ -206,6 +207,7 @@ void ExtensionUninstallDialog::OnDialogClosed(CloseAction action) {
     UMA_HISTOGRAM_ENUMERATION("Extensions.UninstallDialogAction", action,
                               CLOSE_ACTION_LAST);
   } else if (ShouldShowRemoveDataCheckbox()) {
+    // TODO(crbug.com/1065748): Delete Webapp recording in extensions dialog.
     UMA_HISTOGRAM_ENUMERATION("Webapp.UninstallDialogAction", action,
                               CLOSE_ACTION_LAST);
   }

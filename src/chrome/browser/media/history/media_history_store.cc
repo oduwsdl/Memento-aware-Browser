@@ -15,6 +15,7 @@
 #include "chrome/browser/media/history/media_history_feed_items_table.h"
 #include "chrome/browser/media/history/media_history_feeds_table.h"
 #include "chrome/browser/media/history/media_history_images_table.h"
+#include "chrome/browser/media/history/media_history_kaleidoscope_data_table.h"
 #include "chrome/browser/media/history/media_history_origin_table.h"
 #include "chrome/browser/media/history/media_history_playback_table.h"
 #include "chrome/browser/media/history/media_history_session_images_table.h"
@@ -160,6 +161,9 @@ namespace media_history {
 const char MediaHistoryStore::kInitResultHistogramName[] =
     "Media.History.Init.Result";
 
+const char MediaHistoryStore::kInitResultAfterDeleteHistogramName[] =
+    "Media.History.Init.ResultAfterDelete";
+
 const char MediaHistoryStore::kPlaybackWriteResultHistogramName[] =
     "Media.History.Playback.WriteResult";
 
@@ -174,6 +178,8 @@ MediaHistoryStore::MediaHistoryStore(
     scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner)
     : db_task_runner_(db_task_runner),
       db_path_(GetDBPath(profile)),
+      db_(std::make_unique<sql::Database>()),
+      meta_table_(std::make_unique<sql::MetaTable>()),
       origin_table_(new MediaHistoryOriginTable(db_task_runner_)),
       playback_table_(new MediaHistoryPlaybackTable(db_task_runner_)),
       session_table_(new MediaHistorySessionTable(db_task_runner_)),
@@ -186,7 +192,16 @@ MediaHistoryStore::MediaHistoryStore(
       feed_items_table_(IsMediaFeedsEnabled()
                             ? new MediaHistoryFeedItemsTable(db_task_runner_)
                             : nullptr),
-      initialization_successful_(false) {}
+      kaleidoscope_table_(
+          new MediaHistoryKaleidoscopeDataTable(db_task_runner_)),
+      initialization_successful_(false) {
+  db_->set_histogram_tag("MediaHistory");
+  db_->set_exclusive_locking();
+
+  // To recover from corruption.
+  db_->set_error_callback(
+      base::BindRepeating(&DatabaseErrorCallback, db_.get(), db_path_));
+}
 
 MediaHistoryStore::~MediaHistoryStore() {
   // The connection pointer needs to be deleted on the DB sequence since there
@@ -299,20 +314,23 @@ void MediaHistoryStore::Initialize(const bool should_reset) {
 
   base::UmaHistogramEnumeration(MediaHistoryStore::kInitResultHistogramName,
                                 result);
+
+  // In some edge cases the DB might be corrupted and unrecoverable so we should
+  // delete the database and recreate it.
+  if (result != InitResult::kSuccess) {
+    db_ = std::make_unique<sql::Database>();
+    meta_table_ = std::make_unique<sql::MetaTable>();
+
+    sql::Database::Delete(db_path_);
+
+    base::UmaHistogramEnumeration(
+        MediaHistoryStore::kInitResultAfterDeleteHistogramName,
+        InitializeInternal());
+  }
 }
 
 MediaHistoryStore::InitResult MediaHistoryStore::InitializeInternal() {
   DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
-
-  db_ = std::make_unique<sql::Database>();
-  db_->set_histogram_tag("MediaHistory");
-  db_->set_exclusive_locking();
-
-  // To recover from corruption.
-  db_->set_error_callback(
-      base::BindRepeating(&DatabaseErrorCallback, db_.get(), db_path_));
-
-  meta_table_ = std::make_unique<sql::MetaTable>();
 
   if (db_path_.empty()) {
     if (IsCancelled() || !db_ || !db_->OpenInMemory()) {
@@ -335,8 +353,6 @@ MediaHistoryStore::InitResult MediaHistoryStore::InitializeInternal() {
       return MediaHistoryStore::InitResult::kFailedToOpenDatabase;
     }
   }
-
-  db_->Preload();
 
   if (IsCancelled() || !db_ || !db_->Execute("PRAGMA foreign_keys=1")) {
     LOG(ERROR) << "Failed to enable foreign keys on the media history store.";
@@ -439,6 +455,8 @@ sql::InitStatus MediaHistoryStore::InitializeTables() {
     status = feeds_table_->Initialize(db_.get());
   if (feed_items_table_ && status == sql::INIT_OK)
     status = feed_items_table_->Initialize(db_.get());
+  if (status == sql::INIT_OK)
+    status = kaleidoscope_table_->Initialize(db_.get());
 
   return status;
 }
@@ -509,6 +527,12 @@ MediaHistoryStore::GetOriginRowsForDebug() {
 
   DCHECK(statement.Succeeded());
   return origins;
+}
+
+std::vector<url::Origin> MediaHistoryStore::GetHighWatchTimeOrigins(
+    const base::TimeDelta& audio_video_watchtime_min) {
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
+  return origin_table_->GetHighWatchTimeOrigins(audio_video_watchtime_min);
 }
 
 std::vector<mojom::MediaHistoryPlaybackRowPtr>
@@ -1175,6 +1199,82 @@ MediaHistoryStore::GetMediaFeedFetchDetails(const int64_t feed_id) {
     return base::nullopt;
 
   return feeds_table_->GetFetchDetails(feed_id);
+}
+
+void MediaHistoryStore::UpdateFeedUserStatus(
+    const int64_t feed_id,
+    media_feeds::mojom::FeedUserStatus status) {
+  if (!CanAccessDatabase())
+    return;
+
+  if (!feeds_table_)
+    return;
+
+  if (!DB()->BeginTransaction()) {
+    DLOG(ERROR) << "Failed to begin the transaction.";
+    return;
+  }
+
+  if (!feeds_table_->UpdateFeedUserStatus(feed_id, status)) {
+    DB()->RollbackTransaction();
+    return;
+  }
+
+  DB()->CommitTransaction();
+}
+
+void MediaHistoryStore::SetKaleidoscopeData(
+    media::mojom::GetCollectionsResponsePtr data,
+    const std::string& gaia_id) {
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
+  if (!CanAccessDatabase())
+    return;
+
+  if (!DB()->BeginTransaction()) {
+    DLOG(ERROR) << "Failed to begin the transaction.";
+    return;
+  }
+
+  if (!kaleidoscope_table_->Set(std::move(data), gaia_id)) {
+    DB()->RollbackTransaction();
+    return;
+  }
+
+  DB()->CommitTransaction();
+}
+
+media::mojom::GetCollectionsResponsePtr MediaHistoryStore::GetKaleidoscopeData(
+    const std::string& gaia_id) {
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
+  if (!CanAccessDatabase())
+    return nullptr;
+
+  if (!DB()->BeginTransaction()) {
+    DLOG(ERROR) << "Failed to begin the transaction.";
+    return nullptr;
+  }
+
+  auto out = kaleidoscope_table_->Get(gaia_id);
+  DB()->CommitTransaction();
+  return out;
+}
+
+void MediaHistoryStore::DeleteKaleidoscopeData() {
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
+  if (!CanAccessDatabase())
+    return;
+
+  if (!DB()->BeginTransaction()) {
+    DLOG(ERROR) << "Failed to begin the transaction.";
+    return;
+  }
+
+  if (!kaleidoscope_table_->Delete()) {
+    DB()->RollbackTransaction();
+    return;
+  }
+
+  DB()->CommitTransaction();
 }
 
 }  // namespace media_history

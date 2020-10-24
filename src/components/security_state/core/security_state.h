@@ -172,12 +172,6 @@ struct VisibleSecurityState {
   scoped_refptr<net::X509Certificate> certificate;
   net::CertStatus cert_status;
   int connection_status;
-  // Whether or not the page is a memento
-  bool memento_status;
-  // Datetime of the page if it is a memento
-  std::string memento_datetime;
-  // Whether or not the page contains mixed memento content
-  bool mixed_memento = true;
   // The ID of the (EC)DH group used by the key exchange. The value is zero if
   // unknown (older cache entries may not store the value) or not applicable.
   uint16_t key_exchange_group;
@@ -210,10 +204,10 @@ struct VisibleSecurityState {
   // True if the page should be excluded from a UI treatment for legacy TLS
   // (used for control group in an experimental UI rollout).
   bool should_suppress_legacy_tls_warning;
-  // True if the page should be excluded from a warning UI treatment for mixed
-  // content. If set to false, the page will receive a neutral (rather than
-  // positively secure) UI treatment.
-  bool should_suppress_mixed_content_warning;
+  // True if mixed forms should be treated as secure from the visible security
+  // state perspective (for example, if a different warning is being shown for
+  // them).
+  bool should_treat_displayed_mixed_forms_as_secure;
   // Contains information about input events that may impact the security
   // level of the page.
   InsecureInputEventData insecure_input_events;

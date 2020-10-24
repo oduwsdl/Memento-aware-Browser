@@ -5,9 +5,10 @@
 #ifndef V8_WASM_BASELINE_X64_LIFTOFF_ASSEMBLER_X64_H_
 #define V8_WASM_BASELINE_X64_LIFTOFF_ASSEMBLER_X64_H_
 
-#include "src/wasm/baseline/liftoff-assembler.h"
-
 #include "src/codegen/assembler.h"
+#include "src/heap/memory-chunk.h"
+#include "src/wasm/baseline/liftoff-assembler.h"
+#include "src/wasm/simd-shuffle.h"
 
 namespace v8 {
 namespace internal {
@@ -35,9 +36,7 @@ static_assert((kLiftoffAssemblerFpCacheRegs &
 // rbp-8 holds the stack marker, rbp-16 is the instance parameter.
 constexpr int kInstanceOffset = 16;
 
-inline Operand GetStackSlot(int offset) {
-  return Operand(offset > 0 ? rbp : rsp, -offset);
-}
+inline Operand GetStackSlot(int offset) { return Operand(rbp, -offset); }
 
 // TODO(clemensb): Make this a constexpr variable once Operand is constexpr.
 inline Operand GetInstanceOperand() { return GetStackSlot(kInstanceOffset); }
@@ -64,6 +63,8 @@ inline void Load(LiftoffAssembler* assm, LiftoffRegister dst, Operand src,
       assm->movl(dst.gp(), src);
       break;
     case ValueType::kI64:
+    case ValueType::kOptRef:
+    case ValueType::kRef:
       assm->movq(dst.gp(), src);
       break;
     case ValueType::kF32:
@@ -94,6 +95,9 @@ inline void Store(LiftoffAssembler* assm, Operand dst, LiftoffRegister src,
       break;
     case ValueType::kF64:
       assm->Movsd(dst, src.fp());
+      break;
+    case ValueType::kS128:
+      assm->Movdqu(dst, src.fp());
       break;
     default:
       UNREACHABLE();
@@ -132,6 +136,24 @@ int LiftoffAssembler::PrepareStackFrame() {
   sub_sp_32(0);
   DCHECK_EQ(liftoff::kSubSpSize, pc_offset() - offset);
   return offset;
+}
+
+void LiftoffAssembler::PrepareTailCall(int num_callee_stack_params,
+                                       int stack_param_delta) {
+  // Push the return address and frame pointer to complete the stack frame.
+  pushq(Operand(rbp, 8));
+  pushq(Operand(rbp, 0));
+
+  // Shift the whole frame upwards.
+  const int slot_count = num_callee_stack_params + 2;
+  for (int i = slot_count - 1; i >= 0; --i) {
+    movq(kScratchRegister, Operand(rsp, i * 8));
+    movq(Operand(rbp, (i - stack_param_delta) * 8), kScratchRegister);
+  }
+
+  // Set the new stack and frame pointer.
+  leaq(rsp, Operand(rbp, -stack_param_delta * 8));
+  popq(rbp);
 }
 
 void LiftoffAssembler::PatchPrepareStackFrame(int offset, int frame_size) {
@@ -182,7 +204,9 @@ int LiftoffAssembler::SlotSizeForType(ValueType type) {
   return type.element_size_bytes();
 }
 
-bool LiftoffAssembler::NeedsAlignment(ValueType type) { return false; }
+bool LiftoffAssembler::NeedsAlignment(ValueType type) {
+  return type.is_reference_type();
+}
 
 void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value,
                                     RelocInfo::Mode rmode) {
@@ -212,11 +236,10 @@ void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value,
   }
 }
 
-void LiftoffAssembler::LoadFromInstance(Register dst, uint32_t offset,
-                                        int size) {
-  DCHECK_LE(offset, kMaxInt);
-  movq(dst, liftoff::GetInstanceOperand());
+void LiftoffAssembler::LoadFromInstance(Register dst, int offset, int size) {
+  DCHECK_LE(0, offset);
   DCHECK(size == 4 || size == 8);
+  movq(dst, liftoff::GetInstanceOperand());
   if (size == 4) {
     movl(dst, Operand(dst, offset));
   } else {
@@ -224,9 +247,8 @@ void LiftoffAssembler::LoadFromInstance(Register dst, uint32_t offset,
   }
 }
 
-void LiftoffAssembler::LoadTaggedPointerFromInstance(Register dst,
-                                                     uint32_t offset) {
-  DCHECK_LE(offset, kMaxInt);
+void LiftoffAssembler::LoadTaggedPointerFromInstance(Register dst, int offset) {
+  DCHECK_LE(0, offset);
   movq(dst, liftoff::GetInstanceOperand());
   LoadTaggedPointerField(dst, Operand(dst, offset));
 }
@@ -241,13 +263,45 @@ void LiftoffAssembler::FillInstanceInto(Register dst) {
 
 void LiftoffAssembler::LoadTaggedPointer(Register dst, Register src_addr,
                                          Register offset_reg,
-                                         uint32_t offset_imm,
+                                         int32_t offset_imm,
                                          LiftoffRegList pinned) {
+  DCHECK_GE(offset_imm, 0);
   if (emit_debug_code() && offset_reg != no_reg) {
     AssertZeroExtended(offset_reg);
   }
-  Operand src_op = liftoff::GetMemOp(this, src_addr, offset_reg, offset_imm);
+  Operand src_op = liftoff::GetMemOp(this, src_addr, offset_reg,
+                                     static_cast<uint32_t>(offset_imm));
   LoadTaggedPointerField(dst, src_op);
+}
+
+void LiftoffAssembler::StoreTaggedPointer(Register dst_addr,
+                                          int32_t offset_imm,
+                                          LiftoffRegister src,
+                                          LiftoffRegList pinned) {
+  DCHECK_GE(offset_imm, 0);
+  Register scratch = pinned.set(GetUnusedRegister(kGpReg, pinned)).gp();
+  Operand dst_op = liftoff::GetMemOp(this, dst_addr, no_reg,
+                                     static_cast<uint32_t>(offset_imm));
+  StoreTaggedField(dst_op, src.gp());
+
+  Label write_barrier;
+  Label exit;
+  CheckPageFlag(dst_addr, scratch,
+                MemoryChunk::kPointersFromHereAreInterestingMask, not_zero,
+                &write_barrier, Label::kNear);
+  jmp(&exit, Label::kNear);
+  bind(&write_barrier);
+  JumpIfSmi(src.gp(), &exit, Label::kNear);
+  if (COMPRESS_POINTERS_BOOL) {
+    DecompressTaggedPointer(src.gp(), src.gp());
+  }
+  CheckPageFlag(src.gp(), scratch,
+                MemoryChunk::kPointersToHereAreInterestingMask, zero, &exit,
+                Label::kNear);
+  leaq(scratch, dst_op);
+  CallRecordWriteStub(dst_addr, scratch, EMIT_REMEMBERED_SET, kSaveFPRegs,
+                      wasm::WasmCode::kRecordWrite);
+  bind(&exit);
 }
 
 void LiftoffAssembler::AtomicLoad(LiftoffRegister dst, Register src_addr,
@@ -699,6 +753,12 @@ void LiftoffAssembler::StoreCallerFrameSlot(LiftoffRegister src,
   liftoff::Store(this, dst, src, type);
 }
 
+void LiftoffAssembler::LoadReturnStackSlot(LiftoffRegister reg, int offset,
+                                           ValueType type) {
+  Operand src(rsp, offset);
+  liftoff::Load(this, reg, src, type);
+}
+
 void LiftoffAssembler::MoveStackValue(uint32_t dst_offset, uint32_t src_offset,
                                       ValueType type) {
   DCHECK_NE(dst_offset, src_offset);
@@ -719,7 +779,7 @@ void LiftoffAssembler::Move(Register dst, Register src, ValueType type) {
   if (type == kWasmI32) {
     movl(dst, src);
   } else {
-    DCHECK_EQ(kWasmI64, type);
+    DCHECK(kWasmI64 == type || type.is_reference_type());
     movq(dst, src);
   }
 }
@@ -745,6 +805,8 @@ void LiftoffAssembler::Spill(int offset, LiftoffRegister reg, ValueType type) {
       movl(dst, reg.gp());
       break;
     case ValueType::kI64:
+    case ValueType::kOptRef:
+    case ValueType::kRef:
       movq(dst, reg.gp());
       break;
     case ValueType::kF32:
@@ -789,26 +851,7 @@ void LiftoffAssembler::Spill(int offset, WasmValue value) {
 }
 
 void LiftoffAssembler::Fill(LiftoffRegister reg, int offset, ValueType type) {
-  Operand src = liftoff::GetStackSlot(offset);
-  switch (type.kind()) {
-    case ValueType::kI32:
-      movl(reg.gp(), src);
-      break;
-    case ValueType::kI64:
-      movq(reg.gp(), src);
-      break;
-    case ValueType::kF32:
-      Movss(reg.fp(), src);
-      break;
-    case ValueType::kF64:
-      Movsd(reg.fp(), src);
-      break;
-    case ValueType::kS128:
-      Movdqu(reg.fp(), src);
-      break;
-    default:
-      UNREACHABLE();
-  }
+  liftoff::Load(this, reg, liftoff::GetStackSlot(offset), type);
 }
 
 void LiftoffAssembler::FillI64Half(Register, int offset, RegPairHalf) {
@@ -2037,6 +2080,33 @@ void LiftoffAssembler::emit_f64_set_cond(Condition cond, Register dst,
                                                       rhs);
 }
 
+bool LiftoffAssembler::emit_select(LiftoffRegister dst, Register condition,
+                                   LiftoffRegister true_value,
+                                   LiftoffRegister false_value,
+                                   ValueType type) {
+  if (type != kWasmI32 && type != kWasmI64) return false;
+
+  testl(condition, condition);
+
+  if (type == kWasmI32) {
+    if (dst == false_value) {
+      cmovl(not_zero, dst.gp(), true_value.gp());
+    } else {
+      if (dst != true_value) movl(dst.gp(), true_value.gp());
+      cmovl(zero, dst.gp(), false_value.gp());
+    }
+  } else {
+    if (dst == false_value) {
+      cmovq(not_zero, dst.gp(), true_value.gp());
+    } else {
+      if (dst != true_value) movq(dst.gp(), true_value.gp());
+      cmovq(zero, dst.gp(), false_value.gp());
+    }
+  }
+
+  return true;
+}
+
 // TODO(fanchenk): Distinguish mov* if data bypass delay matter.
 namespace liftoff {
 template <void (Assembler::*avx_op)(XMMRegister, XMMRegister, XMMRegister),
@@ -2147,10 +2217,11 @@ void EmitI64x2ShrS(LiftoffAssembler* assm, LiftoffRegister dst,
                    LiftoffRegister lhs, ShiftOperand rhs,
                    bool shift_is_rcx = false) {
   bool restore_rcx = false;
+  Register backup = kScratchRegister2;
   if (!shift_is_rcx) {
     if (assm->cache_state()->is_used(LiftoffRegister(rcx))) {
       restore_rcx = true;
-      assm->movq(kScratchRegister, rcx);
+      assm->movq(backup, rcx);
     }
     assm->movl(rcx, rhs);
   }
@@ -2159,15 +2230,15 @@ void EmitI64x2ShrS(LiftoffAssembler* assm, LiftoffRegister dst,
 
   assm->Pextrq(tmp, lhs.fp(), int8_t{0x0});
   assm->sarq_cl(tmp);
-  assm->Pinsrq(dst.fp(), tmp, int8_t{0x0});
+  assm->Pinsrq(dst.fp(), tmp, uint8_t{0x0});
 
   assm->Pextrq(tmp, lhs.fp(), int8_t{0x1});
   assm->sarq_cl(tmp);
-  assm->Pinsrq(dst.fp(), tmp, int8_t{0x1});
+  assm->Pinsrq(dst.fp(), tmp, uint8_t{0x1});
 
   // restore rcx.
   if (restore_rcx) {
-    assm->movq(rcx, kScratchRegister);
+    assm->movq(rcx, backup);
   }
 }
 
@@ -2219,11 +2290,11 @@ void LiftoffAssembler::LoadTransform(LiftoffRegister dst, Register src_addr,
   } else {
     DCHECK_EQ(LoadTransformationKind::kSplat, transform);
     if (memtype == MachineType::Int8()) {
-      Pinsrb(dst.fp(), src_op, 0);
+      Pinsrb(dst.fp(), dst.fp(), src_op, 0);
       Pxor(kScratchDoubleReg, kScratchDoubleReg);
       Pshufb(dst.fp(), kScratchDoubleReg);
     } else if (memtype == MachineType::Int16()) {
-      Pinsrw(dst.fp(), src_op, 0);
+      Pinsrw(dst.fp(), dst.fp(), src_op, 0);
       Pshuflw(dst.fp(), dst.fp(), uint8_t{0});
       Punpcklqdq(dst.fp(), dst.fp());
     } else if (memtype == MachineType::Int32()) {
@@ -2240,10 +2311,29 @@ void LiftoffAssembler::LoadTransform(LiftoffRegister dst, Register src_addr,
   }
 }
 
-void LiftoffAssembler::emit_s8x16_shuffle(LiftoffRegister dst,
+void LiftoffAssembler::emit_i8x16_shuffle(LiftoffRegister dst,
                                           LiftoffRegister lhs,
                                           LiftoffRegister rhs,
-                                          const uint8_t shuffle[16]) {
+                                          const uint8_t shuffle[16],
+                                          bool is_swizzle) {
+  if (is_swizzle) {
+    uint32_t imms[4];
+    // Shuffles that use just 1 operand are called swizzles, rhs can be ignored.
+    wasm::SimdShuffle::Pack16Lanes(imms, shuffle);
+    TurboAssembler::Move(kScratchDoubleReg, make_uint64(imms[3], imms[2]),
+                         make_uint64(imms[1], imms[0]));
+    if (CpuFeatures::IsSupported(AVX)) {
+      CpuFeatureScope scope(this, AVX);
+      vpshufb(dst.fp(), lhs.fp(), kScratchDoubleReg);
+    } else {
+      if (dst != lhs) {
+        movups(dst.fp(), lhs.fp());
+      }
+      pshufb(dst.fp(), kScratchDoubleReg);
+    }
+    return;
+  }
+
   LiftoffRegister tmp_simd =
       GetUnusedRegister(kFpReg, LiftoffRegList::ForRegs(dst, lhs, rhs));
   Movups(kScratchDoubleReg, lhs.fp());
@@ -2257,7 +2347,7 @@ void LiftoffAssembler::emit_s8x16_shuffle(LiftoffRegister dst,
   }
   TurboAssembler::Move(tmp_simd.fp(), mask1[0]);
   movq(kScratchRegister, mask1[1]);
-  Pinsrq(tmp_simd.fp(), kScratchRegister, int8_t{1});
+  Pinsrq(tmp_simd.fp(), kScratchRegister, uint8_t{1});
   Pshufb(kScratchDoubleReg, tmp_simd.fp());
 
   uint64_t mask2[2] = {};
@@ -2269,7 +2359,7 @@ void LiftoffAssembler::emit_s8x16_shuffle(LiftoffRegister dst,
   }
   TurboAssembler::Move(tmp_simd.fp(), mask2[0]);
   movq(kScratchRegister, mask2[1]);
-  Pinsrq(tmp_simd.fp(), kScratchRegister, int8_t{1});
+  Pinsrq(tmp_simd.fp(), kScratchRegister, uint8_t{1});
 
   if (dst.fp() != rhs.fp()) {
     Movups(dst.fp(), rhs.fp());
@@ -2278,11 +2368,10 @@ void LiftoffAssembler::emit_s8x16_shuffle(LiftoffRegister dst,
   Por(dst.fp(), kScratchDoubleReg);
 }
 
-void LiftoffAssembler::emit_s8x16_swizzle(LiftoffRegister dst,
+void LiftoffAssembler::emit_i8x16_swizzle(LiftoffRegister dst,
                                           LiftoffRegister lhs,
                                           LiftoffRegister rhs) {
-  XMMRegister mask =
-      GetUnusedRegister(kFpReg, LiftoffRegList::ForRegs(lhs, rhs)).fp();
+  XMMRegister mask = kScratchDoubleReg;
   // Out-of-range indices should return 0, add 112 (0x70) so that any value > 15
   // saturates to 128 (top bit set), so pshufb will zero that lane.
   TurboAssembler::Move(mask, uint32_t{0x70707070});
@@ -2562,6 +2651,15 @@ void LiftoffAssembler::emit_f64x2_le(LiftoffRegister dst, LiftoffRegister lhs,
                                                             rhs);
 }
 
+void LiftoffAssembler::emit_s128_const(LiftoffRegister dst,
+                                       const uint8_t imms[16]) {
+  uint64_t vals[2];
+  memcpy(vals, imms, sizeof(vals));
+  TurboAssembler::Move(dst.fp(), vals[0]);
+  movq(kScratchRegister, vals[1]);
+  Pinsrq(dst.fp(), kScratchRegister, uint8_t{1});
+}
+
 void LiftoffAssembler::emit_s128_not(LiftoffRegister dst, LiftoffRegister src) {
   if (dst.fp() != src.fp()) {
     Pcmpeqd(dst.fp(), dst.fp());
@@ -2727,16 +2825,16 @@ void LiftoffAssembler::emit_i8x16_add(LiftoffRegister dst, LiftoffRegister lhs,
       this, dst, lhs, rhs);
 }
 
-void LiftoffAssembler::emit_i8x16_add_saturate_s(LiftoffRegister dst,
-                                                 LiftoffRegister lhs,
-                                                 LiftoffRegister rhs) {
+void LiftoffAssembler::emit_i8x16_add_sat_s(LiftoffRegister dst,
+                                            LiftoffRegister lhs,
+                                            LiftoffRegister rhs) {
   liftoff::EmitSimdCommutativeBinOp<&Assembler::vpaddsb, &Assembler::paddsb>(
       this, dst, lhs, rhs);
 }
 
-void LiftoffAssembler::emit_i8x16_add_saturate_u(LiftoffRegister dst,
-                                                 LiftoffRegister lhs,
-                                                 LiftoffRegister rhs) {
+void LiftoffAssembler::emit_i8x16_add_sat_u(LiftoffRegister dst,
+                                            LiftoffRegister lhs,
+                                            LiftoffRegister rhs) {
   liftoff::EmitSimdCommutativeBinOp<&Assembler::vpaddusb, &Assembler::paddusb>(
       this, dst, lhs, rhs);
 }
@@ -2747,16 +2845,16 @@ void LiftoffAssembler::emit_i8x16_sub(LiftoffRegister dst, LiftoffRegister lhs,
       this, dst, lhs, rhs);
 }
 
-void LiftoffAssembler::emit_i8x16_sub_saturate_s(LiftoffRegister dst,
-                                                 LiftoffRegister lhs,
-                                                 LiftoffRegister rhs) {
+void LiftoffAssembler::emit_i8x16_sub_sat_s(LiftoffRegister dst,
+                                            LiftoffRegister lhs,
+                                            LiftoffRegister rhs) {
   liftoff::EmitSimdNonCommutativeBinOp<&Assembler::vpsubsb, &Assembler::psubsb>(
       this, dst, lhs, rhs);
 }
 
-void LiftoffAssembler::emit_i8x16_sub_saturate_u(LiftoffRegister dst,
-                                                 LiftoffRegister lhs,
-                                                 LiftoffRegister rhs) {
+void LiftoffAssembler::emit_i8x16_sub_sat_u(LiftoffRegister dst,
+                                            LiftoffRegister lhs,
+                                            LiftoffRegister rhs) {
   liftoff::EmitSimdNonCommutativeBinOp<&Assembler::vpsubusb,
                                        &Assembler::psubusb>(this, dst, lhs,
                                                             rhs);
@@ -2925,16 +3023,16 @@ void LiftoffAssembler::emit_i16x8_add(LiftoffRegister dst, LiftoffRegister lhs,
       this, dst, lhs, rhs);
 }
 
-void LiftoffAssembler::emit_i16x8_add_saturate_s(LiftoffRegister dst,
-                                                 LiftoffRegister lhs,
-                                                 LiftoffRegister rhs) {
+void LiftoffAssembler::emit_i16x8_add_sat_s(LiftoffRegister dst,
+                                            LiftoffRegister lhs,
+                                            LiftoffRegister rhs) {
   liftoff::EmitSimdCommutativeBinOp<&Assembler::vpaddsw, &Assembler::paddsw>(
       this, dst, lhs, rhs);
 }
 
-void LiftoffAssembler::emit_i16x8_add_saturate_u(LiftoffRegister dst,
-                                                 LiftoffRegister lhs,
-                                                 LiftoffRegister rhs) {
+void LiftoffAssembler::emit_i16x8_add_sat_u(LiftoffRegister dst,
+                                            LiftoffRegister lhs,
+                                            LiftoffRegister rhs) {
   liftoff::EmitSimdCommutativeBinOp<&Assembler::vpaddusw, &Assembler::paddusw>(
       this, dst, lhs, rhs);
 }
@@ -2945,16 +3043,16 @@ void LiftoffAssembler::emit_i16x8_sub(LiftoffRegister dst, LiftoffRegister lhs,
       this, dst, lhs, rhs);
 }
 
-void LiftoffAssembler::emit_i16x8_sub_saturate_s(LiftoffRegister dst,
-                                                 LiftoffRegister lhs,
-                                                 LiftoffRegister rhs) {
+void LiftoffAssembler::emit_i16x8_sub_sat_s(LiftoffRegister dst,
+                                            LiftoffRegister lhs,
+                                            LiftoffRegister rhs) {
   liftoff::EmitSimdNonCommutativeBinOp<&Assembler::vpsubsw, &Assembler::psubsw>(
       this, dst, lhs, rhs);
 }
 
-void LiftoffAssembler::emit_i16x8_sub_saturate_u(LiftoffRegister dst,
-                                                 LiftoffRegister lhs,
-                                                 LiftoffRegister rhs) {
+void LiftoffAssembler::emit_i16x8_sub_sat_u(LiftoffRegister dst,
+                                            LiftoffRegister lhs,
+                                            LiftoffRegister rhs) {
   liftoff::EmitSimdNonCommutativeBinOp<&Assembler::vpsubusw,
                                        &Assembler::psubusw>(this, dst, lhs,
                                                             rhs);
@@ -3104,6 +3202,13 @@ void LiftoffAssembler::emit_i32x4_max_u(LiftoffRegister dst,
       this, dst, lhs, rhs, base::Optional<CpuFeature>(SSE4_1));
 }
 
+void LiftoffAssembler::emit_i32x4_dot_i16x8_s(LiftoffRegister dst,
+                                              LiftoffRegister lhs,
+                                              LiftoffRegister rhs) {
+  liftoff::EmitSimdCommutativeBinOp<&Assembler::vpmaddwd, &Assembler::pmaddwd>(
+      this, dst, lhs, rhs);
+}
+
 void LiftoffAssembler::emit_i64x2_neg(LiftoffRegister dst,
                                       LiftoffRegister src) {
   DoubleRegister reg = dst.fp() == src.fp() ? kScratchDoubleReg : dst.fp();
@@ -3224,6 +3329,34 @@ void LiftoffAssembler::emit_f32x4_sqrt(LiftoffRegister dst,
   Sqrtps(dst.fp(), src.fp());
 }
 
+bool LiftoffAssembler::emit_f32x4_ceil(LiftoffRegister dst,
+                                       LiftoffRegister src) {
+  DCHECK(CpuFeatures::IsSupported(SSE4_1));
+  Roundps(dst.fp(), src.fp(), kRoundUp);
+  return true;
+}
+
+bool LiftoffAssembler::emit_f32x4_floor(LiftoffRegister dst,
+                                        LiftoffRegister src) {
+  DCHECK(CpuFeatures::IsSupported(SSE4_1));
+  Roundps(dst.fp(), src.fp(), kRoundDown);
+  return true;
+}
+
+bool LiftoffAssembler::emit_f32x4_trunc(LiftoffRegister dst,
+                                        LiftoffRegister src) {
+  DCHECK(CpuFeatures::IsSupported(SSE4_1));
+  Roundps(dst.fp(), src.fp(), kRoundToZero);
+  return true;
+}
+
+bool LiftoffAssembler::emit_f32x4_nearest_int(LiftoffRegister dst,
+                                              LiftoffRegister src) {
+  DCHECK(CpuFeatures::IsSupported(SSE4_1));
+  Roundps(dst.fp(), src.fp(), kRoundToNearest);
+  return true;
+}
+
 void LiftoffAssembler::emit_f32x4_add(LiftoffRegister dst, LiftoffRegister lhs,
                                       LiftoffRegister rhs) {
   liftoff::EmitSimdCommutativeBinOp<&Assembler::vaddps, &Assembler::addps>(
@@ -3307,6 +3440,20 @@ void LiftoffAssembler::emit_f32x4_max(LiftoffRegister dst, LiftoffRegister lhs,
   Andnps(dst.fp(), kScratchDoubleReg);
 }
 
+void LiftoffAssembler::emit_f32x4_pmin(LiftoffRegister dst, LiftoffRegister lhs,
+                                       LiftoffRegister rhs) {
+  // Due to the way minps works, pmin(a, b) = minps(b, a).
+  liftoff::EmitSimdNonCommutativeBinOp<&Assembler::vminps, &Assembler::minps>(
+      this, dst, rhs, lhs);
+}
+
+void LiftoffAssembler::emit_f32x4_pmax(LiftoffRegister dst, LiftoffRegister lhs,
+                                       LiftoffRegister rhs) {
+  // Due to the way maxps works, pmax(a, b) = maxps(b, a).
+  liftoff::EmitSimdNonCommutativeBinOp<&Assembler::vmaxps, &Assembler::maxps>(
+      this, dst, rhs, lhs);
+}
+
 void LiftoffAssembler::emit_f64x2_abs(LiftoffRegister dst,
                                       LiftoffRegister src) {
   if (dst.fp() == src.fp()) {
@@ -3336,6 +3483,34 @@ void LiftoffAssembler::emit_f64x2_neg(LiftoffRegister dst,
 void LiftoffAssembler::emit_f64x2_sqrt(LiftoffRegister dst,
                                        LiftoffRegister src) {
   Sqrtpd(dst.fp(), src.fp());
+}
+
+bool LiftoffAssembler::emit_f64x2_ceil(LiftoffRegister dst,
+                                       LiftoffRegister src) {
+  DCHECK(CpuFeatures::IsSupported(SSE4_1));
+  Roundpd(dst.fp(), src.fp(), kRoundUp);
+  return true;
+}
+
+bool LiftoffAssembler::emit_f64x2_floor(LiftoffRegister dst,
+                                        LiftoffRegister src) {
+  DCHECK(CpuFeatures::IsSupported(SSE4_1));
+  Roundpd(dst.fp(), src.fp(), kRoundDown);
+  return true;
+}
+
+bool LiftoffAssembler::emit_f64x2_trunc(LiftoffRegister dst,
+                                        LiftoffRegister src) {
+  DCHECK(CpuFeatures::IsSupported(SSE4_1));
+  Roundpd(dst.fp(), src.fp(), kRoundToZero);
+  return true;
+}
+
+bool LiftoffAssembler::emit_f64x2_nearest_int(LiftoffRegister dst,
+                                              LiftoffRegister src) {
+  DCHECK(CpuFeatures::IsSupported(SSE4_1));
+  Roundpd(dst.fp(), src.fp(), kRoundToNearest);
+  return true;
 }
 
 void LiftoffAssembler::emit_f64x2_add(LiftoffRegister dst, LiftoffRegister lhs,
@@ -3419,6 +3594,20 @@ void LiftoffAssembler::emit_f64x2_max(LiftoffRegister dst, LiftoffRegister lhs,
   Cmppd(dst.fp(), kScratchDoubleReg, int8_t{3});
   Psrlq(dst.fp(), 13);
   Andnpd(dst.fp(), kScratchDoubleReg);
+}
+
+void LiftoffAssembler::emit_f64x2_pmin(LiftoffRegister dst, LiftoffRegister lhs,
+                                       LiftoffRegister rhs) {
+  // Due to the way minpd works, pmin(a, b) = minpd(b, a).
+  liftoff::EmitSimdNonCommutativeBinOp<&Assembler::vminpd, &Assembler::minpd>(
+      this, dst, rhs, lhs);
+}
+
+void LiftoffAssembler::emit_f64x2_pmax(LiftoffRegister dst, LiftoffRegister lhs,
+                                       LiftoffRegister rhs) {
+  // Due to the way maxpd works, pmax(a, b) = maxpd(b, a).
+  liftoff::EmitSimdNonCommutativeBinOp<&Assembler::vmaxpd, &Assembler::maxpd>(
+      this, dst, rhs, lhs);
 }
 
 void LiftoffAssembler::emit_i32x4_sconvert_f32x4(LiftoffRegister dst,
@@ -3870,6 +4059,10 @@ void LiftoffAssembler::CallNativeWasmCode(Address addr) {
   near_call(addr, RelocInfo::WASM_CALL);
 }
 
+void LiftoffAssembler::TailCallNativeWasmCode(Address addr) {
+  near_jmp(addr, RelocInfo::WASM_CALL);
+}
+
 void LiftoffAssembler::CallIndirect(const wasm::FunctionSig* sig,
                                     compiler::CallDescriptor* call_descriptor,
                                     Register target) {
@@ -3881,6 +4074,18 @@ void LiftoffAssembler::CallIndirect(const wasm::FunctionSig* sig,
     RetpolineCall(target);
   } else {
     call(target);
+  }
+}
+
+void LiftoffAssembler::TailCallIndirect(Register target) {
+  if (target == no_reg) {
+    popq(kScratchRegister);
+    target = kScratchRegister;
+  }
+  if (FLAG_untrusted_code_mitigations) {
+    RetpolineJump(target);
+  } else {
+    jmp(target);
   }
 }
 

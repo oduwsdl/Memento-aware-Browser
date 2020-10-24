@@ -18,6 +18,8 @@ namespace web_app {
 class TestWebAppUrlLoader : public WebAppUrlLoader {
  public:
   TestWebAppUrlLoader();
+  TestWebAppUrlLoader(const TestWebAppUrlLoader&) = delete;
+  TestWebAppUrlLoader& operator=(const TestWebAppUrlLoader&) = delete;
   ~TestWebAppUrlLoader() override;
 
   // Changes TestWebAppUrlLoader to save LoadUrl() calls. Use
@@ -42,9 +44,9 @@ class TestWebAppUrlLoader : public WebAppUrlLoader {
                UrlComparison url_comparison,
                ResultCallback callback) override;
 
-  // Sets the result for the next about:blank load to be ok.
-  void SetAboutBlankResultLoaded();
-  void AddAboutBlankResults(const std::vector<Result>& results);
+  // Sets the result for PrepareForLoad() to be ok.
+  void SetPrepareForLoadResultLoaded();
+  void AddPrepareForLoadResults(const std::vector<Result>& results);
 
  private:
   bool should_save_requests_ = false;
@@ -61,7 +63,6 @@ class TestWebAppUrlLoader : public WebAppUrlLoader {
 
   std::queue<std::pair<GURL, ResultCallback>> pending_requests_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestWebAppUrlLoader);
 };
 
 }  // namespace web_app

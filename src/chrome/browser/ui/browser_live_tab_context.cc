@@ -78,6 +78,10 @@ std::string BrowserLiveTabContext::GetAppName() const {
   return browser_->app_name();
 }
 
+std::string BrowserLiveTabContext::GetUserTitle() const {
+  return browser_->user_title();
+}
+
 sessions::LiveTab* BrowserLiveTabContext::GetLiveTabAt(int index) const {
   return sessions::ContentLiveTab::GetForWebContents(
       browser_->tab_strip_model()->GetWebContentsAt(index));
@@ -160,8 +164,9 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
   // time the tab was closed.
   if (base::FeatureList::IsEnabled(features::kTabGroups) &&
       first_tab_in_group) {
-    group_model->GetTabGroup(group.value())
-        ->SetVisualData(std::move(group_visual_data));
+    const tab_groups::TabGroupVisualData new_data(
+        group_visual_data.title(), group_visual_data.color(), false);
+    group_model->GetTabGroup(group.value())->SetVisualData(new_data);
   }
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -218,7 +223,8 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
     const std::string& app_name,
     const gfx::Rect& bounds,
     ui::WindowShowState show_state,
-    const std::string& workspace) {
+    const std::string& workspace,
+    const std::string& user_title) {
   std::unique_ptr<Browser::CreateParams> create_params;
   if (ShouldCreateAppWindowForAppName(profile, app_name)) {
     // Only trusted app popup windows should ever be restored.
@@ -234,6 +240,7 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
 
   create_params->initial_show_state = show_state;
   create_params->initial_workspace = workspace;
+  create_params->user_title = user_title;
   Browser* browser = new Browser(*create_params.get());
   return browser->live_tab_context();
 }
@@ -249,5 +256,13 @@ sessions::LiveTabContext* BrowserLiveTabContext::FindContextForWebContents(
 sessions::LiveTabContext* BrowserLiveTabContext::FindContextWithID(
     SessionID desired_id) {
   Browser* browser = chrome::FindBrowserWithID(desired_id);
+  return browser ? browser->live_tab_context() : nullptr;
+}
+
+// static
+sessions::LiveTabContext* BrowserLiveTabContext::FindContextWithGroup(
+    tab_groups::TabGroupId group,
+    Profile* profile) {
+  Browser* browser = chrome::FindBrowserWithGroup(group, profile);
   return browser ? browser->live_tab_context() : nullptr;
 }

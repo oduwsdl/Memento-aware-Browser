@@ -9,7 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -49,6 +49,7 @@
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
+#include "ui/views/test/button_test_api.h"
 #include "ui/views/test/scoped_views_test_helper.h"
 #include "ui/views/test/test_views_delegate.h"
 
@@ -129,7 +130,7 @@ class PageInfoBubbleViewTestApi {
 
   // Simulates recreating the dialog with a new PermissionInfoList.
   void SetPermissionInfo(const PermissionInfoList& list) {
-    for (const PageInfoBubbleView::PermissionInfo& info : list) {
+    for (const PageInfo::PermissionInfo& info : list) {
       view_->presenter_->OnSitePermissionChanged(info.type, info.setting);
     }
     CreateView();
@@ -202,9 +203,9 @@ class PageInfoBubbleViewTest : public testing::Test {
     parent_window_->Init(std::move(parent_params));
 
     content::WebContents* web_contents = web_contents_helper_.web_contents();
-    content_settings::TabSpecificContentSettings::CreateForWebContents(
+    content_settings::PageSpecificContentSettings::CreateForWebContents(
         web_contents,
-        std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+        std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
             web_contents));
     api_ = std::make_unique<test::PageInfoBubbleViewTestApi>(
         parent_window_->GetNativeView(), web_contents_helper_.profile(),
@@ -272,9 +273,7 @@ TEST_F(PageInfoBubbleViewTest, NotificationPermissionRevokeUkm) {
   TestingProfile* profile =
       static_cast<TestingProfile*>(web_contents_helper_.profile());
   ukm::TestAutoSetUkmRecorder ukm_recorder;
-  ASSERT_TRUE(profile->CreateHistoryService(
-      /* delete_file= */ true,
-      /* no_db= */ false));
+  ASSERT_TRUE(profile->CreateHistoryService());
   auto* history_service = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
   history_service->AddPage(origin_url, base::Time::Now(),
@@ -320,9 +319,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfo) {
 
   TestingProfile* profile =
       static_cast<TestingProfile*>(web_contents_helper_.profile());
-  ASSERT_TRUE(profile->CreateHistoryService(
-      /* delete_file= */ true,
-      /* no_db= */ false));
+  ASSERT_TRUE(profile->CreateHistoryService());
 
   PermissionInfoList list(1);
   list.back().type = ContentSettingsType::GEOLOCATION;
@@ -407,8 +404,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithUsbDevice) {
   views::Button* button = static_cast<views::Button*>(children[2]);
   const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                              ui::EventTimeForNow(), 0, 0);
-  static_cast<views::ButtonListener*>(object_view)
-      ->ButtonPressed(button, event);
+  views::test::ButtonTestApi(button).NotifyClick(event);
   api_->SetPermissionInfo(list);
   EXPECT_EQ(kExpectedChildren, api_->permissions_view()->children().size());
   EXPECT_FALSE(store->HasDevicePermission(origin, origin, *device_info));
@@ -456,7 +452,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithPolicyUsbDevices) {
             label->GetText());
 
   views::Button* button = static_cast<views::Button*>(children[2]);
-  EXPECT_EQ(button->state(), views::Button::STATE_DISABLED);
+  EXPECT_EQ(button->GetState(), views::Button::STATE_DISABLED);
 
   views::Label* desc_label = static_cast<views::Label*>(children[3]);
   EXPECT_EQ(base::ASCIIToUTF16("USB device allowed by your administrator"),
@@ -465,9 +461,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithPolicyUsbDevices) {
   // Policy granted USB permissions should not be able to be deleted.
   const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                              ui::EventTimeForNow(), 0, 0);
-  views::ButtonListener* button_listener =
-      static_cast<views::ButtonListener*>(object_view);
-  button_listener->ButtonPressed(button, event);
+  views::test::ButtonTestApi(button).NotifyClick(event);
   api_->SetPermissionInfo(list);
   EXPECT_EQ(kExpectedChildren + 1, api_->permissions_view()->children().size());
 }
@@ -518,14 +512,12 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithUserAndPolicyUsbDevices) {
     EXPECT_EQ(base::ASCIIToUTF16("Gizmo"), label->GetText());
 
     views::Button* button = static_cast<views::Button*>(children[2]);
-    EXPECT_NE(button->state(), views::Button::STATE_DISABLED);
+    EXPECT_NE(button->GetState(), views::Button::STATE_DISABLED);
 
     views::Label* desc_label = static_cast<views::Label*>(children[3]);
     EXPECT_EQ(base::ASCIIToUTF16("USB device"), desc_label->GetText());
 
-    views::ButtonListener* button_listener =
-        static_cast<views::ButtonListener*>(object_view);
-    button_listener->ButtonPressed(button, event);
+    views::test::ButtonTestApi(button).NotifyClick(event);
     api_->SetPermissionInfo(list);
     EXPECT_EQ(kExpectedChildren + 1,
               api_->permissions_view()->children().size());
@@ -545,15 +537,13 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithUserAndPolicyUsbDevices) {
               label->GetText());
 
     views::Button* button = static_cast<views::Button*>(children[2]);
-    EXPECT_EQ(button->state(), views::Button::STATE_DISABLED);
+    EXPECT_EQ(button->GetState(), views::Button::STATE_DISABLED);
 
     views::Label* desc_label = static_cast<views::Label*>(children[3]);
     EXPECT_EQ(base::ASCIIToUTF16("USB device allowed by your administrator"),
               desc_label->GetText());
 
-    views::ButtonListener* button_listener =
-        static_cast<views::ButtonListener*>(object_view);
-    button_listener->ButtonPressed(button, event);
+    views::test::ButtonTestApi(button).NotifyClick(event);
     api_->SetPermissionInfo(list);
     EXPECT_EQ(kExpectedChildren + 1,
               api_->permissions_view()->children().size());

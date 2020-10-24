@@ -42,7 +42,7 @@ void GetConsentIDs(const std::unordered_set<int>& known_ids,
   }
 
   // The strings returned by the WebUI are not free-form, they must belong into
-  // a pre-determined set of strings (stored in |string_to_grd_id_map_|). As
+  // a pre-determined set of strings (stored in `string_to_grd_id_map_`). As
   // this has privacy and legal implications, CHECK the integrity of the strings
   // received from the renderer process before recording the consent.
   for (const std::string& text : consent_description) {
@@ -138,6 +138,8 @@ void SyncConsentScreenHandler::Show() {
   base::DictionaryValue data;
   data.SetBoolean("isChildAccount", user_manager->IsLoggedInAsChildUser());
   data.SetString("deviceType", ui::GetChromeOSDeviceName());
+  data.SetBoolean("splitSettingsSyncEnabled",
+                  chromeos::features::IsSplitSettingsSyncEnabled());
   ShowScreenWithData(kScreenId, &data);
 }
 
@@ -158,13 +160,6 @@ void SyncConsentScreenHandler::RegisterMessages() {
               &SyncConsentScreenHandler::HandleAcceptAndContinue);
   AddCallback("login.SyncConsentScreen.declineAndContinue",
               &SyncConsentScreenHandler::HandleDeclineAndContinue);
-}
-
-void SyncConsentScreenHandler::GetAdditionalParameters(
-    base::DictionaryValue* parameters) {
-  parameters->SetBoolean("splitSettingsSyncEnabled",
-                         chromeos::features::IsSplitSettingsSyncEnabled());
-  BaseScreenHandler::GetAdditionalParameters(parameters);
 }
 
 void SyncConsentScreenHandler::HandleContinueAndReview(

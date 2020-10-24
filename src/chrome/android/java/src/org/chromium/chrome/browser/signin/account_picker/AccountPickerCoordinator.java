@@ -34,6 +34,11 @@ public class AccountPickerCoordinator {
          * Notifies when the user clicked the "add account" button.
          */
         void addAccount();
+
+        /**
+         * Notifies when the user clicked the "Go incognito mode" button.
+         */
+        default void goIncognitoMode() {}
     }
 
     private final AccountPickerMediator mMediator;
@@ -45,10 +50,11 @@ public class AccountPickerCoordinator {
      * @param listener Listener to notify when an account is selected or the user wants to add an
      *                 account.
      * @param selectedAccountName The name of the account that should be marked as selected.
+     * @param showIncognitoRow whether to show the incognito row in the account picker.
      */
     @MainThread
-    public AccountPickerCoordinator(
-            RecyclerView view, Listener listener, @Nullable String selectedAccountName) {
+    public AccountPickerCoordinator(RecyclerView view, Listener listener,
+            @Nullable String selectedAccountName, boolean showIncognitoRow) {
         assert listener != null : "The argument AccountPickerCoordinator.Listener cannot be null!";
 
         MVCListAdapter.ModelList listModel = new MVCListAdapter.ModelList();
@@ -58,11 +64,12 @@ public class AccountPickerCoordinator {
                 AddAccountRowViewBinder::bindView);
         adapter.registerType(ItemType.EXISTING_ACCOUNT_ROW, ExistingAccountRowViewBinder::buildView,
                 ExistingAccountRowViewBinder::bindView);
+        adapter.registerType(ItemType.INCOGNITO_ACCOUNT_ROW,
+                IncognitoAccountRowViewBinder::buildView, IncognitoAccountRowViewBinder::bindView);
 
         view.setAdapter(adapter);
-
         mMediator = new AccountPickerMediator(
-                view.getContext(), listModel, listener, selectedAccountName);
+                view.getContext(), listModel, listener, selectedAccountName, showIncognitoRow);
     }
 
     /**

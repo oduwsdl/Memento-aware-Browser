@@ -64,12 +64,12 @@ bool g_dead_vars_analysis = false;
 
 // Node: The following is used when tracing --dead-vars
 // to provide extra info for the GC suspect.
-#define TRACE_LLVM_DECL(str, decl)   \
-  do {                               \
-    if (g_dead_vars_analysis) {      \
-      std::cout << str << std::endl; \
-      decl->dump();                  \
-    }                                \
+#define TRACE_LLVM_DECL(str, decl)                   \
+  do {                                               \
+    if (g_tracing_enabled && g_dead_vars_analysis) { \
+      std::cout << str << std::endl;                 \
+      decl->dump();                                  \
+    }                                                \
   } while (false)
 
 typedef std::string MangledName;
@@ -367,6 +367,11 @@ static bool KnownToCauseGC(clang::MangleContext* ctx,
   LoadGCSuspects();
 
   if (!InV8Namespace(decl)) return false;
+
+  if (suspects_whitelist.find(decl->getNameAsString()) !=
+      suspects_whitelist.end()) {
+    return false;
+  }
 
   MangledName name;
   if (GetMangledName(ctx, decl, &name)) {
@@ -680,6 +685,7 @@ class FunctionAnalyzer {
                    clang::CXXRecordDecl* maybe_object_decl,
                    clang::CXXRecordDecl* smi_decl,
                    clang::CXXRecordDecl* no_gc_decl,
+                   clang::CXXRecordDecl* no_gc_or_safepoint_decl,
                    clang::CXXRecordDecl* no_heap_access_decl,
                    clang::DiagnosticsEngine& d, clang::SourceManager& sm)
       : ctx_(ctx),
@@ -687,6 +693,7 @@ class FunctionAnalyzer {
         maybe_object_decl_(maybe_object_decl),
         smi_decl_(smi_decl),
         no_gc_decl_(no_gc_decl),
+        no_gc_or_safepoint_decl_(no_gc_or_safepoint_decl),
         no_heap_access_decl_(no_heap_access_decl),
         d_(d),
         sm_(sm),
@@ -1358,15 +1365,6 @@ class FunctionAnalyzer {
   }
 
   bool IsInternalPointerType(clang::QualType qtype) {
-    // Not yet assigned pointers can't get moved by the GC.
-    if (qtype.isNull()) {
-      return false;
-    }
-    // nullptr can't get moved by the GC.
-    if (qtype->isNullPtrType()) {
-      return false;
-    }
-
     const clang::CXXRecordDecl* record = qtype->getAsCXXRecordDecl();
     bool result = IsDerivedFromInternalPointer(record);
     TRACE_LLVM_TYPE("is internal " << result, qtype);
@@ -1376,6 +1374,15 @@ class FunctionAnalyzer {
   // Returns weather the given type is a raw pointer or a wrapper around
   // such. For V8 that means Object and MaybeObject instances.
   bool RepresentsRawPointerType(clang::QualType qtype) {
+    // Not yet assigned pointers can't get moved by the GC.
+    if (qtype.isNull()) {
+      return false;
+    }
+    // nullptr can't get moved by the GC.
+    if (qtype->isNullPtrType()) {
+      return false;
+    }
+
     const clang::PointerType* pointer_type =
         llvm::dyn_cast_or_null<clang::PointerType>(qtype.getTypePtrOrNull());
     if (pointer_type != NULL) {
@@ -1401,6 +1408,8 @@ class FunctionAnalyzer {
     }
 
     return (no_gc_decl_ && IsDerivedFrom(definition, no_gc_decl_)) ||
+           (no_gc_or_safepoint_decl_ &&
+            IsDerivedFrom(definition, no_gc_or_safepoint_decl_)) ||
            (no_heap_access_decl_ &&
             IsDerivedFrom(definition, no_heap_access_decl_));
   }
@@ -1486,6 +1495,7 @@ class FunctionAnalyzer {
   clang::CXXRecordDecl* maybe_object_decl_;
   clang::CXXRecordDecl* smi_decl_;
   clang::CXXRecordDecl* no_gc_decl_;
+  clang::CXXRecordDecl* no_gc_or_safepoint_decl_;
   clang::CXXRecordDecl* no_heap_access_decl_;
 
   clang::DiagnosticsEngine& d_;
@@ -1519,7 +1529,29 @@ class ProblemsFinder : public clang::ASTConsumer,
     }
   }
 
+  bool TranslationUnitIgnored() {
+    if (!ignored_files_loaded_) {
+      std::ifstream fin("tools/gcmole/ignored_files");
+      std::string s;
+      while (fin >> s) ignored_files_.insert(s);
+      ignored_files_loaded_ = true;
+    }
+
+    clang::FileID main_file_id = sm_.getMainFileID();
+    std::string filename = sm_.getFileEntryForID(main_file_id)->getName().str();
+
+    bool result = ignored_files_.find(filename) != ignored_files_.end();
+    if (result) {
+      llvm::outs() << "Ignoring file " << filename << "\n";
+    }
+    return result;
+  }
+
   virtual void HandleTranslationUnit(clang::ASTContext &ctx) {
+    if (TranslationUnitIgnored()) {
+      return;
+    }
+
     Resolver r(ctx);
 
     // It is a valid situation that no_gc_decl == NULL when the
@@ -1529,6 +1561,11 @@ class ProblemsFinder : public clang::ASTConsumer,
         r.ResolveNamespace("v8")
             .ResolveNamespace("internal")
             .ResolveTemplate("DisallowHeapAllocation");
+
+    clang::CXXRecordDecl* no_gc_or_safepoint_decl =
+        r.ResolveNamespace("v8")
+            .ResolveNamespace("internal")
+            .ResolveTemplate("DisallowGarbageCollection");
 
     clang::CXXRecordDecl* no_heap_access_decl =
         r.ResolveNamespace("v8")
@@ -1559,10 +1596,10 @@ class ProblemsFinder : public clang::ASTConsumer,
       no_heap_access_decl = no_heap_access_decl->getDefinition();
 
     if (object_decl != NULL && smi_decl != NULL && maybe_object_decl != NULL) {
-      function_analyzer_ =
-          new FunctionAnalyzer(clang::ItaniumMangleContext::create(ctx, d_),
-                               object_decl, maybe_object_decl, smi_decl,
-                               no_gc_decl, no_heap_access_decl, d_, sm_);
+      function_analyzer_ = new FunctionAnalyzer(
+          clang::ItaniumMangleContext::create(ctx, d_), object_decl,
+          maybe_object_decl, smi_decl, no_gc_decl, no_gc_or_safepoint_decl,
+          no_heap_access_decl, d_, sm_);
       TraverseDecl(ctx.getTranslationUnitDecl());
     } else {
       if (object_decl == NULL) {
@@ -1595,6 +1632,9 @@ class ProblemsFinder : public clang::ASTConsumer,
  private:
   clang::DiagnosticsEngine& d_;
   clang::SourceManager& sm_;
+
+  bool ignored_files_loaded_ = false;
+  std::set<std::string> ignored_files_;
 
   FunctionAnalyzer* function_analyzer_;
 };

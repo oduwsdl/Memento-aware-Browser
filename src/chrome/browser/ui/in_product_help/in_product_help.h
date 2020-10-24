@@ -5,11 +5,11 @@
 #ifndef CHROME_BROWSER_UI_IN_PRODUCT_HELP_IN_PRODUCT_HELP_H_
 #define CHROME_BROWSER_UI_IN_PRODUCT_HELP_IN_PRODUCT_HELP_H_
 
+// Deprecated. Use FeaturePromoController.
+//
 // Identifies a feature that has in-product help.
 enum class InProductHelpFeature {
-  kGlobalMediaControls,
   kIncognitoWindow,
-  kReopenTab,
 };
 
 #endif  // CHROME_BROWSER_UI_IN_PRODUCT_HELP_IN_PRODUCT_HELP_H_

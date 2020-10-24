@@ -88,7 +88,7 @@ void CopyDebuggee(Debuggee* dst, const Debuggee& src) {
 
 // Returns true if the given |Extension| is allowed to attach to the specified
 // |url|.
-bool ExtensionCanAttachToURL(const Extension& extension,
+bool ExtensionMayAttachToURL(const Extension& extension,
                              const GURL& url,
                              Profile* profile,
                              std::string* error) {
@@ -115,6 +115,38 @@ constexpr char kPerfettoUIExtensionId[] = "lfmkphfpdbjijhpomgecfikhfohaoine";
 
 bool ExtensionMayAttachToBrowser(const Extension& extension) {
   return extension.id() == kPerfettoUIExtensionId;
+}
+
+bool ExtensionMayAttachToWebContents(const Extension& extension,
+                                     WebContents& web_contents,
+                                     Profile* profile,
+                                     std::string* error) {
+  // This is *not* redundant to the checks below, as
+  // web_contents.GetLastCommittedURL() may be different from
+  // web_contents.GetMainFrame()->GetLastCommittedURL(), with the
+  // former being a 'virtual' URL as obtained from NavigationEntry.
+  if (!ExtensionMayAttachToURL(extension, web_contents.GetLastCommittedURL(),
+                               profile, error)) {
+    return false;
+  }
+
+  for (content::RenderFrameHost* rfh : web_contents.GetAllFrames()) {
+    if (!ExtensionMayAttachToURL(extension, rfh->GetLastCommittedURL(), profile,
+                                 error))
+      return false;
+  }
+  return true;
+}
+
+bool ExtensionMayAttachToAgentHost(const Extension& extension,
+                                   DevToolsAgentHost& agent_host,
+                                   Profile* profile,
+                                   std::string* error) {
+  if (WebContents* wc = agent_host.GetWebContents())
+    return ExtensionMayAttachToWebContents(extension, *wc, profile, error);
+
+  return ExtensionMayAttachToURL(extension, agent_host.GetURL(), profile,
+                                 error);
 }
 
 }  // namespace
@@ -238,6 +270,7 @@ bool ExtensionDevToolsClientHost::Attach() {
 }
 
 ExtensionDevToolsClientHost::~ExtensionDevToolsClientHost() {
+  ExtensionDevToolsInfoBarDelegate::NotifyExtensionDetached(extension_id());
   g_attached_client_hosts.Get().erase(this);
 }
 
@@ -372,7 +405,7 @@ bool ExtensionDevToolsClientHost::MayAttachToURL(const GURL& url,
   if (url.is_empty() || url == "about:")
     return true;
   std::string error;
-  return ExtensionCanAttachToURL(*extension_, url, profile_, &error);
+  return ExtensionMayAttachToURL(*extension_, url, profile_, &error);
 }
 
 bool ExtensionDevToolsClientHost::MayAttachToBrowser() {
@@ -416,12 +449,9 @@ bool DebuggerFunction::InitAgentHost(std::string* error) {
         *debuggee_.tab_id, browser_context(), include_incognito_information(),
         &web_contents);
     if (result && web_contents) {
-      // TODO(rdevlin.cronin) This should definitely be GetLastCommittedURL().
-      GURL url = web_contents->GetVisibleURL();
-
-      if (!ExtensionCanAttachToURL(
-              *extension(), url, Profile::FromBrowserContext(browser_context()),
-              error)) {
+      if (!ExtensionMayAttachToWebContents(
+              *extension(), *web_contents,
+              Profile::FromBrowserContext(browser_context()), error)) {
         return false;
       }
 
@@ -433,20 +463,22 @@ bool DebuggerFunction::InitAgentHost(std::string* error) {
             ->GetBackgroundHostForExtension(*debuggee_.extension_id);
     if (extension_host) {
       if (extension()->permissions_data()->IsRestrictedUrl(
-              extension_host->GetURL(), error)) {
+              extension_host->GetLastCommittedURL(), error)) {
         return false;
       }
       agent_host_ =
           DevToolsAgentHost::GetOrCreateFor(extension_host->host_contents());
     }
   } else if (debuggee_.target_id) {
-    agent_host_ = DevToolsAgentHost::GetForId(*debuggee_.target_id);
-    if (agent_host_.get()) {
-      if (extension()->permissions_data()->IsRestrictedUrl(
-              agent_host_->GetURL(), error)) {
-        agent_host_ = nullptr;
+    scoped_refptr<DevToolsAgentHost> agent_host =
+        DevToolsAgentHost::GetForId(*debuggee_.target_id);
+    if (agent_host) {
+      if (!ExtensionMayAttachToAgentHost(
+              *extension(), *agent_host,
+              Profile::FromBrowserContext(browser_context()), error)) {
         return false;
       }
+      agent_host_ = std::move(agent_host);
     } else if (*debuggee_.target_id == kBrowserTargetId &&
                ExtensionMayAttachToBrowser(*extension())) {
       // TODO(caseq): get rid of the below code, browser agent host should
@@ -676,7 +708,8 @@ ExtensionFunction::ResponseAction DebuggerGetTargetsFunction::Run() {
   for (size_t i = 0; i < list.size(); ++i)
     result->Append(SerializeTarget(list[i]));
 
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 }  // namespace extensions

@@ -8,47 +8,46 @@
 #include <utility>
 
 #include "base/callback.h"
+#include "base/optional.h"
 #include "chrome/browser/policy/messaging_layer/public/report_queue.h"
 #include "components/policy/proto/record.pb.h"
 #include "components/policy/proto/record_constants.pb.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace reporting {
 namespace test {
 
-// A |StorageModule| that stores the wrapped record and priority and calls the
-// callback with an OK status.
-class TestStorageModule : public StorageModule {
+class TestStorageModuleStrict : public StorageModule {
  public:
-  TestStorageModule() = default;
+  // As opposed to the production |StorageModule|, test module does not need to
+  // call factory method - it is created directly by constructor.
+  TestStorageModuleStrict();
 
-  void AddRecord(reporting::EncryptedRecord record,
-                 reporting::Priority priority,
-                 base::OnceCallback<void(Status)> callback) override;
+  MOCK_METHOD(void,
+              AddRecord,
+              (Priority priority,
+               Record record,
+               base::OnceCallback<void(Status)> callback),
+              (override));
 
-  reporting::WrappedRecord wrapped_record() { return wrapped_record_; }
-
-  reporting::Priority priority() { return priority_; }
+  Record record() const;
+  Priority priority() const;
 
  protected:
-  ~TestStorageModule() override = default;
+  ~TestStorageModuleStrict() override;
 
  private:
-  reporting::WrappedRecord wrapped_record_;
-  reporting::Priority priority_;
+  void AddRecordSuccessfully(Priority priority,
+                             Record record,
+                             base::OnceCallback<void(Status)> callback);
+
+  base::Optional<Record> record_;
+  base::Optional<Priority> priority_;
 };
 
-// A |TestStorageModule| that always fails on |AddRecord| calls.
-class AlwaysFailsStorageModule final : public TestStorageModule {
- public:
-  AlwaysFailsStorageModule() = default;
-
-  void AddRecord(reporting::EncryptedRecord record,
-                 reporting::Priority priority,
-                 base::OnceCallback<void(Status)> callback) override;
-
- protected:
-  ~AlwaysFailsStorageModule() override = default;
-};
+// Most of the time no need to log uninterested calls to |AddRecord|.
+typedef ::testing::NiceMock<TestStorageModuleStrict> TestStorageModule;
 
 }  // namespace test
 }  // namespace reporting

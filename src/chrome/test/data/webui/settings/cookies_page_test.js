@@ -29,7 +29,7 @@ suite('CrSettingsCookiesPageTest', function() {
 
   suiteSetup(function() {
     loadTimeData.overrideValues({
-      improvedCookieControlsEnabled: true,
+      enableContentSettingsRedesign: false,
     });
   });
 
@@ -58,11 +58,10 @@ suite('CrSettingsCookiesPageTest', function() {
 
   test('ElementVisibility', async function() {
     await flushTasks();
+    assertFalse(isChildVisible(page, '#exceptionHeader'));
     assertTrue(isChildVisible(page, '#clearOnExit'));
     assertTrue(isChildVisible(page, '#doNotTrack'));
     assertTrue(isChildVisible(page, '#networkPrediction'));
-    // Ensure that with the improvedCookieControls flag enabled that the block
-    // third party cookies radio is visible.
     assertTrue(isChildVisible(page, '#blockThirdPartyIncognito'));
   });
 
@@ -201,22 +200,17 @@ suite('CrSettingsCookiesPageTest', function() {
   });
 });
 
-suite('CrSettingsCookiesPageTest_ImprovedCookieControlsDisabled', function() {
-  /** @type {TestSiteSettingsPrefsBrowserProxy} */
-  let siteSettingsBrowserProxy;
-
+suite('ContentSettingsRedesign', function() {
   /** @type {!SettingsCookiesPageElement} */
   let page;
 
   suiteSetup(function() {
     loadTimeData.overrideValues({
-      improvedCookieControlsEnabled: false,
+      enableContentSettingsRedesign: true,
     });
   });
 
   setup(function() {
-    siteSettingsBrowserProxy = new TestSiteSettingsPrefsBrowserProxy();
-    SiteSettingsPrefsBrowserProxyImpl.instance_ = siteSettingsBrowserProxy;
     document.body.innerHTML = '';
     page = /** @type {!SettingsCookiesPageElement} */ (
         document.createElement('settings-cookies-page'));
@@ -228,14 +222,9 @@ suite('CrSettingsCookiesPageTest_ImprovedCookieControlsDisabled', function() {
       },
     };
     document.body.appendChild(page);
-    flush();
   });
 
-  teardown(function() {
-    page.remove();
-  });
-
-  test('BlockThirdPartyRadio_Hidden', function() {
-    assertFalse(isChildVisible(page, '#blockThirdPartyIncognito'));
+  test('HeaderVisibility', async function() {
+    assertTrue(isChildVisible(page, '#exceptionHeader'));
   });
 });

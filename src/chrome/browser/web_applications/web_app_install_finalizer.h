@@ -9,7 +9,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
@@ -30,6 +29,8 @@ class WebAppInstallFinalizer final : public InstallFinalizer {
   WebAppInstallFinalizer(Profile* profile,
                          WebAppIconManager* icon_manager,
                          std::unique_ptr<InstallFinalizer> legacy_finalizer);
+  WebAppInstallFinalizer(const WebAppInstallFinalizer&) = delete;
+  WebAppInstallFinalizer& operator=(const WebAppInstallFinalizer&) = delete;
   ~WebAppInstallFinalizer() override;
 
   // InstallFinalizer:
@@ -50,6 +51,8 @@ class WebAppInstallFinalizer final : public InstallFinalizer {
   void UninstallExternalAppByUser(const AppId& app_id,
                                   UninstallWebAppCallback callback) override;
   bool WasExternalAppUninstalledByUser(const AppId& app_id) const override;
+  void RemoveLegacyInstallFinalizerForTesting() override;
+  InstallFinalizer* legacy_finalizer_for_testing() override;
   void Start() override;
   void Shutdown() override;
 
@@ -82,14 +85,12 @@ class WebAppInstallFinalizer final : public InstallFinalizer {
   void OnDatabaseCommitCompletedForInstall(InstallFinalizedCallback callback,
                                            AppId app_id,
                                            bool success);
-  void OnDatabaseCommitCompletedForUpdate(InstallFinalizedCallback callback,
-                                          AppId app_id,
-                                          std::string old_name,
-                                          bool success);
-  void OnFallbackInstallFinalized(const AppId& app_in_sync_install_id,
-                                  InstallFinalizedCallback callback,
-                                  const AppId& installed_app_id,
-                                  InstallResultCode code);
+  void OnDatabaseCommitCompletedForUpdate(
+      InstallFinalizedCallback callback,
+      AppId app_id,
+      std::string old_name,
+      const WebApplicationInfo& web_app_info,
+      bool success);
 
   WebAppRegistrar& GetWebAppRegistrar() const;
 
@@ -101,7 +102,6 @@ class WebAppInstallFinalizer final : public InstallFinalizer {
 
   base::WeakPtrFactory<WebAppInstallFinalizer> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppInstallFinalizer);
 };
 
 }  // namespace web_app

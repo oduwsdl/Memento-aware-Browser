@@ -36,14 +36,6 @@ const std::vector<SearchConcept>& GetPrivacySearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSection,
        {.section = mojom::Section::kPrivacyAndSecurity}},
-      {IDS_OS_SETTINGS_TAG_PRIVACY_WIFI_SLEEP,
-       mojom::kPrivacyAndSecuritySectionPath,
-       mojom::SearchResultIcon::kShield,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kKeepWifiOnDuringSleep},
-       {IDS_OS_SETTINGS_TAG_PRIVACY_WIFI_SLEEP_ALT1,
-        SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -69,9 +61,10 @@ const std::vector<SearchConcept>& GetPrivacyGoogleChromeSearchConcepts() {
 PrivacySection::PrivacySection(Profile* profile,
                                SearchTagRegistry* search_tag_registry)
     : OsSettingsSection(profile, search_tag_registry) {
-  registry()->AddSearchTags(GetPrivacySearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetPrivacySearchConcepts());
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  registry()->AddSearchTags(GetPrivacyGoogleChromeSearchConcepts());
+  updater.AddSearchTags(GetPrivacyGoogleChromeSearchConcepts());
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
@@ -82,7 +75,6 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"privacyPageTitle", IDS_SETTINGS_PRIVACY},
       {"enableLogging", IDS_SETTINGS_ENABLE_LOGGING_TOGGLE_TITLE},
       {"enableLoggingDesc", IDS_SETTINGS_ENABLE_LOGGING_TOGGLE_DESC},
-      {"wakeOnWifi", IDS_SETTINGS_WAKE_ON_WIFI_DESCRIPTION},
       {"enableContentProtectionAttestation",
        IDS_SETTINGS_ENABLE_CONTENT_PROTECTION_ATTESTATION},
       {"enableSuggestedContent", IDS_SETTINGS_ENABLE_SUGGESTED_CONTENT_TITLE},
@@ -123,9 +115,14 @@ std::string PrivacySection::GetSectionPath() const {
   return mojom::kPrivacyAndSecuritySectionPath;
 }
 
+bool PrivacySection::LogMetric(mojom::Setting setting,
+                               base::Value& value) const {
+  // Unimplemented.
+  return false;
+}
+
 void PrivacySection::RegisterHierarchy(HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSetting(mojom::Setting::kVerifiedAccess);
-  generator->RegisterTopLevelSetting(mojom::Setting::kKeepWifiOnDuringSleep);
   generator->RegisterTopLevelSetting(
       mojom::Setting::kUsageStatsAndCrashReports);
 }

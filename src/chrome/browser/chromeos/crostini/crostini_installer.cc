@@ -113,8 +113,6 @@ SetupResult ErrorToSetupResult(InstallerError error) {
       return SetupResult::kSuccess;
     case InstallerError::kErrorLoadingTermina:
       return SetupResult::kErrorLoadingTermina;
-    case InstallerError::kErrorStartingConcierge:
-      return SetupResult::kErrorStartingConcierge;
     case InstallerError::kErrorCreatingDiskImage:
       return SetupResult::kErrorCreatingDiskImage;
     case InstallerError::kErrorStartingTermina:
@@ -149,8 +147,6 @@ SetupResult InstallStateToCancelledSetupResult(
       return SetupResult::kUserCancelledStart;
     case InstallerState::kInstallImageLoader:
       return SetupResult::kUserCancelledInstallImageLoader;
-    case InstallerState::kStartConcierge:
-      return SetupResult::kUserCancelledStartConcierge;
     case InstallerState::kCreateDiskImage:
       return SetupResult::kUserCancelledCreateDiskImage;
     case InstallerState::kStartTerminaVm:
@@ -326,15 +322,6 @@ void CrostiniInstaller::OnComponentLoaded(CrostiniResult result) {
     }
     return;
   }
-  UpdateInstallingState(InstallerState::kStartConcierge);
-}
-
-void CrostiniInstaller::OnConciergeStarted(bool success) {
-  DCHECK_EQ(installing_state_, InstallerState::kStartConcierge);
-  if (!success) {
-    HandleError(InstallerError::kErrorStartingConcierge);
-    return;
-  }
   UpdateInstallingState(InstallerState::kCreateDiskImage);
 }
 
@@ -487,7 +474,7 @@ void CrostiniInstaller::RunProgressCallback() {
 
   double state_start_mark = 0;
   double state_end_mark = 0;
-  int state_max_seconds = 1;
+  auto state_max_time = base::TimeDelta::FromSeconds(1);
 
   switch (installing_state_) {
     case InstallerState::kStart:
@@ -497,41 +484,37 @@ void CrostiniInstaller::RunProgressCallback() {
     case InstallerState::kInstallImageLoader:
       state_start_mark = 0.0;
       state_end_mark = 0.20;
-      state_max_seconds = 30;
-      break;
-    case InstallerState::kStartConcierge:
-      state_start_mark = 0.20;
-      state_end_mark = 0.21;
+      state_max_time = base::TimeDelta::FromSeconds(30);
       break;
     case InstallerState::kCreateDiskImage:
-      state_start_mark = 0.21;
+      state_start_mark = 0.20;
       state_end_mark = 0.22;
       break;
     case InstallerState::kStartTerminaVm:
       state_start_mark = 0.22;
       state_end_mark = 0.28;
-      state_max_seconds = 8;
+      state_max_time = base::TimeDelta::FromSeconds(8);
       break;
     case InstallerState::kCreateContainer:
       state_start_mark = 0.28;
       state_end_mark = 0.72;
-      state_max_seconds = 180;
+      state_max_time = base::TimeDelta::FromSeconds(180);
       break;
     case InstallerState::kSetupContainer:
       state_start_mark = 0.72;
       state_end_mark = 0.76;
-      state_max_seconds = 8;
+      state_max_time = base::TimeDelta::FromSeconds(8);
       break;
     case InstallerState::kStartContainer:
       state_start_mark = 0.76;
       state_end_mark = 0.79;
-      state_max_seconds = 8;
+      state_max_time = base::TimeDelta::FromSeconds(8);
       break;
     case InstallerState::kConfigureContainer:
       state_start_mark = 0.79;
       state_end_mark = 0.99;
       // Ansible installation and playbook application.
-      state_max_seconds = 140 + 300;
+      state_max_time = base::TimeDelta::FromSeconds(140 + 300);
       break;
     case InstallerState::kFetchSshKeys:
       state_start_mark = 0.99;
@@ -545,7 +528,7 @@ void CrostiniInstaller::RunProgressCallback() {
       NOTREACHED();
   }
 
-  double state_fraction = time_in_state.InSecondsF() / state_max_seconds;
+  double state_fraction = time_in_state / state_max_time;
 
   if (installing_state_ == InstallerState::kCreateContainer) {
     // In CREATE_CONTAINER, consume half the progress bar with downloading,
@@ -662,9 +645,8 @@ void CrostiniInstaller::OnCrostiniRestartFinished(CrostiniResult result) {
 
   if (!skip_launching_terminal_for_testing_) {
     // kInvalidDisplayId will launch terminal on the current active display.
-    crostini::LaunchContainerTerminal(profile_, display::kInvalidDisplayId,
-                                      crostini::ContainerId::GetDefault(),
-                                      std::vector<std::string>());
+    crostini::LaunchTerminal(profile_, display::kInvalidDisplayId,
+                             crostini::ContainerId::GetDefault());
   }
 }
 

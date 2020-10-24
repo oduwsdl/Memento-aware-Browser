@@ -45,48 +45,47 @@ void FindTabHelper::RemoveObserver(FindResultObserver* observer) {
 void FindTabHelper::StartFinding(base::string16 search_string,
                                  bool forward_direction,
                                  bool case_sensitive,
-                                 bool find_next_if_selection_matches,
+                                 bool find_match,
                                  bool run_synchronously_for_testing) {
   // Remove the carriage return character, which generally isn't in web content.
   const base::char16 kInvalidChars[] = {'\r', 0};
   base::RemoveChars(search_string, kInvalidChars, &search_string);
 
-  // If search_string is empty, it means FindNext was pressed with a keyboard
-  // shortcut so unless we have something to search for we return early.
-  if (search_string.empty() && find_text_.empty()) {
-    search_string = GetInitialSearchText();
+  // Keep track of what the last search was across the tabs.
+  if (delegate_)
+    delegate_->SetLastSearchText(search_string);
 
-    if (search_string.empty())
-      return;
+  if (search_string.empty()) {
+    StopFinding(find_in_page::SelectionAction::kClear);
+    for (auto& observer : observers_)
+      observer.OnFindEmptyText(web_contents_);
+    return;
   }
 
-  // Keep track of the previous search.
-  previous_find_text_ = find_text_;
-
-  // NB: search_string will be empty when using the FindNext keyboard shortcut.
-  bool new_session = (find_text_ != search_string && !search_string.empty()) ||
+  bool new_session = find_text_ != search_string ||
                      (last_search_case_sensitive_ != case_sensitive) ||
                      find_op_aborted_;
+
+  // Continuing here would just find the same results, potentially causing
+  // some flicker in the highlighting.
+  if (!new_session && !find_match)
+    return;
 
   current_find_request_id_ = find_request_id_counter_++;
   if (new_session)
     current_find_session_id_ = current_find_request_id_;
 
-  if (!search_string.empty())
-    find_text_ = search_string;
+  previous_find_text_ = find_text_;
+  find_text_ = search_string;
   last_search_case_sensitive_ = case_sensitive;
-
   find_op_aborted_ = false;
-
-  // Keep track of what the last search was across the tabs.
-  if (delegate_)
-    delegate_->SetLastSearchText(find_text_);
+  should_find_match_ = find_match;
 
   auto options = blink::mojom::FindOptions::New();
   options->forward = forward_direction;
   options->match_case = case_sensitive;
   options->new_session = new_session;
-  options->find_next_if_selection_matches = find_next_if_selection_matches;
+  options->find_match = find_match;
   options->run_synchronously_for_testing = run_synchronously_for_testing;
   web_contents_->Find(current_find_request_id_, find_text_, std::move(options));
 }
@@ -106,6 +105,7 @@ void FindTabHelper::StopFinding(SelectionAction selection_action) {
   last_completed_find_text_.clear();
   find_op_aborted_ = true;
   last_search_result_ = FindNotificationDetails();
+  should_find_match_ = false;
 
   content::StopFindAction action;
   switch (selection_action) {

@@ -13,8 +13,9 @@ import android.widget.LinearLayout;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.library_loader.LibraryLoader;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.ntp.IncognitoCookieControlsManager;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -36,15 +37,21 @@ public class TasksSurfaceCoordinator implements TasksSurface {
     private final PropertyModelChangeProcessor mPropertyModelChangeProcessor;
     private final TasksSurfaceMediator mMediator;
     private MostVisitedListCoordinator mMostVisitedList;
+    private TrendyTermsCoordinator mTrendyTermsCoordinator;
     private final PropertyModel mPropertyModel;
+    private final boolean mHasTrendyTerm;
+    private final @TabSwitcherType int mTabSwitcherType;
 
     public TasksSurfaceCoordinator(ChromeActivity activity, ScrimCoordinator scrimCoordinator,
-            PropertyModel propertyModel, @TabSwitcherType int tabSwitcherType, boolean hasMVTiles) {
+            PropertyModel propertyModel, @TabSwitcherType int tabSwitcherType, boolean hasMVTiles,
+            boolean hasTrendyTerms) {
         mView = (TasksView) LayoutInflater.from(activity).inflate(R.layout.tasks_view_layout, null);
         mView.initialize(activity.getLifecycleDispatcher());
         mPropertyModelChangeProcessor =
                 PropertyModelChangeProcessor.create(propertyModel, mView, TasksViewBinder::bind);
         mPropertyModel = propertyModel;
+        mHasTrendyTerm = hasTrendyTerms;
+        mTabSwitcherType = tabSwitcherType;
         if (tabSwitcherType == TabSwitcherType.CAROUSEL) {
             mTabSwitcher = TabManagementModuleProvider.getDelegate().createCarouselTabSwitcher(
                     activity, mView.getCarouselTabSwitcherContainer(), scrimCoordinator);
@@ -62,14 +69,25 @@ public class TasksSurfaceCoordinator implements TasksSurface {
         }
 
         View.OnClickListener incognitoLearnMoreClickListener = v -> {
-            HelpAndFeedback.getInstance().show(activity,
+            HelpAndFeedbackLauncherImpl.getInstance().show(activity,
                     activity.getString(R.string.help_context_incognito_learn_more),
                     Profile.getLastUsedRegularProfile().getOffTheRecordProfile(), null);
         };
         IncognitoCookieControlsManager incognitoCookieControlsManager =
                 new IncognitoCookieControlsManager();
+        Runnable trendyTermsUpdater = null;
+        if (hasTrendyTerms) {
+            mTrendyTermsCoordinator = new TrendyTermsCoordinator(
+                    activity, getView().findViewById(R.id.trendy_terms_recycler_view));
+
+            trendyTermsUpdater = () -> {
+                TrendyTermsCache.maybeFetch(Profile.getLastUsedRegularProfile());
+                mTrendyTermsCoordinator.populateTrendyTerms();
+            };
+        }
         mMediator = new TasksSurfaceMediator(propertyModel, incognitoLearnMoreClickListener,
-                incognitoCookieControlsManager, tabSwitcherType == TabSwitcherType.CAROUSEL);
+                incognitoCookieControlsManager, tabSwitcherType == TabSwitcherType.CAROUSEL,
+                trendyTermsUpdater);
 
         if (hasMVTiles) {
             LinearLayout mvTilesLayout = mView.findViewById(R.id.mv_tiles_layout);
@@ -105,6 +123,16 @@ public class TasksSurfaceCoordinator implements TasksSurface {
     }
 
     @Override
+    public Supplier<Boolean> getTabGridDialogVisibilitySupplier() {
+        if (mTabSwitcherType != TabSwitcherType.CAROUSEL
+                && mTabSwitcherType != TabSwitcherType.GRID) {
+            return null;
+        }
+        assert mTabSwitcher != null;
+        return mTabSwitcher.getTabGridDialogVisibilitySupplier();
+    }
+
+    @Override
     public ViewGroup getBodyViewContainer() {
         return mView.getBodyViewContainer();
     }
@@ -112,6 +140,11 @@ public class TasksSurfaceCoordinator implements TasksSurface {
     @Override
     public View getView() {
         return mView;
+    }
+
+    @Override
+    public View getTopToolbarPlaceholderView() {
+        return mView != null ? mView.findViewById(R.id.top_toolbar_placeholder) : null;
     }
 
     @Override
@@ -124,5 +157,10 @@ public class TasksSurfaceCoordinator implements TasksSurface {
         }
 
         mMediator.initWithNative(fakeboxDelegate);
+
+        if (mHasTrendyTerm && mTabSwitcher != null) {
+            mTabSwitcher.getController().addOverviewModeObserver(mMediator);
+            TrendyTermsCache.maybeFetch(Profile.getLastUsedRegularProfile());
+        }
     }
 }

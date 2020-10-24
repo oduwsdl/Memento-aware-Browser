@@ -99,7 +99,8 @@ FuzzerSoftwareOutputSurfaceProvider::CreateOutputSurface(
     bool gpu_compositing,
     mojom::DisplayClient* display_client,
     gpu::GpuTaskSchedulerHelper* gpu_task_scheduler,
-    const RendererSettings& renderer_settings) {
+    const RendererSettings& renderer_settings,
+    const DebugRendererSettings* debug_settings) {
   std::unique_ptr<SoftwareOutputDevice> software_output_device =
       png_dir_path_ ? std::make_unique<PNGSoftwareOutputDevice>(*png_dir_path_)
                     : std::make_unique<SoftwareOutputDevice>();

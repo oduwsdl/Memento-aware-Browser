@@ -47,7 +47,8 @@ constexpr int kMinimumPdfSize = 50;
 
 // Converts a color mode to its Mojo type.
 mojom::PrintColorMode ToArcColorMode(int color_mode) {
-  base::Optional<bool> is_color = printing::IsColorModelSelected(color_mode);
+  base::Optional<bool> is_color = printing::IsColorModelSelected(
+      printing::ColorModeToColorModel(color_mode));
   return is_color.value() ? mojom::PrintColorMode::COLOR
                           : mojom::PrintColorMode::MONOCHROME;
 }
@@ -146,13 +147,13 @@ mojom::PrintDocumentRequestPtr PrintDocumentRequestFromJobSettings(
 base::ReadOnlySharedMemoryRegion ReadPreviewDocument(
     mojo::ScopedHandle preview_document,
     size_t data_size) {
-  base::PlatformFile platform_file;
+  base::ScopedPlatformFile platform_file;
   if (mojo::UnwrapPlatformFile(std::move(preview_document), &platform_file) !=
       MOJO_RESULT_OK) {
     return base::ReadOnlySharedMemoryRegion();
   }
 
-  base::File src_file(platform_file);
+  base::File src_file(std::move(platform_file));
   if (!src_file.IsValid()) {
     DPLOG(ERROR) << "Source file is invalid.";
     return base::ReadOnlySharedMemoryRegion();
@@ -369,7 +370,7 @@ void PrintSessionImpl::StartPrintAfterPluginIsLoaded() {
       FROM_HERE,
       base::BindOnce(&PrintSessionImpl::StartPrintNow,
                      weak_ptr_factory_.GetWeakPtr()),
-      base::TimeDelta::FromMilliseconds(100));
+      base::TimeDelta::FromMilliseconds(500));
 }
 
 void PrintSessionImpl::StartPrintNow() {

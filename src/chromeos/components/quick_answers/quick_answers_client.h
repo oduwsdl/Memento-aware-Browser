@@ -23,6 +23,7 @@ namespace quick_answers {
 
 struct QuickAnswer;
 struct QuickAnswersRequest;
+struct IntentInfo;
 enum class IntentType;
 enum class ResultType;
 
@@ -110,6 +111,9 @@ class QuickAnswersClient : public ash::AssistantStateObserver,
   static void SetIntentGeneratorFactoryForTesting(
       IntentGeneratorFactoryCallback* factory);
 
+  static bool IsQuickAnswersAllowedForLocale(const std::string& locale,
+                                             const std::string& runtime_locale);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest, SendRequest);
   FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest,
@@ -134,8 +138,7 @@ class QuickAnswersClient : public ash::AssistantStateObserver,
                            bool skip_fetch);
   void IntentGeneratorCallback(const QuickAnswersRequest& quick_answers_request,
                                bool skip_fetch,
-                               const std::string& intent_text,
-                               IntentType intent_type);
+                               const IntentInfo& intent_info);
   base::TimeDelta GetImpressionDuration() const;
 
   network::mojom::URLLoaderFactory* url_loader_factory_ = nullptr;

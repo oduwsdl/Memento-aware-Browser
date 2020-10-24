@@ -10,7 +10,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
@@ -25,6 +24,7 @@
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 
+class ClipboardProvider;
 class DocumentProvider;
 class HistoryURLProvider;
 class KeywordProvider;
@@ -85,6 +85,8 @@ class AutocompleteController : public AutocompleteProviderListener,
       std::unique_ptr<AutocompleteProviderClient> provider_client,
       int provider_types);
   ~AutocompleteController() override;
+  AutocompleteController(const AutocompleteController&) = delete;
+  AutocompleteController& operator=(const AutocompleteController&) = delete;
 
   // UI elements that need to be notified when the results get updated should
   // be added as an |observer|. So far there is no need for a RemoveObserver
@@ -159,6 +161,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   }
   KeywordProvider* keyword_provider() const { return keyword_provider_; }
   SearchProvider* search_provider() const { return search_provider_; }
+  ClipboardProvider* clipboard_provider() const { return clipboard_provider_; }
 
   const AutocompleteInput& input() const { return input_; }
   const AutocompleteResult& result() const { return result_; }
@@ -169,13 +172,19 @@ class AutocompleteController : public AutocompleteProviderListener,
     return last_time_default_match_changed_;
   }
 
+  // Sets the provider timeout duration for future calls to |Start()|.
+  void SetStartStopTimerDurationForTesting(base::TimeDelta duration);
+
  private:
   friend class AutocompleteProviderTest;
+  friend class OmniboxSuggestionButtonRowBrowserTest;
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest,
                            RedundantKeywordsIgnoredInResult);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest, UpdateAssistedQueryStats);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
-                           EmitTextChangedAccessibilityEvent);
+                           EmitAccessibilityEvents);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
+                           EmitAccessibilityEventsOnButtonFocusHint);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewTest, DoesNotUpdateAutocompleteOnBlur);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, FriendlyAccessibleLabel);
@@ -194,6 +203,10 @@ class AutocompleteController : public AutocompleteProviderListener,
                            PopupStepSelectionWithHiddenGroupIds);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelTest,
                            PopupInlineAutocompleteAndTemporaryText);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelSuggestionButtonRowTest,
+                           PopupStepSelectionWithButtonRow);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelSuggestionButtonRowTest,
+                           PopupStepSelectionWithButtonRowAndKeywordButton);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
                            EmitSelectedChildrenChangedAccessibilityEvent);
 
@@ -219,18 +232,12 @@ class AutocompleteController : public AutocompleteProviderListener,
   // relevance before this is called.
   void UpdateAssociatedKeywords(AutocompleteResult* result);
 
-  // Called for zero-prefix suggestions only.
-  // - Updates |result| with suggestion group ID to header mapping information.
-  // - Ensures matches that belong to a group appear at the bottom.
-  // Remote zero-prefix suggestions may be backfilled with local zero-prefix
-  // suggestions if there are not enough of them to fill all the available
-  // slots. However this cannot be done when remote reactive zero-prefix
-  // suggestions (aka rZPS) are present (i.e., there are suggestions with a
-  // |suggestion_groupd_id|), as those must appear under a header for
-  // transparency reasons. Hence we demote grouped matches to the bottom here.
-  // This function makes an implicit assumption that remote non-rZPS are not
-  // grouped. Otherwise local ZPS would appear at the top of the list.
-  void UpdateHeaders(AutocompleteResult* result);
+  // Updates |result| with the suggestion group ID to header string mapping as
+  // well as the set of hidden suggestion group IDs.
+  // Called for zero-prefix suggestions only. This call is followed by
+  // AutocompleteResult::GroupAndDemoteMatchesWithHeaders() which groups and
+  // demotes matches with suggestion group IDs to the bottom of the result set.
+  void UpdateHeaderInfoFromZeroSuggestProvider(AutocompleteResult* result);
 
   // For each group of contiguous matches from the same TemplateURL, show the
   // provider name as a description on the first match in the group.
@@ -289,6 +296,8 @@ class AutocompleteController : public AutocompleteProviderListener,
 
   OnDeviceHeadProvider* on_device_head_provider_;
 
+  ClipboardProvider* clipboard_provider_;
+
   // Input passed to Start.
   AutocompleteInput input_;
 
@@ -314,12 +323,11 @@ class AutocompleteController : public AutocompleteProviderListener,
   // Timer used to tell the providers to Stop() searching for matches.
   base::OneShotTimer stop_timer_;
 
-  // Amount of time (in ms) between when the user stops typing and
-  // when we send Stop() to every provider.  This is intended to avoid
-  // the disruptive effect of belated omnibox updates, updates that
-  // come after the user has had to time to read the whole dropdown
-  // and doesn't expect it to change.
-  const base::TimeDelta stop_timer_duration_;
+  // Amount of time between when the user stops typing and when we send Stop()
+  // to every provider.  This is intended to avoid the disruptive effect of
+  // belated omnibox updates, updates that come after the user has had to time
+  // to read the whole dropdown and doesn't expect it to change.
+  base::TimeDelta stop_timer_duration_;
 
   // True if a query is not currently running.
   bool done_;
@@ -338,8 +346,6 @@ class AutocompleteController : public AutocompleteProviderListener,
   bool search_service_worker_signal_sent_;
 
   TemplateURLService* template_url_service_;
-
-  DISALLOW_COPY_AND_ASSIGN(AutocompleteController);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_CONTROLLER_H_

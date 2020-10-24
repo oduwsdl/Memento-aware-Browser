@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
+import {$$, BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
 import {assertNotStyle, assertStyle, createTestProxy, keydown} from 'chrome://test/new_tab_page/test_support.js';
 import {eventToPromise, flushTasks} from 'chrome://test/test_util.m.js';
@@ -60,6 +60,7 @@ suite('NewTabPageMostVisitedTest', () => {
         url: {url: `https://${char}/`},
         source: i,
         titleSource: i,
+        isQueryTile: false,
         dataGenerationTime: {internalValue: 0},
       };
     });
@@ -238,8 +239,8 @@ suite('NewTabPageMostVisitedTest', () => {
     assertEquals(0, queryAll('.tile[hidden]').length);
     assertAddShortcutHidden();
     await addTiles(11, /* customLinksEnabled */ false);
-    assertEquals(10, queryTiles().length);
-    assertEquals(2, queryAll('.tile[hidden]').length);
+    assertEquals(8, queryTiles().length);
+    assertEquals(0, queryAll('.tile[hidden]').length);
     assertAddShortcutHidden();
     await addTiles(11, /* customLinksEnabled */ true);
     assertEquals(10, queryTiles().length);
@@ -259,12 +260,15 @@ suite('NewTabPageMostVisitedTest', () => {
     await addTiles(1);
     assertEquals(1, queryTiles().length);
     assertEquals(0, queryAll('.tile[hidden]').length);
+    assertTrue(mostVisited.visible_);
     await addTiles(1, /* customLinksEnabled */ true, /* visible */ false);
     assertEquals(1, queryTiles().length);
-    assertEquals(1, queryAll('.tile[hidden]').length);
+    assertEquals(0, queryAll('.tile[hidden]').length);
+    assertFalse(mostVisited.visible_);
     await addTiles(1, /* customLinksEnabled */ true, /* visible */ true);
     assertEquals(1, queryTiles().length);
     assertEquals(0, queryAll('.tile[hidden]').length);
+    assertTrue(mostVisited.visible_);
   });
 
   test('dialog opens when add shortcut clicked', () => {
@@ -383,6 +387,28 @@ suite('NewTabPageMostVisitedTest', () => {
       assertTrue(mostVisited.$.toast.open);
     });
 
+    test('toast has undo buttons when action successful', async () => {
+      testProxy.handler.setResultFor('addMostVisitedTile', Promise.resolve({
+        success: true,
+      }));
+      inputUrl.value = 'url';
+      saveButton.click();
+      await testProxy.handler.whenCalled('addMostVisitedTile');
+      await flushTasks();
+      assertFalse($$(mostVisited, '#undo').hidden);
+    });
+
+    test('toast has no undo buttons when action successful', async () => {
+      testProxy.handler.setResultFor('addMostVisitedTile', Promise.resolve({
+        success: false,
+      }));
+      inputUrl.value = 'url';
+      saveButton.click();
+      await testProxy.handler.whenCalled('addMostVisitedTile');
+      await flushTasks();
+      assertFalse(!!$$(mostVisited, '#undo'));
+    });
+
     test('save name and URL', async () => {
       inputName.value = 'name';
       inputUrl.value = 'https://url/';
@@ -427,6 +453,15 @@ suite('NewTabPageMostVisitedTest', () => {
       assertFalse(inputUrl.invalid);
       saveButton.click();
       assertTrue(inputUrl.invalid);
+    });
+
+    test('invalid cleared when text entered', () => {
+      inputUrl.value = '%';
+      assertFalse(inputUrl.invalid);
+      saveButton.click();
+      assertTrue(inputUrl.invalid);
+      inputUrl.value = '';
+      assertFalse(inputUrl.invalid);
     });
   });
 
@@ -613,6 +648,10 @@ suite('NewTabPageMostVisitedTest', () => {
   test('drag first tile to second position', async () => {
     await addTiles(2);
     const [first, second] = queryTiles();
+    assertEquals('https://a/', first.href);
+    assertTrue(first.draggable);
+    assertEquals('https://b/', second.href);
+    assertTrue(second.draggable);
     const firstRect = first.getBoundingClientRect();
     const secondRect = second.getBoundingClientRect();
     first.dispatchEvent(new DragEvent('dragstart', {
@@ -637,6 +676,10 @@ suite('NewTabPageMostVisitedTest', () => {
   test('drag second tile to first position', async () => {
     await addTiles(2);
     const [first, second] = queryTiles();
+    assertEquals('https://a/', first.href);
+    assertTrue(first.draggable);
+    assertEquals('https://b/', second.href);
+    assertTrue(second.draggable);
     const firstRect = first.getBoundingClientRect();
     const secondRect = second.getBoundingClientRect();
     second.dispatchEvent(new DragEvent('dragstart', {
@@ -658,6 +701,31 @@ suite('NewTabPageMostVisitedTest', () => {
     assertEquals('https://a/', newSecond.href);
   });
 
+  test('most visited tiles are not draggable', async () => {
+    await addTiles(2, /* customLinksEnabled= */ false);
+    const [first, second] = queryTiles();
+    assertEquals('https://a/', first.href);
+    assertFalse(first.draggable);
+    assertEquals('https://b/', second.href);
+    assertFalse(second.draggable);
+
+    const firstRect = first.getBoundingClientRect();
+    const secondRect = second.getBoundingClientRect();
+    first.dispatchEvent(new DragEvent('dragstart', {
+      clientX: firstRect.x + firstRect.width / 2,
+      clientY: firstRect.y + firstRect.height / 2,
+    }));
+    document.dispatchEvent(new DragEvent('dragend', {
+      clientX: secondRect.x + 1,
+      clientY: secondRect.y + 1,
+    }));
+    await flushTasks();
+    assertEquals(0, testProxy.handler.getCallCount('reorderMostVisitedTile'));
+    const [newFirst, newSecond] = queryTiles();
+    assertEquals('https://a/', newFirst.href);
+    assertEquals('https://b/', newSecond.href);
+  });
+
   test('RIGHT_TO_LEFT tile title text direction', async () => {
     const tilesRendered = eventToPromise('dom-change', mostVisited.$.tiles);
     testProxy.callbackRouterRemote.setMostVisitedInfo({
@@ -668,6 +736,7 @@ suite('NewTabPageMostVisitedTest', () => {
         url: {url: 'https://url/'},
         source: 0,
         titleSource: 0,
+        isQueryTile: false,
         dataGenerationTime: {internalValue: 0},
       }],
       visible: true,
@@ -689,6 +758,7 @@ suite('NewTabPageMostVisitedTest', () => {
         url: {url: 'https://url/'},
         source: 0,
         titleSource: 0,
+        isQueryTile: false,
         dataGenerationTime: {internalValue: 0},
       }],
       visible: true,
@@ -738,6 +808,7 @@ suite('NewTabPageMostVisitedTest', () => {
     });
     queryAll('.tile-title span').forEach(tile => {
       assertStyle(tile, 'text-shadow', 'none');
+      assertStyle(tile, 'color', 'rgb(60, 64, 67)');
     });
   });
 
@@ -759,6 +830,7 @@ suite('NewTabPageMostVisitedTest', () => {
       url: {url: 'https://a/'},
       source: 0,
       titleSource: 0,
+      isQueryTile: false,
       dataGenerationTime: {internalValue: 0},
     });
     assertDeepEquals(tiles[1], {
@@ -767,6 +839,7 @@ suite('NewTabPageMostVisitedTest', () => {
       url: {url: 'https://b/'},
       source: 1,
       titleSource: 1,
+      isQueryTile: false,
       dataGenerationTime: {internalValue: 0},
     });
   });
@@ -791,6 +864,7 @@ suite('NewTabPageMostVisitedTest', () => {
       url: {url: 'https://a/'},
       source: 0,
       titleSource: 0,
+      isQueryTile: false,
       dataGenerationTime: {internalValue: 0},
     });
   });

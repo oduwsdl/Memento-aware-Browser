@@ -12,6 +12,7 @@
 #include "content/browser/web_package/signed_exchange_prefetch_handler.h"
 #include "content/browser/web_package/signed_exchange_prefetch_metric_recorder.h"
 #include "content/browser/web_package/signed_exchange_utils.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/common/content_features.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
@@ -43,7 +44,6 @@ PrefetchURLLoader::PrefetchURLLoader(
         signed_exchange_prefetch_metric_recorder,
     scoped_refptr<PrefetchedSignedExchangeCache>
         prefetched_signed_exchange_cache,
-    base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
     const std::string& accept_langs,
     RecursivePrefetchTokenGenerator recursive_prefetch_token_generator)
     : frame_tree_node_id_(frame_tree_node_id),
@@ -137,10 +137,8 @@ void PrefetchURLLoader::OnReceiveResponse(
       signed_exchange_utils::ShouldHandleAsSignedHTTPExchange(
           resource_request_.url, *response)) {
     DCHECK(!signed_exchange_prefetch_handler_);
-    if (prefetched_signed_exchange_cache_adapter_) {
-      prefetched_signed_exchange_cache_adapter_->OnReceiveOuterResponse(
-          response.Clone());
-    }
+    const bool keep_entry_for_prefetch_cache =
+        !!prefetched_signed_exchange_cache_adapter_;
     // Note that after this point this doesn't directly get upcalls from the
     // network. (Until |this| calls the handler's FollowRedirect.)
     signed_exchange_prefetch_handler_ =
@@ -149,7 +147,8 @@ void PrefetchURLLoader::OnReceiveResponse(
             mojo::ScopedDataPipeConsumerHandle(), loader_.Unbind(),
             client_receiver_.Unbind(), network_loader_factory_,
             url_loader_throttles_getter_, this,
-            signed_exchange_prefetch_metric_recorder_, accept_langs_);
+            signed_exchange_prefetch_metric_recorder_, accept_langs_,
+            keep_entry_for_prefetch_cache);
     return;
   }
 
@@ -168,12 +167,6 @@ void PrefetchURLLoader::OnReceiveResponse(
     response->recursive_prefetch_token = recursive_prefetch_token;
   }
 
-  if (prefetched_signed_exchange_cache_adapter_ &&
-      signed_exchange_prefetch_handler_) {
-    prefetched_signed_exchange_cache_adapter_->OnReceiveInnerResponse(
-        response.Clone());
-  }
-
   forwarding_client_->OnReceiveResponse(std::move(response));
 }
 
@@ -182,10 +175,9 @@ void PrefetchURLLoader::OnReceiveRedirect(
     network::mojom::URLResponseHeadPtr head) {
   if (prefetched_signed_exchange_cache_adapter_ &&
       signed_exchange_prefetch_handler_) {
-    prefetched_signed_exchange_cache_adapter_->OnReceiveRedirect(
-        redirect_info.new_url,
-        signed_exchange_prefetch_handler_->ComputeHeaderIntegrity(),
-        signed_exchange_prefetch_handler_->GetSignatureExpireTime());
+    prefetched_signed_exchange_cache_adapter_->OnReceiveSignedExchange(
+        signed_exchange_prefetch_handler_
+            ->TakePrefetchedSignedExchangeCacheEntry());
   }
 
   resource_request_.url = redirect_info.new_url;

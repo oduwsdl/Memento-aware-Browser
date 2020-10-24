@@ -15,7 +15,6 @@
 #include "components/autofill/core/browser/payments/full_card_request.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/risk_data_loader.h"
-#include "ui/views/controls/combobox/combobox_listener.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 
 namespace autofill {
@@ -40,13 +39,12 @@ class CvcUnmaskViewController
     : public PaymentRequestSheetController,
       public autofill::RiskDataLoader,
       public autofill::payments::FullCardRequest::UIDelegate,
-      public views::ComboboxListener,
       public views::TextfieldController {
  public:
   CvcUnmaskViewController(
-      PaymentRequestSpec* spec,
-      PaymentRequestState* state,
-      PaymentRequestDialogView* dialog,
+      base::WeakPtr<PaymentRequestSpec> spec,
+      base::WeakPtr<PaymentRequestState> state,
+      base::WeakPtr<PaymentRequestDialogView> dialog,
       const autofill::CreditCard& credit_card,
       base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
           result_delegate,
@@ -69,9 +67,11 @@ class CvcUnmaskViewController
   // PaymentRequestSheetController:
   base::string16 GetSheetTitle() override;
   void FillContentView(views::View* content_view) override;
-  std::unique_ptr<views::Button> CreatePrimaryButton() override;
+  base::string16 GetPrimaryButtonLabel() override;
+  views::Button::PressedCallback GetPrimaryButtonCallback() override;
+  int GetPrimaryButtonId() override;
+  bool GetPrimaryButtonEnabled() override;
   bool ShouldShowSecondaryButton() override;
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
   // Called when the user confirms their CVC. This will pass the value to the
@@ -87,12 +87,14 @@ class CvcUnmaskViewController
   bool GetSheetId(DialogViewID* sheet_id) override;
   views::View* GetFirstFocusedView() override;
 
+  // PaymentRequestSheetController:
+  void BackButtonPressed() override;
+
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
                        const base::string16& new_contents) override;
 
-  // views::ComboboxListener:
-  void OnPerformAction(views::Combobox* combobox) override;
+  void OnPerformAction();
 
   autofill::MonthComboboxModel month_combobox_model_;
   autofill::YearComboboxModel year_combobox_model_;

@@ -15,6 +15,7 @@ import androidx.annotation.VisibleForTesting;
 import com.google.android.gms.auth.api.phone.SmsRetriever;
 import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.common.api.Status;
+import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.Task;
 
 import org.chromium.base.ContextUtils;
@@ -32,19 +33,19 @@ import org.chromium.ui.base.WindowAndroid;
 @JNINamespace("content")
 @JNIAdditionalImport(Wrappers.class)
 public class SmsUserConsentReceiver extends BroadcastReceiver {
-    private static final String TAG = "SmsUserConsentReceiver";
+    private static final String TAG = "SmsUserConsentRcvr";
     private static final boolean DEBUG = false;
     private final long mSmsProviderAndroid;
     private boolean mDestroyed;
     private Wrappers.SmsRetrieverClientWrapper mClient;
-    private Wrappers.SmsReceiverContext mContext;
+    private Wrappers.WebOTPServiceContext mContext;
     private WindowAndroid mWindowAndroid;
 
     private SmsUserConsentReceiver(long smsProviderAndroid) {
         mDestroyed = false;
         mSmsProviderAndroid = smsProviderAndroid;
 
-        mContext = new Wrappers.SmsReceiverContext(ContextUtils.getApplicationContext());
+        mContext = new Wrappers.WebOTPServiceContext(ContextUtils.getApplicationContext());
 
         // A broadcast receiver is registered upon the creation of this class
         // which happens when the SMS Retriever API is used for the first time
@@ -123,6 +124,7 @@ public class SmsUserConsentReceiver extends BroadcastReceiver {
             SmsUserConsentReceiverJni.get().onReceive(mSmsProviderAndroid, message);
         } else if (resultCode == Activity.RESULT_CANCELED) {
             if (DEBUG) Log.d(TAG, "Activity result cancelled.");
+            SmsUserConsentReceiverJni.get().onCancel(mSmsProviderAndroid);
         }
     }
 
@@ -130,6 +132,13 @@ public class SmsUserConsentReceiver extends BroadcastReceiver {
     private void listen(WindowAndroid windowAndroid) {
         mWindowAndroid = windowAndroid;
         Task<Void> task = getClient().startSmsUserConsent(null);
+
+        task.addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(Exception e) {
+                Log.e(TAG, "Task failed to start", e);
+            }
+        });
         if (DEBUG) Log.d(TAG, "Installed task");
     }
 
@@ -153,5 +162,6 @@ public class SmsUserConsentReceiver extends BroadcastReceiver {
     interface Natives {
         void onReceive(long nativeSmsProviderGmsUserConsent, String sms);
         void onTimeout(long nativeSmsProviderGmsUserConsent);
+        void onCancel(long nativeSmsProviderGmsUserConsent);
     }
 }

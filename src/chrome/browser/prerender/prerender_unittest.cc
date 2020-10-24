@@ -27,22 +27,24 @@
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/loading_test_util.h"
-#include "chrome/browser/prerender/prerender_contents.h"
-#include "chrome/browser/prerender/prerender_field_trial.h"
-#include "chrome/browser/prerender/prerender_handle.h"
-#include "chrome/browser/prerender/prerender_link_manager.h"
-#include "chrome/browser/prerender/prerender_manager.h"
+#include "chrome/browser/prerender/chrome_prerender_manager_delegate.h"
 #include "chrome/browser/prerender/prerender_test_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/prerender_util.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/prerender/browser/prerender_contents.h"
+#include "components/prerender/browser/prerender_field_trial.h"
+#include "components/prerender/browser/prerender_handle.h"
+#include "components/prerender/browser/prerender_link_manager.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "components/prerender/common/prerender_origin.h"
 #include "components/prerender/common/prerender_types.mojom.h"
+#include "components/prerender/common/prerender_util.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
@@ -51,7 +53,6 @@
 #include "net/http/http_cache.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/prerender/prerender_rel_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
@@ -67,12 +68,13 @@ class UnitTestPrerenderManager;
 
 namespace {
 
-class DummyPrerenderHandleClient : public blink::mojom::PrerenderHandleClient {
+class DummyPrerenderProcessorClient
+    : public blink::mojom::PrerenderProcessorClient {
  public:
-  DummyPrerenderHandleClient() = default;
-  ~DummyPrerenderHandleClient() override = default;
+  DummyPrerenderProcessorClient() = default;
+  ~DummyPrerenderProcessorClient() override = default;
 
-  // blink::mojom::PrerenderHandleClient implementation
+  // blink::mojom::PrerenderProcessorClient implementation
   void OnPrerenderStart() override {}
   void OnPrerenderStopLoading() override {}
   void OnPrerenderDomContentLoaded() override {}
@@ -92,18 +94,6 @@ class DummyPrerenderContents : public PrerenderContents {
   void StartPrerendering(
       const gfx::Rect& bounds,
       content::SessionStorageNamespace* session_storage_namespace) override;
-
-  bool GetChildId(int* child_id) const override {
-    // Having a default child_id of -1 forces pending prerenders not to fail
-    // on session storage and cross domain checking.
-    *child_id = -1;
-    return true;
-  }
-
-  bool GetRouteId(int* route_id) const override {
-    *route_id = route_id_;
-    return true;
-  }
 
   FinalStatus expected_final_status() const { return expected_final_status_; }
 
@@ -147,8 +137,6 @@ int DummyPrerenderContents::g_next_route_id_ = 0;
 
 const gfx::Size kDefaultViewSize(640, 480);
 
-const uint32_t kDefaultRelTypes = blink::kPrerenderRelTypePrerender;
-
 }  // namespace
 
 class UnitTestPrerenderManager : public PrerenderManager {
@@ -157,7 +145,9 @@ class UnitTestPrerenderManager : public PrerenderManager {
   using PrerenderManager::kNavigationRecordWindowMs;
 
   explicit UnitTestPrerenderManager(Profile* profile)
-      : PrerenderManager(profile) {
+      : PrerenderManager(
+            profile,
+            std::make_unique<ChromePrerenderManagerDelegate>(profile)) {
     set_rate_limit_enabled(false);
   }
 
@@ -196,7 +186,7 @@ class UnitTestPrerenderManager : public PrerenderManager {
         prerender_data->ReleaseContents();
     active_prerenders_.erase(to_erase);
 
-    prerender_contents->PrepareForUse();
+    prerender_contents->MarkAsUsedForTesting();
     return prerender_contents;
   }
 
@@ -306,7 +296,8 @@ DummyPrerenderContents::DummyPrerenderContents(
     Origin origin,
     const base::Optional<url::Origin>& initiator_origin,
     FinalStatus expected_final_status)
-    : PrerenderContents(test_prerender_manager,
+    : PrerenderContents(std::make_unique<ChromePrerenderContentsDelegate>(),
+                        test_prerender_manager,
                         nullptr,
                         url,
                         Referrer(),
@@ -396,31 +387,26 @@ class PrerenderTest : public testing::Test {
                     const GURL& initiator_url,
                     int render_process_id,
                     int render_view_id) {
-    blink::mojom::PrerenderAttributesPtr attributes =
-        blink::mojom::PrerenderAttributes::New();
+    auto attributes = blink::mojom::PrerenderAttributes::New();
     attributes->url = url;
-    attributes->rel_types = kDefaultRelTypes;
+    attributes->rel_type = blink::mojom::PrerenderRelType::kPrerender;
     attributes->referrer = blink::mojom::Referrer::New(
         initiator_url, network::mojom::ReferrerPolicy::kDefault);
-    attributes->initiator_origin = url::Origin::Create(initiator_url);
     attributes->view_size = kDefaultViewSize;
 
-    mojo::PendingRemote<blink::mojom::PrerenderHandleClient> handle_client;
-    clients_.Add(std::make_unique<DummyPrerenderHandleClient>(),
-                 handle_client.InitWithNewPipeAndPassReceiver());
-
-    mojo::PendingRemote<blink::mojom::PrerenderHandle> handle;
+    mojo::PendingRemote<blink::mojom::PrerenderProcessorClient>
+        processor_client;
+    clients_.Add(std::make_unique<DummyPrerenderProcessorClient>(),
+                 processor_client.InitWithNewPipeAndPassReceiver());
 
     // This could delete an existing prerender as a side-effect.
-    bool added = prerender_link_manager()->OnAddPrerender(
-        render_process_id, render_view_id, std::move(attributes),
-        std::move(handle_client), handle.InitWithNewPipeAndPassReceiver());
-
-    // We don't care about retaining the |handle|, so just let it be discarded.
-    // The PrerenderLinkManager won't care.
+    base::Optional<int> prerender_id =
+        prerender_link_manager()->OnStartPrerender(
+            render_process_id, render_view_id, std::move(attributes),
+            url::Origin::Create(initiator_url), std::move(processor_client));
 
     // Check if the new prerender request was added and running.
-    return added && LastPrerenderIsRunning();
+    return prerender_id && LastPrerenderIsRunning();
   }
 
   // Shorthand to add a simple prerender with a reasonable source. Returns
@@ -443,25 +429,25 @@ class PrerenderTest : public testing::Test {
   void AbandonFirstPrerender() {
     CHECK(!prerender_link_manager()->prerenders_.empty());
     prerender_link_manager()->OnAbandonPrerender(
-        prerender_link_manager()->prerenders_.front().get());
+        prerender_link_manager()->prerenders_.front()->prerender_id);
   }
 
   void AbandonLastPrerender() {
     CHECK(!prerender_link_manager()->prerenders_.empty());
     prerender_link_manager()->OnAbandonPrerender(
-        prerender_link_manager()->prerenders_.back().get());
+        prerender_link_manager()->prerenders_.back()->prerender_id);
   }
 
   void CancelFirstPrerender() {
     CHECK(!prerender_link_manager()->prerenders_.empty());
     prerender_link_manager()->OnCancelPrerender(
-        prerender_link_manager()->prerenders_.front().get());
+        prerender_link_manager()->prerenders_.front()->prerender_id);
   }
 
   void CancelLastPrerender() {
     CHECK(!prerender_link_manager()->prerenders_.empty());
     prerender_link_manager()->OnCancelPrerender(
-        prerender_link_manager()->prerenders_.back().get());
+        prerender_link_manager()->prerenders_.back()->prerender_id);
   }
 
   void DisablePrerender() {
@@ -476,7 +462,7 @@ class PrerenderTest : public testing::Test {
         chrome_browser_net::NETWORK_PREDICTION_ALWAYS);
   }
 
-  void DisconnectAllPrerenderHandleClients() { clients_.Clear(); }
+  void DisconnectAllPrerenderProcessorClients() { clients_.Clear(); }
 
   const base::HistogramTester& histogram_tester() { return histogram_tester_; }
 
@@ -489,7 +475,7 @@ class PrerenderTest : public testing::Test {
   std::unique_ptr<UnitTestPrerenderManager> prerender_manager_;
   std::unique_ptr<PrerenderLinkManager> prerender_link_manager_;
   base::HistogramTester histogram_tester_;
-  mojo::UniqueReceiverSet<blink::mojom::PrerenderHandleClient> clients_;
+  mojo::UniqueReceiverSet<blink::mojom::PrerenderProcessorClient> clients_;
 
   // Restore prerender mode after this test finishes running.
   test_utils::RestorePrerenderMode restore_prerender_mode_;
@@ -497,9 +483,9 @@ class PrerenderTest : public testing::Test {
 
 TEST_F(PrerenderTest, RespectsThirdPartyCookiesPref) {
   GURL url("http://www.google.com/");
-  ASSERT_TRUE(IsNoStatePrefetchEnabled());
-
-  profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  profile()->GetPrefs()->SetInteger(
+      prefs::kCookieControlsMode,
+      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
   EXPECT_FALSE(AddSimplePrerender(url));
   histogram_tester().ExpectUniqueSample(
       "Prerender.FinalStatus", FINAL_STATUS_BLOCK_THIRD_PARTY_COOKIES, 1);
@@ -663,7 +649,6 @@ TEST_F(PrerenderTest, PredictorPrefetchHoldbackOffPredictorReferrer) {
 // Flaky on Android and Mac, crbug.com/1087876.
 TEST_F(PrerenderTest, DISABLED_PrerenderDisabledOnLowEndDevice) {
   GURL url("http://www.google.com/");
-  ASSERT_TRUE(IsNoStatePrefetchEnabled());
   prerender_manager()->SetIsLowEndDevice(true);
   EXPECT_FALSE(AddSimplePrerender(url));
   histogram_tester().ExpectUniqueSample("Prerender.FinalStatus",
@@ -993,8 +978,8 @@ TEST_F(PrerenderTest, MaxConcurrencyTest) {
   }
 }
 
-TEST_F(PrerenderTest, AliasURLTest) {
-  ASSERT_TRUE(IsNoStatePrefetchEnabled());
+// Flaky on Android: https://crbug.com/1105908
+TEST_F(PrerenderTest, DISABLED_AliasURLTest) {
   SetConcurrency(7);
 
   GURL url("http://www.google.com/");
@@ -1039,107 +1024,6 @@ TEST_F(PrerenderTest, AliasURLTest) {
   EXPECT_TRUE(AddSimplePrerender(alias_url2));
   entry = prerender_manager()->FindAndUseEntry(url);
   ASSERT_EQ(prerender_contents, entry.get());
-}
-
-TEST_F(PrerenderTest, PendingPrerenderTest) {
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(url, FINAL_STATUS_USED);
-  EXPECT_TRUE(AddSimplePrerender(url));
-
-  int child_id;
-  int route_id;
-  ASSERT_TRUE(prerender_contents->GetChildId(&child_id));
-  ASSERT_TRUE(prerender_contents->GetRouteId(&route_id));
-
-  GURL pending_url("http://news.google.com/");
-
-  // Schedule a pending prerender launched from the prerender.
-  DummyPrerenderContents* pending_prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          pending_url, url::Origin::Create(GURL("https://www.google.com")),
-          ORIGIN_GWS_PRERENDER, FINAL_STATUS_USED);
-  AddPrerender(pending_url, url, child_id, route_id);
-
-  EXPECT_FALSE(LastPrerenderIsRunning());
-  EXPECT_FALSE(pending_prerender_contents->prerendering_has_started());
-
-  // Use the referring prerender.
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  std::unique_ptr<PrerenderContents> entry =
-      prerender_manager()->FindAndUseEntry(url);
-  ASSERT_EQ(prerender_contents, entry.get());
-
-  // The pending prerender should start now.
-  EXPECT_TRUE(LastPrerenderIsRunning());
-  EXPECT_TRUE(pending_prerender_contents->prerendering_has_started());
-  entry = prerender_manager()->FindAndUseEntry(pending_url);
-  ASSERT_EQ(pending_prerender_contents, entry.get());
-}
-
-TEST_F(PrerenderTest, InvalidPendingPrerenderTest) {
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(url, FINAL_STATUS_USED);
-  EXPECT_TRUE(AddSimplePrerender(url));
-
-  int child_id;
-  int route_id;
-  ASSERT_TRUE(prerender_contents->GetChildId(&child_id));
-  ASSERT_TRUE(prerender_contents->GetRouteId(&route_id));
-
-  // This pending URL has an unsupported scheme, and won't be able
-  // to start.
-  GURL pending_url("ftp://news.google.com/");
-
-  // Schedule a pending prerender launched from the prerender.
-  DummyPrerenderContents* pending_prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          pending_url, url::Origin::Create(GURL("https://www.google.com")),
-          ORIGIN_GWS_PRERENDER, FINAL_STATUS_UNSUPPORTED_SCHEME);
-  AddPrerender(pending_url, url, child_id, route_id);
-  EXPECT_FALSE(LastPrerenderIsRunning());
-  EXPECT_FALSE(pending_prerender_contents->prerendering_has_started());
-
-  // Use the referring prerender.
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  std::unique_ptr<PrerenderContents> entry =
-      prerender_manager()->FindAndUseEntry(url);
-  ASSERT_EQ(prerender_contents, entry.get());
-
-  // The pending prerender still doesn't start.
-  EXPECT_FALSE(LastPrerenderExists());
-  EXPECT_FALSE(pending_prerender_contents->prerendering_has_started());
-}
-
-TEST_F(PrerenderTest, CancelPendingPrerenderTest) {
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(url, FINAL_STATUS_USED);
-  EXPECT_TRUE(AddSimplePrerender(url));
-
-  int child_id;
-  int route_id;
-  ASSERT_TRUE(prerender_contents->GetChildId(&child_id));
-  ASSERT_TRUE(prerender_contents->GetRouteId(&route_id));
-
-  GURL pending_url("http://news.google.com/");
-
-  // Schedule a pending prerender launched from the prerender.
-  AddPrerender(pending_url, url, child_id, route_id);
-  EXPECT_FALSE(LastPrerenderIsRunning());
-
-  // Cancel the pending prerender.
-  CancelLastPrerender();
-
-  // Use the referring prerender.
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  std::unique_ptr<PrerenderContents> entry =
-      prerender_manager()->FindAndUseEntry(url);
-  ASSERT_EQ(prerender_contents, entry.get());
-
-  // The pending prerender doesn't start.
-  EXPECT_FALSE(LastPrerenderExists());
 }
 
 // Tests that prerendering is cancelled when the source render view does not
@@ -1539,7 +1423,8 @@ TEST_F(PrerenderTest, LinkManagerAbandonThenCancel) {
 
 // Flaky on Android, crbug.com/1087876.
 // Flaky on Mac and Linux, crbug.com/1087735.
-#if defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_ANDROID) || defined(OS_MAC) || defined(OS_LINUX) || \
+    defined(OS_CHROMEOS)
 #define MAYBE_LinkManagerAddTwiceCancelTwice \
   DISABLED_LinkManagerAddTwiceCancelTwice
 #else
@@ -1576,15 +1461,8 @@ TEST_F(PrerenderTest, MAYBE_LinkManagerAddTwiceCancelTwice) {
 
 // TODO(gavinp): Update this test after abandon has an effect on Prerenders,
 // like shortening the timeouts.
-// Flaky on Android, crbug.com/1087876.
-#if defined(OS_ANDROID)
-#define MAYBE_LinkManagerAddTwiceAbandonTwiceUseTwice \
-  DISABLED_LinkManagerAddTwiceAbandonTwiceUseTwice
-#else
-#define MAYBE_LinkManagerAddTwiceAbandonTwiceUseTwice \
-  LinkManagerAddTwiceAbandonTwiceUseTwice
-#endif
-TEST_F(PrerenderTest, MAYBE_LinkManagerAddTwiceAbandonTwiceUseTwice) {
+// Flaky on Android and Linux, crbug.com/1087876 & crbug.com/1087736.
+TEST_F(PrerenderTest, DISABLED_LinkManagerAddTwiceAbandonTwiceUseTwice) {
   SetConcurrency(2);
   EXPECT_TRUE(IsEmptyPrerenderLinkManager());
   GURL url("http://www.myexample.com");
@@ -1706,7 +1584,7 @@ TEST_F(PrerenderTest, LinkManagerRendererDisconnect) {
 
   // Disconnect all clients. Spin the run loop to give the link manager
   // opportunity to detect disconnection.
-  DisconnectAllPrerenderHandleClients();
+  DisconnectAllPrerenderProcessorClients();
   base::RunLoop().RunUntilIdle();
 
   tick_clock()->Advance(prerender_manager()->config().abandon_time_to_live +
@@ -1746,68 +1624,6 @@ TEST_F(PrerenderTest, DISABLED_LinkManagerAbandonInactivePrerender) {
   EXPECT_FALSE(prerender_manager()->FindEntry(first_url));
   EXPECT_FALSE(prerender_manager()->FindEntry(second_url));
   EXPECT_TRUE(IsEmptyPrerenderLinkManager());
-}
-
-// Creates two prerenders, the second one started by the first, both of which
-// should be blocked by max_concurrency; abandons both of them and waits to make
-// sure both are cleared from the PrerenderLinkManager.
-TEST_F(PrerenderTest, LinkManagerClearOnPendingAbandon) {
-  base::TimeDelta prefetch_age;
-  FinalStatus final_status;
-  Origin origin;
-
-  prerender_manager()->SetTickClockForTesting(tick_clock());
-  SetConcurrency(1);
-  ASSERT_LT(prerender_manager()->config().abandon_time_to_live,
-            prerender_manager()->config().time_to_live);
-  GURL first_url("http://www.myexample.com");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(first_url,
-                                                       FINAL_STATUS_TIMED_OUT);
-  EXPECT_TRUE(AddSimplePrerender(first_url));
-
-  int child_id;
-  int route_id;
-  ASSERT_TRUE(prerender_contents->GetChildId(&child_id));
-  ASSERT_TRUE(prerender_contents->GetRouteId(&route_id));
-
-  GURL pending_url("http://www.neverlaunched.com");
-  AddPrerender(pending_url, first_url, child_id, route_id);
-
-  EXPECT_FALSE(IsEmptyPrerenderLinkManager());
-
-  EXPECT_EQ(prerender_contents, prerender_manager()->FindEntry(first_url));
-  EXPECT_FALSE(prerender_manager()->FindEntry(pending_url));
-
-  AbandonFirstPrerender();
-  AbandonFirstPrerender();
-
-  EXPECT_TRUE(prerender_manager()->GetPrefetchInformation(
-      first_url, &prefetch_age, &final_status, &origin));
-  EXPECT_EQ(base::TimeDelta(), prefetch_age);
-  EXPECT_EQ(prerender::FINAL_STATUS_UNKNOWN, final_status);
-  EXPECT_EQ(prerender::ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN, origin);
-
-  const base::TimeDelta advance_duration =
-      prerender_manager()->config().abandon_time_to_live +
-      TimeDelta::FromSeconds(1);
-  tick_clock()->Advance(advance_duration);
-  EXPECT_FALSE(prerender_manager()->FindEntry(first_url));
-  EXPECT_FALSE(prerender_manager()->FindEntry(pending_url));
-  EXPECT_TRUE(IsEmptyPrerenderLinkManager());
-
-  EXPECT_TRUE(prerender_manager()->GetPrefetchInformation(
-      first_url, &prefetch_age, &final_status, &origin));
-  EXPECT_EQ(advance_duration, prefetch_age);
-  EXPECT_EQ(prerender::FINAL_STATUS_TIMED_OUT, final_status);
-  EXPECT_EQ(prerender::ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN, origin);
-
-  EXPECT_FALSE(prerender_manager()->GetPrefetchInformation(
-      pending_url, &prefetch_age, &final_status, &origin));
-
-  EXPECT_FALSE(prerender_manager()->GetPrefetchInformation(
-      GURL("https://not-prefetched.com/"), &prefetch_age, &final_status,
-      &origin));
 }
 
 // Creates two prerenders, one of which should be blocked by the

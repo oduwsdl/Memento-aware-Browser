@@ -12,7 +12,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "components/prefs/testing_pref_service.h"
 #include "components/services/app_service/app_service_impl.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
@@ -72,7 +71,7 @@ class FakePublisher : public apps::PublisherBase {
 
   void LoadIcon(const std::string& app_id,
                 apps::mojom::IconKeyPtr icon_key,
-                apps::mojom::IconCompression icon_compression,
+                apps::mojom::IconType icon_type,
                 int32_t size_hint_in_dip,
                 bool allow_placeholder_icon,
                 LoadIconCallback callback) override {
@@ -164,16 +163,15 @@ class AppServiceImplTest : public testing::Test {
  protected:
   // base::test::TaskEnvironment task_environment_;
   content::BrowserTaskEnvironment task_environment_;
-  TestingPrefServiceSimple pref_service_;
   base::ScopedTempDir temp_dir_;
 };
 
 TEST_F(AppServiceImplTest, PubSub) {
   const int size_hint_in_dip = 64;
 
-  AppServiceImpl::RegisterProfilePrefs(pref_service_.registry());
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-  AppServiceImpl impl(&pref_service_, temp_dir_.GetPath());
+  AppServiceImpl impl(temp_dir_.GetPath(),
+                      /*is_share_intents_supported=*/false);
 
   // Start with one subscriber.
   FakeSubscriber sub0(&impl);
@@ -249,7 +247,7 @@ TEST_F(AppServiceImplTest, PubSub) {
     constexpr bool allow_placeholder_icon = false;
     impl.LoadIcon(
         app_type, "o", std::move(icon_key),
-        apps::mojom::IconCompression::kUncompressed, size_hint_in_dip,
+        apps::mojom::IconType::kUncompressed, size_hint_in_dip,
         allow_placeholder_icon,
         base::BindOnce(
             [](bool* ran, apps::mojom::IconValuePtr iv) { *ran = true; },
@@ -266,9 +264,9 @@ TEST_F(AppServiceImplTest, PubSub) {
 // is not fixed, please update to the same bug.
 TEST_F(AppServiceImplTest, PreferredApps) {
   // Test Initialize.
-  AppServiceImpl::RegisterProfilePrefs(pref_service_.registry());
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-  AppServiceImpl impl(&pref_service_, temp_dir_.GetPath());
+  AppServiceImpl impl(temp_dir_.GetPath(),
+                      /*is_share_intents_supported=*/false);
   impl.GetPreferredAppsForTesting().Init();
 
   const char kAppId1[] = "abcdefg";
@@ -369,7 +367,6 @@ TEST_F(AppServiceImplTest, PreferredApps) {
 }
 
 TEST_F(AppServiceImplTest, PreferredAppsPersistency) {
-  AppServiceImpl::RegisterProfilePrefs(pref_service_.registry());
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
   const char kAppId1[] = "abcdefg";
@@ -377,12 +374,13 @@ TEST_F(AppServiceImplTest, PreferredAppsPersistency) {
   auto intent_filter = apps_util::CreateIntentFilterForUrlScope(filter_url);
   {
     base::RunLoop run_loop_read;
-    AppServiceImpl impl(&pref_service_, temp_dir_.GetPath(),
-                        run_loop_read.QuitClosure());
+    base::RunLoop run_loop_write;
+    AppServiceImpl impl(temp_dir_.GetPath(),
+                        /*is_share_intents_supported=*/false,
+                        run_loop_read.QuitClosure(),
+                        run_loop_write.QuitClosure());
     impl.FlushMojoCallsForTesting();
     run_loop_read.Run();
-    base::RunLoop run_loop_write;
-    impl.SetWriteCompletedCallbackForTesting(run_loop_write.QuitClosure());
     impl.AddPreferredApp(apps::mojom::AppType::kUnknown, kAppId1,
                          intent_filter->Clone(),
                          apps_util::CreateIntentFromUrl(filter_url),
@@ -393,12 +391,98 @@ TEST_F(AppServiceImplTest, PreferredAppsPersistency) {
   // Create a new impl to initialize preferred apps from the disk.
   {
     base::RunLoop run_loop_read;
-    AppServiceImpl impl(&pref_service_, temp_dir_.GetPath(),
+    AppServiceImpl impl(temp_dir_.GetPath(),
+                        /*is_share_intents_supported=*/false,
                         run_loop_read.QuitClosure());
     impl.FlushMojoCallsForTesting();
     run_loop_read.Run();
     EXPECT_EQ(kAppId1, impl.GetPreferredAppsForTesting().FindPreferredAppForUrl(
                            filter_url));
+  }
+}
+
+TEST_F(AppServiceImplTest, PreferredAppsUpgrade) {
+  ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+
+  const char kAppId1[] = "abcdefg";
+  const char kAppId2[] = "gfedcba";
+  GURL filter_url1 = GURL("https://www.google.com/abc");
+  GURL filter_url2 = GURL("https://www.abc.com");
+  auto intent_filter1 = apps_util::CreateIntentFilterForUrlScope(filter_url1);
+  auto intent_filter1_with_action = apps_util::CreateIntentFilterForUrlScope(
+      filter_url1, /*with_action_view=*/true);
+  auto intent_filter2_with_action = apps_util::CreateIntentFilterForUrlScope(
+      filter_url2, /*with_action_view=*/true);
+  {
+    base::RunLoop run_loop_read;
+    base::RunLoop run_loop_write;
+    AppServiceImpl impl(temp_dir_.GetPath(),
+                        /*is_share_intents_supported=*/false,
+                        run_loop_read.QuitClosure(),
+                        run_loop_write.QuitClosure());
+    impl.FlushMojoCallsForTesting();
+    run_loop_read.Run();
+    impl.AddPreferredApp(apps::mojom::AppType::kUnknown, kAppId1,
+                         intent_filter1->Clone(),
+                         apps_util::CreateIntentFromUrl(filter_url1),
+                         /*from_publisher=*/false);
+    impl.AddPreferredApp(apps::mojom::AppType::kUnknown, kAppId2,
+                         intent_filter2_with_action->Clone(),
+                         apps_util::CreateIntentFromUrl(filter_url2),
+                         /*from_publisher=*/false);
+    run_loop_write.Run();
+    impl.FlushMojoCallsForTesting();
+
+    // If try to remove old intent filter with filter with action, it wouldn't
+    // work.
+    impl.RemovePreferredAppForFilter(apps::mojom::AppType::kUnknown, kAppId1,
+                                     intent_filter1_with_action->Clone());
+    task_environment_.RunUntilIdle();
+    EXPECT_EQ(kAppId1, impl.GetPreferredAppsForTesting().FindPreferredAppForUrl(
+                           filter_url1));
+    EXPECT_EQ(kAppId2, impl.GetPreferredAppsForTesting().FindPreferredAppForUrl(
+                           filter_url2));
+  }
+
+  // Create a new impl with sharing flag on to initialize preferred apps from
+  // the disk.
+  {
+    base::RunLoop run_loop_read;
+    base::RunLoop run_loop_write;
+    AppServiceImpl impl(temp_dir_.GetPath(),
+                        /*is_share_intents_supported=*/true,
+                        run_loop_read.QuitClosure(),
+                        run_loop_write.QuitClosure());
+    impl.FlushMojoCallsForTesting();
+    run_loop_read.Run();
+    EXPECT_EQ(kAppId1, impl.GetPreferredAppsForTesting().FindPreferredAppForUrl(
+                           filter_url1));
+    EXPECT_EQ(kAppId2, impl.GetPreferredAppsForTesting().FindPreferredAppForUrl(
+                           filter_url2));
+    run_loop_write.Run();
+    impl.FlushMojoCallsForTesting();
+  }
+
+  // Create another new impl to read from disk and see if the filter is upgraded
+  // by trying to delete the entry using new filter.
+  {
+    base::RunLoop run_loop_read;
+    AppServiceImpl impl(temp_dir_.GetPath(),
+                        /*is_share_intents_supported=*/false,
+                        run_loop_read.QuitClosure());
+    impl.FlushMojoCallsForTesting();
+    run_loop_read.Run();
+    impl.RemovePreferredAppForFilter(apps::mojom::AppType::kUnknown, kAppId1,
+                                     intent_filter1_with_action->Clone());
+    impl.RemovePreferredAppForFilter(apps::mojom::AppType::kUnknown, kAppId2,
+                                     intent_filter2_with_action->Clone());
+    task_environment_.RunUntilIdle();
+    EXPECT_EQ(
+        base::nullopt,
+        impl.GetPreferredAppsForTesting().FindPreferredAppForUrl(filter_url1));
+    EXPECT_EQ(
+        base::nullopt,
+        impl.GetPreferredAppsForTesting().FindPreferredAppForUrl(filter_url2));
   }
 }
 

@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -20,6 +21,7 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/proto/client_model.pb.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
@@ -62,7 +64,11 @@ const char ModelLoader::kClientModelUrlPrefix[] =
 const char ModelLoader::kClientModelNamePattern[] =
     "client_model_v5%s_variation_%d.pb";
 const char ModelLoader::kClientModelFinchExperiment[] =
+#if BUILDFLAG(FULL_SAFE_BROWSING)
     "ClientSideDetectionModel";
+#else
+    "ClientSideDetectionModelOnAndroid";
+#endif
 const char ModelLoader::kClientModelFinchParam[] =
     "ModelNum";
 const char kUmaModelDownloadResponseMetricName[] =
@@ -78,7 +84,7 @@ int ModelLoader::GetModelNumber() {
       kClientModelFinchExperiment, kClientModelFinchParam);
   int model_number = 0;
   if (!base::StringToInt(num_str, &model_number)) {
-    model_number = 0;  // Default model
+    model_number = 4;  // Default model
   }
   return model_number;
 }
@@ -246,6 +252,8 @@ void ModelLoader::OnURLLoaderComplete(
     model_str_.assign(data);
     model_.swap(model);
     model_status = MODEL_SUCCESS;
+    base::UmaHistogramSparse("SBClientPhishing.ClientModelVersionFetched",
+                             model_->version());
   }
   EndFetch(model_status, max_age);
 }
@@ -309,12 +317,18 @@ void ModelLoader::OverrideModelWithLocalFile() {
 }
 
 void ModelLoader::OnGetOverridenModelData(std::string model_data) {
-  if (model_data.empty())
+  if (model_data.empty()) {
+    VLOG(2) << "Overriden model data is empty";
     return;
+  }
 
   std::unique_ptr<ClientSideModel> model(new ClientSideModel());
-  if (!model->ParseFromArray(model_data.data(), model_data.size()))
+  if (!model->ParseFromArray(model_data.data(), model_data.size())) {
+    VLOG(2) << "Overriden model data is not a valid ClientSideModel proto";
     return;
+  }
+
+  VLOG(2) << "Model overriden successfully";
 
   model_.swap(model);
   model_str_.assign(model_data);

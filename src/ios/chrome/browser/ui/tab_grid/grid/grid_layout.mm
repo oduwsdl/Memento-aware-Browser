@@ -5,24 +5,14 @@
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_layout.h"
 
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_constants.h"
+#import "ios/chrome/browser/ui/tab_grid/grid/reordering_layout_util.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@interface GridLayout ()
-@property(nonatomic, strong) NSArray<NSIndexPath*>* indexPathsOfDeletingItems;
-@property(nonatomic, strong) NSArray<NSIndexPath*>* indexPathsOfInsertingItems;
-@end
-
 @implementation GridLayout
-
-- (instancetype)init {
-  if (self = [super init]) {
-    _animatesItemUpdates = YES;
-  }
-  return self;
-}
 
 #pragma mark - UICollectionViewLayout
 
@@ -74,98 +64,13 @@
     self.sectionInset = kGridLayoutInsetsRegularRegular;
     self.minimumLineSpacing = kGridLayoutLineSpacingRegularRegular;
   }
-}
-
-- (void)prepareForCollectionViewUpdates:
-    (NSArray<UICollectionViewUpdateItem*>*)updateItems {
-  [super prepareForCollectionViewUpdates:updateItems];
-  // Track which items in this update are explicitly being deleted or inserted.
-  NSMutableArray<NSIndexPath*>* deletingItems =
-      [NSMutableArray arrayWithCapacity:updateItems.count];
-  NSMutableArray<NSIndexPath*>* insertingItems =
-      [NSMutableArray arrayWithCapacity:updateItems.count];
-  for (UICollectionViewUpdateItem* item in updateItems) {
-    switch (item.updateAction) {
-      case UICollectionUpdateActionDelete:
-        [deletingItems addObject:item.indexPathBeforeUpdate];
-        break;
-      case UICollectionUpdateActionInsert:
-        [insertingItems addObject:item.indexPathAfterUpdate];
-        break;
-      default:
-        break;
-    }
+  if (IsThumbStripEnabled()) {
+    // When the thumb strip feature is enabled, increase the bottom inset to
+    // account for the bvc on the bottom of the screen.
+    UIEdgeInsets sectionInset = self.sectionInset;
+    sectionInset.bottom += kBVCHeightTabGrid;
+    self.sectionInset = sectionInset;
   }
-  self.indexPathsOfDeletingItems = [deletingItems copy];
-  self.indexPathsOfInsertingItems = [insertingItems copy];
-}
-
-- (UICollectionViewLayoutAttributes*)
-finalLayoutAttributesForDisappearingItemAtIndexPath:
-    (NSIndexPath*)itemIndexPath {
-  // Return initial layout if animations are disabled.
-  if (!self.animatesItemUpdates) {
-    return [self layoutAttributesForItemAtIndexPath:itemIndexPath];
-  }
-  // Note that this method is called for any item whose index path changing from
-  // |itemIndexPath|, which includes any items that were in the layout and whose
-  // index path is changing. For an item whose index path is changing, this
-  // method is called before
-  // -initialLayoutAttributesForAppearingItemAtIndexPath:
-  UICollectionViewLayoutAttributes* attributes = [[super
-      finalLayoutAttributesForDisappearingItemAtIndexPath:itemIndexPath] copy];
-  // Disappearing items that aren't being deleted just use the default
-  // attributes.
-  if (![self.indexPathsOfDeletingItems containsObject:itemIndexPath]) {
-    return attributes;
-  }
-  // Cells being deleted scale to 0, and are z-positioned behind all others.
-  // (Note that setting the zIndex here actually has no effect, despite what is
-  // implied in the UIKit documentation).
-  attributes.zIndex = -10;
-  // Scaled down to 0% (or near enough).
-  CGAffineTransform transform =
-      CGAffineTransformScale(attributes.transform, /*sx=*/0.01, /*sy=*/0.01);
-  attributes.transform = transform;
-  // Fade out.
-  attributes.alpha = 0.0;
-  return attributes;
-}
-
-- (UICollectionViewLayoutAttributes*)
-initialLayoutAttributesForAppearingItemAtIndexPath:(NSIndexPath*)itemIndexPath {
-  // Return final layout if animations are disabled.
-  if (!self.animatesItemUpdates) {
-    return [self layoutAttributesForItemAtIndexPath:itemIndexPath];
-  }
-  // Note that this method is called for any item whose index path is becoming
-  // |itemIndexPath|, which includes any items that were in the layout but whose
-  // index path is changing. For an item whose index path is changing, this
-  // method is called after
-  // -finalLayoutAttributesForDisappearingItemAtIndexPath:
-  UICollectionViewLayoutAttributes* attributes = [[super
-      initialLayoutAttributesForAppearingItemAtIndexPath:itemIndexPath] copy];
-  // Appearing items that aren't being inserted just use the default
-  // attributes.
-  if (![self.indexPathsOfInsertingItems containsObject:itemIndexPath]) {
-    return attributes;
-  }
-  // TODO(crbug.com/820410) : Polish the animation, and put constants where they
-  // belong.
-  // Cells being inserted start faded out, scaled down, and drop downwards
-  // slightly.
-  attributes.alpha = 0.0;
-  CGAffineTransform transform =
-      CGAffineTransformScale(attributes.transform, /*sx=*/0.9, /*sy=*/0.9);
-  transform = CGAffineTransformTranslate(transform, /*tx=*/0,
-                                         /*ty=*/attributes.size.height * 0.1);
-  attributes.transform = transform;
-  return attributes;
-}
-
-- (void)finalizeCollectionViewUpdates {
-  self.indexPathsOfDeletingItems = @[];
-  self.indexPathsOfInsertingItems = @[];
 }
 
 @end
@@ -178,38 +83,24 @@ initialLayoutAttributesForAppearingItemAtIndexPath:(NSIndexPath*)itemIndexPath {
 // -layoutAttributesForItemAtIndexPath: need to be overridden to change the
 // default layout attributes.
 - (NSArray<__kindof UICollectionViewLayoutAttributes*>*)
-layoutAttributesForElementsInRect:(CGRect)rect {
-  NSArray* baseAttributes = [super layoutAttributesForElementsInRect:rect];
-  NSMutableArray<__kindof UICollectionViewLayoutAttributes*>* attributes =
-      [NSMutableArray array];
-  for (UICollectionViewLayoutAttributes* attribute in baseAttributes) {
-    UICollectionViewLayoutAttributes* newAttribute = [attribute copy];
-    newAttribute.alpha = kReorderingInactiveCellOpacity;
-    [attributes addObject:newAttribute];
-  }
-  return [attributes copy];
+    layoutAttributesForElementsInRect:(CGRect)rect {
+  return CopyAttributesArrayAndSetInactiveOpacity(
+      [super layoutAttributesForElementsInRect:rect]);
 }
 
 - (UICollectionViewLayoutAttributes*)layoutAttributesForItemAtIndexPath:
     (NSIndexPath*)indexPath {
-  UICollectionViewLayoutAttributes* attributes =
-      [[super layoutAttributesForItemAtIndexPath:indexPath] copy];
-  attributes.alpha = kReorderingInactiveCellOpacity;
-  return attributes;
+  return CopyAttributesAndSetInactiveOpacity(
+      [super layoutAttributesForItemAtIndexPath:indexPath]);
 }
 
 - (UICollectionViewLayoutAttributes*)
-layoutAttributesForInteractivelyMovingItemAtIndexPath:(NSIndexPath*)indexPath
-                                   withTargetPosition:(CGPoint)position {
-  UICollectionViewLayoutAttributes* attributes = [[super
+    layoutAttributesForInteractivelyMovingItemAtIndexPath:
+        (NSIndexPath*)indexPath
+                                       withTargetPosition:(CGPoint)position {
+  return CopyAttributesAndSetActiveProperties([super
       layoutAttributesForInteractivelyMovingItemAtIndexPath:indexPath
-                                         withTargetPosition:position] copy];
-  // The moving item has regular opacity, but is scaled.
-  attributes.alpha = 1.0;
-  attributes.transform =
-      CGAffineTransformScale(attributes.transform, kReorderingActiveCellScale,
-                             kReorderingActiveCellScale);
-  return attributes;
+                                         withTargetPosition:position]);
 }
 
 @end

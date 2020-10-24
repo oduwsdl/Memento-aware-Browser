@@ -42,12 +42,6 @@ class CrostiniApps : public KeyedService,
       Profile* profile);
 
  private:
-  enum class PublishAppIDType {
-    kInstall,
-    kUninstall,
-    kUpdate,
-  };
-
   void Initialize(const mojo::Remote<apps::mojom::AppService>& app_service);
 
   // apps::mojom::Publisher overrides.
@@ -55,7 +49,7 @@ class CrostiniApps : public KeyedService,
                apps::mojom::ConnectOptionsPtr opts) override;
   void LoadIcon(const std::string& app_id,
                 apps::mojom::IconKeyPtr icon_key,
-                apps::mojom::IconCompression icon_compression,
+                apps::mojom::IconType icon_type,
                 int32_t size_hint_in_dip,
                 bool allow_placeholder_icon,
                 LoadIconCallback callback) override;
@@ -64,6 +58,7 @@ class CrostiniApps : public KeyedService,
               apps::mojom::LaunchSource launch_source,
               int64_t display_id) override;
   void Uninstall(const std::string& app_id,
+                 apps::mojom::UninstallSource uninstall_source,
                  bool clear_site_data,
                  bool report_abuse) override;
   void GetMenuModel(const std::string& app_id,
@@ -74,32 +69,20 @@ class CrostiniApps : public KeyedService,
   // GuestOsRegistryService::Observer overrides.
   void OnRegistryUpdated(
       guest_os::GuestOsRegistryService* registry_service,
+      guest_os::GuestOsRegistryService::VmType vm_type,
       const std::vector<std::string>& updated_apps,
       const std::vector<std::string>& removed_apps,
       const std::vector<std::string>& inserted_apps) override;
-  void OnAppIconUpdated(const std::string& app_id,
-                        ui::ScaleFactor scale_factor,
-                        const std::string& compressed_icon_data) override;
 
   // Registers and unregisters terminal with AppService.
   // TODO(crbug.com/1028898): Move this code into System Apps
   // once it can support hiding apps.
   void OnCrostiniEnabledChanged();
 
-  void LoadIconFromVM(const std::string app_id,
-                      apps::mojom::IconCompression icon_compression,
-                      int32_t size_hint_in_dip,
-                      bool allow_placeholder_icon,
-                      ui::ScaleFactor scale_factor,
-                      IconEffects icon_effects,
-                      LoadIconCallback callback);
-
   apps::mojom::AppPtr Convert(
-      const std::string& app_id,
       const guest_os::GuestOsRegistryService::Registration& registration,
       bool new_icon_key);
   apps::mojom::IconKeyPtr NewIconKey(const std::string& app_id);
-  void PublishAppID(const std::string& app_id, PublishAppIDType type);
 
   mojo::RemoteSet<apps::mojom::Subscriber> subscribers_;
 
@@ -111,14 +94,6 @@ class CrostiniApps : public KeyedService,
   apps_util::IncrementingIconKeyFactory icon_key_factory_;
 
   bool crostini_enabled_;
-
-  // A map from app_ids to callbacks waiting on those apps to load an icon.
-  std::multimap<std::string,
-                std::tuple<apps::mojom::IconCompression,
-                           int32_t,
-                           IconEffects,
-                           LoadIconCallback>>
-      app_icon_callbacks_;
 
   base::WeakPtrFactory<CrostiniApps> weak_ptr_factory_{this};
 

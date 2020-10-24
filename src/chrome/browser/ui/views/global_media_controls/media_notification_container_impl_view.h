@@ -10,23 +10,29 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_impl.h"
+#include "chrome/browser/ui/views/global_media_controls/media_notification_device_selector_view_delegate.h"
 #include "chrome/browser/ui/views/global_media_controls/overlay_media_notification_view.h"
 #include "components/media_message_center/media_notification_container.h"
 #include "components/media_message_center/media_notification_view_impl.h"
+#include "media/audio/audio_device_description.h"
+#include "media/base/media_switches.h"
 #include "ui/views/animation/slide_out_controller_delegate.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/widget/unique_widget_ptr.h"
 
 namespace media_message_center {
 class MediaNotificationItem;
 }  // namespace media_message_center
 
 namespace views {
+class LabelButton;
 class ImageButton;
 class SlideOutController;
 }  // namespace views
 
+class MediaNotificationDeviceSelectorView;
 class MediaNotificationContainerObserver;
+class MediaNotificationService;
 
 // MediaNotificationContainerImplView holds a media notification for display
 // within the MediaDialogView. The media notification shows metadata for a media
@@ -35,13 +41,16 @@ class MediaNotificationContainerImplView
     : public views::Button,
       public media_message_center::MediaNotificationContainer,
       public MediaNotificationContainerImpl,
+      public MediaNotificationDeviceSelectorViewDelegate,
       public views::SlideOutControllerDelegate,
-      public views::ButtonListener,
       public views::FocusChangeListener {
  public:
   MediaNotificationContainerImplView(
       const std::string& id,
-      base::WeakPtr<media_message_center::MediaNotificationItem> item);
+      base::WeakPtr<media_message_center::MediaNotificationItem> item,
+      MediaNotificationService* service,
+      base::Optional<media_message_center::NotificationTheme> theme =
+          base::nullopt);
   ~MediaNotificationContainerImplView() override;
 
   // views::Button:
@@ -78,12 +87,22 @@ class MediaNotificationContainerImplView
   void OnSlideChanged(bool in_progress) override {}
   void OnSlideOut() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // MediaNotificationContainerImpl:
   void AddObserver(MediaNotificationContainerObserver* observer) override;
   void RemoveObserver(MediaNotificationContainerObserver* observer) override;
+
+  // MediaNotificationDeviceSelectorViewDelegate
+  // Called when an audio device has been selected for output.
+  void OnAudioSinkChosen(const std::string& sink_id) override;
+  void OnDeviceSelectorViewSizeChanged() override;
+  std::unique_ptr<MediaNotificationDeviceProvider::
+                      GetOutputDevicesCallbackList::Subscription>
+  RegisterAudioOutputDeviceDescriptionsCallback(
+      MediaNotificationDeviceProvider::GetOutputDevicesCallbackList::
+          CallbackType callback) override;
+  std::unique_ptr<base::RepeatingCallbackList<void(bool)>::Subscription>
+  RegisterIsAudioOutputDeviceSwitchingSupportedCallback(
+      base::RepeatingCallback<void(bool)> callback) override;
 
   // Sets up the notification to be ready to display in an overlay instead of
   // the dialog.
@@ -95,12 +114,19 @@ class MediaNotificationContainerImplView
   const base::string16& GetTitle();
 
   views::ImageButton* GetDismissButtonForTesting();
+  views::Button* GetStopCastingButtonForTesting();
 
   media_message_center::MediaNotificationViewImpl* view_for_testing() {
-    return view_;
+    DCHECK(!base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI));
+    return static_cast<media_message_center::MediaNotificationViewImpl*>(view_);
   }
 
   bool is_playing_for_testing() { return is_playing_; }
+  bool is_expanded_for_testing() { return is_expanded_; }
+
+  views::Widget* drag_image_widget_for_testing() {
+    return drag_image_widget_.get();
+  }
 
  private:
   class DismissButton;
@@ -113,6 +139,8 @@ class MediaNotificationContainerImplView
 
   void DismissNotification();
 
+  void CreateDragImageWidget();
+
   // Updates the forced expanded state of |view_|.
   void ForceExpandedState();
 
@@ -121,6 +149,8 @@ class MediaNotificationContainerImplView
 
   // True if we should handle the given mouse event for dragging purposes.
   bool ShouldHandleMouseEvent(const ui::MouseEvent& event, bool is_press);
+
+  void OnSizeChanged();
 
   const std::string id_;
   views::View* swipeable_container_ = nullptr;
@@ -137,7 +167,12 @@ class MediaNotificationContainerImplView
   views::View* dismiss_button_container_ = nullptr;
 
   DismissButton* dismiss_button_ = nullptr;
-  media_message_center::MediaNotificationViewImpl* view_ = nullptr;
+  media_message_center::MediaNotificationView* view_ = nullptr;
+  MediaNotificationDeviceSelectorView* audio_device_selector_view_ = nullptr;
+
+  // Only shows up for cast notifications.
+  views::View* stop_button_strip_ = nullptr;
+  views::LabelButton* stop_cast_button_ = nullptr;
 
   SkColor foreground_color_;
   SkColor background_color_;
@@ -164,12 +199,20 @@ class MediaNotificationContainerImplView
 
   bool is_playing_ = false;
 
+  bool is_expanded_ = false;
+
+  std::string audio_sink_id_ = media::AudioDeviceDescription::kDefaultDeviceId;
+
   base::ObserverList<MediaNotificationContainerObserver> observers_;
 
   // Handles gesture events for swiping to dismiss notifications.
   std::unique_ptr<views::SlideOutController> slide_out_controller_;
 
   OverlayMediaNotificationView* overlay_ = nullptr;
+
+  views::UniqueWidgetPtr drag_image_widget_;
+
+  MediaNotificationService* const service_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaNotificationContainerImplView);
 };

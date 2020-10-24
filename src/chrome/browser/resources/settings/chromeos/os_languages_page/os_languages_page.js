@@ -17,8 +17,10 @@ cr.define('settings', function() {
     is: 'os-settings-languages-page',
 
     behaviors: [
+      DeepLinkingBehavior,
       I18nBehavior,
       PrefsBehavior,
+      settings.RouteObserverBehavior,
     ],
 
     properties: {
@@ -67,13 +69,39 @@ cr.define('settings', function() {
         },
       },
 
-      /** @private */
-      imeOptionsInSettings_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean('imeOptionsInSettings');
-        },
+      /**
+       * Used by DeepLinkingBehavior to focus this page's deep links.
+       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       */
+      supportedSettingIds: {
+        type: Object,
+        value: () => new Set([
+          chromeos.settings.mojom.Setting.kAddLanguage,
+          chromeos.settings.mojom.Setting.kShowInputOptionsInShelf,
+        ]),
+      },
+    },
+
+    /** @private {?settings.LanguagesMetricsProxy} */
+    languagesMetricsProxy_: null,
+
+    /** @override */
+    created() {
+      this.languagesMetricsProxy_ =
+          settings.LanguagesMetricsProxyImpl.getInstance();
+    },
+
+    /**
+     * @param {!settings.Route} route
+     * @param {!settings.Route} oldRoute
+     */
+    currentRouteChanged(route, oldRoute) {
+      // Does not apply to this page.
+      if (route !== settings.routes.OS_LANGUAGES_DETAILS) {
+        return;
       }
+
+      this.attemptDeepLink();
     },
 
     /** @private {boolean} */
@@ -94,6 +122,15 @@ cr.define('settings', function() {
     },
 
     /**
+     * @param {!Event} e
+     * @private
+     */
+    onShowImeMenuChange_(e) {
+      this.languagesMetricsProxy_.recordToggleShowInputOptionsOnShelf(
+          e.target.checked);
+    },
+
+    /**
      * Stamps and opens the Add Languages dialog, registering a listener to
      * disable the dialog's dom-if again on close.
      * @param {!Event} e
@@ -101,6 +138,7 @@ cr.define('settings', function() {
      */
     onAddLanguagesTap_(e) {
       e.preventDefault();
+      this.languagesMetricsProxy_.recordAddLanguages();
       this.showAddLanguagesDialog_ = true;
     },
 
@@ -190,6 +228,7 @@ cr.define('settings', function() {
      * @private
      */
     onManageInputMethodsTap_() {
+      this.languagesMetricsProxy_.recordManageInputMethods();
       settings.Router.getInstance().navigateTo(
           settings.routes.OS_LANGUAGES_INPUT_METHODS);
     },
@@ -225,15 +264,32 @@ cr.define('settings', function() {
      * @param {!{model: !{item: chrome.languageSettingsPrivate.InputMethod}}} e
      * @private
      */
-    onInputMethodOptionsTap_(e) {
-      if (this.imeOptionsInSettings_) {
-        const params = new URLSearchParams;
-        params.append('id', e.model.item.id);
-        settings.Router.getInstance().navigateTo(
-            settings.routes.OS_LANGUAGES_INPUT_METHOD_OPTIONS, params);
-      } else {
-        this.languageHelper.openInputMethodOptions(e.model.item.id);
-      }
+    openExtensionOptionsPage_(e) {
+      this.languageHelper.openInputMethodOptions(e.model.item.id);
+    },
+
+
+    /**
+     * @param {string} id Input method ID.
+     * @return {boolean} True if there is a options page in ChromeOS settings
+     *     for the input method ID.
+     * @private
+     */
+    hasOptionsPageInSettings_(id) {
+      return loadTimeData.getBoolean('imeOptionsInSettings') &&
+          settings.input_method_util.hasOptionsPageInSettings(id);
+    },
+
+    /**
+     * Navigate to the input method options page in ChromeOS settings.
+     * @param {!{model: !{item: chrome.languageSettingsPrivate.InputMethod}}} e
+     * @private
+     */
+    navigateToOptionsPageInSettings_(e) {
+      const params = new URLSearchParams;
+      params.append('id', e.model.item.id);
+      settings.Router.getInstance().navigateTo(
+          settings.routes.OS_LANGUAGES_INPUT_METHOD_OPTIONS, params);
     },
 
     /**
@@ -317,6 +373,8 @@ cr.define('settings', function() {
       // We don't support unchecking this checkbox. TODO(michaelpg): Ask for a
       // simpler widget.
       assert(e.target.checked);
+      this.languagesMetricsProxy_.recordInteraction(
+          settings.LanguagesPageInteraction.SWITCH_SYSTEM_LANGUAGE);
       this.isChangeInProgress_ = true;
       this.languageHelper.setProspectiveUILanguage(
           this.detailLanguage_.language.code);
@@ -466,6 +524,8 @@ cr.define('settings', function() {
      */
     onRestartTap_() {
       settings.recordSettingChange();
+      this.languagesMetricsProxy_.recordInteraction(
+          settings.LanguagesPageInteraction.RESTART);
       settings.LifetimeBrowserProxyImpl.getInstance().signOutAndRestart();
     },
 

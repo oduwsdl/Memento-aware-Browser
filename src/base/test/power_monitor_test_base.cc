@@ -4,20 +4,24 @@
 
 #include "base/test/power_monitor_test_base.h"
 
-#include "base/message_loop/message_loop_current.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_source.h"
 #include "base/run_loop.h"
+#include "base/task/current_thread.h"
 
 namespace base {
 
-PowerMonitorTestSource::PowerMonitorTestSource()
-    : test_on_battery_power_(false) {
-  DCHECK(MessageLoopCurrent::Get())
+PowerMonitorTestSource::PowerMonitorTestSource() {
+  DCHECK(CurrentThread::Get())
       << "PowerMonitorTestSource requires a MessageLoop.";
 }
 
 PowerMonitorTestSource::~PowerMonitorTestSource() = default;
+
+PowerObserver::DeviceThermalState
+PowerMonitorTestSource::GetCurrentThermalState() {
+  return current_thermal_state_;
+}
 
 void PowerMonitorTestSource::GeneratePowerStateEvent(bool on_battery_power) {
   test_on_battery_power_ = on_battery_power;
@@ -42,6 +46,7 @@ bool PowerMonitorTestSource::IsOnBatteryPowerImpl() {
 void PowerMonitorTestSource::GenerateThermalThrottlingEvent(
     PowerObserver::DeviceThermalState new_thermal_state) {
   ProcessThermalEvent(new_thermal_state);
+  current_thermal_state_ = new_thermal_state;
   RunLoop().RunUntilIdle();
 }
 

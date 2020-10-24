@@ -26,21 +26,21 @@
 #include "content/browser/renderer_host/display_feature.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
-#include "content/common/content_to_visible_time_reporter.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/common/screen_info.h"
 #include "content/public/common/widget_type.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom.h"
-#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
+#include "third_party/blink/public/common/page/content_to_visible_time_reporter.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
+#include "third_party/blink/public/mojom/page/record_content_to_visible_time_request.mojom-forward.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/accessibility/ax_tree_id_registry.h"
 #include "ui/base/ime/mojom/text_input_state.mojom-forward.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/display/display.h"
+#include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
@@ -74,12 +74,8 @@ class DelegatedFrameHost;
 struct DisplayFeature;
 
 // Basic implementation shared by concrete RenderWidgetHostView subclasses.
-class CONTENT_EXPORT RenderWidgetHostViewBase
-    : public RenderWidgetHostView,
-      public RenderFrameMetadataProvider::Observer {
+class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
  public:
-  ~RenderWidgetHostViewBase() override;
-
   float current_device_scale_factor() const {
     return current_device_scale_factor_;
   }
@@ -111,17 +107,16 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       base::OnceCallback<void(const SkBitmap&)> callback) override;
   std::unique_ptr<viz::ClientFrameSinkVideoCapturer> CreateVideoCapturer()
       override;
-  void GetScreenInfo(ScreenInfo* screen_info) override;
+  void GetScreenInfo(blink::ScreenInfo* screen_info) override;
   void EnableAutoResize(const gfx::Size& min_size,
                         const gfx::Size& max_size) override;
   void DisableAutoResize(const gfx::Size& new_size) override;
-  bool IsScrollOffsetAtTop() override;
   float GetDeviceScaleFactor() final;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
   void SetRecordContentToVisibleTimeRequest(
       base::TimeTicks start_time,
-      base::Optional<bool> destination_is_loaded,
+      bool destination_is_loaded,
       bool show_reason_tab_switching,
       bool show_reason_unoccluded,
       bool show_reason_bfcache_restore) final;
@@ -132,14 +127,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       const gfx::PointF& point) override;
   gfx::PointF TransformRootPointToViewCoordSpace(
       const gfx::PointF& point) override;
-
-  // RenderFrameMetadataProvider::Observer
-  void OnRenderFrameMetadataChangedBeforeActivation(
-      const cc::RenderFrameMetadata& metadata) override;
-  void OnRenderFrameMetadataChangedAfterActivation() override;
-  void OnRenderFrameSubmission() override;
-  void OnLocalSurfaceIdChanged(
-      const cc::RenderFrameMetadata& metadata) override;
 
   virtual void UpdateIntrinsicSizingInfo(
       blink::mojom::IntrinsicSizingInfoPtr sizing_info);
@@ -157,14 +144,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   void SetWidgetType(WidgetType widget_type);
 
   WidgetType GetWidgetType();
-
-  // Return a value that is incremented each time the renderer swaps a new frame
-  // to the view.
-  uint32_t RendererFrameNumber();
-
-  // Called each time the RenderWidgetHost receives a new frame for display from
-  // the renderer.
-  void DidReceiveRendererFrame();
 
   // Notification that a resize or move session ended on the native widget.
   void UpdateScreenInfo(gfx::NativeView view);
@@ -189,7 +168,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // |event_start_time| field of the returned struct will have a null
   // timestamp. Calling this will reset |last_record_tab_switch_time_request_|
   // to null.
-  base::Optional<RecordContentToVisibleTimeRequest>
+  blink::mojom::RecordContentToVisibleTimeRequestPtr
   TakeRecordContentToVisibleTimeRequest();
 
   base::WeakPtr<RenderWidgetHostViewBase> GetWeakPtr();
@@ -251,7 +230,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       BrowserAccessibilityDelegate* delegate,
       bool for_root_frame);
 
-  virtual void AccessibilityShowMenu(const gfx::Point& point);
   virtual gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget();
   virtual gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible();
   virtual gfx::NativeViewAccessible
@@ -287,8 +265,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   virtual const viz::FrameSinkId& GetFrameSinkId() const = 0;
 
   // Returns the LocalSurfaceId allocated by the parent client for this view.
-  virtual const viz::LocalSurfaceIdAllocation& GetLocalSurfaceIdAllocation()
-      const = 0;
+  virtual const viz::LocalSurfaceId& GetLocalSurfaceId() const = 0;
 
   // Called whenever the browser receives updated hit test data from viz.
   virtual void NotifyHitTestRegionUpdated(
@@ -394,6 +371,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // pointer state by dispatching touch down events.
   virtual void TransferTouches(
       const std::vector<std::unique_ptr<ui::TouchEvent>>& touches) {}
+
+  virtual void SetLastPointerType(ui::EventPointerType last_pointer_type) {}
 
   //----------------------------------------------------------------------------
   // The following methods are related to IME.
@@ -538,12 +517,16 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   void reset_is_evicted() { is_evicted_ = false; }
   bool is_evicted() { return is_evicted_; }
 
+  // SetContentBackgroundColor is called when the renderer wants to update the
+  // view's background color.
+  void SetContentBackgroundColor(SkColor color);
+  base::Optional<SkColor> content_background_color() const {
+    return content_background_color_;
+  }
+
  protected:
   explicit RenderWidgetHostViewBase(RenderWidgetHost* host);
 
-  // SetContentBackgroundColor is called when the render wants to  update the
-  // view's background color.
-  void SetContentBackgroundColor(SkColor color);
   void NotifyObserversAboutShutdown();
 
   virtual MouseWheelPhaseHandler* GetMouseWheelPhaseHandler();
@@ -616,6 +599,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // specific RenderWidgetHostView.
   base::Optional<DisplayFeature> display_feature_;
 
+ protected:
+  ~RenderWidgetHostViewBase() override;
+
  private:
   FRIEND_TEST_ALL_PREFIXES(
       BrowserSideFlingBrowserTest,
@@ -625,6 +611,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       EarlyTouchpadFlingCancelationOnInertialGSUAckNotConsumed);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostDelegatedInkMetadataTest,
                            FlagGetsSetFromRenderFrameMetadata);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostInputEventRouterTest,
+                           QueryResultAfterChildViewDead);
+  FRIEND_TEST_ALL_PREFIXES(DelegatedInkPointTest, EventForwardedToCompositor);
+  FRIEND_TEST_ALL_PREFIXES(DelegatedInkPointTest,
+                           MojoInterfaceReboundOnDisconnect);
 
   void SynchronizeVisualProperties();
 
@@ -648,8 +639,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
 
   gfx::Rect current_display_area_;
 
-  uint32_t renderer_frame_number_ = 0;
-
   base::ObserverList<RenderWidgetHostViewBaseObserver>::Unchecked observers_;
 
   base::Optional<blink::WebGestureEvent> pending_touchpad_pinch_begin_;
@@ -657,19 +646,13 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // The last tab switch processing start request. This should only be set and
   // retrieved using SetRecordContentToVisibleTimeRequest and
   // TakeRecordContentToVisibleTimeRequest.
-  base::Optional<RecordContentToVisibleTimeRequest>
+  blink::mojom::RecordContentToVisibleTimeRequestPtr
       last_record_tab_switch_time_request_;
 
   // True when StopFlingingIfNecessary() calls StopFling().
   bool view_stopped_flinging_for_test_ = false;
 
   bool is_evicted_ = false;
-
-  // True when points should be forwarded from the
-  // RenderWidgetHostViewEventHandler directly to viz for use in a delegated
-  // ink trail.
-  // TODO(1052145): Use this to begin forwarding the points to viz.
-  bool is_drawing_delegated_ink_trails_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostViewBase> weak_factory_{this};
 

@@ -7,20 +7,23 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_forward.h"
+#include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
+#include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/file_source_request.h"
-#include "chrome/browser/safe_browsing/dm_token_utils.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/file_analysis_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/safe_browsing/deep_scanning_failure_modal_dialog.h"
+#include "chrome/common/pref_names.h"
 #include "components/download/public/common/download_item.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/policy/core/browser/url_util.h"
@@ -36,57 +39,68 @@ namespace safe_browsing {
 
 namespace {
 
-void DeepScanningClientResponseToDownloadCheckResult(
-    const DeepScanningClientResponse& response,
+void ResponseToDownloadCheckResult(
+    const enterprise_connectors::ContentAnalysisResponse& response,
     DownloadCheckResult* download_result) {
-  if (response.has_malware_scan_verdict()) {
-    if (response.malware_scan_verdict().verdict() ==
-        MalwareDeepScanningVerdict::MALWARE) {
-      *download_result = DownloadCheckResult::DANGEROUS;
-      return;
-    }
+  bool malware_scan_failure = false;
+  bool dlp_scan_failure = false;
+  auto malware_action =
+      enterprise_connectors::TriggeredRule::ACTION_UNSPECIFIED;
+  auto dlp_action = enterprise_connectors::TriggeredRule::ACTION_UNSPECIFIED;
 
-    if (response.malware_scan_verdict().verdict() ==
-        MalwareDeepScanningVerdict::UWS) {
-      *download_result = DownloadCheckResult::POTENTIALLY_UNWANTED;
-      return;
+  for (const auto& result : response.results()) {
+    if (result.tag() == "malware") {
+      if (result.status() !=
+          enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS) {
+        malware_scan_failure = true;
+        continue;
+      }
+      for (const auto& rule : result.triggered_rules()) {
+        malware_action = enterprise_connectors::GetHighestPrecedenceAction(
+            malware_action, rule.action());
+      }
     }
-  }
-
-  if (response.has_dlp_scan_verdict() &&
-      response.dlp_scan_verdict().status() == DlpDeepScanningVerdict::SUCCESS) {
-    bool should_dlp_block = std::any_of(
-        response.dlp_scan_verdict().triggered_rules().begin(),
-        response.dlp_scan_verdict().triggered_rules().end(),
-        [](const DlpDeepScanningVerdict::TriggeredRule& rule) {
-          return rule.action() == DlpDeepScanningVerdict::TriggeredRule::BLOCK;
-        });
-    if (should_dlp_block) {
-      *download_result = DownloadCheckResult::SENSITIVE_CONTENT_BLOCK;
-      return;
-    }
-
-    bool should_dlp_warn = std::any_of(
-        response.dlp_scan_verdict().triggered_rules().begin(),
-        response.dlp_scan_verdict().triggered_rules().end(),
-        [](const DlpDeepScanningVerdict::TriggeredRule& rule) {
-          return rule.action() == DlpDeepScanningVerdict::TriggeredRule::WARN;
-        });
-    if (should_dlp_warn) {
-      *download_result = DownloadCheckResult::SENSITIVE_CONTENT_WARNING;
-      return;
+    if (result.tag() == "dlp") {
+      if (result.status() !=
+          enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS) {
+        dlp_scan_failure = true;
+        continue;
+      }
+      for (const auto& rule : result.triggered_rules()) {
+        dlp_action = enterprise_connectors::GetHighestPrecedenceAction(
+            dlp_action, rule.action());
+      }
     }
   }
 
-  if (response.has_malware_scan_verdict() &&
-      response.malware_scan_verdict().verdict() ==
-          MalwareDeepScanningVerdict::SCAN_FAILURE) {
-    *download_result = DownloadCheckResult::UNKNOWN;
-    return;
+  if (malware_action == enterprise_connectors::GetHighestPrecedenceAction(
+                            malware_action, dlp_action)) {
+    switch (malware_action) {
+      case enterprise_connectors::TriggeredRule::BLOCK:
+        *download_result = DownloadCheckResult::DANGEROUS;
+        return;
+      case enterprise_connectors::TriggeredRule::WARN:
+        *download_result = DownloadCheckResult::POTENTIALLY_UNWANTED;
+        return;
+      case enterprise_connectors::TriggeredRule::REPORT_ONLY:
+      case enterprise_connectors::TriggeredRule::ACTION_UNSPECIFIED:
+        break;
+    }
+  } else {
+    switch (dlp_action) {
+      case enterprise_connectors::TriggeredRule::BLOCK:
+        *download_result = DownloadCheckResult::SENSITIVE_CONTENT_BLOCK;
+        return;
+      case enterprise_connectors::TriggeredRule::WARN:
+        *download_result = DownloadCheckResult::SENSITIVE_CONTENT_WARNING;
+        return;
+      case enterprise_connectors::TriggeredRule::REPORT_ONLY:
+      case enterprise_connectors::TriggeredRule::ACTION_UNSPECIFIED:
+        break;
+    }
   }
 
-  if (response.has_dlp_scan_verdict() &&
-      response.dlp_scan_verdict().status() != DlpDeepScanningVerdict::SUCCESS) {
+  if (dlp_scan_failure || malware_scan_failure) {
     *download_result = DownloadCheckResult::UNKNOWN;
     return;
   }
@@ -94,31 +108,47 @@ void DeepScanningClientResponseToDownloadCheckResult(
   *download_result = DownloadCheckResult::DEEP_SCANNED_SAFE;
 }
 
-bool ShouldUploadForDlpScanByLegacyPolicy() {
-  int check_content_compliance = g_browser_process->local_state()->GetInteger(
-      prefs::kCheckContentCompliance);
-  return (check_content_compliance ==
-              CheckContentComplianceValues::CHECK_DOWNLOADS ||
-          check_content_compliance ==
-              CheckContentComplianceValues::CHECK_UPLOADS_AND_DOWNLOADS);
-}
+EventResult GetEventResult(DownloadCheckResult download_result,
+                           Profile* profile) {
+  auto download_restriction = static_cast<DownloadPrefs::DownloadRestriction>(
+      profile->GetPrefs()->GetInteger(prefs::kDownloadRestrictions));
+  switch (download_result) {
+    case DownloadCheckResult::UNKNOWN:
+    case DownloadCheckResult::SAFE:
+    case DownloadCheckResult::WHITELISTED_BY_POLICY:
+    case DownloadCheckResult::DEEP_SCANNED_SAFE:
+      return EventResult::ALLOWED;
 
-bool ShouldUploadForMalwareScanByLegacyPolicy(download::DownloadItem* item) {
-  content::BrowserContext* browser_context =
-      content::DownloadItemUtils::GetBrowserContext(item);
-  if (!browser_context)
-    return false;
+    // The following results return WARNED or BLOCKED depending on
+    // |download_restriction|.
+    case DownloadCheckResult::DANGEROUS:
+    case DownloadCheckResult::DANGEROUS_HOST:
+      switch (download_restriction) {
+        case DownloadPrefs::DownloadRestriction::ALL_FILES:
+        case DownloadPrefs::DownloadRestriction::POTENTIALLY_DANGEROUS_FILES:
+        case DownloadPrefs::DownloadRestriction::DANGEROUS_FILES:
+        case DownloadPrefs::DownloadRestriction::MALICIOUS_FILES:
+          return EventResult::BLOCKED;
+        case DownloadPrefs::DownloadRestriction::NONE:
+          return EventResult::WARNED;
+      }
 
-  Profile* profile = Profile::FromBrowserContext(browser_context);
-  if (!profile)
-    return false;
+    case DownloadCheckResult::UNCOMMON:
+    case DownloadCheckResult::POTENTIALLY_UNWANTED:
+    case DownloadCheckResult::SENSITIVE_CONTENT_WARNING:
+      return EventResult::WARNED;
 
-  int send_files_for_malware_check = profile->GetPrefs()->GetInteger(
-      prefs::kSafeBrowsingSendFilesForMalwareCheck);
-  return (send_files_for_malware_check ==
-              SendFilesForMalwareCheckValues::SEND_DOWNLOADS ||
-          send_files_for_malware_check ==
-              SendFilesForMalwareCheckValues::SEND_UPLOADS_AND_DOWNLOADS);
+    case DownloadCheckResult::BLOCKED_PASSWORD_PROTECTED:
+    case DownloadCheckResult::BLOCKED_TOO_LARGE:
+    case DownloadCheckResult::SENSITIVE_CONTENT_BLOCK:
+    case DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE:
+      return EventResult::BLOCKED;
+
+    default:
+      NOTREACHED() << "Should never be final result";
+      break;
+  }
+  return EventResult::UNKNOWN;
 }
 
 }  // namespace
@@ -126,48 +156,20 @@ bool ShouldUploadForMalwareScanByLegacyPolicy(download::DownloadItem* item) {
 /* static */
 base::Optional<enterprise_connectors::AnalysisSettings>
 DeepScanningRequest::ShouldUploadBinary(download::DownloadItem* item) {
-  bool dlp_scan = base::FeatureList::IsEnabled(kContentComplianceEnabled);
-  bool malware_scan = base::FeatureList::IsEnabled(kMalwareScanEnabled);
-
-  // If neither DLP or malware scanning is enabled by features, don't perform
-  // scans.
-  if (!dlp_scan && !malware_scan)
-    return base::nullopt;
-
   auto* connectors_manager =
       enterprise_connectors::ConnectorsManager::GetInstance();
 
-  // If the settings arent't obtained by the FILE_DOWNLOADED connector, check
-  // the legacy DLP and Malware policies.
+  // If the download Connector is not enabled, don't scan.
   if (!connectors_manager->IsConnectorEnabled(
-          enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED)) {
-    if (dlp_scan)
-      dlp_scan = ShouldUploadForDlpScanByLegacyPolicy();
-    if (malware_scan)
-      malware_scan = ShouldUploadForMalwareScanByLegacyPolicy(item);
-
-    if (!dlp_scan && !malware_scan)
-      return base::nullopt;
-  }
+          enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED))
+    return base::nullopt;
 
   // Check that item->GetURL() matches the appropriate URL patterns by getting
-  // settings. No settings means no matches were found.
-  auto settings = connectors_manager->GetAnalysisSettings(
+  // settings. No settings means no matches were found and that the downloaded
+  // file shouldn't be uploaded.
+  return connectors_manager->GetAnalysisSettings(
       item->GetURL(),
       enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED);
-
-  if (!settings.has_value())
-    return base::nullopt;
-
-  if (!dlp_scan)
-    settings.value().tags.erase("dlp");
-  if (!malware_scan)
-    settings.value().tags.erase("malware");
-
-  if (settings.value().tags.empty())
-    return base::nullopt;
-
-  return settings;
 }
 
 DeepScanningRequest::DeepScanningRequest(
@@ -193,7 +195,7 @@ void DeepScanningRequest::Start() {
   // Indicate we're now scanning the file.
   callback_.Run(DownloadCheckResult::ASYNC_SCANNING);
 
-  auto request = std::make_unique<FileSourceRequest>(
+  auto request = std::make_unique<FileAnalysisRequest>(
       analysis_settings_, item_->GetFullPath(),
       item_->GetTargetFilePath().BaseName(),
       base::BindOnce(&DeepScanningRequest::OnScanComplete,
@@ -207,10 +209,7 @@ void DeepScanningRequest::Start() {
   Profile* profile = Profile::FromBrowserContext(
       content::DownloadItemUtils::GetBrowserContext(item_));
 
-  if (request->use_legacy_proto())
-    PrepareLegacyRequest(request.get(), profile);
-  else
-    PrepareConnectorRequest(request.get(), profile);
+  PrepareRequest(request.get(), profile);
 
   upload_start_time_ = base::TimeTicks::Now();
   BinaryUploadService* binary_upload_service =
@@ -219,77 +218,39 @@ void DeepScanningRequest::Start() {
     binary_upload_service->MaybeUploadForDeepScanning(std::move(request));
   } else {
     OnScanComplete(BinaryUploadService::Result::UNKNOWN,
-                   DeepScanningClientResponse());
+                   enterprise_connectors::ContentAnalysisResponse());
   }
 }
 
-void DeepScanningRequest::PrepareLegacyRequest(
-    BinaryUploadService::Request* request,
-    Profile* profile) {
-  if (trigger_ == DeepScanTrigger::TRIGGER_APP_PROMPT) {
-    MalwareDeepScanningClientRequest malware_request;
-    malware_request.set_population(
-        MalwareDeepScanningClientRequest::POPULATION_TITANIUM);
-    request->set_request_malware_scan(std::move(malware_request));
-  } else if (trigger_ == DeepScanTrigger::TRIGGER_POLICY) {
-    policy::DMToken dm_token = GetDMToken(profile);
-    request->set_device_token(dm_token.value());
+void DeepScanningRequest::PrepareRequest(BinaryUploadService::Request* request,
+                                         Profile* profile) {
+  if (trigger_ == DeepScanTrigger::TRIGGER_POLICY)
+    request->set_device_token(policy::GetDMToken(profile).value());
 
-    if (base::FeatureList::IsEnabled(kContentComplianceEnabled) &&
-        (analysis_settings_.tags.count("dlp") == 1)) {
-      DlpDeepScanningClientRequest dlp_request;
-      dlp_request.set_content_source(
-          DlpDeepScanningClientRequest::FILE_DOWNLOAD);
-      if (item_->GetURL().is_valid())
-        dlp_request.set_url(item_->GetURL().spec());
-      request->set_request_dlp_scan(std::move(dlp_request));
-    }
-
-    if (base::FeatureList::IsEnabled(kMalwareScanEnabled) &&
-        (analysis_settings_.tags.count("malware") == 1)) {
-      MalwareDeepScanningClientRequest malware_request;
-      malware_request.set_population(
-          MalwareDeepScanningClientRequest::POPULATION_ENTERPRISE);
-      request->set_request_malware_scan(std::move(malware_request));
-    }
-  }
-}
-
-void DeepScanningRequest::PrepareConnectorRequest(
-    BinaryUploadService::Request* request,
-    Profile* profile) {
-  request->set_device_token(GetDMToken(profile).value());
   request->set_analysis_connector(enterprise_connectors::FILE_DOWNLOADED);
+  request->set_email(GetProfileEmail(profile));
+
   if (item_->GetURL().is_valid())
     request->set_url(item_->GetURL().spec());
+
+  if (item_->GetTabUrl().is_valid())
+    request->set_tab_url(item_->GetTabUrl());
+
   for (const std::string& tag : analysis_settings_.tags)
     request->add_tag(tag);
-  // TODO(crbug.com/1069069): Set CSD field.
 }
 
-void DeepScanningRequest::OnScanComplete(BinaryUploadService::Result result,
-                                         DeepScanningClientResponse response) {
+void DeepScanningRequest::OnScanComplete(
+    BinaryUploadService::Result result,
+    enterprise_connectors::ContentAnalysisResponse response) {
   RecordDeepScanMetrics(
       /*access_point=*/DeepScanAccessPoint::DOWNLOAD,
       /*duration=*/base::TimeTicks::Now() - upload_start_time_,
       /*total_size=*/item_->GetTotalBytes(), /*result=*/result,
       /*response=*/response);
-  Profile* profile = Profile::FromBrowserContext(
-      content::DownloadItemUtils::GetBrowserContext(item_));
-  if (profile && trigger_ == DeepScanTrigger::TRIGGER_POLICY) {
-    std::string raw_digest_sha256 = item_->GetHash();
-    MaybeReportDeepScanningVerdict(
-        profile, item_->GetURL(), item_->GetTargetFilePath().AsUTF8Unsafe(),
-        base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
-        item_->GetMimeType(),
-        extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
-        DeepScanAccessPoint::DOWNLOAD, item_->GetTotalBytes(), result,
-        response);
-  }
-
   DownloadCheckResult download_result = DownloadCheckResult::UNKNOWN;
   if (result == BinaryUploadService::Result::SUCCESS) {
-    DeepScanningClientResponseToDownloadCheckResult(response, &download_result);
+    ResponseToDownloadCheckResult(response, &download_result);
   } else if (trigger_ == DeepScanTrigger::TRIGGER_APP_PROMPT &&
              MaybeShowDeepScanFailureModalDialog(
                  base::BindOnce(&DeepScanningRequest::Start,
@@ -310,6 +271,23 @@ void DeepScanningRequest::OnScanComplete(BinaryUploadService::Result result,
              BinaryUploadService::Result::DLP_SCAN_UNSUPPORTED_FILE_TYPE) {
     if (analysis_settings_.block_unsupported_file_types)
       download_result = DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE;
+  }
+
+  Profile* profile = Profile::FromBrowserContext(
+      content::DownloadItemUtils::GetBrowserContext(item_));
+  if (profile && trigger_ == DeepScanTrigger::TRIGGER_POLICY) {
+    std::string raw_digest_sha256 = item_->GetHash();
+    MaybeReportDeepScanningVerdict(
+        profile, item_->GetURL(), item_->GetTargetFilePath().AsUTF8Unsafe(),
+        base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
+        item_->GetMimeType(),
+        extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
+        DeepScanAccessPoint::DOWNLOAD, item_->GetTotalBytes(), result, response,
+        GetEventResult(download_result, profile));
+
+    item_->SetUserData(
+        enterprise_connectors::ScanResult::kKey,
+        std::make_unique<enterprise_connectors::ScanResult>(response));
   }
 
   FinishRequest(download_result);

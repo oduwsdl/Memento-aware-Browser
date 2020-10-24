@@ -83,7 +83,10 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, NoPreviousCommittedUrl) {
   tester()->NavigateToUntrackedUrl();
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSFirstImagePaint, 0);
-  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count());
+  size_t document_created_entries_count =
+      tester()->test_ukm_recorder().GetEntriesByName("DocumentCreated").size();
+  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count() -
+                     document_created_entries_count);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest, NonSearchPreviousCommittedUrl) {
@@ -101,7 +104,10 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, NonSearchPreviousCommittedUrl) {
   tester()->NavigateToUntrackedUrl();
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSFirstImagePaint, 0);
-  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count());
+  size_t document_created_entries_count =
+      tester()->test_ukm_recorder().GetEntriesByName("DocumentCreated").size();
+  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count() -
+                     document_created_entries_count);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest,
@@ -120,7 +126,10 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
   tester()->NavigateToUntrackedUrl();
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSFirstImagePaint, 0);
-  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count());
+  size_t document_created_entries_count =
+      tester()->test_ukm_recorder().GetEntriesByName("DocumentCreated").size();
+  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count() -
+                     document_created_entries_count);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest,
@@ -141,7 +150,10 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
   tester()->NavigateToUntrackedUrl();
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSFirstImagePaint, 0);
-  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count());
+  size_t document_created_entries_count =
+      tester()->test_ukm_recorder().GetEntriesByName("DocumentCreated").size();
+  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count() -
+                     document_created_entries_count);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl1) {
@@ -573,7 +585,10 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSFirstImagePaint, 0);
 
-  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count());
+  size_t document_created_entries_count =
+      tester()->test_ukm_recorder().GetEntriesByName("DocumentCreated").size();
+  EXPECT_EQ(0ul, tester()->test_ukm_recorder().entries_count() -
+                     document_created_entries_count);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest,
@@ -623,7 +638,7 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
 }
 
 // Disabled due to flakiness: https://crbug.com/1092018
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_NewNavigationBeforeCommit DISABLED_NewNavigationBeforeCommit
 #else
 #define MAYBE_NewNavigationBeforeCommit NewNavigationBeforeCommit

@@ -16,13 +16,12 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.site_settings.SiteSettingsTestUtils;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.browser_ui.settings.ChromeImageViewPreference;
 import org.chromium.components.browser_ui.settings.ExpandablePreferenceGroup;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
@@ -32,7 +31,6 @@ import org.chromium.components.browser_ui.site_settings.Website;
 import org.chromium.components.browser_ui.site_settings.WebsiteAddress;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.util.Origin;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -45,8 +43,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 })
 public class TrustedWebActivityPreferencesUiTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private String mPackage;
     private TrustedWebActivityPermissionManager mPermissionMananger;
@@ -90,15 +87,12 @@ public class TrustedWebActivityPreferencesUiTest {
                     return preferences;
                 });
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                // The preference group gets recreated in onPreferenceClick, so we need to find it
-                // again.
-                final ExpandablePreferenceGroup group =
-                        (ExpandablePreferenceGroup) websitePreferences.findPreference(groupName);
-                return group.isExpanded();
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            // The preference group gets recreated in onPreferenceClick, so we need to find it
+            // again.
+            final ExpandablePreferenceGroup group =
+                    (ExpandablePreferenceGroup) websitePreferences.findPreference(groupName);
+            return group.isExpanded();
         });
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {

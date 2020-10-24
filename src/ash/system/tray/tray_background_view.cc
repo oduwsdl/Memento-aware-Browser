@@ -18,7 +18,8 @@
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/style/ash_color_provider.h"
+#include "ash/style/default_color_constants.h"
+#include "ash/style/default_colors.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_delegate.h"
@@ -28,6 +29,7 @@
 #include "ash/system/tray/tray_event_filter.h"
 #include "ash/window_factory.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/scoped_observer.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/layer.h"
@@ -134,8 +136,11 @@ class TrayBackgroundView::TrayWidgetObserver : public views::WidgetObserver {
     host_->AnchorUpdated();
   }
 
+  void Add(views::Widget* widget) { observer_.Add(widget); }
+
  private:
   TrayBackgroundView* host_;
+  ScopedObserver<views::Widget, views::WidgetObserver> observer_{this};
 
   DISALLOW_COPY_AND_ASSIGN(TrayWidgetObserver);
 };
@@ -155,16 +160,18 @@ TrayBackgroundView::TrayBackgroundView(Shelf* shelf)
       show_when_collapsed_(true),
       widget_observer_(new TrayWidgetObserver(this)) {
   DCHECK(shelf_);
-  set_notify_enter_exit_on_child(true);
-  set_ink_drop_base_color(ShelfConfig::Get()->shelf_ink_drop_base_color());
-  set_ink_drop_visible_opacity(
-      ShelfConfig::Get()->shelf_ink_drop_visible_opacity());
+  SetNotifyEnterExitOnChild(true);
+
+  SetInkDropBaseColor(DeprecatedGetInkDropBaseColor(kDefaultShelfInkDropColor));
+  SetInkDropVisibleOpacity(
+      DeprecatedGetInkDropOpacity(kDefaultShelfInkDropOpacity));
 
   SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetInstallFocusRingOnFocus(true);
 
-  focus_ring()->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
+  focus_ring()->SetColor(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
   focus_ring()->SetPathGenerator(std::make_unique<HighlightPathGenerator>(
       this, kTrayBackgroundFocusPadding));
   SetFocusPainter(nullptr);
@@ -187,13 +194,12 @@ TrayBackgroundView::TrayBackgroundView(Shelf* shelf)
 
 TrayBackgroundView::~TrayBackgroundView() {
   Shell::Get()->system_tray_model()->virtual_keyboard()->RemoveObserver(this);
-  if (GetWidget())
-    GetWidget()->RemoveObserver(widget_observer_.get());
+  widget_observer_.reset();
   StopObservingImplicitAnimations();
 }
 
 void TrayBackgroundView::Initialize() {
-  GetWidget()->AddObserver(widget_observer_.get());
+  widget_observer_->Add(GetWidget());
   Shell::Get()->system_tray_model()->virtual_keyboard()->AddObserver(this);
 
   UpdateBackground();
@@ -217,8 +223,11 @@ void TrayBackgroundView::SetVisiblePreferred(bool visible_preferred) {
   StartVisibilityAnimation(GetEffectiveVisibility());
 
   // We need to update which trays overflow after showing or hiding a tray.
-  if (shelf_->GetStatusAreaWidget())
-    shelf_->GetStatusAreaWidget()->UpdateCollapseState();
+  auto* status_area_widget = shelf_->GetStatusAreaWidget();
+  if (status_area_widget) {
+    status_area_widget->UpdateCollapseState();
+    status_area_widget->LogVisiblePodCountMetric();
+  }
 }
 
 void TrayBackgroundView::StartVisibilityAnimation(bool visible) {
@@ -306,8 +315,7 @@ void TrayBackgroundView::ChildPreferredSizeChanged(views::View* child) {
 std::unique_ptr<views::InkDropRipple> TrayBackgroundView::CreateInkDropRipple()
     const {
   const AshColorProvider::RippleAttributes ripple_attributes =
-      AshColorProvider::Get()->GetRippleAttributes(
-          ShelfConfig::Get()->GetDefaultShelfColor());
+      AshColorProvider::Get()->GetRippleAttributes();
   return std::make_unique<views::FloodFillInkDropRipple>(
       size(), GetBackgroundInsets(), GetInkDropCenterBasedOnLastEvent(),
       ripple_attributes.base_color, ripple_attributes.inkdrop_opacity);
@@ -326,11 +334,10 @@ TrayBackgroundView::CreateInkDropHighlight() const {
   bounds.set_width(bounds.width() + 2 * icon_size);
   bounds.set_height(bounds.height() + 2 * icon_size);
   const AshColorProvider::RippleAttributes ripple_attributes =
-      AshColorProvider::Get()->GetRippleAttributes(
-          ShelfConfig::Get()->GetDefaultShelfColor());
+      AshColorProvider::Get()->GetRippleAttributes();
   auto highlight = std::make_unique<views::InkDropHighlight>(
       gfx::SizeF(bounds.size()), ripple_attributes.base_color);
-  highlight->set_visible_opacity(ripple_attributes.inkdrop_opacity);
+  highlight->set_visible_opacity(ripple_attributes.highlight_opacity);
   return highlight;
 }
 

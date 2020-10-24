@@ -8,9 +8,13 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/message_loop/message_pump_type.h"
+#include "base/task/single_thread_task_executor.h"
 #include "build/build_config.h"
 #include "chrome/updater/app/app.h"
+#include "chrome/updater/app/app_install.h"
 #include "chrome/updater/app/app_uninstall.h"
+#include "chrome/updater/app/app_update.h"
 #include "chrome/updater/app/app_wake.h"
 #include "chrome/updater/configurator.h"
 #include "chrome/updater/constants.h"
@@ -23,19 +27,16 @@
 #if defined(OS_WIN)
 #include "chrome/updater/app/server/win/server.h"
 #include "chrome/updater/app/server/win/service_main.h"
-#include "chrome/updater/win/install_app.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/updater/app/server/mac/server.h"
-#include "chrome/updater/mac/setup/app_swap.h"
-#include "chrome/updater/mac/setup/install_app.h"
 #endif
 
 // Instructions For Windows.
 // - To install only the updater, run "updatersetup.exe" from the build out dir.
-// - To install Chrome and the updater, do the same but use the --appid:
-//    updatersetup.exe --appid={8A69D345-D564-463c-AFF1-A69D9E530F96}
+// - To install Chrome and the updater, do the same but use the --app-id:
+//    updatersetup.exe --app-id={8A69D345-D564-463c-AFF1-A69D9E530F96}
 // - To uninstall, run "updater.exe --uninstall" from its install directory,
 // which is under %LOCALAPPDATA%\Google\GoogleUpdater, or from the |out|
 // directory of the build.
@@ -82,6 +83,7 @@ void InitializeCrashReporting() {
 
 int HandleUpdaterCommands(const base::CommandLine* command_line) {
   DCHECK(!command_line->HasSwitch(kCrashHandlerSwitch));
+  base::SingleThreadTaskExecutor main_task_executor(base::MessagePumpType::UI);
 
   if (command_line->HasSwitch(kCrashMeSwitch)) {
     // Records a backtrace in the log, crashes the program, saves a crash dump,
@@ -98,20 +100,17 @@ int HandleUpdaterCommands(const base::CommandLine* command_line) {
 #endif
   }
 
+  if (command_line->HasSwitch(kUpdateSwitch))
+    return MakeAppUpdate()->Run();
+
 #if defined(OS_WIN)
   if (command_line->HasSwitch(kComServiceSwitch))
     return ServiceMain::RunComService(command_line);
 #endif  // OS_WIN
 
-  if (command_line->HasSwitch(kInstallSwitch))
+  if (command_line->HasSwitch(kInstallSwitch) ||
+      command_line->HasSwitch(kTagSwitch))
     return MakeAppInstall()->Run();
-
-#if defined(OS_MACOSX)
-  if (command_line->HasSwitch(kPromoteCandidateSwitch))
-    return MakeAppPromoteCandidate()->Run();
-  if (command_line->HasSwitch(kUninstallCandidateSwitch))
-    return MakeAppUninstallCandidate()->Run();
-#endif  // OS_MACOSX
 
   if (command_line->HasSwitch(kUninstallSwitch))
     return MakeAppUninstall()->Run();
@@ -141,7 +140,9 @@ int UpdaterMain(int argc, const char* const* argv) {
 
   InitializeCrashReporting();
 
-  return HandleUpdaterCommands(command_line);
+  const int retval = HandleUpdaterCommands(command_line);
+  DVLOG(1) << __func__ << " returned " << retval << ".";
+  return retval;
 }
 
 }  // namespace updater

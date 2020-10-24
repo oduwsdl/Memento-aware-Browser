@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -39,6 +40,8 @@ class UserPolicySigninServiceTest;
 namespace {
 
 const char kTestEmail[] = "enterprise@example.com";
+const char kTestRefreshToken[] =
+    "test_refresh_token_for_enterprise@example.com";
 
 // Dummy delegate forwarding all the calls the test fixture.
 // Owned by the DiceTurnOnSyncHelper.
@@ -193,6 +196,7 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
     command_line->AppendSwitchASCII(switches::kGaiaUrl, base_url.spec());
     command_line->AppendSwitchASCII(switches::kLsoUrl, base_url.spec());
     command_line->AppendSwitchASCII(switches::kGoogleApisUrl, base_url.spec());
+    policy::ChromeBrowserPolicyConnector::EnableCommandLineSupportForTesting();
     fake_gaia_.Initialize();
     // Configure Sync server.
     command_line->AppendSwitch(switches::kDisableSync);
@@ -210,6 +214,9 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
 
     account_info_ = signin::MakeAccountAvailable(
         IdentityManagerFactory::GetForProfile(profile()), kTestEmail);
+    signin::SetRefreshTokenForAccount(
+        IdentityManagerFactory::GetForProfile(profile()),
+        account_info_.account_id, kTestRefreshToken);
     SetupFakeGaiaResponses();
   }
 
@@ -237,9 +244,7 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
     access_token_info.audience =
         GaiaUrls::GetInstance()->oauth2_chrome_client_id();
     access_token_info.email = kTestEmail;
-    fake_gaia_.IssueOAuthToken(
-        base::StringPrintf("refresh_token_for_%s", account_info_.gaia.c_str()),
-        access_token_info);
+    fake_gaia_.IssueOAuthToken(kTestRefreshToken, access_token_info);
   }
 
   std::unique_ptr<net::test_server::HttpResponse> HandleUserInfoRequest(

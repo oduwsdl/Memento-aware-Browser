@@ -8,6 +8,8 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.text.TextUtils;
+import android.view.View;
 
 import androidx.appcompat.content.res.AppCompatResources;
 
@@ -18,10 +20,13 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.send_tab_to_self.SendTabToSelfShareActivity;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.share.ChromeShareExtras;
+import org.chromium.chrome.browser.share.link_to_text.LinkToTextCoordinator;
 import org.chromium.chrome.browser.share.qrcode.QrCodeCoordinator;
 import org.chromium.chrome.browser.share.screenshot.ScreenshotCoordinator;
+import org.chromium.chrome.browser.share.send_tab_to_self.SendTabToSelfCoordinator;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder.ContentType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -29,6 +34,8 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.Shee
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.browser_ui.share.ShareParams;
+import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.widget.Toast;
 
@@ -42,19 +49,20 @@ import java.util.Set;
 /**
  * Provides {@code PropertyModel}s of Chrome-provided sharing options.
  */
-// TODO(crbug/1022172): Should be package-protected once modularization is complete.
-public class ChromeProvidedSharingOptionsProvider {
+class ChromeProvidedSharingOptionsProvider {
     private final Activity mActivity;
     private final Supplier<Tab> mTabProvider;
     private final BottomSheetController mBottomSheetController;
     private final ShareSheetBottomSheetContent mBottomSheetContent;
-    private final PrefServiceBridge mPrefServiceBridge;
     private final ShareParams mShareParams;
     private final Callback<Tab> mPrintTabCallback;
+    private final SettingsLauncher mSettingsLauncher;
+    private final boolean mIsSyncEnabled;
     private final long mShareStartTime;
     private final List<FirstPartyOption> mOrderedFirstPartyOptions;
     private final ChromeOptionShareCallback mChromeOptionShareCallback;
     private ScreenshotCoordinator mScreenshotCoordinator;
+    private final String mUrl;
 
     /**
      * Constructs a new {@link ChromeProvidedSharingOptionsProvider}.
@@ -64,50 +72,113 @@ public class ChromeProvidedSharingOptionsProvider {
      * @param bottomSheetController The {@link BottomSheetController} for the current activity.
      * @param bottomSheetContent The {@link ShareSheetBottomSheetContent} for the current
      * activity.
-     * @param prefServiceBridge The {@link PrefServiceBridge} singleton. This provides printing
-     * preferences.
      * @param shareParams The {@link ShareParams} for the current share.
+     * @param chromeShareExtras The {@link ChromeShareExtras} for the current share.
      * @param printTab A {@link Callback} that will print a given Tab.
      * @param shareStartTime The start time of the current share.
      * @param chromeOptionShareCallback A ChromeOptionShareCallback that can be used by
-     *         Chrome-provdied sharing options.
+     * Chrome-provided sharing options.
      */
     ChromeProvidedSharingOptionsProvider(Activity activity, Supplier<Tab> tabProvider,
             BottomSheetController bottomSheetController,
-            ShareSheetBottomSheetContent bottomSheetContent, PrefServiceBridge prefServiceBridge,
-            ShareParams shareParams, Callback<Tab> printTab, long shareStartTime,
+            ShareSheetBottomSheetContent bottomSheetContent, ShareParams shareParams,
+            ChromeShareExtras chromeShareExtras, Callback<Tab> printTab,
+            SettingsLauncher settingsLauncher, boolean isSyncEnabled, long shareStartTime,
             ChromeOptionShareCallback chromeOptionShareCallback) {
         mActivity = activity;
         mTabProvider = tabProvider;
         mBottomSheetController = bottomSheetController;
         mBottomSheetContent = bottomSheetContent;
-        mPrefServiceBridge = prefServiceBridge;
         mShareParams = shareParams;
         mPrintTabCallback = printTab;
+        mSettingsLauncher = settingsLauncher;
+        mIsSyncEnabled = isSyncEnabled;
         mShareStartTime = shareStartTime;
         mOrderedFirstPartyOptions = new ArrayList<>();
         initializeFirstPartyOptionsInOrder();
         mChromeOptionShareCallback = chromeOptionShareCallback;
+        mUrl = getUrlToShare(shareParams, chromeShareExtras,
+                mTabProvider.get().isInitialized() ? mTabProvider.get().getUrl().getSpec() : "");
     }
 
     /**
      * Encapsulates a {@link PropertyModel} and the {@link ContentType}s it should be shown for.
      */
     private static class FirstPartyOption {
-        private final PropertyModel mPropertyModel;
-        private final Collection<Integer> mContentTypes;
+        final Collection<Integer> mContentTypes;
+        final Collection<Integer> mContentTypesToDisableFor;
+        final PropertyModel mPropertyModel;
+        final boolean mDisableForMultiWindow;
 
-        FirstPartyOption(PropertyModel propertyModel, Collection<Integer> contentTypes) {
-            mPropertyModel = propertyModel;
+        /**
+         * Should only be used when the default property model constructed in the builder does not
+         * fit the feature's needs. This should be rare.
+         *
+         * @param model Property model for the first party option.
+         * @param contentTypes Content types to trigger for.
+         * @param contentTypesToDisableFor Content types to disable for.
+         * @param disableForMultiWindow If the feature should be disabled if in multi-window mode.
+         */
+        FirstPartyOption(PropertyModel model, Collection<Integer> contentTypes,
+                Collection<Integer> contentTypesToDisableFor, boolean disableForMultiWindow) {
+            mPropertyModel = model;
             mContentTypes = contentTypes;
+            mContentTypesToDisableFor = contentTypesToDisableFor;
+            mDisableForMultiWindow = disableForMultiWindow;
+        }
+    }
+
+    private class FirstPartyOptionBuilder {
+        private int mIcon;
+        private int mIconLabel;
+        private String mFeatureNameForMetrics;
+        private Callback<View> mOnClickCallback;
+        private boolean mDisableForMultiWindow;
+        private Integer[] mContentTypesToDisableFor;
+        private final Integer[] mContentTypesInBuilder;
+
+        FirstPartyOptionBuilder(Integer... contentTypes) {
+            mContentTypesInBuilder = contentTypes;
+            mContentTypesToDisableFor = new Integer[] {};
         }
 
-        PropertyModel getPropertyModel() {
-            return mPropertyModel;
+        FirstPartyOptionBuilder setIcon(int icon, int iconLabel) {
+            mIcon = icon;
+            mIconLabel = iconLabel;
+            return this;
         }
 
-        Collection<Integer> getContentTypes() {
-            return mContentTypes;
+        FirstPartyOptionBuilder setFeatureNameForMetrics(String featureName) {
+            mFeatureNameForMetrics = featureName;
+            return this;
+        }
+
+        FirstPartyOptionBuilder setOnClickCallback(Callback<View> onClickCallback) {
+            mOnClickCallback = onClickCallback;
+            return this;
+        }
+
+        FirstPartyOptionBuilder setContentTypesToDisableFor(Integer... contentTypesToDisableFor) {
+            mContentTypesToDisableFor = contentTypesToDisableFor;
+            return this;
+        }
+
+        FirstPartyOptionBuilder setDisableForMultiWindow(boolean disableForMultiWindow) {
+            mDisableForMultiWindow = disableForMultiWindow;
+            return this;
+        }
+
+        FirstPartyOption build() {
+            PropertyModel model = ShareSheetPropertyModelBuilder.createPropertyModel(
+                    AppCompatResources.getDrawable(mActivity, mIcon),
+                    mActivity.getResources().getString(mIconLabel), (view) -> {
+                        RecordUserAction.record(mFeatureNameForMetrics);
+                        recordTimeToShare(mShareStartTime);
+                        mBottomSheetController.hideContent(mBottomSheetContent, true);
+                        mOnClickCallback.onResult(view);
+                    });
+            return new FirstPartyOption(model, Arrays.asList(mContentTypesInBuilder),
+                    Arrays.asList(mContentTypesToDisableFor), mDisableForMultiWindow);
         }
     }
 
@@ -116,13 +187,17 @@ public class ChromeProvidedSharingOptionsProvider {
      * contentTypes} being shared.
      *
      * @param contentTypes a {@link Set} of {@link ContentType}.
+     * @param isMultiWindow if in multi-window mode.
      * @return a list of {@link PropertyModel}s.
      */
-    List<PropertyModel> getPropertyModels(Set<Integer> contentTypes) {
+    List<PropertyModel> getPropertyModels(Set<Integer> contentTypes, boolean isMultiWindow) {
         List<PropertyModel> propertyModels = new ArrayList<>();
         for (FirstPartyOption firstPartyOption : mOrderedFirstPartyOptions) {
-            if (!Collections.disjoint(contentTypes, firstPartyOption.getContentTypes())) {
-                propertyModels.add(firstPartyOption.getPropertyModel());
+            if (!Collections.disjoint(contentTypes, firstPartyOption.mContentTypes)
+                    && Collections.disjoint(
+                            contentTypes, firstPartyOption.mContentTypesToDisableFor)
+                    && !(isMultiWindow && firstPartyOption.mDisableForMultiWindow)) {
+                propertyModels.add(firstPartyOption.mPropertyModel);
             }
         }
         return propertyModels;
@@ -138,13 +213,20 @@ public class ChromeProvidedSharingOptionsProvider {
         }
         mOrderedFirstPartyOptions.add(createCopyLinkFirstPartyOption());
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARING_HUB_V15)) {
+            mOrderedFirstPartyOptions.add(createCopyImageFirstPartyOption());
+            mOrderedFirstPartyOptions.add(createCopyFirstPartyOption());
             mOrderedFirstPartyOptions.add(createCopyTextFirstPartyOption());
         }
         mOrderedFirstPartyOptions.add(createSendTabToSelfFirstPartyOption());
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARE_QRCODE)) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARING_HUB_V15)
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARE_HIGHLIGHTS_ANDROID)) {
+            mOrderedFirstPartyOptions.add(createHighlightsFirstPartyOption());
+        }
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARE_QRCODE)
+                && !mTabProvider.get().getWebContents().isIncognito()) {
             mOrderedFirstPartyOptions.add(createQrCodeFirstPartyOption());
         }
-        if (mPrefServiceBridge.getBoolean(Pref.PRINTING_ENABLED)) {
+        if (UserPrefs.get(Profile.getLastUsedRegularProfile()).getBoolean(Pref.PRINTING_ENABLED)) {
             mOrderedFirstPartyOptions.add(createPrintingFirstPartyOption());
         }
     }
@@ -168,125 +250,154 @@ public class ChromeProvidedSharingOptionsProvider {
     private FirstPartyOption createScreenshotFirstPartyOption() {
         PropertyModel propertyModel = ShareSheetPropertyModelBuilder.createPropertyModel(
                 AppCompatResources.getDrawable(mActivity, R.drawable.screenshot),
-                mActivity.getResources().getString(R.string.sharing_screenshot),
-                (shareParams)
-                        -> {
+                mActivity.getResources().getString(R.string.sharing_screenshot), (view) -> {
                     RecordUserAction.record("SharingHubAndroid.ScreenshotSelected");
-                    RecordHistogram.recordMediumTimesHistogram(
-                            "Sharing.SharingHubAndroid.TimeToShare",
-                            System.currentTimeMillis() - mShareStartTime);
-                    mScreenshotCoordinator = new ScreenshotCoordinator(
-                            mActivity, mTabProvider.get(), mChromeOptionShareCallback);
+                    recordTimeToShare(mShareStartTime);
+                    mScreenshotCoordinator = new ScreenshotCoordinator(mActivity,
+                            mTabProvider.get(), mChromeOptionShareCallback, mBottomSheetController);
                     // Capture a screenshot once the bottom sheet is fully hidden. The
                     // observer will then remove itself.
                     mBottomSheetController.addObserver(mSheetObserver);
                     mBottomSheetController.hideContent(mBottomSheetContent, true);
-                },
-                /*isFirstParty=*/true);
-        return new FirstPartyOption(
-                propertyModel, Arrays.asList(ContentType.LINK_PAGE_VISIBLE, ContentType.IMAGE));
+                });
+        return new FirstPartyOption(propertyModel,
+                Arrays.asList(ContentType.LINK_PAGE_VISIBLE, ContentType.TEXT,
+                        ContentType.HIGHLIGHTED_TEXT, ContentType.IMAGE),
+                /*contentTypesToDisableFor=*/Collections.emptySet(),
+                /*disableForMultiWindow=*/true);
     }
 
     private FirstPartyOption createCopyLinkFirstPartyOption() {
-        PropertyModel propertyModel = ShareSheetPropertyModelBuilder.createPropertyModel(
-                AppCompatResources.getDrawable(mActivity, R.drawable.ic_content_copy_black),
-                mActivity.getResources().getString(R.string.sharing_copy_url),
-                (shareParams)
-                        -> {
-                    RecordUserAction.record("SharingHubAndroid.CopyURLSelected");
-                    RecordHistogram.recordMediumTimesHistogram(
-                            "Sharing.SharingHubAndroid.TimeToShare",
-                            System.currentTimeMillis() - mShareStartTime);
-                    mBottomSheetController.hideContent(mBottomSheetContent, true);
+        return new FirstPartyOptionBuilder(
+                ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE)
+                .setContentTypesToDisableFor(ContentType.LINK_AND_TEXT)
+                .setIcon(R.drawable.ic_content_copy_black, R.string.sharing_copy_url)
+                .setFeatureNameForMetrics("SharingHubAndroid.CopyURLSelected")
+                .setOnClickCallback((view) -> {
                     ClipboardManager clipboard = (ClipboardManager) mActivity.getSystemService(
                             Context.CLIPBOARD_SERVICE);
                     clipboard.setPrimaryClip(
                             ClipData.newPlainText(mShareParams.getTitle(), mShareParams.getUrl()));
                     Toast.makeText(mActivity, R.string.link_copied, Toast.LENGTH_SHORT).show();
-                },
-                /*isFirstParty=*/true);
-        return new FirstPartyOption(propertyModel,
-                Arrays.asList(ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE));
+                })
+                .build();
+    }
+
+    private FirstPartyOption createCopyImageFirstPartyOption() {
+        return new FirstPartyOptionBuilder(ContentType.IMAGE)
+                .setIcon(R.drawable.ic_content_copy_black, R.string.sharing_copy_image)
+                .setFeatureNameForMetrics("SharingHubAndroid.CopyImageSelected")
+                .setOnClickCallback((view) -> {
+                    if (!mShareParams.getFileUris().isEmpty()) {
+                        Clipboard.getInstance().setImageUri(mShareParams.getFileUris().get(0));
+                        Toast.makeText(mActivity, R.string.image_copied, Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .build();
+    }
+
+    private FirstPartyOption createCopyFirstPartyOption() {
+        return new FirstPartyOptionBuilder(ContentType.LINK_AND_TEXT)
+                .setIcon(R.drawable.ic_content_copy_black, R.string.sharing_copy)
+                .setFeatureNameForMetrics("SharingHubAndroid.CopySelected")
+                .setOnClickCallback((view) -> {
+                    ClipboardManager clipboard = (ClipboardManager) mActivity.getSystemService(
+                            Context.CLIPBOARD_SERVICE);
+                    clipboard.setPrimaryClip(ClipData.newPlainText(
+                            mShareParams.getTitle(), mShareParams.getTextAndUrl()));
+                    Toast.makeText(mActivity, R.string.sharing_copied, Toast.LENGTH_SHORT).show();
+                })
+                .build();
     }
 
     private FirstPartyOption createCopyTextFirstPartyOption() {
-        PropertyModel propertyModel = ShareSheetPropertyModelBuilder.createPropertyModel(
-                AppCompatResources.getDrawable(mActivity, R.drawable.ic_content_copy_black),
-                mActivity.getResources().getString(R.string.sharing_copy_text),
-                (shareParams)
-                        -> {
-                    RecordUserAction.record("SharingHubAndroid.CopyTextSelected");
-                    RecordHistogram.recordMediumTimesHistogram(
-                            "Sharing.SharingHubAndroid.TimeToShare",
-                            System.currentTimeMillis() - mShareStartTime);
-                    mBottomSheetController.hideContent(mBottomSheetContent, true);
+        return new FirstPartyOptionBuilder(ContentType.TEXT, ContentType.HIGHLIGHTED_TEXT)
+                .setContentTypesToDisableFor(ContentType.LINK_AND_TEXT)
+                .setIcon(R.drawable.ic_content_copy_black, R.string.sharing_copy_text)
+                .setFeatureNameForMetrics("SharingHubAndroid.CopyTextSelected")
+                .setOnClickCallback((view) -> {
                     ClipboardManager clipboard = (ClipboardManager) mActivity.getSystemService(
                             Context.CLIPBOARD_SERVICE);
                     clipboard.setPrimaryClip(
                             ClipData.newPlainText(mShareParams.getTitle(), mShareParams.getText()));
                     Toast.makeText(mActivity, R.string.text_copied, Toast.LENGTH_SHORT).show();
-                },
-                /*isFirstParty=*/true);
-        return new FirstPartyOption(propertyModel, Collections.singleton(ContentType.TEXT));
+                })
+                .build();
     }
 
     private FirstPartyOption createSendTabToSelfFirstPartyOption() {
-        PropertyModel propertyModel = ShareSheetPropertyModelBuilder.createPropertyModel(
-                AppCompatResources.getDrawable(mActivity, R.drawable.send_tab),
-                mActivity.getResources().getString(R.string.send_tab_to_self_share_activity_title),
-                (shareParams)
-                        -> {
-                    RecordUserAction.record("SharingHubAndroid.SendTabToSelfSelected");
-                    RecordHistogram.recordMediumTimesHistogram(
-                            "Sharing.SharingHubAndroid.TimeToShare",
-                            System.currentTimeMillis() - mShareStartTime);
-                    mBottomSheetController.hideContent(mBottomSheetContent, true);
-                    SendTabToSelfShareActivity.actionHandler(mActivity,
-                            mTabProvider.get()
-                                    .getWebContents()
-                                    .getNavigationController()
-                                    .getVisibleEntry(),
-                            mBottomSheetController, mTabProvider.get().getWebContents());
-                },
-                /*isFirstParty=*/true);
-        return new FirstPartyOption(propertyModel,
-                Arrays.asList(ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE));
+        return new FirstPartyOptionBuilder(
+                ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE, ContentType.IMAGE)
+                .setIcon(R.drawable.send_tab, R.string.send_tab_to_self_share_activity_title)
+                .setFeatureNameForMetrics("SharingHubAndroid.SendTabToSelfSelected")
+                .setOnClickCallback((view) -> {
+                    SendTabToSelfCoordinator sttsCoordinator =
+                            new SendTabToSelfCoordinator(mActivity, mUrl, mShareParams.getTitle(),
+                                    mBottomSheetController, mSettingsLauncher, mIsSyncEnabled,
+                                    mTabProvider.get()
+                                            .getWebContents()
+                                            .getNavigationController()
+                                            .getVisibleEntry()
+                                            .getTimestamp());
+                    sttsCoordinator.show();
+                })
+                .build();
     }
 
     private FirstPartyOption createQrCodeFirstPartyOption() {
-        PropertyModel propertyModel = ShareSheetPropertyModelBuilder.createPropertyModel(
-                AppCompatResources.getDrawable(mActivity, R.drawable.qr_code),
-                mActivity.getResources().getString(R.string.qr_code_share_icon_label),
-                (currentActivity)
-                        -> {
-                    RecordUserAction.record("SharingHubAndroid.QRCodeSelected");
-                    RecordHistogram.recordMediumTimesHistogram(
-                            "Sharing.SharingHubAndroid.TimeToShare",
-                            System.currentTimeMillis() - mShareStartTime);
-                    mBottomSheetController.hideContent(mBottomSheetContent, true);
-                    QrCodeCoordinator qrCodeCoordinator = new QrCodeCoordinator(mActivity);
+        return new FirstPartyOptionBuilder(
+                ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE, ContentType.IMAGE)
+                .setIcon(R.drawable.qr_code, R.string.qr_code_share_icon_label)
+                .setFeatureNameForMetrics("SharingHubAndroid.QRCodeSelected")
+                .setOnClickCallback((view) -> {
+                    QrCodeCoordinator qrCodeCoordinator = new QrCodeCoordinator(mActivity, mUrl);
                     qrCodeCoordinator.show();
-                },
-                /*isFirstParty=*/true);
-        return new FirstPartyOption(propertyModel,
-                Arrays.asList(ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE));
+                })
+                .build();
     }
 
     private FirstPartyOption createPrintingFirstPartyOption() {
-        PropertyModel propertyModel = ShareSheetPropertyModelBuilder.createPropertyModel(
-                AppCompatResources.getDrawable(mActivity, R.drawable.sharing_print),
-                mActivity.getResources().getString(R.string.print_share_activity_title),
-                (currentActivity)
-                        -> {
-                    RecordUserAction.record("SharingHubAndroid.PrintSelected");
-                    RecordHistogram.recordMediumTimesHistogram(
-                            "Sharing.SharingHubAndroid.TimeToShare",
-                            System.currentTimeMillis() - mShareStartTime);
-                    mBottomSheetController.hideContent(mBottomSheetContent, true);
-                    mPrintTabCallback.onResult(mTabProvider.get());
-                },
-                /*isFirstParty=*/true);
-        return new FirstPartyOption(
-                propertyModel, Collections.singleton(ContentType.LINK_PAGE_VISIBLE));
+        return new FirstPartyOptionBuilder(ContentType.LINK_PAGE_VISIBLE)
+                .setIcon(R.drawable.sharing_print, R.string.print_share_activity_title)
+                .setFeatureNameForMetrics("SharingHubAndroid.PrintSelected")
+                .setOnClickCallback((view) -> { mPrintTabCallback.onResult(mTabProvider.get()); })
+                .build();
+    }
+
+    private FirstPartyOption createHighlightsFirstPartyOption() {
+        return new FirstPartyOptionBuilder(ContentType.HIGHLIGHTED_TEXT)
+                .setIcon(R.drawable.link, R.string.sharing_highlights)
+                .setFeatureNameForMetrics("SharingHubAndroid.LinkToTextSelected")
+                .setOnClickCallback((view) -> {
+                    LinkToTextCoordinator linkToTextCoordinator =
+                            new LinkToTextCoordinator(mActivity, mTabProvider.get(),
+                                    mChromeOptionShareCallback, mUrl, mShareParams.getText());
+                })
+                .build();
+    }
+
+    /**
+     * Returns the url to share.
+     *
+     * <p>This prioritizes the URL in {@link ShareParams}, but if it does not exist, we look for an
+     * image source URL from {@link ChromeShareExtras}. The image source URL is not contained in
+     * {@link ShareParams#getUrl()} because we do not want to share the image URL with the image
+     * file in third-party app shares. If both are empty then current tab URL is used. This is
+     * useful for {@link LinkToTextCoordinator} that needs URL but it cannot be provided through
+     * {@link ShareParams}.
+     */
+    static String getUrlToShare(
+            ShareParams shareParams, ChromeShareExtras chromeShareExtras, String tabUrl) {
+        if (!TextUtils.isEmpty(shareParams.getUrl())) {
+            return shareParams.getUrl();
+        } else if (!TextUtils.isEmpty(chromeShareExtras.getImageSrcUrl())) {
+            return chromeShareExtras.getImageSrcUrl();
+        }
+        return tabUrl;
+    }
+
+    static void recordTimeToShare(long shareStartTime) {
+        RecordHistogram.recordMediumTimesHistogram("Sharing.SharingHubAndroid.TimeToShare",
+                System.currentTimeMillis() - shareStartTime);
     }
 }

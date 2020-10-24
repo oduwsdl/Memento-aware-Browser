@@ -236,9 +236,6 @@ extern const char kGoogleKeepAppId[];
 // The extension id of the Youtube application.
 extern const char kYoutubeAppId[];
 
-// The extension id of the genius (Get Help) app.
-extern const char kGeniusAppId[];
-
 #if defined(OS_CHROMEOS)
 // The extension id of the default Demo Mode Highlights app.
 extern const char kHighlightsAppId[];
@@ -293,7 +290,11 @@ extern const logging::LogSeverity kMinimumSeverityToReportError;
 
 // The minimum channel where Service Worker based extensions can run.
 constexpr version_info::Channel kMinChannelForServiceWorkerBasedExtension =
-    version_info::Channel::DEV;
+    version_info::Channel::STABLE;
+
+// IDs for the Media Router Component Extension.
+extern const char kCastExtensionIdRelease[];
+extern const char kCastExtensionIdDev[];
 
 }  // namespace extension_misc
 

@@ -6,24 +6,26 @@
 
 #include <string>
 
+#include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_features.h"
+#include "chrome/browser/prerender/isolated/isolated_prerender_network_context_client.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_params.h"
+#include "chrome/browser/prerender/isolated/isolated_prerender_prefetch_metrics_collector.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_proxy_configurator.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_service.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_service_factory.h"
-#include "chrome/browser/prerender/isolated/isolated_prerender_service_workers_observer.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_subresource_manager.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
@@ -31,14 +33,18 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/prefs/pref_service.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/isolation_info.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -104,11 +110,60 @@ void OnGotCookieList(
   if (!cookie_list.empty()) {
     std::move(result_callback)
         .Run(url, false,
-             IsolatedPrerenderTabHelper::PrefetchStatus::
+             IsolatedPrerenderPrefetchStatus::
                  kPrefetchNotEligibleUserHasCookies);
     return;
   }
+
+  // Cookies are tricky because cookies for different paths or a higher level
+  // domain (e.g.: m.foo.com and foo.com) may not show up in |cookie_list|, but
+  // they will show up in |excluded_cookies|. To check for any cookies for a
+  // domain, compare the domains of the prefetched |url| and the domains of all
+  // the returned cookies.
+  bool excluded_cookie_has_tld = false;
+  for (const auto& cookie_result : excluded_cookies) {
+    if (cookie_result.cookie.IsExpired(base::Time::Now())) {
+      // Expired cookies don't count.
+      continue;
+    }
+
+    if (url.DomainIs(cookie_result.cookie.DomainWithoutDot())) {
+      excluded_cookie_has_tld = true;
+      break;
+    }
+  }
+
+  if (excluded_cookie_has_tld) {
+    std::move(result_callback)
+        .Run(url, false,
+             IsolatedPrerenderPrefetchStatus::
+                 kPrefetchNotEligibleUserHasCookies);
+    return;
+  }
+
   std::move(result_callback).Run(url, true, base::nullopt);
+}
+
+void CookieSetHelper(base::RepeatingClosure run_me,
+                     net::CookieAccessResult access_result) {
+  run_me.Run();
+}
+
+bool ShouldStartSpareRenderer() {
+  if (!IsolatedPrerenderStartsSpareRenderer()) {
+    return false;
+  }
+
+  for (content::RenderProcessHost::iterator iter(
+           content::RenderProcessHost::AllHostsIterator());
+       !iter.IsAtEnd(); iter.Advance()) {
+    if (iter.GetCurrentValue()->IsUnused()) {
+      // There is already a spare renderer.
+      return false;
+    }
+  }
+
+  return true;
 }
 
 }  // namespace
@@ -132,6 +187,12 @@ IsolatedPrerenderTabHelper::CurrentPageLoad::CurrentPageLoad(
 }
 
 IsolatedPrerenderTabHelper::CurrentPageLoad::~CurrentPageLoad() {
+  if (IsolatedPrerenderStartsSpareRenderer()) {
+    UMA_HISTOGRAM_COUNTS_100(
+        "IsolatedPrerender.SpareRenderer.CountStartedOnSRP",
+        number_of_spare_renderers_started_);
+  }
+
   if (!profile_)
     return;
 
@@ -152,6 +213,15 @@ IsolatedPrerenderTabHelper::CurrentPageLoad::~CurrentPageLoad() {
 // static
 const void* IsolatedPrerenderTabHelper::PrefetchingLikelyEventKey() {
   return &kPrefetchingLikelyEventKey;
+}
+
+static content::ServiceWorkerContext* g_service_worker_context_for_test =
+    nullptr;
+
+// static
+void IsolatedPrerenderTabHelper::SetServiceWorkerContextForTest(
+    content::ServiceWorkerContext* context) {
+  g_service_worker_context_for_test = context;
 }
 
 IsolatedPrerenderTabHelper::IsolatedPrerenderTabHelper(
@@ -201,10 +271,34 @@ IsolatedPrerenderTabHelper::after_srp_metrics() const {
   return base::nullopt;
 }
 
+// static
+bool IsolatedPrerenderTabHelper::IsProfileEligible(Profile* profile) {
+  if (profile->IsOffTheRecord()) {
+    return false;
+  }
+
+  if (IsolatedPrerenderOnlyForLiteMode()) {
+    return data_reduction_proxy::DataReductionProxySettings::
+        IsDataSaverEnabledByUser(profile->IsOffTheRecord(),
+                                 profile->GetPrefs());
+  }
+  return true;
+}
+
+bool IsolatedPrerenderTabHelper::IsProfileEligible() const {
+  return IsProfileEligible(profile_);
+}
+
 void IsolatedPrerenderTabHelper::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!navigation_handle->IsInMainFrame()) {
+    return;
+  }
+
+  // This check is only relevant for detecting AMP pages. For this feature, AMP
+  // pages won't get sped up any so just ignore them.
+  if (navigation_handle->IsSameDocument()) {
     return;
   }
 
@@ -213,12 +307,21 @@ void IsolatedPrerenderTabHelper::DidStartNavigation(
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile_);
   if (prerender_manager &&
-      prerender_manager->IsWebContentsPrerendering(web_contents(), nullptr)) {
+      prerender_manager->IsWebContentsPrerendering(web_contents())) {
     return;
   }
 
+  const GURL& url = navigation_handle->GetURL();
+
+  if (page_->prefetched_responses_.find(url) !=
+      page_->prefetched_responses_.end()) {
+    // Start copying any needed cookies over to the main profile if this page
+    // was prefetched.
+    CopyIsolatedCookiesOnAfterSRPClick(url);
+  }
+
   // User is navigating, don't bother prefetching further.
-  page_->url_loader_.reset();
+  page_->url_loaders_.clear();
 
   if (page_->srp_metrics_->prefetch_attempted_count_ > 0) {
     UMA_HISTOGRAM_COUNTS_100(
@@ -246,9 +349,187 @@ void IsolatedPrerenderTabHelper::NotifyPrefetchProbeLatency(
   page_->probe_latency_ = probe_latency;
 }
 
-void IsolatedPrerenderTabHelper::OnPrefetchStatusUpdate(const GURL& url,
-                                                        PrefetchStatus usage) {
+void IsolatedPrerenderTabHelper::ReportProbeResult(
+    const GURL& url,
+    IsolatedPrerenderProbeResult result) {
+  if (!page_->prefetch_metrics_collector_) {
+    return;
+  }
+  page_->prefetch_metrics_collector_->OnMainframeNavigationProbeResult(url,
+                                                                       result);
+}
+
+void IsolatedPrerenderTabHelper::OnPrefetchStatusUpdate(
+    const GURL& url,
+    IsolatedPrerenderPrefetchStatus usage) {
   page_->prefetch_status_by_url_[url] = usage;
+}
+
+IsolatedPrerenderPrefetchStatus
+IsolatedPrerenderTabHelper::MaybeUpdatePrefetchStatusWithNSPContext(
+    const GURL& url,
+    IsolatedPrerenderPrefetchStatus status) const {
+  switch (status) {
+    // These are the statuses we want to update.
+    case IsolatedPrerenderPrefetchStatus::kPrefetchUsedNoProbe:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchUsedProbeSuccess:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchNotUsedProbeFailed:
+      break;
+    // These statuses are not applicable since the prefetch was not used after
+    // the click.
+    case IsolatedPrerenderPrefetchStatus::kPrefetchNotStarted:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleGoogleDomain:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleUserHasCookies:
+    case IsolatedPrerenderPrefetchStatus::
+        kPrefetchNotEligibleUserHasServiceWorker:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleSchemeIsNotHttps:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleHostIsIPAddress:
+    case IsolatedPrerenderPrefetchStatus::
+        kPrefetchNotEligibleNonDefaultStoragePartition:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchNotFinishedInTime:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchFailedNetError:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchFailedNon2XX:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchFailedNotHTML:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchSuccessful:
+    case IsolatedPrerenderPrefetchStatus::kNavigatedToLinkNotOnSRP:
+    case IsolatedPrerenderPrefetchStatus::kSubresourceThrottled:
+      return status;
+    // These statuses we are going to update to, and this is the only place that
+    // they are set so they are not expected to be passed in.
+    case IsolatedPrerenderPrefetchStatus::kPrefetchUsedNoProbeWithNSP:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchUsedProbeSuccessWithNSP:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchNotUsedProbeFailedWithNSP:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchUsedNoProbeNSPAttemptDenied:
+    case IsolatedPrerenderPrefetchStatus::
+        kPrefetchUsedProbeSuccessNSPAttemptDenied:
+    case IsolatedPrerenderPrefetchStatus::
+        kPrefetchNotUsedProbeFailedNSPAttemptDenied:
+    case IsolatedPrerenderPrefetchStatus::kPrefetchUsedNoProbeNSPNotStarted:
+    case IsolatedPrerenderPrefetchStatus::
+        kPrefetchUsedProbeSuccessNSPNotStarted:
+    case IsolatedPrerenderPrefetchStatus::
+        kPrefetchNotUsedProbeFailedNSPNotStarted:
+      NOTREACHED();
+      return status;
+  }
+
+  bool no_state_prefetch_not_started =
+      base::Contains(page_->urls_to_no_state_prefetch_, url);
+
+  bool no_state_prefetch_complete =
+      base::Contains(page_->no_state_prefetched_urls_, url);
+
+  bool no_state_prefetch_failed =
+      base::Contains(page_->failed_no_state_prefetch_urls_, url);
+
+  if (!no_state_prefetch_not_started && !no_state_prefetch_complete &&
+      !no_state_prefetch_failed) {
+    return status;
+  }
+
+  // At most one of those bools should be true.
+  DCHECK(no_state_prefetch_not_started ^ no_state_prefetch_complete ^
+         no_state_prefetch_failed);
+
+  if (no_state_prefetch_complete) {
+    switch (status) {
+      case IsolatedPrerenderPrefetchStatus::kPrefetchUsedNoProbe:
+        return IsolatedPrerenderPrefetchStatus::kPrefetchUsedNoProbeWithNSP;
+      case IsolatedPrerenderPrefetchStatus::kPrefetchUsedProbeSuccess:
+        return IsolatedPrerenderPrefetchStatus::
+            kPrefetchUsedProbeSuccessWithNSP;
+      case IsolatedPrerenderPrefetchStatus::kPrefetchNotUsedProbeFailed:
+        return IsolatedPrerenderPrefetchStatus::
+            kPrefetchNotUsedProbeFailedWithNSP;
+      default:
+        break;
+    }
+  }
+
+  if (no_state_prefetch_failed) {
+    switch (status) {
+      case IsolatedPrerenderPrefetchStatus::kPrefetchUsedNoProbe:
+        return IsolatedPrerenderPrefetchStatus::
+            kPrefetchUsedNoProbeNSPAttemptDenied;
+      case IsolatedPrerenderPrefetchStatus::kPrefetchUsedProbeSuccess:
+        return IsolatedPrerenderPrefetchStatus::
+            kPrefetchUsedProbeSuccessNSPAttemptDenied;
+      case IsolatedPrerenderPrefetchStatus::kPrefetchNotUsedProbeFailed:
+        return IsolatedPrerenderPrefetchStatus::
+            kPrefetchNotUsedProbeFailedNSPAttemptDenied;
+      default:
+        break;
+    }
+  }
+
+  if (no_state_prefetch_not_started) {
+    switch (status) {
+      case IsolatedPrerenderPrefetchStatus::kPrefetchUsedNoProbe:
+        return IsolatedPrerenderPrefetchStatus::
+            kPrefetchUsedNoProbeNSPNotStarted;
+      case IsolatedPrerenderPrefetchStatus::kPrefetchUsedProbeSuccess:
+        return IsolatedPrerenderPrefetchStatus::
+            kPrefetchUsedProbeSuccessNSPNotStarted;
+      case IsolatedPrerenderPrefetchStatus::kPrefetchNotUsedProbeFailed:
+        return IsolatedPrerenderPrefetchStatus::
+            kPrefetchNotUsedProbeFailedNSPNotStarted;
+      default:
+        break;
+    }
+  }
+
+  NOTREACHED();
+  return status;
+}
+
+std::unique_ptr<IsolatedPrerenderTabHelper::AfterSRPMetrics>
+IsolatedPrerenderTabHelper::ComputeAfterSRPMetricsBeforeCommit(
+    content::NavigationHandle* handle) const {
+  if (page_->srp_metrics_->predicted_urls_count_ <= 0) {
+    return nullptr;
+  }
+
+  auto metrics = std::make_unique<AfterSRPMetrics>();
+
+  metrics->url_ = handle->GetURL();
+  metrics->prefetch_eligible_count_ =
+      page_->srp_metrics_->prefetch_eligible_count_;
+
+  metrics->probe_latency_ = page_->probe_latency_;
+
+  // Check every url in the redirect chain for a status, starting at the end
+  // and working backwards. Note: When a redirect chain is eligible all the
+  // way to the end, the status is already propagated. But if a redirect was
+  // not eligible then this will find its last known status.
+  DCHECK(!handle->GetRedirectChain().empty());
+  base::Optional<IsolatedPrerenderPrefetchStatus> status;
+  base::Optional<size_t> prediction_position;
+  for (auto back_iter = handle->GetRedirectChain().rbegin();
+       back_iter != handle->GetRedirectChain().rend(); ++back_iter) {
+    GURL chain_url = *back_iter;
+    auto status_iter = page_->prefetch_status_by_url_.find(chain_url);
+    if (!status && status_iter != page_->prefetch_status_by_url_.end()) {
+      status = MaybeUpdatePrefetchStatusWithNSPContext(chain_url,
+                                                       status_iter->second);
+    }
+
+    // Same check for the original prediction ordering.
+    auto position_iter = page_->original_prediction_ordering_.find(chain_url);
+    if (!prediction_position &&
+        position_iter != page_->original_prediction_ordering_.end()) {
+      prediction_position = position_iter->second;
+    }
+  }
+
+  if (status) {
+    metrics->prefetch_status_ = *status;
+  } else {
+    metrics->prefetch_status_ =
+        IsolatedPrerenderPrefetchStatus::kNavigatedToLinkNotOnSRP;
+  }
+  metrics->clicked_link_srp_position_ = prediction_position;
+
+  return metrics;
 }
 
 void IsolatedPrerenderTabHelper::DidFinishNavigation(
@@ -257,6 +538,13 @@ void IsolatedPrerenderTabHelper::DidFinishNavigation(
   if (!navigation_handle->IsInMainFrame()) {
     return;
   }
+
+  // This check is only relevant for detecting AMP pages. For this feature, AMP
+  // pages won't get sped up any so just ignore them.
+  if (navigation_handle->IsSameDocument()) {
+    return;
+  }
+
   if (!navigation_handle->HasCommitted()) {
     return;
   }
@@ -266,7 +554,7 @@ void IsolatedPrerenderTabHelper::DidFinishNavigation(
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile_);
   if (prerender_manager &&
-      prerender_manager->IsWebContentsPrerendering(web_contents(), nullptr)) {
+      prerender_manager->IsWebContentsPrerendering(web_contents())) {
     return;
   }
 
@@ -278,37 +566,13 @@ void IsolatedPrerenderTabHelper::DidFinishNavigation(
       std::make_unique<CurrentPageLoad>(navigation_handle);
 
   if (page_->srp_metrics_->predicted_urls_count_ > 0) {
+    page_->prefetch_metrics_collector_->OnMainframeNavigatedTo(url);
+
     // If the previous page load was a Google SRP, the AfterSRPMetrics class
     // needs to be created now from the SRP's |page_| and then set on the new
     // one when we set it at the end of this method.
-    new_page->after_srp_metrics_ = std::make_unique<AfterSRPMetrics>();
-    new_page->after_srp_metrics_->url_ = url;
-    new_page->after_srp_metrics_->prefetch_eligible_count_ =
-        page_->srp_metrics_->prefetch_eligible_count_;
-
-    new_page->after_srp_metrics_->probe_latency_ = page_->probe_latency_;
-
-    auto status_iter = page_->prefetch_status_by_url_.find(url);
-    if (status_iter != page_->prefetch_status_by_url_.end()) {
-      new_page->after_srp_metrics_->prefetch_status_ = status_iter->second;
-    } else {
-      new_page->after_srp_metrics_->prefetch_status_ =
-          PrefetchStatus::kNavigatedToLinkNotOnSRP;
-    }
-
-    // Whenever probe latency is set, the status should reflect that a probe
-    // was attempted and vise versa.
-    DCHECK_EQ(new_page->after_srp_metrics_->probe_latency_.has_value(),
-              new_page->after_srp_metrics_->prefetch_status_ ==
-                      PrefetchStatus::kPrefetchUsedProbeSuccess ||
-                  new_page->after_srp_metrics_->prefetch_status_ ==
-                      PrefetchStatus::kPrefetchNotUsedProbeFailed);
-
-    auto position_iter = page_->original_prediction_ordering_.find(url);
-    if (position_iter != page_->original_prediction_ordering_.end()) {
-      new_page->after_srp_metrics_->clicked_link_srp_position_ =
-          position_iter->second;
-    }
+    new_page->after_srp_metrics_ =
+        ComputeAfterSRPMetricsBeforeCommit(navigation_handle);
 
     // See if the page being navigated to was prerendered. If so, copy over its
     // subresource manager and networking pipes.
@@ -318,6 +582,8 @@ void IsolatedPrerenderTabHelper::DidFinishNavigation(
         service->TakeSubresourceManagerForURL(url);
     if (manager) {
       new_page->subresource_manager_ = std::move(manager);
+      new_page->isolated_cookie_manager_ =
+          std::move(page_->isolated_cookie_manager_);
       new_page->isolated_url_loader_factory_ =
           std::move(page_->isolated_url_loader_factory_);
       new_page->isolated_network_context_ =
@@ -369,14 +635,12 @@ IsolatedPrerenderTabHelper::CopyPrefetchResponseForNSP(const GURL& url) {
 }
 
 bool IsolatedPrerenderTabHelper::PrefetchingActive() const {
-  return page_ && page_->url_loader_;
+  return page_ && !page_->url_loaders_.empty();
 }
 
 void IsolatedPrerenderTabHelper::Prefetch() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsolatedPrerenderIsEnabled());
-
-  page_->url_loader_.reset();
 
   if (!page_->srp_metrics_->navigation_to_prefetch_start_.has_value()) {
     page_->srp_metrics_->navigation_to_prefetch_start_ =
@@ -389,21 +653,37 @@ void IsolatedPrerenderTabHelper::Prefetch() {
     page_->isolated_network_context_->CloseIdleConnections(base::DoNothing());
   }
 
-  if (page_->urls_to_prefetch_.empty()) {
-    return;
-  }
-
-  if (IsolatedPrerenderMaximumNumberOfPrefetches().has_value() &&
-      page_->srp_metrics_->prefetch_attempted_count_ >=
-          IsolatedPrerenderMaximumNumberOfPrefetches().value()) {
-    return;
-  }
-
   if (web_contents()->GetVisibility() != content::Visibility::VISIBLE) {
     // |OnVisibilityChanged| will restart prefetching when the tab becomes
     // visible again.
     return;
   }
+
+  DCHECK_GT(IsolatedPrerenderMaximumNumberOfConcurrentPrefetches(), 0U);
+
+  while (
+      // Checks that the total number of prefetches has not been met.
+      !(IsolatedPrerenderMaximumNumberOfPrefetches().has_value() &&
+        page_->srp_metrics_->prefetch_attempted_count_ >=
+            IsolatedPrerenderMaximumNumberOfPrefetches().value()) &&
+
+      // Checks that there are still urls to prefetch.
+      !page_->urls_to_prefetch_.empty() &&
+
+      // Checks that the max number of concurrent prefetches has not been met.
+      page_->url_loaders_.size() <
+          IsolatedPrerenderMaximumNumberOfConcurrentPrefetches()) {
+    StartSinglePrefetch();
+  }
+}
+
+void IsolatedPrerenderTabHelper::StartSinglePrefetch() {
+  DCHECK(!page_->urls_to_prefetch_.empty());
+  DCHECK(!(IsolatedPrerenderMaximumNumberOfPrefetches().has_value() &&
+           page_->srp_metrics_->prefetch_attempted_count_ >=
+               IsolatedPrerenderMaximumNumberOfPrefetches().value()));
+  DCHECK(page_->url_loaders_.size() <
+         IsolatedPrerenderMaximumNumberOfConcurrentPrefetches());
 
   page_->srp_metrics_->prefetch_attempted_count_++;
 
@@ -411,10 +691,13 @@ void IsolatedPrerenderTabHelper::Prefetch() {
   page_->urls_to_prefetch_.erase(page_->urls_to_prefetch_.begin());
 
   // The status is updated to be successful or failed when it finishes.
-  OnPrefetchStatusUpdate(url, PrefetchStatus::kPrefetchNotFinishedInTime);
+  OnPrefetchStatusUpdate(
+      url, IsolatedPrerenderPrefetchStatus::kPrefetchNotFinishedInTime);
 
-  net::IsolationInfo isolation_info =
-      net::IsolationInfo::CreateOpaqueAndNonTransient();
+  url::Origin origin = url::Origin::Create(url);
+  net::IsolationInfo isolation_info = net::IsolationInfo::Create(
+      net::IsolationInfo::RequestType::kMainFrame, origin, origin,
+      net::SiteForCookies::FromOrigin(origin));
   network::ResourceRequest::TrustedParams trusted_params;
   trusted_params.isolation_info = isolation_info;
 
@@ -422,10 +705,12 @@ void IsolatedPrerenderTabHelper::Prefetch() {
       std::make_unique<network::ResourceRequest>();
   request->url = url;
   request->method = "GET";
+  request->enable_load_timing = true;
   request->load_flags = net::LOAD_DISABLE_CACHE | net::LOAD_PREFETCH;
-  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  request->credentials_mode = network::mojom::CredentialsMode::kInclude;
   request->headers.SetHeader(content::kCorsExemptPurposeHeaderName, "prefetch");
   request->trusted_params = trusted_params;
+  request->site_for_cookies = trusted_params.isolation_info.site_for_cookies();
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation("navigation_predictor_srp_prefetch",
@@ -452,23 +737,32 @@ void IsolatedPrerenderTabHelper::Prefetch() {
             policy_exception_justification: "Not implemented."
         })");
 
-  page_->url_loader_ =
+  std::unique_ptr<network::SimpleURLLoader> loader =
       network::SimpleURLLoader::Create(std::move(request), traffic_annotation);
 
-  // base::Unretained is safe because |page_->url_loader_| is owned by |this|.
-  page_->url_loader_->SetOnRedirectCallback(
+  // base::Unretained is safe because |loader| is owned by |this|.
+  loader->SetOnRedirectCallback(
       base::BindRepeating(&IsolatedPrerenderTabHelper::OnPrefetchRedirect,
-                          base::Unretained(this), url));
-  page_->url_loader_->SetAllowHttpErrorResults(true);
-  page_->url_loader_->SetTimeoutDuration(IsolatedPrefetchTimeoutDuration());
-  page_->url_loader_->DownloadToString(
+                          base::Unretained(this), loader.get(), url));
+  loader->SetAllowHttpErrorResults(true);
+  loader->SetTimeoutDuration(IsolatedPrefetchTimeoutDuration());
+  loader->DownloadToString(
       GetURLLoaderFactory(),
       base::BindOnce(&IsolatedPrerenderTabHelper::OnPrefetchComplete,
-                     base::Unretained(this), url, isolation_info),
-      1024 * 1024 * 5 /* 5MB */);
+                     base::Unretained(this), loader.get(), url, isolation_info),
+      IsolatedPrerenderMainframeBodyLengthLimit());
+
+  page_->url_loaders_.emplace(std::move(loader));
+
+  // Start a spare renderer now so that it will be ready by the time it is
+  // useful to have.
+  if (ShouldStartSpareRenderer()) {
+    StartSpareRenderer();
+  }
 }
 
 void IsolatedPrerenderTabHelper::OnPrefetchRedirect(
+    network::SimpleURLLoader* loader,
     const GURL& original_url,
     const net::RedirectInfo& redirect_info,
     const network::mojom::URLResponseHead& response_head,
@@ -493,10 +787,14 @@ void IsolatedPrerenderTabHelper::OnPrefetchRedirect(
                      weak_factory_.GetWeakPtr()));
 
   // Cancels the current request.
+  DCHECK(page_->url_loaders_.find(loader) != page_->url_loaders_.end());
+  page_->url_loaders_.erase(page_->url_loaders_.find(loader));
+
   Prefetch();
 }
 
 void IsolatedPrerenderTabHelper::OnPrefetchComplete(
+    network::SimpleURLLoader* loader,
     const GURL& url,
     const net::IsolationInfo& isolation_info,
     std::unique_ptr<std::string> body) {
@@ -504,22 +802,37 @@ void IsolatedPrerenderTabHelper::OnPrefetchComplete(
   DCHECK(PrefetchingActive());
 
   base::UmaHistogramSparse("IsolatedPrerender.Prefetch.Mainframe.NetError",
-                           std::abs(page_->url_loader_->NetError()));
+                           std::abs(loader->NetError()));
 
-  if (page_->url_loader_->NetError() != net::OK) {
-    OnPrefetchStatusUpdate(url, PrefetchStatus::kPrefetchFailedNetError);
+  if (loader->CompletionStatus()) {
+    page_->prefetch_metrics_collector_->OnMainframeResourcePrefetched(
+        url, page_->original_prediction_ordering_.find(url)->second,
+        loader->ResponseInfo() ? loader->ResponseInfo()->Clone() : nullptr,
+        loader->CompletionStatus().value());
   }
 
-  if (page_->url_loader_->NetError() == net::OK && body &&
-      page_->url_loader_->ResponseInfo()) {
-    network::mojom::URLResponseHeadPtr head =
-        page_->url_loader_->ResponseInfo()->Clone();
+  if (loader->NetError() != net::OK) {
+    OnPrefetchStatusUpdate(
+        url, IsolatedPrerenderPrefetchStatus::kPrefetchFailedNetError);
+
+    for (auto& observer : observer_list_) {
+      observer.OnPrefetchCompletedWithError(url, loader->NetError());
+    }
+  }
+
+  if (loader->NetError() == net::OK && body && loader->ResponseInfo()) {
+    network::mojom::URLResponseHeadPtr head = loader->ResponseInfo()->Clone();
 
     DCHECK(!head->proxy_server.is_direct());
 
     HandlePrefetchResponse(url, isolation_info, std::move(head),
+
                            std::move(body));
   }
+
+  DCHECK(page_->url_loaders_.find(loader) != page_->url_loaders_.end());
+  page_->url_loaders_.erase(page_->url_loaders_.find(loader));
+
   Prefetch();
 }
 
@@ -557,7 +870,8 @@ void IsolatedPrerenderTabHelper::HandlePrefetchResponse(
                            response_code);
 
   if (response_code < 200 || response_code >= 300) {
-    OnPrefetchStatusUpdate(url, PrefetchStatus::kPrefetchFailedNon2XX);
+    OnPrefetchStatusUpdate(
+        url, IsolatedPrerenderPrefetchStatus::kPrefetchFailedNon2XX);
     for (auto& observer : observer_list_) {
       observer.OnPrefetchCompletedWithError(url, response_code);
     }
@@ -565,7 +879,8 @@ void IsolatedPrerenderTabHelper::HandlePrefetchResponse(
   }
 
   if (head->mime_type != "text/html") {
-    OnPrefetchStatusUpdate(url, PrefetchStatus::kPrefetchFailedNotHTML);
+    OnPrefetchStatusUpdate(
+        url, IsolatedPrerenderPrefetchStatus::kPrefetchFailedNotHTML);
     return;
   }
 
@@ -575,7 +890,8 @@ void IsolatedPrerenderTabHelper::HandlePrefetchResponse(
   page_->prefetched_responses_.emplace(url, std::move(response));
   page_->srp_metrics_->prefetch_successful_count_++;
 
-  OnPrefetchStatusUpdate(url, PrefetchStatus::kPrefetchSuccessful);
+  OnPrefetchStatusUpdate(url,
+                         IsolatedPrerenderPrefetchStatus::kPrefetchSuccessful);
 
   MaybeDoNoStatePrefetch(url);
 
@@ -642,6 +958,10 @@ void IsolatedPrerenderTabHelper::DoNoStatePrefetch() {
   // before the end of the method if the handle is not created.
   IsolatedPrerenderSubresourceManager* manager =
       service->OnAboutToNoStatePrefetch(url, CopyPrefetchResponseForNSP(url));
+  DCHECK_EQ(manager, service->GetSubresourceManagerForURL(url));
+
+  manager->SetPrefetchMetricsCollector(page_->prefetch_metrics_collector_);
+
   manager->SetCreateIsolatedLoaderFactoryCallback(base::BindRepeating(
       &IsolatedPrerenderTabHelper::CreateNewURLLoaderFactory,
       weak_factory_.GetWeakPtr()));
@@ -659,6 +979,26 @@ void IsolatedPrerenderTabHelper::DoNoStatePrefetch() {
     service->DestroySubresourceManagerForURL(url);
     // Don't use |manager| again!
 
+    page_->failed_no_state_prefetch_urls_.push_back(url);
+
+    // Try the next URL.
+    page_->urls_to_no_state_prefetch_.erase(
+        page_->urls_to_no_state_prefetch_.begin());
+    DoNoStatePrefetch();
+    return;
+  }
+
+  page_->number_of_no_state_prefetch_attempts_++;
+
+  // It is possible for the manager to be destroyed during the NoStatePrefetch
+  // navigation. If this happens, abort the NSP and try again.
+  manager = service->GetSubresourceManagerForURL(url);
+  if (!manager) {
+    handle->OnCancel();
+    handle.reset();
+
+    page_->failed_no_state_prefetch_urls_.push_back(url);
+
     // Try the next URL.
     page_->urls_to_no_state_prefetch_.erase(
         page_->urls_to_no_state_prefetch_.begin());
@@ -670,14 +1010,24 @@ void IsolatedPrerenderTabHelper::DoNoStatePrefetch() {
       std::move(handle),
       base::BindOnce(&IsolatedPrerenderTabHelper::OnPrerenderDone,
                      weak_factory_.GetWeakPtr(), url));
-
-  page_->number_of_no_state_prefetch_attempts_++;
 }
 
 void IsolatedPrerenderTabHelper::OnPrerenderDone(const GURL& url) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!page_->urls_to_no_state_prefetch_.empty());
-  DCHECK_EQ(url, page_->urls_to_no_state_prefetch_[0]);
+
+  // The completed NSP probably consumed a previously started spare renderer, so
+  // kick off another one if needed.
+  if (ShouldStartSpareRenderer()) {
+    StartSpareRenderer();
+  }
+
+  // It is possible that this is run as a callback after a navigation has
+  // already happened and |page_| is now a different instance than when the
+  // prerender was started. In this case, just return.
+  if (page_->urls_to_no_state_prefetch_.empty() ||
+      url != page_->urls_to_no_state_prefetch_[0]) {
+    return;
+  }
 
   page_->no_state_prefetched_urls_.push_back(
       page_->urls_to_no_state_prefetch_[0]);
@@ -692,6 +1042,11 @@ void IsolatedPrerenderTabHelper::OnPrerenderDone(const GURL& url) {
   DoNoStatePrefetch();
 }
 
+void IsolatedPrerenderTabHelper::StartSpareRenderer() {
+  page_->number_of_spare_renderers_started_++;
+  content::RenderProcessHost::WarmupSpareRenderProcessHost(profile_);
+}
+
 void IsolatedPrerenderTabHelper::OnPredictionUpdated(
     const base::Optional<NavigationPredictorKeyedService::Prediction>
         prediction) {
@@ -700,10 +1055,7 @@ void IsolatedPrerenderTabHelper::OnPredictionUpdated(
     return;
   }
 
-  // DataSaver must be enabled by the user to use this feature.
-  if (!data_reduction_proxy::DataReductionProxySettings::
-          IsDataSaverEnabledByUser(profile_->IsOffTheRecord(),
-                                   profile_->GetPrefs())) {
+  if (!IsProfileEligible()) {
     return;
   }
 
@@ -737,6 +1089,13 @@ void IsolatedPrerenderTabHelper::OnPredictionUpdated(
     return;
   }
 
+  if (!page_->prefetch_metrics_collector_) {
+    page_->prefetch_metrics_collector_ =
+        base::MakeRefCounted<IsolatedPrerenderPrefetchMetricsCollector>(
+            page_->navigation_start_,
+            web_contents()->GetMainFrame()->GetPageUkmSourceId());
+  }
+
   // It's very likely we'll prefetch something at this point, so inform PLM to
   // start tracking metrics.
   InformPLMOfLikelyPrefetching(web_contents());
@@ -766,32 +1125,44 @@ void IsolatedPrerenderTabHelper::OnPredictionUpdated(
 }
 
 // static
+content::ServiceWorkerContext*
+IsolatedPrerenderTabHelper::GetServiceWorkerContext(Profile* profile) {
+  if (g_service_worker_context_for_test)
+    return g_service_worker_context_for_test;
+  return content::BrowserContext::GetDefaultStoragePartition(profile)
+      ->GetServiceWorkerContext();
+}
+
+// static
 void IsolatedPrerenderTabHelper::CheckEligibilityOfURL(
     Profile* profile,
     const GURL& url,
     OnEligibilityResultCallback result_callback) {
-  if (!data_reduction_proxy::DataReductionProxySettings::
-          IsDataSaverEnabledByUser(profile->IsOffTheRecord(),
-                                   profile->GetPrefs())) {
+  if (!IsProfileEligible(profile)) {
     std::move(result_callback).Run(url, false, base::nullopt);
     return;
   }
 
   if (google_util::IsGoogleAssociatedDomainUrl(url)) {
     std::move(result_callback)
-        .Run(url, false, PrefetchStatus::kPrefetchNotEligibleGoogleDomain);
+        .Run(url, false,
+             IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleGoogleDomain);
     return;
   }
 
   if (url.HostIsIPAddress()) {
     std::move(result_callback)
-        .Run(url, false, PrefetchStatus::kPrefetchNotEligibleHostIsIPAddress);
+        .Run(url, false,
+             IsolatedPrerenderPrefetchStatus::
+                 kPrefetchNotEligibleHostIsIPAddress);
     return;
   }
 
   if (!url.SchemeIs(url::kHttpsScheme)) {
     std::move(result_callback)
-        .Run(url, false, PrefetchStatus::kPrefetchNotEligibleSchemeIsNotHttps);
+        .Run(url, false,
+             IsolatedPrerenderPrefetchStatus::
+                 kPrefetchNotEligibleSchemeIsNotHttps);
     return;
   }
 
@@ -807,7 +1178,8 @@ void IsolatedPrerenderTabHelper::CheckEligibilityOfURL(
           /*can_create=*/false)) {
     std::move(result_callback)
         .Run(url, false,
-             PrefetchStatus::kPrefetchNotEligibleNonDefaultStoragePartition);
+             IsolatedPrerenderPrefetchStatus::
+                 kPrefetchNotEligibleNonDefaultStoragePartition);
     return;
   }
 
@@ -818,17 +1190,22 @@ void IsolatedPrerenderTabHelper::CheckEligibilityOfURL(
     return;
   }
 
-  base::Optional<bool> site_has_service_worker =
-      isolated_prerender_service->service_workers_observer()
-          ->IsServiceWorkerRegisteredForOrigin(url::Origin::Create(url));
-  if (!site_has_service_worker.has_value() || site_has_service_worker.value()) {
+  content::ServiceWorkerContext* service_worker_context_ =
+      GetServiceWorkerContext(profile);
+
+  bool site_has_service_worker =
+      service_worker_context_->MaybeHasRegistrationForOrigin(
+          url::Origin::Create(url));
+  if (site_has_service_worker) {
     std::move(result_callback)
         .Run(url, false,
-             PrefetchStatus::kPrefetchNotEligibleUserHasServiceWorker);
+             IsolatedPrerenderPrefetchStatus::
+                 kPrefetchNotEligibleUserHasServiceWorker);
     return;
   }
 
   net::CookieOptions options = net::CookieOptions::MakeAllInclusive();
+  options.set_return_excluded_cookies();
   default_storage_partition->GetCookieManagerForBrowserProcess()->GetCookieList(
       url, options,
       base::BindOnce(&OnGotCookieList, url, std::move(result_callback)));
@@ -837,12 +1214,26 @@ void IsolatedPrerenderTabHelper::CheckEligibilityOfURL(
 void IsolatedPrerenderTabHelper::OnGotEligibilityResult(
     const GURL& url,
     bool eligible,
-    base::Optional<IsolatedPrerenderTabHelper::PrefetchStatus> status) {
+    base::Optional<IsolatedPrerenderPrefetchStatus> status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // It is possible that this callback is being run late. That is, after the
+  // user has navigated away from the origin SRP. To detect this, check if the
+  // url exists in the set of predicted urls. If it doesn't, do nothing.
+  if (page_->original_prediction_ordering_.find(url) ==
+      page_->original_prediction_ordering_.end()) {
+    return;
+  }
 
   if (!eligible) {
     if (status) {
       OnPrefetchStatusUpdate(url, status.value());
+
+      if (page_->prefetch_metrics_collector_) {
+        page_->prefetch_metrics_collector_->OnMainframeResourceNotEligible(
+            url, page_->original_prediction_ordering_.find(url)->second,
+            *status);
+      }
     }
     return;
   }
@@ -850,7 +1241,8 @@ void IsolatedPrerenderTabHelper::OnGotEligibilityResult(
   // TODO(robertogden): Consider adding redirect URLs to the front of the list.
   page_->urls_to_prefetch_.push_back(url);
   page_->srp_metrics_->prefetch_eligible_count_++;
-  OnPrefetchStatusUpdate(url, PrefetchStatus::kPrefetchNotStarted);
+  OnPrefetchStatusUpdate(url,
+                         IsolatedPrerenderPrefetchStatus::kPrefetchNotStarted);
 
   if (page_->original_prediction_ordering_.find(url) !=
       page_->original_prediction_ordering_.end()) {
@@ -864,8 +1256,92 @@ void IsolatedPrerenderTabHelper::OnGotEligibilityResult(
     }
   }
 
-  if (!PrefetchingActive()) {
-    Prefetch();
+  Prefetch();
+
+  for (auto& observer : observer_list_) {
+    observer.OnNewEligiblePrefetchStarted();
+  }
+}
+
+bool IsolatedPrerenderTabHelper::IsWaitingForAfterSRPCookiesCopy() const {
+  switch (page_->cookie_copy_status_) {
+    case CookieCopyStatus::kNoNavigation:
+    case CookieCopyStatus::kCopyComplete:
+      return false;
+    case CookieCopyStatus::kWaitingForCopy:
+      return true;
+  }
+}
+
+void IsolatedPrerenderTabHelper::SetOnAfterSRPCookieCopyCompleteCallback(
+    base::OnceClosure callback) {
+  // We don't expect a callback unless there's something to wait on.
+  DCHECK(IsWaitingForAfterSRPCookiesCopy());
+
+  page_->on_after_srp_cookie_copy_complete_ = std::move(callback);
+}
+
+void IsolatedPrerenderTabHelper::CopyIsolatedCookiesOnAfterSRPClick(
+    const GURL& url) {
+  if (!page_->isolated_network_context_) {
+    // Not set in unit tests.
+    return;
+  }
+
+  page_->cookie_copy_status_ = CookieCopyStatus::kWaitingForCopy;
+
+  if (!page_->isolated_cookie_manager_) {
+    page_->isolated_network_context_->GetCookieManager(
+        page_->isolated_cookie_manager_.BindNewPipeAndPassReceiver());
+  }
+
+  net::CookieOptions options = net::CookieOptions::MakeAllInclusive();
+  page_->isolated_cookie_manager_->GetCookieList(
+      url, options,
+      base::BindOnce(
+          &IsolatedPrerenderTabHelper::OnGotIsolatedCookiesToCopyAfterSRPClick,
+          weak_factory_.GetWeakPtr(), url));
+}
+
+void IsolatedPrerenderTabHelper::OnGotIsolatedCookiesToCopyAfterSRPClick(
+    const GURL& url,
+    const net::CookieAccessResultList& cookie_list,
+    const net::CookieAccessResultList& excluded_cookies) {
+  DCHECK(IsWaitingForAfterSRPCookiesCopy());
+
+  UMA_HISTOGRAM_COUNTS_100("IsolatedPrerender.Prefetch.Mainframe.CookiesToCopy",
+                           cookie_list.size());
+
+  if (cookie_list.empty()) {
+    OnCopiedIsolatedCookiesAfterSRPClick();
+    return;
+  }
+
+  // When |barrier| is run |cookie_list.size()| times, it will run
+  // |OnCopiedIsolatedCookiesAfterSRPClick|.
+  base::RepeatingClosure barrier = base::BarrierClosure(
+      cookie_list.size(),
+      base::BindOnce(
+          &IsolatedPrerenderTabHelper::OnCopiedIsolatedCookiesAfterSRPClick,
+          weak_factory_.GetWeakPtr()));
+
+  content::StoragePartition* default_storage_partition =
+      content::BrowserContext::GetDefaultStoragePartition(profile_);
+  net::CookieOptions options = net::CookieOptions::MakeAllInclusive();
+
+  for (const net::CookieWithAccessResult& cookie : cookie_list) {
+    default_storage_partition->GetCookieManagerForBrowserProcess()
+        ->SetCanonicalCookie(cookie.cookie, url, options,
+                             base::BindOnce(&CookieSetHelper, barrier));
+  }
+}
+
+void IsolatedPrerenderTabHelper::OnCopiedIsolatedCookiesAfterSRPClick() {
+  DCHECK(IsWaitingForAfterSRPCookiesCopy());
+
+  page_->cookie_copy_status_ = CookieCopyStatus::kCopyComplete;
+  if (page_->on_after_srp_cookie_copy_complete_) {
+    std::move(page_->on_after_srp_cookie_copy_complete_).Run();
   }
 }
 
@@ -914,6 +1390,8 @@ void IsolatedPrerenderTabHelper::CreateIsolatedURLLoaderFactory() {
       network::mojom::CertVerifierCreationParams::New());
   context_params->cors_exempt_header_list = {
       content::kCorsExemptPurposeHeaderName};
+  context_params->cookie_manager_params =
+      network::mojom::CookieManagerParams::New();
 
   context_params->http_cache_enabled = true;
   DCHECK(!context_params->http_cache_path);
@@ -926,9 +1404,23 @@ void IsolatedPrerenderTabHelper::CreateIsolatedURLLoaderFactory() {
   isolated_prerender_service->proxy_configurator()->AddCustomProxyConfigClient(
       std::move(config_client));
 
+  // Explicitly disallow network service features which could cause a privacy
+  // leak.
+  context_params->enable_certificate_reporting = false;
+  context_params->enable_expect_ct_reporting = false;
+  context_params->enable_domain_reliability = false;
+
   content::GetNetworkService()->CreateNetworkContext(
       page_->isolated_network_context_.BindNewPipeAndPassReceiver(),
       std::move(context_params));
+
+  // Configure a context client to ensure Web Reports and other privacy leak
+  // surfaces won't be enabled.
+  mojo::PendingRemote<network::mojom::NetworkContextClient> client_remote;
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<IsolatedPrerenderNetworkContextClient>(),
+      client_remote.InitWithNewPipeAndPassReceiver());
+  page_->isolated_network_context_->SetClient(std::move(client_remote));
 
   mojo::PendingRemote<network::mojom::URLLoaderFactory> isolated_factory_remote;
 

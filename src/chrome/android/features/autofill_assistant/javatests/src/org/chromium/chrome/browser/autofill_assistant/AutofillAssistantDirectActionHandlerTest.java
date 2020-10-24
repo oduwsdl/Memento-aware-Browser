@@ -31,7 +31,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.chrome.autofill_assistant.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.directactions.DirectActionHandler;
 import org.chromium.chrome.browser.directactions.DirectActionReporter;
 import org.chromium.chrome.browser.directactions.DirectActionReporter.Type;
@@ -39,8 +39,8 @@ import org.chromium.chrome.browser.directactions.FakeDirectActionReporter;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -49,8 +49,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 public class AutofillAssistantDirectActionHandlerTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private ChromeActivity mActivity;
     private BottomSheetController mBottomSheetController;
@@ -70,8 +69,8 @@ public class AutofillAssistantDirectActionHandlerTest {
         mModuleEntryProvider.setCannotInstall();
 
         mHandler = new AutofillAssistantDirectActionHandler(mActivity, mBottomSheetController,
-                mActivity.getFullscreenManager(), mActivity.getCompositorViewHolder(),
-                mActivity.getActivityTabProvider(), mActivity.getScrim(), mModuleEntryProvider);
+                mActivity.getBrowserControlsManager(), mActivity.getCompositorViewHolder(),
+                mActivity.getActivityTabProvider(), mModuleEntryProvider);
 
         mSharedPreferencesManager.removeKey(
                 ChromePreferenceKeys.AUTOFILL_ASSISTANT_ONBOARDING_ACCEPTED);

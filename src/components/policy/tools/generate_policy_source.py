@@ -88,6 +88,7 @@ class PolicyDetails:
     features = policy.get('features', {})
     self.can_be_recommended = features.get('can_be_recommended', False)
     self.can_be_mandatory = features.get('can_be_mandatory', True)
+    self.internal_only = features.get('internal_only', False)
     self.is_deprecated = policy.get('deprecated', False)
     self.is_device_only = policy.get('device_only', False)
     self.is_future = policy.get('future', False)
@@ -1009,17 +1010,17 @@ def _GenerateDefaultValue(value):
 
   |value|: The deserialized value to convert to base::Value."""
   if type(value) == bool or type(value) == int:
-    return [], 'std::make_unique<base::Value>(%s)' % json.dumps(value)
+    return [], 'base::Value(%s)' % json.dumps(value)
   elif type(value) == str:
-    return [], 'std::make_unique<base::Value>("%s")' % value
+    return [], 'base::Value("%s")' % value
   elif type(value) == list:
-    setup = ['auto default_value = std::make_unique<base::ListValue>();']
+    setup = ['base::Value default_value(base::Value::Type::LIST);']
     for entry in value:
       decl, fetch = _GenerateDefaultValue(entry)
       # Nested lists are not supported.
       if decl:
         return [], None
-      setup.append('default_value->Append(%s);' % fetch)
+      setup.append('default_value.Append(%s);' % fetch)
     return setup, 'std::move(default_value)'
   return [], None
 
@@ -1032,7 +1033,7 @@ def _WritePolicyConstantSource(policies, policy_atomic_groups, target_platform,
 #include <climits>
 #include <memory>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/stl_util.h"  // base::size()
 #include "build/branding_buildflags.h"
 #include "components/policy/core/common/policy_types.h"
@@ -1282,7 +1283,7 @@ class RiskTags(object):
     values = ['  ' + self.enum_for_tag[tag] for tag in self.enum_for_tag]
     values.append('  RISK_TAG_COUNT')
     values.append('  RISK_TAG_NONE')
-    enum_text = 'enum RiskTag {\n'
+    enum_text = 'enum RiskTag : uint8_t {\n'
     enum_text += ',\n'.join(values) + '\n};\n'
     return enum_text
 
@@ -1658,8 +1659,9 @@ def _WriteAppRestrictions(policies, policy_atomic_groups, target_platform, f,
   f.write('<restrictions xmlns:android="'
           'http://schemas.android.com/apk/res/android">\n\n')
   for policy in policies:
-    if (policy.is_supported and policy.restriction_type != 'invalid' and
-        not policy.is_deprecated and not policy.is_future):
+    if (policy.is_supported and policy.restriction_type != 'invalid'
+        and not policy.is_deprecated and not policy.is_future
+        and not policy.internal_only):
       WriteAppRestriction(policy)
   f.write('</restrictions>')
 

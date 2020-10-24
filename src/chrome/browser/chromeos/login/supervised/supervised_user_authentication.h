@@ -35,10 +35,8 @@ class SupervisedUserAuthentication {
   enum SupervisedUserPasswordChangeResult {
     PASSWORD_CHANGED_IN_MANAGER_SESSION = 0,
     PASSWORD_CHANGED_IN_USER_SESSION = 1,
-    PASSWORD_CHANGE_FAILED_NO_MASTER_KEY = 2,
     PASSWORD_CHANGE_FAILED_NO_SIGNATURE_KEY = 3,
     PASSWORD_CHANGE_FAILED_NO_PASSWORD_DATA = 4,
-    PASSWORD_CHANGE_FAILED_MASTER_KEY_FAILURE = 5,
     PASSWORD_CHANGE_FAILED_LOADING_DATA = 6,
     PASSWORD_CHANGE_FAILED_INCOMPLETE_DATA = 7,
     PASSWORD_CHANGE_FAILED_AUTHENTICATION_FAILURE = 8,
@@ -59,15 +57,15 @@ class SupervisedUserAuthentication {
   // Transforms key according to schema specified in Local State.
   UserContext TransformKey(const UserContext& context);
 
-  // Fills |password_data| with |password|-specific data for |user_id|,
+  // Fills `password_data` with `password`-specific data for `user_id`,
   // depending on target schema. Does not affect Local State.
   bool FillDataForNewUser(const std::string& user_id,
                           const std::string& password,
                           base::DictionaryValue* password_data,
                           base::DictionaryValue* extra_data);
 
-  // Stores |password_data| for |user_id| in Local State. Only public parts
-  // of |password_data| will be stored.
+  // Stores `password_data` for `user_id` in Local State. Only public parts
+  // of `password_data` will be stored.
   void StorePasswordData(const std::string& user_id,
                          const base::DictionaryValue& password_data);
 
@@ -89,16 +87,12 @@ class SupervisedUserAuthentication {
                               const PasswordDataCallback& success_callback,
                               const base::Closure& failure_callback);
 
-  // Creates a random string that can be used as a master key for managed
-  // user's homedir.
-  std::string GenerateMasterKey();
-
   // Called by supervised user to store password data for migration upon signin.
   void ScheduleSupervisedPasswordChange(
       const std::string& supervised_user_id,
       const base::DictionaryValue* password_data);
 
-  // Utility method that gets schema version for |user_id| from Local State.
+  // Utility method that gets schema version for `user_id` from Local State.
   Schema GetPasswordSchema(const std::string& user_id);
 
   static std::string BuildPasswordSignature(

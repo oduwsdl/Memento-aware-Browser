@@ -39,6 +39,9 @@ const char kCloudManagementEnrollmentMandatory[] =
 // machine policy.
 const char kCloudPolicyOverridesPlatformPolicy[] = "policy.cloud_override";
 
+// A list of Data leak prevention rules.
+const char kDlpRulesList[] = "policy.dlp_rules_list";
+
 // A boolean value that can be used to disable native window occlusion
 // calculation, even if the Finch feature is enabled.
 const char kNativeWindowOcclusionEnabled[] =
@@ -48,6 +51,15 @@ const char kNativeWindowOcclusionEnabled[] =
 // IntensiveWakeUpThrottling web feature. Only applied if the policy is managed.
 const char kIntensiveWakeUpThrottlingEnabled[] =
     "policy.intensive_wake_up_throttling_enabled";
+
+// Boolean policy preference to disable the User-Agent Client Hints feature.
+const char kUserAgentClientHintsEnabled[] =
+    "policy.user_agent_client_hints_enabled";
+
+#if defined(OS_ANDROID)
+// Boolean policy preference to disable the BackForwardCache feature.
+const char kBackForwardCacheEnabled[] = "policy.back_forward_cache_enabled";
+#endif  // defined(OS_ANDROID)
 
 }  // namespace policy_prefs
 }  // namespace policy

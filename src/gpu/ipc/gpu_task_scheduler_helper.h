@@ -34,9 +34,14 @@ class InProcessCommandBuffer;
 // would hold a reference.
 class GL_IN_PROCESS_CONTEXT_EXPORT GpuTaskSchedulerHelper {
  public:
-  // This constructor is only used for SkiaOutputSurface.
+  // This constructor is only used for SkiaOutputSurface when a
+  // SkiaOutputSurfaceDependency is already set up.
   explicit GpuTaskSchedulerHelper(
       std::unique_ptr<SingleTaskSequence> task_sequence);
+  // This constructor is used for SkiaOutputSurface in OutputSurfaceProviderImpl
+  // and for testing cases.
+  // TODO(weiliangc): After changing to proper initialization order, make this
+  // constructor for testing only.
   explicit GpuTaskSchedulerHelper(Scheduler* scheduler);
   // This constructor is used for command buffer GLOutputSurface.
   explicit GpuTaskSchedulerHelper(

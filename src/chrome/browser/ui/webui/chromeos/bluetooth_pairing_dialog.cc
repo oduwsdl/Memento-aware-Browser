@@ -16,19 +16,12 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "device/bluetooth/bluetooth_device.h"
+#include "device/bluetooth/public/cpp/bluetooth_address.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
 
 namespace {
-
-#if !BUILDFLAG(OPTIMIZE_WEBUI)
-namespace {
-const char kGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/chromeos/"
-    "bluetooth_pairing_dialog/";
-}
-#endif
 
 constexpr int kBluetoothPairingDialogHeight = 375;
 
@@ -56,7 +49,7 @@ SystemWebDialogDelegate* BluetoothPairingDialog::ShowDialog(
     bool paired,
     bool connected) {
   std::string cannonical_address =
-      device::BluetoothDevice::CanonicalizeAddress(address);
+      device::CanonicalizeBluetoothAddress(address);
   if (cannonical_address.empty()) {
     LOG(ERROR) << "BluetoothPairingDialog: Invalid address: " << address;
     return nullptr;
@@ -113,18 +106,12 @@ BluetoothPairingDialogUI::BluetoothPairingDialogUI(content::WebUI* web_ui)
 
   AddBluetoothStrings(source);
   source->AddLocalizedString("title", IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE_TITLE);
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  webui::SetupBundledWebUIDataSource(
-      source, "bluetooth_pairing_dialog.js",
-      IDR_BLUETOOTH_PAIRING_DIALOG_ROLLUP_JS,
-      IDR_BLUETOOTH_PAIRING_DIALOG_CONTAINER_HTML);
-#else
   webui::SetupWebUIDataSource(
       source,
       base::make_span(kBluetoothPairingDialogResources,
                       kBluetoothPairingDialogResourcesSize),
-      kGeneratedPath, IDR_BLUETOOTH_PAIRING_DIALOG_CONTAINER_HTML);
-#endif
+      std::string(),
+      IDR_BLUETOOTH_PAIRING_DIALOG_BLUETOOTH_PAIRING_DIALOG_CONTAINER_HTML);
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
 }
 

@@ -13,7 +13,8 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.chrome.browser.DeviceConditions;
+import org.chromium.chrome.browser.device.DeviceConditions;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -240,6 +241,13 @@ public class OfflineNotificationBackgroundTask extends NativeBackgroundTask {
 
     private static boolean shouldNotReschedule() {
         boolean noNewPages = !PrefetchPrefs.getHasNewPages();
+        // Notification scheduler framework takes care of smart throttle layer after
+        // this integration.
+        if (CachedFeatureFlags.isEnabled(
+                    ChromeFeatureList.PREFETCH_NOTIFICATION_SCHEDULING_INTEGRATION)) {
+            return noNewPages;
+        }
+
         boolean tooManyIgnoredNotifications =
                 PrefetchPrefs.getIgnoredNotificationCounter() >= IGNORED_NOTIFICATION_MAX;
 

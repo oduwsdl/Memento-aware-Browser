@@ -7,8 +7,8 @@
 
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "base/notreached.h"
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
-#include "net/url_request/url_fetcher.h"
 
 namespace chromeos {
 
@@ -25,13 +25,13 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkPortalDetector {
     CAPTIVE_PORTAL_STATUS_ONLINE = 2,
     CAPTIVE_PORTAL_STATUS_PORTAL = 3,
     CAPTIVE_PORTAL_STATUS_PROXY_AUTH_REQUIRED = 4,
-    CAPTIVE_PORTAL_STATUS_COUNT
+    CAPTIVE_PORTAL_STATUS_COUNT,
+    kMaxValue = CAPTIVE_PORTAL_STATUS_COUNT  // For UMA_HISTOGRAM_ENUMERATION
   };
 
   struct CaptivePortalState {
     CaptivePortalState()
-        : status(CAPTIVE_PORTAL_STATUS_UNKNOWN),
-          response_code(net::URLFetcher::RESPONSE_CODE_INVALID) {}
+        : status(CAPTIVE_PORTAL_STATUS_UNKNOWN), response_code(-1) {}
 
     bool operator==(const CaptivePortalState& o) const {
       return status == o.status && response_code == o.response_code;
@@ -97,10 +97,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkPortalDetector {
   virtual void Enable(bool start_detection) = 0;
 
   // Starts or restarts portal detection for the default network. If not
-  // currently in the idle state, does nothing unless |force| is true in which
-  // case any current detection is stopped and a new attempt is started. Returns
-  // true if a new portal detection attempt was started.
-  virtual bool StartPortalDetection(bool force) = 0;
+  // currently in the idle state, does nothing. Returns true if a new portal
+  // detection attempt was started.
+  virtual void StartPortalDetection() = 0;
 
   // Sets current strategy according to |id|. If current detection id
   // doesn't equal to |id|, detection is restarted.

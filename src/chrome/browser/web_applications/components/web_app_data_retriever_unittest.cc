@@ -10,7 +10,7 @@
 
 #include "base/bind.h"
 #include "base/optional.h"
-#include "base/strings/nullable_string16.h"
+#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "chrome/browser/installable/fake_installable_manager.h"
@@ -24,6 +24,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_utils.h"
 #include "content/public/test/web_contents_tester.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -85,6 +86,8 @@ class FakeChromeRenderFrame
 class WebAppDataRetrieverTest : public ChromeRenderViewHostTestHarness {
  public:
   WebAppDataRetrieverTest() = default;
+  WebAppDataRetrieverTest(const WebAppDataRetrieverTest&) = delete;
+  WebAppDataRetrieverTest& operator=(const WebAppDataRetrieverTest&) = delete;
   ~WebAppDataRetrieverTest() override = default;
 
   // Set fake ChromeRenderFrame to avoid mojo connection errors.
@@ -96,6 +99,17 @@ class WebAppDataRetrieverTest : public ChromeRenderViewHostTestHarness {
             chrome::mojom::ChromeRenderFrame::Name_,
             base::BindRepeating(&FakeChromeRenderFrame::Bind,
                                 base::Unretained(&fake_chrome_render_frame_)));
+
+    // When ProactivelySwapBrowsingInstance or RenderDocument is enabled on
+    // same-site main-frame navigations, a same-site navigation might result in
+    // a change of RenderFrames, which WebAppDataRetriever does not track (it
+    // tracks the old RenderFrame where the navigation started in). So we
+    // should disable same-site proactive BrowsingInstance for the main frame.
+    // Note: this will not disable RenderDocument.
+    // TODO(crbug.com/936696): Make WebAppDataRetriever support a change of
+    // RenderFrames.
+    content::DisableProactiveBrowsingInstanceSwapFor(
+        web_contents()->GetMainFrame());
   }
 
   void SetRendererWebApplicationInfo(const WebApplicationInfo& web_app_info) {
@@ -123,17 +137,13 @@ class WebAppDataRetrieverTest : public ChromeRenderViewHostTestHarness {
       base::Optional<SkColor> theme_color) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
 
-    web_app_info->app_url = url;
+    web_app_info->start_url = url;
     web_app_info->title = base::UTF8ToUTF16(name);
     web_app_info->description = base::UTF8ToUTF16(description);
     web_app_info->scope = scope;
     web_app_info->theme_color = theme_color;
 
     return web_app_info;
-  }
-
-  static base::NullableString16 ToNullableUTF16(const std::string& str) {
-    return base::NullableString16(base::UTF8ToUTF16(str), false);
   }
 
  protected:
@@ -152,7 +162,6 @@ class WebAppDataRetrieverTest : public ChromeRenderViewHostTestHarness {
   base::Optional<std::unique_ptr<WebApplicationInfo>> web_app_info_;
   std::vector<WebApplicationIconInfo> icons_;
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppDataRetrieverTest);
 };
 
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_NoEntry) {
@@ -175,7 +184,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlAbsent) {
   web_contents_tester()->NavigateAndCommit(FooUrl());
 
   WebApplicationInfo original_web_app_info;
-  original_web_app_info.app_url = GURL();
+  original_web_app_info.start_url = GURL();
 
   SetRendererWebApplicationInfo(original_web_app_info);
 
@@ -189,7 +198,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlAbsent) {
 
   // If the WebApplicationInfo has no URL, we fallback to the last committed
   // URL.
-  EXPECT_EQ(FooUrl(), web_app_info()->app_url);
+  EXPECT_EQ(FooUrl(), web_app_info()->start_url);
 }
 
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlPresent) {
@@ -198,7 +207,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlPresent) {
   web_contents_tester()->NavigateAndCommit(FooUrl());
 
   WebApplicationInfo original_web_app_info;
-  original_web_app_info.app_url = BarUrl();
+  original_web_app_info.start_url = BarUrl();
 
   SetRendererWebApplicationInfo(original_web_app_info);
 
@@ -210,7 +219,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlPresent) {
                      base::Unretained(this), run_loop.QuitClosure()));
   run_loop.Run();
 
-  EXPECT_EQ(original_web_app_info.app_url, web_app_info()->app_url);
+  EXPECT_EQ(original_web_app_info.start_url, web_app_info()->start_url);
 }
 
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_TitleAbsentFromRenderer) {
@@ -261,8 +270,8 @@ TEST_F(WebAppDataRetrieverTest,
   run_loop.Run();
 
   // If the WebApplicationInfo has no title and the WebContents has no title,
-  // we fallback to app_url.
-  EXPECT_EQ(base::UTF8ToUTF16(web_app_info()->app_url.spec()),
+  // we fallback to start_url.
+  EXPECT_EQ(base::UTF8ToUTF16(web_app_info()->start_url.spec()),
             web_app_info()->title);
 }
 
@@ -364,7 +373,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_FrameNavigated) {
   web_contents_tester()->NavigateAndCommit(FooUrl2());
   run_loop.Run();
 
-  EXPECT_EQ(FooUrl(), web_app_info()->app_url);
+  EXPECT_EQ(FooUrl(), web_app_info()->start_url);
   EXPECT_EQ(web_contents_title, web_app_info()->title);
 }
 
@@ -372,15 +381,16 @@ TEST_F(WebAppDataRetrieverTest, CheckInstallabilityAndRetrieveManifest) {
   SetFakeChromeRenderFrame();
 
   const GURL manifest_start_url = GURL("https://example.com/start");
-  const std::string manifest_short_name = "Short Name from Manifest";
-  const std::string manifest_name = "Name from Manifest";
+  const base::string16 manifest_short_name =
+      base::ASCIIToUTF16("Short Name from Manifest");
+  const base::string16 manifest_name = base::ASCIIToUTF16("Name from Manifest");
   const GURL manifest_scope = GURL("https://example.com/scope");
   const base::Optional<SkColor> manifest_theme_color = 0xAABBCCDD;
 
   {
     auto manifest = std::make_unique<blink::Manifest>();
-    manifest->short_name = ToNullableUTF16(manifest_short_name);
-    manifest->name = ToNullableUTF16(manifest_name);
+    manifest->short_name = manifest_short_name;
+    manifest->name = manifest_name;
     manifest->start_url = manifest_start_url;
     manifest->scope = manifest_scope;
     manifest->theme_color = manifest_theme_color;
@@ -402,9 +412,8 @@ TEST_F(WebAppDataRetrieverTest, CheckInstallabilityAndRetrieveManifest) {
                                      bool is_installable) {
         EXPECT_TRUE(is_installable);
 
-        EXPECT_EQ(base::UTF8ToUTF16(manifest_short_name),
-                  result->short_name.string());
-        EXPECT_EQ(base::UTF8ToUTF16(manifest_name), result->name.string());
+        EXPECT_EQ(manifest_short_name, result->short_name);
+        EXPECT_EQ(manifest_name, result->name);
         EXPECT_EQ(manifest_start_url, result->start_url);
         EXPECT_EQ(manifest_scope, result->scope);
         EXPECT_EQ(manifest_theme_color, result->theme_color);

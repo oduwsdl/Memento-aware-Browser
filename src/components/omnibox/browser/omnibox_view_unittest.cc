@@ -77,8 +77,8 @@ TEST_F(OmniboxViewTest, TestStripSchemasUnsafeForPaste) {
       "javAscript:alert(1)",                          // Unsafe JS URL.
       "javAscript:javascript:alert(2)",               // Single strip unsafe.
       "jaVascript:\njavaScript:\x01 alert(3) \x01",   // Single strip unsafe.
-      "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x10\x11\x12\x13\x14\x15\x16\x17"
-      "\x18\x19 JavaScript:alert(4)",  // Leading control chars unsafe.
+      ("\x01\x02\x03\x04\x05\x06\x07\x08\x09\x10\x11\x12\x13\x14\x15\x16\x17"
+       "\x18\x19 JavaScript:alert(4)"),  // Leading control chars unsafe.
       "\x01\x02javascript:\x03\x04JavaScript:alert(5)"  // Embedded control
                                                         // characters unsafe.
   };
@@ -168,13 +168,13 @@ TEST_F(OmniboxViewTest, SanitizeTextForPaste) {
 // Tests GetIcon returns the default search icon when the match is a search
 // query.
 TEST_F(OmniboxViewTest, GetIcon_Default) {
-  gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
-      vector_icons::kSearchIcon, gfx::kFaviconSize, gfx::kPlaceholderColor);
+  ui::ImageModel expected_icon = ui::ImageModel::FromVectorIcon(
+      vector_icons::kSearchIcon, gfx::kPlaceholderColor, gfx::kFaviconSize);
 
-  gfx::ImageSkia icon = view()->GetIcon(
+  ui::ImageModel icon = view()->GetIcon(
       gfx::kFaviconSize, gfx::kPlaceholderColor, base::DoNothing());
 
-  EXPECT_EQ(icon.bitmap(), expected_icon.bitmap());
+  EXPECT_EQ(expected_icon, icon);
 }
 
 // Tests GetIcon returns the bookmark icon when the match is bookmarked.
@@ -188,13 +188,13 @@ TEST_F(OmniboxViewTest, GetIcon_BookmarkIcon) {
   bookmark_model()->AddURL(bookmark_model()->bookmark_bar_node(), 0,
                            base::ASCIIToUTF16("a bookmark"), kUrl);
 
-  gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
-      omnibox::kBookmarkIcon, gfx::kFaviconSize, gfx::kPlaceholderColor);
+  ui::ImageModel expected_icon = ui::ImageModel::FromVectorIcon(
+      omnibox::kBookmarkIcon, gfx::kPlaceholderColor, gfx::kFaviconSize);
 
-  gfx::ImageSkia icon = view()->GetIcon(
+  ui::ImageModel icon = view()->GetIcon(
       gfx::kFaviconSize, gfx::kPlaceholderColor, base::DoNothing());
 
-  EXPECT_EQ(icon.bitmap(), expected_icon.bitmap());
+  EXPECT_EQ(expected_icon, icon);
 }
 
 // Tests GetIcon returns the website's favicon when the match is a website.
@@ -272,7 +272,8 @@ TEST_F(OmniboxViewTest, GetStateChanges_DeletedText_RichAutocompletion) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeatureWithParameters(
       omnibox::kRichAutocompletion,
-      {{OmniboxFieldTrial::kRichAutocompletionAutocompleteNonPrefix, "true"}});
+      {{OmniboxFieldTrial::kRichAutocompletionAutocompleteNonPrefixAllParam,
+        "true"}});
 
   // Cases with single selection
 

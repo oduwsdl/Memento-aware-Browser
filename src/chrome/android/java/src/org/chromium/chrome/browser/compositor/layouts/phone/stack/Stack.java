@@ -24,6 +24,7 @@ import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayoutBase;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackAnimation.OverviewAnimationType;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabList;
@@ -450,6 +451,8 @@ public abstract class Stack {
      * @return Whether or not the TabList represented by this TabStackState should be displayed.
      */
     public boolean isDisplayable() {
+        if (mTabList == null) return false;
+
         return !mTabList.isIncognito() || (!mIsDying && mTabList.getCount() > 0);
     }
 
@@ -1231,7 +1234,7 @@ public abstract class Stack {
     }
 
     protected float getScrollDimensionSize() {
-        return mCurrentMode == Orientation.PORTRAIT ? mLayout.getHeightMinusBrowserControls()
+        return mCurrentMode == Orientation.PORTRAIT ? mLayout.getHeightMinusContentOffsetsDp()
                                                     : mLayout.getWidth();
     }
 
@@ -1494,7 +1497,7 @@ public abstract class Stack {
             // Resolve bottom stacking
             stackedCount = 0;
             float maxStackedPosition =
-                    portrait ? mLayout.getHeightMinusBrowserControls() : mLayout.getWidth();
+                    portrait ? mLayout.getHeightMinusContentOffsetsDp() : mLayout.getWidth();
             for (int i = mStackTabs.length - 1; i >= 0; i--) {
                 assert mStackTabs[i] != null;
                 StackTab stackTab = mStackTabs[i];
@@ -1714,6 +1717,8 @@ public abstract class Stack {
      *                     restored if we're calling this while the switcher is already visible.
      */
     private void createStackTabs(boolean restoreState) {
+        if (mTabList == null) return;
+
         final int count = mTabList.getCount();
         if (count == 0) {
             cleanupTabs();
@@ -1722,7 +1727,7 @@ public abstract class Stack {
             mStackTabs = new StackTab[count];
 
             final boolean isIncognito = mTabList.isIncognito();
-            final boolean needTitle = !mLayout.isHiding();
+            final boolean needTitle = !mLayout.isStartingToHide();
             for (int i = 0; i < count; ++i) {
                 Tab tab = mTabList.getTabAt(i);
                 int tabId = tab != null ? tab.getId() : Tab.INVALID_TAB_ID;
@@ -1812,7 +1817,7 @@ public abstract class Stack {
     private float getStackScale(RectF stackRect) {
         return mCurrentMode == Orientation.PORTRAIT
                 ? stackRect.width() / mLayout.getWidth()
-                : stackRect.height() / mLayout.getHeightMinusBrowserControls();
+                : stackRect.height() / mLayout.getHeightMinusContentOffsetsDp();
     }
 
     protected void setScrollTarget(float offset, boolean immediate) {
@@ -1975,7 +1980,7 @@ public abstract class Stack {
     private float getRange(float range) {
         return range
                 * (mCurrentMode == Orientation.PORTRAIT ? mLayout.getWidth()
-                                                        : mLayout.getHeightMinusBrowserControls());
+                                                        : mLayout.getHeightMinusContentOffsetsDp());
     }
 
     /**
@@ -2027,7 +2032,7 @@ public abstract class Stack {
     }
 
     protected void updateCurrentMode(@Orientation int orientation) {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID)) {
+        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID)) {
             mCurrentMode = Orientation.LANDSCAPE;
         } else {
             mCurrentMode = orientation;
@@ -2036,7 +2041,7 @@ public abstract class Stack {
         mDiscardDirection = getDefaultDiscardDirection();
         final float opaqueTopPadding = mBorderTopPadding - mBorderTransparentTop;
         mAnimationFactory = new StackAnimation(this, mLayout.getWidth(), mLayout.getHeight(),
-                mLayout.getTopBrowserControlsHeight(), mBorderTopPadding, opaqueTopPadding,
+                mLayout.getTopContentOffsetDp(), mBorderTopPadding, opaqueTopPadding,
                 mBorderLeftPadding, mCurrentMode);
         mViewAnimationFactory = new StackViewAnimation(mLayout.getContext().getResources());
         if (mStackTabs == null) return;
@@ -2124,7 +2129,7 @@ public abstract class Stack {
     public void swipeUpdated(long time, float x, float y, float dx, float dy, float tx, float ty) {
         if (!mInSwipe) return;
 
-        final float toolbarSize = mLayout.getTopBrowserControlsHeight();
+        final float toolbarSize = mLayout.getTopContentOffsetDp();
         if (ty > toolbarSize) mSwipeCanScroll = true;
         if (!mSwipeCanScroll) return;
 

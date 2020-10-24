@@ -40,9 +40,7 @@ class BatchingMediaLogTest : public testing::Test {
  public:
   BatchingMediaLogTest()
       : task_runner_(new base::TestMockTimeTaskRunner()),
-        log_(GURL("http://foo.com"),
-             task_runner_,
-             TestEventHandler::Create(this)) {
+        log_(task_runner_, TestEventHandler::Create(this)) {
     log_.SetTickClockForTesting(&tick_clock_);
   }
 
@@ -66,6 +64,10 @@ class BatchingMediaLogTest : public testing::Test {
   std::vector<media::MediaLogRecord> GetMediaLogRecords() {
     std::vector<media::MediaLogRecord> return_events = std::move(events_);
     return return_events;
+  }
+
+  void AddMessage(media::MediaLogMessageLevel level, std::string message) {
+    log_.AddMessage(level, message);
   }
 
  private:
@@ -155,6 +157,14 @@ TEST_F(BatchingMediaLogTest, DurationChanged) {
   EXPECT_EQ(media::MediaLogRecord::Type::kMediaEventTriggered, events[0].type);
   EXPECT_EQ(media::MediaLogRecord::Type::kMediaEventTriggered, events[1].type);
   EXPECT_EQ(media::MediaLogRecord::Type::kMediaEventTriggered, events[2].type);
+}
+
+TEST_F(BatchingMediaLogTest, OnlyKeepsFirstErrorStringMessage) {
+  AddMessage(media::MediaLogMessageLevel::kERROR, "first error");
+  AddMessage(media::MediaLogMessageLevel::kERROR, "second error");
+  log_.NotifyError(media::DEMUXER_ERROR_DETECTED_HLS);
+
+  ASSERT_EQ(log_.GetErrorMessage(), "DEMUXER_ERROR_DETECTED_HLS: first error");
 }
 
 }  // namespace content

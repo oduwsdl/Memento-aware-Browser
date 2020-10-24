@@ -47,6 +47,7 @@
 <translation id="2488661730534396940">Aktivoi vasemmalla oleva työpöytä</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2530339807289914946">Vieritä sivun alareunaan</translation>
+<translation id="2530896289327917474">Laita näppäimistöselaaminen päälle tai pois päältä</translation>
 <translation id="2574014812750545982">Nollaa sivun zoomaustaso</translation>
 <translation id="2596078834055697711">Ota kuvakaappaus</translation>
 <translation id="2685170433750953446"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" />, sitten <ph name="TAB" /> tai <ph name="RIGHT" /></translation>
@@ -185,6 +186,7 @@
 <translation id="8234414138295101081">Kierrä näyttöä 90 astetta</translation>
 <translation id="8241665785394195545">oikeanpuoleinen hakasulje</translation>
 <translation id="8264941229485248811">Näytä tai piilota Kehittäjien työkalut ‑tarkastaja</translation>
+<translation id="8322502972606429618">Näytä muutama viimeksi leikepöydälle kopioitu asia</translation>
 <translation id="836869401750819675">Avaa Lataukset-sivu</translation>
 <translation id="8388247778047144397">Vedä linkki välilehtirivin ryhjään kohtaan</translation>
 <translation id="8389638407792712197">Avaa uusi ikkuna</translation>

@@ -10,29 +10,38 @@
 #include "chrome/browser/policy/messaging_layer/public/report_queue.h"
 #include "components/policy/proto/record.pb.h"
 #include "components/policy/proto/record_constants.pb.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using ::testing::Invoke;
 
 namespace reporting {
 namespace test {
 
-using reporting::EncryptedRecord;
-using reporting::Priority;
+TestStorageModuleStrict::TestStorageModuleStrict() {
+  ON_CALL(*this, AddRecord)
+      .WillByDefault(Invoke(this, &TestStorageModule::AddRecordSuccessfully));
+}
 
-void TestStorageModule::AddRecord(EncryptedRecord record,
-                                  Priority priority,
-                                  base::OnceCallback<void(Status)> callback) {
-  ASSERT_TRUE(
-      wrapped_record_.ParseFromString(record.encrypted_wrapped_record()));
+TestStorageModuleStrict::~TestStorageModuleStrict() = default;
+
+Record TestStorageModuleStrict::record() const {
+  EXPECT_TRUE(record_.has_value());
+  return record_.value();
+}
+
+Priority TestStorageModuleStrict::priority() const {
+  EXPECT_TRUE(priority_.has_value());
+  return priority_.value();
+}
+
+void TestStorageModuleStrict::AddRecordSuccessfully(
+    Priority priority,
+    Record record,
+    base::OnceCallback<void(Status)> callback) {
+  record_ = std::move(record);
   priority_ = priority;
   std::move(callback).Run(Status::StatusOK());
 }
-
-void AlwaysFailsStorageModule::AddRecord(
-    EncryptedRecord record,
-    Priority priority,
-    base::OnceCallback<void(Status)> callback) {
-  std::move(callback).Run(Status(error::UNKNOWN, "Failing for Tests"));
-}
-
 }  // namespace test
 }  // namespace reporting

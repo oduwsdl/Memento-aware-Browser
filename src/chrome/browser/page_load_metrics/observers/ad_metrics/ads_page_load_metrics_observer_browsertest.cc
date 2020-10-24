@@ -31,6 +31,7 @@
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
 #include "components/subresource_filter/core/mojom/subresource_filter.mojom.h"
 #include "components/ukm/test_ukm_recorder.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
@@ -54,6 +55,11 @@
 
 namespace {
 
+using OriginStatus = FrameData::OriginStatus;
+using OriginStatusWithThrottling = FrameData::OriginStatusWithThrottling;
+
+using FrameTreeNodeId = int;
+
 const char kCrossOriginHistogramId[] =
     "PageLoad.Clients.Ads.FrameCounts.AdFrames.PerFrame."
     "OriginStatus";
@@ -62,19 +68,40 @@ const char kCreativeOriginHistogramId[] =
     "PageLoad.Clients.Ads.FrameCounts.AdFrames.PerFrame."
     "CreativeOriginStatus";
 
+const char kCreativeOriginWithThrottlingHistogramId[] =
+    "PageLoad.Clients.Ads.FrameCounts.AdFrames.PerFrame."
+    "CreativeOriginStatusWithThrottling";
+
 const char kAdUserActivationHistogramId[] =
     "PageLoad.Clients.Ads.FrameCounts.AdFrames.PerFrame."
     "UserActivation";
 
-const char kSqrtNumberOfPixelsHistogramId[] =
-    "PageLoad.Clients.Ads.FrameCounts.AdFrames.PerFrame."
-    "SqrtNumberOfPixels";
-
 const char kPeakWindowdPercentHistogramId[] =
-    "PageLoad.Clients.Ads.Cpu.FullPage.PeakWindowedPercent";
+    "PageLoad.Clients.Ads.Cpu.FullPage.PeakWindowedPercent2";
 
 const char kHeavyAdInterventionTypeHistogramId[] =
     "PageLoad.Clients.Ads.HeavyAds.InterventionType2";
+
+const char kMaxAdDensityByAreaHistogramId[] =
+    "PageLoad.Clients.Ads.AdDensity.MaxPercentByArea";
+
+const char kMaxAdDensityByHeightHistogramId[] =
+    "PageLoad.Clients.Ads.AdDensity.MaxPercentByHeight";
+
+const char kMaxAdDensityRecordedHistogramId[] =
+    "PageLoad.Clients.Ads.AdDensity.Recorded";
+
+const char kMemoryPerFrameMaxHistogramId[] =
+    "PageLoad.Clients.Ads.Memory.PerFrame.Max";
+
+const char kMemoryAggregateMaxHistogramId[] =
+    "PageLoad.Clients.Ads.Memory.Aggregate.Max";
+
+const char kMemoryMainFrameMaxHistogramId[] =
+    "PageLoad.Clients.Ads.Memory.MainFrame.Max";
+
+const char kMemoryUpdateCountHistogramId[] =
+    "PageLoad.Clients.Ads.Memory.UpdateCount";
 
 const char kHttpOkResponseHeader[] =
     "HTTP/1.1 200 OK\r\n"
@@ -97,6 +124,60 @@ void LoadLargeResource(net::test_server::ControllableHttpResponse* response,
 
 }  // namespace
 
+class MemoryMeasurementWaiter
+    : public performance_manager::v8_memory::V8DetailedMemoryObserverAnySeq {
+ public:
+  MemoryMeasurementWaiter() = default;
+  ~MemoryMeasurementWaiter() override = default;
+
+  void OnV8MemoryMeasurementAvailable(
+      performance_manager::RenderProcessHostId process_id,
+      const performance_manager::v8_memory::V8DetailedMemoryProcessData&
+          process_data,
+      const performance_manager::v8_memory::V8DetailedMemoryObserverAnySeq::
+          FrameDataMap& frame_data) override {
+    // Iterate through frames with available measurements.
+    for (const auto& map_pair : frame_data) {
+      content::GlobalFrameRoutingId frame_routing_id = map_pair.first;
+      content::RenderFrameHost* rfh =
+          content::RenderFrameHost::FromID(frame_routing_id);
+
+      // If the measurement is positive and this is a frame that we're waiting
+      // for, then remove the frame node id from the set of ones awaiting
+      // measurement.
+      if (map_pair.second.v8_bytes_used() > 0) {
+        auto it = expected_frame_ids_.find(rfh->GetFrameTreeNodeId());
+        if (it != expected_frame_ids_.end())
+          expected_frame_ids_.erase(it);
+      }
+    }
+
+    QuitIfDone();
+  }
+
+  bool ExpectationSatisfied() const { return expected_frame_ids_.empty(); }
+
+  // Waits for positive memory measurements to be received for frames
+  // corresponding to each FrameTreeNodeId in |expected_frame_ids|.
+  void WaitForPositiveMeasurementsForFramesWithIds(
+      std::vector<FrameTreeNodeId> expected_frame_ids) {
+    expected_frame_ids_.insert(expected_frame_ids.begin(),
+                               expected_frame_ids.end());
+    base::RunLoop run_loop;
+    quit_closure_ = run_loop.QuitClosure();
+    run_loop.Run();
+  }
+
+  void QuitIfDone() {
+    if (!quit_closure_.is_null() && ExpectationSatisfied())
+      std::move(quit_closure_).Run();
+  }
+
+ private:
+  std::set<FrameTreeNodeId> expected_frame_ids_;
+  base::OnceClosure quit_closure_;
+};
+
 class AdsPageLoadMetricsObserverBrowserTest
     : public subresource_filter::SubresourceFilterBrowserTest {
  public:
@@ -113,8 +194,9 @@ class AdsPageLoadMetricsObserverBrowserTest
   }
 
   void SetUp() override {
-    std::vector<base::Feature> enabled = {subresource_filter::kAdTagging,
-                                          features::kSitePerProcess};
+    std::vector<base::Feature> enabled = {
+        subresource_filter::kAdTagging, features::kSitePerProcess,
+        features::kV8PerAdFrameMemoryMonitoring};
     std::vector<base::Feature> disabled = {};
 
     if (use_process_priority_) {
@@ -230,6 +312,251 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
       static_cast<int>(FrameData::OriginStatus::kCross));
 }
 
+// Verifies that the page ad density records the maximum value during
+// a page's lifecycling by creating a large ad frame, destroying it, and
+// creating a smaller iframe. The ad density recorded is the density with
+// the first larger frame.
+IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
+                       PageAdDensityRecordsPageMax) {
+  base::HistogramTester histogram_tester;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  auto waiter = CreatePageLoadMetricsTestWaiter();
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Evaluate the height and width of the page as the browser_test can
+  // vary the dimensions.
+  int document_height =
+      EvalJs(web_contents, "document.body.scrollHeight").ExtractInt();
+  int document_width =
+      EvalJs(web_contents, "document.body.scrollWidth").ExtractInt();
+
+  // Expectation is before NavigateToUrl for this test as the expectation can be
+  // met after NavigateToUrl and before the Wait.
+  waiter->AddMainFrameIntersectionExpectation(
+      gfx::Rect(0, 0, document_width,
+                document_height));  // Initial main frame rect.
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL(
+                     "a.com", "/ads_observer/blank_with_adiframe_writer.html"));
+  waiter->Wait();
+  web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Create a frame at 100,100 of size 200,200.
+  waiter->AddMainFrameIntersectionExpectation(gfx::Rect(100, 100, 200, 200));
+
+  // Create the frame with b.com as origin to not get caught by
+  // restricted ad tagging.
+  EXPECT_TRUE(ExecJs(
+      web_contents,
+      content::JsReplace(
+          "let frame = createAdIframeAtRect(100, 100, 200, 200); "
+          "frame.src = $1; ",
+          embedded_test_server()->GetURL("b.com", "/ads_observer/pixel.png"))));
+  waiter->Wait();
+
+  // Load should stop before we remove the frame.
+  EXPECT_TRUE(WaitForLoadStop(web_contents));
+  EXPECT_TRUE(ExecJs(web_contents,
+                     "let frames = document.getElementsByTagName('iframe'); "
+                     "frames[0].remove(); "));
+  waiter->AddMainFrameIntersectionExpectation(gfx::Rect(400, 400, 10, 10));
+
+  // Delete the frame and create a new frame at 400,400 of size 10x10. The
+  // ad density resulting from this frame is lower than the 200x200.
+  EXPECT_TRUE(ExecJs(
+      web_contents,
+      content::JsReplace("let frame = createAdIframeAtRect(400, 400, 10, 10); "
+                         "frame.src = $1; ",
+                         embedded_test_server()
+                             ->GetURL("b.com", "/ads_observer/pixel.png")
+                             .spec())));
+  waiter->Wait();
+
+  // Evaluate the height and width of the page as the browser_test can
+  // vary the dimensions.
+  document_height =
+      EvalJs(web_contents, "document.body.scrollHeight").ExtractInt();
+  document_width =
+      EvalJs(web_contents, "document.body.scrollWidth").ExtractInt();
+
+  int page_area = document_width * document_height;
+  int ad_area = 200 * 200;  // The area of the first larger ad iframe.
+  int expected_page_density_area = ad_area * 100 / page_area;
+  int expected_page_density_height = 200 * 100 / document_height;
+
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityByAreaHistogramId,
+                                      expected_page_density_area, 1);
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityByHeightHistogramId,
+                                      expected_page_density_height, 1);
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityRecordedHistogramId, true,
+                                      1);
+  auto entries =
+      ukm_recorder.GetEntriesByName(ukm::builders::AdPageLoad::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  ukm_recorder.ExpectEntryMetric(
+      entries.front(), ukm::builders::AdPageLoad::kMaxAdDensityByAreaName,
+      expected_page_density_area);
+  ukm_recorder.ExpectEntryMetric(
+      entries.front(), ukm::builders::AdPageLoad::kMaxAdDensityByHeightName,
+      expected_page_density_height);
+}
+
+// Creates multiple overlapping frames and verifies the page ad density.
+IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
+                       PageAdDensityMultipleFrames) {
+  base::HistogramTester histogram_tester;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  auto waiter = CreatePageLoadMetricsTestWaiter();
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  int document_height =
+      EvalJs(web_contents, "document.body.scrollHeight").ExtractInt();
+  int document_width =
+      EvalJs(web_contents, "document.body.scrollWidth").ExtractInt();
+
+  // Expectation is before NavigateToUrl for this test as the expectation can be
+  // met after NavigateToUrl and before the Wait.
+  waiter->AddMainFrameIntersectionExpectation(
+      gfx::Rect(0, 0, document_width,
+                document_height));  // Initial main frame rect.
+
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL(
+                     "a.com", "/ads_observer/blank_with_adiframe_writer.html"));
+  waiter->Wait();
+  web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Create a frame of size 400,400 at 100,100.
+  waiter->AddMainFrameIntersectionExpectation(gfx::Rect(400, 400, 100, 100));
+
+  // Create the frame with b.com as origin to not get caught by
+  // restricted ad tagging.
+  EXPECT_TRUE(ExecJs(
+      web_contents, content::JsReplace(
+                        "let frame = createAdIframeAtRect(400, 400, 100, 100); "
+                        "frame.src = $1",
+                        embedded_test_server()
+                            ->GetURL("b.com", "/ads_observer/pixel.png")
+                            .spec())));
+
+  waiter->Wait();
+
+  // Create a frame at of size 200,200 at 450,450.
+  waiter->AddMainFrameIntersectionExpectation(gfx::Rect(450, 450, 200, 200));
+  EXPECT_TRUE(ExecJs(
+      web_contents, content::JsReplace(
+                        "let frame = createAdIframeAtRect(450, 450, 200, 200); "
+                        "frame.src = $1",
+                        embedded_test_server()
+                            ->GetURL("b.com", "/ads_observer/pixel.png")
+                            .spec())));
+  waiter->Wait();
+
+  // Evaluate the height and width of the page as the browser_test can
+  // vary the dimensions.
+  document_height =
+      EvalJs(web_contents, "document.body.scrollHeight").ExtractInt();
+  document_width =
+      EvalJs(web_contents, "document.body.scrollWidth").ExtractInt();
+
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+
+  int page_area = document_width * document_height;
+  // The area of the two iframes minus the area of the overlapping section.
+  int ad_area = 100 * 100 + 200 * 200 - 50 * 50;
+  int expected_page_density_area = ad_area * 100 / page_area;
+  int expected_page_density_height = 250 * 100 / document_height;
+
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityByAreaHistogramId,
+                                      expected_page_density_area, 1);
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityByHeightHistogramId,
+                                      expected_page_density_height, 1);
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityRecordedHistogramId, true,
+                                      1);
+  auto entries =
+      ukm_recorder.GetEntriesByName(ukm::builders::AdPageLoad::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  ukm_recorder.ExpectEntryMetric(
+      entries.front(), ukm::builders::AdPageLoad::kMaxAdDensityByAreaName,
+      expected_page_density_area);
+  ukm_recorder.ExpectEntryMetric(
+      entries.front(), ukm::builders::AdPageLoad::kMaxAdDensityByHeightName,
+      expected_page_density_height);
+}
+
+// Creates a frame with display:none styling and verifies that it has an
+// empty intersection with the main frame.
+#if defined(OS_WIN)
+#define MAYBE_PageAdDensityIgnoreDisplayNoneFrame \
+  DISABLED_PageAdDensityIgnoreDisplayNoneFrame
+#else
+#define MAYBE_PageAdDensityIgnoreDisplayNoneFrame \
+  PageAdDensityIgnoreDisplayNoneFrame
+#endif
+IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
+                       MAYBE_PageAdDensityIgnoreDisplayNoneFrame) {
+  base::HistogramTester histogram_tester;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  auto waiter = CreatePageLoadMetricsTestWaiter();
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Evaluate the height and width of the page as the browser_test can
+  // vary the dimensions.
+  int document_height =
+      EvalJs(web_contents, "document.body.scrollHeight").ExtractInt();
+  int document_width =
+      EvalJs(web_contents, "document.body.scrollWidth").ExtractInt();
+
+  // Expectation is before NavigateToUrl for this test as the expectation can be
+  // met after NavigateToUrl and before the Wait.
+  waiter->AddMainFrameIntersectionExpectation(
+      gfx::Rect(0, 0, document_width,
+                document_height));  // Initial main frame rect.
+
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL(
+                     "a.com", "/ads_observer/blank_with_adiframe_writer.html"));
+  waiter->Wait();
+  web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Create a frame at 100,100 of size 200,200. The expectation is an empty rect
+  // as the frame is display:none and as a result has no main frame
+  // intersection.
+  waiter->AddMainFrameIntersectionExpectation(gfx::Rect(0, 0, 0, 0));
+
+  // Create the frame with b.com as origin to not get caught by
+  // restricted ad tagging.
+  EXPECT_TRUE(ExecJs(
+      web_contents, content::JsReplace(
+                        "let frame = createAdIframeAtRect(100, 100, 200, 200); "
+                        "frame.src = $1; "
+                        "frame.style.display = \"none\";",
+                        embedded_test_server()
+                            ->GetURL("b.com", "/ads_observer/pixel.png")
+                            .spec())));
+
+  waiter->Wait();
+
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityByAreaHistogramId, 0, 1);
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityByHeightHistogramId, 0, 1);
+  histogram_tester.ExpectUniqueSample(kMaxAdDensityRecordedHistogramId, true,
+                                      1);
+  auto entries =
+      ukm_recorder.GetEntriesByName(ukm::builders::AdPageLoad::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  ukm_recorder.ExpectEntryMetric(
+      entries.front(), ukm::builders::AdPageLoad::kMaxAdDensityByAreaName, 0);
+  ukm_recorder.ExpectEntryMetric(
+      entries.front(), ukm::builders::AdPageLoad::kMaxAdDensityByHeightName, 0);
+}
+
 // Each CreativeOriginStatus* browser test inputs a pointer to a frame object
 // representing the frame tree path of a website with with a (possibly null)
 // ad subframe, which itself may have linearly nested subframes.
@@ -250,16 +577,23 @@ class CreativeOriginAdsPageLoadMetricsObserverBrowserTest
    public:
     Frame(std::string origin,
           std::unique_ptr<Frame> child,
-          bool has_text = false)
-        : origin_(origin), child_(std::move(child)), has_text_(has_text) {}
+          bool has_text = false,
+          bool is_outside_view = false)
+        : origin_(origin),
+          child_(std::move(child)),
+          has_text_(has_text),
+          is_outside_view_(is_outside_view) {}
 
     ~Frame() = default;
 
     bool HasChild() const { return child_ != nullptr; }
 
     bool HasDescendantRenderingText(bool is_top_frame = true) const {
-      if (!is_top_frame && has_text_)
+      if (!is_top_frame && has_text_ && !is_outside_view_)
         return true;
+
+      if (!is_top_frame && is_outside_view_)
+        return false;
 
       if (!child_)
         return false;
@@ -271,8 +605,12 @@ class CreativeOriginAdsPageLoadMetricsObserverBrowserTest
 
     std::string Print(bool should_escape = false) const {
       std::vector<std::string> query_pieces = {origin_};
-      if (!has_text_)
+      if (!has_text_ && is_outside_view_)
+        query_pieces.push_back("{no-text-render,out-of-view}");
+      else if (!has_text_)
         query_pieces.push_back("{no-text-render}");
+      else if (is_outside_view_)
+        query_pieces.push_back("{out-of-view}");
       query_pieces.push_back("(");
       if (child_)
         query_pieces.push_back(child_->Print());
@@ -291,41 +629,40 @@ class CreativeOriginAdsPageLoadMetricsObserverBrowserTest
     std::string origin_;
     std::unique_ptr<Frame> child_;
     bool has_text_;
+    bool is_outside_view_;
   };
 
   // A convenience function to make frame creation less verbose.
   std::unique_ptr<Frame> MakeFrame(std::string origin,
                                    std::unique_ptr<Frame> child,
-                                   bool has_text = false) {
-    return std::make_unique<Frame>(origin, std::move(child), has_text);
+                                   bool has_text = false,
+                                   bool is_outside_view = false) {
+    return std::make_unique<Frame>(origin, std::move(child), has_text,
+                                   is_outside_view);
   }
 
-  void TestCreativeOriginStatus(std::unique_ptr<Frame> frames,
-                                FrameData::OriginStatus expected_status =
-                                    FrameData::OriginStatus::kUnknown) {
-    base::HistogramTester histogram_tester;
-
+  void RecordCreativeOriginStatusHistograms(std::unique_ptr<Frame> frame) {
     // The file cross_site_iframe_factory.html loads URLs like:
     // http://a.com:40919/
     //   cross_site_iframe_factory.html?a{no-text-render}(b(c{no-text-render}))
     // The frame thus intended as the creative will be the only one in which
     // text renders.
-    std::string ad_suffix = frames->PrintChild(true /* should_escape */);
+    std::string ad_suffix = frame->PrintChild(true /* should_escape */);
     if (!ad_suffix.empty())
       SetRulesetToDisallowURLsWithPathSuffix(ad_suffix);
-    std::string query = frames->Print();
+    std::string query = frame->Print();
     std::string relative_url = "/cross_site_iframe_factory.html?" + query;
     const GURL main_url(
-        embedded_test_server()->GetURL(frames->Hostname(), relative_url));
+        embedded_test_server()->GetURL(frame->Hostname(), relative_url));
 
     // If there is text to render in any subframe, wait until there is a first
-    // contentful paint.  Load some bytes in any case.
+    // contentful paint. Load some bytes in any case.
     auto waiter = CreatePageLoadMetricsTestWaiter();
-    if (frames->HasDescendantRenderingText()) {
+    if (frame->HasDescendantRenderingText()) {
       waiter->AddSubFrameExpectation(
           page_load_metrics::PageLoadMetricsTestWaiter::TimingField::
               kFirstContentfulPaint);
-    } else if (frames->HasChild()) {
+    } else if (frame->HasChild()) {
       waiter->AddSubframeDataExpectation();
     }
     EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), main_url));
@@ -334,14 +671,39 @@ class CreativeOriginAdsPageLoadMetricsObserverBrowserTest
     // Navigate away to force the histogram recording.
     EXPECT_TRUE(
         ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
+  }
+
+  void TestCreativeOriginStatus(
+      std::unique_ptr<Frame> main_frame,
+      FrameData::OriginStatus expected_status,
+      base::Optional<FrameData::OriginStatusWithThrottling>
+          expected_status_with_throttling) {
+    base::HistogramTester histogram_tester;
+    bool subframe_exists = main_frame->HasChild();
+
+    RecordCreativeOriginStatusHistograms(std::move(main_frame));
 
     // Test histograms.
-    if (frames->HasChild()) {
+    if (subframe_exists) {
       histogram_tester.ExpectUniqueSample(kCreativeOriginHistogramId,
                                           expected_status, 1);
+      if (expected_status_with_throttling.has_value()) {
+        histogram_tester.ExpectUniqueSample(
+            kCreativeOriginWithThrottlingHistogramId,
+            expected_status_with_throttling.value(), 1);
+      } else {
+        // the CreativeOriginStatusWithThrottling histogram is best-effort,
+        // and in the case where there is no content, multiple possible
+        // states are valid.
+        histogram_tester.ExpectTotalCount(
+            kCreativeOriginWithThrottlingHistogramId, 1);
+      }
+
     } else {
-      // If no subframe exists, verify that histogram is not set.
+      // If no subframe exists, verify that each histogram is not set.
       histogram_tester.ExpectTotalCount(kCreativeOriginHistogramId, 0);
+      histogram_tester.ExpectTotalCount(
+          kCreativeOriginWithThrottlingHistogramId, 0);
     }
   }
 };
@@ -350,9 +712,9 @@ class CreativeOriginAdsPageLoadMetricsObserverBrowserTest
 IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
                        CreativeOriginStatusSame) {
   TestCreativeOriginStatus(
-      MakeFrame("a",
-                MakeFrame("a", MakeFrame("b", MakeFrame("c", nullptr)), true)),
-      FrameData::OriginStatus::kSame);
+      MakeFrame("a", MakeFrame("a", MakeFrame("b", MakeFrame("c", nullptr)),
+                               true /* has_text */)),
+      OriginStatus::kSame, OriginStatusWithThrottling::kSameAndUnthrottled);
 }
 
 // Test that an ad with a different origin as the main page is cross-origin.
@@ -360,17 +722,17 @@ IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
                        CreativeOriginStatusCross) {
   TestCreativeOriginStatus(
       MakeFrame("a", MakeFrame("b", MakeFrame("c", nullptr), true)),
-      FrameData::OriginStatus::kCross);
+      OriginStatus::kCross, OriginStatusWithThrottling::kCrossAndUnthrottled);
 }
 
-// Test that an ad creative with the same different origin as the main page,
+// Test that an ad creative with the same origin as the main page,
 // but nested in a cross-origin root ad frame, is same-origin.
 IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
                        CreativeOriginStatusSameNested) {
   TestCreativeOriginStatus(
       MakeFrame("a",
                 MakeFrame("b", MakeFrame("a", MakeFrame("c", nullptr), true))),
-      FrameData::OriginStatus::kSame);
+      OriginStatus::kSame, OriginStatusWithThrottling::kSameAndUnthrottled);
 }
 
 // Test that an ad creative with a different origin as the main page,
@@ -380,7 +742,8 @@ IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
   TestCreativeOriginStatus(
       MakeFrame("a",
                 MakeFrame("a", MakeFrame("b", MakeFrame("c", nullptr), true))),
-      FrameData::OriginStatus::kCross);
+      FrameData::OriginStatus::kCross,
+      FrameData::OriginStatusWithThrottling::kCrossAndUnthrottled);
 }
 
 // Test that an ad creative with a different origin as the main page,
@@ -389,23 +752,74 @@ IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
                        CreativeOriginStatusCrossDoubleNested) {
   TestCreativeOriginStatus(
       MakeFrame("a",
-                MakeFrame("a", MakeFrame("a", MakeFrame("b", nullptr, true)))),
-      FrameData::OriginStatus::kCross);
+                MakeFrame("a", MakeFrame("a", MakeFrame("b", nullptr,
+                                                        true /* has_text */)))),
+      OriginStatus::kCross, OriginStatusWithThrottling::kCrossAndUnthrottled);
 }
 
 // Test that if no iframe renders text, the creative origin status is
-// indeterminate.
+// indeterminate. The creative origin status with throttling can be
+// either kUnknownAndThrottled or kUnknownAndUnthrottled in this case
+// due to race conditions, as nothing is painted.
+// TODO(cammie): Find a better workaround for testing COSwT in this
+// edge case.
 IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
                        CreativeOriginStatusNoCreativeDesignated) {
   TestCreativeOriginStatus(
       MakeFrame("a", MakeFrame("b", MakeFrame("c", nullptr))),
-      FrameData::OriginStatus::kUnknown);
+      OriginStatus::kUnknown, base::nullopt);
 }
 
 // Test that if no iframe is created, there is no histogram set.
 IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
                        CreativeOriginStatusNoSubframes) {
-  TestCreativeOriginStatus(MakeFrame("a", nullptr));
+  TestCreativeOriginStatus(MakeFrame("a", nullptr), OriginStatus::kUnknown,
+                           OriginStatusWithThrottling::kUnknownAndUnthrottled);
+}
+
+// Flakily fails (crbug.com/1099758)
+// Test that a throttled ad with a different origin as the main page is
+// marked as throttled, with indeterminate creative origin status.
+IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
+                       DISABLED_CreativeOriginStatusWithThrottlingUnknown) {
+  TestCreativeOriginStatus(
+      MakeFrame("a",
+                MakeFrame("b", MakeFrame("c", nullptr), true /* has_text */,
+                          true /* is_outside_view */)),
+      OriginStatus::kUnknown, OriginStatusWithThrottling::kUnknownAndThrottled);
+}
+
+// Test that an ad creative with the same origin as the main page,
+// but nested in a throttled cross-origin root ad frame, is marked as
+// throttled, with indeterminate creative origin status.
+IN_PROC_BROWSER_TEST_F(CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
+                       CreativeOriginStatusWithThrottlingNestedThrottled) {
+  TestCreativeOriginStatus(
+      MakeFrame(
+          "a",
+          MakeFrame(
+              "b", MakeFrame("a", MakeFrame("c", nullptr), true /* has_text */),
+              false /* has_text */, true /* is_outside_view */)),
+      OriginStatus::kUnknown, OriginStatusWithThrottling::kUnknownAndThrottled);
+}
+
+// Flakily fails. https://crbug.com/1099545
+// Test that an ad creative with a different origin as the main page,
+// but nested in a same-origin root ad frame, such that its root ad frame
+// is outside the main frame but not throttled (because the root is
+// same-origin), will be marked as having unknown creative origin status
+// (since there will be no FCP) and being unthrottled.
+IN_PROC_BROWSER_TEST_F(
+    CreativeOriginAdsPageLoadMetricsObserverBrowserTest,
+    DISABLED_CreativeOriginStatusWithThrottlingNestedUnthrottled) {
+  TestCreativeOriginStatus(
+      MakeFrame(
+          "a",
+          MakeFrame(
+              "a", MakeFrame("b", MakeFrame("c", nullptr), true /* has_text */),
+              false /* has_text */, true /* is_outside_view */)),
+      OriginStatus::kUnknown,
+      OriginStatusWithThrottling::kUnknownAndUnthrottled);
 }
 
 IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
@@ -463,8 +877,8 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
                        DocOverwritesNavigation) {
   content::DOMMessageQueue msg_queue;
 
-  base::HistogramTester histogram_tester;
-
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  auto waiter = CreatePageLoadMetricsTestWaiter();
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(
                      "/ads_observer/docwrite_provisional_frame.html"));
@@ -475,10 +889,16 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
   // Navigate away to force the histogram recording.
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
 
-  // TODO(johnidel): Check that the subresources of the new frame are reported
-  // correctly. Resources from a failed provisional load are not reported to
-  // resource data updates, causing this adframe to not be recorded. This is an
-  // uncommon case but should be reported. See crbug.com/914893.
+  auto entries =
+      ukm_recorder.GetEntriesByName(ukm::builders::AdFrameLoad::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  ukm_recorder.ExpectEntryMetric(
+      entries.front(), ukm::builders::AdFrameLoad::kLoading_NumResourcesName,
+      3);
+
+  // TODO(https://crbug.com/): We should verify that we also receive FCP for
+  // frames that are loaded in this manner. Currently timing updates are not
+  // sent for aborted navigations due to doc.write.
 }
 
 // Test that a blank ad subframe that is docwritten correctly reports metrics.
@@ -580,14 +1000,15 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
 
   histogram_tester.ExpectTotalCount(
-      "PageLoad.Clients.Ads.AdPaintTiming.NavigationToFirstContentfulPaint", 1);
+      "PageLoad.Clients.Ads.AdPaintTiming.NavigationToFirstContentfulPaint2",
+      1);
   histogram_tester.ExpectTotalCount(
       "PageLoad.Clients.Ads.Visible.AdPaintTiming."
-      "NavigationToFirstContentfulPaint",
+      "NavigationToFirstContentfulPaint2",
       1);
   histogram_tester.ExpectTotalCount(
       "PageLoad.Clients.Ads.NonVisible.AdPaintTiming."
-      "NavigationToFirstContentfulPaint",
+      "NavigationToFirstContentfulPaint2",
       0);
 }
 
@@ -693,8 +1114,6 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest, FramePixelSize) {
 
   // Navigate away to force the histogram recording.
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
-  histogram_tester.ExpectBucketCount(kSqrtNumberOfPixelsHistogramId, 100, 2);
-  histogram_tester.ExpectBucketCount(kSqrtNumberOfPixelsHistogramId, 0, 1);
 
   // Verify each UKM entry has a corresponding, unique size.
   auto entries =
@@ -739,43 +1158,6 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
       "PageLoad.Clients.Ads.Visible.FrameCounts.AdFrames.Total", 0, 1);
   histogram_tester.ExpectUniqueSample(
       "PageLoad.Clients.Ads.NonVisible.FrameCounts.AdFrames.Total", 1, 1);
-}
-
-IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
-                       AdFrameSameOriginByteMetrics) {
-  base::HistogramTester histogram_tester;
-
-  // cross_site_iframe_factory loads URLs like:
-  // http://b.com:40919/cross_site_iframe_factory.html?b()
-  SetRulesetWithRules({subresource_filter::testing::CreateSuffixRule("b()))"),
-                       subresource_filter::testing::CreateSuffixRule("e())")});
-  const GURL main_url(embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(b(c(),d(b())),e(e,e()))"));
-
-  auto waiter = CreatePageLoadMetricsTestWaiter();
-  ui_test_utils::NavigateToURL(browser(), main_url);
-
-  // One favicon resource and 2 resources for each frame.
-  waiter->AddMinimumCompleteResourcesExpectation(17);
-  waiter->Wait();
-
-  // Navigate away to force the histogram recording.
-  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
-
-  // Verify that iframe e is only same origin.
-  histogram_tester.ExpectBucketCount(
-      "PageLoad.Clients.Ads.Bytes.AdFrames.PerFrame.PercentSameOrigin2", 100,
-      1);
-
-  // Verify that iframe b counts subframes as cross origin and a nested same
-  // origin subframe as same origin.
-  histogram_tester.ExpectBucketCount(
-      "PageLoad.Clients.Ads.Bytes.AdFrames.PerFrame.PercentSameOrigin2", 50, 1);
-
-  // Verify that all iframe are treated as cross-origin to the page. Only 1/8 of
-  // resources are on origin a.com.
-  histogram_tester.ExpectBucketCount(
-      "PageLoad.Clients.Ads.Bytes.FullPage.PercentSameOrigin2", 12.5, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
@@ -1941,4 +2323,94 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverWithBackgroundingBrowserTest,
   EXPECT_NE(main_frame->GetProcess(), frame1->GetProcess());
   EXPECT_FALSE(main_frame->GetProcess()->IsProcessBackgrounded());
   EXPECT_TRUE(frame1->GetProcess()->IsProcessBackgrounded());
+}
+
+class AdsMemoryMeasurementBrowserTest
+    : public subresource_filter::SubresourceFilterBrowserTest {
+ public:
+  AdsMemoryMeasurementBrowserTest() = default;
+  ~AdsMemoryMeasurementBrowserTest() override = default;
+
+  void SetUp() override {
+    std::map<std::string, std::string> memory_poll_params = {
+        {"MemoryPollInterval", "1"}, {"MemoryPollMode", "eager_for_testing"}};
+    performance_manager::v8_memory::internal::
+        SetEagerMemoryMeasurementEnabledForTesting(true);
+    std::vector<base::test::ScopedFeatureList::FeatureAndParams> enabled = {
+        {subresource_filter::kAdTagging, {{}}},
+        {features::kSitePerProcess, {{}}},
+        {features::kV8PerAdFrameMemoryMonitoring, memory_poll_params}};
+    std::vector<base::Feature> disabled = {};
+
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled, disabled);
+
+    subresource_filter::SubresourceFilterBrowserTest::SetUp();
+  }
+
+  std::vector<FrameTreeNodeId> GetFrameNodeIds(Browser* browser) {
+    content::WebContents* web_contents =
+        browser->tab_strip_model()->GetActiveWebContents();
+    std::vector<int> frame_node_ids = {
+        web_contents->GetMainFrame()->GetFrameTreeNodeId()};
+
+    std::vector<content::RenderFrameHost*> children =
+        web_contents->GetMainFrame()->GetFramesInSubtree();
+
+    for (auto* child : children)
+      frame_node_ids.push_back(child->GetFrameTreeNodeId());
+
+    return frame_node_ids;
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(AdsMemoryMeasurementBrowserTest);
+};
+
+IN_PROC_BROWSER_TEST_F(AdsMemoryMeasurementBrowserTest,
+                       SingleAdFrame_MaxMemoryBytesRecorded) {
+  base::HistogramTester histogram_tester;
+
+  // Instantiate a memory request and waiter to wait for a minimum
+  // number of memory measurements to be received.
+  std::unique_ptr<performance_manager::v8_memory::V8DetailedMemoryRequestAnySeq>
+      memory_request = std::make_unique<
+          performance_manager::v8_memory::V8DetailedMemoryRequestAnySeq>(
+          base::TimeDelta::FromSeconds(1), MeasurementMode::kEagerForTesting);
+  auto waiter = std::make_unique<MemoryMeasurementWaiter>();
+  memory_request->AddObserver(waiter.get());
+
+  // cross_site_iframe_factory loads URLs like:
+  // http://b.com:40919/cross_site_iframe_factory.html?b()
+  SetRulesetWithRules({subresource_filter::testing::CreateSuffixRule("b()")});
+  const GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+
+  ui_test_utils::NavigateToURL(browser(), main_url);
+
+  // Wait until we get positive memory measurements for each frame.
+  std::vector<FrameTreeNodeId> frame_node_ids = GetFrameNodeIds(browser());
+  waiter->WaitForPositiveMeasurementsForFramesWithIds(frame_node_ids);
+
+  // Navigate away to force the histogram recording.
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+
+  histogram_tester.ExpectTotalCount(kMemoryPerFrameMaxHistogramId, 1);
+  EXPECT_GT(
+      histogram_tester.GetAllSamples(kMemoryPerFrameMaxHistogramId)[0].min, 0);
+
+  histogram_tester.ExpectTotalCount(kMemoryAggregateMaxHistogramId, 1);
+  EXPECT_GT(
+      histogram_tester.GetAllSamples(kMemoryAggregateMaxHistogramId)[0].min, 0);
+
+  histogram_tester.ExpectTotalCount(kMemoryMainFrameMaxHistogramId, 1);
+  EXPECT_GT(
+      histogram_tester.GetAllSamples(kMemoryMainFrameMaxHistogramId)[0].min, 0);
+
+  histogram_tester.ExpectTotalCount(kMemoryUpdateCountHistogramId, 1);
+  EXPECT_GE(
+      histogram_tester.GetAllSamples(kMemoryUpdateCountHistogramId)[0].min, 1);
+
+  memory_request->RemoveObserver(waiter.get());
 }

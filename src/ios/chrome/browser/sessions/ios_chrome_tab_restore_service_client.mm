@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "components/sessions/ios/ios_live_tab.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
@@ -64,7 +65,8 @@ IOSChromeTabRestoreServiceClient::CreateLiveTabContext(
     const std::string& /* app_name */,
     const gfx::Rect& /* bounds */,
     ui::WindowShowState /* show_state */,
-    const std::string& /* workspace */) {
+    const std::string& /* workspace */,
+    const std::string& /* user_title */) {
   NOTREACHED() << "Tab restore service attempting to create a new window.";
   return nullptr;
 }
@@ -99,6 +101,12 @@ IOSChromeTabRestoreServiceClient::FindLiveTabContextWithID(
       desired_id));
 }
 
+sessions::LiveTabContext*
+IOSChromeTabRestoreServiceClient::FindLiveTabContextWithGroup(
+    tab_groups::TabGroupId group) {
+  return nullptr;
+}
+
 bool IOSChromeTabRestoreServiceClient::ShouldTrackURLForRestore(
     const GURL& url) {
   // NOTE: In the //chrome client, chrome://quit and chrome://restart are
@@ -129,7 +137,6 @@ bool IOSChromeTabRestoreServiceClient::HasLastSession() {
 }
 
 void IOSChromeTabRestoreServiceClient::GetLastSession(
-    sessions::GetLastSessionCallback callback,
-    base::CancelableTaskTracker* tracker) {
+    sessions::GetLastSessionCallback callback) {
   NOTREACHED();
 }

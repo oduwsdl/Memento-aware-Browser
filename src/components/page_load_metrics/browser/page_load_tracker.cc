@@ -122,7 +122,7 @@ void RecordAppBackgroundPageLoadCompleted(bool completed_after_background) {
                         completed_after_background);
 }
 
-void DispatchFirstPaintAfterBackForwardCacheRestore(
+void DispatchEventsAfterBackForwardCacheRestore(
     PageLoadMetricsObserver* observer,
     const std::vector<mojo::StructPtr<mojom::BackForwardCacheTiming>>&
         last_timings,
@@ -133,25 +133,24 @@ void DispatchFirstPaintAfterBackForwardCacheRestore(
   for (size_t i = 0; i < new_timings.size(); i++) {
     auto first_paint =
         new_timings[i]->first_paint_after_back_forward_cache_restore;
-
-    // The back-forward navigation happened, but the first-paint event has not
-    // happened yet.
-    if (first_paint.is_zero())
-      continue;
-
-    if (i < last_timings.size()) {
-      auto last_first_paint =
-          last_timings[i]->first_paint_after_back_forward_cache_restore;
-
-      // The first-paint after the page was restored from the cache was already
-      // recorded.
-      if (!last_first_paint.is_zero()) {
-        DCHECK_EQ(last_first_paint, first_paint);
-        continue;
-      }
+    if (!first_paint.is_zero() &&
+        (i >= last_timings.size() ||
+         last_timings[i]
+             ->first_paint_after_back_forward_cache_restore.is_zero())) {
+      observer->OnFirstPaintAfterBackForwardCacheRestoreInPage(*new_timings[i],
+                                                               i);
     }
 
-    observer->OnFirstPaintAfterBackForwardCacheRestoreInPage(*new_timings[i]);
+    auto first_input_delay =
+        new_timings[i]->first_input_delay_after_back_forward_cache_restore;
+    if (first_input_delay.has_value() &&
+        (i >= last_timings.size() ||
+         !last_timings[i]
+              ->first_input_delay_after_back_forward_cache_restore
+              .has_value())) {
+      observer->OnFirstInputAfterBackForwardCacheRestoreInPage(*new_timings[i],
+                                                               i);
+    }
   }
 }
 
@@ -176,7 +175,7 @@ void DispatchObserverTimingCallbacks(PageLoadMetricsObserver* observer,
       !last_timing.paint_timing->first_paint) {
     observer->OnFirstPaintInPage(new_timing);
   }
-  DispatchFirstPaintAfterBackForwardCacheRestore(
+  DispatchEventsAfterBackForwardCacheRestore(
       observer, last_timing.back_forward_cache_timings,
       new_timing.back_forward_cache_timings);
   if (new_timing.paint_timing->first_image_paint &&
@@ -342,7 +341,9 @@ void PageLoadTracker::LogAbortChainHistograms(
 void PageLoadTracker::PageHidden() {
   // Only log the first time we background in a given page load.
   if (!first_background_time_.has_value() ||
-      !first_background_time_after_back_forward_cache_restore_.has_value()) {
+      (!back_forward_cache_restores_.empty() &&
+       !back_forward_cache_restores_.back()
+            .first_background_time.has_value())) {
     // Make sure we either started in the foreground and haven't been
     // foregrounded yet, or started in the background and have already been
     // foregrounded.
@@ -358,8 +359,10 @@ void PageLoadTracker::PageHidden() {
     if (!first_background_time_.has_value())
       first_background_time_ = background_time - navigation_start_;
 
-    if (!first_background_time_after_back_forward_cache_restore_.has_value()) {
-      first_background_time_after_back_forward_cache_restore_ =
+    if (!back_forward_cache_restores_.empty() &&
+        !back_forward_cache_restores_.back()
+             .first_background_time.has_value()) {
+      back_forward_cache_restores_.back().first_background_time =
           background_time - navigation_start_after_back_forward_cache_restore_;
     }
   }
@@ -780,12 +783,12 @@ void PageLoadTracker::UpdateFeaturesUsage(
   }
 }
 
-void PageLoadTracker::UpdateThroughput(
-    mojom::ThroughputUkmDataPtr throughput_data) {
-  if (!throughput_data)
-    return;
-  for (const auto& observer : observers_)
-    observer->OnThroughputUpdate(throughput_data);
+void PageLoadTracker::SetUpSharedMemoryForSmoothness(
+    base::ReadOnlySharedMemoryRegion shared_memory) {
+  DCHECK(shared_memory.IsValid());
+  for (auto& observer : observers_) {
+    observer->SetUpSharedMemoryForSmoothness(shared_memory);
+  }
 }
 
 void PageLoadTracker::UpdateResourceDataUse(
@@ -838,17 +841,13 @@ const base::Optional<base::TimeDelta>& PageLoadTracker::GetFirstForegroundTime()
   return first_foreground_time_;
 }
 
-const base::Optional<base::TimeDelta>&
-PageLoadTracker::GetFirstBackgroundTimeAfterBackForwardCacheRestore() const {
-  return first_background_time_after_back_forward_cache_restore_;
+const PageLoadMetricsObserverDelegate::BackForwardCacheRestore&
+PageLoadTracker::GetBackForwardCacheRestore(size_t index) const {
+  return back_forward_cache_restores_[index];
 }
 
 bool PageLoadTracker::StartedInForeground() const {
   return started_in_foreground_;
-}
-
-bool PageLoadTracker::LastBackForwardCacheRestoreWasInForeground() const {
-  return last_back_forward_cache_restore_was_in_foreground_;
 }
 
 const UserInitiatedInfo& PageLoadTracker::GetUserInitiatedInfo() const {
@@ -927,7 +926,7 @@ PageLoadTracker::GetExperimentalLargestContentfulPaintHandler() const {
   return experimental_largest_contentful_paint_handler_;
 }
 
-ukm::SourceId PageLoadTracker::GetSourceId() const {
+ukm::SourceId PageLoadTracker::GetPageUkmSourceId() const {
   return source_id_;
 }
 
@@ -946,20 +945,22 @@ void PageLoadTracker::OnEnterBackForwardCache() {
 
 void PageLoadTracker::OnRestoreFromBackForwardCache(
     content::NavigationHandle* navigation_handle) {
-  first_background_time_after_back_forward_cache_restore_.reset();
   navigation_start_after_back_forward_cache_restore_ =
       navigation_handle->NavigationStart();
 
   DCHECK(!visibility_tracker_.currently_in_foreground());
   bool visible =
       GetWebContents()->GetVisibility() == content::Visibility::VISIBLE;
-  last_back_forward_cache_restore_was_in_foreground_ = visible;
+
+  BackForwardCacheRestore back_forward_cache_restore(visible);
+  back_forward_cache_restores_.push_back(back_forward_cache_restore);
+
   if (visible)
     PageShown();
 
   for (const auto& observer : observers_) {
-    observer->OnRestoreFromBackForwardCache(
-        metrics_update_dispatcher_.timing());
+    observer->OnRestoreFromBackForwardCache(metrics_update_dispatcher_.timing(),
+                                            navigation_handle);
   }
 }
 

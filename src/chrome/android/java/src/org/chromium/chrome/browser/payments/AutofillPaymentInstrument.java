@@ -13,16 +13,16 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.FullCardRequestDelegate;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.NormalizedAddressRequestDelegate;
+import org.chromium.components.payments.BasicCardUtils;
 import org.chromium.components.payments.ErrorStrings;
 import org.chromium.components.payments.PayerData;
 import org.chromium.components.payments.PaymentApp;
-import org.chromium.components.payments.PaymentApp.InstrumentDetailsCallback;
 import org.chromium.components.payments.PaymentAppType;
 import org.chromium.components.payments.PaymentFeatureList;
 import org.chromium.content_public.browser.WebContents;

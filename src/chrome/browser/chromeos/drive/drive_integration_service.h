@@ -162,6 +162,16 @@ class DriveIntegrationService : public KeyedService,
   void GetQuickAccessItems(int max_number,
                            GetQuickAccessItemsCallback callback);
 
+  // Returns the metadata for Drive file at |local_path|.
+  void GetMetadata(const base::FilePath& local_path,
+                   drivefs::mojom::DriveFs::GetMetadataCallback callback);
+
+  // Locates files or dirs by their server-side ID. Paths are relative to the
+  // mount point.
+  void LocateFilesByItemIds(
+      const std::vector<std::string>& item_ids,
+      drivefs::mojom::DriveFs::LocateFilesByItemIdsCallback callback);
+
   void RestartDrive();
 
   // Sets the arguments to be parsed by DriveFS on startup. Should only be
@@ -214,6 +224,9 @@ class DriveIntegrationService : public KeyedService,
   // but not yet mounted, this will start it mounting and wait for it to
   // complete before adding the mount point.
   void AddDriveMountPoint();
+
+  // Mounts Drive if the directory exists.
+  void MaybeMountDrive(bool data_directory_exists);
 
   // Registers remote file system for drive mount point.
   bool AddDriveMountPointAfterMounted();

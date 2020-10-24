@@ -11,6 +11,7 @@
 #include "components/permissions/permission_request_id.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/test/mock_permission_prompt_factory.h"
+#include "content/public/browser/web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 
@@ -20,9 +21,13 @@ constexpr char kGrantIsImplicitHistogram[] =
     "API.StorageAccess.GrantIsImplicit";
 constexpr char kPromptResultHistogram[] = "Permissions.Action.StorageAccess";
 
-constexpr char kInsecureURL[] = "http://www.example.com";
-constexpr char kSecureURL[] = "https://www.example.com";
-constexpr char kAlternateURL[] = "https://embedder_example.test";
+GURL GetTopLevelURL() {
+  return GURL("https://embedder.example.com");
+}
+
+GURL GetRequesterURL() {
+  return GURL("https://requester.example.com");
+}
 
 void SaveResult(ContentSetting* content_setting_result,
                 ContentSetting content_setting) {
@@ -39,7 +44,7 @@ class StorageAccessGrantPermissionContextTest
     ChromeRenderViewHostTestHarness::SetUp();
 
     // Ensure we are navigated to some page so that the proper views get setup.
-    NavigateAndCommit(GURL(kInsecureURL));
+    NavigateAndCommit(GetTopLevelURL());
 
     // Create PermissionRequestManager.
     permissions::PermissionRequestManager::CreateForWebContents(web_contents());
@@ -61,8 +66,7 @@ class StorageAccessGrantPermissionContextTest
   void ExhaustImplicitGrants(
       const GURL& requesting_origin,
       StorageAccessGrantPermissionContext& permission_context) {
-    permissions::PermissionRequestID fake_id(
-        /*render_process_id=*/0, /*render_frame_id=*/0, /*request_id=*/0);
+    permissions::PermissionRequestID fake_id = CreateFakeID();
 
     permissions::PermissionRequestManager* manager =
         permissions::PermissionRequestManager::FromWebContents(web_contents());
@@ -78,22 +82,28 @@ class StorageAccessGrantPermissionContextTest
           /*user_gesture=*/true, base::BindOnce(&SaveResult, &result));
       base::RunLoop().RunUntilIdle();
 
-      // We should not have a prompt showing up right now.
       EXPECT_FALSE(manager->IsRequestInProgress());
     }
+  }
+
+  permissions::PermissionRequestID CreateFakeID() {
+    return permissions::PermissionRequestID(web_contents()->GetMainFrame(),
+                                            ++next_request_id_);
   }
 
  private:
   std::unique_ptr<permissions::MockPermissionPromptFactory>
       mock_permission_prompt_factory_;
+  int next_request_id_ = 0;
 };
 
 TEST_F(StorageAccessGrantPermissionContextTest, InsecureOriginsAreAllowed) {
+  GURL insecure_url = GURL("http://www.example.com");
   StorageAccessGrantPermissionContext permission_context(profile());
+  EXPECT_TRUE(permission_context.IsPermissionAvailableToOrigins(insecure_url,
+                                                                insecure_url));
   EXPECT_TRUE(permission_context.IsPermissionAvailableToOrigins(
-      GURL(kInsecureURL), GURL(kInsecureURL)));
-  EXPECT_TRUE(permission_context.IsPermissionAvailableToOrigins(
-      GURL(kInsecureURL), GURL(kSecureURL)));
+      insecure_url, GetRequesterURL()));
 }
 
 // When the Storage Access API feature is disabled we should block the
@@ -104,12 +114,11 @@ TEST_F(StorageAccessGrantPermissionContextTest,
   scoped_disable.InitAndDisableFeature(blink::features::kStorageAccessAPI);
 
   StorageAccessGrantPermissionContext permission_context(profile());
-  permissions::PermissionRequestID fake_id(
-      /*render_process_id=*/0, /*render_frame_id=*/0, /*request_id=*/0);
+  permissions::PermissionRequestID fake_id = CreateFakeID();
 
   ContentSetting result = CONTENT_SETTING_DEFAULT;
   permission_context.DecidePermission(
-      web_contents(), fake_id, GURL(kSecureURL), GURL(kSecureURL),
+      web_contents(), fake_id, GetRequesterURL(), GetTopLevelURL(),
       /*user_gesture=*/true, base::BindOnce(&SaveResult, &result));
   EXPECT_EQ(CONTENT_SETTING_BLOCK, result);
 }
@@ -122,42 +131,28 @@ TEST_F(StorageAccessGrantPermissionContextTest,
   scoped_enable.InitAndEnableFeature(blink::features::kStorageAccessAPI);
 
   StorageAccessGrantPermissionContext permission_context(profile());
-  permissions::PermissionRequestID fake_id(
-      /*render_process_id=*/0, /*render_frame_id=*/0, /*request_id=*/0);
+  permissions::PermissionRequestID fake_id = CreateFakeID();
 
-  const GURL requesting_origin(kAlternateURL);
-  const GURL embedding_origin(kSecureURL);
-
-  // Ensure all our implicit grants are taken care of before we proceed to
-  // validate.
-  ExhaustImplicitGrants(requesting_origin, permission_context);
+  ExhaustImplicitGrants(GetRequesterURL(), permission_context);
 
   ContentSetting result = CONTENT_SETTING_DEFAULT;
   permission_context.DecidePermission(
-      web_contents(), fake_id, requesting_origin, embedding_origin,
+      web_contents(), fake_id, GetRequesterURL(), GetTopLevelURL(),
       /*user_gesture=*/true, base::BindOnce(&SaveResult, &result));
   base::RunLoop().RunUntilIdle();
 
-  // We should get a prompt showing up right now.
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents());
-  DCHECK(manager);
-  EXPECT_TRUE(manager->IsRequestInProgress());
+  ASSERT_TRUE(manager);
+  ASSERT_TRUE(manager->IsRequestInProgress());
 
-  // Verify the prompt is showing text that includes both of the origins we
-  // expect.
   permissions::PermissionRequest* request = manager->Requests().front();
   ASSERT_TRUE(request);
   ASSERT_EQ(1u, manager->Requests().size());
-  EXPECT_NE(request->GetMessageTextFragment().find(
-                base::UTF8ToUTF16(requesting_origin.host())),
-            base::string16::npos);
-  EXPECT_NE(request->GetMessageTextFragment().find(
-                base::UTF8ToUTF16(embedding_origin.host())),
-            base::string16::npos);
+  // Prompt should have both origins.
+  EXPECT_EQ(GetRequesterURL(), request->GetOrigin());
+  EXPECT_EQ(GetTopLevelURL(), manager->GetEmbeddingOrigin());
 
-  // Close the prompt and validate we get the expected setting back in our
-  // callback.
   manager->Closing();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(CONTENT_SETTING_ASK, result);
@@ -170,12 +165,11 @@ TEST_F(StorageAccessGrantPermissionContextTest,
   scoped_enable.InitAndEnableFeature(blink::features::kStorageAccessAPI);
 
   StorageAccessGrantPermissionContext permission_context(profile());
-  permissions::PermissionRequestID fake_id(
-      /*render_process_id=*/0, /*render_frame_id=*/0, /*request_id=*/0);
+  permissions::PermissionRequestID fake_id = CreateFakeID();
 
   ContentSetting result = CONTENT_SETTING_DEFAULT;
   permission_context.DecidePermission(
-      web_contents(), fake_id, GURL(kSecureURL), GURL(kSecureURL),
+      web_contents(), fake_id, GetRequesterURL(), GetTopLevelURL(),
       /*user_gesture=*/false, base::BindOnce(&SaveResult, &result));
   EXPECT_EQ(CONTENT_SETTING_BLOCK, result);
 }
@@ -190,7 +184,7 @@ TEST_F(StorageAccessGrantPermissionContextTest,
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             permission_context
                 .GetPermissionStatus(/*render_frame_host=*/nullptr,
-                                     GURL(kSecureURL), GURL(kSecureURL))
+                                     GetRequesterURL(), GetTopLevelURL())
                 .content_setting);
 }
 
@@ -204,7 +198,7 @@ TEST_F(StorageAccessGrantPermissionContextTest,
   EXPECT_EQ(CONTENT_SETTING_ASK,
             permission_context
                 .GetPermissionStatus(/*render_frame_host=*/nullptr,
-                                     GURL(kSecureURL), GURL(kSecureURL))
+                                     GetRequesterURL(), GetTopLevelURL())
                 .content_setting);
 }
 
@@ -219,31 +213,23 @@ TEST_F(StorageAccessGrantPermissionContextTest,
   histogram_tester.ExpectTotalCount(kGrantIsImplicitHistogram, 0);
 
   StorageAccessGrantPermissionContext permission_context(profile());
-  permissions::PermissionRequestID fake_id(
-      /*render_process_id=*/0, /*render_frame_id=*/0, /*request_id=*/0);
+  permissions::PermissionRequestID fake_id = CreateFakeID();
 
-  const GURL requesting_origin_1(kAlternateURL);
-  const GURL requesting_origin_2(kInsecureURL);
-  const GURL embedding_origin(kSecureURL);
-
-  // Ensure all our implicit grants are taken care of for |requesting_origin_1|
-  // before we proceed to validate.
-  ExhaustImplicitGrants(requesting_origin_1, permission_context);
+  ExhaustImplicitGrants(GetRequesterURL(), permission_context);
   histogram_tester.ExpectTotalCount(kGrantIsImplicitHistogram, 5);
   histogram_tester.ExpectBucketCount(kGrantIsImplicitHistogram,
                                      /*implicit_grant=*/1, 5);
 
   ContentSetting result = CONTENT_SETTING_DEFAULT;
   permission_context.DecidePermission(
-      web_contents(), fake_id, requesting_origin_1, embedding_origin,
+      web_contents(), fake_id, GetRequesterURL(), GetTopLevelURL(),
       /*user_gesture=*/true, base::BindOnce(&SaveResult, &result));
   base::RunLoop().RunUntilIdle();
 
-  // We should get a prompt showing up right now.
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents());
-  DCHECK(manager);
-  EXPECT_TRUE(manager->IsRequestInProgress());
+  ASSERT_TRUE(manager);
+  ASSERT_TRUE(manager->IsRequestInProgress());
 
   // Close the prompt and validate we get the expected setting back in our
   // callback.
@@ -258,11 +244,13 @@ TEST_F(StorageAccessGrantPermissionContextTest,
   histogram_tester.ExpectBucketCount(kPromptResultHistogram,
                                      /*DISMISSED=*/2, 1);
 
+  GURL alternate_requester_url = GURL("https://requester2_example.com");
+
   // However now if a different requesting origin makes a request we should see
   // it gets auto-granted as the limit has not been reached for it yet.
   result = CONTENT_SETTING_DEFAULT;
   permission_context.DecidePermission(
-      web_contents(), fake_id, requesting_origin_2, embedding_origin,
+      web_contents(), fake_id, alternate_requester_url, GetTopLevelURL(),
       /*user_gesture=*/true, base::BindOnce(&SaveResult, &result));
   base::RunLoop().RunUntilIdle();
 
@@ -286,31 +274,23 @@ TEST_F(StorageAccessGrantPermissionContextTest, ExplicitGrantDenial) {
   histogram_tester.ExpectTotalCount(kPromptResultHistogram, 0);
 
   StorageAccessGrantPermissionContext permission_context(profile());
-  permissions::PermissionRequestID fake_id(
-      /*render_process_id=*/0, /*render_frame_id=*/0, /*request_id=*/0);
+  permissions::PermissionRequestID fake_id = CreateFakeID();
 
-  const GURL requesting_origin_1(kAlternateURL);
-  const GURL requesting_origin_2(kInsecureURL);
-  const GURL embedding_origin(kSecureURL);
-
-  // Ensure all our implicit grants are taken care of for |requesting_origin_1|
-  // before we proceed to validate.
-  ExhaustImplicitGrants(requesting_origin_1, permission_context);
+  ExhaustImplicitGrants(GetRequesterURL(), permission_context);
   histogram_tester.ExpectTotalCount(kGrantIsImplicitHistogram, 5);
   histogram_tester.ExpectBucketCount(kGrantIsImplicitHistogram,
                                      /*implicit_grant=*/1, 5);
 
   ContentSetting result = CONTENT_SETTING_DEFAULT;
   permission_context.DecidePermission(
-      web_contents(), fake_id, requesting_origin_1, embedding_origin,
+      web_contents(), fake_id, GetRequesterURL(), GetTopLevelURL(),
       /*user_gesture=*/true, base::BindOnce(&SaveResult, &result));
   base::RunLoop().RunUntilIdle();
 
-  // We should get a prompt showing up right now.
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents());
-  DCHECK(manager);
-  EXPECT_TRUE(manager->IsRequestInProgress());
+  ASSERT_TRUE(manager);
+  ASSERT_TRUE(manager->IsRequestInProgress());
 
   // Deny the prompt and validate we get the expected setting back in our
   // callback.
@@ -335,31 +315,23 @@ TEST_F(StorageAccessGrantPermissionContextTest, ExplicitGrantAccept) {
   histogram_tester.ExpectTotalCount(kPromptResultHistogram, 0);
 
   StorageAccessGrantPermissionContext permission_context(profile());
-  permissions::PermissionRequestID fake_id(
-      /*render_process_id=*/0, /*render_frame_id=*/0, /*request_id=*/0);
+  permissions::PermissionRequestID fake_id = CreateFakeID();
 
-  const GURL requesting_origin_1(kAlternateURL);
-  const GURL requesting_origin_2(kInsecureURL);
-  const GURL embedding_origin(kSecureURL);
-
-  // Ensure all our implicit grants are taken care of for |requesting_origin_1|
-  // before we proceed to validate.
-  ExhaustImplicitGrants(requesting_origin_1, permission_context);
+  ExhaustImplicitGrants(GetRequesterURL(), permission_context);
   histogram_tester.ExpectTotalCount(kGrantIsImplicitHistogram, 5);
   histogram_tester.ExpectBucketCount(kGrantIsImplicitHistogram,
                                      /*implicit_grant=*/1, 5);
 
   ContentSetting result = CONTENT_SETTING_DEFAULT;
   permission_context.DecidePermission(
-      web_contents(), fake_id, requesting_origin_1, embedding_origin,
+      web_contents(), fake_id, GetRequesterURL(), GetTopLevelURL(),
       /*user_gesture=*/true, base::BindOnce(&SaveResult, &result));
   base::RunLoop().RunUntilIdle();
 
-  // We should get a prompt showing up right now.
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents());
-  DCHECK(manager);
-  EXPECT_TRUE(manager->IsRequestInProgress());
+  ASSERT_TRUE(manager);
+  ASSERT_TRUE(manager->IsRequestInProgress());
 
   // Accept the prompt and validate we get the expected setting back in our
   // callback.

@@ -44,7 +44,7 @@ constexpr char kHostSuffix[] = "-ccd-testing-v4.metric.gstatic.com";
 const std::string GetRandomString(int length) {
   std::string prefix;
   for (int i = 0; i < length; i++) {
-    prefix = 'a' + base::RandInt(0, 25);
+    prefix += ('a' + base::RandInt(0, 25));
   }
   return prefix;
 }
@@ -108,7 +108,7 @@ void DnsLatencyRoutine::AnalyzeResultsAndExecuteCallback() {
   double average_latency = AverageLatency(latencies_);
   if (!successfully_resolved_all_addresses_ || average_latency == 0.0) {
     set_verdict(mojom::RoutineVerdict::kProblem);
-    problems_.emplace_back(mojom::DnsLatencyProblem::kFailedToResolveAllHosts);
+    problems_.emplace_back(mojom::DnsLatencyProblem::kHostResolutionFailure);
   } else if (average_latency > kBadLatencyMs.InMillisecondsF() &&
              average_latency <= kVeryBadLatencyMs.InMillisecondsF()) {
     set_verdict(mojom::RoutineVerdict::kProblem);

@@ -17,6 +17,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/base/features.h"
 #include "cc/base/simple_enclosed_region.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/picture_layer.h"
@@ -51,8 +52,8 @@ struct SameSizeAsLayer : public base::RefCounted<SameSizeAsLayer> {
     SkColor background_color;
     Region non_fast_scrollable_region;
     TouchActionRegion touch_action_region;
+    Region wheel_event_region;
     ElementId element_id;
-    ElementId frame_element_id;
   } inputs;
   void* layer_tree_inputs;
   int int_fields[6];
@@ -81,7 +82,6 @@ Layer::Inputs::Inputs(int layer_id)
       contents_opaque_for_text(false),
       is_drawable(false),
       double_sided(true),
-      has_will_change_transform_hint(false),
       background_color(0) {}
 
 Layer::Inputs::~Inputs() = default;
@@ -224,13 +224,6 @@ void Layer::SetNeedsFullTreeSync() {
   layer_tree_host_->SetNeedsFullTreeSync();
 }
 
-void Layer::SetNextCommitWaitsForActivation() {
-  if (!layer_tree_host_)
-    return;
-
-  layer_tree_host_->SetNextCommitWaitsForActivation();
-}
-
 void Layer::SetNeedsPushProperties() {
   if (layer_tree_host_)
     layer_tree_host_->AddLayerShouldPushProperties(this);
@@ -244,7 +237,7 @@ bool Layer::IsPropertyChangeAllowed() const {
 }
 
 void Layer::CaptureContent(const gfx::Rect& rect,
-                           std::vector<NodeId>* content) {}
+                           std::vector<NodeInfo>* content) {}
 
 sk_sp<SkPicture> Layer::GetPicture() const {
   return nullptr;
@@ -962,7 +955,6 @@ void Layer::SetScrollOffsetFromImplSide(
   if (inputs.scroll_offset == scroll_offset)
     return;
   inputs.scroll_offset = scroll_offset;
-  SetNeedsPushProperties();
 
   UpdatePropertyTreeScrollOffset();
 
@@ -1080,6 +1072,15 @@ void Layer::SetTouchActionRegion(TouchActionRegion touch_action_region) {
 
   inputs_.touch_action_region = std::move(touch_action_region);
   SetPropertyTreesNeedRebuild();
+  SetNeedsCommit();
+}
+
+void Layer::SetWheelEventRegion(Region wheel_event_region) {
+  DCHECK(IsPropertyChangeAllowed());
+  if (inputs_.wheel_event_region == wheel_event_region)
+    return;
+
+  inputs_.wheel_event_region = std::move(wheel_event_region);
   SetNeedsCommit();
 }
 
@@ -1320,16 +1321,20 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->set_may_contain_video(may_contain_video_);
   layer->SetNonFastScrollableRegion(inputs_.non_fast_scrollable_region);
   layer->SetTouchActionRegion(inputs_.touch_action_region);
-  // TODO(sunxd): Pass the correct region for wheel event handlers, see
-  // https://crbug.com/841364.
-  EventListenerProperties mouse_wheel_props =
-      layer_tree_host()->event_listener_properties(
-          EventListenerClass::kMouseWheel);
-  if (mouse_wheel_props == EventListenerProperties::kBlocking ||
-      mouse_wheel_props == EventListenerProperties::kBlockingAndPassive) {
-    layer->SetWheelEventHandlerRegion(Region(gfx::Rect(bounds())));
+  if (!base::FeatureList::IsEnabled(::features::kWheelEventRegions)) {
+    // TODO(sunxd): Pass the correct region for wheel event handlers, see
+    // https://crbug.com/841364.
+    EventListenerProperties mouse_wheel_props =
+        layer_tree_host()->event_listener_properties(
+            EventListenerClass::kMouseWheel);
+    if (mouse_wheel_props == EventListenerProperties::kBlocking ||
+        mouse_wheel_props == EventListenerProperties::kBlockingAndPassive) {
+      layer->SetWheelEventHandlerRegion(Region(gfx::Rect(bounds())));
+    } else {
+      layer->SetWheelEventHandlerRegion(Region());
+    }
   } else {
-    layer->SetWheelEventHandlerRegion(Region());
+    layer->SetWheelEventHandlerRegion(inputs_.wheel_event_region);
   }
   layer->SetContentsOpaque(inputs_.contents_opaque);
   layer->SetContentsOpaqueForText(inputs_.contents_opaque_for_text);
@@ -1355,8 +1360,6 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
     layer->set_needs_show_scrollbars(true);
 
   layer->UnionUpdateRect(inputs_.update_rect);
-  layer->SetHasWillChangeTransformHint(has_will_change_transform_hint());
-  layer->SetFrameElementId(inputs_.frame_element_id);
   layer->SetNeedsPushProperties();
 
   // debug_info_->invalidations, if exist, will be cleared in the function.
@@ -1457,20 +1460,6 @@ void Layer::OnOpacityAnimated(float opacity) {
 
 void Layer::OnTransformAnimated(const gfx::Transform& transform) {
   EnsureLayerTreeInputs().transform = transform;
-}
-
-void Layer::SetHasWillChangeTransformHint(bool has_will_change) {
-  if (inputs_.has_will_change_transform_hint == has_will_change)
-    return;
-  inputs_.has_will_change_transform_hint = has_will_change;
-  SetNeedsCommit();
-}
-
-void Layer::SetFrameElementId(ElementId frame_element_id) {
-  if (inputs_.frame_element_id == frame_element_id)
-    return;
-  inputs_.frame_element_id = frame_element_id;
-  SetNeedsCommit();
 }
 
 void Layer::SetTrilinearFiltering(bool trilinear_filtering) {

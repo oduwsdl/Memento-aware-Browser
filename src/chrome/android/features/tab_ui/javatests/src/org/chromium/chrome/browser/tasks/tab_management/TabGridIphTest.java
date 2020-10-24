@@ -48,7 +48,6 @@ import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
@@ -78,7 +77,18 @@ import java.io.IOException;
 /** End-to-end tests for TabGridIph component. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 // clang-format off
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+        "enable-features=IPH_TabGroupsDragAndDrop<TabGroupsDragAndDrop",
+        "force-fieldtrials=TabGroupsDragAndDrop/Enabled",
+        "force-fieldtrial-params=TabGroupsDragAndDrop.Enabled:availability/any/" +
+        "event_trigger/" +
+        "name%3Aiph_tabgroups_drag_and_drop;comparator%3A==0;window%3A30;storage%3A365/" +
+        "event_trigger2/" +
+        "name%3Aiph_tabgroups_drag_and_drop;comparator%3A<2;window%3A90;storage%3A365/" +
+        "event_used/" +
+        "name%3Atab_drag_and_drop_to_group;comparator%3A==0;window%3A365;storage%3A365/" +
+        "session_rate/<1"
+})
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
 @Features.EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
 @Features.DisableFeatures(ChromeFeatureList.CLOSE_TAB_SUGGESTIONS)
@@ -94,20 +104,16 @@ public class TabGridIphTest {
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
-
-    @Rule
-    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
     @Before
     public void setUp() {
         mActivityTestRule.startMainActivityOnBlankPage();
         Layout layout = mActivityTestRule.getActivity().getLayoutManager().getOverviewLayout();
         assertTrue(layout instanceof StartSurfaceLayout);
-        CriteriaHelper.pollUiThread(mActivityTestRule.getActivity()
-                                            .getTabModelSelector()
-                                            .getTabModelFilterProvider()
-                                            .getCurrentTabModelFilter()::isTabModelRestored);
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
         mModalDialogManager = TestThreadUtils.runOnUiThreadBlockingNoException(
                 mActivityTestRule.getActivity()::getModalDialogManager);
     }

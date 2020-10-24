@@ -19,9 +19,8 @@
 #include "chrome/browser/performance_manager/observers/isolation_context_metrics.h"
 #include "chrome/browser/performance_manager/observers/metrics_collector.h"
 #include "chrome/browser/performance_manager/policies/background_tab_loading_policy.h"
-#include "chrome/browser/performance_manager/policies/high_pmf_memory_pressure_policy.h"
+#include "chrome/browser/performance_manager/policies/high_pmf_discard_policy.h"
 #include "chrome/browser/performance_manager/policies/policy_features.h"
-#include "chrome/browser/performance_manager/policies/urgent_page_discarding_policy.h"
 #include "chrome/browser/performance_manager/policies/working_set_trimmer_policy.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/performance_manager/embedder/performance_manager_lifetime.h"
@@ -34,15 +33,20 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_CHROMEOS)
 #include "base/allocator/buildflags.h"
+#include "chrome/browser/performance_manager/policies/userspace_swap_policy_chromeos.h"
+
 #if BUILDFLAG(USE_TCMALLOC)
-#include "chrome/browser/performance_manager/policies/dynamic_tcmalloc_policy_linux.h"
+#include "chrome/browser/performance_manager/policies/dynamic_tcmalloc_policy_chromeos.h"
 #include "chrome/common/performance_manager/mojom/tcmalloc.mojom.h"
 #endif  // BUILDFLAG(USE_TCMALLOC)
-#endif  // defined(OS_LINUX)
+
+#endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_ANDROID)
+#include "chrome/browser/performance_manager/policies/page_discarding_helper.h"
+#include "chrome/browser/performance_manager/policies/urgent_page_discarding_policy.h"
 #include "chrome/browser/tab_contents/form_interaction_tab_helper.h"
 #endif  // !defined(OS_ANDROID)
 
@@ -89,7 +93,13 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
                            CreatePolicyForPlatform());
   }
 
-#if defined(OS_LINUX)
+#if defined(OS_CHROMEOS)
+  if (performance_manager::policies::UserspaceSwapPolicy::
+          UserspaceSwapSupportedAndEnabled()) {
+    graph->PassToGraph(
+        std::make_unique<performance_manager::policies::UserspaceSwapPolicy>());
+  }
+
 #if BUILDFLAG(USE_TCMALLOC)
   if (base::FeatureList::IsEnabled(
           performance_manager::features::kDynamicTcmallocTuning)) {
@@ -97,10 +107,22 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
                        performance_manager::policies::DynamicTcmallocPolicy>());
   }
 #endif  // BUILDFLAG(USE_TCMALLOC)
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_ANDROID)
   graph->PassToGraph(FormInteractionTabHelper::CreateGraphObserver());
+
+  // The PageDiscardingHelper instance is required by the HighPMFDiscardPolicy
+  // and by UrgentDiscardingFromPerformanceManager.
+
+  if (base::FeatureList::IsEnabled(
+          performance_manager::features::kHighPMFDiscardPolicy) ||
+      base::FeatureList::IsEnabled(
+          performance_manager::features::
+              kUrgentDiscardingFromPerformanceManager)) {
+    graph->PassToGraph(std::make_unique<
+                       performance_manager::policies::PageDiscardingHelper>());
+  }
 
   if (base::FeatureList::IsEnabled(
           performance_manager::features::
@@ -117,17 +139,16 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
         std::make_unique<
             performance_manager::policies::BackgroundTabLoadingPolicy>());
   }
+
+  if (base::FeatureList::IsEnabled(
+          performance_manager::features::kHighPMFDiscardPolicy)) {
+    graph->PassToGraph(std::make_unique<
+                       performance_manager::policies::HighPMFDiscardPolicy>());
+  }
 #endif  // !defined(OS_ANDROID)
 
   graph->PassToGraph(
       std::make_unique<performance_manager::metrics::MemoryPressureMetrics>());
-
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHighPMFMemoryPressureSignals)) {
-    graph->PassToGraph(
-        std::make_unique<
-            performance_manager::policies::HighPMFMemoryPressurePolicy>());
-  }
 
   if (base::FeatureList::IsEnabled(
           performance_manager::features::kTabLoadingFrameNavigationThrottles)) {

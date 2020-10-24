@@ -8,13 +8,11 @@
 #include "src/base/macros.h"
 #include "src/heap/cppgc/free-list.h"
 #include "src/heap/cppgc/globals.h"
-#include "src/heap/cppgc/heap-object-header-inl.h"
 #include "src/heap/cppgc/heap-object-header.h"
 #include "src/heap/cppgc/heap-page.h"
 #include "src/heap/cppgc/heap-space.h"
 #include "src/heap/cppgc/heap-visitor.h"
 #include "src/heap/cppgc/heap.h"
-#include "src/heap/cppgc/object-allocator-inl.h"
 #include "src/heap/cppgc/object-start-bitmap.h"
 #include "src/heap/cppgc/page-memory.h"
 #include "src/heap/cppgc/stats-collector.h"
@@ -112,6 +110,7 @@ void* ObjectAllocator::OutOfLineAllocate(NormalPageSpace* space, size_t size,
                                          GCInfoIndex gcinfo) {
   void* memory = OutOfLineAllocateImpl(space, size, gcinfo);
   stats_collector_->NotifySafePointForConservativeCollection();
+  raw_heap_->heap()->AdvanceIncrementalGarbageCollectionOnAllocationIfNeeded();
   return memory;
 }
 
@@ -138,7 +137,7 @@ void* ObjectAllocator::OutOfLineAllocateImpl(NormalPageSpace* space,
   // TODO(chromium:1056170): Add lazy sweep.
 
   // 4. Complete sweeping.
-  raw_heap_->heap()->sweeper().Finish();
+  raw_heap_->heap()->sweeper().FinishIfRunning();
 
   // 5. Add a new page to this heap.
   auto* new_page = NormalPage::Create(page_backend_, space);

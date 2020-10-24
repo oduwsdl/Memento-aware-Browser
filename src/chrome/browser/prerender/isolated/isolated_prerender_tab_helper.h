@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -17,18 +18,23 @@
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
+#include "chrome/browser/prerender/isolated/isolated_prerender_prefetch_status.h"
+#include "chrome/browser/prerender/isolated/isolated_prerender_probe_result.h"
 #include "chrome/browser/prerender/isolated/prefetched_mainframe_response_container.h"
+#include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/isolation_info.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "url/gurl.h"
 
 class IsolatedPrerenderPageLoadMetricsObserver;
+class IsolatedPrerenderPrefetchMetricsCollector;
 class IsolatedPrerenderSubresourceManager;
 class Profile;
 
@@ -42,6 +48,8 @@ class SimpleURLLoader;
 
 // This class listens to predictions of the next navigation and prefetches the
 // mainpage content of Google Search Result Page links when they are available.
+// When a prefetched page is navigated to, this class also copies over any
+// cookies from the prefetch into the profile's cookie jar.
 class IsolatedPrerenderTabHelper
     : public content::WebContentsObserver,
       public content::WebContentsUserData<IsolatedPrerenderTabHelper>,
@@ -57,76 +65,17 @@ class IsolatedPrerenderTabHelper
     // Called when a prefetch for |url| is completed successfully.
     virtual void OnPrefetchCompletedSuccessfully(const GURL& url) {}
 
-    // Called when a prefetch for |url| is completed with an HTTP error code
-    // (non-2XX).
-    virtual void OnPrefetchCompletedWithError(const GURL& url, int code) {}
+    // Called when a prefetch for |url| is completed with an error code.
+    // Negative values for |error_code| are a net::Error and positive values are
+    // a HTTP error code.
+    virtual void OnPrefetchCompletedWithError(const GURL& url, int error_code) {
+    }
 
     // Called when a NoStatePrefetch finishes loading.
     virtual void OnNoStatePrefetchFinished() {}
-  };
 
-  // The various states that a prefetch can go through or terminate with. Used
-  // in UKM logging so don't remove or reorder values. Update
-  // |IsolatedPrerenderPrefetchStatus| in //tools/metrics/histograms/enums.xml
-  // whenever this is changed.
-  enum class PrefetchStatus {
-    // The interceptor used a prefetch.
-    kPrefetchUsedNoProbe = 0,
-
-    // The interceptor used a prefetch after successfully probing the origin.
-    kPrefetchUsedProbeSuccess = 1,
-
-    // The interceptor was not able to use an available prefetch because the
-    // origin probe failed.
-    kPrefetchNotUsedProbeFailed = 2,
-
-    // The url was eligible to be prefetched, but the network request was never
-    // made.
-    kPrefetchNotStarted = 3,
-
-    // The url was not eligible to be prefetched because it is a Google-owned
-    // domain.
-    kPrefetchNotEligibleGoogleDomain = 4,
-
-    // The url was not eligible to be prefetched because the user had cookies
-    // for that origin.
-    kPrefetchNotEligibleUserHasCookies = 5,
-
-    // The url was not eligible to be prefetched because there was a registered
-    // service worker for that origin.
-    kPrefetchNotEligibleUserHasServiceWorker = 6,
-
-    // The url was not eligible to be prefetched because its scheme was not
-    // https://.
-    kPrefetchNotEligibleSchemeIsNotHttps = 7,
-
-    // The url was not eligible to be prefetched because its host was an IP
-    // address.
-    kPrefetchNotEligibleHostIsIPAddress = 8,
-
-    // The url was not eligible to be prefetched because it uses a non-default
-    // storage partition.
-    kPrefetchNotEligibleNonDefaultStoragePartition = 9,
-
-    // The network request was cancelled before it finished. This happens when
-    // there is a new navigation.
-    kPrefetchNotFinishedInTime = 10,
-
-    // The prefetch failed because of a net error.
-    kPrefetchFailedNetError = 11,
-
-    // The prefetch failed with a non-2XX HTTP response code.
-    kPrefetchFailedNon2XX = 12,
-
-    // The prefetch's Content-Type header was not html.
-    kPrefetchFailedNotHTML = 13,
-
-    // The prefetch finished successfully but was never used.
-    kPrefetchSuccessful = 14,
-
-    // The navigation off of the Google SRP was to a url that was not on the
-    // SRP.
-    kNavigatedToLinkNotOnSRP = 15,
+    // Called when a url's eligiblity checks are done and fully processed.
+    virtual void OnNewEligiblePrefetchStarted() {}
   };
 
   // Container for several metrics which pertain to prefetching actions
@@ -194,19 +143,26 @@ class IsolatedPrerenderTabHelper
     base::Optional<size_t> clicked_link_srp_position_;
 
     // The status of a prefetch done on the SRP that may have been used here.
-    base::Optional<PrefetchStatus> prefetch_status_;
+    base::Optional<IsolatedPrerenderPrefetchStatus> prefetch_status_;
 
     // The amount of time it took the probe to complete. Set only when a
     // prefetch is used and a probe was required.
     base::Optional<base::TimeDelta> probe_latency_;
   };
 
+  // Checks if a |service_worker_context_for_test_| is available, and if not,
+  // returns the real service worker context from the default storage partition.
+  // This is used for passing the |service_worker_context| to
+  // CheckEligibilityOfURL().
+  static content::ServiceWorkerContext* GetServiceWorkerContext(
+      Profile* profile);
+
   // Used to determine if |url| is eligible for isolated prefetching. Also gives
   // a reason in |status| if one is applicable.
   using OnEligibilityResultCallback = base::OnceCallback<void(
       const GURL& url,
       bool eligible,
-      base::Optional<IsolatedPrerenderTabHelper::PrefetchStatus> status)>;
+      base::Optional<IsolatedPrerenderPrefetchStatus> status)>;
   static void CheckEligibilityOfURL(
       Profile* profile,
       const GURL& url,
@@ -234,15 +190,35 @@ class IsolatedPrerenderTabHelper
       const GURL& url);
 
   // Updates |prefetch_status_by_url_|.
-  void OnPrefetchStatusUpdate(const GURL& url, PrefetchStatus usage);
+  void OnPrefetchStatusUpdate(const GURL& url,
+                              IsolatedPrerenderPrefetchStatus usage);
 
   // Called by the URLLoaderInterceptor to update |page_.probe_latency_|.
   void NotifyPrefetchProbeLatency(base::TimeDelta probe_latency);
+
+  // Called by the URLLoaderInterceptor to report the outcome of an origin
+  // probe.
+  void ReportProbeResult(const GURL& url, IsolatedPrerenderProbeResult result);
+
+  // When a previously prefetched page is navigated to, any cookies set on that
+  // page load should be copied over to the normal profile. While this copy is
+  // in progress, this method returns true to indicate to the navigation loader
+  // interceptor that it should wait to commit the mainframe.
+  // |SetOnAfterSRPCookieCopyCompleteCallback| can be used to set a callback
+  // when the cookie copy process is complete.
+  bool IsWaitingForAfterSRPCookiesCopy() const;
+  void SetOnAfterSRPCookieCopyCompleteCallback(base::OnceClosure callback);
 
   void AddObserverForTesting(Observer* observer);
   void RemoveObserverForTesting(Observer* observer);
 
   network::mojom::NetworkContext* GetIsolatedContextForTesting() const;
+
+  // Sets the service_worker_context_for_test_ with a FakeServiceWorkerContext
+  // for the the purpose of testing.
+  // Used in the SetUp() method in isolated_prerender_tab_helper_unittest.cc.
+  static void SetServiceWorkerContextForTest(
+      content::ServiceWorkerContext* context);
 
  protected:
   // Exposed for testing.
@@ -252,6 +228,18 @@ class IsolatedPrerenderTabHelper
  private:
   friend class IsolatedPrerenderPageLoadMetricsObserver;
   friend class content::WebContentsUserData<IsolatedPrerenderTabHelper>;
+
+  // Identifies the state of the cookie copying process we're in, if any.
+  enum class CookieCopyStatus {
+    // No cookies need to be copied.
+    kNoNavigation,
+
+    // The cookie copy process is in progress.
+    kWaitingForCopy,
+
+    // The cookie copy process is complete.
+    kCopyComplete,
+  };
 
   // Owns all per-pageload state in the tab helper so that new navigations only
   // need to reset an instance of this class to clean up previous state.
@@ -272,15 +260,24 @@ class IsolatedPrerenderTabHelper
     // Only set for pages after a Google SRP.
     std::unique_ptr<AfterSRPMetrics> after_srp_metrics_;
 
+    // Collects metrics on all prefetching. This is a scoped refptr so that it
+    // can also be shared with subresource managers until all pointers to it are
+    // destroyed, at which time it logs UKM.
+    scoped_refptr<IsolatedPrerenderPrefetchMetricsCollector>
+        prefetch_metrics_collector_;
+
     // The status of each prefetch.
-    std::map<GURL, PrefetchStatus> prefetch_status_by_url_;
+    std::map<GURL, IsolatedPrerenderPrefetchStatus> prefetch_status_by_url_;
 
     // A map of all predicted URLs to their original placement in the ordered
     // prediction.
     std::map<GURL, size_t> original_prediction_ordering_;
 
-    // The url loader that does all the prefetches. Set only when active.
-    std::unique_ptr<network::SimpleURLLoader> url_loader_;
+    // The url loaders that do all the prefetches. Only active loaders are in
+    // this set.
+    std::set<std::unique_ptr<network::SimpleURLLoader>,
+             base::UniquePtrComparator>
+        url_loaders_;
 
     // An ordered list of the URLs to prefetch.
     std::vector<GURL> urls_to_prefetch_;
@@ -297,6 +294,9 @@ class IsolatedPrerenderTabHelper
     // The number of no state prefetch requests that have been made.
     size_t number_of_no_state_prefetch_attempts_ = 0;
 
+    // The number of spare renderers that were started during this page load.
+    size_t number_of_spare_renderers_started_ = 0;
+
     // All urls that are eligible to be no state prefetched. Once a no state
     // prefetch finishes, in success or in error, it is removed from this list.
     // If there is an active no state prefetch, its url will always be the first
@@ -306,6 +306,10 @@ class IsolatedPrerenderTabHelper
     // All urls have have been successfully no state prefetched and finished.
     std::vector<GURL> no_state_prefetched_urls_;
 
+    // URLs for which a NoStatePrefetch was attempted and was denied by the
+    // Prerender code.
+    std::vector<GURL> failed_no_state_prefetch_urls_;
+
     // If the current page load was prerendered, then this subresource manager
     // is taken from |IsolatedPrerenderService| and used to facilitate loading
     // of prefetched resources from cache. Note: An
@@ -314,29 +318,55 @@ class IsolatedPrerenderTabHelper
     // previous page load remaining alive.
     std::unique_ptr<IsolatedPrerenderSubresourceManager> subresource_manager_;
 
-    // The network context and url loader factory that will be used for
-    // prefetches. A separate network context is used so that the prefetch proxy
-    // can be used via a custom proxy configuration.
-    scoped_refptr<network::SharedURLLoaderFactory> isolated_url_loader_factory_;
+    // The current status of copying cookies for the next page load when the
+    // user navigates to a prefetched link.
+    CookieCopyStatus cookie_copy_status_ = CookieCopyStatus::kNoNavigation;
+
+    // A callback that runs once |cookie_copy_status_| is set to copy complete.
+    base::OnceClosure on_after_srp_cookie_copy_complete_;
+
+    // The cookie manager, network contextm and url loader factory that will be
+    // used for prefetches. A separate network context is used so that the
+    // prefetch proxy can be used via a custom proxy configuration.
     mojo::Remote<network::mojom::NetworkContext> isolated_network_context_;
+    mojo::Remote<network::mojom::CookieManager> isolated_cookie_manager_;
+    scoped_refptr<network::SharedURLLoaderFactory> isolated_url_loader_factory_;
   };
+
+  // Returns true if the current profile is not incognito and meets any
+  // requirements for Lite Mode being enabled.
+  static bool IsProfileEligible(Profile* profile);
+  bool IsProfileEligible() const;
+
+  // Computes the AfterSRPMetrics that would be returned for the next
+  // navigation, when it commits. This method exists to allow the PLM Observer
+  // to get the AfterSRPMetrics if the navigation fails to commit, so that
+  // metrics can be logged anyways. Returns nullptr if the after srp metrics
+  // wouldn't be set on the next commit.
+  std::unique_ptr<IsolatedPrerenderTabHelper::AfterSRPMetrics>
+  ComputeAfterSRPMetricsBeforeCommit(content::NavigationHandle* handle) const;
 
   // A helper method to make it easier to tell when prefetching is already
   // active.
   bool PrefetchingActive() const;
 
-  // Prefetches the front of |urls_to_prefetch_|.
+  // Starts prefetching the next eligible links.
   void Prefetch();
 
-  // Called when |url_loader_| encounters a redirect.
-  void OnPrefetchRedirect(const GURL& original_url,
+  // Helper method for |Prefetch| which starts a single prefetch.
+  void StartSinglePrefetch();
+
+  // Called when |loader| encounters a redirect.
+  void OnPrefetchRedirect(network::SimpleURLLoader* loader,
+                          const GURL& original_url,
                           const net::RedirectInfo& redirect_info,
                           const network::mojom::URLResponseHead& response_head,
                           std::vector<std::string>* removed_headers);
 
-  // Called when |url_loader_| completes. |url| is the url that was requested
+  // Called when |loader| completes. |url| is the url that was requested
   // and |key| is the temporary NIK used during the request.
-  void OnPrefetchComplete(const GURL& url,
+  void OnPrefetchComplete(network::SimpleURLLoader* loader,
+                          const GURL& url,
                           const net::IsolationInfo& isolation_info,
                           std::unique_ptr<std::string> response_body);
 
@@ -355,10 +385,22 @@ class IsolatedPrerenderTabHelper
   // Starts a new no state prefetch for the next eligible url.
   void DoNoStatePrefetch();
 
+  // Starts a spare renderer. Should only be called when all NSPs and
+  // prefetching is complete.
+  void StartSpareRenderer();
+
   // Makes a clone of |this|'s prefetch response so that it can be used for
   // NoStatePrefetch now and later reused if the user navigates to that page.
   std::unique_ptr<PrefetchedMainframeResponseContainer>
   CopyPrefetchResponseForNSP(const GURL& url);
+
+  // Updates any status like kPrefetchUsed or kPrefetchNotUsed with additional
+  // information about applicable NoStatePrefetches given |self|. Note: This is
+  // done here because the navigation loader interceptor doesn't have visibility
+  // itself and can't report it. Static and public to enable testing.
+  IsolatedPrerenderPrefetchStatus MaybeUpdatePrefetchStatusWithNSPContext(
+      const GURL& url,
+      IsolatedPrerenderPrefetchStatus status) const;
 
   // NavigationPredictorKeyedService::Observer:
   void OnPredictionUpdated(
@@ -366,9 +408,10 @@ class IsolatedPrerenderTabHelper
           prediction) override;
 
   // Used as a callback for when the eligibility of |url| is determined.
-  void OnGotEligibilityResult(const GURL& url,
-                              bool eligible,
-                              base::Optional<PrefetchStatus> status);
+  void OnGotEligibilityResult(
+      const GURL& url,
+      bool eligible,
+      base::Optional<IsolatedPrerenderPrefetchStatus> status);
 
   // Creates a new URL Loader Factory on |page_|'s isolated network context.
   // |isolation_info| may be passed if the factory will be used in the renderer
@@ -376,6 +419,23 @@ class IsolatedPrerenderTabHelper
   void CreateNewURLLoaderFactory(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> pending_receiver,
       base::Optional<net::IsolationInfo> isolation_info);
+
+  // Starts a query for all cookies on |url| in the isolated cookie jar so that
+  // they can be copied to the normal profile. After this method is called,
+  // |IsWaitingForAfterSRPCookiesCopy| returns true until
+  // |OnCopiedIsolatedCookiesAfterSRPClick| runs.
+  void CopyIsolatedCookiesOnAfterSRPClick(const GURL& url);
+
+  // Starts copying all cookies in |cookie_list| to the normal profile.
+  void OnGotIsolatedCookiesToCopyAfterSRPClick(
+      const GURL& url,
+      const net::CookieAccessResultList& cookie_list,
+      const net::CookieAccessResultList& excluded_cookies);
+
+  // When this is called, |IsWaitingForAfterSRPCookiesCopy| will return false
+  // again and the callback passed to |SetOnAfterSRPCookieCopyCompleteCallback|,
+  // if any, is run.
+  void OnCopiedIsolatedCookiesAfterSRPClick();
 
   // Creates the isolated network context and url loader factory for this page.
   void CreateIsolatedURLLoaderFactory();

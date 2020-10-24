@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/importer/importer_unittest_utils.h"
+#include "chrome/browser/password_manager/password_manager_test_util.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/test/base/testing_profile.h"
@@ -26,12 +28,31 @@
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+namespace {
+using autofill::PasswordForm;
 using bookmarks::BookmarkModel;
 using bookmarks::TitledUrlMatch;
 using bookmarks::UrlAndTitle;
+using password_manager::TestPasswordStore;
+
+PasswordForm MakePasswordForm() {
+  PasswordForm form;
+  form.url = GURL("https://example.com/");
+  form.signon_realm = form.url.GetOrigin().spec();
+  form.username_value = base::ASCIIToUTF16("user@gmail.com");
+  form.password_value = base::ASCIIToUTF16("s3cre3t");
+  form.in_store = PasswordForm::Store::kProfileStore;
+  return form;
+}
+
+}  // namespace
 
 class TestProfileWriter : public ProfileWriter {
  public:
@@ -49,11 +70,23 @@ class ProfileWriterTest : public testing::Test {
     DCHECK(profile_dir_.CreateUniqueTempDir());
     TestingProfile::Builder profile_builder;
     profile_builder.SetPath(profile_dir_.GetPath());
+    profile_builder.AddTestingFactory(
+        BookmarkModelFactory::GetInstance(),
+        BookmarkModelFactory::GetDefaultFactory());
+    profile_builder.AddTestingFactory(
+        HistoryServiceFactory::GetInstance(),
+        HistoryServiceFactory::GetDefaultFactory());
     profile_ = profile_builder.Build();
 
     DCHECK(second_profile_dir_.CreateUniqueTempDir());
     TestingProfile::Builder second_profile_builder;
     second_profile_builder.SetPath(second_profile_dir_.GetPath());
+    second_profile_builder.AddTestingFactory(
+        BookmarkModelFactory::GetInstance(),
+        BookmarkModelFactory::GetDefaultFactory());
+    second_profile_builder.AddTestingFactory(
+        HistoryServiceFactory::GetInstance(),
+        HistoryServiceFactory::GetDefaultFactory());
     second_profile_ = second_profile_builder.Build();
   }
 
@@ -101,12 +134,10 @@ class ProfileWriterTest : public testing::Test {
   void VerifyBookmarksCount(const std::vector<UrlAndTitle>& bookmarks_record,
                             BookmarkModel* bookmark_model,
                             size_t expected) {
-    std::vector<TitledUrlMatch> matches;
-    for (size_t i = 0; i < bookmarks_record.size(); ++i) {
-      bookmark_model->GetBookmarksMatching(
-          bookmarks_record[i].title, 10, &matches);
+    for (auto bookmark : bookmarks_record) {
+      std::vector<TitledUrlMatch> matches =
+          bookmark_model->GetBookmarksMatching(bookmark.title, 10);
       EXPECT_EQ(expected, matches.size());
-      matches.clear();
     }
   }
 
@@ -165,15 +196,11 @@ class ProfileWriterTest : public testing::Test {
 
 // Add bookmarks via ProfileWriter to profile1 when profile2 also exists.
 TEST_F(ProfileWriterTest, CheckBookmarksWithMultiProfile) {
-  second_profile()->CreateBookmarkModel(true);
-
   BookmarkModel* bookmark_model2 =
       BookmarkModelFactory::GetForBrowserContext(second_profile());
   bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model2);
   bookmarks::AddIfNotBookmarked(
       bookmark_model2, GURL("http://www.bing.com"), base::ASCIIToUTF16("Bing"));
-
-  profile()->CreateBookmarkModel(true);
 
   CreateImportedBookmarksEntries();
   BookmarkModel* bookmark_model1 =
@@ -196,8 +223,6 @@ TEST_F(ProfileWriterTest, CheckBookmarksWithMultiProfile) {
 
 // Verify that bookmarks are duplicated when added twice.
 TEST_F(ProfileWriterTest, CheckBookmarksAfterWritingDataTwice) {
-  profile()->CreateBookmarkModel(true);
-
   CreateImportedBookmarksEntries();
   BookmarkModel* bookmark_model =
       BookmarkModelFactory::GetForBrowserContext(profile());
@@ -232,7 +257,6 @@ std::unique_ptr<TemplateURL> ProfileWriterTest::CreateTemplateURL(
 
 // Verify that history entires are not duplicated when added twice.
 TEST_F(ProfileWriterTest, CheckHistoryAfterWritingDataTwice) {
-  ASSERT_TRUE(profile()->CreateHistoryService(true, false));
   profile()->BlockUntilHistoryProcessesPendingRequests();
 
   CreateHistoryPageEntries();
@@ -249,7 +273,6 @@ TEST_F(ProfileWriterTest, CheckHistoryAfterWritingDataTwice) {
 }
 
 TEST_F(ProfileWriterTest, AddKeywords) {
-  ASSERT_TRUE(profile()->CreateHistoryService(true, false));
   TemplateURLServiceFactory::GetInstance()->SetTestingFactoryAndUse(
       profile(),
       base::BindRepeating(&TemplateURLServiceFactory::BuildInstanceFor));
@@ -278,4 +301,31 @@ TEST_F(ProfileWriterTest, AddKeywords) {
   EXPECT_EQ(turls[1]->keyword(), base::ASCIIToUTF16("key2"));
   EXPECT_EQ(turls[1]->url(), "http://key2.com");
   EXPECT_EQ(turls[1]->short_name(), base::ASCIIToUTF16("n2"));
+}
+
+TEST_F(ProfileWriterTest, AddPassword) {
+  scoped_refptr<TestPasswordStore> store =
+      CreateAndUseTestPasswordStore(profile());
+  PasswordForm form = MakePasswordForm();
+
+  auto profile_writer = base::MakeRefCounted<TestProfileWriter>(profile());
+  profile_writer->AddPasswordForm(form);
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_THAT(store->stored_passwords().at(form.signon_realm),
+              testing::ElementsAre(form));
+}
+
+TEST_F(ProfileWriterTest, AddPasswordDisabled) {
+  scoped_refptr<TestPasswordStore> store =
+      CreateAndUseTestPasswordStore(profile());
+  profile()->GetPrefs()->SetBoolean(
+      password_manager::prefs::kCredentialsEnableService, false);
+  PasswordForm form = MakePasswordForm();
+
+  auto profile_writer = base::MakeRefCounted<TestProfileWriter>(profile());
+  profile_writer->AddPasswordForm(form);
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_THAT(store->stored_passwords(), testing::IsEmpty());
 }

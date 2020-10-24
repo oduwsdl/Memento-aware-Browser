@@ -1,1 +1,0 @@
-speech-dispatcher/libspeechd_version.h

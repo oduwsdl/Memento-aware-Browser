@@ -739,6 +739,61 @@ Status ExecuteIsElementEnabled(Session* session,
   }
 }
 
+Status ExecuteGetComputedLabel(Session* session,
+                               WebView* web_view,
+                               const std::string& element_id,
+                               const base::DictionaryValue& params,
+                               std::unique_ptr<base::Value>* value) {
+  std::unique_ptr<base::Value> axNode;
+  Status status = GetAXNodeByElementId(session, web_view, element_id, &axNode);
+  if (status.IsError())
+    return status;
+
+  // Computed label stores as `name` in the AXTree.
+  base::Optional<base::Value> nameNode = axNode->ExtractKey("name");
+  if (!nameNode) {
+    // No computed label found. Return empty string.
+    *value = std::make_unique<base::Value>("");
+    return Status(kOk);
+  }
+
+  base::Optional<base::Value> nameVal = nameNode->ExtractKey("value");
+  if (!nameVal)
+    return Status(kUnknownError,
+                  "No name value found in the node in CDP response");
+
+  *value = std::make_unique<base::Value>(std::move(*nameVal));
+
+  return Status(kOk);
+}
+
+Status ExecuteGetComputedRole(Session* session,
+                              WebView* web_view,
+                              const std::string& element_id,
+                              const base::DictionaryValue& params,
+                              std::unique_ptr<base::Value>* value) {
+  std::unique_ptr<base::Value> axNode;
+  Status status = GetAXNodeByElementId(session, web_view, element_id, &axNode);
+  if (status.IsError())
+    return status;
+
+  base::Optional<base::Value> roleNode = axNode->ExtractKey("role");
+  if (!roleNode) {
+    // No computed role found. Return empty string.
+    *value = std::make_unique<base::Value>("");
+    return Status(kOk);
+  }
+
+  base::Optional<base::Value> roleVal = roleNode->ExtractKey("value");
+  if (!roleVal)
+    return Status(kUnknownError,
+                  "No role value found in the node in CDP response");
+
+  *value = std::make_unique<base::Value>(std::move(*roleVal));
+
+  return Status(kOk);
+}
+
 Status ExecuteIsElementDisplayed(Session* session,
                                  WebView* web_view,
                                  const std::string& element_id,
@@ -938,8 +993,8 @@ Status ExecuteElementScreenshot(Session* session,
   // view port. However, CaptureScreenshot expects a location relative to the
   // document origin. We make the adjustment using the scroll amount of the top
   // level window. Scrolling of frames has already been included in |location|.
-  // Scroll information can be in either document.documentElement or
-  // document.body, depending on document compatibility mode. The parentheses
+  // Use window.pageXOffset and widnow.pageYOffset for scroll information,
+  // should always return scroll amount regardless of doctype. The parentheses
   // around the JavaScript code below is needed because JavaScript syntax
   // doesn't allow a statement to start with an object literal.
   // document.documentElement.clientHeight and Width provide viewport height
@@ -947,8 +1002,8 @@ Status ExecuteElementScreenshot(Session* session,
   std::unique_ptr<base::Value> browser_info;
   status = web_view->EvaluateScript(
       std::string(),
-      "({x: document.documentElement.scrollLeft || document.body.scrollLeft,"
-      "  y: document.documentElement.scrollTop || document.body.scrollTop,"
+      "({x: window.pageXOffset,"
+      "  y: window.pageYOffset,"
       "  height: document.documentElement.clientHeight,"
       "  width: document.documentElement.clientWidth,"
       "  device_pixel_ratio: window.devicePixelRatio})",

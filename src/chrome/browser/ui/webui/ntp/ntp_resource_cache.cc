@@ -33,7 +33,6 @@
 #include "chrome/browser/ui/webui/ntp/app_launcher_handler.h"
 #include "chrome/browser/ui/webui/ntp/cookie_controls_handler.h"
 #include "chrome/common/buildflags.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -42,7 +41,6 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/content_settings/core/common/cookie_controls_enforcement.h"
-#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/google/core/common/google_util.h"
 #include "components/policy/core/common/policy_service.h"
@@ -69,7 +67,7 @@
 #include "chromeos/strings/grit/chromeos_strings.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/platform_util.h"
 #endif
 
@@ -98,8 +96,8 @@ SkColor GetThemeColor(const ui::ThemeProvider& tp, int id) {
   // If web contents are being inverted because the system is in high-contrast
   // mode, any system theme colors we use must be inverted too to cancel out.
   return ui::NativeTheme::GetInstanceForNativeUi()
-                     ->GetHighContrastColorScheme() ==
-                 ui::NativeTheme::HighContrastColorScheme::kDark
+                     ->GetPlatformHighContrastColorScheme() ==
+                 ui::NativeTheme::PlatformHighContrastColorScheme::kDark
              ? color_utils::InvertColor(color)
              : color;
 }
@@ -173,7 +171,6 @@ NTPResourceCache::NTPResourceCache(Profile* profile)
   profile_pref_change_registrar_.Add(prefs::kNtpShownPage, callback);
   profile_pref_change_registrar_.Add(prefs::kHideWebStoreIcon, callback);
   profile_pref_change_registrar_.Add(prefs::kCookieControlsMode, callback);
-  profile_pref_change_registrar_.Add(prefs::kBlockThirdPartyCookies, callback);
 
   theme_observer_.Add(ui::NativeTheme::GetInstanceForNativeUi());
 
@@ -186,10 +183,10 @@ NTPResourceCache::NTPResourceCache(Profile* profile)
                           base::Unretained(this)));
 }
 
-NTPResourceCache::~NTPResourceCache() {}
+NTPResourceCache::~NTPResourceCache() = default;
 
 bool NTPResourceCache::NewTabHTMLNeedsRefresh() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Invalidate if the current value is different from the cached value.
   bool is_enabled = platform_util::IsSwipeTrackingFromScrollEventsEnabled();
   if (is_enabled != is_swipe_tracking_from_scroll_events_enabled_) {
@@ -202,7 +199,7 @@ bool NTPResourceCache::NewTabHTMLNeedsRefresh() {
 
 NTPResourceCache::WindowType NTPResourceCache::GetWindowType(
     Profile* profile, content::RenderProcessHost* render_host) {
-  if (profile->IsGuestSession()) {
+  if (profile->IsGuestSession() || profile->IsEphemeralGuestProfile()) {
     return GUEST;
   } else if (render_host) {
     // Sometimes the |profile| is the parent (non-incognito) version of the user
@@ -314,8 +311,6 @@ void NTPResourceCache::CreateNewTabIncognitoHTML() {
       l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_NOT_SAVED);
   replacements["learnMoreLink"] = kLearnMoreIncognitoUrl;
   replacements["title"] = l10n_util::GetStringUTF8(IDS_NEW_TAB_TITLE);
-  replacements["hideCookieControls"] =
-      cookie_controls_service->ShouldHideCookieControlsUI() ? "hidden" : "";
   replacements["cookieControlsTitle"] =
       l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_THIRD_PARTY_COOKIE);
   replacements["cookieControlsDescription"] =
@@ -374,11 +369,11 @@ void NTPResourceCache::CreateNewTabGuestHTML() {
                                 chrome::kLearnMoreEnterpriseURL);
     base::string16 enterprise_info;
     if (connector->IsCloudManaged()) {
-      const std::string enterprise_display_domain =
-          connector->GetEnterpriseDisplayDomain();
+      const std::string enterprise_domain_manager =
+          connector->GetEnterpriseDomainManager();
       enterprise_info = l10n_util::GetStringFUTF16(
           IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY,
-          base::UTF8ToUTF16(enterprise_display_domain));
+          base::UTF8ToUTF16(enterprise_domain_manager));
     } else if (connector->IsActiveDirectoryManaged()) {
       enterprise_info =
           l10n_util::GetStringUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED);
@@ -497,6 +492,9 @@ void NTPResourceCache::CreateNewTabHTML() {
   load_time_data.SetString(
       "page_switcher_same_title",
       GetLocalizedString(IDS_NEW_TAB_PAGE_SWITCHER_SAME_TITLE));
+  load_time_data.SetString(
+      "runonoslogin", GetLocalizedString(IDS_APP_CONTEXT_MENU_RUN_ON_OS_LOGIN));
+
   // On Mac OS X 10.7+, horizontal scrolling can be treated as a back or
   // forward gesture. Pass through a flag that indicates whether or not that
   // feature is enabled.

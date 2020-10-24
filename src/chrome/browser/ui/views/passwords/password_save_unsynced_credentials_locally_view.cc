@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/strings/string16.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -30,9 +31,9 @@ PasswordSaveUnsyncedCredentialsLocallyView::
                              /*easily_dismissable=*/false),
       controller_(PasswordsModelDelegateFromWebContents(web_contents)) {
   SetButtons(ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL);
-  SetAcceptCallback(base::BindOnce(
-      &SaveUnsyncedCredentialsLocallyBubbleController::OnSaveClicked,
-      base::Unretained(&controller_)));
+  SetAcceptCallback(
+      base::BindOnce(&PasswordSaveUnsyncedCredentialsLocallyView::OnSaveClicked,
+                     base::Unretained(this)));
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
                  l10n_util::GetStringUTF16(
                      IDS_PASSWORD_MANAGER_SAVE_UNSYNCED_CREDENTIALS_BUTTON));
@@ -65,7 +66,7 @@ void PasswordSaveUnsyncedCredentialsLocallyView::CreateLayout() {
   auto description = std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(
           IDS_PASSWORD_MANAGER_UNSYNCED_CREDENTIALS_BUBBLE_DESCRIPTION),
-      ChromeTextContext::CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_HINT);
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_HINT);
   description->SetMultiLine(true);
   description->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   description->SetBorder(
@@ -75,29 +76,47 @@ void PasswordSaveUnsyncedCredentialsLocallyView::CreateLayout() {
                                0));
   AddChildView(std::move(description));
 
-  DCHECK(!controller_.GetUnsyncedCredentials().empty());
-  for (const autofill::PasswordForm& row :
-       controller_.GetUnsyncedCredentials()) {
+  DCHECK(!controller_.unsynced_credentials().empty());
+  for (const autofill::PasswordForm& form :
+       controller_.unsynced_credentials()) {
     auto* row_view = AddChildView(std::make_unique<views::View>());
-    auto* username_label = row_view->AddChildView(CreateUsernameLabel(row));
-    auto* password_label = row_view->AddChildView(
-        CreatePasswordLabel(row, IDS_PASSWORDS_VIA_FEDERATION, false));
+    auto* checkbox = row_view->AddChildView(std::make_unique<views::Checkbox>(
+        base::string16(), views::Button::PressedCallback()));
+    checkbox->SetCallback(base::BindRepeating(
+        &PasswordSaveUnsyncedCredentialsLocallyView::ButtonPressed,
+        base::Unretained(this), base::Unretained(checkbox)));
+    checkbox->SetBorder(views::CreateEmptyBorder(
+        0, 0, 0, /*right=*/
+        ChromeLayoutProvider::Get()->GetDistanceMetric(
+            DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL)));
+    // Usually all passwords should be saved, so they're selected by default.
+    checkbox->SetChecked(true);
+    num_selected_checkboxes_++;
+    auto* username_label = row_view->AddChildView(CreateUsernameLabel(form));
+    checkbox->SetAssociatedLabel(username_label);
+    auto* password_label = row_view->AddChildView(CreatePasswordLabel(form));
     auto* row_layout =
         row_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
             views::BoxLayout::Orientation::kHorizontal));
     row_layout->SetFlexForView(username_label, 1);
     row_layout->SetFlexForView(password_label, 1);
+
+    checkboxes_.push_back(checkbox);
   }
 }
 
-bool PasswordSaveUnsyncedCredentialsLocallyView::ShouldShowCloseButton() const {
-  return true;
+void PasswordSaveUnsyncedCredentialsLocallyView::ButtonPressed(
+    views::Checkbox* checkbox) {
+  num_selected_checkboxes_ += checkbox->GetChecked() ? 1 : -1;
+  GetOkButton()->SetState(num_selected_checkboxes_
+                              ? views::Button::ButtonState::STATE_NORMAL
+                              : views::Button::ButtonState::STATE_DISABLED);
 }
 
-gfx::Size PasswordSaveUnsyncedCredentialsLocallyView::CalculatePreferredSize()
-    const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
+void PasswordSaveUnsyncedCredentialsLocallyView::OnSaveClicked() {
+  std::vector<bool> was_credential_selected;
+  for (const auto* checkbox : checkboxes_) {
+    was_credential_selected.push_back(checkbox->GetChecked());
+  }
+  controller_.OnSaveClicked(was_credential_selected);
 }

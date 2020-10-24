@@ -7,9 +7,9 @@
 #include "base/android/jni_string.h"
 #include "base/optional.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantViewInteractions_jni.h"
-#include "chrome/browser/android/autofill_assistant/generic_ui_controller_android.h"
 #include "chrome/browser/android/autofill_assistant/ui_controller_android_utils.h"
 #include "chrome/browser/android/autofill_assistant/view_handler_android.h"
+#include "components/autofill_assistant/browser/radio_button_controller.h"
 #include "components/autofill_assistant/browser/user_model.h"
 
 namespace autofill_assistant {
@@ -390,6 +390,17 @@ bool AttachViewToParent(base::android::ScopedJavaGlobalRef<jobject> jview,
     return false;
   }
   return true;
+}
+
+void UpdateRadioButtonGroup(
+    base::WeakPtr<RadioButtonController> radio_button_controller,
+    const std::string& radio_group,
+    const std::string& model_identifier) {
+  if (radio_button_controller == nullptr) {
+    return;
+  }
+  radio_button_controller->UpdateRadioButtonGroup(radio_group,
+                                                  model_identifier);
 }
 
 }  // namespace android_interactions

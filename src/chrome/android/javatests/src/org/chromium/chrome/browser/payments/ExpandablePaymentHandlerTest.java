@@ -31,13 +31,14 @@ import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.payments.handler.PaymentHandlerCoordinator;
 import org.chromium.chrome.browser.payments.handler.PaymentHandlerCoordinator.PaymentHandlerUiObserver;
-import org.chromium.chrome.browser.payments.handler.PaymentHandlerCoordinator.PaymentHandlerWebContentsObserver;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
@@ -45,6 +46,7 @@ import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
+import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.url.GURL;
 
 import java.util.Arrays;
@@ -68,11 +70,10 @@ public class ExpandablePaymentHandlerTest {
 
     // Host the tests on https://127.0.0.1, because file:// URLs cannot have service workers.
     private EmbeddedTestServer mServer;
-    private boolean mUiShownCalled = false;
-    private boolean mUiClosedCalled = false;
-    private boolean mWebContentsInitializedCallbackInvoked = false;
+    private boolean mUiShownCalled;
+    private boolean mUiClosedCalled;
     private UiDevice mDevice;
-    private boolean mDefaultIsIncognito = false;
+    private boolean mDefaultIsIncognito;
     private ChromeActivity mDefaultActivity;
 
     /**
@@ -132,8 +133,8 @@ public class ExpandablePaymentHandlerTest {
         PaymentHandlerCoordinator paymentHandler = new PaymentHandlerCoordinator();
         mRule.runOnUiThread(
                 ()
-                        -> paymentHandler.show(mDefaultActivity, defaultPaymentAppUrl(),
-                                isIncognito, defaultWebContentObserver(), defaultUiObserver()));
+                        -> paymentHandler.show(mDefaultActivity.getCurrentWebContents(),
+                                defaultPaymentAppUrl(), isIncognito, defaultUiObserver()));
         return paymentHandler;
     }
 
@@ -158,15 +159,6 @@ public class ExpandablePaymentHandlerTest {
     private GURL defaultPaymentAppUrl() {
         return new GURL(mServer.getURL(
                 "/components/test/data/payments/maxpay.com/payment_handler_window.html"));
-    }
-
-    private PaymentHandlerWebContentsObserver defaultWebContentObserver() {
-        return new PaymentHandlerWebContentsObserver() {
-            @Override
-            public void onWebContentsInitialized(WebContents webContents) {
-                mWebContentsInitializedCallbackInvoked = true;
-            }
-        };
     }
 
     private PaymentHandlerUiObserver defaultUiObserver() {
@@ -245,8 +237,6 @@ public class ExpandablePaymentHandlerTest {
         startDefaultServer();
         PaymentHandlerCoordinator paymentHandler = createPaymentHandlerAndShow(mDefaultIsIncognito);
         waitForUiShown();
-
-        Assert.assertTrue(mWebContentsInitializedCallbackInvoked);
 
         mRule.runOnUiThread(() -> paymentHandler.hide());
         waitForUiClosed();
@@ -359,6 +349,7 @@ public class ExpandablePaymentHandlerTest {
     @Test
     @SmallTest
     @Feature({"Payments"})
+    @DisabledTest(message = "crbug.com/1131674")
     public void testNavigateBackWithSystemBackButton() throws Throwable {
         startDefaultServer();
 
@@ -407,6 +398,7 @@ public class ExpandablePaymentHandlerTest {
     @Test
     @SmallTest
     @Feature({"Payments"})
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/1135547
     @ParameterAnnotations.UseMethodParameter(GoodCertParams.class)
     public void testSecureConnectionShowUi(int goodCertificate) throws Throwable {
         startServer(goodCertificate);

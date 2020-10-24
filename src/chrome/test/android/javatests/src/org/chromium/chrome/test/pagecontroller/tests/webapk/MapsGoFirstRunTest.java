@@ -30,8 +30,8 @@ import org.chromium.chrome.test.pagecontroller.utils.IUi2Locator;
 import org.chromium.chrome.test.pagecontroller.utils.Ui2Locators;
 import org.chromium.chrome.test.pagecontroller.utils.UiAutomatorUtils;
 import org.chromium.chrome.test.pagecontroller.utils.UiLocatorHelper;
+import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.webapk.lib.client.WebApkValidator;
 
 /**
  * Test the Maps Go First Run Experience.
@@ -49,7 +49,7 @@ public class MapsGoFirstRunTest {
 
     @Before
     public void setUp() {
-        WebApkValidator.disableValidationForTesting();
+        WebApkValidator.setDisableValidationForTesting(true);
         TestThreadUtils.runOnUiThreadBlocking(WebappRegistry::refreshSharedPrefsForTesting);
     }
 
@@ -103,7 +103,7 @@ public class MapsGoFirstRunTest {
         UiLocatorHelper helper =
                 UiAutomatorUtils.getInstance().getLocatorHelper(MAPS_GO_FRE_TIMEOUT_MS);
         IUi2Locator runningInChromeBanner =
-                Ui2Locators.withContentDescString(R.string.app_running_in_chrome_disclosure);
+                Ui2Locators.withContentDescString(R.string.twa_running_in_chrome);
         helper.verifyOnScreen(runningInChromeBanner);
     }
 }

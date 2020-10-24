@@ -40,7 +40,6 @@ class FakeSyncService : public SyncService {
   bool HasObserver(const SyncServiceObserver* observer) const override;
   void OnDataTypeRequestsSyncStartup(ModelType type) override;
   void StopAndClear() override;
-  ModelTypeSet GetRegisteredDataTypes() const override;
   ModelTypeSet GetPreferredDataTypes() const override;
   std::unique_ptr<SyncSetupInProgressHandle> GetSetupInProgressHandle()
       override;
@@ -48,7 +47,6 @@ class FakeSyncService : public SyncService {
   GoogleServiceAuthError GetAuthError() const override;
   base::Time GetAuthErrorTime() const override;
   bool RequiresClientUpgrade() const override;
-  UserShare* GetUserShare() const override;
   void DataTypePreconditionChanged(syncer::ModelType type) override;
   SyncTokenStatus GetSyncTokenStatusForDebugging() const override;
   bool QueryDetailedSyncStatusForDebugging(SyncStatus* result) const override;
@@ -60,8 +58,6 @@ class FakeSyncService : public SyncService {
   base::Location GetUnrecoverableErrorLocationForDebugging() const override;
   void AddProtocolEventObserver(ProtocolEventObserver* observer) override;
   void RemoveProtocolEventObserver(ProtocolEventObserver* observer) override;
-  void AddTypeDebugInfoObserver(TypeDebugInfoObserver* observer) override;
-  void RemoveTypeDebugInfoObserver(TypeDebugInfoObserver* observer) override;
   base::WeakPtr<JsController> GetJsController() override;
   void GetAllNodesForDebugging(
       base::OnceCallback<void(std::unique_ptr<base::ListValue>)> callback)
@@ -71,15 +67,17 @@ class FakeSyncService : public SyncService {
       const std::string& gaia_id,
       const std::vector<std::vector<uint8_t>>& keys,
       int last_key_version) override;
-  UserDemographicsResult GetUserNoisedBirthYearAndGender(
-      base::Time now) override;
+  void AddTrustedVaultRecoveryMethodFromWeb(
+      const std::string& gaia_id,
+      const std::vector<uint8_t>& public_key,
+      base::OnceClosure callback) override;
+  bool CanUploadDemographicsToGoogle() override;
 
   // KeyedService implementation.
   void Shutdown() override;
 
  private:
   GURL sync_service_url_;
-  std::unique_ptr<UserShare> user_share_;
 };
 
 }  // namespace syncer

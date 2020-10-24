@@ -4,7 +4,10 @@
 
 #import "ios/web/public/session/crw_session_storage.h"
 
+#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
+#include "ios/web/common/features.h"
 #import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/navigation/navigation_item_storage_test_util.h"
 #import "ios/web/navigation/serializable_user_data_manager_impl.h"
@@ -76,8 +79,6 @@ class CRWNSessionStorageTest : public PlatformTest {
     [item_storage
         setDisplayState:web::PageDisplayState(CGPointZero, UIEdgeInsetsZero,
                                               0.0, 0.0, 0.0)];
-    [item_storage
-        setPOSTData:[@"Test data" dataUsingEncoding:NSUTF8StringEncoding]];
     [item_storage setHTTPRequestHeaders:@{ @"HeaderKey" : @"HeaderValue" }];
     [session_storage_ setItemStorages:@[ item_storage ]];
     // Create serializable user data.
@@ -95,6 +96,29 @@ class CRWNSessionStorageTest : public PlatformTest {
 // Tests that unarchiving CRWSessionStorage data results in an equivalent
 // storage.
 TEST_F(CRWNSessionStorageTest, EncodeDecode) {
+  NSKeyedArchiver* archiver =
+      [[NSKeyedArchiver alloc] initRequiringSecureCoding:NO];
+  [archiver encodeObject:session_storage_ forKey:NSKeyedArchiveRootObjectKey];
+  [archiver finishEncoding];
+  NSData* data = [archiver encodedData];
+  NSKeyedUnarchiver* unarchiver =
+      [[NSKeyedUnarchiver alloc] initForReadingFromData:data error:nil];
+  unarchiver.requiresSecureCoding = NO;
+  id decoded = [unarchiver decodeObjectForKey:NSKeyedArchiveRootObjectKey];
+  EXPECT_TRUE(SessionStoragesAreEqual(session_storage_, decoded));
+}
+
+// Tests that unarchiving CRWSessionStorage data results in an equivalent
+// storage when the user agent is automatic.
+TEST_F(CRWNSessionStorageTest, EncodeDecodeAutomatic) {
+  // The kUseDefaultUserAgentInWebClient feature is only available on iOS 13+.
+  if (!base::ios::IsRunningOnIOS13OrLater()) {
+    return;
+  }
+
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(web::features::kUseDefaultUserAgentInWebClient);
+  session_storage_.userAgentType = web::UserAgentType::AUTOMATIC;
   NSKeyedArchiver* archiver =
       [[NSKeyedArchiver alloc] initRequiringSecureCoding:NO];
   [archiver encodeObject:session_storage_ forKey:NSKeyedArchiveRootObjectKey];

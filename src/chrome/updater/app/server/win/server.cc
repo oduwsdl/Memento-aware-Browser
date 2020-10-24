@@ -2,16 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This macro is used in <wrl/module.h>. Since only the COM functionality is
-// used here (while WinRT is not being used), define this macro to optimize
-// compilation of <wrl/module.h> for COM-only.
-#ifndef __WRL_CLASSIC_COM_STRICT__
-#define __WRL_CLASSIC_COM_STRICT__
-#endif  // __WRL_CLASSIC_COM_STRICT__
-
 #include "chrome/updater/app/server/win/server.h"
 
-#include <windows.h>
+#include <wrl/implements.h>
 
 #include <algorithm>
 
@@ -27,8 +20,11 @@
 #include "chrome/updater/app/server/win/com_classes.h"
 #include "chrome/updater/app/server/win/com_classes_legacy.h"
 #include "chrome/updater/configurator.h"
+#include "chrome/updater/control_service.h"
 #include "chrome/updater/prefs.h"
-#include "chrome/updater/update_service_in_process.h"
+#include "chrome/updater/update_service.h"
+#include "chrome/updater/win/constants.h"
+#include "chrome/updater/win/wrl_module.h"
 #include "components/prefs/pref_service.h"
 
 namespace updater {
@@ -65,7 +61,7 @@ HRESULT ComServerApp::RegisterClassObjects() {
       Microsoft::WRL::SimpleClassFactory<UpdaterImpl>>(
       &flags, nullptr, __uuidof(IClassFactory), &factory);
   if (FAILED(hr)) {
-    LOG(ERROR) << "Factory creation failed; hr: " << hr;
+    LOG(ERROR) << "Factory creation for UpdaterImpl failed; hr: " << hr;
     return hr;
   }
 
@@ -78,10 +74,26 @@ HRESULT ComServerApp::RegisterClassObjects() {
   factory.Reset();
 
   hr = Microsoft::WRL::Details::CreateClassFactory<
+      Microsoft::WRL::SimpleClassFactory<UpdaterControlImpl>>(
+      &flags, nullptr, __uuidof(IClassFactory), &factory);
+  if (FAILED(hr)) {
+    LOG(ERROR) << "Factory creation for UpdaterControlImpl failed; hr: " << hr;
+    return hr;
+  }
+
+  Microsoft::WRL::ComPtr<IClassFactory> class_factory_updater_control;
+  hr = factory.As(&class_factory_updater_control);
+  if (FAILED(hr)) {
+    LOG(ERROR) << "IClassFactory object creation failed; hr: " << hr;
+    return hr;
+  }
+  factory.Reset();
+
+  hr = Microsoft::WRL::Details::CreateClassFactory<
       Microsoft::WRL::SimpleClassFactory<LegacyOnDemandImpl>>(
       &flags, nullptr, __uuidof(IClassFactory), &factory);
   if (FAILED(hr)) {
-    LOG(ERROR) << "Factory creation failed; hr: " << hr;
+    LOG(ERROR) << "Factory creation for LegacyOnDemandImpl failed; hr: " << hr;
     return hr;
   }
 
@@ -94,13 +106,14 @@ HRESULT ComServerApp::RegisterClassObjects() {
 
   // The pointer in this array is unowned. Do not release it.
   IClassFactory* class_factories[] = {class_factory_updater.Get(),
+                                      class_factory_updater_control.Get(),
                                       class_factory_legacy_ondemand.Get()};
   static_assert(
       std::extent<decltype(cookies_)>() == base::size(class_factories),
       "Arrays cookies_ and class_factories must be the same size.");
 
-  IID class_ids[] = {__uuidof(UpdaterClass),
-                     __uuidof(GoogleUpdate3WebUserClass)};
+  IID class_ids[] = {__uuidof(UpdaterClass), CLSID_UpdaterControlClass,
+                     CLSID_GoogleUpdate3WebUserClass};
   DCHECK_EQ(base::size(cookies_), base::size(class_ids));
   static_assert(std::extent<decltype(cookies_)>() == base::size(class_ids),
                 "Arrays cookies_ and class_ids must be the same size.");
@@ -134,29 +147,35 @@ void ComServerApp::Stop() {
   main_task_runner_->PostTask(
       FROM_HERE, base::BindOnce([]() {
         scoped_refptr<ComServerApp> this_server = AppServerSingletonInstance();
-        this_server->config_->GetPrefService()->CommitPendingWrite();
-        this_server->service_ = nullptr;
-        this_server->config_ = nullptr;
+        this_server->update_service_ = nullptr;
+        this_server->control_service_ = nullptr;
         this_server->Shutdown(0);
       }));
 }
 
-void ComServerApp::Initialize() {
-  config_ = base::MakeRefCounted<Configurator>(CreateGlobalPrefs());
-}
-
-void ComServerApp::FirstTaskRun() {
+void ComServerApp::ActiveDuty(scoped_refptr<UpdateService> update_service,
+                              scoped_refptr<ControlService> control_service) {
   if (!com_initializer_.Succeeded()) {
     PLOG(ERROR) << "Failed to initialize COM";
     Shutdown(-1);
     return;
   }
   main_task_runner_ = base::SequencedTaskRunnerHandle::Get();
-  service_ = base::MakeRefCounted<UpdateServiceInProcess>(config_);
+  update_service_ = update_service;
+  control_service_ = control_service;
   CreateWRLModule();
   HRESULT hr = RegisterClassObjects();
   if (FAILED(hr))
     Shutdown(hr);
+}
+
+void ComServerApp::UninstallSelf() {
+  // TODO(crbug.com/1098934): Uninstall this candidate version of the updater.
+}
+
+bool ComServerApp::SwapRPCInterfaces() {
+  // TODO(crbug.com/1098935): Update non-side-by-side COM registration.
+  return true;
 }
 
 }  // namespace updater

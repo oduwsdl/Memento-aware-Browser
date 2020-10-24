@@ -34,11 +34,8 @@ using AXStringProperty = mojom::AccessibilityStringProperty;
 
 AccessibilityNodeInfoDataWrapper::AccessibilityNodeInfoDataWrapper(
     AXTreeSourceArc* tree_source,
-    AXNodeInfoData* node,
-    bool is_important)
-    : AccessibilityInfoDataWrapper(tree_source),
-      node_ptr_(node),
-      is_important_(is_important) {}
+    AXNodeInfoData* node)
+    : AccessibilityInfoDataWrapper(tree_source), node_ptr_(node) {}
 
 AccessibilityNodeInfoDataWrapper::~AccessibilityNodeInfoDataWrapper() = default;
 
@@ -73,12 +70,10 @@ bool AccessibilityNodeInfoDataWrapper::IsVirtualNode() const {
 }
 
 bool AccessibilityNodeInfoDataWrapper::IsIgnored() const {
-  if (!tree_source_->IsScreenReaderMode())
-    return !is_important_;
+  if (!tree_source_->UseFullFocusMode())
+    return !IsImportantInAndroid();
 
-  // Most conditions are precomputed in AXTreeSourceArc::BuildImportanceTable().
-  // TODO(hirokisato): migrate importance computation here.
-  if (!is_important_)
+  if (!IsImportantInAndroid() || !HasImportantProperty())
     return true;
 
   if (IsAccessibilityFocusableContainer())
@@ -90,24 +85,32 @@ bool AccessibilityNodeInfoDataWrapper::IsIgnored() const {
   return !HasAccessibilityFocusableText();
 }
 
+bool AccessibilityNodeInfoDataWrapper::IsImportantInAndroid() const {
+  return IsVirtualNode() || GetProperty(AXBooleanProperty::IMPORTANCE);
+}
+
 bool AccessibilityNodeInfoDataWrapper::CanBeAccessibilityFocused() const {
-  // Using HasText() here is incomplete because it doesn't match the
-  // populated ax name. However, this method is used only from AXTreeSourceArc
-  // and not used for actual focusability computation of ChromeVox, and it's
-  // enough to check only hasText().
-  return (IsAccessibilityFocusableContainer() ||
-          HasAccessibilityFocusableText()) &&
-         HasText();
+  if (!IsAccessibilityFocusableContainer() && !HasAccessibilityFocusableText())
+    return false;
+
+  ui::AXNodeData data;
+  PopulateAXRole(&data);
+  return ui::IsControl(data.role) || !ComputeAXName(true).empty();
 }
 
 bool AccessibilityNodeInfoDataWrapper::IsAccessibilityFocusableContainer()
     const {
-  if (!is_important_)
+  if (IsVirtualNode()) {
+    return GetProperty(AXBooleanProperty::SCREEN_READER_FOCUSABLE) ||
+           IsFocusable();
+  }
+
+  if (!IsImportantInAndroid() || (IsScrollableContainer() && !HasText()))
     return false;
 
   return GetProperty(AXBooleanProperty::SCREEN_READER_FOCUSABLE) ||
-         GetProperty(AXBooleanProperty::CLICKABLE) ||
-         GetProperty(AXBooleanProperty::FOCUSABLE) || IsToplevelScrollItem();
+         IsFocusable() || IsClickable() || IsToplevelScrollItem();
+  // TODO(hirokisato): probably check long clickable as well.
 }
 
 void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
@@ -172,8 +175,8 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
     // need additional information contained only in the CollectionInfo. The
     // CollectionInfo should be an ancestor of this node.
     AXCollectionInfoData* collection_info = nullptr;
-    for (const AccessibilityInfoDataWrapper* container =
-             static_cast<const AccessibilityInfoDataWrapper*>(this);
+    for (AccessibilityInfoDataWrapper* container =
+             const_cast<AccessibilityNodeInfoDataWrapper*>(this);
          container;) {
       if (!container || !container->IsNode())
         break;
@@ -182,8 +185,7 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
         break;
       }
 
-      container =
-          tree_source_->GetParent(tree_source_->GetFromId(container->GetId()));
+      container = tree_source_->GetParent(container);
     }
 
     if (collection_info) {
@@ -206,7 +208,7 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
 
   std::string chrome_role;
   if (GetProperty(AXStringProperty::CHROME_ROLE, &chrome_role)) {
-    ax::mojom::Role role_value = ui::ParseRole(chrome_role.c_str());
+    auto role_value = ui::ParseAXEnum<ax::mojom::Role>(chrome_role.c_str());
     if (role_value != ax::mojom::Role::kNone) {
       // The webView and rootWebArea roles differ between Android and Chrome. In
       // particular, Android includes far fewer attributes which leads to
@@ -292,9 +294,9 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXState(
 
 #undef MAP_STATE
 
-  const bool focusable = tree_source_->IsScreenReaderMode()
+  const bool focusable = tree_source_->UseFullFocusMode()
                              ? IsAccessibilityFocusableContainer()
-                             : GetProperty(AXBooleanProperty::FOCUSABLE);
+                             : IsFocusable();
   if (focusable)
     out_data->AddState(ax::mojom::State::kFocusable);
 
@@ -319,82 +321,28 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
   AccessibilityInfoDataWrapper::Serialize(out_data);
 
   bool is_node_tree_root = tree_source_->IsRootOfNodeTree(GetId());
+  // String properties that doesn't belong to any of existing chrome
+  // automation string properties are pushed into description.
+  // TODO (sahok): Refactor this to make clear the functionality(b/158633575).
+  std::vector<std::string> descriptions;
 
   // String properties.
-  int labelled_by = -1;
+  const std::string name = ComputeAXName(true);
+  if (!name.empty())
+    out_data->SetName(name);
 
-  // Accessible name computation is a concatenated string comprising of:
-  // content description, text, labelled by text, pane title, and cached name
-  // from previous events.
-  std::string text;
-  std::string content_description;
-  std::string label;
-  std::string pane_title;
-  GetProperty(AXStringProperty::CONTENT_DESCRIPTION, &content_description);
-  GetProperty(AXStringProperty::TEXT, &text);
-
-  if (GetProperty(AXIntProperty::LABELED_BY, &labelled_by)) {
-    AccessibilityInfoDataWrapper* labelled_by_node =
-        tree_source_->GetFromId(labelled_by);
-    if (labelled_by_node && labelled_by_node->IsNode()) {
-      ui::AXNodeData labelled_by_data;
-      tree_source_->SerializeNode(labelled_by_node, &labelled_by_data);
-      labelled_by_data.GetStringAttribute(ax::mojom::StringAttribute::kName,
-                                          &label);
-    }
-  }
-
-  GetProperty(AXStringProperty::PANE_TITLE, &pane_title);
-
-  // |hint_text| attribute in Android is often used as a placeholder text within
-  // textfields.
-  std::string hint_text;
-  GetProperty(AXStringProperty::HINT_TEXT, &hint_text);
-
-  if (!text.empty() || !content_description.empty() || !label.empty() ||
-      !pane_title.empty() || !hint_text.empty() || cached_name_) {
-    // Append non empty properties to name attribute.
-    std::vector<std::string> names;
-    if (!content_description.empty())
-      names.push_back(content_description);
-    if (!label.empty())
-      names.push_back(label);
-    if (!pane_title.empty())
-      names.push_back(pane_title);
-    // For a textField, the editable text is contained in the text property, and
-    // this should be set as the value.
-    // This ensures that the edited text will be read out appropriately.
-    if (!text.empty()) {
-      if (out_data->role == ax::mojom::Role::kTextField) {
-        // When the edited text is empty, Android framework shows |hint_text| in
-        // the text field and |text| is also populated with |hint_text|.
-        // Prevent the duplicated output of |hint_text|.
-        if (!GetProperty(AXBooleanProperty::SHOWING_HINT_TEXT))
-          out_data->SetValue(text);
-      } else {
-        names.push_back(text);
-      }
-    }
-
-    // Append hint text as part of name attribute.
-    if (!hint_text.empty())
-      names.push_back(hint_text);
-
-    if (cached_name_ && !(*cached_name_).empty())
-      names.push_back(*cached_name_);
-
-    // TODO(sarakato): Exposing all possible labels for a node, may result in
-    // too much being spoken. For ARC ++, this may result in divergent behaviour
-    // from Talkback.
-    if (!names.empty())
-      out_data->SetName(base::JoinString(names, " "));
-  } else if (tree_source_->IsScreenReaderMode() &&
-             IsAccessibilityFocusableContainer()) {
-    // Compute the name by joining all nodes with names.
-    std::vector<std::string> names;
-    ComputeNameFromContents(&names);
-    if (!names.empty())
-      out_data->SetName(base::JoinString(names, " "));
+  // For a textField, the editable text is contained in the text property, and
+  // this should be set as the value instead of the name.
+  // This ensures that the edited text will be read out appropriately.
+  // When the edited text is empty, Android framework shows |hint_text| in
+  // the text field and |text| is also populated with |hint_text|.
+  // Prevent the duplicated output of |hint_text|.
+  if (GetProperty(AXBooleanProperty::EDITABLE) &&
+      !GetProperty(AXBooleanProperty::SHOWING_HINT_TEXT)) {
+    std::string text;
+    GetProperty(AXStringProperty::TEXT, &text);
+    if (!text.empty())
+      out_data->SetValue(text);
   }
 
   std::string role_description;
@@ -426,11 +374,12 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
     if (node_ptr_->range_info) {
       out_data->AddStringAttribute(ax::mojom::StringAttribute::kValue,
                                    state_description);
+    } else if (GetProperty(AXBooleanProperty::CHECKABLE)) {
+      out_data->AddStringAttribute(
+          ax::mojom::StringAttribute::kCheckedStateDescription,
+          state_description);
     } else {
-      // TODO(sahok): Append strings anotated as kDescription(which is now
-      // overwritten)
-      out_data->AddStringAttribute(ax::mojom::StringAttribute::kDescription,
-                                   state_description);
+      descriptions.push_back(state_description);
     }
   }
 
@@ -448,18 +397,17 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
 
   // Boolean properties.
   PopulateAXState(out_data);
-  if (GetProperty(AXBooleanProperty::SCROLLABLE)) {
+  if (GetProperty(AXBooleanProperty::SCROLLABLE))
     out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kScrollable, true);
-  }
-  if (GetProperty(AXBooleanProperty::CLICKABLE)) {
+
+  if (IsClickable())
     out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kClickable, true);
-  }
+
   if (GetProperty(AXBooleanProperty::SELECTED)) {
     if (ui::SupportsSelected(out_data->role)) {
       out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, true);
     } else {
-      out_data->AddStringAttribute(
-          ax::mojom::StringAttribute::kDescription,
+      descriptions.push_back(
           l10n_util::GetStringUTF8(IDS_ARC_ACCESSIBILITY_SELECTED_STATUS));
     }
   }
@@ -535,6 +483,69 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
         ax::mojom::StringListAttribute::kCustomActionDescriptions,
         custom_action_descriptions);
   }
+
+  if (!descriptions.empty()) {
+    out_data->AddStringAttribute(ax::mojom::StringAttribute::kDescription,
+                                 base::JoinString(descriptions, " "));
+  }
+}
+
+std::string AccessibilityNodeInfoDataWrapper::ComputeAXName(
+    bool do_recursive) const {
+  // Accessible name computation is a concatenated string comprising of:
+  // content description, text, labeled by text, pane title, and cached name
+  // from previous events.
+
+  // TODO(sarakato): Exposing all possible labels for a node, may result in
+  // too much being spoken. For ARC ++, this may result in divergent behaviour
+  // from Talkback.
+  std::string text;
+  std::string content_description;
+  std::string label;
+  GetProperty(AXStringProperty::CONTENT_DESCRIPTION, &content_description);
+  GetProperty(AXStringProperty::TEXT, &text);
+
+  int labeled_by = -1;
+  if (do_recursive && GetProperty(AXIntProperty::LABELED_BY, &labeled_by)) {
+    AccessibilityInfoDataWrapper* labeled_by_node =
+        tree_source_->GetFromId(labeled_by);
+    if (labeled_by_node && labeled_by_node->IsNode())
+      label = labeled_by_node->ComputeAXName(false);
+  }
+
+  std::string pane_title;
+  GetProperty(AXStringProperty::PANE_TITLE, &pane_title);
+
+  // |hint_text| attribute in Android is often used as a placeholder text within
+  // textfields.
+  std::string hint_text;
+  GetProperty(AXStringProperty::HINT_TEXT, &hint_text);
+
+  std::vector<std::string> names;
+  // Append non empty properties to name attribute.
+  if (!content_description.empty())
+    names.push_back(content_description);
+  if (!label.empty())
+    names.push_back(label);
+  if (!pane_title.empty())
+    names.push_back(pane_title);
+  if (!text.empty() && !GetProperty(AXBooleanProperty::EDITABLE)) {
+    // EDITABLE is checked here, as EDITABLE field will have text set as value,
+    // this is done in Serialize() function.
+    names.push_back(text);
+  }
+  if (!hint_text.empty())
+    names.push_back(hint_text);
+  if (cached_name_ && !(*cached_name_).empty())
+    names.push_back(*cached_name_);
+
+  // If a node is accessibility focusable, but has no name, the name should be
+  // computed from its descendants.
+  if (names.empty() && tree_source_->UseFullFocusMode() &&
+      IsAccessibilityFocusableContainer())
+    ComputeNameFromContents(&names);
+
+  return base::JoinString(names, " ");
 }
 
 void AccessibilityNodeInfoDataWrapper::GetChildren(
@@ -584,7 +595,19 @@ bool AccessibilityNodeInfoDataWrapper::GetProperty(
 
 bool AccessibilityNodeInfoDataWrapper::HasStandardAction(
     AXActionType action) const {
-  return arc::HasStandardAction(node_ptr_, action);
+  if (!node_ptr_->int_list_properties)
+    return false;
+
+  auto itr = node_ptr_->int_list_properties->find(
+      AXIntListProperty::STANDARD_ACTION_IDS);
+  if (itr == node_ptr_->int_list_properties->end())
+    return false;
+
+  for (const auto supported_action : itr->second) {
+    if (static_cast<AXActionType>(supported_action) == action)
+      return true;
+  }
+  return false;
 }
 
 bool AccessibilityNodeInfoDataWrapper::HasCoveringSpan(
@@ -622,7 +645,10 @@ bool AccessibilityNodeInfoDataWrapper::HasText() const {
 }
 
 bool AccessibilityNodeInfoDataWrapper::HasAccessibilityFocusableText() const {
-  if (!is_important_ || !HasText())
+  if (IsVirtualNode())
+    return HasText();
+
+  if (!IsImportantInAndroid() || !HasText())
     return false;
 
   // If any ancestor has a focusable property, the text is used by that node.
@@ -649,11 +675,11 @@ void AccessibilityNodeInfoDataWrapper::ComputeNameFromContents(
 
 void AccessibilityNodeInfoDataWrapper::ComputeNameFromContentsInternal(
     std::vector<std::string>* names) const {
-  if (IsAccessibilityFocusableContainer())
+  if (IsVirtualNode() || IsAccessibilityFocusableContainer())
     return;
 
   // Take the name from either content description or text. It's not clear
-  // whether labelled by should be taken into account here.
+  // whether labeled by should be taken into account here.
   std::string name;
   if (!GetProperty(AXStringProperty::CONTENT_DESCRIPTION, &name) ||
       name.empty()) {
@@ -673,6 +699,17 @@ void AccessibilityNodeInfoDataWrapper::ComputeNameFromContentsInternal(
     static_cast<AccessibilityNodeInfoDataWrapper*>(child)
         ->ComputeNameFromContentsInternal(names);
   }
+}
+
+bool AccessibilityNodeInfoDataWrapper::IsClickable() const {
+  return GetProperty(AXBooleanProperty::CLICKABLE) ||
+         HasStandardAction(AXActionType::CLICK);
+}
+
+bool AccessibilityNodeInfoDataWrapper::IsFocusable() const {
+  return GetProperty(AXBooleanProperty::FOCUSABLE) ||
+         HasStandardAction(AXActionType::FOCUS) ||
+         HasStandardAction(AXActionType::CLEAR_FOCUS);
 }
 
 bool AccessibilityNodeInfoDataWrapper::IsScrollableContainer() const {
@@ -698,6 +735,51 @@ bool AccessibilityNodeInfoDataWrapper::IsToplevelScrollItem() const {
 
   return static_cast<AccessibilityNodeInfoDataWrapper*>(parent)
       ->IsScrollableContainer();
+}
+
+bool AccessibilityNodeInfoDataWrapper::HasImportantProperty() const {
+  if (!has_important_property_cache_.has_value())
+    has_important_property_cache_ = HasImportantPropertyInternal();
+
+  return *has_important_property_cache_;
+}
+
+bool AccessibilityNodeInfoDataWrapper::HasImportantPropertyInternal() const {
+  if (HasNonEmptyStringProperty(node_ptr_,
+                                AXStringProperty::CONTENT_DESCRIPTION) ||
+      HasNonEmptyStringProperty(node_ptr_, AXStringProperty::TEXT) ||
+      HasNonEmptyStringProperty(node_ptr_, AXStringProperty::PANE_TITLE) ||
+      HasNonEmptyStringProperty(node_ptr_, AXStringProperty::HINT_TEXT) ||
+      cached_name_.has_value()) {
+    return true;
+  }
+
+  if (IsFocusable() || IsClickable())
+    return true;
+
+  // These properties are sorted in the same order of mojom file.
+  if (GetProperty(AXBooleanProperty::CHECKABLE) ||
+      GetProperty(AXBooleanProperty::SELECTED) ||
+      GetProperty(AXBooleanProperty::EDITABLE)) {
+    return true;
+  }
+
+  ui::AXNodeData data;
+  PopulateAXRole(&data);
+  if (ui::IsControl(data.role))
+    return true;
+
+  // Check if any ancestor has an important property.
+  std::vector<AccessibilityInfoDataWrapper*> children;
+  GetChildren(&children);
+  for (AccessibilityInfoDataWrapper* child : children) {
+    if (static_cast<AccessibilityNodeInfoDataWrapper*>(child)
+            ->HasImportantProperty()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace arc

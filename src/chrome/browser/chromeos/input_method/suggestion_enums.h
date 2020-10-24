@@ -16,7 +16,7 @@ enum class AssistiveType {
   kPersonalName = 4,
   kEmoji = 5,
   kAssistiveAutocorrect = 6,
-  kPersonalNumber = 7,
+  kPersonalNumber = 7,  // Deprecated, combined with kPersonalPhoneNumber
   kPersonalFirstName = 8,
   kPersonalLastName = 9,
   kMaxValue = kPersonalLastName,
@@ -27,6 +27,17 @@ enum class SuggestionStatus {
   kAccept = 1,
   kDismiss = 2,
   kBrowsing = 3,
+  kOpenSettings = 4,
+};
+
+// Must match with IMEAssistiveDisabledReason in enums.xml
+enum class DisabledReason {
+  kNone = 0,
+  kFeatureFlagOff = 1,
+  kEnterpriseSettingsOff = 2,
+  kUserSettingsOff = 3,
+  kUrlOrAppNotAllowed = 4,
+  kMaxValue = kUrlOrAppNotAllowed,
 };
 
 }  // namespace chromeos

@@ -21,6 +21,7 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -31,8 +32,8 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
@@ -40,8 +41,8 @@ import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tracing.TracingController;
 import org.chromium.chrome.browser.tracing.TracingNotificationManager;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.browser_ui.notifications.MockNotificationManagerProxy;
 import org.chromium.components.browser_ui.settings.ButtonPreference;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
@@ -61,8 +62,8 @@ import java.util.concurrent.TimeUnit;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TracingSettingsTest {
     @Rule
-    public final ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public final ChromeTabbedActivityTestRule mActivityTestRule =
+            new ChromeTabbedActivityTestRule();
     @Rule
     public final SettingsActivityTestRule<TracingSettings> mSettingsActivityTestRule =
             new SettingsActivityTestRule<>(TracingSettings.class);
@@ -99,11 +100,9 @@ public class TracingSettingsTest {
      * called into Android to notify or cancel a notification.
      */
     private void waitForNotificationManagerMutation() {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mMockNotificationManager.getMutationCountAndDecrement() > 0;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(mMockNotificationManager.getMutationCountAndDecrement(),
+                    Matchers.greaterThan(0));
         }, 15000L /* maxTimeoutMs */, 50 /* checkIntervalMs */);
     }
 
@@ -145,6 +144,7 @@ public class TracingSettingsTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
+    @DisabledTest
     @DisableIf.Build(sdk_is_less_than = 21, message = "crbug.com/899894")
     public void testRecordTrace() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
@@ -233,7 +233,7 @@ public class TracingSettingsTest {
         callbackHelper.waitForCallback(3 /* currentCallCount */);
 
         // The temporary file should be deleted asynchronously.
-        CriteriaHelper.pollInstrumentationThread(Criteria.equals(false, () -> tempFile.exists()));
+        CriteriaHelper.pollInstrumentationThread(() -> !tempFile.exists());
 
         // Notification should be deleted, too.
         waitForNotificationManagerMutation();

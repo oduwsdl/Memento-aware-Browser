@@ -348,7 +348,7 @@ void KeyboardLockBrowserTest::CancelKeyboardLock(
 void KeyboardLockBrowserTest::EnterFullscreen(const base::Location& from_here) {
   web_contents()->EnterFullscreenMode(web_contents()->GetMainFrame(), {});
 
-  ASSERT_TRUE(web_contents()->IsFullscreenForCurrentTab())
+  ASSERT_TRUE(web_contents()->IsFullscreen())
       << "Location: " << from_here.ToString();
 
   VerifyKeyboardLockState(from_here);
@@ -357,7 +357,7 @@ void KeyboardLockBrowserTest::EnterFullscreen(const base::Location& from_here) {
 void KeyboardLockBrowserTest::ExitFullscreen(const base::Location& from_here) {
   web_contents()->ExitFullscreenMode(/*should_resize=*/true);
 
-  ASSERT_FALSE(web_contents()->IsFullscreenForCurrentTab())
+  ASSERT_FALSE(web_contents()->IsFullscreen())
       << "Location: " << from_here.ToString();
 
   VerifyKeyboardLockState(from_here);
@@ -395,7 +395,7 @@ void KeyboardLockBrowserTest::VerifyKeyboardLockState(
 
   bool ux_conditions_satisfied =
       web_contents()->GetRenderWidgetHostView()->HasFocus() &&
-      web_contents()->IsFullscreenForCurrentTab();
+      web_contents()->IsFullscreen();
 
   bool keyboard_lock_active =
       web_contents()->GetRenderWidgetHostView()->IsKeyboardLocked();
@@ -649,7 +649,7 @@ IN_PROC_BROWSER_TEST_F(KeyboardLockBrowserTest,
 
   // The first child has the same origin as the top-level domain.
   RenderFrameHost* child_frame = ChildFrameAt(web_contents()->GetMainFrame(),
-                                              /*child_index=*/0);
+                                              /*index=*/0);
   ASSERT_TRUE(child_frame);
 
   bool api_exists = false;
@@ -671,7 +671,7 @@ IN_PROC_BROWSER_TEST_F(KeyboardLockBrowserTest,
 
   // The second child has a different origin as the top-level domain.
   RenderFrameHost* child_frame = ChildFrameAt(web_contents()->GetMainFrame(),
-                                              /*child_index=*/1);
+                                              /*index=*/1);
   ASSERT_TRUE(child_frame);
 
   bool api_exists = false;

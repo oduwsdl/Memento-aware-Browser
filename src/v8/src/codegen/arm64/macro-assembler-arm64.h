@@ -968,6 +968,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // Load the builtin given by the Smi in |builtin_index| into the same
   // register.
   void LoadEntryFromBuiltinIndex(Register builtin_index);
+  void LoadEntryFromBuiltinIndex(Builtins::Name builtin_index,
+                                 Register destination);
   void CallBuiltinByIndex(Register builtin_index) override;
   void CallBuiltin(int builtin_index);
 
@@ -980,8 +982,9 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // The return address on the stack is used by frame iteration.
   void StoreReturnAddressAndCall(Register target);
 
-  void CallForDeoptimization(Address target, int deopt_id, Label* exit,
-                             DeoptimizeKind kind);
+  void CallForDeoptimization(Builtins::Name target, int deopt_id, Label* exit,
+                             DeoptimizeKind kind,
+                             Label* jump_deoptimization_entry_label);
 
   // Calls a C function.
   // The called function is not allowed to trigger a
@@ -1276,6 +1279,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   inline void Mrs(const Register& rt, SystemRegister sysreg);
   inline void Msr(SystemRegister sysreg, const Register& rt);
 
+  // Prologue claims an extra slot due to arm64's alignement constraints.
+  static constexpr int kExtraSlotClaimedByPrologue = 1;
   // Generates function prologue code.
   void Prologue();
 
@@ -1712,6 +1717,12 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   inline void PopWRegList(RegList regs) {
     PopSizeRegList(regs, kWRegSizeInBits);
   }
+  inline void PushQRegList(RegList regs) {
+    PushSizeRegList(regs, kQRegSizeInBits, CPURegister::kVRegister);
+  }
+  inline void PopQRegList(RegList regs) {
+    PopSizeRegList(regs, kQRegSizeInBits, CPURegister::kVRegister);
+  }
   inline void PushDRegList(RegList regs) {
     PushSizeRegList(regs, kDRegSizeInBits, CPURegister::kVRegister);
   }
@@ -1773,8 +1784,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
     DecodeField<Field>(reg, reg);
   }
 
-  // TODO(victorgomes): inline this function once we remove V8_REVERSE_JSARGS
-  // flag.
   Operand ReceiverOperand(const Register arg_count);
 
   // ---- SMI and Number Utilities ----
@@ -2092,7 +2101,7 @@ class UseScratchRegisterScope {
 #endif
     available_->Remove(list);
   }
-  void Include(const Register& reg1, const Register& reg2) {
+  void Include(const Register& reg1, const Register& reg2 = NoReg) {
     CPURegList list(reg1, reg2);
     Include(list);
   }

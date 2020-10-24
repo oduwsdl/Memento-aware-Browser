@@ -19,8 +19,14 @@ const base::Feature kAllowAmbientEQ{"AllowAmbientEQ",
 const base::Feature kAutoNightLight{"AutoNightLight",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kCaptureMode{"CaptureMode",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kContextualNudges{"ContextualNudges",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kDarkLightMode{"DarkLightMode",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kDisplayAlignAssist{"DisplayAlignAssist",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
@@ -34,17 +40,11 @@ const base::Feature kDockedMagnifier{"DockedMagnifier",
 const base::Feature kDragToSnapInClamshellMode{
     "DragToSnapInClamshellMode", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kMovablePartialScreenshot{
-    "MovablePartialScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kEnableOverviewRoundedCorners{
-    "EnableOverviewRoundedCorners", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kEnhancedDeskAnimations{"EnhancedDeskAnimations",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLimitAltTabToActiveDesk{"LimitAltTabToActiveDesk",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kPerDeskShelf{"PerDeskShelf",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLockScreenNotifications{"LockScreenNotifications",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -62,11 +62,20 @@ const base::Feature kLockScreenMediaControls{"LockScreenMediaControls",
 const base::Feature kHideArcMediaNotifications{
     "HideArcMediaNotifications", base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kInteractiveWindowCycleList{
+    "InteractiveWindowCycleList", base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kManagedDeviceUIRedesign{"ManagedDeviceUIRedesign",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kMediaSessionNotification{"MediaSessionNotification",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kMediaNotificationsCounter{
+    "MediaNotificationsCounter", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kMovablePartialScreenshot{
+    "MovablePartialScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kMultiDisplayOverviewAndSplitView{
     "MultiDisplayOverviewAndSplitView", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -77,10 +86,13 @@ const base::Feature kNotificationExpansionAnimation{
     "NotificationExpansionAnimation", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNotificationExperimentalShortTimeouts{
-    "NotificationExperimentalShortTimeouts", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NotificationExperimentalShortTimeouts", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNotificationScrollBar{"NotificationScrollBar",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPerDeskShelf{"PerDeskShelf",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPipRoundedCorners{"PipRoundedCorners",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -97,35 +109,38 @@ const base::Feature kTrilinearFiltering{"TrilinearFiltering",
 const base::Feature kUseBluetoothSystemInAsh{"UseBluetoothSystemInAsh",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kSupervisedUserDeprecationNotice{
-    "SupervisedUserDeprecationNotice", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kSwapSideVolumeButtonsForOrientation{
     "SwapSideVolumeButtonsForOrientation", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableBackgroundBlur{"EnableBackgroundBlur",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kSwipingFromLeftEdgeToGoBack{
-    "SwipingFromLeftEdgeToGoBack", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kDragFromShelfToHomeOrOverview{
-    "DragFromShelfToHomeOrOverview", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kHideShelfControlsInTabletMode{
     "HideShelfControlsInTabletMode", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kSystemTrayMicGainSetting{
-    "SystemTrayMicGainSetting", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kReverseScrollGestures{"EnableReverseScrollGestures",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSystemTrayMicGainSetting{"SystemTrayMicGainSetting",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kWebUITabStripTabDragIntegration{
     "WebUITabStripTabDragIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kShelfAppScaling{"ShelfAppScaling",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNotificationsInContextMenu{
     "NotificationsInContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kMaintainShelfStateWhenEnteringOverview{
+    "MaintainShelfStateWhenEnteringOverview", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kTemporaryHoldingSpace{"TemporaryHoldingSpace",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDragUnpinnedAppToPin{"DragUnpinnedAppToPin",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsAllowAmbientEQEnabled() {
   return base::FeatureList::IsEnabled(kAllowAmbientEQ);
@@ -141,6 +156,18 @@ bool IsPerDeskShelfEnabled() {
 
 bool IsAutoNightLightEnabled() {
   return base::FeatureList::IsEnabled(kAutoNightLight);
+}
+
+bool IsCaptureModeEnabled() {
+  return base::FeatureList::IsEnabled(kCaptureMode);
+}
+
+bool IsDarkLightModeEnabled() {
+  return base::FeatureList::IsEnabled(kDarkLightMode);
+}
+
+bool IsEnhancedDeskAnimations() {
+  return base::FeatureList::IsEnabled(kEnhancedDeskAnimations);
 }
 
 bool IsHideArcMediaNotificationsEnabled() {
@@ -159,6 +186,10 @@ bool IsLockScreenInlineReplyEnabled() {
 bool IsLockScreenHideSensitiveNotificationsSupported() {
   return base::FeatureList::IsEnabled(
       kLockScreenHideSensitiveNotificationsSupport);
+}
+
+bool IsInteractiveWindowCycleListEnabled() {
+  return base::FeatureList::IsEnabled(kInteractiveWindowCycleList);
 }
 
 bool IsManagedDeviceUIRedesignEnabled() {
@@ -191,10 +222,6 @@ bool IsTrilinearFilteringEnabled() {
   return use_trilinear_filtering;
 }
 
-bool IsSupervisedUserDeprecationNoticeEnabled() {
-  return base::FeatureList::IsEnabled(kSupervisedUserDeprecationNotice);
-}
-
 bool IsSwapSideVolumeButtonsForOrientationEnabled() {
   return base::FeatureList::IsEnabled(kSwapSideVolumeButtonsForOrientation);
 }
@@ -213,25 +240,16 @@ bool IsBackgroundBlurEnabled() {
 #endif
 }
 
-bool IsSwipingFromLeftEdgeToGoBackEnabled() {
-  return base::FeatureList::IsEnabled(kSwipingFromLeftEdgeToGoBack);
-}
-
-bool IsDragFromShelfToHomeOrOverviewEnabled() {
-  // The kDragFromShelfToHomeOrOverview feature is only enabled on the devices
-  // that have hotseat enabled (i.e., on Krane and on Dogfood devices) in M80.
-  // See crbug.com/1029991 for details.
-  return base::FeatureList::IsEnabled(kDragFromShelfToHomeOrOverview) ||
-         chromeos::switches::ShouldShowShelfHotseat();
-}
-
 bool IsReduceDisplayNotificationsEnabled() {
   return base::FeatureList::IsEnabled(kReduceDisplayNotifications);
 }
 
 bool IsHideShelfControlsInTabletModeEnabled() {
-  return base::FeatureList::IsEnabled(kHideShelfControlsInTabletMode) &&
-         IsDragFromShelfToHomeOrOverviewEnabled();
+  return base::FeatureList::IsEnabled(kHideShelfControlsInTabletMode);
+}
+
+bool IsReverseScrollGesturesEnabled() {
+  return base::FeatureList::IsEnabled(kReverseScrollGestures);
 }
 
 bool AreContextualNudgesEnabled() {
@@ -267,6 +285,18 @@ bool IsAppScalingEnabled() {
 
 bool IsNotificationsInContextMenuEnabled() {
   return base::FeatureList::IsEnabled(kNotificationsInContextMenu);
+}
+
+bool IsMaintainShelfStateWhenEnteringOverviewEnabled() {
+  return base::FeatureList::IsEnabled(kMaintainShelfStateWhenEnteringOverview);
+}
+
+bool IsTemporaryHoldingSpaceEnabled() {
+  return base::FeatureList::IsEnabled(kTemporaryHoldingSpace);
+}
+
+bool IsDragUnpinnedAppToPinEnabled() {
+  return base::FeatureList::IsEnabled(kDragUnpinnedAppToPin);
 }
 
 namespace {

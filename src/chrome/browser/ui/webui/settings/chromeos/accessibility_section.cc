@@ -6,12 +6,16 @@
 
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/tablet_mode.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/accessibility/accessibility_state_utils.h"
+#include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/speech/extension_api/tts_engine_extension_observer.h"
 #include "chrome/browser/ui/webui/settings/accessibility_main_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/captions_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/font_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
@@ -22,6 +26,7 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_features.h"
+#include "extensions/browser/extension_system.h"
 #include "media/base/media_switches.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/accessibility_switches.h"
@@ -74,12 +79,6 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kChromeVox},
        {IDS_OS_SETTINGS_TAG_A11y_CHROMEVOX_ALT1, SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_A11Y_TABLET_NAVIGATION_BUTTONS,
-       mojom::kManageAccessibilitySubpagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kTabletNavigationButtons}},
       {IDS_OS_SETTINGS_TAG_A11Y_MONO_AUDIO,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
@@ -101,12 +100,6 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kCaptions}},
-      {IDS_OS_SETTINGS_TAG_A11Y_SPEECH_ENGINES,
-       mojom::kTextToSpeechSubpagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kTextToSpeechEngines}},
       {IDS_OS_SETTINGS_TAG_A11Y_HIGHLIGHT_CURSOR,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
@@ -152,7 +145,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kSpeakToType}},
+       {.setting = mojom::Setting::kHighlightKeyboardFocus}},
       {IDS_OS_SETTINGS_TAG_A11Y_STARTUP_SOUND,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
@@ -195,6 +188,18 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kFullscreenMagnifier}},
+      {IDS_OS_SETTINGS_TAG_A11Y_ENABLE_SWITCH_ACCESS,
+       mojom::kManageAccessibilitySubpagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kEnableSwitchAccess}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetTextToSpeechVoiceSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_A11Y_SPEECH_VOICE_PREVIEW,
        mojom::kTextToSpeechSubpagePath,
        mojom::SearchResultIcon::kA11y,
@@ -205,14 +210,27 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
   return *tags;
 }
 
-const std::vector<SearchConcept>& GetA11ySwitchAccessSearchConcepts() {
+const std::vector<SearchConcept>& GetTextToSpeechEnginesSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_A11Y_ENABLE_SWITCH_ACCESS,
+      {IDS_OS_SETTINGS_TAG_A11Y_SPEECH_ENGINES,
+       mojom::kTextToSpeechSubpagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kTextToSpeechEngines}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>&
+GetA11yTabletNavigationButtonSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_A11Y_TABLET_NAVIGATION_BUTTONS,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kEnableSwitchAccess}},
+       {.setting = mojom::Setting::kTabletNavigationButtons}},
   });
   return *tags;
 }
@@ -267,7 +285,7 @@ const std::vector<SearchConcept>& GetA11yLabelsSearchConcepts() {
 
 const std::vector<SearchConcept>& GetA11yLiveCaptionSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_A11Y_LIVE_CAPTIONS,
+      {IDS_OS_SETTINGS_TAG_A11Y_LIVE_CAPTION,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
@@ -302,14 +320,14 @@ bool IsCursorColorAllowed() {
   return features::IsAccessibilityCursorColorEnabled();
 }
 
-bool IsSwitchAccessAllowed() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ::switches::kEnableExperimentalAccessibilitySwitchAccess);
-}
-
 bool IsSwitchAccessTextAllowed() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnableExperimentalAccessibilitySwitchAccessText);
+}
+
+bool AreTabletNavigationButtonsAllowed() {
+  return ash::features::IsHideShelfControlsInTabletModeEnabled() &&
+         ash::TabletMode::IsBoardTypeMarkedAsTabletCapable();
 }
 
 }  // namespace
@@ -320,7 +338,11 @@ AccessibilitySection::AccessibilitySection(
     PrefService* pref_service)
     : OsSettingsSection(profile, search_tag_registry),
       pref_service_(pref_service) {
-  registry()->AddSearchTags(GetA11ySearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetA11ySearchConcepts());
+
+  if (AreTabletNavigationButtonsAllowed())
+    updater.AddSearchTags(GetA11yTabletNavigationButtonSearchConcepts());
 
   pref_change_registrar_.Init(pref_service_);
   pref_change_registrar_.Add(
@@ -331,10 +353,27 @@ AccessibilitySection::AccessibilitySection(
       ash::prefs::kAccessibilitySwitchAccessAutoScanEnabled,
       base::BindRepeating(&AccessibilitySection::UpdateSearchTags,
                           base::Unretained(this)));
+
   UpdateSearchTags();
+
+  // ExtensionService can be null for tests.
+  extensions::ExtensionService* extension_service =
+      extensions::ExtensionSystem::Get(profile)->extension_service();
+  if (!extension_service)
+    return;
+  content::TtsController::GetInstance()->AddVoicesChangedDelegate(this);
+  extension_registry_ = extensions::ExtensionRegistry::Get(profile);
+  extension_registry_->AddObserver(this);
+
+  UpdateTextToSpeechVoiceSearchTags();
+  UpdateTextToSpeechEnginesSearchTags();
 }
 
-AccessibilitySection::~AccessibilitySection() = default;
+AccessibilitySection::~AccessibilitySection() {
+  content::TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
+  if (extension_registry_)
+    extension_registry_->RemoveObserver(this);
+}
 
 void AccessibilitySection::AddLoadTimeData(
     content::WebUIDataSource* html_source) {
@@ -358,13 +397,15 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_DEFAULT_LABEL},
       {"largeMouseCursorSizeLargeLabel",
        IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LARGE_LABEL},
-      {"cursorColorEnabledLabel", IDS_SETTINGS_CURSOR_COLOR_ENABLED_LABEL},
       {"cursorColorOptionsLabel", IDS_SETTINGS_CURSOR_COLOR_OPTIONS_LABEL},
+      {"cursorColorBlack", IDS_SETTINGS_CURSOR_COLOR_BLACK},
       {"cursorColorRed", IDS_SETTINGS_CURSOR_COLOR_RED},
-      {"cursorColorOrange", IDS_SETTINGS_CURSOR_COLOR_ORANGE},
+      {"cursorColorYellow", IDS_SETTINGS_CURSOR_COLOR_YELLOW},
       {"cursorColorGreen", IDS_SETTINGS_CURSOR_COLOR_GREEN},
+      {"cursorColorCyan", IDS_SETTINGS_CURSOR_COLOR_CYAN},
       {"cursorColorBlue", IDS_SETTINGS_CURSOR_COLOR_BLUE},
-      {"cursorColorPurple", IDS_SETTINGS_CURSOR_COLOR_PURPLE},
+      {"cursorColorMagenta", IDS_SETTINGS_CURSOR_COLOR_MAGENTA},
+      {"cursorColorPink", IDS_SETTINGS_CURSOR_COLOR_PINK},
       {"highContrastLabel", IDS_SETTINGS_HIGH_CONTRAST_LABEL},
       {"stickyKeysLabel", IDS_SETTINGS_STICKY_KEYS_LABEL},
       {"chromeVoxLabel", IDS_SETTINGS_CHROMEVOX_LABEL},
@@ -437,6 +478,8 @@ void AccessibilitySection::AddLoadTimeData(
       {"manageSwitchAccessSettings",
        IDS_SETTINGS_MANAGE_SWITCH_ACCESS_SETTINGS},
       {"switchAssignmentHeading", IDS_SETTINGS_SWITCH_ASSIGNMENT_HEADING},
+      {"switchAssignOptionPlaceholder",
+       IDS_SETTINGS_SWITCH_ASSIGN_OPTION_PLACEHOLDER},
       {"switchAssignOptionNone", IDS_SETTINGS_SWITCH_ASSIGN_OPTION_NONE},
       {"switchAssignOptionSpace", IDS_SETTINGS_SWITCH_ASSIGN_OPTION_SPACE},
       {"switchAssignOptionEnter", IDS_SETTINGS_SWITCH_ASSIGN_OPTION_ENTER},
@@ -515,18 +558,14 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_A11Y_TABLET_MODE_SHELF_BUTTONS_LABEL},
       {"tabletModeShelfNavigationButtonsSettingDescription",
        IDS_SETTINGS_A11Y_TABLET_MODE_SHELF_BUTTONS_DESCRIPTION},
-      {"captionsEnableLiveCaptionTitle",
-       IDS_SETTINGS_CAPTIONS_ENABLE_LIVE_CAPTION_TITLE},
-      {"captionsEnableLiveCaptionSubtitle",
-       IDS_SETTINGS_CAPTIONS_ENABLE_LIVE_CAPTION_SUBTITLE},
+      {"caretBrowsingTitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_TITLE},
+      {"caretBrowsingSubtitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_SUBTITLE},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
   html_source->AddString("a11yLearnMoreUrl",
                          chrome::kChromeAccessibilityHelpURL);
 
-  html_source->AddBoolean("showExperimentalAccessibilitySwitchAccess",
-                          IsSwitchAccessAllowed());
   html_source->AddBoolean(
       "showExperimentalAccessibilitySwitchAccessImprovedTextInput",
       IsSwitchAccessTextAllowed());
@@ -534,14 +573,11 @@ void AccessibilitySection::AddLoadTimeData(
   html_source->AddBoolean("showExperimentalA11yLabels",
                           AreExperimentalA11yLabelsAllowed());
 
-  html_source->AddBoolean(
-      "showTabletModeShelfNavigationButtonsSettings",
-      ash::features::IsHideShelfControlsInTabletModeEnabled());
+  html_source->AddBoolean("showTabletModeShelfNavigationButtonsSettings",
+                          AreTabletNavigationButtonsAllowed());
 
   html_source->AddString("tabletModeShelfNavigationButtonsLearnMoreUrl",
                          chrome::kTabletModeGesturesLearnMoreURL);
-
-  html_source->AddBoolean("enableLiveCaption", AreLiveCaptionsAllowed());
 
   html_source->AddBoolean("showExperimentalAccessibilityCursorColor",
                           IsCursorColorAllowed());
@@ -556,6 +592,7 @@ void AccessibilitySection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(std::make_unique<::settings::TtsHandler>());
   web_ui->AddMessageHandler(
       std::make_unique<::settings::FontHandler>(profile()));
+  web_ui->AddMessageHandler(std::make_unique<CaptionsHandler>());
 }
 
 int AccessibilitySection::GetSectionNameMessageId() const {
@@ -573,10 +610,17 @@ mojom::SearchResultIcon AccessibilitySection::GetSectionIcon() const {
 std::string AccessibilitySection::GetSectionPath() const {
   return mojom::kAccessibilitySectionPath;
 }
+bool AccessibilitySection::LogMetric(mojom::Setting setting,
+                                     base::Value& value) const {
+  // Unimplemented.
+  return false;
+}
 
 void AccessibilitySection::RegisterHierarchy(
     HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSetting(mojom::Setting::kA11yQuickSettings);
+  generator->RegisterTopLevelSetting(
+      mojom::Setting::kGetImageDescriptionsFromGoogle);
 
   // Manage accessibility.
   generator->RegisterTopLevelSubpage(
@@ -593,7 +637,7 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kStickyKeys,
       mojom::Setting::kOnScreenKeyboard,
       mojom::Setting::kDictation,
-      mojom::Setting::kSpeakToType,
+      mojom::Setting::kHighlightKeyboardFocus,
       mojom::Setting::kEnableSwitchAccess,
       mojom::Setting::kHighlightTextCaret,
       mojom::Setting::kAutoClickWhenCursorStops,
@@ -602,7 +646,6 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kTabletNavigationButtons,
       mojom::Setting::kMonoAudio,
       mojom::Setting::kStartupSound,
-      mojom::Setting::kGetImageDescriptionsFromGoogle,
       mojom::Setting::kLiveCaptions,
       mojom::Setting::kEnableCursorColor,
   };
@@ -636,52 +679,92 @@ void AccessibilitySection::RegisterHierarchy(
   RegisterNestedSettingBulk(mojom::Subpage::kSwitchAccessOptions,
                             kSwitchAccessSettings, generator);
 
-  // Captions.
+  // Caption preferences.
   generator->RegisterTopLevelSubpage(
       IDS_SETTINGS_CAPTIONS, mojom::Subpage::kCaptions,
       mojom::SearchResultIcon::kA11y, mojom::SearchResultDefaultRank::kMedium,
       mojom::kCaptionsSubpagePath);
 }
 
+void AccessibilitySection::OnVoicesChanged() {
+  UpdateTextToSpeechVoiceSearchTags();
+}
+
+void AccessibilitySection::UpdateTextToSpeechVoiceSearchTags() {
+  // Start with no text-to-speech voice search tags.
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.RemoveSearchTags(GetTextToSpeechVoiceSearchConcepts());
+
+  content::TtsController* tts_controller =
+      content::TtsController::GetInstance();
+  std::vector<content::VoiceData> voices;
+  tts_controller->GetVoices(profile(), &voices);
+  if (!voices.empty()) {
+    updater.AddSearchTags(GetTextToSpeechVoiceSearchConcepts());
+  }
+}
+
+void AccessibilitySection::OnExtensionLoaded(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension) {
+  UpdateTextToSpeechEnginesSearchTags();
+}
+
+void AccessibilitySection::OnExtensionUnloaded(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    extensions::UnloadedExtensionReason reason) {
+  UpdateTextToSpeechEnginesSearchTags();
+}
+
+void AccessibilitySection::UpdateTextToSpeechEnginesSearchTags() {
+  // Start with no text-to-speech engines search tags.
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.RemoveSearchTags(GetTextToSpeechEnginesSearchConcepts());
+
+  const std::set<std::string> extensions =
+      TtsEngineExtensionObserver::GetInstance(profile())->GetTtsExtensions();
+  if (!extensions.empty()) {
+    updater.AddSearchTags(GetTextToSpeechEnginesSearchConcepts());
+  }
+}
+
 void AccessibilitySection::UpdateSearchTags() {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
   if (accessibility_state_utils::IsScreenReaderEnabled() &&
       AreExperimentalA11yLabelsAllowed()) {
-    registry()->AddSearchTags(GetA11yLabelsSearchConcepts());
+    updater.AddSearchTags(GetA11yLabelsSearchConcepts());
   } else {
-    registry()->RemoveSearchTags(GetA11yLabelsSearchConcepts());
+    updater.RemoveSearchTags(GetA11yLabelsSearchConcepts());
   }
 
-  registry()->RemoveSearchTags(GetA11ySwitchAccessSearchConcepts());
-  registry()->RemoveSearchTags(GetA11ySwitchAccessOnSearchConcepts());
-  registry()->RemoveSearchTags(GetA11ySwitchAccessKeyboardSearchConcepts());
+  updater.RemoveSearchTags(GetA11ySwitchAccessOnSearchConcepts());
+  updater.RemoveSearchTags(GetA11ySwitchAccessKeyboardSearchConcepts());
 
   if (AreLiveCaptionsAllowed()) {
-    registry()->AddSearchTags(GetA11yLiveCaptionSearchConcepts());
+    updater.AddSearchTags(GetA11yLiveCaptionSearchConcepts());
   } else {
-    registry()->RemoveSearchTags(GetA11yLiveCaptionSearchConcepts());
+    updater.RemoveSearchTags(GetA11yLiveCaptionSearchConcepts());
   }
 
   if (IsCursorColorAllowed()) {
-    registry()->AddSearchTags(GetA11yCursorColorSearchConcepts());
+    updater.AddSearchTags(GetA11yCursorColorSearchConcepts());
   } else {
-    registry()->RemoveSearchTags(GetA11yCursorColorSearchConcepts());
+    updater.RemoveSearchTags(GetA11yCursorColorSearchConcepts());
   }
-
-  if (!IsSwitchAccessAllowed())
-    return;
-
-  registry()->AddSearchTags(GetA11ySwitchAccessSearchConcepts());
 
   if (!pref_service_->GetBoolean(
           ash::prefs::kAccessibilitySwitchAccessEnabled)) {
     return;
   }
 
-  registry()->AddSearchTags(GetA11ySwitchAccessOnSearchConcepts());
+  updater.AddSearchTags(GetA11ySwitchAccessOnSearchConcepts());
 
-  if (pref_service_->GetBoolean(
+  if (IsSwitchAccessTextAllowed() &&
+      pref_service_->GetBoolean(
           ash::prefs::kAccessibilitySwitchAccessAutoScanEnabled)) {
-    registry()->AddSearchTags(GetA11ySwitchAccessKeyboardSearchConcepts());
+    updater.AddSearchTags(GetA11ySwitchAccessKeyboardSearchConcepts());
   }
 }
 

@@ -25,7 +25,8 @@ std::unique_ptr<OutputSurface> TestOutputSurfaceProvider::CreateOutputSurface(
     bool gpu_compositing,
     mojom::DisplayClient* display_client,
     gpu::GpuTaskSchedulerHelper* gpu_task_scheduler,
-    const RendererSettings& renderer_settings) {
+    const RendererSettings& renderer_settings,
+    const DebugRendererSettings* debug_settings) {
   if (gpu_compositing) {
     return FakeOutputSurface::Create3d();
   } else {

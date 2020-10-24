@@ -81,7 +81,7 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   static constexpr size_t kGlobalActivationThreshold = 0;
 #endif
 
-#ifdef V8_CONCURRENT_MARKING
+#ifdef V8_ATOMIC_MARKING_STATE
   static const AccessMode kAtomicity = AccessMode::ATOMIC;
 #else
   static const AccessMode kAtomicity = AccessMode::NON_ATOMIC;
@@ -146,7 +146,6 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   void FinalizeIncrementally();
 
   void UpdateMarkingWorklistAfterScavenge();
-  void UpdateWeakReferencesAfterScavenge();
   void UpdateMarkedBytesAfterScavenge(size_t dead_bytes_in_new_space);
 
   void Hurry();
@@ -180,25 +179,6 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
 
   V8_INLINE void RestartIfNotMarking();
 
-  // {raw_obj} and {slot_address} are raw Address values instead of a
-  // HeapObject and a MaybeObjectSlot because this is called from
-  // generated code via ExternalReference.
-  static int RecordWriteFromCode(Address raw_obj, Address slot_address,
-                                 Isolate* isolate);
-
-  // Record a slot for compaction.  Returns false for objects that are
-  // guaranteed to be rescanned or not guaranteed to survive.
-  //
-  // No slots in white objects should be recorded, as some slots are typed and
-  // cannot be interpreted correctly if the underlying object does not survive
-  // the incremental cycle (stays white).
-  V8_INLINE bool BaseRecordWrite(HeapObject obj, HeapObject value);
-  template <typename TSlot>
-  V8_INLINE void RecordWrite(HeapObject obj, TSlot slot,
-                             typename TSlot::TObject value);
-  void RecordWriteSlow(HeapObject obj, HeapObjectSlot slot, HeapObject value);
-  void RecordWriteIntoCode(Code host, RelocInfo* rinfo, HeapObject value);
-
   // Returns true if the function succeeds in transitioning the object
   // from white to grey.
   V8_INLINE bool WhiteToGreyAndPush(HeapObject obj);
@@ -228,8 +208,8 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
     }
   }
 
-  MarkingWorklists* marking_worklists() const {
-    return collector_->marking_worklists();
+  MarkingWorklists::Local* local_marking_worklists() const {
+    return collector_->local_marking_worklists();
   }
 
   void Deactivate();
@@ -270,13 +250,7 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   // increase chances of reusing of map transition tree in future.
   void RetainMaps();
 
-  void ActivateIncrementalWriteBarrier(PagedSpace* space);
-  void ActivateIncrementalWriteBarrier(NewSpace* space);
-  void ActivateIncrementalWriteBarrier();
-
-  void DeactivateIncrementalWriteBarrierForSpace(PagedSpace* space);
-  void DeactivateIncrementalWriteBarrierForSpace(NewSpace* space);
-  void DeactivateIncrementalWriteBarrier();
+  void PublishWriteBarrierWorklists();
 
   // Updates scheduled_bytes_to_mark_ to ensure marking progress based on
   // time.

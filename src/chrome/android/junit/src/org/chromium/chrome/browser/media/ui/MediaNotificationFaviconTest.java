@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.media.ui;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doCallRealMethod;
@@ -25,9 +26,9 @@ import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerDelegate.ListenerService;
 import org.chromium.chrome.browser.ui.favicon.IconType;
 import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
+import org.chromium.components.browser_ui.media.MediaNotificationInfo;
 
 /**
  * Test of media notifications to ensure that the favicon is displayed on normal devices and
@@ -74,7 +75,7 @@ public class MediaNotificationFaviconTest extends MediaNotificationTestBase {
         super.setUp();
 
         getController().mThrottler.mController = getController();
-        doCallRealMethod().when(getController()).onServiceStarted(any(ListenerService.class));
+        doCallRealMethod().when(getController()).onServiceStarted(any(MockListenerService.class));
         doCallRealMethod()
                 .when(mMockForegroundServiceUtils)
                 .startForegroundService(any(Intent.class));
@@ -155,8 +156,29 @@ public class MediaNotificationFaviconTest extends MediaNotificationTestBase {
         assertEquals(mFavicon, getDisplayedIcon());
     }
 
+    @Test
+    public void testWillReturnLargeIcon() {
+        mTabHolder.simulateFaviconUpdated(mFavicon);
+        mTabHolder.mMediaSessionTabHelper.mLargeIconBridge = new TestLargeIconBridge();
+
+        mTabHolder.simulateMediaSessionStateChanged(true, false);
+        assertEquals(0, getCurrentNotificationInfo().defaultNotificationLargeIcon);
+    }
+
+    @Test
+    public void testNoLargeIcon() {
+        mTabHolder.simulateFaviconUpdated(null);
+        mTabHolder.simulateMediaSessionStateChanged(true, false);
+        assertNotEquals(0, getCurrentNotificationInfo().defaultNotificationLargeIcon);
+    }
+
     private Bitmap getDisplayedIcon() {
         return mTabHolder.mMediaSessionTabHelper.mMediaSessionHelper.mFavicon;
+    }
+
+    private MediaNotificationInfo getCurrentNotificationInfo() {
+        return mTabHolder.mMediaSessionTabHelper.mMediaSessionHelper.mNotificationInfoBuilder
+                .build();
     }
 
     @Override

@@ -49,6 +49,7 @@ struct WasmModule;
 #define WASM_RUNTIME_STUB_LIST(V, VTRAP) \
   FOREACH_WASM_TRAPREASON(VTRAP)         \
   V(WasmCompileLazy)                     \
+  V(WasmTriggerTierUp)                   \
   V(WasmDebugBreak)                      \
   V(WasmInt32ToHeapNumber)               \
   V(WasmTaggedNonSmiToInt32)             \
@@ -56,6 +57,7 @@ struct WasmModule;
   V(WasmFloat64ToNumber)                 \
   V(WasmTaggedToFloat64)                 \
   V(WasmAllocateJSArray)                 \
+  V(WasmAllocatePair)                    \
   V(WasmAtomicNotify)                    \
   V(WasmI32AtomicWait32)                 \
   V(WasmI32AtomicWait64)                 \
@@ -365,6 +367,17 @@ const char* GetWasmCodeKindAsString(WasmCode::Kind);
 // Manages the code reservations and allocations of a single {NativeModule}.
 class WasmCodeAllocator {
  public:
+#if V8_TARGET_ARCH_ARM64
+  // ARM64 only supports direct calls within a 128 MB range.
+  static constexpr size_t kMaxCodeSpaceSize = 128 * MB;
+#else
+  // Use 1024 MB limit for code spaces on other platforms. This is smaller than
+  // the total allowed code space (kMaxWasmCodeMemory) to avoid unnecessarily
+  // big reservations, and to ensure that distances within a code space fit
+  // within a 32-bit signed integer.
+  static constexpr size_t kMaxCodeSpaceSize = 1024 * MB;
+#endif
+
   // {OptionalLock} is passed between {WasmCodeAllocator} and {NativeModule} to
   // indicate that the lock on the {WasmCodeAllocator} is already taken. It's
   // optional to allow to also call methods without holding the lock.
@@ -421,6 +434,11 @@ class WasmCodeAllocator {
   size_t GetNumCodeSpaces() const;
 
  private:
+  // Sentinel value to be used for {AllocateForCodeInRegion} for specifying no
+  // restriction on the region to allocate in.
+  static constexpr base::AddressRegion kUnrestrictedRegion{
+      kNullAddress, std::numeric_limits<size_t>::max()};
+
   // The engine-wide wasm code manager.
   WasmCodeManager* const code_manager_;
 
@@ -575,6 +593,12 @@ class V8_EXPORT_PRIVATE NativeModule final {
   size_t committed_code_space() const {
     return code_allocator_.committed_code_space();
   }
+  size_t generated_code_size() const {
+    return code_allocator_.generated_code_size();
+  }
+  size_t liftoff_bailout_count() const { return liftoff_bailout_count_.load(); }
+  size_t liftoff_code_size() const { return liftoff_code_size_.load(); }
+  size_t turbofan_code_size() const { return turbofan_code_size_.load(); }
   WasmEngine* engine() const { return engine_; }
 
   bool HasWireBytes() const {
@@ -641,6 +665,10 @@ class V8_EXPORT_PRIVATE NativeModule final {
   // Get or create the debug info for this NativeModule.
   DebugInfo* GetDebugInfo();
 
+  uint32_t* num_liftoff_function_calls_array() {
+    return num_liftoff_function_calls_.get();
+  }
+
  private:
   friend class WasmCode;
   friend class WasmCodeAllocator;
@@ -671,6 +699,8 @@ class V8_EXPORT_PRIVATE NativeModule final {
   WasmCode* CreateEmptyJumpTableInRegion(
       int jump_table_size, base::AddressRegion,
       const WasmCodeAllocator::OptionalLock&);
+
+  void UpdateCodeSize(size_t, ExecutionTier, ForDebugging);
 
   // Hold the {allocation_mutex_} when calling one of these methods.
   // {slot_index} is the index in the declared functions, i.e. function index
@@ -725,6 +755,9 @@ class V8_EXPORT_PRIVATE NativeModule final {
   // A cache of the import wrappers, keyed on the kind and signature.
   std::unique_ptr<WasmImportWrapperCache> import_wrapper_cache_;
 
+  // Array to handle number of function calls.
+  std::unique_ptr<uint32_t[]> num_liftoff_function_calls_;
+
   // This mutex protects concurrent calls to {AddCode} and friends.
   mutable base::Mutex allocation_mutex_;
 
@@ -759,6 +792,9 @@ class V8_EXPORT_PRIVATE NativeModule final {
   int modification_scope_depth_ = 0;
   UseTrapHandler use_trap_handler_ = kNoTrapHandler;
   bool lazy_compile_frozen_ = false;
+  std::atomic<size_t> liftoff_bailout_count_{0};
+  std::atomic<size_t> liftoff_code_size_{0};
+  std::atomic<size_t> turbofan_code_size_{0};
 
   DISALLOW_COPY_AND_ASSIGN(NativeModule);
 };
@@ -811,7 +847,7 @@ class V8_EXPORT_PRIVATE WasmCodeManager final {
 
   V8_WARN_UNUSED_RESULT VirtualMemory TryAllocate(size_t size,
                                                   void* hint = nullptr);
-  bool Commit(base::AddressRegion);
+  void Commit(base::AddressRegion);
   void Decommit(base::AddressRegion);
 
   void FreeNativeModule(Vector<VirtualMemory> owned_code,

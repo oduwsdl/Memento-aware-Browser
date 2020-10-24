@@ -62,8 +62,12 @@ std::string NameForClient(AvailabilityProber::ClientName name) {
   switch (name) {
     case AvailabilityProber::ClientName::kIsolatedPrerenderOriginCheck:
       return "IsolatedPrerenderOriginCheck";
+    case AvailabilityProber::ClientName::kIsolatedPrerenderTLSCanaryCheck:
+      return "IsolatedPrerenderTLSCanaryCheck";
+    case AvailabilityProber::ClientName::kIsolatedPrerenderDNSCanaryCheck:
+      return "IsolatedPrerenderDNSCanaryCheck";
     default:
-      NOTREACHED();
+      NOTREACHED() << static_cast<int>(name);
       return std::string();
   }
   NOTREACHED();
@@ -309,11 +313,19 @@ AvailabilityProber::~AvailabilityProber() {
     network_connection_tracker_->RemoveNetworkConnectionObserver(this);
 }
 
+base::WeakPtr<AvailabilityProber> AvailabilityProber::AsWeakPtr() const {
+  return weak_factory_.GetWeakPtr();
+}
+
 // static
 void AvailabilityProber::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   for (int i = static_cast<int>(
            AvailabilityProber::ClientName::kIsolatedPrerenderOriginCheck);
        i <= static_cast<int>(AvailabilityProber::ClientName::kMaxValue); i++) {
+    if (i == static_cast<int>(AvailabilityProber::ClientName::
+                                  kIsolatedPrerenderCanaryCheck_DEPRECATED)) {
+      continue;
+    }
     registry->RegisterDictionaryPref(PrefKeyForName(
         NameForClient(static_cast<AvailabilityProber::ClientName>(i))));
   }
@@ -324,6 +336,11 @@ void AvailabilityProber::ClearData(PrefService* pref_service) {
   for (int i = static_cast<int>(
            AvailabilityProber::ClientName::kIsolatedPrerenderOriginCheck);
        i <= static_cast<int>(AvailabilityProber::ClientName::kMaxValue); i++) {
+    if (i == static_cast<int>(AvailabilityProber::ClientName::
+                                  kIsolatedPrerenderCanaryCheck_DEPRECATED)) {
+      continue;
+    }
+
     std::string key = PrefKeyForName(
         NameForClient(static_cast<AvailabilityProber::ClientName>(i)));
     DictionaryPrefUpdate update(pref_service, key);

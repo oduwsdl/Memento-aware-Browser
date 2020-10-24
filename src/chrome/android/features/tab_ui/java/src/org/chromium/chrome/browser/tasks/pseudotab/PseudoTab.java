@@ -14,7 +14,6 @@ import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabList;
@@ -23,6 +22,8 @@ import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
+import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
+import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 
 import java.io.ByteArrayInputStream;
@@ -49,8 +50,9 @@ public class PseudoTab {
     private final Integer mTabId;
     private final WeakReference<Tab> mTab;
 
-    @GuardedBy("PseudoTab.class")
+    @GuardedBy("sLock")
     private static final Map<Integer, PseudoTab> sAllTabs = new LinkedHashMap<>();
+    private static final Object sLock = new Object();
     private static boolean sReadStateFile;
     private static List<PseudoTab> sAllTabsFromStateFile;
     private static PseudoTab sActiveTabFromStateFile;
@@ -63,10 +65,12 @@ public class PseudoTab {
     /**
      * Construct from a tab ID. An earlier instance with the same ID can be returned.
      */
-    public static synchronized PseudoTab fromTabId(int tabId) {
-        PseudoTab cached = sAllTabs.get(tabId);
-        if (cached != null) return cached;
-        return new PseudoTab(tabId);
+    public static PseudoTab fromTabId(int tabId) {
+        synchronized (sLock) {
+            PseudoTab cached = sAllTabs.get(tabId);
+            if (cached != null) return cached;
+            return new PseudoTab(tabId);
+        }
     }
 
     private PseudoTab(int tabId) {
@@ -78,14 +82,21 @@ public class PseudoTab {
     /**
      * Construct from a {@link Tab}. An earlier instance with the same {@link Tab} can be returned.
      */
-    public static synchronized PseudoTab fromTab(@NonNull Tab tab) {
-        PseudoTab cached = sAllTabs.get(tab.getId());
-        if (cached != null && cached.hasRealTab()) {
-            assert cached.getTab() == tab;
-            return cached;
+    public static PseudoTab fromTab(@NonNull Tab tab) {
+        synchronized (sLock) {
+            PseudoTab cached = sAllTabs.get(tab.getId());
+            if (cached != null && cached.hasRealTab()) {
+                if (cached.getTab() == tab) {
+                    return cached;
+                } else {
+                    assert cached.getTab().getWebContents() == null
+                            || cached.getTab().getWebContents().getTopLevelNativeWindow() == null;
+                    return new PseudoTab(tab);
+                }
+            }
+            // We need to upgrade a pre-native Tab to a post-native Tab.
+            return new PseudoTab(tab);
         }
-        // We need to upgrade a pre-native Tab to a post-native Tab.
-        return new PseudoTab(tab);
     }
 
     private PseudoTab(@NonNull Tab tab) {
@@ -156,7 +167,7 @@ public class PseudoTab {
      * @return The title
      */
     public String getTitle() {
-        if (mTab != null && mTab.get() != null) {
+        if (mTab != null && mTab.get() != null && mTab.get().isInitialized()) {
             return mTab.get().getTitle();
         }
         assert mTabId != null;
@@ -168,7 +179,7 @@ public class PseudoTab {
      * @return The URL
      */
     public String getUrl() {
-        if (mTab != null && mTab.get() != null) {
+        if (mTab != null && mTab.get() != null && mTab.get().isInitialized()) {
             return mTab.get().getUrlString();
         }
         assert mTabId != null;
@@ -180,7 +191,7 @@ public class PseudoTab {
      * @return The root ID
      */
     public int getRootId() {
-        if (mTab != null && mTab.get() != null) {
+        if (mTab != null && mTab.get() != null && mTab.get().isInitialized()) {
             return CriticalPersistedTabData.from(mTab.get()).getRootId();
         }
         assert mTabId != null;
@@ -202,7 +213,10 @@ public class PseudoTab {
     public long getTimestampMillis() {
         assert mTab != null
                 && mTab.get() != null : "getTimestampMillis can only be used with real tabs";
-        return mTab.get().getTimestampMillis();
+        if (!mTab.get().isInitialized()) {
+            return CriticalPersistedTabData.INVALID_TIMESTAMP;
+        }
+        return CriticalPersistedTabData.from(mTab.get()).getTimestampMillis();
     }
 
     /**
@@ -228,8 +242,10 @@ public class PseudoTab {
      * Robolectric tests.
      */
     @VisibleForTesting
-    public static synchronized void clearForTesting() {
-        sAllTabs.clear();
+    public static void clearForTesting() {
+        synchronized (sLock) {
+            sAllTabs.clear();
+        }
     }
 
     /**
@@ -239,26 +255,29 @@ public class PseudoTab {
      * @param tabModelSelector The {@link TabModelSelector} to query the tab relation
      * @return Related {@link PseudoTab}s
      */
-    public static synchronized @NonNull List<PseudoTab> getRelatedTabs(
+    public static @NonNull List<PseudoTab> getRelatedTabs(
             PseudoTab member, @NonNull TabModelSelector tabModelSelector) {
-        List<Tab> relatedTabs = getRelatedTabList(tabModelSelector, member.getId());
-        if (relatedTabs != null) return getListOfPseudoTab(relatedTabs);
+        synchronized (sLock) {
+            List<Tab> relatedTabs = getRelatedTabList(tabModelSelector, member.getId());
+            if (relatedTabs != null) return getListOfPseudoTab(relatedTabs);
 
-        List<PseudoTab> related = new ArrayList<>();
-        int rootId = member.getRootId();
-        if (rootId == Tab.INVALID_TAB_ID || !TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) {
-            related.add(member);
+            List<PseudoTab> related = new ArrayList<>();
+            int rootId = member.getRootId();
+            if (rootId == Tab.INVALID_TAB_ID
+                    || !TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) {
+                related.add(member);
+                return related;
+            }
+            for (Integer key : sAllTabs.keySet()) {
+                PseudoTab tab = sAllTabs.get(key);
+                assert tab != null;
+                if (tab.getRootId() == Tab.INVALID_TAB_ID) continue;
+                if (tab.getRootId() != rootId) continue;
+                related.add(tab);
+            }
+            assert related.size() > 0;
             return related;
         }
-        for (Integer key : sAllTabs.keySet()) {
-            PseudoTab tab = sAllTabs.get(key);
-            assert tab != null;
-            if (tab.getRootId() == Tab.INVALID_TAB_ID) continue;
-            if (tab.getRootId() != rootId) continue;
-            related.add(tab);
-        }
-        assert related.size() > 0;
-        return related;
     }
 
     private static @Nullable List<Tab> getRelatedTabList(
@@ -276,8 +295,10 @@ public class PseudoTab {
     }
 
     @VisibleForTesting
-    static synchronized int getAllTabsCountForTests() {
-        return sAllTabs.size();
+    static int getAllTabsCountForTests() {
+        synchronized (sLock) {
+            return sAllTabs.size();
+        }
     }
 
     @Nullable
@@ -293,14 +314,14 @@ public class PseudoTab {
     }
 
     private static void readAllPseudoTabsFromStateFile() {
-        assert CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START);
+        assert CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
+                || CachedFeatureFlags.isEnabled(ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP);
         if (sReadStateFile) return;
         sReadStateFile = true;
 
         long startMs = SystemClock.elapsedRealtime();
-        File stateFile =
-                new File(TabbedModeTabPersistencePolicy.getOrCreateTabbedModeStateDirectory(),
-                        TabbedModeTabPersistencePolicy.getStateFileName(0));
+        File stateFile = new File(TabStateDirectory.getOrCreateTabbedModeStateDirectory(),
+                TabbedModeTabPersistencePolicy.getStateFileName(0));
         if (!stateFile.exists()) {
             Log.i(TAG, "State file does not exist.");
             return;
@@ -327,7 +348,10 @@ public class PseudoTab {
                     (index, id, url, isIncognito, isStandardActiveIndex, isIncognitoActiveIndex)
                             -> {
                         // Skip restoring of non-selected NTP to match the real restoration logic.
-                        if (NewTabPage.isNTPUrl(url) && !isStandardActiveIndex) return;
+                        if (ReturnToChromeExperimentsUtil.isCanonicalizedNTPUrl(url)
+                                && !isStandardActiveIndex) {
+                            return;
+                        }
                         PseudoTab tab = PseudoTab.fromTabId(id);
                         if (isStandardActiveIndex) {
                             assert sActiveTabFromStateFile == null;

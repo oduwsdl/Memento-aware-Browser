@@ -34,10 +34,6 @@ OriginPolicyInterstitialPage::~OriginPolicyInterstitialPage() = default;
 
 void OriginPolicyInterstitialPage::OnInterstitialClosing() {}
 
-bool OriginPolicyInterstitialPage::ShouldCreateNewNavigation() const {
-  return false;
-}
-
 void OriginPolicyInterstitialPage::PopulateInterstitialStrings(
     base::DictionaryValue* load_time_data) {
   load_time_data->SetString("type", "ORIGIN_POLICY");
@@ -72,6 +68,8 @@ void OriginPolicyInterstitialPage::PopulateInterstitialStrings(
       {"heading", IDS_ORIGIN_POLICY_HEADING},
       {"openDetails", IDS_ORIGIN_POLICY_DETAILS},
       {"optInLink", IDS_SAFE_BROWSING_SCOUT_REPORTING_AGREE},
+      {"enhancedProtectionMessage",
+       IDS_SAFE_BROWSING_ENHANCED_PROTECTION_MESSAGE},
       {"primaryButtonText", IDS_ORIGIN_POLICY_BUTTON},
       {"primaryParagraph", IDS_ORIGIN_POLICY_INFO},
       {"recurrentErrorParagraph", IDS_ORIGIN_POLICY_INFO2},

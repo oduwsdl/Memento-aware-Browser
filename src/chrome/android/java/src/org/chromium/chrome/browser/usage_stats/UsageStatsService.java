@@ -9,15 +9,16 @@ import android.app.Activity;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.BuildInfo;
+import org.chromium.base.CollectionUtil;
 import org.chromium.base.Log;
 import org.chromium.base.Promise;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.components.user_prefs.UserPrefs;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -32,6 +33,7 @@ public class UsageStatsService {
 
     private static UsageStatsService sInstance;
 
+    private Profile mProfile;
     private EventTracker mEventTracker;
     private NotificationSuspender mNotificationSuspender;
     private SuspensionTracker mSuspensionTracker;
@@ -62,10 +64,10 @@ public class UsageStatsService {
 
     @VisibleForTesting
     UsageStatsService() {
-        Profile profile = Profile.getLastUsedRegularProfile();
-        mBridge = new UsageStatsBridge(profile, this);
+        mProfile = Profile.getLastUsedRegularProfile();
+        mBridge = new UsageStatsBridge(mProfile, this);
         mEventTracker = new EventTracker(mBridge);
-        mNotificationSuspender = new NotificationSuspender(profile);
+        mNotificationSuspender = new NotificationSuspender(mProfile);
         mSuspensionTracker = new SuspensionTracker(mBridge, mNotificationSuspender);
         mTokenTracker = new TokenTracker(mBridge);
         mPageViewObservers = new ArrayList<>();
@@ -97,10 +99,9 @@ public class UsageStatsService {
     }
 
     /** @return Whether the user has authorized DW to access usage stats data. */
-    public boolean getOptInState() {
+    boolean getOptInState() {
         ThreadUtils.assertOnUiThread();
-        PrefServiceBridge prefServiceBridge = PrefServiceBridge.getInstance();
-        boolean enabledByPref = prefServiceBridge.getBoolean(Pref.USAGE_STATS_ENABLED);
+        boolean enabledByPref = UserPrefs.get(mProfile).getBoolean(Pref.USAGE_STATS_ENABLED);
         boolean enabledByFeature = ChromeFeatureList.isEnabled(ChromeFeatureList.USAGE_STATS);
         // If the user has previously opted in, but the feature has been turned off, we need to
         // treat it as if they opted out; otherwise they'll have no UI affordance for clearing
@@ -114,10 +115,9 @@ public class UsageStatsService {
     }
 
     /** Sets the user's opt in state. */
-    public void setOptInState(boolean state) {
+    void setOptInState(boolean state) {
         ThreadUtils.assertOnUiThread();
-        PrefServiceBridge prefServiceBridge = PrefServiceBridge.getInstance();
-        prefServiceBridge.setBoolean(Pref.USAGE_STATS_ENABLED, state);
+        UserPrefs.get(mProfile).setBoolean(Pref.USAGE_STATS_ENABLED, state);
 
         if (mOptInState == state) return;
         mOptInState = state;
@@ -250,12 +250,9 @@ public class UsageStatsService {
     }
 
     private void notifyObserversOfSuspensions(List<String> fqdns, boolean suspended) {
-        for (WeakReference<PageViewObserver> observerRef : mPageViewObservers) {
-            PageViewObserver observer = observerRef.get();
-            if (observer != null) {
-                for (String fqdn : fqdns) {
-                    observer.notifySiteSuspensionChanged(fqdn, suspended);
-                }
+        for (PageViewObserver observer : CollectionUtil.strengthen(mPageViewObservers)) {
+            for (String fqdn : fqdns) {
+                observer.notifySiteSuspensionChanged(fqdn, suspended);
             }
         }
     }

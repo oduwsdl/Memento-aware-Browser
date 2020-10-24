@@ -33,24 +33,24 @@ class JSChecker {
   explicit JSChecker(content::WebContents* web_contents);
   explicit JSChecker(content::RenderFrameHost* frame_host);
 
-  // Evaluates |expression|. Evaluation will be completed when this function
+  // Evaluates `expression`. Evaluation will be completed when this function
   // call returns.
   void Evaluate(const std::string& expression);
 
-  // Executes |expression|. Doesn't require a correct command. Command will be
+  // Executes `expression`. Doesn't require a correct command. Command will be
   // queued up and executed later. This function will return immediately.
   void ExecuteAsync(const std::string& expression);
 
-  // Evaluates |expression| and returns its result.
+  // Evaluates `expression` and returns its result.
   WARN_UNUSED_RESULT bool GetBool(const std::string& expression);
   WARN_UNUSED_RESULT int GetInt(const std::string& expression);
   WARN_UNUSED_RESULT std::string GetString(const std::string& expression);
 
-  // Checks truthfulness of the given |expression|.
+  // Checks truthfulness of the given `expression`.
   void ExpectTrue(const std::string& expression);
   void ExpectFalse(const std::string& expression);
 
-  // Compares result of |expression| with |result|.
+  // Compares result of `expression` with `result`.
   void ExpectEQ(const std::string& expression, int result);
   void ExpectNE(const std::string& expression, int result);
   void ExpectEQ(const std::string& expression, const std::string& result);
@@ -58,12 +58,48 @@ class JSChecker {
   void ExpectEQ(const std::string& expression, bool result);
   void ExpectNE(const std::string& expression, bool result);
 
-  // Checks test waiter that would await until |js_condition| evaluates
+  // Evaluates value of element with `element_id`'s `attribute` and
+  // returns its result.
+  WARN_UNUSED_RESULT bool GetAttributeBool(
+      const std::string& attribute,
+      std::initializer_list<base::StringPiece> element_id);
+  WARN_UNUSED_RESULT int GetAttributeInt(
+      const std::string& attribute,
+      std::initializer_list<base::StringPiece> element_id);
+  WARN_UNUSED_RESULT std::string GetAttributeString(
+      const std::string& attribute,
+      std::initializer_list<base::StringPiece> element_id);
+
+  // Compares value of element with `element_id`'s `attribute` with `result`.
+  void ExpectAttributeEQ(const std::string& attribute,
+                         std::initializer_list<base::StringPiece> element_id,
+                         int result);
+  void ExpectAttributeNE(const std::string& attribute,
+                         std::initializer_list<base::StringPiece> element_id,
+                         int result);
+  void ExpectAttributeEQ(const std::string& attribute,
+                         std::initializer_list<base::StringPiece> element_id,
+                         const std::string& result);
+  void ExpectAttributeNE(const std::string& attribute,
+                         std::initializer_list<base::StringPiece> element_id,
+                         const std::string& result);
+  void ExpectAttributeEQ(const std::string& attribute,
+                         std::initializer_list<base::StringPiece> element_id,
+                         bool result);
+  void ExpectAttributeNE(const std::string& attribute,
+                         std::initializer_list<base::StringPiece> element_id,
+                         bool result);
+
+  void ExpectFocused(std::initializer_list<base::StringPiece> element_id);
+  WARN_UNUSED_RESULT std::unique_ptr<TestConditionWaiter> CreateFocusWaiter(
+      const std::initializer_list<base::StringPiece>& path);
+
+  // Checks test waiter that would await until `js_condition` evaluates
   // to true.
   WARN_UNUSED_RESULT std::unique_ptr<TestConditionWaiter> CreateWaiter(
       const std::string& js_condition);
 
-  // Checks test waiter that would await until |js_condition| evaluates
+  // Checks test waiter that would await until `js_condition` evaluates
   // to true.
   WARN_UNUSED_RESULT std::unique_ptr<TestConditionWaiter>
   CreateWaiterWithDescription(const std::string& js_condition,
@@ -193,17 +229,11 @@ class JSChecker {
     web_contents_ = web_contents;
   }
 
-  void set_polymer_ui(bool polymer_ui) { polymer_ui_ = polymer_ui; }
-
  private:
   void GetBoolImpl(const std::string& expression, bool* result);
   void GetIntImpl(const std::string& expression, int* result);
   void GetStringImpl(const std::string& expression, std::string* result);
 
-  // Checks if we assume that WebUI is polymer-based. There are few UI elements
-  // that were not migrated to polymer, as well as some test-only UIs
-  // (e.g. test SAML pages) that require old-fashioned interaction.
-  bool polymer_ui_ = true;
   content::WebContents* web_contents_ = nullptr;
 };
 
@@ -221,7 +251,14 @@ void ExecuteOobeJSAsync(const std::string& script);
 std::string GetOobeElementPath(
     std::initializer_list<base::StringPiece> element_ids);
 
-// Creates a waiter that allows to wait until screen with |oobe_screen_id| is
+// Generates JS expression that evaluates to attribute of the element in
+// hierarchy. It is assumed that all intermediate elements
+// are Polymer-based.
+std::string GetAttributeExpression(
+    const std::string& attribute,
+    std::initializer_list<base::StringPiece> element_ids);
+
+// Creates a waiter that allows to wait until screen with `oobe_screen_id` is
 // shown in webui.
 WARN_UNUSED_RESULT std::unique_ptr<TestConditionWaiter> CreateOobeScreenWaiter(
     const std::string& oobe_screen_id);

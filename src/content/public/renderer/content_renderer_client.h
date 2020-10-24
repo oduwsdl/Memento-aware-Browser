@@ -24,7 +24,8 @@
 #include "content/public/renderer/websocket_handshake_throttle_provider.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/supported_types.h"
-#include "mojo/public/cpp/bindings/generic_pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
@@ -67,10 +68,8 @@ class BinderMap;
 }
 
 namespace content {
-class BrowserPluginDelegate;
 class RenderFrame;
 class RenderView;
-struct WebPluginInfo;
 
 // Embedder API for participating in renderer logic.
 class CONTENT_EXPORT ContentRendererClient {
@@ -128,26 +127,9 @@ class CONTENT_EXPORT ContentRendererClient {
       RenderFrame* render_frame,
       const base::FilePath& plugin_path);
 
-  // Creates a delegate for browser plugin.
-  virtual BrowserPluginDelegate* CreateBrowserPluginDelegate(
-      RenderFrame* render_frame,
-      const WebPluginInfo& info,
-      const std::string& mime_type,
-      const GURL& original_url);
-
   // Returns true if the embedder has an error page to show for the given http
   // status code.
   virtual bool HasErrorPage(int http_status_code);
-
-  // Returns true if the embedder prefers not to show an error page for a failed
-  // navigation to |url| with |error_code| in |render_frame|.
-  virtual bool ShouldSuppressErrorPage(RenderFrame* render_frame,
-                                       const GURL& url,
-                                       int error_code);
-
-  // Returns false for new tab page activities, which should be filtered out in
-  // UseCounter; returns true otherwise.
-  virtual bool ShouldTrackUseCounter(const GURL& url);
 
   // Returns the information to display when a navigation error occurs.
   // |error_html| should be set to null if this is a custom error page that will
@@ -305,14 +287,13 @@ class CONTENT_EXPORT ContentRendererClient {
 #if !defined(OS_ANDROID)
   // Creates a speech recognition client used to transcribe audio into captions.
   virtual std::unique_ptr<media::SpeechRecognitionClient>
-  CreateSpeechRecognitionClient(RenderFrame* render_frame);
+  CreateSpeechRecognitionClient(
+      RenderFrame* render_frame,
+      media::SpeechRecognitionClient::OnReadyCallback callback);
 #endif
 
   // Returns true if the page at |url| can use Pepper CameraDevice APIs.
   virtual bool IsPluginAllowedToUseCameraDeviceAPI(const GURL& url);
-
-  // Returns true if dev channel APIs are available for plugins.
-  virtual bool IsPluginAllowedToUseDevChannelAPIs();
 
   // Notifies that a document element has been inserted in the frame's document.
   // This may be called multiple times for the same document. This method may
@@ -330,6 +311,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // Allows subclasses to enable some runtime features before Blink has
   // started.
   virtual void SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() {}
+
+  // Returns whether or not V8 script extensions should be allowed for a
+  // service worker.
+  virtual bool AllowScriptExtensionForServiceWorker(
+      const url::Origin& script_origin);
 
   // Notifies that a service worker context is going to be initialized. No
   // meaningful task has run on the worker thread at this point. This
@@ -434,9 +420,11 @@ class CONTENT_EXPORT ContentRendererClient {
   GetAudioRendererAlgorithmParameters(
       ::media::AudioParameters audio_parameters);
 
-  // Handles a request from the browser to bind a receiver on the renderer
-  // processes's main thread.
-  virtual void BindReceiverOnMainThread(mojo::GenericPendingReceiver receiver);
+  // Proxies the URLLoaderFactory if the platform supports Chrome extensions.
+  virtual void MaybeProxyURLLoaderFactory(
+      RenderFrame* render_frame,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory>*
+          factory_receiver);
 };
 
 }  // namespace content

@@ -16,7 +16,7 @@ enum Setting {
   kDisconnectWifiNetwork = 5,
   kPreferWifiNetwork = 6,
   kForgetWifiNetwork = 7,
-  kConfigureWifi = 8,
+  kWifiAddNetwork = 8,
   kWifiAutoConfigureIp = 9,
   kWifiDns = 10,
   kWifiProxy = 11,
@@ -32,6 +32,11 @@ enum Setting {
   kCellularAutoConnectToNetwork = 21,
   kInstantTetheringOnOff = 22,
   kDisconnectTetherNetwork = 23,
+  kWifiMetered = 24,
+  kCellularMetered = 25,
+  kCellularAddNetwork = 26,
+  kCellularRemoveESimNetwork = 27,
+  kCellularRenameESimNetwork = 28,
 
   // Bluetooth section.
   kBluetoothOnOff = 100,
@@ -50,6 +55,12 @@ enum Setting {
   kMessagesOnOff = 206,
   kForgetPhone = 207,
   kNearbyShareOnOff = 208,
+  kPhoneHubOnOff = 209,
+  kPhoneHubNotificationsOnOff = 210,
+  // Note: Value 211 was for deprecated kPhoneHubNotificationBadgeOnOff.
+  // Do not reuse.
+  kPhoneHubTaskContinuationOnOff = 212,
+  kWifiSyncOnOff = 213,
 
   // People section.
   kAddAccount = 300,
@@ -101,19 +112,23 @@ enum Setting {
   kSleepWhenLaptopLidClosed = 424,
   kDisplayResolution = 425,
   kDisplayRefreshRate = 426,
-  kRemoveDlc = 427,
+  // Note: Value 427 was for deprecated Remove DLC - see
+  // https://crbug.com/1108093. Do not reuse.
   kDisplayMirroring = 428,
   kAllowWindowsToSpanDisplays = 429,
   kAmbientColors = 430,
   kTouchscreenCalibration = 431,
   kNightLightColorTemperature = 432,
   kPowerIdleBehaviorWhileOnBattery = 433,
+  kDisplayOverscan = 434,
 
   // Personalization section.
   kOpenWallpaper = 500,
   kAmbientModeOnOff = 501,
   kAmbientModeSource = 502,
   kChangeDeviceAccountImage = 503,
+  // Note: Value 504 was for deprecated kAmbientModeUpdatePhotosContainers.
+  // Do not reuse.
 
   // Search and Assistant section.
   kPreferredSearchEngine = 600,
@@ -148,7 +163,9 @@ enum Setting {
 
   // Privacy section.
   kVerifiedAccess = 1101,
-  kKeepWifiOnDuringSleep = 1102,
+  // Note: Value 1102 was for deprecated "Keep wi-fi on during sleep" setting -
+  // see https://bugs.chromium.org/p/chromium/issues/detail?id=1077126.
+  // Do not reuse.
   kUsageStatsAndCrashReports = 1103,
 
   // Languages and Input section.
@@ -156,6 +173,10 @@ enum Setting {
   kShowInputOptionsInShelf = 1201,
   kShowPersonalInformationSuggestions = 1202,
   kShowEmojiSuggestions = 1203,
+  kChangeDeviceLanguage = 1204,
+  kOfferTranslation = 1205,
+  kAddInputMethod = 1206,
+  kSpellCheck = 1207,
 
   // Files section.
   kGoogleDriveConnection = 1300,
@@ -180,7 +201,7 @@ enum Setting {
   kStickyKeys = 1511,
   kOnScreenKeyboard = 1512,
   kDictation = 1513,
-  kSpeakToType = 1514,
+  kHighlightKeyboardFocus = 1514,
   kHighlightTextCaret = 1515,
   kAutoClickWhenCursorStops = 1516,
   kLargeCursor = 1517,
@@ -202,4 +223,9 @@ enum Setting {
   // About Chrome OS section.
   kChangeChromeChannel = 1700,
   kCopyDetailedBuildInfo = 1701,
+  kCheckForOsUpdate = 1702,
+  kSeeWhatsNew = 1703,
+  kGetHelpWithChromeOs = 1704,
+  kReportAnIssue = 1705,
+  kTermsOfService = 1706,
 };

@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.webapps;
 
-import static org.chromium.webapk.lib.common.WebApkConstants.WEBAPK_PACKAGE_PREFIX;
+import static org.chromium.components.webapk.lib.common.WebApkConstants.WEBAPK_PACKAGE_PREFIX;
 
 import android.graphics.Bitmap;
 import android.os.Handler;
@@ -17,14 +17,15 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.metrics.WebApkUma;
+import org.chromium.chrome.browser.metrics.WebApkUma.UpdateRequestQueued;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
 import org.chromium.components.background_task_scheduler.TaskIds;
@@ -197,7 +198,7 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
 
     /** Schedules update for when WebAPK is not running. */
     private void scheduleUpdate() {
-        WebApkUma.recordUpdateRequestQueued(1);
+        WebApkUma.recordUpdateRequestQueued(UpdateRequestQueued.TWICE);
         TaskInfo updateTask;
         if (mStorage.shouldForceUpdate()) {
             // Start an update task ASAP for forced updates.

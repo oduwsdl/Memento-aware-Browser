@@ -51,7 +51,6 @@
 #include "ppapi/c/dev/ppb_printing_dev.h"
 #include "ppapi/c/dev/ppb_text_input_dev.h"
 #include "ppapi/c/dev/ppb_trace_event_dev.h"
-#include "ppapi/c/dev/ppb_truetype_font_dev.h"
 #include "ppapi/c/dev/ppb_url_util_dev.h"
 #include "ppapi/c/dev/ppb_var_deprecated.h"
 #include "ppapi/c/dev/ppb_video_capture_dev.h"
@@ -63,7 +62,6 @@
 #include "ppapi/c/ppb_audio.h"
 #include "ppapi/c/ppb_audio_buffer.h"
 #include "ppapi/c/ppb_audio_config.h"
-#include "ppapi/c/ppb_audio_encoder.h"
 #include "ppapi/c/ppb_console.h"
 #include "ppapi/c/ppb_core.h"
 #include "ppapi/c/ppb_file_io.h"
@@ -108,15 +106,7 @@
 #include "ppapi/c/private/ppb_file_io_private.h"
 #include "ppapi/c/private/ppb_file_ref_private.h"
 #include "ppapi/c/private/ppb_find_private.h"
-#include "ppapi/c/private/ppb_flash.h"
-#include "ppapi/c/private/ppb_flash_clipboard.h"
-#include "ppapi/c/private/ppb_flash_drm.h"
-#include "ppapi/c/private/ppb_flash_file.h"
 #include "ppapi/c/private/ppb_flash_font_file.h"
-#include "ppapi/c/private/ppb_flash_fullscreen.h"
-#include "ppapi/c/private/ppb_flash_menu.h"
-#include "ppapi/c/private/ppb_flash_message_loop.h"
-#include "ppapi/c/private/ppb_flash_print.h"
 #include "ppapi/c/private/ppb_host_resolver_private.h"
 #include "ppapi/c/private/ppb_instance_private.h"
 #include "ppapi/c/private/ppb_isolated_file_system_private.h"
@@ -128,7 +118,6 @@
 #include "ppapi/c/private/ppb_udp_socket_private.h"
 #include "ppapi/c/private/ppb_uma_private.h"
 #include "ppapi/c/private/ppb_x509_certificate_private.h"
-#include "ppapi/c/trusted/ppb_broker_trusted.h"
 #include "ppapi/c/trusted/ppb_browser_font_trusted.h"
 #include "ppapi/c/trusted/ppb_char_set_trusted.h"
 #include "ppapi/c/trusted/ppb_file_chooser_trusted.h"
@@ -495,7 +484,6 @@ PluginModule::PluginModule(const std::string& name,
     : callback_tracker_(new ppapi::CallbackTracker),
       is_in_destructor_(false),
       is_crashed_(false),
-      broker_(nullptr),
       library_(nullptr),
       name_(name),
       version_(version),
@@ -700,13 +688,6 @@ bool PluginModule::ReserveInstanceID(PP_Instance instance) {
   return true;  // Instance ID is usable.
 }
 
-void PluginModule::SetBroker(PepperBroker* broker) {
-  DCHECK(!broker_ || !broker);
-  broker_ = broker;
-}
-
-PepperBroker* PluginModule::GetBroker() { return broker_; }
-
 RendererPpapiHostImpl* PluginModule::CreateOutOfProcessModule(
     RenderFrameImpl* render_frame,
     const base::FilePath& path,
@@ -733,7 +714,7 @@ RendererPpapiHostImpl* PluginModule::CreateOutOfProcessModule(
 
   if (!dispatcher->Init(channel_handle, &GetInterface,
                         ppapi::Preferences(PpapiPreferencesBuilder::Build(
-                            render_frame->render_view()->webkit_preferences(),
+                            render_frame->render_view()->GetBlinkPreferences(),
                             gpu_feature_info)),
                         hung_filter.get(), task_runner)) {
     return nullptr;

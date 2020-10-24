@@ -11,6 +11,7 @@
 #include <memory>
 #include <random>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
@@ -18,10 +19,8 @@
 #include "base/cancelable_callback.h"
 #include "base/containers/circular_deque.h"
 #include "base/debug/crash_logging.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/pending_task.h"
 #include "base/run_loop.h"
@@ -29,6 +28,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/task/common/task_annotator.h"
+#include "base/task/current_thread.h"
 #include "base/task/sequence_manager/associated_thread_id.h"
 #include "base/task/sequence_manager/enqueue_order.h"
 #include "base/task/sequence_manager/enqueue_order_generator.h"
@@ -80,12 +80,14 @@ class BASE_EXPORT SequenceManagerImpl
  public:
   using Observer = SequenceManager::Observer;
 
+  SequenceManagerImpl(const SequenceManagerImpl&) = delete;
+  SequenceManagerImpl& operator=(const SequenceManagerImpl&) = delete;
   ~SequenceManagerImpl() override;
 
   // Assume direct control over current thread and create a SequenceManager.
   // This function should be called only once per thread.
-  // This function assumes that a MessageLoop is initialized for
-  // the current thread.
+  // This function assumes that a task execution environment is already
+  // initialized for the current thread.
   static std::unique_ptr<SequenceManagerImpl> CreateOnCurrentThread(
       SequenceManager::Settings settings = SequenceManager::Settings());
 
@@ -136,9 +138,9 @@ class BASE_EXPORT SequenceManagerImpl
   bool OnSystemIdle() override;
 
   void AddDestructionObserver(
-      MessageLoopCurrent::DestructionObserver* destruction_observer);
+      CurrentThread::DestructionObserver* destruction_observer);
   void RemoveDestructionObserver(
-      MessageLoopCurrent::DestructionObserver* destruction_observer);
+      CurrentThread::DestructionObserver* destruction_observer);
   // TODO(alexclarke): Remove this as part of https://crbug.com/825327.
   void SetTaskRunner(scoped_refptr<SingleThreadTaskRunner> task_runner);
   // TODO(alexclarke): Remove this as part of https://crbug.com/825327.
@@ -212,9 +214,9 @@ class BASE_EXPORT SequenceManagerImpl
 
   // Returns the SequenceManager running the
   // current thread. It must only be used on the thread it was obtained.
-  // Only to be used by MessageLoopCurrent for the moment
+  // Only to be used by CurrentThread for the moment
   static SequenceManagerImpl* GetCurrent();
-  friend class ::base::MessageLoopCurrent;
+  friend class ::base::CurrentThread;
 
   enum class ProcessTaskResult {
     kDeferred,
@@ -312,7 +314,7 @@ class BASE_EXPORT SequenceManagerImpl
 
     Observer* observer = nullptr;  // NOT OWNED
 
-    ObserverList<MessageLoopCurrent::DestructionObserver>::Unchecked
+    ObserverList<CurrentThread::DestructionObserver>::Unchecked
         destruction_observers;
 
     // By default native work is not prioritized at all.
@@ -432,8 +434,6 @@ class BASE_EXPORT SequenceManagerImpl
   }
 
   WeakPtrFactory<SequenceManagerImpl> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(SequenceManagerImpl);
 };
 
 }  // namespace internal

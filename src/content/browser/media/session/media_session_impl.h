@@ -84,6 +84,9 @@ class MediaSessionImpl : public MediaSession,
 
   ~MediaSessionImpl() override;
 
+  CONTENT_EXPORT void SetDelegateForTests(
+      std::unique_ptr<AudioFocusDelegate> delegate);
+
 #if defined(OS_ANDROID)
   void ClearMediaSessionAndroid();
   MediaSessionAndroid* GetMediaSessionAndroid();
@@ -253,6 +256,14 @@ class MediaSessionImpl : public MediaSession,
   // Exit picture-in-picture.
   void ExitPictureInPicture() override;
 
+  // Routes the audio from this Media Session to the given output device. If
+  // |id| is null, we will route to the default output device.
+  // Players created after this setting has been set will also have their audio
+  // rerouted. This setting persists until cross-origin navigation occurs, the
+  // renderer reports an audio sink change to a device different from |id|, or
+  // this method is called again.
+  void SetAudioSinkId(const base::Optional<std::string>& id) override;
+
   // Downloads the bitmap version of a MediaImage at least |minimum_size_px|
   // and closest to |desired_size_px|. If the download failed, was too small or
   // the image did not come from the media session then returns a null image.
@@ -267,6 +278,14 @@ class MediaSessionImpl : public MediaSession,
   }
 
   void OnPictureInPictureAvailabilityChanged();
+
+  // Called when any of the normal players have switched to a different audio
+  // output device.
+  void OnAudioOutputSinkIdChanged();
+
+  // Called when any of the normal players can no longer support audio output
+  // device switching.
+  void OnAudioOutputSinkChangingDisabled();
 
   // Returns whether the action should be routed to |routed_service_|.
   bool ShouldRouteAction(media_session::mojom::MediaSessionAction action) const;
@@ -289,8 +308,6 @@ class MediaSessionImpl : public MediaSession,
   friend class MediaSessionImplTest;
   friend class MediaInternalsAudioFocusTest;
 
-  CONTENT_EXPORT void SetDelegateForTests(
-      std::unique_ptr<AudioFocusDelegate> delegate);
   CONTENT_EXPORT void RemoveAllPlayersForTest();
   CONTENT_EXPORT MediaSessionUmaHelper* uma_helper_for_test();
 
@@ -384,6 +401,13 @@ class MediaSessionImpl : public MediaSession,
 
   bool IsPictureInPictureAvailable() const;
 
+  // Returns the device ID for the audio output device being used by all of the
+  // normal players. If the players are not all using the same audio output
+  // device, the id of the default device will be returned.
+  std::string GetSharedAudioOutputDeviceId() const;
+
+  bool IsAudioOutputDeviceSwitchingSupported() const;
+
   // Called when a MediaSessionAction is received. The action will be forwarded
   // to blink::MediaSession corresponding to the current routed service.
   void DidReceiveAction(media_session::mojom::MediaSessionAction action,
@@ -438,6 +462,11 @@ class MediaSessionImpl : public MediaSession,
 
   // True if the WebContents associated with this MediaSessionImpl is focused.
   bool focused_ = false;
+
+  // Used to persist audio device selection between navigations on the same
+  // origin.
+  url::Origin origin_;
+  base::Optional<std::string> audio_device_id_for_origin_;
 
 #if defined(OS_ANDROID)
   std::unique_ptr<MediaSessionAndroid> session_android_;

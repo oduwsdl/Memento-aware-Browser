@@ -7,13 +7,16 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/ash_features.h"
 #include "base/feature_list.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/file_manager/file_manager_string_util.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_features.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/system/statistics_provider.h"
@@ -40,22 +43,45 @@ ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
                    crostini::CrostiniFeatures::Get()->IsEnabled(
                        Profile::FromBrowserContext(browser_context())));
   dict->SetBoolean("PLUGIN_VM_ENABLED",
-                   plugin_vm::IsPluginVmEnabled(
+                   plugin_vm::PluginVmFeatures::Get()->IsEnabled(
                        Profile::FromBrowserContext(browser_context())));
+  dict->SetBoolean(
+      "FILES_CAMERA_FOLDER_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kFilesCameraFolder));
   dict->SetBoolean("FILES_NG_ENABLED",
                    base::FeatureList::IsEnabled(chromeos::features::kFilesNG));
+  dict->SetBoolean("COPY_IMAGE_ENABLED",
+                   base::FeatureList::IsEnabled(
+                       chromeos::features::kEnableFilesAppCopyImage));
   dict->SetBoolean(
       "UNIFIED_MEDIA_VIEW_ENABLED",
       base::FeatureList::IsEnabled(chromeos::features::kUnifiedMediaView));
   dict->SetBoolean(
       "FILES_TRANSFER_DETAILS_ENABLED",
       base::FeatureList::IsEnabled(chromeos::features::kFilesTransferDetails));
-  dict->SetBoolean("ZIP_NO_NACL", base::FeatureList::IsEnabled(
-                                      chromeos::features::kFilesZipNoNaCl));
+  dict->SetBoolean("FILES_TRASH_ENABLED", base::FeatureList::IsEnabled(
+                                              chromeos::features::kFilesTrash));
+  dict->SetBoolean("ZIP_MOUNT", base::FeatureList::IsEnabled(
+                                    chromeos::features::kFilesZipMount));
+  dict->SetBoolean("ZIP_PACK", base::FeatureList::IsEnabled(
+                                   chromeos::features::kFilesZipPack));
+  dict->SetBoolean("ZIP_UNPACK", base::FeatureList::IsEnabled(
+                                     chromeos::features::kFilesZipUnpack));
+  dict->SetBoolean("SHARESHEET_ENABLED",
+                   base::FeatureList::IsEnabled(features::kSharesheet));
+  dict->SetBoolean(
+      "FILTERS_IN_RECENTS_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kFiltersInRecents));
+  dict->SetBoolean("HOLDING_SPACE_ENABLED",
+                   ash::features::IsTemporaryHoldingSpaceEnabled());
+  dict->SetBoolean("FILES_SINGLE_PARTITION_FORMAT_ENABLED",
+                   base::FeatureList::IsEnabled(
+                       chromeos::features::kFilesSinglePartitionFormat));
 
   dict->SetString("UI_LOCALE", extension_l10n_util::CurrentLocaleOrDefault());
 
-  return RespondNow(OneArgument(std::move(dict)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 }  // namespace extensions

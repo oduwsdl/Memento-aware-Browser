@@ -94,7 +94,7 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
   // Ignored.
   void OnPriorityAndReasonChanged(
       const performance_manager::FrameNode* frame_node,
-      const PriorityAndReason& previous_value) override {}
+      const performance_manager::PriorityAndReason& previous_value) override {}
   // Ignored.
   void OnHadFormInteractionChanged(
       const performance_manager::FrameNode* frame_node) override {}
@@ -105,6 +105,10 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
   void OnFirstContentfulPaint(
       const performance_manager::FrameNode* frame_node,
       base::TimeDelta time_since_navigation_start) override {}
+  void OnViewportIntersectionChanged(
+      const performance_manager::FrameNode* frame_node) override {}
+  void OnFrameVisibilityChanged(
+      const performance_manager::FrameNode* frame_node) override {}
 
   // PageNodeObserver implementation:
   void OnPageNodeAdded(const performance_manager::PageNode* page_node) override;
@@ -153,9 +157,6 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
       const performance_manager::ProcessNode* process_node) override;
   void OnBeforeProcessNodeRemoved(
       const performance_manager::ProcessNode* process_node) override;
-  void OnExpectedTaskQueueingDurationSample(
-      const performance_manager::ProcessNode* process_node) override {
-  }  // Ignored.
   // Ignored.
   void OnMainThreadTaskLoadIsLow(
       const performance_manager::ProcessNode* process_node) override {}
@@ -184,6 +185,10 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
   void OnBeforeClientWorkerRemoved(
       const performance_manager::WorkerNode* worker_node,
       const performance_manager::WorkerNode* client_worker_node) override;
+  // Ignored.
+  void OnPriorityAndReasonChanged(
+      const performance_manager::WorkerNode* worker_node,
+      const performance_manager::PriorityAndReason& previous_value) override {}
 
  private:
   // The favicon requests happen on the UI thread. This helper class
@@ -216,9 +221,6 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
       int64_t serialization_id,
       scoped_refptr<base::RefCountedMemory> bitmap_data);
 
-  static void BindOnPMSequence(
-      mojo::PendingReceiver<discards::mojom::GraphDump> receiver,
-      performance_manager::Graph* graph);
   static void OnConnectionError(DiscardsGraphDumpImpl* impl);
 
   performance_manager::Graph* graph_ = nullptr;

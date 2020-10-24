@@ -15,6 +15,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/menu/menu_runner.h"
 
 namespace test {
@@ -28,6 +29,7 @@ class ToolbarButtonTestApi {
 
   views::MenuRunner* menu_runner() { return button_->menu_runner_.get(); }
   bool menu_showing() const { return button_->menu_showing_; }
+
   const gfx::Insets last_paint_insets() const {
     return button_->last_paint_insets_;
   }
@@ -93,6 +95,21 @@ class TestToolbarButton : public ToolbarButton {
 
 using ToolbarButtonViewsTest = ChromeViewsTestBase;
 
+TEST_F(ToolbarButtonViewsTest, DefaultLayoutInsets) {
+  ToolbarButton button;
+  gfx::Insets default_insets = ::GetLayoutInsets(TOOLBAR_BUTTON);
+  EXPECT_EQ(default_insets, button.GetLayoutInsets());
+  EXPECT_EQ(default_insets, button.GetInsets());
+}
+
+TEST_F(ToolbarButtonViewsTest, SetLayoutInsets) {
+  ToolbarButton button;
+  gfx::Insets new_insets(2, 3, 4, 5);
+  button.SetLayoutInsets(new_insets);
+  EXPECT_EQ(new_insets, button.GetLayoutInsets());
+  EXPECT_EQ(new_insets, button.GetInsets());
+}
+
 TEST_F(ToolbarButtonViewsTest, MenuDoesNotShowWhenTabStripIsEmpty) {
   TestTabStripModelDelegate delegate;
   TestingProfile profile;
@@ -102,8 +119,9 @@ TEST_F(ToolbarButtonViewsTest, MenuDoesNotShowWhenTabStripIsEmpty) {
 
   // ToolbarButton needs a parent view on some platforms.
   auto parent_view = std::make_unique<views::View>();
-  ToolbarButton* button = parent_view->AddChildView(
-      std::make_unique<ToolbarButton>(nullptr, std::move(model), &tab_strip));
+  ToolbarButton* button =
+      parent_view->AddChildView(std::make_unique<ToolbarButton>(
+          views::Button::PressedCallback(), std::move(model), &tab_strip));
   std::unique_ptr<views::Widget> widget_ = CreateTestWidget();
   widget_->SetContentsView(std::move(parent_view));
 
@@ -131,7 +149,7 @@ class ToolbarButtonUITest : public ChromeViewsTestBase {
 
     widget_ = CreateTestWidget();
     button_ = widget_->SetContentsView(std::make_unique<TestToolbarButton>(
-        nullptr, std::move(model), nullptr));
+        views::Button::PressedCallback(), std::move(model), nullptr));
   }
 
   void TearDown() override {
@@ -154,7 +172,7 @@ TEST_F(ToolbarButtonUITest, ShowMenu) {
 
   EXPECT_FALSE(test_api.menu_showing());
   EXPECT_FALSE(test_api.menu_runner());
-  EXPECT_EQ(views::Button::STATE_NORMAL, button_->state());
+  EXPECT_EQ(views::Button::STATE_NORMAL, button_->GetState());
 
   // Show the menu. Note that it is asynchronous.
   button_->ShowContextMenuForView(nullptr, gfx::Point(), ui::MENU_SOURCE_MOUSE);
@@ -164,14 +182,14 @@ TEST_F(ToolbarButtonUITest, ShowMenu) {
   EXPECT_TRUE(test_api.menu_runner()->IsRunning());
 
   // Button should appear pressed when the menu is showing.
-  EXPECT_EQ(views::Button::STATE_PRESSED, button_->state());
+  EXPECT_EQ(views::Button::STATE_PRESSED, button_->GetState());
 
   test_api.menu_runner()->Cancel();
 
   // Ensure the ToolbarButton's |menu_runner_| member is reset to null.
   EXPECT_FALSE(test_api.menu_showing());
   EXPECT_FALSE(test_api.menu_runner());
-  EXPECT_EQ(views::Button::STATE_NORMAL, button_->state());
+  EXPECT_EQ(views::Button::STATE_NORMAL, button_->GetState());
 }
 
 // Test deleting a ToolbarButton while its menu is showing.

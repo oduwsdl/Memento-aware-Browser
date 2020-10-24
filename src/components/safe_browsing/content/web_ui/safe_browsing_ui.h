@@ -13,6 +13,7 @@
 #include "components/safe_browsing/core/proto/csd.pb.h"
 #include "components/safe_browsing/core/proto/realtimeapi.pb.h"
 #include "components/safe_browsing/core/proto/webui.pb.h"
+#include "components/safe_browsing/core/safe_browsing_service_interface.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -45,6 +46,7 @@ struct DeepScanDebugData {
   base::Optional<DeepScanningClientRequest> request;
   base::Optional<enterprise_connectors::ContentAnalysisRequest>
       content_analysis_request;
+  GURL tab_url;
 
   base::Time response_time;
   std::string response_status;
@@ -125,10 +127,6 @@ class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
   // Get the real time lookup responses that have been received since the oldest
   // currently open chrome://safe-browsing tab was opened.
   void GetRTLookupResponses(const base::ListValue* args);
-
-  // Show whether real time lookup experiment is enabled. This is useful for
-  // testing on Android, because it also takes memory threshold into account.
-  void GetRTLookupExperimentEnabled(const base::ListValue* args);
 
   // Get the current referrer chain for a given URL.
   void GetReferrerChain(const base::ListValue* args);
@@ -220,6 +218,8 @@ class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
                    const std::vector<net::CanonicalCookie>& cookies);
 
   content::BrowserContext* browser_context_;
+
+  mojo::Remote<network::mojom::CookieManager> cookie_manager_remote_;
 
   // List that keeps all the WebUI listener objects.
   static std::vector<SafeBrowsingUIHandler*> webui_list_;
@@ -333,6 +333,7 @@ class WebUIInfoSingleton {
   // and response.
   void AddToDeepScanRequests(const DeepScanningClientRequest& request);
   void AddToDeepScanRequests(
+      const GURL& tab_url,
       const enterprise_connectors::ContentAnalysisRequest& request);
 
   // Add the new response to |deep_scan_requests_| and send it to all the open
@@ -443,10 +444,11 @@ class WebUIInfoSingleton {
     return reporting_events_;
   }
 
-  network::mojom::CookieManager* GetCookieManager();
+  mojo::Remote<network::mojom::CookieManager> GetCookieManager(
+      content::BrowserContext* browser_context);
 
-  void set_network_context(SafeBrowsingNetworkContext* network_context) {
-    network_context_ = network_context;
+  void set_safe_browsing_service(SafeBrowsingServiceInterface* sb_service) {
+    sb_service_ = sb_service;
   }
 
   void AddListenerForTesting() { has_test_listener_ = true; }
@@ -456,8 +458,6 @@ class WebUIInfoSingleton {
  private:
   WebUIInfoSingleton();
   ~WebUIInfoSingleton();
-
-  void InitializeCookieManager();
 
   void MaybeClearData();
 
@@ -530,11 +530,8 @@ class WebUIInfoSingleton {
   // The current referrer chain provider, if any. Can be nullptr.
   ReferrerChainProvider* referrer_chain_provider_ = nullptr;
 
-  // The current NetworkContext for Safe Browsing pings.
-  SafeBrowsingNetworkContext* network_context_ = nullptr;
-
-  // The current CookieManager for the Safe Browsing cookie.
-  mojo::Remote<network::mojom::CookieManager> cookie_manager_remote_;
+  // The Safe Browsing service.
+  SafeBrowsingServiceInterface* sb_service_ = nullptr;
 
   // Whether there is a test listener.
   bool has_test_listener_ = false;

@@ -94,12 +94,6 @@ RENDER_TEST_FEATURE_ANNOTATION = 'RenderTest'
 WPR_ARCHIVE_FILE_PATH_ANNOTATION = 'WPRArchiveDirectory'
 WPR_RECORD_REPLAY_TEST_FEATURE_ANNOTATION = 'WPRRecordReplayTest'
 
-# This needs to be kept in sync with formatting in |RenderUtils.imageName|
-RE_RENDER_IMAGE_NAME = re.compile(
-      r'(?P<test_class>\w+)\.'
-      r'(?P<description>[-\w]+)\.'
-      r'(?P<device_model_sdk>[-\w]+)\.png')
-
 _DEVICE_GOLD_DIR = 'skia_gold'
 # A map of Android product models to SDK ints.
 RENDER_TEST_MODEL_SDK_CONFIGS = {
@@ -171,7 +165,7 @@ class LocalDeviceInstrumentationTestRun(
     target_package = _GetTargetPackageName(self._test_instance.test_apk)
 
     @local_device_environment.handle_shard_failures_with(
-        self._env.BlacklistDevice)
+        self._env.DenylistDevice)
     @trace_event.traced
     def individual_device_set_up(device, host_device_tuples):
       steps = []
@@ -198,6 +192,21 @@ class LocalDeviceInstrumentationTestRun(
           self._context_managers[str(dev)].append(system_app_context)
 
         steps.append(replace_package)
+
+      if self._test_instance.system_packages_to_remove:
+
+        @trace_event.traced
+        def remove_packages(dev):
+          logging.info('Attempting to remove system packages %s',
+                       self._test_instance.system_packages_to_remove)
+          system_app.RemoveSystemApps(
+              dev, self._test_instance.system_packages_to_remove)
+          logging.info('Done removing system packages')
+
+        # This should be at the front in case we're removing the package to make
+        # room for another APK installation later on. Since we disallow
+        # concurrent adb with this option specified, this should be safe.
+        steps.insert(0, remove_packages)
 
       if self._test_instance.use_webview_provider:
         @trace_event.traced
@@ -388,7 +397,7 @@ class LocalDeviceInstrumentationTestRun(
     # expectations can be re-used between tests, saving a significant amount
     # of time.
     self._skia_gold_work_dir = tempfile.mkdtemp()
-    self._skia_gold_session_manager = gold_utils.SkiaGoldSessionManager(
+    self._skia_gold_session_manager = gold_utils.AndroidSkiaGoldSessionManager(
         self._skia_gold_work_dir, self._test_instance.skia_gold_properties)
     if self._test_instance.wait_for_java_debugger:
       logging.warning('*' * 80)
@@ -410,7 +419,7 @@ class LocalDeviceInstrumentationTestRun(
       return
 
     @local_device_environment.handle_shard_failures_with(
-        self._env.BlacklistDevice)
+        self._env.DenylistDevice)
     @trace_event.traced
     def individual_device_tear_down(dev):
       if str(dev) in self._flag_changers:
@@ -471,7 +480,8 @@ class LocalDeviceInstrumentationTestRun(
     batched_tests = dict()
     other_tests = []
     for test in tests:
-      if 'Batch' in test['annotations']:
+      if 'Batch' in test['annotations'] and 'RequiresRestart' not in test[
+          'annotations']:
         batch_name = test['annotations']['Batch']['value']
         if not batch_name:
           batch_name = test['class']
@@ -590,11 +600,16 @@ class LocalDeviceInstrumentationTestRun(
       wpr_archive_path = os.path.join(host_paths.DIR_SOURCE_ROOT,
                                       wpr_archive_relative_path)
       if not os.path.isdir(wpr_archive_path):
-        raise RuntimeError('WPRArchiveDirectory annotation should point'
-                           'to a directory only.')
+        raise RuntimeError('WPRArchiveDirectory annotation should point '
+                           'to a directory only. '
+                           '{0} exist: {1}'.format(
+                               wpr_archive_path,
+                               os.path.exists(wpr_archive_path)))
 
-      archive_path = os.path.join(wpr_archive_path,
-                                  self._GetUniqueTestName(test) + '.wprgo')
+      # Some linux version does not like # in the name. Replaces it with __.
+      archive_path = os.path.join(
+          wpr_archive_path,
+          _ReplaceUncommonChars(self._GetUniqueTestName(test)) + '.wprgo')
 
       if not os.path.exists(_WPR_GO_LINUX_X86_64_PATH):
         # If we got to this stage, then we should have
@@ -637,6 +652,7 @@ class LocalDeviceInstrumentationTestRun(
 
       if self._env.trace_output:
         self._SaveTraceData(trace_device_file, device, test['class'])
+
 
       def restore_flags():
         if flags_to_add:
@@ -785,24 +801,30 @@ class LocalDeviceInstrumentationTestRun(
       logging.debug('raw output from %s:', test_display_name)
       for l in output:
         logging.debug('  %s', l)
+
     if self._test_instance.store_tombstones:
-      tombstones_url = None
-      for result in results:
-        if result.GetType() == base_test_result.ResultType.CRASH:
-          if not tombstones_url:
-            resolved_tombstones = tombstones.ResolveTombstones(
-                device,
-                resolve_all_tombstones=True,
-                include_stack_symbols=False,
-                wipe_tombstones=True,
-                tombstone_symbolizer=self._test_instance.symbolizer)
-            tombstone_filename = 'tombstones_%s_%s' % (
-                time.strftime('%Y%m%dT%H%M%S-UTC', time.gmtime()),
-                device.serial)
-            with self._env.output_manager.ArchivedTempfile(
-                tombstone_filename, 'tombstones') as tombstone_file:
-              tombstone_file.write('\n'.join(resolved_tombstones))
+      resolved_tombstones = tombstones.ResolveTombstones(
+          device,
+          resolve_all_tombstones=True,
+          include_stack_symbols=False,
+          wipe_tombstones=True,
+          tombstone_symbolizer=self._test_instance.symbolizer)
+      if resolved_tombstones:
+        tombstone_filename = 'tombstones_%s_%s' % (time.strftime(
+            '%Y%m%dT%H%M%S-UTC', time.gmtime()), device.serial)
+        with self._env.output_manager.ArchivedTempfile(
+            tombstone_filename, 'tombstones') as tombstone_file:
+          tombstone_file.write('\n'.join(resolved_tombstones))
+
+        # Associate tombstones with first crashing test.
+        for result in results:
+          if result.GetType() == base_test_result.ResultType.CRASH:
             result.SetLink('tombstones', tombstone_file.Link())
+            break
+        else:
+          # We don't always detect crashes correctly. In this case,
+          # associate with the first test.
+          results[0].SetLink('tombstones', tombstone_file.Link())
     return results, None
 
   def _GetTestsFromRunner(self):
@@ -979,7 +1001,6 @@ class LocalDeviceInstrumentationTestRun(
     if not self._render_tests_device_output_dir:
       return
     self._ProcessSkiaGoldRenderTestResults(device, results)
-    self._ProcessLocalRenderTestResults(device, results)
 
   def _ProcessSkiaGoldRenderTestResults(self, device, results):
     gold_dir = posixpath.join(self._render_tests_device_output_dir,
@@ -995,8 +1016,8 @@ class LocalDeviceInstrumentationTestRun(
       # Pull everything at once instead of pulling individually, as it's
       # slightly faster since each command over adb has some overhead compared
       # to doing the same thing locally.
-      device.PullFile(gold_dir, host_dir)
       host_dir = os.path.join(host_dir, _DEVICE_GOLD_DIR)
+      device.PullFile(gold_dir, host_dir)
       for image_name in os.listdir(host_dir):
         if not image_name.endswith('.png'):
           continue
@@ -1012,15 +1033,50 @@ class LocalDeviceInstrumentationTestRun(
               'when doing Skia Gold comparison.' % image_name)
           continue
 
+        # Add 'ignore': '1' if a comparison failure would not be surfaced, as
+        # that implies that we aren't actively maintaining baselines for the
+        # test. This helps prevent unrelated CLs from getting comments posted to
+        # them.
+        # Additionally, add the ignore if we're running on a trybot and this is
+        # not our final retry attempt in order to prevent unrelated CLs from
+        # getting spammed if a test is flaky.
+        optional_keys = {}
+        with open(json_path) as infile:
+          # All the key/value pairs in the JSON file are strings, so convert
+          # to a bool.
+          json_dict = json.load(infile)
+          fail_on_unsupported = json_dict.get('fail_on_unsupported_configs',
+                                              'false')
+          fail_on_unsupported = fail_on_unsupported.lower() == 'true'
+        running_on_unsupported = (
+            device.build_version_sdk not in RENDER_TEST_MODEL_SDK_CONFIGS.get(
+                device.product_model, []) and not fail_on_unsupported)
+        # TODO(skbug.com/10787): Remove the ignore on non-final retry once we
+        # fully switch over to using the Gerrit plugin for surfacing Gold
+        # information since it does not spam people with emails due to automated
+        # comments.
+        not_final_retry = self._env.current_try + 1 != self._env.max_tries
+        tryjob_but_not_final_retry =\
+            not_final_retry and gold_properties.IsTryjobRun()
+        should_ignore_in_gold =\
+            running_on_unsupported or tryjob_but_not_final_retry
+        # We still want to fail the test even if we're ignoring the image in
+        # Gold if we're running on a supported configuration, so
+        # should_ignore_in_gold != should_hide_failure.
+        should_hide_failure = running_on_unsupported
+        if should_ignore_in_gold:
+          optional_keys['ignore'] = '1'
+
         gold_session = self._skia_gold_session_manager.GetSkiaGoldSession(
-            keys_file=json_path)
+            keys_input=json_path)
 
         try:
           status, error = gold_session.RunComparison(
               name=render_name,
               png_file=image_path,
               output_manager=self._env.output_manager,
-              use_luci=use_luci)
+              use_luci=use_luci,
+              optional_keys=optional_keys)
         except Exception as e:  # pylint: disable=broad-except
           _FailTestIfNecessary(results)
           _AppendToLog(results, 'Skia Gold comparison raised exception: %s' % e)
@@ -1032,14 +1088,7 @@ class LocalDeviceInstrumentationTestRun(
         # Don't fail the test if we ran on an unsupported configuration unless
         # the test has explicitly opted in, as it's likely that baselines
         # aren't maintained for that configuration.
-        with open(json_path) as infile:
-          # All the key/value pairs in the JSON file are strings, so convert
-          # to a bool.
-          fail_on_unsupported = json.load(infile).get(
-              'fail_on_unsupported_configs', 'false')
-          fail_on_unsupported = fail_on_unsupported.lower() == 'true'
-        if device.build_version_sdk not in RENDER_TEST_MODEL_SDK_CONFIGS.get(
-            device.product_model, []) and not fail_on_unsupported:
+        if should_hide_failure:
           if self._test_instance.skia_gold_properties.local_pixel_tests:
             _AppendToLog(
                 results, 'Gold comparison for %s failed, but model %s with SDK '
@@ -1058,7 +1107,8 @@ class LocalDeviceInstrumentationTestRun(
         failure_log = (
             'Skia Gold reported failure for RenderTest %s. See '
             'RENDER_TESTS.md for how to fix this failure.' % render_name)
-        status_codes = gold_utils.SkiaGoldSession.StatusCodes
+        status_codes =\
+            self._skia_gold_session_manager.GetSessionClass().StatusCodes
         if status == status_codes.AUTH_FAILURE:
           _AppendToLog(results,
                        'Gold authentication failed with output %s' % error)
@@ -1066,8 +1116,9 @@ class LocalDeviceInstrumentationTestRun(
           _AppendToLog(results,
                        'Gold initialization failed with output %s' % error)
         elif status == status_codes.COMPARISON_FAILURE_REMOTE:
-          triage_link = gold_session.GetTriageLink(render_name)
-          if not triage_link:
+          public_triage_link, internal_triage_link =\
+              gold_session.GetTriageLinks(render_name)
+          if not public_triage_link:
             _AppendToLog(
                 results, 'Failed to get triage link for %s, raw output: %s' %
                 (render_name, error))
@@ -1076,12 +1127,19 @@ class LocalDeviceInstrumentationTestRun(
                 gold_session.GetTriageLinkOmissionReason(render_name))
             continue
           if gold_properties.IsTryjobRun():
-            _SetLinkOnResults(results, 'Skia Gold triage link for entire CL',
-                              triage_link)
-          else:
             _SetLinkOnResults(results,
-                              'Skia Gold triage link for %s' % render_name,
-                              triage_link)
+                              'Public Skia Gold triage link for entire CL',
+                              public_triage_link)
+            _SetLinkOnResults(results,
+                              'Internal Skia Gold triage link for entire CL',
+                              internal_triage_link)
+          else:
+            _SetLinkOnResults(
+                results, 'Public Skia Gold triage link for %s' % render_name,
+                public_triage_link)
+            _SetLinkOnResults(
+                results, 'Internal Skia Gold triage link for %s' % render_name,
+                internal_triage_link)
           _AppendToLog(results, failure_log)
 
         elif status == status_codes.COMPARISON_FAILURE_LOCAL:
@@ -1106,62 +1164,6 @@ class LocalDeviceInstrumentationTestRun(
           logging.error(
               'Given unhandled SkiaGoldSession StatusCode %s with error %s',
               status, error)
-
-  def _ProcessLocalRenderTestResults(self, device, results):
-    failure_images_device_dir = posixpath.join(
-        self._render_tests_device_output_dir, 'failures')
-    if not device.FileExists(failure_images_device_dir):
-      return
-
-    diff_images_device_dir = posixpath.join(
-        self._render_tests_device_output_dir, 'diffs')
-
-    golden_images_device_dir = posixpath.join(
-        self._render_tests_device_output_dir, 'goldens')
-
-    for failure_filename in device.ListDirectory(failure_images_device_dir):
-
-      with self._env.output_manager.ArchivedTempfile(
-          'fail_%s' % failure_filename, 'render_tests',
-          output_manager.Datatype.PNG) as failure_image_host_file:
-        device.PullFile(
-            posixpath.join(failure_images_device_dir, failure_filename),
-            failure_image_host_file.name)
-      failure_link = failure_image_host_file.Link()
-
-      golden_image_device_file = posixpath.join(
-          golden_images_device_dir, failure_filename)
-      if device.PathExists(golden_image_device_file):
-        with self._env.output_manager.ArchivedTempfile(
-            'golden_%s' % failure_filename, 'render_tests',
-            output_manager.Datatype.PNG) as golden_image_host_file:
-          device.PullFile(
-              golden_image_device_file, golden_image_host_file.name)
-        golden_link = golden_image_host_file.Link()
-      else:
-        golden_link = ''
-
-      diff_image_device_file = posixpath.join(
-          diff_images_device_dir, failure_filename)
-      if device.PathExists(diff_image_device_file):
-        with self._env.output_manager.ArchivedTempfile(
-            'diff_%s' % failure_filename, 'render_tests',
-            output_manager.Datatype.PNG) as diff_image_host_file:
-          device.PullFile(
-              diff_image_device_file, diff_image_host_file.name)
-        diff_link = diff_image_host_file.Link()
-      else:
-        diff_link = ''
-
-      processed_template_output = _GenerateRenderTestHtml(
-          failure_filename, failure_link, golden_link, diff_link)
-
-      with self._env.output_manager.ArchivedTempfile(
-          '%s.html' % failure_filename, 'render_tests',
-          output_manager.Datatype.HTML) as html_results:
-        html_results.write(processed_template_output)
-        html_results.flush()
-      _SetLinkOnResults(results, failure_filename, html_results.Link())
 
   #override
   def _ShouldRetry(self, test, result):
@@ -1212,6 +1214,17 @@ def _GetWPRArchivePath(test):
   """Retrieves the archive path from the WPRArchiveDirectory annotation."""
   return test['annotations'].get(WPR_ARCHIVE_FILE_PATH_ANNOTATION,
                                  {}).get('value', ())
+
+
+def _ReplaceUncommonChars(original):
+  """Replaces uncommon characters with __."""
+  if not original:
+    raise ValueError('parameter should not be empty')
+
+  uncommon_chars = ['#']
+  for char in uncommon_chars:
+    original = original.replace(char, '__')
+  return original
 
 
 def _IsRenderTest(test):

@@ -24,6 +24,7 @@ import android.widget.TextView;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matcher;
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -39,6 +40,7 @@ import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
@@ -54,7 +56,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@Features.EnableFeatures(ChromeFeatureList.QUERY_TILES)
+@Features.EnableFeatures({ChromeFeatureList.QUERY_TILES, ChromeFeatureList.QUERY_TILES_IN_NTP})
 public class QueryTileSectionTest {
     private static final String SEARCH_URL_PATTERN = "https://www.google.com/search?q=";
 
@@ -208,16 +210,15 @@ public class QueryTileSectionTest {
     }
 
     private String getTabUrl() {
-        return mActivityTestRule.getActivity().getActivityTab().getUrl().getValidSpecOrEmpty();
+        return ChromeTabUtils.getUrlOnUiThread(mActivityTestRule.getActivity().getActivityTab())
+                .getValidSpecOrEmpty();
     }
 
     private void waitForSearchResultsPage() {
-        CriteriaHelper.pollUiThread(
-                new Criteria("The SRP was never loaded. " + mTab.getUrl().getValidSpecOrEmpty()) {
-                    @Override
-                    public boolean isSatisfied() {
-                        return mTab.getUrl().getValidSpecOrEmpty().contains(SEARCH_URL_PATTERN);
-                    }
-                });
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat("The SRP was never loaded.",
+                    ChromeTabUtils.getUrlOnUiThread(mTab).getValidSpecOrEmpty(),
+                    Matchers.containsString(SEARCH_URL_PATTERN));
+        });
     }
 }

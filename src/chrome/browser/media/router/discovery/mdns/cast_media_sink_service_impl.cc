@@ -7,16 +7,17 @@
 #include "base/bind.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/discovery/mdns/media_sink_util.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/net/system_network_context_manager.h"
-#include "chrome/common/media_router/discovery/media_sink_internal.h"
-#include "chrome/common/media_router/media_sink.h"
 #include "components/cast_channel/cast_channel_enum.h"
 #include "components/cast_channel/cast_socket_service.h"
 #include "components/cast_channel/logger.h"
+#include "components/media_router/common/discovery/media_sink_internal.h"
+#include "components/media_router/common/media_sink.h"
 #include "components/net_log/chrome_net_log.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/backoff_entry.h"
@@ -25,6 +26,8 @@
 namespace media_router {
 
 namespace {
+
+constexpr char kLoggerComponent[] = "CastMediaSinkServiceImpl";
 
 MediaSinkInternal CreateCastSinkFromDialSink(
     const MediaSinkInternal& dial_sink) {
@@ -49,8 +52,8 @@ MediaSinkInternal CreateCastSinkFromDialSink(
   return MediaSinkInternal(sink, extra_data);
 }
 
-void RecordError(cast_channel::ChannelError channel_error,
-                 cast_channel::LastError last_error) {
+MediaRouterChannelError RecordError(cast_channel::ChannelError channel_error,
+                                    cast_channel::LastError last_error) {
   MediaRouterChannelError error_code = MediaRouterChannelError::UNKNOWN;
 
   switch (channel_error) {
@@ -120,6 +123,7 @@ void RecordError(cast_channel::ChannelError channel_error,
   }
 
   CastAnalytics::RecordDeviceChannelError(error_code);
+  return error_code;
 }
 
 // Max allowed values
@@ -301,7 +305,7 @@ void CastMediaSinkServiceImpl::OnError(const cast_channel::CastSocket& socket,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   cast_channel::LastError last_error =
       cast_socket_service_->GetLogger()->GetLastError(socket.id());
-  RecordError(error_state, last_error);
+  MediaRouterChannelError error_code = RecordError(error_state, last_error);
 
   net::IPEndPoint ip_endpoint = socket.ip_endpoint();
   // Need a PostTask() here because RemoveSocket() will release the memory of
@@ -321,6 +325,13 @@ void CastMediaSinkServiceImpl::OnError(const cast_channel::CastSocket& socket,
       std::find_if(sinks.begin(), sinks.end(), [&socket_id](const auto& entry) {
         return entry.second.cast_data().cast_channel_id == socket_id;
       });
+  if (logger_.is_bound()) {
+    auto sink_id = sink_it == sinks.end() ? "" : sink_it->first;
+    logger_->LogError(mojom::LogCategory::kDiscovery, kLoggerComponent,
+                      base::StringPrintf("MediaRouterChannelError: %d",
+                                         static_cast<int>(error_code)),
+                      sink_id, "", "");
+  }
   if (sink_it == sinks.end()) {
     return;
   }
@@ -591,12 +602,18 @@ void CastMediaSinkServiceImpl::OnChannelOpenFailed(
     const net::IPEndPoint& ip_endpoint,
     const MediaSinkInternal& sink) {
   // Check that the IPEndPoints match before removing, as it is possible that
-  // the sink was reconnected under a different IP before this method is called.
+  // the sink was reconnected under a different IP before this method is
+  // called.
   const MediaSinkInternal* existing_sink = GetSinkById(sink.sink().id());
   if (!existing_sink ||
       !(ip_endpoint == existing_sink->cast_data().ip_endpoint))
     return;
 
+  if (logger_.is_bound()) {
+    logger_->LogError(mojom::LogCategory::kDiscovery, kLoggerComponent,
+                      "Failed to open a channel for sink", sink.sink().id(), "",
+                      "");
+  }
   RemoveSink(sink);
 }
 
@@ -649,6 +666,12 @@ void CastMediaSinkServiceImpl::OpenChannelsNow(
 void CastMediaSinkServiceImpl::SetCastAllowAllIPs(bool allow_all_ips) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   allow_all_ips_ = allow_all_ips;
+}
+
+void CastMediaSinkServiceImpl::BindLogger(
+    mojo::PendingRemote<mojom::Logger> pending_remote) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  logger_.Bind(std::move(pending_remote));
 }
 
 }  // namespace media_router

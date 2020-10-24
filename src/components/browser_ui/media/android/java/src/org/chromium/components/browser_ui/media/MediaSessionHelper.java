@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.SysUtils;
+import org.chromium.components.browser_ui.media.MediaSessionUma.MediaSessionActionSource;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.MediaSession;
 import org.chromium.content_public.browser.MediaSessionObserver;
@@ -56,7 +57,8 @@ public class MediaSessionHelper implements MediaImageCallback {
     private Bitmap mCurrentMediaImage;
     private String mOrigin;
     private int mPreviousVolumeControlStream = AudioManager.USE_DEFAULT_STREAM_TYPE;
-    private MediaNotificationInfo.Builder mNotificationInfoBuilder;
+    @VisibleForTesting
+    public MediaNotificationInfo.Builder mNotificationInfoBuilder;
     // The fallback title if |mPageMetadata| is null or its title is empty.
     private String mFallbackTitle;
     // Set to true if favicon update callback was called at least once.
@@ -225,7 +227,7 @@ public class MediaSessionHelper implements MediaImageCallback {
                 // delegate will pass a favicon later, show nothing for now; we expect the favicon
                 // to arrive quickly.
                 if (mWebContents.isIncognito()
-                        || (mCurrentMediaImage == null && fetchLargeFaviconImage())) {
+                        || (mCurrentMediaImage == null && !fetchLargeFaviconImage())) {
                     mNotificationInfoBuilder.setDefaultNotificationLargeIcon(
                             R.drawable.audio_playing_square);
                 }
@@ -263,6 +265,8 @@ public class MediaSessionHelper implements MediaImageCallback {
     }
 
     public void setWebContents(@NonNull WebContents webContents) {
+        if (mWebContents == webContents) return;
+
         mWebContents = webContents;
 
         if (mWebContentsObserver != null) mWebContentsObserver.destroy();
@@ -408,18 +412,18 @@ public class MediaSessionHelper implements MediaImageCallback {
      *               {@link MediaNotificationListener} interface.
      * @return the corresponding histogram value.
      */
-    public static @MediaSessionUma.MediaSessionActionSource int convertMediaActionSourceToUMA(
+    public static @Nullable @MediaSessionActionSource Integer convertMediaActionSourceToUMA(
             int source) {
         if (source == MediaNotificationListener.ACTION_SOURCE_MEDIA_NOTIFICATION) {
-            return MediaSessionUma.MediaSessionActionSource.MEDIA_NOTIFICATION;
+            return MediaSessionActionSource.MEDIA_NOTIFICATION;
         } else if (source == MediaNotificationListener.ACTION_SOURCE_MEDIA_SESSION) {
-            return MediaSessionUma.MediaSessionActionSource.MEDIA_SESSION;
+            return MediaSessionActionSource.MEDIA_SESSION;
         } else if (source == MediaNotificationListener.ACTION_SOURCE_HEADSET_UNPLUG) {
-            return MediaSessionUma.MediaSessionActionSource.HEADSET_UNPLUG;
+            return MediaSessionActionSource.HEADSET_UNPLUG;
         }
 
         assert false;
-        return MediaSessionUma.MediaSessionActionSource.NUM_ENTRIES;
+        return null;
     }
 
     private Activity getActivity() {

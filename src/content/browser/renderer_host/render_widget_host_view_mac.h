@@ -80,6 +80,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       public remote_cocoa::mojom::RenderWidgetHostNSViewHost,
       public BrowserCompositorMacClient,
       public TextInputManager::Observer,
+      public RenderFrameMetadataProvider::Observer,
       public ui::GestureProviderClient,
       public ui::AcceleratedWidgetMacNSView,
       public ui::AccessibilityFocusOverrider::Client,
@@ -115,7 +116,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override;
   void SpeakSelection() override;
-  void GetScreenInfo(ScreenInfo* screen_info) override;
+  void SetWindowFrameInScreen(const gfx::Rect& rect) override;
+  void GetScreenInfo(blink::ScreenInfo* screen_info) override;
   void TakeFallbackContentFrom(RenderWidgetHostView* view) override;
 
   // Implementation of RenderWidgetHostViewBase.
@@ -161,6 +163,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   blink::mojom::PointerLockResult LockMouse(bool) override;
   blink::mojom::PointerLockResult ChangeMouseLock(bool) override;
   void UnlockMouse() override;
+  bool GetIsMouseLockedUnadjustedMovementForTesting() override;
+  // Returns true when running on a recent enough OS for unaccelerated pointer
+  // events.
+  static bool IsUnadjustedMouseMovementSupported();
   bool LockKeyboard(base::Optional<base::flat_set<ui::DomCode>> codes) override;
   void UnlockKeyboard() override;
   bool IsKeyboardLocked() override;
@@ -177,8 +183,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       override;
 
   const viz::FrameSinkId& GetFrameSinkId() const override;
-  const viz::LocalSurfaceIdAllocation& GetLocalSurfaceIdAllocation()
-      const override;
+  const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
   // Returns true when we can hit test input events with location data to be
   // sent to the targeted RenderWidgetHost.
   bool ShouldRouteEvents() const;
@@ -221,7 +226,12 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void OnGestureEvent(const ui::GestureEventData& gesture) override;
 
   // RenderFrameMetadataProvider::Observer
+  void OnRenderFrameMetadataChangedBeforeActivation(
+      const cc::RenderFrameMetadata& metadata) override {}
   void OnRenderFrameMetadataChangedAfterActivation() override;
+  void OnRenderFrameSubmission() override {}
+  void OnLocalSurfaceIdChanged(
+      const cc::RenderFrameMetadata& metadata) override {}
 
   // IPC::Sender implementation.
   bool Send(IPC::Message* message) override;
@@ -469,6 +479,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // |cocoa_view_|.
   void SetParentAccessibilityElement(id parent_accessibility_element);
 
+  RenderWidgetHostViewMac* PopupChildHostView() {
+    return popup_child_host_view_;
+  }
+
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
 
  protected:
@@ -622,6 +636,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // indicates what the change in position of the mouse would be had it not been
   // locked.
   bool mouse_locked_ = false;
+
+  // Tracks whether unaccelerated mouse motion events are sent while the mouse
+  // is locked.
+  bool mouse_lock_unadjusted_movement_ = false;
 
   // Latest capture sequence number which is incremented when the caller
   // requests surfaces be synchronized via

@@ -168,7 +168,17 @@ Try tapping the mic to ask me anything.
 
       <!-- Managed user session warning -->
       <message name="IDS_ASH_LOGIN_MANAGED_SESSION_MONITORING_USER_WARNING" desc="Text shown in the user pod in case the user is managed.">
-        <ph name="ENROLLMENT_DOMAIN">$1<ex>example.com</ex></ph> manages this user. It may remotely manage settings and monitor user activity.
+        <ph name="ENROLLMENT_DOMAIN">$1<ex>example.com</ex></ph> manages this user and may remotely manage settings and monitor user activity.
+      </message>
+
+      <!-- Pop-up enterprise management. -->
+      <message name="IDS_ASH_LOGIN_ENTERPRISE_MANAGED_POP_UP" desc="Text shown in the management pop-up when user clicks on status tray enterprise management.">
+        This <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is managed by <ph name="ENROLLMENT_DOMAIN">$2<ex>example.com</ex></ph>. Administrators may remotely configure the device.
+      </message>
+
+      <!-- Pop-up secondary login screen. -->
+      <message name="IDS_ASH_LOGIN_USER_ADDING_BANNER" desc="Text shown on a banner in user adding screen.">
+        Add an account to multiple sign-in. All signed-in accounts can be accessed without a password, so this feature should only be used with trusted accounts.
       </message>
 
       <!-- Status tray enterprise management. -->
@@ -209,6 +219,9 @@ Try tapping the mic to ask me anything.
       </message>
       <message name="IDS_ASH_SHELF_APPS_BUTTON" desc="Text shown on apps button on login screen.">
         Apps
+      </message>
+      <message name="IDS_ASH_ENTERPRISE_ENROLLMENT_BUTTON" desc="Text shown on enterprise enrollment button on oobe screen.">
+        Enterprise enrollment
       </message>
 
       <message name="IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE" desc="The title used for the Ash Launcher in the Shelf (not mentioning 'Apps' since this is a general launcher).">
@@ -309,7 +322,9 @@ Try tapping the mic to ask me anything.
         <ph name="ATTEMPTS_LEFT">$1<ex>3</ex></ph> attempts left
       </message>
       <message name="IDS_REQUEST_PIN_DIALOG_ERROR_ATTEMPTS" desc="The text displayed in the certificate provider PIN request dialog when the previous login attempt was unsuccessful but there are more attempts remaining. Includes the reason for the previous failure.">
-        <ph name="ERROR_MESSAGE">$1<ex>Invalid PIN.</ex></ph> <ph name="ATTEMPTS_LEFT">$2<ex>3</ex></ph> attempts left
+        {ATTEMPTS_LEFT, plural,
+          =1 {<ph name="ERROR_MESSAGE">{1}<ex>Invalid PIN.</ex></ph> {0} attempt left}
+          other {<ph name="ERROR_MESSAGE">{1}<ex>Invalid PIN.</ex></ph> {0} attempts left}}
       </message>
 
       <!-- Print Management App -->
@@ -332,6 +347,9 @@ Try tapping the mic to ask me anything.
         Status
       </message>
       <message name="IDS_PRINT_MANAGEMENT_TITLE" desc="The title of the print management app.">
+        Print jobs
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_APP_NAME" desc="The app name of the print management app.">
         Print Jobs
       </message>
       <message name="IDS_PRINT_MANAGEMENT_CLEAR_ALL_HISTORY_BUTTON_TEXT" desc="The label for the button that clears the print job history.">
@@ -349,8 +367,14 @@ Try tapping the mic to ask me anything.
       <message name="IDS_PRINT_MANAGEMENT_HISTORY_HEADER_LABEL" desc="The header label that indicates that print jobs below this header are the user's print history.">
         History
       </message>
-      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP" desc="The tooltip that states that the user's print jobs are automatically deleted after 90 days.">
-        Print jobs older than 90 days will be removed
+      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP_INDEFINITE" desc="The tooltip that states that the user's print jobs are stored indefinitely.">
+        Print jobs will appear in history unless they are removed manually
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP_MULTIPLE_DAYS_EXPIRATION" desc="The tooltip that states that the user's print jobs are automatically deleted after a variable amount of days.">
+        Print jobs older than <ph name="NUMBER_OF_DAYS">$1<ex>45</ex></ph> days will be removed
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP_SINGLE_DAY_EXPIRATION" desc="The tooltip that states that the user's print jobs are automatically deleted after one day.">
+        Print jobs older than 1 day will be removed
       </message>
       <message name="IDS_PRINT_MANAGEMENT_PRINTED_PAGES_ARIA_LABEL" desc="The aria label that describes the current page printed printed versus the total number of pages.">
         Printed page <ph name="PRINTED_PAGES">$1<ex>1</ex></ph> out of <ph name="TOTAL_PAGES">$2<ex>2</ex></ph>.
@@ -361,8 +385,11 @@ Try tapping the mic to ask me anything.
       <message name="IDS_PRINT_MANAGEMENT_COMPLETED_JOB_ARIA_LABEL" desc="The aria label that describes a completed print job that includes the print job documenet title, printer name, creation time, and completion status. This is a sentence with commas and spaces (minor pause) between placeholders.">
         <ph name="DOCUMENT_TITLE">$1<ex>my_essay.doc</ex></ph>, <ph name="PRINTER_NAME">$2<ex>canon 6450</ex></ph>, <ph name="CREATION_TIME">$3<ex>February 8, 2020</ex></ph>, <ph name="COMPLETION_STATUS">$4<ex>Printed</ex></ph>
       </message>
-      <message name="IDS_PRINT_MANAGEMENT_ONGOING_JOB_ARIA_LABEL" desc="The aria label that describes an ongoing print job that includes the print job documenet title, printer name, creation time, and ongoing status.">
-        <ph name="DOCUMENT_TITLE">$1<ex>my_essay.doc</ex></ph>, <ph name="PRINTER_NAME">$2<ex>canon 6450</ex></ph>, <ph name="CREATION_TIME">$3<ex>February 8, 2020</ex></ph>, <ph name="PRINTED_PAGE_NUMBER">$4<ex>5</ex></ph> out of <ph name="TOTAL_PAGE_NUMBER">$5<ex>7</ex></ph>
+      <message name="IDS_PRINT_MANAGEMENT_ONGOING_JOB_ARIA_LABEL" desc="The aria label that describes an ongoing print job that includes the print job documenet title, printer name, creation time, and ongoing status. Also notifies users that the ongoing print job can be cancelled with the 'Enter' key. This is only used for ChromeVox voice transcriptions.">
+        <ph name="DOCUMENT_TITLE">$1<ex>my_essay.doc</ex></ph>, <ph name="PRINTER_NAME">$2<ex>canon 6450</ex></ph>, <ph name="CREATION_TIME">$3<ex>February 8, 2020</ex></ph>, <ph name="PRINTED_PAGE_NUMBER">$4<ex>5</ex></ph> out of <ph name="TOTAL_PAGE_NUMBER">$5<ex>7</ex></ph>. Press enter to cancel the print job.
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_STOPPED_ONGOING_JOB_ARIA_LABEL" desc="The aria label that describes a stopped print job that includes the print job documenet title, printer name, creation time, and error status. This is a sentence with commas and spaces (minor pause) between placeholders.">
+        <ph name="DOCUMENT_TITLE">$1<ex>my_essay.doc</ex></ph>, <ph name="PRINTER_NAME">$2<ex>canon 6450</ex></ph>, <ph name="CREATION_TIME">$3<ex>February 8, 2020</ex></ph>, <ph name="ERROR_STATUS">$4<ex>Stopped - Out of paper</ex></ph>
       </message>
       <message name="IDS_PRINT_MANAGEMENT_PAPER_JAM_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because of a printer paper jam.">
         Failed - Paper jam
@@ -397,9 +424,144 @@ Try tapping the mic to ask me anything.
       <message name="IDS_PRINT_MANAGEMENT_NO_PRINT_JOBS_IN_PROGRESS_MESSAGE" desc="The message shown to users if they do not have any print jobs in progress i.e. being printed.">
         No print jobs in progress
       </message>
+      <message name="IDS_PRINT_MANAGEMENT_PAPER_JAM_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job has stopped because of a printer paper jam.">
+        Stopped - Paper jam
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_OUT_OF_PAPER_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job has stopped because their printer is out out of paper.">
+        Stopped - Out of paper
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_OUT_OF_INK_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job has stopped because their printer is out of ink.">
+        Stopped - Out of ink
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_DOOR_OPEN_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job stopped because their printer door is open.">
+        Stopped - Door open
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_TRAY_MISSING_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job stopped because their printer's tray is missing.">
+        Stopped - Tray missing
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_OUTPUT_FULL_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job stopped because their printer's output is full .">
+        Stopped - Output full
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_GENERIC_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job stopped.">
+        Stopped
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_UNKNOWN_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job stopped due to an unknown error.">
+        Stopped - Unknown error
+      </message>
       <message name="IDS_PRINT_MANAGEMENT_CLEAR_ALL_POLICY_PRINT_JOB_INDICATOR_MESSAGE" desc="The message shown to indicate that a user policy is in place to prevent the user from deleting their print job history.">
         This action is managed by your administrator
       </message>
+      <message name="IDS_PRINT_MANAGEMENT_CANCEL_PRINT_JOB_BUTTON_LABEL" desc="The label for the button that cancels a print job.">
+        Cancel print job
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_CANCELED_PRINT_JOB_ARIA_ANNOUNCEMENT" desc="The announcement said to notify ChromeVox that a print job was recently cancelled.">
+        Cancelled print job <ph name="DOCUMENT_TITLE">$1<ex>my_essay.doc</ex></ph>
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_COLLAPSE_PRINTING_STATUS" desc="A text that indicates to the user that the print job is currently printing. This text only appears if the width of the app's window is small and cannot display the entire ongoing printing status.">
+        Printing
+      </message>
+
+      <!-- Scanning App -->
+      <message name="IDS_SCANNING_APP_TITLE" desc="The title of the scanning app.">
+        Scan
+      </message>
+      <message name="IDS_SCANNING_APP_SCANNER_DROPDOWN_LABEL" desc="The label for the dropdown that displays connected scanners.">
+        Scanner
+      </message>
+      <message name="IDS_SCANNING_APP_NO_SCANNERS_TEXT" desc="The text displayed in the scanner dropdown when no scanners are available.">
+        No available scanners
+      </message>
+      <message name="IDS_SCANNING_APP_SOURCE_DROPDOWN_LABEL" desc="The label for the dropdown that displays available scan sources (e.g. flatbed, document feeder, etc.).">
+        Source
+      </message>
+      <message name="IDS_SCANNING_APP_FILE_TYPE_DROPDOWN_LABEL" desc="The label for the dropdown that displays available file types.">
+        File type
+      </message>
+      <message name="IDS_SCANNING_APP_JPG_OPTION_TEXT" desc="The text displayed for the JPG file type option.">
+        JPG
+      </message>
+      <message name="IDS_SCANNING_APP_PDF_OPTION_TEXT" desc="The text displayed for the PDF file type option.">
+        PDF
+      </message>
+      <message name="IDS_SCANNING_APP_PNG_OPTION_TEXT" desc="The text displayed for the PNG file type option.">
+        PNG
+      </message>
+      <message name="IDS_SCANNING_APP_COLOR_MODE_DROPDOWN_LABEL" desc="The label for the dropdown that displays available color modes (e.g. color, grayscale, black and white, etc.).">
+        Color mode
+      </message>
+      <message name="IDS_SCANNING_APP_RESOLUTION_DROPDOWN_LABEL" desc="The label for the dropdown that displays available resolutions (e.g. 150 dpi, 300 dpi, etc.).">
+        Resolution
+      </message>
+      <message name="IDS_SCANNING_APP_RESOLUTION_OPTION_TEXT" desc="The text displayed for an option in the resolution dropdown.">
+        <ph name="RESOLUTION_VALUE">$1<ex>300</ex></ph> dpi
+      </message>
+
+      <!-- Diagnostics App -->
+      <!-- TODO(michaelcheco): Update with finalized copies of the strings -->
+      <message name="IDS_DIAGNOSTICS_TITLE" desc="The title of the diagnostics app." translateable="false">
+        Diagnostics
+      </message>
+      <message name="IDS_DIAGNOSTICS_MEMORY_TITLE" desc="The title of the diagnostics memory section which shows users' information about their computer memory." translateable="false">
+        Memory
+      </message>
+      <message name="IDS_DIAGNOSTICS_BATTERY_TITLE" desc="The title of the diagnostics battery section which shows users' information about their computer battery." translateable="false">
+        Battery
+      </message>
+      <message name="IDS_DIAGNOSTICS_CPU_TITLE" desc="The title of the diagnostics CPU section which shows users' information about their computer CPU usage." translateable="false">
+        CPU
+      </message>
+      <message name="IDS_DIAGNOSTICS_CPU_USAGE_LABEL" desc="The label for the percentage of CPU that is currently being used." translateable="false">
+        Currently using
+      </message>
+      <message name="IDS_DIAGNOSTICS_CPU_USAGE_SYSTEM_LABEL" desc="The label for the percentage of CPU that is currently being used by the system." translateable="false">
+        System
+      </message>
+      <message name="IDS_DIAGNOSTICS_CPU_USAGE_USER_LABEL" desc="The label for the percentage of CPU that is currently being used by the user." translateable="false">
+        User
+      </message>
+      <message name="IDS_DIAGNOSTICS_CPU_TEMPERATURE_LABEL" desc="The label for the current CPU temperature." translateable="false">
+        Temperature
+      </message>
+      <message name="IDS_DIAGNOSTICS_TOTAL_MEMORY_LABEL" desc="The label for the total amount of memory on a device." translateable="false">
+        Total Memory
+      </message>
+      <message name="IDS_DIAGNOSTICS_MEMORY_AVAILABLE_LABEL" desc="The label for the amount of memory available on a device." translateable="false">
+        Memory available
+      </message>
+      <message name="IDS_DIAGNOSTICS_PERCENTAGE_LABEL" desc="The label displaying localized percentage." translateable="true">
+        <ph name="PERCENTAGE_VALUE">$1<ex>50</ex></ph>%
+      </message>
+      <message name="IDS_DIAGNOSTICS_POWER_LABEL" desc="The label for the power adapter status." translateable="false">
+        Power
+      </message>
+      <message name="IDS_DIAGNOSTICS_POWER_TIME_LABEL" desc="The label for the time until the battery is fully charged." translateable="false">
+        Time until full
+      </message>
+      <message name="IDS_DIAGNOSTICS_CHARGE_NOW_LABEL" desc="The label for a battery's current battery level represented in milliamps." translateable="false">
+        Now charge
+      </message>
+      <message name="IDS_DIAGNOSTICS_CURRENT_NOW_LABEL" desc="The label for a battery's current power consumption represented in milliamps." translateable="false">
+        Now current
+      </message>
+      <message name="IDS_DIAGNOSTICS_DESIGNED_FULL_CHARGE_LABEL" desc="The label for a battery's designed full charge capacity represented in milliamp hours." translateable="false">
+        Designed full charge
+      </message>
+      <message name="IDS_DIAGNOSTICS_NOW_FULL_CHARGE_LABEL" desc="The label for a battery's full charge capacity represented in milliamp hours." translateable="false">
+        Now full charge
+      </message>
+      <message name="IDS_DIAGNOSTICS_CYCLE_COUNT_LABEL" desc="The label for a battery's cycle count. The cycle count is the number of times the battery has been drained and recharged." translateable="false">
+        Cycle count
+      </message>
+      <message name="IDS_DIAGNOSTICS_REMAINING_CHARGE_LABEL" desc="The label for the progress bar that displays users' remaining battery charge." translateable="false">
+        Remaining charge
+      </message>
+      <message name="IDS_DIAGNOSTICS_SESSION_LOG_LABEL" desc="The label for the button that opens the session log for the diagnostics app." translateable="false">
+        Session log
+      </message>
+      <message name="IDS_DIAGNOSTICS_USED_MEMORY_LABEL" desc="The label for the progress bar that displays the amount of used memory on a users' device." translateable="false">
+        Used memory
+      </message>
+
     </messages>
   </release>
 </grit>

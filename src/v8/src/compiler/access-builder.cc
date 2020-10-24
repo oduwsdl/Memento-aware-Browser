@@ -17,7 +17,7 @@
 #include "src/objects/objects-inl.h"
 #include "src/objects/ordered-hash-table.h"
 #include "src/objects/source-text-module.h"
-#include "torque-generated/exported-class-definitions-tq.h"
+#include "torque-generated/exported-class-definitions.h"
 
 namespace v8 {
 namespace internal {
@@ -425,20 +425,34 @@ FieldAccess AccessBuilder::ForJSTypedArrayExternalPointer() {
                                              : Type::ExternalPointer(),
                         MachineType::Pointer(),
                         kNoWriteBarrier,
-                        LoadSensitivity::kCritical};
+                        LoadSensitivity::kCritical,
+                        ConstFieldInfo::None(),
+                        false,
+#ifdef V8_HEAP_SANDBOX
+                        kTypedArrayExternalPointerTag
+#endif
+  };
   return access;
 }
 
 // static
 FieldAccess AccessBuilder::ForJSDataViewDataPointer() {
-  FieldAccess access = {kTaggedBase,
-                        JSDataView::kDataPointerOffset,
-                        MaybeHandle<Name>(),
-                        MaybeHandle<Map>(),
-                        V8_HEAP_SANDBOX_BOOL ? Type::SandboxedExternalPointer()
-                                             : Type::ExternalPointer(),
-                        MachineType::Pointer(),
-                        kNoWriteBarrier};
+  FieldAccess access = {
+      kTaggedBase,
+      JSDataView::kDataPointerOffset,
+      MaybeHandle<Name>(),
+      MaybeHandle<Map>(),
+      V8_HEAP_SANDBOX_BOOL ? Type::SandboxedExternalPointer()
+                           : Type::ExternalPointer(),
+      MachineType::Pointer(),
+      kNoWriteBarrier,
+      LoadSensitivity::kUnsafe,
+      ConstFieldInfo::None(),
+      false,
+#ifdef V8_HEAP_SANDBOX
+      kDataViewDataPointerTag,
+#endif
+  };
   return access;
 }
 
@@ -525,6 +539,18 @@ FieldAccess AccessBuilder::ForFixedArrayLength() {
                         MaybeHandle<Name>(),
                         MaybeHandle<Map>(),
                         TypeCache::Get()->kFixedArrayLengthType,
+                        MachineType::TaggedSigned(),
+                        kNoWriteBarrier};
+  return access;
+}
+
+// static
+FieldAccess AccessBuilder::ForWeakFixedArrayLength() {
+  FieldAccess access = {kTaggedBase,
+                        WeakFixedArray::kLengthOffset,
+                        MaybeHandle<Name>(),
+                        MaybeHandle<Map>(),
+                        TypeCache::Get()->kWeakFixedArrayLengthType,
                         MachineType::TaggedSigned(),
                         kNoWriteBarrier};
   return access;
@@ -625,6 +651,16 @@ FieldAccess AccessBuilder::ForMapPrototype() {
 }
 
 // static
+FieldAccess AccessBuilder::ForMapNativeContext() {
+  FieldAccess access = {
+      kTaggedBase,         Map::kConstructorOrBackPointerOrNativeContextOffset,
+      Handle<Name>(),      MaybeHandle<Map>(),
+      Type::Any(),         MachineType::TaggedPointer(),
+      kPointerWriteBarrier};
+  return access;
+}
+
+// static
 FieldAccess AccessBuilder::ForModuleRegularExports() {
   FieldAccess access = {
       kTaggedBase,           SourceTextModule::kRegularExportsOffset,
@@ -712,14 +748,22 @@ FieldAccess AccessBuilder::ForSlicedStringParent() {
 
 // static
 FieldAccess AccessBuilder::ForExternalStringResourceData() {
-  FieldAccess access = {kTaggedBase,
-                        ExternalString::kResourceDataOffset,
-                        Handle<Name>(),
-                        MaybeHandle<Map>(),
-                        V8_HEAP_SANDBOX_BOOL ? Type::SandboxedExternalPointer()
-                                             : Type::ExternalPointer(),
-                        MachineType::Pointer(),
-                        kNoWriteBarrier};
+  FieldAccess access = {
+      kTaggedBase,
+      ExternalString::kResourceDataOffset,
+      Handle<Name>(),
+      MaybeHandle<Map>(),
+      V8_HEAP_SANDBOX_BOOL ? Type::SandboxedExternalPointer()
+                           : Type::ExternalPointer(),
+      MachineType::Pointer(),
+      kNoWriteBarrier,
+      LoadSensitivity::kUnsafe,
+      ConstFieldInfo::None(),
+      false,
+#ifdef V8_HEAP_SANDBOX
+      kExternalStringResourceTag,
+#endif
+  };
   return access;
 }
 
@@ -839,6 +883,25 @@ FieldAccess AccessBuilder::ForFixedArraySlot(
 }
 
 // static
+FieldAccess AccessBuilder::ForFeedbackVectorSlot(int index) {
+  int offset = FeedbackVector::OffsetOfElementAt(index);
+  FieldAccess access = {kTaggedBase,      offset,
+                        Handle<Name>(),   MaybeHandle<Map>(),
+                        Type::Any(),      MachineType::AnyTagged(),
+                        kFullWriteBarrier};
+  return access;
+}
+
+// static
+FieldAccess AccessBuilder::ForWeakFixedArraySlot(int index) {
+  int offset = WeakFixedArray::OffsetOfElementAt(index);
+  FieldAccess access = {kTaggedBase,      offset,
+                        Handle<Name>(),   MaybeHandle<Map>(),
+                        Type::Any(),      MachineType::AnyTagged(),
+                        kFullWriteBarrier};
+  return access;
+}
+// static
 FieldAccess AccessBuilder::ForCellValue() {
   FieldAccess access = {kTaggedBase,       Cell::kValueOffset,
                         Handle<Name>(),    MaybeHandle<Map>(),
@@ -884,6 +947,14 @@ FieldAccess AccessBuilder::ForContextSlotKnownPointer(size_t index) {
 ElementAccess AccessBuilder::ForFixedArrayElement() {
   ElementAccess access = {kTaggedBase, FixedArray::kHeaderSize, Type::Any(),
                           MachineType::AnyTagged(), kFullWriteBarrier};
+  return access;
+}
+
+// static
+ElementAccess AccessBuilder::ForWeakFixedArrayElement() {
+  ElementAccess const access = {kTaggedBase, WeakFixedArray::kHeaderSize,
+                                Type::Any(), MachineType::AnyTagged(),
+                                kFullWriteBarrier};
   return access;
 }
 
@@ -1165,6 +1236,59 @@ FieldAccess AccessBuilder::ForDictionaryObjectHashIndex() {
       Type::SignedSmall(),
       MachineType::TaggedSigned(),
       kNoWriteBarrier};
+  return access;
+}
+
+// static
+FieldAccess AccessBuilder::ForFeedbackCellValue() {
+  FieldAccess access = {kTaggedBase,      FeedbackCell::kValueOffset,
+                        Handle<Name>(),   MaybeHandle<Map>(),
+                        Type::Any(),      MachineType::TaggedPointer(),
+                        kFullWriteBarrier};
+  return access;
+}
+
+// static
+FieldAccess AccessBuilder::ForFeedbackCellInterruptBudget() {
+  FieldAccess access = {kTaggedBase,
+                        FeedbackCell::kInterruptBudgetOffset,
+                        Handle<Name>(),
+                        MaybeHandle<Map>(),
+                        TypeCache::Get()->kInt32,
+                        MachineType::Int32(),
+                        kNoWriteBarrier};
+  return access;
+}
+
+// static
+FieldAccess AccessBuilder::ForFeedbackVectorInvocationCount() {
+  FieldAccess access = {kTaggedBase,
+                        FeedbackVector::kInvocationCountOffset,
+                        Handle<Name>(),
+                        MaybeHandle<Map>(),
+                        TypeCache::Get()->kInt32,
+                        MachineType::Int32(),
+                        kNoWriteBarrier};
+  return access;
+}
+
+// static
+FieldAccess AccessBuilder::ForFeedbackVectorOptimizedCodeWeakOrSmi() {
+  FieldAccess access = {
+      kTaggedBase,      FeedbackVector::kOptimizedCodeWeakOrSmiOffset,
+      Handle<Name>(),   MaybeHandle<Map>(),
+      Type::Any(),      MachineType::AnyTagged(),
+      kFullWriteBarrier};
+  return access;
+}
+
+// static
+FieldAccess AccessBuilder::ForFeedbackVectorClosureFeedbackCellArray() {
+  FieldAccess access = {
+      kTaggedBase,      FeedbackVector::kClosureFeedbackCellArrayOffset,
+      Handle<Name>(),   MaybeHandle<Map>(),
+      Type::Any(),      MachineType::TaggedPointer(),
+      kFullWriteBarrier};
   return access;
 }
 

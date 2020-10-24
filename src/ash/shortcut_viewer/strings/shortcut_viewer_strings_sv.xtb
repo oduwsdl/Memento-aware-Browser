@@ -47,6 +47,7 @@
 <translation id="2488661730534396940">Aktivera skrivbordet till vänster</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2530339807289914946">Rulla nedåt på webbsidan</translation>
+<translation id="2530896289327917474">Aktivera eller inaktivera textmarkörläge</translation>
 <translation id="2574014812750545982">Återställ zoomnivån på sidan</translation>
 <translation id="2596078834055697711">Ta en skärmdump av fönstret</translation>
 <translation id="2685170433750953446"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" />, sedan <ph name="TAB" /> eller <ph name="RIGHT" /></translation>
@@ -155,7 +156,7 @@
 <translation id="6692847073476874842">Förhandsgranska filerna i appen Filer</translation>
 <translation id="671928215901716392">Lås skärmen</translation>
 <translation id="6727005317916125192">Föregående ruta</translation>
-<translation id="6740781404993465795">Välja nästa ord eller bokstav</translation>
+<translation id="6740781404993465795">Välj nästa ord eller bokstav</translation>
 <translation id="6755851152783057058">Byt till den senast använda inmatningsmetoden</translation>
 <translation id="6760706756348334449">Sänk volymen</translation>
 <translation id="6941333068993625698">Skicka feedback</translation>
@@ -185,6 +186,7 @@
 <translation id="8234414138295101081">Rotera skärmen 90 grader</translation>
 <translation id="8241665785394195545">höger parentes</translation>
 <translation id="8264941229485248811">Visa eller dölj inspektören för Verktyg för programmerare</translation>
+<translation id="8322502972606429618">Visa de senaste objekten som kopierats till urklipp</translation>
 <translation id="836869401750819675">Öppna sidan Nedladdningar</translation>
 <translation id="8388247778047144397">Dra länken till ett tomt område i flikhuvudet</translation>
 <translation id="8389638407792712197">Öppna nytt fönster</translation>

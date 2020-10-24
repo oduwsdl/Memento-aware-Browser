@@ -30,6 +30,7 @@ class InputEngineContext {
 };
 
 // A basic implementation of InputEngine without using any decoder.
+// TODO(https://crbug.com/1019541): Rename this to RuleBasedEngine.
 class InputEngine : public mojom::InputChannel {
  public:
   InputEngine();
@@ -45,9 +46,17 @@ class InputEngine : public mojom::InputChannel {
   // mojom::InputChannel overrides:
   void ProcessMessage(const std::vector<uint8_t>& message,
                       ProcessMessageCallback callback) override;
+  void OnFocus() override;
+  void OnBlur() override;
+  void OnSurroundingTextChanged(
+      const std::string& text,
+      uint32_t offset,
+      mojom::SelectionRangePtr selection_range) override;
   void ProcessKeypressForRulebased(
-      mojom::KeypressInfoForRulebasedPtr keypress_info,
+      mojom::PhysicalKeyEventPtr event,
       ProcessKeypressForRulebasedCallback callback) override;
+  void OnKeyEvent(mojom::PhysicalKeyEventPtr event,
+                  OnKeyEventCallback callback) override;
   void ResetForRulebased() override;
   void GetRulebasedKeypressCountForTesting(
       GetRulebasedKeypressCountForTestingCallback callback) override;

@@ -7,13 +7,13 @@
 #include <algorithm>
 
 #include "base/strings/string_number_conversions.h"
-#include "chrome/browser/chromeos/local_search_service/local_search_service.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/webui/settings/chromeos/hierarchy.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_sections.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_concept.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_result_icon.mojom.h"
-#include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/components/local_search_service/local_search_service_sync.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
@@ -44,14 +44,20 @@ SearchHandler::SearchHandler(
     SearchTagRegistry* search_tag_registry,
     OsSettingsSections* sections,
     Hierarchy* hierarchy,
-    local_search_service::LocalSearchService* local_search_service)
+    local_search_service::LocalSearchServiceSync* local_search_service)
     : search_tag_registry_(search_tag_registry),
       sections_(sections),
       hierarchy_(hierarchy),
-      index_(local_search_service->GetIndex(
-          local_search_service::IndexId::kCrosSettings)) {}
+      index_(local_search_service->GetIndexSync(
+          local_search_service::IndexId::kCrosSettings,
+          local_search_service::Backend::kLinearMap,
+          g_browser_process ? g_browser_process->local_state() : nullptr)) {
+  search_tag_registry_->AddObserver(this);
+}
 
-SearchHandler::~SearchHandler() = default;
+SearchHandler::~SearchHandler() {
+  search_tag_registry_->RemoveObserver(this);
+}
 
 void SearchHandler::BindInterface(
     mojo::PendingReceiver<mojom::SearchHandler> pending_receiver) {
@@ -70,11 +76,11 @@ std::vector<mojom::SearchResultPtr> SearchHandler::Search(
   uint32_t max_local_search_service_results = 5 * max_num_results;
 
   std::vector<local_search_service::Result> local_search_service_results;
-  local_search_service::ResponseStatus response_status = index_->Find(
+  local_search_service::ResponseStatus response_status = index_->FindSync(
       query, max_local_search_service_results, &local_search_service_results);
 
   if (response_status != local_search_service::ResponseStatus::kSuccess) {
-    LOG(ERROR) << "Cannot search; LocalSearchService returned "
+    LOG(ERROR) << "Cannot search; LocalSearchServiceSync returned "
                << static_cast<int>(response_status)
                << ". Returning empty results array.";
     return {};
@@ -90,6 +96,16 @@ void SearchHandler::Search(const base::string16& query,
                            SearchCallback callback) {
   std::move(callback).Run(
       Search(query, max_num_results, parent_result_behavior));
+}
+
+void SearchHandler::Observe(
+    mojo::PendingRemote<mojom::SearchResultsObserver> observer) {
+  observers_.Add(std::move(observer));
+}
+
+void SearchHandler::OnRegistryUpdated() {
+  for (auto& observer : observers_)
+    observer->OnSearchResultAvailabilityChanged();
 }
 
 std::vector<mojom::SearchResultPtr> SearchHandler::GenerateSearchResultsArray(
@@ -137,7 +153,7 @@ void SearchHandler::AddParentResults(
 
         // Nested subpage.
         if (metadata.parent_subpage) {
-          it = AddSubpageResultIfPossible(it, *metadata.parent_subpage,
+          it = AddSubpageResultIfPossible(it, result, *metadata.parent_subpage,
                                           result->relevance_score,
                                           search_results);
           break;
@@ -155,7 +171,7 @@ void SearchHandler::AddParentResults(
 
         // Nested setting.
         if (metadata.primary.second) {
-          it = AddSubpageResultIfPossible(it, *metadata.primary.second,
+          it = AddSubpageResultIfPossible(it, result, *metadata.primary.second,
                                           result->relevance_score,
                                           search_results);
           break;
@@ -197,11 +213,21 @@ SearchHandler::AddSectionResultIfPossible(
 std::vector<mojom::SearchResultPtr>::iterator
 SearchHandler::AddSubpageResultIfPossible(
     const std::vector<mojom::SearchResultPtr>::iterator& curr_position,
+    const mojom::SearchResultPtr& child_result,
     mojom::Subpage subpage,
     double relevance_score,
     std::vector<mojom::SearchResultPtr>* results) const {
   // If |results| already includes |subpage|, do not add it again.
   if (ContainsSubpageResult(*results, subpage))
+    return curr_position;
+
+  mojom::SearchResultPtr subpage_result =
+      hierarchy_->GetSubpageMetadata(subpage).ToSearchResult(
+          child_result->relevance_score);
+
+  // Don't add a result for a parent subpage if it has the exact same text as
+  // the child result, since this results in a broken-looking UI.
+  if (subpage_result->result_text == child_result->result_text)
     return curr_position;
 
   return results->insert(
@@ -261,7 +287,8 @@ mojom::SearchResultPtr SearchHandler::ResultToSearchResult(
       /*canonical_result_text=*/
       l10n_util::GetStringUTF16(concept->canonical_message_id), url,
       concept->icon, result.score, hierarchy_strings, concept->default_rank,
-      concept->type, std::move(result_id));
+      /*was_generated_from_text_match=*/true, concept->type,
+      std::move(result_id));
 }
 
 std::string SearchHandler::GetModifiedUrl(const SearchConcept& concept,

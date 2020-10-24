@@ -13,6 +13,9 @@ suite('item tests', function() {
   /** @type {!TestIconLoader} */
   let testIconLoader;
 
+  /** @type {!CrToastManagerElement} */
+  let toastManager;
+
   setup(function() {
     document.body.innerHTML = '';
 
@@ -24,6 +27,9 @@ suite('item tests', function() {
 
     item = document.createElement('downloads-item');
     document.body.appendChild(item);
+
+    toastManager = document.createElement('cr-toast-manager');
+    document.body.appendChild(toastManager);
   });
 
   test('dangerous downloads aren\'t linkable', () => {
@@ -66,7 +72,7 @@ suite('item tests', function() {
                hideDate: false,
                dangerType: DangerType.SENSITIVE_CONTENT_BLOCK,
              }));
-    assertEquals(item.computeIcon_(), 'cr:warning');
+    assertEquals(item.computeIcon_(), 'cr:error');
     assertFalse(item.useFileIcon_);
 
     item.set('data', createDownload({
@@ -74,7 +80,7 @@ suite('item tests', function() {
                hideDate: false,
                dangerType: DangerType.BLOCKED_TOO_LARGE,
              }));
-    assertEquals(item.computeIcon_(), 'cr:warning');
+    assertEquals(item.computeIcon_(), 'cr:error');
     assertFalse(item.useFileIcon_);
 
     item.set('data', createDownload({
@@ -82,7 +88,51 @@ suite('item tests', function() {
                hideDate: false,
                dangerType: DangerType.BLOCKED_PASSWORD_PROTECTED,
              }));
-    assertEquals(item.computeIcon_(), 'cr:warning');
+    assertEquals(item.computeIcon_(), 'cr:error');
     assertFalse(item.useFileIcon_);
+  });
+
+  test('open now button controlled by load time data', async () => {
+    loadTimeData.overrideValues({'allowOpenNow': true});
+    item.set('data', createDownload({
+               filePath: 'unique1',
+               hideDate: false,
+               state: States.ASYNC_SCANNING,
+             }));
+    flush();
+    assertNotEquals(item.$$('#openNow'), null);
+
+    loadTimeData.overrideValues({'allowOpenNow': false});
+    item.set('data', createDownload({
+               filePath: 'unique1',
+               hideDate: false,
+               state: States.ASYNC_SCANNING,
+             }));
+    flush();
+    assertEquals(item.$$('#openNow'), null);
+  });
+
+  test('undo is shown in toast', () => {
+    item.data = createDownload({hideDate: false});
+    toastManager.show('', /* hideSlotted= */ true);
+    assertTrue(toastManager.slottedHidden);
+    item.$.remove.click();
+    assertFalse(toastManager.slottedHidden);
+  });
+
+  test('undo is not shown in toast when item is dangerous', () => {
+    item.data = createDownload({hideDate: false, isDangerous: true});
+    toastManager.show('', /* hideSlotted= */ false);
+    assertFalse(toastManager.slottedHidden);
+    item.$.remove.click();
+    assertTrue(toastManager.slottedHidden);
+  });
+
+  test('undo is not shown in toast when item is mixed content', () => {
+    item.data = createDownload({hideDate: false, isMixedContent: true});
+    toastManager.show('', /* hideSlotted= */ false);
+    assertFalse(toastManager.slottedHidden);
+    item.$.remove.click();
+    assertTrue(toastManager.slottedHidden);
   });
 });

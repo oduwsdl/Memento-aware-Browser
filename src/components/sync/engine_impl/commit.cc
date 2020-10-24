@@ -51,7 +51,6 @@ SyncCommitError GetSyncCommitError(SyncerError syncer_error) {
     case SyncerError::NETWORK_IO_ERROR:
       return SyncCommitError::kNetworkError;
     case SyncerError::SYNC_AUTH_ERROR:
-    case SyncerError::SERVER_RETURN_INVALID_CREDENTIAL:
       return SyncCommitError::kAuthError;
     case SyncerError::SYNC_SERVER_ERROR:
     case SyncerError::SERVER_RETURN_UNKNOWN_ERROR:
@@ -61,7 +60,6 @@ SyncCommitError GetSyncCommitError(SyncerError syncer_error) {
     case SyncerError::SERVER_RETURN_CLEAR_PENDING:
     case SyncerError::SERVER_RETURN_NOT_MY_BIRTHDAY:
     case SyncerError::SERVER_RETURN_CONFLICT:
-    case SyncerError::SERVER_RETURN_USER_ROLLBACK:
     case SyncerError::SERVER_RETURN_PARTIAL_FAILURE:
     case SyncerError::SERVER_RETURN_CLIENT_DATA_OBSOLETE:
     case SyncerError::SERVER_RETURN_ENCRYPTION_OBSOLETE:
@@ -82,12 +80,9 @@ Commit::Commit(ContributionMap contributions,
                ExtensionsActivity::Records extensions_activity_buffer)
     : contributions_(std::move(contributions)),
       message_(message),
-      extensions_activity_buffer_(extensions_activity_buffer),
-      cleaned_up_(false) {}
+      extensions_activity_buffer_(extensions_activity_buffer) {}
 
-Commit::~Commit() {
-  DCHECK(cleaned_up_);
-}
+Commit::~Commit() = default;
 
 // static
 std::unique_ptr<Commit> Commit::Init(ModelTypeSet enabled_types,
@@ -155,8 +150,8 @@ SyncerError Commit::PostAndProcessResponse(
   }
 
   if (cycle->context()->debug_info_getter()) {
-    sync_pb::DebugInfo* debug_info = message_.mutable_debug_info();
-    cycle->context()->debug_info_getter()->GetDebugInfo(debug_info);
+    *message_.mutable_debug_info() =
+        cycle->context()->debug_info_getter()->GetDebugInfo();
   }
 
   DVLOG(1) << "Sending commit message.";
@@ -243,14 +238,6 @@ ModelTypeSet Commit::GetContributingDataTypes() const {
     contributed_data_types.Put(model_type_and_contribution.first);
   }
   return contributed_data_types;
-}
-
-void Commit::CleanUp() {
-  for (ContributionMap::const_iterator it = contributions_.begin();
-       it != contributions_.end(); ++it) {
-    it->second->CleanUp();
-  }
-  cleaned_up_ = true;
 }
 
 void Commit::ReportFullCommitFailure(SyncerError syncer_error) {

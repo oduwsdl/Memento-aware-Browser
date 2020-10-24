@@ -42,12 +42,14 @@ class GlanceableInfoView : public views::View,
  private:
   void InitLayout();
 
-  // Weather-related views. Owned by the view hierarchy.
+  base::string16 GetTemperatureText() const;
+
+  // View for the time info. Owned by the view hierarchy.
+  ash::tray::TimeView* time_view_ = nullptr;
+
+  // Views for weather icon and temperature.
   views::ImageView* weather_condition_icon_ = nullptr;
   views::Label* temperature_ = nullptr;
-
-  // Owned by the view hierarchy.
-  ash::tray::TimeView* time_view_ = nullptr;
 
   // Owned by |AmbientController|.
   AmbientViewDelegate* const delegate_ = nullptr;

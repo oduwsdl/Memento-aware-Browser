@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
+
+#include "base/strings/utf_string_conversions.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -16,11 +18,34 @@
 namespace {
 using password_manager::CredentialWithPassword;
 using password_manager::LeakCheckCredential;
-using CompromisedCredentialsView =
-    password_manager::CompromisedCredentialsManager::CredentialsView;
+using InsecureCredentialsView =
+    password_manager::InsecureCredentialsManager::CredentialsView;
 using SavedPasswordsView =
     password_manager::SavedPasswordsPresenter::SavedPasswordsView;
 using State = password_manager::BulkLeakCheckServiceInterface::State;
+
+// Key used to attach UserData to a LeakCheckCredential.
+constexpr char kPasswordCheckDataKey[] = "password-check-manager-data-key";
+// Minimum time the check should be running.
+constexpr base::TimeDelta kDelay = base::TimeDelta::FromSeconds(3);
+
+// Class which ensures that IOSChromePasswordCheckManager will stay alive
+// until password check is completed even if class what initially created
+// IOSChromePasswordCheckManager was destroyed.
+class IOSChromePasswordCheckManagerHolder : public LeakCheckCredential::Data {
+ public:
+  explicit IOSChromePasswordCheckManagerHolder(
+      scoped_refptr<IOSChromePasswordCheckManager> manager)
+      : manager_(std::move(manager)) {}
+  ~IOSChromePasswordCheckManagerHolder() override = default;
+
+  std::unique_ptr<Data> Clone() override {
+    return std::make_unique<IOSChromePasswordCheckManagerHolder>(manager_);
+  }
+
+ private:
+  scoped_refptr<IOSChromePasswordCheckManager> manager_;
+};
 
 PasswordCheckState ConvertBulkCheckState(State state) {
   switch (state) {
@@ -35,6 +60,7 @@ PasswordCheckState ConvertBulkCheckState(State state) {
     case State::kQuotaLimit:
       return PasswordCheckState::kQuotaLimit;
     case State::kCanceled:
+      return PasswordCheckState::kCanceled;
     case State::kTokenRequestFailure:
     case State::kHashingFailure:
     case State::kServiceError:
@@ -42,6 +68,23 @@ PasswordCheckState ConvertBulkCheckState(State state) {
   }
   NOTREACHED();
   return PasswordCheckState::kIdle;
+}
+
+// Function which returns duplicates of passed form.
+std::vector<password_manager::PasswordForm> GetDuplicatesOfForm(
+    const password_manager::PasswordForm& form,
+    SavedPasswordsView passwords) {
+  std::vector<password_manager::PasswordForm> duplicates;
+  auto tie = [](const auto& form) {
+    return std::tie(form.signon_realm, form.username_value,
+                    form.password_value);
+  };
+
+  for (const auto& item : passwords) {
+    if (tie(item) == tie(form))
+      duplicates.emplace_back(item);
+  }
+  return duplicates;
 }
 }  // namespace
 
@@ -52,29 +95,41 @@ IOSChromePasswordCheckManager::IOSChromePasswordCheckManager(
           browser_state,
           ServiceAccessType::EXPLICIT_ACCESS)),
       saved_passwords_presenter_(password_store_),
-      compromised_credentials_manager_(password_store_,
-                                       &saved_passwords_presenter_),
+      insecure_credentials_manager_(&saved_passwords_presenter_,
+                                    password_store_),
       bulk_leak_check_service_adapter_(
           &saved_passwords_presenter_,
           IOSChromeBulkLeakCheckServiceFactory::GetForBrowserState(
               browser_state),
           browser_state->GetPrefs()) {
   observed_saved_passwords_presenter_.Add(&saved_passwords_presenter_);
-  observed_compromised_credentials_manager_.Add(
-      &compromised_credentials_manager_);
+  observed_insecure_credentials_manager_.Add(&insecure_credentials_manager_);
   observed_bulk_leak_check_service_.Add(
       IOSChromeBulkLeakCheckServiceFactory::GetForBrowserState(browser_state));
 
   // Instructs the presenter and manager to initialize and build their caches.
   saved_passwords_presenter_.Init();
-  compromised_credentials_manager_.Init();
+  insecure_credentials_manager_.Init();
 }
 
 IOSChromePasswordCheckManager::~IOSChromePasswordCheckManager() = default;
 
 void IOSChromePasswordCheckManager::StartPasswordCheck() {
-  bulk_leak_check_service_adapter_.StartBulkLeakCheck();
-  is_check_running_ = true;
+  if (is_initialized_) {
+    IOSChromePasswordCheckManagerHolder data(
+        scoped_refptr<IOSChromePasswordCheckManager>(this));
+    bulk_leak_check_service_adapter_.StartBulkLeakCheck(kPasswordCheckDataKey,
+                                                        &data);
+    is_check_running_ = true;
+    start_time_ = base::Time::Now();
+  } else {
+    start_check_on_init_ = true;
+  }
+}
+
+void IOSChromePasswordCheckManager::StopPasswordCheck() {
+  bulk_leak_check_service_adapter_.StopBulkLeakCheck();
+  is_check_running_ = false;
 }
 
 PasswordCheckState IOSChromePasswordCheckManager::GetPasswordCheckState()
@@ -93,17 +148,66 @@ base::Time IOSChromePasswordCheckManager::GetLastPasswordCheckTime() const {
 
 std::vector<CredentialWithPassword>
 IOSChromePasswordCheckManager::GetCompromisedCredentials() const {
-  return compromised_credentials_manager_.GetCompromisedCredentials();
+  return insecure_credentials_manager_.GetCompromisedCredentials();
+}
+
+password_manager::SavedPasswordsPresenter::SavedPasswordsView
+IOSChromePasswordCheckManager::GetAllCredentials() const {
+  return saved_passwords_presenter_.GetSavedPasswords();
+}
+
+password_manager::SavedPasswordsPresenter::SavedPasswordsView
+IOSChromePasswordCheckManager::GetSavedPasswordsFor(
+    const CredentialWithPassword& credential) const {
+  return insecure_credentials_manager_.GetSavedPasswordsFor(credential);
+}
+
+bool IOSChromePasswordCheckManager::EditPasswordForm(
+    const password_manager::PasswordForm& form,
+    base::StringPiece new_username,
+    base::StringPiece new_password) {
+  auto duplicates =
+      GetDuplicatesOfForm(form, saved_passwords_presenter_.GetSavedPasswords());
+  if (duplicates.size() == 0)
+    return false;
+  return saved_passwords_presenter_.EditSavedPasswords(
+      duplicates, base::UTF8ToUTF16(new_username),
+      base::UTF8ToUTF16(new_password));
+}
+
+void IOSChromePasswordCheckManager::EditCompromisedPasswordForm(
+    const password_manager::PasswordForm& form,
+    base::StringPiece password) {
+  insecure_credentials_manager_.UpdateCredential(
+      password_manager::CredentialView(form), password);
+}
+
+void IOSChromePasswordCheckManager::DeletePasswordForm(
+    const password_manager::PasswordForm& form) {
+  auto duplicates =
+      GetDuplicatesOfForm(form, saved_passwords_presenter_.GetSavedPasswords());
+  for (auto& duplicate : duplicates) {
+    password_store_->RemoveLogin(duplicate);
+  }
+}
+
+void IOSChromePasswordCheckManager::DeleteCompromisedPasswordForm(
+    const password_manager::PasswordForm& form) {
+  insecure_credentials_manager_.RemoveCredential(
+      password_manager::CredentialView(form));
 }
 
 void IOSChromePasswordCheckManager::OnSavedPasswordsChanged(
     SavedPasswordsView) {
   // Observing saved passwords to update possible kNoPasswords state.
   NotifyPasswordCheckStatusChanged();
+  if (!std::exchange(is_initialized_, true) && start_check_on_init_) {
+    StartPasswordCheck();
+  }
 }
 
 void IOSChromePasswordCheckManager::OnCompromisedCredentialsChanged(
-    CompromisedCredentialsView credentials) {
+    InsecureCredentialsView credentials) {
   for (auto& observer : observers_) {
     observer.CompromisedCredentialsChanged(credentials);
   }
@@ -117,6 +221,20 @@ void IOSChromePasswordCheckManager::OnStateChanged(State state) {
         base::Time::Now().ToDoubleT());
   }
   if (state != State::kRunning) {
+    // If check was running
+    if (is_check_running_) {
+      const base::TimeDelta elapsed = base::Time::Now() - start_time_;
+      if (elapsed < kDelay) {
+        base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+            FROM_HERE,
+            base::BindOnce(&IOSChromePasswordCheckManager::
+                               NotifyPasswordCheckStatusChanged,
+                           weak_ptr_factory_.GetWeakPtr()),
+            kDelay - elapsed);
+        is_check_running_ = false;
+        return;
+      }
+    }
     is_check_running_ = false;
   }
   NotifyPasswordCheckStatusChanged();
@@ -126,7 +244,7 @@ void IOSChromePasswordCheckManager::OnCredentialDone(
     const LeakCheckCredential& credential,
     password_manager::IsLeaked is_leaked) {
   if (is_leaked) {
-    compromised_credentials_manager_.SaveCompromisedCredential(credential);
+    insecure_credentials_manager_.SaveCompromisedCredential(credential);
   }
 }
 

@@ -58,10 +58,10 @@ let prefsMixedProvider;
 let prefsMixedEmbeddingOrigin;
 
 /**
- * An example pref with native file system write
+ * An example pref with file system write
  * @type {SiteSettingsPref}
  */
-let prefsNativeFileSystemWrite;
+let prefsFileSystemWrite;
 
 /**
  * An example pref with multiple categories and multiple allow/block
@@ -105,6 +105,11 @@ let prefsChromeExtension;
  * @type {SiteSettingsPref}
  */
 let prefsEmbargo;
+
+/**
+ * An example prefs with 1 discarded content setting.
+ */
+let prefsDiscarded;
 
 /**
  * Creates all the test |SiteSettingsPref|s that are needed for the tests in
@@ -274,9 +279,9 @@ function populateTestExceptions() {
 
   prefsGeolocationEmpty = createSiteSettingsPrefs([], []);
 
-  prefsNativeFileSystemWrite = createSiteSettingsPrefs(
+  prefsFileSystemWrite = createSiteSettingsPrefs(
       [], [createContentSettingTypeToValuePair(
-              ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE,
+              ContentSettingsTypes.FILE_SYSTEM_WRITE,
               [createRawSiteException('http://foo.com', {
                 setting: ContentSetting.BLOCK,
               })])]);
@@ -290,9 +295,19 @@ function populateTestExceptions() {
           isEmbargoed: true,
         })]),
   ]);
+
+  prefsDiscarded = createSiteSettingsPrefs([], [
+    createContentSettingTypeToValuePair(
+        ContentSettingsTypes.PLUGINS,
+        [createRawSiteException('https://[*.]example.com:443', {
+          embeddingOrigin: '',
+          setting: ContentSetting.BLOCK,
+          isDiscarded: true,
+        })]),
+  ]);
 }
 
-suite('SiteListEmbargoedOrigin', function() {
+suite('SiteListProperties', function() {
   /**
    * A site list element created before each test.
    * @type {!SiteListElement}
@@ -371,6 +386,14 @@ suite('SiteListEmbargoedOrigin', function() {
             .querySelectorAll('site-list-entry')[0]
             .$$('#siteDescription')
             .innerHTML);
+  });
+
+  test('Discarded setting', async function() {
+    setUpCategory(
+        ContentSettingsTypes.PLUGINS, ContentSetting.BLOCK, prefsDiscarded);
+    const result = await browserProxy.whenCalled('getExceptionList');
+    flush();
+    assertTrue(testElement.hasDiscardedExceptions);
   });
 });
 
@@ -1031,7 +1054,7 @@ suite('SiteList', function() {
 
       const testsParams = [
         ['a', testElement, new MouseEvent('mouseleave')],
-        ['b', testElement, new MouseEvent('tap')],
+        ['b', testElement, new MouseEvent('click')],
         ['c', testElement, new Event('blur')],
         ['d', tooltip, new MouseEvent('mouseenter')],
       ];
@@ -1052,8 +1075,8 @@ suite('SiteList', function() {
       'Add site button is hidden for content settings that don\'t allow it',
       function() {
         setUpCategory(
-            ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE, ContentSetting.ALLOW,
-            prefsNativeFileSystemWrite);
+            ContentSettingsTypes.FILE_SYSTEM_WRITE, ContentSetting.ALLOW,
+            prefsFileSystemWrite);
         return browserProxy.whenCalled('getExceptionList').then(() => {
           flush();
           assertTrue(testElement.$$('#addSite').hidden);
@@ -1081,6 +1104,7 @@ suite('EditExceptionDialog', function() {
       embeddingOrigin: SITE_EXCEPTION_WILDCARD,
       isEmbargoed: false,
       incognito: false,
+      isDiscarded: false,
       setting: ContentSetting.BLOCK,
       enforcement: null,
       controlledBy: chrome.settingsPrivate.ControlledBy.USER_POLICY,

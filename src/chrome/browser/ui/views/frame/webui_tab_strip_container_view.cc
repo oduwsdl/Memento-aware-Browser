@@ -33,11 +33,14 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/chrome_view_class_properties.h"
-#include "chrome/browser/ui/views/feature_promos/feature_promo_bubble_view.h"
-#include "chrome/browser/ui/views/feature_promos/feature_promo_colors.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
+#include "chrome/browser/ui/views/frame/top_container_view.h"
+#include "chrome/browser/ui/views/frame/webui_tab_strip_field_trial.h"
+#include "chrome/browser/ui/views/in_product_help/feature_promo_colors.h"
+#include "chrome/browser/ui/views/in_product_help/feature_promo_controller_views.h"
 #include "chrome/browser/ui/views/tabs/tab_group_editor_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/webui_tab_counter_button.h"
@@ -53,6 +56,8 @@
 #include "components/feature_engagement/public/tracker.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/drop_data.h"
+#include "ui/accessibility/ax_mode.h"
+#include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/aura/window.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/custom_data_helper.h"
@@ -73,7 +78,101 @@
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget.h"
 
+// Represents a drag or fling that either goes up or down. Defined here so we
+// can use it in module local methods.
+enum class WebUITabStripDragDirection { kUp, kDown };
+
+// Represents which type of event is causing the WebUI tab strip to open or
+// close. Note that currently |kDragRelease| and |kOther| behave the same but
+// they're conceptually different and could use different logic in the future.
+enum class WebUITabStripOpenCloseReason {
+  // User drags the toolbar up or down and releases it partway.
+  kDragRelease,
+  // User flings, flicks, or swipes the toolbar up or down (possibly during a
+  // drag).
+  kFling,
+  // The tabstrip is opened or closed as the result of some other action or
+  // event not tied to the user directly manipulating the toolbar.
+  kOther
+};
+
 namespace {
+
+// Returns the animation curve to use for different types of events that could
+// cause the tabstrip to be revealed or hidden.
+gfx::Tween::Type GetTweenTypeForTabstripOpenClose(
+    WebUITabStripOpenCloseReason reason) {
+  switch (reason) {
+    case WebUITabStripOpenCloseReason::kDragRelease:
+      // case falls through
+    case WebUITabStripOpenCloseReason::kOther:
+      return gfx::Tween::FAST_OUT_SLOW_IN;
+    case WebUITabStripOpenCloseReason::kFling:
+      return gfx::Tween::LINEAR_OUT_SLOW_IN;
+  }
+}
+
+// Returns the base duration of the animation used to open or close the
+// tabstrip, before changes are made for shade positioning, gesture velocity,
+// etc.
+base::TimeDelta GetBaseTabstripOpenCloseAnimationDuration(
+    WebUITabStripDragDirection direction) {
+  // These values were determined by UX; in the future we may want to change
+  // values for fling animations to be consistent for both open and close
+  // gestures.
+  constexpr base::TimeDelta kHideAnimationDuration =
+      base::TimeDelta::FromMilliseconds(200);
+  constexpr base::TimeDelta kShowAnimationDuration =
+      base::TimeDelta::FromMilliseconds(250);
+  switch (direction) {
+    case WebUITabStripDragDirection::kUp:
+      return kHideAnimationDuration;
+    case WebUITabStripDragDirection::kDown:
+      return kShowAnimationDuration;
+  }
+}
+
+// Returns the actual duration of the animation used to open or close the
+// tabstrip based on open/close reason, movement direction, and the current
+// position of the toolbar.
+base::TimeDelta GetTimeDeltaForTabstripOpenClose(
+    WebUITabStripOpenCloseReason reason,
+    WebUITabStripDragDirection direction,
+    double percent_remaining) {
+  base::TimeDelta duration =
+      GetBaseTabstripOpenCloseAnimationDuration(direction);
+
+  // Fling gestures get shortened based on how little space is left for the
+  // toolbar to move. Ideally we'd base it on fling velocity instead but (a) the
+  // animation is already very fast, and (b) the event reporting around drag vs.
+  // fling is not granular enough to give consistent results.
+  if (reason == WebUITabStripOpenCloseReason::kFling) {
+    constexpr base::TimeDelta kMinimumAnimationDuration =
+        base::TimeDelta::FromMilliseconds(75);
+    duration =
+        std::max(kMinimumAnimationDuration, duration * percent_remaining);
+  }
+
+  return duration;
+}
+
+// Converts a y-delta to a drag direction.
+WebUITabStripDragDirection DragDirectionFromDelta(float delta) {
+  DCHECK(delta != 0.0f);
+  return delta > 0.0f ? WebUITabStripDragDirection::kDown
+                      : WebUITabStripDragDirection::kUp;
+}
+
+// Converts a swipe gesture to a drag direction, or none if the swipe is neither
+// up nor down.
+base::Optional<WebUITabStripDragDirection> DragDirectionFromSwipe(
+    const ui::GestureEvent* event) {
+  if (event->details().swipe_down())
+    return WebUITabStripDragDirection::kDown;
+  if (event->details().swipe_up())
+    return WebUITabStripDragDirection::kUp;
+  return base::nullopt;
+}
 
 bool EventTypeCanCloseTabStrip(const ui::EventType& type) {
   switch (type) {
@@ -95,7 +194,7 @@ class WebUITabStripWebView : public views::WebView {
   // content::WebContentsDelegate:
   bool CanDragEnter(content::WebContents* source,
                     const content::DropData& data,
-                    blink::WebDragOperationsMask operations_allowed) override {
+                    blink::DragOperationsMask operations_allowed) override {
     // TODO(crbug.com/1032592): Prevent dragging across Chromium instances.
     if (data.custom_data.find(base::ASCIIToUTF16(kWebUITabIdDataType)) !=
         data.custom_data.end()) {
@@ -104,7 +203,7 @@ class WebUITabStripWebView : public views::WebView {
           data.custom_data.at(base::ASCIIToUTF16(kWebUITabIdDataType)),
           &tab_id);
       return found_tab_id && extensions::ExtensionTabUtil::GetTabById(
-                                 tab_id, browser_context(), false, nullptr);
+                                 tab_id, GetBrowserContext(), false, nullptr);
     }
 
     if (data.custom_data.find(base::ASCIIToUTF16(kWebUITabGroupIdDataType)) !=
@@ -112,7 +211,7 @@ class WebUITabStripWebView : public views::WebView {
       std::string group_id = base::UTF16ToUTF8(
           data.custom_data.at(base::ASCIIToUTF16(kWebUITabGroupIdDataType)));
       Browser* found_browser = tab_strip_ui::GetBrowserWithGroupId(
-          Profile::FromBrowserContext(browser_context()), group_id);
+          Profile::FromBrowserContext(GetBrowserContext()), group_id);
       return found_browser != nullptr;
     }
 
@@ -130,15 +229,22 @@ class WebUITabStripContainerView::AutoCloser : public ui::EventHandler,
   using CloseCallback = base::RepeatingCallback<void(TabStripUICloseAction)>;
 
   AutoCloser(CloseCallback close_callback,
+             views::View* top_container,
              views::View* content_area,
              views::View* omnibox)
       : close_callback_(std::move(close_callback)),
+        top_container_(top_container),
         content_area_(content_area),
         omnibox_(omnibox) {
+    DCHECK(top_container_);
     DCHECK(content_area_);
     DCHECK(omnibox_);
+
     view_observer_.Add(content_area_);
     view_observer_.Add(omnibox_);
+#if defined(OS_WIN)
+    view_observer_.Add(top_container_);
+#endif  // defined(OS_WIN)
 
     // Our observed Widget's NativeView may be destroyed before us. We
     // have no reasonable way of un-registering our pre-target handler
@@ -179,6 +285,14 @@ class WebUITabStripContainerView::AutoCloser : public ui::EventHandler,
     if (!content_area_->GetBoundsInScreen().Contains(event_location_in_screen))
       return;
 
+    // The event may intersect both the content area's bounds and the
+    // top container's bounds. In this case, the top container is
+    // occluding the web content so we shouldn't close. This happens in
+    // immersive mode while the top container is revealed. For more info see
+    // https://crbug.com/1112028
+    if (top_container_->GetBoundsInScreen().Contains(event_location_in_screen))
+      return;
+
     located_event->StopPropagation();
     close_callback_.Run(TabStripUICloseAction::kTapInTabContent);
   }
@@ -199,6 +313,8 @@ class WebUITabStripContainerView::AutoCloser : public ui::EventHandler,
       content_area_ = nullptr;
     else if (observed_view == omnibox_)
       omnibox_ = nullptr;
+    else if (observed_view == top_container_)
+      top_container_ = nullptr;
     else
       NOTREACHED();
   }
@@ -226,6 +342,7 @@ class WebUITabStripContainerView::AutoCloser : public ui::EventHandler,
 
  private:
   CloseCallback close_callback_;
+  views::View* top_container_;
   views::View* content_area_;
   views::View* omnibox_;
 
@@ -247,21 +364,26 @@ class WebUITabStripContainerView::DragToOpenHandler : public ui::EventHandler {
 
   ~DragToOpenHandler() override { drag_handle_->RemovePreTargetHandler(this); }
 
+  // Cancels any current drag.
+  void CancelDrag() { drag_in_progress_ = false; }
+
+  // ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override {
     switch (event->type()) {
-      case ui::ET_GESTURE_SCROLL_BEGIN:
+      case ui::ET_GESTURE_SCROLL_BEGIN: {
         // Only treat this scroll as drag-to-open if the y component is
         // larger. Otherwise, leave the event unhandled. Horizontal
         // scrolls are used in the toolbar, e.g. for text scrolling in
         // the Omnibox.
-        if (event->details().scroll_y_hint() >
-            event->details().scroll_x_hint()) {
+        float y_delta = event->details().scroll_y_hint();
+        if (std::fabs(y_delta) > std::fabs(event->details().scroll_x_hint()) &&
+            container_->CanStartDragToOpen(DragDirectionFromDelta(y_delta))) {
           drag_in_progress_ = true;
-          container_->UpdateHeightForDragToOpen(
-              event->details().scroll_y_hint());
+          container_->UpdateHeightForDragToOpen(y_delta);
           event->SetHandled();
         }
         break;
+      }
       case ui::ET_GESTURE_SCROLL_UPDATE:
         if (drag_in_progress_) {
           container_->UpdateHeightForDragToOpen(event->details().scroll_y());
@@ -275,30 +397,31 @@ class WebUITabStripContainerView::DragToOpenHandler : public ui::EventHandler {
           drag_in_progress_ = false;
         }
         break;
-      case ui::ET_GESTURE_SWIPE:
+      case ui::ET_GESTURE_SWIPE: {
         // If a touch is released at high velocity, the scroll gesture
         // is "converted" to a swipe gesture. ET_GESTURE_END is still
         // sent after. From logging, it seems like ET_GESTURE_SCROLL_END
         // is sometimes also sent after this. It will be ignored here
         // since |drag_in_progress_| is set to false.
+        const auto direction = DragDirectionFromSwipe(event);
+
+        // If a swipe happens quickly enough, scroll events might not have
+        // been sent, so we may have to start one.
         if (!drag_in_progress_) {
-          // If a swipe happens quickly enough, scroll events might not
-          // have been sent. Tell the container a drag began.
+          if (!direction.has_value() ||
+              !container_->CanStartDragToOpen(direction.value())) {
+            break;
+          }
           container_->UpdateHeightForDragToOpen(0.0f);
         }
 
-        if (event->details().swipe_down() || event->details().swipe_up()) {
-          container_->EndDragToOpen(event->details().swipe_down()
-                                        ? FlingDirection::kDown
-                                        : FlingDirection::kUp);
-        } else {
-          // Treat a sideways swipe as a normal drag end.
-          container_->EndDragToOpen();
-        }
+        // If there is a direction, then end the drag with a fling, otherwise
+        // (in the case of a sideways fling) use the default release logic.
+        container_->EndDragToOpen(direction);
 
         event->SetHandled();
         drag_in_progress_ = false;
-        break;
+      } break;
       case ui::ET_GESTURE_END:
         if (drag_in_progress_) {
           // If an unsupported gesture is sent, ensure that we still
@@ -321,127 +444,26 @@ class WebUITabStripContainerView::DragToOpenHandler : public ui::EventHandler {
   bool drag_in_progress_ = false;
 };
 
-class WebUITabStripContainerView::IPHController : public TabStripModelObserver,
-                                                  public views::WidgetObserver {
- public:
-  explicit IPHController(Browser* browser)
-      : browser_(browser),
-        widget_observer_(this),
-        iph_tracker_(feature_engagement::TrackerFactory::GetForBrowserContext(
-            browser_->profile())) {
-    browser_->tab_strip_model()->AddObserver(this);
-  }
-
-  ~IPHController() override {
-    browser_->tab_strip_model()->RemoveObserver(this);
-  }
-
-  void SetAnchorView(views::View* anchor_view) {
-    DCHECK(!anchor_.view());
-    anchor_.SetView(anchor_view);
-  }
-
-  void NotifyOpened() {
-    iph_tracker_->NotifyEvent(feature_engagement::events::kWebUITabStripOpened);
-  }
-
-  void NotifyClosed() {
-    iph_tracker_->NotifyEvent(feature_engagement::events::kWebUITabStripClosed);
-  }
-
-  void UpdatePromoBounds() {
-    if (!promo_)
-      return;
-    promo_->OnAnchorBoundsChanged();
-  }
-
-  // Ends the promo if it's showing.
-  void AbortPromo() {
-    if (!promo_)
-      return;
-
-    widget_observer_.Remove(promo_->GetWidget());
-    promo_->GetWidget()->CloseWithReason(
-        views::Widget::ClosedReason::kUnspecified);
-    PromoBubbleDismissed();
-  }
-
-  // TabStripModelObserver:
-  void OnTabStripModelChanged(
-      TabStripModel* tab_strip_model,
-      const TabStripModelChange& change,
-      const TabStripSelectionChange& selection) override {
-    // We want to show the IPH to let the user know where their new tabs
-    // are. So, ignore changes other than insertions.
-    if (change.type() != TabStripModelChange::kInserted)
-      return;
-
-    // Abort if we shouldn't show IPH right now.
-    if (!iph_tracker_->ShouldTriggerHelpUI(
-            feature_engagement::kIPHWebUITabStripFeature))
-      return;
-
-    views::View* const anchor_view = anchor_.view();
-
-    // In the off chance this is called while the browser is being destroyed,
-    // return.
-    if (!anchor_view)
-      return;
-
-    anchor_view->SetProperty(kHasInProductHelpPromoKey, true);
-    promo_ = FeaturePromoBubbleView::CreateOwned(
-        anchor_view, views::BubbleBorder::TOP_RIGHT,
-        FeaturePromoBubbleView::ActivationAction::DO_NOT_ACTIVATE,
-        /*title_string_specifier=*/base::nullopt, IDS_WEBUI_TAB_STRIP_PROMO);
-    promo_->set_close_on_deactivate(false);
-    widget_observer_.Add(promo_->GetWidget());
-  }
-
-  // views::WidgetObserver:
-  void OnWidgetDestroying(views::Widget* widget) override {
-    // This call should only happen at the end of IPH.
-    DCHECK_EQ(widget, promo_->GetWidget());
-    widget_observer_.Remove(widget);
-    PromoBubbleDismissed();
-  }
-
- private:
-  void PromoBubbleDismissed() {
-    promo_ = nullptr;
-    iph_tracker_->Dismissed(feature_engagement::kIPHWebUITabStripFeature);
-    views::View* const anchor_view = anchor_.view();
-    if (anchor_view)
-      anchor_view->SetProperty(kHasInProductHelpPromoKey, false);
-  }
-
-  Browser* const browser_;
-  ScopedObserver<views::Widget, views::WidgetObserver> widget_observer_;
-  feature_engagement::Tracker* const iph_tracker_;
-  views::ViewTracker anchor_;
-
-  FeaturePromoBubbleView* promo_ = nullptr;
-};
-
 WebUITabStripContainerView::WebUITabStripContainerView(
-    Browser* browser,
+    BrowserView* browser_view,
     views::View* tab_contents_container,
-    views::View* drag_handle,
+    views::View* top_container,
     views::View* omnibox)
-    : browser_(browser),
+    : browser_view_(browser_view),
       web_view_(AddChildView(
-          std::make_unique<WebUITabStripWebView>(browser->profile()))),
+          std::make_unique<WebUITabStripWebView>(browser_view_->GetProfile()))),
+      top_container_(top_container),
       tab_contents_container_(tab_contents_container),
       auto_closer_(std::make_unique<AutoCloser>(
           base::Bind(&WebUITabStripContainerView::CloseForEventOutsideTabStrip,
                      base::Unretained(this)),
+          browser_view->top_container(),
           tab_contents_container,
           omnibox)),
       drag_to_open_handler_(
-          std::make_unique<DragToOpenHandler>(this, drag_handle)),
-      iph_controller_(std::make_unique<IPHController>(browser_)) {
+          std::make_unique<DragToOpenHandler>(this, top_container)) {
   TRACE_EVENT0("ui", "WebUITabStripContainerView.Init");
-  DCHECK(UseTouchableTabStrip());
-  animation_.SetTweenType(gfx::Tween::Type::FAST_OUT_SLOW_IN);
+  DCHECK(UseTouchableTabStrip(browser_view_->browser()));
 
   SetVisible(false);
   animation_.Reset(0.0);
@@ -474,10 +496,11 @@ WebUITabStripContainerView::WebUITabStripContainerView(
 
   DCHECK(tab_contents_container);
   view_observer_.Add(tab_contents_container_);
+  view_observer_.Add(top_container_);
 
   TabStripUI* const tab_strip_ui = static_cast<TabStripUI*>(
       web_view_->GetWebContents()->GetWebUI()->GetController());
-  tab_strip_ui->Initialize(browser_, this);
+  tab_strip_ui->Initialize(browser_view_->browser(), this);
 }
 
 WebUITabStripContainerView::~WebUITabStripContainerView() {
@@ -487,8 +510,29 @@ WebUITabStripContainerView::~WebUITabStripContainerView() {
 }
 
 // static
-bool WebUITabStripContainerView::UseTouchableTabStrip() {
-  return base::FeatureList::IsEnabled(features::kWebUITabStrip) &&
+bool WebUITabStripContainerView::SupportsTouchableTabStrip(
+    const Browser* browser) {
+  return browser->is_type_normal() &&
+         base::FeatureList::IsEnabled(features::kWebUITabStrip);
+}
+
+// static
+bool WebUITabStripContainerView::UseTouchableTabStrip(const Browser* browser) {
+  // TODO(crbug.com/1136185, crbug.com/1136236): We currently do not switch to
+  // touchable tabstrip in Screen Reader mode due to the touchable tabstrip
+  // being less accessible than the traditional tabstrip.
+  if (ui::AXPlatformNode::GetAccessibilityMode().has_mode(
+          ui::AXMode::kScreenReader)) {
+    return false;
+  }
+
+  // This is called at Browser start to check which mode to use. It is a
+  // good place to check the feature state and set up a synthetic field
+  // trial.
+  WebUITabStripFieldTrial::RegisterFieldTrialIfNecessary();
+
+  return browser->is_type_normal() &&
+         base::FeatureList::IsEnabled(features::kWebUITabStrip) &&
          ui::TouchUiController::Get()->touch_ui();
 }
 
@@ -525,7 +569,7 @@ void WebUITabStripContainerView::OpenForTabDrag() {
     return;
 
   RecordTabStripUIOpenHistogram(TabStripUIOpenAction::kTabDraggedIntoWindow);
-  SetContainerTargetVisibility(true);
+  SetContainerTargetVisibility(true, WebUITabStripOpenCloseReason::kOther);
 }
 
 views::NativeViewHost* WebUITabStripContainerView::GetNativeViewHost() {
@@ -535,47 +579,60 @@ views::NativeViewHost* WebUITabStripContainerView::GetNativeViewHost() {
 std::unique_ptr<views::View> WebUITabStripContainerView::CreateTabCounter() {
   DCHECK_EQ(nullptr, tab_counter_);
 
-  auto tab_counter =
-      CreateWebUITabCounterButton(this, browser_->tab_strip_model());
+  auto tab_counter = CreateWebUITabCounterButton(
+      base::BindRepeating(&WebUITabStripContainerView::TabCounterPressed,
+                          base::Unretained(this)),
+      browser_view_);
 
   tab_counter_ = tab_counter.get();
   view_observer_.Add(tab_counter_);
 
-  iph_controller_->SetAnchorView(tab_counter_);
-
   return tab_counter;
 }
 
-void WebUITabStripContainerView::UpdatePromoBubbleBounds() {
-  iph_controller_->UpdatePromoBounds();
+void WebUITabStripContainerView::SetVisibleForTesting(bool visible) {
+  SetContainerTargetVisibility(visible, WebUITabStripOpenCloseReason::kOther);
+  FinishAnimationForTesting();
 }
 
-void WebUITabStripContainerView::SetVisibleForTesting(bool visible) {
-  SetContainerTargetVisibility(visible);
-  animation_.SetCurrentValue(visible ? 1.0 : 0.0);
+void WebUITabStripContainerView::FinishAnimationForTesting() {
+  if (!animation_.is_animating())
+    return;
+  const bool target = animation_.IsShowing();
+  animation_.SetCurrentValue(target ? 1.0 : 0.0);
   animation_.End();
   PreferredSizeChanged();
 }
 
 const ui::AcceleratorProvider*
 WebUITabStripContainerView::GetAcceleratorProvider() const {
-  return BrowserView::GetBrowserViewForBrowser(browser_);
+  return browser_view_;
 }
 
 void WebUITabStripContainerView::CloseContainer() {
-  SetContainerTargetVisibility(false);
-  iph_controller_->NotifyClosed();
+  SetContainerTargetVisibility(false, WebUITabStripOpenCloseReason::kOther);
+  browser_view_->feature_promo_controller()
+      ->feature_engagement_tracker()
+      ->NotifyEvent(feature_engagement::events::kWebUITabStripClosed);
+}
+
+bool WebUITabStripContainerView::CanStartDragToOpen(
+    WebUITabStripDragDirection direction) const {
+  // If we're already in a drag, then we can always continue dragging.
+  if (current_drag_height_)
+    return true;
+  return direction == (GetVisible() ? WebUITabStripDragDirection::kUp
+                                    : WebUITabStripDragDirection::kDown);
 }
 
 void WebUITabStripContainerView::UpdateHeightForDragToOpen(float height_delta) {
   if (!current_drag_height_) {
-    // If we are visible and aren't already dragging, ignore; either we are
-    // animating open, or the touch would've triggered autoclose.
-    if (GetVisible())
-      return;
+    const bool was_open = GetVisible();
+    DCHECK(!was_open || height_delta <= 0.0f);
+    DCHECK(was_open || height_delta >= 0.0f);
 
     SetVisible(true);
-    current_drag_height_ = 0;
+    current_drag_height_ = was_open ? height() : 0.0f;
     animation_.Reset();
   }
 
@@ -586,7 +643,7 @@ void WebUITabStripContainerView::UpdateHeightForDragToOpen(float height_delta) {
 }
 
 void WebUITabStripContainerView::EndDragToOpen(
-    base::Optional<FlingDirection> fling_direction) {
+    base::Optional<WebUITabStripDragDirection> fling_direction) {
   if (!current_drag_height_)
     return;
 
@@ -601,25 +658,67 @@ void WebUITabStripContainerView::EndDragToOpen(
   if (fling_direction) {
     // If this was a fling, ignore the final height and use the fling
     // direction.
-    opening = fling_direction == FlingDirection::kDown;
+    opening = (fling_direction == WebUITabStripDragDirection::kDown);
   }
 
   if (opening) {
     RecordTabStripUIOpenHistogram(TabStripUIOpenAction::kToolbarDrag);
-    iph_controller_->NotifyOpened();
+    browser_view_->feature_promo_controller()
+        ->feature_engagement_tracker()
+        ->NotifyEvent(feature_engagement::events::kWebUITabStripOpened);
+  } else {
+    browser_view_->feature_promo_controller()
+        ->feature_engagement_tracker()
+        ->NotifyEvent(feature_engagement::events::kWebUITabStripClosed);
   }
 
   animation_.Reset(open_proportion);
-  SetContainerTargetVisibility(opening);
+  SetContainerTargetVisibility(
+      opening, fling_direction.has_value()
+                   ? WebUITabStripOpenCloseReason::kFling
+                   : WebUITabStripOpenCloseReason::kDragRelease);
+}
+
+void WebUITabStripContainerView::TabCounterPressed(const ui::Event& event) {
+  const bool new_visibility = !GetVisible();
+  if (new_visibility) {
+    RecordTabStripUIOpenHistogram(TabStripUIOpenAction::kTapOnTabCounter);
+    browser_view_->feature_promo_controller()
+        ->feature_engagement_tracker()
+        ->NotifyEvent(feature_engagement::events::kWebUITabStripOpened);
+  } else {
+    RecordTabStripUICloseHistogram(TabStripUICloseAction::kTapOnTabCounter);
+    browser_view_->feature_promo_controller()
+        ->feature_engagement_tracker()
+        ->NotifyEvent(feature_engagement::events::kWebUITabStripClosed);
+  }
+
+  SetContainerTargetVisibility(new_visibility,
+                               WebUITabStripOpenCloseReason::kOther);
+
+  if (GetVisible() && event.IsKeyEvent()) {
+    // Automatically move focus to the tab strip WebUI if the tab strip
+    // was opened via a key event.
+    SetPaneFocusAndFocusDefault();
+  }
 }
 
 void WebUITabStripContainerView::SetContainerTargetVisibility(
-    bool target_visible) {
+    bool target_visible,
+    WebUITabStripOpenCloseReason reason) {
   if (target_visible) {
+    immersive_revealed_lock_.reset(
+        browser_view_->immersive_mode_controller()->GetRevealedLock(
+            ImmersiveModeController::ANIMATE_REVEAL_YES));
+
     SetVisible(true);
     PreferredSizeChanged();
-    if (animation_.GetCurrentValue() < 1.0) {
-      animation_.SetSlideDuration(base::TimeDelta::FromMilliseconds(250));
+    const double current_value = animation_.GetCurrentValue();
+    if (current_value < 1.0) {
+      animation_.SetSlideDuration(GetTimeDeltaForTabstripOpenClose(
+          reason, WebUITabStripDragDirection::kDown,
+          /* percent_remaining */ 1.0 - current_value));
+      animation_.SetTweenType(GetTweenTypeForTabstripOpenClose(reason));
       animation_.Show();
     }
 
@@ -631,8 +730,11 @@ void WebUITabStripContainerView::SetContainerTargetVisibility(
 
     time_at_open_ = base::TimeTicks::Now();
 
-    // If we're opening, end IPH if it's showing.
-    iph_controller_->AbortPromo();
+    if (browser_view_->feature_promo_controller()->BubbleIsShowing(
+            feature_engagement::kIPHWebUITabStripFeature)) {
+      browser_view_->feature_promo_controller()->CloseBubble(
+          feature_engagement::kIPHWebUITabStripFeature);
+    }
   } else {
     if (time_at_open_) {
       RecordTabStripUIOpenDurationHistogram(base::TimeTicks::Now() -
@@ -640,8 +742,12 @@ void WebUITabStripContainerView::SetContainerTargetVisibility(
       time_at_open_ = base::nullopt;
     }
 
-    if (animation_.GetCurrentValue() > 0.0) {
-      animation_.SetSlideDuration(base::TimeDelta::FromMilliseconds(200));
+    const double current_value = animation_.GetCurrentValue();
+    if (current_value > 0.0) {
+      animation_.SetSlideDuration(GetTimeDeltaForTabstripOpenClose(
+          reason, WebUITabStripDragDirection::kUp,
+          /* percent_remaining */ current_value));
+      animation_.SetTweenType(GetTweenTypeForTabstripOpenClose(reason));
       animation_.Hide();
     } else {
       PreferredSizeChanged();
@@ -649,6 +755,8 @@ void WebUITabStripContainerView::SetContainerTargetVisibility(
     }
 
     web_view_->SetFocusBehavior(FocusBehavior::NEVER);
+
+    immersive_revealed_lock_.reset();
   }
   auto_closer_->set_enabled(target_visible);
 }
@@ -656,8 +764,7 @@ void WebUITabStripContainerView::SetContainerTargetVisibility(
 void WebUITabStripContainerView::CloseForEventOutsideTabStrip(
     TabStripUICloseAction reason) {
   RecordTabStripUICloseHistogram(reason);
-  iph_controller_->NotifyClosed();
-  SetContainerTargetVisibility(false);
+  SetContainerTargetVisibility(false, WebUITabStripOpenCloseReason::kOther);
 }
 
 void WebUITabStripContainerView::AnimationEnded(
@@ -692,13 +799,33 @@ void WebUITabStripContainerView::ShowEditDialogForGroupAtPoint(
     tab_groups::TabGroupId group) {
   ConvertPointToScreen(this, &point);
   rect.set_origin(point);
-  TabGroupEditorBubbleView::Show(browser_, group, nullptr, rect, this);
+  TabGroupEditorBubbleView::Show(browser_view_->browser(), group, nullptr, rect,
+                                 this);
 }
 
 TabStripUILayout WebUITabStripContainerView::GetLayout() {
   DCHECK(tab_contents_container_);
-  return TabStripUILayout::CalculateForWebViewportSize(
-      tab_contents_container_->size());
+
+  gfx::Size tab_contents_size = tab_contents_container_->size();
+
+  // Because some pages can display the bookmark bar even when the bookmark bar
+  // is disabled (e.g. NTP) and some pages never display the bookmark bar (e.g.
+  // crashed tab pages, pages in guest browser windows), we will always reserve
+  // room for the bookmarks bar so that the size and shape of the effective
+  // viewport doesn't change.
+  //
+  // This may cause the thumbnail to crop off the extreme right and left edge of
+  // the image in some cases, but a very slight crop is preferable to constantly
+  // changing thumbnail sizes.
+  //
+  // See: crbug.com/1066652 for more info
+  const int max_bookmark_height = GetLayoutConstant(BOOKMARK_BAR_HEIGHT);
+  const views::View* bookmarks = browser_view_->bookmark_bar();
+  const int bookmark_bar_height =
+      (bookmarks && bookmarks->GetVisible()) ? bookmarks->height() : 0;
+  tab_contents_size.Enlarge(0, -(max_bookmark_height - bookmark_bar_height));
+
+  return TabStripUILayout::CalculateForWebViewportSize(tab_contents_size);
 }
 
 SkColor WebUITabStripContainerView::GetColor(int id) const {
@@ -723,8 +850,9 @@ gfx::Size WebUITabStripContainerView::FlexRule(
     const views::View* view,
     const views::SizeBounds& bounds) const {
   DCHECK_EQ(view, web_view_);
-  const int width =
-      bounds.width() ? *bounds.width() : tab_contents_container_->width();
+  const int width = bounds.width().is_bounded()
+                        ? bounds.width().value()
+                        : tab_contents_container_->width();
   const int height = TabStripUILayout::CalculateForWebViewportSize(
                          tab_contents_container_->size())
                          .CalculateContainerHeight();
@@ -732,39 +860,29 @@ gfx::Size WebUITabStripContainerView::FlexRule(
   return gfx::Size(width, height);
 }
 
-void WebUITabStripContainerView::ButtonPressed(views::Button* sender,
-                                               const ui::Event& event) {
-  DCHECK_EQ(sender->GetID(), VIEW_ID_WEBUI_TAB_STRIP_TAB_COUNTER);
-  const bool new_visibility = !GetVisible();
-  if (new_visibility) {
-    RecordTabStripUIOpenHistogram(TabStripUIOpenAction::kTapOnTabCounter);
-    iph_controller_->NotifyOpened();
-  } else {
-    RecordTabStripUICloseHistogram(TabStripUICloseAction::kTapOnTabCounter);
-    iph_controller_->NotifyClosed();
-  }
-
-  SetContainerTargetVisibility(new_visibility);
-
-  if (GetVisible() && sender->HasFocus()) {
-    // Automatically move focus to the tab strip WebUI if the focus is
-    // currently on the toggle button.
-    SetPaneFocusAndFocusDefault();
-  }
-}
-
 void WebUITabStripContainerView::OnViewBoundsChanged(View* observed_view) {
-  if (observed_view != tab_contents_container_)
+#if defined(OS_WIN)
+  if (observed_view == top_container_) {
+    if (old_top_container_width_ != top_container_->width()) {
+      old_top_container_width_ = top_container_->width();
+      // If somehow we're in the middle of a drag, abort.
+      drag_to_open_handler_->CancelDrag();
+      CloseContainer();
+    }
     return;
+  }
+#endif  // defined(OS_WIN)
 
-  // TODO(pbos): PreferredSizeChanged seems to cause infinite recursion with
-  // BrowserView::ChildPreferredSizeChanged. InvalidateLayout here should be
-  // replaceable with PreferredSizeChanged.
-  InvalidateLayout();
+  if (observed_view == tab_contents_container_) {
+    // TODO(pbos): PreferredSizeChanged seems to cause infinite recursion with
+    // BrowserView::ChildPreferredSizeChanged. InvalidateLayout here should be
+    // replaceable with PreferredSizeChanged.
+    InvalidateLayout();
 
-  TabStripUI* const tab_strip_ui = static_cast<TabStripUI*>(
-      web_view_->GetWebContents()->GetWebUI()->GetController());
-  tab_strip_ui->LayoutChanged();
+    TabStripUI* const tab_strip_ui = static_cast<TabStripUI*>(
+        web_view_->GetWebContents()->GetWebUI()->GetController());
+    tab_strip_ui->LayoutChanged();
+  }
 }
 
 void WebUITabStripContainerView::OnViewIsDeleting(View* observed_view) {
@@ -774,8 +892,6 @@ void WebUITabStripContainerView::OnViewIsDeleting(View* observed_view) {
     tab_counter_ = nullptr;
   else if (observed_view == tab_contents_container_)
     tab_contents_container_ = nullptr;
-  else
-    NOTREACHED();
 }
 
 bool WebUITabStripContainerView::SetPaneFocusAndFocusDefault() {

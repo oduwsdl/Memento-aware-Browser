@@ -34,6 +34,12 @@ class SharedWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   void Reload() override;
   bool Close() override;
 
+  NetworkLoaderFactoryParamsAndInfo CreateNetworkFactoryParamsForDevTools()
+      override;
+  RenderProcessHost* GetProcessHost() override;
+
+  url::Origin GetConstructorOrigin();
+
   bool Matches(SharedWorkerHost* worker_host);
   void WorkerReadyForInspection(
       mojo::PendingRemote<blink::mojom::DevToolsAgent> agent_remote,
@@ -50,7 +56,7 @@ class SharedWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   ~SharedWorkerDevToolsAgentHost() override;
 
   // DevToolsAgentHostImpl overrides.
-  bool AttachSession(DevToolsSession* session) override;
+  bool AttachSession(DevToolsSession* session, bool acquire_wake_lock) override;
   void DetachSession(DevToolsSession* session) override;
 
   enum WorkerState {

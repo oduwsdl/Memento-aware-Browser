@@ -7,33 +7,28 @@
 
 #include "ash/app_list/views/privacy_info_view.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/styled_label_listener.h"
 
 namespace ash {
 
 class AppListViewDelegate;
-class SearchResultPageView;
+class PrivacyContainerView;
 
 // View representing Suggested Content privacy info in the Launcher.
 class SuggestedContentInfoView : public PrivacyInfoView {
  public:
   SuggestedContentInfoView(AppListViewDelegate* view_delegate,
-                           SearchResultPageView* search_result_page_view);
+                           PrivacyContainerView* container);
   SuggestedContentInfoView(const SuggestedContentInfoView&) = delete;
   SuggestedContentInfoView& operator=(const SuggestedContentInfoView&) = delete;
   ~SuggestedContentInfoView() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // views::StyledLabelListener:
-  void StyledLabelLinkClicked(views::StyledLabel* label,
-                              const gfx::Range& range,
-                              int event_flags) override;
+  // PrivacyInfoView:
+  void CloseButtonPressed() override;
+  void LinkClicked() override;
 
  private:
   AppListViewDelegate* const view_delegate_;
-  SearchResultPageView* const search_result_page_view_;
+  PrivacyContainerView* const container_;
 };
 
 }  // namespace ash

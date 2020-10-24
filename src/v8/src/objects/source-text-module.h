@@ -7,7 +7,7 @@
 
 #include "src/objects/module.h"
 #include "src/objects/promise.h"
-#include "torque-generated/bit-fields-tq.h"
+#include "torque-generated/bit-fields.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -62,7 +62,7 @@ class SourceTextModule
 
   // Get the import.meta object of [module].  If it doesn't exist yet, it is
   // created and passed to the embedder callback for initialization.
-  V8_EXPORT_PRIVATE static Handle<JSObject> GetImportMeta(
+  V8_EXPORT_PRIVATE static MaybeHandle<JSObject> GetImportMeta(
       Isolate* isolate, Handle<SourceTextModule> module);
 
   using BodyDescriptor =

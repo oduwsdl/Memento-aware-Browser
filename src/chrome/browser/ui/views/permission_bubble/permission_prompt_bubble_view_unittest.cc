@@ -8,6 +8,7 @@
 #include "components/permissions/permission_util.h"
 #include "components/permissions/test/mock_permission_request.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/gurl.h"
 
 using PermissionPromptBubbleViewTest = ChromeViewsTestBase;
 
@@ -27,6 +28,7 @@ class TestDelegate : public permissions::PermissionPrompt::Delegate {
                    std::back_inserter(raw_requests_),
                    [](auto& req) { return req.get(); });
   }
+
   TestDelegate(const GURL& origin, const std::vector<std::string> names) {
     std::transform(
         names.begin(), names.end(), std::back_inserter(requests_),
@@ -43,9 +45,19 @@ class TestDelegate : public permissions::PermissionPrompt::Delegate {
     return raw_requests_;
   }
 
+  GURL GetRequestingOrigin() const override {
+    return raw_requests_.front()->GetOrigin();
+  }
+
+  GURL GetEmbeddingOrigin() const override {
+    return GURL("https://embedder.example.com");
+  }
+
   void Accept() override {}
   void Deny() override {}
   void Closing() override {}
+
+  bool WasCurrentRequestAlreadyDisplayed() override { return false; }
 
  private:
   std::vector<std::unique_ptr<permissions::PermissionRequest>> requests_;
@@ -112,4 +124,5 @@ TEST_F(PermissionPromptBubbleViewTest,
   EXPECT_PRED_FORMAT2(::testing::IsSubstring, "CameraPanTiltZoom", title);
   EXPECT_PRED_FORMAT2(::testing::IsNotSubstring, "VideoCapture", title);
 }
+
 }  // namespace

@@ -50,7 +50,8 @@ class RemoveUserButton : public SystemLabelButton {
             listener,
             l10n_util::GetStringUTF16(
                 IDS_ASH_LOGIN_POD_MENU_REMOVE_ITEM_ACCESSIBLE_NAME),
-            SystemLabelButton::DisplayType::DEFAULT),
+            SystemLabelButton::DisplayType::DEFAULT,
+            /*multiline*/ true),
         bubble_(bubble) {}
 
   ~RemoveUserButton() override = default;
@@ -62,16 +63,16 @@ class RemoveUserButton : public SystemLabelButton {
       return;
     }
 
-    if (event->key_code() != ui::VKEY_RETURN) {
-      // The remove-user button should handle bubble dismissal and stop
-      // propagation, otherwise the event will propagate to the bubble widget,
-      // which will close itself and invalidate the bubble pointer in
-      // LoginUserMenuView.
-      event->StopPropagation();
+    if (event->key_code() == ui::VKEY_ESCAPE ||
+        event->key_code() == ui::VKEY_TAB) {
       bubble_->Hide();
-    } else {
-      views::Button::OnKeyEvent(event);
+      // We explicitly move focus back to the dropdown button so the Tab
+      // traversal works correctly.
+      bubble_->GetBubbleOpener()->RequestFocus();
     }
+
+    if (event->key_code() == ui::VKEY_RETURN)
+      views::Button::OnKeyEvent(event);
   }
 
   LoginUserMenuView* bubble_;
@@ -96,6 +97,10 @@ views::View* LoginUserMenuView::TestApi::managed_user_data() {
 
 views::Label* LoginUserMenuView::TestApi::username_label() {
   return bubble_->username_label_;
+}
+
+views::Label* LoginUserMenuView::TestApi::management_disclosure_label() {
+  return bubble_->management_disclosure_label_;
 }
 
 LoginUserMenuView::LoginUserMenuView(
@@ -137,16 +142,16 @@ LoginUserMenuView::LoginUserMenuView(
   }
 
   // User is managed.
-  if (user.user_enterprise_domain) {
+  if (user.user_account_manager) {
     managed_user_data_ = new views::View();
     managed_user_data_->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical));
     base::string16 managed_text = l10n_util::GetStringFUTF16(
         IDS_ASH_LOGIN_MANAGED_SESSION_MONITORING_USER_WARNING,
-        base::UTF8ToUTF16(user.user_enterprise_domain.value()));
-    views::Label* managed_label = login_views_utils::CreateBubbleLabel(
+        base::UTF8ToUTF16(user.user_account_manager.value()));
+    management_disclosure_label_ = login_views_utils::CreateBubbleLabel(
         managed_text, gfx::kGoogleGrey200, this);
-    managed_user_data_->AddChildView(managed_label);
+    managed_user_data_->AddChildView(management_disclosure_label_);
     AddChildView(managed_user_data_);
   }
 

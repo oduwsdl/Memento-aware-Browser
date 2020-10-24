@@ -92,7 +92,7 @@ static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
   info.user_title = info.short_name;
   info.display = static_cast<blink::mojom::DisplayMode>(java_display_mode);
   info.orientation =
-      static_cast<blink::WebScreenOrientationLockType>(java_orientation);
+      static_cast<device::mojom::ScreenOrientationLockType>(java_orientation);
   info.theme_color = JavaColorToOptionalSkColor(java_theme_color);
   info.background_color = JavaColorToOptionalSkColor(java_background_color);
   info.best_primary_icon_url =
@@ -175,7 +175,7 @@ static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
     DCHECK_EQ(shortcut_data.size(), 6u);
     blink::Manifest::ShortcutItem shortcut_item;
     shortcut_item.name = shortcut_data[0];
-    shortcut_item.short_name = base::NullableString16(shortcut_data[1]);
+    shortcut_item.short_name = shortcut_data[1];
     shortcut_item.url = GURL(base::UTF16ToUTF8(shortcut_data[2]));
 
     blink::Manifest::ImageResource icon;

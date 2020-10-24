@@ -1,0 +1,9 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/mojo/public/interfaces/bindings/tests/echo.mojom",
+    "/Users/macuser/chromium/src/mojo/public/interfaces/bindings/tests/echo_import/echo_import.mojom"
+  ]
+}

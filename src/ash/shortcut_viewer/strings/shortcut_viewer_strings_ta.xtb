@@ -10,7 +10,7 @@
 <translation id="1290373024480130896"><ph name="MODIFIER1" /><ph name="SEPARATOR1" /><ph name="MODIFIER2" /><ph name="SEPARATOR2" /><ph name="MODIFIER3" /><ph name="SEPARATOR3" /><ph name="KEY" /></translation>
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1299858300159559687">உங்கள் தற்போதைய பக்கத்தை அச்சிடும்</translation>
-<translation id="1383876407941801731">தேடல்</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1454364489140280055"><ph name="CTRL" /><ph name="SEPARATOR1" /><ph name="SHIFT1" /><ph name="SEPARATOR2" /><ph name="G" /> அல்லது <ph name="SHIFT2" /><ph name="SEPARATOR3" /><ph name="ENTER" /></translation>
 <translation id="1477442857810932985">வரியின் இறுதிக்குச் செல்லும்</translation>
 <translation id="1499072997694708844">தேடல் சாளரம் திறந்திருந்தால் அதை மூடலாம் அல்லது தற்போதைய பக்கம் காட்டப்படுவதை நிறுத்தலாம்</translation>
@@ -47,6 +47,7 @@
 <translation id="2488661730534396940">இடதுபுறத்தில் உள்ள டெஸ்க்கை செயல்படுத்தும்</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2530339807289914946">இணையப் பக்கத்தில் கீழே செல்லும்</translation>
+<translation id="2530896289327917474">சுட்டி உலாவலை இயக்க/முடக்க</translation>
 <translation id="2574014812750545982">பக்கத்தில், இயல்பான அளவிற்குக் காட்சியை மீட்டமைக்கும்</translation>
 <translation id="2596078834055697711">சாளரத்தை ஸ்கிரீன்ஷாட் எடுக்கும்</translation>
 <translation id="2685170433750953446"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" />, பின்னர் <ph name="TAB" /> அல்லது <ph name="RIGHT" />ஐ அழுத்தவும்</translation>

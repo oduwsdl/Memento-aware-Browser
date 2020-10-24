@@ -8,10 +8,13 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
 #include "chrome/browser/installable/installable_logging.h"
@@ -21,12 +24,13 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/test/service_worker_registration_waiter.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace {
 
@@ -91,15 +95,16 @@ InstallableParams GetPrimaryIconPreferMaskableAndSplashIconParams() {
 class LazyWorkerInstallableManager : public InstallableManager {
  public:
   LazyWorkerInstallableManager(content::WebContents* web_contents,
-                               base::Closure quit_closure)
-      : InstallableManager(web_contents), quit_closure_(quit_closure) {}
-  ~LazyWorkerInstallableManager() override {}
+                               base::OnceClosure quit_closure)
+      : InstallableManager(web_contents),
+        quit_closure_(std::move(quit_closure)) {}
+  ~LazyWorkerInstallableManager() override = default;
 
  protected:
-  void OnWaitingForServiceWorker() override { quit_closure_.Run(); }
+  void OnWaitingForServiceWorker() override { std::move(quit_closure_).Run(); }
 
  private:
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
 };
 
 // Used only for testing pages where the manifest URL is changed. This class
@@ -110,7 +115,7 @@ class ResetDataInstallableManager : public InstallableManager {
       : InstallableManager(web_contents) {}
   ~ResetDataInstallableManager() override {}
 
-  void SetQuitClosure(base::Closure quit_closure) {
+  void SetQuitClosure(base::RepeatingClosure quit_closure) {
     quit_closure_ = quit_closure;
   }
 
@@ -121,18 +126,19 @@ class ResetDataInstallableManager : public InstallableManager {
   }
 
  private:
-  base::Closure quit_closure_;
+  base::RepeatingClosure quit_closure_;
 };
 
 class CallbackTester {
  public:
-  explicit CallbackTester(base::Closure quit_closure)
+  explicit CallbackTester(base::RepeatingClosure quit_closure)
       : quit_closure_(quit_closure) {}
 
   void OnDidFinishInstallableCheck(const InstallableData& data) {
     errors_ = data.errors;
     manifest_url_ = data.manifest_url;
-    manifest_ = *data.manifest;
+    if (data.manifest)
+      manifest_ = *data.manifest;
     primary_icon_url_ = data.primary_icon_url;
     if (data.primary_icon)
       primary_icon_.reset(new SkBitmap(*data.primary_icon));
@@ -157,7 +163,7 @@ class CallbackTester {
   bool has_worker() const { return has_worker_; }
 
  private:
-  base::Closure quit_closure_;
+  base::RepeatingClosure quit_closure_;
   std::vector<InstallableStatusCode> errors_;
   GURL manifest_url_;
   blink::Manifest manifest_;
@@ -174,8 +180,10 @@ class NestedCallbackTester {
  public:
   NestedCallbackTester(InstallableManager* manager,
                        const InstallableParams& params,
-                       base::Closure quit_closure)
-      : manager_(manager), params_(params), quit_closure_(quit_closure) {}
+                       base::OnceClosure quit_closure)
+      : manager_(manager),
+        params_(params),
+        quit_closure_(std::move(quit_closure)) {}
 
   void Run() {
     manager_->GetData(
@@ -210,14 +218,15 @@ class NestedCallbackTester {
     EXPECT_EQ(manifest_.display, data.manifest->display);
     EXPECT_EQ(manifest_.name, data.manifest->name);
     EXPECT_EQ(manifest_.short_name, data.manifest->short_name);
+    EXPECT_EQ(manifest_.display_override, data.manifest->display_override);
 
-    quit_closure_.Run();
+    std::move(quit_closure_).Run();
   }
 
  private:
   InstallableManager* manager_;
   InstallableParams params_;
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
   std::vector<InstallableStatusCode> errors_;
   GURL manifest_url_;
   blink::Manifest manifest_;
@@ -310,10 +319,10 @@ class InstallableManagerOfflineCapabilityBrowserTest
           is_service_worker_offline_supported_(std::get<1>(GetParam())) {
       if (is_offline_check_feature_enabled_) {
         scoped_feature_list_.InitAndEnableFeature(
-            features::kCheckOfflineCapability);
+            blink::features::kCheckOfflineCapability);
       } else {
         scoped_feature_list_.InitAndDisableFeature(
-            features::kCheckOfflineCapability);
+            blink::features::kCheckOfflineCapability);
       }
     }
     ~InstallableManagerOfflineCapabilityBrowserTest() override = default;
@@ -330,12 +339,12 @@ class InstallableManagerOfflineCapabilityBrowserTest
           || is_service_worker_offline_supported_;
     }
 
-    // Assume that the name of HTML files using service worker with offline
-    // support includes "_offline_support" suffix.
+    // Assume that the name of HTML files using a service worker with an empty
+    // fetch event handler includes "_empty_fetch_handler" suffix.
     const std::string GetPath(std::string base) {
       if (is_service_worker_offline_supported_)
-        return base + "_offline_support.html";
-      return base + ".html";
+        return base + ".html";
+      return base + "_empty_fetch_handler.html";
     }
 
   private:
@@ -1190,12 +1199,13 @@ IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
   if (IsServiceWorkerOfflineSupported()) {
     EXPECT_TRUE(content::ExecuteScript(
         web_contents,
-        "navigator.serviceWorker.register('service_worker_offline_support.js');"
+        "navigator.serviceWorker.register('service_worker.js');"
     ));
   } else {
     EXPECT_TRUE(content::ExecuteScript(
         web_contents,
-        "navigator.serviceWorker.register('service_worker.js');"));
+        "navigator.serviceWorker.register("
+          "'service_worker_empty_fetch_handler.js');"));
   }
   tester_run_loop.Run();
 
@@ -1331,12 +1341,12 @@ IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
     if (IsServiceWorkerOfflineSupported()) {
       EXPECT_TRUE(content::ExecuteScript(
           web_contents,
-          "navigator.serviceWorker.register("
-              "'service_worker_offline_support.js');"));
+          "navigator.serviceWorker.register('service_worker.js');"));
     } else {
       EXPECT_TRUE(content::ExecuteScript(
           web_contents,
-          "navigator.serviceWorker.register('service_worker.js');"));
+          "navigator.serviceWorker.register("
+            "'service_worker_empty_fetch_handler.js');"));
     }
     tester_run_loop.Run();
 
@@ -1584,9 +1594,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
 
     EXPECT_FALSE(tester->manifest().IsEmpty());
     EXPECT_EQ(std::vector<InstallableStatusCode>{}, tester->errors());
-    EXPECT_EQ(base::ASCIIToUTF16("Manifest test app"),
-              tester->manifest().name.string());
-    EXPECT_EQ(base::string16(), tester->manifest().short_name.string());
+    EXPECT_EQ(base::ASCIIToUTF16("Manifest test app"), tester->manifest().name);
+    EXPECT_EQ(base::string16(),
+              tester->manifest().short_name.value_or(base::string16()));
   }
 
   {
@@ -1616,9 +1626,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
     run_loop.Run();
 
     EXPECT_FALSE(tester->manifest().IsEmpty());
-    EXPECT_EQ(base::string16(), tester->manifest().name.string());
-    EXPECT_EQ(base::ASCIIToUTF16("Manifest"),
-              tester->manifest().short_name.string());
+    EXPECT_EQ(base::string16(),
+              tester->manifest().name.value_or(base::string16()));
+    EXPECT_EQ(base::ASCIIToUTF16("Manifest"), tester->manifest().short_name);
     EXPECT_EQ(std::vector<InstallableStatusCode>{}, tester->errors());
   }
 }
@@ -1814,4 +1824,123 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckSplashIcon) {
     EXPECT_EQ(nullptr, tester->splash_icon());
     EXPECT_EQ(std::vector<InstallableStatusCode>{}, tester->errors());
   }
+}
+
+IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
+                       ManifestLinkChangeReportsError) {
+  InstallableManager* manager = GetManager(browser());
+
+  base::RunLoop run_loop;
+  std::unique_ptr<CallbackTester> tester(
+      new CallbackTester(run_loop.QuitClosure()));
+
+  NavigateAndRunInstallableManager(browser(), tester.get(), GetManifestParams(),
+                                   "/banners/manifest_test_page.html");
+  // Simulate a manifest URL update by just calling the observer function.
+  static_cast<content::WebContentsObserver*>(manager)->DidUpdateWebManifestURL(
+      nullptr, base::nullopt);
+  run_loop.Run();
+
+  ASSERT_EQ(tester->errors().size(), 1u);
+  EXPECT_EQ(tester->errors()[0], MANIFEST_URL_CHANGED);
+}
+
+// A dedicated test fixture for DisplayOverride, which is supported
+// only for the new web apps mode, and requires a command line switch
+// to enable manifest parsing.
+class InstallableManagerBrowserTest_DisplayOverride
+    : public InstallableManagerBrowserTest {
+ public:
+  InstallableManagerBrowserTest_DisplayOverride() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kWebAppManifestDisplayOverride);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest_DisplayOverride,
+                       CheckManifestOnly) {
+  base::RunLoop run_loop;
+  std::unique_ptr<CallbackTester> tester(
+      new CallbackTester(run_loop.QuitClosure()));
+
+  NavigateAndRunInstallableManager(
+      browser(), tester.get(), GetManifestParams(),
+      GetURLOfPageWithServiceWorkerAndManifest(
+          "/banners/manifest_display_override.json"));
+  run_loop.Run();
+
+  EXPECT_FALSE(tester->manifest().IsEmpty());
+  EXPECT_FALSE(tester->manifest_url().is_empty());
+  ASSERT_EQ(2u, tester->manifest().display_override.size());
+  EXPECT_EQ(blink::mojom::DisplayMode::kMinimalUi,
+            tester->manifest().display_override[0]);
+  EXPECT_EQ(blink::mojom::DisplayMode::kStandalone,
+            tester->manifest().display_override[1]);
+
+  EXPECT_TRUE(tester->primary_icon_url().is_empty());
+  EXPECT_EQ(nullptr, tester->primary_icon());
+  EXPECT_FALSE(tester->has_maskable_primary_icon());
+  EXPECT_FALSE(tester->valid_manifest());
+  EXPECT_FALSE(tester->has_worker());
+  EXPECT_TRUE(tester->splash_icon_url().is_empty());
+  EXPECT_EQ(nullptr, tester->splash_icon());
+  EXPECT_EQ(std::vector<InstallableStatusCode>{}, tester->errors());
+}
+
+IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest_DisplayOverride,
+                       ManifestDisplayOverrideReportsError) {
+  base::RunLoop run_loop;
+  std::unique_ptr<CallbackTester> tester(
+      new CallbackTester(run_loop.QuitClosure()));
+
+  NavigateAndRunInstallableManager(
+      browser(), tester.get(), GetWebAppParams(),
+      GetURLOfPageWithServiceWorkerAndManifest(
+          "/banners/manifest_display_override_contains_browser.json"));
+  run_loop.Run();
+
+  EXPECT_FALSE(tester->manifest().IsEmpty());
+  EXPECT_FALSE(tester->manifest_url().is_empty());
+  ASSERT_EQ(3u, tester->manifest().display_override.size());
+  EXPECT_EQ(blink::mojom::DisplayMode::kBrowser,
+            tester->manifest().display_override[0]);
+  EXPECT_EQ(blink::mojom::DisplayMode::kMinimalUi,
+            tester->manifest().display_override[1]);
+  EXPECT_EQ(blink::mojom::DisplayMode::kStandalone,
+            tester->manifest().display_override[2]);
+  EXPECT_EQ(
+      std::vector<InstallableStatusCode>{
+          MANIFEST_DISPLAY_OVERRIDE_NOT_SUPPORTED},
+      tester->errors());
+}
+
+IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest_DisplayOverride,
+                       FallbackToDisplayBrowser) {
+  base::RunLoop run_loop;
+  std::unique_ptr<CallbackTester> tester(
+      new CallbackTester(run_loop.QuitClosure()));
+
+  NavigateAndRunInstallableManager(
+      browser(), tester.get(), GetWebAppParams(),
+      GetURLOfPageWithServiceWorkerAndManifest(
+          "/banners/manifest_display_override_display_is_browser.json"));
+  run_loop.Run();
+
+  EXPECT_FALSE(tester->manifest().IsEmpty());
+  EXPECT_FALSE(tester->manifest_url().is_empty());
+  ASSERT_EQ(1u, tester->manifest().display_override.size());
+  EXPECT_EQ(blink::mojom::DisplayMode::kStandalone,
+            tester->manifest().display_override[0]);
+
+  EXPECT_FALSE(tester->primary_icon_url().is_empty());
+  EXPECT_NE(nullptr, tester->primary_icon());
+  EXPECT_EQ(144, tester->primary_icon()->width());
+  EXPECT_TRUE(tester->valid_manifest());
+  EXPECT_TRUE(tester->has_worker());
+  EXPECT_TRUE(tester->splash_icon_url().is_empty());
+  EXPECT_EQ(nullptr, tester->splash_icon());
+  EXPECT_EQ(std::vector<InstallableStatusCode>{}, tester->errors());
 }

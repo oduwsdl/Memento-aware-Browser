@@ -157,12 +157,12 @@ std::vector<base::string16> ToValues(
 }
 
 std::unique_ptr<views::ToggleImageButton> CreatePasswordViewButton(
-    views::ButtonListener* listener,
+    views::Button::PressedCallback callback,
     bool are_passwords_revealed) {
-  auto button = std::make_unique<views::ToggleImageButton>(listener);
+  auto button = std::make_unique<views::ToggleImageButton>(std::move(callback));
   button->SetFocusForPlatform();
   button->SetInstallFocusRingOnFocus(true);
-  button->set_request_focus_on_press(true);
+  button->SetRequestFocusOnPress(true);
   button->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_SHOW_PASSWORD));
   button->SetToggledTooltipText(
@@ -234,7 +234,7 @@ std::unique_ptr<views::View> CreateHeaderImage(int image_id) {
   if (preferred_size.width()) {
     float scale =
         static_cast<float>(ChromeLayoutProvider::Get()->GetDistanceMetric(
-            DISTANCE_BUBBLE_PREFERRED_WIDTH)) /
+            views::DISTANCE_BUBBLE_PREFERRED_WIDTH)) /
         preferred_size.width();
     preferred_size = gfx::ScaleToRoundedSize(preferred_size, scale);
     image_view->SetImageSize(preferred_size);
@@ -274,26 +274,31 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
     // The credential to be saved doesn't contain password but just the identity
     // provider (e.g. "Sign in with Google"). Thus, the layout is different.
     SetLayoutManager(std::make_unique<views::FillLayout>());
-    std::pair<base::string16, base::string16> titles =
-        GetCredentialLabelsForAccountChooser(password_form);
-    CredentialsItemView* credential_view = new CredentialsItemView(
-        this, titles.first, titles.second, &password_form,
-        content::BrowserContext::GetDefaultStoragePartition(
-            controller_.GetProfile())
-            ->GetURLLoaderFactoryForBrowserProcess()
-            .get());
-    credential_view->SetEnabled(false);
-    AddChildView(credential_view);
+    const auto titles = GetCredentialLabelsForAccountChooser(password_form);
+    AddChildView(std::make_unique<CredentialsItemView>(
+                     views::Button::PressedCallback(), titles.first,
+                     titles.second, &password_form,
+                     content::BrowserContext::GetDefaultStoragePartition(
+                         controller_.GetProfile())
+                         ->GetURLLoaderFactoryForBrowserProcess()
+                         .get()))
+        ->SetEnabled(false);
   } else {
     std::unique_ptr<views::EditableCombobox> username_dropdown =
         CreateUsernameEditableCombobox(password_form);
-    username_dropdown->set_listener(this);
+    username_dropdown->SetCallback(base::BindRepeating(
+        &PasswordSaveUpdateView::OnContentChanged, base::Unretained(this)));
     std::unique_ptr<views::EditableCombobox> password_dropdown =
         CreatePasswordEditableCombobox(password_form, are_passwords_revealed_);
-    password_dropdown->set_listener(this);
+    password_dropdown->SetCallback(base::BindRepeating(
+        &PasswordSaveUpdateView::OnContentChanged, base::Unretained(this)));
 
     std::unique_ptr<views::ToggleImageButton> password_view_button =
-        CreatePasswordViewButton(this, are_passwords_revealed_);
+        CreatePasswordViewButton(
+            base::BindRepeating(
+                &PasswordSaveUpdateView::TogglePasswordVisibility,
+                base::Unretained(this)),
+            are_passwords_revealed_);
 
     views::GridLayout* layout =
         SetLayoutManager(std::make_unique<views::GridLayout>());
@@ -306,6 +311,7 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
                         std::move(password_view_button));
   }
 
+  SetShowIcon(false);
   SetFootnoteView(CreateFooterView());
   SetCancelCallback(base::BindOnce(&PasswordSaveUpdateView::OnDialogCancelled,
                                    base::Unretained(this)));
@@ -337,46 +343,6 @@ bool PasswordSaveUpdateView::Accept() {
   return true;
 }
 
-void PasswordSaveUpdateView::OnDialogCancelled() {
-  UpdateUsernameAndPasswordInModel();
-  if (is_update_bubble_) {
-    controller_.OnNopeUpdateClicked();
-  } else {
-    controller_.OnNeverForThisSiteClicked();
-  }
-}
-
-void PasswordSaveUpdateView::ButtonPressed(views::Button* sender,
-                                           const ui::Event& event) {
-  DCHECK(sender == password_view_button_);
-  TogglePasswordVisibility();
-}
-
-void PasswordSaveUpdateView::OnContentChanged(
-    views::EditableCombobox* editable_combobox) {
-  bool is_update_state_before = controller_.IsCurrentStateUpdate();
-  bool is_ok_button_enabled_before =
-      IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK);
-  UpdateUsernameAndPasswordInModel();
-  // Maybe the buttons should be updated.
-  if (is_update_state_before != controller_.IsCurrentStateUpdate() ||
-      is_ok_button_enabled_before !=
-          IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK)) {
-    UpdateBubbleUIElements();
-    DialogModelChanged();
-    // TODO(ellyjones): This should not be necessary; DialogModelChanged()
-    // implies a re-layout of the dialog.
-    GetWidget()->GetRootView()->Layout();
-  }
-}
-
-gfx::Size PasswordSaveUpdateView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
 views::View* PasswordSaveUpdateView::GetInitiallyFocusedView() {
   if (username_dropdown_ && username_dropdown_->GetText().empty())
     return username_dropdown_;
@@ -400,14 +366,6 @@ gfx::ImageSkia PasswordSaveUpdateView::GetWindowIcon() {
   return gfx::ImageSkia();
 }
 
-bool PasswordSaveUpdateView::ShouldShowWindowIcon() const {
-  return false;
-}
-
-bool PasswordSaveUpdateView::ShouldShowCloseButton() const {
-  return true;
-}
-
 void PasswordSaveUpdateView::AddedToWidget() {
   static_cast<views::Label*>(GetBubbleFrameView()->title())
       ->SetAllowCharacterBreak(true);
@@ -416,8 +374,8 @@ void PasswordSaveUpdateView::AddedToWidget() {
 void PasswordSaveUpdateView::OnThemeChanged() {
   PasswordBubbleViewBase::OnThemeChanged();
   int id = color_utils::IsDark(GetBubbleFrameView()->GetBackgroundColor())
-               ? IDR_SAVE_PASSWORD_DARK
-               : IDR_SAVE_PASSWORD;
+               ? IDR_SAVE_PASSWORD_MULTI_DEVICE_DARK
+               : IDR_SAVE_PASSWORD_MULTI_DEVICE;
   GetBubbleFrameView()->SetHeaderView(CreateHeaderImage(id));
   if (password_view_button_) {
     auto* theme = GetNativeTheme();
@@ -501,7 +459,7 @@ void PasswordSaveUpdateView::UpdateBubbleUIElements() {
       ui::DIALOG_BUTTON_CANCEL,
       l10n_util::GetStringUTF16(
           is_update_bubble_ ? IDS_PASSWORD_MANAGER_CANCEL_BUTTON
-                            : IDS_PASSWORD_MANAGER_BUBBLE_BLACKLIST_BUTTON));
+                            : IDS_PASSWORD_MANAGER_BUBBLE_BLOCKLIST_BUTTON));
 
   SetTitle(controller_.GetTitle());
 }
@@ -511,9 +469,34 @@ std::unique_ptr<views::View> PasswordSaveUpdateView::CreateFooterView() {
     return nullptr;
   auto label = std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(IDS_SAVE_PASSWORD_FOOTER),
-      ChromeTextContext::CONTEXT_BODY_TEXT_SMALL,
+      ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
       views::style::STYLE_SECONDARY);
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   return label;
+}
+
+void PasswordSaveUpdateView::OnDialogCancelled() {
+  UpdateUsernameAndPasswordInModel();
+  if (is_update_bubble_)
+    controller_.OnNopeUpdateClicked();
+  else
+    controller_.OnNeverForThisSiteClicked();
+}
+
+void PasswordSaveUpdateView::OnContentChanged() {
+  bool is_update_state_before = controller_.IsCurrentStateUpdate();
+  bool is_ok_button_enabled_before =
+      IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK);
+  UpdateUsernameAndPasswordInModel();
+  // Maybe the buttons should be updated.
+  if (is_update_state_before != controller_.IsCurrentStateUpdate() ||
+      is_ok_button_enabled_before !=
+          IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK)) {
+    UpdateBubbleUIElements();
+    DialogModelChanged();
+    // TODO(ellyjones): This should not be necessary; DialogModelChanged()
+    // implies a re-layout of the dialog.
+    GetWidget()->GetRootView()->Layout();
+  }
 }

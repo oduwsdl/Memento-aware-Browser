@@ -933,7 +933,7 @@ error::Error DoScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                        GLenum filter,
                                        const GLfloat* bounds_rect);
 error::Error DoScheduleCALayerInUseQueryCHROMIUM(
-    GLuint n,
+    GLsizei n,
     const volatile GLuint* textures);
 error::Error DoScheduleDCLayerCHROMIUM(GLuint texture_0,
                                        GLuint texture_1,
@@ -1078,17 +1078,7 @@ error::Error DoBindFragDataLocationEXT(GLuint program,
 error::Error DoGetFragDataIndexEXT(GLuint program,
                                    const char* name,
                                    GLint* index);
-error::Error DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(
-    GLint location,
-    GLboolean transpose,
-    const volatile GLfloat* defaultValue);
 
-error::Error DoOverlayPromotionHintCHROMIUM(GLuint texture,
-                                            GLboolean promotion_hint,
-                                            GLint display_x,
-                                            GLint display_y,
-                                            GLint display_width,
-                                            GLint display_height);
 error::Error DoSetDrawRectangleCHROMIUM(GLint x,
                                         GLint y,
                                         GLint width,

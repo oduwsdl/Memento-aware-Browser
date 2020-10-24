@@ -6,8 +6,6 @@
 
 #include "base/no_destructor.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -43,9 +41,7 @@ const std::vector<SearchConcept>& GetResetSearchConcepts() {
 }
 
 bool IsPowerwashAllowed() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return !connector->IsEnterpriseManaged() &&
+  return !webui::IsEnterpriseManaged() &&
          !user_manager::UserManager::Get()->IsLoggedInAsGuest() &&
          !user_manager::UserManager::Get()->IsLoggedInAsSupervisedUser() &&
          !user_manager::UserManager::Get()->IsLoggedInAsChildUser();
@@ -56,8 +52,9 @@ bool IsPowerwashAllowed() {
 ResetSection::ResetSection(Profile* profile,
                            SearchTagRegistry* search_tag_registry)
     : OsSettingsSection(profile, search_tag_registry) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   if (IsPowerwashAllowed())
-    registry()->AddSearchTags(GetResetSearchConcepts());
+    updater.AddSearchTags(GetResetSearchConcepts());
 }
 
 ResetSection::~ResetSection() = default;
@@ -108,6 +105,11 @@ mojom::SearchResultIcon ResetSection::GetSectionIcon() const {
 
 std::string ResetSection::GetSectionPath() const {
   return mojom::kResetSectionPath;
+}
+
+bool ResetSection::LogMetric(mojom::Setting setting, base::Value& value) const {
+  // Unimplemented.
+  return false;
 }
 
 void ResetSection::RegisterHierarchy(HierarchyGenerator* generator) const {

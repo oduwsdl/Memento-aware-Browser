@@ -148,10 +148,10 @@ int StaleHostResolver::RequestImpl::Start(
   if (CacheDataIsUsable()) {
     // |stale_timer_| is deleted when the Request is deleted, so it's safe to
     // use Unretained here.
-    base::Callback<void()> stale_callback =
-        base::Bind(&StaleHostResolver::RequestImpl::OnStaleDelayElapsed,
-                   base::Unretained(this));
-    stale_timer_.Start(FROM_HERE, resolver_->options_.delay, stale_callback);
+    stale_timer_.Start(
+        FROM_HERE, resolver_->options_.delay,
+        base::BindOnce(&StaleHostResolver::RequestImpl::OnStaleDelayElapsed,
+                       base::Unretained(this)));
   } else {
     cache_error_ = net::ERR_DNS_CACHE_MISS;
     cache_request_.reset();
@@ -332,7 +332,7 @@ net::HostCache* StaleHostResolver::GetHostCache() {
   return inner_resolver_->GetHostCache();
 }
 
-std::unique_ptr<base::Value> StaleHostResolver::GetDnsConfigAsValue() const {
+base::Value StaleHostResolver::GetDnsConfigAsValue() const {
   return inner_resolver_->GetDnsConfigAsValue();
 }
 

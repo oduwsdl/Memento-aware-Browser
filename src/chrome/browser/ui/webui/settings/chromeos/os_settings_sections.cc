@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_sections.h"
 
+#include "build/branding_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/settings/chromeos/about_section.h"
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_section.h"
@@ -23,6 +24,7 @@
 #include "chrome/browser/ui/webui/settings/chromeos/privacy_section.h"
 #include "chrome/browser/ui/webui/settings/chromeos/reset_section.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search_section.h"
+#include "chromeos/components/phonehub/phone_hub_manager.h"
 
 namespace chromeos {
 namespace settings {
@@ -31,6 +33,7 @@ OsSettingsSections::OsSettingsSections(
     Profile* profile,
     SearchTagRegistry* search_tag_registry,
     multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
+    phonehub::PhoneHubManager* phone_hub_manager,
     syncer::SyncService* sync_service,
     SupervisedUserService* supervised_user_service,
     KerberosCredentialsManager* kerberos_credentials_manager,
@@ -53,7 +56,7 @@ OsSettingsSections::OsSettingsSections(
   sections_.push_back(std::move(bluetooth_section));
 
   auto multidevice_section = std::make_unique<MultiDeviceSection>(
-      profile, search_tag_registry, multidevice_setup_client,
+      profile, search_tag_registry, multidevice_setup_client, phone_hub_manager,
       android_sms_service, profile->GetPrefs());
   sections_map_[mojom::Section::kMultiDevice] = multidevice_section.get();
   sections_.push_back(std::move(multidevice_section));
@@ -100,8 +103,8 @@ OsSettingsSections::OsSettingsSections(
   sections_map_[mojom::Section::kPrivacyAndSecurity] = privacy_section.get();
   sections_.push_back(std::move(privacy_section));
 
-  auto language_section =
-      std::make_unique<LanguagesSection>(profile, search_tag_registry);
+  auto language_section = std::make_unique<LanguagesSection>(
+      profile, search_tag_registry, profile->GetPrefs());
   sections_map_[mojom::Section::kLanguagesAndInput] = language_section.get();
   sections_.push_back(std::move(language_section));
 
@@ -125,8 +128,13 @@ OsSettingsSections::OsSettingsSections(
   sections_map_[mojom::Section::kReset] = reset_section.get();
   sections_.push_back(std::move(reset_section));
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  auto about_section = std::make_unique<AboutSection>(
+      profile, search_tag_registry, profile->GetPrefs());
+#else
   auto about_section =
       std::make_unique<AboutSection>(profile, search_tag_registry);
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
   sections_map_[mojom::Section::kAboutChromeOs] = about_section.get();
   sections_.push_back(std::move(about_section));
 }

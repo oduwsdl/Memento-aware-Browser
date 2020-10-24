@@ -10,6 +10,10 @@
 namespace web {
 namespace features {
 
+// Reduces the size of the session to persist when enabled. Specific size is
+// obtained from "session-size" Finch parameter.
+extern const base::Feature kReduceSessionSize;
+
 // Used to crash the browser if unexpected URL change is detected.
 // https://crbug.com/841105.
 extern const base::Feature kCrashOnUnexpectedURLChange;
@@ -52,6 +56,19 @@ extern const base::Feature kPreserveScrollViewProperties;
 
 // When enabled, display an interstitial on lookalike URL navigations.
 extern const base::Feature kIOSLookalikeUrlNavigationSuggestionsUI;
+
+// When enabled, supports dropping URLs on the web content area to navigate to
+// the URL.
+extern const base::Feature kAddWebContentDropInteraction;
+
+// When enabled, opening a URL with a text fragment (e.g.,
+// example.com/#:~:text=examples) will cause matching text in the page to be
+// highlighted and scrolled into view.
+// See also: https://wicg.github.io/scroll-to-text-fragment/
+extern const base::Feature kScrollToTextIOS;
+
+// When enabled, display an interstitial on legacy TLS connections.
+extern const base::Feature kIOSLegacyTLSInterstitial;
 
 // When true, for each navigation, the default user agent is chosen by the
 // WebClient GetDefaultUserAgent() method. If it is false, the mobile version

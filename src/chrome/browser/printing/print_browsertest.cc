@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <memory>
 
 #include "base/auto_reset.h"
@@ -12,8 +13,12 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/printing/print_job_manager.h"
+#include "chrome/browser/printing/print_view_manager_base.h"
 #include "chrome/browser/printing/print_view_manager_common.h"
+#include "chrome/browser/printing/printer_query.h"
 #include "chrome/browser/printing/printing_message_filter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -31,13 +36,14 @@
 #include "components/printing/common/print.mojom.h"
 #include "components/printing/common/print_messages.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/no_renderer_crashes_assertion.h"
 #include "extensions/common/extension.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/dns/mock_host_resolver.h"
@@ -52,6 +58,72 @@ namespace printing {
 namespace {
 
 constexpr int kDefaultDocumentCookie = 1234;
+
+mojom::PrintParamsPtr GetPrintParams() {
+  auto params = mojom::PrintParams::New();
+  params->page_size = gfx::Size(612, 792);
+  params->content_size = gfx::Size(540, 720);
+  params->printable_area = gfx::Rect(612, 792);
+  params->dpi = gfx::Size(72, 72);
+  params->document_cookie = kDefaultDocumentCookie;
+  params->pages_per_sheet = 4;
+  params->printed_doc_type = IsOopifEnabled() ? mojom::SkiaDocumentType::kMSKP
+                                              : mojom::SkiaDocumentType::kPDF;
+  return params;
+}
+
+void UpdatePrintSettingsReplyOnIO(
+    scoped_refptr<PrintQueriesQueue> queue,
+    std::unique_ptr<PrinterQuery> printer_query,
+    mojom::PrintManagerHost::UpdatePrintSettingsCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK(printer_query);
+  auto params = mojom::PrintPagesParams::New();
+  params->params = mojom::PrintParams::New();
+  if (printer_query->last_status() == PrintingContext::OK) {
+    RenderParamsFromPrintSettings(printer_query->settings(),
+                                  params->params.get());
+    params->params->document_cookie = printer_query->cookie();
+    params->pages = PageRange::GetPages(printer_query->settings().ranges());
+  }
+  bool canceled = printer_query->last_status() == PrintingContext::CANCEL;
+
+  params->params = GetPrintParams();
+
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](mojom::PrintManagerHost::UpdatePrintSettingsCallback callback,
+             mojom::PrintPagesParamsPtr params, bool canceled) {
+            DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+            std::move(callback).Run(std::move(params), canceled);
+          },
+          std::move(callback), std::move(params), canceled));
+
+  if (printer_query->cookie() && printer_query->settings().dpi()) {
+    queue->QueuePrinterQuery(std::move(printer_query));
+  } else {
+    printer_query->StopWorker();
+  }
+}
+
+void UpdatePrintSettingsOnIO(
+    int32_t cookie,
+    mojom::PrintManagerHost::UpdatePrintSettingsCallback callback,
+    scoped_refptr<PrintQueriesQueue> queue,
+    base::Value job_settings) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  std::unique_ptr<PrinterQuery> printer_query = queue->PopPrinterQuery(cookie);
+  if (!printer_query) {
+    printer_query = queue->CreatePrinterQuery(
+        content::ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE);
+  }
+  auto* printer_query_ptr = printer_query.get();
+  printer_query_ptr->SetSettings(
+      std::move(job_settings),
+      base::BindOnce(&UpdatePrintSettingsReplyOnIO, queue,
+                     std::move(printer_query), std::move(callback)));
+}
 
 class PrintPreviewObserver : PrintPreviewUI::TestDelegate {
  public:
@@ -84,7 +156,7 @@ class PrintPreviewObserver : PrintPreviewUI::TestDelegate {
 
  private:
   // PrintPreviewUI::TestDelegate:
-  void DidGetPreviewPageCount(int page_count) override {
+  void DidGetPreviewPageCount(uint32_t page_count) override {
     total_page_count_ = page_count;
   }
 
@@ -109,39 +181,12 @@ class PrintPreviewObserver : PrintPreviewUI::TestDelegate {
   }
 
   base::Optional<content::DOMMessageQueue> queue_;
-  int total_page_count_ = 1;
-  int rendered_page_count_ = 0;
+  uint32_t total_page_count_ = 1;
+  uint32_t rendered_page_count_ = 0;
   content::WebContents* preview_dialog_ = nullptr;
   base::RunLoop* run_loop_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PrintPreviewObserver);
-};
-
-class NupPrintingTestDelegate : public PrintingMessageFilter::TestDelegate {
- public:
-  NupPrintingTestDelegate() {
-    PrintingMessageFilter::SetDelegateForTesting(this);
-  }
-  ~NupPrintingTestDelegate() override {
-    PrintingMessageFilter::SetDelegateForTesting(nullptr);
-  }
-
-  // PrintingMessageFilter::TestDelegate:
-  PrintMsg_Print_Params GetPrintParams() override {
-    PrintMsg_Print_Params params;
-    params.page_size = gfx::Size(612, 792);
-    params.content_size = gfx::Size(540, 720);
-    params.printable_area = gfx::Rect(612, 792);
-    params.dpi = gfx::Size(72, 72);
-    params.document_cookie = kDefaultDocumentCookie;
-    params.pages_per_sheet = 4;
-    params.printed_doc_type = IsOopifEnabled() ? mojom::SkiaDocumentType::kMSKP
-                                               : mojom::SkiaDocumentType::kPDF;
-    return params;
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NupPrintingTestDelegate);
 };
 
 class TestPrintRenderFrame
@@ -268,6 +313,26 @@ class KillPrintRenderFrame
 };
 
 }  // namespace
+
+class TestPrintViewManager : public PrintViewManagerBase {
+ public:
+  explicit TestPrintViewManager(content::WebContents* web_contents)
+      : PrintViewManagerBase(web_contents) {}
+  TestPrintViewManager(const TestPrintViewManager&) = delete;
+  TestPrintViewManager& operator=(const TestPrintViewManager&) = delete;
+  ~TestPrintViewManager() override = default;
+
+ private:
+  // printing::mojom::PrintManagerHost:
+  void UpdatePrintSettings(int32_t cookie,
+                           base::Value job_settings,
+                           UpdatePrintSettingsCallback callback) override {
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&UpdatePrintSettingsOnIO, cookie, std::move(callback),
+                       queue_, std::move(job_settings)));
+  }
+};
 
 class PrintBrowserTest : public InProcessBrowserTest {
  public:
@@ -405,6 +470,10 @@ class IsolateOriginsPrintBrowserTest : public PrintBrowserTest {
 class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
  public:
   BackForwardCachePrintBrowserTest() = default;
+  BackForwardCachePrintBrowserTest(const BackForwardCachePrintBrowserTest&) =
+      delete;
+  BackForwardCachePrintBrowserTest& operator=(
+      const BackForwardCachePrintBrowserTest&) = delete;
   ~BackForwardCachePrintBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -417,7 +486,7 @@ class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
             {"TimeToLiveInBackForwardCacheInSeconds", "3600"},
         });
 
-    InProcessBrowserTest::SetUpCommandLine(command_line);
+    PrintBrowserTest::SetUpCommandLine(command_line);
   }
 
   content::WebContents* web_contents() const {
@@ -449,8 +518,6 @@ class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
         << location.ToString();
   }
 
-  base::HistogramTester histogram_tester_;
-
  private:
   void AddSampleToBuckets(std::vector<base::Bucket>* buckets,
                           base::HistogramBase::Sample sample) {
@@ -464,10 +531,9 @@ class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
     }
   }
 
+  base::HistogramTester histogram_tester_;
   std::vector<base::Bucket> expected_blocklisted_features_;
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(BackForwardCachePrintBrowserTest);
 };
 
 constexpr char IsolateOriginsPrintBrowserTest::kIsolatedSite[];
@@ -527,6 +593,89 @@ IN_PROC_BROWSER_TEST_F(PrintBrowserTest, SelectionContainsIframe) {
   ui_test_utils::NavigateToURL(browser(), url);
 
   PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/true);
+}
+
+// https://crbug.com/1125972
+// https://crbug.com/1131598
+IN_PROC_BROWSER_TEST_F(PrintBrowserTest, NoScrolling) {
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/printing/with-scrollable.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  const char kExpression1[] = "iframe.contentWindow.scrollY";
+  const char kExpression2[] = "scrollable.scrollTop";
+  const char kExpression3[] = "shapeshifter.scrollTop";
+
+  double old_scroll1 = content::EvalJs(contents, kExpression1).ExtractDouble();
+  double old_scroll2 = content::EvalJs(contents, kExpression2).ExtractDouble();
+  double old_scroll3 = content::EvalJs(contents, kExpression3).ExtractDouble();
+
+  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+
+  double new_scroll1 = content::EvalJs(contents, kExpression1).ExtractDouble();
+
+  // TODO(crbug.com/1131598): Perform the corresponding EvalJs() calls here and
+  // assign to new_scroll2 and new_scroll3, once the printing code has been
+  // fixed to handle these cases. Right now, the scroll offset jumps.
+  double new_scroll2 = old_scroll2;
+  double new_scroll3 = old_scroll3;
+
+  EXPECT_EQ(old_scroll1, new_scroll1);
+  EXPECT_EQ(old_scroll2, new_scroll2);
+  EXPECT_EQ(old_scroll3, new_scroll3);
+}
+
+// https://crbug.com/1131598
+IN_PROC_BROWSER_TEST_F(PrintBrowserTest, DISABLED_NoScrollingFrameset) {
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/printing/frameset.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  const char kExpression[] =
+      "document.getElementById('frame').contentWindow.scrollY";
+
+  double old_scroll = content::EvalJs(contents, kExpression).ExtractDouble();
+
+  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+
+  double new_scroll = content::EvalJs(contents, kExpression).ExtractDouble();
+
+  EXPECT_EQ(old_scroll, new_scroll);
+}
+
+// https://crbug.com/1125972
+IN_PROC_BROWSER_TEST_F(PrintBrowserTest, NoScrollingVerticalRl) {
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/printing/vertical-rl.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+
+  // Test that entering print preview didn't mess up the scroll position.
+  EXPECT_EQ(
+      0, content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                         "window.scrollX"));
+}
+
+// Before invoking print preview, page scale is changed to a different value.
+// Test that when print preview is ready, in other words when printing is
+// finished, the page scale factor gets reset to initial scale.
+IN_PROC_BROWSER_TEST_F(PrintBrowserTest, ResetPageScaleAfterPrintPreview) {
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/printing/test1.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  contents->SetPageScale(1.5);
+
+  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+
+  double contents_page_scale_after_print =
+      content::EvalJs(contents, "window.visualViewport.scale").ExtractDouble();
+
+  constexpr double kContentsInitialScale = 1.0;
+  EXPECT_EQ(kContentsInitialScale, contents_page_scale_after_print);
 }
 
 // Printing frame content for the main frame of a generic webpage.
@@ -725,9 +874,21 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessPrintBrowserTest,
 
   KillPrintRenderFrame frame_content(subframe_rph);
   frame_content.OverrideBinderForTesting(subframe);
-  content::ScopedAllowRendererCrashes allow_renderer_crashes(subframe_rph);
 
-  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+  // Waits for the renderer to be down.
+  content::RenderProcessHostWatcher process_watcher(
+      subframe_rph, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+
+  // Adds the observer to get the status for the preview.
+  PrintPreviewObserver print_preview_observer(/*wait_for_loaded=*/false);
+  StartPrint(browser()->tab_strip_model()->GetActiveWebContents(),
+             /*print_renderer=*/mojo::NullAssociatedRemote(),
+             /*print_preview_disabled=*/false, /*has_selection*/ false);
+
+  // Makes sure that |subframe_rph| is terminated.
+  process_watcher.Wait();
+  // Confirms that the preview pages are rendered.
+  print_preview_observer.WaitUntilPreviewIsReady();
 }
 
 // Printing preview a web page with an iframe from an isolated origin.
@@ -778,7 +939,8 @@ IN_PROC_BROWSER_TEST_F(BackForwardCachePrintBrowserTest, DisableCaching) {
   ASSERT_TRUE(embedded_test_server()->Started());
 
   // 1) Navigate to A and trigger printing.
-  GURL url(embedded_test_server()->GetURL("a.com", "/printing/test1.html"));
+  GURL url(embedded_test_server()->GetURL(
+      "a.com", "/back_forward_cache/no-favicon.html"));
   ui_test_utils::NavigateToURL(browser(), url);
   content::RenderFrameHost* rfh_a = current_frame_host();
   content::RenderFrameDeletedObserver delete_observer_rfh_a(rfh_a);
@@ -786,7 +948,8 @@ IN_PROC_BROWSER_TEST_F(BackForwardCachePrintBrowserTest, DisableCaching) {
 
   // 2) Navigate to B.
   // The first page is not cached because printing preview was open.
-  GURL url_2(embedded_test_server()->GetURL("b.com", "/printing/test2.html"));
+  GURL url_2(embedded_test_server()->GetURL(
+      "b.com", "/back_forward_cache/no-favicon.html"));
   ui_test_utils::NavigateToURL(browser(), url_2);
   delete_observer_rfh_a.WaitUntilDeleted();
 
@@ -815,20 +978,32 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessPrintExtensionBrowserTest,
 // Printing frame content for the main frame of a generic webpage with N-up
 // priting. This is a regression test for https://crbug.com/937247
 IN_PROC_BROWSER_TEST_F(PrintBrowserTest, PrintNup) {
-  NupPrintingTestDelegate test_delegate;
   ASSERT_TRUE(embedded_test_server()->Started());
   GURL url(embedded_test_server()->GetURL("/printing/test1.html"));
   ui_test_utils::NavigateToURL(browser(), url);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(web_contents);
+  content::RemoveWebContentsReceiverSet(web_contents,
+                                        mojom::PrintManagerHost::Name_);
+  TestPrintViewManager print_view_manager(web_contents);
 
   PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
 }
 
 // Site per process version of PrintBrowserTest.PrintNup.
 IN_PROC_BROWSER_TEST_F(SitePerProcessPrintBrowserTest, PrintNup) {
-  NupPrintingTestDelegate test_delegate;
   ASSERT_TRUE(embedded_test_server()->Started());
   GURL url(embedded_test_server()->GetURL("/printing/test1.html"));
   ui_test_utils::NavigateToURL(browser(), url);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(web_contents);
+  content::RemoveWebContentsReceiverSet(web_contents,
+                                        mojom::PrintManagerHost::Name_);
+  TestPrintViewManager print_view_manager(web_contents);
 
   PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
 }
@@ -870,7 +1045,8 @@ IN_PROC_BROWSER_TEST_F(PrintBrowserTest, PDFPluginNotKeyboardFocusable) {
     const button = document.getElementsByTagName('print-preview-app')[0]
                        .$['previewArea']
                        .$$('iframe')
-                       .contentDocument.querySelector('#zoom-toolbar')
+                       .contentDocument.querySelector('pdf-viewer-pp')
+                       .shadowRoot.querySelector('#zoom-toolbar')
                        .$['zoom-out-button'];
     button.addEventListener('focus', (e) => {
       window.domAutomationController.send(e.target.id);
@@ -879,8 +1055,7 @@ IN_PROC_BROWSER_TEST_F(PrintBrowserTest, PDFPluginNotKeyboardFocusable) {
     const select_tag = document.getElementsByTagName('print-preview-app')[0]
                            .$['sidebar']
                            .$['destinationSettings']
-                           .$['destinationSelect']
-                           .$$('select');
+                           .$['destinationSelect'];
     select_tag.addEventListener('focus', () => {
       window.domAutomationController.send(true);
     });

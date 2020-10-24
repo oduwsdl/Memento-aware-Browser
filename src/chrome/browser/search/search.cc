@@ -35,6 +35,7 @@
 #if !defined(OS_ANDROID)
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
+#include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
 #endif
 
 namespace search {
@@ -171,9 +172,11 @@ struct NewTabURLDetails {
       : url(url), state(state) {}
 
   static NewTabURLDetails ForProfile(Profile* profile) {
-    // Incognito has its own New Tab.
-    if (profile->IsOffTheRecord())
+    // Incognito and Guest profiles have their own New Tab.
+    if (profile->IsIncognitoProfile() || profile->IsGuestSession() ||
+        profile->IsEphemeralGuestProfile()) {
       return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);
+    }
 
 #if defined(OS_ANDROID)
     const GURL local_url(chrome::kChromeSearchLocalNtpUrl);
@@ -262,9 +265,16 @@ bool IsNTPOrRelatedURL(const GURL& url, Profile* profile) {
 }
 
 bool IsNTPURL(const GURL& url) {
-  return url.SchemeIs(chrome::kChromeSearchScheme) &&
-         (url.host_piece() == chrome::kChromeSearchRemoteNtpHost ||
-          url.host_piece() == chrome::kChromeSearchLocalNtpHost);
+  if (url.SchemeIs(chrome::kChromeSearchScheme) &&
+      (url.host_piece() == chrome::kChromeSearchRemoteNtpHost ||
+       url.host_piece() == chrome::kChromeSearchLocalNtpHost)) {
+    return true;
+  }
+#if defined(OS_ANDROID)
+  return false;
+#else
+  return NewTabPageUI::IsNewTabPageOrigin(url);
+#endif
 }
 
 bool IsInstantNTP(content::WebContents* contents) {

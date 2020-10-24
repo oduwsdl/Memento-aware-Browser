@@ -72,6 +72,7 @@ class ChromeDownloadManagerDelegate
                           int64_t total_bytes,
                           DownloadLocationDialogType dialog_type,
                           const base::FilePath& suggested_path,
+                          bool supports_later_dialog,
                           DownloadDialogBridge::DialogCallback callback);
 
   void SetDownloadDialogBridgeForTesting(DownloadDialogBridge* bridge);
@@ -158,6 +159,9 @@ class ChromeDownloadManagerDelegate
                                safe_browsing::DownloadCheckResult result);
 
   base::WeakPtr<ChromeDownloadManagerDelegate> GetWeakPtr();
+
+  static void ConnectToQuarantineService(
+      mojo::PendingReceiver<quarantine::mojom::Quarantine> receiver);
 
  protected:
   virtual safe_browsing::DownloadProtectionService*
@@ -278,6 +282,9 @@ class ChromeDownloadManagerDelegate
       download::PathValidationResult result,
       const base::FilePath& target_path);
 #endif
+
+  // Returns whether to show download later dialog.
+  bool ShouldShowDownloadLaterDialog() const;
 
   Profile* profile_;
 

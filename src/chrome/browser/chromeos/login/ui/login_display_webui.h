@@ -20,6 +20,9 @@ class AccountId;
 
 namespace chromeos {
 
+class UserBoardView;
+class UserSelectionScreen;
+
 // WebUI-based login UI implementation.
 class LoginDisplayWebUI : public LoginDisplay,
                           public SigninScreenHandlerDelegate,
@@ -42,27 +45,21 @@ class LoginDisplayWebUI : public LoginDisplay,
   void ShowPasswordChangedDialog(bool show_password_error,
                                  const AccountId& account_id) override;
   void ShowSigninUI(const std::string& email) override;
-  void ShowWhitelistCheckFailedError() override;
+  void ShowAllowlistCheckFailedError() override;
 
   // SigninScreenHandlerDelegate implementation:
   void Login(const UserContext& user_context,
              const SigninSpecifics& specifics) override;
   bool IsSigninInProgress() const override;
-  void Signout() override;
-
   void OnSigninScreenReady() override;
   void CancelUserAdding() override;
   void ShowEnterpriseEnrollmentScreen() override;
-  void ShowEnableDebuggingScreen() override;
   void ShowKioskEnableScreen() override;
   void ShowKioskAutolaunchScreen() override;
-  void ShowUpdateRequiredScreen() override;
   void ShowWrongHWIDScreen() override;
   void SetWebUIHandler(LoginDisplayWebUIHandler* webui_handler) override;
-  bool IsShowGuest() const override;
   bool IsShowUsers() const override;
   bool ShowUsersHasChanged() const override;
-  bool IsAllowNewUser() const override;
   bool AllowNewUserChanged() const override;
   bool IsUserSigninCompleted() const override;
 
@@ -73,9 +70,6 @@ class LoginDisplayWebUI : public LoginDisplay,
   void OnUserActivity(const ui::Event* event) override;
 
  private:
-  // Whether to show guest login.
-  bool show_guest_ = false;
-
   // Whether to show the user pods or a GAIA sign in.
   // Public sessions are always shown.
   bool show_users_ = false;
@@ -91,6 +85,10 @@ class LoginDisplayWebUI : public LoginDisplay,
 
   // Reference to the WebUI handling layer for the login screen
   LoginDisplayWebUIHandler* webui_handler_ = nullptr;
+
+  // Used only for the "user-adding" (aka "multiprofile") flow.
+  std::unique_ptr<UserSelectionScreen> user_selection_screen_;
+  base::WeakPtr<UserBoardView> user_board_view_;
 
   DISALLOW_COPY_AND_ASSIGN(LoginDisplayWebUI);
 };

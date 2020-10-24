@@ -14,6 +14,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_id.h"
@@ -67,6 +68,13 @@ class TemplateURLRef {
   // the |post_data|. See http://tools.ietf.org/html/rfc2046 for the details.
   typedef std::pair<std::string, std::string> PostContent;
 
+  // Enumeration of the known search or suggest request sources.
+  enum RequestSource {
+    SEARCHBOX,          // Omnibox or the NTP realbox. The default.
+    CROS_APP_LIST,      // Chrome OS app list search box.
+    NON_SEARCHBOX_NTP,  // Non-searchbox NTP surfaces.
+  };
+
   // This struct encapsulates arguments passed to
   // TemplateURLRef::ReplaceSearchTerms methods.  By default, only search_terms
   // is required and is passed in the constructor.
@@ -75,21 +83,6 @@ class TemplateURLRef {
     explicit SearchTermsArgs(const base::string16& search_terms);
     SearchTermsArgs(const SearchTermsArgs& other);
     ~SearchTermsArgs();
-
-    // If the search request is from the omnibox, this enum may specify details
-    // about how the user last interacted with the omnibox.
-    //
-    // These values are used as HTTP GET parameter values. Entries should not be
-    // renumbered and numeric values should never be reused.
-    enum class OmniboxFocusType {
-      // The default value. This is used for any search requests without any
-      // special interaction annotation, including: normal omnibox searches,
-      // as-you-type omnibox suggestions, as well as non-omnibox searches.
-      DEFAULT = 0,
-
-      // This search request is triggered by the user focusing the omnibox.
-      ON_FOCUS = 1,
-    };
 
     struct ContextualSearchParams {
       ContextualSearchParams();
@@ -118,6 +111,10 @@ class TemplateURLRef {
       // The |target_lang| specifies the best language to translate into for
       // the user, which also indicates when translation is appropriate or
       // helpful.  This comes from the Chrome Language Model.
+      // The |fluent_languages| string specifies the languages the user
+      // is fluent in reading.  This acts as an alternate set of languages
+      // to consider translating into.  The languages are ordered by
+      // fluency, and encoded as a comma-separated list of BCP 47 languages.
       ContextualSearchParams(int version,
                              int contextual_cards_version,
                              std::string home_country,
@@ -125,7 +122,8 @@ class TemplateURLRef {
                              int previous_event_results,
                              bool is_exact_search,
                              std::string source_lang,
-                             std::string target_lang);
+                             std::string target_lang,
+                             std::string fluent_languages);
       ContextualSearchParams(const ContextualSearchParams& other);
       ~ContextualSearchParams();
 
@@ -162,6 +160,10 @@ class TemplateURLRef {
 
       // Target language string to be translated into.
       std::string target_lang;
+
+      // Alternate target languages that the user is fluent in, encoded in a
+      // single string.
+      std::string fluent_languages;
     };
 
     // Estimates dynamic memory usage.
@@ -177,9 +179,8 @@ class TemplateURLRef {
     // The type the original input query was identified as.
     metrics::OmniboxInputType input_type = metrics::OmniboxInputType::EMPTY;
 
-    // If the search request is from the omnibox, this may specify how the user
-    // last interacted with the omnibox.
-    OmniboxFocusType omnibox_focus_type = OmniboxFocusType::DEFAULT;
+    // Specifies how the user last interacted with the searchbox UI element.
+    OmniboxFocusType focus_type = OmniboxFocusType::DEFAULT;
 
     // The optional assisted query stats, aka AQS, used for logging purposes.
     // This string contains impressions of all autocomplete matches shown
@@ -234,9 +235,8 @@ class TemplateURLRef {
     // When searching for an image, the original size of the image.
     gfx::Size image_original_size;
 
-    // True if the search was made using the app list search box. Otherwise, the
-    // search was made using the omnibox.
-    bool from_app_list = false;
+    // Source of the search or suggest request.
+    RequestSource request_source = SEARCHBOX;
 
     ContextualSearchParams contextual_search_params;
   };

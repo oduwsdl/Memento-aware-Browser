@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/views/passwords/password_auto_sign_in_view.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/test/browser_test.h"
+#include "ui/views/test/ax_event_counter.h"
 
 using base::StartsWith;
 
@@ -27,11 +28,18 @@ class PasswordBubbleBrowserTest
  public:
   PasswordBubbleBrowserTest() {
     if (GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          password_manager::features::kEnablePasswordsAccountStorage);
+      // |kEnablePasswordsAccountStorage|, |kCompromisedPasswordsReengagement|
+      // are both enabled.
+      scoped_feature_list_.InitWithFeatures(
+          {password_manager::features::kEnablePasswordsAccountStorage,
+           password_manager::features::kCompromisedPasswordsReengagement},
+          {});
     } else {
-      scoped_feature_list_.InitAndDisableFeature(
-          password_manager::features::kEnablePasswordsAccountStorage);
+      // |kCompromisedPasswordsReengagement| enabled,
+      // |kEnablePasswordsAccountStorage| disabled.
+      scoped_feature_list_.InitWithFeatures(
+          {password_manager::features::kCompromisedPasswordsReengagement},
+          {password_manager::features::kEnablePasswordsAccountStorage});
     }
   }
 
@@ -65,6 +73,13 @@ class PasswordBubbleBrowserTest
     } else if (StartsWith(name, "MoveToAccountStoreBubble",
                           base::CompareCase::SENSITIVE)) {
       SetupMovingPasswords();
+    } else if (StartsWith(name, "SafeState", base::CompareCase::SENSITIVE)) {
+      SetupSafeState();
+    } else if (StartsWith(name, "MoreToFixState",
+                          base::CompareCase::SENSITIVE)) {
+      SetupMoreToFixState();
+    } else if (StartsWith(name, "UnsafeState", base::CompareCase::SENSITIVE)) {
+      SetupUnsafeState();
     } else {
       ADD_FAILURE() << "Unknown dialog type";
       return;
@@ -97,10 +112,30 @@ IN_PROC_BROWSER_TEST_P(PasswordBubbleBrowserTest, InvokeUi_AutoSignin) {
   ShowAndVerifyUi();
 }
 
+IN_PROC_BROWSER_TEST_P(PasswordBubbleBrowserTest, InvokeUi_SafeState) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_P(PasswordBubbleBrowserTest, InvokeUi_MoreToFixState) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_P(PasswordBubbleBrowserTest, InvokeUi_UnsafeState) {
+  ShowAndVerifyUi();
+}
+
 IN_PROC_BROWSER_TEST_P(PasswordBubbleBrowserTest,
                        InvokeUi_MoveToAccountStoreBubble) {
   if (!GetParam()) {
     return;  // No moving bubble available without the flag.
   }
   ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_P(PasswordBubbleBrowserTest, AlertAccessibleEvent) {
+  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kAlert));
+  ShowUi("ManagePasswordBubble");
+  // TODO(crbug.com/1082217): This should only produce one event
+  EXPECT_LT(0, counter.GetCount(ax::mojom::Event::kAlert));
 }

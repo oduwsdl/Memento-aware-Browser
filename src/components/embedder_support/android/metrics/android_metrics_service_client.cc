@@ -12,6 +12,7 @@
 #include "base/base_paths_android.h"
 #include "base/files/file_util.h"
 #include "base/i18n/rtl.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
@@ -135,6 +136,11 @@ void RegisterOrRemovePreviousRunMetricsFile(
   }
 }
 
+bool IsSamplesCounterEnabled() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      base::kPersistentHistogramsFeature, "prev_run_metrics_count_only", false);
+}
+
 std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
     PrefService* pref_service,
     bool metrics_reporting_enabled) {
@@ -158,8 +164,12 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
     metrics::FileMetricsProvider::Params browser_metrics_params(
         browser_metrics_upload_dir,
         metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_DIR,
-        metrics::FileMetricsProvider::ASSOCIATE_INTERNAL_PROFILE,
+        IsSamplesCounterEnabled()
+            ? metrics::FileMetricsProvider::
+                  ASSOCIATE_INTERNAL_PROFILE_SAMPLES_COUNTER
+            : metrics::FileMetricsProvider::ASSOCIATE_INTERNAL_PROFILE,
         kBrowserMetricsName);
+
     browser_metrics_params.max_dir_kib = kMaxHistogramStorageKiB;
     browser_metrics_params.filter =
         base::BindRepeating(FilterBrowserMetricsFiles);
@@ -180,6 +190,20 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
   return file_metrics_provider;
 }
 
+base::OnceClosure CreateChainedClosure(base::OnceClosure cb1,
+                                       base::OnceClosure cb2) {
+  return base::BindOnce(
+      [](base::OnceClosure cb1, base::OnceClosure cb2) {
+        if (cb1) {
+          std::move(cb1).Run();
+        }
+        if (cb2) {
+          std::move(cb2).Run();
+        }
+      },
+      std::move(cb1), std::move(cb2));
+}
+
 }  // namespace
 
 // Needs to be kept in sync with the writer in
@@ -192,9 +216,11 @@ AndroidMetricsServiceClient::~AndroidMetricsServiceClient() = default;
 // static
 void AndroidMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
   metrics::MetricsService::RegisterPrefs(registry);
-  metrics::FileMetricsProvider::RegisterPrefs(registry, kBrowserMetricsName);
-  metrics::FileMetricsProvider::RegisterPrefs(registry,
-                                              kCrashpadHistogramAllocatorName);
+  metrics::FileMetricsProvider::RegisterSourcePrefs(registry,
+                                                    kBrowserMetricsName);
+  metrics::FileMetricsProvider::RegisterSourcePrefs(
+      registry, kCrashpadHistogramAllocatorName);
+  metrics::FileMetricsProvider::RegisterPrefs(registry);
   metrics::StabilityMetricsHelper::RegisterPrefs(registry);
   ukm::UkmService::RegisterPrefs(registry);
 }
@@ -222,8 +248,7 @@ void AndroidMetricsServiceClient::MaybeStartMetrics() {
   bool user_consent_or_flag = user_consent_ || IsMetricsReportingForceEnabled();
   if (IsConsentDetermined()) {
     if (app_consent_ && user_consent_or_flag) {
-      metrics_service_ = CreateMetricsService(metrics_state_manager_.get(),
-                                              this, pref_service_);
+      CreateMetricsService(metrics_state_manager_.get(), this, pref_service_);
       // Register for notifications so we can detect when the user or app are
       // interacting with the embedder. We use these as signals to wake up the
       // MetricsService.
@@ -245,38 +270,39 @@ void AndroidMetricsServiceClient::MaybeStartMetrics() {
   }
 }
 
-std::unique_ptr<MetricsService>
-AndroidMetricsServiceClient::CreateMetricsService(
+void AndroidMetricsServiceClient::CreateMetricsService(
     MetricsStateManager* state_manager,
     AndroidMetricsServiceClient* client,
     PrefService* prefs) {
-  auto service = std::make_unique<MetricsService>(state_manager, client, prefs);
-  service->RegisterMetricsProvider(
+  metrics_service_ =
+      std::make_unique<MetricsService>(state_manager, client, prefs);
+  metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::SubprocessMetricsProvider>());
-  service->RegisterMetricsProvider(std::make_unique<NetworkMetricsProvider>(
-      content::CreateNetworkConnectionTrackerAsyncGetter()));
-  service->RegisterMetricsProvider(std::make_unique<CPUMetricsProvider>());
-  service->RegisterMetricsProvider(
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<NetworkMetricsProvider>(
+          content::CreateNetworkConnectionTrackerAsyncGetter()));
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<CPUMetricsProvider>());
+  metrics_service_->RegisterMetricsProvider(
       std::make_unique<ScreenInfoMetricsProvider>());
-  if (client->EnablePersistentHistograms()) {
-    service->RegisterMetricsProvider(CreateFileMetricsProvider(
+  if (client->IsPersistentHistogramsEnabled()) {
+    metrics_service_->RegisterMetricsProvider(CreateFileMetricsProvider(
         pref_service_, metrics_state_manager_->IsMetricsReportingEnabled()));
   }
-  service->RegisterMetricsProvider(
+  metrics_service_->RegisterMetricsProvider(
       std::make_unique<CallStackProfileMetricsProvider>());
-  service->RegisterMetricsProvider(
+  metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::AndroidMetricsProvider>());
-  service->RegisterMetricsProvider(
+  metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::DriveMetricsProvider>(
           base::DIR_ANDROID_APP_DATA));
-  service->RegisterMetricsProvider(
+  metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::GPUMetricsProvider>());
-  RegisterAdditionalMetricsProviders(service.get());
+  RegisterAdditionalMetricsProviders(metrics_service_.get());
 
   // The file metrics provider makes IO.
   base::ScopedAllowBlocking allow_io;
-  service->InitializeMetricsRecordingState();
-  return service;
+  metrics_service_->InitializeMetricsRecordingState();
 }
 
 void AndroidMetricsServiceClient::CreateUkmService() {
@@ -339,10 +365,7 @@ AndroidMetricsServiceClient::CreateLowEntropyProvider() {
   return metrics_state_manager_->CreateLowEntropyProvider();
 }
 
-void AndroidMetricsServiceClient::EnableUkm(bool enable) {
-  bool must_purge = ukm_enabled_ && !enable;
-  ukm_enabled_ = enable;
-
+void AndroidMetricsServiceClient::UpdateUkm(bool must_purge) {
   if (!ukm_service_)
     return;
   if (must_purge) {
@@ -433,8 +456,11 @@ void AndroidMetricsServiceClient::CollectFinalMetricsForLog(
   // Set up the callback task to call after we receive histograms from all
   // child processes. |timeout| specifies how long to wait before absolutely
   // calling us back on the task.
-  content::FetchHistogramsAsynchronously(base::ThreadTaskRunnerHandle::Get(),
-                                         std::move(done_callback), timeout);
+  content::FetchHistogramsAsynchronously(
+      base::ThreadTaskRunnerHandle::Get(),
+      CreateChainedClosure(std::move(done_callback),
+                           on_final_metrics_collected_listener_),
+      timeout);
 
   if (collect_final_metrics_for_log_closure_)
     std::move(collect_final_metrics_for_log_closure_).Run();
@@ -479,7 +505,7 @@ base::TimeDelta AndroidMetricsServiceClient::GetStandardUploadInterval() {
 }
 
 bool AndroidMetricsServiceClient::IsUkmAllowedForAllProfiles() {
-  return ukm_enabled_;
+  return false;
 }
 
 bool AndroidMetricsServiceClient::ShouldStartUpFastForTesting() const {
@@ -508,6 +534,11 @@ void AndroidMetricsServiceClient::Observe(
 void AndroidMetricsServiceClient::SetCollectFinalMetricsForLogClosureForTesting(
     base::OnceClosure closure) {
   collect_final_metrics_for_log_closure_ = std::move(closure);
+}
+
+void AndroidMetricsServiceClient::SetOnFinalMetricsCollectedListenerForTesting(
+    base::RepeatingClosure listener) {
+  on_final_metrics_collected_listener_ = std::move(listener);
 }
 
 int AndroidMetricsServiceClient::GetSampleBucketValue() {
@@ -541,7 +572,7 @@ bool AndroidMetricsServiceClient::IsInPackageNameSample() {
 void AndroidMetricsServiceClient::RegisterAdditionalMetricsProviders(
     MetricsService* service) {}
 
-bool AndroidMetricsServiceClient::EnablePersistentHistograms() {
+bool AndroidMetricsServiceClient::IsPersistentHistogramsEnabled() {
   return false;
 }
 

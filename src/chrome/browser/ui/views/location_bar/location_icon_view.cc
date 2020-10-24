@@ -67,11 +67,7 @@ bool LocationIconView::ShouldShowSeparator() const {
 }
 
 bool LocationIconView::ShowBubble(const ui::Event& event) {
-  if (GetIconType()) {
-    return delegate_->Dialog();
-  }
   return delegate_->ShowPageInfoDialog();
-  
 }
 
 bool LocationIconView::IsBubbleShowing() const {
@@ -106,7 +102,7 @@ void LocationIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 }
 
 void LocationIconView::AddedToWidget() {
-  Update(true, false);
+  Update(true);
 }
 
 void LocationIconView::OnThemeChanged() {
@@ -134,9 +130,6 @@ bool LocationIconView::ShouldShowText() const {
   if (delegate_->IsEditingOrEmpty())
     return false;
 
-  if (is_memento_icon_)
-    return true;//ShouldShowMixedContentWarning();
-
   const auto* location_bar_model = delegate_->GetLocationBarModel();
   const GURL& url = location_bar_model->GetURL();
   if (url.SchemeIs(content::kChromeUIScheme) ||
@@ -147,22 +140,6 @@ bool LocationIconView::ShouldShowText() const {
   }
 
   return !location_bar_model->GetSecureDisplayText().empty();
-}
-
-bool LocationIconView::ShouldShowMixedContentWarning() const {
-  return delegate_->GetLocationBarModel()->IsMixedContent();
-}
-
-bool LocationIconView::ShouldShowMementoInfo() const {
-  return delegate_->GetLocationBarModel()->IsMemento();
-}
-
-void LocationIconView::SetIconType(bool is_memento_icon) {
-  is_memento_icon_ = is_memento_icon;
-}
-
-bool LocationIconView::GetIconType() {
-  return is_memento_icon_;
 }
 
 const views::InkDrop* LocationIconView::get_ink_drop_for_testing() {
@@ -199,10 +176,6 @@ base::string16 LocationIconView::GetText() const {
       return extension_name;
   }
 
-  if (is_memento_icon_)
-    return delegate_->GetLocationBarModel()->GetMementoDisplayText();
-
-  //return delegate_->GetLocationBarModel()->GetMementoDisplayText();
   return delegate_->GetLocationBarModel()->GetSecureDisplayText();
 }
 
@@ -235,39 +208,21 @@ void LocationIconView::UpdateIcon() {
   // Cancel any previous outstanding icon requests, as they are now outdated.
   icon_fetch_weak_ptr_factory_.InvalidateWeakPtrs();
 
-  gfx::ImageSkia icon = delegate_->GetLocationIcon(
+  ui::ImageModel icon = delegate_->GetLocationIcon(
       base::BindOnce(&LocationIconView::OnIconFetched,
                      icon_fetch_weak_ptr_factory_.GetWeakPtr()));
-  if (!icon.isNull())
-    SetImage(icon);
-}
-
-void LocationIconView::UpdateMementoIcon() {
-  // Cancel any previous outstanding icon requests, as they are now outdated.
-  icon_fetch_weak_ptr_factory_.InvalidateWeakPtrs();
-
-  gfx::ImageSkia icon = delegate_->GetMementoIcon(
-      base::BindOnce(&LocationIconView::OnIconFetched,
-                     icon_fetch_weak_ptr_factory_.GetWeakPtr()));
-  if (!icon.isNull())
-    SetImage(icon);
+  if (!icon.IsEmpty())
+    SetImageModel(icon);
 }
 
 void LocationIconView::OnIconFetched(const gfx::Image& image) {
   DCHECK(!image.IsEmpty());
-  SetImage(image.AsImageSkia());
+  SetImageModel(ui::ImageModel::FromImage(image));
 }
 
-void LocationIconView::Update(bool suppress_animations, bool memento_icon) {
+void LocationIconView::Update(bool suppress_animations) {
   UpdateTextVisibility(suppress_animations);
-
-  if (memento_icon) {
-    UpdateMementoIcon();
-  }
-  else {
-    UpdateIcon();
-  }
-  
+  UpdateIcon();
 
   // The label text color may have changed in response to changes in security
   // level.
@@ -293,7 +248,7 @@ void LocationIconView::Update(bool suppress_animations, bool memento_icon) {
     } else {
       SetInkDropMode(InkDropMode::ON);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 #else
       SetFocusBehavior(FocusBehavior::ALWAYS);

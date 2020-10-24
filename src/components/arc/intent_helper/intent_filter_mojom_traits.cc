@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/optional.h"
 #include "base/strings/string_util.h"
 
 namespace mojo {
@@ -23,7 +24,7 @@ bool StructTraits<arc::mojom::IntentFilterDataView, arc::IntentFilter>::Read(
   if (!data.ReadDataPaths(&paths))
     return false;
 
-  std::string package_name;
+  base::Optional<std::string> package_name;
   if (!data.ReadPackageName(&package_name))
     return false;
 
@@ -39,9 +40,20 @@ bool StructTraits<arc::mojom::IntentFilterDataView, arc::IntentFilter>::Read(
   if (!data.ReadMimeTypes(&mime_types))
     return false;
 
-  *out = arc::IntentFilter(package_name, std::move(actions),
-                           std::move(authorities), std::move(paths),
-                           std::move(schemes), std::move(mime_types));
+  base::Optional<std::string> activity_name;
+  if (!data.ReadActivityName(&activity_name))
+    return false;
+
+  base::Optional<std::string> activity_label;
+  if (!data.ReadActivityLabel(&activity_label))
+    return false;
+
+  *out = arc::IntentFilter(std::move(package_name).value_or(std::string()),
+                           std::move(activity_name).value_or(std::string()),
+                           std::move(activity_label).value_or(std::string()),
+                           std::move(actions), std::move(authorities),
+                           std::move(paths), std::move(schemes),
+                           std::move(mime_types));
   return true;
 }
 

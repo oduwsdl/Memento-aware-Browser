@@ -27,7 +27,7 @@ namespace {
 // An implementation of the BrowsingDataMediaLicenseHelper interface that
 // determine data on media licenses in a given |filesystem_context| and
 // returns a list of MediaLicenseInfo items to a client.
-class BrowsingDataMediaLicenseHelperImpl
+class BrowsingDataMediaLicenseHelperImpl final
     : public BrowsingDataMediaLicenseHelper {
  public:
   // BrowsingDataMediaLicenseHelper implementation
@@ -98,9 +98,9 @@ void BrowsingDataMediaLicenseHelperImpl::FetchMediaLicenseInfoOnFileTaskRunner(
           filesystem_context_->GetFileSystemBackend(kType));
 
   // Determine the set of origins used.
-  std::set<url::Origin> origins;
+  std::vector<url::Origin> origins =
+      backend->GetOriginsForTypeOnFileTaskRunner(kType);
   std::list<MediaLicenseInfo> result;
-  backend->GetOriginsForTypeOnFileTaskRunner(kType, &origins);
   for (const auto& origin : origins) {
     if (!browsing_data::HasWebScheme(origin.GetURL()))
       continue;  // Non-websafe state is not considered browsing data.

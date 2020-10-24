@@ -188,6 +188,7 @@ public class TabSwitcherMediatorUnitTest {
                 .when(mBrowserControlsStateProvider)
                 .getBottomControlsHeight();
         doReturn(CONTROL_HEIGHT_DEFAULT).when(mBrowserControlsStateProvider).getTopControlsHeight();
+        doReturn(CONTROL_HEIGHT_DEFAULT).when(mBrowserControlsStateProvider).getContentOffset();
         doNothing()
                 .when(mBrowserControlsStateProvider)
                 .addObserver(mBrowserControlsStateProviderObserverCaptor.capture());
@@ -197,7 +198,7 @@ public class TabSwitcherMediatorUnitTest {
 
         mModel = new PropertyModel(TabListContainerProperties.ALL_KEYS);
         mModel.addObserver(mPropertyObserver);
-        mMediator = new TabSwitcherMediator(mResetHandler, mModel, mTabModelSelector,
+        mMediator = new TabSwitcherMediator(mContext, mResetHandler, mModel, mTabModelSelector,
                 mBrowserControlsStateProvider, mCompositorViewHolder, null, mMessageItemsController,
                 mMultiWindowModeStateDispatcher, TabListCoordinator.TabListMode.GRID);
         mMediator.initWithNative(null);
@@ -223,7 +224,7 @@ public class TabSwitcherMediatorUnitTest {
 
     @Test
     public void showsWithoutAnimation() {
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         initAndAssertAllProperties();
         mMediator.showOverview(false);
 
@@ -251,7 +252,7 @@ public class TabSwitcherMediatorUnitTest {
     @Test
     public void showsWithoutAnimation_withTabGroups() {
         doReturn(2).when(mTabModelFilter).getCount();
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         initAndAssertAllProperties();
         mMediator.showOverview(false);
@@ -462,7 +463,7 @@ public class TabSwitcherMediatorUnitTest {
         initAndAssertAllProperties();
         mMediator.showOverview(true);
         assertThat(mModel.get(TabListContainerProperties.IS_VISIBLE), equalTo(true));
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         mTabModelObserverCaptor.getValue().didSelectTab(mTab1, TabSelectionType.FROM_USER, TAB3_ID);
 
@@ -471,7 +472,7 @@ public class TabSwitcherMediatorUnitTest {
 
     @Test
     public void doesNotHideWhenSelectedTabChangedDueToTabClosure() {
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         initAndAssertAllProperties();
         mMediator.showOverview(true);
         assertThat(mModel.get(TabListContainerProperties.IS_VISIBLE), equalTo(true));
@@ -487,7 +488,7 @@ public class TabSwitcherMediatorUnitTest {
 
     @Test
     public void doesNotHideWhenSelectedTabChangedDueToModelChange() {
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         initAndAssertAllProperties();
         mMediator.showOverview(true);
         assertThat(mModel.get(TabListContainerProperties.IS_VISIBLE), equalTo(true));
@@ -556,7 +557,7 @@ public class TabSwitcherMediatorUnitTest {
     @Test
     public void showOverviewDoesNotUpdateResetHandlerBeforeRestoreCompleted() {
         initAndAssertAllProperties();
-        doReturn(false).when(mTabModelFilter).isTabModelRestored();
+        doReturn(false).when(mTabModelSelector).isTabStateInitialized();
         mMediator.showOverview(true);
 
         // MRU will be false unless the start surface is enabled.
@@ -566,7 +567,7 @@ public class TabSwitcherMediatorUnitTest {
     @Test
     public void prepareOverviewDoesNotUpdateResetHandlerBeforeRestoreCompleted() {
         initAndAssertAllProperties();
-        doReturn(false).when(mTabModelFilter).isTabModelRestored();
+        doReturn(false).when(mTabModelSelector).isTabStateInitialized();
         mMediator.prepareOverview();
 
         // MRU will be false unless the start surface is enabled.
@@ -576,7 +577,7 @@ public class TabSwitcherMediatorUnitTest {
     @Test
     public void showOverviewUpdatesResetHandlerAfterRestoreCompleted() {
         initAndAssertAllProperties();
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         mMediator.showOverview(true);
 
@@ -587,7 +588,7 @@ public class TabSwitcherMediatorUnitTest {
     @Test
     public void prepareOverviewUpdatesResetHandlerAfterRestoreCompleted() {
         initAndAssertAllProperties();
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         mMediator.prepareOverview();
 
@@ -598,7 +599,7 @@ public class TabSwitcherMediatorUnitTest {
     @Test
     public void prepareOverviewSetsInitialScrollIndexAfterRestoreCompleted() {
         initAndAssertAllProperties();
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         mModel.set(TabListContainerProperties.INITIAL_SCROLL_INDEX, 1);
 
@@ -649,41 +650,138 @@ public class TabSwitcherMediatorUnitTest {
 
     @Test
     public void updatesPropertiesWithTopControlsChanges() {
-        assertEquals(
-                CONTROL_HEIGHT_DEFAULT, mModel.get(TabListContainerProperties.TOP_CONTROLS_HEIGHT));
-        assertEquals(
-                CONTROL_HEIGHT_DEFAULT, mModel.get(TabListContainerProperties.SHADOW_TOP_MARGIN));
+        assertEquals("Wrong initial top margin.", CONTROL_HEIGHT_DEFAULT,
+                mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals("Wrong initial shadow top offset", CONTROL_HEIGHT_DEFAULT,
+                mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
 
+        // Change top controls height without animation.
+        doReturn(CONTROL_HEIGHT_INCREASED)
+                .when(mBrowserControlsStateProvider)
+                .getTopControlsHeight();
+        doReturn(CONTROL_HEIGHT_INCREASED).when(mBrowserControlsStateProvider).getContentOffset();
         mBrowserControlsStateProviderObserverCaptor.getValue().onTopControlsHeightChanged(
                 CONTROL_HEIGHT_INCREASED, 0);
-        assertEquals(CONTROL_HEIGHT_INCREASED,
-                mModel.get(TabListContainerProperties.TOP_CONTROLS_HEIGHT));
-        assertEquals(
-                CONTROL_HEIGHT_INCREASED, mModel.get(TabListContainerProperties.SHADOW_TOP_MARGIN));
+        mBrowserControlsStateProviderObserverCaptor.getValue().onControlsOffsetChanged(
+                0, 0, 0, 0, false);
 
+        assertEquals(
+                "Top margin should be equal to top controls height if controls are fully shown.",
+                CONTROL_HEIGHT_INCREASED, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals("Shadow offset should follow the content offset.", CONTROL_HEIGHT_INCREASED,
+                mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
+
+        // Change top controls height without animation.
+        doReturn(CONTROL_HEIGHT_DEFAULT).when(mBrowserControlsStateProvider).getTopControlsHeight();
+        doReturn(CONTROL_HEIGHT_DEFAULT).when(mBrowserControlsStateProvider).getContentOffset();
         mBrowserControlsStateProviderObserverCaptor.getValue().onTopControlsHeightChanged(
                 CONTROL_HEIGHT_DEFAULT, 0);
-        assertEquals(
-                CONTROL_HEIGHT_DEFAULT, mModel.get(TabListContainerProperties.TOP_CONTROLS_HEIGHT));
-        assertEquals(
-                CONTROL_HEIGHT_DEFAULT, mModel.get(TabListContainerProperties.SHADOW_TOP_MARGIN));
+        mBrowserControlsStateProviderObserverCaptor.getValue().onControlsOffsetChanged(
+                0, 0, 0, 0, false);
+
+        assertEquals("Top margin should be equal to top controls height if controls are at rest.",
+                CONTROL_HEIGHT_DEFAULT, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals("Shadow offset should follow the content offset.", CONTROL_HEIGHT_DEFAULT,
+                mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
+    }
+
+    @Test
+    public void testTopControlsHeightAnimations() {
+        assertEquals("Wrong initial top margin.", CONTROL_HEIGHT_DEFAULT,
+                mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals("Wrong initial shadow top offset", CONTROL_HEIGHT_DEFAULT,
+                mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
+
+        // Increase the height.
+        doReturn(CONTROL_HEIGHT_INCREASED)
+                .when(mBrowserControlsStateProvider)
+                .getTopControlsHeight();
+        mBrowserControlsStateProviderObserverCaptor.getValue().onTopControlsHeightChanged(
+                CONTROL_HEIGHT_INCREASED, 20);
+
+        assertEquals("Top margin shouldn't change until the animation starts.",
+                CONTROL_HEIGHT_DEFAULT, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals("Shadow offset should follow the content offset.", CONTROL_HEIGHT_DEFAULT,
+                mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
+
+        // Animate by changing the content offset.
+        for (int offset = CONTROL_HEIGHT_DEFAULT; offset < CONTROL_HEIGHT_INCREASED; offset += 5) {
+            doReturn(offset).when(mBrowserControlsStateProvider).getContentOffset();
+            mBrowserControlsStateProviderObserverCaptor.getValue().onControlsOffsetChanged(
+                    offset - CONTROL_HEIGHT_INCREASED, offset - CONTROL_HEIGHT_DEFAULT, 0, 0,
+                    false);
+
+            assertEquals("Top margin should follow the content offset during the animation.",
+                    offset, mModel.get(TabListContainerProperties.TOP_MARGIN));
+            assertEquals("Shadow offset should follow the content offset.", offset,
+                    mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
+        }
+
+        // End the animation.
+        doReturn(CONTROL_HEIGHT_INCREASED).when(mBrowserControlsStateProvider).getContentOffset();
+        mBrowserControlsStateProviderObserverCaptor.getValue().onControlsOffsetChanged(
+                0, 20, 0, 0, false);
+
+        assertEquals("Top margin should be updated to the new height when the animation ends.",
+                CONTROL_HEIGHT_INCREASED, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals("Shadow offset should follow the content offset.", CONTROL_HEIGHT_INCREASED,
+                mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
+
+        // Now decrease the height, back to the default.
+        doReturn(CONTROL_HEIGHT_DEFAULT).when(mBrowserControlsStateProvider).getTopControlsHeight();
+        mBrowserControlsStateProviderObserverCaptor.getValue().onTopControlsHeightChanged(
+                CONTROL_HEIGHT_DEFAULT, 0);
+
+        assertEquals("Top margin shouldn't change until the animation starts.",
+                CONTROL_HEIGHT_INCREASED, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals("Shadow offset should follow the content offset.", CONTROL_HEIGHT_INCREASED,
+                mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
+
+        // Animate by changing the content offset.
+        for (int offset = CONTROL_HEIGHT_INCREASED; offset > CONTROL_HEIGHT_DEFAULT; offset -= 5) {
+            doReturn(offset).when(mBrowserControlsStateProvider).getContentOffset();
+            mBrowserControlsStateProviderObserverCaptor.getValue().onControlsOffsetChanged(
+                    offset - CONTROL_HEIGHT_DEFAULT, CONTROL_HEIGHT_INCREASED - offset, 0, 0,
+                    false);
+
+            assertEquals("Top margin should follow the content offset during the animation.",
+                    offset, mModel.get(TabListContainerProperties.TOP_MARGIN));
+            assertEquals("Shadow offset should follow the content offset.", offset,
+                    mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
+        }
+
+        // End the animation.
+        doReturn(CONTROL_HEIGHT_DEFAULT).when(mBrowserControlsStateProvider).getContentOffset();
+        mBrowserControlsStateProviderObserverCaptor.getValue().onControlsOffsetChanged(
+                0, 0, 0, 0, false);
+
+        assertEquals("Top margin should be updated to the new height at the end of the animation.",
+                CONTROL_HEIGHT_DEFAULT, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals("Shadow offset should follow the content offset.", CONTROL_HEIGHT_DEFAULT,
+                mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
     }
 
     @Test
     @Features.EnableFeatures(ChromeFeatureList.START_SURFACE_ANDROID)
     public void updatesPropertiesWithTopControlsChanges_StartSurface() {
-        assertEquals(0, mModel.get(TabListContainerProperties.TOP_CONTROLS_HEIGHT));
-        assertEquals(0, mModel.get(TabListContainerProperties.SHADOW_TOP_MARGIN));
+        assertEquals(0, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals(0, mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
 
         mBrowserControlsStateProviderObserverCaptor.getValue().onTopControlsHeightChanged(
                 CONTROL_HEIGHT_INCREASED, 0);
-        assertEquals(0, mModel.get(TabListContainerProperties.TOP_CONTROLS_HEIGHT));
-        assertEquals(0, mModel.get(TabListContainerProperties.SHADOW_TOP_MARGIN));
+        doReturn(CONTROL_HEIGHT_INCREASED).when(mBrowserControlsStateProvider).getContentOffset();
+        mBrowserControlsStateProviderObserverCaptor.getValue().onControlsOffsetChanged(
+                0, 0, 0, 0, false);
+        assertEquals(0, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals(0, mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
 
         mBrowserControlsStateProviderObserverCaptor.getValue().onTopControlsHeightChanged(
                 CONTROL_HEIGHT_DEFAULT, 0);
-        assertEquals(0, mModel.get(TabListContainerProperties.TOP_CONTROLS_HEIGHT));
-        assertEquals(0, mModel.get(TabListContainerProperties.SHADOW_TOP_MARGIN));
+        doReturn(CONTROL_HEIGHT_DEFAULT).when(mBrowserControlsStateProvider).getContentOffset();
+        mBrowserControlsStateProviderObserverCaptor.getValue().onControlsOffsetChanged(
+                0, 0, 0, 0, false);
+        assertEquals(0, mModel.get(TabListContainerProperties.TOP_MARGIN));
+        assertEquals(0, mModel.get(TabListContainerProperties.SHADOW_TOP_OFFSET));
     }
 
     @Test
@@ -712,8 +810,8 @@ public class TabSwitcherMediatorUnitTest {
         assertThat(mModel.get(TabListContainerProperties.IS_INCOGNITO),
                 equalTo(mTabModel.isIncognito()));
         assertThat(mModel.get(TabListContainerProperties.IS_VISIBLE), equalTo(false));
-        assertThat(mModel.get(TabListContainerProperties.TOP_CONTROLS_HEIGHT),
-                equalTo(CONTROL_HEIGHT_DEFAULT));
+        assertThat(
+                mModel.get(TabListContainerProperties.TOP_MARGIN), equalTo(CONTROL_HEIGHT_DEFAULT));
         assertThat(mModel.get(TabListContainerProperties.BOTTOM_CONTROLS_HEIGHT),
                 equalTo(CONTROL_HEIGHT_DEFAULT));
     }

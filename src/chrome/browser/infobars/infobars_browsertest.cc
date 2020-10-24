@@ -40,6 +40,7 @@
 #include "chrome/browser/ui/startup/automation_infobar_delegate.h"
 #include "chrome/browser/ui/startup/bad_flags_prompt.h"
 #include "chrome/browser/ui/startup/google_api_keys_infobar_delegate.h"
+#include "chrome/browser/ui/startup/mac_system_infobar_delegate.h"
 #include "chrome/browser/ui/startup/obsolete_system_infobar_delegate.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -57,14 +58,14 @@
 #include "extensions/browser/sandboxed_unpacker.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "services/service_manager/sandbox/switches.h"
+#include "sandbox/policy/switches.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(OS_CHROMEOS)
 #include "chrome/browser/ui/startup/default_browser_infobar_delegate.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/ui/cocoa/keystone_infobar_delegate.h"
 #endif
 
@@ -193,6 +194,7 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
       {"plugin_observer", IBD::PLUGIN_OBSERVER_INFOBAR_DELEGATE},
       {"file_access_disabled", IBD::FILE_ACCESS_DISABLED_INFOBAR_DELEGATE},
       {"keystone_promotion", IBD::KEYSTONE_PROMOTION_INFOBAR_DELEGATE_MAC},
+      {"mac_system", IBD::SYSTEM_INFOBAR_DELEGATE_MAC},
       {"collected_cookies", IBD::COLLECTED_COOKIES_INFOBAR_DELEGATE},
       {"installation_error", IBD::INSTALLATION_ERROR_INFOBAR_DELEGATE},
       {"bad_flags", IBD::BAD_FLAGS_INFOBAR_DELEGATE},
@@ -292,8 +294,16 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
       break;
 
     case IBD::KEYSTONE_PROMOTION_INFOBAR_DELEGATE_MAC:
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       KeystonePromotionInfoBarDelegate::Create(GetWebContents());
+#else
+      ADD_FAILURE() << "This infobar is not supported on this OS.";
+#endif
+      break;
+
+    case IBD::SYSTEM_INFOBAR_DELEGATE_MAC:
+#if defined(OS_MAC)
+      MacSystemInfoBarDelegate::Create(GetInfoBarService());
 #else
       ADD_FAILURE() << "This infobar is not supported on this OS.";
 #endif
@@ -318,7 +328,7 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
     case IBD::BAD_FLAGS_INFOBAR_DELEGATE:
       chrome::ShowBadFlagsInfoBar(GetWebContents(),
                                   IDS_BAD_FLAGS_WARNING_MESSAGE,
-                                  service_manager::switches::kNoSandbox);
+                                  sandbox::policy::switches::kNoSandbox);
       break;
 
     case IBD::DEFAULT_BROWSER_INFOBAR_DELEGATE:
@@ -347,7 +357,7 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
       break;
 
     case IBD::TRANSLATE_INFOBAR_DELEGATE_NON_AURA: {
-#if defined(USE_AURA) || defined(OS_MACOSX)
+#if defined(USE_AURA) || defined(OS_MAC)
       ADD_FAILURE() << "This infobar is not supported on this toolkit.";
 #else
       // The translate infobar is only used on Android and iOS, neither of
@@ -432,8 +442,11 @@ IN_PROC_BROWSER_TEST_F(InfoBarUiTest, InvokeUi_file_access_disabled) {
   ShowAndVerifyUi();
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 IN_PROC_BROWSER_TEST_F(InfoBarUiTest, InvokeUi_keystone_promotion) {
+  ShowAndVerifyUi();
+}
+IN_PROC_BROWSER_TEST_F(InfoBarUiTest, InvokeUi_mac_system) {
   ShowAndVerifyUi();
 }
 #endif
@@ -468,7 +481,7 @@ IN_PROC_BROWSER_TEST_F(InfoBarUiTest, InvokeUi_page_info) {
   ShowAndVerifyUi();
 }
 
-#if !defined(USE_AURA) && !defined(OS_MACOSX)
+#if !defined(USE_AURA) && !defined(OS_MAC)
 IN_PROC_BROWSER_TEST_F(InfoBarUiTest, InvokeUi_translate) {
   ShowAndVerifyUi();
 }

@@ -16,6 +16,8 @@
 #include "components/exo/surface_observer.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/base/ime/input_method.h"
+#include "ui/base/ime/input_method_observer.h"
 #include "ui/events/gestures/gesture_recognizer_impl.h"
 
 namespace aura {
@@ -63,6 +65,9 @@ class WebContentController
   // Attach this web contents to an aura window as a child.
   void AttachTo(aura::Window* window, int window_id);
 
+  // Invoked when the aura window becomes visible and is fully initialized.
+  void OnVisible(aura::Window* window);
+
  protected:
   // content::WebContentsObserver
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
@@ -109,8 +114,6 @@ class WebContentController
   void HandleClearCache();
   void HandleClearCookies(int64_t id);
   void HandleGetTitle(int64_t id);
-  void HandleSetAutoMediaPlaybackPolicy(
-      const webview::SetAutoMediaPlaybackPolicyRequest& request);
   void HandleResize(const gfx::Size& size);
   viz::SurfaceId GetSurfaceId();
   void ChannelModified(content::RenderFrameHost* frame,
@@ -140,6 +143,31 @@ class WebContentController
   std::set<std::string> current_javascript_channel_set_;
   std::set<content::RenderFrameHost*> current_render_frame_set_;
   std::set<content::RenderWidgetHost*> current_render_widget_set_;
+
+  // Observes the aura window and calls back to the controller for visibility
+  // events.
+  class WebviewWindowVisibilityObserver : public aura::WindowObserver {
+   public:
+    explicit WebviewWindowVisibilityObserver(aura::Window* window,
+                                             WebContentController* controller);
+    ~WebviewWindowVisibilityObserver() override;
+
+    WebviewWindowVisibilityObserver(const WebviewWindowVisibilityObserver&) =
+        delete;
+    WebviewWindowVisibilityObserver& operator=(
+        const WebviewWindowVisibilityObserver&) = delete;
+
+   private:
+    // aura::WindowObserver
+    void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
+    void OnWindowDestroyed(aura::Window* window) override;
+
+    aura::Window* window_;
+    WebContentController* controller_;
+  };
+
+  std::unique_ptr<WebviewWindowVisibilityObserver> window_visibility_observer_;
+  std::unique_ptr<ui::InputMethodObserver> input_method_observer_;
 
   base::WeakPtrFactory<WebContentController> weak_ptr_factory_{this};
 

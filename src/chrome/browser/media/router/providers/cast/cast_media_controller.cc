@@ -8,7 +8,7 @@
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
-#include "chrome/browser/media/router/providers/cast/cast_activity_record.h"
+#include "chrome/browser/media/router/providers/cast/app_activity.h"
 #include "chrome/browser/media/router/providers/cast/cast_internal_message_util.h"
 #include "components/cast_channel/cast_message_util.h"
 #include "components/cast_channel/enum_table.h"
@@ -44,14 +44,19 @@ void SetIfValid(bool* out, const base::Value* value) {
     *out = value->GetBool();
 }
 void SetIfValid(base::TimeDelta* out, const base::Value* value) {
-  if (value && value->is_double())
-    *out = base::TimeDelta::FromSeconds(value->GetDouble());
+  if (!value)
+    return;
+  if (value->is_double()) {
+    *out = base::TimeDelta::FromSecondsD(value->GetDouble());
+  } else if (value->is_int()) {
+    *out = base::TimeDelta::FromSeconds(value->GetInt());
+  }
 }
 
 // If |value| has "width" and "height" fields with positive values, it gets
 // converted into gfx::Size. Otherwise base::nullopt is returned.
 base::Optional<gfx::Size> GetValidSize(const base::Value* value) {
-  if (!value)
+  if (!value || !value->is_dict())
     return base::nullopt;
   int width = 0;
   int height = 0;
@@ -65,7 +70,7 @@ base::Optional<gfx::Size> GetValidSize(const base::Value* value) {
 }  // namespace
 
 CastMediaController::CastMediaController(
-    CastActivityRecord* activity,
+    AppActivity* activity,
     mojo::PendingReceiver<mojom::MediaController> receiver,
     mojo::PendingRemote<mojom::MediaStatusObserver> observer)
     : sender_id_("sender-" + base::NumberToString(base::RandUint64())),
@@ -211,6 +216,8 @@ void CastMediaController::UpdateMediaStatus(const base::Value& message_value) {
   if (images && images->is_list()) {
     media_status_.images.clear();
     for (const base::Value& image_value : images->GetList()) {
+      if (!image_value.is_dict())
+        continue;
       const std::string* url_string = image_value.FindStringKey("url");
       if (!url_string)
         continue;

@@ -20,6 +20,14 @@ extern NSString* const kGridCellCloseButtonIdentifier;
 // Grid styling.
 extern NSString* const kGridBackgroundColor;
 
+// PlusSignCell styling
+extern NSString* const kPlusSignCellBackgroundColor;
+extern NSString* const kPlusSignCellBackgroundDarkColor;
+
+// The height of the BVC that remains visible after transitioning from thumb
+// strip to tab grid.
+extern const CGFloat kBVCHeightTabGrid;
+
 // GridLayout.
 // Extra-small screens require a slightly different layout configuration (e.g.,
 // margins) even though they may be categorized into the same size class as

@@ -246,6 +246,10 @@ void SessionControllerClientImpl::RequestSignOut() {
   chrome::AttemptUserExit();
 }
 
+void SessionControllerClientImpl::AttemptRestartChrome() {
+  chrome::AttemptRestart();
+}
+
 void SessionControllerClientImpl::SwitchActiveUser(
     const AccountId& account_id) {
   DoSwitchActiveUser(account_id);
@@ -370,8 +374,6 @@ bool SessionControllerClientImpl::CanLockScreen() {
 
 // static
 bool SessionControllerClientImpl::ShouldLockScreenAutomatically() {
-  // TODO(xiyuan): Observe ash::prefs::kEnableAutoScreenLock and update ash.
-  // Tracked in http://crbug.com/670423
   const UserList logged_in_users = UserManager::Get()->GetLoggedInUsers();
   for (auto* user : logged_in_users) {
     Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(user);
@@ -611,15 +613,15 @@ void SessionControllerClientImpl::SendSessionLengthLimit() {
                           kSessionLengthLimitMinMs),
                  kSessionLengthLimitMaxMs));
   }
-  base::TimeTicks session_start_time;
+  base::Time session_start_time;
   if (local_state->HasPrefPath(prefs::kSessionStartTime)) {
-    session_start_time = base::TimeTicks::FromInternalValue(
+    session_start_time = base::Time::FromInternalValue(
         local_state->GetInt64(prefs::kSessionStartTime));
   }
 
   policy::off_hours::DeviceOffHoursController* off_hours_controller =
       chromeos::DeviceSettingsService::Get()->device_off_hours_controller();
-  base::TimeTicks off_hours_session_end_time;
+  base::Time off_hours_session_end_time;
   // Use "OffHours" end time only if the session will be actually terminated.
   if (off_hours_controller->IsCurrentSessionAllowedOnlyForOffHours())
     off_hours_session_end_time = off_hours_controller->GetOffHoursEndTime();
@@ -644,7 +646,7 @@ void SessionControllerClientImpl::SendSessionLengthLimit() {
                                                session_start_time);
     return;
   }
-  base::TimeTicks off_hours_session_start_time = base::TimeTicks::Now();
+  base::Time off_hours_session_start_time = base::Time::Now();
   base::TimeDelta off_hours_session_length_limit =
       off_hours_session_end_time - off_hours_session_start_time;
   session_controller_->SetSessionLengthLimit(off_hours_session_length_limit,

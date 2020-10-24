@@ -10,6 +10,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/audio/unified_volume_slider_controller.h"
+#include "ash/system/media/unified_media_controls_controller.h"
 #include "ash/system/unified/unified_system_tray_model.h"
 #include "base/macros.h"
 #include "ui/gfx/geometry/point.h"
@@ -24,6 +25,7 @@ namespace ash {
 class DetailedViewController;
 class FeaturePodControllerBase;
 class PaginationController;
+class UnifiedMediaControlsController;
 class UnifiedBrightnessSliderController;
 class UnifiedVolumeSliderController;
 class UnifiedSystemTrayBubble;
@@ -33,7 +35,8 @@ class UnifiedSystemTrayView;
 // Controller class of UnifiedSystemTrayView. Handles events of the view.
 class ASH_EXPORT UnifiedSystemTrayController
     : public views::AnimationDelegateViews,
-      public UnifiedVolumeSliderController::Delegate {
+      public UnifiedVolumeSliderController::Delegate,
+      public UnifiedMediaControlsController::Delegate {
  public:
   UnifiedSystemTrayController(UnifiedSystemTrayModel* model,
                               UnifiedSystemTrayBubble* bubble = nullptr,
@@ -59,9 +62,6 @@ class ASH_EXPORT UnifiedSystemTrayController
   void HandleEnterpriseInfoAction();
   // Toggle expanded state of UnifiedSystemTrayView. Called from the view.
   void ToggleExpanded();
-  // Called when message center visibility is changed. Called from the
-  // view.
-  void OnMessageCenterVisibilityUpdated();
 
   // Handle finger dragging and expand/collapse the view. Called from view.
   void BeginDrag(const gfx::PointF& location);
@@ -89,8 +89,12 @@ class ASH_EXPORT UnifiedSystemTrayController
   void ShowLocaleDetailedView();
   // Show the detailed view of audio. Called from the view.
   void ShowAudioDetailedView();
+  // Show the detailed view for dark mode. Called from the feature pod button.
+  void ShowDarkModeDetailedView();
   // Show the detailed view of notifier settings. Called from the view.
   void ShowNotifierSettingsView();
+  // Show the detailed view of media controls. Called from the view.
+  void ShowMediaControlsDetailedView();
 
   // If you want to add a new detailed view, add here.
 
@@ -127,6 +131,10 @@ class ASH_EXPORT UnifiedSystemTrayController
 
   // UnifiedVolumeSliderController::Delegate:
   void OnAudioSettingsButtonClicked() override;
+
+  // UnifedMediaControlsController::Delegate;
+  void ShowMediaControls() override;
+  void OnMediaControlsViewClicked() override;
 
   UnifiedSystemTrayModel* model() { return model_; }
 
@@ -213,6 +221,8 @@ class ASH_EXPORT UnifiedSystemTrayController
 
   std::unique_ptr<PaginationController> pagination_controller_;
 
+  std::unique_ptr<UnifiedMediaControlsController> media_controls_controller_;
+
   // Controller of volume slider. Owned.
   std::unique_ptr<UnifiedVolumeSliderController> volume_slider_controller_;
 
@@ -232,11 +242,11 @@ class ASH_EXPORT UnifiedSystemTrayController
   // during drag.
   double drag_threshold_;
 
-  // Animation between expanded and collapsed states.
-  std::unique_ptr<gfx::SlideAnimation> animation_;
-
   std::unique_ptr<SystemTrayTransitionAnimationMetricsReporter>
       animation_metrics_reporter_;
+
+  // Animation between expanded and collapsed states.
+  std::unique_ptr<gfx::SlideAnimation> animation_;
 
   DISALLOW_COPY_AND_ASSIGN(UnifiedSystemTrayController);
 };

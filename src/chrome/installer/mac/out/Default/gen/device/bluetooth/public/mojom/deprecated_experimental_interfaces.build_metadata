@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/chrome/installer/mac/out/Default/gen/device/bluetooth/public/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/device/bluetooth/public/mojom/adapter.mojom",
+    "/Users/macuser/chromium/src/device/bluetooth/public/mojom/device.mojom"
+  ]
+}

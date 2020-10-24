@@ -73,11 +73,8 @@ enum DomainCheckErrors {
 // Encapsulates logic to determine if enterprise policies should be honored.
 bool ShouldHonorPolicies() {
   auto& platform_management_service = PlatformManagementService::GetInstance();
-  auto management_authorities =
-      platform_management_service.GetManagementAuthorities();
-  return management_authorities.find(
-             policy::EnterpriseManagementAuthority::DOMAIN_LOCAL) !=
-         management_authorities.end();
+  return platform_management_service.GetManagementAuthorityTrustworthiness() >=
+         ManagementAuthorityTrustworthiness::TRUSTED;
 }
 
 // Parses |gpo_dict| according to |schema| and writes the resulting policy
@@ -186,7 +183,7 @@ void CollectEnterpriseUMAs() {
   base::UmaHistogramBoolean("EnterpriseCheck.IsDomainJoined", IsDomainJoined());
   base::UmaHistogramBoolean("EnterpriseCheck.InDomain",
                             base::win::IsEnrolledToDomain());
-  base::UmaHistogramBoolean("EnterpriseCheck.IsManaged",
+  base::UmaHistogramBoolean("EnterpriseCheck.IsManaged2",
                             base::win::IsDeviceRegisteredWithManagement());
   base::UmaHistogramBoolean("EnterpriseCheck.IsEnterpriseUser",
                             base::IsMachineExternallyManaged());

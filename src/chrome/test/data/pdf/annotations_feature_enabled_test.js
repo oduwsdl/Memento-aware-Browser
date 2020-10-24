@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {eventToPromise, waitBeforeNextRender} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/_test_resources/webui/test_util.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {$} from 'chrome://resources/js/util.m.js';
+import {testAsync} from './test_util.js';
 
 window.onerror = e => chrome.test.fail(e.stack);
 window.onunhandledrejection = e => chrome.test.fail(e.reason);
@@ -23,25 +24,16 @@ function waitFor(predicate) {
 }
 
 function contentElement() {
-  return document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  return viewer.shadowRoot.elementFromPoint(innerWidth / 2, innerHeight / 2);
 }
 
 function isAnnotationMode() {
-  return document.querySelector('#toolbar').annotationMode;
-}
-
-async function testAsync(f) {
-  try {
-    await f();
-    chrome.test.succeed();
-  } catch (e) {
-    chrome.test.fail(e.stack);
-  }
+  return viewer.shadowRoot.querySelector('#toolbar').annotationMode;
 }
 
 chrome.test.runTests([
   function testAnnotationsEnabled() {
-    const toolbar = document.body.querySelector('#toolbar');
+    const toolbar = viewer.shadowRoot.querySelector('#toolbar');
     chrome.test.assertTrue(loadTimeData.getBoolean('pdfAnnotationsEnabled'));
     chrome.test.assertTrue(
         toolbar.shadowRoot.querySelector('#annotate') != null);
@@ -52,7 +44,7 @@ chrome.test.runTests([
       chrome.test.assertEq('EMBED', contentElement().tagName);
 
       // Enter annotation mode.
-      $('toolbar').toggleAnnotation();
+      viewer.shadowRoot.querySelector('#toolbar').toggleAnnotation();
       await viewer.loaded;
       chrome.test.assertEq('VIEWER-INK-HOST', contentElement().tagName);
     });
@@ -64,11 +56,15 @@ chrome.test.runTests([
       const cameras = [];
       inkHost.ink_.setCamera = camera => cameras.push(camera);
 
-      viewer.viewport_.setZoom(1);
-      viewer.viewport_.setZoom(2);
+      viewer.viewport.setZoom(1);
+      viewer.viewport.setZoom(2);
       chrome.test.assertEq(2, cameras.length);
 
-      window.scrollTo(100, 100);
+      const updateEnabled =
+          document.documentElement.hasAttribute('pdf-viewer-update-enabled');
+      const scrollingContainer =
+          updateEnabled ? viewer.shadowRoot.querySelector('#scroller') : window;
+      scrollingContainer.scrollTo(100, 100);
       await animationFrame();
 
       chrome.test.assertEq(3, cameras.length);
@@ -81,7 +77,10 @@ chrome.test.runTests([
 
       for (const expectation of expectations) {
         const actual = cameras.shift();
-        chrome.test.assertEq(expectation.top, actual.top);
+        const expectationTop = updateEnabled ?
+            Math.min(2.25, expectation.top - 21) :
+            expectation.top;
+        chrome.test.assertEq(expectationTop, actual.top);
         chrome.test.assertEq(expectation.left, actual.left);
         chrome.test.assertEq(expectation.bottom, actual.bottom);
         chrome.test.assertEq(expectation.right, actual.right);
@@ -96,8 +95,10 @@ chrome.test.runTests([
       inkHost.ink_.setAnnotationTool = value => tool = value;
 
       // Pen defaults.
-      const viewerPdfToolbar = document.querySelector('viewer-pdf-toolbar');
-      const pen = viewerPdfToolbar.$$('#pen');
+      const viewerPdfToolbar = viewer.shadowRoot.querySelector('#toolbar');
+      const viewerAnnotationsBar =
+          viewerPdfToolbar.shadowRoot.querySelector('viewer-annotations-bar');
+      const pen = viewerAnnotationsBar.shadowRoot.querySelector('#pen');
       pen.click();
       chrome.test.assertEq('pen', tool.tool);
       chrome.test.assertEq(0.1429, tool.size);
@@ -105,7 +106,8 @@ chrome.test.runTests([
 
 
       // Selected size and color.
-      const penOptions = viewerPdfToolbar.$$('#pen viewer-pen-options');
+      const penOptions = viewerAnnotationsBar.shadowRoot.querySelector(
+          '#pen viewer-pen-options');
       penOptions.$$('#sizes [value="1"]').click();
       penOptions.$$('#colors [value="#00b0ff"]').click();
       await animationFrame();
@@ -115,7 +117,7 @@ chrome.test.runTests([
 
 
       // Eraser defaults.
-      viewerPdfToolbar.$$('#eraser').click();
+      viewerAnnotationsBar.shadowRoot.querySelector('#eraser').click();
       chrome.test.assertEq('eraser', tool.tool);
       chrome.test.assertEq(1, tool.size);
       chrome.test.assertEq(null, tool.color);
@@ -129,15 +131,15 @@ chrome.test.runTests([
 
 
       // Highlighter defaults.
-      viewerPdfToolbar.$$('#highlighter').click();
+      viewerAnnotationsBar.shadowRoot.querySelector('#highlighter').click();
       chrome.test.assertEq('highlighter', tool.tool);
       chrome.test.assertEq(0.7143, tool.size);
       chrome.test.assertEq('#ffbc00', tool.color);
 
 
       // Need to expand to use this color.
-      const highlighterOptions =
-          viewerPdfToolbar.$$('#highlighter viewer-pen-options');
+      const highlighterOptions = viewerAnnotationsBar.shadowRoot.querySelector(
+          '#highlighter viewer-pen-options');
       highlighterOptions.$$('#colors [value="#d1c4e9"]').click();
       chrome.test.assertEq('#ffbc00', tool.color);
 
@@ -153,9 +155,11 @@ chrome.test.runTests([
   function testStrokeUndoRedo() {
     testAsync(async () => {
       const inkHost = contentElement();
-      const viewerPdfToolbar = document.querySelector('viewer-pdf-toolbar');
-      const undo = viewerPdfToolbar.$$('#undo');
-      const redo = viewerPdfToolbar.$$('#redo');
+      const viewerPdfToolbar = viewer.shadowRoot.querySelector('#toolbar');
+      const viewerAnnotationsBar =
+          viewerPdfToolbar.shadowRoot.querySelector('viewer-annotations-bar');
+      const undo = viewerAnnotationsBar.shadowRoot.querySelector('#undo');
+      const redo = viewerAnnotationsBar.shadowRoot.querySelector('#redo');
 
       const pen = {
         pointerId: 2,
@@ -376,9 +380,113 @@ chrome.test.runTests([
     testAsync(async () => {
       chrome.test.assertTrue(isAnnotationMode());
       // Exit annotation mode.
-      $('toolbar').toggleAnnotation();
+      viewer.shadowRoot.querySelector('#toolbar').toggleAnnotation();
       await viewer.loaded;
       chrome.test.assertEq('EMBED', contentElement().tagName);
     });
   },
+  function testHidingAnnotationsExitsAnnotationsMode() {
+    testAsync(async () => {
+      document.body.innerHTML = '';
+      const toolbar = document.createElement('viewer-pdf-toolbar-new');
+      document.body.appendChild(toolbar);
+      toolbar.toggleAnnotation();
+      // This is normally done by the parent in response to the event fired by
+      // toggleAnnotation().
+      toolbar.annotationMode = true;
+
+      await toolbar.addEventListener('display-annotations-changed', async e => {
+        chrome.test.assertFalse(e.detail);
+        await waitFor(() => toolbar.annotationMode === false);
+        chrome.test.succeed();
+      });
+      toolbar.shadowRoot.querySelector('#show-annotations-button').click();
+    });
+  },
+  function testEnteringAnnotationsModeShowsAnnotations() {
+    document.body.innerHTML = '';
+    const toolbar = document.createElement('viewer-pdf-toolbar-new');
+    document.body.appendChild(toolbar);
+    chrome.test.assertFalse(toolbar.annotationMode);
+
+    // Hide annotations.
+    toolbar.shadowRoot.querySelector('#show-annotations-button').click();
+
+    toolbar.addEventListener('annotation-mode-toggled', e => {
+      chrome.test.assertTrue(e.detail);
+      chrome.test.succeed();
+    });
+    toolbar.toggleAnnotation();
+  },
+  function testEnteringAnnotationsModeDisablesTwoUp() {
+    document.body.innerHTML = '';
+    const toolbar = document.createElement('viewer-pdf-toolbar-new');
+    document.body.appendChild(toolbar);
+    chrome.test.assertFalse(toolbar.annotationMode);
+
+    toolbar.toggleAnnotation();
+    // This is normally done by the parent in response to the event fired by
+    // toggleAnnotation().
+    toolbar.annotationMode = true;
+    chrome.test.assertTrue(
+        toolbar.shadowRoot.querySelector('#two-page-view-button').disabled);
+    chrome.test.succeed();
+  },
+  function testRotateOrTwoUpViewTriggersDialog() {
+    document.body.innerHTML = '';
+    const toolbar = document.createElement('viewer-pdf-toolbar-new');
+    document.body.appendChild(toolbar);
+    toolbar.annotationAvailable = true;
+    toolbar.pdfAnnotationsEnabled = true;
+    toolbar.rotated = false;
+    toolbar.twoUpViewEnabled = false;
+
+    testAsync(async () => {
+      await waitBeforeNextRender(toolbar);
+      chrome.test.assertFalse(toolbar.annotationMode);
+
+      // If rotation is enabled clicking the button shows the dialog.
+      toolbar.rotated = true;
+      const annotateButton = toolbar.shadowRoot.querySelector('#annotate');
+      chrome.test.assertFalse(annotateButton.disabled);
+      annotateButton.click();
+      await waitBeforeNextRender(toolbar);
+      let dialog =
+          toolbar.shadowRoot.querySelector('viewer-annotations-mode-dialog');
+      chrome.test.assertTrue(dialog.isOpen());
+
+      // Cancel the dialog.
+      const whenClosed = eventToPromise('close', dialog);
+      dialog.shadowRoot.querySelector('.cancel-button').click();
+      chrome.test.assertFalse(dialog.isOpen());
+      await whenClosed;
+
+      // If both two up and rotate are enabled, the dialog opens.
+      toolbar.twoUpViewEnabled = true;
+      chrome.test.assertFalse(annotateButton.disabled);
+      annotateButton.click();
+      await waitBeforeNextRender(toolbar);
+      dialog =
+          toolbar.shadowRoot.querySelector('viewer-annotations-mode-dialog');
+      chrome.test.assertTrue(dialog.isOpen());
+
+      // When "Edit" is clicked, the toolbar should fire
+      // annotation-mode-dialog-confirmed.
+      const whenConfirmed =
+          eventToPromise('annotation-mode-dialog-confirmed', toolbar);
+      dialog.shadowRoot.querySelector('.action-button').click();
+      await whenConfirmed;
+      chrome.test.assertFalse(dialog.isOpen());
+      await waitBeforeNextRender(toolbar);
+
+      // Dialog shows in two up view (un-rotated).
+      toolbar.rotated = false;
+      chrome.test.assertFalse(annotateButton.disabled);
+      annotateButton.click();
+      await waitBeforeNextRender(toolbar);
+      dialog =
+          toolbar.shadowRoot.querySelector('viewer-annotations-mode-dialog');
+      chrome.test.assertTrue(dialog.isOpen());
+    });
+  }
 ]);
