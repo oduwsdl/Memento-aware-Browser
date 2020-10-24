@@ -31,8 +31,8 @@
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
-#include "net/dns/dns_config_overrides.h"
 #include "net/dns/host_resolver.h"
+#include "net/dns/public/dns_config_overrides.h"
 #include "net/http/http_auth_preferences.h"
 #include "services/network/cors/preflight_controller.h"
 #include "services/network/http_cache_data_counter.h"
@@ -89,18 +89,18 @@ class CertVerifierWithTrustAnchors;
 class CookieManager;
 class ExpectCTReporter;
 class HostResolver;
+class MdnsResponderManager;
 class NetworkService;
 class NetworkServiceNetworkDelegate;
 class NetworkServiceProxyDelegate;
-class MdnsResponderManager;
-class NSSTempCertsCacheChromeOS;
 class P2PSocketManager;
+class PendingTrustTokenStore;
 class ProxyLookupRequest;
 class QuicTransport;
 class ResourceScheduler;
 class ResourceSchedulerClient;
+class SessionCleanupCookieStore;
 class SQLiteTrustTokenPersister;
-class PendingTrustTokenStore;
 class WebSocketFactory;
 
 namespace cors {
@@ -205,8 +205,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const url::Origin& top_frame_origin) override;
   void ClearTrustTokenData(mojom::ClearDataFilterPtr filter,
                            base::OnceClosure done) override;
-  void ClearNetworkingHistorySince(
-      base::Time time,
+  void ClearNetworkingHistoryBetween(
+      base::Time start_time,
+      base::Time end_time,
       base::OnceClosure completion_callback) override;
   void ClearHttpCache(base::Time start_time,
                       base::Time end_time,
@@ -221,6 +222,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   void ClearHostCache(mojom::ClearDataFilterPtr filter,
                       ClearHostCacheCallback callback) override;
   void ClearHttpAuthCache(base::Time start_time,
+                          base::Time end_time,
                           ClearHttpAuthCacheCallback callback) override;
   void ClearReportingCacheReports(
       mojom::ClearDataFilterPtr filter,
@@ -259,6 +261,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   void GetExpectCTState(const std::string& domain,
                         const net::NetworkIsolationKey& network_isolation_key,
                         GetExpectCTStateCallback callback) override;
+  void MaybeEnqueueSCTReport(
+      const net::HostPortPair& host_port_pair,
+      const net::X509Certificate* validated_certificate_chain,
+      const net::SignedCertificateTimestampAndStatusList&
+          signed_certificate_timestamps);
+  void SetSCTAuditingEnabled(bool enabled) override;
+  bool is_sct_auditing_enabled() { return is_sct_auditing_enabled_; }
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
   void CreateUDPSocket(
       mojo::PendingReceiver<mojom::UDPSocket> receiver,
@@ -301,6 +310,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       int32_t render_frame_id,
       const url::Origin& origin,
       uint32_t options,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
       mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
       mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
       mojo::PendingRemote<mojom::TrustedHeaderClient> header_client) override;
@@ -346,9 +356,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       std::vector<mojom::CorsOriginPatternPtr> allow_patterns,
       std::vector<mojom::CorsOriginPatternPtr> block_patterns,
       SetCorsOriginAccessListsForOriginCallback callback) override;
-  void SetCorsExtraSafelistedRequestHeaderNames(
-      const std::vector<std::string>&
-          cors_extra_safelisted_request_header_names) override;
   void EnableStaticKeyPinningForTesting(
       EnableStaticKeyPinningForTestingCallback callback) override;
   void VerifyCertificateForTesting(
@@ -401,6 +408,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const GURL& url,
       const net::NetworkIsolationKey& network_isolation_key,
       LookupServerBasicAuthCredentialsCallback callback) override;
+#if defined(OS_CHROMEOS)
+  void LookupProxyAuthCredentials(
+      const net::ProxyServer& proxy_server,
+      const std::string& auth_scheme,
+      const std::string& realm,
+      LookupProxyAuthCredentialsCallback callback) override;
+#endif
   void GetOriginPolicyManager(
       mojo::PendingReceiver<mojom::OriginPolicyManager> receiver) override;
 
@@ -466,8 +480,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
     return domain_reliability_monitor_.get();
   }
 
-  bool IsCorsEnabled() const { return cors_enabled_; }
-
   // The http_auth_dynamic_params_ would be used to populate
   // the |http_auth_merged_preferences| of the given NetworkContext.
   void OnHttpAuthDynamicParamsChanged(
@@ -495,10 +507,19 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
     return trust_token_store_.get();
   }
 
+#if BUILDFLAG(IS_CT_SUPPORTED)
+  void SetIsSCTAuditingEnabledForTesting(bool enabled) {
+    is_sct_auditing_enabled_ = enabled;
+  }
+#endif  // BUILDFLAG(IS_CT_SUPPORTED)
+
  private:
   URLRequestContextOwner MakeURLRequestContext(
       mojo::PendingRemote<mojom::URLLoaderFactory>
-          url_loader_factory_for_cert_net_fetcher);
+          url_loader_factory_for_cert_net_fetcher,
+      scoped_refptr<SessionCleanupCookieStore>);
+  scoped_refptr<SessionCleanupCookieStore> MakeSessionCleanupCookieStore()
+      const;
 
   // Invoked when the HTTP cache was cleared. Invokes |callback|.
   void OnHttpCacheCleared(ClearHttpCacheCallback callback,
@@ -648,13 +669,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   std::queue<SetExpectCTTestReportCallback>
       outstanding_set_expect_ct_callbacks_;
+
+  bool is_sct_auditing_enabled_ = false;
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
 #if defined(OS_CHROMEOS)
   CertVerifierWithTrustAnchors* cert_verifier_with_trust_anchors_ = nullptr;
-  // Additional certificates made available to NSS cert validation as temporary
-  // certificates.
-  std::unique_ptr<network::NSSTempCertsCacheChromeOS> nss_temp_certs_cache_;
 #endif
 
   // CertNetFetcher used by the context's CertVerifier. May be nullptr if
@@ -700,9 +720,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   // Manages CORS preflight requests and its cache.
   cors::PreflightController cors_preflight_controller_;
-
-  // Manages if OOR-CORS is enabled.
-  bool cors_enabled_ = false;
 
   std::unique_ptr<NetworkQualitiesPrefDelegate>
       network_qualities_pref_delegate_;

@@ -81,8 +81,8 @@ URLLoaderFactory::URLLoaderFactory(
   DCHECK_NE(mojom::kInvalidProcessId, params_->process_id);
   DCHECK(!params_->factory_override);
   // Only non-navigation IsolationInfos should be bound to URLLoaderFactories.
-  DCHECK_EQ(net::IsolationInfo::RedirectMode::kUpdateNothing,
-            params_->isolation_info.redirect_mode());
+  DCHECK_EQ(net::IsolationInfo::RequestType::kOther,
+            params_->isolation_info.request_type());
   DCHECK(!params_->automatically_assign_isolation_info ||
          params_->isolation_info.IsEmpty());
 
@@ -212,22 +212,6 @@ void URLLoaderFactory::CreateLoaderAndStart(
     status.exists_in_cache = false;
     status.completion_time = base::TimeTicks::Now();
     mojo::Remote<mojom::URLLoaderClient>(std::move(client))->OnComplete(status);
-    return;
-  }
-
-  if (url_request.trust_token_params && !context_->trust_token_store()) {
-    mojo::ReportBadMessage(
-        "Got a request with Trust Tokens parameters with Trust tokens "
-        "disabled.");
-    return;
-  }
-
-  if (url_request.trust_token_params && url_request.request_initiator &&
-      !IsOriginPotentiallyTrustworthy(*url_request.request_initiator)) {
-    mojo::ReportBadMessage(
-        "Got a request with Trust Tokens parameters from an insecure context, "
-        "but Trust Tokens operations may only be executed from secure "
-        "contexts.");
     return;
   }
 

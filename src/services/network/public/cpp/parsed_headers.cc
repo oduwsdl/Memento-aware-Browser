@@ -21,15 +21,15 @@ mojom::ParsedHeadersPtr PopulateParsedHeaders(
   if (!headers)
     return parsed_headers;
 
-  if (base::FeatureList::IsEnabled(features::kOutOfBlinkFrameAncestors)) {
-    AddContentSecurityPolicyFromHeaders(
-        *headers, url, &parsed_headers->content_security_policy);
-  }
+  AddContentSecurityPolicyFromHeaders(*headers, url,
+                                      &parsed_headers->content_security_policy);
+
+  parsed_headers->allow_csp_from = ParseAllowCSPFromHeader(*headers);
 
   parsed_headers->cross_origin_embedder_policy =
       ParseCrossOriginEmbedderPolicy(*headers);
-  parsed_headers->cross_origin_opener_policy =
-      ParseCrossOriginOpenerPolicy(*headers);
+  parsed_headers->cross_origin_opener_policy = ParseCrossOriginOpenerPolicy(
+      *headers, parsed_headers->cross_origin_embedder_policy);
 
   std::string origin_isolation;
   if (headers->GetNormalizedHeader("Origin-Isolation", &origin_isolation))
@@ -37,7 +37,17 @@ mojom::ParsedHeadersPtr PopulateParsedHeaders(
 
   std::string accept_ch;
   if (headers->GetNormalizedHeader("Accept-CH", &accept_ch))
-    parsed_headers->accept_ch = ParseAcceptCH(accept_ch);
+    parsed_headers->accept_ch = ParseClientHintsHeader(accept_ch);
+
+  std::string accept_ch_lifetime;
+  if (headers->GetNormalizedHeader("Accept-CH-Lifetime", &accept_ch_lifetime)) {
+    parsed_headers->accept_ch_lifetime =
+        ParseAcceptCHLifetime(accept_ch_lifetime);
+  }
+
+  std::string critical_ch;
+  if (headers->GetNormalizedHeader("Critical-CH", &critical_ch))
+    parsed_headers->critical_ch = ParseClientHintsHeader(critical_ch);
 
   return parsed_headers;
 }

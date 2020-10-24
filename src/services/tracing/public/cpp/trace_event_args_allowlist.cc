@@ -38,14 +38,14 @@ const char* const kMemoryDumpAllowedArgs[] = {
 const char* const kRendererHostAllowedArgs[] = {
     "class",           "line", "should_background", "has_pending_views",
     "bytes_allocated", nullptr};
-const char* const kUIAllowedArgs[] = {"dpi", "message_id", nullptr};
 const char* const kV8GCAllowedArgs[] = {"num_items", "num_tasks", nullptr};
 const char* const kTopLevelFlowAllowedArgs[] = {"task_queue_name", nullptr};
 const char* const kTopLevelIpcRunTaskAllowedArgs[] = {"ipc_hash", nullptr};
 const char* const kLifecyclesTaskPostedAllowedArgs[] = {
     "task_queue_name", "time_since_disabled_ms", "ipc_hash", "location",
     nullptr};
-const char* const kMemoryPressureEventsAllowedArgs[] = {"level", nullptr};
+const char* const kMemoryPressureEventsAllowedArgs[] = {
+    "level", "listener_creation_info", nullptr};
 
 const AllowlistEntry kEventArgsAllowlist[] = {
     {"__metadata", "thread_name", nullptr},
@@ -55,6 +55,8 @@ const AllowlistEntry kEventArgsAllowlist[] = {
     {"__metadata", "chrome_library_module", nullptr},
     {"__metadata", "stackFrames", nullptr},
     {"__metadata", "typeNames", nullptr},
+    {"base", "MemoryPressureListener::Notify",
+     kMemoryPressureEventsAllowedArgs},
     {"base", "MessagePumpForUI::ProcessNextWindowsMessage PeekMessage",
      kPeekMessageAllowedArgs},
     {"base", "MultiSourceMemoryPressureMonitor::OnMemoryPressureLevelChanged",
@@ -93,8 +95,6 @@ const AllowlistEntry kEventArgsAllowlist[] = {
     {TRACE_DISABLED_BY_DEFAULT("memory-infra"), "*", kMemoryDumpAllowedArgs},
     {TRACE_DISABLED_BY_DEFAULT("system_stats"), "*", nullptr},
     {TRACE_DISABLED_BY_DEFAULT("v8.gc"), "*", kV8GCAllowedArgs},
-    {"ui", "HWNDMessageHandler::OnWndProc", kUIAllowedArgs},
-    {"ui", "HWNDMessageHandler::OnDwmCompositionChanged", kUIAllowedArgs},
     {"ui", "RenderTextHarfBuzz::FallbackFont", kFallbackFontAllowedArgs},
     {"ui", "RenderTextHarfBuzz::GetFallbackFonts",
      kGetFallbackFontsAllowedArgs},
@@ -105,6 +105,7 @@ const AllowlistEntry kEventArgsAllowlist[] = {
     {nullptr, nullptr, nullptr}};
 
 const char* kMetadataAllowlist[] = {"chrome-bitness",
+                                    "chrome-dcheck-on",
                                     "chrome-library-name",
                                     "clock-domain",
                                     "config",

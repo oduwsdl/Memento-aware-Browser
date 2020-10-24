@@ -13,33 +13,49 @@
 namespace network {
 
 // static
-void EmptyURLLoaderClient::DrainURLRequest(
+void EmptyURLLoaderClientWrapper::DrainURLRequest(
     mojo::PendingReceiver<mojom::URLLoaderClient> client_receiver,
-    mojo::PendingRemote<mojom::URLLoader> url_loader,
-    base::OnceClosure callback) {
-  // Raw |new| is okay, because the newly constructed EmptyURLLoaderClient will
-  // delete itself after consuming all the data/callbacks.
-  new EmptyURLLoaderClient(std::move(client_receiver), std::move(url_loader),
-                           std::move(callback));
+    mojo::PendingRemote<mojom::URLLoader> url_loader) {
+  // Raw |new| is okay, because the object will delete itself.
+  new EmptyURLLoaderClientWrapper(std::move(client_receiver),
+                                  std::move(url_loader));
 }
 
-EmptyURLLoaderClient::EmptyURLLoaderClient(
+EmptyURLLoaderClientWrapper::EmptyURLLoaderClientWrapper(
     mojo::PendingReceiver<mojom::URLLoaderClient> receiver,
-    mojo::PendingRemote<mojom::URLLoader> url_loader,
-    base::OnceClosure callback)
-    : receiver_(this, std::move(receiver)),
-      url_loader_(std::move(url_loader)),
-      callback_(std::move(callback)) {
+    mojo::PendingRemote<mojom::URLLoader> url_loader)
+    : receiver_(&client_, std::move(receiver)),
+      url_loader_(std::move(url_loader)) {
+  client_.Drain(base::BindOnce(&EmptyURLLoaderClientWrapper::DidDrain,
+                               base::Unretained(this)));
   receiver_.set_disconnect_handler(base::BindOnce(
-      &EmptyURLLoaderClient::DeleteSelf, base::Unretained(this)));
+      &EmptyURLLoaderClientWrapper::DeleteSelf, base::Unretained(this)));
 }
 
-EmptyURLLoaderClient::~EmptyURLLoaderClient() {}
+EmptyURLLoaderClientWrapper::~EmptyURLLoaderClientWrapper() = default;
 
-void EmptyURLLoaderClient::DeleteSelf() {
-  if (callback_)
-    std::move(callback_).Run();
+void EmptyURLLoaderClientWrapper::DidDrain(
+    const network::URLLoaderCompletionStatus& status) {
+  DeleteSelf();
+}
+
+void EmptyURLLoaderClientWrapper::DeleteSelf() {
   delete this;
+}
+
+EmptyURLLoaderClient::EmptyURLLoaderClient() = default;
+EmptyURLLoaderClient::~EmptyURLLoaderClient() = default;
+
+void EmptyURLLoaderClient::Drain(
+    base::OnceCallback<void(const URLLoaderCompletionStatus&)> callback) {
+  DCHECK(!callback_);
+  callback_ = std::move(callback);
+  MaybeDone();
+}
+
+void EmptyURLLoaderClient::MaybeDone() {
+  if (done_status_ && callback_)
+    std::move(callback_).Run(*done_status_);
 }
 
 void EmptyURLLoaderClient::OnReceiveResponse(
@@ -67,7 +83,8 @@ void EmptyURLLoaderClient::OnStartLoadingResponseBody(
 }
 
 void EmptyURLLoaderClient::OnComplete(const URLLoaderCompletionStatus& status) {
-  DeleteSelf();
+  done_status_ = status;
+  MaybeDone();
 }
 
 void EmptyURLLoaderClient::OnDataAvailable(const void* data, size_t num_bytes) {

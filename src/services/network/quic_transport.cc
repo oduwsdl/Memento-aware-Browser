@@ -91,8 +91,8 @@ class QuicTransport::Stream final {
         incoming_(stream),
         readable_(std::move(readable)),
         writable_(std::move(writable)),
-        readable_watcher_(FROM_HERE, ArmingPolicy::AUTOMATIC),
-        writable_watcher_(FROM_HERE, ArmingPolicy::AUTOMATIC) {
+        readable_watcher_(FROM_HERE, ArmingPolicy::MANUAL),
+        writable_watcher_(FROM_HERE, ArmingPolicy::MANUAL) {
     DCHECK(outgoing_);
     DCHECK(incoming_);
     DCHECK(readable_);
@@ -108,8 +108,8 @@ class QuicTransport::Stream final {
         id_(outgoing->id()),
         outgoing_(outgoing),
         readable_(std::move(readable)),
-        readable_watcher_(FROM_HERE, ArmingPolicy::AUTOMATIC),
-        writable_watcher_(FROM_HERE, ArmingPolicy::AUTOMATIC) {
+        readable_watcher_(FROM_HERE, ArmingPolicy::MANUAL),
+        writable_watcher_(FROM_HERE, ArmingPolicy::MANUAL) {
     DCHECK(outgoing_);
     DCHECK(readable_);
     Init();
@@ -123,8 +123,8 @@ class QuicTransport::Stream final {
         id_(incoming->id()),
         incoming_(incoming),
         writable_(std::move(writable)),
-        readable_watcher_(FROM_HERE, ArmingPolicy::AUTOMATIC),
-        writable_watcher_(FROM_HERE, ArmingPolicy::AUTOMATIC) {
+        readable_watcher_(FROM_HERE, ArmingPolicy::MANUAL),
+        writable_watcher_(FROM_HERE, ArmingPolicy::MANUAL) {
     DCHECK(incoming_);
     DCHECK(writable_);
     Init();
@@ -148,7 +148,13 @@ class QuicTransport::Stream final {
     MayDisposeLater();
   }
 
-  ~Stream() { transport_->transport_->session()->CloseStream(id_); }
+  ~Stream() {
+    auto* stream = incoming_ ? incoming_ : outgoing_;
+    if (!stream) {
+      return;
+    }
+    stream->Reset(quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
+  }
 
  private:
   using ArmingPolicy = mojo::SimpleWatcher::ArmingPolicy;
@@ -162,6 +168,7 @@ class QuicTransport::Stream final {
           MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
           MOJO_TRIGGER_CONDITION_SIGNALS_SATISFIED,
           base::BindRepeating(&Stream::OnReadable, base::Unretained(this)));
+      readable_watcher_.ArmOrNotify();
     }
 
     if (incoming_) {
@@ -173,6 +180,7 @@ class QuicTransport::Stream final {
           writable_.get(), MOJO_HANDLE_SIGNAL_WRITABLE,
           MOJO_TRIGGER_CONDITION_SIGNALS_SATISFIED,
           base::BindRepeating(&Stream::OnWritable, base::Unretained(this)));
+      writable_watcher_.ArmOrNotify();
     }
   }
 
@@ -189,6 +197,7 @@ class QuicTransport::Stream final {
       MojoResult result = readable_->BeginReadData(
           &data, &available, MOJO_BEGIN_READ_DATA_FLAG_NONE);
       if (result == MOJO_RESULT_SHOULD_WAIT) {
+        readable_watcher_.Arm();
         return;
       }
       if (result == MOJO_RESULT_FAILED_PRECONDITION) {
@@ -198,8 +207,8 @@ class QuicTransport::Stream final {
       }
       DCHECK_EQ(result, MOJO_RESULT_OK);
 
-      bool send_result = outgoing_->Write(quiche::QuicheStringPiece(
-          reinterpret_cast<const char*>(data), available));
+      bool send_result = outgoing_->Write(
+          absl::string_view(reinterpret_cast<const char*>(data), available));
       if (!send_result) {
         // TODO(yhirano): Handle this failure.
         readable_->EndReadData(0);
@@ -238,6 +247,7 @@ class QuicTransport::Stream final {
       MojoResult result = writable_->BeginWriteData(
           &buffer, &available, MOJO_BEGIN_WRITE_DATA_FLAG_NONE);
       if (result == MOJO_RESULT_SHOULD_WAIT) {
+        writable_watcher_.Arm();
         return;
       }
       if (result == MOJO_RESULT_FAILED_PRECONDITION) {
@@ -506,13 +516,13 @@ void QuicTransport::OnIncomingBidirectionalStreamAvailable() {
         sizeof(options), MOJO_CREATE_DATA_PIPE_FLAG_NONE, 1, 256 * 1024};
     if (mojo::CreateDataPipe(&options, &writable_for_outgoing,
                              &readable_for_outgoing) != MOJO_RESULT_OK) {
-      transport_->session()->CloseStream(stream->id());
+      stream->Reset(quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
       // TODO(yhirano): Error the entire connection.
       return;
     }
     if (mojo::CreateDataPipe(&options, &writable_for_incoming,
                              &readable_for_incoming) != MOJO_RESULT_OK) {
-      transport_->session()->CloseStream(stream->id());
+      stream->Reset(quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
       // TODO(yhirano): Error the entire connection.
       return;
     }
@@ -547,7 +557,7 @@ void QuicTransport::OnIncomingUnidirectionalStreamAvailable() {
         sizeof(options), MOJO_CREATE_DATA_PIPE_FLAG_NONE, 1, 256 * 1024};
     if (mojo::CreateDataPipe(&options, &writable_for_incoming,
                              &readable_for_incoming) != MOJO_RESULT_OK) {
-      transport_->session()->CloseStream(stream->id());
+      stream->Reset(quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
       // TODO(yhirano): Error the entire connection.
       return;
     }

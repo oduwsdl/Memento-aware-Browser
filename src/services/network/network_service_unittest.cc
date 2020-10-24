@@ -470,27 +470,24 @@ TEST_F(NetworkServiceTest, DnsClientEnableDisable) {
       std::move(dns_client));
 
   service()->ConfigureStubHostResolver(
-      true /* insecure_dns_client_enabled */,
-      net::DnsConfig::SecureDnsMode::OFF,
+      true /* insecure_dns_client_enabled */, net::SecureDnsMode::kOff,
       base::nullopt /* dns_over_https_servers */);
   EXPECT_TRUE(dns_client_ptr->CanUseInsecureDnsTransactions());
-  EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF,
+  EXPECT_EQ(net::SecureDnsMode::kOff,
             dns_client_ptr->GetEffectiveConfig()->secure_dns_mode);
 
   service()->ConfigureStubHostResolver(
-      false /* insecure_dns_client_enabled */,
-      net::DnsConfig::SecureDnsMode::OFF,
+      false /* insecure_dns_client_enabled */, net::SecureDnsMode::kOff,
       base::nullopt /* dns_over_https_servers */);
   EXPECT_FALSE(dns_client_ptr->CanUseInsecureDnsTransactions());
-  EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF,
+  EXPECT_EQ(net::SecureDnsMode::kOff,
             dns_client_ptr->GetEffectiveConfig()->secure_dns_mode);
 
   service()->ConfigureStubHostResolver(
-      false /* insecure_dns_client_enabled */,
-      net::DnsConfig::SecureDnsMode::AUTOMATIC,
+      false /* insecure_dns_client_enabled */, net::SecureDnsMode::kAutomatic,
       base::nullopt /* dns_over_https_servers */);
   EXPECT_FALSE(dns_client_ptr->CanUseInsecureDnsTransactions());
-  EXPECT_EQ(net::DnsConfig::SecureDnsMode::AUTOMATIC,
+  EXPECT_EQ(net::SecureDnsMode::kAutomatic,
             dns_client_ptr->GetEffectiveConfig()->secure_dns_mode);
 
   std::vector<mojom::DnsOverHttpsServerPtr> dns_over_https_servers_ptr;
@@ -500,10 +497,10 @@ TEST_F(NetworkServiceTest, DnsClientEnableDisable) {
   dns_over_https_server->use_post = true;
   dns_over_https_servers_ptr.emplace_back(std::move(dns_over_https_server));
   service()->ConfigureStubHostResolver(false /* insecure_dns_client_enabled */,
-                                       net::DnsConfig::SecureDnsMode::AUTOMATIC,
+                                       net::SecureDnsMode::kAutomatic,
                                        std::move(dns_over_https_servers_ptr));
   EXPECT_FALSE(dns_client_ptr->CanUseInsecureDnsTransactions());
-  EXPECT_EQ(net::DnsConfig::SecureDnsMode::AUTOMATIC,
+  EXPECT_EQ(net::SecureDnsMode::kAutomatic,
             dns_client_ptr->GetEffectiveConfig()->secure_dns_mode);
 }
 
@@ -536,9 +533,10 @@ TEST_F(NetworkServiceTest, DnsOverHttpsEnableDisable) {
   dns_over_https_servers_ptr.emplace_back(std::move(dns_over_https_server));
 
   service()->ConfigureStubHostResolver(false /* insecure_dns_client_enabled */,
-                                       net::DnsConfig::SecureDnsMode::AUTOMATIC,
+                                       net::SecureDnsMode::kAutomatic,
                                        std::move(dns_over_https_servers_ptr));
-  EXPECT_TRUE(service()->host_resolver_manager()->GetDnsConfigAsValue());
+  EXPECT_TRUE(
+      service()->host_resolver_manager()->GetDnsConfigAsValue().is_dict());
   std::vector<net::DnsOverHttpsServerConfig> dns_over_https_servers =
       dns_client_ptr->GetEffectiveConfig()->dns_over_https_servers;
   ASSERT_EQ(1u, dns_over_https_servers.size());
@@ -559,9 +557,10 @@ TEST_F(NetworkServiceTest, DnsOverHttpsEnableDisable) {
   dns_over_https_servers_ptr.emplace_back(std::move(dns_over_https_server));
 
   service()->ConfigureStubHostResolver(true /* insecure_dns_client_enabled */,
-                                       net::DnsConfig::SecureDnsMode::SECURE,
+                                       net::SecureDnsMode::kSecure,
                                        std::move(dns_over_https_servers_ptr));
-  EXPECT_TRUE(service()->host_resolver_manager()->GetDnsConfigAsValue());
+  EXPECT_TRUE(
+      service()->host_resolver_manager()->GetDnsConfigAsValue().is_dict());
   dns_over_https_servers =
       dns_client_ptr->GetEffectiveConfig()->dns_over_https_servers;
   ASSERT_EQ(2u, dns_over_https_servers.size());
@@ -577,8 +576,7 @@ TEST_F(NetworkServiceTest, DisableDohUpgradeProviders) {
       features::kDnsOverHttpsUpgrade,
       {{"DisabledProviders", "CleanBrowsingSecure, , Cloudflare,Unexpected"}});
   service()->ConfigureStubHostResolver(
-      true /* insecure_dns_client_enabled */,
-      net::DnsConfig::SecureDnsMode::AUTOMATIC,
+      true /* insecure_dns_client_enabled */, net::SecureDnsMode::kAutomatic,
       base::nullopt /* dns_over_https_servers */);
 
   // Set valid DnsConfig.
@@ -935,6 +933,8 @@ class NetworkServiceTestWithService : public testing::Test {
     mojom::URLLoaderFactoryParamsPtr params =
         mojom::URLLoaderFactoryParams::New();
     params->process_id = process_id;
+    params->request_initiator_origin_lock =
+        url::Origin::Create(GURL("https://initiator.example.com"));
     params->is_corb_enabled = false;
     network_context_->CreateURLLoaderFactory(
         loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
@@ -1215,11 +1215,14 @@ TEST_F(NetworkServiceTestWithService, SetsTrustTokenKeyCommitments) {
   auto expectation = mojom::TrustTokenKeyCommitmentResult::New();
   ASSERT_TRUE(base::Base64Decode(
       "aaaa", &expectation->signed_redemption_record_verification_key));
+  expectation->protocol_version =
+      mojom::TrustTokenProtocolVersion::kTrustTokenV1;
+  expectation->id = 1;
   expectation->batch_size = 5;
 
   base::RunLoop run_loop;
   network_service_->SetTrustTokenKeyCommitments(
-      R"( { "https://issuer.example": { "batchsize": 5, "srrkey": "aaaa" } } )",
+      R"( { "https://issuer.example": { "protocol_version": "TrustTokenV1", "id": 1, "batchsize": 5, "srrkey": "aaaa" } } )",
       run_loop.QuitClosure());
   run_loop.Run();
 

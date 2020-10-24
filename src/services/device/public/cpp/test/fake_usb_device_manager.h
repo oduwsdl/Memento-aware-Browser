@@ -74,6 +74,10 @@ class FakeUsbDeviceManager : public mojom::UsbDeviceManager {
       const std::string& guid,
       mojo::PendingReceiver<device::mojom::UsbDevice> device_receiver,
       mojo::PendingRemote<mojom::UsbDeviceClient> device_client) override;
+  void GetSecurityKeyDevice(
+      const std::string& guid,
+      mojo::PendingReceiver<device::mojom::UsbDevice> device_receiver,
+      mojo::PendingRemote<mojom::UsbDeviceClient> device_client) override;
 
 #if defined(OS_ANDROID)
   void RefreshDeviceInfo(const std::string& guid,
@@ -86,6 +90,7 @@ class FakeUsbDeviceManager : public mojom::UsbDeviceManager {
 
   void OpenFileDescriptor(const std::string& guid,
                           uint32_t drop_privileges_mask,
+                          mojo::PlatformHandle lifeline_fd,
                           OpenFileDescriptorCallback callback) override;
 #endif  // defined(OS_CHROMEOS)
 

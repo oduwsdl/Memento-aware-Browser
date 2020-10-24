@@ -135,7 +135,7 @@ std::unique_ptr<network::TestURLLoaderClient> FetchRequest(
   // NIK must be consistent with |site_for_cookies|.
   if (request.site_for_cookies.IsNull()) {
     params->isolation_info = net::IsolationInfo::Create(
-        net::IsolationInfo::RedirectMode::kUpdateNothing,
+        net::IsolationInfo::RequestType::kOther,
         url::Origin::Create(GURL("https://abc.invalid")),
         url::Origin::Create(GURL("https://xyz.invalid")),
         request.site_for_cookies);
@@ -168,14 +168,8 @@ class UseCertVerifierBuiltinTest : public NetworkContextTest,
 
   void SetUp() override {
     if (GetParam()) {
-#if defined(OS_CHROMEOS)
-      // TODO(crbug.com/1085379): remove this GTEST_SKIP().
-      GTEST_SKIP() << "Skipping test, CertVerifierService feature not yet "
-                      "available on ChromeOS.";
-#else
       scoped_feature_list_.InitAndEnableFeature(
           network::features::kCertVerifierService);
-#endif
     } else {
       scoped_feature_list_.InitAndDisableFeature(
           network::features::kCertVerifierService);
@@ -239,13 +233,7 @@ class NetworkContextCertVerifierBuiltinFeatureFlagTest
       disabled_features.push_back(net::features::kCertVerifierBuiltinFeature);
     }
     if (use_cert_verifier_service_feature_) {
-#if defined(OS_CHROMEOS)
-      // TODO(crbug.com/1085379): remove this GTEST_SKIP().
-      GTEST_SKIP() << "Skipping test, CertVerifierService feature not yet "
-                      "available on ChromeOS.";
-#else
       enabled_features.push_back(network::features::kCertVerifierService);
-#endif
     } else {
       disabled_features.push_back(network::features::kCertVerifierService);
     }

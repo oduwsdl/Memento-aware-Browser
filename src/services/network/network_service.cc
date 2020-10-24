@@ -35,9 +35,9 @@
 #include "net/cert/cert_database.h"
 #include "net/cert/ct_log_response_parser.h"
 #include "net/cert/signed_tree_head.h"
-#include "net/dns/dns_config_overrides.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_manager.h"
+#include "net/dns/public/dns_config_overrides.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/log/file_net_log_observer.h"
 #include "net/log/net_log.h"
@@ -48,14 +48,17 @@
 #include "net/ssl/ssl_key_logger_impl.h"
 #include "net/url_request/url_request_context.h"
 #include "services/network/crl_set_distributor.h"
-#include "services/network/cross_origin_read_blocking.h"
+#include "services/network/cross_origin_read_blocking_exception_for_plugin.h"
 #include "services/network/dns_config_change_manager.h"
+#include "services/network/first_party_sets/preloaded_first_party_sets.h"
 #include "services/network/http_auth_cache_copier.h"
 #include "services/network/legacy_tls_config_distributor.h"
 #include "services/network/net_log_exporter.h"
 #include "services/network/net_log_proxy_sink.h"
 #include "services/network/network_context.h"
 #include "services/network/network_usage_accumulator.h"
+#include "services/network/public/cpp/crash_keys.h"
+#include "services/network/public/cpp/cross_origin_read_blocking.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
 #include "services/network/public/cpp/load_info_util.h"
@@ -74,6 +77,10 @@
 #if defined(OS_ANDROID)
 #include "base/android/application_status_listener.h"
 #include "net/android/http_auth_negotiate_android.h"
+#endif
+
+#if BUILDFLAG(IS_CT_SUPPORTED)
+#include "services/network/sct_auditing_cache.h"
 #endif
 
 namespace network {
@@ -184,6 +191,7 @@ void HandleBadMessage(const std::string& error) {
   LOG(WARNING) << "Mojo error in NetworkService:" << error;
   mojo::debug::ScopedMessageErrorCrashKey crash_key_value(error);
   base::debug::DumpWithoutCrashing();
+  network::debug::ClearDeserializationCrashKeyString();
 }
 
 }  // namespace
@@ -364,6 +372,14 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
   doh_probe_activator_ = std::make_unique<DelayedDohProbeActivator>(this);
 
   trust_token_key_commitments_ = std::make_unique<TrustTokenKeyCommitments>();
+
+  preloaded_first_party_sets_ = std::make_unique<PreloadedFirstPartySets>();
+
+#if BUILDFLAG(IS_CT_SUPPORTED)
+  constexpr size_t kMaxSCTAuditingCacheEntries = 1024;
+  sct_auditing_cache_ =
+      std::make_unique<SCTAuditingCache>(kMaxSCTAuditingCacheEntries);
+#endif
 }
 
 NetworkService::~NetworkService() {
@@ -466,8 +482,8 @@ void NetworkService::StartNetLog(base::File file,
   constants->MergeDictionary(&client_constants);
 
   file_net_log_observer_ = net::FileNetLogObserver::CreateUnboundedPreExisting(
-      std::move(file), std::move(constants));
-  file_net_log_observer_->StartObserving(net_log_, capture_mode);
+      std::move(file), capture_mode, std::move(constants));
+  file_net_log_observer_->StartObserving(net_log_);
 }
 
 void NetworkService::AttachNetLogProxy(
@@ -495,7 +511,7 @@ void NetworkService::CreateNetworkContext(
 
 void NetworkService::ConfigureStubHostResolver(
     bool insecure_dns_client_enabled,
-    net::DnsConfig::SecureDnsMode secure_dns_mode,
+    net::SecureDnsMode secure_dns_mode,
     base::Optional<std::vector<mojom::DnsOverHttpsServerPtr>>
         dns_over_https_servers) {
   DCHECK(!dns_over_https_servers || !dns_over_https_servers->empty());
@@ -520,6 +536,7 @@ void NetworkService::ConfigureStubHostResolver(
   overrides.disabled_upgrade_providers =
       SplitString(features::kDnsOverHttpsUpgradeDisabledProvidersParam.Get(),
                   ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
   host_resolver_manager_->SetDnsConfigOverrides(overrides);
 }
 
@@ -662,7 +679,7 @@ void NetworkService::SetCryptConfig(mojom::CryptConfigPtr crypt_config) {
 }
 #endif
 
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_MAC)
 void NetworkService::SetEncryptionKey(const std::string& encryption_key) {
   OSCrypt::SetRawEncryptionKey(encryption_key);
 }
@@ -670,7 +687,7 @@ void NetworkService::SetEncryptionKey(const std::string& encryption_key) {
 
 void NetworkService::AddCorbExceptionForPlugin(int32_t process_id) {
   DCHECK_NE(mojom::kBrowserProcessId, process_id);
-  CrossOriginReadBlocking::AddExceptionForPlugin(process_id);
+  CrossOriginReadBlockingExceptionForPlugin::AddExceptionForPlugin(process_id);
 }
 
 void NetworkService::AddAllowedRequestInitiatorForPlugin(
@@ -684,7 +701,8 @@ void NetworkService::AddAllowedRequestInitiatorForPlugin(
 void NetworkService::RemoveSecurityExceptionsForPlugin(int32_t process_id) {
   DCHECK_NE(mojom::kBrowserProcessId, process_id);
 
-  CrossOriginReadBlocking::RemoveExceptionForPlugin(process_id);
+  CrossOriginReadBlockingExceptionForPlugin::RemoveExceptionForPlugin(
+      process_id);
 
   std::map<int, std::set<url::Origin>>& map = plugin_origins_;
   map.erase(process_id);
@@ -734,6 +752,25 @@ void NetworkService::SetTrustTokenKeyCommitments(
   std::move(done).Run();
 }
 
+#if BUILDFLAG(IS_CT_SUPPORTED)
+void NetworkService::ClearSCTAuditingCache() {
+  sct_auditing_cache_->ClearCache();
+}
+
+void NetworkService::ConfigureSCTAuditing(
+    bool enabled,
+    double sampling_rate,
+    const GURL& reporting_uri,
+    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+    mojo::PendingRemote<mojom::URLLoaderFactory> factory) {
+  sct_auditing_cache_->set_enabled(enabled);
+  sct_auditing_cache_->set_sampling_rate(sampling_rate);
+  sct_auditing_cache_->set_report_uri(reporting_uri);
+  sct_auditing_cache_->set_traffic_annotation(traffic_annotation);
+  sct_auditing_cache_->set_url_loader_factory(std::move(factory));
+}
+#endif
+
 #if defined(OS_ANDROID)
 void NetworkService::DumpWithoutCrashing(base::Time dump_request_time) {
   static base::debug::CrashKeyString* time_key =
@@ -752,6 +789,10 @@ void NetworkService::BindTestInterface(
     auto pipe = receiver.PassPipe();
     registry_->TryBindInterface(mojom::NetworkServiceTest::Name_, &pipe);
   }
+}
+
+void NetworkService::SetPreloadedFirstPartySets(const std::string& raw_sets) {
+  preloaded_first_party_sets_->ParseAndSet(raw_sets);
 }
 
 std::unique_ptr<net::HttpAuthHandlerFactory>

@@ -60,6 +60,13 @@ void FakeUsbDeviceManager::GetDevice(
                         std::move(device_client));
 }
 
+void FakeUsbDeviceManager::GetSecurityKeyDevice(
+    const std::string& guid,
+    mojo::PendingReceiver<device::mojom::UsbDevice> device_receiver,
+    mojo::PendingRemote<mojom::UsbDeviceClient> device_client) {
+  return GetDevice(guid, std::move(device_receiver), std::move(device_client));
+}
+
 #if defined(OS_ANDROID)
 void FakeUsbDeviceManager::RefreshDeviceInfo(
     const std::string& guid,
@@ -83,6 +90,7 @@ void FakeUsbDeviceManager::CheckAccess(const std::string& guid,
 void FakeUsbDeviceManager::OpenFileDescriptor(
     const std::string& guid,
     uint32_t drop_privileges_mask,
+    mojo::PlatformHandle lifeline_fd,
     OpenFileDescriptorCallback callback) {
   std::move(callback).Run(base::File(
       base::FilePath(FILE_PATH_LITERAL("/dev/null")),

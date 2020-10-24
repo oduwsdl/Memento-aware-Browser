@@ -18,10 +18,10 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "net/base/auth.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
@@ -47,6 +47,15 @@ namespace {
 // What is considered a "small message" for the purposes of small message
 // reassembly.
 constexpr uint64_t kSmallMessageThreshhold = 1 << 16;
+
+// The capacity of the data pipe to use for received messages, in bytes. Optimal
+// value depends on the platform.
+#if defined(OS_ANDROID)
+constexpr uint32_t kReceiveDataPipeCapacity = 1 << 16;
+#else
+// |2^n - delta| is better than 2^n on Linux. See crrev.com/c/1792208.
+constexpr uint32_t kReceiveDataPipeCapacity = 131000;
+#endif
 
 // Convert a mojom::WebSocketMessageType to a
 // net::WebSocketFrameHeader::OpCode
@@ -185,24 +194,13 @@ void WebSocket::WebSocketEventHandler::OnAddChannelResponse(
            << " extensions=\"" << extensions << "\"";
 
   impl_->handshake_succeeded_ = true;
-  impl_->pending_connection_tracker_.OnCompleteHandshake();
-
-  base::CommandLine* const command_line =
-      base::CommandLine::ForCurrentProcess();
-  DCHECK(command_line);
-  uint64_t receive_quota_threshold =
-      net::WebSocketChannel::kReceiveQuotaThreshold;
-  if (command_line->HasSwitch(net::kWebSocketReceiveQuotaThreshold)) {
-    std::string flag_string =
-        command_line->GetSwitchValueASCII(net::kWebSocketReceiveQuotaThreshold);
-    if (!base::StringToUint64(flag_string, &receive_quota_threshold))
-      receive_quota_threshold = net::WebSocketChannel::kReceiveQuotaThreshold;
+  if (impl_->pending_connection_tracker_) {
+    impl_->pending_connection_tracker_->OnCompleteHandshake();
   }
-  DVLOG(3) << "receive_quota_threshold is " << receive_quota_threshold;
 
   const MojoCreateDataPipeOptions data_pipe_options{
       sizeof(MojoCreateDataPipeOptions), MOJO_CREATE_DATA_PIPE_FLAG_NONE, 1,
-      receive_quota_threshold * 2};
+      kReceiveDataPipeCapacity};
   mojo::ScopedDataPipeConsumerHandle readable;
   const MojoResult result =
       mojo::CreateDataPipe(&data_pipe_options, &impl_->writable_, &readable);
@@ -390,11 +388,13 @@ WebSocket::WebSocket(
     int32_t frame_id,
     const url::Origin& origin,
     uint32_t options,
+    net::NetworkTrafficAnnotationTag traffic_annotation,
     HasRawHeadersAccess has_raw_headers_access,
     mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
     mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
     mojo::PendingRemote<mojom::TrustedHeaderClient> header_client,
-    WebSocketThrottler::PendingConnection pending_connection_tracker,
+    base::Optional<WebSocketThrottler::PendingConnection>
+        pending_connection_tracker,
     DataPipeUseTracker data_pipe_use_tracker,
     base::TimeDelta delay)
     : factory_(factory),
@@ -404,6 +404,7 @@ WebSocket::WebSocket(
       pending_connection_tracker_(std::move(pending_connection_tracker)),
       delay_(delay),
       options_(options),
+      traffic_annotation_(traffic_annotation),
       child_id_(child_id),
       frame_id_(frame_id),
       origin_(std::move(origin)),
@@ -423,6 +424,8 @@ WebSocket::WebSocket(
   // |isolation_info| must not be empty.
   DCHECK(!factory_->GetURLRequestContext()->require_network_isolation_key() ||
          !isolation_info.IsEmpty());
+  // |delay| should be zero if this connection is not throttled.
+  DCHECK(pending_connection_tracker.has_value() || delay.is_zero());
   if (auth_handler_) {
     // Make sure the request dies if |auth_handler_| has an error, otherwise
     // requests can hang.
@@ -603,14 +606,17 @@ void WebSocket::AddChannel(
   }
   channel_->SendAddChannelRequest(socket_url, requested_protocols, origin_,
                                   site_for_cookies, isolation_info,
-                                  headers_to_pass);
+                                  headers_to_pass, traffic_annotation_);
 }
 
 void WebSocket::OnWritable(MojoResult result,
                            const mojo::HandleSignalsState& state) {
   if (result != MOJO_RESULT_OK) {
+    // MOJO_RESULT_FAILED_PRECONDITION (=9) is common when the other end of the
+    // pipe is closed.
     DVLOG(1) << "WebSocket::OnWritable mojo error=" << result;
-    Reset();
+
+    OnConnectionError(FROM_HERE);
     return;
   }
   wait_for_writable_ = false;
@@ -675,8 +681,11 @@ void WebSocket::SendDataFrame(base::span<const char>* payload) {
 void WebSocket::OnReadable(MojoResult result,
                            const mojo::HandleSignalsState& state) {
   if (result != MOJO_RESULT_OK) {
-    DVLOG(1) << "WebSocket::OnWritable mojo error=" << result;
-    Reset();
+    // MOJO_RESULT_FAILED_PRECONDITION (=9) is common when the other end of the
+    // pipe is closed.
+    DVLOG(1) << "WebSocket::OnReadable mojo error=" << result;
+
+    OnConnectionError(FROM_HERE);
     return;
   }
   wait_for_readable_ = false;
