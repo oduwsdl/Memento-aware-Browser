@@ -53,7 +53,6 @@ union Identifier
 		uint32_t g : 3;
 		uint32_t b : 3;
 		uint32_t a : 3;
-		uint32_t large : 1;  // Has dimension larger than SHRT_MAX (see b/133429305).
 	};
 };
 
@@ -88,7 +87,8 @@ public:
 	int slicePitchBytes(VkImageAspectFlagBits aspect, uint32_t mipLevel, Usage usage = RAW) const;
 	int getMipLevelSize(VkImageAspectFlagBits aspect, uint32_t mipLevel, Usage usage = RAW) const;
 	int layerPitchBytes(VkImageAspectFlagBits aspect, Usage usage = RAW) const;
-	VkExtent3D getMipLevelExtent(uint32_t mipLevel) const;
+	VkExtent2D getMipLevelExtent(uint32_t mipLevel) const;
+	int getDepthOrLayerCount(uint32_t mipLevel) const;
 
 	int getSampleCount() const
 	{
@@ -106,7 +106,11 @@ public:
 	bool hasDepthAspect() const { return (subresourceRange.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0; }
 	bool hasStencilAspect() const { return (subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) != 0; }
 
-	void prepareForSampling() const { image->prepareForSampling(subresourceRange); }
+	// This function is only called from the renderer, so use the USING_STORAGE flag,
+	// as it is required in order to write to an image from a shader
+	void contentsChanged() { image->contentsChanged(subresourceRange, Image::USING_STORAGE); }
+
+	void prepareForSampling() { image->prepareForSampling(subresourceRange); }
 
 	const VkComponentMapping &getComponentMapping() const { return components; }
 	const VkImageSubresourceRange &getSubresourceRange() const { return subresourceRange; }
@@ -128,16 +132,9 @@ public:
 	const Identifier id;
 };
 
-// TODO(b/132437008): Also used by SamplerYcbcrConversion. Move somewhere centrally?
-inline VkComponentMapping ResolveIdentityMapping(VkComponentMapping m)
-{
-	return {
-		(m.r == VK_COMPONENT_SWIZZLE_IDENTITY) ? VK_COMPONENT_SWIZZLE_R : m.r,
-		(m.g == VK_COMPONENT_SWIZZLE_IDENTITY) ? VK_COMPONENT_SWIZZLE_G : m.g,
-		(m.b == VK_COMPONENT_SWIZZLE_IDENTITY) ? VK_COMPONENT_SWIZZLE_B : m.b,
-		(m.a == VK_COMPONENT_SWIZZLE_IDENTITY) ? VK_COMPONENT_SWIZZLE_A : m.a,
-	};
-}
+VkComponentMapping ResolveIdentityMapping(VkComponentMapping mapping);
+VkComponentMapping ResolveComponentMapping(VkComponentMapping mapping, vk::Format format);
+VkImageSubresourceRange ResolveRemainingLevelsLayers(VkImageSubresourceRange range, const vk::Image *image);
 
 static inline ImageView *Cast(VkImageView object)
 {

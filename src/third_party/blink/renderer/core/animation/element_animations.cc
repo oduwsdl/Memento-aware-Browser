@@ -114,9 +114,7 @@ void ElementAnimations::Trace(Visitor* visitor) const {
 }
 
 const ComputedStyle* ElementAnimations::BaseComputedStyle() const {
-  if (IsAnimationStyleChange())
-    return base_computed_style_.get();
-  return nullptr;
+  return base_computed_style_.get();
 }
 
 const CSSBitset* ElementAnimations::BaseImportantSet() const {
@@ -129,7 +127,6 @@ void ElementAnimations::UpdateBaseComputedStyle(
     const ComputedStyle* computed_style,
     std::unique_ptr<CSSBitset> base_important_set) {
   DCHECK(computed_style);
-  DCHECK(IsAnimationStyleChange());
   base_computed_style_ = ComputedStyle::Clone(*computed_style);
   base_important_set_ = std::move(base_important_set);
 }
@@ -139,15 +136,17 @@ void ElementAnimations::ClearBaseComputedStyle() {
   base_important_set_ = nullptr;
 }
 
-bool ElementAnimations::AnimationsPreserveAxisAlignment() const {
-  for (const auto& entry : animations_) {
-    const Animation& animation = *entry.key;
-    if (const auto* effect = DynamicTo<KeyframeEffect>(animation.effect())) {
-      if (!effect->AnimationsPreserveAxisAlignment())
-        return false;
+bool ElementAnimations::UpdateBoxSizeAndCheckTransformAxisAlignment(
+    const FloatSize& box_size) {
+  bool preserves_axis_alignment = true;
+  for (auto& entry : animations_) {
+    Animation& animation = *entry.key;
+    if (auto* effect = DynamicTo<KeyframeEffect>(animation.effect())) {
+      if (!effect->UpdateBoxSizeAndCheckTransformAxisAlignment(box_size))
+        preserves_axis_alignment = false;
     }
   }
-  return true;
+  return preserves_axis_alignment;
 }
 
 }  // namespace blink

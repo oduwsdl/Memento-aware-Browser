@@ -5,6 +5,187 @@ This page includes a list of high level updates for each milestone release.
 
 * * *
 
+Milestone 87
+------------
+
+  * GrVkImageInfo now has a field for sample count. GrBackendRenderTarget constructor
+    that took both a GrVkImageInfo and separate sample count is deprecated. Use the
+    version without sample count instead. Similarly, GrD3DTextureResourceInfo now
+    has a sample count field and GrBackendRenderTarget no longer takes a separate
+    sample count for Direct3D. The sample count for GrBackendRenderTarget is now
+    directly queried from MtlTexture rather than passed separately. The version that
+    takes a separate sample count is deprecated and the parameter is ignored.
+    https://review.skia.org/320262
+    https://review.skia.org/320757
+    https://review.skia.org/320956
+
+  * Added deprecation warning for Metal support on MacOS 10.13, iOS 8.3, and older.
+    https://review.skia.org/320260
+
+  * GrVkImageInfo now has a field for sample count. GrBackendRenderTarget constructor
+    that took both a GrVkImageInfo and separate sample count is deprecated. Use the
+    version without sample count instead.
+
+  * Update SkClipOp::kMax_EnumValue to include only intersect and difference when
+    SK_SUPPORT_DEPRECATED_CLIPOPS is not defined.
+    https://review.skia.org/320064
+
+  * Add support for external allocator for Direct3D 12 backend.
+    Defines base classes for an allocation associated with a backend texture and a
+    a memory allocator to create such allocations.
+    Adds memory allocator to backend context.
+    https://review.skia.org/317243
+
+  * Add new optional parameter to GrContext::setBackend[Texture/RenderTarget]State which can
+    be used to return the previous GrBackendSurfaceMutableState before the requested change.
+    https://review.skia.org/318698
+
+  * New optimized clip stack for GPU backends. Enabled by default but old behavior based on
+    SkClipStack can be restored by defining SK_DISABLE_NEW_GR_CLIP_STACK when building. It is not
+    compatible with SK_SUPPORT_DEPRECATED_CLIPOPS and we are targeting the removal of support for
+    the deprecated, expanding clip ops.
+    https://review.skia.org/317209
+
+  * GPU backends now properly honor the SkFilterQuality when calling drawAtlas.
+    https://review.skia.org/313081
+
+  * The signature of 'main' used with SkRuntimeEffect SkSL has changed. There is no longer an
+    'inout half4 color' parameter, effects must return their color instead.
+    Valid signatures are now 'half4 main()' or 'half4 main(float2 coord)'.
+    https://review.skia.org/310756
+
+  * New YUVA planar specifications for SkCodec, SkImageGenerator, SkImage::MakeFromYUVAPixmaps.
+    Chroma subsampling is specified in more structured way. SkCodec and SkImageGenerator
+    don't assume 3 planes with 8bit planar values. Old APIs are deprecated.
+    https://review.skia.org/309658
+    https://review.skia.org/312886
+    https://review.skia.org/314276
+    https://review.skia.org/316837
+    https://review.skia.org/317097
+
+  * Added VkImageUsageFlags to GrVkImageInfo struct.
+
+* * *
+
+Milestone 86
+------------
+
+  * Remove support for 'in' variables from SkRuntimeEffect. API now exclusively refers to inputs
+    as 'uniforms'.
+    https://review.skia.org/309050
+
+  * Add SkImageGeneratorNDK and SkEncodeImageWithNDK for using Android's NDK APIs to decode and
+    encode.
+    https://review.skia.org/308185
+    https://review.skia.org/308800
+
+  * SkImage:remove DecodeToRaster, DecodeToTexture
+    https://review.skia.org/306331
+
+  * Add GrContext api to update compressed backend textures.
+    https://review.skia.org/302265
+
+  * Rename GrMipMapped to GrMipmapped for consistency with new APIs.
+    Also rename GrBackendTexture::hasMipMaps() to GrBackendTexture::hasMipmaps()
+    https://review.skia.org/304576
+    https://review.skia.org/304598
+
+  * Add option for clients to own semaphores after wait calls.
+    https://review.skia.org/301216
+
+  * Remove obsolete GrFlushFlags.
+    https://review.skia.org/298818
+
+  * Adds default flush() calls to SkSurface, SkImage, and GrContext. These calls do
+    a basic flush without a submit. If you haven't updated Skia in a couple releases
+    and still have flush() calls in your code that you expect to do a flush and
+    submit, you should update all those to the previously added flushAndSubmit() calls
+    instead.
+    https://review.skia.org/299141
+
+  * Enable BackendSemaphores for the Direct3D backend.
+    https://review.skia.org/298752
+
+  * Added SkImage:asyncRescaleAndReadPixels and SkImage::asyncRescaleAndReadPixelsYUV420
+    https://review.skia.org/299281
+
+  * Ganesh is moving towards replacing GrContext with the GrDirectContext/GrRecordingContext
+    pair. GrDirectContexts have _direct_ access to the GPU and are very similar to the old
+    GrContext. GrRecordingContexts are less powerful contexts that lack GPU access but provided
+    context-like utilities during DDL recording. SkSurfaces and SkCanvas will now only return
+    GrRecordingContexts. Clients requiring context features that need GPU access can then
+    check (via GrRecordingContext::asDirectContext) if the available recording context is actually
+    a direct context.
+
+  * Replace #defined values in SkString with equivalent constexprs.
+    http://review.skia.org/306160
+
+
+* * *
+
+Milestone 85
+------------
+
+  * Added GrContext::oomed() which reports whether Skia has seen a GL_OUT_OF_MEMORY
+    error from Open GL [ES] or VK_ERROR_OUT_OF_*_MEMORY from Vulkan.
+    https://review.skia.org/298216
+
+  * Add option on SkSurface::flush to pass in a GrBackendSurfaceMutableState which
+    we will set the gpu backend surface to be at the end of the flush.
+    https://review.skia.org/295567
+
+  * Add GrContext function to set mutable state on a backend surface. Currently this
+    is only used for setting vulkan VkImage layout and queue family.
+    https://review.skia.org/293844
+
+  * SkSurface factores that take GrBackendTexture or GrBackendRenderTarget now always
+    call the release proc (if provided) on failure. SkSurface::replaceBackendTexture
+    also calls the release proc on failure.
+    https://review.skia.org/293762
+
+  * SkSurface::asyncRescaleAndReadPixels and SkSurfaceasyncRescaleAndReadPixelsYUV420
+    now require explicit GrContext submit to guarantee finite time before callback
+    is invoked.
+    https://review.skia.org/292840
+
+  * Add VkSharingMode field to GrVkImageInfo.
+    https://review.skia.org/293559
+
+  * Move SkBitmapRegionDecoder into client_utils/android.
+
+  * SkCanvas.clear and SkCanvas.drawColor now accept SkColor4f in addition to SkColor.
+
+  * Remove SkSurface::MakeFromBackendTextureAsRenderTarget.
+    This factory existed to work around issues with GL_TEXTURE_RECTANGLE that existed
+    in Chrome's command buffer. Those issues have since been resolved. Use
+    SkSurface::MakeFromBackendTexutre or SkSurface::MakeFromBackendRenderTarget instead.
+    https://review.skia.org/292719
+
+  * Adds submittedProc callback to GrFlushInfo which will be called when the work
+    from the flush call is submitted to the GPU. This is specifically useful for knowing
+    when semahpores sent with the flush have been submitted and can be waiting on.
+    https://review.skia.org/291078
+
+  * GrContext submit is now required to be called in order to send GPU work to the
+    actual GPU. The flush calls simply produces 3D API specific objects that are ready
+    to be submitted (e.g. command buffers). For the GL backend, the flush will still
+    send commands to the driver. However, clients should still assume the must call
+    submit which is where any glFlush that is need for sync objects will be called. There,
+    are flushAndSubmit() functions of GrContext, SkSurface, and SkImage that will act
+    like the previous flush() functions. This will flush the work and immediately call
+    submit.
+    https://review.skia.org/289033
+
+  * Remove deprecated version of flush calls on GrContext and SkSurface.
+    https://review.skia.org/2290540
+
+  * SkCanvas::drawVertices and drawPatch now support mapping an SkShader without explicit
+    texture coordinates. If they're not supplied, the local positions (vertex position or
+    patch cubic positions) will be directly used to sample the SkShader.
+    https://review.skia.org/290130
+
+* * *
+
 Milestone 84
 ------------
 

@@ -4,6 +4,7 @@
 
 import * as Bindings from '../bindings/bindings.js';
 import * as Common from '../common/common.js';
+import * as Platform from '../platform/platform.js';
 import * as SDK from '../sdk/sdk.js';
 import * as TextUtils from '../text_utils/text_utils.js';
 import * as UI from '../ui/ui.js';
@@ -11,8 +12,7 @@ import * as Workspace from '../workspace/workspace.js';
 
 /**
  * @implements {UI.ContextFlavorListener.ContextFlavorListener}
- * @implements {UI.ListControl.ListDelegate}
- * @unrestricted
+ * @implements {UI.ListControl.ListDelegate<!BreakpointItem>}
  */
 export class JavaScriptBreakpointsSidebarPane extends UI.ThrottledWidget.ThrottledWidget {
   constructor() {
@@ -48,7 +48,17 @@ export class JavaScriptBreakpointsSidebarPane extends UI.ThrottledWidget.Throttl
 
     locations.sort((item1, item2) => item1.uiLocation.compareTo(item2.uiLocation));
 
-    return locations;
+    const result = [];
+    let lastBreakpoint = null;
+    let lastLocation = null;
+    for (const location of locations) {
+      if (location.breakpoint !== lastBreakpoint || (lastLocation && location.uiLocation.compareTo(lastLocation))) {
+        result.push(location);
+        lastBreakpoint = location.breakpoint;
+        lastLocation = location.uiLocation;
+      }
+    }
+    return result;
   }
 
   _hideList() {
@@ -103,7 +113,7 @@ export class JavaScriptBreakpointsSidebarPane extends UI.ThrottledWidget.Throttl
    * @return {!Promise<?Workspace.UISourceCode.UILocation>}
    */
   async _getSelectedUILocation() {
-    const details = self.UI.context.flavor(SDK.DebuggerModel.DebuggerPausedDetails);
+    const details = UI.Context.Context.instance().flavor(SDK.DebuggerModel.DebuggerPausedDetails);
     if (details && details.callFrames.length) {
       return await Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance().rawLocationToUILocation(
           details.callFrames[0].location());
@@ -264,8 +274,8 @@ export class JavaScriptBreakpointsSidebarPane extends UI.ThrottledWidget.Throttl
           lineText.substring(item.showColumn ? uiLocation.columnNumber : 0).trimEndWithMaxLength(maxSnippetLength);
     }
 
-    element[breakpointLocationsSymbol] = item.locations;
-    element[locationSymbol] = uiLocation;
+    elementToBreakpointMap.set(element, item.locations);
+    elementToUILocationMap.set(element, uiLocation);
     return element;
   }
 
@@ -291,8 +301,8 @@ export class JavaScriptBreakpointsSidebarPane extends UI.ThrottledWidget.Throttl
    * @override
    * @param {?BreakpointItem} from
    * @param {?BreakpointItem} to
-   * @param {?Element} fromElement
-   * @param {?Element} toElement
+   * @param {?HTMLElement} fromElement
+   * @param {?HTMLElement} toElement
    */
   selectedItemChanged(from, to, fromElement, toElement) {
     if (fromElement) {
@@ -337,7 +347,7 @@ export class JavaScriptBreakpointsSidebarPane extends UI.ThrottledWidget.Throttl
     if (!node) {
       return [];
     }
-    return node[breakpointLocationsSymbol] || [];
+    return elementToBreakpointMap.get(node) || [];
   }
 
   /**
@@ -346,7 +356,7 @@ export class JavaScriptBreakpointsSidebarPane extends UI.ThrottledWidget.Throttl
   _breakpointCheckboxClicked(event) {
     const hadFocus = this.hasFocus();
     const breakpoints = this._breakpointLocations(event).map(breakpointLocation => breakpointLocation.breakpoint);
-    const newState = event.target.checkboxElement.checked;
+    const newState = /** @type {!UI.UIUtils.CheckboxLabel} */ (event.target).checkboxElement.checked;
     for (const breakpoint of breakpoints) {
       breakpoint.setEnabled(newState);
       const item =
@@ -510,10 +520,19 @@ class BreakpointItem {
   }
 }
 
-export const locationSymbol = Symbol('location');
-export const checkboxLabelSymbol = Symbol('checkbox-label');
-export const snippetElementSymbol = Symbol('snippet-element');
-export const breakpointLocationsSymbol = Symbol('locations');
+/** @type {!WeakMap<!Element, !Workspace.UISourceCode.UILocation>} */
+const elementToUILocationMap = new WeakMap();
+
+/**
+ * @param {!Element} element
+ */
+export function retrieveLocationForElement(element) {
+  return elementToUILocationMap.get(element);
+}
+
+/** @type {!WeakMap<!Element, !Array<!BreakpointLocation>>} */
+const elementToBreakpointMap = new WeakMap();
 
 /** @typedef {{breakpoint: !Bindings.BreakpointManager.Breakpoint, uiLocation: !Workspace.UISourceCode.UILocation}} */
+// @ts-ignore typedef
 export let BreakpointLocation;

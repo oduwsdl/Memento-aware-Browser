@@ -312,10 +312,10 @@ void InstallAccessorInternal(
         config.cached_property_key);
   }
 
-  // Support [LenientThis] and attributes with Promise types by not specifying
-  // the signature. V8 does not do the type checking against holder if no
-  // signature is specified. Note that info.Holder() passed to callbacks will
-  // be *unsafe*.
+  // Support [LegacyLenientThis] and attributes with Promise types by not
+  // specifying the signature. V8 does not do the type checking against holder
+  // if no signature is specified. Note that info.Holder() passed to callbacks
+  // will be *unsafe*.
   if (config.holder_check_configuration ==
       V8DOMConfiguration::kDoNotCheckHolder)
     signature = v8::Local<v8::Signature>();
@@ -463,7 +463,8 @@ void InstallMethodInternal(v8::Isolate* isolate,
                            v8::Local<v8::FunctionTemplate> interface_template,
                            v8::Local<v8::Signature> signature,
                            const Configuration& method,
-                           const DOMWrapperWorld& world) {
+                           const DOMWrapperWorld& world,
+                           const v8::CFunction* v8_c_function = nullptr) {
   if (!WorldConfigurationApplies(method, world))
     return;
 
@@ -488,7 +489,7 @@ void InstallMethodInternal(v8::Isolate* isolate,
     v8::Local<v8::FunctionTemplate> function_template =
         v8::FunctionTemplate::New(
             isolate, callback, v8::Local<v8::Value>(), signature, method.length,
-            v8::ConstructorBehavior::kAllow, side_effect_type);
+            v8::ConstructorBehavior::kAllow, side_effect_type, v8_c_function);
     function_template->RemovePrototype();
     function_template->SetAcceptAnyReceiver(
         method.access_check_configuration ==
@@ -534,7 +535,7 @@ void InstallMethodInternal(
   if (!WorldConfigurationApplies(config, world))
     return;
 
-  v8::Local<v8::Name> name = config.MethodName(isolate);
+  v8::Local<v8::String> name = config.MethodName(isolate);
   v8::FunctionCallback callback = config.callback;
   // Promise-returning functions need to return a reject promise when
   // an exception occurs.  This includes a case that the receiver object is not
@@ -565,6 +566,7 @@ void InstallMethodInternal(
     v8::Local<v8::Function> function =
         function_template->GetFunction(isolate->GetCurrentContext())
             .ToLocalChecked();
+    function->SetName(name);
     if (location & V8DOMConfiguration::kOnInstance && !instance.IsEmpty()) {
       instance
           ->DefineOwnProperty(
@@ -594,6 +596,7 @@ void InstallMethodInternal(
     v8::Local<v8::Function> function =
         function_template->GetFunction(isolate->GetCurrentContext())
             .ToLocalChecked();
+    function->SetName(name);
     interface->DefineOwnProperty(isolate->GetCurrentContext(), name, function, static_cast<v8::PropertyAttribute>(config.attribute)).ToChecked();
   }
 }
@@ -790,6 +793,22 @@ void V8DOMConfiguration::InstallMethods(
                           interface_template, signature, methods[i], world);
 }
 
+void V8DOMConfiguration::InstallMethods(
+    v8::Isolate* isolate,
+    const DOMWrapperWorld& world,
+    v8::Local<v8::ObjectTemplate> instance_template,
+    v8::Local<v8::ObjectTemplate> prototype_template,
+    v8::Local<v8::FunctionTemplate> interface_template,
+    v8::Local<v8::Signature> signature,
+    const NoAllocDirectCallMethodConfiguration* methods,
+    size_t method_count) {
+  for (size_t i = 0; i < method_count; ++i) {
+    InstallMethodInternal(
+        isolate, instance_template, prototype_template, interface_template,
+        signature, methods[i].method_config, world, &methods[i].v8_c_function);
+  }
+}
+
 void V8DOMConfiguration::InstallMethod(
     v8::Isolate* isolate,
     const DOMWrapperWorld& world,
@@ -887,7 +906,7 @@ v8::Local<v8::FunctionTemplate> V8DOMConfiguration::DomClassTemplate(
     InstallTemplateFunction configure_dom_class_template) {
   V8PerIsolateData* data = V8PerIsolateData::From(isolate);
   v8::Local<v8::FunctionTemplate> interface_template =
-      data->FindInterfaceTemplate(world, wrapper_type_info);
+      data->FindV8Template(world, wrapper_type_info).As<v8::FunctionTemplate>();
   if (!interface_template.IsEmpty())
     return interface_template;
 
@@ -895,7 +914,7 @@ v8::Local<v8::FunctionTemplate> V8DOMConfiguration::DomClassTemplate(
   interface_template = v8::FunctionTemplate::New(
       isolate, V8ObjectConstructor::IsValidConstructorMode);
   configure_dom_class_template(isolate, world, interface_template);
-  data->SetInterfaceTemplate(world, wrapper_type_info, interface_template);
+  data->AddV8Template(world, wrapper_type_info, interface_template);
   return interface_template;
 }
 

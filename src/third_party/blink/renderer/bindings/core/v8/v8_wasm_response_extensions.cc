@@ -39,7 +39,6 @@ static const int kWasmModuleTag = 1;
 // received bytes get forwarded to the V8 API class |WasmStreaming|.
 class FetchDataLoaderForWasmStreaming final : public FetchDataLoader,
                                               public BytesConsumer::Client {
-  USING_GARBAGE_COLLECTED_MIXIN(FetchDataLoaderForWasmStreaming);
 
  public:
   FetchDataLoaderForWasmStreaming(std::shared_ptr<v8::WasmStreaming> streaming,
@@ -161,7 +160,6 @@ class FetchDataLoaderForWasmStreaming final : public FetchDataLoader,
 class WasmDataLoaderClient final
     : public GarbageCollected<WasmDataLoaderClient>,
       public FetchDataLoader::Client {
-  USING_GARBAGE_COLLECTED_MIXIN(WasmDataLoaderClient);
 
  public:
   explicit WasmDataLoaderClient(FetchDataLoaderForWasmStreaming* loader)
@@ -254,6 +252,10 @@ class WasmStreamingClient : public v8::WasmStreaming::Client {
       return;
 
     v8::OwnedBuffer serialized_module = compiled_module.Serialize();
+    // V8 might not be able to serialize the module.
+    if (serialized_module.size == 0)
+      return;
+
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                          "v8.wasm.cachedModule", TRACE_EVENT_SCOPE_THREAD,
                          "producedCacheSize", serialized_module.size);

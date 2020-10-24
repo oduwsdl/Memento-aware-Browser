@@ -46,6 +46,10 @@ struct FetchAPIResponse {
   // The mime type of the response, if one has been set.
   string? mime_type;
 
+  // The http request method used to load the response.  May be unset for
+  // synthetic Response objects created via the constructor.
+  string? request_method;
+
   // Mojo interface to read the response payload.
   SerializedBlob? blob;
 
@@ -101,4 +105,7 @@ struct FetchAPIResponse {
   // True if the response was originally loaded via a request fetched over a
   // SPDY channel.
   bool was_fetched_via_spdy = false;
+
+  // https://fetch.spec.whatwg.org/#concept-response-range-requested-flag
+  bool has_range_requested = false;
 };

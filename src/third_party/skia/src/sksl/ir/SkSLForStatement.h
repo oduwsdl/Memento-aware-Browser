@@ -17,71 +17,91 @@ namespace SkSL {
 /**
  * A 'for' statement.
  */
-struct ForStatement : public Statement {
+class ForStatement : public Statement {
+public:
+    static constexpr Kind kStatementKind = Kind::kFor;
+
     ForStatement(int offset, std::unique_ptr<Statement> initializer,
                  std::unique_ptr<Expression> test, std::unique_ptr<Expression> next,
                  std::unique_ptr<Statement> statement, std::shared_ptr<SymbolTable> symbols)
-    : INHERITED(offset, kFor_Kind)
-    , fSymbols(symbols)
-    , fInitializer(std::move(initializer))
-    , fTest(std::move(test))
-    , fNext(std::move(next))
-    , fStatement(std::move(statement)) {}
+    : INHERITED(offset, ForStatementData{std::move(symbols)}) {
+        fStatementChildren.reserve_back(2);
+        fStatementChildren.push_back(std::move(initializer));
+        fStatementChildren.push_back(std::move(statement));
+        fExpressionChildren.reserve_back(2);
+        fExpressionChildren.push_back(std::move(test));
+        fExpressionChildren.push_back(std::move(next));
+    }
 
-    int nodeCount() const override {
-        int result = 1;
-        if (fInitializer) {
-            result += fInitializer->nodeCount();
-        }
-        if (fTest) {
-            result += fTest->nodeCount();
-        }
-        if (fNext) {
-            result += fNext->nodeCount();
-        }
-        result += fStatement->nodeCount();
-        return result;
+    std::unique_ptr<Statement>& initializer() {
+        return fStatementChildren[0];
+    }
+
+    const std::unique_ptr<Statement>& initializer() const {
+        return fStatementChildren[0];
+    }
+
+    std::unique_ptr<Expression>& test() {
+        return fExpressionChildren[0];
+    }
+
+    const std::unique_ptr<Expression>& test() const {
+        return fExpressionChildren[0];
+    }
+
+    std::unique_ptr<Expression>& next() {
+        return fExpressionChildren[1];
+    }
+
+    const std::unique_ptr<Expression>& next() const {
+        return fExpressionChildren[1];
+    }
+
+    std::unique_ptr<Statement>& statement() {
+        return fStatementChildren[1];
+    }
+
+    const std::unique_ptr<Statement>& statement() const {
+        return fStatementChildren[1];
+    }
+
+    std::shared_ptr<SymbolTable> symbols() const {
+        return this->forStatementData().fSymbolTable;
     }
 
     std::unique_ptr<Statement> clone() const override {
-        return std::unique_ptr<Statement>(new ForStatement(fOffset,
-                                                     fInitializer ? fInitializer->clone() : nullptr,
-                                                     fTest ? fTest->clone() : nullptr,
-                                                     fNext ? fNext->clone() : nullptr,
-                                                     fStatement->clone(),
-                                                     fSymbols));
+        return std::make_unique<ForStatement>(
+                fOffset,
+                this->initializer() ? this->initializer()->clone() : nullptr,
+                this->test() ? this->test()->clone() : nullptr,
+                this->next() ? this->next()->clone() : nullptr,
+                this->statement()->clone(),
+                SymbolTable::WrapIfBuiltin(this->symbols()));
     }
 
     String description() const override {
         String result("for (");
-        if (fInitializer) {
-            result += fInitializer->description();
+        if (this->initializer()) {
+            result += this->initializer()->description();
         } else {
             result += ";";
         }
         result += " ";
-        if (fTest) {
-            result += fTest->description();
+        if (this->test()) {
+            result += this->test()->description();
         }
         result += "; ";
-        if (fNext) {
-            result += fNext->description();
+        if (this->next()) {
+            result += this->next()->description();
         }
-        result += ") " + fStatement->description();
+        result += ") " + this->statement()->description();
         return result;
     }
 
-    // it's important to keep fSymbols defined first (and thus destroyed last) because destroying
-    // the other fields can update symbol reference counts
-    const std::shared_ptr<SymbolTable> fSymbols;
-    std::unique_ptr<Statement> fInitializer;
-    std::unique_ptr<Expression> fTest;
-    std::unique_ptr<Expression> fNext;
-    std::unique_ptr<Statement> fStatement;
-
-    typedef Statement INHERITED;
+private:
+    using INHERITED = Statement;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

@@ -90,8 +90,8 @@ bool FontCache::lcd_text_enabled_ = false;
 bool FontCache::use_skia_font_fallback_ = false;
 #endif  // defined(OS_WIN)
 
-FontCache* FontCache::GetFontCache() {
-  return &FontGlobalContext::GetFontCache();
+FontCache* FontCache::GetFontCache(CreateIfNeeded create) {
+  return FontGlobalContext::GetFontCache(create);
 }
 
 FontCache::FontCache()
@@ -116,11 +116,11 @@ FontCache::FontCache()
 #endif
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 FontPlatformData* FontCache::SystemFontPlatformData(
     const FontDescription& font_description) {
   const AtomicString& family = FontCache::SystemFontFamily();
-#if defined(OS_LINUX) || defined(OS_FUCHSIA)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
   if (family.IsEmpty() || family == font_family_names::kSystemUi)
     return nullptr;
 #else
@@ -142,7 +142,7 @@ FontPlatformData* FontCache::GetFontPlatformData(
     PlatformInit();
   }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (creation_params.CreationType() == kCreateFontByFamily &&
       creation_params.Family() == font_family_names::kSystemUi) {
     return SystemFontPlatformData(font_description);
@@ -241,7 +241,7 @@ std::unique_ptr<FontPlatformData> FontCache::ScaleFontPlatformData(
     float font_size) {
   TRACE_EVENT0("fonts,ui", "FontCache::ScaleFontPlatformData");
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   return CreateFontPlatformData(font_description, creation_params, font_size);
 #else
   return std::make_unique<FontPlatformData>(font_platform_data, font_size);
@@ -397,11 +397,6 @@ void FontCache::InvalidateShapeCache() {
   PurgeFallbackListShaperCache();
 }
 
-void FontCache::InvalidateEnumerationCache() {
-  TRACE_EVENT0("fonts,ui", "FontCache::InvalidateEnumerationCache");
-  font_enumeration_cache_.clear();
-}
-
 void FontCache::Purge(PurgeSeverity purge_severity) {
   // Ideally we should never be forcing the purge while the
   // FontCachePurgePreventer is in scope, but we call purge() at any timing
@@ -414,7 +409,6 @@ void FontCache::Purge(PurgeSeverity purge_severity) {
 
   PurgePlatformFontDataCache();
   PurgeFallbackListShaperCache();
-  InvalidateEnumerationCache();
 }
 
 void FontCache::AddClient(FontCacheClient* client) {
@@ -435,10 +429,6 @@ uint16_t FontCache::Generation() {
 void FontCache::Invalidate() {
   TRACE_EVENT0("fonts,ui", "FontCache::Invalidate");
   font_platform_data_cache_.clear();
-  // TODO(https://crbug.com/1061630): Determine optimal cache invalidation
-  // strategy for enumeration. As implemented, the enumeration cache might not
-  // get invalidated when the system fonts change.
-  InvalidateEnumerationCache();
   generation_++;
 
   if (font_cache_clients_) {
@@ -543,17 +533,6 @@ FontCache::Bcp47Vector FontCache::GetBcp47LocaleForRequest(
   if (fallback_priority == FontFallbackPriority::kEmojiEmoji)
     result.push_back(kColorEmojiLocale);
   return result;
-}
-
-const std::vector<FontEnumerationEntry>& FontCache::EnumerateAvailableFonts() {
-  if (font_enumeration_cache_.size() == 0) {
-    base::TimeTicks enum_start = base::TimeTicks::Now();
-    font_enumeration_cache_ = EnumeratePlatformAvailableFonts();
-    base::TimeDelta time_taken = base::TimeTicks::Now() - enum_start;
-    UMA_HISTOGRAM_TIMES("Blink.Fonts.Enumeration.Duration", time_taken);
-  }
-
-  return font_enumeration_cache_;
 }
 
 FontFallbackMap& FontCache::GetFontFallbackMap() {

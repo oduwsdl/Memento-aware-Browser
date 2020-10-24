@@ -10,6 +10,7 @@
 #include "include/core/SkStrokeRec.h"
 #include "include/private/GrResourceKey.h"
 #include "include/utils/SkRandom.h"
+#include "src/core/SkMatrixPriv.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrDefaultGeoProcFactory.h"
@@ -98,20 +99,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        string.appendf(
-                "Color: 0x%08x, Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
-                "StrokeWidth: %.2f\n",
-                fColor.toBytes_RGBA(), fRect.fLeft, fRect.fTop, fRect.fRight, fRect.fBottom,
-                fStrokeWidth);
-        string += fHelper.dumpInfo();
-        string += INHERITED::dumpInfo();
-        return string;
-    }
-#endif
-
     static std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
                                           GrPaint&& paint,
                                           const SkMatrix& viewMatrix,
@@ -187,7 +174,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& clip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         GrGeometryProcessor* gp;
         {
             using namespace GrDefaultGeoProcFactory;
@@ -203,7 +191,8 @@ private:
                                                       : GrPrimitiveType::kLineStrip;
 
         fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(clip),
-                                                 dstProxyView, gp, primType);
+                                                 dstProxyView, gp, primType,
+                                                 renderPassXferBarriers);
     }
 
     void onPrepareDraws(Target* target) override {
@@ -255,6 +244,15 @@ private:
         flushState->drawMesh(*fMesh);
     }
 
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        return SkStringPrintf("Color: 0x%08x, Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
+                              "StrokeWidth: %.2f\n%s",
+                              fColor.toBytes_RGBA(), fRect.fLeft, fRect.fTop, fRect.fRight,
+                              fRect.fBottom, fStrokeWidth, fHelper.dumpInfo().c_str());
+    }
+#endif
+
     // TODO: override onCombineIfPossible
 
     Helper         fHelper;
@@ -268,7 +266,7 @@ private:
     const static int kVertsPerHairlineRect = 5;
     const static int kVertsPerStrokeRect = 10;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -427,26 +425,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        for (const auto& info : fRects) {
-            string.appendf(
-                    "Color: 0x%08x, ORect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
-                    "AssistORect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
-                    "IRect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], Degen: %d",
-                    info.fColor.toBytes_RGBA(), info.fDevOutside.fLeft, info.fDevOutside.fTop,
-                    info.fDevOutside.fRight, info.fDevOutside.fBottom, info.fDevOutsideAssist.fLeft,
-                    info.fDevOutsideAssist.fTop, info.fDevOutsideAssist.fRight,
-                    info.fDevOutsideAssist.fBottom, info.fDevInside.fLeft, info.fDevInside.fTop,
-                    info.fDevInside.fRight, info.fDevInside.fBottom, info.fDegenerate);
-        }
-        string += fHelper.dumpInfo();
-        string += INHERITED::dumpInfo();
-        return string;
-    }
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
     GrProcessorSet::Analysis finalize(
@@ -464,10 +442,30 @@ private:
                              SkArenaAlloc*,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&&,
-                             const GrXferProcessor::DstProxyView&) override;
+                             const GrXferProcessor::DstProxyView&,
+                             GrXferBarrierFlags renderPassXferBarriers) override;
 
     void onPrepareDraws(Target*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
+
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString string;
+        for (const auto& info : fRects) {
+            string.appendf(
+                    "Color: 0x%08x, ORect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
+                    "AssistORect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
+                    "IRect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], Degen: %d",
+                    info.fColor.toBytes_RGBA(), info.fDevOutside.fLeft, info.fDevOutside.fTop,
+                    info.fDevOutside.fRight, info.fDevOutside.fBottom, info.fDevOutsideAssist.fLeft,
+                    info.fDevOutsideAssist.fTop, info.fDevOutsideAssist.fRight,
+                    info.fDevOutsideAssist.fBottom, info.fDevInside.fLeft, info.fDevInside.fTop,
+                    info.fDevInside.fRight, info.fDevInside.fBottom, info.fDegenerate);
+        }
+        string += fHelper.dumpInfo();
+        return string;
+    }
+#endif
 
     static const int kMiterIndexCnt = 3 * 24;
     static const int kMiterVertexCnt = 16;
@@ -513,14 +511,15 @@ private:
     bool           fMiterStroke;
     bool           fWideColor;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 void AAStrokeRectOp::onCreateProgramInfo(const GrCaps* caps,
                                          SkArenaAlloc* arena,
                                          const GrSurfaceProxyView* writeView,
                                          GrAppliedClip&& appliedClip,
-                                         const GrXferProcessor::DstProxyView& dstProxyView) {
+                                         const GrXferProcessor::DstProxyView& dstProxyView,
+                                         GrXferBarrierFlags renderPassXferBarriers) {
 
     GrGeometryProcessor* gp = create_aa_stroke_rect_gp(arena,
                                                        fHelper.compatibleWithCoverageAsAlpha(),
@@ -538,7 +537,8 @@ void AAStrokeRectOp::onCreateProgramInfo(const GrCaps* caps,
                                              std::move(appliedClip),
                                              dstProxyView,
                                              gp,
-                                             GrPrimitiveType::kTriangles);
+                                             GrPrimitiveType::kTriangles,
+                                             renderPassXferBarriers);
 }
 
 void AAStrokeRectOp::onPrepareDraws(Target* target) {

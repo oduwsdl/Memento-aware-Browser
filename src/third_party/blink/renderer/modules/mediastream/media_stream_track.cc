@@ -27,11 +27,12 @@
 
 #include <memory>
 
+#include "base/feature_list.h"
 #include "base/strings/stringprintf.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
-#include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_capabilities.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_constraints.h"
@@ -41,11 +42,13 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/modules/imagecapture/image_capture.h"
 #include "third_party/blink/renderer/modules/mediastream/apply_constraints_request.h"
 #include "third_party/blink/renderer/modules/mediastream/media_constraints_impl.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_utils.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/mediastream/overconstrained_error.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_controller.h"
 #include "third_party/blink/renderer/modules/mediastream/webaudio_media_stream_audio_sink.h"
@@ -157,8 +160,7 @@ bool ConstraintsHaveImageCapture(const MediaTrackConstraints* constraints) {
 std::unique_ptr<WebAudioSourceProvider>
 CreateWebAudioSourceFromMediaStreamTrack(MediaStreamComponent* component,
                                          int context_sample_rate) {
-  WebPlatformMediaStreamTrack* media_stream_track =
-      component->GetPlatformTrack();
+  MediaStreamTrackPlatform* media_stream_track = component->GetPlatformTrack();
   if (!media_stream_track) {
     DLOG(ERROR) << "Native track missing for webaudio source.";
     return nullptr;
@@ -179,18 +181,20 @@ void CloneNativeVideoMediaStreamTrack(MediaStreamComponent* original,
   MediaStreamVideoSource* native_source =
       MediaStreamVideoSource::GetVideoSource(source);
   DCHECK(native_source);
-  MediaStreamVideoTrack* original_track =
-      MediaStreamVideoTrack::GetVideoTrack(original);
+  MediaStreamVideoTrack* original_track = MediaStreamVideoTrack::From(original);
   DCHECK(original_track);
   clone->SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
       native_source, original_track->adapter_settings(),
       original_track->noise_reduction(), original_track->is_screencast(),
-      original_track->min_frame_rate(),
+      original_track->min_frame_rate(), original_track->pan(),
+      original_track->tilt(), original_track->zoom(),
+      original_track->pan_tilt_zoom_allowed(),
       MediaStreamVideoSource::ConstraintsOnceCallback(), clone->Enabled()));
 }
 
 void DidSetMediaStreamTrackEnabled(MediaStreamComponent* component) {
-  auto* native_track = WebPlatformMediaStreamTrack::GetTrack(component);
+  auto* native_track =
+      MediaStreamTrackPlatform::GetTrack(WebMediaStreamTrack(component));
   if (native_track)
     native_track->SetEnabled(component->Enabled());
 }
@@ -220,20 +224,20 @@ MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
     : MediaStreamTrack(context,
                        component,
                        component->Source()->GetReadyState(),
-                       /*pan_tilt_zoom_allowed=*/false) {}
+                       /*callback=*/base::DoNothing()) {}
 
 MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
                                    MediaStreamComponent* component,
-                                   bool pan_tilt_zoom_allowed)
+                                   base::OnceClosure callback)
     : MediaStreamTrack(context,
                        component,
                        component->Source()->GetReadyState(),
-                       pan_tilt_zoom_allowed) {}
+                       std::move(callback)) {}
 
 MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
                                    MediaStreamComponent* component,
                                    MediaStreamSource::ReadyState ready_state,
-                                   bool pan_tilt_zoom_allowed)
+                                   base::OnceClosure callback)
     : ready_state_(ready_state),
       component_(component),
       execution_context_(context) {
@@ -244,11 +248,28 @@ MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
   // been called. Update the muted state manually.
   component_->SetMuted(ready_state_ == MediaStreamSource::kReadyStateMuted);
 
-  if (component_->Source() &&
+  MediaStreamVideoTrack* const video_track =
+      MediaStreamVideoTrack::From(Component());
+  if (video_track && component_->Source() &&
       component_->Source()->GetType() == MediaStreamSource::kTypeVideo) {
-    image_capture_ = MakeGarbageCollected<ImageCapture>(context, this,
-                                                        pan_tilt_zoom_allowed);
+    bool pan_tilt_zoom_allowed =
+        image_capture_ ? image_capture_->HasPanTiltZoomPermissionGranted()
+                       : video_track->pan_tilt_zoom_allowed();
+    image_capture_ = MakeGarbageCollected<ImageCapture>(
+        context, this, pan_tilt_zoom_allowed, std::move(callback));
+  } else {
+    if (execution_context_) {
+      execution_context_->GetTaskRunner(TaskType::kInternalMedia)
+          ->PostTask(FROM_HERE, std::move(callback));
+    } else {
+      std::move(callback).Run();
+    }
   }
+
+  // Note that both 'live' and 'muted' correspond to a 'live' ready state in the
+  // web API.
+  if (ready_state_ != MediaStreamSource::kReadyStateEnded)
+    EnsureFeatureHandleForScheduler();
 }
 
 MediaStreamTrack::~MediaStreamTrack() = default;
@@ -392,6 +413,7 @@ void MediaStreamTrack::stopTrack(ExecutionContext* execution_context) {
     return;
 
   ready_state_ = MediaStreamSource::kReadyStateEnded;
+  feature_handle_for_scheduler_.reset();
   UserMediaController* user_media =
       UserMediaController::From(To<LocalDOMWindow>(execution_context));
   if (user_media)
@@ -402,12 +424,9 @@ void MediaStreamTrack::stopTrack(ExecutionContext* execution_context) {
 
 MediaStreamTrack* MediaStreamTrack::clone(ScriptState* script_state) {
   MediaStreamComponent* cloned_component = Component()->Clone();
-  bool pan_tilt_zoom_allowed =
-      image_capture_ ? image_capture_->HasPanTiltZoomPermissionGranted()
-                     : false;
   MediaStreamTrack* cloned_track = MakeGarbageCollected<MediaStreamTrack>(
       ExecutionContext::From(script_state), cloned_component, ready_state_,
-      pan_tilt_zoom_allowed);
+      base::DoNothing());
   DidCloneMediaStreamTrack(Component(), cloned_component);
   return cloned_track;
 }
@@ -497,16 +516,16 @@ MediaTrackCapabilities* MediaStreamTrack::getCapabilities() const {
     }
     Vector<String> facing_mode;
     switch (platform_capabilities.facing_mode) {
-      case WebMediaStreamTrack::FacingMode::kUser:
+      case MediaStreamTrackPlatform::FacingMode::kUser:
         facing_mode.push_back("user");
         break;
-      case WebMediaStreamTrack::FacingMode::kEnvironment:
+      case MediaStreamTrackPlatform::FacingMode::kEnvironment:
         facing_mode.push_back("environment");
         break;
-      case WebMediaStreamTrack::FacingMode::kLeft:
+      case MediaStreamTrackPlatform::FacingMode::kLeft:
         facing_mode.push_back("left");
         break;
-      case WebMediaStreamTrack::FacingMode::kRight:
+      case MediaStreamTrackPlatform::FacingMode::kRight:
         facing_mode.push_back("right");
         break;
       default:
@@ -525,41 +544,23 @@ MediaTrackConstraints* MediaStreamTrack::getConstraints() const {
   if (!image_capture_)
     return constraints;
 
-  HeapVector<Member<MediaTrackConstraintSet>> vector;
-  if (constraints->hasAdvanced())
-    vector = constraints->advanced();
-  // TODO(mcasas): consider consolidating this code in MediaContraintsImpl.
-  MediaTrackConstraintSet* image_capture_constraints =
+  MediaTrackConstraintSet* image_capture_advanced_constraints =
       const_cast<MediaTrackConstraintSet*>(
           image_capture_->GetMediaTrackConstraints());
-  // TODO(mcasas): add |torch|, https://crbug.com/700607.
-  if (image_capture_constraints->hasWhiteBalanceMode() ||
-      image_capture_constraints->hasExposureMode() ||
-      image_capture_constraints->hasFocusMode() ||
-      image_capture_constraints->hasExposureCompensation() ||
-      image_capture_constraints->hasExposureTime() ||
-      image_capture_constraints->hasColorTemperature() ||
-      image_capture_constraints->hasIso() ||
-      image_capture_constraints->hasBrightness() ||
-      image_capture_constraints->hasContrast() ||
-      image_capture_constraints->hasSaturation() ||
-      image_capture_constraints->hasSharpness() ||
-      image_capture_constraints->hasFocusDistance() ||
-      (RuntimeEnabledFeatures::MediaCapturePanTiltEnabled() &&
-       image_capture_constraints->hasPan()) ||
-      (RuntimeEnabledFeatures::MediaCapturePanTiltEnabled() &&
-       image_capture_constraints->hasTilt()) ||
-      image_capture_constraints->hasZoom()) {
-    // Add image capture constraints, if any, as another entry to advanced().
-    vector.push_back(image_capture_constraints);
-    constraints->setAdvanced(vector);
-  }
-  return constraints;
+  if (!image_capture_advanced_constraints)
+    return constraints;
+
+  MediaTrackConstraints* image_capture_constraints =
+      MediaTrackConstraints::Create();
+  HeapVector<Member<MediaTrackConstraintSet>> vector;
+  vector.push_back(image_capture_advanced_constraints);
+  image_capture_constraints->setAdvanced(vector);
+  return image_capture_constraints;
 }
 
 MediaTrackSettings* MediaStreamTrack::getSettings() const {
   MediaTrackSettings* settings = MediaTrackSettings::Create();
-  WebMediaStreamTrack::Settings platform_settings;
+  MediaStreamTrackPlatform::Settings platform_settings;
   component_->GetSettings(platform_settings);
   if (platform_settings.HasFrameRate())
     settings->setFrameRate(platform_settings.frame_rate);
@@ -579,16 +580,16 @@ MediaTrackSettings* MediaStreamTrack::getSettings() const {
     settings->setGroupId(platform_settings.group_id);
   if (platform_settings.HasFacingMode()) {
     switch (platform_settings.facing_mode) {
-      case WebMediaStreamTrack::FacingMode::kUser:
+      case MediaStreamTrackPlatform::FacingMode::kUser:
         settings->setFacingMode("user");
         break;
-      case WebMediaStreamTrack::FacingMode::kEnvironment:
+      case MediaStreamTrackPlatform::FacingMode::kEnvironment:
         settings->setFacingMode("environment");
         break;
-      case WebMediaStreamTrack::FacingMode::kLeft:
+      case MediaStreamTrackPlatform::FacingMode::kLeft:
         settings->setFacingMode("left");
         break;
-      case WebMediaStreamTrack::FacingMode::kRight:
+      case MediaStreamTrackPlatform::FacingMode::kRight:
         settings->setFacingMode("right");
         break;
       default:
@@ -741,19 +742,25 @@ void MediaStreamTrack::SourceChangedState() {
   if (Ended())
     return;
 
+  // Note that both 'live' and 'muted' correspond to a 'live' ready state in the
+  // web API, hence the following logic around |feature_handle_for_scheduler_|.
+
   ready_state_ = component_->Source()->GetReadyState();
   switch (ready_state_) {
     case MediaStreamSource::kReadyStateLive:
       component_->SetMuted(false);
       DispatchEvent(*Event::Create(event_type_names::kUnmute));
+      EnsureFeatureHandleForScheduler();
       break;
     case MediaStreamSource::kReadyStateMuted:
       component_->SetMuted(true);
       DispatchEvent(*Event::Create(event_type_names::kMute));
+      EnsureFeatureHandleForScheduler();
       break;
     case MediaStreamSource::kReadyStateEnded:
       DispatchEvent(*Event::Create(event_type_names::kEnded));
       PropagateTrackEnded();
+      feature_handle_for_scheduler_.reset();
       break;
   }
   SendLogMessage(
@@ -822,6 +829,26 @@ void MediaStreamTrack::Trace(Visitor* visitor) const {
   visitor->Trace(image_capture_);
   visitor->Trace(execution_context_);
   EventTargetWithInlineData::Trace(visitor);
+}
+
+void MediaStreamTrack::EnsureFeatureHandleForScheduler() {
+  if (feature_handle_for_scheduler_)
+    return;
+  LocalDOMWindow* window = DynamicTo<LocalDOMWindow>(GetExecutionContext());
+  // Ideally we'd use To<LocalDOMWindow>, but in unittests the ExecutionContext
+  // may not be a LocalDOMWindow.
+  if (!window)
+    return;
+  // This can happen for detached frames.
+  if (!window->GetFrame())
+    return;
+  feature_handle_for_scheduler_ =
+      window->GetFrame()->GetFrameScheduler()->RegisterFeature(
+          SchedulingPolicy::Feature::kWebRTC,
+          base::FeatureList::IsEnabled(features::kOptOutWebRTCFromAllThrottling)
+              ? SchedulingPolicy{SchedulingPolicy::DisableAllThrottling()}
+              : SchedulingPolicy{
+                    SchedulingPolicy::DisableAggressiveThrottling()});
 }
 
 }  // namespace blink

@@ -47,6 +47,7 @@ export class ChangesSidebar extends UI.Widget.Widget {
    * @return {?Workspace.UISourceCode.UISourceCode}
    */
   selectedUISourceCode() {
+    // @ts-ignore uiSourceCode seems to be dynamically attached.
     return this._treeoutline.selectedTreeElement ? this._treeoutline.selectedTreeElement.uiSourceCode : null;
   }
 
@@ -80,8 +81,10 @@ export class ChangesSidebar extends UI.Widget.Widget {
         this._selectionChanged();
       }
     }
-    this._treeoutline.removeChild(treeElement);
-    treeElement.dispose();
+    if (treeElement) {
+      this._treeoutline.removeChild(treeElement);
+      treeElement.dispose();
+    }
     if (this._treeoutline.rootElement().childCount() === 0) {
       this._treeoutline.setFocusable(false);
     }

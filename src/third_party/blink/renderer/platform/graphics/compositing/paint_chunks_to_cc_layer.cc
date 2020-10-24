@@ -4,10 +4,14 @@
 
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_chunks_to_cc_layer.h"
 
+#include "base/numerics/safe_conversions.h"
+#include "cc/base/features.h"
+#include "cc/layers/layer.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/paint/paint_op_buffer.h"
 #include "cc/paint/render_surface_filters.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/chunk_to_layer_mapper.h"
+#include "third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_list.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
@@ -29,16 +33,13 @@ class ConversionContext {
  public:
   ConversionContext(const PropertyTreeState& layer_state,
                     const gfx::Vector2dF& layer_offset,
-                    const FloatSize& visual_rect_subpixel_offset,
                     cc::DisplayItemList& cc_list)
       : layer_state_(layer_state),
         layer_offset_(layer_offset),
-        current_transform_(&layer_state.Transform().Unalias()),
-        current_clip_(&layer_state.Clip().Unalias()),
-        current_effect_(&layer_state.Effect().Unalias()),
-        chunk_to_layer_mapper_(layer_state_,
-                               layer_offset_,
-                               visual_rect_subpixel_offset),
+        current_transform_(&layer_state.Transform()),
+        current_clip_(&layer_state.Clip()),
+        current_effect_(&layer_state.Effect()),
+        chunk_to_layer_mapper_(layer_state_, layer_offset_),
         cc_list_(cc_list) {}
   ~ConversionContext();
 
@@ -88,7 +89,7 @@ class ConversionContext {
   // At last, close all pushed states to balance pairs (this happens when the
   // context object is destructed):
   //   Output: End_C4 End_C3 End_C2 End_C1
-  void Convert(const PaintChunkSubset&, const DisplayItemList&);
+  void Convert(const PaintChunkSubset&);
 
  private:
   // Adjust the translation of the whole display list relative to layer offset.
@@ -279,9 +280,9 @@ void ConversionContext::SwitchToChunkState(const PaintChunk& chunk) {
   chunk_to_layer_mapper_.SwitchToChunk(chunk);
 
   const auto& chunk_state = chunk.properties;
-  SwitchToEffect(chunk_state.Effect());
-  SwitchToClip(chunk_state.Clip());
-  SwitchToTransform(chunk_state.Transform());
+  SwitchToEffect(chunk_state.Effect().Unalias());
+  SwitchToClip(chunk_state.Clip().Unalias());
+  SwitchToTransform(chunk_state.Transform().Unalias());
 }
 
 // Tries to combine a clip node's clip rect into |combined_clip_rect|.
@@ -290,12 +291,13 @@ static bool CombineClip(const ClipPaintPropertyNode& clip,
                         FloatRoundedRect& combined_clip_rect) {
   // Don't combine into a clip with clip path.
   DCHECK(clip.Parent());
-  if (clip.Parent()->ClipPath())
+  if (clip.UnaliasedParent()->ClipPath())
     return false;
 
   // Don't combine clips in different transform spaces.
-  const auto& transform_space = clip.LocalTransformSpace();
-  const auto& parent_transform_space = clip.Parent()->LocalTransformSpace();
+  const auto& transform_space = clip.LocalTransformSpace().Unalias();
+  const auto& parent_transform_space =
+      clip.UnaliasedParent()->LocalTransformSpace().Unalias();
   if (&transform_space != &parent_transform_space &&
       (transform_space.Parent() != &parent_transform_space ||
        !transform_space.IsIdentity()))
@@ -329,15 +331,13 @@ static bool CombineClip(const ClipPaintPropertyNode& clip,
   return true;
 }
 
-void ConversionContext::SwitchToClip(
-    const ClipPaintPropertyNode& target_clip_arg) {
-  const auto& target_clip = target_clip_arg.Unalias();
+void ConversionContext::SwitchToClip(const ClipPaintPropertyNode& target_clip) {
   if (&target_clip == current_clip_)
     return;
 
   // Step 1: Exit all clips until the lowest common ancestor is found.
   const auto* lca_clip =
-      &LowestCommonAncestor(target_clip, *current_clip_).Unalias();
+      &target_clip.LowestCommonAncestor(*current_clip_).Unalias();
   while (current_clip_ != lca_clip) {
     if (!state_stack_.size() || state_stack_.back().type != StateEntry::kClip) {
       // This bug is known to happen in pre-CompositeAfterPaint due to some
@@ -372,7 +372,7 @@ void ConversionContext::SwitchToClip(
   // At this point the current clip must be an ancestor of the target.
   Vector<const ClipPaintPropertyNode*, 1u> pending_clips;
   for (const auto* clip = &target_clip; clip != current_clip_;
-       clip = SafeUnalias(clip->Parent())) {
+       clip = clip->UnaliasedParent()) {
     // This should never happen unless the DCHECK in step 1 failed.
     if (!clip)
       break;
@@ -405,7 +405,7 @@ void ConversionContext::SwitchToClip(
 void ConversionContext::StartClip(
     const FloatRoundedRect& combined_clip_rect,
     const ClipPaintPropertyNode& lowest_combined_clip_node) {
-  DCHECK_EQ(&lowest_combined_clip_node, &lowest_combined_clip_node.Unalias());
+  DCHECK_EQ(&lowest_combined_clip_node, &lowest_combined_clip_node);
   const auto& local_transform =
       lowest_combined_clip_node.LocalTransformSpace().Unalias();
   if (&local_transform != current_transform_)
@@ -435,7 +435,7 @@ void ConversionContext::StartClip(
 bool HasRealEffects(const EffectPaintPropertyNode& current,
                     const EffectPaintPropertyNode& ancestor) {
   for (const auto* node = &current; node != &ancestor;
-       node = SafeUnalias(node->Parent())) {
+       node = node->UnaliasedParent()) {
     if (node->HasRealEffects())
       return true;
   }
@@ -443,14 +443,13 @@ bool HasRealEffects(const EffectPaintPropertyNode& current,
 }
 
 void ConversionContext::SwitchToEffect(
-    const EffectPaintPropertyNode& target_effect_arg) {
-  const auto& target_effect = target_effect_arg.Unalias();
+    const EffectPaintPropertyNode& target_effect) {
   if (&target_effect == current_effect_)
     return;
 
   // Step 1: Exit all effects until the lowest common ancestor is found.
   const auto& lca_effect =
-      LowestCommonAncestor(target_effect, *current_effect_).Unalias();
+      target_effect.LowestCommonAncestor(*current_effect_).Unalias();
 
 #if DCHECK_IS_ON()
   bool has_pre_cap_effect_hierarchy_issue = false;
@@ -487,7 +486,7 @@ void ConversionContext::SwitchToEffect(
   // effect. At this point the current effect must be an ancestor of the target.
   Vector<const EffectPaintPropertyNode*, 1u> pending_effects;
   for (const auto* effect = &target_effect; effect != &lca_effect;
-       effect = SafeUnalias(effect->Parent())) {
+       effect = effect->UnaliasedParent()) {
     // This should never happen unless the DCHECK in step 1 failed.
     if (!effect)
       break;
@@ -499,7 +498,7 @@ void ConversionContext::SwitchToEffect(
     const EffectPaintPropertyNode* sub_effect = pending_effects[i];
 #if DCHECK_IS_ON()
     if (!has_pre_cap_effect_hierarchy_issue)
-      DCHECK_EQ(current_effect_, SafeUnalias(sub_effect->Parent()));
+      DCHECK_EQ(current_effect_, sub_effect->UnaliasedParent());
 #endif
     StartEffect(*sub_effect);
 #if DCHECK_IS_ON()
@@ -512,12 +511,10 @@ void ConversionContext::SwitchToEffect(
 }
 
 void ConversionContext::StartEffect(const EffectPaintPropertyNode& effect) {
-  DCHECK_EQ(&effect, &effect.Unalias());
-
   // Before each effect can be applied, we must enter its output clip first,
   // or exit all clips if it doesn't have one.
   if (effect.OutputClip())
-    SwitchToClip(*effect.OutputClip());
+    SwitchToClip(effect.OutputClip()->Unalias());
   else
     EndClips();
 
@@ -530,7 +527,7 @@ void ConversionContext::StartEffect(const EffectPaintPropertyNode& effect) {
   // This also avoids multiple Save/Concat/.../Restore pairs for multiple
   // consecutive effects in the same transform space, by issuing only one pair
   // around all of the effects.
-  SwitchToTransform(effect.LocalTransformSpace());
+  SwitchToTransform(effect.LocalTransformSpace().Unalias());
 
   // We always create separate effect nodes for normal effects and filter
   // effects, so we can handle them separately.
@@ -547,8 +544,7 @@ void ConversionContext::StartEffect(const EffectPaintPropertyNode& effect) {
   if (!has_filter) {
     // TODO(ajuma): This should really be rounding instead of flooring the
     // alpha value, but that breaks slimming paint reftests.
-    auto alpha =
-        static_cast<uint8_t>(gfx::ToFlooredInt(255 * effect.Opacity()));
+    auto alpha = base::ClampFloor<uint8_t>(255 * effect.Opacity());
     if (has_other_effects) {
       PaintFlags flags;
       flags.setBlendMode(effect.BlendMode());
@@ -583,15 +579,18 @@ void ConversionContext::StartEffect(const EffectPaintPropertyNode& effect) {
   current_effect_ = &effect;
 
   if (effect.Filter().HasReferenceFilter()) {
-    auto reference_box = effect.Filter().ReferenceBox();
-    effect_bounds_stack_.back().bounds = reference_box;
-    if (current_effect_->Filter().HasReferenceFilter()) {
-      // Emit an empty paint operation to add the filter's source bounds (mapped
-      // to layer space) to the visual rect of the filter's SaveLayerOp.
-      cc_list_.StartPaint();
-      cc_list_.EndPaintOfUnpaired(chunk_to_layer_mapper_.MapVisualRect(
-          EnclosingIntRect(reference_box)));
-    }
+    // Map a random point in the reference box through the filter to determine
+    // the bounds of the effect on an empty source. For empty chunks, or chunks
+    // with empty bounds, with a filter applied that produces output even when
+    // there's no input this will expand the bounds to match.
+    FloatRect filtered_bounds = current_effect_->MapRect(
+        FloatRect(effect.Filter().ReferenceBox().Center(), FloatSize()));
+    effect_bounds_stack_.back().bounds = filtered_bounds;
+    // Emit an empty paint operation to add the filtered bounds (mapped to layer
+    // space) to the visual rect of the filter's SaveLayerOp.
+    cc_list_.StartPaint();
+    cc_list_.EndPaintOfUnpaired(chunk_to_layer_mapper_.MapVisualRect(
+        EnclosingIntRect(filtered_bounds)));
   }
 }
 
@@ -613,7 +612,7 @@ void ConversionContext::EndEffect() {
   const auto& previous_state = state_stack_.back();
   DCHECK_EQ(previous_state.type, StateEntry::kEffect);
   if (!previous_state.has_pre_cap_effect_hierarchy_issue)
-    DCHECK_EQ(SafeUnalias(current_effect_->Parent()), previous_state.effect);
+    DCHECK_EQ(current_effect_->UnaliasedParent(), previous_state.effect);
   DCHECK_EQ(current_clip_, previous_state.clip);
 #endif
 
@@ -669,8 +668,7 @@ void ConversionContext::PopState() {
 }
 
 void ConversionContext::SwitchToTransform(
-    const TransformPaintPropertyNode& target_transform_arg) {
-  const auto& target_transform = target_transform_arg.Unalias();
+    const TransformPaintPropertyNode& target_transform) {
   if (&target_transform == current_transform_)
     return;
 
@@ -707,13 +705,13 @@ void ConversionContext::EndTransform() {
   previous_transform_ = nullptr;
 }
 
-void ConversionContext::Convert(const PaintChunkSubset& paint_chunks,
-                                const DisplayItemList& display_items) {
-  for (const auto& chunk : paint_chunks) {
+void ConversionContext::Convert(const PaintChunkSubset& chunks) {
+  for (auto it = chunks.begin(); it != chunks.end(); ++it) {
+    const auto& chunk = *it;
     const auto& chunk_state = chunk.properties;
     bool switched_to_chunk_state = false;
 
-    for (const auto& item : display_items.ItemsInPaintChunk(chunk)) {
+    for (const auto& item : it.DisplayItems()) {
       sk_sp<const PaintRecord> record;
       if (item.IsScrollbar())
         record = static_cast<const ScrollbarDisplayItem&>(item).Paint();
@@ -751,37 +749,30 @@ void ConversionContext::Convert(const PaintChunkSubset& paint_chunks,
       SwitchToChunkState(chunk);
 
     // Most effects apply to drawable contents only. Reference filters are
-    // exceptions, for which we have already added the reference box to the
-    // bounds of the effect in StartEffect().
+    // exceptions, for which we have already added the chunk bounds mapped
+    // through the filter to the bounds of the effect in StartEffect().
     UpdateEffectBounds(FloatRect(chunk.drawable_bounds),
-                       chunk_state.Transform());
+                       chunk_state.Transform().Unalias());
   }
 }
 
 }  // unnamed namespace
 
-void PaintChunksToCcLayer::ConvertInto(
-    const PaintChunkSubset& paint_chunks,
-    const PropertyTreeState& layer_state,
-    const gfx::Vector2dF& layer_offset,
-    const FloatSize& visual_rect_subpixel_offset,
-    const DisplayItemList& display_items,
-    cc::DisplayItemList& cc_list) {
-  ConversionContext(layer_state, layer_offset, visual_rect_subpixel_offset,
-                    cc_list)
-      .Convert(paint_chunks, display_items);
+void PaintChunksToCcLayer::ConvertInto(const PaintChunkSubset& chunks,
+                                       const PropertyTreeState& layer_state,
+                                       const gfx::Vector2dF& layer_offset,
+                                       cc::DisplayItemList& cc_list) {
+  ConversionContext(layer_state, layer_offset, cc_list).Convert(chunks);
 }
 
 scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
     const PaintChunkSubset& paint_chunks,
     const PropertyTreeState& layer_state,
     const gfx::Vector2dF& layer_offset,
-    const DisplayItemList& display_items,
     cc::DisplayItemList::UsageHint hint,
     RasterUnderInvalidationCheckingParams* under_invalidation_checking_params) {
   auto cc_list = base::MakeRefCounted<cc::DisplayItemList>(hint);
-  ConvertInto(paint_chunks, layer_state, layer_offset, FloatSize(),
-              display_items, *cc_list);
+  ConvertInto(paint_chunks, layer_state, layer_offset, *cc_list);
 
   if (under_invalidation_checking_params) {
     auto& params = *under_invalidation_checking_params;
@@ -791,8 +782,7 @@ scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
     // use cc_list because it is not finalized yet.
     auto list_clone = base::MakeRefCounted<cc::DisplayItemList>(
         cc::DisplayItemList::kToBeReleasedAsPaintOpBuffer);
-    ConvertInto(paint_chunks, layer_state, layer_offset, FloatSize(),
-                display_items, *list_clone);
+    ConvertInto(paint_chunks, layer_state, layer_offset, *list_clone);
     recorder.getRecordingCanvas()->drawPicture(list_clone->ReleaseAsRecord());
     params.tracking.CheckUnderInvalidations(params.debug_name,
                                             recorder.finishRecordingAsPicture(),
@@ -806,6 +796,157 @@ scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
 
   cc_list->Finalize();
   return cc_list;
+}
+
+// The heuristic for picking a checkerboarding color works as follows:
+//   - During paint, PaintChunker will look for background color display items,
+//     and annotates the chunk with the index of the display item that paints
+//     the largest area background color (ties are broken by selecting the
+//     display item that paints last).
+//   - After layer allocation, the paint chunks assigned to a layer are
+//     examined for a background color annotation. The chunk with the largest
+//     background color annotation is selected.
+//   - If the area of the selected background color is at least half the size
+//     of the layer, then it is set as the layer's background color.
+//   - The same color is used for the layer's safe opaque background color, but
+//     without the size requirement, as safe opaque background color should
+//     always get a value if possible.
+static void UpdateBackgroundColor(cc::Layer& layer,
+                                  const PaintChunkSubset& paint_chunks) {
+  SkColor color = SK_ColorTRANSPARENT;
+  uint64_t area = 0;
+  for (const auto& chunk : paint_chunks) {
+    if (chunk.background_color != Color::kTransparent &&
+        chunk.background_color_area >= area) {
+      color = chunk.background_color.Rgb();
+      area = chunk.background_color_area;
+    }
+  }
+
+  layer.SetSafeOpaqueBackgroundColor(color);
+
+  uint64_t layer_area =
+      static_cast<uint64_t>(layer.bounds().width()) * layer.bounds().height();
+  if (area < layer_area / 2)
+    color = SK_ColorTRANSPARENT;
+  layer.SetBackgroundColor(color);
+}
+
+static void UpdateTouchActionRegion(
+    const HitTestData& hit_test_data,
+    const PropertyTreeState& layer_state,
+    const PropertyTreeState& chunk_state,
+    const FloatPoint& layer_offset,
+    cc::TouchActionRegion& touch_action_region) {
+  for (const auto& touch_action_rect : hit_test_data.touch_action_rects) {
+    auto rect = FloatClipRect(FloatRect(touch_action_rect.rect));
+    if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
+                                                   rect)) {
+      continue;
+    }
+    rect.MoveBy(-layer_offset);
+    touch_action_region.Union(touch_action_rect.allowed_touch_action,
+                              gfx::Rect(EnclosingIntRect(rect.Rect())));
+  }
+}
+
+static void UpdateWheelEventRegion(const HitTestData& hit_test_data,
+                                   const PropertyTreeState& layer_state,
+                                   const PropertyTreeState& chunk_state,
+                                   const FloatPoint& layer_offset,
+                                   cc::Region& wheel_event_region) {
+  for (const auto& wheel_event_rect : hit_test_data.wheel_event_rects) {
+    auto rect = FloatClipRect(FloatRect(wheel_event_rect));
+    if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
+                                                   rect)) {
+      continue;
+    }
+    rect.MoveBy(-layer_offset);
+    wheel_event_region.Union(gfx::Rect(EnclosingIntRect(rect.Rect())));
+  }
+}
+
+static void UpdateNonFastScrollableRegion(
+    cc::Layer& layer,
+    const HitTestData& hit_test_data,
+    const PropertyTreeState& layer_state,
+    const PropertyTreeState& chunk_state,
+    const FloatPoint& layer_offset,
+    PropertyTreeManager* property_tree_manager,
+    cc::Region& non_fast_scrollable_region) {
+  if (hit_test_data.scroll_hit_test_rect.IsEmpty())
+    return;
+
+  // Skip the scroll hit test rect if it is for scrolling this cc::Layer.
+  // This is only needed for CompositeAfterPaint because
+  // pre-CompositeAfterPaint does not paint scroll hit test data for
+  // composited scrollers.
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+    if (const auto* scroll_translation = hit_test_data.scroll_translation) {
+      const auto& scroll_node = *scroll_translation->ScrollNode();
+      auto scroll_element_id = scroll_node.GetCompositorElementId();
+      if (layer.element_id() == scroll_element_id)
+        return;
+      // Ensure the cc scroll node to prepare for possible descendant nodes
+      // referenced by later composited layers. This can't be done by ensuring
+      // parent transform node in EnsureCompositorTransformNode() if the
+      // transform tree and the scroll tree have different topologies.
+      // This is not necessary with ScrollUnification which ensures the
+      // complete scroll tree.
+      if (!RuntimeEnabledFeatures::ScrollUnificationEnabled()) {
+        DCHECK(property_tree_manager);
+        property_tree_manager->EnsureCompositorScrollNode(*scroll_translation);
+      }
+    }
+  }
+
+  FloatClipRect rect(FloatRect(hit_test_data.scroll_hit_test_rect));
+  if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
+                                                 rect))
+    return;
+
+  rect.MoveBy(-layer_offset);
+  non_fast_scrollable_region.Union(EnclosingIntRect(rect.Rect()));
+}
+
+static void UpdateTouchActionWheelEventHandlerAndNonFastScrollableRegions(
+    cc::Layer& layer,
+    const PropertyTreeState& layer_state,
+    const PaintChunkSubset& chunks,
+    PropertyTreeManager* property_tree_manager) {
+  gfx::Vector2dF cc_layer_offset = layer.offset_to_transform_parent();
+  FloatPoint layer_offset(cc_layer_offset.x(), cc_layer_offset.y());
+  cc::TouchActionRegion touch_action_region;
+  cc::Region wheel_event_region;
+  cc::Region non_fast_scrollable_region;
+  for (const auto& chunk : chunks) {
+    if (!chunk.hit_test_data)
+      continue;
+    auto chunk_state = chunk.properties.GetPropertyTreeState().Unalias();
+    UpdateTouchActionRegion(*chunk.hit_test_data, layer_state, chunk_state,
+                            layer_offset, touch_action_region);
+    if (base::FeatureList::IsEnabled(::features::kWheelEventRegions)) {
+      UpdateWheelEventRegion(*chunk.hit_test_data, layer_state, chunk_state,
+                             layer_offset, wheel_event_region);
+    }
+    UpdateNonFastScrollableRegion(
+        layer, *chunk.hit_test_data, layer_state, chunk_state, layer_offset,
+        property_tree_manager, non_fast_scrollable_region);
+  }
+  layer.SetTouchActionRegion(std::move(touch_action_region));
+  if (base::FeatureList::IsEnabled(::features::kWheelEventRegions))
+    layer.SetWheelEventRegion(std::move(wheel_event_region));
+  layer.SetNonFastScrollableRegion(std::move(non_fast_scrollable_region));
+}
+
+void PaintChunksToCcLayer::UpdateLayerProperties(
+    cc::Layer& layer,
+    const PropertyTreeState& layer_state,
+    const PaintChunkSubset& chunks,
+    PropertyTreeManager* property_tree_manager) {
+  UpdateBackgroundColor(layer, chunks);
+  UpdateTouchActionWheelEventHandlerAndNonFastScrollableRegions(
+      layer, layer_state, chunks, property_tree_manager);
 }
 
 }  // namespace blink

@@ -40,7 +40,9 @@ class New(api_request_handler.ApiRequestHandler):
     # TODO(dberris): Validate the inputs based on the type of job requested.
     job = _CreateJob(self.request)
 
-    scheduler.Schedule(job)
+    # We apply the cost-based scheduling at job creation time, so that we can
+    # roll out the feature as jobs come along.
+    scheduler.Schedule(job, scheduler.Cost(job))
 
     job.PostCreationUpdate()
 
@@ -67,6 +69,8 @@ def _CreateJob(request):
 
   # Validate the priority, if it's present.
   priority = _ValidatePriority(arguments.get('priority'))
+
+  # Validate and find the associated issue.
   bug_id, project = _ValidateBugId(
       arguments.get('bug_id'), arguments.get('project', 'chromium'))
   comparison_mode = _ValidateComparisonMode(arguments.get('comparison_mode'))
@@ -79,7 +83,6 @@ def _CreateJob(request):
   user = _ValidateUser(arguments.get('user'))
   changes = _ValidateChanges(comparison_mode, arguments)
 
-
   # If this is a try job, we assume it's higher priority than bisections, so
   # we'll set it at a negative priority.
   if priority not in arguments and comparison_mode == job_state.TRY:
@@ -87,8 +90,8 @@ def _CreateJob(request):
 
   # TODO(dberris): Make this the default when we've graduated the beta.
   use_execution_engine = (
-      arguments.get('experimental_execution_engine') and
-      arguments.get('comparison_mode') == job_state.PERFORMANCE)
+      arguments.get('experimental_execution_engine')
+      and arguments.get('comparison_mode') == job_state.PERFORMANCE)
 
   # Ensure that we have the required fields in tryjob requests.
   if comparison_mode == 'try':
@@ -98,8 +101,8 @@ def _CreateJob(request):
     # First we check whether there's a quest that's of type 'RunTelemetryTest'.
     is_telemetry_test = any(
         [isinstance(q, quest_module.RunTelemetryTest) for q in quests])
-    if is_telemetry_test and ('story' not in arguments and
-                              'story_tags' not in arguments):
+    if is_telemetry_test and ('story' not in arguments
+                              and 'story_tags' not in arguments):
       raise ValueError(
           'Missing either "story" or "story_tags" as arguments for try jobs.')
 
@@ -118,7 +121,8 @@ def _CreateJob(request):
       tags=tags,
       user=user,
       priority=priority,
-      use_execution_engine=use_execution_engine, project=project)
+      use_execution_engine=use_execution_engine,
+      project=project)
 
   if use_execution_engine:
     # TODO(dberris): We need to figure out a way to get the arguments to be more
@@ -176,7 +180,7 @@ def _ArgumentsWithConfiguration(original_arguments):
   if configuration:
     try:
       default_arguments = bot_configurations.Get(configuration)
-    except KeyError:
+    except ValueError:
       # Reraise with a clearer message.
       raise ValueError("Bot Config: %s doesn't exist." % configuration)
     logging.info('Bot Config: %s', default_arguments)
@@ -212,7 +216,7 @@ def _ArgumentsWithConfiguration(original_arguments):
 
 def _ValidateBugId(bug_id, project):
   if not bug_id:
-    return None, project
+    return None, None
 
   try:
     # TODO(dberris): Figure out a way to check the issue tracker if the project
@@ -222,6 +226,7 @@ def _ValidateBugId(bug_id, project):
     return int(bug_id), project
   except ValueError:
     raise ValueError(_ERROR_BUG_ID)
+
 
 def _ValidatePriority(priority):
   if not priority:
@@ -282,8 +287,8 @@ def _ValidateChanges(comparison_mode, arguments):
     return change_1, change_2
 
   # Everything else that follows only applies to bisections.
-  assert (comparison_mode == job_state.FUNCTIONAL or
-          comparison_mode == job_state.PERFORMANCE)
+  assert (comparison_mode == job_state.FUNCTIONAL
+          or comparison_mode == job_state.PERFORMANCE)
 
   if 'start_git_hash' not in arguments or 'end_git_hash' not in arguments:
     raise ValueError(
@@ -366,15 +371,16 @@ def _GenerateQuests(arguments):
                        quest_module.ReadValue)
     elif target == 'vr_perf_tests':
       quest_classes = (quest_module.FindIsolate,
-                       quest_module.RunVrTelemetryTest,
-                       quest_module.ReadValue)
+                       quest_module.RunVrTelemetryTest, quest_module.ReadValue)
     elif 'browser_test' in target:
-      quest_classes = (quest_module.FindIsolate,
-                       quest_module.RunBrowserTest,
+      quest_classes = (quest_module.FindIsolate, quest_module.RunBrowserTest,
                        quest_module.ReadValue)
     elif 'instrumentation_test' in target:
       quest_classes = (quest_module.FindIsolate,
                        quest_module.RunInstrumentationTest,
+                       quest_module.ReadValue)
+    elif 'webrtc_perf_tests' in target:
+      quest_classes = (quest_module.FindIsolate, quest_module.RunWebRtcTest,
                        quest_module.ReadValue)
     else:
       quest_classes = (quest_module.FindIsolate, quest_module.RunGTest,

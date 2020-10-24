@@ -25,7 +25,8 @@ class PLATFORM_EXPORT AVIFImageDecoder final : public ImageDecoder {
   AVIFImageDecoder(AlphaOption,
                    HighBitDepthDecodingOption,
                    const ColorBehavior&,
-                   size_t max_decoded_bytes);
+                   size_t max_decoded_bytes,
+                   AnimationOption);
   AVIFImageDecoder(const AVIFImageDecoder&) = delete;
   AVIFImageDecoder& operator=(const AVIFImageDecoder&) = delete;
   ~AVIFImageDecoder() override;
@@ -34,12 +35,21 @@ class PLATFORM_EXPORT AVIFImageDecoder final : public ImageDecoder {
   String FilenameExtension() const override { return "avif"; }
   bool ImageIsHighBitDepth() override;
   void OnSetData(SegmentReader* data) override;
+  cc::YUVSubsampling GetYUVSubsampling() const override;
+  IntSize DecodedYUVSize(cc::YUVIndex) const override;
+  size_t DecodedYUVWidthBytes(cc::YUVIndex) const override;
+  SkYUVColorSpace GetYUVColorSpace() const override;
+  uint8_t GetYUVBitDepth() const override;
+  void DecodeToYUV() override;
   int RepetitionCount() const override;
   base::TimeDelta FrameDurationAtIndex(size_t) const override;
+  bool ImageHasBothStillAndAnimatedSubImages() const override;
 
   // Returns true if the data in fast_reader begins with a valid FileTypeBox
   // (ftyp) that supports the brand 'avif' or 'avis'.
   static bool MatchesAVIFSignature(const FastSharedBufferReader& fast_reader);
+
+  gfx::ColorTransform* GetColorTransformForTesting();
 
  private:
   // ImageDecoder:
@@ -67,13 +77,22 @@ class PLATFORM_EXPORT AVIFImageDecoder final : public ImageDecoder {
   // desired.
   void ColorCorrectImage(ImageFrame* buffer);
 
-  bool is_high_bit_depth_ = false;
+  // The bit depth from the container.
+  uint8_t bit_depth_ = 0;
   bool decode_to_half_float_ = false;
+  // The YUV format from the container. Stores an avifPixelFormat enum value.
+  // Declared as uint8_t because we can't forward-declare an enum type in C++.
+  uint8_t avif_yuv_format_ = 0;  // AVIF_PIXEL_FORMAT_NONE
+  uint8_t chroma_shift_x_ = 0;
+  uint8_t chroma_shift_y_ = 0;
   size_t decoded_frame_count_ = 0;
+  SkYUVColorSpace yuv_color_space_ = SkYUVColorSpace::kIdentity_SkYUVColorSpace;
   std::unique_ptr<avifDecoder, void (*)(avifDecoder*)> decoder_{nullptr,
                                                                 nullptr};
 
   std::unique_ptr<gfx::ColorTransform> color_transform_;
+
+  const AnimationOption animation_option_;
 
   sk_sp<SkData> image_data_;
 };

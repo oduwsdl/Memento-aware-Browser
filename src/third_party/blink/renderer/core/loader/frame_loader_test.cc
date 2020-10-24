@@ -5,7 +5,8 @@
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/page/chrome_client_impl.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
@@ -21,7 +22,7 @@ class FrameLoaderSimTest : public SimTest {
 
   void SetUp() override {
     SimTest::SetUp();
-    WebView().MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    WebView().MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 };
@@ -72,7 +73,8 @@ TEST_F(FrameLoaderSimTest, LoadEventProgressBeforeUnloadCanceled) {
 
   // We'll only allow canceling a beforeunload if there's a sticky user
   // activation present so simulate a user gesture.
-  frame_b->NotifyUserActivationInLocalTree();
+  LocalFrame::NotifyUserActivation(
+      frame_b, mojom::UserActivationNotificationType::kTest);
 
   auto& chrome_client =
       To<ChromeClientImpl>(WebView().GetPage()->GetChromeClient());
@@ -106,6 +108,41 @@ TEST_F(FrameLoaderSimTest, LoadEventProgressBeforeUnloadCanceled) {
     EXPECT_TRUE(frame_b->GetDocument()->BeforeUnloadStarted());
     EXPECT_TRUE(frame_c->GetDocument()->BeforeUnloadStarted());
   }
+}
+
+class FrameLoaderTest : public testing::Test {
+ protected:
+  void SetUp() override {
+    web_view_helper_.Initialize();
+    url_test_helpers::RegisterMockedURLLoad(
+        url_test_helpers::ToKURL("https://example.com/foo.html"),
+        test::CoreTestDataPath("foo.html"));
+  }
+
+  void TearDown() override {
+    url_test_helpers::UnregisterAllURLsAndClearMemoryCache();
+  }
+
+  frame_test_helpers::WebViewHelper web_view_helper_;
+};
+
+TEST_F(FrameLoaderTest, PolicyContainerIsStoredInLocalFrameOnCommitNavigation) {
+  WebViewImpl* web_view_impl = web_view_helper_.Initialize();
+
+  const KURL& url = KURL(NullURL(), "https://www.example.com/bar.html");
+  std::unique_ptr<WebNavigationParams> params =
+      WebNavigationParams::CreateWithHTMLBuffer(SharedBuffer::Create(), url);
+  params->policy_container = std::make_unique<WebPolicyContainerClient>(
+      WebPolicyContainerData{network::mojom::ReferrerPolicy::kAlways},
+      CrossVariantMojoAssociatedRemote<
+          mojom::PolicyContainerHostInterfaceBase>());
+  LocalFrame* local_frame =
+      To<LocalFrame>(web_view_impl->GetPage()->MainFrame());
+  local_frame->Loader().CommitNavigation(std::move(params), nullptr);
+
+  EXPECT_EQ(mojom::blink::PolicyContainerData::New(
+                network::mojom::ReferrerPolicy::kAlways),
+            local_frame->GetPolicyContainer()->GetPolicies());
 }
 
 }  // namespace blink

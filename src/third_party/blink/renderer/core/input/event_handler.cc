@@ -96,6 +96,8 @@
 #include "third_party/blink/renderer/core/scroll/scrollbar.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/cursor_data.h"
+#include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
+#include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/cursors.h"
 #include "third_party/blink/renderer/platform/geometry/float_point.h"
@@ -588,22 +590,46 @@ base::Optional<ui::Cursor> EventHandler::SelectCursor(
         continue;
 
       // For large cursors below the max size, limit their ability to cover UI
-      // elements by removing them when they intersect with the visual viewport.
+      // elements by removing them when they are not fully contained by the
+      // visual viewport. Careful, we need to make sure to translate coordinate
+      // spaces if we are in an OOPIF.
+      //
       // TODO(csharrison): Consider sending a fallback cursor in the IPC to the
-      // browser process so we can do that calculation there instead.
+      // browser process so we can do that calculation there instead, this would
+      // ensure even a compromised renderer could not obscure browser UI with a
+      // large cursor. Also, consider augmenting the intervention to drop the
+      // cursor for iframes if the cursor image obscures content in the parent
+      // frame.
       if (size.Width() > kMaximumCursorSizeWithoutFallback ||
           size.Height() > kMaximumCursorSizeWithoutFallback) {
-        IntRect cursor_rect(IntPoint(location.RoundedPoint() - hot_spot), size);
-        IntRect visible_rect = page->GetVisualViewport().VisibleContentRect();
-        if (!visible_rect.Contains(cursor_rect)) {
+        PhysicalOffset cursor_offset =
+            frame_->ContentLayoutObject()->LocalToAncestorPoint(
+                location.Point(),
+                nullptr,  // no ancestor maps all the way up the hierarchy
+                kTraverseDocumentBoundaries | kApplyRemoteMainFrameTransform) -
+            PhysicalOffset(hot_spot);
+        PhysicalRect cursor_rect(cursor_offset, LayoutSize(size));
+        if (!PhysicalRect(page->GetVisualViewport().VisibleContentRect())
+                 .Contains(cursor_rect)) {
           Deprecation::CountDeprecation(
-              &node->GetDocument(),
+              node->GetExecutionContext(),
               WebFeature::kCustomCursorIntersectsViewport);
           continue;
         }
       }
 
       Image* image = cached_image->GetImage();
+
+      // If the image is an SVG, then adjust the scale to reflect the device
+      // scale factor so that the SVG can be rasterized in the native
+      // resolution and scaled down to the correct size for the cursor.
+      float device_scale_factor = 1;
+      if (image->IsSVGImage()) {
+        device_scale_factor =
+            page->GetChromeClient().GetScreenInfo(*frame_).device_scale_factor;
+        scale *= device_scale_factor;
+      }
+
       // Ensure no overflow possible in calculations above.
       if (scale < kMinimumCursorScale)
         continue;
@@ -611,10 +637,21 @@ base::Optional<ui::Cursor> EventHandler::SelectCursor(
       // Convert from logical pixels to physical pixels.
       hot_spot.Scale(scale, scale);
 
+      // Special case for SVG so that it can be rasterized in the appropriate
+      // resolution for high DPI displays.
+      scoped_refptr<Image> svg_image_holder;
+      if (auto* svg_image = DynamicTo<SVGImage>(image)) {
+        IntSize scaled_size(svg_image->Size());
+        scaled_size.Scale(device_scale_factor);
+        // TODO(fs): Should pass proper URL. Use StyleImage::GetImage.
+        svg_image_holder = SVGImageForContainer::Create(
+            svg_image, FloatSize(scaled_size), device_scale_factor, NullURL());
+        image = svg_image_holder.get();
+      }
+
       ui::Cursor cursor(ui::mojom::blink::CursorType::kCustom);
       cursor.set_custom_bitmap(
-          image ? image->AsSkBitmapForCurrentFrame(kRespectImageOrientation)
-                : SkBitmap());
+          image->AsSkBitmapForCurrentFrame(kRespectImageOrientation));
       cursor.set_custom_hotspot(
           DetermineHotSpot(*image, hot_spot_specified, hot_spot));
       cursor.set_image_scale_factor(scale);
@@ -783,7 +820,7 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
   }
 
   LocalFrame::NotifyUserActivation(
-      frame_,
+      frame_, mojom::blink::UserActivationNotificationType::kInteraction,
       RuntimeEnabledFeatures::BrowserVerifiedUserActivationMouseEnabled());
 
   if (RuntimeEnabledFeatures::MiddleClickAutoscrollEnabled()) {
@@ -1349,6 +1386,10 @@ Element* EventHandler::EffectiveMouseEventTargetElement(
   return new_element_under_mouse;
 }
 
+Element* EventHandler::GetElementUnderMouse() {
+  return mouse_event_manager_->GetElementUnderMouse();
+}
+
 bool EventHandler::IsPointerIdActiveOnFrame(PointerId pointer_id,
                                             LocalFrame* frame) const {
   DCHECK(frame_ == &frame_->LocalFrameRoot() || frame_ == frame);
@@ -1475,7 +1516,7 @@ void EventHandler::ResetMousePositionForPointerUnlock() {
 }
 
 bool EventHandler::LongTapShouldInvokeContextMenu() {
-  return gesture_manager_->LongTapShouldInvokeContextMenu();
+  return gesture_manager_->GestureContextMenuDeferred();
 }
 
 WebInputEventResult EventHandler::DispatchMousePointerEvent(
@@ -1596,10 +1637,6 @@ bool EventHandler::IsScrollbarHandlingGestures() const {
 
 bool EventHandler::ShouldApplyTouchAdjustment(
     const WebGestureEvent& event) const {
-  if (frame_->GetSettings() &&
-      !frame_->GetSettings()->GetTouchAdjustmentEnabled())
-    return false;
-
   if (event.primary_pointer_type == WebPointerProperties::PointerType::kPen)
     return false;
 
@@ -2033,9 +2070,6 @@ WebInputEventResult EventHandler::SendContextMenuEvent(
   frame_->GetDocument()->UpdateStyleAndLayout(
       DocumentUpdateReason::kContextMenu);
 
-  GetSelectionController().UpdateSelectionForContextMenuEvent(
-      mev, position_in_contents);
-
   Element* target_element =
       override_target_element ? override_target_element : mev.InnerElement();
   return mouse_event_manager_->DispatchMouseEvent(
@@ -2100,7 +2134,7 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
     // Intersect the selection rect and the visible bounds of focused_element.
     if (focused_element) {
       IntRect clipped_rect = view->ViewportToFrame(
-          focused_element->VisibleBoundsInVisualViewport());
+          GetFocusedElementRectForNonLocatedContextMenu(focused_element));
       left = std::max(clipped_rect.X(), left);
       top = std::max(clipped_rect.Y(), top);
       right = std::min(clipped_rect.MaxX(), right);
@@ -2117,7 +2151,8 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
           view->ConvertToRootFrame(selection_rect.Center());
     }
   } else if (focused_element) {
-    IntRect clipped_rect = focused_element->BoundsInViewport();
+    IntRect clipped_rect =
+        GetFocusedElementRectForNonLocatedContextMenu(focused_element);
     location_in_root_frame =
         visual_viewport.ViewportToRootFrame(clipped_rect.Center());
   } else {
@@ -2134,17 +2169,13 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
           IntRect(location_in_viewport, IntSize()), frame_->View())
           .Location();
 
-  Node* target_node =
-      override_target_element ? override_target_element : doc->FocusedElement();
-  if (!target_node)
-    target_node = doc;
-
   // Use the focused node as the target for hover and active.
   HitTestRequest request(HitTestRequest::kActive |
                          HitTestRequest::kRetargetForInert);
   HitTestLocation location(location_in_root_frame);
   HitTestResult result(request, location);
-  result.SetInnerNode(target_node);
+  result.SetInnerNode(focused_element ? static_cast<Node*>(focused_element)
+                                      : doc);
   doc->UpdateHoverActiveState(request.Active(), !request.Move(),
                               result.InnerElement());
 
@@ -2166,7 +2197,21 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
   // coordinates instead of root frame coordinates.
   mouse_event.SetFrameScale(1);
 
-  return SendContextMenuEvent(mouse_event, override_target_element);
+  return SendContextMenuEvent(mouse_event, focused_element);
+}
+
+IntRect EventHandler::GetFocusedElementRectForNonLocatedContextMenu(
+    Element* focused_element) {
+  IntRect clipped_rect = focused_element->VisibleBoundsInVisualViewport();
+  // The bounding rect of multiline elements may include points that are
+  // not within the element. Intersect the clipped rect with the first
+  // outline rect to ensure that the selection rect only includes visible
+  // points within the focused element.
+  Vector<IntRect> outline_rects =
+      focused_element->OutlineRectsInVisualViewport();
+  if (outline_rects.size() > 1)
+    clipped_rect.Intersect(outline_rects[0]);
+  return clipped_rect;
 }
 
 void EventHandler::ScheduleHoverStateUpdate() {
@@ -2270,6 +2315,12 @@ void EventHandler::DragSourceEndedAt(const WebMouseEvent& event,
   }
 
   mouse_event_manager_->DragSourceEndedAt(event, operation);
+
+  if (frame_->GetSettings() &&
+      frame_->GetSettings()->GetTouchDragDropEnabled() &&
+      frame_->GetSettings()->GetTouchDragEndContextMenu()) {
+    gesture_manager_->SendContextMenuEventTouchDragEnd(event);
+  }
 }
 
 void EventHandler::UpdateDragStateAfterEditDragIfNeeded(

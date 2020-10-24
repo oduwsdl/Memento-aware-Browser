@@ -30,7 +30,8 @@ namespace gl
 void GL_APIENTRY Accum(GLenum op, GLfloat value)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glAccum", "context = %d, GLenum op = %s, GLfloat value = %f", CID(context),
+    EVENT(context, gl::EntryPoint::Accum, "glAccum",
+          "context = %d, GLenum op = %s, GLfloat value = %f", CID(context),
           GLenumToString(GLenumGroup::AccumOp, op), value);
 
     if (context)
@@ -43,12 +44,17 @@ void GL_APIENTRY Accum(GLenum op, GLfloat value)
         }
         ANGLE_CAPTURE(Accum, isCallValid, context, op, value);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY AlphaFunc(GLenum func, GLfloat ref)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glAlphaFunc", "context = %d, GLenum func = %s, GLfloat ref = %f", CID(context),
+    EVENT(context, gl::EntryPoint::AlphaFunc, "glAlphaFunc",
+          "context = %d, GLenum func = %s, GLfloat ref = %f", CID(context),
           GLenumToString(GLenumGroup::AlphaFunction, func), ref);
 
     if (context)
@@ -63,12 +69,16 @@ void GL_APIENTRY AlphaFunc(GLenum func, GLfloat ref)
         }
         ANGLE_CAPTURE(AlphaFunc, isCallValid, context, funcPacked, ref);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Begin(GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glBegin", "context = %d, GLenum mode = %s", CID(context),
+    EVENT(context, gl::EntryPoint::Begin, "glBegin", "context = %d, GLenum mode = %s", CID(context),
           GLenumToString(GLenumGroup::PrimitiveType, mode));
 
     if (context)
@@ -80,6 +90,10 @@ void GL_APIENTRY Begin(GLenum mode)
             context->begin(mode);
         }
         ANGLE_CAPTURE(Begin, isCallValid, context, mode);
+    }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
     }
 }
 
@@ -93,7 +107,7 @@ void GL_APIENTRY Bitmap(GLsizei width,
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glBitmap",
+        context, gl::EntryPoint::Bitmap, "glBitmap",
         "context = %d, GLsizei width = %d, GLsizei height = %d, GLfloat xorig = %f, GLfloat yorig "
         "= %f, GLfloat xmove = %f, GLfloat ymove = %f, const GLubyte *bitmap = 0x%016" PRIxPTR "",
         CID(context), width, height, xorig, yorig, xmove, ymove, (uintptr_t)bitmap);
@@ -111,12 +125,17 @@ void GL_APIENTRY Bitmap(GLsizei width,
         ANGLE_CAPTURE(Bitmap, isCallValid, context, width, height, xorig, yorig, xmove, ymove,
                       bitmap);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY BlendFunc(GLenum sfactor, GLenum dfactor)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glBlendFunc", "context = %d, GLenum sfactor = %s, GLenum dfactor = %s", CID(context),
+    EVENT(context, gl::EntryPoint::BlendFunc, "glBlendFunc",
+          "context = %d, GLenum sfactor = %s, GLenum dfactor = %s", CID(context),
           GLenumToString(GLenumGroup::BlendingFactor, sfactor),
           GLenumToString(GLenumGroup::BlendingFactor, dfactor));
 
@@ -131,12 +150,17 @@ void GL_APIENTRY BlendFunc(GLenum sfactor, GLenum dfactor)
         }
         ANGLE_CAPTURE(BlendFunc, isCallValid, context, sfactor, dfactor);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY CallList(GLuint list)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glCallList", "context = %d, GLuint list = %u", CID(context), list);
+    EVENT(context, gl::EntryPoint::CallList, "glCallList", "context = %d, GLuint list = %u",
+          CID(context), list);
 
     if (context)
     {
@@ -148,12 +172,16 @@ void GL_APIENTRY CallList(GLuint list)
         }
         ANGLE_CAPTURE(CallList, isCallValid, context, list);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY CallLists(GLsizei n, GLenum type, const void *lists)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glCallLists",
+    EVENT(context, gl::EntryPoint::CallLists, "glCallLists",
           "context = %d, GLsizei n = %d, GLenum type = %s, const void *lists = 0x%016" PRIxPTR "",
           CID(context), n, GLenumToString(GLenumGroup::ListNameType, type), (uintptr_t)lists);
 
@@ -168,13 +196,17 @@ void GL_APIENTRY CallLists(GLsizei n, GLenum type, const void *lists)
         }
         ANGLE_CAPTURE(CallLists, isCallValid, context, n, type, lists);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Clear(GLbitfield mask)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glClear", "context = %d, GLbitfield mask = %s", CID(context),
-          GLbitfieldToString(GLenumGroup::ClearBufferMask, mask).c_str());
+    EVENT(context, gl::EntryPoint::Clear, "glClear", "context = %d, GLbitfield mask = %s",
+          CID(context), GLbitfieldToString(GLenumGroup::ClearBufferMask, mask).c_str());
 
     if (context)
     {
@@ -186,13 +218,17 @@ void GL_APIENTRY Clear(GLbitfield mask)
         }
         ANGLE_CAPTURE(Clear, isCallValid, context, mask);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ClearAccum(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glClearAccum",
+        context, gl::EntryPoint::ClearAccum, "glClearAccum",
         "context = %d, GLfloat red = %f, GLfloat green = %f, GLfloat blue = %f, GLfloat alpha = %f",
         CID(context), red, green, blue, alpha);
 
@@ -207,13 +243,17 @@ void GL_APIENTRY ClearAccum(GLfloat red, GLfloat green, GLfloat blue, GLfloat al
         }
         ANGLE_CAPTURE(ClearAccum, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ClearColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glClearColor",
+        context, gl::EntryPoint::ClearColor, "glClearColor",
         "context = %d, GLfloat red = %f, GLfloat green = %f, GLfloat blue = %f, GLfloat alpha = %f",
         CID(context), red, green, blue, alpha);
 
@@ -228,12 +268,17 @@ void GL_APIENTRY ClearColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat al
         }
         ANGLE_CAPTURE(ClearColor, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ClearDepth(GLdouble depth)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glClearDepth", "context = %d, GLdouble depth = %f", CID(context), depth);
+    EVENT(context, gl::EntryPoint::ClearDepth, "glClearDepth", "context = %d, GLdouble depth = %f",
+          CID(context), depth);
 
     if (context)
     {
@@ -245,12 +290,17 @@ void GL_APIENTRY ClearDepth(GLdouble depth)
         }
         ANGLE_CAPTURE(ClearDepth, isCallValid, context, depth);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ClearIndex(GLfloat c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glClearIndex", "context = %d, GLfloat c = %f", CID(context), c);
+    EVENT(context, gl::EntryPoint::ClearIndex, "glClearIndex", "context = %d, GLfloat c = %f",
+          CID(context), c);
 
     if (context)
     {
@@ -262,12 +312,17 @@ void GL_APIENTRY ClearIndex(GLfloat c)
         }
         ANGLE_CAPTURE(ClearIndex, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ClearStencil(GLint s)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glClearStencil", "context = %d, GLint s = %d", CID(context), s);
+    EVENT(context, gl::EntryPoint::ClearStencil, "glClearStencil", "context = %d, GLint s = %d",
+          CID(context), s);
 
     if (context)
     {
@@ -279,12 +334,16 @@ void GL_APIENTRY ClearStencil(GLint s)
         }
         ANGLE_CAPTURE(ClearStencil, isCallValid, context, s);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ClipPlane(GLenum plane, const GLdouble *equation)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glClipPlane",
+    EVENT(context, gl::EntryPoint::ClipPlane, "glClipPlane",
           "context = %d, GLenum plane = %s, const GLdouble *equation = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::ClipPlaneName, plane), (uintptr_t)equation);
 
@@ -299,13 +358,18 @@ void GL_APIENTRY ClipPlane(GLenum plane, const GLdouble *equation)
         }
         ANGLE_CAPTURE(ClipPlane, isCallValid, context, plane, equation);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3b(GLbyte red, GLbyte green, GLbyte blue)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3b", "context = %d, GLbyte red = %d, GLbyte green = %d, GLbyte blue = %d",
-          CID(context), red, green, blue);
+    EVENT(context, gl::EntryPoint::Color3b, "glColor3b",
+          "context = %d, GLbyte red = %d, GLbyte green = %d, GLbyte blue = %d", CID(context), red,
+          green, blue);
 
     if (context)
     {
@@ -318,13 +382,17 @@ void GL_APIENTRY Color3b(GLbyte red, GLbyte green, GLbyte blue)
         }
         ANGLE_CAPTURE(Color3b, isCallValid, context, red, green, blue);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3bv(const GLbyte *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3bv", "context = %d, const GLbyte *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color3bv, "glColor3bv",
+          "context = %d, const GLbyte *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -336,13 +404,18 @@ void GL_APIENTRY Color3bv(const GLbyte *v)
         }
         ANGLE_CAPTURE(Color3bv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3d(GLdouble red, GLdouble green, GLdouble blue)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3d", "context = %d, GLdouble red = %f, GLdouble green = %f, GLdouble blue = %f",
-          CID(context), red, green, blue);
+    EVENT(context, gl::EntryPoint::Color3d, "glColor3d",
+          "context = %d, GLdouble red = %f, GLdouble green = %f, GLdouble blue = %f", CID(context),
+          red, green, blue);
 
     if (context)
     {
@@ -355,13 +428,17 @@ void GL_APIENTRY Color3d(GLdouble red, GLdouble green, GLdouble blue)
         }
         ANGLE_CAPTURE(Color3d, isCallValid, context, red, green, blue);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color3dv, "glColor3dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -373,13 +450,18 @@ void GL_APIENTRY Color3dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(Color3dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3f(GLfloat red, GLfloat green, GLfloat blue)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3f", "context = %d, GLfloat red = %f, GLfloat green = %f, GLfloat blue = %f",
-          CID(context), red, green, blue);
+    EVENT(context, gl::EntryPoint::Color3f, "glColor3f",
+          "context = %d, GLfloat red = %f, GLfloat green = %f, GLfloat blue = %f", CID(context),
+          red, green, blue);
 
     if (context)
     {
@@ -392,13 +474,17 @@ void GL_APIENTRY Color3f(GLfloat red, GLfloat green, GLfloat blue)
         }
         ANGLE_CAPTURE(Color3f, isCallValid, context, red, green, blue);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color3fv, "glColor3fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -410,13 +496,18 @@ void GL_APIENTRY Color3fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(Color3fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3i(GLint red, GLint green, GLint blue)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3i", "context = %d, GLint red = %d, GLint green = %d, GLint blue = %d",
-          CID(context), red, green, blue);
+    EVENT(context, gl::EntryPoint::Color3i, "glColor3i",
+          "context = %d, GLint red = %d, GLint green = %d, GLint blue = %d", CID(context), red,
+          green, blue);
 
     if (context)
     {
@@ -429,13 +520,17 @@ void GL_APIENTRY Color3i(GLint red, GLint green, GLint blue)
         }
         ANGLE_CAPTURE(Color3i, isCallValid, context, red, green, blue);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color3iv, "glColor3iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -447,13 +542,18 @@ void GL_APIENTRY Color3iv(const GLint *v)
         }
         ANGLE_CAPTURE(Color3iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3s(GLshort red, GLshort green, GLshort blue)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3s", "context = %d, GLshort red = %d, GLshort green = %d, GLshort blue = %d",
-          CID(context), red, green, blue);
+    EVENT(context, gl::EntryPoint::Color3s, "glColor3s",
+          "context = %d, GLshort red = %d, GLshort green = %d, GLshort blue = %d", CID(context),
+          red, green, blue);
 
     if (context)
     {
@@ -466,13 +566,17 @@ void GL_APIENTRY Color3s(GLshort red, GLshort green, GLshort blue)
         }
         ANGLE_CAPTURE(Color3s, isCallValid, context, red, green, blue);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color3sv, "glColor3sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -484,13 +588,18 @@ void GL_APIENTRY Color3sv(const GLshort *v)
         }
         ANGLE_CAPTURE(Color3sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3ub(GLubyte red, GLubyte green, GLubyte blue)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3ub", "context = %d, GLubyte red = %d, GLubyte green = %d, GLubyte blue = %d",
-          CID(context), red, green, blue);
+    EVENT(context, gl::EntryPoint::Color3ub, "glColor3ub",
+          "context = %d, GLubyte red = %d, GLubyte green = %d, GLubyte blue = %d", CID(context),
+          red, green, blue);
 
     if (context)
     {
@@ -503,13 +612,17 @@ void GL_APIENTRY Color3ub(GLubyte red, GLubyte green, GLubyte blue)
         }
         ANGLE_CAPTURE(Color3ub, isCallValid, context, red, green, blue);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3ubv(const GLubyte *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3ubv", "context = %d, const GLubyte *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color3ubv, "glColor3ubv",
+          "context = %d, const GLubyte *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -521,13 +634,18 @@ void GL_APIENTRY Color3ubv(const GLubyte *v)
         }
         ANGLE_CAPTURE(Color3ubv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3ui(GLuint red, GLuint green, GLuint blue)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3ui", "context = %d, GLuint red = %u, GLuint green = %u, GLuint blue = %u",
-          CID(context), red, green, blue);
+    EVENT(context, gl::EntryPoint::Color3ui, "glColor3ui",
+          "context = %d, GLuint red = %u, GLuint green = %u, GLuint blue = %u", CID(context), red,
+          green, blue);
 
     if (context)
     {
@@ -540,13 +658,17 @@ void GL_APIENTRY Color3ui(GLuint red, GLuint green, GLuint blue)
         }
         ANGLE_CAPTURE(Color3ui, isCallValid, context, red, green, blue);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3uiv(const GLuint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3uiv", "context = %d, const GLuint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color3uiv, "glColor3uiv",
+          "context = %d, const GLuint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -558,13 +680,18 @@ void GL_APIENTRY Color3uiv(const GLuint *v)
         }
         ANGLE_CAPTURE(Color3uiv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3us(GLushort red, GLushort green, GLushort blue)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3us", "context = %d, GLushort red = %u, GLushort green = %u, GLushort blue = %u",
-          CID(context), red, green, blue);
+    EVENT(context, gl::EntryPoint::Color3us, "glColor3us",
+          "context = %d, GLushort red = %u, GLushort green = %u, GLushort blue = %u", CID(context),
+          red, green, blue);
 
     if (context)
     {
@@ -577,13 +704,17 @@ void GL_APIENTRY Color3us(GLushort red, GLushort green, GLushort blue)
         }
         ANGLE_CAPTURE(Color3us, isCallValid, context, red, green, blue);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color3usv(const GLushort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor3usv", "context = %d, const GLushort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color3usv, "glColor3usv",
+          "context = %d, const GLushort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -595,12 +726,16 @@ void GL_APIENTRY Color3usv(const GLushort *v)
         }
         ANGLE_CAPTURE(Color3usv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4b(GLbyte red, GLbyte green, GLbyte blue, GLbyte alpha)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4b",
+    EVENT(context, gl::EntryPoint::Color4b, "glColor4b",
           "context = %d, GLbyte red = %d, GLbyte green = %d, GLbyte blue = %d, GLbyte alpha = %d",
           CID(context), red, green, blue, alpha);
 
@@ -615,13 +750,17 @@ void GL_APIENTRY Color4b(GLbyte red, GLbyte green, GLbyte blue, GLbyte alpha)
         }
         ANGLE_CAPTURE(Color4b, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4bv(const GLbyte *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4bv", "context = %d, const GLbyte *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color4bv, "glColor4bv",
+          "context = %d, const GLbyte *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -633,12 +772,16 @@ void GL_APIENTRY Color4bv(const GLbyte *v)
         }
         ANGLE_CAPTURE(Color4bv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4d(GLdouble red, GLdouble green, GLdouble blue, GLdouble alpha)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4d",
+    EVENT(context, gl::EntryPoint::Color4d, "glColor4d",
           "context = %d, GLdouble red = %f, GLdouble green = %f, GLdouble blue = %f, GLdouble "
           "alpha = %f",
           CID(context), red, green, blue, alpha);
@@ -654,13 +797,17 @@ void GL_APIENTRY Color4d(GLdouble red, GLdouble green, GLdouble blue, GLdouble a
         }
         ANGLE_CAPTURE(Color4d, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color4dv, "glColor4dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -672,13 +819,17 @@ void GL_APIENTRY Color4dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(Color4dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4f(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glColor4f",
+        context, gl::EntryPoint::Color4f, "glColor4f",
         "context = %d, GLfloat red = %f, GLfloat green = %f, GLfloat blue = %f, GLfloat alpha = %f",
         CID(context), red, green, blue, alpha);
 
@@ -693,13 +844,17 @@ void GL_APIENTRY Color4f(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha
         }
         ANGLE_CAPTURE(Color4f, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color4fv, "glColor4fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -711,12 +866,16 @@ void GL_APIENTRY Color4fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(Color4fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4i(GLint red, GLint green, GLint blue, GLint alpha)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4i",
+    EVENT(context, gl::EntryPoint::Color4i, "glColor4i",
           "context = %d, GLint red = %d, GLint green = %d, GLint blue = %d, GLint alpha = %d",
           CID(context), red, green, blue, alpha);
 
@@ -731,13 +890,17 @@ void GL_APIENTRY Color4i(GLint red, GLint green, GLint blue, GLint alpha)
         }
         ANGLE_CAPTURE(Color4i, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color4iv, "glColor4iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -749,13 +912,17 @@ void GL_APIENTRY Color4iv(const GLint *v)
         }
         ANGLE_CAPTURE(Color4iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4s(GLshort red, GLshort green, GLshort blue, GLshort alpha)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glColor4s",
+        context, gl::EntryPoint::Color4s, "glColor4s",
         "context = %d, GLshort red = %d, GLshort green = %d, GLshort blue = %d, GLshort alpha = %d",
         CID(context), red, green, blue, alpha);
 
@@ -770,13 +937,17 @@ void GL_APIENTRY Color4s(GLshort red, GLshort green, GLshort blue, GLshort alpha
         }
         ANGLE_CAPTURE(Color4s, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color4sv, "glColor4sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -788,13 +959,17 @@ void GL_APIENTRY Color4sv(const GLshort *v)
         }
         ANGLE_CAPTURE(Color4sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4ub(GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glColor4ub",
+        context, gl::EntryPoint::Color4ub, "glColor4ub",
         "context = %d, GLubyte red = %d, GLubyte green = %d, GLubyte blue = %d, GLubyte alpha = %d",
         CID(context), red, green, blue, alpha);
 
@@ -809,13 +984,17 @@ void GL_APIENTRY Color4ub(GLubyte red, GLubyte green, GLubyte blue, GLubyte alph
         }
         ANGLE_CAPTURE(Color4ub, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4ubv(const GLubyte *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4ubv", "context = %d, const GLubyte *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color4ubv, "glColor4ubv",
+          "context = %d, const GLubyte *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -827,12 +1006,16 @@ void GL_APIENTRY Color4ubv(const GLubyte *v)
         }
         ANGLE_CAPTURE(Color4ubv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4ui(GLuint red, GLuint green, GLuint blue, GLuint alpha)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4ui",
+    EVENT(context, gl::EntryPoint::Color4ui, "glColor4ui",
           "context = %d, GLuint red = %u, GLuint green = %u, GLuint blue = %u, GLuint alpha = %u",
           CID(context), red, green, blue, alpha);
 
@@ -847,13 +1030,17 @@ void GL_APIENTRY Color4ui(GLuint red, GLuint green, GLuint blue, GLuint alpha)
         }
         ANGLE_CAPTURE(Color4ui, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4uiv(const GLuint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4uiv", "context = %d, const GLuint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color4uiv, "glColor4uiv",
+          "context = %d, const GLuint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -865,12 +1052,16 @@ void GL_APIENTRY Color4uiv(const GLuint *v)
         }
         ANGLE_CAPTURE(Color4uiv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4us(GLushort red, GLushort green, GLushort blue, GLushort alpha)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4us",
+    EVENT(context, gl::EntryPoint::Color4us, "glColor4us",
           "context = %d, GLushort red = %u, GLushort green = %u, GLushort blue = %u, GLushort "
           "alpha = %u",
           CID(context), red, green, blue, alpha);
@@ -886,13 +1077,17 @@ void GL_APIENTRY Color4us(GLushort red, GLushort green, GLushort blue, GLushort 
         }
         ANGLE_CAPTURE(Color4us, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Color4usv(const GLushort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColor4usv", "context = %d, const GLushort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Color4usv, "glColor4usv",
+          "context = %d, const GLushort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -904,12 +1099,16 @@ void GL_APIENTRY Color4usv(const GLushort *v)
         }
         ANGLE_CAPTURE(Color4usv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ColorMask(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColorMask",
+    EVENT(context, gl::EntryPoint::ColorMask, "glColorMask",
           "context = %d, GLboolean red = %s, GLboolean green = %s, GLboolean blue = %s, GLboolean "
           "alpha = %s",
           CID(context), GLbooleanToString(red), GLbooleanToString(green), GLbooleanToString(blue),
@@ -926,12 +1125,17 @@ void GL_APIENTRY ColorMask(GLboolean red, GLboolean green, GLboolean blue, GLboo
         }
         ANGLE_CAPTURE(ColorMask, isCallValid, context, red, green, blue, alpha);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ColorMaterial(GLenum face, GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glColorMaterial", "context = %d, GLenum face = %s, GLenum mode = %s", CID(context),
+    EVENT(context, gl::EntryPoint::ColorMaterial, "glColorMaterial",
+          "context = %d, GLenum face = %s, GLenum mode = %s", CID(context),
           GLenumToString(GLenumGroup::MaterialFace, face),
           GLenumToString(GLenumGroup::ColorMaterialParameter, mode));
 
@@ -946,12 +1150,16 @@ void GL_APIENTRY ColorMaterial(GLenum face, GLenum mode)
         }
         ANGLE_CAPTURE(ColorMaterial, isCallValid, context, face, mode);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY CopyPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum type)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glCopyPixels",
+    EVENT(context, gl::EntryPoint::CopyPixels, "glCopyPixels",
           "context = %d, GLint x = %d, GLint y = %d, GLsizei width = %d, GLsizei height = %d, "
           "GLenum type = %s",
           CID(context), x, y, width, height, GLenumToString(GLenumGroup::PixelCopyType, type));
@@ -967,13 +1175,17 @@ void GL_APIENTRY CopyPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLe
         }
         ANGLE_CAPTURE(CopyPixels, isCallValid, context, x, y, width, height, type);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY CullFace(GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glCullFace", "context = %d, GLenum mode = %s", CID(context),
-          GLenumToString(GLenumGroup::CullFaceMode, mode));
+    EVENT(context, gl::EntryPoint::CullFace, "glCullFace", "context = %d, GLenum mode = %s",
+          CID(context), GLenumToString(GLenumGroup::CullFaceMode, mode));
 
     if (context)
     {
@@ -986,13 +1198,17 @@ void GL_APIENTRY CullFace(GLenum mode)
         }
         ANGLE_CAPTURE(CullFace, isCallValid, context, modePacked);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY DeleteLists(GLuint list, GLsizei range)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glDeleteLists", "context = %d, GLuint list = %u, GLsizei range = %d", CID(context), list,
-          range);
+    EVENT(context, gl::EntryPoint::DeleteLists, "glDeleteLists",
+          "context = %d, GLuint list = %u, GLsizei range = %d", CID(context), list, range);
 
     if (context)
     {
@@ -1004,13 +1220,17 @@ void GL_APIENTRY DeleteLists(GLuint list, GLsizei range)
         }
         ANGLE_CAPTURE(DeleteLists, isCallValid, context, list, range);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY DepthFunc(GLenum func)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glDepthFunc", "context = %d, GLenum func = %s", CID(context),
-          GLenumToString(GLenumGroup::DepthFunction, func));
+    EVENT(context, gl::EntryPoint::DepthFunc, "glDepthFunc", "context = %d, GLenum func = %s",
+          CID(context), GLenumToString(GLenumGroup::DepthFunction, func));
 
     if (context)
     {
@@ -1022,13 +1242,17 @@ void GL_APIENTRY DepthFunc(GLenum func)
         }
         ANGLE_CAPTURE(DepthFunc, isCallValid, context, func);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY DepthMask(GLboolean flag)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glDepthMask", "context = %d, GLboolean flag = %s", CID(context),
-          GLbooleanToString(flag));
+    EVENT(context, gl::EntryPoint::DepthMask, "glDepthMask", "context = %d, GLboolean flag = %s",
+          CID(context), GLbooleanToString(flag));
 
     if (context)
     {
@@ -1040,12 +1264,17 @@ void GL_APIENTRY DepthMask(GLboolean flag)
         }
         ANGLE_CAPTURE(DepthMask, isCallValid, context, flag);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY DepthRange(GLdouble n, GLdouble f)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glDepthRange", "context = %d, GLdouble n = %f, GLdouble f = %f", CID(context), n, f);
+    EVENT(context, gl::EntryPoint::DepthRange, "glDepthRange",
+          "context = %d, GLdouble n = %f, GLdouble f = %f", CID(context), n, f);
 
     if (context)
     {
@@ -1057,13 +1286,17 @@ void GL_APIENTRY DepthRange(GLdouble n, GLdouble f)
         }
         ANGLE_CAPTURE(DepthRange, isCallValid, context, n, f);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Disable(GLenum cap)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glDisable", "context = %d, GLenum cap = %s", CID(context),
-          GLenumToString(GLenumGroup::EnableCap, cap));
+    EVENT(context, gl::EntryPoint::Disable, "glDisable", "context = %d, GLenum cap = %s",
+          CID(context), GLenumToString(GLenumGroup::EnableCap, cap));
 
     if (context)
     {
@@ -1075,13 +1308,17 @@ void GL_APIENTRY Disable(GLenum cap)
         }
         ANGLE_CAPTURE(Disable, isCallValid, context, cap);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY DrawBuffer(GLenum buf)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glDrawBuffer", "context = %d, GLenum buf = %s", CID(context),
-          GLenumToString(GLenumGroup::DrawBufferMode, buf));
+    EVENT(context, gl::EntryPoint::DrawBuffer, "glDrawBuffer", "context = %d, GLenum buf = %s",
+          CID(context), GLenumToString(GLenumGroup::DrawBufferMode, buf));
 
     if (context)
     {
@@ -1093,13 +1330,17 @@ void GL_APIENTRY DrawBuffer(GLenum buf)
         }
         ANGLE_CAPTURE(DrawBuffer, isCallValid, context, buf);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY
 DrawPixels(GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glDrawPixels",
+    EVENT(context, gl::EntryPoint::DrawPixels, "glDrawPixels",
           "context = %d, GLsizei width = %d, GLsizei height = %d, GLenum format = %s, GLenum type "
           "= %s, const void *pixels = 0x%016" PRIxPTR "",
           CID(context), width, height, GLenumToString(GLenumGroup::PixelFormat, format),
@@ -1116,12 +1357,17 @@ DrawPixels(GLsizei width, GLsizei height, GLenum format, GLenum type, const void
         }
         ANGLE_CAPTURE(DrawPixels, isCallValid, context, width, height, format, type, pixels);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EdgeFlag(GLboolean flag)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEdgeFlag", "context = %d, GLboolean flag = %s", CID(context), GLbooleanToString(flag));
+    EVENT(context, gl::EntryPoint::EdgeFlag, "glEdgeFlag", "context = %d, GLboolean flag = %s",
+          CID(context), GLbooleanToString(flag));
 
     if (context)
     {
@@ -1133,13 +1379,17 @@ void GL_APIENTRY EdgeFlag(GLboolean flag)
         }
         ANGLE_CAPTURE(EdgeFlag, isCallValid, context, flag);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EdgeFlagv(const GLboolean *flag)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEdgeFlagv", "context = %d, const GLboolean *flag = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)flag);
+    EVENT(context, gl::EntryPoint::EdgeFlagv, "glEdgeFlagv",
+          "context = %d, const GLboolean *flag = 0x%016" PRIxPTR "", CID(context), (uintptr_t)flag);
 
     if (context)
     {
@@ -1151,13 +1401,17 @@ void GL_APIENTRY EdgeFlagv(const GLboolean *flag)
         }
         ANGLE_CAPTURE(EdgeFlagv, isCallValid, context, flag);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Enable(GLenum cap)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEnable", "context = %d, GLenum cap = %s", CID(context),
-          GLenumToString(GLenumGroup::EnableCap, cap));
+    EVENT(context, gl::EntryPoint::Enable, "glEnable", "context = %d, GLenum cap = %s",
+          CID(context), GLenumToString(GLenumGroup::EnableCap, cap));
 
     if (context)
     {
@@ -1169,12 +1423,16 @@ void GL_APIENTRY Enable(GLenum cap)
         }
         ANGLE_CAPTURE(Enable, isCallValid, context, cap);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY End()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEnd", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::End, "glEnd", "context = %d", CID(context));
 
     if (context)
     {
@@ -1186,12 +1444,16 @@ void GL_APIENTRY End()
         }
         ANGLE_CAPTURE(End, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EndList()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEndList", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::EndList, "glEndList", "context = %d", CID(context));
 
     if (context)
     {
@@ -1203,12 +1465,17 @@ void GL_APIENTRY EndList()
         }
         ANGLE_CAPTURE(EndList, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalCoord1d(GLdouble u)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalCoord1d", "context = %d, GLdouble u = %f", CID(context), u);
+    EVENT(context, gl::EntryPoint::EvalCoord1d, "glEvalCoord1d", "context = %d, GLdouble u = %f",
+          CID(context), u);
 
     if (context)
     {
@@ -1220,13 +1487,17 @@ void GL_APIENTRY EvalCoord1d(GLdouble u)
         }
         ANGLE_CAPTURE(EvalCoord1d, isCallValid, context, u);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalCoord1dv(const GLdouble *u)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalCoord1dv", "context = %d, const GLdouble *u = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)u);
+    EVENT(context, gl::EntryPoint::EvalCoord1dv, "glEvalCoord1dv",
+          "context = %d, const GLdouble *u = 0x%016" PRIxPTR "", CID(context), (uintptr_t)u);
 
     if (context)
     {
@@ -1238,12 +1509,17 @@ void GL_APIENTRY EvalCoord1dv(const GLdouble *u)
         }
         ANGLE_CAPTURE(EvalCoord1dv, isCallValid, context, u);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalCoord1f(GLfloat u)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalCoord1f", "context = %d, GLfloat u = %f", CID(context), u);
+    EVENT(context, gl::EntryPoint::EvalCoord1f, "glEvalCoord1f", "context = %d, GLfloat u = %f",
+          CID(context), u);
 
     if (context)
     {
@@ -1255,13 +1531,17 @@ void GL_APIENTRY EvalCoord1f(GLfloat u)
         }
         ANGLE_CAPTURE(EvalCoord1f, isCallValid, context, u);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalCoord1fv(const GLfloat *u)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalCoord1fv", "context = %d, const GLfloat *u = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)u);
+    EVENT(context, gl::EntryPoint::EvalCoord1fv, "glEvalCoord1fv",
+          "context = %d, const GLfloat *u = 0x%016" PRIxPTR "", CID(context), (uintptr_t)u);
 
     if (context)
     {
@@ -1273,12 +1553,17 @@ void GL_APIENTRY EvalCoord1fv(const GLfloat *u)
         }
         ANGLE_CAPTURE(EvalCoord1fv, isCallValid, context, u);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalCoord2d(GLdouble u, GLdouble v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalCoord2d", "context = %d, GLdouble u = %f, GLdouble v = %f", CID(context), u, v);
+    EVENT(context, gl::EntryPoint::EvalCoord2d, "glEvalCoord2d",
+          "context = %d, GLdouble u = %f, GLdouble v = %f", CID(context), u, v);
 
     if (context)
     {
@@ -1290,13 +1575,17 @@ void GL_APIENTRY EvalCoord2d(GLdouble u, GLdouble v)
         }
         ANGLE_CAPTURE(EvalCoord2d, isCallValid, context, u, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalCoord2dv(const GLdouble *u)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalCoord2dv", "context = %d, const GLdouble *u = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)u);
+    EVENT(context, gl::EntryPoint::EvalCoord2dv, "glEvalCoord2dv",
+          "context = %d, const GLdouble *u = 0x%016" PRIxPTR "", CID(context), (uintptr_t)u);
 
     if (context)
     {
@@ -1308,12 +1597,17 @@ void GL_APIENTRY EvalCoord2dv(const GLdouble *u)
         }
         ANGLE_CAPTURE(EvalCoord2dv, isCallValid, context, u);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalCoord2f(GLfloat u, GLfloat v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalCoord2f", "context = %d, GLfloat u = %f, GLfloat v = %f", CID(context), u, v);
+    EVENT(context, gl::EntryPoint::EvalCoord2f, "glEvalCoord2f",
+          "context = %d, GLfloat u = %f, GLfloat v = %f", CID(context), u, v);
 
     if (context)
     {
@@ -1325,13 +1619,17 @@ void GL_APIENTRY EvalCoord2f(GLfloat u, GLfloat v)
         }
         ANGLE_CAPTURE(EvalCoord2f, isCallValid, context, u, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalCoord2fv(const GLfloat *u)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalCoord2fv", "context = %d, const GLfloat *u = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)u);
+    EVENT(context, gl::EntryPoint::EvalCoord2fv, "glEvalCoord2fv",
+          "context = %d, const GLfloat *u = 0x%016" PRIxPTR "", CID(context), (uintptr_t)u);
 
     if (context)
     {
@@ -1343,13 +1641,18 @@ void GL_APIENTRY EvalCoord2fv(const GLfloat *u)
         }
         ANGLE_CAPTURE(EvalCoord2fv, isCallValid, context, u);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalMesh1(GLenum mode, GLint i1, GLint i2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalMesh1", "context = %d, GLenum mode = %s, GLint i1 = %d, GLint i2 = %d",
-          CID(context), GLenumToString(GLenumGroup::MeshMode1, mode), i1, i2);
+    EVENT(context, gl::EntryPoint::EvalMesh1, "glEvalMesh1",
+          "context = %d, GLenum mode = %s, GLint i1 = %d, GLint i2 = %d", CID(context),
+          GLenumToString(GLenumGroup::MeshMode1, mode), i1, i2);
 
     if (context)
     {
@@ -1361,12 +1664,16 @@ void GL_APIENTRY EvalMesh1(GLenum mode, GLint i1, GLint i2)
         }
         ANGLE_CAPTURE(EvalMesh1, isCallValid, context, mode, i1, i2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalMesh2(GLenum mode, GLint i1, GLint i2, GLint j1, GLint j2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalMesh2",
+    EVENT(context, gl::EntryPoint::EvalMesh2, "glEvalMesh2",
           "context = %d, GLenum mode = %s, GLint i1 = %d, GLint i2 = %d, GLint j1 = %d, GLint j2 = "
           "%d",
           CID(context), GLenumToString(GLenumGroup::MeshMode2, mode), i1, i2, j1, j2);
@@ -1382,12 +1689,17 @@ void GL_APIENTRY EvalMesh2(GLenum mode, GLint i1, GLint i2, GLint j1, GLint j2)
         }
         ANGLE_CAPTURE(EvalMesh2, isCallValid, context, mode, i1, i2, j1, j2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalPoint1(GLint i)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalPoint1", "context = %d, GLint i = %d", CID(context), i);
+    EVENT(context, gl::EntryPoint::EvalPoint1, "glEvalPoint1", "context = %d, GLint i = %d",
+          CID(context), i);
 
     if (context)
     {
@@ -1399,12 +1711,17 @@ void GL_APIENTRY EvalPoint1(GLint i)
         }
         ANGLE_CAPTURE(EvalPoint1, isCallValid, context, i);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY EvalPoint2(GLint i, GLint j)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glEvalPoint2", "context = %d, GLint i = %d, GLint j = %d", CID(context), i, j);
+    EVENT(context, gl::EntryPoint::EvalPoint2, "glEvalPoint2",
+          "context = %d, GLint i = %d, GLint j = %d", CID(context), i, j);
 
     if (context)
     {
@@ -1416,12 +1733,16 @@ void GL_APIENTRY EvalPoint2(GLint i, GLint j)
         }
         ANGLE_CAPTURE(EvalPoint2, isCallValid, context, i, j);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY FeedbackBuffer(GLsizei size, GLenum type, GLfloat *buffer)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFeedbackBuffer",
+    EVENT(context, gl::EntryPoint::FeedbackBuffer, "glFeedbackBuffer",
           "context = %d, GLsizei size = %d, GLenum type = %s, GLfloat *buffer = 0x%016" PRIxPTR "",
           CID(context), size, GLenumToString(GLenumGroup::FeedbackType, type), (uintptr_t)buffer);
 
@@ -1436,12 +1757,16 @@ void GL_APIENTRY FeedbackBuffer(GLsizei size, GLenum type, GLfloat *buffer)
         }
         ANGLE_CAPTURE(FeedbackBuffer, isCallValid, context, size, type, buffer);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Finish()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFinish", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::Finish, "glFinish", "context = %d", CID(context));
 
     if (context)
     {
@@ -1453,12 +1778,16 @@ void GL_APIENTRY Finish()
         }
         ANGLE_CAPTURE(Finish, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Flush()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFlush", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::Flush, "glFlush", "context = %d", CID(context));
 
     if (context)
     {
@@ -1470,12 +1799,17 @@ void GL_APIENTRY Flush()
         }
         ANGLE_CAPTURE(Flush, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Fogf(GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFogf", "context = %d, GLenum pname = %s, GLfloat param = %f", CID(context),
+    EVENT(context, gl::EntryPoint::Fogf, "glFogf",
+          "context = %d, GLenum pname = %s, GLfloat param = %f", CID(context),
           GLenumToString(GLenumGroup::FogParameter, pname), param);
 
     if (context)
@@ -1488,12 +1822,17 @@ void GL_APIENTRY Fogf(GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(Fogf, isCallValid, context, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Fogfv(GLenum pname, const GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFogfv", "context = %d, GLenum pname = %s, const GLfloat *params = 0x%016" PRIxPTR "",
+    EVENT(context, gl::EntryPoint::Fogfv, "glFogfv",
+          "context = %d, GLenum pname = %s, const GLfloat *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::FogParameter, pname), (uintptr_t)params);
 
     if (context)
@@ -1506,12 +1845,17 @@ void GL_APIENTRY Fogfv(GLenum pname, const GLfloat *params)
         }
         ANGLE_CAPTURE(Fogfv, isCallValid, context, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Fogi(GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFogi", "context = %d, GLenum pname = %s, GLint param = %d", CID(context),
+    EVENT(context, gl::EntryPoint::Fogi, "glFogi",
+          "context = %d, GLenum pname = %s, GLint param = %d", CID(context),
           GLenumToString(GLenumGroup::FogParameter, pname), param);
 
     if (context)
@@ -1524,13 +1868,18 @@ void GL_APIENTRY Fogi(GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(Fogi, isCallValid, context, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Fogiv(GLenum pname, const GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFogiv", "context = %d, GLenum pname = %s, const GLint *params = 0x%016" PRIxPTR "",
-          CID(context), GLenumToString(GLenumGroup::FogParameter, pname), (uintptr_t)params);
+    EVENT(context, gl::EntryPoint::Fogiv, "glFogiv",
+          "context = %d, GLenum pname = %s, const GLint *params = 0x%016" PRIxPTR "", CID(context),
+          GLenumToString(GLenumGroup::FogParameter, pname), (uintptr_t)params);
 
     if (context)
     {
@@ -1542,13 +1891,17 @@ void GL_APIENTRY Fogiv(GLenum pname, const GLint *params)
         }
         ANGLE_CAPTURE(Fogiv, isCallValid, context, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY FrontFace(GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFrontFace", "context = %d, GLenum mode = %s", CID(context),
-          GLenumToString(GLenumGroup::FrontFaceDirection, mode));
+    EVENT(context, gl::EntryPoint::FrontFace, "glFrontFace", "context = %d, GLenum mode = %s",
+          CID(context), GLenumToString(GLenumGroup::FrontFaceDirection, mode));
 
     if (context)
     {
@@ -1560,13 +1913,17 @@ void GL_APIENTRY FrontFace(GLenum mode)
         }
         ANGLE_CAPTURE(FrontFace, isCallValid, context, mode);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY
 Frustum(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glFrustum",
+    EVENT(context, gl::EntryPoint::Frustum, "glFrustum",
           "context = %d, GLdouble left = %f, GLdouble right = %f, GLdouble bottom = %f, GLdouble "
           "top = %f, GLdouble zNear = %f, GLdouble zFar = %f",
           CID(context), left, right, bottom, top, zNear, zFar);
@@ -1582,12 +1939,17 @@ Frustum(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble z
         }
         ANGLE_CAPTURE(Frustum, isCallValid, context, left, right, bottom, top, zNear, zFar);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 GLuint GL_APIENTRY GenLists(GLsizei range)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGenLists", "context = %d, GLsizei range = %d", CID(context), range);
+    EVENT(context, gl::EntryPoint::GenLists, "glGenLists", "context = %d, GLsizei range = %d",
+          CID(context), range);
 
     GLuint returnValue;
     if (context)
@@ -1606,6 +1968,7 @@ GLuint GL_APIENTRY GenLists(GLsizei range)
     }
     else
     {
+        GenerateContextLostErrorOnCurrentGlobalContext();
         returnValue = GetDefaultReturnValue<EntryPoint::GenLists, GLuint>();
     }
     return returnValue;
@@ -1614,8 +1977,9 @@ GLuint GL_APIENTRY GenLists(GLsizei range)
 void GL_APIENTRY GetBooleanv(GLenum pname, GLboolean *data)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetBooleanv", "context = %d, GLenum pname = %s, GLboolean *data = 0x%016" PRIxPTR "",
-          CID(context), GLenumToString(GLenumGroup::GetPName, pname), (uintptr_t)data);
+    EVENT(context, gl::EntryPoint::GetBooleanv, "glGetBooleanv",
+          "context = %d, GLenum pname = %s, GLboolean *data = 0x%016" PRIxPTR "", CID(context),
+          GLenumToString(GLenumGroup::GetPName, pname), (uintptr_t)data);
 
     if (context)
     {
@@ -1627,12 +1991,16 @@ void GL_APIENTRY GetBooleanv(GLenum pname, GLboolean *data)
         }
         ANGLE_CAPTURE(GetBooleanv, isCallValid, context, pname, data);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetClipPlane(GLenum plane, GLdouble *equation)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetClipPlane",
+    EVENT(context, gl::EntryPoint::GetClipPlane, "glGetClipPlane",
           "context = %d, GLenum plane = %s, GLdouble *equation = 0x%016" PRIxPTR "", CID(context),
           GLenumToString(GLenumGroup::ClipPlaneName, plane), (uintptr_t)equation);
 
@@ -1647,13 +2015,18 @@ void GL_APIENTRY GetClipPlane(GLenum plane, GLdouble *equation)
         }
         ANGLE_CAPTURE(GetClipPlane, isCallValid, context, plane, equation);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetDoublev(GLenum pname, GLdouble *data)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetDoublev", "context = %d, GLenum pname = %s, GLdouble *data = 0x%016" PRIxPTR "",
-          CID(context), GLenumToString(GLenumGroup::GetPName, pname), (uintptr_t)data);
+    EVENT(context, gl::EntryPoint::GetDoublev, "glGetDoublev",
+          "context = %d, GLenum pname = %s, GLdouble *data = 0x%016" PRIxPTR "", CID(context),
+          GLenumToString(GLenumGroup::GetPName, pname), (uintptr_t)data);
 
     if (context)
     {
@@ -1665,12 +2038,16 @@ void GL_APIENTRY GetDoublev(GLenum pname, GLdouble *data)
         }
         ANGLE_CAPTURE(GetDoublev, isCallValid, context, pname, data);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 GLenum GL_APIENTRY GetError()
 {
     Context *context = GetGlobalContext();
-    EVENT("glGetError", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::GetError, "glGetError", "context = %d", CID(context));
 
     GLenum returnValue;
     if (context)
@@ -1689,6 +2066,7 @@ GLenum GL_APIENTRY GetError()
     }
     else
     {
+
         returnValue = GetDefaultReturnValue<EntryPoint::GetError, GLenum>();
     }
     return returnValue;
@@ -1697,8 +2075,9 @@ GLenum GL_APIENTRY GetError()
 void GL_APIENTRY GetFloatv(GLenum pname, GLfloat *data)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetFloatv", "context = %d, GLenum pname = %s, GLfloat *data = 0x%016" PRIxPTR "",
-          CID(context), GLenumToString(GLenumGroup::GetPName, pname), (uintptr_t)data);
+    EVENT(context, gl::EntryPoint::GetFloatv, "glGetFloatv",
+          "context = %d, GLenum pname = %s, GLfloat *data = 0x%016" PRIxPTR "", CID(context),
+          GLenumToString(GLenumGroup::GetPName, pname), (uintptr_t)data);
 
     if (context)
     {
@@ -1710,13 +2089,18 @@ void GL_APIENTRY GetFloatv(GLenum pname, GLfloat *data)
         }
         ANGLE_CAPTURE(GetFloatv, isCallValid, context, pname, data);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetIntegerv(GLenum pname, GLint *data)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetIntegerv", "context = %d, GLenum pname = %s, GLint *data = 0x%016" PRIxPTR "",
-          CID(context), GLenumToString(GLenumGroup::GetPName, pname), (uintptr_t)data);
+    EVENT(context, gl::EntryPoint::GetIntegerv, "glGetIntegerv",
+          "context = %d, GLenum pname = %s, GLint *data = 0x%016" PRIxPTR "", CID(context),
+          GLenumToString(GLenumGroup::GetPName, pname), (uintptr_t)data);
 
     if (context)
     {
@@ -1728,12 +2112,16 @@ void GL_APIENTRY GetIntegerv(GLenum pname, GLint *data)
         }
         ANGLE_CAPTURE(GetIntegerv, isCallValid, context, pname, data);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetLightfv(GLenum light, GLenum pname, GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetLightfv",
+    EVENT(context, gl::EntryPoint::GetLightfv, "glGetLightfv",
           "context = %d, GLenum light = %s, GLenum pname = %s, GLfloat *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::LightName, light),
           GLenumToString(GLenumGroup::LightParameter, pname), (uintptr_t)params);
@@ -1750,12 +2138,16 @@ void GL_APIENTRY GetLightfv(GLenum light, GLenum pname, GLfloat *params)
         }
         ANGLE_CAPTURE(GetLightfv, isCallValid, context, light, pnamePacked, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetLightiv(GLenum light, GLenum pname, GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetLightiv",
+    EVENT(context, gl::EntryPoint::GetLightiv, "glGetLightiv",
           "context = %d, GLenum light = %s, GLenum pname = %s, GLint *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::LightName, light),
           GLenumToString(GLenumGroup::LightParameter, pname), (uintptr_t)params);
@@ -1771,12 +2163,16 @@ void GL_APIENTRY GetLightiv(GLenum light, GLenum pname, GLint *params)
         }
         ANGLE_CAPTURE(GetLightiv, isCallValid, context, light, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetMapdv(GLenum target, GLenum query, GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetMapdv",
+    EVENT(context, gl::EntryPoint::GetMapdv, "glGetMapdv",
           "context = %d, GLenum target = %s, GLenum query = %s, GLdouble *v = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::MapTarget, target),
           GLenumToString(GLenumGroup::GetMapQuery, query), (uintptr_t)v);
@@ -1792,12 +2188,16 @@ void GL_APIENTRY GetMapdv(GLenum target, GLenum query, GLdouble *v)
         }
         ANGLE_CAPTURE(GetMapdv, isCallValid, context, target, query, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetMapfv(GLenum target, GLenum query, GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetMapfv",
+    EVENT(context, gl::EntryPoint::GetMapfv, "glGetMapfv",
           "context = %d, GLenum target = %s, GLenum query = %s, GLfloat *v = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::MapTarget, target),
           GLenumToString(GLenumGroup::GetMapQuery, query), (uintptr_t)v);
@@ -1813,12 +2213,16 @@ void GL_APIENTRY GetMapfv(GLenum target, GLenum query, GLfloat *v)
         }
         ANGLE_CAPTURE(GetMapfv, isCallValid, context, target, query, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetMapiv(GLenum target, GLenum query, GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetMapiv",
+    EVENT(context, gl::EntryPoint::GetMapiv, "glGetMapiv",
           "context = %d, GLenum target = %s, GLenum query = %s, GLint *v = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::MapTarget, target),
           GLenumToString(GLenumGroup::GetMapQuery, query), (uintptr_t)v);
@@ -1834,12 +2238,16 @@ void GL_APIENTRY GetMapiv(GLenum target, GLenum query, GLint *v)
         }
         ANGLE_CAPTURE(GetMapiv, isCallValid, context, target, query, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetMaterialfv(GLenum face, GLenum pname, GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetMaterialfv",
+    EVENT(context, gl::EntryPoint::GetMaterialfv, "glGetMaterialfv",
           "context = %d, GLenum face = %s, GLenum pname = %s, GLfloat *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::MaterialFace, face),
           GLenumToString(GLenumGroup::MaterialParameter, pname), (uintptr_t)params);
@@ -1856,12 +2264,16 @@ void GL_APIENTRY GetMaterialfv(GLenum face, GLenum pname, GLfloat *params)
         }
         ANGLE_CAPTURE(GetMaterialfv, isCallValid, context, face, pnamePacked, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetMaterialiv(GLenum face, GLenum pname, GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetMaterialiv",
+    EVENT(context, gl::EntryPoint::GetMaterialiv, "glGetMaterialiv",
           "context = %d, GLenum face = %s, GLenum pname = %s, GLint *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::MaterialFace, face),
           GLenumToString(GLenumGroup::MaterialParameter, pname), (uintptr_t)params);
@@ -1877,13 +2289,18 @@ void GL_APIENTRY GetMaterialiv(GLenum face, GLenum pname, GLint *params)
         }
         ANGLE_CAPTURE(GetMaterialiv, isCallValid, context, face, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetPixelMapfv(GLenum map, GLfloat *values)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetPixelMapfv", "context = %d, GLenum map = %s, GLfloat *values = 0x%016" PRIxPTR "",
-          CID(context), GLenumToString(GLenumGroup::PixelMap, map), (uintptr_t)values);
+    EVENT(context, gl::EntryPoint::GetPixelMapfv, "glGetPixelMapfv",
+          "context = %d, GLenum map = %s, GLfloat *values = 0x%016" PRIxPTR "", CID(context),
+          GLenumToString(GLenumGroup::PixelMap, map), (uintptr_t)values);
 
     if (context)
     {
@@ -1896,13 +2313,18 @@ void GL_APIENTRY GetPixelMapfv(GLenum map, GLfloat *values)
         }
         ANGLE_CAPTURE(GetPixelMapfv, isCallValid, context, map, values);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetPixelMapuiv(GLenum map, GLuint *values)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetPixelMapuiv", "context = %d, GLenum map = %s, GLuint *values = 0x%016" PRIxPTR "",
-          CID(context), GLenumToString(GLenumGroup::PixelMap, map), (uintptr_t)values);
+    EVENT(context, gl::EntryPoint::GetPixelMapuiv, "glGetPixelMapuiv",
+          "context = %d, GLenum map = %s, GLuint *values = 0x%016" PRIxPTR "", CID(context),
+          GLenumToString(GLenumGroup::PixelMap, map), (uintptr_t)values);
 
     if (context)
     {
@@ -1915,13 +2337,18 @@ void GL_APIENTRY GetPixelMapuiv(GLenum map, GLuint *values)
         }
         ANGLE_CAPTURE(GetPixelMapuiv, isCallValid, context, map, values);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetPixelMapusv(GLenum map, GLushort *values)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetPixelMapusv", "context = %d, GLenum map = %s, GLushort *values = 0x%016" PRIxPTR "",
-          CID(context), GLenumToString(GLenumGroup::PixelMap, map), (uintptr_t)values);
+    EVENT(context, gl::EntryPoint::GetPixelMapusv, "glGetPixelMapusv",
+          "context = %d, GLenum map = %s, GLushort *values = 0x%016" PRIxPTR "", CID(context),
+          GLenumToString(GLenumGroup::PixelMap, map), (uintptr_t)values);
 
     if (context)
     {
@@ -1934,13 +2361,17 @@ void GL_APIENTRY GetPixelMapusv(GLenum map, GLushort *values)
         }
         ANGLE_CAPTURE(GetPixelMapusv, isCallValid, context, map, values);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetPolygonStipple(GLubyte *mask)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetPolygonStipple", "context = %d, GLubyte *mask = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)mask);
+    EVENT(context, gl::EntryPoint::GetPolygonStipple, "glGetPolygonStipple",
+          "context = %d, GLubyte *mask = 0x%016" PRIxPTR "", CID(context), (uintptr_t)mask);
 
     if (context)
     {
@@ -1952,13 +2383,17 @@ void GL_APIENTRY GetPolygonStipple(GLubyte *mask)
         }
         ANGLE_CAPTURE(GetPolygonStipple, isCallValid, context, mask);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 const GLubyte *GL_APIENTRY GetString(GLenum name)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetString", "context = %d, GLenum name = %s", CID(context),
-          GLenumToString(GLenumGroup::StringName, name));
+    EVENT(context, gl::EntryPoint::GetString, "glGetString", "context = %d, GLenum name = %s",
+          CID(context), GLenumToString(GLenumGroup::StringName, name));
 
     const GLubyte *returnValue;
     if (context)
@@ -1977,6 +2412,7 @@ const GLubyte *GL_APIENTRY GetString(GLenum name)
     }
     else
     {
+        GenerateContextLostErrorOnCurrentGlobalContext();
         returnValue = GetDefaultReturnValue<EntryPoint::GetString, const GLubyte *>();
     }
     return returnValue;
@@ -1985,7 +2421,7 @@ const GLubyte *GL_APIENTRY GetString(GLenum name)
 void GL_APIENTRY GetTexEnvfv(GLenum target, GLenum pname, GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexEnvfv",
+    EVENT(context, gl::EntryPoint::GetTexEnvfv, "glGetTexEnvfv",
           "context = %d, GLenum target = %s, GLenum pname = %s, GLfloat *params = 0x%016" PRIxPTR
           "",
           CID(context), GLenumToString(GLenumGroup::TextureEnvTarget, target),
@@ -2004,12 +2440,16 @@ void GL_APIENTRY GetTexEnvfv(GLenum target, GLenum pname, GLfloat *params)
         }
         ANGLE_CAPTURE(GetTexEnvfv, isCallValid, context, targetPacked, pnamePacked, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexEnviv(GLenum target, GLenum pname, GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexEnviv",
+    EVENT(context, gl::EntryPoint::GetTexEnviv, "glGetTexEnviv",
           "context = %d, GLenum target = %s, GLenum pname = %s, GLint *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureEnvTarget, target),
           GLenumToString(GLenumGroup::TextureEnvParameter, pname), (uintptr_t)params);
@@ -2027,12 +2467,16 @@ void GL_APIENTRY GetTexEnviv(GLenum target, GLenum pname, GLint *params)
         }
         ANGLE_CAPTURE(GetTexEnviv, isCallValid, context, targetPacked, pnamePacked, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexGendv(GLenum coord, GLenum pname, GLdouble *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexGendv",
+    EVENT(context, gl::EntryPoint::GetTexGendv, "glGetTexGendv",
           "context = %d, GLenum coord = %s, GLenum pname = %s, GLdouble *params = 0x%016" PRIxPTR
           "",
           CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
@@ -2049,12 +2493,16 @@ void GL_APIENTRY GetTexGendv(GLenum coord, GLenum pname, GLdouble *params)
         }
         ANGLE_CAPTURE(GetTexGendv, isCallValid, context, coord, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexGenfv(GLenum coord, GLenum pname, GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexGenfv",
+    EVENT(context, gl::EntryPoint::GetTexGenfv, "glGetTexGenfv",
           "context = %d, GLenum coord = %s, GLenum pname = %s, GLfloat *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
           GLenumToString(GLenumGroup::TextureGenParameter, pname), (uintptr_t)params);
@@ -2070,12 +2518,16 @@ void GL_APIENTRY GetTexGenfv(GLenum coord, GLenum pname, GLfloat *params)
         }
         ANGLE_CAPTURE(GetTexGenfv, isCallValid, context, coord, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexGeniv(GLenum coord, GLenum pname, GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexGeniv",
+    EVENT(context, gl::EntryPoint::GetTexGeniv, "glGetTexGeniv",
           "context = %d, GLenum coord = %s, GLenum pname = %s, GLint *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
           GLenumToString(GLenumGroup::TextureGenParameter, pname), (uintptr_t)params);
@@ -2091,12 +2543,16 @@ void GL_APIENTRY GetTexGeniv(GLenum coord, GLenum pname, GLint *params)
         }
         ANGLE_CAPTURE(GetTexGeniv, isCallValid, context, coord, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexImage(GLenum target, GLint level, GLenum format, GLenum type, void *pixels)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexImage",
+    EVENT(context, gl::EntryPoint::GetTexImage, "glGetTexImage",
           "context = %d, GLenum target = %s, GLint level = %d, GLenum format = %s, GLenum type = "
           "%s, void *pixels = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureTarget, target), level,
@@ -2116,12 +2572,16 @@ void GL_APIENTRY GetTexImage(GLenum target, GLint level, GLenum format, GLenum t
         }
         ANGLE_CAPTURE(GetTexImage, isCallValid, context, targetPacked, level, format, type, pixels);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexLevelParameterfv(GLenum target, GLint level, GLenum pname, GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexLevelParameterfv",
+    EVENT(context, gl::EntryPoint::GetTexLevelParameterfv, "glGetTexLevelParameterfv",
           "context = %d, GLenum target = %s, GLint level = %d, GLenum pname = %s, GLfloat *params "
           "= 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureTarget, target), level,
@@ -2141,12 +2601,16 @@ void GL_APIENTRY GetTexLevelParameterfv(GLenum target, GLint level, GLenum pname
         ANGLE_CAPTURE(GetTexLevelParameterfv, isCallValid, context, targetPacked, level, pname,
                       params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexLevelParameteriv(GLenum target, GLint level, GLenum pname, GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexLevelParameteriv",
+    EVENT(context, gl::EntryPoint::GetTexLevelParameteriv, "glGetTexLevelParameteriv",
           "context = %d, GLenum target = %s, GLint level = %d, GLenum pname = %s, GLint *params = "
           "0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureTarget, target), level,
@@ -2166,12 +2630,16 @@ void GL_APIENTRY GetTexLevelParameteriv(GLenum target, GLint level, GLenum pname
         ANGLE_CAPTURE(GetTexLevelParameteriv, isCallValid, context, targetPacked, level, pname,
                       params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexParameterfv(GLenum target, GLenum pname, GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexParameterfv",
+    EVENT(context, gl::EntryPoint::GetTexParameterfv, "glGetTexParameterfv",
           "context = %d, GLenum target = %s, GLenum pname = %s, GLfloat *params = 0x%016" PRIxPTR
           "",
           CID(context), GLenumToString(GLenumGroup::TextureTarget, target),
@@ -2189,12 +2657,16 @@ void GL_APIENTRY GetTexParameterfv(GLenum target, GLenum pname, GLfloat *params)
         }
         ANGLE_CAPTURE(GetTexParameterfv, isCallValid, context, targetPacked, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY GetTexParameteriv(GLenum target, GLenum pname, GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glGetTexParameteriv",
+    EVENT(context, gl::EntryPoint::GetTexParameteriv, "glGetTexParameteriv",
           "context = %d, GLenum target = %s, GLenum pname = %s, GLint *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureTarget, target),
           GLenumToString(GLenumGroup::GetTextureParameter, pname), (uintptr_t)params);
@@ -2211,12 +2683,17 @@ void GL_APIENTRY GetTexParameteriv(GLenum target, GLenum pname, GLint *params)
         }
         ANGLE_CAPTURE(GetTexParameteriv, isCallValid, context, targetPacked, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Hint(GLenum target, GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glHint", "context = %d, GLenum target = %s, GLenum mode = %s", CID(context),
+    EVENT(context, gl::EntryPoint::Hint, "glHint",
+          "context = %d, GLenum target = %s, GLenum mode = %s", CID(context),
           GLenumToString(GLenumGroup::HintTarget, target),
           GLenumToString(GLenumGroup::HintMode, mode));
 
@@ -2230,12 +2707,17 @@ void GL_APIENTRY Hint(GLenum target, GLenum mode)
         }
         ANGLE_CAPTURE(Hint, isCallValid, context, target, mode);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY IndexMask(GLuint mask)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexMask", "context = %d, GLuint mask = %u", CID(context), mask);
+    EVENT(context, gl::EntryPoint::IndexMask, "glIndexMask", "context = %d, GLuint mask = %u",
+          CID(context), mask);
 
     if (context)
     {
@@ -2247,12 +2729,17 @@ void GL_APIENTRY IndexMask(GLuint mask)
         }
         ANGLE_CAPTURE(IndexMask, isCallValid, context, mask);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Indexd(GLdouble c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexd", "context = %d, GLdouble c = %f", CID(context), c);
+    EVENT(context, gl::EntryPoint::Indexd, "glIndexd", "context = %d, GLdouble c = %f",
+          CID(context), c);
 
     if (context)
     {
@@ -2264,13 +2751,17 @@ void GL_APIENTRY Indexd(GLdouble c)
         }
         ANGLE_CAPTURE(Indexd, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Indexdv(const GLdouble *c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexdv", "context = %d, const GLdouble *c = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)c);
+    EVENT(context, gl::EntryPoint::Indexdv, "glIndexdv",
+          "context = %d, const GLdouble *c = 0x%016" PRIxPTR "", CID(context), (uintptr_t)c);
 
     if (context)
     {
@@ -2282,12 +2773,17 @@ void GL_APIENTRY Indexdv(const GLdouble *c)
         }
         ANGLE_CAPTURE(Indexdv, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Indexf(GLfloat c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexf", "context = %d, GLfloat c = %f", CID(context), c);
+    EVENT(context, gl::EntryPoint::Indexf, "glIndexf", "context = %d, GLfloat c = %f", CID(context),
+          c);
 
     if (context)
     {
@@ -2299,13 +2795,17 @@ void GL_APIENTRY Indexf(GLfloat c)
         }
         ANGLE_CAPTURE(Indexf, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Indexfv(const GLfloat *c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexfv", "context = %d, const GLfloat *c = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)c);
+    EVENT(context, gl::EntryPoint::Indexfv, "glIndexfv",
+          "context = %d, const GLfloat *c = 0x%016" PRIxPTR "", CID(context), (uintptr_t)c);
 
     if (context)
     {
@@ -2317,12 +2817,17 @@ void GL_APIENTRY Indexfv(const GLfloat *c)
         }
         ANGLE_CAPTURE(Indexfv, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Indexi(GLint c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexi", "context = %d, GLint c = %d", CID(context), c);
+    EVENT(context, gl::EntryPoint::Indexi, "glIndexi", "context = %d, GLint c = %d", CID(context),
+          c);
 
     if (context)
     {
@@ -2334,13 +2839,17 @@ void GL_APIENTRY Indexi(GLint c)
         }
         ANGLE_CAPTURE(Indexi, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Indexiv(const GLint *c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexiv", "context = %d, const GLint *c = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)c);
+    EVENT(context, gl::EntryPoint::Indexiv, "glIndexiv",
+          "context = %d, const GLint *c = 0x%016" PRIxPTR "", CID(context), (uintptr_t)c);
 
     if (context)
     {
@@ -2352,12 +2861,17 @@ void GL_APIENTRY Indexiv(const GLint *c)
         }
         ANGLE_CAPTURE(Indexiv, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Indexs(GLshort c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexs", "context = %d, GLshort c = %d", CID(context), c);
+    EVENT(context, gl::EntryPoint::Indexs, "glIndexs", "context = %d, GLshort c = %d", CID(context),
+          c);
 
     if (context)
     {
@@ -2369,13 +2883,17 @@ void GL_APIENTRY Indexs(GLshort c)
         }
         ANGLE_CAPTURE(Indexs, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Indexsv(const GLshort *c)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIndexsv", "context = %d, const GLshort *c = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)c);
+    EVENT(context, gl::EntryPoint::Indexsv, "glIndexsv",
+          "context = %d, const GLshort *c = 0x%016" PRIxPTR "", CID(context), (uintptr_t)c);
 
     if (context)
     {
@@ -2387,12 +2905,16 @@ void GL_APIENTRY Indexsv(const GLshort *c)
         }
         ANGLE_CAPTURE(Indexsv, isCallValid, context, c);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY InitNames()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glInitNames", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::InitNames, "glInitNames", "context = %d", CID(context));
 
     if (context)
     {
@@ -2404,13 +2926,17 @@ void GL_APIENTRY InitNames()
         }
         ANGLE_CAPTURE(InitNames, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 GLboolean GL_APIENTRY IsEnabled(GLenum cap)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIsEnabled", "context = %d, GLenum cap = %s", CID(context),
-          GLenumToString(GLenumGroup::EnableCap, cap));
+    EVENT(context, gl::EntryPoint::IsEnabled, "glIsEnabled", "context = %d, GLenum cap = %s",
+          CID(context), GLenumToString(GLenumGroup::EnableCap, cap));
 
     GLboolean returnValue;
     if (context)
@@ -2429,6 +2955,7 @@ GLboolean GL_APIENTRY IsEnabled(GLenum cap)
     }
     else
     {
+        GenerateContextLostErrorOnCurrentGlobalContext();
         returnValue = GetDefaultReturnValue<EntryPoint::IsEnabled, GLboolean>();
     }
     return returnValue;
@@ -2437,7 +2964,8 @@ GLboolean GL_APIENTRY IsEnabled(GLenum cap)
 GLboolean GL_APIENTRY IsList(GLuint list)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glIsList", "context = %d, GLuint list = %u", CID(context), list);
+    EVENT(context, gl::EntryPoint::IsList, "glIsList", "context = %d, GLuint list = %u",
+          CID(context), list);
 
     GLboolean returnValue;
     if (context)
@@ -2456,6 +2984,7 @@ GLboolean GL_APIENTRY IsList(GLuint list)
     }
     else
     {
+        GenerateContextLostErrorOnCurrentGlobalContext();
         returnValue = GetDefaultReturnValue<EntryPoint::IsList, GLboolean>();
     }
     return returnValue;
@@ -2464,7 +2993,8 @@ GLboolean GL_APIENTRY IsList(GLuint list)
 void GL_APIENTRY LightModelf(GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLightModelf", "context = %d, GLenum pname = %s, GLfloat param = %f", CID(context),
+    EVENT(context, gl::EntryPoint::LightModelf, "glLightModelf",
+          "context = %d, GLenum pname = %s, GLfloat param = %f", CID(context),
           GLenumToString(GLenumGroup::LightModelParameter, pname), param);
 
     if (context)
@@ -2478,12 +3008,16 @@ void GL_APIENTRY LightModelf(GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(LightModelf, isCallValid, context, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LightModelfv(GLenum pname, const GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLightModelfv",
+    EVENT(context, gl::EntryPoint::LightModelfv, "glLightModelfv",
           "context = %d, GLenum pname = %s, const GLfloat *params = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::LightModelParameter, pname), (uintptr_t)params);
 
@@ -2498,12 +3032,17 @@ void GL_APIENTRY LightModelfv(GLenum pname, const GLfloat *params)
         }
         ANGLE_CAPTURE(LightModelfv, isCallValid, context, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LightModeli(GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLightModeli", "context = %d, GLenum pname = %s, GLint param = %d", CID(context),
+    EVENT(context, gl::EntryPoint::LightModeli, "glLightModeli",
+          "context = %d, GLenum pname = %s, GLint param = %d", CID(context),
           GLenumToString(GLenumGroup::LightModelParameter, pname), param);
 
     if (context)
@@ -2517,12 +3056,16 @@ void GL_APIENTRY LightModeli(GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(LightModeli, isCallValid, context, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LightModeliv(GLenum pname, const GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLightModeliv",
+    EVENT(context, gl::EntryPoint::LightModeliv, "glLightModeliv",
           "context = %d, GLenum pname = %s, const GLint *params = 0x%016" PRIxPTR "", CID(context),
           GLenumToString(GLenumGroup::LightModelParameter, pname), (uintptr_t)params);
 
@@ -2537,13 +3080,18 @@ void GL_APIENTRY LightModeliv(GLenum pname, const GLint *params)
         }
         ANGLE_CAPTURE(LightModeliv, isCallValid, context, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Lightf(GLenum light, GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLightf", "context = %d, GLenum light = %s, GLenum pname = %s, GLfloat param = %f",
-          CID(context), GLenumToString(GLenumGroup::LightName, light),
+    EVENT(context, gl::EntryPoint::Lightf, "glLightf",
+          "context = %d, GLenum light = %s, GLenum pname = %s, GLfloat param = %f", CID(context),
+          GLenumToString(GLenumGroup::LightName, light),
           GLenumToString(GLenumGroup::LightParameter, pname), param);
 
     if (context)
@@ -2558,13 +3106,17 @@ void GL_APIENTRY Lightf(GLenum light, GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(Lightf, isCallValid, context, light, pnamePacked, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Lightfv(GLenum light, GLenum pname, const GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glLightfv",
+        context, gl::EntryPoint::Lightfv, "glLightfv",
         "context = %d, GLenum light = %s, GLenum pname = %s, const GLfloat *params = 0x%016" PRIxPTR
         "",
         CID(context), GLenumToString(GLenumGroup::LightName, light),
@@ -2582,13 +3134,18 @@ void GL_APIENTRY Lightfv(GLenum light, GLenum pname, const GLfloat *params)
         }
         ANGLE_CAPTURE(Lightfv, isCallValid, context, light, pnamePacked, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Lighti(GLenum light, GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLighti", "context = %d, GLenum light = %s, GLenum pname = %s, GLint param = %d",
-          CID(context), GLenumToString(GLenumGroup::LightName, light),
+    EVENT(context, gl::EntryPoint::Lighti, "glLighti",
+          "context = %d, GLenum light = %s, GLenum pname = %s, GLint param = %d", CID(context),
+          GLenumToString(GLenumGroup::LightName, light),
           GLenumToString(GLenumGroup::LightParameter, pname), param);
 
     if (context)
@@ -2602,12 +3159,16 @@ void GL_APIENTRY Lighti(GLenum light, GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(Lighti, isCallValid, context, light, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Lightiv(GLenum light, GLenum pname, const GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLightiv",
+    EVENT(context, gl::EntryPoint::Lightiv, "glLightiv",
           "context = %d, GLenum light = %s, GLenum pname = %s, const GLint *params = 0x%016" PRIxPTR
           "",
           CID(context), GLenumToString(GLenumGroup::LightName, light),
@@ -2624,13 +3185,17 @@ void GL_APIENTRY Lightiv(GLenum light, GLenum pname, const GLint *params)
         }
         ANGLE_CAPTURE(Lightiv, isCallValid, context, light, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LineStipple(GLint factor, GLushort pattern)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLineStipple", "context = %d, GLint factor = %d, GLushort pattern = %u", CID(context),
-          factor, pattern);
+    EVENT(context, gl::EntryPoint::LineStipple, "glLineStipple",
+          "context = %d, GLint factor = %d, GLushort pattern = %u", CID(context), factor, pattern);
 
     if (context)
     {
@@ -2643,12 +3208,17 @@ void GL_APIENTRY LineStipple(GLint factor, GLushort pattern)
         }
         ANGLE_CAPTURE(LineStipple, isCallValid, context, factor, pattern);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LineWidth(GLfloat width)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLineWidth", "context = %d, GLfloat width = %f", CID(context), width);
+    EVENT(context, gl::EntryPoint::LineWidth, "glLineWidth", "context = %d, GLfloat width = %f",
+          CID(context), width);
 
     if (context)
     {
@@ -2660,12 +3230,17 @@ void GL_APIENTRY LineWidth(GLfloat width)
         }
         ANGLE_CAPTURE(LineWidth, isCallValid, context, width);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ListBase(GLuint base)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glListBase", "context = %d, GLuint base = %u", CID(context), base);
+    EVENT(context, gl::EntryPoint::ListBase, "glListBase", "context = %d, GLuint base = %u",
+          CID(context), base);
 
     if (context)
     {
@@ -2677,12 +3252,16 @@ void GL_APIENTRY ListBase(GLuint base)
         }
         ANGLE_CAPTURE(ListBase, isCallValid, context, base);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LoadIdentity()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLoadIdentity", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::LoadIdentity, "glLoadIdentity", "context = %d", CID(context));
 
     if (context)
     {
@@ -2694,13 +3273,17 @@ void GL_APIENTRY LoadIdentity()
         }
         ANGLE_CAPTURE(LoadIdentity, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LoadMatrixd(const GLdouble *m)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLoadMatrixd", "context = %d, const GLdouble *m = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)m);
+    EVENT(context, gl::EntryPoint::LoadMatrixd, "glLoadMatrixd",
+          "context = %d, const GLdouble *m = 0x%016" PRIxPTR "", CID(context), (uintptr_t)m);
 
     if (context)
     {
@@ -2712,13 +3295,17 @@ void GL_APIENTRY LoadMatrixd(const GLdouble *m)
         }
         ANGLE_CAPTURE(LoadMatrixd, isCallValid, context, m);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LoadMatrixf(const GLfloat *m)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLoadMatrixf", "context = %d, const GLfloat *m = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)m);
+    EVENT(context, gl::EntryPoint::LoadMatrixf, "glLoadMatrixf",
+          "context = %d, const GLfloat *m = 0x%016" PRIxPTR "", CID(context), (uintptr_t)m);
 
     if (context)
     {
@@ -2730,12 +3317,17 @@ void GL_APIENTRY LoadMatrixf(const GLfloat *m)
         }
         ANGLE_CAPTURE(LoadMatrixf, isCallValid, context, m);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LoadName(GLuint name)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLoadName", "context = %d, GLuint name = %u", CID(context), name);
+    EVENT(context, gl::EntryPoint::LoadName, "glLoadName", "context = %d, GLuint name = %u",
+          CID(context), name);
 
     if (context)
     {
@@ -2747,13 +3339,17 @@ void GL_APIENTRY LoadName(GLuint name)
         }
         ANGLE_CAPTURE(LoadName, isCallValid, context, name);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY LogicOp(GLenum opcode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glLogicOp", "context = %d, GLenum opcode = %s", CID(context),
-          GLenumToString(GLenumGroup::LogicOp, opcode));
+    EVENT(context, gl::EntryPoint::LogicOp, "glLogicOp", "context = %d, GLenum opcode = %s",
+          CID(context), GLenumToString(GLenumGroup::LogicOp, opcode));
 
     if (context)
     {
@@ -2766,13 +3362,17 @@ void GL_APIENTRY LogicOp(GLenum opcode)
         }
         ANGLE_CAPTURE(LogicOp, isCallValid, context, opcodePacked);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY
 Map1d(GLenum target, GLdouble u1, GLdouble u2, GLint stride, GLint order, const GLdouble *points)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMap1d",
+    EVENT(context, gl::EntryPoint::Map1d, "glMap1d",
           "context = %d, GLenum target = %s, GLdouble u1 = %f, GLdouble u2 = %f, GLint stride = "
           "%d, GLint order = %d, const GLdouble *points = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::MapTarget, target), u1, u2, stride, order,
@@ -2789,13 +3389,17 @@ Map1d(GLenum target, GLdouble u1, GLdouble u2, GLint stride, GLint order, const 
         }
         ANGLE_CAPTURE(Map1d, isCallValid, context, target, u1, u2, stride, order, points);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY
 Map1f(GLenum target, GLfloat u1, GLfloat u2, GLint stride, GLint order, const GLfloat *points)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMap1f",
+    EVENT(context, gl::EntryPoint::Map1f, "glMap1f",
           "context = %d, GLenum target = %s, GLfloat u1 = %f, GLfloat u2 = %f, GLint stride = %d, "
           "GLint order = %d, const GLfloat *points = 0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::MapTarget, target), u1, u2, stride, order,
@@ -2812,6 +3416,10 @@ Map1f(GLenum target, GLfloat u1, GLfloat u2, GLint stride, GLint order, const GL
         }
         ANGLE_CAPTURE(Map1f, isCallValid, context, target, u1, u2, stride, order, points);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Map2d(GLenum target,
@@ -2826,7 +3434,7 @@ void GL_APIENTRY Map2d(GLenum target,
                        const GLdouble *points)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMap2d",
+    EVENT(context, gl::EntryPoint::Map2d, "glMap2d",
           "context = %d, GLenum target = %s, GLdouble u1 = %f, GLdouble u2 = %f, GLint ustride = "
           "%d, GLint uorder = %d, GLdouble v1 = %f, GLdouble v2 = %f, GLint vstride = %d, GLint "
           "vorder = %d, const GLdouble *points = 0x%016" PRIxPTR "",
@@ -2846,6 +3454,10 @@ void GL_APIENTRY Map2d(GLenum target,
         ANGLE_CAPTURE(Map2d, isCallValid, context, target, u1, u2, ustride, uorder, v1, v2, vstride,
                       vorder, points);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Map2f(GLenum target,
@@ -2860,7 +3472,7 @@ void GL_APIENTRY Map2f(GLenum target,
                        const GLfloat *points)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMap2f",
+    EVENT(context, gl::EntryPoint::Map2f, "glMap2f",
           "context = %d, GLenum target = %s, GLfloat u1 = %f, GLfloat u2 = %f, GLint ustride = %d, "
           "GLint uorder = %d, GLfloat v1 = %f, GLfloat v2 = %f, GLint vstride = %d, GLint vorder = "
           "%d, const GLfloat *points = 0x%016" PRIxPTR "",
@@ -2880,13 +3492,18 @@ void GL_APIENTRY Map2f(GLenum target,
         ANGLE_CAPTURE(Map2f, isCallValid, context, target, u1, u2, ustride, uorder, v1, v2, vstride,
                       vorder, points);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY MapGrid1d(GLint un, GLdouble u1, GLdouble u2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMapGrid1d", "context = %d, GLint un = %d, GLdouble u1 = %f, GLdouble u2 = %f",
-          CID(context), un, u1, u2);
+    EVENT(context, gl::EntryPoint::MapGrid1d, "glMapGrid1d",
+          "context = %d, GLint un = %d, GLdouble u1 = %f, GLdouble u2 = %f", CID(context), un, u1,
+          u2);
 
     if (context)
     {
@@ -2898,13 +3515,18 @@ void GL_APIENTRY MapGrid1d(GLint un, GLdouble u1, GLdouble u2)
         }
         ANGLE_CAPTURE(MapGrid1d, isCallValid, context, un, u1, u2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY MapGrid1f(GLint un, GLfloat u1, GLfloat u2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMapGrid1f", "context = %d, GLint un = %d, GLfloat u1 = %f, GLfloat u2 = %f",
-          CID(context), un, u1, u2);
+    EVENT(context, gl::EntryPoint::MapGrid1f, "glMapGrid1f",
+          "context = %d, GLint un = %d, GLfloat u1 = %f, GLfloat u2 = %f", CID(context), un, u1,
+          u2);
 
     if (context)
     {
@@ -2916,12 +3538,16 @@ void GL_APIENTRY MapGrid1f(GLint un, GLfloat u1, GLfloat u2)
         }
         ANGLE_CAPTURE(MapGrid1f, isCallValid, context, un, u1, u2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY MapGrid2d(GLint un, GLdouble u1, GLdouble u2, GLint vn, GLdouble v1, GLdouble v2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMapGrid2d",
+    EVENT(context, gl::EntryPoint::MapGrid2d, "glMapGrid2d",
           "context = %d, GLint un = %d, GLdouble u1 = %f, GLdouble u2 = %f, GLint vn = %d, "
           "GLdouble v1 = %f, GLdouble v2 = %f",
           CID(context), un, u1, u2, vn, v1, v2);
@@ -2937,12 +3563,16 @@ void GL_APIENTRY MapGrid2d(GLint un, GLdouble u1, GLdouble u2, GLint vn, GLdoubl
         }
         ANGLE_CAPTURE(MapGrid2d, isCallValid, context, un, u1, u2, vn, v1, v2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY MapGrid2f(GLint un, GLfloat u1, GLfloat u2, GLint vn, GLfloat v1, GLfloat v2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMapGrid2f",
+    EVENT(context, gl::EntryPoint::MapGrid2f, "glMapGrid2f",
           "context = %d, GLint un = %d, GLfloat u1 = %f, GLfloat u2 = %f, GLint vn = %d, GLfloat "
           "v1 = %f, GLfloat v2 = %f",
           CID(context), un, u1, u2, vn, v1, v2);
@@ -2958,13 +3588,18 @@ void GL_APIENTRY MapGrid2f(GLint un, GLfloat u1, GLfloat u2, GLint vn, GLfloat v
         }
         ANGLE_CAPTURE(MapGrid2f, isCallValid, context, un, u1, u2, vn, v1, v2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Materialf(GLenum face, GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMaterialf", "context = %d, GLenum face = %s, GLenum pname = %s, GLfloat param = %f",
-          CID(context), GLenumToString(GLenumGroup::MaterialFace, face),
+    EVENT(context, gl::EntryPoint::Materialf, "glMaterialf",
+          "context = %d, GLenum face = %s, GLenum pname = %s, GLfloat param = %f", CID(context),
+          GLenumToString(GLenumGroup::MaterialFace, face),
           GLenumToString(GLenumGroup::MaterialParameter, pname), param);
 
     if (context)
@@ -2979,13 +3614,17 @@ void GL_APIENTRY Materialf(GLenum face, GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(Materialf, isCallValid, context, face, pnamePacked, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Materialfv(GLenum face, GLenum pname, const GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glMaterialfv",
+        context, gl::EntryPoint::Materialfv, "glMaterialfv",
         "context = %d, GLenum face = %s, GLenum pname = %s, const GLfloat *params = 0x%016" PRIxPTR
         "",
         CID(context), GLenumToString(GLenumGroup::MaterialFace, face),
@@ -3003,13 +3642,18 @@ void GL_APIENTRY Materialfv(GLenum face, GLenum pname, const GLfloat *params)
         }
         ANGLE_CAPTURE(Materialfv, isCallValid, context, face, pnamePacked, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Materiali(GLenum face, GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMateriali", "context = %d, GLenum face = %s, GLenum pname = %s, GLint param = %d",
-          CID(context), GLenumToString(GLenumGroup::MaterialFace, face),
+    EVENT(context, gl::EntryPoint::Materiali, "glMateriali",
+          "context = %d, GLenum face = %s, GLenum pname = %s, GLint param = %d", CID(context),
+          GLenumToString(GLenumGroup::MaterialFace, face),
           GLenumToString(GLenumGroup::MaterialParameter, pname), param);
 
     if (context)
@@ -3023,12 +3667,16 @@ void GL_APIENTRY Materiali(GLenum face, GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(Materiali, isCallValid, context, face, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Materialiv(GLenum face, GLenum pname, const GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMaterialiv",
+    EVENT(context, gl::EntryPoint::Materialiv, "glMaterialiv",
           "context = %d, GLenum face = %s, GLenum pname = %s, const GLint *params = 0x%016" PRIxPTR
           "",
           CID(context), GLenumToString(GLenumGroup::MaterialFace, face),
@@ -3045,13 +3693,17 @@ void GL_APIENTRY Materialiv(GLenum face, GLenum pname, const GLint *params)
         }
         ANGLE_CAPTURE(Materialiv, isCallValid, context, face, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY MatrixMode(GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMatrixMode", "context = %d, GLenum mode = %s", CID(context),
-          GLenumToString(GLenumGroup::MatrixMode, mode));
+    EVENT(context, gl::EntryPoint::MatrixMode, "glMatrixMode", "context = %d, GLenum mode = %s",
+          CID(context), GLenumToString(GLenumGroup::MatrixMode, mode));
 
     if (context)
     {
@@ -3064,13 +3716,17 @@ void GL_APIENTRY MatrixMode(GLenum mode)
         }
         ANGLE_CAPTURE(MatrixMode, isCallValid, context, modePacked);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY MultMatrixd(const GLdouble *m)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMultMatrixd", "context = %d, const GLdouble *m = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)m);
+    EVENT(context, gl::EntryPoint::MultMatrixd, "glMultMatrixd",
+          "context = %d, const GLdouble *m = 0x%016" PRIxPTR "", CID(context), (uintptr_t)m);
 
     if (context)
     {
@@ -3082,13 +3738,17 @@ void GL_APIENTRY MultMatrixd(const GLdouble *m)
         }
         ANGLE_CAPTURE(MultMatrixd, isCallValid, context, m);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY MultMatrixf(const GLfloat *m)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glMultMatrixf", "context = %d, const GLfloat *m = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)m);
+    EVENT(context, gl::EntryPoint::MultMatrixf, "glMultMatrixf",
+          "context = %d, const GLfloat *m = 0x%016" PRIxPTR "", CID(context), (uintptr_t)m);
 
     if (context)
     {
@@ -3100,12 +3760,17 @@ void GL_APIENTRY MultMatrixf(const GLfloat *m)
         }
         ANGLE_CAPTURE(MultMatrixf, isCallValid, context, m);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY NewList(GLuint list, GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNewList", "context = %d, GLuint list = %u, GLenum mode = %s", CID(context), list,
+    EVENT(context, gl::EntryPoint::NewList, "glNewList",
+          "context = %d, GLuint list = %u, GLenum mode = %s", CID(context), list,
           GLenumToString(GLenumGroup::ListMode, mode));
 
     if (context)
@@ -3118,13 +3783,17 @@ void GL_APIENTRY NewList(GLuint list, GLenum mode)
         }
         ANGLE_CAPTURE(NewList, isCallValid, context, list, mode);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3b(GLbyte nx, GLbyte ny, GLbyte nz)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3b", "context = %d, GLbyte nx = %d, GLbyte ny = %d, GLbyte nz = %d",
-          CID(context), nx, ny, nz);
+    EVENT(context, gl::EntryPoint::Normal3b, "glNormal3b",
+          "context = %d, GLbyte nx = %d, GLbyte ny = %d, GLbyte nz = %d", CID(context), nx, ny, nz);
 
     if (context)
     {
@@ -3136,13 +3805,17 @@ void GL_APIENTRY Normal3b(GLbyte nx, GLbyte ny, GLbyte nz)
         }
         ANGLE_CAPTURE(Normal3b, isCallValid, context, nx, ny, nz);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3bv(const GLbyte *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3bv", "context = %d, const GLbyte *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Normal3bv, "glNormal3bv",
+          "context = %d, const GLbyte *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3154,13 +3827,18 @@ void GL_APIENTRY Normal3bv(const GLbyte *v)
         }
         ANGLE_CAPTURE(Normal3bv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3d(GLdouble nx, GLdouble ny, GLdouble nz)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3d", "context = %d, GLdouble nx = %f, GLdouble ny = %f, GLdouble nz = %f",
-          CID(context), nx, ny, nz);
+    EVENT(context, gl::EntryPoint::Normal3d, "glNormal3d",
+          "context = %d, GLdouble nx = %f, GLdouble ny = %f, GLdouble nz = %f", CID(context), nx,
+          ny, nz);
 
     if (context)
     {
@@ -3172,13 +3850,17 @@ void GL_APIENTRY Normal3d(GLdouble nx, GLdouble ny, GLdouble nz)
         }
         ANGLE_CAPTURE(Normal3d, isCallValid, context, nx, ny, nz);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Normal3dv, "glNormal3dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3190,13 +3872,18 @@ void GL_APIENTRY Normal3dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(Normal3dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3f(GLfloat nx, GLfloat ny, GLfloat nz)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3f", "context = %d, GLfloat nx = %f, GLfloat ny = %f, GLfloat nz = %f",
-          CID(context), nx, ny, nz);
+    EVENT(context, gl::EntryPoint::Normal3f, "glNormal3f",
+          "context = %d, GLfloat nx = %f, GLfloat ny = %f, GLfloat nz = %f", CID(context), nx, ny,
+          nz);
 
     if (context)
     {
@@ -3208,13 +3895,17 @@ void GL_APIENTRY Normal3f(GLfloat nx, GLfloat ny, GLfloat nz)
         }
         ANGLE_CAPTURE(Normal3f, isCallValid, context, nx, ny, nz);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Normal3fv, "glNormal3fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3226,13 +3917,17 @@ void GL_APIENTRY Normal3fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(Normal3fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3i(GLint nx, GLint ny, GLint nz)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3i", "context = %d, GLint nx = %d, GLint ny = %d, GLint nz = %d", CID(context),
-          nx, ny, nz);
+    EVENT(context, gl::EntryPoint::Normal3i, "glNormal3i",
+          "context = %d, GLint nx = %d, GLint ny = %d, GLint nz = %d", CID(context), nx, ny, nz);
 
     if (context)
     {
@@ -3244,13 +3939,17 @@ void GL_APIENTRY Normal3i(GLint nx, GLint ny, GLint nz)
         }
         ANGLE_CAPTURE(Normal3i, isCallValid, context, nx, ny, nz);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Normal3iv, "glNormal3iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3262,13 +3961,18 @@ void GL_APIENTRY Normal3iv(const GLint *v)
         }
         ANGLE_CAPTURE(Normal3iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3s(GLshort nx, GLshort ny, GLshort nz)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3s", "context = %d, GLshort nx = %d, GLshort ny = %d, GLshort nz = %d",
-          CID(context), nx, ny, nz);
+    EVENT(context, gl::EntryPoint::Normal3s, "glNormal3s",
+          "context = %d, GLshort nx = %d, GLshort ny = %d, GLshort nz = %d", CID(context), nx, ny,
+          nz);
 
     if (context)
     {
@@ -3280,13 +3984,17 @@ void GL_APIENTRY Normal3s(GLshort nx, GLshort ny, GLshort nz)
         }
         ANGLE_CAPTURE(Normal3s, isCallValid, context, nx, ny, nz);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Normal3sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glNormal3sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Normal3sv, "glNormal3sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3298,13 +4006,17 @@ void GL_APIENTRY Normal3sv(const GLshort *v)
         }
         ANGLE_CAPTURE(Normal3sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY
 Ortho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glOrtho",
+    EVENT(context, gl::EntryPoint::Ortho, "glOrtho",
           "context = %d, GLdouble left = %f, GLdouble right = %f, GLdouble bottom = %f, GLdouble "
           "top = %f, GLdouble zNear = %f, GLdouble zFar = %f",
           CID(context), left, right, bottom, top, zNear, zFar);
@@ -3320,12 +4032,17 @@ Ortho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNe
         }
         ANGLE_CAPTURE(Ortho, isCallValid, context, left, right, bottom, top, zNear, zFar);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PassThrough(GLfloat token)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPassThrough", "context = %d, GLfloat token = %f", CID(context), token);
+    EVENT(context, gl::EntryPoint::PassThrough, "glPassThrough", "context = %d, GLfloat token = %f",
+          CID(context), token);
 
     if (context)
     {
@@ -3337,12 +4054,16 @@ void GL_APIENTRY PassThrough(GLfloat token)
         }
         ANGLE_CAPTURE(PassThrough, isCallValid, context, token);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PixelMapfv(GLenum map, GLsizei mapsize, const GLfloat *values)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPixelMapfv",
+    EVENT(context, gl::EntryPoint::PixelMapfv, "glPixelMapfv",
           "context = %d, GLenum map = %s, GLsizei mapsize = %d, const GLfloat *values = "
           "0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::PixelMap, map), mapsize, (uintptr_t)values);
@@ -3358,13 +4079,17 @@ void GL_APIENTRY PixelMapfv(GLenum map, GLsizei mapsize, const GLfloat *values)
         }
         ANGLE_CAPTURE(PixelMapfv, isCallValid, context, map, mapsize, values);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PixelMapuiv(GLenum map, GLsizei mapsize, const GLuint *values)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glPixelMapuiv",
+        context, gl::EntryPoint::PixelMapuiv, "glPixelMapuiv",
         "context = %d, GLenum map = %s, GLsizei mapsize = %d, const GLuint *values = 0x%016" PRIxPTR
         "",
         CID(context), GLenumToString(GLenumGroup::PixelMap, map), mapsize, (uintptr_t)values);
@@ -3380,12 +4105,16 @@ void GL_APIENTRY PixelMapuiv(GLenum map, GLsizei mapsize, const GLuint *values)
         }
         ANGLE_CAPTURE(PixelMapuiv, isCallValid, context, map, mapsize, values);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PixelMapusv(GLenum map, GLsizei mapsize, const GLushort *values)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPixelMapusv",
+    EVENT(context, gl::EntryPoint::PixelMapusv, "glPixelMapusv",
           "context = %d, GLenum map = %s, GLsizei mapsize = %d, const GLushort *values = "
           "0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::PixelMap, map), mapsize, (uintptr_t)values);
@@ -3401,12 +4130,17 @@ void GL_APIENTRY PixelMapusv(GLenum map, GLsizei mapsize, const GLushort *values
         }
         ANGLE_CAPTURE(PixelMapusv, isCallValid, context, map, mapsize, values);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PixelStoref(GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPixelStoref", "context = %d, GLenum pname = %s, GLfloat param = %f", CID(context),
+    EVENT(context, gl::EntryPoint::PixelStoref, "glPixelStoref",
+          "context = %d, GLenum pname = %s, GLfloat param = %f", CID(context),
           GLenumToString(GLenumGroup::PixelStoreParameter, pname), param);
 
     if (context)
@@ -3420,12 +4154,17 @@ void GL_APIENTRY PixelStoref(GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(PixelStoref, isCallValid, context, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PixelStorei(GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPixelStorei", "context = %d, GLenum pname = %s, GLint param = %d", CID(context),
+    EVENT(context, gl::EntryPoint::PixelStorei, "glPixelStorei",
+          "context = %d, GLenum pname = %s, GLint param = %d", CID(context),
           GLenumToString(GLenumGroup::PixelStoreParameter, pname), param);
 
     if (context)
@@ -3439,12 +4178,17 @@ void GL_APIENTRY PixelStorei(GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(PixelStorei, isCallValid, context, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PixelTransferf(GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPixelTransferf", "context = %d, GLenum pname = %s, GLfloat param = %f", CID(context),
+    EVENT(context, gl::EntryPoint::PixelTransferf, "glPixelTransferf",
+          "context = %d, GLenum pname = %s, GLfloat param = %f", CID(context),
           GLenumToString(GLenumGroup::PixelTransferParameter, pname), param);
 
     if (context)
@@ -3458,12 +4202,17 @@ void GL_APIENTRY PixelTransferf(GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(PixelTransferf, isCallValid, context, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PixelTransferi(GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPixelTransferi", "context = %d, GLenum pname = %s, GLint param = %d", CID(context),
+    EVENT(context, gl::EntryPoint::PixelTransferi, "glPixelTransferi",
+          "context = %d, GLenum pname = %s, GLint param = %d", CID(context),
           GLenumToString(GLenumGroup::PixelTransferParameter, pname), param);
 
     if (context)
@@ -3477,13 +4226,18 @@ void GL_APIENTRY PixelTransferi(GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(PixelTransferi, isCallValid, context, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PixelZoom(GLfloat xfactor, GLfloat yfactor)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPixelZoom", "context = %d, GLfloat xfactor = %f, GLfloat yfactor = %f", CID(context),
-          xfactor, yfactor);
+    EVENT(context, gl::EntryPoint::PixelZoom, "glPixelZoom",
+          "context = %d, GLfloat xfactor = %f, GLfloat yfactor = %f", CID(context), xfactor,
+          yfactor);
 
     if (context)
     {
@@ -3496,12 +4250,17 @@ void GL_APIENTRY PixelZoom(GLfloat xfactor, GLfloat yfactor)
         }
         ANGLE_CAPTURE(PixelZoom, isCallValid, context, xfactor, yfactor);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PointSize(GLfloat size)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPointSize", "context = %d, GLfloat size = %f", CID(context), size);
+    EVENT(context, gl::EntryPoint::PointSize, "glPointSize", "context = %d, GLfloat size = %f",
+          CID(context), size);
 
     if (context)
     {
@@ -3513,12 +4272,17 @@ void GL_APIENTRY PointSize(GLfloat size)
         }
         ANGLE_CAPTURE(PointSize, isCallValid, context, size);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PolygonMode(GLenum face, GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPolygonMode", "context = %d, GLenum face = %s, GLenum mode = %s", CID(context),
+    EVENT(context, gl::EntryPoint::PolygonMode, "glPolygonMode",
+          "context = %d, GLenum face = %s, GLenum mode = %s", CID(context),
           GLenumToString(GLenumGroup::MaterialFace, face),
           GLenumToString(GLenumGroup::PolygonMode, mode));
 
@@ -3532,13 +4296,17 @@ void GL_APIENTRY PolygonMode(GLenum face, GLenum mode)
         }
         ANGLE_CAPTURE(PolygonMode, isCallValid, context, face, mode);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PolygonStipple(const GLubyte *mask)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPolygonStipple", "context = %d, const GLubyte *mask = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)mask);
+    EVENT(context, gl::EntryPoint::PolygonStipple, "glPolygonStipple",
+          "context = %d, const GLubyte *mask = 0x%016" PRIxPTR "", CID(context), (uintptr_t)mask);
 
     if (context)
     {
@@ -3550,12 +4318,16 @@ void GL_APIENTRY PolygonStipple(const GLubyte *mask)
         }
         ANGLE_CAPTURE(PolygonStipple, isCallValid, context, mask);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PopAttrib()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPopAttrib", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::PopAttrib, "glPopAttrib", "context = %d", CID(context));
 
     if (context)
     {
@@ -3567,12 +4339,16 @@ void GL_APIENTRY PopAttrib()
         }
         ANGLE_CAPTURE(PopAttrib, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PopMatrix()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPopMatrix", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::PopMatrix, "glPopMatrix", "context = %d", CID(context));
 
     if (context)
     {
@@ -3584,12 +4360,16 @@ void GL_APIENTRY PopMatrix()
         }
         ANGLE_CAPTURE(PopMatrix, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PopName()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPopName", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::PopName, "glPopName", "context = %d", CID(context));
 
     if (context)
     {
@@ -3601,13 +4381,17 @@ void GL_APIENTRY PopName()
         }
         ANGLE_CAPTURE(PopName, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PushAttrib(GLbitfield mask)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPushAttrib", "context = %d, GLbitfield mask = %s", CID(context),
-          GLbitfieldToString(GLenumGroup::AttribMask, mask).c_str());
+    EVENT(context, gl::EntryPoint::PushAttrib, "glPushAttrib", "context = %d, GLbitfield mask = %s",
+          CID(context), GLbitfieldToString(GLenumGroup::AttribMask, mask).c_str());
 
     if (context)
     {
@@ -3619,12 +4403,16 @@ void GL_APIENTRY PushAttrib(GLbitfield mask)
         }
         ANGLE_CAPTURE(PushAttrib, isCallValid, context, mask);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PushMatrix()
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPushMatrix", "context = %d", CID(context));
+    EVENT(context, gl::EntryPoint::PushMatrix, "glPushMatrix", "context = %d", CID(context));
 
     if (context)
     {
@@ -3636,12 +4424,17 @@ void GL_APIENTRY PushMatrix()
         }
         ANGLE_CAPTURE(PushMatrix, isCallValid, context);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY PushName(GLuint name)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glPushName", "context = %d, GLuint name = %u", CID(context), name);
+    EVENT(context, gl::EntryPoint::PushName, "glPushName", "context = %d, GLuint name = %u",
+          CID(context), name);
 
     if (context)
     {
@@ -3653,12 +4446,17 @@ void GL_APIENTRY PushName(GLuint name)
         }
         ANGLE_CAPTURE(PushName, isCallValid, context, name);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos2d(GLdouble x, GLdouble y)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos2d", "context = %d, GLdouble x = %f, GLdouble y = %f", CID(context), x, y);
+    EVENT(context, gl::EntryPoint::RasterPos2d, "glRasterPos2d",
+          "context = %d, GLdouble x = %f, GLdouble y = %f", CID(context), x, y);
 
     if (context)
     {
@@ -3670,13 +4468,17 @@ void GL_APIENTRY RasterPos2d(GLdouble x, GLdouble y)
         }
         ANGLE_CAPTURE(RasterPos2d, isCallValid, context, x, y);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos2dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos2dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos2dv, "glRasterPos2dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3688,12 +4490,17 @@ void GL_APIENTRY RasterPos2dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(RasterPos2dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos2f(GLfloat x, GLfloat y)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos2f", "context = %d, GLfloat x = %f, GLfloat y = %f", CID(context), x, y);
+    EVENT(context, gl::EntryPoint::RasterPos2f, "glRasterPos2f",
+          "context = %d, GLfloat x = %f, GLfloat y = %f", CID(context), x, y);
 
     if (context)
     {
@@ -3705,13 +4512,17 @@ void GL_APIENTRY RasterPos2f(GLfloat x, GLfloat y)
         }
         ANGLE_CAPTURE(RasterPos2f, isCallValid, context, x, y);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos2fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos2fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos2fv, "glRasterPos2fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3723,12 +4534,17 @@ void GL_APIENTRY RasterPos2fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(RasterPos2fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos2i(GLint x, GLint y)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos2i", "context = %d, GLint x = %d, GLint y = %d", CID(context), x, y);
+    EVENT(context, gl::EntryPoint::RasterPos2i, "glRasterPos2i",
+          "context = %d, GLint x = %d, GLint y = %d", CID(context), x, y);
 
     if (context)
     {
@@ -3740,13 +4556,17 @@ void GL_APIENTRY RasterPos2i(GLint x, GLint y)
         }
         ANGLE_CAPTURE(RasterPos2i, isCallValid, context, x, y);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos2iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos2iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos2iv, "glRasterPos2iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3758,12 +4578,17 @@ void GL_APIENTRY RasterPos2iv(const GLint *v)
         }
         ANGLE_CAPTURE(RasterPos2iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos2s(GLshort x, GLshort y)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos2s", "context = %d, GLshort x = %d, GLshort y = %d", CID(context), x, y);
+    EVENT(context, gl::EntryPoint::RasterPos2s, "glRasterPos2s",
+          "context = %d, GLshort x = %d, GLshort y = %d", CID(context), x, y);
 
     if (context)
     {
@@ -3775,13 +4600,17 @@ void GL_APIENTRY RasterPos2s(GLshort x, GLshort y)
         }
         ANGLE_CAPTURE(RasterPos2s, isCallValid, context, x, y);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos2sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos2sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos2sv, "glRasterPos2sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3793,13 +4622,17 @@ void GL_APIENTRY RasterPos2sv(const GLshort *v)
         }
         ANGLE_CAPTURE(RasterPos2sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos3d(GLdouble x, GLdouble y, GLdouble z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos3d", "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::RasterPos3d, "glRasterPos3d",
+          "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f", CID(context), x, y, z);
 
     if (context)
     {
@@ -3811,13 +4644,17 @@ void GL_APIENTRY RasterPos3d(GLdouble x, GLdouble y, GLdouble z)
         }
         ANGLE_CAPTURE(RasterPos3d, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos3dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos3dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos3dv, "glRasterPos3dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3829,13 +4666,17 @@ void GL_APIENTRY RasterPos3dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(RasterPos3dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos3f(GLfloat x, GLfloat y, GLfloat z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos3f", "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::RasterPos3f, "glRasterPos3f",
+          "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f", CID(context), x, y, z);
 
     if (context)
     {
@@ -3847,13 +4688,17 @@ void GL_APIENTRY RasterPos3f(GLfloat x, GLfloat y, GLfloat z)
         }
         ANGLE_CAPTURE(RasterPos3f, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos3fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos3fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos3fv, "glRasterPos3fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3865,13 +4710,17 @@ void GL_APIENTRY RasterPos3fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(RasterPos3fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos3i(GLint x, GLint y, GLint z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos3i", "context = %d, GLint x = %d, GLint y = %d, GLint z = %d", CID(context),
-          x, y, z);
+    EVENT(context, gl::EntryPoint::RasterPos3i, "glRasterPos3i",
+          "context = %d, GLint x = %d, GLint y = %d, GLint z = %d", CID(context), x, y, z);
 
     if (context)
     {
@@ -3883,13 +4732,17 @@ void GL_APIENTRY RasterPos3i(GLint x, GLint y, GLint z)
         }
         ANGLE_CAPTURE(RasterPos3i, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos3iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos3iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos3iv, "glRasterPos3iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3901,13 +4754,17 @@ void GL_APIENTRY RasterPos3iv(const GLint *v)
         }
         ANGLE_CAPTURE(RasterPos3iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos3s(GLshort x, GLshort y, GLshort z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos3s", "context = %d, GLshort x = %d, GLshort y = %d, GLshort z = %d",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::RasterPos3s, "glRasterPos3s",
+          "context = %d, GLshort x = %d, GLshort y = %d, GLshort z = %d", CID(context), x, y, z);
 
     if (context)
     {
@@ -3919,13 +4776,17 @@ void GL_APIENTRY RasterPos3s(GLshort x, GLshort y, GLshort z)
         }
         ANGLE_CAPTURE(RasterPos3s, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos3sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos3sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos3sv, "glRasterPos3sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3937,12 +4798,16 @@ void GL_APIENTRY RasterPos3sv(const GLshort *v)
         }
         ANGLE_CAPTURE(RasterPos3sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos4d",
+    EVENT(context, gl::EntryPoint::RasterPos4d, "glRasterPos4d",
           "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f, GLdouble w = %f",
           CID(context), x, y, z, w);
 
@@ -3956,13 +4821,17 @@ void GL_APIENTRY RasterPos4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
         }
         ANGLE_CAPTURE(RasterPos4d, isCallValid, context, x, y, z, w);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos4dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos4dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos4dv, "glRasterPos4dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -3974,12 +4843,16 @@ void GL_APIENTRY RasterPos4dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(RasterPos4dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos4f",
+    EVENT(context, gl::EntryPoint::RasterPos4f, "glRasterPos4f",
           "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f, GLfloat w = %f",
           CID(context), x, y, z, w);
 
@@ -3993,13 +4866,17 @@ void GL_APIENTRY RasterPos4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
         }
         ANGLE_CAPTURE(RasterPos4f, isCallValid, context, x, y, z, w);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos4fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos4fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos4fv, "glRasterPos4fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4011,13 +4888,18 @@ void GL_APIENTRY RasterPos4fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(RasterPos4fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos4i(GLint x, GLint y, GLint z, GLint w)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos4i", "context = %d, GLint x = %d, GLint y = %d, GLint z = %d, GLint w = %d",
-          CID(context), x, y, z, w);
+    EVENT(context, gl::EntryPoint::RasterPos4i, "glRasterPos4i",
+          "context = %d, GLint x = %d, GLint y = %d, GLint z = %d, GLint w = %d", CID(context), x,
+          y, z, w);
 
     if (context)
     {
@@ -4029,13 +4911,17 @@ void GL_APIENTRY RasterPos4i(GLint x, GLint y, GLint z, GLint w)
         }
         ANGLE_CAPTURE(RasterPos4i, isCallValid, context, x, y, z, w);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos4iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos4iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos4iv, "glRasterPos4iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4047,12 +4933,16 @@ void GL_APIENTRY RasterPos4iv(const GLint *v)
         }
         ANGLE_CAPTURE(RasterPos4iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos4s(GLshort x, GLshort y, GLshort z, GLshort w)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos4s",
+    EVENT(context, gl::EntryPoint::RasterPos4s, "glRasterPos4s",
           "context = %d, GLshort x = %d, GLshort y = %d, GLshort z = %d, GLshort w = %d",
           CID(context), x, y, z, w);
 
@@ -4066,13 +4956,17 @@ void GL_APIENTRY RasterPos4s(GLshort x, GLshort y, GLshort z, GLshort w)
         }
         ANGLE_CAPTURE(RasterPos4s, isCallValid, context, x, y, z, w);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY RasterPos4sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRasterPos4sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::RasterPos4sv, "glRasterPos4sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4084,13 +4978,17 @@ void GL_APIENTRY RasterPos4sv(const GLshort *v)
         }
         ANGLE_CAPTURE(RasterPos4sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ReadBuffer(GLenum src)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glReadBuffer", "context = %d, GLenum src = %s", CID(context),
-          GLenumToString(GLenumGroup::ReadBufferMode, src));
+    EVENT(context, gl::EntryPoint::ReadBuffer, "glReadBuffer", "context = %d, GLenum src = %s",
+          CID(context), GLenumToString(GLenumGroup::ReadBufferMode, src));
 
     if (context)
     {
@@ -4101,6 +4999,10 @@ void GL_APIENTRY ReadBuffer(GLenum src)
             context->readBuffer(src);
         }
         ANGLE_CAPTURE(ReadBuffer, isCallValid, context, src);
+    }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
     }
 }
 
@@ -4113,7 +5015,7 @@ void GL_APIENTRY ReadPixels(GLint x,
                             void *pixels)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glReadPixels",
+    EVENT(context, gl::EntryPoint::ReadPixels, "glReadPixels",
           "context = %d, GLint x = %d, GLint y = %d, GLsizei width = %d, GLsizei height = %d, "
           "GLenum format = %s, GLenum type = %s, void *pixels = 0x%016" PRIxPTR "",
           CID(context), x, y, width, height, GLenumToString(GLenumGroup::PixelFormat, format),
@@ -4130,12 +5032,16 @@ void GL_APIENTRY ReadPixels(GLint x,
         }
         ANGLE_CAPTURE(ReadPixels, isCallValid, context, x, y, width, height, format, type, pixels);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Rectd(GLdouble x1, GLdouble y1, GLdouble x2, GLdouble y2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRectd",
+    EVENT(context, gl::EntryPoint::Rectd, "glRectd",
           "context = %d, GLdouble x1 = %f, GLdouble y1 = %f, GLdouble x2 = %f, GLdouble y2 = %f",
           CID(context), x1, y1, x2, y2);
 
@@ -4149,12 +5055,16 @@ void GL_APIENTRY Rectd(GLdouble x1, GLdouble y1, GLdouble x2, GLdouble y2)
         }
         ANGLE_CAPTURE(Rectd, isCallValid, context, x1, y1, x2, y2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Rectdv(const GLdouble *v1, const GLdouble *v2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRectdv",
+    EVENT(context, gl::EntryPoint::Rectdv, "glRectdv",
           "context = %d, const GLdouble *v1 = 0x%016" PRIxPTR
           ", const GLdouble *v2 = 0x%016" PRIxPTR "",
           CID(context), (uintptr_t)v1, (uintptr_t)v2);
@@ -4169,12 +5079,16 @@ void GL_APIENTRY Rectdv(const GLdouble *v1, const GLdouble *v2)
         }
         ANGLE_CAPTURE(Rectdv, isCallValid, context, v1, v2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Rectf(GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRectf",
+    EVENT(context, gl::EntryPoint::Rectf, "glRectf",
           "context = %d, GLfloat x1 = %f, GLfloat y1 = %f, GLfloat x2 = %f, GLfloat y2 = %f",
           CID(context), x1, y1, x2, y2);
 
@@ -4188,12 +5102,16 @@ void GL_APIENTRY Rectf(GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2)
         }
         ANGLE_CAPTURE(Rectf, isCallValid, context, x1, y1, x2, y2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Rectfv(const GLfloat *v1, const GLfloat *v2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRectfv",
+    EVENT(context, gl::EntryPoint::Rectfv, "glRectfv",
           "context = %d, const GLfloat *v1 = 0x%016" PRIxPTR ", const GLfloat *v2 = 0x%016" PRIxPTR
           "",
           CID(context), (uintptr_t)v1, (uintptr_t)v2);
@@ -4208,13 +5126,18 @@ void GL_APIENTRY Rectfv(const GLfloat *v1, const GLfloat *v2)
         }
         ANGLE_CAPTURE(Rectfv, isCallValid, context, v1, v2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Recti(GLint x1, GLint y1, GLint x2, GLint y2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRecti", "context = %d, GLint x1 = %d, GLint y1 = %d, GLint x2 = %d, GLint y2 = %d",
-          CID(context), x1, y1, x2, y2);
+    EVENT(context, gl::EntryPoint::Recti, "glRecti",
+          "context = %d, GLint x1 = %d, GLint y1 = %d, GLint x2 = %d, GLint y2 = %d", CID(context),
+          x1, y1, x2, y2);
 
     if (context)
     {
@@ -4226,12 +5149,16 @@ void GL_APIENTRY Recti(GLint x1, GLint y1, GLint x2, GLint y2)
         }
         ANGLE_CAPTURE(Recti, isCallValid, context, x1, y1, x2, y2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Rectiv(const GLint *v1, const GLint *v2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRectiv",
+    EVENT(context, gl::EntryPoint::Rectiv, "glRectiv",
           "context = %d, const GLint *v1 = 0x%016" PRIxPTR ", const GLint *v2 = 0x%016" PRIxPTR "",
           CID(context), (uintptr_t)v1, (uintptr_t)v2);
 
@@ -4245,12 +5172,16 @@ void GL_APIENTRY Rectiv(const GLint *v1, const GLint *v2)
         }
         ANGLE_CAPTURE(Rectiv, isCallValid, context, v1, v2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Rects(GLshort x1, GLshort y1, GLshort x2, GLshort y2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRects",
+    EVENT(context, gl::EntryPoint::Rects, "glRects",
           "context = %d, GLshort x1 = %d, GLshort y1 = %d, GLshort x2 = %d, GLshort y2 = %d",
           CID(context), x1, y1, x2, y2);
 
@@ -4264,12 +5195,16 @@ void GL_APIENTRY Rects(GLshort x1, GLshort y1, GLshort x2, GLshort y2)
         }
         ANGLE_CAPTURE(Rects, isCallValid, context, x1, y1, x2, y2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Rectsv(const GLshort *v1, const GLshort *v2)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRectsv",
+    EVENT(context, gl::EntryPoint::Rectsv, "glRectsv",
           "context = %d, const GLshort *v1 = 0x%016" PRIxPTR ", const GLshort *v2 = 0x%016" PRIxPTR
           "",
           CID(context), (uintptr_t)v1, (uintptr_t)v2);
@@ -4284,13 +5219,17 @@ void GL_APIENTRY Rectsv(const GLshort *v1, const GLshort *v2)
         }
         ANGLE_CAPTURE(Rectsv, isCallValid, context, v1, v2);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 GLint GL_APIENTRY RenderMode(GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRenderMode", "context = %d, GLenum mode = %s", CID(context),
-          GLenumToString(GLenumGroup::RenderingMode, mode));
+    EVENT(context, gl::EntryPoint::RenderMode, "glRenderMode", "context = %d, GLenum mode = %s",
+          CID(context), GLenumToString(GLenumGroup::RenderingMode, mode));
 
     GLint returnValue;
     if (context)
@@ -4309,6 +5248,7 @@ GLint GL_APIENTRY RenderMode(GLenum mode)
     }
     else
     {
+        GenerateContextLostErrorOnCurrentGlobalContext();
         returnValue = GetDefaultReturnValue<EntryPoint::RenderMode, GLint>();
     }
     return returnValue;
@@ -4317,7 +5257,7 @@ GLint GL_APIENTRY RenderMode(GLenum mode)
 void GL_APIENTRY Rotated(GLdouble angle, GLdouble x, GLdouble y, GLdouble z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRotated",
+    EVENT(context, gl::EntryPoint::Rotated, "glRotated",
           "context = %d, GLdouble angle = %f, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f",
           CID(context), angle, x, y, z);
 
@@ -4331,12 +5271,16 @@ void GL_APIENTRY Rotated(GLdouble angle, GLdouble x, GLdouble y, GLdouble z)
         }
         ANGLE_CAPTURE(Rotated, isCallValid, context, angle, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Rotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glRotatef",
+    EVENT(context, gl::EntryPoint::Rotatef, "glRotatef",
           "context = %d, GLfloat angle = %f, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f",
           CID(context), angle, x, y, z);
 
@@ -4350,13 +5294,17 @@ void GL_APIENTRY Rotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
         }
         ANGLE_CAPTURE(Rotatef, isCallValid, context, angle, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Scaled(GLdouble x, GLdouble y, GLdouble z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glScaled", "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::Scaled, "glScaled",
+          "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f", CID(context), x, y, z);
 
     if (context)
     {
@@ -4368,13 +5316,17 @@ void GL_APIENTRY Scaled(GLdouble x, GLdouble y, GLdouble z)
         }
         ANGLE_CAPTURE(Scaled, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Scalef(GLfloat x, GLfloat y, GLfloat z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glScalef", "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f", CID(context),
-          x, y, z);
+    EVENT(context, gl::EntryPoint::Scalef, "glScalef",
+          "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f", CID(context), x, y, z);
 
     if (context)
     {
@@ -4386,12 +5338,16 @@ void GL_APIENTRY Scalef(GLfloat x, GLfloat y, GLfloat z)
         }
         ANGLE_CAPTURE(Scalef, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Scissor(GLint x, GLint y, GLsizei width, GLsizei height)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glScissor",
+    EVENT(context, gl::EntryPoint::Scissor, "glScissor",
           "context = %d, GLint x = %d, GLint y = %d, GLsizei width = %d, GLsizei height = %d",
           CID(context), x, y, width, height);
 
@@ -4406,13 +5362,18 @@ void GL_APIENTRY Scissor(GLint x, GLint y, GLsizei width, GLsizei height)
         }
         ANGLE_CAPTURE(Scissor, isCallValid, context, x, y, width, height);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY SelectBuffer(GLsizei size, GLuint *buffer)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glSelectBuffer", "context = %d, GLsizei size = %d, GLuint *buffer = 0x%016" PRIxPTR "",
-          CID(context), size, (uintptr_t)buffer);
+    EVENT(context, gl::EntryPoint::SelectBuffer, "glSelectBuffer",
+          "context = %d, GLsizei size = %d, GLuint *buffer = 0x%016" PRIxPTR "", CID(context), size,
+          (uintptr_t)buffer);
 
     if (context)
     {
@@ -4425,13 +5386,17 @@ void GL_APIENTRY SelectBuffer(GLsizei size, GLuint *buffer)
         }
         ANGLE_CAPTURE(SelectBuffer, isCallValid, context, size, buffer);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY ShadeModel(GLenum mode)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glShadeModel", "context = %d, GLenum mode = %s", CID(context),
-          GLenumToString(GLenumGroup::ShadingModel, mode));
+    EVENT(context, gl::EntryPoint::ShadeModel, "glShadeModel", "context = %d, GLenum mode = %s",
+          CID(context), GLenumToString(GLenumGroup::ShadingModel, mode));
 
     if (context)
     {
@@ -4444,13 +5409,18 @@ void GL_APIENTRY ShadeModel(GLenum mode)
         }
         ANGLE_CAPTURE(ShadeModel, isCallValid, context, modePacked);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY StencilFunc(GLenum func, GLint ref, GLuint mask)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glStencilFunc", "context = %d, GLenum func = %s, GLint ref = %d, GLuint mask = %u",
-          CID(context), GLenumToString(GLenumGroup::StencilFunction, func), ref, mask);
+    EVENT(context, gl::EntryPoint::StencilFunc, "glStencilFunc",
+          "context = %d, GLenum func = %s, GLint ref = %d, GLuint mask = %u", CID(context),
+          GLenumToString(GLenumGroup::StencilFunction, func), ref, mask);
 
     if (context)
     {
@@ -4463,12 +5433,17 @@ void GL_APIENTRY StencilFunc(GLenum func, GLint ref, GLuint mask)
         }
         ANGLE_CAPTURE(StencilFunc, isCallValid, context, func, ref, mask);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY StencilMask(GLuint mask)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glStencilMask", "context = %d, GLuint mask = %u", CID(context), mask);
+    EVENT(context, gl::EntryPoint::StencilMask, "glStencilMask", "context = %d, GLuint mask = %u",
+          CID(context), mask);
 
     if (context)
     {
@@ -4480,13 +5455,18 @@ void GL_APIENTRY StencilMask(GLuint mask)
         }
         ANGLE_CAPTURE(StencilMask, isCallValid, context, mask);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY StencilOp(GLenum fail, GLenum zfail, GLenum zpass)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glStencilOp", "context = %d, GLenum fail = %s, GLenum zfail = %s, GLenum zpass = %s",
-          CID(context), GLenumToString(GLenumGroup::StencilOp, fail),
+    EVENT(context, gl::EntryPoint::StencilOp, "glStencilOp",
+          "context = %d, GLenum fail = %s, GLenum zfail = %s, GLenum zpass = %s", CID(context),
+          GLenumToString(GLenumGroup::StencilOp, fail),
           GLenumToString(GLenumGroup::StencilOp, zfail),
           GLenumToString(GLenumGroup::StencilOp, zpass));
 
@@ -4501,12 +5481,17 @@ void GL_APIENTRY StencilOp(GLenum fail, GLenum zfail, GLenum zpass)
         }
         ANGLE_CAPTURE(StencilOp, isCallValid, context, fail, zfail, zpass);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord1d(GLdouble s)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord1d", "context = %d, GLdouble s = %f", CID(context), s);
+    EVENT(context, gl::EntryPoint::TexCoord1d, "glTexCoord1d", "context = %d, GLdouble s = %f",
+          CID(context), s);
 
     if (context)
     {
@@ -4518,13 +5503,17 @@ void GL_APIENTRY TexCoord1d(GLdouble s)
         }
         ANGLE_CAPTURE(TexCoord1d, isCallValid, context, s);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord1dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord1dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord1dv, "glTexCoord1dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4536,12 +5525,17 @@ void GL_APIENTRY TexCoord1dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(TexCoord1dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord1f(GLfloat s)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord1f", "context = %d, GLfloat s = %f", CID(context), s);
+    EVENT(context, gl::EntryPoint::TexCoord1f, "glTexCoord1f", "context = %d, GLfloat s = %f",
+          CID(context), s);
 
     if (context)
     {
@@ -4553,13 +5547,17 @@ void GL_APIENTRY TexCoord1f(GLfloat s)
         }
         ANGLE_CAPTURE(TexCoord1f, isCallValid, context, s);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord1fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord1fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord1fv, "glTexCoord1fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4571,12 +5569,17 @@ void GL_APIENTRY TexCoord1fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(TexCoord1fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord1i(GLint s)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord1i", "context = %d, GLint s = %d", CID(context), s);
+    EVENT(context, gl::EntryPoint::TexCoord1i, "glTexCoord1i", "context = %d, GLint s = %d",
+          CID(context), s);
 
     if (context)
     {
@@ -4588,13 +5591,17 @@ void GL_APIENTRY TexCoord1i(GLint s)
         }
         ANGLE_CAPTURE(TexCoord1i, isCallValid, context, s);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord1iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord1iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord1iv, "glTexCoord1iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4606,12 +5613,17 @@ void GL_APIENTRY TexCoord1iv(const GLint *v)
         }
         ANGLE_CAPTURE(TexCoord1iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord1s(GLshort s)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord1s", "context = %d, GLshort s = %d", CID(context), s);
+    EVENT(context, gl::EntryPoint::TexCoord1s, "glTexCoord1s", "context = %d, GLshort s = %d",
+          CID(context), s);
 
     if (context)
     {
@@ -4623,13 +5635,17 @@ void GL_APIENTRY TexCoord1s(GLshort s)
         }
         ANGLE_CAPTURE(TexCoord1s, isCallValid, context, s);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord1sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord1sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord1sv, "glTexCoord1sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4641,12 +5657,17 @@ void GL_APIENTRY TexCoord1sv(const GLshort *v)
         }
         ANGLE_CAPTURE(TexCoord1sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord2d(GLdouble s, GLdouble t)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord2d", "context = %d, GLdouble s = %f, GLdouble t = %f", CID(context), s, t);
+    EVENT(context, gl::EntryPoint::TexCoord2d, "glTexCoord2d",
+          "context = %d, GLdouble s = %f, GLdouble t = %f", CID(context), s, t);
 
     if (context)
     {
@@ -4658,13 +5679,17 @@ void GL_APIENTRY TexCoord2d(GLdouble s, GLdouble t)
         }
         ANGLE_CAPTURE(TexCoord2d, isCallValid, context, s, t);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord2dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord2dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord2dv, "glTexCoord2dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4676,12 +5701,17 @@ void GL_APIENTRY TexCoord2dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(TexCoord2dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord2f(GLfloat s, GLfloat t)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord2f", "context = %d, GLfloat s = %f, GLfloat t = %f", CID(context), s, t);
+    EVENT(context, gl::EntryPoint::TexCoord2f, "glTexCoord2f",
+          "context = %d, GLfloat s = %f, GLfloat t = %f", CID(context), s, t);
 
     if (context)
     {
@@ -4693,13 +5723,17 @@ void GL_APIENTRY TexCoord2f(GLfloat s, GLfloat t)
         }
         ANGLE_CAPTURE(TexCoord2f, isCallValid, context, s, t);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord2fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord2fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord2fv, "glTexCoord2fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4711,12 +5745,17 @@ void GL_APIENTRY TexCoord2fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(TexCoord2fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord2i(GLint s, GLint t)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord2i", "context = %d, GLint s = %d, GLint t = %d", CID(context), s, t);
+    EVENT(context, gl::EntryPoint::TexCoord2i, "glTexCoord2i",
+          "context = %d, GLint s = %d, GLint t = %d", CID(context), s, t);
 
     if (context)
     {
@@ -4728,13 +5767,17 @@ void GL_APIENTRY TexCoord2i(GLint s, GLint t)
         }
         ANGLE_CAPTURE(TexCoord2i, isCallValid, context, s, t);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord2iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord2iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord2iv, "glTexCoord2iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4746,12 +5789,17 @@ void GL_APIENTRY TexCoord2iv(const GLint *v)
         }
         ANGLE_CAPTURE(TexCoord2iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord2s(GLshort s, GLshort t)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord2s", "context = %d, GLshort s = %d, GLshort t = %d", CID(context), s, t);
+    EVENT(context, gl::EntryPoint::TexCoord2s, "glTexCoord2s",
+          "context = %d, GLshort s = %d, GLshort t = %d", CID(context), s, t);
 
     if (context)
     {
@@ -4763,13 +5811,17 @@ void GL_APIENTRY TexCoord2s(GLshort s, GLshort t)
         }
         ANGLE_CAPTURE(TexCoord2s, isCallValid, context, s, t);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord2sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord2sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord2sv, "glTexCoord2sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4781,13 +5833,17 @@ void GL_APIENTRY TexCoord2sv(const GLshort *v)
         }
         ANGLE_CAPTURE(TexCoord2sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord3d(GLdouble s, GLdouble t, GLdouble r)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord3d", "context = %d, GLdouble s = %f, GLdouble t = %f, GLdouble r = %f",
-          CID(context), s, t, r);
+    EVENT(context, gl::EntryPoint::TexCoord3d, "glTexCoord3d",
+          "context = %d, GLdouble s = %f, GLdouble t = %f, GLdouble r = %f", CID(context), s, t, r);
 
     if (context)
     {
@@ -4799,13 +5855,17 @@ void GL_APIENTRY TexCoord3d(GLdouble s, GLdouble t, GLdouble r)
         }
         ANGLE_CAPTURE(TexCoord3d, isCallValid, context, s, t, r);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord3dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord3dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord3dv, "glTexCoord3dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4817,13 +5877,17 @@ void GL_APIENTRY TexCoord3dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(TexCoord3dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord3f(GLfloat s, GLfloat t, GLfloat r)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord3f", "context = %d, GLfloat s = %f, GLfloat t = %f, GLfloat r = %f",
-          CID(context), s, t, r);
+    EVENT(context, gl::EntryPoint::TexCoord3f, "glTexCoord3f",
+          "context = %d, GLfloat s = %f, GLfloat t = %f, GLfloat r = %f", CID(context), s, t, r);
 
     if (context)
     {
@@ -4835,13 +5899,17 @@ void GL_APIENTRY TexCoord3f(GLfloat s, GLfloat t, GLfloat r)
         }
         ANGLE_CAPTURE(TexCoord3f, isCallValid, context, s, t, r);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord3fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord3fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord3fv, "glTexCoord3fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4853,13 +5921,17 @@ void GL_APIENTRY TexCoord3fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(TexCoord3fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord3i(GLint s, GLint t, GLint r)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord3i", "context = %d, GLint s = %d, GLint t = %d, GLint r = %d", CID(context), s,
-          t, r);
+    EVENT(context, gl::EntryPoint::TexCoord3i, "glTexCoord3i",
+          "context = %d, GLint s = %d, GLint t = %d, GLint r = %d", CID(context), s, t, r);
 
     if (context)
     {
@@ -4871,13 +5943,17 @@ void GL_APIENTRY TexCoord3i(GLint s, GLint t, GLint r)
         }
         ANGLE_CAPTURE(TexCoord3i, isCallValid, context, s, t, r);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord3iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord3iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord3iv, "glTexCoord3iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4889,13 +5965,17 @@ void GL_APIENTRY TexCoord3iv(const GLint *v)
         }
         ANGLE_CAPTURE(TexCoord3iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord3s(GLshort s, GLshort t, GLshort r)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord3s", "context = %d, GLshort s = %d, GLshort t = %d, GLshort r = %d",
-          CID(context), s, t, r);
+    EVENT(context, gl::EntryPoint::TexCoord3s, "glTexCoord3s",
+          "context = %d, GLshort s = %d, GLshort t = %d, GLshort r = %d", CID(context), s, t, r);
 
     if (context)
     {
@@ -4907,13 +5987,17 @@ void GL_APIENTRY TexCoord3s(GLshort s, GLshort t, GLshort r)
         }
         ANGLE_CAPTURE(TexCoord3s, isCallValid, context, s, t, r);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord3sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord3sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord3sv, "glTexCoord3sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4925,12 +6009,16 @@ void GL_APIENTRY TexCoord3sv(const GLshort *v)
         }
         ANGLE_CAPTURE(TexCoord3sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord4d(GLdouble s, GLdouble t, GLdouble r, GLdouble q)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord4d",
+    EVENT(context, gl::EntryPoint::TexCoord4d, "glTexCoord4d",
           "context = %d, GLdouble s = %f, GLdouble t = %f, GLdouble r = %f, GLdouble q = %f",
           CID(context), s, t, r, q);
 
@@ -4944,13 +6032,17 @@ void GL_APIENTRY TexCoord4d(GLdouble s, GLdouble t, GLdouble r, GLdouble q)
         }
         ANGLE_CAPTURE(TexCoord4d, isCallValid, context, s, t, r, q);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord4dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord4dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord4dv, "glTexCoord4dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4962,12 +6054,16 @@ void GL_APIENTRY TexCoord4dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(TexCoord4dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord4f(GLfloat s, GLfloat t, GLfloat r, GLfloat q)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord4f",
+    EVENT(context, gl::EntryPoint::TexCoord4f, "glTexCoord4f",
           "context = %d, GLfloat s = %f, GLfloat t = %f, GLfloat r = %f, GLfloat q = %f",
           CID(context), s, t, r, q);
 
@@ -4981,13 +6077,17 @@ void GL_APIENTRY TexCoord4f(GLfloat s, GLfloat t, GLfloat r, GLfloat q)
         }
         ANGLE_CAPTURE(TexCoord4f, isCallValid, context, s, t, r, q);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord4fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord4fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord4fv, "glTexCoord4fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -4999,13 +6099,18 @@ void GL_APIENTRY TexCoord4fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(TexCoord4fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord4i(GLint s, GLint t, GLint r, GLint q)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord4i", "context = %d, GLint s = %d, GLint t = %d, GLint r = %d, GLint q = %d",
-          CID(context), s, t, r, q);
+    EVENT(context, gl::EntryPoint::TexCoord4i, "glTexCoord4i",
+          "context = %d, GLint s = %d, GLint t = %d, GLint r = %d, GLint q = %d", CID(context), s,
+          t, r, q);
 
     if (context)
     {
@@ -5017,13 +6122,17 @@ void GL_APIENTRY TexCoord4i(GLint s, GLint t, GLint r, GLint q)
         }
         ANGLE_CAPTURE(TexCoord4i, isCallValid, context, s, t, r, q);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord4iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord4iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord4iv, "glTexCoord4iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5035,12 +6144,16 @@ void GL_APIENTRY TexCoord4iv(const GLint *v)
         }
         ANGLE_CAPTURE(TexCoord4iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord4s(GLshort s, GLshort t, GLshort r, GLshort q)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord4s",
+    EVENT(context, gl::EntryPoint::TexCoord4s, "glTexCoord4s",
           "context = %d, GLshort s = %d, GLshort t = %d, GLshort r = %d, GLshort q = %d",
           CID(context), s, t, r, q);
 
@@ -5054,13 +6167,17 @@ void GL_APIENTRY TexCoord4s(GLshort s, GLshort t, GLshort r, GLshort q)
         }
         ANGLE_CAPTURE(TexCoord4s, isCallValid, context, s, t, r, q);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexCoord4sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexCoord4sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::TexCoord4sv, "glTexCoord4sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5072,13 +6189,18 @@ void GL_APIENTRY TexCoord4sv(const GLshort *v)
         }
         ANGLE_CAPTURE(TexCoord4sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexEnvf(GLenum target, GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexEnvf", "context = %d, GLenum target = %s, GLenum pname = %s, GLfloat param = %f",
-          CID(context), GLenumToString(GLenumGroup::TextureEnvTarget, target),
+    EVENT(context, gl::EntryPoint::TexEnvf, "glTexEnvf",
+          "context = %d, GLenum target = %s, GLenum pname = %s, GLfloat param = %f", CID(context),
+          GLenumToString(GLenumGroup::TextureEnvTarget, target),
           GLenumToString(GLenumGroup::TextureEnvParameter, pname), param);
 
     if (context)
@@ -5094,12 +6216,16 @@ void GL_APIENTRY TexEnvf(GLenum target, GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(TexEnvf, isCallValid, context, targetPacked, pnamePacked, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexEnvfv(GLenum target, GLenum pname, const GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexEnvfv",
+    EVENT(context, gl::EntryPoint::TexEnvfv, "glTexEnvfv",
           "context = %d, GLenum target = %s, GLenum pname = %s, const GLfloat *params = "
           "0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureEnvTarget, target),
@@ -5118,13 +6244,18 @@ void GL_APIENTRY TexEnvfv(GLenum target, GLenum pname, const GLfloat *params)
         }
         ANGLE_CAPTURE(TexEnvfv, isCallValid, context, targetPacked, pnamePacked, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexEnvi(GLenum target, GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexEnvi", "context = %d, GLenum target = %s, GLenum pname = %s, GLint param = %d",
-          CID(context), GLenumToString(GLenumGroup::TextureEnvTarget, target),
+    EVENT(context, gl::EntryPoint::TexEnvi, "glTexEnvi",
+          "context = %d, GLenum target = %s, GLenum pname = %s, GLint param = %d", CID(context),
+          GLenumToString(GLenumGroup::TextureEnvTarget, target),
           GLenumToString(GLenumGroup::TextureEnvParameter, pname), param);
 
     if (context)
@@ -5140,13 +6271,17 @@ void GL_APIENTRY TexEnvi(GLenum target, GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(TexEnvi, isCallValid, context, targetPacked, pnamePacked, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexEnviv(GLenum target, GLenum pname, const GLint *params)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glTexEnviv",
+        context, gl::EntryPoint::TexEnviv, "glTexEnviv",
         "context = %d, GLenum target = %s, GLenum pname = %s, const GLint *params = 0x%016" PRIxPTR
         "",
         CID(context), GLenumToString(GLenumGroup::TextureEnvTarget, target),
@@ -5165,13 +6300,18 @@ void GL_APIENTRY TexEnviv(GLenum target, GLenum pname, const GLint *params)
         }
         ANGLE_CAPTURE(TexEnviv, isCallValid, context, targetPacked, pnamePacked, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexGend(GLenum coord, GLenum pname, GLdouble param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexGend", "context = %d, GLenum coord = %s, GLenum pname = %s, GLdouble param = %f",
-          CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
+    EVENT(context, gl::EntryPoint::TexGend, "glTexGend",
+          "context = %d, GLenum coord = %s, GLenum pname = %s, GLdouble param = %f", CID(context),
+          GLenumToString(GLenumGroup::TextureCoordName, coord),
           GLenumToString(GLenumGroup::TextureGenParameter, pname), param);
 
     if (context)
@@ -5185,12 +6325,16 @@ void GL_APIENTRY TexGend(GLenum coord, GLenum pname, GLdouble param)
         }
         ANGLE_CAPTURE(TexGend, isCallValid, context, coord, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexGendv(GLenum coord, GLenum pname, const GLdouble *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexGendv",
+    EVENT(context, gl::EntryPoint::TexGendv, "glTexGendv",
           "context = %d, GLenum coord = %s, GLenum pname = %s, const GLdouble *params = "
           "0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
@@ -5207,13 +6351,18 @@ void GL_APIENTRY TexGendv(GLenum coord, GLenum pname, const GLdouble *params)
         }
         ANGLE_CAPTURE(TexGendv, isCallValid, context, coord, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexGenf(GLenum coord, GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexGenf", "context = %d, GLenum coord = %s, GLenum pname = %s, GLfloat param = %f",
-          CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
+    EVENT(context, gl::EntryPoint::TexGenf, "glTexGenf",
+          "context = %d, GLenum coord = %s, GLenum pname = %s, GLfloat param = %f", CID(context),
+          GLenumToString(GLenumGroup::TextureCoordName, coord),
           GLenumToString(GLenumGroup::TextureGenParameter, pname), param);
 
     if (context)
@@ -5227,13 +6376,17 @@ void GL_APIENTRY TexGenf(GLenum coord, GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(TexGenf, isCallValid, context, coord, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexGenfv(GLenum coord, GLenum pname, const GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glTexGenfv",
+        context, gl::EntryPoint::TexGenfv, "glTexGenfv",
         "context = %d, GLenum coord = %s, GLenum pname = %s, const GLfloat *params = 0x%016" PRIxPTR
         "",
         CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
@@ -5250,13 +6403,18 @@ void GL_APIENTRY TexGenfv(GLenum coord, GLenum pname, const GLfloat *params)
         }
         ANGLE_CAPTURE(TexGenfv, isCallValid, context, coord, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexGeni(GLenum coord, GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexGeni", "context = %d, GLenum coord = %s, GLenum pname = %s, GLint param = %d",
-          CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
+    EVENT(context, gl::EntryPoint::TexGeni, "glTexGeni",
+          "context = %d, GLenum coord = %s, GLenum pname = %s, GLint param = %d", CID(context),
+          GLenumToString(GLenumGroup::TextureCoordName, coord),
           GLenumToString(GLenumGroup::TextureGenParameter, pname), param);
 
     if (context)
@@ -5270,12 +6428,16 @@ void GL_APIENTRY TexGeni(GLenum coord, GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(TexGeni, isCallValid, context, coord, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexGeniv(GLenum coord, GLenum pname, const GLint *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexGeniv",
+    EVENT(context, gl::EntryPoint::TexGeniv, "glTexGeniv",
           "context = %d, GLenum coord = %s, GLenum pname = %s, const GLint *params = 0x%016" PRIxPTR
           "",
           CID(context), GLenumToString(GLenumGroup::TextureCoordName, coord),
@@ -5292,6 +6454,10 @@ void GL_APIENTRY TexGeniv(GLenum coord, GLenum pname, const GLint *params)
         }
         ANGLE_CAPTURE(TexGeniv, isCallValid, context, coord, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexImage1D(GLenum target,
@@ -5304,7 +6470,7 @@ void GL_APIENTRY TexImage1D(GLenum target,
                             const void *pixels)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexImage1D",
+    EVENT(context, gl::EntryPoint::TexImage1D, "glTexImage1D",
           "context = %d, GLenum target = %s, GLint level = %d, GLint internalformat = %d, GLsizei "
           "width = %d, GLint border = %d, GLenum format = %s, GLenum type = %s, const void *pixels "
           "= 0x%016" PRIxPTR "",
@@ -5325,6 +6491,10 @@ void GL_APIENTRY TexImage1D(GLenum target,
         ANGLE_CAPTURE(TexImage1D, isCallValid, context, target, level, internalformat, width,
                       border, format, type, pixels);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexImage2D(GLenum target,
@@ -5338,7 +6508,7 @@ void GL_APIENTRY TexImage2D(GLenum target,
                             const void *pixels)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexImage2D",
+    EVENT(context, gl::EntryPoint::TexImage2D, "glTexImage2D",
           "context = %d, GLenum target = %s, GLint level = %d, GLint internalformat = %d, GLsizei "
           "width = %d, GLsizei height = %d, GLint border = %d, GLenum format = %s, GLenum type = "
           "%s, const void *pixels = 0x%016" PRIxPTR "",
@@ -5361,12 +6531,16 @@ void GL_APIENTRY TexImage2D(GLenum target,
         ANGLE_CAPTURE(TexImage2D, isCallValid, context, targetPacked, level, internalformat, width,
                       height, border, format, type, pixels);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexParameterf(GLenum target, GLenum pname, GLfloat param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexParameterf",
+    EVENT(context, gl::EntryPoint::TexParameterf, "glTexParameterf",
           "context = %d, GLenum target = %s, GLenum pname = %s, GLfloat param = %f", CID(context),
           GLenumToString(GLenumGroup::TextureTarget, target),
           GLenumToString(GLenumGroup::TextureParameterName, pname), param);
@@ -5383,12 +6557,16 @@ void GL_APIENTRY TexParameterf(GLenum target, GLenum pname, GLfloat param)
         }
         ANGLE_CAPTURE(TexParameterf, isCallValid, context, targetPacked, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexParameterfv(GLenum target, GLenum pname, const GLfloat *params)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexParameterfv",
+    EVENT(context, gl::EntryPoint::TexParameterfv, "glTexParameterfv",
           "context = %d, GLenum target = %s, GLenum pname = %s, const GLfloat *params = "
           "0x%016" PRIxPTR "",
           CID(context), GLenumToString(GLenumGroup::TextureTarget, target),
@@ -5406,12 +6584,16 @@ void GL_APIENTRY TexParameterfv(GLenum target, GLenum pname, const GLfloat *para
         }
         ANGLE_CAPTURE(TexParameterfv, isCallValid, context, targetPacked, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexParameteri(GLenum target, GLenum pname, GLint param)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTexParameteri",
+    EVENT(context, gl::EntryPoint::TexParameteri, "glTexParameteri",
           "context = %d, GLenum target = %s, GLenum pname = %s, GLint param = %d", CID(context),
           GLenumToString(GLenumGroup::TextureTarget, target),
           GLenumToString(GLenumGroup::TextureParameterName, pname), param);
@@ -5428,13 +6610,17 @@ void GL_APIENTRY TexParameteri(GLenum target, GLenum pname, GLint param)
         }
         ANGLE_CAPTURE(TexParameteri, isCallValid, context, targetPacked, pname, param);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY TexParameteriv(GLenum target, GLenum pname, const GLint *params)
 {
     Context *context = GetValidGlobalContext();
     EVENT(
-        "glTexParameteriv",
+        context, gl::EntryPoint::TexParameteriv, "glTexParameteriv",
         "context = %d, GLenum target = %s, GLenum pname = %s, const GLint *params = 0x%016" PRIxPTR
         "",
         CID(context), GLenumToString(GLenumGroup::TextureTarget, target),
@@ -5452,13 +6638,17 @@ void GL_APIENTRY TexParameteriv(GLenum target, GLenum pname, const GLint *params
         }
         ANGLE_CAPTURE(TexParameteriv, isCallValid, context, targetPacked, pname, params);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Translated(GLdouble x, GLdouble y, GLdouble z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTranslated", "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::Translated, "glTranslated",
+          "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f", CID(context), x, y, z);
 
     if (context)
     {
@@ -5470,13 +6660,17 @@ void GL_APIENTRY Translated(GLdouble x, GLdouble y, GLdouble z)
         }
         ANGLE_CAPTURE(Translated, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Translatef(GLfloat x, GLfloat y, GLfloat z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glTranslatef", "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::Translatef, "glTranslatef",
+          "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f", CID(context), x, y, z);
 
     if (context)
     {
@@ -5488,12 +6682,17 @@ void GL_APIENTRY Translatef(GLfloat x, GLfloat y, GLfloat z)
         }
         ANGLE_CAPTURE(Translatef, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex2d(GLdouble x, GLdouble y)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex2d", "context = %d, GLdouble x = %f, GLdouble y = %f", CID(context), x, y);
+    EVENT(context, gl::EntryPoint::Vertex2d, "glVertex2d",
+          "context = %d, GLdouble x = %f, GLdouble y = %f", CID(context), x, y);
 
     if (context)
     {
@@ -5505,13 +6704,17 @@ void GL_APIENTRY Vertex2d(GLdouble x, GLdouble y)
         }
         ANGLE_CAPTURE(Vertex2d, isCallValid, context, x, y);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex2dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex2dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex2dv, "glVertex2dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5523,12 +6726,17 @@ void GL_APIENTRY Vertex2dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(Vertex2dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex2f(GLfloat x, GLfloat y)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex2f", "context = %d, GLfloat x = %f, GLfloat y = %f", CID(context), x, y);
+    EVENT(context, gl::EntryPoint::Vertex2f, "glVertex2f",
+          "context = %d, GLfloat x = %f, GLfloat y = %f", CID(context), x, y);
 
     if (context)
     {
@@ -5540,13 +6748,17 @@ void GL_APIENTRY Vertex2f(GLfloat x, GLfloat y)
         }
         ANGLE_CAPTURE(Vertex2f, isCallValid, context, x, y);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex2fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex2fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex2fv, "glVertex2fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5558,12 +6770,17 @@ void GL_APIENTRY Vertex2fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(Vertex2fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex2i(GLint x, GLint y)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex2i", "context = %d, GLint x = %d, GLint y = %d", CID(context), x, y);
+    EVENT(context, gl::EntryPoint::Vertex2i, "glVertex2i",
+          "context = %d, GLint x = %d, GLint y = %d", CID(context), x, y);
 
     if (context)
     {
@@ -5575,13 +6792,17 @@ void GL_APIENTRY Vertex2i(GLint x, GLint y)
         }
         ANGLE_CAPTURE(Vertex2i, isCallValid, context, x, y);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex2iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex2iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex2iv, "glVertex2iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5593,12 +6814,17 @@ void GL_APIENTRY Vertex2iv(const GLint *v)
         }
         ANGLE_CAPTURE(Vertex2iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex2s(GLshort x, GLshort y)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex2s", "context = %d, GLshort x = %d, GLshort y = %d", CID(context), x, y);
+    EVENT(context, gl::EntryPoint::Vertex2s, "glVertex2s",
+          "context = %d, GLshort x = %d, GLshort y = %d", CID(context), x, y);
 
     if (context)
     {
@@ -5610,13 +6836,17 @@ void GL_APIENTRY Vertex2s(GLshort x, GLshort y)
         }
         ANGLE_CAPTURE(Vertex2s, isCallValid, context, x, y);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex2sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex2sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex2sv, "glVertex2sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5628,13 +6858,17 @@ void GL_APIENTRY Vertex2sv(const GLshort *v)
         }
         ANGLE_CAPTURE(Vertex2sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex3d(GLdouble x, GLdouble y, GLdouble z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex3d", "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::Vertex3d, "glVertex3d",
+          "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f", CID(context), x, y, z);
 
     if (context)
     {
@@ -5646,13 +6880,17 @@ void GL_APIENTRY Vertex3d(GLdouble x, GLdouble y, GLdouble z)
         }
         ANGLE_CAPTURE(Vertex3d, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex3dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex3dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex3dv, "glVertex3dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5664,13 +6902,17 @@ void GL_APIENTRY Vertex3dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(Vertex3dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex3f(GLfloat x, GLfloat y, GLfloat z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex3f", "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::Vertex3f, "glVertex3f",
+          "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f", CID(context), x, y, z);
 
     if (context)
     {
@@ -5682,13 +6924,17 @@ void GL_APIENTRY Vertex3f(GLfloat x, GLfloat y, GLfloat z)
         }
         ANGLE_CAPTURE(Vertex3f, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex3fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex3fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex3fv, "glVertex3fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5700,13 +6946,17 @@ void GL_APIENTRY Vertex3fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(Vertex3fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex3i(GLint x, GLint y, GLint z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex3i", "context = %d, GLint x = %d, GLint y = %d, GLint z = %d", CID(context), x,
-          y, z);
+    EVENT(context, gl::EntryPoint::Vertex3i, "glVertex3i",
+          "context = %d, GLint x = %d, GLint y = %d, GLint z = %d", CID(context), x, y, z);
 
     if (context)
     {
@@ -5718,13 +6968,17 @@ void GL_APIENTRY Vertex3i(GLint x, GLint y, GLint z)
         }
         ANGLE_CAPTURE(Vertex3i, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex3iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex3iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex3iv, "glVertex3iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5736,13 +6990,17 @@ void GL_APIENTRY Vertex3iv(const GLint *v)
         }
         ANGLE_CAPTURE(Vertex3iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex3s(GLshort x, GLshort y, GLshort z)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex3s", "context = %d, GLshort x = %d, GLshort y = %d, GLshort z = %d",
-          CID(context), x, y, z);
+    EVENT(context, gl::EntryPoint::Vertex3s, "glVertex3s",
+          "context = %d, GLshort x = %d, GLshort y = %d, GLshort z = %d", CID(context), x, y, z);
 
     if (context)
     {
@@ -5754,13 +7012,17 @@ void GL_APIENTRY Vertex3s(GLshort x, GLshort y, GLshort z)
         }
         ANGLE_CAPTURE(Vertex3s, isCallValid, context, x, y, z);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex3sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex3sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex3sv, "glVertex3sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5772,12 +7034,16 @@ void GL_APIENTRY Vertex3sv(const GLshort *v)
         }
         ANGLE_CAPTURE(Vertex3sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex4d",
+    EVENT(context, gl::EntryPoint::Vertex4d, "glVertex4d",
           "context = %d, GLdouble x = %f, GLdouble y = %f, GLdouble z = %f, GLdouble w = %f",
           CID(context), x, y, z, w);
 
@@ -5791,13 +7057,17 @@ void GL_APIENTRY Vertex4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
         }
         ANGLE_CAPTURE(Vertex4d, isCallValid, context, x, y, z, w);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex4dv(const GLdouble *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex4dv", "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex4dv, "glVertex4dv",
+          "context = %d, const GLdouble *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5809,12 +7079,16 @@ void GL_APIENTRY Vertex4dv(const GLdouble *v)
         }
         ANGLE_CAPTURE(Vertex4dv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex4f",
+    EVENT(context, gl::EntryPoint::Vertex4f, "glVertex4f",
           "context = %d, GLfloat x = %f, GLfloat y = %f, GLfloat z = %f, GLfloat w = %f",
           CID(context), x, y, z, w);
 
@@ -5828,13 +7102,17 @@ void GL_APIENTRY Vertex4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
         }
         ANGLE_CAPTURE(Vertex4f, isCallValid, context, x, y, z, w);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex4fv(const GLfloat *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex4fv", "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex4fv, "glVertex4fv",
+          "context = %d, const GLfloat *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5846,13 +7124,18 @@ void GL_APIENTRY Vertex4fv(const GLfloat *v)
         }
         ANGLE_CAPTURE(Vertex4fv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex4i(GLint x, GLint y, GLint z, GLint w)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex4i", "context = %d, GLint x = %d, GLint y = %d, GLint z = %d, GLint w = %d",
-          CID(context), x, y, z, w);
+    EVENT(context, gl::EntryPoint::Vertex4i, "glVertex4i",
+          "context = %d, GLint x = %d, GLint y = %d, GLint z = %d, GLint w = %d", CID(context), x,
+          y, z, w);
 
     if (context)
     {
@@ -5864,13 +7147,17 @@ void GL_APIENTRY Vertex4i(GLint x, GLint y, GLint z, GLint w)
         }
         ANGLE_CAPTURE(Vertex4i, isCallValid, context, x, y, z, w);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex4iv(const GLint *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex4iv", "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex4iv, "glVertex4iv",
+          "context = %d, const GLint *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5882,12 +7169,16 @@ void GL_APIENTRY Vertex4iv(const GLint *v)
         }
         ANGLE_CAPTURE(Vertex4iv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex4s(GLshort x, GLshort y, GLshort z, GLshort w)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex4s",
+    EVENT(context, gl::EntryPoint::Vertex4s, "glVertex4s",
           "context = %d, GLshort x = %d, GLshort y = %d, GLshort z = %d, GLshort w = %d",
           CID(context), x, y, z, w);
 
@@ -5901,13 +7192,17 @@ void GL_APIENTRY Vertex4s(GLshort x, GLshort y, GLshort z, GLshort w)
         }
         ANGLE_CAPTURE(Vertex4s, isCallValid, context, x, y, z, w);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Vertex4sv(const GLshort *v)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glVertex4sv", "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context),
-          (uintptr_t)v);
+    EVENT(context, gl::EntryPoint::Vertex4sv, "glVertex4sv",
+          "context = %d, const GLshort *v = 0x%016" PRIxPTR "", CID(context), (uintptr_t)v);
 
     if (context)
     {
@@ -5919,12 +7214,16 @@ void GL_APIENTRY Vertex4sv(const GLshort *v)
         }
         ANGLE_CAPTURE(Vertex4sv, isCallValid, context, v);
     }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
+    }
 }
 
 void GL_APIENTRY Viewport(GLint x, GLint y, GLsizei width, GLsizei height)
 {
     Context *context = GetValidGlobalContext();
-    EVENT("glViewport",
+    EVENT(context, gl::EntryPoint::Viewport, "glViewport",
           "context = %d, GLint x = %d, GLint y = %d, GLsizei width = %d, GLsizei height = %d",
           CID(context), x, y, width, height);
 
@@ -5938,6 +7237,10 @@ void GL_APIENTRY Viewport(GLint x, GLint y, GLsizei width, GLsizei height)
             context->viewport(x, y, width, height);
         }
         ANGLE_CAPTURE(Viewport, isCallValid, context, x, y, width, height);
+    }
+    else
+    {
+        GenerateContextLostErrorOnCurrentGlobalContext();
     }
 }
 }  // namespace gl

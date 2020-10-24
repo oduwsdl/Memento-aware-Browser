@@ -269,7 +269,7 @@ def makeGenOpts(args):
     # Extensions required and suppressed for beta "platform". This can
     # probably eventually be derived from the requires= attributes of
     # the extension blocks.
-    betaRequireExtensions = [ 'VK_KHR_ray_tracing', 'VK_KHR_deferred_host_operations', 'VK_KHR_pipeline_library' ]
+    betaRequireExtensions = [ 'VK_KHR_ray_tracing', 'VK_KHR_deferred_host_operations', 'VK_KHR_pipeline_library', 'VK_KHR_portability_subset' ]
     betaSuppressExtensions = [ 'VK_NV_ray_tracing' ]
 
     platforms = [
@@ -294,6 +294,7 @@ def makeGenOpts(args):
                                                                      ] ],
         [ 'vulkan_xcb.h',         [ 'VK_KHR_xcb_surface'          ], commonSuppressExtensions ],
         [ 'vulkan_xlib.h',        [ 'VK_KHR_xlib_surface'         ], commonSuppressExtensions ],
+        [ 'vulkan_directfb.h',    [ 'VK_EXT_directfb_surface'     ], commonSuppressExtensions ],
         [ 'vulkan_xlib_xrandr.h', [ 'VK_EXT_acquire_xlib_display' ], commonSuppressExtensions ],
         [ 'vulkan_metal.h',       [ 'VK_EXT_metal_surface'        ], commonSuppressExtensions ],
         [ 'vulkan_beta.h',        betaRequireExtensions,             betaSuppressExtensions ],
@@ -358,7 +359,7 @@ def makeGenOpts(args):
             versions          = featuresPat,
             emitversions      = featuresPat,
             defaultExtensions = defaultExtensions,
-            addExtensions     = None,
+            addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
             prefixText        = prefixStrings + vkPrefixStrings,

@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_descriptor.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
+#include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
@@ -50,18 +51,17 @@ class MODULES_EXPORT MediaStreamTrack
     : public EventTargetWithInlineData,
       public ActiveScriptWrappable<MediaStreamTrack>,
       public MediaStreamSource::Observer {
-  USING_GARBAGE_COLLECTED_MIXIN(MediaStreamTrack);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
   MediaStreamTrack(ExecutionContext*,
                    MediaStreamComponent*,
-                   bool pan_tilt_zoom_allowed);
+                   base::OnceClosure callback);
   MediaStreamTrack(ExecutionContext*,
                    MediaStreamComponent*,
                    MediaStreamSource::ReadyState,
-                   bool pan_tilt_zoom_allowed);
+                   base::OnceClosure callback);
   ~MediaStreamTrack() override;
 
   String kind() const;
@@ -125,6 +125,15 @@ class MODULES_EXPORT MediaStreamTrack
                                     const MediaTrackConstraints*);
 
   std::string GetTrackLogString() const;
+
+  // Ensures that |feature_handle_for_scheduler_| is initialized.
+  void EnsureFeatureHandleForScheduler();
+
+  // This handle notifies the scheduler about a live media stream track
+  // associated with a frame. The handle should be destroyed when the track
+  // is stopped.
+  FrameScheduler::SchedulingAffectingFeatureHandle
+      feature_handle_for_scheduler_;
 
   MediaStreamSource::ReadyState ready_state_;
   HeapHashSet<Member<MediaStream>> registered_media_streams_;

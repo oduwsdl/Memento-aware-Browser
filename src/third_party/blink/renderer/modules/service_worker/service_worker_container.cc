@@ -342,7 +342,7 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(
 
   mojom::ServiceWorkerUpdateViaCache update_via_cache =
       ParseUpdateViaCache(options->updateViaCache());
-  base::Optional<mojom::ScriptType> script_type =
+  base::Optional<mojom::blink::ScriptType> script_type =
       Script::ParseScriptType(options->type());
   DCHECK(script_type);
 
@@ -492,9 +492,6 @@ void ServiceWorkerContainer::SetController(
     MaybeRecordThirdPartyServiceWorkerUsage(GetExecutionContext());
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kServiceWorkerControlledPage);
-    GetExecutionContext()->GetScheduler()->RegisterStickyFeature(
-        SchedulingPolicy::Feature::kServiceWorkerControlledPage,
-        {SchedulingPolicy::RecordMetricsForBackForwardCache()});
   }
   if (should_notify_controller_change)
     DispatchEvent(*Event::Create(event_type_names::kControllerchange));
@@ -582,9 +579,10 @@ ServiceWorkerContainer::GetOrCreateServiceWorkerRegistration(
     return registration;
   }
 
+  const int64_t registration_id = info.registration_id;
   registration = MakeGarbageCollected<ServiceWorkerRegistration>(
       GetSupplementable()->GetExecutionContext(), std::move(info));
-  service_worker_registration_objects_.Set(info.registration_id, registration);
+  service_worker_registration_objects_.Set(registration_id, registration);
   return registration;
 }
 
@@ -594,9 +592,10 @@ ServiceWorker* ServiceWorkerContainer::GetOrCreateServiceWorker(
     return nullptr;
   ServiceWorker* worker = service_worker_objects_.at(info.version_id);
   if (!worker) {
+    const int64_t version_id = info.version_id;
     worker = ServiceWorker::Create(GetSupplementable()->GetExecutionContext(),
                                    std::move(info));
-    service_worker_objects_.Set(info.version_id, worker);
+    service_worker_objects_.Set(version_id, worker);
   }
   return worker;
 }

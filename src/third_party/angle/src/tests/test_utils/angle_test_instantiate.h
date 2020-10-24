@@ -28,6 +28,9 @@ bool IsWindows();
 bool IsWindows7();
 bool IsFuchsia();
 
+// CPU architectures
+bool IsARM64();
+
 // Android devices
 bool IsNexus5X();
 bool IsNexus6P();
@@ -40,13 +43,13 @@ bool IsNVIDIAShield();
 // GPU vendors.
 bool IsIntel();
 bool IsAMD();
-bool IsNVIDIA();
 bool IsARM();
-bool IsARM64();
+bool IsNVIDIA();
 
 // GPU devices.
 bool IsSwiftshaderDevice();
 
+// Compiler configs.
 inline bool IsASan()
 {
 #if defined(ANGLE_WITH_ASAN)
@@ -54,6 +57,15 @@ inline bool IsASan()
 #else
     return false;
 #endif  // defined(ANGLE_WITH_ASAN)
+}
+
+inline bool IsTSan()
+{
+#if defined(THREAD_SANITIZER)
+    return true;
+#else
+    return false;
+#endif  // defined(THREAD_SANITIZER)
 }
 
 bool IsPlatformAvailable(const PlatformParameters &param);
@@ -225,8 +237,8 @@ struct CombinedPrintToStringParamName
                                               combine1, combine2, combine3, combine4, combine5),  \
                              print)
 
-// Checks if a config is expected to be supported by checking a system-based white list.
-bool IsConfigWhitelisted(const SystemInfo &systemInfo, const PlatformParameters &param);
+// Checks if a config is expected to be supported by checking a system-based allow list.
+bool IsConfigAllowlisted(const SystemInfo &systemInfo, const PlatformParameters &param);
 
 // Determines if a config is supported by trying to initialize it. Does
 // not require SystemInfo.
@@ -244,10 +256,7 @@ std::vector<std::string> GetAvailableTestPlatformNames();
 void SetSelectedConfig(const char *selectedConfig);
 bool IsConfigSelected();
 
-// Use a separate isolated process per test config. This works around
-// driver flakiness when using multiple APIs/windows/etc in the same
-// process.
-extern bool gSeparateProcessPerConfig;
+extern bool gEnableANGLEPerTestCaptureLabel;
 
 // For use with ANGLE_INSTANTIATE_TEST_ARRAY
 template <typename ParamsT>
@@ -299,6 +308,20 @@ std::vector<ParamT> CombineWithValues(const std::vector<ParamT> &in,
                                       ParamT combine(const ParamT &, ModifierT))
 {
     return CombineWithValues(in, std::begin(modifiers), std::end(modifiers), combine);
+}
+
+template <typename ParamT, typename FilterFunc>
+std::vector<ParamT> FilterWithFunc(const std::vector<ParamT> &in, FilterFunc filter)
+{
+    std::vector<ParamT> out;
+    for (const ParamT &param : in)
+    {
+        if (filter(param))
+        {
+            out.push_back(param);
+        }
+    }
+    return out;
 }
 }  // namespace angle
 

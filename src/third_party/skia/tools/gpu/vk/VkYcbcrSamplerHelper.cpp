@@ -9,8 +9,8 @@
 
 #ifdef SK_VULKAN
 
-#include "include/gpu/GrContext.h"
-#include "src/gpu/GrContextPriv.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/vk/GrVkGpu.h"
 #include "src/gpu/vk/GrVkUtil.h"
 
@@ -23,11 +23,11 @@ std::pair<int, int> VkYcbcrSamplerHelper::GetExpectedUV(int x, int y, int width,
 }
 
 GrVkGpu* VkYcbcrSamplerHelper::vkGpu() {
-    return (GrVkGpu*) fContext->priv().getGpu();
+    return (GrVkGpu*) fDContext->priv().getGpu();
 }
 
-VkYcbcrSamplerHelper::VkYcbcrSamplerHelper(GrContext* context) : fContext(context) {
-    SkASSERT_RELEASE(context->backend() == GrBackendApi::kVulkan);
+VkYcbcrSamplerHelper::VkYcbcrSamplerHelper(GrDirectContext* dContext) : fDContext(dContext) {
+    SkASSERT_RELEASE(dContext->backend() == GrBackendApi::kVulkan);
 }
 
 VkYcbcrSamplerHelper::~VkYcbcrSamplerHelper() {
@@ -74,7 +74,8 @@ bool VkYcbcrSamplerHelper::createBackendTexture(uint32_t width, uint32_t height)
     vkImageInfo.arrayLayers = 1;
     vkImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     vkImageInfo.tiling = VK_IMAGE_TILING_LINEAR;
-    vkImageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    vkImageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     vkImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     vkImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -175,19 +176,31 @@ bool VkYcbcrSamplerHelper::createBackendTexture(uint32_t width, uint32_t height)
     }
 
     // Wrap the image into SkImage.
-    GrVkYcbcrConversionInfo ycbcrInfo(vkImageInfo.format,
-                                      /*externalFormat=*/0,
-                                      VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
-                                      VK_SAMPLER_YCBCR_RANGE_ITU_NARROW,
-                                      VK_CHROMA_LOCATION_COSITED_EVEN,
-                                      VK_CHROMA_LOCATION_COSITED_EVEN,
-                                      VK_FILTER_LINEAR,
-                                      false,
-                                      formatProperties.linearTilingFeatures);
-    GrVkAlloc alloc(fImageMemory, 0 /* offset */, requirements.size, 0 /* flags */);
-    GrVkImageInfo imageInfo(fImage, alloc, VK_IMAGE_TILING_LINEAR, VK_IMAGE_LAYOUT_UNDEFINED,
-                            vkImageInfo.format, 1 /* levelCount */, VK_QUEUE_FAMILY_IGNORED,
-                            GrProtected::kNo, ycbcrInfo);
+    GrVkYcbcrConversionInfo ycbcrInfo = {vkImageInfo.format,
+                                         /*externalFormat=*/0,
+                                         VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
+                                         VK_SAMPLER_YCBCR_RANGE_ITU_NARROW,
+                                         VK_CHROMA_LOCATION_COSITED_EVEN,
+                                         VK_CHROMA_LOCATION_COSITED_EVEN,
+                                         VK_FILTER_LINEAR,
+                                         false,
+                                         formatProperties.linearTilingFeatures};
+    GrVkAlloc alloc;
+    alloc.fMemory = fImageMemory;
+    alloc.fOffset = 0;
+    alloc.fSize = requirements.size;
+
+    GrVkImageInfo imageInfo = {fImage,
+                               alloc,
+                               VK_IMAGE_TILING_LINEAR,
+                               VK_IMAGE_LAYOUT_UNDEFINED,
+                               vkImageInfo.format,
+                               vkImageInfo.usage,
+                               1 /* sample count */,
+                               1 /* levelCount */,
+                               VK_QUEUE_FAMILY_IGNORED,
+                               GrProtected::kNo,
+                               ycbcrInfo};
 
     fTexture = GrBackendTexture(width, height, imageInfo);
     return true;

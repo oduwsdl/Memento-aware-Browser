@@ -17,6 +17,7 @@
 #include "common/Assert.h"
 #include "dawn_native/BackendConnection.h"
 #include "dawn_native/ErrorData.h"
+#include "dawn_native/Format.h"
 #include "dawn_native/Instance.h"
 #include "dawn_native/d3d12/AdapterD3D12.h"
 #include "dawn_native/d3d12/BackendD3D12.h"
@@ -29,6 +30,7 @@
 #include "dawn_native/d3d12/D3D12Error.h"
 #include "dawn_native/d3d12/PipelineLayoutD3D12.h"
 #include "dawn_native/d3d12/PlatformFunctions.h"
+#include "dawn_native/d3d12/QuerySetD3D12.h"
 #include "dawn_native/d3d12/QueueD3D12.h"
 #include "dawn_native/d3d12/RenderPipelineD3D12.h"
 #include "dawn_native/d3d12/ResidencyManagerD3D12.h"
@@ -41,6 +43,7 @@
 #include "dawn_native/d3d12/StagingDescriptorAllocatorD3D12.h"
 #include "dawn_native/d3d12/SwapChainD3D12.h"
 #include "dawn_native/d3d12/TextureD3D12.h"
+#include "dawn_native/d3d12/UtilsD3D12.h"
 
 #include <sstream>
 
@@ -79,7 +82,7 @@ namespace dawn_native { namespace d3d12 {
         mCommandQueue.As(&mD3d12SharingContract);
 
         DAWN_TRY(
-            CheckHRESULT(mD3d12Device->CreateFence(GetLastSubmittedCommandSerial(),
+            CheckHRESULT(mD3d12Device->CreateFence(uint64_t(GetLastSubmittedCommandSerial()),
                                                    D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&mFence)),
                          "D3D12 create fence"));
 
@@ -90,14 +93,15 @@ namespace dawn_native { namespace d3d12 {
         mCommandAllocatorManager = std::make_unique<CommandAllocatorManager>(this);
 
         // Zero sized allocator is never requested and does not need to exist.
-        for (uint32_t countIndex = 1; countIndex < kNumOfStagingDescriptorAllocators;
-             countIndex++) {
-            mViewAllocators[countIndex] = std::make_unique<StagingDescriptorAllocator>(
-                this, countIndex, kShaderVisibleDescriptorHeapSize,
+        for (uint32_t countIndex = 0; countIndex < kNumViewDescriptorAllocators; countIndex++) {
+            mViewAllocators[countIndex + 1] = std::make_unique<StagingDescriptorAllocator>(
+                this, 1u << countIndex, kShaderVisibleDescriptorHeapSize,
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        }
 
-            mSamplerAllocators[countIndex] = std::make_unique<StagingDescriptorAllocator>(
-                this, countIndex, kShaderVisibleDescriptorHeapSize,
+        for (uint32_t countIndex = 0; countIndex < kNumSamplerDescriptorAllocators; countIndex++) {
+            mSamplerAllocators[countIndex + 1] = std::make_unique<StagingDescriptorAllocator>(
+                this, 1u << countIndex, kShaderVisibleDescriptorHeapSize,
                 D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
         }
 
@@ -215,7 +219,7 @@ namespace dawn_native { namespace d3d12 {
 
     MaybeError Device::TickImpl() {
         // Perform cleanup operations to free unused objects
-        Serial completedSerial = GetCompletedCommandSerial();
+        ExecutionSerial completedSerial = GetCompletedCommandSerial();
 
         mResourceAllocatorManager->Tick(completedSerial);
         DAWN_TRY(mCommandAllocatorManager->Tick(completedSerial));
@@ -235,14 +239,15 @@ namespace dawn_native { namespace d3d12 {
     MaybeError Device::NextSerial() {
         IncrementLastSubmittedCommandSerial();
 
-        return CheckHRESULT(mCommandQueue->Signal(mFence.Get(), GetLastSubmittedCommandSerial()),
-                            "D3D12 command queue signal fence");
+        return CheckHRESULT(
+            mCommandQueue->Signal(mFence.Get(), uint64_t(GetLastSubmittedCommandSerial())),
+            "D3D12 command queue signal fence");
     }
 
-    MaybeError Device::WaitForSerial(uint64_t serial) {
+    MaybeError Device::WaitForSerial(ExecutionSerial serial) {
         CheckPassedSerials();
         if (GetCompletedCommandSerial() < serial) {
-            DAWN_TRY(CheckHRESULT(mFence->SetEventOnCompletion(serial, mFenceEvent),
+            DAWN_TRY(CheckHRESULT(mFence->SetEventOnCompletion(uint64_t(serial), mFenceEvent),
                                   "D3D12 set event on completion"));
             WaitForSingleObject(mFenceEvent, INFINITE);
             CheckPassedSerials();
@@ -250,8 +255,8 @@ namespace dawn_native { namespace d3d12 {
         return {};
     }
 
-    Serial Device::CheckAndUpdateCompletedSerials() {
-        return mFence->GetCompletedValue();
+    ExecutionSerial Device::CheckAndUpdateCompletedSerials() {
+        return ExecutionSerial(mFence->GetCompletedValue());
     }
 
     void Device::ReferenceUntilUnused(ComPtr<IUnknown> object) {
@@ -270,10 +275,10 @@ namespace dawn_native { namespace d3d12 {
         const BindGroupLayoutDescriptor* descriptor) {
         return new BindGroupLayout(this, descriptor);
     }
-    ResultOrError<BufferBase*> Device::CreateBufferImpl(const BufferDescriptor* descriptor) {
+    ResultOrError<Ref<BufferBase>> Device::CreateBufferImpl(const BufferDescriptor* descriptor) {
         Ref<Buffer> buffer = AcquireRef(new Buffer(this, descriptor));
-        DAWN_TRY(buffer->Initialize());
-        return buffer.Detach();
+        DAWN_TRY(buffer->Initialize(descriptor->mappedAtCreation));
+        return std::move(buffer);
     }
     CommandBufferBase* Device::CreateCommandBuffer(CommandEncoder* encoder,
                                                    const CommandBufferDescriptor* descriptor) {
@@ -288,7 +293,7 @@ namespace dawn_native { namespace d3d12 {
         return PipelineLayout::Create(this, descriptor);
     }
     ResultOrError<QuerySetBase*> Device::CreateQuerySetImpl(const QuerySetDescriptor* descriptor) {
-        return DAWN_UNIMPLEMENTED_ERROR("Waiting for implementation");
+        return QuerySet::Create(this, descriptor);
     }
     ResultOrError<RenderPipelineBase*> Device::CreateRenderPipelineImpl(
         const RenderPipelineDescriptor* descriptor) {
@@ -336,12 +341,55 @@ namespace dawn_native { namespace d3d12 {
         DAWN_TRY_ASSIGN(commandRecordingContext, GetPendingCommandContext());
 
         Buffer* dstBuffer = ToBackend(destination);
-        StagingBuffer* srcBuffer = ToBackend(source);
-        dstBuffer->TrackUsageAndTransitionNow(commandRecordingContext, wgpu::BufferUsage::CopyDst);
 
-        commandRecordingContext->GetCommandList()->CopyBufferRegion(
-            dstBuffer->GetD3D12Resource().Get(), destinationOffset, srcBuffer->GetResource(),
+        DAWN_TRY(dstBuffer->EnsureDataInitializedAsDestination(commandRecordingContext,
+                                                               destinationOffset, size));
+
+        CopyFromStagingToBufferImpl(commandRecordingContext, source, sourceOffset, destination,
+                                    destinationOffset, size);
+
+        return {};
+    }
+
+    void Device::CopyFromStagingToBufferImpl(CommandRecordingContext* commandContext,
+                                             StagingBufferBase* source,
+                                             uint64_t sourceOffset,
+                                             BufferBase* destination,
+                                             uint64_t destinationOffset,
+                                             uint64_t size) {
+        ASSERT(commandContext != nullptr);
+        Buffer* dstBuffer = ToBackend(destination);
+        StagingBuffer* srcBuffer = ToBackend(source);
+        dstBuffer->TrackUsageAndTransitionNow(commandContext, wgpu::BufferUsage::CopyDst);
+
+        commandContext->GetCommandList()->CopyBufferRegion(
+            dstBuffer->GetD3D12Resource(), destinationOffset, srcBuffer->GetResource(),
             sourceOffset, size);
+    }
+
+    MaybeError Device::CopyFromStagingToTexture(const StagingBufferBase* source,
+                                                const TextureDataLayout& src,
+                                                TextureCopy* dst,
+                                                const Extent3D& copySizePixels) {
+        CommandRecordingContext* commandContext;
+        DAWN_TRY_ASSIGN(commandContext, GetPendingCommandContext());
+        Texture* texture = ToBackend(dst->texture.Get());
+        ASSERT(texture->GetDimension() == wgpu::TextureDimension::e2D);
+
+        SubresourceRange range = GetSubresourcesAffectedByCopy(*dst, copySizePixels);
+
+        if (IsCompleteSubresourceCopiedTo(texture, copySizePixels, dst->mipLevel)) {
+            texture->SetIsSubresourceContentInitialized(true, range);
+        } else {
+            texture->EnsureSubresourceContentInitialized(commandContext, range);
+        }
+
+        texture->TrackUsageAndTransitionNow(commandContext, wgpu::TextureUsage::CopyDst, range);
+
+        // compute the copySplits and record the CopyTextureRegion commands
+        CopyBufferToTextureWithCopySplit(commandContext, *dst, copySizePixels, texture,
+                                         ToBackend(source)->GetResource(), src.offset,
+                                         src.bytesPerRow, src.rowsPerImage, range.aspects);
 
         return {};
     }
@@ -360,7 +408,7 @@ namespace dawn_native { namespace d3d12 {
 
     Ref<TextureBase> Device::WrapSharedHandle(const ExternalImageDescriptor* descriptor,
                                               HANDLE sharedHandle,
-                                              uint64_t acquireMutexKey,
+                                              ExternalMutexSerial acquireMutexKey,
                                               bool isSwapChainTexture) {
         Ref<TextureBase> dawnTexture;
         if (ConsumedError(Texture::Create(this, descriptor, sharedHandle, acquireMutexKey,
@@ -523,8 +571,13 @@ namespace dawn_native { namespace d3d12 {
             ::CloseHandle(mFenceEvent);
         }
 
+        // Release recycled resource heaps.
+        if (mResourceAllocatorManager != nullptr) {
+            mResourceAllocatorManager->DestroyPool();
+        }
+
         // We need to handle clearing up com object refs that were enqeued after TickImpl
-        mUsedComObjectRefs.ClearUpTo(GetCompletedCommandSerial());
+        mUsedComObjectRefs.ClearUpTo(std::numeric_limits<ExecutionSerial>::max());
 
         ASSERT(mUsedComObjectRefs.Empty());
         ASSERT(!mPendingCommands.IsOpen());
@@ -540,14 +593,18 @@ namespace dawn_native { namespace d3d12 {
 
     StagingDescriptorAllocator* Device::GetViewStagingDescriptorAllocator(
         uint32_t descriptorCount) const {
-        ASSERT(descriptorCount < kNumOfStagingDescriptorAllocators);
-        return mViewAllocators[descriptorCount].get();
+        ASSERT(descriptorCount <= kMaxViewDescriptorsPerBindGroup);
+        // This is Log2 of the next power of two, plus 1.
+        uint32_t allocatorIndex = descriptorCount == 0 ? 0 : Log2Ceil(descriptorCount) + 1;
+        return mViewAllocators[allocatorIndex].get();
     }
 
     StagingDescriptorAllocator* Device::GetSamplerStagingDescriptorAllocator(
         uint32_t descriptorCount) const {
-        ASSERT(descriptorCount < kNumOfStagingDescriptorAllocators);
-        return mSamplerAllocators[descriptorCount].get();
+        ASSERT(descriptorCount <= kMaxSamplerDescriptorsPerBindGroup);
+        // This is Log2 of the next power of two, plus 1.
+        uint32_t allocatorIndex = descriptorCount == 0 ? 0 : Log2Ceil(descriptorCount) + 1;
+        return mSamplerAllocators[allocatorIndex].get();
     }
 
     StagingDescriptorAllocator* Device::GetRenderTargetViewAllocator() const {
@@ -560,6 +617,18 @@ namespace dawn_native { namespace d3d12 {
 
     SamplerHeapCache* Device::GetSamplerHeapCache() {
         return mSamplerHeapCache.get();
+    }
+
+    uint32_t Device::GetOptimalBytesPerRowAlignment() const {
+        return D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+    }
+
+    // TODO(dawn:512): Once we optimize DynamicUploader allocation with offsets we
+    // should make this return D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT = 512.
+    // Current implementations would try to allocate additional 511 bytes,
+    // so we return 1 and let ComputeTextureCopySplits take care of the alignment.
+    uint64_t Device::GetOptimalBufferToTextureCopyOffsetAlignment() const {
+        return 1;
     }
 
 }}  // namespace dawn_native::d3d12

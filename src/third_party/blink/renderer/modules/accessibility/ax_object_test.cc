@@ -12,22 +12,6 @@
 namespace blink {
 namespace test {
 
-class AccessibilityLayoutTest : public testing::WithParamInterface<bool>,
-                                private ScopedLayoutNGForTest,
-                                public AccessibilityTest {
- public:
-  AccessibilityLayoutTest() : ScopedLayoutNGForTest(GetParam()) {}
-
- protected:
-  bool LayoutNGEnabled() const {
-    return RuntimeEnabledFeatures::LayoutNGEnabled();
-  }
-};
-
-INSTANTIATE_TEST_SUITE_P(AccessibilityTest,
-                         AccessibilityLayoutTest,
-                         testing::Bool());
-
 TEST_F(AccessibilityTest, IsDescendantOf) {
   SetBodyInnerHTML(R"HTML(<button id="button">button</button>)HTML");
 
@@ -169,13 +153,13 @@ TEST_F(AccessibilityTest, TreeNavigationWithIgnoredContainer) {
   // ++++B
   // ++C
   // So that nodes [A, B, C] are siblings
-  SetBodyInnerHTML(R"HTML(<body>
-    <p id="A">some text</p>
-    <div>
-      <p id="B">nested text</p>
-    </div>
-    <p id="C">more text</p>
-    </body>)HTML");
+  SetBodyInnerHTML(R"HTML(
+      <p id="A">some text</p>
+      <div>
+        <p id="B">nested text</p>
+      </div>
+      <p id="C">more text</p>
+      )HTML");
 
   const AXObject* root = GetAXRootObject();
   const AXObject* body = GetAXBodyObject();
@@ -244,6 +228,149 @@ TEST_F(AccessibilityTest, TreeNavigationWithIgnoredContainer) {
   EXPECT_EQ(obj_b_text, obj_c->UnignoredPreviousInPreOrder());
   EXPECT_EQ(obj_c_text, obj_c->NextInPreOrderIncludingIgnored());
   EXPECT_EQ(obj_c_text, obj_c->UnignoredNextInPreOrder());
+}
+
+TEST_F(AccessibilityTest, TreeNavigationWithContinuations) {
+  // Continuations found in the layout tree should not appear in the
+  // accessibility tree. For example, the following accessibility tree should
+  // result from the following HTML.
+  //
+  // WebArea
+  // ++HTMLElement
+  // ++++BodyElement
+  // ++++++Link
+  // ++++++++StaticText "Before block element."
+  // ++++++++GenericContainer
+  // ++++++++++Paragraph
+  // ++++++++++++StaticText "Inside block element."
+  // ++++++++StaticText "After block element."
+  SetBodyInnerHTML(R"HTML(
+      <a id="link" href="#">
+        Before block element.
+        <div id="div">
+          <p id="paragraph">
+            Inside block element.
+          </p>
+        </div>
+        After block element.
+      </a>
+      )HTML");
+
+  const AXObject* ax_root = GetAXRootObject();
+  ASSERT_NE(nullptr, ax_root);
+  const AXObject* ax_body = GetAXBodyObject();
+  ASSERT_NE(nullptr, ax_body);
+  const AXObject* ax_link = GetAXObjectByElementId("link");
+  ASSERT_NE(nullptr, ax_link);
+  const AXObject* ax_text_before = ax_link->FirstChildIncludingIgnored();
+  ASSERT_NE(nullptr, ax_text_before);
+  ASSERT_EQ(ax::mojom::Role::kStaticText, ax_text_before->RoleValue());
+  ASSERT_FALSE(ax_text_before->AccessibilityIsIgnored());
+  const AXObject* ax_div = GetAXObjectByElementId("div");
+  ASSERT_NE(nullptr, ax_div);
+  const AXObject* ax_paragraph = GetAXObjectByElementId("paragraph");
+  ASSERT_NE(nullptr, ax_paragraph);
+  const AXObject* ax_text_inside = ax_paragraph->FirstChildIncludingIgnored();
+  ASSERT_NE(nullptr, ax_text_inside);
+  ASSERT_EQ(ax::mojom::Role::kStaticText, ax_text_inside->RoleValue());
+  ASSERT_FALSE(ax_text_inside->AccessibilityIsIgnored());
+  const AXObject* ax_text_after = ax_link->LastChildIncludingIgnored();
+  ASSERT_NE(nullptr, ax_text_after);
+  ASSERT_EQ(ax::mojom::Role::kStaticText, ax_text_after->RoleValue());
+  ASSERT_FALSE(ax_text_after->AccessibilityIsIgnored());
+
+  //
+  // Test parent / child relationships individually. This is easier to debug
+  // than printing the whole accessibility tree as a string and comparing with
+  // an expected tree.
+  //
+
+  EXPECT_EQ(ax_root, ax_link->ParentObjectUnignored());
+  EXPECT_EQ(ax_body, ax_link->ParentObjectIncludedInTree());
+
+  EXPECT_EQ(ax_link, ax_text_before->ParentObjectUnignored());
+  EXPECT_EQ(ax_link, ax_text_before->ParentObjectIncludedInTree());
+  EXPECT_EQ(ax_link, ax_div->ParentObjectUnignored());
+  EXPECT_EQ(ax_link, ax_div->ParentObjectIncludedInTree());
+  EXPECT_EQ(ax_link, ax_text_after->ParentObjectUnignored());
+  EXPECT_EQ(ax_link, ax_text_after->ParentObjectIncludedInTree());
+
+  EXPECT_EQ(ax_div, ax_link->ChildAtIncludingIgnored(1));
+  EXPECT_EQ(ax_div, ax_link->UnignoredChildAt(1));
+
+  EXPECT_EQ(nullptr, ax_text_before->PreviousSiblingIncludingIgnored());
+  EXPECT_EQ(nullptr, ax_text_before->UnignoredPreviousSibling());
+  EXPECT_EQ(ax_div, ax_text_before->NextSiblingIncludingIgnored());
+  EXPECT_EQ(ax_div, ax_text_before->UnignoredNextSibling());
+  EXPECT_EQ(ax_div, ax_text_after->PreviousSiblingIncludingIgnored());
+  EXPECT_EQ(ax_div, ax_text_after->UnignoredPreviousSibling());
+  EXPECT_EQ(nullptr, ax_text_after->NextSiblingIncludingIgnored());
+  EXPECT_EQ(nullptr, ax_text_after->UnignoredNextSibling());
+
+  EXPECT_EQ(ax_paragraph, ax_div->ChildAtIncludingIgnored(0));
+  EXPECT_EQ(ax_paragraph, ax_div->UnignoredChildAt(0));
+
+  EXPECT_EQ(ax_div, ax_paragraph->ParentObjectUnignored());
+  EXPECT_EQ(ax_div, ax_paragraph->ParentObjectIncludedInTree());
+  EXPECT_EQ(ax_paragraph, ax_text_inside->ParentObjectUnignored());
+  EXPECT_EQ(ax_paragraph, ax_text_inside->ParentObjectIncludedInTree());
+}
+
+TEST_F(AccessibilityTest, TreeNavigationWithInlineTextBoxes) {
+  SetBodyInnerHTML(R"HTML(
+      Before paragraph element.
+      <p id="paragraph">
+        Inside paragraph element.
+      </p>
+      After paragraph element.
+      )HTML");
+
+  AXObject* ax_root = GetAXRootObject();
+  ASSERT_NE(nullptr, ax_root);
+  ax_root->LoadInlineTextBoxes();
+
+  const AXObject* ax_paragraph = GetAXObjectByElementId("paragraph");
+  ASSERT_NE(nullptr, ax_paragraph);
+  const AXObject* ax_text_inside = ax_paragraph->FirstChildIncludingIgnored();
+  ASSERT_NE(nullptr, ax_text_inside);
+  ASSERT_EQ(ax::mojom::Role::kStaticText, ax_text_inside->RoleValue());
+  const AXObject* ax_text_before = ax_paragraph->UnignoredPreviousSibling();
+  ASSERT_NE(nullptr, ax_text_before);
+  ASSERT_EQ(ax::mojom::blink::Role::kStaticText, ax_text_before->RoleValue());
+  const AXObject* ax_text_after = ax_paragraph->UnignoredNextSibling();
+  ASSERT_NE(nullptr, ax_text_after);
+  ASSERT_EQ(ax::mojom::blink::Role::kStaticText, ax_text_after->RoleValue());
+
+  //
+  // Verify parent / child relationships between static text and inline text
+  // boxes.
+  //
+
+  EXPECT_EQ(1, ax_text_before->ChildCountIncludingIgnored());
+  EXPECT_EQ(1, ax_text_before->UnignoredChildCount());
+  const AXObject* ax_inline_before =
+      ax_text_before->FirstChildIncludingIgnored();
+  EXPECT_EQ(ax::mojom::blink::Role::kInlineTextBox,
+            ax_inline_before->RoleValue());
+  EXPECT_EQ(ax_text_before, ax_inline_before->ParentObjectIncludedInTree());
+  EXPECT_EQ(ax_text_before, ax_inline_before->ParentObjectUnignored());
+
+  EXPECT_EQ(1, ax_text_inside->ChildCountIncludingIgnored());
+  EXPECT_EQ(1, ax_text_inside->UnignoredChildCount());
+  const AXObject* ax_inline_inside =
+      ax_text_inside->FirstChildIncludingIgnored();
+  EXPECT_EQ(ax::mojom::blink::Role::kInlineTextBox,
+            ax_inline_inside->RoleValue());
+  EXPECT_EQ(ax_text_inside, ax_inline_inside->ParentObjectIncludedInTree());
+  EXPECT_EQ(ax_text_inside, ax_inline_inside->ParentObjectUnignored());
+
+  EXPECT_EQ(1, ax_text_after->ChildCountIncludingIgnored());
+  EXPECT_EQ(1, ax_text_after->UnignoredChildCount());
+  const AXObject* ax_inline_after = ax_text_after->FirstChildIncludingIgnored();
+  EXPECT_EQ(ax::mojom::blink::Role::kInlineTextBox,
+            ax_inline_after->RoleValue());
+  EXPECT_EQ(ax_text_after, ax_inline_after->ParentObjectIncludedInTree());
+  EXPECT_EQ(ax_text_after, ax_inline_after->ParentObjectUnignored());
 }
 
 TEST_F(AccessibilityTest, AXObjectComparisonOperators) {
@@ -390,7 +517,72 @@ TEST_F(AccessibilityTest, AxNodeObjectContainsInPageLinkTarget) {
   EXPECT_EQ(anchor->Url(), KURL("http://test.com/#target"));
 }
 
-TEST_P(AccessibilityLayoutTest, NextOnLine) {
+TEST_F(AccessibilityTest, AxNodeObjectInPageLinkTargetNonAscii) {
+  GetDocument().SetURL(KURL("http://test.com"));
+  // ö is U+00F6 which URI encodes to %C3%B6
+  //
+  // This file is forced to be UTF-8 by the build system,
+  // the uR"" will create char16_t[] of UTF-16,
+  // WTF::String will wrap the char16_t* as UTF-16.
+  // All this is checked by ensuring a match against u"\u00F6".
+  //
+  // TODO(1117212): The escaped version currently takes precedence.
+  //  <h1 id="%C3%B6">O2</h1>
+  SetBodyInnerHTML(
+      uR"HTML(
+    <a href="#ö" id="anchor">O</a>
+    <h1 id="ö">O</h1>"
+    <a href="#t%6Fp" id="top_test">top</a>"
+    <a href="#" id="empty_test">also top</a>");
+  )HTML");
+
+  {
+    // anchor
+    const AXObject* anchor = GetAXObjectByElementId("anchor");
+    ASSERT_NE(nullptr, anchor);
+
+    EXPECT_FALSE(anchor->Url().IsEmpty());
+    EXPECT_EQ(anchor->Url(), KURL(u"http://test.com/#\u00F6"));
+
+    const AXObject* target = anchor->InPageLinkTarget();
+    ASSERT_NE(nullptr, target);
+
+    auto* targetElement = DynamicTo<Element>(target->GetNode());
+    ASSERT_NE(nullptr, target);
+    ASSERT_TRUE(targetElement->HasID());
+    EXPECT_EQ(targetElement->IdForStyleResolution(), String(u"\u00F6"));
+  }
+
+  {
+    // top_test
+    const AXObject* anchor = GetAXObjectByElementId("top_test");
+    ASSERT_NE(nullptr, anchor);
+
+    EXPECT_FALSE(anchor->Url().IsEmpty());
+    EXPECT_EQ(anchor->Url(), KURL(u"http://test.com/#t%6Fp"));
+
+    const AXObject* target = anchor->InPageLinkTarget();
+    ASSERT_NE(nullptr, target);
+
+    EXPECT_EQ(&GetDocument(), target->GetNode());
+  }
+
+  {
+    // empty_test
+    const AXObject* anchor = GetAXObjectByElementId("empty_test");
+    ASSERT_NE(nullptr, anchor);
+
+    EXPECT_FALSE(anchor->Url().IsEmpty());
+    EXPECT_EQ(anchor->Url(), KURL(u"http://test.com/#"));
+
+    const AXObject* target = anchor->InPageLinkTarget();
+    ASSERT_NE(nullptr, target);
+
+    EXPECT_EQ(&GetDocument(), target->GetNode());
+  }
+}
+
+TEST_P(ParameterizedAccessibilityTest, NextOnLine) {
   SetBodyInnerHTML(R"HTML(
     <style>
     html {
@@ -487,21 +679,17 @@ TEST_F(AccessibilityTest, CheckNoDuplicateChildren) {
       ax_select->FirstChildIncludingIgnored()->ChildCountIncludingIgnored(), 1);
 }
 
-TEST_F(AccessibilityTest, InitRelationCache) {
-  // All of the other tests already have accessibility initialized
+TEST_F(AccessibilityTest, InitRelationCacheLabelFor) {
+  // Most other tests already have accessibility initialized
   // first, but we don't want to in this test.
   //
   // Get rid of the AXContext so the AXObjectCache is destroyed.
   ax_context_.reset(nullptr);
 
   SetBodyInnerHTML(R"HTML(
-      <ul id="ul" aria-owns="li"></ul>
       <label for="a"></label>
       <input id="a">
       <input id="b">
-      <div role="section" id="div">
-        <li id="li"></li>
-      </div>
     )HTML");
 
   // Now recreate an AXContext, simulating what happens if accessibility
@@ -514,11 +702,28 @@ TEST_F(AccessibilityTest, InitRelationCache) {
   ASSERT_NE(nullptr, input_a);
   const AXObject* input_b = GetAXObjectByElementId("b");
   ASSERT_NE(nullptr, input_b);
+}
 
-  EXPECT_TRUE(GetAXObjectCache().MayHaveHTMLLabel(
-      To<HTMLElement>(*input_a->GetNode())));
-  EXPECT_FALSE(GetAXObjectCache().MayHaveHTMLLabel(
-      To<HTMLElement>(*input_b->GetNode())));
+TEST_F(AccessibilityTest, InitRelationCacheAriaOwns) {
+  // Most other tests already have accessibility initialized
+  // first, but we don't want to in this test.
+  //
+  // Get rid of the AXContext so the AXObjectCache is destroyed.
+  ax_context_.reset(nullptr);
+
+  SetBodyInnerHTML(R"HTML(
+      <ul id="ul" aria-owns="li"></ul>
+      <div role="section" id="div">
+        <li id="li"></li>
+      </div>
+    )HTML");
+
+  // Now recreate an AXContext, simulating what happens if accessibility
+  // is enabled after the document is loaded.
+  ax_context_.reset(new AXContext(GetDocument()));
+
+  const AXObject* root = GetAXRootObject();
+  ASSERT_NE(nullptr, root);
 
   // Note: retrieve the LI first and check that its parent is not
   // the paragraph element. If we were to retrieve the UL element,

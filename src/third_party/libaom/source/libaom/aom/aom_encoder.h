@@ -78,27 +78,6 @@ typedef struct aom_fixed_buf {
   size_t sz;       /**< Length of the buffer, in chars */
 } aom_fixed_buf_t; /**< alias for struct aom_fixed_buf */
 
-/*!\brief Compressed Frame Flags
- *
- * This type represents a bitfield containing information about a compressed
- * frame that may be useful to an application. The most significant 16 bits
- * can be used by an algorithm to provide additional detail, for example to
- * support frame types that are codec specific (MPEG-1 D-frames for example)
- */
-typedef uint32_t aom_codec_frame_flags_t;
-#define AOM_FRAME_IS_KEY 0x1 /**< frame is the start of a GOP */
-/*!\brief frame can be dropped without affecting the stream (no future frame
- * depends on this one) */
-#define AOM_FRAME_IS_DROPPABLE 0x2
-/*!\brief this is an INTRA_ONLY frame */
-#define AOM_FRAME_IS_INTRAONLY 0x10
-/*!\brief this is an S-frame */
-#define AOM_FRAME_IS_SWITCH 0x20
-/*!\brief this is an error-resilient frame */
-#define AOM_FRAME_IS_ERROR_RESILIENT 0x40
-/*!\brief this is a key-frame dependent recovery-point frame */
-#define AOM_FRAME_IS_DELAYED_RANDOM_ACCESS_POINT 0x80
-
 /*!\brief Error Resilient flags
  *
  * These flags define which error resilient features to enable in the
@@ -152,8 +131,17 @@ typedef struct aom_codec_cx_pkt {
       unsigned int samples[4]; /**< Number of samples, total/y/u/v */
       uint64_t sse[4];         /**< sum squared error, total/y/u/v */
       double psnr[4];          /**< PSNR, total/y/u/v */
-    } psnr;                    /**< data for PSNR packet */
-    aom_fixed_buf_t raw;       /**< data for arbitrary packets */
+      /*!\brief Number of samples, total/y/u/v when
+       * input bit-depth < stream bit-depth.*/
+      unsigned int samples_hbd[4];
+      /*!\brief sum squared error, total/y/u/v when
+       * input bit-depth < stream bit-depth.*/
+      uint64_t sse_hbd[4];
+      /*!\brief PSNR, total/y/u/v when
+       * input bit-depth < stream bit-depth.*/
+      double psnr_hbd[4];
+    } psnr;              /**< data for PSNR packet */
+    aom_fixed_buf_t raw; /**< data for arbitrary packets */
 
     /* This packet size is fixed to allow codecs to extend this
      * interface without having to manage storage for raw packets,

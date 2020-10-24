@@ -29,6 +29,8 @@ namespace dawn_native { namespace metal {
             uint32_t textureIndex = 0;
 
             for (BindGroupIndex group : IterateBitSet(GetBindGroupLayoutsMask())) {
+                mIndexInfo[stage][group].resize(GetBindGroupLayout(group)->GetBindingCount());
+
                 for (BindingIndex bindingIndex{0};
                      bindingIndex < GetBindGroupLayout(group)->GetBindingCount(); ++bindingIndex) {
                     const BindingInfo& bindingInfo =
@@ -50,13 +52,11 @@ namespace dawn_native { namespace metal {
                             samplerIndex++;
                             break;
                         case wgpu::BindingType::SampledTexture:
+                        case wgpu::BindingType::MultisampledTexture:
                         case wgpu::BindingType::ReadonlyStorageTexture:
                         case wgpu::BindingType::WriteonlyStorageTexture:
                             mIndexInfo[stage][group][bindingIndex] = textureIndex;
                             textureIndex++;
-                            break;
-                        case wgpu::BindingType::StorageTexture:
-                            UNREACHABLE();
                             break;
                     }
                 }

@@ -14,16 +14,6 @@
         "port_name": "linux-trusty",
         "specifiers": ["Trusty", "Debug"]
     },
-    "Mac10.10 Tests": {
-        "master": "chromium.mac",
-        "port_name": "mac-mac10.10",
-        "specifiers": ["Mac10.10", "Release"]
-    },
-    "Mac10.11 Tests": {
-        "master": "chromium.mac",
-        "port_name": "mac-mac10.11",
-        "specifiers": ["Mac10.11", "Release"]
-    },
     "Mac10.12 Tests": {
         "master": "chromium.mac",
         "port_name": "mac-mac10.12",
@@ -34,11 +24,6 @@
         "port_name": "mac-mac10.13",
         "specifiers": ["Mac10.13", "Release"]
     },
-    "WebKit Mac10.13 (retina)": {
-        "master": "chromium.mac",
-        "port_name": "mac-retina",
-        "specifiers": ["Retina", "Release"]
-    },
     "Mac10.13 Tests (dbg)": {
         "master": "chromium.mac",
         "port_name": "mac-mac10.13",
@@ -48,6 +33,16 @@
         "master": "chromium.mac",
         "port_name": "mac-mac10.14",
         "specifiers": ["Mac10.14", "Release"]
+    },
+    "Mac10.15 Tests": {
+        "master": "chromium.mac",
+        "port_name": "mac-mac10.15",
+        "specifiers": ["Mac10.15", "Release"]
+    },
+    "Mac11.0 Tests": {
+        "master": "chromium.fyi",
+        "port_name": "mac-mac11.0",
+        "specifiers": ["Mac11.0", "Release"]
     },
     "Win7 Tests (1)": {
         "master": "chromium.win",
@@ -77,18 +72,6 @@
         "has_webdriver_tests": true,
         "is_try_builder": true
     },
-    "mac10.10-blink-rel": {
-        "master": "tryserver.blink",
-        "port_name": "mac-mac10.10",
-        "specifiers": ["Mac10.10", "Release"],
-        "is_try_builder": true
-    },
-    "mac10.11-blink-rel": {
-        "master": "tryserver.blink",
-        "port_name": "mac-mac10.11",
-        "specifiers": ["Mac10.11", "Release"],
-        "is_try_builder": true
-    },
     "mac10.12-blink-rel": {
         "master": "tryserver.blink",
         "port_name": "mac-mac10.12",
@@ -99,12 +82,6 @@
         "master": "tryserver.blink",
         "port_name": "mac-mac10.13",
         "specifiers": ["Mac10.13", "Release"],
-        "is_try_builder": true
-    },
-    "mac10.13_retina-blink-rel": {
-        "master": "tryserver.blink",
-        "port_name": "mac-retina",
-        "specifiers": ["Retina", "Release"],
         "is_try_builder": true
     },
     "mac10.14-blink-rel": {
@@ -119,6 +96,12 @@
         "specifiers": ["Mac10.15", "Release"],
         "is_try_builder": true
     },
+    "mac11.0-blink-rel": {
+        "master": "tryserver.blink",
+        "port_name": "mac-mac11.0",
+        "specifiers": ["Mac11.0", "Release"],
+        "is_try_builder": true
+    },
     "win7-blink-rel": {
         "master": "tryserver.blink",
         "port_name": "win-win7",
@@ -131,14 +114,11 @@
         "specifiers": ["Win10", "Release"],
         "is_try_builder": true
     },
-    "android-weblayer-pie-arm64-fyi-rel": {
+    "android-pie-arm64-wpt-rel-non-cq": {
         "port_name": "android-android-pie",
-        "specifiers": ["Android", "android_weblayer", "Release"],
-        "is_try_builder": true
-    },
-    "android-webview-pie-arm64-fyi-rel": {
-        "port_name": "android-android-pie",
-        "specifiers": ["Android", "android_webview", "chrome_android", "Release"],
+        "specifiers": [
+            "Android", "android_weblayer", "android_webview",
+            "chrome_android", "Release"],
         "is_try_builder": true
     }
 }

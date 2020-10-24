@@ -30,7 +30,7 @@ namespace dawn_native { namespace opengl {
 
         TRACE_EVENT_BEGIN0(GetDevice()->GetPlatform(), Recording, "CommandBufferGL::Execute");
         for (uint32_t i = 0; i < commandCount; ++i) {
-            ToBackend(commands[i])->Execute();
+            DAWN_TRY(ToBackend(commands[i])->Execute());
         }
         TRACE_EVENT_END0(GetDevice()->GetPlatform(), Recording, "CommandBufferGL::Execute");
 
@@ -44,9 +44,18 @@ namespace dawn_native { namespace opengl {
                                       size_t size) {
         const OpenGLFunctions& gl = ToBackend(GetDevice())->gl;
 
+        ToBackend(buffer)->EnsureDataInitializedAsDestination(bufferOffset, size);
+
         gl.BindBuffer(GL_ARRAY_BUFFER, ToBackend(buffer)->GetHandle());
         gl.BufferSubData(GL_ARRAY_BUFFER, bufferOffset, size, data);
         return {};
+    }
+
+    MaybeError Queue::WriteTextureImpl(const TextureCopyView& destination,
+                                       const void* data,
+                                       const TextureDataLayout& dataLayout,
+                                       const Extent3D& writeSizePixel) {
+        return DAWN_UNIMPLEMENTED_ERROR("Unable to write to texture\n");
     }
 
 }}  // namespace dawn_native::opengl

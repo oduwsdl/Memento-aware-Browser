@@ -24,11 +24,13 @@ void AXRelationCache::Init() {
     if (!id.IsEmpty())
       all_previously_seen_label_target_ids_.insert(id);
 
+    // Ensure correct ancestor chains even when not all AXObject's in the
+    // document are created, e.g. in the devtools accessibility panel.
+    // Defers adding aria-owns targets as children of their new parents,
+    // and to the relation cache, until the appropriate document lifecycle.
     if (element.FastHasAttribute(html_names::kAriaOwnsAttr)) {
-      if (AXObject* obj = object_cache_->GetOrCreate(&element)) {
-        obj->ClearChildren();
-        obj->AddChildren();
-      }
+      object_cache_->HandleAttributeChanged(html_names::kAriaOwnsAttr,
+                                            &element);
     }
   }
 }
@@ -150,6 +152,7 @@ void AXRelationCache::UpdateAriaOwnsFromAttrAssociatedElements(
   // attr-associated elements have already had their scope validated, but they
   // need to be further validated to determine if they introduce a cycle or are
   // already owned by another element.
+
   Vector<String> owned_id_vector;
   for (const auto& element : attr_associated_elements) {
     AXObject* child = GetOrCreate(element);
@@ -223,6 +226,13 @@ void AXRelationCache::UpdateAriaOwnerToChildrenMapping(
   // Finally, update the mapping from the owner to the list of child IDs.
   aria_owner_to_children_mapping_.Set(owner->AXObjectID(),
                                       validated_owned_child_axids);
+
+#if DCHECK_IS_ON()
+  // Owned children must be in tree to avoid serialization issues.
+  for (AXObject* child : validated_owned_children_result) {
+    DCHECK(child->AccessibilityIsIncludedInTree());
+  }
+#endif
 }
 
 bool AXRelationCache::MayHaveHTMLLabelViaForAttribute(
@@ -284,7 +294,7 @@ void AXRelationCache::UpdateRelatedText(Node* node) {
     GetReverseRelated(node, related_sources);
     for (AXObject* related : related_sources) {
       if (related)
-        TextChanged(related);
+        object_cache_->MarkAXObjectDirty(related, /*subtree=*/false);
     }
 
     // Forward relation via <label for="[id]">.
@@ -321,11 +331,6 @@ void AXRelationCache::ChildrenChanged(AXObject* object) {
   object->ChildrenChanged();
 }
 
-void AXRelationCache::TextChanged(AXObject* object) {
-  object->TextChanged();
-  object_cache_->PostNotification(object, ax::mojom::Event::kTextChanged);
-}
-
 void AXRelationCache::LabelChanged(Node* node) {
   const auto& id =
       To<HTMLElement>(node)->FastGetAttribute(html_names::kForAttr);
@@ -333,7 +338,7 @@ void AXRelationCache::LabelChanged(Node* node) {
     all_previously_seen_label_target_ids_.insert(id);
     if (auto* control = To<HTMLLabelElement>(node)->control()) {
       if (AXObject* obj = Get(control))
-        TextChanged(obj);
+        object_cache_->MarkAXObjectDirty(obj, /*subtree=*/false);
     }
   }
 }

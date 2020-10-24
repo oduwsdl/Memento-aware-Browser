@@ -19,7 +19,7 @@
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
 #include "core/fxcrt/fx_stream.h"
-#include "third_party/base/logging.h"
+#include "third_party/base/check.h"
 #include "third_party/base/stl_util.h"
 
 CPDF_Dictionary::CPDF_Dictionary()
@@ -108,6 +108,12 @@ ByteString CPDF_Dictionary::GetStringFor(const ByteString& key) const {
   return p ? p->GetString() : ByteString();
 }
 
+ByteString CPDF_Dictionary::GetStringFor(const ByteString& key,
+                                         const ByteString& def) const {
+  const CPDF_Object* p = GetObjectFor(key);
+  return p ? p->GetString() : ByteString(def);
+}
+
 WideString CPDF_Dictionary::GetUnicodeTextFor(const ByteString& key) const {
   const CPDF_Object* p = GetObjectFor(key);
   if (const CPDF_Reference* pRef = ToReference(p))
@@ -115,10 +121,15 @@ WideString CPDF_Dictionary::GetUnicodeTextFor(const ByteString& key) const {
   return p ? p->GetUnicodeText() : WideString();
 }
 
-ByteString CPDF_Dictionary::GetStringFor(const ByteString& key,
-                                         const ByteString& def) const {
+ByteString CPDF_Dictionary::GetNameFor(const ByteString& key) const {
+  const CPDF_Name* p = ToName(GetObjectFor(key));
+  return p ? p->GetString() : ByteString();
+}
+
+bool CPDF_Dictionary::GetBooleanFor(const ByteString& key,
+                                    bool bDefault) const {
   const CPDF_Object* p = GetObjectFor(key);
-  return p ? p->GetString() : ByteString(def);
+  return ToBoolean(p) ? p->GetInteger() != 0 : bDefault;
 }
 
 int CPDF_Dictionary::GetIntegerFor(const ByteString& key) const {
@@ -134,12 +145,6 @@ int CPDF_Dictionary::GetIntegerFor(const ByteString& key, int def) const {
 float CPDF_Dictionary::GetNumberFor(const ByteString& key) const {
   const CPDF_Object* p = GetObjectFor(key);
   return p ? p->GetNumber() : 0;
-}
-
-bool CPDF_Dictionary::GetBooleanFor(const ByteString& key,
-                                    bool bDefault) const {
-  const CPDF_Object* p = GetObjectFor(key);
-  return ToBoolean(p) ? p->GetInteger() != 0 : bDefault;
 }
 
 const CPDF_Dictionary* CPDF_Dictionary::GetDictFor(

@@ -2,15 +2,19 @@
  * Inserts an iframe usable for origin isolation testing, and returns a promise
  * fulfilled when the iframe is loaded and its document.domain is set. The
  * iframe will point to the send-origin-isolation-header.py file, on the
- * designated hostname
- * @param {string} hostname - The hostname used to calculate the iframe's src=""
+ * designated host
+ * @param {string} host - The host used to calculate the iframe's src=""
  * @param {string=} header - The value of the Origin-Isolation header that the
  *   iframe will set. Omit this to set no header.
+ * @param {object=} options - Rarely-used options.
+ * @param {boolean=} options.redirectFirst - Whether to do a 302 redirect first
+ *   before arriving at the isolated page. The redirecting page will not set
+ *   the Origin-Isolation header.
  * @returns {HTMLIFrameElement} The created iframe element
  */
-export async function insertIframe(hostname, header) {
+export async function insertIframe(host, header, { redirectFirst = false } = {}) {
   const iframe = document.createElement("iframe");
-  const navigatePromise = navigateIframe(iframe, hostname, header);
+  const navigatePromise = navigateIframe(iframe, host, header, { redirectFirst });
   document.body.append(iframe);
   await navigatePromise;
   await setBothDocumentDomains(iframe.contentWindow);
@@ -21,15 +25,18 @@ export async function insertIframe(hostname, header) {
  * Navigates an iframe to a page for origin isolation testing, similar to
  * insertIframe but operating on an existing iframe.
  * @param {HTMLIFrameElement} iframeEl - The <iframe> element to navigate
- * @param {string} hostname - The hostname used to calculate the iframe's new
- *   src=""
+ * @param {string} host - The host to calculate the iframe's new src=""
  * @param {string=} header - The value of the Origin-Isolation header that the
  *   newly-navigated-to page will set. Omit this to set no header.
+ * @param {object=} options - Rarely-used options.
+ * @param {boolean=} options.redirectFirst - Whether to do a 302 redirect first
+ *   before arriving at the isolated page. The redirecting page will not set
+ *   the Origin-Isolation header.
  * @returns {Promise} a promise fulfilled when the load event fires, or rejected
  *   if the error event fires
  */
-export function navigateIframe(iframeEl, hostname, header) {
-  const url = getIframeURL(hostname, header);
+export function navigateIframe(iframeEl, host, header, { redirectFirst = false } = {}) {
+  const url = getSendHeaderURL(host, header, { redirectFirst });
 
   const waitPromise = waitForIframe(iframeEl, url);
   iframeEl.src = url;
@@ -53,6 +60,32 @@ export function waitForIframe(iframeEl, destinationForErrorMessage) {
       () => reject(new Error(`Could not navigate to ${destinationForErrorMessage}`))
     );
   });
+}
+
+/**
+ * Opens a new window usable for origin isolation testing, and returns a promise
+ * fulfilled when the window is loaded and its document.domain is set. The
+ * window will point to the send-origin-isolation-header.py file, on the
+ * designated host.
+ *
+ * The opened window will be automatically closed when all the tests complete.
+ * @param {string} host - The host used to calculate the window's URL
+ * @param {string=} header - The value of the Origin-Isolation header that the
+ *   iframe will set. Omit this to set no header.
+ * @returns {WindowProxy} The created window
+ */
+export async function openWindow(host, header) {
+  const url = getSendHeaderURL(host, header, { sendLoadedMessage: true });
+  const openedWindow = window.open(url);
+
+  add_completion_callback(() => openedWindow.close());
+
+  const whatHappened = await waitForMessage(openedWindow);
+  assert_equals(whatHappened, "loaded");
+
+  await setBothDocumentDomains(openedWindow);
+
+  return openedWindow;
 }
 
 /**
@@ -80,9 +113,18 @@ export function testSameAgentCluster(testFrames, testLabelPrefix) {
 
     promise_test(async () => {
       const frameWindow = frames[testFrames[1]];
+      const frameElement = document.querySelectorAll("iframe")[testFrames[1]];
 
       // Must not throw
       frameWindow.document;
+
+      // Must not throw
+      frameWindow.location.href;
+
+      assert_not_equals(frameElement.contentDocument, null, "contentDocument");
+
+      const whatHappened = await accessFrameElement(frameWindow);
+      assert_equals(whatHappened, "frameElement accessed successfully");
     }, `${prefix}setting document.domain must give sync access`);
   } else {
     // Between the two children at the index given by testFrames[0] and
@@ -90,14 +132,18 @@ export function testSameAgentCluster(testFrames, testLabelPrefix) {
 
     promise_test(async () => {
       const whatHappened = await sendWasmModuleBetween(testFrames);
-
       assert_equals(whatHappened, "WebAssembly.Module message received");
     }, `${prefix}message event must occur`);
 
     promise_test(async () => {
-      const whatHappened = await accessDocumentBetween(testFrames);
+      const whatHappened1 = await accessDocumentBetween(testFrames);
+      assert_equals(whatHappened1, "accessed document successfully");
 
-      assert_equals(whatHappened, "accessed document successfully");
+      const whatHappened2 = await accessLocationHrefBetween(testFrames);
+      assert_equals(whatHappened2, "accessed location.href successfully");
+
+      // We don't test contentDocument/frameElement for these because accessing
+      // those via siblings has to go through the parent anyway.
     }, `${prefix}setting document.domain must give sync access`);
   }
 }
@@ -127,10 +173,20 @@ export function testDifferentAgentClusters(testFrames, testLabelPrefix) {
 
     promise_test(async () => {
       const frameWindow = frames[testFrames[1]];
+      const frameElement = document.querySelectorAll("iframe")[testFrames[1]];
 
       assert_throws_dom("SecurityError", DOMException, () => {
         frameWindow.document;
       });
+
+      assert_throws_dom("SecurityError", DOMException, () => {
+        frameWindow.location.href;
+      });
+
+      assert_equals(frameElement.contentDocument, null, "contentDocument");
+
+      const whatHappened = await accessFrameElement(frameWindow);
+      assert_equals(whatHappened, "null");
     }, `${prefix}setting document.domain must not give sync access`);
   } else {
     // Between the two children at the index given by testFrames[0] and
@@ -138,16 +194,96 @@ export function testDifferentAgentClusters(testFrames, testLabelPrefix) {
 
     promise_test(async () => {
       const whatHappened = await sendWasmModuleBetween(testFrames);
-
       assert_equals(whatHappened, "messageerror");
     }, `${prefix}messageerror event must occur`);
 
     promise_test(async () => {
-      const whatHappened = await accessDocumentBetween(testFrames);
+      const whatHappened1 = await accessDocumentBetween(testFrames);
+      assert_equals(whatHappened1, "SecurityError");
 
-      assert_equals(whatHappened, "SecurityError");
+      const whatHappened2 = await accessLocationHrefBetween(testFrames);
+      assert_equals(whatHappened2, "SecurityError");
+
+      // We don't test contentDocument/frameElement for these because accessing
+      // those via siblings has to go through the parent anyway.
     }, `${prefix}setting document.domain must not give sync access`);
   }
+}
+
+/**
+ * Expands into a pair of promise_test() calls to ensure that the given window,
+ * opened by window.open(), is in a different agent cluster from the current
+ * (opener) window.
+ * @param {function} openedWindowGetter - A function that returns the opened
+ * window
+ */
+export function testOpenedWindowIsInADifferentAgentCluster(openedWindowGetter) {
+  promise_test(async () => {
+    const whatHappened = await sendWasmModule(openedWindowGetter());
+
+    assert_equals(whatHappened, "messageerror");
+  }, `messageerror event must occur`);
+
+  promise_test(async () => {
+    assert_throws_dom("SecurityError", DOMException, () => {
+      openedWindowGetter().document;
+    });
+
+    assert_throws_dom("SecurityError", DOMException, () => {
+      openedWindowGetter().location.href;
+    });
+  }, `setting document.domain must not give sync access`);
+}
+
+/**
+ * Expands into a pair of promise_test() calls to ensure that the given window,
+ * opened by window.open(), is in the same agent cluster as the current
+ * (opener) window.
+ * @param {function} openedWindowGetter - A function that returns the opened
+ * window
+ */
+export function testOpenedWindowIsInSameAgentCluster(openedWindowGetter) {
+  promise_test(async () => {
+    const whatHappened = await sendWasmModule(openedWindowGetter());
+
+    assert_equals(whatHappened, "WebAssembly.Module message received");
+  }, `message event must occur`);
+
+  promise_test(async () => {
+    // Must not throw
+    openedWindowGetter().document;
+
+    // Must not throw
+    openedWindowGetter().location.href;
+  }, `setting document.domain must give sync access`);
+}
+
+/**
+ * Creates a promise_test() to check the value of the originIsolated getter in
+ * the given testFrame.
+ * @param {Window|number|function} testFrame - Either self, or a frame index to
+     test, or a function that returns a windwo to test.
+ * @param {boolean} expected - The expected value for originIsolated.
+ * @param {string=} testLabelPrefix - A prefix used in the test names. This can
+ *   be omitted if the function is only used once in a test file.
+ */
+export function testGetter(testFrame, expected, testLabelPrefix) {
+  const prefix = testLabelPrefix === undefined ? "" : `${testLabelPrefix}: `;
+
+  promise_test(async () => {
+    if (testFrame === self) {
+      assert_equals(self.originIsolated, expected);
+    } else if (typeof testFrame === "number") {
+      const frameWindow = frames[testFrame];
+      const result = await accessOriginIsolated(frameWindow);
+      assert_equals(result, expected);
+    } else {
+      assert_equals(typeof testFrame, "function",
+        "testFrame argument must be self, a number, or a function");
+      const result = await accessOriginIsolated(testFrame());
+      assert_equals(result, expected);
+    }
+  }, `${prefix}originIsolated must equal ${expected}`);
 }
 
 /**
@@ -189,11 +325,24 @@ export async function setBothDocumentDomains(frameWindow) {
   assert_equals(whatHappened, "document.domain is set");
 }
 
-function getIframeURL(hostname, header) {
+async function accessOriginIsolated(frameWindow) {
+  // This function is coupled to ./send-origin-isolation-header.py, which ensures
+  // that sending such a message will result in a message back.
+  frameWindow.postMessage({ command: "get originIsolated" }, "*");
+  return waitForMessage(frameWindow);
+}
+
+function getSendHeaderURL(host, header, { sendLoadedMessage = false, redirectFirst = false } = {}) {
   const url = new URL("send-origin-isolation-header.py", import.meta.url);
-  url.hostname = hostname;
+  url.host = host;
   if (header !== undefined) {
     url.searchParams.set("header", header);
+  }
+  if (sendLoadedMessage) {
+    url.searchParams.set("send-loaded-message", "");
+  }
+  if (redirectFirst) {
+    url.searchParams.set("redirect-first", "");
   }
 
   return url.href;
@@ -213,6 +362,19 @@ async function accessDocumentBetween(testFrames) {
 
   sourceFrame.postMessage({ command: "access document", indexIntoParentFrameOfDestination }, "*");
   return waitForMessage(sourceFrame);
+}
+
+async function accessLocationHrefBetween(testFrames) {
+  const sourceFrame = frames[testFrames[0]];
+  const indexIntoParentFrameOfDestination = testFrames[1];
+
+  sourceFrame.postMessage({ command: "access location.href", indexIntoParentFrameOfDestination }, "*");
+  return waitForMessage(sourceFrame);
+}
+
+async function accessFrameElement(frameWindow) {
+  frameWindow.postMessage({ command: "access frameElement" }, "*");
+  return waitForMessage(frameWindow);
 }
 
 function waitForMessage(expectedSource) {

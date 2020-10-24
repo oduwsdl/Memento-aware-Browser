@@ -101,8 +101,6 @@ void HTTPRequestHeaderValidator::VisitHeader(const WebString& name,
 class WebAssociatedURLLoaderImpl::ClientAdapter final
     : public GarbageCollected<ClientAdapter>,
       public ThreadableLoaderClient {
-  USING_GARBAGE_COLLECTED_MIXIN(ClientAdapter);
-
  public:
   ClientAdapter(WebAssociatedURLLoaderImpl*,
                 WebAssociatedURLLoaderClient*,
@@ -292,7 +290,7 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidFail(
 }
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::DidFailRedirectCheck() {
-  DidFail(WebURLError(ResourceError::Failure(NullURL())));
+  DidFail(ResourceError::Failure(NullURL()));
 }
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::EnableErrorNotifications() {
@@ -317,8 +315,6 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::NotifyError(TimerBase* timer) {
 class WebAssociatedURLLoaderImpl::Observer final
     : public GarbageCollected<Observer>,
       public ExecutionContextLifecycleObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(Observer);
-
  public:
   Observer(WebAssociatedURLLoaderImpl* parent, ExecutionContext* context)
       : ExecutionContextLifecycleObserver(context), parent_(parent) {}
@@ -326,9 +322,9 @@ class WebAssociatedURLLoaderImpl::Observer final
   void Dispose() {
     parent_ = nullptr;
     // TODO(keishi): Remove IsIteratingOverObservers() check when
-    // HeapObserverList() supports removal while iterating.
+    // HeapObserverSet() supports removal while iterating.
     if (!GetExecutionContext()
-             ->ContextLifecycleObserverList()
+             ->ContextLifecycleObserverSet()
              .IsIteratingOverObservers()) {
       SetExecutionContext(nullptr);
     }
@@ -410,7 +406,8 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
       std::move(task_runner));
 
   if (allow_load) {
-    ResourceLoaderOptions resource_loader_options;
+    ResourceLoaderOptions resource_loader_options(
+        observer_->GetExecutionContext()->GetCurrentWorld());
     resource_loader_options.data_buffering_policy = kDoNotBufferData;
 
     if (options_.grant_universal_access) {
@@ -426,19 +423,20 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
     }
 
     ResourceRequest& webcore_request = new_request.ToMutableResourceRequest();
-    mojom::RequestContextType context = webcore_request.GetRequestContext();
-    if (context == mojom::RequestContextType::UNSPECIFIED) {
+    mojom::blink::RequestContextType context =
+        webcore_request.GetRequestContext();
+    if (context == mojom::blink::RequestContextType::UNSPECIFIED) {
       // TODO(yoav): We load URLs without setting a TargetType (and therefore a
       // request context) in several places in content/
       // (P2PPortAllocatorSession::AllocateLegacyRelaySession, for example).
       // Remove this once those places are patched up.
-      new_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
+      new_request.SetRequestContext(mojom::blink::RequestContextType::INTERNAL);
       new_request.SetRequestDestination(
           network::mojom::RequestDestination::kEmpty);
-    } else if (context == mojom::RequestContextType::VIDEO) {
+    } else if (context == mojom::blink::RequestContextType::VIDEO) {
       resource_loader_options.initiator_info.name =
           fetch_initiator_type_names::kVideo;
-    } else if (context == mojom::RequestContextType::AUDIO) {
+    } else if (context == mojom::blink::RequestContextType::AUDIO) {
       resource_loader_options.initiator_info.name =
           fetch_initiator_type_names::kAudio;
     }
@@ -452,9 +450,8 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
   }
 
   if (!loader_) {
-    client_adapter_->DidFail(
-        WebURLError(ResourceError::CancelledDueToAccessCheckError(
-            request.Url(), ResourceRequestBlockedReason::kOther)));
+    client_adapter_->DidFail(ResourceError::CancelledDueToAccessCheckError(
+        request.Url(), ResourceRequestBlockedReason::kOther));
   }
   client_adapter_->EnableErrorNotifications();
 }

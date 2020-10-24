@@ -12,17 +12,38 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_layout_part.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
+#include "third_party/blink/renderer/core/mathml/mathml_operator_element.h"
 
 namespace blink {
 namespace {
 
 inline LayoutUnit InlineOffsetForDisplayMathCentering(
-    bool is_display_math,
+    bool is_display_block_math,
     LayoutUnit available_inline_size,
     LayoutUnit max_row_inline_size) {
-  if (is_display_math)
+  if (is_display_block_math)
     return (available_inline_size - max_row_inline_size) / 2;
   return LayoutUnit();
+}
+
+static void DetermineOperatorSpacing(const NGLayoutInputNode& node,
+                                     LayoutUnit* lspace,
+                                     LayoutUnit* rspace) {
+  auto* core_operator =
+      DynamicTo<MathMLOperatorElement>(node.GetDOMNode());
+  if (core_operator) {
+    // TODO(crbug.com/1124298): Implement embellished operators.
+    LayoutUnit leading_space(core_operator->DefaultLeadingSpace() *
+                             node.Style().FontSize());
+    *lspace = std::max<LayoutUnit>(
+        ValueForLength(node.Style().GetMathLSpace(), leading_space),
+        LayoutUnit());
+    LayoutUnit trailing_space(core_operator->DefaultTrailingSpace() *
+                              node.Style().FontSize());
+    *rspace = std::max<LayoutUnit>(
+        ValueForLength(node.Style().GetMathRSpace(), trailing_space),
+        LayoutUnit());
+  }
 }
 
 }  // namespace
@@ -32,13 +53,10 @@ NGMathRowLayoutAlgorithm::NGMathRowLayoutAlgorithm(
     : NGLayoutAlgorithm(params) {
   DCHECK(params.space.IsNewFormattingContext());
   DCHECK(!ConstraintSpace().HasBlockFragmentation());
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
 }
 
 void NGMathRowLayoutAlgorithm::LayoutRowItems(
-    NGContainerFragmentBuilder::ChildrenVector* children,
+    ChildrenVector* children,
     LayoutUnit* max_row_block_baseline,
     LogicalSize* row_total_size) {
   LayoutUnit inline_offset, max_row_ascent, max_row_descent;
@@ -52,6 +70,8 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
           To<NGBlockNode>(child), BorderScrollbarPadding().StartOffset());
       continue;
     }
+    LayoutUnit lspace, rspace;
+    DetermineOperatorSpacing(child, &lspace, &rspace);
     const ComputedStyle& child_style = child.Style();
     NGConstraintSpace child_space = CreateConstraintSpaceForMathChild(
         Node(), ChildAvailableSize(), ConstraintSpace(), child);
@@ -59,25 +79,27 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
         To<NGBlockNode>(child).Layout(child_space, nullptr /* break token */);
     const NGPhysicalContainerFragment& physical_fragment =
         result->PhysicalFragment();
-    NGBoxFragment fragment(ConstraintSpace().GetWritingMode(),
-                           ConstraintSpace().Direction(),
+    NGBoxFragment fragment(ConstraintSpace().GetWritingDirection(),
                            To<NGPhysicalBoxFragment>(physical_fragment));
 
     NGBoxStrut margins =
         ComputeMarginsFor(child_space, child_style, ConstraintSpace());
     inline_offset += margins.inline_start;
 
-    LayoutUnit ascent = margins.block_start +
-                        fragment.Baseline().value_or(fragment.BlockSize());
+    LayoutUnit ascent = margins.block_start + fragment.BaselineOrSynthesize();
     *max_row_block_baseline = std::max(*max_row_block_baseline, ascent);
 
-    // TODO(rbuis): Operators can add lspace and rspace.
+    // TODO(crbug.com/1125136): take into account italic correction.
+    inline_offset += lspace;
 
     children->emplace_back(
+        To<NGBlockNode>(child), margins,
         LogicalOffset{inline_offset, margins.block_start - ascent},
-        &physical_fragment);
+        std::move(&physical_fragment));
 
     inline_offset += fragment.InlineSize() + margins.inline_end;
+
+    inline_offset += rspace;
 
     max_row_ascent = std::max(max_row_ascent, ascent + margins.block_start);
     max_row_descent = std::max(
@@ -91,29 +113,31 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
 scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
   DCHECK(!BreakToken());
 
-  bool is_display_math =
-      Node().IsMathRoot() && Style().Display() == EDisplay::kMath;
+  bool is_display_block_math =
+      Node().IsMathRoot() && (Style().Display() == EDisplay::kBlockMath);
 
   LogicalSize max_row_size;
   LayoutUnit max_row_block_baseline;
 
   const LogicalSize border_box_size = container_builder_.InitialBorderBoxSize();
 
-  NGContainerFragmentBuilder::ChildrenVector children;
+  ChildrenVector children;
   LayoutRowItems(&children, &max_row_block_baseline, &max_row_size);
 
   // Add children taking into account centering, baseline and
   // border/scrollbar/padding.
   LayoutUnit center_offset = InlineOffsetForDisplayMathCentering(
-      is_display_math, container_builder_.InlineSize(),
+      is_display_block_math, container_builder_.InlineSize(),
       max_row_size.inline_size);
 
   LogicalOffset adjust_offset = BorderScrollbarPadding().StartOffset();
   adjust_offset += LogicalOffset{center_offset, max_row_block_baseline};
-  for (auto& child : children) {
-    child.offset += adjust_offset;
+  for (auto& child_data : children) {
+    child_data.offset += adjust_offset;
     container_builder_.AddChild(
-        To<NGPhysicalContainerFragment>(*child.fragment), child.offset);
+        To<NGPhysicalContainerFragment>(*child_data.fragment),
+        child_data.offset);
+    child_data.child.StoreMargins(ConstraintSpace(), child_data.margins);
   }
 
   container_builder_.SetBaseline(adjust_offset.block_offset);
@@ -122,13 +146,9 @@ scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
       ConstraintSpace(), Style(), BorderPadding(),
       max_row_size.block_size + BorderScrollbarPadding().BlockSum(),
       border_box_size.inline_size);
-  container_builder_.SetBlockSize(block_size);
+  container_builder_.SetFragmentsTotalBlockSize(block_size);
 
-  NGOutOfFlowLayoutPart(
-      Node(), ConstraintSpace(),
-      container_builder_.Borders() + container_builder_.Scrollbar(),
-      &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   return container_builder_.ToBoxFragment();
 }
@@ -146,16 +166,20 @@ MinMaxSizesResult NGMathRowLayoutAlgorithm::ComputeMinMaxSizes(
        child = child.NextSibling()) {
     if (child.IsOutOfFlowPositioned())
       continue;
-    MinMaxSizesResult child_result =
-        ComputeMinAndMaxContentContribution(Style(), child, child_input);
+    MinMaxSizesResult child_result = ComputeMinAndMaxContentContribution(
+        Style(), To<NGBlockNode>(child), child_input);
     NGBoxStrut child_margins = ComputeMinMaxMargins(Style(), child);
     child_result.sizes += child_margins.InlineSum();
 
     sizes += child_result.sizes;
+
+    LayoutUnit lspace, rspace;
+    DetermineOperatorSpacing(child, &lspace, &rspace);
+    sizes += lspace + rspace;
     depends_on_percentage_block_size |=
         child_result.depends_on_percentage_block_size;
 
-    // TODO(rbuis): Operators can add lspace and rspace.
+    // TODO(crbug.com/1125136): take into account italic correction.
   }
 
   // Due to negative margins, it is possible that we calculated a negative

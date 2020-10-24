@@ -118,27 +118,15 @@ class PLATFORM_EXPORT Visitor {
     Trace(value);
   }
 
+  // TraceStrongly strongifies WeakMembers.
   template <typename T>
-  ALWAYS_INLINE void TraceMaybeDeleted(const Member<T>& t) {
+  ALWAYS_INLINE void TraceStrongly(const WeakMember<T>& t) {
     const T* value = t.GetSafe();
 
-    if (Member<T>::IsMemberHashTableDeletedValue(value))
-      return;
+    DCHECK(!WeakMember<T>::IsMemberHashTableDeletedValue(value));
 
     Trace<T>(value);
   }
-
-  // TraceMayBeDeleted strongifies WeakMembers.
-  template <typename T>
-  ALWAYS_INLINE void TraceMaybeDeleted(const WeakMember<T>& t) {
-    const T* value = t.GetSafe();
-
-    if (WeakMember<T>::IsMemberHashTableDeletedValue(value))
-      return;
-
-    Trace<T>(value);
-  }
-
   // Fallback methods used only when we need to trace raw pointers of T. This is
   // the case when a member is a union where we do not support members.
   template <typename T>
@@ -196,15 +184,13 @@ class PLATFORM_EXPORT Visitor {
     TraceTrait<T>::Trace(this, &t);
   }
 
-  template <typename T>
-  void TraceEphemeron(const WeakMember<T>& key,
-                      const void* value,
-                      TraceCallback value_trace_callback) {
-    T* t = key.Get();
+  template <typename T, typename U>
+  void TraceEphemeron(const WeakMember<T>& key, const U* value) {
+    const T* t = key.GetSafe();
     if (!t)
       return;
-    VisitEphemeron(TraceDescriptorFor(t).base_object_payload, value,
-                   value_trace_callback);
+    VisitEphemeron(TraceDescriptorFor(t).base_object_payload,
+                   TraceDescriptorFor(value));
   }
 
   template <typename T>
@@ -234,11 +220,6 @@ class PLATFORM_EXPORT Visitor {
   }
 
   // Dynamic visitor interface.
-
-  // Registers backing store pointers so that they can be moved and properly
-  // updated.
-  virtual void RegisterBackingStoreCallback(const void* backing,
-                                            MovingObjectCallback) {}
 
   // Adds a |callback| that is invoked with |parameter| after liveness has been
   // computed on the whole object graph. The |callback| may use the provided
@@ -272,7 +253,9 @@ class PLATFORM_EXPORT Visitor {
   //
   // This can be used to defer processing data structures to the main thread
   // when support for concurrent processing is missing.
-  virtual bool DeferredTraceIfConcurrent(TraceDescriptor desc) { return false; }
+  virtual bool DeferredTraceIfConcurrent(TraceDescriptor, size_t) {
+    return false;
+  }
 
  protected:
   // Visits an object through a strong reference.
@@ -295,7 +278,7 @@ class PLATFORM_EXPORT Visitor {
 
   // Visits ephemeron pairs which are a combination of weak and strong keys and
   // values.
-  virtual void VisitEphemeron(const void*, const void*, TraceCallback) {}
+  virtual void VisitEphemeron(const void*, TraceDescriptor) {}
 
   // Visits a container |object| holding ephemeron pairs held from |slot|.  The
   // descriptor |strong_desc| can be used to enforce strong treatment of

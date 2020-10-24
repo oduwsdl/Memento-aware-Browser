@@ -28,9 +28,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
 import * as Host from '../host/host.js';
 import * as Platform from '../platform/platform.js';
+import * as SDK from '../sdk/sdk.js';  // eslint-disable-line no-unused-vars
+import * as ThemeSupport from '../theme_support/theme_support.js';
 import * as UI from '../ui/ui.js';
 
 import {ChartViewport, ChartViewportDelegate} from './ChartViewport.js';  // eslint-disable-line no-unused-vars
@@ -160,10 +165,10 @@ export class FlameChart extends UI.Widget.VBox {
     // Keyboard focused group is used to navigate groups irrespective of whether they are selectable or not
     this._keyboardFocusedGroup = -1;
 
-    this._selectedGroupBackroundColor = self.UI.themeSupport.patchColorText(
-        Colors.SelectedGroupBackground, UI.UIUtils.ThemeSupport.ColorUsage.Background);
-    this._selectedGroupBorderColor =
-        self.UI.themeSupport.patchColorText(Colors.SelectedGroupBorder, UI.UIUtils.ThemeSupport.ColorUsage.Background);
+    this._selectedGroupBackroundColor = ThemeSupport.ThemeSupport.instance().patchColorText(
+        Colors.SelectedGroupBackground, ThemeSupport.ThemeSupport.ColorUsage.Background);
+    this._selectedGroupBorderColor = ThemeSupport.ThemeSupport.instance().patchColorText(
+        Colors.SelectedGroupBorder, ThemeSupport.ThemeSupport.ColorUsage.Background);
   }
 
   /**
@@ -625,6 +630,14 @@ export class FlameChart extends UI.Widget.VBox {
     if (!eventHandled && this._rawTimelineData && this._rawTimelineData.groups) {
       this._handleKeyboardGroupNavigation(e);
     }
+  }
+
+  /**
+   * @param {string} eventName
+   * @param {function(!Event):undefined} onEvent
+   */
+  bindCanvasEvent(eventName, onEvent) {
+    this._canvas.addEventListener(eventName, onEvent);
   }
 
   /**
@@ -1216,10 +1229,33 @@ export class FlameChart extends UI.Widget.VBox {
     this._drawFlowEvents(context, width, height);
     this._drawMarkers();
     const dividersData = TimelineGrid.calculateGridOffsets(this);
+    const navStartTimes = Array.from(this._dataProvider.navStartTimes().values());
+
+    let navStartTimeIndex = 0;
+    const drawAdjustedTime = time => {
+      if (navStartTimes.length === 0) {
+        return this.formatValue(time, dividersData.precision);
+      }
+
+      // Track when the time crosses the boundary to the next nav start record,
+      // and when it does, move the nav start array index accordingly.
+      const hasNextNavStartTime = navStartTimes.length > navStartTimeIndex + 1;
+      if (hasNextNavStartTime && time > navStartTimes[navStartTimeIndex + 1].startTime) {
+        navStartTimeIndex++;
+      }
+
+      // Adjust the time by the nearest nav start marker's value.
+      const nearestMarker = navStartTimes[navStartTimeIndex];
+      if (nearestMarker) {
+        time -= nearestMarker.startTime - this.zeroTime();
+      }
+
+      return this.formatValue(time, dividersData.precision);
+    };
+
     TimelineGrid.drawCanvasGrid(context, dividersData);
     if (this._rulerEnabled) {
-      TimelineGrid.drawCanvasHeaders(
-          context, dividersData, time => this.formatValue(time, dividersData.precision), 3, HeaderHeight);
+      TimelineGrid.drawCanvasHeaders(context, dividersData, drawAdjustedTime, 3, HeaderHeight);
     }
 
     this._updateElementPosition(this._highlightElement, this._highlightedEntryIndex);
@@ -1468,7 +1504,7 @@ export class FlameChart extends UI.Widget.VBox {
 
     const groupOffsets = this._groupOffsets;
     const lastGroupOffset = Array.prototype.peekLast.call(groupOffsets);
-    const colorUsage = UI.UIUtils.ThemeSupport.ColorUsage;
+    const colorUsage = ThemeSupport.ThemeSupport.ColorUsage;
 
     context.save();
     context.scale(ratio, ratio);
@@ -1476,7 +1512,7 @@ export class FlameChart extends UI.Widget.VBox {
     const defaultFont = '11px ' + Host.Platform.fontFamily();
     context.font = defaultFont;
 
-    context.fillStyle = self.UI.themeSupport.patchColorText('#fff', colorUsage.Background);
+    context.fillStyle = ThemeSupport.ThemeSupport.instance().patchColorText('#fff', colorUsage.Background);
     this._forEachGroupInViewport((offset, index, group) => {
       const paddingHeight = group.style.padding;
       if (paddingHeight < 5) {
@@ -1488,7 +1524,7 @@ export class FlameChart extends UI.Widget.VBox {
       context.fillRect(0, lastGroupOffset + 2, width, top + height - lastGroupOffset);
     }
 
-    context.strokeStyle = self.UI.themeSupport.patchColorText('#eee', colorUsage.Background);
+    context.strokeStyle = ThemeSupport.ThemeSupport.instance().patchColorText('#eee', colorUsage.Background);
     context.beginPath();
     this._forEachGroupInViewport((offset, index, group, isFirst) => {
       if (isFirst || group.style.padding < 4) {
@@ -1543,7 +1579,7 @@ export class FlameChart extends UI.Widget.VBox {
     });
     context.restore();
 
-    context.fillStyle = self.UI.themeSupport.patchColorText('#6e6e6e', colorUsage.Foreground);
+    context.fillStyle = ThemeSupport.ThemeSupport.instance().patchColorText('#6e6e6e', colorUsage.Foreground);
     context.beginPath();
     this._forEachGroupInViewport((offset, index, group) => {
       if (this._isGroupCollapsible(index)) {
@@ -1554,7 +1590,7 @@ export class FlameChart extends UI.Widget.VBox {
     });
     context.fill();
 
-    context.strokeStyle = self.UI.themeSupport.patchColorText('#ddd', colorUsage.Background);
+    context.strokeStyle = ThemeSupport.ThemeSupport.instance().patchColorText('#ddd', colorUsage.Background);
     context.beginPath();
     context.stroke();
 
@@ -2306,6 +2342,12 @@ export class FlameChartDataProvider {
    * @return {string}
    */
   textColor(entryIndex) {
+  }
+
+  /**
+   * @return {!Map<string, !SDK.TracingModel.Event>}
+   */
+  navStartTimes() {
   }
 }
 

@@ -38,6 +38,7 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
     v->fLineHeight = **line_height;
     v->fTypeface   = font->fTypeface;
     v->fAscent     = font->fAscentPct * -0.01f * v->fTextSize; // negative ascent per SkFontMetrics
+    v->fLineShift  = ParseDefault((*jtxt)["ls"], 0.0f);
 
     static constexpr SkTextUtils::Align gAlignMap[] = {
         SkTextUtils::kLeft_Align,  // 'j': 0
@@ -72,6 +73,21 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
     v->fResize = gResizeMap[std::min(std::max(ParseDefault<size_t>((*jtxt)[   "rs"], 0),
                                               ParseDefault<size_t>((*jtxt)["sk_rs"], 0)),
                                      SK_ARRAY_COUNT(gResizeMap))];
+
+    // At the moment, BM uses the paragraph box to discriminate point mode vs. paragraph mode.
+    v->fLineBreak = v->fBox.isEmpty()
+            ? Shaper::LinebreakPolicy::kExplicit
+            : Shaper::LinebreakPolicy::kParagraph;
+
+    // Optional explicit text mode.
+    // N.b.: this is not being exported by BM, only used for testing.
+    auto text_mode = ParseDefault((*jtxt)["m"], -1);
+    if (text_mode >= 0) {
+        // Explicit text mode.
+        v->fLineBreak = (text_mode == 0)
+                ? Shaper::LinebreakPolicy::kExplicit   // 'm': 0 -> point text
+                : Shaper::LinebreakPolicy::kParagraph; // 'm': 1 -> paragraph text
+    }
 
     // In point mode, the text is baseline-aligned.
     v->fVAlign = v->fBox.isEmpty() ? Shaper::VAlign::kTopBaseline
@@ -109,11 +125,6 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
         }
     }
 
-    if (v->fResize != Shaper::ResizePolicy::kNone && v->fBox.isEmpty()) {
-        abuilder.log(Logger::Level::kWarning, jtxt, "Auto-scaled text requires a paragraph box.");
-        v->fResize = Shaper::ResizePolicy::kNone;
-    }
-
     const auto& parse_color = [] (const skjson::ArrayValue* jcolor,
                                   SkColor* c) {
         if (!jcolor) {
@@ -133,10 +144,13 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
     v->fHasStroke = parse_color((*jtxt)["sc"], &v->fStrokeColor);
 
     if (v->fHasStroke) {
-        v->fStrokeWidth = ParseDefault((*jtxt)["s"], 0.0f);
+        v->fStrokeWidth = ParseDefault((*jtxt)["sw"], 1.0f);
+        v->fPaintOrder  = ParseDefault((*jtxt)["of"], true)
+                ? TextPaintOrder::kFillStroke
+                : TextPaintOrder::kStrokeFill;
     }
 
     return true;
 }
 
-} // namespace skottie
+}  // namespace skottie::internal

@@ -30,15 +30,6 @@ public:
 
     const char* name() const override { return "StencilPathOp"; }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        string.printf("Path: 0x%p, AA: %d", fPath.get(), fUseHWAA);
-        string.append(INHERITED::dumpInfo());
-        return string;
-    }
-#endif
-
 private:
     friend class GrOpMemoryPool; // for ctor
 
@@ -59,11 +50,18 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) override {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) override {}
 
     void onPrepare(GrOpFlushState*) override {}
 
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
+
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        return SkStringPrintf("Path: 0x%p, AA: %d", fPath.get(), fUseHWAA);
+    }
+#endif
 
     SkMatrix                  fViewMatrix;
     bool                      fUseHWAA;
@@ -71,7 +69,7 @@ private:
     GrScissorState            fScissor;
     sk_sp<const GrPath>       fPath;
 
-    typedef GrOp INHERITED;
+    using INHERITED = GrOp;
 };
 
 #endif

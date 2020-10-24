@@ -44,18 +44,6 @@ BSSL_NAMESPACE_BEGIN
 
 namespace {
 
-TEST(TrustTokenTest, KeyGenExp0) {
-  uint8_t priv_key[TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE];
-  uint8_t pub_key[TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE];
-  size_t priv_key_len, pub_key_len;
-  ASSERT_TRUE(TRUST_TOKEN_generate_key(
-      TRUST_TOKEN_experiment_v0(), priv_key, &priv_key_len,
-      TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE, pub_key, &pub_key_len,
-      TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE, 0x0001));
-  ASSERT_EQ(400u, priv_key_len);
-  ASSERT_EQ(409u, pub_key_len);
-}
-
 TEST(TrustTokenTest, KeyGenExp1) {
   uint8_t priv_key[TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE];
   uint8_t pub_key[TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE];
@@ -66,6 +54,30 @@ TEST(TrustTokenTest, KeyGenExp1) {
       TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE, 0x0001));
   ASSERT_EQ(292u, priv_key_len);
   ASSERT_EQ(301u, pub_key_len);
+}
+
+TEST(TrustTokenTest, KeyGenExp2VOPRF) {
+  uint8_t priv_key[TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE];
+  uint8_t pub_key[TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE];
+  size_t priv_key_len, pub_key_len;
+  ASSERT_TRUE(TRUST_TOKEN_generate_key(
+      TRUST_TOKEN_experiment_v2_voprf(), priv_key, &priv_key_len,
+      TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE, pub_key, &pub_key_len,
+      TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE, 0x0001));
+  ASSERT_EQ(52u, priv_key_len);
+  ASSERT_EQ(101u, pub_key_len);
+}
+
+TEST(TrustTokenTest, KeyGenExp2PMB) {
+  uint8_t priv_key[TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE];
+  uint8_t pub_key[TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE];
+  size_t priv_key_len, pub_key_len;
+  ASSERT_TRUE(TRUST_TOKEN_generate_key(
+      TRUST_TOKEN_experiment_v2_pmb(), priv_key, &priv_key_len,
+      TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE, pub_key, &pub_key_len,
+      TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE, 0x0001));
+  ASSERT_EQ(292u, priv_key_len);
+  ASSERT_EQ(295u, pub_key_len);
 }
 
 // Test that H in |TRUST_TOKEN_experiment_v1| was computed correctly.
@@ -90,8 +102,34 @@ TEST(TrustTokenTest, HExp1) {
   EXPECT_EQ(Bytes(h), Bytes(expected_bytes, expected_len));
 }
 
+// Test that H in |TRUST_TOKEN_experiment_v2_pmb| was computed correctly.
+TEST(TrustTokenTest, HExp2) {
+  const EC_GROUP *group = EC_GROUP_new_by_curve_name(NID_secp384r1);
+  ASSERT_TRUE(group);
+
+  const uint8_t kHGen[] = "generator";
+  const uint8_t kHLabel[] = "PMBTokens Experiment V2 HashH";
+
+  bssl::UniquePtr<EC_POINT> expected_h(EC_POINT_new(group));
+  ASSERT_TRUE(expected_h);
+  ASSERT_TRUE(ec_hash_to_curve_p384_xmd_sha512_sswu_draft07(
+      group, &expected_h->raw, kHLabel, sizeof(kHLabel), kHGen, sizeof(kHGen)));
+  uint8_t expected_bytes[1 + 2 * EC_MAX_BYTES];
+  size_t expected_len =
+      EC_POINT_point2oct(group, expected_h.get(), POINT_CONVERSION_UNCOMPRESSED,
+                         expected_bytes, sizeof(expected_bytes), nullptr);
+
+  uint8_t h[97];
+  ASSERT_TRUE(pmbtoken_exp2_get_h_for_testing(h));
+  EXPECT_EQ(Bytes(h), Bytes(expected_bytes, expected_len));
+}
+
 static std::vector<const TRUST_TOKEN_METHOD *> AllMethods() {
-  return {TRUST_TOKEN_experiment_v0(), TRUST_TOKEN_experiment_v1()};
+  return {
+    TRUST_TOKEN_experiment_v1(),
+    TRUST_TOKEN_experiment_v2_voprf(),
+    TRUST_TOKEN_experiment_v2_pmb()
+  };
 }
 
 class TrustTokenProtocolTestBase : public ::testing::Test {
@@ -114,7 +152,7 @@ class TrustTokenProtocolTestBase : public ::testing::Test {
     issuer.reset(TRUST_TOKEN_ISSUER_new(method(), issuer_max_batchsize));
     ASSERT_TRUE(issuer);
 
-    for (size_t i = 0; i < 3; i++) {
+    for (size_t i = 0; i < method()->max_keys; i++) {
       uint8_t priv_key[TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE];
       uint8_t pub_key[TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE];
       size_t priv_key_len, pub_key_len, key_index;
@@ -175,7 +213,7 @@ TEST_P(TrustTokenProtocolTest, InvalidToken) {
   bssl::UniquePtr<uint8_t> free_issue_msg(issue_msg);
   ASSERT_TRUE(TRUST_TOKEN_ISSUER_issue(
       issuer.get(), &issue_resp, &resp_len, &tokens_issued, issue_msg, msg_len,
-      /*public_metadata=*/KeyID(0), /*private_metadata=*/1,
+      /*public_metadata=*/KeyID(0), /*private_metadata=*/0,
       /*max_issuance=*/10));
   bssl::UniquePtr<uint8_t> free_msg(issue_resp);
   bssl::UniquePtr<STACK_OF(TRUST_TOKEN)> tokens(
@@ -351,10 +389,14 @@ TEST_P(TrustTokenProtocolTest, TruncatedRedemptionResponse) {
               Bytes(client_data, client_data_len));
     resp_len = 10;
 
+    // If the protocol doesn't use SRRs, TRUST_TOKEN_CLIENT_finish_redemtpion
+    // leaves all SRR validation to the caller.
     uint8_t *srr = NULL, *sig = NULL;
     size_t srr_len, sig_len;
-    ASSERT_FALSE(TRUST_TOKEN_CLIENT_finish_redemption(
-        client.get(), &srr, &srr_len, &sig, &sig_len, redeem_resp, resp_len));
+    bool expect_failure = !method()->has_srr;
+    ASSERT_EQ(expect_failure, TRUST_TOKEN_CLIENT_finish_redemption(
+                                  client.get(), &srr, &srr_len, &sig, &sig_len,
+                                  redeem_resp, resp_len));
     bssl::UniquePtr<uint8_t> free_srr(srr);
     bssl::UniquePtr<uint8_t> free_sig(sig);
   }
@@ -440,9 +482,14 @@ TEST_P(TrustTokenMetadataTest, SetAndGetMetadata) {
                                                 &msg_len, 10));
   bssl::UniquePtr<uint8_t> free_issue_msg(issue_msg);
   size_t tokens_issued;
-  ASSERT_TRUE(TRUST_TOKEN_ISSUER_issue(
+  bool result = TRUST_TOKEN_ISSUER_issue(
       issuer.get(), &issue_resp, &resp_len, &tokens_issued, issue_msg, msg_len,
-      public_metadata(), private_metadata(), /*max_issuance=*/1));
+      public_metadata(), private_metadata(), /*max_issuance=*/1);
+  if (!method()->has_private_metadata && private_metadata()) {
+    ASSERT_FALSE(result);
+    return;
+  }
+  ASSERT_TRUE(result);
   bssl::UniquePtr<uint8_t> free_msg(issue_resp);
   size_t key_index;
   bssl::UniquePtr<STACK_OF(TRUST_TOKEN)> tokens(
@@ -454,14 +501,7 @@ TEST_P(TrustTokenMetadataTest, SetAndGetMetadata) {
     const uint8_t kClientData[] = "\x70TEST CLIENT DATA";
     uint64_t kRedemptionTime = 13374242;
 
-    const uint8_t kExpectedSRRNoTokenHash[] =
-        "\xa3\x68\x6d\x65\x74\x61\x64\x61\x74\x61\xa2\x66\x70\x75\x62\x6c\x69"
-        "\x63\x00\x67\x70\x72\x69\x76\x61\x74\x65\x00\x6b\x63\x6c\x69\x65\x6e"
-        "\x74\x2d\x64\x61\x74\x61\x70\x54\x45\x53\x54\x20\x43\x4c\x49\x45\x4e"
-        "\x54\x20\x44\x41\x54\x41\x70\x65\x78\x70\x69\x72\x79\x2d\x74\x69\x6d"
-        "\x65\x73\x74\x61\x6d\x70\x1a\x00\xcc\x15\x7a";
-
-    const uint8_t kExpectedSRRTokenHash[] =
+    const uint8_t kExpectedSRR[] =
         "\xa4\x68\x6d\x65\x74\x61\x64\x61\x74\x61\xa2\x66\x70\x75\x62\x6c\x69"
         "\x63\x00\x67\x70\x72\x69\x76\x61\x74\x65\x00\x6a\x74\x6f\x6b\x65\x6e"
         "\x2d\x68\x61\x73\x68\x58\x20\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
@@ -498,54 +538,62 @@ TEST_P(TrustTokenMetadataTest, SetAndGetMetadata) {
     bssl::UniquePtr<uint8_t> free_srr(srr);
     bssl::UniquePtr<uint8_t> free_sig(sig);
 
-    if (method()->use_token_hash) {
-      const uint8_t kTokenHashDSTLabel[] = "TrustTokenV0 TokenHash";
-      uint8_t token_hash[SHA256_DIGEST_LENGTH];
-      SHA256_CTX sha_ctx;
-      SHA256_Init(&sha_ctx);
-      SHA256_Update(&sha_ctx, kTokenHashDSTLabel, sizeof(kTokenHashDSTLabel));
-      SHA256_Update(&sha_ctx, token->data, token->len);
-      SHA256_Final(token_hash, &sha_ctx);
+    if (!method()->has_srr) {
+      size_t b64_len;
+      ASSERT_TRUE(EVP_EncodedLength(&b64_len, sizeof(kExpectedSRR) - 1));
+      b64_len -= 1;
 
-      // Check the token hash is in the SRR.
-      ASSERT_EQ(Bytes(token_hash), Bytes(srr + 41, sizeof(token_hash)));
+      const char kSRRHeader[] = "body=:";
+      ASSERT_LT(sizeof(kSRRHeader) - 1 + b64_len, srr_len);
 
-      uint8_t decode_private_metadata;
-      ASSERT_TRUE(TRUST_TOKEN_decode_private_metadata(
-          method(), &decode_private_metadata, metadata_key,
-          sizeof(metadata_key), token_hash, sizeof(token_hash), srr[27]));
-      ASSERT_EQ(srr[18], public_metadata());
-      ASSERT_EQ(decode_private_metadata, private_metadata());
-
-      // Clear out the metadata bits.
-      srr[18] = 0;
-      srr[27] = 0;
-
-      // Clear out the token hash.
-      OPENSSL_memset(srr + 41, 0, sizeof(token_hash));
-
-      ASSERT_EQ(Bytes(kExpectedSRRTokenHash, sizeof(kExpectedSRRTokenHash) - 1),
-                Bytes(srr, srr_len));
-    } else {
-      uint8_t decode_private_metadata;
-      ASSERT_TRUE(TRUST_TOKEN_decode_private_metadata(
-          method(), &decode_private_metadata, metadata_key,
-          sizeof(metadata_key), kClientData, sizeof(kClientData) - 1, srr[27]));
-      ASSERT_EQ(srr[18], public_metadata());
-      ASSERT_EQ(decode_private_metadata, private_metadata());
-
-      // Clear out the metadata bits.
-      srr[18] = 0;
-      srr[27] = 0;
-
-      ASSERT_EQ(
-          Bytes(kExpectedSRRNoTokenHash, sizeof(kExpectedSRRNoTokenHash) - 1),
-          Bytes(srr, srr_len));
+      ASSERT_EQ(Bytes(kSRRHeader, sizeof(kSRRHeader) - 1),
+                Bytes(srr, sizeof(kSRRHeader) - 1));
+      uint8_t *decoded_srr =
+          (uint8_t *)OPENSSL_malloc(sizeof(kExpectedSRR) + 1);
+      ASSERT_TRUE(decoded_srr);
+      ASSERT_LT(
+          int(sizeof(kExpectedSRR) - 1),
+          EVP_DecodeBlock(decoded_srr, srr + sizeof(kSRRHeader) - 1, b64_len));
+      srr = decoded_srr;
+      srr_len = sizeof(kExpectedSRR) - 1;
+      free_srr.reset(srr);
     }
+
+    const uint8_t kTokenHashDSTLabel[] = "TrustTokenV0 TokenHash";
+    uint8_t token_hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha_ctx;
+    SHA256_Init(&sha_ctx);
+    SHA256_Update(&sha_ctx, kTokenHashDSTLabel, sizeof(kTokenHashDSTLabel));
+    SHA256_Update(&sha_ctx, token->data, token->len);
+    SHA256_Final(token_hash, &sha_ctx);
+
+    // Check the token hash is in the SRR.
+    ASSERT_EQ(Bytes(token_hash), Bytes(srr + 41, sizeof(token_hash)));
+
+    uint8_t decode_private_metadata;
+    ASSERT_TRUE(TRUST_TOKEN_decode_private_metadata(
+        method(), &decode_private_metadata, metadata_key,
+        sizeof(metadata_key), token_hash, sizeof(token_hash), srr[27]));
+    ASSERT_EQ(srr[18], public_metadata());
+    ASSERT_EQ(decode_private_metadata, private_metadata());
+
+    // Clear out the metadata bits.
+    srr[18] = 0;
+    srr[27] = 0;
+
+    // Clear out the token hash.
+    OPENSSL_memset(srr + 41, 0, sizeof(token_hash));
+
+    ASSERT_EQ(Bytes(kExpectedSRR, sizeof(kExpectedSRR) - 1),
+              Bytes(srr, srr_len));
   }
 }
 
 TEST_P(TrustTokenMetadataTest, TooManyRequests) {
+  if (!method()->has_private_metadata && private_metadata()) {
+    return;
+  }
+
   issuer_max_batchsize = 1;
   ASSERT_NO_FATAL_FAILURE(SetupContexts());
 
@@ -570,6 +618,10 @@ TEST_P(TrustTokenMetadataTest, TooManyRequests) {
 
 
 TEST_P(TrustTokenMetadataTest, TruncatedProof) {
+  if (!method()->has_private_metadata && private_metadata()) {
+    return;
+  }
+
   ASSERT_NO_FATAL_FAILURE(SetupContexts());
 
   uint8_t *issue_msg = NULL, *issue_resp = NULL;
@@ -594,36 +646,27 @@ TEST_P(TrustTokenMetadataTest, TruncatedProof) {
   ASSERT_TRUE(CBS_get_u32(&real_response, &public_metadata));
   ASSERT_TRUE(CBB_add_u32(bad_response.get(), public_metadata));
 
+  const EC_GROUP *group = EC_GROUP_new_by_curve_name(NID_secp384r1);
+  size_t token_length =
+      TRUST_TOKEN_NONCE_SIZE + 2 * (1 + 2 * BN_num_bytes(&group->field));
+  if (method() == TRUST_TOKEN_experiment_v1()) {
+    token_length += 4;
+  }
+  if (method() == TRUST_TOKEN_experiment_v2_voprf()) {
+    token_length = 1 + 2 * BN_num_bytes(&group->field);
+  }
   for (size_t i = 0; i < count; i++) {
-    uint8_t s[PMBTOKEN_NONCE_SIZE];
-    CBS tmp;
-    ASSERT_TRUE(CBS_copy_bytes(&real_response, s, PMBTOKEN_NONCE_SIZE));
-    ASSERT_TRUE(CBB_add_bytes(bad_response.get(), s, PMBTOKEN_NONCE_SIZE));
-    ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
-    ASSERT_TRUE(CBB_add_u16(bad_response.get(), CBS_len(&tmp)));
-    ASSERT_TRUE(
-        CBB_add_bytes(bad_response.get(), CBS_data(&tmp), CBS_len(&tmp)));
-    ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
-    ASSERT_TRUE(CBB_add_u16(bad_response.get(), CBS_len(&tmp)));
-    ASSERT_TRUE(
-        CBB_add_bytes(bad_response.get(), CBS_data(&tmp), CBS_len(&tmp)));
-    if (!method()->batched_proof) {
-      ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
-      CBB dleq;
-      ASSERT_TRUE(CBB_add_u16_length_prefixed(bad_response.get(), &dleq));
-      ASSERT_TRUE(CBB_add_bytes(&dleq, CBS_data(&tmp), CBS_len(&tmp) - 2));
-      ASSERT_TRUE(CBB_flush(bad_response.get()));
-    }
+    ASSERT_TRUE(CBB_add_bytes(bad_response.get(), CBS_data(&real_response),
+                              token_length));
+    ASSERT_TRUE(CBS_skip(&real_response, token_length));
   }
 
-  if (method()->batched_proof) {
-    CBS tmp;
-    ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
-    CBB dleq;
-    ASSERT_TRUE(CBB_add_u16_length_prefixed(bad_response.get(), &dleq));
-    ASSERT_TRUE(CBB_add_bytes(&dleq, CBS_data(&tmp), CBS_len(&tmp) - 2));
-    ASSERT_TRUE(CBB_flush(bad_response.get()));
-  }
+  CBS tmp;
+  ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
+  CBB dleq;
+  ASSERT_TRUE(CBB_add_u16_length_prefixed(bad_response.get(), &dleq));
+  ASSERT_TRUE(CBB_add_bytes(&dleq, CBS_data(&tmp), CBS_len(&tmp) - 2));
+  ASSERT_TRUE(CBB_flush(bad_response.get()));
 
   uint8_t *bad_buf;
   size_t bad_len;
@@ -638,6 +681,10 @@ TEST_P(TrustTokenMetadataTest, TruncatedProof) {
 }
 
 TEST_P(TrustTokenMetadataTest, ExcessDataProof) {
+  if (!method()->has_private_metadata && private_metadata()) {
+    return;
+  }
+
   ASSERT_NO_FATAL_FAILURE(SetupContexts());
 
   uint8_t *issue_msg = NULL, *issue_resp = NULL;
@@ -662,38 +709,28 @@ TEST_P(TrustTokenMetadataTest, ExcessDataProof) {
   ASSERT_TRUE(CBS_get_u32(&real_response, &public_metadata));
   ASSERT_TRUE(CBB_add_u32(bad_response.get(), public_metadata));
 
+  const EC_GROUP *group = EC_GROUP_new_by_curve_name(NID_secp384r1);
+  size_t token_length =
+      TRUST_TOKEN_NONCE_SIZE + 2 * (1 + 2 * BN_num_bytes(&group->field));
+  if (method() == TRUST_TOKEN_experiment_v1()) {
+    token_length += 4;
+  }
+  if (method() == TRUST_TOKEN_experiment_v2_voprf()) {
+    token_length = 1 + 2 * BN_num_bytes(&group->field);
+  }
   for (size_t i = 0; i < count; i++) {
-    uint8_t s[PMBTOKEN_NONCE_SIZE];
-    CBS tmp;
-    ASSERT_TRUE(CBS_copy_bytes(&real_response, s, PMBTOKEN_NONCE_SIZE));
-    ASSERT_TRUE(CBB_add_bytes(bad_response.get(), s, PMBTOKEN_NONCE_SIZE));
-    ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
-    ASSERT_TRUE(CBB_add_u16(bad_response.get(), CBS_len(&tmp)));
-    ASSERT_TRUE(
-        CBB_add_bytes(bad_response.get(), CBS_data(&tmp), CBS_len(&tmp)));
-    ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
-    ASSERT_TRUE(CBB_add_u16(bad_response.get(), CBS_len(&tmp)));
-    ASSERT_TRUE(
-        CBB_add_bytes(bad_response.get(), CBS_data(&tmp), CBS_len(&tmp)));
-    if (!method()->batched_proof) {
-      ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
-      CBB dleq;
-      ASSERT_TRUE(CBB_add_u16_length_prefixed(bad_response.get(), &dleq));
-      ASSERT_TRUE(CBB_add_bytes(&dleq, CBS_data(&tmp), CBS_len(&tmp)));
-      ASSERT_TRUE(CBB_add_u16(&dleq, 42));
-      ASSERT_TRUE(CBB_flush(bad_response.get()));
-    }
+    ASSERT_TRUE(CBB_add_bytes(bad_response.get(), CBS_data(&real_response),
+                              token_length));
+    ASSERT_TRUE(CBS_skip(&real_response, token_length));
   }
 
-  if (method()->batched_proof) {
-    CBS tmp;
-    ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
-    CBB dleq;
-    ASSERT_TRUE(CBB_add_u16_length_prefixed(bad_response.get(), &dleq));
-    ASSERT_TRUE(CBB_add_bytes(&dleq, CBS_data(&tmp), CBS_len(&tmp)));
-    ASSERT_TRUE(CBB_add_u16(&dleq, 42));
-    ASSERT_TRUE(CBB_flush(bad_response.get()));
-  }
+  CBS tmp;
+  ASSERT_TRUE(CBS_get_u16_length_prefixed(&real_response, &tmp));
+  CBB dleq;
+  ASSERT_TRUE(CBB_add_u16_length_prefixed(bad_response.get(), &dleq));
+  ASSERT_TRUE(CBB_add_bytes(&dleq, CBS_data(&tmp), CBS_len(&tmp)));
+  ASSERT_TRUE(CBB_add_u16(&dleq, 42));
+  ASSERT_TRUE(CBB_flush(bad_response.get()));
 
   uint8_t *bad_buf;
   size_t bad_len;
@@ -728,6 +765,14 @@ class TrustTokenBadKeyTest
 };
 
 TEST_P(TrustTokenBadKeyTest, BadKey) {
+  // For versions without private metadata, only corruptions of 'xs' (the 4th
+  // entry in |scalars| below) result in a bad key, as the other scalars are
+  // unused internally.
+  if (!method()->has_private_metadata &&
+      (private_metadata() || corrupted_key() != 4)) {
+    return;
+  }
+
   ASSERT_NO_FATAL_FAILURE(SetupContexts());
 
   uint8_t *issue_msg = NULL, *issue_resp = NULL;

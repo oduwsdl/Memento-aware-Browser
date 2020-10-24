@@ -29,12 +29,11 @@ class MODULES_EXPORT DOMScheduler : public ScriptWrappable,
                                     public ExecutionContextLifecycleObserver,
                                     public Supplement<LocalDOMWindow> {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(DOMScheduler);
 
  public:
   static const char kSupplementName[];
 
-  static DOMScheduler* From(LocalDOMWindow&);
+  static DOMScheduler* scheduler(LocalDOMWindow&);
 
   explicit DOMScheduler(LocalDOMWindow*);
 

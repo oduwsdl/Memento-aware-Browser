@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
 
 #include "base/auto_reset.h"
+#include "cc/base/features.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -12,7 +13,9 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
+#include "third_party/blink/renderer/core/layout/layout_fieldset.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_spanner_placeholder.h"
 #include "third_party/blink/renderer/core/layout/layout_shift_tracker.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -24,7 +27,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
-#include "third_party/blink/renderer/core/paint/compositing/compositing_layer_property_updater.h"
+#include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_property_tree_printer.h"
@@ -87,7 +90,6 @@ NGPrePaintInfo SetupFragmentData(const NGFragmentChildIterator& iterator,
         // FragmentData objects, and reset the visual rect. The visual rect will
         // be set and expanded, as we visit each individual fragment.
         fragment_data->ClearNextFragment();
-        fragment_data->SetVisualRect(IntRect());
       }
       fragment_data->SetLogicalTopInFlowThread(consumed_block_size);
     } else {
@@ -109,7 +111,7 @@ NGPrePaintInfo SetupFragmentData(const NGFragmentChildIterator& iterator,
     // The fragment is block-level.
     if (IsResumingLayout(incoming_break_token)) {
       // This isn't the first fragment for the node. We now need to walk past
-      // all prededing fragments to figure out which FragmentData to return (or
+      // all preceding fragments to figure out which FragmentData to return (or
       // create, if it doesn't already exist).
       const LayoutBox& layout_box = ToLayoutBox(object);
       for (wtf_size_t idx = 0;; idx++) {
@@ -142,6 +144,35 @@ NGPrePaintInfo SetupFragmentData(const NGFragmentChildIterator& iterator,
 
 }  // anonymous namespace
 
+static void SetNeedsCompositingLayerPropertyUpdate(const LayoutObject& object) {
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    return;
+
+  if (!object.HasLayer())
+    return;
+
+  auto* compositor = object.View()->Compositor();
+  if (!compositor)
+    return;
+
+  PaintLayer* paint_layer = ToLayoutBoxModelObject(object).Layer();
+
+  DisableCompositingQueryAsserts disabler;
+  // This ensures that CompositingLayerPropertyUpdater::Update will
+  // be called and update LayerState for the LayoutView.
+  auto* mapping = paint_layer->GetCompositedLayerMapping();
+  if (!mapping)
+    mapping = paint_layer->GroupedMapping();
+  if (!mapping)
+    return;
+
+  // These two calls will cause GraphicsLayerUpdater to run on |paint_layer|
+  // from with PLC::UpdateIfNeeded.
+  compositor->SetNeedsCompositingUpdate(
+      kCompositingUpdateAfterCompositingInputChange);
+  mapping->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateLocal);
+}
+
 void PrePaintTreeWalk::WalkTree(LocalFrameView& root_frame_view) {
   if (root_frame_view.ShouldThrottleRendering()) {
     // Skip the throttled frame. Will update it when it becomes unthrottled.
@@ -172,6 +203,8 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView& root_frame_view) {
     if (property_changed >
         PaintPropertyChangeType::kChangedOnlyCompositedValues) {
       root_frame_view.SetPaintArtifactCompositorNeedsUpdate();
+      if (auto* layout_view = root_frame_view.GetLayoutView())
+        SetNeedsCompositingLayerPropertyUpdate(*layout_view);
     }
   }
 
@@ -182,8 +215,8 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView& root_frame_view) {
 #if DCHECK_IS_ON()
   if (needs_tree_builder_context_update) {
     if (VLOG_IS_ON(2) && root_frame_view.GetLayoutView()) {
-      LOG(ERROR) << "PrePaintTreeWalk::Walk(root_frame_view="
-                 << &root_frame_view << ")\nPaintLayer tree:";
+      VLOG(2) << "PrePaintTreeWalk::Walk(root_frame_view=" << &root_frame_view
+              << ")\nPaintLayer tree:";
       showLayerTree(root_frame_view.GetLayoutView()->Layer());
     }
     if (VLOG_IS_ON(1))
@@ -231,8 +264,8 @@ void PrePaintTreeWalk::Walk(LocalFrameView& frame_view) {
     return context_storage_.back();
   };
 
-  // ancestor_overflow_paint_layer does not cross frame boundaries.
-  context().ancestor_overflow_paint_layer = nullptr;
+  // ancestor_scroll_container_paint_layer does not cross frame boundaries.
+  context().ancestor_scroll_container_paint_layer = nullptr;
   if (context().tree_builder_context) {
     PaintPropertyTreeBuilder::SetupContextForFrame(
         frame_view, *context().tree_builder_context);
@@ -243,8 +276,8 @@ void PrePaintTreeWalk::Walk(LocalFrameView& frame_view) {
   if (LayoutView* view = frame_view.GetLayoutView()) {
 #if DCHECK_IS_ON()
     if (VLOG_IS_ON(3) && needs_tree_builder_context_update) {
-      LOG(ERROR) << "PrePaintTreeWalk::Walk(frame_view=" << &frame_view
-                 << ")\nLayout tree:";
+      VLOG(3) << "PrePaintTreeWalk::Walk(frame_view=" << &frame_view
+              << ")\nLayout tree:";
       showLayoutTree(view);
     }
 #endif
@@ -259,31 +292,43 @@ void PrePaintTreeWalk::Walk(LocalFrameView& frame_view) {
   context_storage_.pop_back();
 }
 
-bool PrePaintTreeWalk::NeedsEffectiveAllowedTouchActionUpdate(
-    const LayoutObject& object,
-    PrePaintTreeWalk::PrePaintTreeWalkContext& context) const {
-  return context.effective_allowed_touch_action_changed ||
-         object.EffectiveAllowedTouchActionChanged() ||
-         object.DescendantEffectiveAllowedTouchActionChanged();
-}
-
 namespace {
-bool HasBlockingTouchEventHandler(const LocalFrame& frame,
-                                  EventTarget& target) {
+
+enum class BlockingEventHandlerType {
+  kNone,
+  kTouchStartOrMoveBlockingEventHandler,
+  kWheelBlockingEventHandler,
+};
+
+bool HasBlockingEventHandlerHelper(const LocalFrame& frame,
+                                   EventTarget& target,
+                                   BlockingEventHandlerType event_type) {
   if (!target.HasEventListeners())
     return false;
   const auto& registry = frame.GetEventHandlerRegistry();
-  const auto* blocking = registry.EventHandlerTargets(
-      EventHandlerRegistry::kTouchStartOrMoveEventBlocking);
-  const auto* blocking_low_latency = registry.EventHandlerTargets(
-      EventHandlerRegistry::kTouchStartOrMoveEventBlockingLowLatency);
-  return blocking->Contains(&target) || blocking_low_latency->Contains(&target);
+  if (BlockingEventHandlerType::kTouchStartOrMoveBlockingEventHandler ==
+      event_type) {
+    const auto* blocking = registry.EventHandlerTargets(
+        EventHandlerRegistry::kTouchStartOrMoveEventBlocking);
+    const auto* blocking_low_latency = registry.EventHandlerTargets(
+        EventHandlerRegistry::kTouchStartOrMoveEventBlockingLowLatency);
+    return blocking->Contains(&target) ||
+           blocking_low_latency->Contains(&target);
+  } else if (BlockingEventHandlerType::kWheelBlockingEventHandler ==
+             event_type) {
+    const auto* blocking =
+        registry.EventHandlerTargets(EventHandlerRegistry::kWheelEventBlocking);
+    return blocking->Contains(&target);
+  }
+  NOTREACHED();
+  return false;
 }
 
-bool HasBlockingTouchEventHandler(const LayoutObject& object) {
+bool HasBlockingEventHandlerHelper(const LayoutObject& object,
+                                   BlockingEventHandlerType event_type) {
   if (IsA<LayoutView>(object)) {
     auto* frame = object.GetFrame();
-    if (HasBlockingTouchEventHandler(*frame, *frame->DomWindow()))
+    if (HasBlockingEventHandlerHelper(*frame, *frame->DomWindow(), event_type))
       return true;
   }
 
@@ -297,7 +342,17 @@ bool HasBlockingTouchEventHandler(const LayoutObject& object) {
   }
   if (!node)
     return false;
-  return HasBlockingTouchEventHandler(*object.GetFrame(), *node);
+  return HasBlockingEventHandlerHelper(*object.GetFrame(), *node, event_type);
+}
+
+bool HasBlockingTouchEventHandler(const LayoutObject& object) {
+  return HasBlockingEventHandlerHelper(
+      object, BlockingEventHandlerType::kTouchStartOrMoveBlockingEventHandler);
+}
+
+bool HasBlockingWheelEventHandler(const LayoutObject& object) {
+  return HasBlockingEventHandlerHelper(
+      object, BlockingEventHandlerType::kWheelBlockingEventHandler);
 }
 }  // namespace
 
@@ -317,6 +372,22 @@ void PrePaintTreeWalk::UpdateEffectiveAllowedTouchAction(
     context.inside_blocking_touch_event_handler = true;
 }
 
+void PrePaintTreeWalk::UpdateBlockingWheelEventHandler(
+    const LayoutObject& object,
+    PrePaintTreeWalk::PrePaintTreeWalkContext& context) {
+  if (object.BlockingWheelEventHandlerChanged())
+    context.blocking_wheel_event_handler_changed = true;
+
+  if (context.blocking_wheel_event_handler_changed) {
+    object.GetMutableForPainting().UpdateInsideBlockingWheelEventHandler(
+        context.inside_blocking_wheel_event_handler ||
+        HasBlockingWheelEventHandler(object));
+  }
+
+  if (object.InsideBlockingWheelEventHandler())
+    context.inside_blocking_wheel_event_handler = true;
+}
+
 void PrePaintTreeWalk::InvalidatePaintForHitTesting(
     const LayoutObject& object,
     PrePaintTreeWalk::PrePaintTreeWalkContext& context) {
@@ -324,12 +395,14 @@ void PrePaintTreeWalk::InvalidatePaintForHitTesting(
       PaintInvalidatorContext::kSubtreeNoInvalidation)
     return;
 
-  if (!context.effective_allowed_touch_action_changed)
+  if (!context.effective_allowed_touch_action_changed &&
+      !context.blocking_wheel_event_handler_changed)
     return;
 
   context.paint_invalidator_context.painting_layer->SetNeedsRepaint();
   ObjectPaintInvalidator(object).InvalidateDisplayItemClient(
       object, PaintInvalidationReason::kHitTest);
+  SetNeedsCompositingLayerPropertyUpdate(object);
 }
 
 void PrePaintTreeWalk::UpdateAuxiliaryObjectProperties(
@@ -342,8 +415,8 @@ void PrePaintTreeWalk::UpdateAuxiliaryObjectProperties(
     return;
 
   PaintLayer* paint_layer = ToLayoutBoxModelObject(object).Layer();
-  paint_layer->UpdateAncestorOverflowLayer(
-      context.ancestor_overflow_paint_layer);
+  paint_layer->UpdateAncestorScrollContainerLayer(
+      context.ancestor_scroll_container_paint_layer);
 
   if (object.StyleRef().HasStickyConstrainedPosition()) {
     paint_layer->GetLayoutObject().UpdateStickyPositionConstraints();
@@ -354,8 +427,8 @@ void PrePaintTreeWalk::UpdateAuxiliaryObjectProperties(
     // update layer position and ancestor inputs updates in the same walk).
     paint_layer->UpdateLayerPosition();
   }
-  if (paint_layer->IsRootLayer() || object.HasOverflowClip())
-    context.ancestor_overflow_paint_layer = paint_layer;
+  if (object.IsScrollContainer())
+    context.ancestor_scroll_container_paint_layer = paint_layer;
 }
 
 bool PrePaintTreeWalk::NeedsTreeBuilderContextUpdate(
@@ -368,61 +441,117 @@ bool PrePaintTreeWalk::NeedsTreeBuilderContextUpdate(
 
   return frame_view.GetLayoutView() &&
          (ObjectRequiresTreeBuilderContext(*frame_view.GetLayoutView()) ||
-          ContextRequiresTreeBuilderContext(context,
-                                            *frame_view.GetLayoutView()));
+          ContextRequiresTreeBuilderContext(context));
 }
 
 bool PrePaintTreeWalk::ObjectRequiresPrePaint(const LayoutObject& object) {
   return object.ShouldCheckForPaintInvalidation() ||
          object.EffectiveAllowedTouchActionChanged() ||
-         object.DescendantEffectiveAllowedTouchActionChanged();
+         object.DescendantEffectiveAllowedTouchActionChanged() ||
+         object.BlockingWheelEventHandlerChanged() ||
+         object.DescendantBlockingWheelEventHandlerChanged();
+  ;
 }
 
 bool PrePaintTreeWalk::ContextRequiresPrePaint(
     const PrePaintTreeWalkContext& context) {
   return context.paint_invalidator_context.NeedsSubtreeWalk() ||
-         context.effective_allowed_touch_action_changed || context.clip_changed;
+         context.effective_allowed_touch_action_changed ||
+         context.blocking_wheel_event_handler_changed || context.clip_changed;
 }
 
 bool PrePaintTreeWalk::ObjectRequiresTreeBuilderContext(
     const LayoutObject& object) {
   return object.NeedsPaintPropertyUpdate() ||
-         (!object.PrePaintBlockedByDisplayLock(
-              DisplayLockLifecycleTarget::kChildren) &&
+         object.ShouldCheckGeometryForPaintInvalidation() ||
+         (!object.ChildPrePaintBlockedByDisplayLock() &&
           (object.DescendantNeedsPaintPropertyUpdate() ||
-           object.DescendantNeedsPaintOffsetAndVisualRectUpdate()));
+           object.DescendantShouldCheckGeometryForPaintInvalidation()));
 }
 
 bool PrePaintTreeWalk::ContextRequiresTreeBuilderContext(
-    const PrePaintTreeWalkContext& context,
-    const LayoutObject& object) {
-  return (context.tree_builder_context &&
-          context.tree_builder_context->force_subtree_update_reasons) ||
-         context.paint_invalidator_context.NeedsVisualRectUpdate(object);
+    const PrePaintTreeWalkContext& context) {
+  return context.tree_builder_context &&
+         context.tree_builder_context->force_subtree_update_reasons;
 }
 
+#if DCHECK_IS_ON()
 void PrePaintTreeWalk::CheckTreeBuilderContextState(
     const LayoutObject& object,
     const PrePaintTreeWalkContext& parent_context) {
   if (parent_context.tree_builder_context ||
       (!ObjectRequiresTreeBuilderContext(object) &&
-       !ContextRequiresTreeBuilderContext(parent_context, object))) {
+       !ContextRequiresTreeBuilderContext(parent_context))) {
     return;
   }
 
-  CHECK(!object.NeedsPaintPropertyUpdate());
-  CHECK(!object.DescendantNeedsPaintPropertyUpdate());
-  CHECK(!object.DescendantNeedsPaintOffsetAndVisualRectUpdate());
-  if (parent_context.paint_invalidator_context.NeedsVisualRectUpdate(object)) {
-    // Note that if paint_invalidator_context's NeedsVisualRectUpdate(object) is
-    // true, we definitely want to CHECK. However, we would also like to know
-    // the value of object.NeedsPaintOffsetAndVisualRectUpdate(), hence one of
-    // the two CHECKs below will definitely trigger, and depending on which one
-    // does we will know the value.
-    CHECK(object.NeedsPaintOffsetAndVisualRectUpdate());
-    CHECK(!object.NeedsPaintOffsetAndVisualRectUpdate());
+  DCHECK(!object.NeedsPaintPropertyUpdate());
+  DCHECK(!object.DescendantNeedsPaintPropertyUpdate());
+  DCHECK(!object.DescendantShouldCheckGeometryForPaintInvalidation());
+  DCHECK(!object.ShouldCheckGeometryForPaintInvalidation());
+  NOTREACHED() << "Unknown reason.";
+}
+#endif
+
+static LayoutBoxModelObject* ContainerForPaintInvalidation(
+    const PaintLayer* painting_layer) {
+  if (!painting_layer)
+    return nullptr;
+  if (auto* containing_paint_layer =
+          painting_layer
+              ->EnclosingLayerForPaintInvalidationCrossingFrameBoundaries())
+    return &containing_paint_layer->GetLayoutObject();
+  return nullptr;
+}
+
+void PrePaintTreeWalk::UpdatePaintInvalidationContainer(
+    const LayoutObject& object,
+    const PaintLayer* painting_layer,
+    PrePaintTreeWalkContext& context,
+    bool is_ng_painting) {
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    return;
+
+  DisableCompositingQueryAsserts disabler;
+
+  if (object.IsPaintInvalidationContainer()) {
+    context.paint_invalidation_container = ToLayoutBoxModelObject(&object);
+    if (object.IsStackingContext() || object.IsSVGRoot()) {
+      context.paint_invalidation_container_for_stacked_contents =
+          ToLayoutBoxModelObject(&object);
+    }
+  } else if (IsA<LayoutView>(object)) {
+    // paint_invalidation_container_for_stacked_contents is only for stacked
+    // descendants in its own frame, because it doesn't establish stacking
+    // context for stacked contents in sub-frames.
+    // Contents stacked in the root stacking context in this frame should use
+    // this frame's PaintInvalidationContainer.
+    context.paint_invalidation_container_for_stacked_contents =
+        ContainerForPaintInvalidation(painting_layer);
+  } else if (!is_ng_painting &&
+             (object.IsColumnSpanAll() ||
+              object.IsFloatingWithNonContainingBlockParent())) {
+    // In these cases, the object may belong to an ancestor of the current
+    // paint invalidation container, in paint order.
+    // Post LayoutNG the |LayoutObject::IsFloatingWithNonContainingBlockParent|
+    // check can be removed as floats will be painted by the correct layer.
+    context.paint_invalidation_container =
+        ContainerForPaintInvalidation(painting_layer);
+  } else if (object.IsStacked() &&
+             // This is to exclude some objects (e.g. LayoutText) inheriting
+             // stacked style from parent but aren't actually stacked.
+             object.HasLayer() &&
+             !ToLayoutBoxModelObject(object)
+                  .Layer()
+                  ->IsReplacedNormalFlowStacking() &&
+             context.paint_invalidation_container !=
+                 context.paint_invalidation_container_for_stacked_contents) {
+    // The current object is stacked, so we should use
+    // m_paintInvalidationContainerForStackedContents as its paint invalidation
+    // container on which the current object is painted.
+    context.paint_invalidation_container =
+        context.paint_invalidation_container_for_stacked_contents;
   }
-  CHECK(false) << "Unknown reason.";
 }
 
 void PrePaintTreeWalk::WalkInternal(const LayoutObject& object,
@@ -466,8 +595,11 @@ void PrePaintTreeWalk::WalkInternal(const LayoutObject& object,
   }
 
   // This must happen before paint invalidation because background painting
-  // depends on the effective allowed touch action.
+  // depends on the effective allowed touch action and blocking wheel event
+  // handlers.
   UpdateEffectiveAllowedTouchAction(object, context);
+  if (base::FeatureList::IsEnabled(::features::kWheelEventRegions))
+    UpdateBlockingWheelEventHandler(object, context);
 
   if (paint_invalidator_.InvalidatePaint(
           object, pre_paint_info,
@@ -476,6 +608,10 @@ void PrePaintTreeWalk::WalkInternal(const LayoutObject& object,
     needs_invalidate_chrome_client_ = true;
 
   InvalidatePaintForHitTesting(object, context);
+
+  UpdatePaintInvalidationContainer(object,
+                                   paint_invalidator_context.painting_layer,
+                                   context, !!pre_paint_info);
 
   if (context.tree_builder_context) {
     property_changed =
@@ -493,18 +629,26 @@ void PrePaintTreeWalk::WalkInternal(const LayoutObject& object,
       }
 
       if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-        if (property_changed >
-            PaintPropertyChangeType::kChangedOnlyCompositedValues) {
-          const auto* paint_invalidation_layer =
-              paint_invalidator_context.paint_invalidation_container->Layer();
-          if (!paint_invalidation_layer->SelfNeedsRepaint()) {
+        if ((property_changed >
+             PaintPropertyChangeType::kChangedOnlyCompositedValues) &&
+            context.paint_invalidation_container) {
+          // Mark the previous paint invalidation container as needing
+          // raster invalidation. This handles cases where raster invalidation
+          // needs to happen but no compositing layers were added or removed.
+          DisableCompositingQueryAsserts disabler;
+
+          const auto* paint_invalidation_container =
+              context.paint_invalidation_container->Layer();
+          if (!paint_invalidation_container->SelfNeedsRepaint()) {
             auto* mapping =
-                paint_invalidation_layer->GetCompositedLayerMapping();
+                paint_invalidation_container->GetCompositedLayerMapping();
             if (!mapping)
-              mapping = paint_invalidation_layer->GroupedMapping();
+              mapping = paint_invalidation_container->GroupedMapping();
             if (mapping)
               mapping->SetNeedsCheckRasterInvalidation();
           }
+
+          SetNeedsCompositingLayerPropertyUpdate(object);
         }
       } else if (!context.tree_builder_context
                       ->supports_composited_raster_invalidation) {
@@ -518,10 +662,6 @@ void PrePaintTreeWalk::WalkInternal(const LayoutObject& object,
   // may paint more or less results according to the changed clip.
   if (context.clip_changed && object.HasLayer())
     ToLayoutBoxModelObject(object).Layer()->SetNeedsRepaint();
-
-  // TODO(crbug.com/1058792): Allow multiple fragments for composited elements
-  // (passing |iterator| here is probably part of the solution).
-  CompositingLayerPropertyUpdater::Update(object);
 }
 
 LocalFrameView* FindWebViewPluginContentFrameView(
@@ -547,21 +687,32 @@ void PrePaintTreeWalk::WalkNGChildren(const LayoutObject* parent,
         continue;
       }
     } else if (!object) {
+      const NGPhysicalBoxFragment* box_fragment = (*iterator)->BoxFragment();
+      if (UNLIKELY(box_fragment->IsLayoutObjectDestroyedOrMoved()))
+        continue;
+
       // A fragmentainer doesn't paint anything itself. Just include its offset
       // and descend into children.
       DCHECK((*iterator)->BoxFragment()->IsFragmentainerBox());
       PhysicalOffset offset = (*iterator)->Link().offset;
       PaintPropertyTreeBuilderFragmentContext::ContainingBlockContext*
-          fragment_context = nullptr;
+          containing_block_context = nullptr;
       if (context_storage_.back().tree_builder_context) {
         PaintPropertyTreeBuilderContext& tree_builder_context =
             context_storage_.back().tree_builder_context.value();
-        fragment_context = &tree_builder_context.fragments[0].current;
-        fragment_context->paint_offset += offset;
+        PaintPropertyTreeBuilderFragmentContext& context =
+            tree_builder_context.fragments[0];
+        containing_block_context = &context.current;
+        containing_block_context->paint_offset += offset;
+
+        if (box_fragment->IsFragmentainerBox()) {
+          context.absolute_position = *containing_block_context;
+          context.fixed_position = *containing_block_context;
+        }
       }
       WalkChildren(/* parent */ nullptr, iterator);
-      if (fragment_context)
-        fragment_context->paint_offset -= offset;
+      if (containing_block_context)
+        containing_block_context->paint_offset -= offset;
       continue;
     }
     Walk(*object, iterator);
@@ -598,6 +749,17 @@ void PrePaintTreeWalk::WalkLegacyChildren(const LayoutObject& object) {
     }
   }
 
+  if (UNLIKELY(object.IsFieldsetIncludingNG())) {
+    // Handle the rendered legend of the fieldset right away. It may not be a
+    // direct child in the layout object tree (there may be an anonymous
+    // fieldset content wrapper in-between, and even a flow thread), but it is
+    // to be treated as such (similarly to out-of-flow positioned elements in a
+    // way).
+    if (const LayoutBox* legend =
+            LayoutFieldset::FindInFlowLegend(To<LayoutBlock>(object)))
+      Walk(*legend, /* iterator */ nullptr);
+  }
+
   for (const LayoutObject* child = object.SlowFirstChild(); child;
        child = child->NextSibling()) {
     if (child->IsLayoutMultiColumnSpannerPlaceholder()) {
@@ -617,6 +779,12 @@ void PrePaintTreeWalk::WalkLegacyChildren(const LayoutObject& object) {
     if (UNLIKELY(RuntimeEnabledFeatures::LayoutNGFragmentTraversalEnabled() &&
                  child->IsOutOfFlowPositioned() && object.IsLayoutNGObject()))
       continue;
+
+    // The rendered legend was handled above, before processing the children of
+    // the fieldset. So skip it when found during normal child traversal.
+    if (UNLIKELY(child->IsRenderedLegend()))
+      continue;
+
     Walk(*child, /* iterator */ nullptr);
   }
 
@@ -681,10 +849,10 @@ void PrePaintTreeWalk::WalkChildren(const LayoutObject* object,
   // block-fragmenting, or that this is monolithic content. We may re-enter
   // LayoutNG fragment traversal if we get to a descendant that supports that.
   if (object && !object->CanTraversePhysicalFragments()) {
-    DCHECK(
-        !object->FlowThreadContainingBlock() ||
-        (object->IsBox() && ToLayoutBox(object)->GetPaginationBreakability() ==
-                                LayoutBox::kForbidBreaks));
+    DCHECK(!object->FlowThreadContainingBlock() ||
+           (object->IsBox() &&
+            ToLayoutBox(object)->GetNGPaginationBreakability() ==
+                LayoutBox::kForbidBreaks));
     WalkLegacyChildren(*object);
     return;
   }
@@ -716,11 +884,12 @@ void PrePaintTreeWalk::Walk(const LayoutObject& object,
   };
 
   bool needs_tree_builder_context_update =
-      ContextRequiresTreeBuilderContext(parent_context(), object) ||
+      ContextRequiresTreeBuilderContext(parent_context()) ||
       ObjectRequiresTreeBuilderContext(object);
 
-  // The following is for debugging crbug.com/974639.
+#if DCHECK_IS_ON()
   CheckTreeBuilderContextState(object, parent_context());
+#endif
 
   // Early out from the tree walk if possible.
   if (!needs_tree_builder_context_update && !ObjectRequiresPrePaint(object) &&
@@ -751,25 +920,21 @@ void PrePaintTreeWalk::Walk(const LayoutObject& object,
 
   WalkInternal(object, iterator, context());
 
-  if (is_last_fragment)
-    object.NotifyDisplayLockDidPrePaint(DisplayLockLifecycleTarget::kSelf);
-
-  bool child_walk_blocked = object.PrePaintBlockedByDisplayLock(
-      DisplayLockLifecycleTarget::kChildren);
+  bool child_walk_blocked = object.ChildPrePaintBlockedByDisplayLock();
   // If we need a subtree walk due to context flags, we need to store that
   // information on the display lock, since subsequent walks might not set the
   // same bits on the context.
-  if (child_walk_blocked &&
-      (ContextRequiresTreeBuilderContext(context(), object) ||
-       ContextRequiresPrePaint(context()))) {
-    // Note that effective allowed touch action changed is special in that
-    // it requires us to specifically recalculate this value on each subtree
-    // element. Other flags simply need a subtree walk. Some consideration
-    // needs to be given to |clip_changed| which ensures that we repaint every
-    // layer, but for the purposes of PrePaint, this flag is just forcing a
-    // subtree walk.
+  if (child_walk_blocked && (ContextRequiresTreeBuilderContext(context()) ||
+                             ContextRequiresPrePaint(context()))) {
+    // Note that |effective_allowed_touch_action_changed| and
+    // |blocking_wheel_event_handler_changed| are special in that they requires
+    // us to specifically recalculate this value on each subtree element. Other
+    // flags simply need a subtree walk. Some consideration needs to be given to
+    // |clip_changed| which ensures that we repaint every layer, but for the
+    // purposes of PrePaint, this flag is just forcing a subtree walk.
     object.GetDisplayLockContext()->SetNeedsPrePaintSubtreeWalk(
-        context().effective_allowed_touch_action_changed);
+        context().effective_allowed_touch_action_changed,
+        context().blocking_wheel_event_handler_changed);
   }
 
   if (!child_walk_blocked) {
@@ -781,11 +946,14 @@ void PrePaintTreeWalk::Walk(const LayoutObject& object,
       if (auto* embedded_view =
               layout_embedded_content.GetEmbeddedContentView()) {
         if (context().tree_builder_context) {
-          auto& offset =
-              context().tree_builder_context->fragments[0].current.paint_offset;
-          offset += layout_embedded_content.ReplacedContentRect().offset;
-          offset -= PhysicalOffset(embedded_view->FrameRect().Location());
-          offset = PhysicalOffset(RoundedIntPoint(offset));
+          auto& current = context().tree_builder_context->fragments[0].current;
+          current.paint_offset = PhysicalOffset(RoundedIntPoint(
+              current.paint_offset +
+              layout_embedded_content.ReplacedContentRect().offset -
+              PhysicalOffset(embedded_view->FrameRect().Location())));
+          // Subpixel accumulation doesn't propagate across embedded view.
+          current.directly_composited_container_paint_offset_subpixel_delta =
+              PhysicalOffset();
         }
         if (embedded_view->IsLocalFrameView()) {
           Walk(*To<LocalFrameView>(embedded_view));
@@ -799,8 +967,6 @@ void PrePaintTreeWalk::Walk(const LayoutObject& object,
         }
       }
     }
-
-    object.NotifyDisplayLockDidPrePaint(DisplayLockLifecycleTarget::kChildren);
   }
   if (is_last_fragment)
     object.GetMutableForPainting().ClearPaintFlags();

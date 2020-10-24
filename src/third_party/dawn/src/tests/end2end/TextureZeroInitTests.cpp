@@ -16,6 +16,7 @@
 
 #include "common/Math.h"
 #include "utils/ComboRenderPipelineDescriptor.h"
+#include "utils/TestUtils.h"
 #include "utils/WGPUHelpers.h"
 
 #define EXPECT_LAZY_CLEAR(N, statement)                                                       \
@@ -30,6 +31,7 @@
         }                                                                                     \
     } while (0)
 
+// TODO(natlee@microsoft.com): test compressed textures are cleared
 class TextureZeroInitTest : public DawnTest {
   protected:
     void SetUp() override {
@@ -62,9 +64,9 @@ class TextureZeroInitTest : public DawnTest {
         descriptor.dimension = wgpu::TextureViewDimension::e2D;
         return descriptor;
     }
-    wgpu::RenderPipeline CreatePipelineForTest() {
+    wgpu::RenderPipeline CreatePipelineForTest(float depth = 0.f) {
         utils::ComboRenderPipelineDescriptor pipelineDescriptor(device);
-        pipelineDescriptor.vertexStage.module = CreateBasicVertexShaderForTest();
+        pipelineDescriptor.vertexStage.module = CreateBasicVertexShaderForTest(depth);
         const char* fs =
             R"(#version 450
             layout(location = 0) out vec4 fragColor;
@@ -80,8 +82,8 @@ class TextureZeroInitTest : public DawnTest {
 
         return device.CreateRenderPipeline(&pipelineDescriptor);
     }
-    wgpu::ShaderModule CreateBasicVertexShaderForTest() {
-        return utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, R"(#version 450
+    wgpu::ShaderModule CreateBasicVertexShaderForTest(float depth = 0.f) {
+        std::string source = R"(#version 450
             const vec2 pos[6] = vec2[6](vec2(-1.0f, -1.0f),
                                     vec2(-1.0f,  1.0f),
                                     vec2( 1.0f, -1.0f),
@@ -91,8 +93,10 @@ class TextureZeroInitTest : public DawnTest {
                                     );
 
             void main() {
-                gl_Position = vec4(pos[gl_VertexIndex], 0.0, 1.0);
-            })");
+                gl_Position = vec4(pos[gl_VertexIndex], )" +
+                             std::to_string(depth) + R"(, 1.0);
+            })";
+        return utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, source.c_str());
     }
     wgpu::ShaderModule CreateSampledTextureFragmentShaderForTest() {
         return utils::CreateShaderModule(device, utils::SingleShaderStage::Fragment,
@@ -133,10 +137,6 @@ TEST_P(TextureZeroInitTest, CopyTextureToBufferSource) {
 // This tests that the code path of CopyTextureToBuffer with multiple texture array layers clears
 // correctly to Zero after first usage
 TEST_P(TextureZeroInitTest, CopyMultipleTextureArrayLayersToBufferSource) {
-    // TODO(jiawei.shao@intel.com): investigate why copies with multiple texture array layers fail
-    // with swiftshader.
-    DAWN_SKIP_TEST_IF(IsSwiftshader());
-
     constexpr uint32_t kArrayLayers = 6u;
 
     const wgpu::TextureDescriptor descriptor = CreateTextureDescriptor(
@@ -328,10 +328,6 @@ TEST_P(TextureZeroInitTest, CopyBufferToTextureHalf) {
 // This tests CopyBufferToTexture fully overwrites a range of subresources, so lazy initialization
 // is needed for neither the subresources involved in the copy nor the other subresources.
 TEST_P(TextureZeroInitTest, CopyBufferToTextureMultipleArrayLayers) {
-    // TODO(jiawei.shao@intel.com): investigate why copies with multiple texture array layers fail
-    // with swiftshader.
-    DAWN_SKIP_TEST_IF(IsSwiftshader());
-
     wgpu::TextureDescriptor descriptor = CreateTextureDescriptor(
         1, 6, wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc, kColorFormat);
     wgpu::Texture texture = device.CreateTexture(&descriptor);
@@ -352,7 +348,7 @@ TEST_P(TextureZeroInitTest, CopyBufferToTextureMultipleArrayLayers) {
     encoder.CopyBufferToTexture(&bufferCopyView, &textureCopyView, &copySize);
     wgpu::CommandBuffer commands = encoder.Finish();
 
-    // The copy overwrites the whole subresources su we don't need to do lazy initialization on
+    // The copy overwrites the whole subresources so we don't need to do lazy initialization on
     // them.
     EXPECT_LAZY_CLEAR(0u, queue.Submit(1, &commands));
 
@@ -580,6 +576,244 @@ TEST_P(TextureZeroInitTest, RenderingLoadingDepthStencil) {
 
     // Expect texture subresource initialized to be true
     EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(srcTexture.Get(), 0, 1, 0, 1));
+}
+
+// Test that clear state is tracked independently for depth/stencil textures.
+TEST_P(TextureZeroInitTest, IndependentDepthStencilLoadAfterDiscard) {
+    // TODO(enga): Figure out why this fails on Metal Intel.
+    DAWN_SKIP_TEST_IF(IsMetal() && IsIntel());
+
+    wgpu::TextureDescriptor depthStencilDescriptor = CreateTextureDescriptor(
+        1, 1, wgpu::TextureUsage::OutputAttachment | wgpu::TextureUsage::CopySrc,
+        kDepthStencilFormat);
+    wgpu::Texture depthStencilTexture = device.CreateTexture(&depthStencilDescriptor);
+
+    // Uninitialize only depth
+    {
+        // Clear the stencil to 2 and discard the depth
+        {
+            utils::ComboRenderPassDescriptor renderPassDescriptor({},
+                                                                  depthStencilTexture.CreateView());
+            renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Clear;
+            renderPassDescriptor.cDepthStencilAttachmentInfo.clearStencil = 2;
+            renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Store;
+
+            wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+            auto pass = encoder.BeginRenderPass(&renderPassDescriptor);
+            pass.EndPass();
+            wgpu::CommandBuffer commandBuffer = encoder.Finish();
+            EXPECT_LAZY_CLEAR(0u, queue.Submit(1, &commandBuffer));
+        }
+
+        // "all" subresources are not initialized; Depth is not initialized
+        EXPECT_EQ(false, dawn_native::IsTextureSubresourceInitialized(
+                             depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_All));
+        EXPECT_EQ(false, dawn_native::IsTextureSubresourceInitialized(
+                             depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_DepthOnly));
+        EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(
+                            depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_StencilOnly));
+
+        // Now load both depth and stencil. Depth should be cleared and stencil should stay the same
+        // at 2.
+        {
+            wgpu::TextureDescriptor colorDescriptor =
+                CreateTextureDescriptor(1, 1,
+                                        wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
+                                            wgpu::TextureUsage::OutputAttachment,
+                                        kColorFormat);
+            wgpu::Texture colorTexture = device.CreateTexture(&colorDescriptor);
+
+            utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()},
+                                                                  depthStencilTexture.CreateView());
+            renderPassDescriptor.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Load;
+            renderPassDescriptor.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Load;
+
+            wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+            auto pass = encoder.BeginRenderPass(&renderPassDescriptor);
+            pass.SetPipeline(CreatePipelineForTest());
+            pass.SetStencilReference(2);
+            pass.Draw(6);
+            pass.EndPass();
+            wgpu::CommandBuffer commandBuffer = encoder.Finish();
+            // No lazy clear because depth will be cleared with a loadOp
+            EXPECT_LAZY_CLEAR(0u, queue.Submit(1, &commandBuffer));
+
+            // Expect the texture to be red because the depth and stencil tests passed. Depth was 0
+            // and stencil was 2.
+            std::vector<RGBA8> expected(kSize * kSize, {255, 0, 0, 255});
+            EXPECT_TEXTURE_RGBA8_EQ(expected.data(), colorTexture, 0, 0, kSize, kSize, 0, 0);
+        }
+
+        // Everything is initialized now
+        EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(
+                            depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_All));
+        EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(
+                            depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_DepthOnly));
+        EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(
+                            depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_StencilOnly));
+
+        // TODO(crbug.com/dawn/439): Implement stencil copies on other platforms
+        if (IsMetal() || IsVulkan() || IsD3D12()) {
+            // Check by copy that the stencil data is 2.
+            std::vector<uint8_t> expected(kSize * kSize, 2);
+            EXPECT_LAZY_CLEAR(
+                0u, EXPECT_TEXTURE_EQ(expected.data(), depthStencilTexture, 0, 0, kSize, kSize, 0,
+                                      0, wgpu::TextureAspect::StencilOnly));
+        }
+    }
+
+    // Uninitialize only stencil
+    {
+        // Clear the depth to 0.7 and discard the stencil.
+        {
+            utils::ComboRenderPassDescriptor renderPassDescriptor({},
+                                                                  depthStencilTexture.CreateView());
+            renderPassDescriptor.cDepthStencilAttachmentInfo.clearDepth = 0.7;
+            renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Store;
+            renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Clear;
+
+            wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+            auto pass = encoder.BeginRenderPass(&renderPassDescriptor);
+            pass.EndPass();
+            wgpu::CommandBuffer commandBuffer = encoder.Finish();
+            EXPECT_LAZY_CLEAR(0u, queue.Submit(1, &commandBuffer));
+        }
+
+        // "all" subresources are not initialized; Stencil is not initialized
+        EXPECT_EQ(false, dawn_native::IsTextureSubresourceInitialized(
+                             depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_All));
+        EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(
+                            depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_DepthOnly));
+        EXPECT_EQ(false, dawn_native::IsTextureSubresourceInitialized(
+                             depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_StencilOnly));
+
+        // Now load both depth and stencil. Stencil should be cleared and depth should stay the same
+        // at 0.7.
+        {
+            wgpu::TextureDescriptor colorDescriptor =
+                CreateTextureDescriptor(1, 1,
+                                        wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
+                                            wgpu::TextureUsage::OutputAttachment,
+                                        kColorFormat);
+            wgpu::Texture colorTexture = device.CreateTexture(&colorDescriptor);
+
+            utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()},
+                                                                  depthStencilTexture.CreateView());
+            renderPassDescriptor.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Load;
+            renderPassDescriptor.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Load;
+
+            wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+            auto pass = encoder.BeginRenderPass(&renderPassDescriptor);
+            pass.SetPipeline(CreatePipelineForTest(0.7));
+            pass.Draw(6);
+            pass.EndPass();
+            wgpu::CommandBuffer commandBuffer = encoder.Finish();
+            // No lazy clear because stencil will clear using a loadOp.
+            EXPECT_LAZY_CLEAR(0u, queue.Submit(1, &commandBuffer));
+
+            // Expect the texture to be red because both the depth a stencil tests passed.
+            // Depth was 0.7 and stencil was 0
+            std::vector<RGBA8> expected(kSize * kSize, {255, 0, 0, 255});
+            EXPECT_TEXTURE_RGBA8_EQ(expected.data(), colorTexture, 0, 0, kSize, kSize, 0, 0);
+        }
+
+        // Everything is initialized now
+        EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(
+                            depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_All));
+        EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(
+                            depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_DepthOnly));
+        EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(
+                            depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_StencilOnly));
+
+        // TODO(crbug.com/dawn/439): Implement stencil copies on other platforms
+        if (IsMetal() || IsVulkan() || IsD3D12()) {
+            // Check by copy that the stencil data is 0.
+            std::vector<uint8_t> expected(kSize * kSize, 0);
+            EXPECT_LAZY_CLEAR(
+                0u, EXPECT_TEXTURE_EQ(expected.data(), depthStencilTexture, 0, 0, kSize, kSize, 0,
+                                      0, wgpu::TextureAspect::StencilOnly));
+        }
+    }
+}
+
+// Test that clear state is tracked independently for depth/stencil textures.
+// Lazy clear of the stencil aspect via copy should not touch depth.
+TEST_P(TextureZeroInitTest, IndependentDepthStencilCopyAfterDiscard) {
+    // TODO(crbug.com/dawn/439): Implement stencil copies on other platforms
+    DAWN_SKIP_TEST_IF(!(IsMetal() || IsVulkan() || IsD3D12()));
+
+    // TODO(enga): Figure out why this fails on Metal Intel.
+    DAWN_SKIP_TEST_IF(IsMetal() && IsIntel());
+
+    wgpu::TextureDescriptor depthStencilDescriptor = CreateTextureDescriptor(
+        1, 1, wgpu::TextureUsage::OutputAttachment | wgpu::TextureUsage::CopySrc,
+        kDepthStencilFormat);
+    wgpu::Texture depthStencilTexture = device.CreateTexture(&depthStencilDescriptor);
+
+    // Clear the depth to 0.3 and discard the stencil.
+    {
+        utils::ComboRenderPassDescriptor renderPassDescriptor({}, depthStencilTexture.CreateView());
+        renderPassDescriptor.cDepthStencilAttachmentInfo.clearDepth = 0.3;
+        renderPassDescriptor.cDepthStencilAttachmentInfo.depthStoreOp = wgpu::StoreOp::Store;
+        renderPassDescriptor.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Clear;
+
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        auto pass = encoder.BeginRenderPass(&renderPassDescriptor);
+        pass.EndPass();
+        wgpu::CommandBuffer commandBuffer = encoder.Finish();
+        EXPECT_LAZY_CLEAR(0u, queue.Submit(1, &commandBuffer));
+    }
+
+    // "all" subresources are not initialized; Stencil is not initialized
+    EXPECT_EQ(false, dawn_native::IsTextureSubresourceInitialized(depthStencilTexture.Get(), 0, 1,
+                                                                  0, 1, WGPUTextureAspect_All));
+    EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(depthStencilTexture.Get(), 0, 1, 0,
+                                                                 1, WGPUTextureAspect_DepthOnly));
+    EXPECT_EQ(false, dawn_native::IsTextureSubresourceInitialized(
+                         depthStencilTexture.Get(), 0, 1, 0, 1, WGPUTextureAspect_StencilOnly));
+
+    // Check by copy that the stencil data is lazily cleared to 0.
+    std::vector<uint8_t> expected(kSize * kSize, 0);
+    EXPECT_LAZY_CLEAR(1u, EXPECT_TEXTURE_EQ(expected.data(), depthStencilTexture, 0, 0, kSize,
+                                            kSize, 0, 0, wgpu::TextureAspect::StencilOnly));
+
+    // Everything is initialized now
+    EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(depthStencilTexture.Get(), 0, 1, 0,
+                                                                 1, WGPUTextureAspect_All));
+    EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(depthStencilTexture.Get(), 0, 1, 0,
+                                                                 1, WGPUTextureAspect_DepthOnly));
+    EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(depthStencilTexture.Get(), 0, 1, 0,
+                                                                 1, WGPUTextureAspect_StencilOnly));
+
+    // Now load both depth and stencil. Stencil should be cleared and depth should stay the same
+    // at 0.3.
+    {
+        wgpu::TextureDescriptor colorDescriptor =
+            CreateTextureDescriptor(1, 1,
+                                    wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
+                                        wgpu::TextureUsage::OutputAttachment,
+                                    kColorFormat);
+        wgpu::Texture colorTexture = device.CreateTexture(&colorDescriptor);
+
+        utils::ComboRenderPassDescriptor renderPassDescriptor({colorTexture.CreateView()},
+                                                              depthStencilTexture.CreateView());
+        renderPassDescriptor.cDepthStencilAttachmentInfo.depthLoadOp = wgpu::LoadOp::Load;
+        renderPassDescriptor.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Load;
+
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        auto pass = encoder.BeginRenderPass(&renderPassDescriptor);
+        pass.SetPipeline(CreatePipelineForTest(0.3));
+        pass.Draw(6);
+        pass.EndPass();
+        wgpu::CommandBuffer commandBuffer = encoder.Finish();
+        // No lazy clear because stencil will clear using a loadOp.
+        EXPECT_LAZY_CLEAR(0u, queue.Submit(1, &commandBuffer));
+
+        // Expect the texture to be red because both the depth a stencil tests passed.
+        // Depth was 0.3 and stencil was 0
+        std::vector<RGBA8> expected(kSize * kSize, {255, 0, 0, 255});
+        EXPECT_TEXTURE_RGBA8_EQ(expected.data(), colorTexture, 0, 0, kSize, kSize, 0, 0);
+    }
 }
 
 // This tests the color attachments clear to 0s
@@ -1131,10 +1365,12 @@ TEST_P(TextureZeroInitTest, CopyTextureToBufferNonRenderableUnaligned) {
     {
         uint32_t bytesPerRow = Align(kUnalignedSize, kTextureBytesPerRowAlignment);
 
-        wgpu::BufferDescriptor bufferDesc;
-        bufferDesc.size = kUnalignedSize * bytesPerRow;
-        bufferDesc.usage = wgpu::BufferUsage::CopyDst;
-        wgpu::Buffer buffer = device.CreateBuffer(&bufferDesc);
+        // Create and initialize the destination buffer to ensure we only count the times of
+        // texture lazy initialization in this test.
+        const uint64_t bufferSize = kUnalignedSize * bytesPerRow;
+        const std::vector<uint8_t> initialBufferData(bufferSize, 0u);
+        wgpu::Buffer buffer = utils::CreateBufferFromData(device, initialBufferData.data(),
+                                                          bufferSize, wgpu::BufferUsage::CopyDst);
 
         wgpu::TextureCopyView textureCopyView = utils::CreateTextureCopyView(texture, 0, {0, 0, 0});
         wgpu::BufferCopyView bufferCopyView =
@@ -1152,11 +1388,259 @@ TEST_P(TextureZeroInitTest, CopyTextureToBufferNonRenderableUnaligned) {
     EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(texture.Get(), 0, 1, 0, 1));
 }
 
-DAWN_INSTANTIATE_TEST(
-    TextureZeroInitTest,
-    D3D12Backend({"nonzero_clear_resources_on_creation_for_testing"}),
-    D3D12Backend({"nonzero_clear_resources_on_creation_for_testing"},
-                 {"use_d3d12_render_pass"}),
-    OpenGLBackend({"nonzero_clear_resources_on_creation_for_testing"}),
-    MetalBackend({"nonzero_clear_resources_on_creation_for_testing"}),
-    VulkanBackend({"nonzero_clear_resources_on_creation_for_testing"}));
+// In this test WriteTexture fully overwrites a texture
+TEST_P(TextureZeroInitTest, WriteWholeTexture) {
+    // TODO(dawn:483): Remove this condition after implementing WriteTexture in those backends.
+    DAWN_SKIP_TEST_IF(IsOpenGL());
+
+    wgpu::TextureDescriptor descriptor = CreateTextureDescriptor(
+        1, 1, wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc, kColorFormat);
+    wgpu::Texture texture = device.CreateTexture(&descriptor);
+
+    wgpu::TextureCopyView textureCopyView = utils::CreateTextureCopyView(texture, 0, {0, 0, 0});
+    wgpu::Extent3D copySize = {kSize, kSize, 1};
+
+    wgpu::TextureDataLayout textureDataLayout;
+    textureDataLayout.offset = 0;
+    textureDataLayout.bytesPerRow = kSize * kFormatBlockByteSize;
+    textureDataLayout.rowsPerImage = kSize;
+
+    std::vector<RGBA8> data(
+        utils::RequiredBytesInCopy(textureDataLayout.bytesPerRow, textureDataLayout.rowsPerImage,
+                                   copySize, kColorFormat) /
+            sizeof(RGBA8),
+        {100, 100, 100, 100});
+
+    // The write overwrites the whole texture so we don't need to do lazy initialization.
+    EXPECT_LAZY_CLEAR(0u,
+                      queue.WriteTexture(&textureCopyView, data.data(), data.size() * sizeof(RGBA8),
+                                         &textureDataLayout, &copySize));
+
+    // Expect texture initialized to be true
+    EXPECT_TRUE(dawn_native::IsTextureSubresourceInitialized(texture.Get(), 0, 1, 0, 1));
+
+    EXPECT_TEXTURE_RGBA8_EQ(data.data(), texture, 0, 0, kSize, kSize, 0, 0);
+}
+
+// Test WriteTexture to a subset of the texture, lazy init is necessary to clear the other
+// half.
+TEST_P(TextureZeroInitTest, WriteTextureHalf) {
+    // TODO(dawn:483): Remove this condition after implementing WriteTexture in those backends.
+    DAWN_SKIP_TEST_IF(IsOpenGL());
+
+    wgpu::TextureDescriptor descriptor = CreateTextureDescriptor(
+        4, 1,
+        wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::Sampled | wgpu::TextureUsage::CopySrc,
+        kColorFormat);
+    wgpu::Texture texture = device.CreateTexture(&descriptor);
+
+    wgpu::TextureCopyView textureCopyView = utils::CreateTextureCopyView(texture, 0, {0, 0, 0});
+    wgpu::Extent3D copySize = {kSize / 2, kSize, 1};
+
+    wgpu::TextureDataLayout textureDataLayout;
+    textureDataLayout.offset = 0;
+    textureDataLayout.bytesPerRow = kSize * kFormatBlockByteSize / 2;
+    textureDataLayout.rowsPerImage = kSize;
+
+    std::vector<RGBA8> data(
+        utils::RequiredBytesInCopy(textureDataLayout.bytesPerRow, textureDataLayout.rowsPerImage,
+                                   copySize, kColorFormat) /
+            sizeof(RGBA8),
+        {100, 100, 100, 100});
+
+    EXPECT_LAZY_CLEAR(1u,
+                      queue.WriteTexture(&textureCopyView, data.data(), data.size() * sizeof(RGBA8),
+                                         &textureDataLayout, &copySize));
+
+    // Expect texture initialized to be true
+    EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(texture.Get(), 0, 1, 0, 1));
+
+    std::vector<RGBA8> expectedZeros((kSize / 2) * kSize, {0, 0, 0, 0});
+    // first half filled with 100, by the data
+    EXPECT_TEXTURE_RGBA8_EQ(data.data(), texture, 0, 0, kSize / 2, kSize, 0, 0);
+    // second half should be cleared
+    EXPECT_TEXTURE_RGBA8_EQ(expectedZeros.data(), texture, kSize / 2, 0, kSize / 2, kSize, 0, 0);
+}
+
+// In this test WriteTexture fully overwrites a range of subresources, so lazy initialization
+// is needed for neither the subresources involved in the write nor the other subresources.
+TEST_P(TextureZeroInitTest, WriteWholeTextureArray) {
+    // TODO(dawn:483): Remove this condition after implementing WriteTexture in those backends.
+    DAWN_SKIP_TEST_IF(IsOpenGL());
+
+    wgpu::TextureDescriptor descriptor = CreateTextureDescriptor(
+        1, 6, wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc, kColorFormat);
+    wgpu::Texture texture = device.CreateTexture(&descriptor);
+
+    constexpr uint32_t kBaseArrayLayer = 2u;
+    constexpr uint32_t kCopyLayerCount = 3u;
+
+    wgpu::TextureCopyView textureCopyView =
+        utils::CreateTextureCopyView(texture, 0, {0, 0, kBaseArrayLayer});
+    wgpu::Extent3D copySize = {kSize, kSize, kCopyLayerCount};
+
+    wgpu::TextureDataLayout textureDataLayout;
+    textureDataLayout.offset = 0;
+    textureDataLayout.bytesPerRow = kSize * kFormatBlockByteSize;
+    textureDataLayout.rowsPerImage = kSize;
+
+    std::vector<RGBA8> data(
+        utils::RequiredBytesInCopy(textureDataLayout.bytesPerRow, textureDataLayout.rowsPerImage,
+                                   copySize, kColorFormat) /
+            sizeof(RGBA8),
+        {100, 100, 100, 100});
+
+    // The write overwrites the whole subresources so we don't need to do lazy initialization on
+    // them.
+    EXPECT_LAZY_CLEAR(0u,
+                      queue.WriteTexture(&textureCopyView, data.data(), data.size() * sizeof(RGBA8),
+                                         &textureDataLayout, &copySize));
+
+    // Expect texture subresource initialized to be true
+    EXPECT_TRUE(dawn_native::IsTextureSubresourceInitialized(texture.Get(), 0, 1, kBaseArrayLayer,
+                                                             kCopyLayerCount));
+
+    for (uint32_t layer = kBaseArrayLayer; layer < kBaseArrayLayer + kCopyLayerCount; ++layer) {
+        EXPECT_TEXTURE_RGBA8_EQ(data.data(), texture, 0, 0, kSize, kSize, 0, layer);
+    }
+}
+
+// Test WriteTexture to a subset of the subresource, lazy init is necessary to clear the other
+// half.
+TEST_P(TextureZeroInitTest, WriteTextureArrayHalf) {
+    // TODO(dawn:483): Remove this condition after implementing WriteTexture in those backends.
+    DAWN_SKIP_TEST_IF(IsOpenGL());
+
+    wgpu::TextureDescriptor descriptor = CreateTextureDescriptor(
+        4, 6,
+        wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::Sampled | wgpu::TextureUsage::CopySrc,
+        kColorFormat);
+    wgpu::Texture texture = device.CreateTexture(&descriptor);
+
+    constexpr uint32_t kBaseArrayLayer = 2u;
+    constexpr uint32_t kCopyLayerCount = 3u;
+
+    wgpu::TextureCopyView textureCopyView =
+        utils::CreateTextureCopyView(texture, 0, {0, 0, kBaseArrayLayer});
+    wgpu::Extent3D copySize = {kSize / 2, kSize, kCopyLayerCount};
+
+    wgpu::TextureDataLayout textureDataLayout;
+    textureDataLayout.offset = 0;
+    textureDataLayout.bytesPerRow = kSize * kFormatBlockByteSize / 2;
+    textureDataLayout.rowsPerImage = kSize;
+
+    std::vector<RGBA8> data(
+        utils::RequiredBytesInCopy(textureDataLayout.bytesPerRow, textureDataLayout.rowsPerImage,
+                                   copySize, kColorFormat) /
+            sizeof(RGBA8),
+        {100, 100, 100, 100});
+
+    EXPECT_LAZY_CLEAR(1u,
+                      queue.WriteTexture(&textureCopyView, data.data(), data.size() * sizeof(RGBA8),
+                                         &textureDataLayout, &copySize));
+
+    // Expect texture subresource initialized to be true
+    EXPECT_EQ(true, dawn_native::IsTextureSubresourceInitialized(texture.Get(), 0, 1,
+                                                                 kBaseArrayLayer, kCopyLayerCount));
+
+    std::vector<RGBA8> expectedZeros((kSize / 2) * kSize, {0, 0, 0, 0});
+    for (uint32_t layer = kBaseArrayLayer; layer < kBaseArrayLayer + kCopyLayerCount; ++layer) {
+        // first half filled with 100, by the data
+        EXPECT_TEXTURE_RGBA8_EQ(data.data(), texture, 0, 0, kSize / 2, kSize, 0, layer);
+        // second half should be cleared
+        EXPECT_TEXTURE_RGBA8_EQ(expectedZeros.data(), texture, kSize / 2, 0, kSize / 2, kSize, 0,
+                                layer);
+    }
+}
+
+// In this test WriteTexture fully overwrites a texture at mip level.
+TEST_P(TextureZeroInitTest, WriteWholeTextureAtMipLevel) {
+    // TODO(dawn:483): Remove this condition after implementing WriteTexture in those backends.
+    DAWN_SKIP_TEST_IF(IsOpenGL());
+
+    wgpu::TextureDescriptor descriptor = CreateTextureDescriptor(
+        4, 1, wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc, kColorFormat);
+    wgpu::Texture texture = device.CreateTexture(&descriptor);
+
+    constexpr uint32_t kMipLevel = 2;
+    constexpr uint32_t kMipSize = kSize >> kMipLevel;
+
+    wgpu::TextureCopyView textureCopyView =
+        utils::CreateTextureCopyView(texture, kMipLevel, {0, 0, 0});
+    wgpu::Extent3D copySize = {kMipSize, kMipSize, 1};
+
+    wgpu::TextureDataLayout textureDataLayout;
+    textureDataLayout.offset = 0;
+    textureDataLayout.bytesPerRow = kMipSize * kFormatBlockByteSize;
+    textureDataLayout.rowsPerImage = kMipSize;
+
+    std::vector<RGBA8> data(
+        utils::RequiredBytesInCopy(textureDataLayout.bytesPerRow, textureDataLayout.rowsPerImage,
+                                   copySize, kColorFormat) /
+            sizeof(RGBA8),
+        {100, 100, 100, 100});
+
+    // The write overwrites the whole texture so we don't need to do lazy initialization.
+    EXPECT_LAZY_CLEAR(0u,
+                      queue.WriteTexture(&textureCopyView, data.data(), data.size() * sizeof(RGBA8),
+                                         &textureDataLayout, &copySize));
+
+    // Expect texture initialized to be true
+    EXPECT_TRUE(dawn_native::IsTextureSubresourceInitialized(texture.Get(), kMipLevel, 1, 0, 1));
+
+    EXPECT_TEXTURE_RGBA8_EQ(data.data(), texture, 0, 0, kMipSize, kMipSize, kMipLevel, 0);
+}
+
+// Test WriteTexture to a subset of the texture at mip level, lazy init is necessary to clear the
+// other half.
+TEST_P(TextureZeroInitTest, WriteTextureHalfAtMipLevel) {
+    // TODO(dawn:483): Remove this condition after implementing WriteTexture in those backends.
+    DAWN_SKIP_TEST_IF(IsOpenGL());
+
+    wgpu::TextureDescriptor descriptor = CreateTextureDescriptor(
+        4, 1,
+        wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::Sampled | wgpu::TextureUsage::CopySrc,
+        kColorFormat);
+    wgpu::Texture texture = device.CreateTexture(&descriptor);
+
+    constexpr uint32_t kMipLevel = 2;
+    constexpr uint32_t kMipSize = kSize >> kMipLevel;
+
+    wgpu::TextureCopyView textureCopyView =
+        utils::CreateTextureCopyView(texture, kMipLevel, {0, 0, 0});
+    wgpu::Extent3D copySize = {kMipSize / 2, kMipSize, 1};
+
+    wgpu::TextureDataLayout textureDataLayout;
+    textureDataLayout.offset = 0;
+    textureDataLayout.bytesPerRow = kMipSize * kFormatBlockByteSize / 2;
+    textureDataLayout.rowsPerImage = kMipSize;
+
+    std::vector<RGBA8> data(
+        utils::RequiredBytesInCopy(textureDataLayout.bytesPerRow, textureDataLayout.rowsPerImage,
+                                   copySize, kColorFormat) /
+            sizeof(RGBA8),
+        {100, 100, 100, 100});
+
+    EXPECT_LAZY_CLEAR(1u,
+                      queue.WriteTexture(&textureCopyView, data.data(), data.size() * sizeof(RGBA8),
+                                         &textureDataLayout, &copySize));
+
+    // Expect texture initialized to be true
+    EXPECT_EQ(true,
+              dawn_native::IsTextureSubresourceInitialized(texture.Get(), kMipLevel, 1, 0, 1));
+
+    std::vector<RGBA8> expectedZeros((kMipSize / 2) * kMipSize, {0, 0, 0, 0});
+    // first half filled with 100, by the data
+    EXPECT_TEXTURE_RGBA8_EQ(data.data(), texture, 0, 0, kMipSize / 2, kMipSize, kMipLevel, 0);
+    // second half should be cleared
+    EXPECT_TEXTURE_RGBA8_EQ(expectedZeros.data(), texture, kMipSize / 2, 0, kMipSize / 2, kMipSize,
+                            kMipLevel, 0);
+}
+
+DAWN_INSTANTIATE_TEST(TextureZeroInitTest,
+                      D3D12Backend({"nonzero_clear_resources_on_creation_for_testing"}),
+                      D3D12Backend({"nonzero_clear_resources_on_creation_for_testing"},
+                                   {"use_d3d12_render_pass"}),
+                      OpenGLBackend({"nonzero_clear_resources_on_creation_for_testing"}),
+                      MetalBackend({"nonzero_clear_resources_on_creation_for_testing"}),
+                      VulkanBackend({"nonzero_clear_resources_on_creation_for_testing"}));

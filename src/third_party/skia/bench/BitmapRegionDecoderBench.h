@@ -18,8 +18,8 @@
 namespace android {
 namespace skia {
 class BitmapRegionDecoder;
-}
-}
+}  // namespace skia
+}  // namespace android
 
 /**
  *  Benchmark Android's BitmapRegionDecoder for a particular colorType, sampleSize, and subset.
@@ -46,7 +46,7 @@ private:
     const SkColorType                                   fColorType;
     const uint32_t                                      fSampleSize;
     const SkIRect                                       fSubset;
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 #endif // SK_ENABLE_ANDROID_UTILS
 #endif // BitmapRegionDecoderBench_DEFINED

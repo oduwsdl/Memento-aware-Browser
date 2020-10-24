@@ -13,20 +13,24 @@
 <translation id="1211441953136645838">beigu vēre</translation>
 <translation id="1281252709823657822">dialoglodziņš</translation>
 <translation id="1306460908038601864">Izsl.</translation>
+<translation id="1311894908970423688">Jābūt šādai vērtībai: <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">pateicības</translation>
 <translation id="1342835525016946179">raksts</translation>
 <translation id="1359897965706325498">reklāmkarogs</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> vienumi</translation>
+<translation id="1480676835519562650">vairākas atlasāmas iespējas; tika atlasītas <ph name="SELECTED" /> no <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">reģions</translation>
 <translation id="1591562245178063882">Šis mēnesis</translation>
 <translation id="1637811476055996098">Izvēlēties failus</translation>
 <translation id="1650423536718072820">izvilkuma citāts</translation>
-<translation id="1727886345390570319">paslēpt slēgto parakstu izvēlni</translation>
+<translation id="1727886345390570319">paslēpt subtitru izvēlni</translation>
 <translation id="1729654308190250600">Lūdzu, ievadiet e-pasta adresi.</translation>
 <translation id="1758486001363313524">Cits...</translation>
 <translation id="1787192514241997742">Kopējais laiks: <ph name="REMAINING_TIME" /></translation>
 <translation id="1806710327868736751">brīdinājuma dialoglodziņš</translation>
 <translation id="1821985195704844674">koka režģis</translation>
 <translation id="1822429046913737220">priekšpusdienā/pēcpusdienā</translation>
+<translation id="1823704031293214298">lapas kājene</translation>
 <translation id="1832974991323546415">atskaņot attālinātā ierīcē</translation>
 <translation id="190587075670221089">dzēšana</translation>
 <translation id="1907737156431278478">piemērs</translation>
@@ -44,6 +48,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. nedēļa, <ph name="YEAR" />. gads</translation>
 <translation id="2277199496770840904"><ph name="NUMBER" />. ieraksts</translation>
 <translation id="2291999235780842123">izvēles rūtiņa</translation>
+<translation id="2307576640803031502">sarakstā, vienums numur <ph name="INDEX" />, kopā ir <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">lappuses pārtraukums</translation>
 <translation id="2335594187091864976">datuma un laika atlasītājs</translation>
 <translation id="2393030564806080191">Heksadecimāla krāsas vērtība</translation>
@@ -51,6 +56,7 @@
 <translation id="248395913932153421">Diena</translation>
 <translation id="2507943997699731163">Aizpildiet šo lauku.</translation>
 <translation id="2508569020611168319">ciļņu saraksts</translation>
+<translation id="2530182415807757784">vairākas atlasāmas iespējas; nekas nav atlasīts</translation>
 <translation id="2561842179657104141">rādīt citas multivides vadīklas</translation>
 <translation id="2572483411312390101">atskaņot</translation>
 <translation id="2613802280814924224">Lūdzu, ievadiet derīgu vērtību. Tuvākā derīgā vērtība ir <ph name="VALID_VALUE" />.</translation>
@@ -100,9 +106,9 @@
 <translation id="4201051445878709314">Rādīt iepriekšējo mēnesi</translation>
 <translation id="421884353938374759">krāsu izvēle</translation>
 <translation id="4248100235867064564">izvēļņu josla</translation>
+<translation id="4293574643247337246">lapas galvene</translation>
 <translation id="4360991593054037559">Lūdzu, ievadiet derīgu vērtību. Divas tuvākās derīgās vērtības ir <ph name="VALID_VALUE_LOW" /> un <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Jautājumi un atbildes</translation>
-<translation id="4413860115965805769">izvēlnes poga</translation>
 <translation id="4444765639179266822">Izklausās: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">atsauce uz glosāriju</translation>
 <translation id="4522570452068850558">Informācija</translation>
@@ -154,9 +160,11 @@
 <translation id="5677946354068040947">citas opcijas</translation>
 <translation id="576709008726043716">ievads</translation>
 <translation id="57838592816432529">Izslēgt skaņu</translation>
+<translation id="5860033963881614850">Izsl.</translation>
 <translation id="588258955323874662">Pilnekrāna</translation>
 <translation id="5888666972993069672">Notiek apraide šajā ierīcē: <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">meklēšanas lodziņš</translation>
+<translation id="5916664084637901428">Iesl.</translation>
 <translation id="5939518447894949180">Atiestatīt</translation>
 <translation id="5966707198760109579">Nedēļa</translation>
 <translation id="5987525920412732405">skaitītājpoga</translation>
@@ -173,7 +181,7 @@
 <translation id="6310801910862476708">Aizvērt režīmu “Attēls attēlā”</translation>
 <translation id="6398862346408813489">Rādīt mēneša atlases paneli</translation>
 <translation id="6404546809543547843">audio laika skalas slīdnis</translation>
-<translation id="6443871981718447451">rādīt slēgto parakstu izvēlni</translation>
+<translation id="6443871981718447451">rādīt subtitru izvēlni</translation>
 <translation id="6453774872122745852">pateicības</translation>
 <translation id="648732519525291180">laika atlasītājs</translation>
 <translation id="6550675742724504774">Opcijas</translation>
@@ -184,6 +192,7 @@
 <translation id="6643016212128521049">Notīrīt</translation>
 <translation id="668171684555832681">Cits</translation>
 <translation id="6692633176391053278">pārslēdzējs</translation>
+<translation id="6709093583001123835">Jābūt šādai vērtībai: <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Slikta atskaņošanas kvalitāte</translation>
 <translation id="6755330956360078551">rīka padoms</translation>
 <translation id="6790428901817661496">Atskaņot</translation>
@@ -284,6 +293,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, sākot no: <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Attēls attēlā</translation>
 <translation id="9168329111483466115">vēre</translation>
+<translation id="945780513535800434">Daļēji atzīmēta</translation>
 <translation id="954003015749068518">atvērt režīmu “attēls attēlā”</translation>
 <translation id="966787709310836684">izvēlne</translation>
 </translationbundle>

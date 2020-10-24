@@ -10,11 +10,10 @@
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/GrStencilSettings.h"
 
 GrDawnCaps::GrDawnCaps(const GrContextOptions& contextOptions) : INHERITED(contextOptions) {
-    fMipMapSupport = false;  // FIXME: implement onRegenerateMipMapLevels in GrDawnGpu.
+    fMipmapSupport = true;
     fBufferMapThreshold = SK_MaxS32;  // FIXME: get this from Dawn?
     fShaderCaps.reset(new GrShaderCaps(contextOptions));
     fMaxTextureSize = fMaxRenderTargetSize = 8192; // FIXME
@@ -97,14 +96,6 @@ bool GrDawnCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     return surface->asTexture() != nullptr;
 }
 
-size_t GrDawnCaps::bytesPerPixel(const GrBackendFormat& backendFormat) const {
-    wgpu::TextureFormat dawnFormat;
-    if (!backendFormat.asDawnFormat(&dawnFormat)) {
-        return 0;
-    }
-    return GrDawnBytesPerPixel(dawnFormat);
-}
-
 int GrDawnCaps::getRenderTargetSampleCount(int requestedCount,
                                            const GrBackendFormat& backendFormat) const {
     wgpu::TextureFormat dawnFormat;
@@ -173,8 +164,7 @@ static uint32_t get_blend_info_key(const GrPipeline& pipeline) {
     return key;
 }
 
-GrProgramDesc GrDawnCaps::makeDesc(const GrRenderTarget* rt,
-                                   const GrProgramInfo& programInfo) const {
+GrProgramDesc GrDawnCaps::makeDesc(GrRenderTarget* rt, const GrProgramInfo& programInfo) const {
     GrProgramDesc desc;
     if (!GrProgramDesc::Build(&desc, rt, programInfo, *this)) {
         SkASSERT(!desc.isValid());
@@ -194,7 +184,7 @@ GrProgramDesc GrDawnCaps::makeDesc(const GrRenderTarget* rt,
     stencil.genKey(&b, true);
 
     // TODO: remove this reliance on the renderTarget
-    bool hasDepthStencil = rt->renderTargetPriv().getStencilAttachment() != nullptr;
+    bool hasDepthStencil = rt->getStencilAttachment() != nullptr;
 
     b.add32(static_cast<uint32_t>(format));
     b.add32(static_cast<int32_t>(hasDepthStencil));
@@ -216,7 +206,7 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrDawnCaps::getTestingCombin
     };
 
 #ifdef SK_DEBUG
-    for (auto combo : combos) {
+    for (const GrCaps::TestFormatColorTypeCombination& combo : combos) {
         SkASSERT(this->onAreColorTypeAndFormatCompatible(combo.fColorType, combo.fFormat));
     }
 #endif

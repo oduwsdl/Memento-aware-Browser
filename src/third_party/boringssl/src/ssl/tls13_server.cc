@@ -196,6 +196,11 @@ static enum ssl_hs_wait_t do_select_parameters(SSL_HANDSHAKE *hs) {
     return ssl_hs_error;
   }
 
+  if (ssl->quic_method != nullptr && client_hello.session_id_len > 0) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_UNEXPECTED_COMPATIBILITY_MODE);
+    ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_ILLEGAL_PARAMETER);
+    return ssl_hs_error;
+  }
   OPENSSL_memcpy(hs->session_id, client_hello.session_id,
                  client_hello.session_id_len);
   hs->session_id_len = client_hello.session_id_len;
@@ -426,6 +431,15 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
     return ssl_hs_error;
   }
 
+  // Copy the QUIC early data context to the session.
+  if (ssl->enable_early_data && ssl->quic_method) {
+    if (!hs->new_session->quic_early_data_context.CopyFrom(
+            hs->config->quic_early_data_context)) {
+      ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+      return ssl_hs_error;
+    }
+  }
+
   if (ssl->ctx->dos_protection_cb != NULL &&
       ssl->ctx->dos_protection_cb(&client_hello) == 0) {
     // Connection rejected for DOS reasons.
@@ -496,7 +510,7 @@ static enum ssl_hs_wait_t do_send_hello_retry_request(SSL_HANDSHAKE *hs) {
       !CBB_add_bytes(&body, kHelloRetryRequest, SSL3_RANDOM_SIZE) ||
       !CBB_add_u8_length_prefixed(&body, &session_id) ||
       !CBB_add_bytes(&session_id, hs->session_id, hs->session_id_len) ||
-      !CBB_add_u16(&body, ssl_cipher_get_value(hs->new_cipher)) ||
+      !CBB_add_u16(&body, SSL_CIPHER_get_protocol_id(hs->new_cipher)) ||
       !CBB_add_u8(&body, 0 /* no compression */) ||
       !tls1_get_shared_group(hs, &group_id) ||
       !CBB_add_u16_length_prefixed(&body, &extensions) ||
@@ -608,7 +622,7 @@ static enum ssl_hs_wait_t do_send_server_hello(SSL_HANDSHAKE *hs) {
       !CBB_add_bytes(&body, ssl->s3->server_random, SSL3_RANDOM_SIZE) ||
       !CBB_add_u8_length_prefixed(&body, &session_id) ||
       !CBB_add_bytes(&session_id, hs->session_id, hs->session_id_len) ||
-      !CBB_add_u16(&body, ssl_cipher_get_value(hs->new_cipher)) ||
+      !CBB_add_u16(&body, SSL_CIPHER_get_protocol_id(hs->new_cipher)) ||
       !CBB_add_u8(&body, 0) ||
       !CBB_add_u16_length_prefixed(&body, &extensions) ||
       !ssl_ext_pre_shared_key_add_serverhello(hs, &extensions) ||

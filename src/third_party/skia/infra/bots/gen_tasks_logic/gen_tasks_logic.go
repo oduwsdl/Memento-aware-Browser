@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"go.skia.org/infra/go/cipd"
 	"go.skia.org/infra/task_scheduler/go/specs"
 )
 
@@ -118,6 +119,8 @@ var (
 	CIPD_PKG_LUCI_AUTH = specs.CIPD_PKGS_KITCHEN[1]
 	CIPD_PKGS_KITCHEN  = append(specs.CIPD_PKGS_KITCHEN[:2], specs.CIPD_PKGS_PYTHON[1])
 	CIPD_PKG_CPYTHON   = specs.CIPD_PKGS_PYTHON[0]
+
+	CIPD_PKGS_GOLDCTL = []*specs.CipdPackage{cipd.MustGetPackage("skia/tools/goldctl/${platform}")}
 
 	CIPD_PKGS_XCODE = []*specs.CipdPackage{
 		// https://chromium.googlesource.com/chromium/tools/build/+/e19b7d9390e2bb438b566515b141ed2b9ed2c7c2/scripts/slave/recipe_modules/ios/api.py#317
@@ -220,6 +223,7 @@ type Config struct {
 	Project string `json:"project"`
 
 	// Service accounts.
+	ServiceAccountCanary       string `json:"service_account_canary"`
 	ServiceAccountCompile      string `json:"service_account_compile"`
 	ServiceAccountHousekeeper  string `json:"service_account_housekeeper"`
 	ServiceAccountRecreateSKPs string `json:"service_account_recreate_skps"`
@@ -391,10 +395,7 @@ func (b *taskBuilder) kitchenTaskNoBundle(recipe string, outputDir string) {
 	}
 
 	// Attempts.
-	if b.extraConfig("Framework") && b.extraConfig("Android", "G3") {
-		// Both bots can be long running. No need to retry them.
-		b.attempts(1)
-	} else if !b.role("Build", "Upload") && b.extraConfig("ASAN", "MSAN", "TSAN", "Valgrind") {
+	if !b.role("Build", "Upload") && b.extraConfig("ASAN", "MSAN", "TSAN", "Valgrind") {
 		// Sanitizers often find non-deterministic issues that retries would hide.
 		b.attempts(1)
 	} else {
@@ -441,9 +442,10 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 			ignore := []string{
 				"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind",
 				"ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
-				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9",
-				"BonusConfigs", "SkottieTracing", "SkottieWASM", "GpuTess", "NonNVPR", "Mskp",
-				"Docker", "PDF", "SkVM", "Puppeteer", "SkottieFrames", "RenderSKP"}
+				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "OOPRDDL", "T8888",
+				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM",
+				"GpuTess", "NonNVPR", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
+				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -467,6 +469,10 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 		} else if b.os("iOS") {
 			ec = append([]string{task_os}, ec...)
 			task_os = "Mac"
+			// iPhone11 requires xcode 11.4.1 which requires >10.15.2.
+			if b.parts["model"] == "iPhone11" {
+				task_os = "Mac10.15.5"
+			}
 		} else if b.matchOs("Win") {
 			task_os = "Win"
 		} else if b.compiler("GCC") {
@@ -530,21 +536,22 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 	}
 	if os, ok := b.parts["os"]; ok {
 		d["os"], ok = map[string]string{
-			"Android":  "Android",
-			"ChromeOS": "ChromeOS",
-			"Debian9":  DEFAULT_OS_LINUX_GCE, // Runs in Deb9 Docker.
-			"Debian10": DEFAULT_OS_LINUX_GCE,
-			"Mac":      DEFAULT_OS_MAC,
-			"Mac10.13": "Mac-10.13.6",
-			"Mac10.14": "Mac-10.14.3",
-			"Mac10.15": "Mac-10.15.1",
-			"Ubuntu18": "Ubuntu-18.04",
-			"Win":      DEFAULT_OS_WIN,
-			"Win10":    "Windows-10-18363",
-			"Win2019":  DEFAULT_OS_WIN,
-			"Win7":     "Windows-7-SP1",
-			"Win8":     "Windows-8.1-SP0",
-			"iOS":      "iOS-13.3.1",
+			"Android":    "Android",
+			"ChromeOS":   "ChromeOS",
+			"Debian9":    DEFAULT_OS_LINUX_GCE, // Runs in Deb9 Docker.
+			"Debian10":   DEFAULT_OS_LINUX_GCE,
+			"Mac":        DEFAULT_OS_MAC,
+			"Mac10.13":   "Mac-10.13.6",
+			"Mac10.14":   "Mac-10.14.3",
+			"Mac10.15":   "Mac-10.15.1",
+			"Mac10.15.5": "Mac-10.15.5", // We have some builders at 10.15.5 to run Xcode 11.4.1
+			"Ubuntu18":   "Ubuntu-18.04",
+			"Win":        DEFAULT_OS_WIN,
+			"Win10":      "Windows-10-18363",
+			"Win2019":    DEFAULT_OS_WIN,
+			"Win7":       "Windows-7-SP1",
+			"Win8":       "Windows-8.1-SP0",
+			"iOS":        "iOS-13.3.1",
 		}[os]
 		if !ok {
 			log.Fatalf("Entry %q not found in OS mapping.", os)
@@ -565,6 +572,12 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			// This is the latest iOS that supports iPhone6.
 			d["os"] = "iOS-12.4.5"
 		}
+		if b.parts["model"] == "iPhone11" {
+			d["os"] = "iOS-13.6"
+		}
+		if b.parts["model"] == "iPadPro" {
+			d["os"] = "iOS-13.6"
+		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
 	}
@@ -576,7 +589,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				"AndroidOne":      {"sprout", "MOB30Q"},
 				"GalaxyS6":        {"zerofltetmo", "NRD90M_G920TUVS6FRC1"},
 				"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
-				"GalaxyS9":        {"starlte", "R16NW_G960FXXU2BRJ8"}, // This is Oreo.
+				"GalaxyS9":        {"starlte", "QP1A.190711.020"},     // This is Android10.
 				"GalaxyS20":       {"exynos990", "QP1A.190711.020"},
 				"MotoG4":          {"athene", "NPJS25.93-14.7-8"},
 				"NVIDIA_Shield":   {"foster", "OPR6.170623.010_3507953_1441.7411"},
@@ -588,7 +601,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				"Pixel2XL":        {"taimen", "PPR1.180610.009"},
 				"Pixel3":          {"blueline", "PQ1A.190105.004"},
 				"Pixel3a":         {"sargo", "QP1A.190711.020"},
-				"Pixel4":          {"flame", "QD1A.190821.011.C4"},
+				"Pixel4":          {"flame", "RPB2.200611.009"}, // R Preview
 				"Pixel4XL":        {"coral", "QD1A.190821.011.C4"},
 				"TecnoSpark3Pro":  {"TECNO-KB8", "PPR1.180610.011"},
 			}[b.parts["model"]]
@@ -985,6 +998,12 @@ func (b *taskBuilder) maybeAddIosDevImage() {
 				asset = "ios-dev-image-12.4"
 			case "13.3.1":
 				asset = "ios-dev-image-13.3"
+			case "13.4.1":
+				asset = "ios-dev-image-13.4"
+			case "13.5.1":
+				asset = "ios-dev-image-13.5"
+			case "13.6":
+				asset = "ios-dev-image-13.6"
 			default:
 				log.Fatalf("Unable to determine correct ios-dev-image asset for %s. If %s is a new iOS release, you must add a CIPD package containing the corresponding iOS dev image; see ios-dev-image-11.4 for an example.", b.Name, m[1])
 			}
@@ -999,84 +1018,88 @@ func (b *taskBuilder) maybeAddIosDevImage() {
 // compile generates a compile task. Returns the name of the compile task.
 func (b *jobBuilder) compile() string {
 	name := b.deriveCompileTaskName()
-	b.addTask(name, func(b *taskBuilder) {
-		recipe := "compile"
-		isolate := "compile.isolate"
-		if b.extraConfig("NoDEPS", "CMake", "CommandBuffer", "Flutter", "SKQP") {
-			recipe = "sync_and_compile"
-			isolate = "swarm_recipe.isolate"
-			b.recipeProps(EXTRA_PROPS)
-			b.usesGit()
-			if !b.extraConfig("NoDEPS") {
-				b.cache(CACHES_WORKDIR...)
+	if b.extraConfig("WasmGMTests") {
+		b.compileWasmGMTests(name)
+	} else {
+		b.addTask(name, func(b *taskBuilder) {
+			recipe := "compile"
+			isolate := "compile.isolate"
+			if b.extraConfig("NoDEPS", "CMake", "CommandBuffer", "Flutter", "SKQP") {
+				recipe = "sync_and_compile"
+				isolate = "swarm_recipe.isolate"
+				b.recipeProps(EXTRA_PROPS)
+				b.usesGit()
+				if !b.extraConfig("NoDEPS") {
+					b.cache(CACHES_WORKDIR...)
+				}
+			} else {
+				b.idempotent()
 			}
-		} else {
-			b.idempotent()
-		}
-		b.kitchenTask(recipe, OUTPUT_BUILD)
-		b.isolate(isolate)
-		b.serviceAccount(b.cfg.ServiceAccountCompile)
-		b.swarmDimensions()
-		if b.extraConfig("Docker", "LottieWeb", "SKQP", "CMake") || b.compiler("EMCC") {
-			b.usesDocker()
-			b.cache(CACHES_DOCKER...)
-		}
+			b.kitchenTask(recipe, OUTPUT_BUILD)
+			b.isolate(isolate)
+			b.serviceAccount(b.cfg.ServiceAccountCompile)
+			b.swarmDimensions()
+			if b.extraConfig("Docker", "LottieWeb", "SKQP", "CMake") || b.compiler("EMCC") {
+				b.usesDocker()
+				b.cache(CACHES_DOCKER...)
+			}
 
-		// Android bots require a toolchain.
-		if b.extraConfig("Android") {
-			if b.matchOs("Mac") {
-				b.asset("android_ndk_darwin")
-			} else if b.matchOs("Win") {
-				pkg := b.MustGetCipdPackageFromAsset("android_ndk_windows")
-				pkg.Path = "n"
-				b.cipd(pkg)
-			} else if !b.extraConfig("SKQP") {
-				b.asset("android_ndk_linux")
-			}
-		} else if b.extraConfig("Chromebook") {
-			b.asset("clang_linux")
-			if b.arch("x86_64") {
-				b.asset("chromebook_x86_64_gles")
-			} else if b.arch("arm") {
-				b.asset("armhf_sysroot")
-				b.asset("chromebook_arm_gles")
-			}
-		} else if b.isLinux() {
-			if b.compiler("Clang") {
+			// Android bots require a toolchain.
+			if b.extraConfig("Android") {
+				if b.matchOs("Mac") {
+					b.asset("android_ndk_darwin")
+				} else if b.matchOs("Win") {
+					pkg := b.MustGetCipdPackageFromAsset("android_ndk_windows")
+					pkg.Path = "n"
+					b.cipd(pkg)
+				} else if !b.extraConfig("SKQP") {
+					b.asset("android_ndk_linux")
+				}
+			} else if b.extraConfig("Chromebook") {
 				b.asset("clang_linux")
+				if b.arch("x86_64") {
+					b.asset("chromebook_x86_64_gles")
+				} else if b.arch("arm") {
+					b.asset("armhf_sysroot")
+					b.asset("chromebook_arm_gles")
+				}
+			} else if b.isLinux() {
+				if b.compiler("Clang") {
+					b.asset("clang_linux")
+				}
+				if b.extraConfig("SwiftShader") {
+					b.asset("cmake_linux")
+				}
+				if b.extraConfig("OpenCL") {
+					b.asset("opencl_headers", "opencl_ocl_icd_linux")
+				}
+				b.asset("ccache_linux")
+				b.usesCCache()
+			} else if b.matchOs("Win") {
+				b.asset("win_toolchain")
+				if b.compiler("Clang") {
+					b.asset("clang_win")
+				}
+				if b.extraConfig("OpenCL") {
+					b.asset("opencl_headers")
+				}
+			} else if b.matchOs("Mac") {
+				b.cipd(CIPD_PKGS_XCODE...)
+				b.Spec.Caches = append(b.Spec.Caches, &specs.Cache{
+					Name: "xcode",
+					Path: "cache/Xcode.app",
+				})
+				b.asset("ccache_mac")
+				b.usesCCache()
+				if b.extraConfig("CommandBuffer") {
+					b.timeout(2 * time.Hour)
+				}
+				if b.extraConfig("iOS") {
+					b.asset("provisioning_profile_ios")
+				}
 			}
-			if b.extraConfig("SwiftShader") {
-				b.asset("cmake_linux")
-			}
-			if b.extraConfig("OpenCL") {
-				b.asset("opencl_headers", "opencl_ocl_icd_linux")
-			}
-			b.asset("ccache_linux")
-			b.usesCCache()
-		} else if b.matchOs("Win") {
-			b.asset("win_toolchain")
-			if b.compiler("Clang") {
-				b.asset("clang_win")
-			}
-			if b.extraConfig("OpenCL") {
-				b.asset("opencl_headers")
-			}
-		} else if b.matchOs("Mac") {
-			b.cipd(CIPD_PKGS_XCODE...)
-			b.Spec.Caches = append(b.Spec.Caches, &specs.Cache{
-				Name: "xcode",
-				Path: "cache/Xcode.app",
-			})
-			b.asset("ccache_mac")
-			b.usesCCache()
-			if b.extraConfig("CommandBuffer") {
-				b.timeout(2 * time.Hour)
-			}
-			if b.extraConfig("iOS") {
-				b.asset("provisioning_profile_ios")
-			}
-		}
-	})
+		})
+	}
 
 	// All compile tasks are runnable as their own Job. Assert that the Job
 	// is listed in jobs.
@@ -1119,6 +1142,23 @@ func (b *jobBuilder) checkGeneratedFiles() {
 	})
 }
 
+// checkGnToBp verifies that the gn_to_bp.py script continues to work.
+func (b *jobBuilder) checkGnToBp() {
+	b.addTask(b.Name, func(b *taskBuilder) {
+		b.isolate("compile.isolate")
+		b.dep(b.buildTaskDrivers())
+		b.cmd("./run_gn_to_bp",
+			"--local=false",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--alsologtostderr")
+		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
+		b.usesPython()
+		b.serviceAccount(b.cfg.ServiceAccountHousekeeper)
+	})
+}
+
 // housekeeper generates a Housekeeper task.
 func (b *jobBuilder) housekeeper() {
 	b.addTask(b.Name, func(b *taskBuilder) {
@@ -1131,33 +1171,29 @@ func (b *jobBuilder) housekeeper() {
 	})
 }
 
-// androidFrameworkCompile generates an Android Framework Compile task. Returns
+// g3FrameworkCanary generates a G3 Framework Canary task. Returns
 // the name of the last task in the generated chain of tasks, which the Job
 // should add as a dependency.
-func (b *jobBuilder) androidFrameworkCompile() {
+func (b *jobBuilder) g3FrameworkCanary() {
 	b.addTask(b.Name, func(b *taskBuilder) {
-		b.recipeProps(EXTRA_PROPS)
-		b.kitchenTask("android_compile", OUTPUT_NONE)
-		b.isolate("compile_android_framework.isolate")
-		b.serviceAccount("skia-android-framework-compile@skia-swarming-bots.iam.gserviceaccount.com")
+		b.isolate("empty.isolate")
+		b.dep(b.buildTaskDrivers())
+		b.cmd("./g3_canary",
+			"--local=false",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--repo", specs.PLACEHOLDER_REPO,
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--patch_issue", specs.PLACEHOLDER_ISSUE,
+			"--patch_set", specs.PLACEHOLDER_PATCHSET,
+			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--alsologtostderr")
 		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
-		b.timeout(2 * time.Hour)
-		b.usesGit()
-	})
-}
-
-// g3FrameworkCompile generates a G3 Framework Compile task. Returns
-// the name of the last task in the generated chain of tasks, which the Job
-// should add as a dependency.
-func (b *jobBuilder) g3FrameworkCompile() {
-	b.addTask(b.Name, func(b *taskBuilder) {
-		b.recipeProps(EXTRA_PROPS)
-		b.kitchenTask("g3_compile", OUTPUT_NONE)
-		b.isolate("compile_g3_framework.isolate")
+		b.cipd(CIPD_PKG_LUCI_AUTH)
 		b.serviceAccount("skia-g3-framework-compile@skia-swarming-bots.iam.gserviceaccount.com")
-		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
 		b.timeout(3 * time.Hour)
-		b.usesGit()
+		b.attempts(1)
 	})
 }
 
@@ -1302,7 +1338,11 @@ func (b *jobBuilder) dm() {
 			isolate = "canvaskit.isolate"
 			recipe = "test_canvaskit"
 		} else if b.extraConfig("LottieWeb") {
-			isolate = "lottie_web.isolate"
+			// lottie_ci.isolate differs from lottie_web.isolate in that it includes more of the files,
+			// especially those brought in via DEPS in the lottie-ci repo. The main difference between
+			// Perf.+LottieWeb and Test.+LottieWeb is that the former pulls in the lottie build via
+			// npm and the latter always tests at lottie's ToT.
+			isolate = "lottie_ci.isolate"
 			recipe = "test_lottie_web"
 		}
 		b.recipeProp("gold_hashes_url", b.cfg.GoldHashesURL)
@@ -1395,6 +1435,32 @@ func (b *jobBuilder) fm() {
 	})
 }
 
+// canary generates a task that uses TaskDrivers to trigger canary manual rolls on autorollers.
+// Canary-G3 does not use this path because it is very different from other autorollers.
+func (b *jobBuilder) canary(rollerName string) {
+	b.addTask(b.Name, func(b *taskBuilder) {
+		b.isolate("empty.isolate")
+		b.dep(b.buildTaskDrivers())
+		b.cmd("./canary",
+			"--local=false",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--roller_name", rollerName,
+			"--repo", specs.PLACEHOLDER_REPO,
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--patch_issue", specs.PLACEHOLDER_ISSUE,
+			"--patch_set", specs.PLACEHOLDER_PATCHSET,
+			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--alsologtostderr")
+		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
+		b.cipd(CIPD_PKG_LUCI_AUTH)
+		b.serviceAccount(b.cfg.ServiceAccountCanary)
+		b.timeout(3 * time.Hour)
+		b.attempts(1)
+	})
+}
+
 // puppeteer generates a task that uses TaskDrivers combined with a node script and puppeteer to
 // benchmark something using Chromium (e.g. CanvasKit, LottieWeb).
 func (b *jobBuilder) puppeteer() {
@@ -1408,6 +1474,11 @@ func (b *jobBuilder) puppeteer() {
 		b.timeout(20 * time.Minute)
 		b.isolate("perf_puppeteer.isolate")
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
+
+		webglversion := "2"
+		if b.extraConfig("WebGL1") {
+			webglversion = "1"
+		}
 
 		if b.extraConfig("SkottieFrames") {
 			b.cmd(
@@ -1425,6 +1496,7 @@ func (b *jobBuilder) puppeteer() {
 				"--model_trace", b.parts["model"],
 				"--cpu_or_gpu_trace", b.parts["cpu_or_gpu"],
 				"--cpu_or_gpu_value_trace", b.parts["cpu_or_gpu_value"],
+				"--webgl_version", webglversion, // ignore when running with cpu backend
 				"--alsologtostderr",
 			)
 			// This CIPD package was made by hand with the following invocation:
@@ -1454,6 +1526,26 @@ func (b *jobBuilder) puppeteer() {
 				"--model_trace", b.parts["model"],
 				"--cpu_or_gpu_trace", b.parts["cpu_or_gpu"],
 				"--cpu_or_gpu_value_trace", b.parts["cpu_or_gpu_value"],
+				"--webgl_version", webglversion,
+				"--alsologtostderr",
+			)
+			b.asset("skp")
+		} else if b.extraConfig("CanvasPerf") { // refers to the canvas_perf.js test suite
+			b.cmd(
+				"./perf_puppeteer_canvas",
+				"--project_id", "skia-swarming-bots",
+				"--git_hash", specs.PLACEHOLDER_REVISION,
+				"--task_id", specs.PLACEHOLDER_TASK_ID,
+				"--task_name", b.Name,
+				"--canvaskit_bin_path", "./build",
+				"--node_bin_path", "./node/node/bin",
+				"--benchmark_path", "./tools/perf-canvaskit-puppeteer",
+				"--output_path", OUTPUT_PERF,
+				"--os_trace", b.parts["os"],
+				"--model_trace", b.parts["model"],
+				"--cpu_or_gpu_trace", b.parts["cpu_or_gpu"],
+				"--cpu_or_gpu_value_trace", b.parts["cpu_or_gpu_value"],
+				"--webgl_version", webglversion,
 				"--alsologtostderr",
 			)
 			b.asset("skp")
@@ -1478,6 +1570,32 @@ func (b *jobBuilder) puppeteer() {
 		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
 		b.cipd(specs.CIPD_PKGS_GSUTIL...)
 		b.dep(depName)
+	})
+}
+
+func (b *jobBuilder) cifuzz() {
+	b.addTask(b.Name, func(b *taskBuilder) {
+		b.attempts(1)
+		b.usesDocker()
+		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
+		b.cipd(CIPD_PKG_LUCI_AUTH)
+		b.cipd(specs.CIPD_PKGS_GIT_LINUX_AMD64...)
+		b.dep(b.buildTaskDrivers())
+		b.output("cifuzz_out")
+		b.timeout(60 * time.Minute)
+		b.isolate("whole_repo.isolate")
+		b.serviceAccount(b.cfg.ServiceAccountCompile)
+		b.cmd(
+			"./cifuzz",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--git_exe_path", "./cipd_bin_packages/git",
+			"--out_path", "./cifuzz_out",
+			"--skia_path", "./skia",
+			"--work_path", "./cifuzz_work",
+			"--alsologtostderr",
+		)
 	})
 }
 
@@ -1601,5 +1719,84 @@ func (b *jobBuilder) presubmit() {
 			Path:    "recipe_bundle",
 			Version: "git_revision:a8bcedad6768e206c4d2bd1718caa849f29cd42d",
 		})
+	})
+}
+
+// compileWasmGMTests uses a task driver to compile the GMs and unit tests for Web Assembly (WASM).
+// We can use the same build for both CPU and GPU tests since the latter requires the code for the
+// former anyway.
+func (b *jobBuilder) compileWasmGMTests(compileName string) {
+	b.addTask(compileName, func(b *taskBuilder) {
+		b.attempts(1)
+		b.usesDocker()
+		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
+		b.cipd(CIPD_PKG_LUCI_AUTH)
+		b.dep(b.buildTaskDrivers())
+		b.output("wasm_out")
+		b.timeout(20 * time.Minute)
+		b.isolate("compile.isolate")
+		b.serviceAccount(b.cfg.ServiceAccountCompile)
+		b.cache(CACHES_DOCKER...)
+		// For now, we only have one compile mode - a GPU release mode. This should be sufficient to
+		// run CPU, WebGL1, and WebGL2 tests. Debug mode is not needed for the waterfall because
+		// when using puppeteer, stacktraces from exceptions are hard to get access to, so we do not
+		// even bother.
+		b.cmd(
+			"./compile_wasm_gm_tests",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", compileName,
+			"--out_path", "./wasm_out",
+			"--skia_path", "./skia",
+			"--work_path", "./cache/docker/wasm_gm",
+			"--alsologtostderr",
+		)
+	})
+}
+
+// compileWasmGMTests uses a task driver to compile the GMs and unit tests for Web Assembly (WASM).
+// We can use the same build for both CPU and GPU tests since the latter requires the code for the
+// former anyway.
+func (b *jobBuilder) runWasmGMTests() {
+	compileTaskName := b.compile()
+
+	b.addTask(b.Name, func(b *taskBuilder) {
+		b.attempts(1)
+		b.usesNode()
+		b.swarmDimensions()
+		b.cipd(CIPD_PKG_LUCI_AUTH)
+		b.cipd(CIPD_PKGS_GOLDCTL...)
+		b.dep(b.buildTaskDrivers())
+		b.dep(compileTaskName)
+		b.timeout(60 * time.Minute)
+		b.isolate("wasm_gm_tests.isolate")
+		b.serviceAccount(b.cfg.ServiceAccountUploadGM)
+		b.cmd(
+			"./run_wasm_gm_tests",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--test_harness_path", "./tools/run-wasm-gm-tests",
+			"--built_path", "./wasm_out",
+			"--node_bin_path", "./node/node/bin",
+			"--resource_path", "./resources",
+			"--work_path", "./wasm_gm/work",
+			"--gold_ctl_path", "./cipd_bin_packages/goldctl",
+			"--git_commit", specs.PLACEHOLDER_REVISION,
+			"--changelist_id", specs.PLACEHOLDER_ISSUE,
+			"--patchset_order", specs.PLACEHOLDER_PATCHSET,
+			"--tryjob_id", specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID,
+			// TODO(kjlubick, nifong) Make these not hard coded if we change the configs we test on.
+			"--webgl_version", "2", // 0 means CPU ; this flag controls cpu_or_gpu and extra_config
+			"--gold_key", "browser:Chrome",
+			"--gold_key", "alpha_type:Premul",
+			"--gold_key", "arch:wasm",
+			"--gold_key", "color_depth:8888",
+			"--gold_key", "configuration:Release",
+			"--gold_key", "cpu_or_gpu_value:QuadroP400",
+			"--gold_key", "model:Golo",
+			"--gold_key", "os:Ubuntu18",
+			"--alsologtostderr",
+		)
 	})
 }

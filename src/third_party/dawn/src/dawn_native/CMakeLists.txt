@@ -18,7 +18,17 @@ DawnJSONGenerator(
     RESULT_VARIABLE "DAWN_NATIVE_UTILS_GEN_SOURCES"
 )
 
-add_library(dawn_native STATIC ${DAWN_DUMMY_FILE})
+add_library(dawn_native ${DAWN_DUMMY_FILE})
+
+target_compile_definitions(dawn_native PRIVATE "DAWN_NATIVE_IMPLEMENTATION")
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(dawn_native PRIVATE "DAWN_NATIVE_SHARED_LIBRARY")
+endif()
+
+if(DAWN_ENABLE_WGSL)
+    target_link_libraries(dawn_native PRIVATE libtint)
+endif()
+
 target_sources(dawn_native PRIVATE
     "${DAWN_INCLUDE_DIR}/dawn_native/DawnNative.h"
     "${DAWN_INCLUDE_DIR}/dawn_native/dawn_native_export.h"
@@ -31,10 +41,10 @@ target_sources(dawn_native PRIVATE
     "BackendConnection.h"
     "BindGroup.cpp"
     "BindGroup.h"
-    "BindGroupAndStorageBarrierTracker.h"
     "BindGroupLayout.cpp"
     "BindGroupLayout.h"
     "BindGroupTracker.h"
+    "BindingInfo.cpp"
     "BindingInfo.h"
     "BuddyAllocator.cpp"
     "BuddyAllocator.h"
@@ -60,12 +70,16 @@ target_sources(dawn_native PRIVATE
     "ComputePassEncoder.h"
     "ComputePipeline.cpp"
     "ComputePipeline.h"
+    "CreateReadyPipelineTracker.cpp"
+    "CreateReadyPipelineTracker.h"
     "Device.cpp"
     "Device.h"
     "DynamicUploader.cpp"
     "DynamicUploader.h"
     "EncodingContext.cpp"
     "EncodingContext.h"
+    "EnumClassBitmasks.h"
+    "EnumMaskIterator.h"
     "Error.cpp"
     "Error.h"
     "ErrorData.cpp"
@@ -80,15 +94,12 @@ target_sources(dawn_native PRIVATE
     "Extensions.h"
     "Fence.cpp"
     "Fence.h"
-    "FenceSignalTracker.cpp"
-    "FenceSignalTracker.h"
     "Format.cpp"
     "Format.h"
     "Forward.h"
     "Instance.cpp"
     "Instance.h"
-    "MapRequestTracker.cpp"
-    "MapRequestTracker.h"
+    "IntegerTypes.h"
     "ObjectBase.cpp"
     "ObjectBase.h"
     "PassResourceUsage.h"
@@ -100,6 +111,8 @@ target_sources(dawn_native PRIVATE
     "Pipeline.h"
     "PipelineLayout.cpp"
     "PipelineLayout.h"
+    "PooledResourceMemoryAllocator.cpp"
+    "PooledResourceMemoryAllocator.h"
     "ProgrammablePassEncoder.cpp"
     "ProgrammablePassEncoder.h"
     "QuerySet.cpp"
@@ -126,6 +139,8 @@ target_sources(dawn_native PRIVATE
     "Sampler.h"
     "ShaderModule.cpp"
     "ShaderModule.h"
+    "SpirvUtils.cpp"
+    "SpirvUtils.h"
     "StagingBuffer.cpp"
     "StagingBuffer.h"
     "Surface.cpp"
@@ -144,8 +159,11 @@ target_link_libraries(dawn_native
     PRIVATE dawn_common
             dawn_platform
             dawn_internal_config
-            shaderc_spvc
             spirv-cross-core
+            spirv-cross-glsl
+            spirv-cross-hlsl
+            spirv-cross-msl
+            SPIRV-Tools-opt
 )
 
 if (DAWN_USE_X11)
@@ -193,6 +211,7 @@ if (DAWN_ENABLE_D3D12)
         "d3d12/HeapAllocatorD3D12.h"
         "d3d12/HeapD3D12.cpp"
         "d3d12/HeapD3D12.h"
+        "d3d12/IntegerTypes.h"
         "d3d12/NativeSwapChainImplD3D12.cpp"
         "d3d12/NativeSwapChainImplD3D12.h"
         "d3d12/PageableD3D12.cpp"
@@ -201,6 +220,8 @@ if (DAWN_ENABLE_D3D12)
         "d3d12/PipelineLayoutD3D12.h"
         "d3d12/PlatformFunctions.cpp"
         "d3d12/PlatformFunctions.h"
+        "d3d12/QuerySetD3D12.cpp"
+        "d3d12/QuerySetD3D12.h"
         "d3d12/QueueD3D12.cpp"
         "d3d12/QueueD3D12.h"
         "d3d12/RenderPassBuilderD3D12.cpp"
@@ -263,6 +284,8 @@ if (DAWN_ENABLE_METAL)
         "metal/PipelineLayoutMTL.mm"
         "metal/QueueMTL.h"
         "metal/QueueMTL.mm"
+        "metal/QuerySetMTL.h"
+        "metal/QuerySetMTL.mm"
         "metal/RenderPipelineMTL.h"
         "metal/RenderPipelineMTL.mm"
         "metal/SamplerMTL.h"
@@ -283,6 +306,7 @@ if (DAWN_ENABLE_METAL)
         "-framework IOKit"
         "-framework IOSurface"
         "-framework QuartzCore"
+        "-framework Metal"
     )
 endif()
 
@@ -388,6 +412,8 @@ if (DAWN_ENABLE_VULKAN)
         "vulkan/NativeSwapChainImplVk.h"
         "vulkan/PipelineLayoutVk.cpp"
         "vulkan/PipelineLayoutVk.h"
+        "vulkan/QuerySetVk.cpp"
+        "vulkan/QuerySetVk.h"
         "vulkan/QueueVk.cpp"
         "vulkan/QueueVk.h"
         "vulkan/RenderPassCache.cpp"

@@ -28,7 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
+import * as Root from '../root/root.js';
 import * as SDK from '../sdk/sdk.js';
 
 import {TimelineJSProfileProcessor} from './TimelineJSProfile.js';
@@ -139,6 +143,13 @@ export class TimelineModelImpl {
    * @param {!SDK.TracingModel.Event} event
    * @return {boolean}
    */
+  isUserTimingEvent(event) {
+    return event.categoriesString === TimelineModelImpl.Category.UserTiming;
+  }
+  /**
+   * @param {!SDK.TracingModel.Event} event
+   * @return {boolean}
+   */
   isParseHTMLEvent(event) {
     return event.name === RecordType.ParseHTML;
   }
@@ -157,6 +168,40 @@ export class TimelineModelImpl {
    */
   isLCPInvalidateEvent(event) {
     return event.name === RecordType.MarkLCPInvalidate && !!event.args['data']['isMainFrame'];
+  }
+
+  /**
+   * @param {!SDK.TracingModel.Event} event
+   * @return {boolean}
+   */
+  isFCPEvent(event) {
+    return event.name === RecordType.MarkFCP && event.args['frame'] === this._mainFrame.frameId;
+  }
+
+  /**
+   * @param {!SDK.TracingModel.Event} event
+   * @return {boolean}
+   */
+  isLongRunningTask(event) {
+    return event.name === RecordType.Task &&
+        TimelineData.forEvent(event).warning === TimelineModelImpl.WarningType.LongTask;
+  }
+
+  /**
+   * @param {!SDK.TracingModel.Event} event
+   * @return {boolean}
+   */
+  isNavigationStartEvent(event) {
+    return event.name === RecordType.NavigationStart;
+  }
+
+  /**
+   * @param {!SDK.TracingModel.Event} event
+   * @return {boolean}
+   */
+  isMainFrameNavigationStartEvent(event) {
+    return this.isNavigationStartEvent(event) && event.args['data']['isLoadingMainFrame'] &&
+        event.args['data']['documentLoaderURL'];
   }
 
   /**
@@ -212,6 +257,17 @@ export class TimelineModelImpl {
   }
 
   /**
+   * @return {!Map<string, !SDK.TracingModel.Event>}
+   */
+  navStartTimes() {
+    if (!this._tracingModel) {
+      return new Map();
+    }
+
+    return this._tracingModel.navStartTimes();
+  }
+
+  /**
    * @param {!SDK.TracingModel.TracingModel} tracingModel
    */
   setEvents(tracingModel) {
@@ -224,8 +280,17 @@ export class TimelineModelImpl {
 
     // Remove LayoutShift events from the main thread list of events because they are
     // represented in the experience track. This is done prior to the main thread being processed for its own events.
-    const layoutShiftEvents =
-        tracingModel.extractEventsFromThreadByName('Renderer', 'CrRendererMain', RecordType.LayoutShift);
+    const layoutShiftEvents = [];
+    for (const process of tracingModel.sortedProcesses()) {
+      if (process.name() !== 'Renderer') {
+        continue;
+      }
+
+      for (const thread of process.sortedThreads()) {
+        const shifts = thread.removeEventsByName(RecordType.LayoutShift);
+        layoutShiftEvents.push(...shifts);
+      }
+    }
 
     this._processSyncBrowserEvents(tracingModel);
     if (this._browserFrameTracking) {
@@ -505,6 +570,11 @@ export class TimelineModelImpl {
     // rename its category.
     for (const trackEvent of track.events) {
       trackEvent.categoriesString = experienceCategory;
+      if (trackEvent.name === RecordType.LayoutShift) {
+        const eventData = trackEvent.args['data'] || trackEvent.args['beginData'] || {};
+        const timelineData = TimelineData.forEvent(trackEvent);
+        timelineData.backendNodeId = eventData['impacted_nodes'][0]['node_id'];
+      }
     }
   }
 
@@ -632,7 +702,11 @@ export class TimelineModelImpl {
       events = events.mergeOrdered(jsSamples, SDK.TracingModel.Event.orderedCompareStartTime);
     }
     if (jsSamples || events.some(e => e.name === RecordType.JSSample)) {
-      const jsFrameEvents = TimelineJSProfileProcessor.generateJSFrameEvents(events);
+      const jsFrameEvents = TimelineJSProfileProcessor.generateJSFrameEvents(events, {
+        showAllEvents: Root.Runtime.experiments.isEnabled('timelineShowAllEvents'),
+        showRuntimeCallStats: Root.Runtime.experiments.isEnabled('timelineV8RuntimeCallStats'),
+        showNativeFunctions: Common.Settings.Settings.instance().moduleSetting('showNativeFunctionsInJSProfile').get(),
+      });
       if (jsFrameEvents && jsFrameEvents.length) {
         events = jsFrameEvents.mergeOrdered(events, SDK.TracingModel.Event.orderedCompareStartTime);
       }
@@ -1493,6 +1567,7 @@ export const RecordType = {
   MarkFCP: 'firstContentfulPaint',
   MarkLCPCandidate: 'largestContentfulPaint::Candidate',
   MarkLCPInvalidate: 'largestContentfulPaint::Invalidate',
+  NavigationStart: 'navigationStart',
 
   TimeStamp: 'TimeStamp',
   ConsoleTime: 'ConsoleTime',

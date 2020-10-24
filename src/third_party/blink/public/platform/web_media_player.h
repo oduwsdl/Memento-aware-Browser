@@ -31,6 +31,7 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_H_
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_H_
 
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/viz/common/surfaces/surface_id.h"
@@ -52,6 +53,10 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
+}
+
+namespace media {
+class VideoFrame;
 }
 
 namespace blink {
@@ -167,6 +172,10 @@ class WebMediaPlayer {
   // value if the hint is cleared.
   virtual void SetLatencyHint(double seconds) = 0;
 
+  // Sets a flag indicating that the WebMediaPlayer should apply pitch
+  // adjustments when using a playback rate other than 1.0.
+  virtual void SetPreservesPitch(bool preserves_pitch) = 0;
+
   // The associated media element is going to enter Picture-in-Picture. This
   // method should make sure the player is set up for this and has a SurfaceId
   // as it will be needed.
@@ -258,6 +267,12 @@ class WebMediaPlayer {
                      cc::PaintFlags&,
                      int already_uploaded_id = -1,
                      VideoFrameUploadMetadata* out_metadata = nullptr) = 0;
+
+  // Similar to Paint(), but just returns the frame directly instead of trying
+  // to upload or convert it. Note: This may kick off a process to update the
+  // current frame for a future call in some cases. Returns nullptr if no frame
+  // is available.
+  virtual scoped_refptr<media::VideoFrame> GetCurrentFrame() = 0;
 
   // Do a GPU-GPU texture copy of the current video frame to |texture|,
   // reallocating |texture| at the appropriate size with given internal
@@ -466,6 +481,11 @@ class WebMediaPlayer {
   GetVideoFramePresentationMetadata() {
     return nullptr;
   }
+
+  // Forces the WebMediaPlayer to update its frame if it is stale. This is used
+  // during immersive WebXR sessions with the RequestVideoFrameCallback() API,
+  // when compositors aren't driving frame updates.
+  virtual void UpdateFrameIfStale() {}
 
   virtual base::WeakPtr<WebMediaPlayer> AsWeakPtr() = 0;
 };

@@ -29,7 +29,7 @@
 
 #include "base/optional.h"
 #include "build/build_config.h"
-#include "third_party/blink/public/platform/web_screen_info.h"
+#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_utilities.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
@@ -136,8 +136,10 @@ class DraggedNodeImageBuilder {
         DocumentLifecycle::kPaintClean);
 
     FloatPoint paint_offset = bounding_box.Location();
-    PropertyTreeState border_box_properties =
-        layer->GetLayoutObject().FirstFragment().LocalBorderBoxProperties();
+    PropertyTreeState border_box_properties = layer->GetLayoutObject()
+                                                  .FirstFragment()
+                                                  .LocalBorderBoxProperties()
+                                                  .Unalias();
     // We paint in the containing transform node's space. Add the offset from
     // the layer to this transform space.
     paint_offset +=
@@ -145,7 +147,6 @@ class DraggedNodeImageBuilder {
 
     return DataTransfer::CreateDragImageForFrame(
         *local_frame_, 1.0f,
-        LayoutObject::ShouldRespectImageOrientation(dragged_layout_object),
         bounding_box.Size(), paint_offset, builder, border_box_properties);
   }
 
@@ -390,7 +391,6 @@ FloatSize DataTransfer::DeviceSpaceSize(const FloatSize& css_size,
 std::unique_ptr<DragImage> DataTransfer::CreateDragImageForFrame(
     LocalFrame& frame,
     float opacity,
-    RespectImageOrientationEnum image_orientation,
     const FloatSize& css_size,
     const FloatPoint& paint_offset,
     PaintRecordBuilder& builder,
@@ -423,7 +423,10 @@ std::unique_ptr<DragImage> DataTransfer::CreateDragImageForFrame(
   float screen_device_scale_factor =
       chrome_client.GetScreenInfo(frame).device_scale_factor;
 
-  return DragImage::Create(image.get(), image_orientation,
+  // There is no orientation information in the image, so pass
+  // kDoNotRespectImageOrientation in order to avoid wasted work looking
+  // at orientation.
+  return DragImage::Create(image.get(), kDoNotRespectImageOrientation,
                            screen_device_scale_factor, kInterpolationDefault,
                            opacity);
 }

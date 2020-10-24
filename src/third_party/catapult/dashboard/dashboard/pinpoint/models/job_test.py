@@ -33,166 +33,52 @@ _COMMENT_COMPLETED_NO_DIFFERENCES = (
     u"""<b>\U0001f4cd Couldn't reproduce a difference.</b>
 https://testbed.example.com/job/1""")
 
-_COMMENT_COMPLETED_WITH_COMMIT = (
-    u"""<b>\U0001f4cd Found a significant difference at 1 commit.</b>
-10 revisions compared.
+_COMMENT_COMPLETED_NO_DIFFERENCES_DUE_TO_FAILURE = (
+    u"""<b>\U0001f63f Job finished with errors.</b>
 https://testbed.example.com/job/1
 
-<b>Subject.</b> by author@chromium.org
-https://example.com/repository/+/git_hash
-0 \u2192 1.235 (+1.235) (+\u221e%)
+One or both of the initial changes failed to produce any results.
+Perhaps the job is misconfigured or the tests are broken? See the job
+page for details.""")
 
-Understanding performance regressions:
-  http://g.co/ChromePerformanceRegressions
-
-You can view the full results and re-run the Pinpoint job at:
-
-https://testbed.example.com/job/1
-
-If you think Pinpoint blamed the wrong commit, please add the
-`Chromeperf-Auto-NeedsAttention` label to the issue so that a sheriff can
-help diagnose.""")
-
-_COMMENT_COMPLETED_WITH_COMMIT_AND_DOCS = (
-    u"""<b>\U0001f4cd Found a significant difference at 1 commit.</b>
-10 revisions compared.
-https://testbed.example.com/job/1
-
-<b>Subject.</b> by author@chromium.org
-https://example.com/repository/+/git_hash
-1.235 \u2192 0 (-1.235) (-100%)
-
-Understanding performance regressions:
-  http://g.co/ChromePerformanceRegressions
-
-Benchmark doc link:
-  http://docs
-
-You can view the full results and re-run the Pinpoint job at:
-
-https://testbed.example.com/job/1
-
-If you think Pinpoint blamed the wrong commit, please add the
-`Chromeperf-Auto-NeedsAttention` label to the issue so that a sheriff can
-help diagnose.""")
-
-_COMMENT_COMPLETED_WITH_AUTOROLL_COMMIT = (
-    u"""<b>\U0001f4cd Found a significant difference at 1 commit.</b>
-10 revisions compared.
-https://testbed.example.com/job/1
-
-<b>Subject.</b> by chromium-autoroll@skia-public.iam.gserviceaccount.com
-https://example.com/repository/+/git_hash
-20 \u2192 30 (+10) (+50%)
-
-Assigning to sheriff sheriff@bar.com because "Subject." is a roll.
-
-Understanding performance regressions:
-  http://g.co/ChromePerformanceRegressions
-
-You can view the full results and re-run the Pinpoint job at:
-
-https://testbed.example.com/job/1
-
-If you think Pinpoint blamed the wrong commit, please add the
-`Chromeperf-Auto-NeedsAttention` label to the issue so that a sheriff can
-help diagnose.""")
-
-_COMMENT_COMPLETED_WITH_PATCH = (
-    u"""<b>\U0001f4cd Found a significant difference at 1 commit.</b>
-10 revisions compared.
-https://testbed.example.com/job/1
-
-<b>Subject.</b> by author@chromium.org
-https://codereview.com/c/672011/2f0d5c7
-40 \u2192 20 (-20) (-50%)
-
-Understanding performance regressions:
-  http://g.co/ChromePerformanceRegressions
-
-You can view the full results and re-run the Pinpoint job at:
-
-https://testbed.example.com/job/1
-
-If you think Pinpoint blamed the wrong commit, please add the
-`Chromeperf-Auto-NeedsAttention` label to the issue so that a sheriff can
-help diagnose.""")
-
-_COMMENT_COMPLETED_THREE_DIFFERENCES = (
-    u"""<b>\U0001f4cd Found significant differences at 3 commits.</b>
-10 revisions compared.
-https://testbed.example.com/job/1
-
-The top 3 are:
-
-<b>1. Subject.</b> by author1@chromium.org
-https://example.com/repository/+/git_hash_1
-50 \u2192 0 (-50) (-100%)
-
-<b>2. Subject.</b> by author2@chromium.org
-https://example.com/repository/+/git_hash_2
-0 \u2192 40 (+40) (+\u221e%)
-
-<b>3. Subject.</b> by author3@chromium.org
-https://example.com/repository/+/git_hash_3
-0 \u2192 No values
-
-Understanding performance regressions:
-  http://g.co/ChromePerformanceRegressions
-
-You can view the full results and re-run the Pinpoint job at:
-
-https://testbed.example.com/job/1
-
-If you think Pinpoint blamed the wrong commit, please add the
-`Chromeperf-Auto-NeedsAttention` label to the issue so that a sheriff can
-help diagnose.""")
-
-_COMMENT_COMPLETED_THREE_DIFFERENCES_ABSOLUTE = (
-    u"""<b>\U0001f4cd Found significant differences at 3 commits.</b>
-10 revisions compared.
-https://testbed.example.com/job/1
-
-The top 3 are:
-
-<b>1. Subject.</b> by author3@chromium.org
-https://example.com/repository/+/git_hash_3
-0 \u2192 -100 (-100) (+\u221e%)
-
-<b>2. Subject.</b> by author2@chromium.org
-https://example.com/repository/+/git_hash_2
-10 \u2192 0 (-10) (-100%)
-
-<b>3. Subject.</b> by author1@chromium.org
-https://example.com/repository/+/git_hash_1
-No values \u2192 10
-
-Understanding performance regressions:
-  http://g.co/ChromePerformanceRegressions
-
-You can view the full results and re-run the Pinpoint job at:
-
-https://testbed.example.com/job/1
-
-If you think Pinpoint blamed the wrong commit, please add the
-`Chromeperf-Auto-NeedsAttention` label to the issue so that a sheriff can
-help diagnose.""")
-
-_COMMENT_FAILED = (
-    u"""\U0001f63f Pinpoint job stopped with an error.
+_COMMENT_FAILED = (u"""\U0001f63f Pinpoint job stopped with an error.
 https://testbed.example.com/job/1
 
 Error string""")
 
-_COMMENT_CODE_REVIEW = (
-    u"""\U0001f4cd Job complete.
+_COMMENT_CODE_REVIEW = (u"""\U0001f4cd Job complete.
 
 See results at: https://testbed.example.com/job/1""")
 
 
-@mock.patch.object(
-    job.results2, 'GetCachedResults2',
-    mock.MagicMock(return_value='http://foo'))
+def FakeCommitAsDict(commit_self):
+  """Fake for Commit.AsDict.
+
+  Returns a canned commit dict based on the Commit's git_hash, which must start
+  with the prefix "git_hash_".
+
+  Use like::
+
+    @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict',
+                autospec=True)
+    def testFoo(self, commit_as_dict):
+      commit_as_dict.side_effect = FakeCommitAsDict
+      ...
+  """
+  git_hash = commit_self.git_hash
+  n = git_hash[len('git_hash_'):]
+  return {
+      'repository': 'chromium',
+      'git_hash': git_hash,
+      'url': 'https://example.com/repository/+/' + git_hash,
+      'author': 'author%s@chromium.org' % (n,),
+      'subject': 'Subject.',
+      'message': 'Subject.\n\nCommit message.',
+      }
+
+
+@mock.patch.object(job.results2, 'GetCachedResults2',
+                   mock.MagicMock(return_value='http://foo'))
 class JobTest(test.TestCase):
 
   @mock.patch.object(
@@ -200,12 +86,11 @@ class JobTest(test.TestCase):
       mock.MagicMock(
           return_value=job.timing_record.EstimateResult(
               job.timing_record.Timings(
-                  datetime.timedelta(seconds=10),
-                  datetime.timedelta(seconds=5),
-                  datetime.timedelta(seconds=100)), ['try', 'linux'])))
-  @mock.patch.object(
-      job.scheduler, 'QueueStats',
-      mock.MagicMock(return_value=[]))
+                  datetime.timedelta(seconds=10), datetime.timedelta(
+                      seconds=5), datetime.timedelta(
+                          seconds=100)), ['try', 'linux'])))
+  @mock.patch.object(job.scheduler, 'QueueStats',
+                     mock.MagicMock(return_value=[]))
   def testAsDictOptions_Estimate(self):
     j = job.Job.New((), (), bug_id=123456)
 
@@ -216,12 +101,10 @@ class JobTest(test.TestCase):
     self.assertEqual(d['estimate']['timings'][2], 100)
     self.assertEqual(d['estimate']['tags'], ['try', 'linux'])
 
-  @mock.patch.object(
-      job.timing_record, 'GetSimilarHistoricalTimings',
-      mock.MagicMock(return_value=None))
-  @mock.patch.object(
-      job.scheduler, 'QueueStats',
-      mock.MagicMock(return_value=[]))
+  @mock.patch.object(job.timing_record, 'GetSimilarHistoricalTimings',
+                     mock.MagicMock(return_value=None))
+  @mock.patch.object(job.scheduler, 'QueueStats',
+                     mock.MagicMock(return_value=[]))
   def testAsDictOptions_EstimateFails(self):
     j = job.Job.New((), (), bug_id=123456)
 
@@ -230,14 +113,14 @@ class JobTest(test.TestCase):
 
 
 class RetryTest(test.TestCase):
+
   def setUp(self):
     super(RetryTest, self).setUp()
 
   def testStarted_RecoverableError_BacksOff(self):
     j = job.Job.New((), (), comparison_mode='performance')
     j.Start()
-    j.state.Explore = mock.MagicMock(
-        side_effect=errors.RecoverableError(None))
+    j.state.Explore = mock.MagicMock(side_effect=errors.RecoverableError(None))
     j._Schedule = mock.MagicMock()
     j.put = mock.MagicMock()
     j.Fail = mock.MagicMock()
@@ -257,8 +140,7 @@ class RetryTest(test.TestCase):
   def testStarted_RecoverableError_Resets(self):
     j = job.Job.New((), (), comparison_mode='performance')
     j.Start()
-    j.state.Explore = mock.MagicMock(
-        side_effect=errors.RecoverableError(None))
+    j.state.Explore = mock.MagicMock(side_effect=errors.RecoverableError(None))
     j._Schedule = mock.MagicMock()
     j.put = mock.MagicMock()
     j.Fail = mock.MagicMock()
@@ -306,7 +188,14 @@ class BugCommentTest(test.TestCase):
     self.ExecuteDeferredTasks('default')
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
-        123456, _COMMENT_STARTED, send_email=True, project='chromium')
+        123456,
+        _COMMENT_STARTED,
+        labels=mock.ANY,
+        send_email=True,
+        project='chromium')
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Started', labels)
+    self.assertNotIn('-Pinpoint-Job-Started', labels)
 
   def testCompletedNoComparison(self):
     j = job.Job.New((), (), bug_id=123456)
@@ -328,10 +217,35 @@ class BugCommentTest(test.TestCase):
     self.add_bug_comment.assert_called_once_with(
         123456,
         _COMMENT_COMPLETED_NO_DIFFERENCES,
-        labels=['Pinpoint-No-Repro'],
+        labels=mock.ANY,
         status='WontFix',
         project='chromium',
     )
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-No-Repro', labels)
+    self.assertNotIn('-Pinpoint-No-Repro', labels)
+
+  @mock.patch.object(job.job_state.JobState, 'FirstOrLastChangeFailed')
+  @mock.patch.object(job.job_state.JobState, 'Differences')
+  def testCompletedNoDifferenceDueToFailureAtOneChange(
+      self, differences, first_or_last_change_failed):
+    differences.return_value = []
+    first_or_last_change_failed.return_value = True
+    j = job.Job.New((), (), bug_id=123456, comparison_mode='performance')
+    j.Run()
+    self.ExecuteDeferredTasks('default')
+    self.assertFalse(j.failed)
+    self.add_bug_comment.assert_called_once_with(
+        123456,
+        _COMMENT_COMPLETED_NO_DIFFERENCES_DUE_TO_FAILURE,
+        labels=mock.ANY,
+        project='chromium',
+    )
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Failed', labels)
+    self.assertNotIn('-Pinpoint-Job-Failed', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
@@ -355,19 +269,28 @@ class BugCommentTest(test.TestCase):
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_WITH_COMMIT,
+        mock.ANY,
         status='Assigned',
         owner='author@chromium.org',
-        labels=['Pinpoint-Culprit-Found'],
+        labels=mock.ANY,
         cc_list=['author@chromium.org'],
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found a significant difference at 1 commit.', message)
+    self.assertIn('<b>Subject.</b>', message)
+    self.assertIn('https://example.com/repository/+/git_hash', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Culprit-Found', labels)
+    self.assertNotIn('-Pinpoint-Culprit-Found', labels)
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
-  def testCompletedMergeIntoExisting(
-      self, differences, result_values, commit_as_dict):
+  def testCompletedMergeIntoExisting(self, differences, result_values,
+                                     commit_as_dict):
     c = change.Change((change.Commit('chromium', 'git_hash'),))
     differences.return_value = [(None, c)]
     result_values.side_effect = [0], [1.23456]
@@ -391,19 +314,27 @@ class BugCommentTest(test.TestCase):
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_WITH_COMMIT,
+        mock.ANY,
         status='Assigned',
         owner='author@chromium.org',
         cc_list=[],
-        labels=['Pinpoint-Culprit-Found'],
+        labels=mock.ANY,
         merge_issue='111222',
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found a significant difference at 1 commit.', message)
+    self.assertIn('https://example.com/repository/+/git_hash', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Culprit-Found', labels)
+    self.assertNotIn('-Pinpoint-Culprit-Found', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
-  def testCompletedSkipsMergeWhenDuplicate(
-      self, differences, result_values, commit_as_dict):
+  def testCompletedSkipsMergeWhenDuplicate(self, differences, result_values,
+                                           commit_as_dict):
     c = change.Change((change.Commit('chromium', 'git_hash'),))
     differences.return_value = [(None, c)]
     result_values.side_effect = [0], [1.23456]
@@ -433,19 +364,27 @@ class BugCommentTest(test.TestCase):
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_WITH_COMMIT,
+        mock.ANY,
         status='Assigned',
         owner='author@chromium.org',
-        labels=['Pinpoint-Culprit-Found'],
+        labels=mock.ANY,
         cc_list=['author@chromium.org'],
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found a significant difference at 1 commit.', message)
+    self.assertIn('https://example.com/repository/+/git_hash', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Culprit-Found', labels)
+    self.assertNotIn('-Pinpoint-Culprit-Found', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
-  def testCompletedWithInvalidIssue(
-      self, differences, result_values, commit_as_dict):
+  def testCompletedWithInvalidIssue(self, differences, result_values,
+                                    commit_as_dict):
     c = change.Change((change.Commit('chromium', 'git_hash'),))
     differences.return_value = [(None, c)]
     result_values.side_effect = [0], [1.23456]
@@ -467,8 +406,8 @@ class BugCommentTest(test.TestCase):
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
-  def testCompletedWithCommitAndDocs(
-      self, differences, result_values, commit_as_dict):
+  def testCompletedWithCommitAndDocs(self, differences, result_values,
+                                     commit_as_dict):
     c = change.Change((change.Commit('chromium', 'git_hash'),))
     differences.return_value = [(None, c)]
     result_values.side_effect = [1.23456], [0]
@@ -481,12 +420,16 @@ class BugCommentTest(test.TestCase):
         'message': 'Subject.\n\nCommit message.',
     }
     self.get_issue.return_value = {'status': 'Untriaged'}
-    j = job.Job.New(
-        (), (), bug_id=123456, comparison_mode='performance',
-        tags={'test_path': 'master/bot/benchmark'})
-    diag_dict = generic_set.GenericSet([[u'Benchmark doc link', u'http://docs']])
+    j = job.Job.New((), (),
+                    bug_id=123456,
+                    comparison_mode='performance',
+                    tags={'test_path': 'master/bot/benchmark'})
+    diag_dict = generic_set.GenericSet([[u'Benchmark doc link',
+                                         u'http://docs']])
     diag = histogram.SparseDiagnostic(
-        data=diag_dict.AsDict(), start_revision=1, end_revision=sys.maxsize,
+        data=diag_dict.AsDict(),
+        start_revision=1,
+        end_revision=sys.maxsize,
         name=reserved_infos.DOCUMENTATION_URLS.name,
         test=utils.TestKey('master/bot/benchmark'))
     diag.put()
@@ -495,13 +438,22 @@ class BugCommentTest(test.TestCase):
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_WITH_COMMIT_AND_DOCS,
+        mock.ANY,
         status='Assigned',
         owner='author@chromium.org',
-        labels=['Pinpoint-Culprit-Found'],
+        labels=mock.ANY,
         cc_list=['author@chromium.org'],
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found a significant difference at 1 commit.', message)
+    self.assertIn('http://docs', message)
+    self.assertIn('Benchmark doc link', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Culprit-Found', labels)
+    self.assertNotIn('-Pinpoint-Culprit-Found', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.patch.GerritPatch.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
@@ -525,19 +477,25 @@ class BugCommentTest(test.TestCase):
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_WITH_PATCH,
+        mock.ANY,
         status='Assigned',
         owner='author@chromium.org',
-        labels=['Pinpoint-Culprit-Found'],
+        labels=mock.ANY,
         cc_list=['author@chromium.org'],
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found a significant difference at 1 commit.', message)
+    self.assertIn('https://codereview.com/c/672011/2f0d5c7', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Culprit-Found', labels)
+    self.assertNotIn('-Pinpoint-Culprit-Found', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.patch.GerritPatch.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
-  def testCompletedDoesNotReassign(
-      self, differences, result_values, patch_as_dict):
+  def testCompletedDoesReassign(self, differences, result_values,
+                                patch_as_dict):
     commits = (change.Commit('chromium', 'git_hash'),)
     patch = change.GerritPatch('https://codereview.com', 672011, '2f0d5c7')
     c = change.Change(commits, patch)
@@ -550,26 +508,39 @@ class BugCommentTest(test.TestCase):
         'subject': 'Subject.',
         'message': 'Subject.\n\nCommit message.',
     }
-    self.get_issue.return_value = {'status': 'Assigned'}
+    self.get_issue.return_value = {
+        'status': 'Assigned',
+        'owner': {
+            'email': 'some-author@somewhere.org'
+        }
+    }
     j = job.Job.New((), (), bug_id=123456, comparison_mode='performance')
     j.Run()
     self.ExecuteDeferredTasks('default')
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_WITH_PATCH,
-        owner=None,
+        mock.ANY,
+        owner='author@chromium.org',
         status=None,
-        cc_list=['author@chromium.org'],
-        labels=['Pinpoint-Culprit-Found'],
+        cc_list=['author@chromium.org', 'some-author@somewhere.org'],
+        labels=mock.ANY,
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found a significant difference at 1 commit.', message)
+    self.assertIn('https://codereview.com/c/672011/2f0d5c7', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Culprit-Found', labels)
+    self.assertNotIn('-Pinpoint-Culprit-Found', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.patch.GerritPatch.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
-  def testCompletedDoesNotReopen(
-      self, differences, result_values, patch_as_dict):
+  def testCompletedDoesNotReopen(self, differences, result_values,
+                                 patch_as_dict):
     commits = (change.Commit('chromium', 'git_hash'),)
     patch = change.GerritPatch('https://codereview.com', 672011, '2f0d5c7')
     c = change.Change(commits, patch)
@@ -588,13 +559,20 @@ class BugCommentTest(test.TestCase):
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_WITH_PATCH,
+        mock.ANY,
         owner=None,
         status=None,
         cc_list=['author@chromium.org'],
-        labels=['Pinpoint-Culprit-Found'],
+        labels=mock.ANY,
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('10 revisions compared', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Culprit-Found', labels)
+    self.assertNotIn('-Pinpoint-Culprit-Found', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
@@ -644,15 +622,27 @@ class BugCommentTest(test.TestCase):
     # We now only CC folks from the top commit.
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_THREE_DIFFERENCES,
+        mock.ANY,
         status='Assigned',
         owner='author1@chromium.org',
         cc_list=['author1@chromium.org'],
-        labels=['Pinpoint-Multiple-Culprits'],
+        labels=mock.ANY,
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found significant differences at 2 commits.', message)
+    self.assertIn('1. Subject.', message)
+    self.assertIn('transitions from "no values" to "some values"', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Multiple-Culprits', labels)
+    self.assertNotIn('-Pinpoint-Multiple-Culprits', labels)
+    self.assertIn('Pinpoint-Multiple-MissingValues', labels)
+    self.assertNotIn('-Pinpoint-Multiple-MissingValues', labels)
 
-  @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
+  @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict',
+              autospec=True)
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
   def testCompletedMultipleDifferences_BlameAbsoluteLargest(
@@ -663,32 +653,7 @@ class BugCommentTest(test.TestCase):
     change_map = {c1: [10], c2: [0], c3: [-100]}
     differences.return_value = [(None, c1), (c1, c2), (c2, c3)]
     result_values.side_effect = lambda c: change_map.get(c, [])
-    commit_as_dict.side_effect = (
-        {
-            'repository': 'chromium',
-            'git_hash': 'git_hash_1',
-            'url': 'https://example.com/repository/+/git_hash_1',
-            'author': 'author1@chromium.org',
-            'subject': 'Subject.',
-            'message': 'Subject.\n\nCommit message.',
-        },
-        {
-            'repository': 'chromium',
-            'git_hash': 'git_hash_2',
-            'url': 'https://example.com/repository/+/git_hash_2',
-            'author': 'author2@chromium.org',
-            'subject': 'Subject.',
-            'message': 'Subject.\n\nCommit message.',
-        },
-        {
-            'repository': 'chromium',
-            'git_hash': 'git_hash_3',
-            'url': 'https://example.com/repository/+/git_hash_3',
-            'author': 'author3@chromium.org',
-            'subject': 'Subject.',
-            'message': 'Subject.\n\nCommit message.',
-        },
-    )
+    commit_as_dict.side_effect = FakeCommitAsDict
     self.get_issue.return_value = {'status': 'Untriaged'}
     j = job.Job.New((), (), bug_id=123456, comparison_mode='performance')
     j.Run()
@@ -698,38 +663,57 @@ class BugCommentTest(test.TestCase):
     # We now only CC folks from the top commit.
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_THREE_DIFFERENCES_ABSOLUTE,
+        mock.ANY,
         status='Assigned',
         owner='author3@chromium.org',
         cc_list=['author3@chromium.org'],
-        labels=['Pinpoint-Multiple-Culprits'],
+        labels=mock.ANY,
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found significant differences at 2 commits.', message)
+    self.assertIn('https://example.com/repository/+/git_hash_3', message)
+    self.assertIn('https://example.com/repository/+/git_hash_2', message)
+    self.assertIn('https://example.com/repository/+/git_hash_1', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Multiple-Culprits', labels)
+    self.assertNotIn('-Pinpoint-Multiple-Culprits', labels)
+    self.assertIn('Pinpoint-Multiple-MissingValues', labels)
+    self.assertNotIn('-Pinpoint-Multiple-MissingValues', labels)
 
-  @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
+  @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict',
+              autospec=True)
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
   def testCompletedMultipleDifferences_TenCulpritsCcTopTwo(
       self, differences, result_values, commit_as_dict):
-    self.Parameterized_TestCompletedMultipleDifferences(
-        10, 2, differences, result_values, commit_as_dict)
+    self.Parameterized_TestCompletedMultipleDifferences(10, 2, differences,
+                                                        result_values,
+                                                        commit_as_dict)
 
-  @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
+  @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict',
+              autospec=True)
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
   def testCompletedMultipleDifferences_HundredCulpritsCcTopThree(
       self, differences, result_values, commit_as_dict):
-    self.Parameterized_TestCompletedMultipleDifferences(
-        100, 3, differences, result_values, commit_as_dict)
+    self.Parameterized_TestCompletedMultipleDifferences(100, 3, differences,
+                                                        result_values,
+                                                        commit_as_dict)
 
-  def Parameterized_TestCompletedMultipleDifferences(
-      self, number_culprits, expected_num_ccs, differences, result_values,
-      commit_as_dict):
+  def Parameterized_TestCompletedMultipleDifferences(self, number_culprits,
+                                                     expected_num_ccs,
+                                                     differences, result_values,
+                                                     commit_as_dict):
     changes = [
         change.Change((change.Commit('chromium', 'git_hash_%d' % (i,)),))
-        for i in range(1, number_culprits+1)]
+        for i in range(1, number_culprits + 1)
+    ]
     # Return [(None,c1), (c1,c2), (c2,c3), ...]
     differences.return_value = zip([None] + changes, changes)
+
     # Ensure culprits are ordered by deriving change results values from commit
     # names.  E.g.:
     #   Change(git_hash_1) -> result_value=[1],
@@ -739,19 +723,10 @@ class BugCommentTest(test.TestCase):
       if change_obj is None:
         return [0]
       v = int(change_obj.commits[0].git_hash[len('git_hash_'):])
-      return [v*v]  # Square the value to ensure increasing deltas.
+      return [v * v]  # Square the value to ensure increasing deltas.
 
     result_values.side_effect = ResultValuesFromFakeGitHash
-    commit_as_dict.side_effect = [
-        {
-            'repository': 'chromium',
-            'git_hash': 'git_hash_%d' % (i,),
-            'url': 'https://example.com/repository/+/git_hash_%d' % (i,),
-            'author': 'author%d@chromium.org' % (i,),
-            'subject': 'Subject.',
-            'message': 'Subject.\n\nCommit message.',
-        }
-        for i in range(1, number_culprits+1)]
+    commit_as_dict.side_effect = FakeCommitAsDict
 
     self.get_issue.return_value = {'status': 'Untriaged'}
     j = job.Job.New((), (), bug_id=123456, comparison_mode='performance')
@@ -770,10 +745,14 @@ class BugCommentTest(test.TestCase):
         status='Assigned',
         owner=expected_ccs[0],
         cc_list=sorted(expected_ccs),
-        labels=['Pinpoint-Multiple-Culprits'],
+        labels=mock.ANY,
         merge_issue=None,
         project='chromium')
-
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Multiple-Culprits', labels)
+    self.assertNotIn('-Pinpoint-Multiple-Culprits', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
@@ -825,15 +804,25 @@ class BugCommentTest(test.TestCase):
         status='Assigned',
         owner='author1@chromium.org',
         cc_list=['author1@chromium.org'],
-        labels=['Pinpoint-Multiple-Culprits'],
+        labels=mock.ANY,
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Missing Values', message)
+    self.assertIn('author1@chromium.org', message)
+    self.assertIn('author2@chromium.org', message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Multiple-MissingValues', labels)
+    self.assertNotIn('-Pinpoint-Multiple-MissingValues', labels)
+    self.assertNotIn('Pinpoint-Multiple-Culprits', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
-  def testCompletedWithAutoroll(
-      self, differences, result_values, commit_as_dict):
+  def testCompletedWithAutoroll(self, differences, result_values,
+                                commit_as_dict):
     c = change.Change((change.Commit('chromium', 'git_hash'),))
     differences.return_value = [(None, c)]
     result_values.side_effect = [20], [30]
@@ -854,19 +843,29 @@ class BugCommentTest(test.TestCase):
     self.assertFalse(j.failed)
     self.add_bug_comment.assert_called_once_with(
         123456,
-        _COMMENT_COMPLETED_WITH_AUTOROLL_COMMIT,
+        mock.ANY,
         status='Assigned',
         owner='sheriff@bar.com',
         cc_list=['chromium-autoroll@skia-public.iam.gserviceaccount.com'],
-        labels=['Pinpoint-Culprit-Found'],
+        labels=mock.ANY,
         merge_issue=None,
         project='chromium')
+    message = self.add_bug_comment.call_args[0][1]
+    self.assertIn('Found a significant difference at 1 commit.', message)
+    self.assertIn('chromium-autoroll@skia-public.iam.gserviceaccount.com',
+                  message)
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Completed', labels)
+    self.assertNotIn('-Pinpoint-Job-Completed', labels)
+    self.assertIn('Pinpoint-Culprit-Found', labels)
+    self.assertNotIn('-Pinpoint-Culprit-Found', labels)
 
   @mock.patch('dashboard.pinpoint.models.change.commit.Commit.AsDict')
   @mock.patch.object(job.job_state.JobState, 'ResultValues')
   @mock.patch.object(job.job_state.JobState, 'Differences')
-  def testCompletedWithAutorollCulpritButNotMostRecent(
-      self, differences, result_values, commit_as_dict):
+  def testCompletedWithAutorollCulpritButNotMostRecent(self, differences,
+                                                       result_values,
+                                                       commit_as_dict):
     """Regression test for http://crbug.com/1076756.
 
     When an autoroll has the biggest delta, assigns to its sheriff even when it
@@ -926,8 +925,10 @@ class BugCommentTest(test.TestCase):
         123456,
         _COMMENT_FAILED,
         send_email=True,
-        labels=['Pinpoint-Job-Failed'],
+        labels=mock.ANY,
         project='chromium')
+    labels = self.add_bug_comment.call_args[1]['labels']
+    self.assertIn('Pinpoint-Job-Failed', labels)
 
   @mock.patch.object(job.job_state.JobState, 'ScheduleWork',
                      mock.MagicMock(side_effect=AssertionError('Error string')))
@@ -952,9 +953,10 @@ class BugCommentTest(test.TestCase):
 
   @mock.patch('dashboard.services.gerrit_service.PostChangeComment')
   def testCompletedUpdatesGerrit(self, post_change_comment):
-    j = job.Job.New(
-        (), (), gerrit_server='https://review.com', gerrit_change_id='123456')
+    j = job.Job.New((), (),
+                    gerrit_server='https://review.com',
+                    gerrit_change_id='123456')
     j.Run()
     self.ExecuteDeferredTasks('default')
-    post_change_comment.assert_called_once_with(
-        'https://review.com', '123456', _COMMENT_CODE_REVIEW)
+    post_change_comment.assert_called_once_with('https://review.com', '123456',
+                                                _COMMENT_CODE_REVIEW)

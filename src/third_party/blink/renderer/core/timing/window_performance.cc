@@ -31,9 +31,11 @@
 
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
@@ -43,12 +45,15 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/page_hidden_state.h"
 #include "third_party/blink/renderer/core/timing/largest_contentful_paint.h"
 #include "third_party/blink/renderer/core/timing/layout_shift.h"
 #include "third_party/blink/renderer/core/timing/performance_element_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_event_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_observer.h"
 #include "third_party/blink/renderer/core/timing/performance_timing.h"
+#include "third_party/blink/renderer/core/timing/visibility_state_entry.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
@@ -63,14 +68,11 @@ namespace blink {
 
 namespace {
 
-String GetFrameAttribute(HTMLFrameOwnerElement* frame_owner,
-                         const QualifiedName& attr_name,
-                         bool truncate) {
-  String attr_value;
+AtomicString GetFrameAttribute(HTMLFrameOwnerElement* frame_owner,
+                               const QualifiedName& attr_name) {
+  AtomicString attr_value;
   if (frame_owner->hasAttribute(attr_name)) {
     attr_value = frame_owner->getAttribute(attr_name);
-    if (truncate && attr_value.length() > 100)
-      attr_value = attr_value.Substring(0, 100);  // Truncate to 100 chars
   }
   return attr_value;
 }
@@ -94,12 +96,12 @@ AtomicString GetFrameOwnerType(HTMLFrameOwnerElement* frame_owner) {
   return "";
 }
 
-String GetFrameSrc(HTMLFrameOwnerElement* frame_owner) {
+AtomicString GetFrameSrc(HTMLFrameOwnerElement* frame_owner) {
   switch (frame_owner->OwnerType()) {
     case mojom::blink::FrameOwnerElementType::kObject:
-      return GetFrameAttribute(frame_owner, html_names::kDataAttr, false);
+      return GetFrameAttribute(frame_owner, html_names::kDataAttr);
     default:
-      return GetFrameAttribute(frame_owner, html_names::kSrcAttr, false);
+      return GetFrameAttribute(frame_owner, html_names::kSrcAttr);
   }
 }
 
@@ -140,6 +142,8 @@ AtomicString SameOriginAttribution(Frame* observer_frame,
 
 }  // namespace
 
+constexpr size_t kDefaultVisibilityStateEntrySize = 50;
+
 static base::TimeTicks ToTimeOrigin(LocalDOMWindow* window) {
   DocumentLoader* loader = window->GetFrame()->Loader().GetDocumentLoader();
   return loader->GetTiming().ReferenceMonotonicTime();
@@ -148,31 +152,34 @@ static base::TimeTicks ToTimeOrigin(LocalDOMWindow* window) {
 WindowPerformance::WindowPerformance(LocalDOMWindow* window)
     : Performance(ToTimeOrigin(window),
                   window->GetTaskRunner(TaskType::kPerformanceTimeline)),
-      ExecutionContextClient(window) {
-  DCHECK(GetFrame());
-  DCHECK(GetFrame()->GetPerformanceMonitor());
-  GetFrame()->GetPerformanceMonitor()->Subscribe(
+      ExecutionContextClient(window),
+      PageVisibilityObserver(window->GetFrame()->GetPage()) {
+  DCHECK(window);
+  DCHECK(window->GetFrame()->GetPerformanceMonitor());
+  window->GetFrame()->GetPerformanceMonitor()->Subscribe(
       PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
+  if (RuntimeEnabledFeatures::VisibilityStateEntryEnabled()) {
+    DCHECK(GetPage());
+    AddVisibilityStateEntry(GetPage()->IsPageVisible(), base::TimeTicks());
+  }
 }
 
 WindowPerformance::~WindowPerformance() = default;
 
 ExecutionContext* WindowPerformance::GetExecutionContext() const {
-  if (!GetFrame())
-    return nullptr;
-  return GetFrame()->DomWindow();
+  return ExecutionContextClient::GetExecutionContext();
 }
 
 PerformanceTiming* WindowPerformance::timing() const {
   if (!timing_)
-    timing_ = MakeGarbageCollected<PerformanceTiming>(GetFrame());
+    timing_ = MakeGarbageCollected<PerformanceTiming>(DomWindow());
 
   return timing_.Get();
 }
 
 PerformanceNavigation* WindowPerformance::navigation() const {
   if (!navigation_)
-    navigation_ = MakeGarbageCollected<PerformanceNavigation>(GetFrame());
+    navigation_ = MakeGarbageCollected<PerformanceNavigation>(DomWindow());
 
   return navigation_.Get();
 }
@@ -191,11 +198,9 @@ MemoryInfo* WindowPerformance::memory() const {
 
 PerformanceNavigationTiming*
 WindowPerformance::CreateNavigationTimingInstance() {
-  if (!GetFrame())
+  if (!DomWindow())
     return nullptr;
-  DocumentLoader* document_loader = GetFrame()->Loader().GetDocumentLoader();
-  if (!document_loader)
-    return nullptr;
+  DocumentLoader* document_loader = DomWindow()->document()->Loader();
   ResourceTimingInfo* info = document_loader->GetNavigationTimingInfo();
   if (!info)
     return nullptr;
@@ -205,7 +210,7 @@ WindowPerformance::CreateNavigationTimingInstance() {
     document_loader->CountUse(WebFeature::kPerformanceServerTiming);
 
   return MakeGarbageCollected<PerformanceNavigationTiming>(
-      GetFrame(), info, time_origin_, std::move(server_timing));
+      DomWindow(), info, time_origin_, std::move(server_timing));
 }
 
 void WindowPerformance::BuildJSONValue(V8ObjectBuilder& builder) const {
@@ -223,6 +228,7 @@ void WindowPerformance::Trace(Visitor* visitor) const {
   Performance::Trace(visitor);
   PerformanceMonitor::Client::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
+  PageVisibilityObserver::Trace(visitor);
 }
 
 static bool CanAccessOrigin(Frame* frame1, Frame* frame2) {
@@ -299,11 +305,11 @@ void WindowPerformance::ReportLongTask(base::TimeTicks start_time,
                                        base::TimeTicks end_time,
                                        ExecutionContext* task_context,
                                        bool has_multiple_contexts) {
-  if (!GetFrame())
+  if (!DomWindow())
     return;
   std::pair<AtomicString, DOMWindow*> attribution =
       WindowPerformance::SanitizedAttribution(
-          task_context, has_multiple_contexts, GetFrame());
+          task_context, has_multiple_contexts, DomWindow()->GetFrame());
   DOMWindow* culprit_dom_window = attribution.second;
   if (!culprit_dom_window || !culprit_dom_window->GetFrame() ||
       !culprit_dom_window->GetFrame()->DeprecatedLocalOwner()) {
@@ -312,11 +318,10 @@ void WindowPerformance::ReportLongTask(base::TimeTicks start_time,
   } else {
     HTMLFrameOwnerElement* frame_owner =
         culprit_dom_window->GetFrame()->DeprecatedLocalOwner();
-    AddLongTaskTiming(
-        start_time, end_time, attribution.first, GetFrameOwnerType(frame_owner),
-        GetFrameSrc(frame_owner),
-        GetFrameAttribute(frame_owner, html_names::kIdAttr, false),
-        GetFrameAttribute(frame_owner, html_names::kNameAttr, true));
+    AddLongTaskTiming(start_time, end_time, attribution.first,
+                      GetFrameOwnerType(frame_owner), GetFrameSrc(frame_owner),
+                      GetFrameAttribute(frame_owner, html_names::kIdAttr),
+                      GetFrameAttribute(frame_owner, html_names::kNameAttr));
   }
 }
 
@@ -330,7 +335,7 @@ void WindowPerformance::RegisterEventTiming(const AtomicString& event_type,
   DCHECK(!processing_start.is_null());
   DCHECK(!processing_end.is_null());
   DCHECK_GE(processing_end, processing_start);
-  if (!GetFrame())
+  if (!DomWindow())
     return;
 
   if (!event_counts_)
@@ -357,8 +362,8 @@ void WindowPerformance::RegisterEventTiming(const AtomicString& event_type,
     should_queue_swap_promise = frame_index_ > last_registered_frame_index_;
   }
   if (should_queue_swap_promise) {
-    GetFrame()->GetChromeClient().NotifySwapTime(
-        *GetFrame(),
+    DomWindow()->GetFrame()->GetChromeClient().NotifySwapTime(
+        *DomWindow()->GetFrame(),
         CrossThreadBindOnce(&WindowPerformance::ReportEventTimings,
                             WrapCrossThreadWeakPersistent(this), frame_index_));
     last_registered_frame_index_ = frame_index_;
@@ -373,8 +378,11 @@ void WindowPerformance::ReportEventTimings(uint64_t frame_index,
   --pending_swap_promise_count_;
   // |event_timings_| and |event_frames_| should always have the same size.
   DCHECK(event_timings_.size() == event_frames_.size());
+  if (event_timings_.IsEmpty())
+    return;
   bool event_timing_enabled =
       RuntimeEnabledFeatures::EventTimingEnabled(GetExecutionContext());
+  DOMHighResTimeStamp end_time = MonotonicTimeToDOMHighResTimeStamp(timestamp);
   while (!event_timings_.IsEmpty()) {
     PerformanceEventTiming* entry = event_timings_.front();
     uint64_t entry_frame_index = event_frames_.front();
@@ -386,8 +394,6 @@ void WindowPerformance::ReportEventTimings(uint64_t frame_index,
 
     event_timings_.pop_front();
     event_frames_.pop_front();
-    DOMHighResTimeStamp end_time =
-        MonotonicTimeToDOMHighResTimeStamp(timestamp);
 
     int duration_in_ms = std::round((end_time - entry->startTime()) / 8) * 8;
     entry->SetDuration(duration_in_ms);
@@ -462,6 +468,26 @@ void WindowPerformance::AddLayoutShiftEntry(LayoutShift* entry) {
   if (HasObserverFor(PerformanceEntry::kLayoutShift))
     NotifyObserversOfEntry(*entry);
   AddLayoutShiftBuffer(*entry);
+}
+
+void WindowPerformance::AddVisibilityStateEntry(bool is_visible,
+                                                base::TimeTicks timestamp) {
+  DCHECK(RuntimeEnabledFeatures::VisibilityStateEntryEnabled());
+  VisibilityStateEntry* entry = MakeGarbageCollected<VisibilityStateEntry>(
+      PageHiddenStateString(!is_visible),
+      MonotonicTimeToDOMHighResTimeStamp(timestamp));
+  if (HasObserverFor(PerformanceEntry::kVisibilityState))
+    NotifyObserversOfEntry(*entry);
+
+  if (visibility_state_buffer_.size() < kDefaultVisibilityStateEntrySize)
+    visibility_state_buffer_.push_back(entry);
+}
+
+void WindowPerformance::PageVisibilityChanged() {
+  if (!RuntimeEnabledFeatures::VisibilityStateEntryEnabled())
+    return;
+
+  AddVisibilityStateEntry(GetPage()->IsPageVisible(), base::TimeTicks::Now());
 }
 
 EventCounts* WindowPerformance::eventCounts() {

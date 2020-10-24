@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrRGBToHSLFilterEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -23,18 +24,12 @@ public:
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
         const GrRGBToHSLFilterEffect& _outer = args.fFp.cast<GrRGBToHSLFilterEffect>();
         (void)_outer;
-        SkString _input1173(args.fInputColor);
-        SkString _sample1173;
-        if (_outer.inputFP_index >= 0) {
-            _sample1173 = this->invokeChild(_outer.inputFP_index, _input1173.c_str(), args);
-        } else {
-            _sample1173.swap(_input1173);
-        }
+        SkString _sample1173 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
                 R"SkSL(half4 c = %s;
-half4 p = c.y < c.z ? half4(c.zy, -1.0, 0.66666666666666663) : half4(c.yz, 0.0, -0.33333333333333331);
+half4 p = c.y < c.z ? half4(c.zy, -1.0, 0.66666668653488159) : half4(c.yz, 0.0, -0.3333333432674408);
 half4 q = c.x < p.x ? half4(p.x, c.x, p.yw) : half4(c.x, p.x, p.yz);
-
+;
 half pmV = q.x;
 half pmC = pmV - min(q.y, q.z);
 half pmL = pmV - pmC * 0.5;
@@ -60,12 +55,14 @@ bool GrRGBToHSLFilterEffect::onIsEqual(const GrFragmentProcessor& other) const {
     (void)that;
     return true;
 }
+bool GrRGBToHSLFilterEffect::usesExplicitReturn() const { return false; }
 GrRGBToHSLFilterEffect::GrRGBToHSLFilterEffect(const GrRGBToHSLFilterEffect& src)
         : INHERITED(kGrRGBToHSLFilterEffect_ClassID, src.optimizationFlags()) {
-    if (src.inputFP_index >= 0) {
-        inputFP_index = this->cloneAndRegisterChildProcessor(src.childProcessor(src.inputFP_index));
-    }
+    this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrRGBToHSLFilterEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrRGBToHSLFilterEffect(*this));
+    return std::make_unique<GrRGBToHSLFilterEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrRGBToHSLFilterEffect::onDumpInfo() const { return SkString(); }
+#endif

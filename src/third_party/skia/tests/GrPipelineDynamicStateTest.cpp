@@ -8,10 +8,10 @@
 #include "include/core/SkTypes.h"
 #include "tests/Test.h"
 
-#include "include/gpu/GrContext.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrColor.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrMemoryPool.h"
@@ -86,13 +86,12 @@ private:
     };
 
     friend class GLSLPipelineDynamicStateTestProcessor;
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 constexpr GrPrimitiveProcessor::Attribute GrPipelineDynamicStateTestProcessor::kAttributes[];
 
 class GLSLPipelineDynamicStateTestProcessor : public GrGLSLGeometryProcessor {
-    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&,
-                 const CoordTransformRange&) final {}
+    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&) final {}
 
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) final {
         const GrPipelineDynamicStateTestProcessor& mp =
@@ -148,7 +147,8 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) override {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) override {}
     void onPrepare(GrOpFlushState*) override {}
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
         GrPipeline pipeline(fScissorTest, SkBlendMode::kSrc,
@@ -166,8 +166,10 @@ private:
                                   flushState->proxy()->backendFormat(),
                                   flushState->writeView()->origin(),
                                   &pipeline,
+                                  &GrUserStencilSettings::kUnused,
                                   geomProc,
-                                  GrPrimitiveType::kTriangleStrip);
+                                  GrPrimitiveType::kTriangleStrip, 0,
+                                  flushState->renderPassBarriers());
 
         flushState->bindPipeline(programInfo, SkRect::MakeIWH(kScreenSize, kScreenSize));
         for (int i = 0; i < 4; ++i) {
@@ -181,15 +183,15 @@ private:
     GrScissorTest               fScissorTest;
     const sk_sp<const GrBuffer> fVertexBuffer;
 
-    typedef GrDrawOp INHERITED;
+    using INHERITED = GrDrawOp;
 };
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrPipelineDynamicStateTest, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
-    GrResourceProvider* rp = context->priv().resourceProvider();
+    auto dContext = ctxInfo.directContext();
+    GrResourceProvider* rp = dContext->priv().resourceProvider();
 
     auto rtc = GrRenderTargetContext::Make(
-            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
+            dContext, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kScreenSize, kScreenSize});
     if (!rtc) {
         ERRORF(reporter, "could not create render target context.");
@@ -231,10 +233,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrPipelineDynamicStateTest, reporter, ctxInfo
     for (GrScissorTest scissorTest : {GrScissorTest::kEnabled, GrScissorTest::kDisabled}) {
         rtc->clear(SkPMColor4f::FromBytes_RGBA(0xbaaaaaad));
         rtc->priv().testingOnly_addDrawOp(
-            GrPipelineDynamicStateTestOp::Make(context, scissorTest, vbuff));
-        rtc->readPixels(SkImageInfo::Make(kScreenSize, kScreenSize,
-                                          kRGBA_8888_SkColorType, kPremul_SkAlphaType),
-                        resultPx, 4 * kScreenSize, {0, 0});
+            GrPipelineDynamicStateTestOp::Make(dContext, scissorTest, vbuff));
+        auto ii = SkImageInfo::Make(kScreenSize, kScreenSize,
+                                    kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+        rtc->readPixels(dContext, ii, resultPx, 4 * kScreenSize, {0, 0});
         for (int y = 0; y < kScreenSize; ++y) {
             for (int x = 0; x < kScreenSize; ++x) {
                 int expectedColorIdx;

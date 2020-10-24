@@ -243,6 +243,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoUnresolved,
     kPseudoDefined,
     kPseudoContent,
+    kPseudoHasDatalist,
     kPseudoHost,
     kPseudoHostContext,
     kPseudoShadow,
@@ -255,9 +256,10 @@ class CORE_EXPORT CSSSelector {
     kPseudoSlotted,
     kPseudoVideoPersistent,
     kPseudoVideoPersistentAncestor,
+    kPseudoTargetText,
   };
 
-  enum AttributeMatchType {
+  enum class AttributeMatchType {
     kCaseSensitive,
     kCaseInsensitive,
   };
@@ -367,9 +369,6 @@ class CORE_EXPORT CSSSelector {
   bool IsLastInTagHistory() const { return is_last_in_tag_history_; }
   void SetLastInTagHistory(bool is_last) { is_last_in_tag_history_ = is_last; }
 
-  bool IgnoreSpecificity() const { return ignore_specificity_; }
-  void SetIgnoreSpecificity(bool ignore) { ignore_specificity_ = ignore; }
-
   // https://drafts.csswg.org/selectors/#compound
   bool IsCompound() const;
 
@@ -378,7 +377,10 @@ class CORE_EXPORT CSSSelector {
     kMatchVisited = 2,
     kMatchAll = kMatchLink | kMatchVisited
   };
-  unsigned ComputeLinkMatchType(unsigned link_match_type) const;
+
+  // True if :link or :visited pseudo-classes are found anywhere in
+  // the selector.
+  bool HasLinkOrVisited() const;
 
   bool IsForPage() const { return is_for_page_; }
   void SetForPage() { is_for_page_ = true; }
@@ -400,8 +402,8 @@ class CORE_EXPORT CSSSelector {
   // Returns true if the immediately preceeding simple selector is ::part.
   bool FollowsPart() const;
   bool NeedsUpdatedDistribution() const;
-  bool HasPseudoIs() const;
-  bool HasPseudoWhere() const;
+
+  static String FormatPseudoTypeForDebugging(PseudoType);
 
  private:
   unsigned relation_ : 4;     // enum RelationType
@@ -414,7 +416,6 @@ class CORE_EXPORT CSSSelector {
   unsigned tag_is_implicit_ : 1;
   unsigned relation_is_affected_by_pseudo_content_ : 1;
   unsigned is_last_in_original_list_ : 1;
-  unsigned ignore_specificity_ : 1;
 
   void SetPseudoType(PseudoType pseudo_type) {
     pseudo_type_ = pseudo_type;
@@ -541,7 +542,6 @@ inline CSSSelector::CSSSelector()
       tag_is_implicit_(false),
       relation_is_affected_by_pseudo_content_(false),
       is_last_in_original_list_(false),
-      ignore_specificity_(false),
       data_(DataUnion::kConstructEmptyValue) {}
 
 inline CSSSelector::CSSSelector(const QualifiedName& tag_q_name,
@@ -556,7 +556,6 @@ inline CSSSelector::CSSSelector(const QualifiedName& tag_q_name,
       tag_is_implicit_(tag_is_implicit),
       relation_is_affected_by_pseudo_content_(false),
       is_last_in_original_list_(false),
-      ignore_specificity_(false),
       data_(tag_q_name) {}
 
 inline CSSSelector::CSSSelector(const CSSSelector& o)
@@ -571,7 +570,6 @@ inline CSSSelector::CSSSelector(const CSSSelector& o)
       relation_is_affected_by_pseudo_content_(
           o.relation_is_affected_by_pseudo_content_),
       is_last_in_original_list_(o.is_last_in_original_list_),
-      ignore_specificity_(o.ignore_specificity_),
       data_(DataUnion::kConstructUninitialized) {
   if (o.match_ == kTag) {
     new (&data_.tag_q_name_) QualifiedName(o.data_.tag_q_name_);

@@ -31,6 +31,14 @@ class CORE_EXPORT FindBuffer {
       String search_text,
       const FindOptions);
 
+  // Returns the closest ancestor of |start_node| (including the node itself)
+  // that is block level.
+  static Node& GetFirstBlockLevelAncestorInclusive(const Node& start_node);
+
+  // See |GetVisibleTextNode|.
+  static Node* ForwardVisibleTextNode(Node& start_node);
+  static Node* BackwardVisibleTextNode(Node& start_node);
+
   // A match result, containing the starting position of the match and
   // the length of the match.
   struct BufferMatchResult {

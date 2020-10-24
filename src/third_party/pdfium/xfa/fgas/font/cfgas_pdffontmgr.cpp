@@ -13,6 +13,7 @@
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
 #include "core/fxge/fx_font.h"
+#include "third_party/base/check.h"
 #include "third_party/base/stl_util.h"
 #include "xfa/fgas/font/cfgas_fontmgr.h"
 #include "xfa/fgas/font/cfgas_gefont.h"
@@ -28,10 +29,8 @@ const char* const g_XFAPDFFontName[][5] = {
 
 }  // namespace
 
-CFGAS_PDFFontMgr::CFGAS_PDFFontMgr(CPDF_Document* pDoc, CFGAS_FontMgr* pFontMgr)
-    : m_pDoc(pDoc), m_pFontMgr(pFontMgr) {
-  ASSERT(pDoc);
-  ASSERT(pFontMgr);
+CFGAS_PDFFontMgr::CFGAS_PDFFontMgr(CPDF_Document* pDoc) : m_pDoc(pDoc) {
+  DCHECK(pDoc);
 }
 
 CFGAS_PDFFontMgr::~CFGAS_PDFFontMgr() = default;
@@ -62,14 +61,14 @@ RetainPtr<CFGAS_GEFont> CFGAS_PDFFontMgr::FindFont(const ByteString& strPsName,
       continue;
     }
     CPDF_Dictionary* pFontDict = ToDictionary(pObj->GetDirect());
-    if (!pFontDict || pFontDict->GetStringFor("Type") != "Font")
+    if (!pFontDict || pFontDict->GetNameFor("Type") != "Font")
       return nullptr;
 
     RetainPtr<CPDF_Font> pPDFFont = pData->GetFont(pFontDict);
     if (!pPDFFont || !pPDFFont->IsEmbedded())
       return nullptr;
 
-    return CFGAS_GEFont::LoadFont(pPDFFont, m_pFontMgr.Get());
+    return CFGAS_GEFont::LoadFont(pPDFFont);
   }
   return nullptr;
 }

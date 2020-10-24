@@ -8,6 +8,7 @@ import * as TextUtils from '../text_utils/text_utils.js';
 import {CSSModel} from './CSSModel.js';  // eslint-disable-line no-unused-vars
 import {DeferredDOMNode} from './DOMModel.js';
 import {FrameAssociated} from './FrameAssociated.js';  // eslint-disable-line no-unused-vars
+import {PageResourceLoadInitiator} from './PageResourceLoader.js';  // eslint-disable-line no-unused-vars
 import {ResourceTreeModel} from './ResourceTreeModel.js';
 
 /**
@@ -30,6 +31,8 @@ export class CSSStyleSheetHeader {
     this.disabled = payload.disabled;
     this.isInline = payload.isInline;
     this.isMutable = payload.isMutable;
+    // TODO(alexrudenko): Needs a roll of the browser_protocol.pdl.
+    this.isConstructed = /** @type {*} */ (payload).isConstructed;
     this.startLine = payload.startLine;
     this.startColumn = payload.startColumn;
     this.endLine = payload.endLine;
@@ -93,8 +96,16 @@ export class CSSStyleSheetHeader {
    * @return {string}
    */
   _viaInspectorResourceURL() {
-    const frame = this._cssModel.target().model(ResourceTreeModel).frameForId(this.frameId);
-    console.assert(frame);
+    const model = this._cssModel.target().model(ResourceTreeModel);
+    console.assert(!!model);
+    if (!model) {
+      return '';
+    }
+    const frame = model.frameForId(this.frameId);
+    if (!frame) {
+      return '';
+    }
+    console.assert(!!frame);
     const parsedURL = new Common.ParsedURL.ParsedURL(frame.url);
     let fakeURL = 'inspector://' + parsedURL.host + parsedURL.folderPathComponents;
     if (!fakeURL.endsWith('/')) {
@@ -196,5 +207,12 @@ export class CSSStyleSheetHeader {
    */
   isViaInspector() {
     return this.origin === 'inspector';
+  }
+
+  /**
+   * @returns {!PageResourceLoadInitiator}
+   */
+  createPageResourceLoadInitiator() {
+    return {target: null, frameId: this.frameId, initiatorUrl: this.hasSourceURL ? '' : this.sourceURL};
   }
 }

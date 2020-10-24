@@ -86,8 +86,16 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
 #endif
 
   bool recursion_blocked_by_display_lock =
-      layer.GetLayoutObject().PrePaintBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren);
+      layer.GetLayoutObject().ChildPrePaintBlockedByDisplayLock();
+  // If the recursion is blocked meaningfully (i.e. we would have recursed,
+  // since the layer has children), then we should inform the display-lock
+  // context that we blocked a graphics layer recursion, so that we can ensure
+  // to rebuild the tree once we're unlocked.
+  if (recursion_blocked_by_display_lock && layer.FirstChild()) {
+    auto* context = layer.GetLayoutObject().GetDisplayLockContext();
+    DCHECK(context);
+    context->NotifyGraphicsLayerRebuildBlocked();
+  }
 
   if (layer.IsStackingContextWithNegativeZOrderChildren()) {
     if (!recursion_blocked_by_display_lock) {
@@ -121,16 +129,13 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
     PaintLayerCompositor* inner_compositor =
         PaintLayerCompositor::FrameContentsCompositor(
             ToLayoutEmbeddedContent(layer.GetLayoutObject()));
-    if (inner_compositor) {
-      // If the embedded frame is render-throttled, it might not be compositing
-      // clean at this point. In that case, we still need to connect its
-      // existing root graphics layer, so we need to query the stale compositing
-      // state.
-      DisableCompositingQueryAsserts disabler;
+    if (inner_compositor &&
+        inner_compositor->CanBeComposited(inner_compositor->RootLayer())) {
       if (inner_compositor->InCompositingMode()) {
-        GraphicsLayer* inner_root_layer = inner_compositor->RootGraphicsLayer();
-        DCHECK(inner_root_layer);
-        layer_vector_for_children->push_back(inner_root_layer);
+        if (GraphicsLayer* inner_root_layer =
+                inner_compositor->RootGraphicsLayer()) {
+          layer_vector_for_children->push_back(inner_root_layer);
+        }
       }
       inner_compositor->ClearRootLayerAttachmentDirty();
     }
@@ -156,15 +161,15 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
                 return a.second < b.second;
               });
     for (auto& item : pending) {
-      if (auto* layer = item.first->GetCompositedLayerMapping()
-                            ->DetachLayerForOverflowControls()) {
-        this_layer_children.insert(item.second + offset, layer);
-        offset++;
-      }
+      offset += item.first->GetCompositedLayerMapping()
+                    ->MoveOverflowControlLayersInto(this_layer_children,
+                                                    item.second + offset);
     }
 
-    if (!this_layer_children.IsEmpty())
-      current_composited_layer_mapping->SetSublayers(this_layer_children);
+    if (!this_layer_children.IsEmpty()) {
+      current_composited_layer_mapping->SetSublayers(
+          std::move(this_layer_children));
+    }
 
     if (ShouldAppendLayer(layer)) {
       child_layers.push_back(

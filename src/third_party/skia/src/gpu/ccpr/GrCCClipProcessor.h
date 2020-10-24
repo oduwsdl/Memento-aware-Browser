@@ -24,7 +24,8 @@ public:
         kYes = true
     };
 
-    GrCCClipProcessor(const GrCaps&, const GrCCClipPath*, IsCoverageCount, MustCheckBounds);
+    GrCCClipProcessor(std::unique_ptr<GrFragmentProcessor>, const GrCaps&, const GrCCClipPath*,
+                      IsCoverageCount, MustCheckBounds);
 
     const char* name() const override { return "GrCCClipProcessor"; }
     std::unique_ptr<GrFragmentProcessor> clone() const override;
@@ -41,7 +42,7 @@ private:
 
     class Impl;
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 #endif

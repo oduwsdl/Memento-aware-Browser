@@ -13,6 +13,7 @@ from dashboard.common import utils
 
 
 class NewBugHandler(api_request_handler.ApiRequestHandler):
+
   def _CheckUser(self):
     if not utils.IsValidSheriffUser():
       raise api_request_handler.ForbiddenError()
@@ -22,12 +23,12 @@ class NewBugHandler(api_request_handler.ApiRequestHandler):
     cc = self.request.get('cc')
     summary = self.request.get('summary')
     description = self.request.get('description')
+    project = self.request.get('project', 'chromium')
     labels = self.request.get_all('label')
     components = self.request.get_all('component')
     keys = self.request.get_all('key')
     bisect = api_utils.ParseBool(self.request.get('bisect', 'true'))
     http = utils.ServiceAccountHttp()
 
-    return file_bug.FileBug(
-        http, owner, cc, summary, description, labels, components, keys,
-        bisect)
+    return file_bug.FileBug(http, owner, cc, summary, description, project,
+                            labels, components, keys, bisect)

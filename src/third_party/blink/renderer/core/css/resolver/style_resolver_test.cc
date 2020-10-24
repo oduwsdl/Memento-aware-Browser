@@ -5,10 +5,11 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/core/animation/animation_test_helper.h"
+#include "third_party/blink/renderer/core/animation/animation_test_helpers.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/css/css_image_value.h"
+#include "third_party/blink/renderer/core/css/css_test_helpers.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
@@ -26,13 +27,13 @@
 
 namespace blink {
 
+using animation_test_helpers::CreateSimpleKeyframeEffectForTest;
+
 class StyleResolverTest : public PageTestBase {
  public:
   scoped_refptr<ComputedStyle> StyleForId(AtomicString id) {
     Element* element = GetDocument().getElementById(id);
-    StyleResolver* resolver = GetStyleEngine().Resolver();
-    DCHECK(resolver);
-    auto style = resolver->StyleForElement(element);
+    auto style = GetStyleEngine().GetStyleResolver().StyleForElement(element);
     DCHECK(style);
     return style;
   }
@@ -60,7 +61,7 @@ TEST_F(StyleResolverTest, StyleForTextInDisplayNone) {
   ASSERT_TRUE(GetDocument().body()->GetComputedStyle());
   EXPECT_TRUE(
       GetDocument().body()->GetComputedStyle()->IsEnsuredInDisplayNone());
-  EXPECT_FALSE(GetStyleEngine().Resolver()->StyleForText(
+  EXPECT_FALSE(GetStyleEngine().GetStyleResolver().StyleForText(
       To<Text>(GetDocument().body()->firstChild())));
 }
 
@@ -69,19 +70,20 @@ TEST_F(StyleResolverTest, AnimationBaseComputedStyle) {
     <style>
       html { font-size: 10px; }
       body { font-size: 20px; }
+      @keyframes fade { to { opacity: 0; }}
+      #div { animation: fade 1s; }
     </style>
     <div id="div">Test</div>
   )HTML");
   UpdateAllLifecyclePhasesForTest();
 
   Element* div = GetDocument().getElementById("div");
-  StyleResolver* resolver = GetStyleEngine().Resolver();
-  ASSERT_TRUE(resolver);
   ElementAnimations& animations = div->EnsureElementAnimations();
   animations.SetAnimationStyleChange(true);
 
-  ASSERT_TRUE(resolver->StyleForElement(div));
-  EXPECT_EQ(20, resolver->StyleForElement(div)->FontSize());
+  StyleResolver& resolver = GetStyleEngine().GetStyleResolver();
+  ASSERT_TRUE(resolver.StyleForElement(div));
+  EXPECT_EQ(20, resolver.StyleForElement(div)->FontSize());
   ASSERT_TRUE(animations.BaseComputedStyle());
   EXPECT_EQ(20, animations.BaseComputedStyle()->FontSize());
 
@@ -91,10 +93,10 @@ TEST_F(StyleResolverTest, AnimationBaseComputedStyle) {
       GetDocument().documentElement()->GetComputedStyle();
   EXPECT_EQ(
       10,
-      resolver->StyleForElement(div, parent_style, parent_style)->FontSize());
+      resolver.StyleForElement(div, parent_style, parent_style)->FontSize());
   ASSERT_TRUE(animations.BaseComputedStyle());
   EXPECT_EQ(20, animations.BaseComputedStyle()->FontSize());
-  EXPECT_EQ(20, resolver->StyleForElement(div)->FontSize());
+  EXPECT_EQ(20, resolver.StyleForElement(div)->FontSize());
 }
 
 TEST_F(StyleResolverTest, ShadowDOMV0Crash) {
@@ -127,7 +129,7 @@ TEST_F(StyleResolverTest, HasEmUnits) {
   EXPECT_TRUE(StyleForId("div")->HasEmUnits());
 }
 
-TEST_F(StyleResolverTest, BasePresentIfFontRelativeUnitsAbsent) {
+TEST_F(StyleResolverTest, BaseReusableIfFontRelativeUnitsAbsent) {
   GetDocument().documentElement()->setInnerHTML("<div id=div>Test</div>");
   UpdateAllLifecyclePhasesForTest();
   Element* div = GetDocument().getElementById("div");
@@ -140,28 +142,14 @@ TEST_F(StyleResolverTest, BasePresentIfFontRelativeUnitsAbsent) {
   EXPECT_EQ("50px", ComputedValue("font-size", *StyleForId("div")));
 
   div->SetNeedsAnimationStyleRecalc();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   StyleForId("div");
 
   ASSERT_TRUE(div->GetElementAnimations());
   EXPECT_TRUE(div->GetElementAnimations()->BaseComputedStyle());
-}
 
-TEST_F(StyleResolverTest, NoCrashWhenAnimatingWithoutCascade) {
-  ScopedCSSCascadeForTest scoped_cascade(false);
-
-  GetDocument().documentElement()->setInnerHTML(R"HTML(
-    <style>
-      @keyframes test {
-        from { width: 10px; }
-        to { width: 20px; }
-      }
-      div {
-        animation: test 1s;
-      }
-    </style>
-    <div id="div">Test</div>
-  )HTML");
-  UpdateAllLifecyclePhasesForTest();
+  StyleResolverState state(GetDocument(), *div);
+  EXPECT_TRUE(StyleResolver::CanReuseBaseComputedStyle(state));
 }
 
 TEST_F(StyleResolverTest, AnimationNotMaskedByImportant) {
@@ -186,6 +174,7 @@ TEST_F(StyleResolverTest, AnimationNotMaskedByImportant) {
   EXPECT_EQ("10px", ComputedValue("height", *StyleForId("div")));
 
   div->SetNeedsAnimationStyleRecalc();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   StyleForId("div");
 
   ASSERT_TRUE(div->GetElementAnimations());
@@ -225,6 +214,7 @@ TEST_F(StyleResolverTest, AnimationNotMaskedWithoutBitset) {
   EXPECT_EQ("10px", ComputedValue("height", *StyleForId("div")));
 
   div->SetNeedsAnimationStyleRecalc();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   StyleForId("div");
 
   ASSERT_TRUE(div->GetElementAnimations());
@@ -255,11 +245,15 @@ TEST_F(StyleResolverTest, AnimationMaskedByImportant) {
   EXPECT_EQ("10px", ComputedValue("height", *StyleForId("div")));
 
   div->SetNeedsAnimationStyleRecalc();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   StyleForId("div");
 
   ASSERT_TRUE(div->GetElementAnimations());
-  EXPECT_FALSE(div->GetElementAnimations()->BaseComputedStyle());
-  EXPECT_FALSE(div->GetElementAnimations()->BaseImportantSet());
+  EXPECT_TRUE(div->GetElementAnimations()->BaseComputedStyle());
+  EXPECT_TRUE(div->GetElementAnimations()->BaseImportantSet());
+
+  StyleResolverState state(GetDocument(), *div);
+  EXPECT_FALSE(StyleResolver::CanReuseBaseComputedStyle(state));
 }
 
 TEST_F(StyleResolverTest, CachedExplicitInheritanceFlags) {
@@ -290,11 +284,104 @@ TEST_F(StyleResolverTest, CachedExplicitInheritanceFlags) {
   EXPECT_TRUE(outer->ComputedStyleRef().ChildHasExplicitInheritance());
 }
 
+TEST_F(StyleResolverTest,
+       TransitionRetargetRelativeFontSizeOnParentlessElement) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      html {
+        font-size: 20px;
+        transition: font-size 100ms;
+      }
+      .adjust { font-size: 50%; }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* element = GetDocument().documentElement();
+  element->setAttribute(html_names::kIdAttr, "target");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ("20px", ComputedValue("font-size", *StyleForId("target")));
+  ElementAnimations* element_animations = element->GetElementAnimations();
+  EXPECT_FALSE(element_animations);
+
+  // Trigger a transition with a dependency on the parent style.
+  element->setAttribute(html_names::kClassAttr, "adjust");
+  UpdateAllLifecyclePhasesForTest();
+  element_animations = element->GetElementAnimations();
+  EXPECT_TRUE(element_animations);
+  Animation* transition = (*element_animations->Animations().begin()).key;
+  EXPECT_TRUE(transition);
+  EXPECT_EQ("20px", ComputedValue("font-size", *StyleForId("target")));
+
+  // Bump the animation time to ensure a transition reversal.
+  transition->setCurrentTime(50);
+  transition->pause();
+  UpdateAllLifecyclePhasesForTest();
+  const String before_reversal_font_size =
+      ComputedValue("font-size", *StyleForId("target"));
+
+  // Verify there is no discontinuity in the font-size on transition reversal.
+  element->setAttribute(html_names::kClassAttr, "");
+  UpdateAllLifecyclePhasesForTest();
+  element_animations = element->GetElementAnimations();
+  EXPECT_TRUE(element_animations);
+  Animation* reverse_transition =
+      (*element_animations->Animations().begin()).key;
+  EXPECT_TRUE(reverse_transition);
+  EXPECT_EQ(before_reversal_font_size,
+            ComputedValue("font-size", *StyleForId("target")));
+}
+
+TEST_F(StyleResolverTest, NonCachableStyleCheckDoesNotAffectBaseComputedStyle) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      .adjust { color: rgb(0, 0, 0); }
+    </style>
+    <div>
+      <div style="color: rgb(0, 128, 0)">
+        <div id="target" style="transition: color 1s linear"></div>
+      </div>
+    </div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* target = GetDocument().getElementById("target");
+
+  EXPECT_EQ("rgb(0, 128, 0)", ComputedValue("color", *StyleForId("target")));
+
+  // Trigger a transition on an inherited property.
+  target->setAttribute(html_names::kClassAttr, "adjust");
+  UpdateAllLifecyclePhasesForTest();
+  ElementAnimations* element_animations = target->GetElementAnimations();
+  EXPECT_TRUE(element_animations);
+  Animation* transition = (*element_animations->Animations().begin()).key;
+  EXPECT_TRUE(transition);
+
+  // Advance to the midpoint of the transition.
+  transition->setCurrentTime(500);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ("rgb(0, 64, 0)", ComputedValue("color", *StyleForId("target")));
+  EXPECT_TRUE(element_animations->BaseComputedStyle());
+
+  element_animations->ClearBaseComputedStyle();
+
+  // Perform a non-cacheable style resolution, and ensure that the base computed
+  // style is not updated.
+  GetStyleEngine().GetStyleResolver().StyleForElement(
+      target, nullptr, nullptr, kMatchAllRulesExcludingSMIL);
+  EXPECT_FALSE(element_animations->BaseComputedStyle());
+
+  // Computing the style with default args updates the base computed style.
+  EXPECT_EQ("rgb(0, 64, 0)", ComputedValue("color", *StyleForId("target")));
+  EXPECT_TRUE(element_animations->BaseComputedStyle());
+}
+
 class StyleResolverFontRelativeUnitTest
     : public testing::WithParamInterface<const char*>,
       public StyleResolverTest {};
 
-TEST_P(StyleResolverFontRelativeUnitTest, NoBaseIfFontRelativeUnitPresent) {
+TEST_P(StyleResolverFontRelativeUnitTest,
+       BaseNotReusableIfFontRelativeUnitPresent) {
   GetDocument().documentElement()->setInnerHTML(
       String::Format("<div id=div style='width:1%s'>Test</div>", GetParam()));
   UpdateAllLifecyclePhasesForTest();
@@ -307,15 +394,19 @@ TEST_P(StyleResolverFontRelativeUnitTest, NoBaseIfFontRelativeUnitPresent) {
   EXPECT_EQ("50px", ComputedValue("font-size", *StyleForId("div")));
 
   div->SetNeedsAnimationStyleRecalc();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   auto computed_style = StyleForId("div");
 
   EXPECT_TRUE(computed_style->HasFontRelativeUnits());
   ASSERT_TRUE(div->GetElementAnimations());
-  EXPECT_FALSE(div->GetElementAnimations()->BaseComputedStyle());
+  EXPECT_TRUE(div->GetElementAnimations()->BaseComputedStyle());
+
+  StyleResolverState state(GetDocument(), *div);
+  EXPECT_FALSE(StyleResolver::CanReuseBaseComputedStyle(state));
 }
 
 TEST_P(StyleResolverFontRelativeUnitTest,
-       BasePresentIfNoFontAffectingAnimation) {
+       BaseReusableIfNoFontAffectingAnimation) {
   GetDocument().documentElement()->setInnerHTML(
       String::Format("<div id=div style='width:1%s'>Test</div>", GetParam()));
   UpdateAllLifecyclePhasesForTest();
@@ -328,11 +419,15 @@ TEST_P(StyleResolverFontRelativeUnitTest,
   EXPECT_EQ("50px", ComputedValue("height", *StyleForId("div")));
 
   div->SetNeedsAnimationStyleRecalc();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   auto computed_style = StyleForId("div");
 
   EXPECT_TRUE(computed_style->HasFontRelativeUnits());
   ASSERT_TRUE(div->GetElementAnimations());
   EXPECT_TRUE(div->GetElementAnimations()->BaseComputedStyle());
+
+  StyleResolverState state(GetDocument(), *div);
+  EXPECT_TRUE(StyleResolver::CanReuseBaseComputedStyle(state));
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -474,8 +569,9 @@ TEST_F(StyleResolverTest, NoFetchForAtPage) {
     </style>
   )HTML");
 
+  GetDocument().GetStyleEngine().UpdateActiveStyle();
   scoped_refptr<const ComputedStyle> page_style =
-      GetDocument().EnsureStyleResolver().StyleForPage(0, "");
+      GetDocument().GetStyleResolver().StyleForPage(0, "");
   ASSERT_TRUE(page_style);
   const CSSValue* computed_value = ComputedStyleUtils::ComputedPropertyValue(
       GetCSSPropertyBackgroundImage(), *page_style);
@@ -585,6 +681,272 @@ TEST_F(StyleResolverTest, ApplyInheritedOnlyCustomPropertyChange) {
 
   EXPECT_EQ("10px", ComputedValue("width", *StyleForId("child1")));
   EXPECT_EQ("20px", ComputedValue("width", *StyleForId("child2")));
+}
+
+TEST_F(StyleResolverTest, CssRulesForElementIncludedRules) {
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* body = GetDocument().body();
+  ASSERT_TRUE(body);
+
+  // Don't crash when only getting one type of rule.
+  auto& resolver = GetDocument().GetStyleResolver();
+  resolver.CssRulesForElement(body, StyleResolver::kUACSSRules);
+  resolver.CssRulesForElement(body, StyleResolver::kUserCSSRules);
+  resolver.CssRulesForElement(body, StyleResolver::kAuthorCSSRules);
+}
+
+TEST_F(StyleResolverTest, NestedPseudoElement) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div::before { content: "Hello"; display: list-item; }
+      div::before::marker { color: green; }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  // Don't crash when calculating style for nested pseudo elements.
+}
+
+TEST_F(StyleResolverTest, CascadedValuesForElement) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #div {
+        top: 1em;
+      }
+      div {
+        top: 10em;
+        right: 20em;
+        bottom: 30em;
+        left: 40em;
+
+        width: 50em;
+        width: 51em;
+        height: 60em !important;
+        height: 61em;
+      }
+    </style>
+    <div id=div style="bottom:300em;"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  auto& resolver = GetDocument().GetStyleResolver();
+  Element* div = GetDocument().getElementById("div");
+  ASSERT_TRUE(div);
+
+  auto map = resolver.CascadedValuesForElement(div, kPseudoIdNone);
+
+  CSSPropertyName top(CSSPropertyID::kTop);
+  CSSPropertyName right(CSSPropertyID::kRight);
+  CSSPropertyName bottom(CSSPropertyID::kBottom);
+  CSSPropertyName left(CSSPropertyID::kLeft);
+  CSSPropertyName width(CSSPropertyID::kWidth);
+  CSSPropertyName height(CSSPropertyID::kHeight);
+
+  ASSERT_TRUE(map.at(top));
+  ASSERT_TRUE(map.at(right));
+  ASSERT_TRUE(map.at(bottom));
+  ASSERT_TRUE(map.at(left));
+  ASSERT_TRUE(map.at(width));
+  ASSERT_TRUE(map.at(height));
+
+  EXPECT_EQ("1em", map.at(top)->CssText());
+  EXPECT_EQ("20em", map.at(right)->CssText());
+  EXPECT_EQ("300em", map.at(bottom)->CssText());
+  EXPECT_EQ("40em", map.at(left)->CssText());
+  EXPECT_EQ("51em", map.at(width)->CssText());
+  EXPECT_EQ("60em", map.at(height)->CssText());
+}
+
+TEST_F(StyleResolverTest, CascadedValuesForPseudoElement) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #div::before {
+        top: 1em;
+      }
+      div::before {
+        top: 10em;
+      }
+    </style>
+    <div id=div></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  auto& resolver = GetDocument().GetStyleResolver();
+  Element* div = GetDocument().getElementById("div");
+  ASSERT_TRUE(div);
+
+  auto map = resolver.CascadedValuesForElement(div, kPseudoIdBefore);
+
+  CSSPropertyName top(CSSPropertyID::kTop);
+  ASSERT_TRUE(map.at(top));
+  EXPECT_EQ("1em", map.at(top)->CssText());
+}
+
+TEST_F(StyleResolverTest, EnsureComputedStyleSlotFallback) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <div id="host"><span></span></div>
+  )HTML");
+
+  ShadowRoot& shadow_root =
+      GetDocument().getElementById("host")->AttachShadowRootInternal(
+          ShadowRootType::kOpen);
+  shadow_root.setInnerHTML(R"HTML(
+    <style>
+      slot { color: red }
+    </style>
+    <slot><span id="fallback"></span></slot>
+  )HTML");
+  Element* fallback = shadow_root.getElementById("fallback");
+  ASSERT_TRUE(fallback);
+
+  UpdateAllLifecyclePhasesForTest();
+
+  // Elements outside the flat tree does not get styles computed during the
+  // lifecycle update.
+  EXPECT_FALSE(fallback->GetComputedStyle());
+
+  // We are currently allowed to query the computed style of elements outside
+  // the flat tree, but slot fallback does not inherit from the slot.
+  const ComputedStyle* fallback_style = fallback->EnsureComputedStyle();
+  ASSERT_TRUE(fallback_style);
+  EXPECT_EQ(Color::kBlack,
+            fallback_style->VisitedDependentColor(GetCSSPropertyColor()));
+}
+
+TEST_F(StyleResolverTest, ComputeValueStandardProperty) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #target { --color: green }
+    </style>
+    <div id="target"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* target = GetDocument().getElementById("target");
+  ASSERT_TRUE(target);
+
+  // Unable to parse a variable reference with css_test_helpers::ParseLonghand.
+  CSSPropertyID property_id = CSSPropertyID::kColor;
+  auto* set =
+      MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLStandardMode);
+  MutableCSSPropertyValueSet::SetResult result = set->SetProperty(
+      property_id, "var(--color)", false, SecureContextMode::kInsecureContext,
+      /*style_sheet_contents=*/nullptr);
+  ASSERT_TRUE(result.did_parse);
+  const CSSValue* parsed_value = set->GetPropertyCSSValue(property_id);
+  ASSERT_TRUE(parsed_value);
+  const CSSValue* computed_value = StyleResolver::ComputeValue(
+      target, CSSPropertyName(property_id), *parsed_value);
+  ASSERT_TRUE(computed_value);
+  EXPECT_EQ("rgb(0, 128, 0)", computed_value->CssText());
+}
+
+TEST_F(StyleResolverTest, ComputeValueCustomProperty) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #target { --color: green }
+    </style>
+    <div id="target"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* target = GetDocument().getElementById("target");
+  ASSERT_TRUE(target);
+
+  AtomicString custom_property_name = "--color";
+  const CSSValue* parsed_value = css_test_helpers::ParseLonghand(
+      GetDocument(), CustomProperty(custom_property_name, GetDocument()),
+      "blue");
+  ASSERT_TRUE(parsed_value);
+  const CSSValue* computed_value = StyleResolver::ComputeValue(
+      target, CSSPropertyName(custom_property_name), *parsed_value);
+  ASSERT_TRUE(computed_value);
+  EXPECT_EQ("blue", computed_value->CssText());
+}
+
+TEST_F(StyleResolverTest, TreeScopedReferences) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #host { animation-name: anim }
+    </style>
+    <div id="host">
+      <span id="slotted"></span>
+    </host>
+  )HTML");
+
+  Element* host = GetDocument().getElementById("host");
+  ASSERT_TRUE(host);
+  ShadowRoot& root = host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  root.setInnerHTML(R"HTML(
+    <style>
+      ::slotted(span) { animation-name: anim-slotted }
+      :host { font-family: myfont }
+    </style>
+    <div id="inner-host">
+      <slot></slot>
+    </div>
+  )HTML");
+
+  Element* inner_host = root.getElementById("inner-host");
+  ASSERT_TRUE(inner_host);
+  ShadowRoot& inner_root =
+      inner_host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  inner_root.setInnerHTML(R"HTML(
+    <style>
+      ::slotted(span) { animation-name: anim-inner-slotted }
+    </style>
+    <slot></slot>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  {
+    StyleResolverState state(GetDocument(), *host);
+    SelectorFilter filter;
+    MatchResult match_result;
+    ElementRuleCollector collector(state.ElementContext(), filter, match_result,
+                                   state.Style(), EInsideLink::kNotInsideLink);
+    GetDocument().GetStyleEngine().GetStyleResolver().MatchAllRules(
+        state, collector, false /* include_smil_properties */);
+    const auto& properties = match_result.GetMatchedProperties();
+    ASSERT_EQ(properties.size(), 3u);
+
+    // div { display: block }
+    EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kUserAgent);
+
+    // :host { font-family: myfont }
+    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[1].types_.tree_order),
+              root.GetTreeScope());
+    EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kAuthor);
+
+    // #host { animation-name: anim }
+    EXPECT_EQ(properties[2].types_.origin, CascadeOrigin::kAuthor);
+    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[2].types_.tree_order),
+              host->GetTreeScope());
+  }
+
+  {
+    auto* span = GetDocument().getElementById("slotted");
+    StyleResolverState state(GetDocument(), *span);
+    SelectorFilter filter;
+    MatchResult match_result;
+    ElementRuleCollector collector(state.ElementContext(), filter, match_result,
+                                   state.Style(), EInsideLink::kNotInsideLink);
+    GetDocument().GetStyleEngine().GetStyleResolver().MatchAllRules(
+        state, collector, false /* include_smil_properties */);
+    const auto& properties = match_result.GetMatchedProperties();
+    ASSERT_EQ(properties.size(), 2u);
+
+    // ::slotted(span) { animation-name: anim-inner-slotted }
+    EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kAuthor);
+    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[0].types_.tree_order),
+              inner_root.GetTreeScope());
+
+    // ::slotted(span) { animation-name: anim-slotted }
+    EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kAuthor);
+    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[1].types_.tree_order),
+              root.GetTreeScope());
+  }
 }
 
 }  // namespace blink

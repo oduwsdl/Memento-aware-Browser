@@ -62,6 +62,7 @@ source_set("fpdfsdk") {
     "fpdf_progressive.cpp",
     "fpdf_save.cpp",
     "fpdf_searchex.cpp",
+    "fpdf_signature.cpp",
     "fpdf_structtree.cpp",
     "fpdf_sysfontinfo.cpp",
     "fpdf_text.cpp",
@@ -97,7 +98,6 @@ source_set("fpdfsdk") {
 
   if (pdf_enable_xfa) {
     deps += [
-      "../fxbarcode",
       "../xfa/fxfa",
       "../xfa/fxfa/parser",
       "fpdfxfa",
@@ -145,6 +145,7 @@ pdfium_embeddertest_source_set("embeddertests") {
     "fpdf_ppo_embeddertest.cpp",
     "fpdf_save_embeddertest.cpp",
     "fpdf_searchex_embeddertest.cpp",
+    "fpdf_signature_embeddertest.cpp",
     "fpdf_structtree_embeddertest.cpp",
     "fpdf_sysfontinfo_embeddertest.cpp",
     "fpdf_text_embeddertest.cpp",

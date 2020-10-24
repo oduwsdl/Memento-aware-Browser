@@ -21,10 +21,6 @@ import {
 import {Config, Data, SLICE_TRACK_KIND} from './common';
 
 
-// Allow to override via devtools for testing (note, needs to be done in the
-// controller-thread).
-(self as {} as {quantPx: number}).quantPx = 1;
-
 class ChromeSliceTrackController extends TrackController<Config, Data> {
   static readonly kind = SLICE_TRACK_KIND;
   private maxDurNs = 0;
@@ -34,11 +30,11 @@ class ChromeSliceTrackController extends TrackController<Config, Data> {
     const startNs = toNs(start);
     const endNs = toNs(end);
 
-    const pxSize = (self as {} as {quantPx: number}).quantPx;
+    const pxSize = this.pxSize();
 
     // ns per quantization bucket (i.e. ns per pixel). /2 * 2 is to force it to
     // be an even number, so we can snap in the middle.
-    const bucketNs = Math.round(resolution * 1e9 * pxSize / 2) * 2;
+    const bucketNs = Math.max(Math.round(resolution * 1e9 * pxSize / 2) * 2, 1);
     const tableName = this.namespaceTable('slice');
 
     if (this.maxDurNs === 0) {
@@ -46,7 +42,7 @@ class ChromeSliceTrackController extends TrackController<Config, Data> {
           this.config.trackId}`;
       const rawResult = await this.query(query);
       if (rawResult.numRecords === 1) {
-        this.maxDurNs = +rawResult.columns![0].longValues![0];
+        this.maxDurNs = rawResult.columns[0].longValues![0];
       }
     }
 
@@ -57,7 +53,9 @@ class ChromeSliceTrackController extends TrackController<Config, Data> {
         max(dur),
         depth,
         id as slice_id,
-        name
+        name,
+        dur = 0 as is_instant,
+        dur = -1 as is_incomplete
       FROM ${tableName}
       WHERE track_id = ${this.config.trackId} AND
         ts >= (${startNs - this.maxDurNs}) AND
@@ -77,6 +75,8 @@ class ChromeSliceTrackController extends TrackController<Config, Data> {
       ends: new Float64Array(numRows),
       depths: new Uint16Array(numRows),
       titles: new Uint16Array(numRows),
+      isInstant: new Uint16Array(numRows),
+      isIncomplete: new Uint16Array(numRows),
     };
 
     const stringIndexes = new Map<string, number>();
@@ -95,12 +95,18 @@ class ChromeSliceTrackController extends TrackController<Config, Data> {
       const startNs = +cols[1].longValues![row];
       const durNs = +cols[2].longValues![row];
       const endNs = startNs + durNs;
+      const isInstant = +cols[6].longValues![row];
+      const isIncomplete = +cols[7].longValues![row];
 
       let endNsQ = Math.floor((endNs + bucketNs / 2 - 1) / bucketNs) * bucketNs;
       endNsQ = Math.max(endNsQ, startNsQ + bucketNs);
 
-      if (startNsQ === endNsQ) {
-        throw new Error('Should never happen');
+      if (!isInstant && startNsQ === endNsQ) {
+        throw new Error(
+            'Expected startNsQ and endNsQ to differ (' +
+            `startNsQ: ${startNsQ}, startNs: ${startNs},` +
+            ` endNsQ: ${endNsQ}, durNs: ${durNs},` +
+            ` endNs: ${endNs}, bucketNs: ${bucketNs})`);
       }
 
       slices.starts[row] = fromNs(startNsQ);
@@ -108,6 +114,8 @@ class ChromeSliceTrackController extends TrackController<Config, Data> {
       slices.depths[row] = +cols[3].longValues![row];
       slices.sliceIds[row] = +cols[4].longValues![row];
       slices.titles[row] = internString(cols[5].stringValues![row]);
+      slices.isInstant[row] = isInstant;
+      slices.isIncomplete[row] = isIncomplete;
     }
     return slices;
   }

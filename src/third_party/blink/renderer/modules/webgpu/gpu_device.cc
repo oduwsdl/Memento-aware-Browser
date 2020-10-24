@@ -8,6 +8,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_device_descriptor.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_extension_name.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_uncaptured_error_event_init.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -21,6 +22,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_compute_pipeline.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device_lost_info.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_pipeline_layout.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_query_set.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_queue.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_bundle_encoder.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_pipeline.h"
@@ -31,6 +33,20 @@
 #include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
+
+namespace {
+
+#ifdef USE_BLINK_V8_BINDING_NEW_IDL_DICTIONARY
+Vector<String> ToStringVector(
+    const Vector<V8GPUExtensionName>& gpu_extension_names) {
+  Vector<String> result;
+  for (auto& name : gpu_extension_names)
+    result.push_back(IDLEnumAsString(name));
+  return result;
+}
+#endif
+
+}  // anonymous namespace
 
 // TODO(enga): Handle adapter options and device descriptor
 GPUDevice::GPUDevice(ExecutionContext* execution_context,
@@ -43,16 +59,32 @@ GPUDevice::GPUDevice(ExecutionContext* execution_context,
                  client_id,
                  dawn_control_client->GetInterface()->GetDevice(client_id)),
       adapter_(adapter),
+#ifdef USE_BLINK_V8_BINDING_NEW_IDL_DICTIONARY
+      extension_name_list_(ToStringVector(descriptor->extensions())),
+#else
+      extension_name_list_(descriptor->extensions()),
+#endif
       queue_(MakeGarbageCollected<GPUQueue>(
           this,
           GetProcs().deviceGetDefaultQueue(GetHandle()))),
       lost_property_(MakeGarbageCollected<LostProperty>(execution_context)),
       error_callback_(BindRepeatingDawnCallback(&GPUDevice::OnUncapturedError,
-                                                WrapWeakPersistent(this))) {
+                                                WrapWeakPersistent(this))),
+      lost_callback_(BindDawnCallback(&GPUDevice::OnDeviceLostError,
+                                      WrapWeakPersistent(this))) {
   DCHECK(dawn_control_client->GetInterface()->GetDevice(client_id));
   GetProcs().deviceSetUncapturedErrorCallback(
       GetHandle(), error_callback_->UnboundRepeatingCallback(),
       error_callback_->AsUserdata());
+  GetProcs().deviceSetDeviceLostCallback(GetHandle(),
+                                         lost_callback_->UnboundCallback(),
+                                         lost_callback_->AsUserdata());
+
+  if (extension_name_list_.Contains("textureCompressionBC")) {
+    AddConsoleWarning(
+        "The extension name 'textureCompressionBC' is deprecated: use "
+        "'texture-compression-bc' instead");
+  }
 }
 
 GPUDevice::~GPUDevice() {
@@ -86,15 +118,9 @@ void GPUDevice::AddConsoleWarning(const char* message) {
 void GPUDevice::OnUncapturedError(WGPUErrorType errorType,
                                   const char* message) {
   DCHECK_NE(errorType, WGPUErrorType_NoError);
+  DCHECK_NE(errorType, WGPUErrorType_DeviceLost);
   LOG(ERROR) << "GPUDevice: " << message;
   AddConsoleWarning(message);
-
-  // TODO: Use device lost callback instead of uncaptured error callback.
-  if (errorType == WGPUErrorType_DeviceLost &&
-      lost_property_->GetState() == LostProperty::kPending) {
-    auto* device_lost_info = MakeGarbageCollected<GPUDeviceLostInfo>(message);
-    lost_property_->Resolve(device_lost_info);
-  }
 
   GPUUncapturedErrorEventInit* init = GPUUncapturedErrorEventInit::Create();
   if (errorType == WGPUErrorType_Validation) {
@@ -113,8 +139,21 @@ void GPUDevice::OnUncapturedError(WGPUErrorType errorType,
       event_type_names::kUncapturederror, init));
 }
 
+void GPUDevice::OnDeviceLostError(const char* message) {
+  AddConsoleWarning(message);
+
+  if (lost_property_->GetState() == LostProperty::kPending) {
+    auto* device_lost_info = MakeGarbageCollected<GPUDeviceLostInfo>(message);
+    lost_property_->Resolve(device_lost_info);
+  }
+}
+
 GPUAdapter* GPUDevice::adapter() const {
   return adapter_;
+}
+
+Vector<String> GPUDevice::extensions() const {
+  return extension_name_list_;
 }
 
 ScriptPromise GPUDevice::lost(ScriptState* script_state) {
@@ -127,18 +166,6 @@ GPUQueue* GPUDevice::defaultQueue() {
 
 GPUBuffer* GPUDevice::createBuffer(const GPUBufferDescriptor* descriptor) {
   return GPUBuffer::Create(this, descriptor);
-}
-
-HeapVector<GPUBufferOrArrayBuffer> GPUDevice::createBufferMapped(
-    const GPUBufferDescriptor* descriptor,
-    ExceptionState& exception_state) {
-  GPUBuffer* gpu_buffer;
-  DOMArrayBuffer* array_buffer;
-  std::tie(gpu_buffer, array_buffer) =
-      GPUBuffer::CreateMapped(this, descriptor, exception_state);
-  return HeapVector<GPUBufferOrArrayBuffer>(
-      {GPUBufferOrArrayBuffer::FromGPUBuffer(gpu_buffer),
-       GPUBufferOrArrayBuffer::FromArrayBuffer(array_buffer)});
 }
 
 GPUTexture* GPUDevice::createTexture(const GPUTextureDescriptor* descriptor,
@@ -194,6 +221,11 @@ GPURenderBundleEncoder* GPUDevice::createRenderBundleEncoder(
   return GPURenderBundleEncoder::Create(this, descriptor);
 }
 
+GPUQuerySet* GPUDevice::createQuerySet(
+    const GPUQuerySetDescriptor* descriptor) {
+  return GPUQuerySet::Create(this, descriptor);
+}
+
 void GPUDevice::pushErrorScope(const WTF::String& filter) {
   GetProcs().devicePushErrorScope(GetHandle(),
                                   AsDawnEnum<WGPUErrorFilter>(filter));
@@ -216,11 +248,9 @@ ScriptPromise GPUDevice::popErrorScope(ScriptState* script_state) {
     return promise;
   }
 
-  // WebGPU guarantees callbacks complete in finite time. Flush now so that
-  // commands reach the GPU process. TODO(enga): This should happen at the end
-  // of the task.
-  GetInterface()->FlushCommands();
-
+  // WebGPU guarantees that promises are resolved in finite time so we
+  // need to ensure commands are flushed.
+  EnsureFlush();
   return promise;
 }
 

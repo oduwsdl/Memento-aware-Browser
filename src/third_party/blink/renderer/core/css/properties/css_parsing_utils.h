@@ -45,6 +45,7 @@ namespace css_parsing_utils {
 
 enum class AllowInsetAndSpread { kAllow, kForbid };
 enum class AllowTextValue { kAllow, kForbid };
+enum class AllowPathValue { kAllow, kForbid };
 enum class DefaultFill { kFill, kNoFill };
 enum class ParsingStyle { kLegacy, kNotLegacy };
 enum class TrackListType { kGridTemplate, kGridTemplateNoRepeat, kGridAuto };
@@ -56,7 +57,7 @@ using ConsumeAnimationItemValue = CSSValue* (*)(CSSPropertyID,
                                                 bool use_legacy_parsing);
 using IsPositionKeyword = bool (*)(CSSValueID);
 
-constexpr size_t kMaxNumAnimationLonghands = 8;
+constexpr size_t kMaxNumAnimationLonghands = 9;
 
 void Complete4Sides(CSSValue* side[4]);
 
@@ -129,14 +130,12 @@ StringView ConsumeUrlAsStringView(CSSParserTokenRange&,
                                   const CSSParserContext&);
 cssvalue::CSSURIValue* ConsumeUrl(CSSParserTokenRange&,
                                   const CSSParserContext&);
+CSSValue* ConsumeSelectorFunction(CSSParserTokenRange&);
 CORE_EXPORT CSSValue* ConsumeIdSelector(CSSParserTokenRange&);
 
 CSSValue* ConsumeColor(CSSParserTokenRange&,
                        const CSSParserContext&,
                        bool accept_quirky_colors = false);
-
-CSSValue* ConsumeInternalForcedBackgroundColor(CSSParserTokenRange&,
-                                               const CSSParserContext&);
 
 CSSValue* ConsumeLineWidth(CSSParserTokenRange&,
                            const CSSParserContext&,
@@ -246,6 +245,7 @@ bool IsCustomIdent(CSSValueID);
 bool IsTimelineName(const CSSParserToken&);
 
 CSSValue* ConsumeScrollOffset(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeElementOffset(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeSelfPositionOverflowPosition(CSSParserTokenRange&,
                                               IsPositionKeyword);
 CSSValue* ConsumeSimplifiedDefaultPosition(CSSParserTokenRange&,
@@ -355,6 +355,9 @@ CSSValue* ConsumeFontSize(CSSParserTokenRange&,
 
 CSSValue* ConsumeLineHeight(CSSParserTokenRange&, const CSSParserContext&);
 
+CSSValue* ConsumeMathDepth(CSSParserTokenRange& range,
+                           const CSSParserContext& context);
+
 CSSValueList* ConsumeFontFamily(CSSParserTokenRange&);
 CSSValue* ConsumeGenericFamily(CSSParserTokenRange&);
 CSSValue* ConsumeFamilyName(CSSParserTokenRange&);
@@ -414,7 +417,9 @@ CSSValue* ConsumeOffsetPath(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumePathOrNone(CSSParserTokenRange&);
 CSSValue* ConsumeOffsetRotate(CSSParserTokenRange&, const CSSParserContext&);
 
-CSSValue* ConsumeBasicShape(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeBasicShape(CSSParserTokenRange&,
+                            const CSSParserContext&,
+                            AllowPathValue);
 bool ConsumeRadii(CSSValue* horizontal_radii[4],
                   CSSValue* vertical_radii[4],
                   CSSParserTokenRange&,

@@ -24,7 +24,6 @@
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/media_query_matcher.h"
@@ -46,6 +45,7 @@
 #include "third_party/blink/renderer/core/html/html_image_fallback_helper.h"
 #include "third_party/blink/renderer/core/html/html_picture_element.h"
 #include "third_party/blink/renderer/core/html/html_source_element.h"
+#include "third_party/blink/renderer/core/html/loading_attribute.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html/parser/html_srcset_parser.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -286,11 +286,17 @@ void HTMLImageElement::ParseAttribute(
   } else if (name == html_names::kDecodingAttr) {
     UseCounter::Count(GetDocument(), WebFeature::kImageDecodingAttribute);
     decoding_mode_ = ParseImageDecodingMode(params.new_value);
-  } else if (name == html_names::kLoadingAttr &&
-             EqualIgnoringASCIICase(params.new_value, "eager")) {
-    GetImageLoader().LoadDeferredImage(referrer_policy_);
+  } else if (name == html_names::kLoadingAttr) {
+    LoadingAttributeValue loading = GetLoadingAttributeValue(params.new_value);
+    if (loading == LoadingAttributeValue::kEager ||
+        (loading == LoadingAttributeValue::kAuto && GetDocument().GetFrame() &&
+         GetDocument().GetFrame()->GetLazyLoadImageSetting() !=
+             LocalFrame::LazyLoadImageSetting::kEnabledAutomatic)) {
+      GetImageLoader().LoadDeferredImage(referrer_policy_);
+    }
   } else if (name == html_names::kImportanceAttr &&
-             RuntimeEnabledFeatures::PriorityHintsEnabled(&GetDocument())) {
+             RuntimeEnabledFeatures::PriorityHintsEnabled(
+                 GetExecutionContext())) {
     // We only need to keep track of usage here, as the communication of the
     // |importance| attribute to the loading pipeline takes place in
     // ImageLoader.
@@ -329,7 +335,7 @@ String HTMLImageElement::AltText() const {
   return FastGetAttribute(html_names::kTitleAttr);
 }
 
-static bool SupportedImageType(const String& type) {
+bool HTMLImageElement::SupportedImageType(const String& type) {
   String trimmed_type = ContentType(type).GetType();
   // An empty type attribute is implicitly supported.
   if (trimmed_type.IsEmpty())
@@ -354,14 +360,14 @@ ImageCandidate HTMLImageElement::FindBestFitImageFromPictureParent() {
       continue;
 
     if (!source->FastGetAttribute(html_names::kSrcAttr).IsNull()) {
-      Deprecation::CountDeprecation(GetDocument(),
+      Deprecation::CountDeprecation(GetExecutionContext(),
                                     WebFeature::kPictureSourceSrc);
     }
     String srcset = source->FastGetAttribute(html_names::kSrcsetAttr);
     if (srcset.IsEmpty())
       continue;
     String type = source->FastGetAttribute(html_names::kTypeAttr);
-    if (!type.IsEmpty() && !SupportedImageType(type))
+    if (!SupportedImageType(type))
       continue;
 
     if (!source->MediaQueryMatches())
@@ -481,9 +487,7 @@ unsigned HTMLImageElement::width() {
 
     // if the image is available, use its width
     if (ImageResourceContent* image_content = GetImageLoader().GetContent()) {
-      return image_content
-          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
-          .Width();
+      return image_content->IntrinsicSize(kRespectImageOrientation).Width();
     }
   }
 
@@ -505,9 +509,7 @@ unsigned HTMLImageElement::height() {
 
     // if the image is available, use its height
     if (ImageResourceContent* image_content = GetImageLoader().GetContent()) {
-      return image_content
-          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
-          .Height();
+      return image_content->IntrinsicSize(kRespectImageOrientation).Height();
     }
   }
 
@@ -547,15 +549,17 @@ unsigned HTMLImageElement::naturalHeight() const {
 
 unsigned HTMLImageElement::LayoutBoxWidth() const {
   LayoutBox* box = GetLayoutBox();
-  return box ? AdjustForAbsoluteZoom::AdjustInt(
-                   box->PhysicalContentBoxRect().PixelSnappedWidth(), box)
+  return box ? AdjustForAbsoluteZoom::AdjustLayoutUnit(box->ContentWidth(),
+                                                       *box)
+                   .Round()
              : 0;
 }
 
 unsigned HTMLImageElement::LayoutBoxHeight() const {
   LayoutBox* box = GetLayoutBox();
-  return box ? AdjustForAbsoluteZoom::AdjustInt(
-                   box->PhysicalContentBoxRect().PixelSnappedHeight(), box)
+  return box ? AdjustForAbsoluteZoom::AdjustLayoutUnit(box->ContentHeight(),
+                                                       *box)
+                   .Round()
              : 0;
 }
 

@@ -5,17 +5,24 @@
 import {assert} from 'chai';
 import * as puppeteer from 'puppeteer';
 
-import {$, $$, click, getBrowserAndPages, goToResource, step, typeText, waitFor} from '../../shared/helper.js';
+import {$$, click, getBrowserAndPages, getHostedModeServerPort, goToResource, pressKey, step, timeout, typeText, waitFor, waitForFunction} from '../../shared/helper.js';
+import {AsyncScope} from '../../shared/mocha-extensions.js';
 
+export const ACTIVE_LINE = '.CodeMirror-activeline > pre > span';
 export const PAUSE_ON_EXCEPTION_BUTTON = '[aria-label="Pause on exceptions"]';
 export const PAUSE_BUTTON = '[aria-label="Pause script execution"]';
 export const RESUME_BUTTON = '[aria-label="Resume script execution"]';
 export const SOURCES_LINES_SELECTOR = '.CodeMirror-code > div';
 export const PAUSE_INDICATOR_SELECTOR = '.paused-status';
+export const CODE_LINE_SELECTOR = '.CodeMirror-code .CodeMirror-linenumber';
+export const SCOPE_LOCAL_VALUES_SELECTOR = 'li[aria-label="Local"] + ol';
+export const SELECTED_THREAD_SELECTOR = 'div.thread-item.selected > div.thread-item-title';
+export const TURNED_OFF_PAUSE_BUTTON_SELECTOR = 'button.toolbar-state-off';
+export const TURNED_ON_PAUSE_BUTTON_SELECTOR = 'button.toolbar-state-on';
 
 export async function doubleClickSourceTreeItem(selector: string) {
-  await waitFor(selector);
-  await click(selector, {clickOptions: {clickCount: 2}});
+  const item = await waitFor(selector);
+  await click(item, {clickOptions: {clickCount: 2}, maxPixelsFromLeft: 40});
 }
 
 export async function openSourcesPanel() {
@@ -33,7 +40,11 @@ export async function openFileInSourcesPanel(testInput: string) {
 }
 
 export async function openSnippetsSubPane() {
-  await click('[aria-label="More tabs"]', {root: await $('.navigator-tabbed-pane')});
+  const root = await waitFor('.navigator-tabbed-pane');
+
+  await waitFor('[aria-label="More tabs"]', root);
+  await click('[aria-label="More tabs"]', {root});
+
   await waitFor('[aria-label="Snippets"]');
 
   await click('[aria-label="Snippets"]');
@@ -44,7 +55,7 @@ export async function createNewSnippet(snippetName: string) {
   const {frontend} = await getBrowserAndPages();
 
   await click('[aria-label="New snippet"]');
-  await waitFor('[aria-label^="Script%20snippet"]');
+  await waitFor('[aria-label^="Script snippet"]');
 
   await typeText(snippetName);
 
@@ -66,27 +77,34 @@ export async function openSourceCodeEditorForFile(sourceFile: string, testInput:
 
 export async function getOpenSources() {
   const sourceTabPane = await waitFor('#sources-panel-sources-view .tabbed-pane');
-  const sourceTabs = (await $('.tabbed-pane-header-tabs', sourceTabPane)).asElement()!;
+  const sourceTabs = await waitFor('.tabbed-pane-header-tabs', sourceTabPane);
   const openSources =
       await sourceTabs.$$eval('.tabbed-pane-header-tab', nodes => nodes.map(n => n.getAttribute('aria-label')));
   return openSources;
 }
 
+export async function waitForhighlightedLineWhichIncludesText(expectedTextContent: string) {
+  const selectedLine = await waitFor(ACTIVE_LINE);
+  const text = await selectedLine.evaluate(node => node.textContent);
+  assert.deepInclude(text, expectedTextContent);
+}
+
 // We can't use the click helper, as it is not possible to select a particular
 // line number element in CodeMirror.
 export async function addBreakpointForLine(frontend: puppeteer.Page, index: number, expectedFail: boolean = false) {
-  await frontend.waitForFunction(index => {
-    return document.querySelectorAll('.CodeMirror-linenumber').length >= index;
-  }, undefined, index);
-  const breakpointLineNumber = await frontend.evaluate(index => {
-    const element = document.querySelectorAll('.CodeMirror-linenumber')[index];
+  const asyncScope = new AsyncScope();
+  await asyncScope.exec(() => frontend.waitForFunction((index, CODE_LINE_SELECTOR) => {
+    return document.querySelectorAll(CODE_LINE_SELECTOR).length >= (index - 1);
+  }, {timeout: 0}, index, CODE_LINE_SELECTOR));
+  const breakpointLineNumber = await frontend.evaluate((index, CODE_LINE_SELECTOR) => {
+    const element = document.querySelectorAll(CODE_LINE_SELECTOR)[index - 1];
 
     const {left, top, width, height} = element.getBoundingClientRect();
     return {
       x: left + width * 0.5,
       y: top + height * 0.5,
     };
-  }, index);
+  }, index, CODE_LINE_SELECTOR);
 
   const currentBreakpointCount = await frontend.$$eval('.cm-breakpoint', nodes => nodes.length);
 
@@ -96,21 +114,29 @@ export async function addBreakpointForLine(frontend: puppeteer.Page, index: numb
     return;
   }
 
-  await frontend.waitForFunction(bpCount => {
+  await asyncScope.exec(() => frontend.waitForFunction(bpCount => {
     return document.querySelectorAll('.cm-breakpoint').length > bpCount &&
         document.querySelectorAll('.cm-breakpoint-unbound').length === 0;
-  }, undefined, currentBreakpointCount);
+  }, {timeout: 0}, currentBreakpointCount));
 }
 
-export async function sourceLineNumberSelector(lineNumber: number) {
+export function sourceLineNumberSelector(lineNumber: number) {
   return `div.CodeMirror-code > div:nth-child(${lineNumber}) div.CodeMirror-linenumber.CodeMirror-gutter-elt`;
+}
+
+export function waitForSourceCodeLines(noOfLines: number) {
+  return waitForFunction(async () => {
+    const elements = await $$(SOURCES_LINES_SELECTOR);
+    return elements.length >= noOfLines ? elements : undefined;
+  });
 }
 
 export async function checkBreakpointIsActive(lineNumber: number) {
   await step(`check that the breakpoint is still active at line ${lineNumber}`, async () => {
-    const codeLineNums = await (await $$(SOURCES_LINES_SELECTOR)).evaluate(elements => {
-      return elements.map((el: HTMLElement) => el.className);
-    });
+    const sourcesLines = await waitForSourceCodeLines(lineNumber);
+    const codeLineNums = await Promise.all(sourcesLines.map(elements => {
+      return elements.evaluate(el => el.className);
+    }));
     assert.deepInclude(codeLineNums[lineNumber - 1], 'cm-breakpoint');
     assert.notDeepInclude(codeLineNums[lineNumber - 1], 'cm-breakpoint-disabled');
     assert.notDeepInclude(codeLineNums[lineNumber - 1], 'cm-breakpoint-unbound');
@@ -119,9 +145,10 @@ export async function checkBreakpointIsActive(lineNumber: number) {
 
 export async function checkBreakpointIsNotActive(lineNumber: number) {
   await step(`check that the breakpoint is not active at line ${lineNumber}`, async () => {
-    const codeLineNums = await (await $$(SOURCES_LINES_SELECTOR)).evaluate(elements => {
-      return elements.map((el: HTMLElement) => el.className);
-    });
+    const sourcesLines = await waitForSourceCodeLines(lineNumber);
+    const codeLineNums = await Promise.all(sourcesLines.map(elements => {
+      return elements.evaluate(el => el.className);
+    }));
     assert.notDeepInclude(codeLineNums[lineNumber - 1], 'cm-breakpoint');
   });
 }
@@ -129,27 +156,61 @@ export async function checkBreakpointIsNotActive(lineNumber: number) {
 export async function checkBreakpointDidNotActivate() {
   await step('check that the script did not pause', async () => {
     // TODO(almuthanna): make sure this check happens at a point where the pause indicator appears if it was active
-    const breakpointIndicator = await (await $$(PAUSE_INDICATOR_SELECTOR)).evaluate(elements => {
-      return elements.map((el: HTMLElement) => el.className);
-    });
+    const pauseIndicators = await $$(PAUSE_INDICATOR_SELECTOR);
+    const breakpointIndicator = await Promise.all(pauseIndicators.map(elements => {
+      return elements.evaluate(el => el.className);
+    }));
     assert.deepEqual(breakpointIndicator.length, 0, 'script had been paused');
   });
 }
 
 export async function getBreakpointDecorators(frontend: puppeteer.Page, disabledOnly = false) {
   const selector = `.cm-breakpoint${disabledOnly ? '-disabled' : ''} .CodeMirror-linenumber`;
-  return await frontend.$$eval(selector, nodes => nodes.map(n => parseInt(n.textContent!, 0)));
+  return await frontend.$$eval(selector, nodes => nodes.map(n => parseInt(n.textContent as string, 0)));
 }
 
 export async function getNonBreakableLines(frontend: puppeteer.Page) {
   const selector = '.cm-non-breakable-line .CodeMirror-linenumber';
-  await waitFor(selector, undefined, 1000);
-  return await frontend.$$eval(selector, nodes => nodes.map(n => parseInt(n.textContent!, 0)));
+  await waitFor(selector);
+  return await frontend.$$eval(selector, nodes => nodes.map(n => parseInt(n.textContent as string, 0)));
 }
 
 export async function getExecutionLine() {
-  const activeLine = await waitFor('.cm-execution-line-outline', undefined, 1000);
-  return await activeLine.asElement()!.evaluate(n => parseInt(n.textContent!, 10));
+  const activeLine = await waitFor('.cm-execution-line-outline');
+  return await activeLine.evaluate(n => parseInt(n.textContent as string, 10));
+}
+
+export async function getExecutionLineText() {
+  const activeLine = await waitFor('.cm-execution-line pre');
+  return await activeLine.evaluate(n => n.textContent as string);
+}
+
+export async function getCallFrameNames() {
+  await waitFor('.call-frame-item-title');
+  const items = await $$('.call-frame-item-title');
+  const promises = items.map(handle => handle.evaluate(el => el.textContent as string));
+  const results = [];
+  for (const promise of promises) {
+    results.push(await promise);
+  }
+  return results;
+}
+
+export async function getCallFrameLocations() {
+  await waitFor('.call-frame-location');
+  const items = await $$('.call-frame-location');
+  const promises = items.map(handle => handle.evaluate(el => el.textContent as string));
+  const results = [];
+  for (const promise of promises) {
+    results.push(await promise);
+  }
+  return results;
+}
+
+export async function switchToCallFrame(index: number) {
+  const selector = `.call-frame-item[aria-posinset="${index}"]`;
+  await click(selector);
+  await waitFor(selector + '[aria-selected="true"]');
 }
 
 export async function retrieveTopCallFrameScriptLocation(script: string, target: puppeteer.Page) {
@@ -162,8 +223,8 @@ export async function retrieveTopCallFrameScriptLocation(script: string, target:
   await waitFor(PAUSE_INDICATOR_SELECTOR);
 
   // Retrieve the top level call frame script location name
-  const scriptLocation =
-      await (await $('.call-frame-location')).evaluate((location: HTMLElement) => location.textContent);
+  const locationHandle = await waitFor('.call-frame-location');
+  const scriptLocation = await locationHandle.evaluate(location => location.textContent);
 
   // Resume the evaluation
   await click(RESUME_BUTTON);
@@ -181,8 +242,8 @@ export async function retrieveTopCallFrameWithoutResuming() {
   await waitFor(PAUSE_INDICATOR_SELECTOR);
 
   // Retrieve the top level call frame script location name
-  const scriptLocation =
-      await (await $('.call-frame-location')).evaluate((location: HTMLElement) => location.textContent);
+  const locationHandle = await waitFor('.call-frame-location');
+  const scriptLocation = await locationHandle.evaluate(location => location.textContent);
 
   return scriptLocation;
 }
@@ -212,7 +273,9 @@ export function waitForAdditionalSourceFiles(frontend: puppeteer.Page, count = 1
 }
 
 export function clearSourceFilesAdded(frontend: puppeteer.Page) {
-  return frontend.evaluate(() => window.__sourceFilesAddedEvents = []);
+  return frontend.evaluate(() => {
+    window.__sourceFilesAddedEvents = [];
+  });
 }
 
 export function retrieveSourceFilesAdded(frontend: puppeteer.Page) {
@@ -231,7 +294,7 @@ export type NestedFileSelector = {
 export function createSelectorsForWorkerFile(
     workerName: string, folderName: string, fileName: string, workerIndex = 1): NestedFileSelector {
   const rootSelector = new Array(workerIndex).fill(`[aria-label="${workerName}, worker"]`).join(' ~ ');
-  const domainSelector = `${rootSelector} + ol > [aria-label="localhost:8090, domain"]`;
+  const domainSelector = `${rootSelector} + ol > [aria-label="localhost:${getHostedModeServerPort()}, domain"]`;
   const folderSelector = `${domainSelector} + ol > [aria-label^="${folderName}, "]`;
   const fileSelector = `${folderSelector} + ol > [aria-label="${fileName}, file"]`;
 
@@ -244,11 +307,15 @@ export function createSelectorsForWorkerFile(
 }
 
 async function expandSourceTreeItem(selector: string) {
-  const sourceTreeItem = await waitFor(selector, undefined, 1000);
-  const isExpanded = await sourceTreeItem.asElement()!.evaluate(element => {
+  // FIXME(crbug/1112692): Refactor test to remove the timeout.
+  await timeout(50);
+  const sourceTreeItem = await waitFor(selector);
+  const isExpanded = await sourceTreeItem.evaluate(element => {
     return element.getAttribute('aria-expanded') === 'true';
   });
   if (!isExpanded) {
+    // FIXME(crbug/1112692): Refactor test to remove the timeout.
+    await timeout(50);
     await doubleClickSourceTreeItem(selector);
   }
 }
@@ -257,21 +324,66 @@ export async function expandFileTree(selectors: NestedFileSelector) {
   await expandSourceTreeItem(selectors.rootSelector);
   await expandSourceTreeItem(selectors.domainSelector);
   await expandSourceTreeItem(selectors.folderSelector);
-  return await waitFor(selectors.fileSelector, undefined, 1000);
+  // FIXME(crbug/1112692): Refactor test to remove the timeout.
+  await timeout(50);
+  return await waitFor(selectors.fileSelector);
+}
+
+export async function stepThroughTheCode() {
+  const {frontend} = getBrowserAndPages();
+  await frontend.keyboard.press('F9');
+  // FIXME(crbug/1112692): Refactor test to remove the timeout.
+  await timeout(50);
+  await waitFor(PAUSE_INDICATOR_SELECTOR);
 }
 
 export async function openNestedWorkerFile(selectors: NestedFileSelector) {
   await expandFileTree(selectors);
+  // FIXME(crbug/1112692): Refactor test to remove the timeout.
+  await timeout(50);
   await click(selectors.fileSelector);
 }
 
 export async function clickOnContextMenu(selector: string, label: string) {
   // Find the selected node, right click.
-  const selectedNode = await $(selector);
+  const selectedNode = await waitFor(selector);
   await click(selectedNode, {clickOptions: {button: 'right'}});
 
   // Wait for the context menu option, and click it.
   const labelSelector = `[aria-label="${label}"]`;
   await waitFor(labelSelector);
   await click(labelSelector);
+}
+
+export async function typeIntoSourcesAndSave(text: string) {
+  const pane = await waitFor('.sources');
+  await pane.type(text);
+
+  await pressKey('s', {control: true});
+}
+
+export async function getScopeNames() {
+  const scopeElements = await $$('.scope-chain-sidebar-pane-section-title');
+  const scopeNames = await Promise.all(scopeElements.map(nodes => nodes.evaluate(n => n.textContent)));
+  return scopeNames;
+}
+
+export async function getValuesForScope(scope: string, expandCount = 0, waitForNoOfValues = 0) {
+  const scopeSelector = `[aria-label="${scope}"]`;
+  await waitFor(scopeSelector);
+  for (let i = 0; i < expandCount; i++) {
+    const unexpandedSelector = `${scopeSelector} + ol li[aria-expanded=false]`;
+    await waitFor(unexpandedSelector);
+    await click(unexpandedSelector);
+  }
+  const valueSelector = `${scopeSelector} + ol .name-and-value`;
+  const valueSelectorElements = await waitForFunction(async () => {
+    const elements = await $$(valueSelector);
+    if (elements.length >= waitForNoOfValues) {
+      return elements;
+    }
+    return undefined;
+  });
+  const values = await Promise.all(valueSelectorElements.map(elem => elem.evaluate(n => n.textContent as string)));
+  return values;
 }

@@ -50,15 +50,18 @@
 
 namespace blink {
 
-int GetRepetitionCountWithPolicyOverride(int actual_count,
-                                         ImageAnimationPolicy policy) {
+int GetRepetitionCountWithPolicyOverride(
+    int actual_count,
+    mojom::blink::ImageAnimationPolicy policy) {
   if (actual_count == kAnimationNone ||
-      policy == kImageAnimationPolicyNoAnimation) {
+      policy == mojom::blink::ImageAnimationPolicy::
+                    kImageAnimationPolicyNoAnimation) {
     return kAnimationNone;
   }
 
   if (actual_count == kAnimationLoopOnce ||
-      policy == kImageAnimationPolicyAnimateOnce) {
+      policy == mojom::blink::ImageAnimationPolicy::
+                    kImageAnimationPolicyAnimateOnce) {
     return kAnimationLoopOnce;
   }
 
@@ -67,7 +70,8 @@ int GetRepetitionCountWithPolicyOverride(int actual_count,
 
 BitmapImage::BitmapImage(ImageObserver* observer, bool is_multipart)
     : Image(observer, is_multipart),
-      animation_policy_(kImageAnimationPolicyAllowed),
+      animation_policy_(
+          mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed),
       all_data_received_(false),
       have_size_(false),
       size_available_(false),
@@ -132,10 +136,15 @@ void BitmapImage::UpdateSize() const {
     return;
 
   size_ = decoder_->FrameSizeAtIndex(0);
-  if (decoder_->OrientationAtIndex(0).UsesWidthAsHeight())
+  density_corrected_size_ = decoder_->DensityCorrectedSizeAtIndex(0);
+  if (decoder_->OrientationAtIndex(0).UsesWidthAsHeight()) {
     size_respecting_orientation_ = size_.TransposedSize();
-  else
+    density_corrected_size_respecting_orientation_ =
+        density_corrected_size_.TransposedSize();
+  } else {
     size_respecting_orientation_ = size_;
+    density_corrected_size_respecting_orientation_ = density_corrected_size_;
+  }
   have_size_ = true;
 }
 
@@ -144,8 +153,14 @@ IntSize BitmapImage::Size() const {
   return size_;
 }
 
-IntSize BitmapImage::SizeRespectingOrientation() const {
+IntSize BitmapImage::DensityCorrectedSize() const {
+  return density_corrected_size_.IsEmpty() ? Size() : density_corrected_size_;
+}
+
+IntSize BitmapImage::PreferredDisplaySize() const {
   UpdateSize();
+  if (!density_corrected_size_respecting_orientation_.IsEmpty())
+    return density_corrected_size_respecting_orientation_;
   return size_respecting_orientation_;
 }
 
@@ -185,7 +200,7 @@ Image::SizeAvailability BitmapImage::SetData(scoped_refptr<SharedBuffer> data,
     return DataChanged(all_data_received);
   }
 
-  bool has_enough_data = ImageDecoder::HasSufficientDataToSniffImageType(*data);
+  bool has_enough_data = ImageDecoder::HasSufficientDataToSniffMimeType(*data);
   decoder_ = DeferredImageDecoder::Create(std::move(data), all_data_received,
                                           ImageDecoder::kAlphaPremultiplied,
                                           ColorBehavior::Tag());
@@ -261,6 +276,13 @@ void BitmapImage::Draw(
   }
 
   FloatRect adjusted_src_rect = src_rect;
+  if (!density_corrected_size_.IsEmpty()) {
+    FloatSize src_size(size_);
+    adjusted_src_rect.Scale(
+        src_size.Width() / density_corrected_size_.Width(),
+        src_size.Height() / density_corrected_size_.Height());
+  }
+
   adjusted_src_rect.Intersect(SkRect::MakeWH(image.width(), image.height()));
 
   if (adjusted_src_rect.IsEmpty() || dst_rect.IsEmpty())
@@ -292,7 +314,7 @@ void BitmapImage::Draw(
     }
   }
 
-  uint32_t unique_id = image.GetSkImage()->uniqueID();
+  uint32_t stable_id = image.stable_id();
   bool is_lazy_generated = image.IsLazyGenerated();
   canvas->drawImageRect(std::move(image), adjusted_src_rect, adjusted_dst_rect,
                         &flags,
@@ -301,7 +323,7 @@ void BitmapImage::Draw(
   if (is_lazy_generated) {
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                          "Draw LazyPixelRef", TRACE_EVENT_SCOPE_THREAD,
-                         "LazyPixelRef", unique_id);
+                         "LazyPixelRef", stable_id);
   }
 
   StartAnimation();
@@ -346,12 +368,15 @@ PaintImage BitmapImage::PaintImageForCurrentFrame() {
 
   cached_frame_ = CreatePaintImage();
 
+  // BitmapImage should not be texture backed.
+  DCHECK(!cached_frame_.IsTextureBacked());
+
   // Create the SkImage backing for this PaintImage here to ensure that copies
   // of the PaintImage share the same SkImage. Skia's caching of the decoded
   // output of this image is tied to the lifetime of the SkImage. So we create
   // the SkImage here and cache the PaintImage to keep the decode alive in
   // skia's cache.
-  cached_frame_.GetSkImage();
+  cached_frame_.GetSwSkImage();
   NotifyMemoryChanged();
 
   return cached_frame_;
@@ -397,6 +422,12 @@ ImageOrientation BitmapImage::CurrentFrameOrientation() const {
                   : kDefaultImageOrientation;
 }
 
+IntSize BitmapImage::CurrentFrameDensityCorrectedSize() const {
+  return decoder_ ? decoder_->DensityCorrectedSizeAtIndex(
+                        PaintImage::kDefaultFrameIndex)
+                  : IntSize();
+}
+
 int BitmapImage::RepetitionCount() {
   if ((repetition_count_status_ == kUnknown) ||
       ((repetition_count_status_ == kUncertain) && all_data_received_)) {
@@ -431,7 +462,8 @@ bool BitmapImage::MaybeAnimated() {
   return decoder_ && decoder_->RepetitionCount() != kAnimationNone;
 }
 
-void BitmapImage::SetAnimationPolicy(ImageAnimationPolicy policy) {
+void BitmapImage::SetAnimationPolicy(
+    mojom::blink::ImageAnimationPolicy policy) {
   if (animation_policy_ == policy)
     return;
 

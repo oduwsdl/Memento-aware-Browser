@@ -270,6 +270,7 @@ def RunTests(args):
   typ_runner.args.metadata = options.metadata
   typ_runner.args.passthrough = options.passthrough
   typ_runner.args.path = options.path
+  typ_runner.args.quiet = options.quiet
   typ_runner.args.repeat = options.repeat
   typ_runner.args.repository_absolute_path = options.repository_absolute_path
   typ_runner.args.retry_limit = options.retry_limit
@@ -313,6 +314,7 @@ def RunTests(args):
   assert all(os.path.isabs(path) for path in test_class_expectations_files)
   typ_runner.args.expectations_files.extend(
       test_class_expectations_files)
+  typ_runner.args.ignored_tags.extend(test_class.IgnoredTags())
 
   # Since sharding logic is handled by browser_test_runner harness by passing
   # browser_test_context.test_case_ids_to_run to subprocess to indicate test

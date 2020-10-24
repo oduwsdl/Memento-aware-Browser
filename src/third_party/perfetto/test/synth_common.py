@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # Copyright (C) 2018 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -244,7 +244,7 @@ class Trace(object):
     if seq_id is not None:
       packet.trusted_packet_sequence_id = seq_id
     snap = self.packet.clock_snapshot
-    for k, v in clocks.iteritems():
+    for k, v in clocks.items():
       clock = snap.clocks.add()
       clock.clock_id = k
       clock.timestamp = v
@@ -392,6 +392,25 @@ class Trace(object):
     for index in freqs:
       thread.cpu_freq_indices.append(index)
       thread.cpu_freq_ticks.append(freqs[index])
+
+  def add_gpu_mem_total_ftrace_event(self, pid, ts, size):
+    ftrace = self.__add_ftrace_event(ts, pid)
+    gpu_mem_total_ftrace_event = ftrace.gpu_mem_total
+    gpu_mem_total_ftrace_event.pid = pid
+    gpu_mem_total_ftrace_event.size = size
+
+  def add_gpu_mem_total_event(self, pid, ts, size):
+    packet = self.add_packet()
+    packet.timestamp = ts
+    gpu_mem_total_event = packet.gpu_mem_total_event
+    gpu_mem_total_event.pid = pid
+    gpu_mem_total_event.size = size
+
+  def add_sched_blocked_reason(self, ts, pid, io_wait, unblock_pid):
+    ftrace = self.__add_ftrace_event(ts, unblock_pid)
+    sched_blocked_reason = ftrace.sched_blocked_reason
+    sched_blocked_reason.pid = pid
+    sched_blocked_reason.io_wait = io_wait
 
 
 def create_trace():

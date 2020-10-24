@@ -200,6 +200,19 @@ bool IsArrayTextureType(TextureType type)
     }
 }
 
+bool IsStaticBufferUsage(BufferUsage useage)
+{
+    switch (useage)
+    {
+        case BufferUsage::StaticCopy:
+        case BufferUsage::StaticDraw:
+        case BufferUsage::StaticRead:
+            return true;
+        default:
+            return false;
+    }
+}
+
 std::ostream &operator<<(std::ostream &os, PrimitiveMode value)
 {
     switch (value)
@@ -377,11 +390,14 @@ std::ostream &operator<<(std::ostream &os, VertexAttribType value)
         case VertexAttribType::HalfFloat:
             os << "GL_HALF_FLOAT";
             break;
+        case VertexAttribType::HalfFloatOES:
+            os << "GL_HALF_FLOAT_OES";
+            break;
         case VertexAttribType::Int:
             os << "GL_INT";
             break;
         case VertexAttribType::Int2101010:
-            os << "GL_INT_10_10_10_2";
+            os << "GL_INT_2_10_10_10_REV";
             break;
         case VertexAttribType::Int1010102:
             os << "GL_INT_10_10_10_2_OES";
@@ -396,7 +412,7 @@ std::ostream &operator<<(std::ostream &os, VertexAttribType value)
             os << "GL_UNSIGNED_INT";
             break;
         case VertexAttribType::UnsignedInt2101010:
-            os << "GL_UNSIGNED_INT_10_10_10_2";
+            os << "GL_UNSIGNED_INT_2_10_10_10_REV";
             break;
         case VertexAttribType::UnsignedInt1010102:
             os << "GL_UNSIGNED_INT_10_10_10_2_OES";

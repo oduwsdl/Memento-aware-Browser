@@ -24,6 +24,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
 import * as Components from '../components/components.js';  // eslint-disable-line no-unused-vars
 import * as Host from '../host/host.js';
@@ -268,9 +271,9 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
         valueElement.createChild('span', 'object-value-function-prefix').textContent = prefix + ' ';
       }
       if (includePreview) {
-        valueElement.createTextChild(body.trim().trimEndWithMaxLength(maxFunctionBodyLength));
+        UI.UIUtils.createTextChild(valueElement, body.trim().trimEndWithMaxLength(maxFunctionBodyLength));
       } else {
-        valueElement.createTextChild(abbreviation.replace(/\n/g, ' '));
+        UI.UIUtils.createTextChild(valueElement, abbreviation.replace(/\n/g, ' '));
       }
     }
   }
@@ -376,7 +379,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
           (self.ObjectUI.ObjectPropertiesSection._maxRenderableStringLength || maxRenderableStringLength)) {
         propertyValue = new ExpandableTextPropertyValue(valueElement, text, 50);
       } else {
-        valueElement.createTextChild(text);
+        UI.UIUtils.createTextChild(valueElement, text);
         propertyValue = new ObjectPropertyValue(valueElement);
         valueElement.title = description || '';
       }
@@ -615,6 +618,7 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
     this._linkifier = linkifier;
     this._maxNumPropertiesToShow = InitialVisibleChildrenLimit;
     this.listItemElement.addEventListener('contextmenu', this._contextMenuFired.bind(this), false);
+    UI.ARIAUtils.setAccessibleName(this.listItemElement, this.property.name);
   }
 
   /**
@@ -749,10 +753,10 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
    * @param {?SDK.RemoteObject.RemoteObject} object
    * @param {!Array.<string>} propertyPath
    * @param {function(!SDK.RemoteObject.CallFunctionResult)} callback
-   * @return {!Element}
+   * @return {!HTMLElement}
    */
   static createRemoteObjectAccessorPropertySpan(object, propertyPath, callback) {
-    const rootElement = createElement('span');
+    const rootElement = /** @type {!HTMLElement} */ (createElement('span'));
     const element = rootElement.createChild('span');
     element.textContent = Common.UIString.UIString('(...)');
     if (!object) {
@@ -830,7 +834,9 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
    */
   _showAllPropertiesElementSelected(element) {
     this.removeChild(element);
-    this.children().forEach(x => x.hidden = false);
+    this.children().forEach(x => {
+      x.hidden = false;
+    });
     return false;
   }
 
@@ -1038,6 +1044,13 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
     }
     if (this.property.value) {
       contextMenu.appendApplicableItems(this.property.value);
+      if (this.property.parentObject instanceof SDK.RemoteObject.LocalJSONObject) {
+        const {value: {value}} = this.property;
+        const propertyValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : value;
+        const copyValueHandler = Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText.bind(
+            Host.InspectorFrontendHost.InspectorFrontendHostInstance, /** @type {string|undefined} */ (propertyValue));
+        contextMenu.clipboardSection().appendItem(ls`Copy value`, copyValueHandler);
+      }
     }
     if (!this.property.synthetic && this.nameElement && this.nameElement.title) {
       const copyPathHandler = Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText.bind(

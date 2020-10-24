@@ -4,29 +4,31 @@
 
 group("front_end") {
   deps = [
-    ":copy_karma_conf",
     "../../../front_end/Images",
     "bindings",
     "browser_sdk",
+    "client_variations",
     "common",
+    "component_helpers",
+    "coverage",
     "dom_extension",
     "elements",
     "formatter_worker",
     "inline_editor",
-    "inspector_overlay",
     "issues",
+    "linear_memory_inspector",
+    "media",
+    "perf_ui",
     "persistence",
     "platform",
     "protocol_client",
+    "root",
     "sdk",
     "sources",
     "test_setup",
     "text_utils",
+    "timeline",
+    "timeline_model",
     "ui",
   ]
-}
-
-copy("copy_karma_conf") {
-  sources = [ "karma.conf.js" ]
-  outputs = [ "$target_gen_dir/karma.conf.js" ]
 }

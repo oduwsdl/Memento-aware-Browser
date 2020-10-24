@@ -4,7 +4,9 @@
 
 const {assert} = chai;
 
-import * as Color from '../../../../front_end/common/Color.js';
+import * as Common from '../../../../front_end/common/common.js';
+
+const Color = Common.Color;
 
 describe('Color', () => {
   it('can be instantiated without issues', () => {
@@ -267,6 +269,60 @@ describe('Color', () => {
     const color = new Color.Color([1, 0, 0, 1], 'rgb');
     color.setFormat('hsl');
     assert.strictEqual(color.asString(), 'hsl(0deg 100% 50%)', 'format was not set correctly');
+  });
+
+  it('suggests colors with good contrast', () => {
+    const colors = [
+      {
+        bgColor: 'salmon',
+        fgColor: 'white',
+        contrast: 4.5,
+        result: 'hsl(0deg 0% 23%)',
+      },
+      {
+        bgColor: 'Lightblue',
+        fgColor: 'white',
+        contrast: 4.5,
+        result: 'hsl(0deg 0% 35%)',
+      },
+      {
+        bgColor: 'white',
+        fgColor: 'hsl(0 53% 52% / 87%)',
+        contrast: 7.0,
+        result: 'hsl(0deg 49% 32% / 87%)',
+      },
+      {
+        bgColor: 'white',
+        fgColor: 'white',
+        contrast: 7.0,
+        result: 'hsl(0deg 0% 35%)',
+      },
+      {
+        bgColor: 'black',
+        fgColor: 'black',
+        contrast: 7.05,
+        result: 'hsl(0deg 0% 59%)',
+      },
+      {
+        bgColor: 'white',
+        fgColor: '#00FF00',
+        contrast: 7.05,
+        result: 'hsl(120deg 100% 20%)',
+      },
+      {
+        bgColor: 'black',
+        fgColor: '#b114ff',
+        contrast: 7.05,
+        result: 'hsl(280deg 100% 71%)',
+      },
+    ];
+    for (const {fgColor, bgColor, contrast, result} of colors) {
+      const suggestedColor =
+          Color.Color.findFgColorForContrast(Color.Color.parse(fgColor)!, Color.Color.parse(bgColor)!, contrast);
+      assert.strictEqual(
+          suggestedColor!.asString(), result,
+          `incorrect color suggestion for ${fgColor}/${bgColor} with contrast ${contrast}`);
+    }
   });
 });
 

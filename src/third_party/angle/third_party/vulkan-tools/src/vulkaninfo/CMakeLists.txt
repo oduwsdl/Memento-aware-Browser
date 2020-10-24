@@ -40,6 +40,7 @@ if(UNIX AND NOT APPLE) # i.e. Linux
     option(BUILD_WSI_XCB_SUPPORT "Build XCB WSI support" ON)
     option(BUILD_WSI_XLIB_SUPPORT "Build Xlib WSI support" ON)
     option(BUILD_WSI_WAYLAND_SUPPORT "Build Wayland WSI support" ON)
+    option(BUILD_WSI_DIRECTFB_SUPPORT "Build DirectFB WSI support" OFF)
 
     if(BUILD_WSI_XCB_SUPPORT)
         find_package(XCB REQUIRED)
@@ -61,6 +62,13 @@ if(UNIX AND NOT APPLE) # i.e. Linux
         target_link_libraries(vulkaninfo ${WAYLAND_CLIENT_LIBRARIES})
         target_compile_definitions(vulkaninfo PRIVATE -DVK_USE_PLATFORM_WAYLAND_KHR -DVK_NO_PROTOTYPES)
     endif()
+
+    if(BUILD_WSI_DIRECTFB_SUPPORT)
+        find_package(DirectFB REQUIRED)
+        target_include_directories(vulkaninfo PRIVATE ${DIRECTFB_INCLUDE_DIR})
+        target_link_libraries(vulkaninfo ${DIRECTFB_LIBRARIES})
+        target_compile_definitions(vulkaninfo PRIVATE -DVK_USE_PLATFORM_DIRECTFB_EXT -DVK_NO_PROTOTYPES)
+    endif()
 endif()
 
 if(APPLE)
@@ -78,8 +86,8 @@ endif()
 
 if(WIN32)
     target_compile_definitions(vulkaninfo PUBLIC -DVK_USE_PLATFORM_WIN32_KHR -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DVK_NO_PROTOTYPES)
-    if(NOT MSVC_VERSION LESS 1900)
-        # Enable control flow guard
+    if(MSVC AND NOT MSVC_VERSION LESS 1900)
+        # If MSVC, Enable control flow guard
         message(STATUS "Building vulkaninfo with control flow guard")
         add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/guard:cf>")
         set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /guard:cf")

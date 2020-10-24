@@ -15,7 +15,7 @@
 #ifndef DAWNNATIVE_DEVICE_H_
 #define DAWNNATIVE_DEVICE_H_
 
-#include "common/Serial.h"
+#include "dawn_native/Commands.h"
 #include "dawn_native/Error.h"
 #include "dawn_native/Extensions.h"
 #include "dawn_native/Format.h"
@@ -33,11 +33,10 @@ namespace dawn_native {
     class AttachmentState;
     class AttachmentStateBlueprint;
     class BindGroupLayoutBase;
+    class CreateReadyPipelineTracker;
     class DynamicUploader;
     class ErrorScope;
     class ErrorScopeTracker;
-    class FenceSignalTracker;
-    class MapRequestTracker;
     class StagingBufferBase;
 
     class DeviceBase {
@@ -71,8 +70,6 @@ namespace dawn_native {
         dawn_platform::Platform* GetPlatform() const;
 
         ErrorScopeTracker* GetErrorScopeTracker() const;
-        FenceSignalTracker* GetFenceSignalTracker() const;
-        MapRequestTracker* GetMapRequestTracker() const;
 
         // Returns the Format corresponding to the wgpu::TextureFormat or an error if the format
         // isn't a valid wgpu::TextureFormat or isn't supported by this device.
@@ -88,10 +85,10 @@ namespace dawn_native {
             CommandEncoder* encoder,
             const CommandBufferDescriptor* descriptor) = 0;
 
-        Serial GetCompletedCommandSerial() const;
-        Serial GetLastSubmittedCommandSerial() const;
-        Serial GetFutureCallbackSerial() const;
-        Serial GetPendingCommandSerial() const;
+        ExecutionSerial GetCompletedCommandSerial() const;
+        ExecutionSerial GetLastSubmittedCommandSerial() const;
+        ExecutionSerial GetFutureSerial() const;
+        ExecutionSerial GetPendingCommandSerial() const;
         virtual MaybeError TickImpl() = 0;
 
         // Many Dawn objects are completely immutable once created which means that if two
@@ -108,9 +105,11 @@ namespace dawn_native {
         // the created object will be, the "blueprint". The blueprint is just a FooBase object
         // instead of a backend Foo object. If the blueprint doesn't match an object in the
         // cache, then the descriptor is used to make a new object.
-        ResultOrError<BindGroupLayoutBase*> GetOrCreateBindGroupLayout(
+        ResultOrError<Ref<BindGroupLayoutBase>> GetOrCreateBindGroupLayout(
             const BindGroupLayoutDescriptor* descriptor);
         void UncacheBindGroupLayout(BindGroupLayoutBase* obj);
+
+        BindGroupLayoutBase* GetEmptyBindGroupLayout();
 
         ResultOrError<ComputePipelineBase*> GetOrCreateComputePipeline(
             const ComputePipelineDescriptor* descriptor);
@@ -142,12 +141,17 @@ namespace dawn_native {
         BindGroupBase* CreateBindGroup(const BindGroupDescriptor* descriptor);
         BindGroupLayoutBase* CreateBindGroupLayout(const BindGroupLayoutDescriptor* descriptor);
         BufferBase* CreateBuffer(const BufferDescriptor* descriptor);
-        WGPUCreateBufferMappedResult CreateBufferMapped(const BufferDescriptor* descriptor);
         CommandEncoder* CreateCommandEncoder(const CommandEncoderDescriptor* descriptor);
         ComputePipelineBase* CreateComputePipeline(const ComputePipelineDescriptor* descriptor);
         PipelineLayoutBase* CreatePipelineLayout(const PipelineLayoutDescriptor* descriptor);
         QuerySetBase* CreateQuerySet(const QuerySetDescriptor* descriptor);
         QueueBase* CreateQueue();
+        void CreateReadyComputePipeline(const ComputePipelineDescriptor* descriptor,
+                                        WGPUCreateReadyComputePipelineCallback callback,
+                                        void* userdata);
+        void CreateReadyRenderPipeline(const RenderPipelineDescriptor* descriptor,
+                                       WGPUCreateReadyRenderPipelineCallback callback,
+                                       void* userdata);
         RenderBundleEncoder* CreateRenderBundleEncoder(
             const RenderBundleEncoderDescriptor* descriptor);
         RenderPipelineBase* CreateRenderPipeline(const RenderPipelineDescriptor* descriptor);
@@ -164,7 +168,7 @@ namespace dawn_native {
         QueueBase* GetDefaultQueue();
 
         void InjectError(wgpu::ErrorType type, const char* message);
-        void Tick();
+        bool Tick();
 
         void SetDeviceLostCallback(wgpu::DeviceLostCallback callback, void* userdata);
         void SetUncapturedErrorCallback(wgpu::ErrorCallback callback, void* userdata);
@@ -185,6 +189,10 @@ namespace dawn_native {
                                                    BufferBase* destination,
                                                    uint64_t destinationOffset,
                                                    uint64_t size) = 0;
+        virtual MaybeError CopyFromStagingToTexture(const StagingBufferBase* source,
+                                                    const TextureDataLayout& src,
+                                                    TextureCopy* dst,
+                                                    const Extent3D& copySizePixels) = 0;
 
         DynamicUploader* GetDynamicUploader() const;
 
@@ -214,12 +222,24 @@ namespace dawn_native {
         bool IsExtensionEnabled(Extension extension) const;
         bool IsToggleEnabled(Toggle toggle) const;
         bool IsValidationEnabled() const;
+        bool IsRobustnessEnabled() const;
         size_t GetLazyClearCountForTesting();
         void IncrementLazyClearCountForTesting();
         size_t GetDeprecationWarningCountForTesting();
         void EmitDeprecationWarning(const char* warning);
         void LoseForTesting();
-        void AddFutureCallbackSerial(Serial serial);
+
+        // AddFutureSerial is used to update the mFutureSerial with the max serial needed to be
+        // ticked in order to clean up all pending callback work or to execute asynchronous resource
+        // writes. It should be given the serial that a callback is tracked with, so that once that
+        // serial is completed, it can be resolved and cleaned up. This is so that when there is no
+        // gpu work (the last submitted serial has not moved beyond the completed serial), Tick can
+        // still check if we have pending work to take care of, rather than hanging and never
+        // reaching the serial the work will be executed on.
+        void AddFutureSerial(ExecutionSerial serial);
+
+        virtual uint32_t GetOptimalBytesPerRowAlignment() const = 0;
+        virtual uint64_t GetOptimalBufferToTextureCopyOffsetAlignment() const = 0;
 
       protected:
         void SetToggle(Toggle toggle, bool isEnabled);
@@ -238,7 +258,8 @@ namespace dawn_native {
             const BindGroupDescriptor* descriptor) = 0;
         virtual ResultOrError<BindGroupLayoutBase*> CreateBindGroupLayoutImpl(
             const BindGroupLayoutDescriptor* descriptor) = 0;
-        virtual ResultOrError<BufferBase*> CreateBufferImpl(const BufferDescriptor* descriptor) = 0;
+        virtual ResultOrError<Ref<BufferBase>> CreateBufferImpl(
+            const BufferDescriptor* descriptor) = 0;
         virtual ResultOrError<ComputePipelineBase*> CreateComputePipelineImpl(
             const ComputePipelineDescriptor* descriptor) = 0;
         virtual ResultOrError<PipelineLayoutBase*> CreatePipelineLayoutImpl(
@@ -264,11 +285,13 @@ namespace dawn_native {
             TextureBase* texture,
             const TextureViewDescriptor* descriptor) = 0;
 
+        ResultOrError<Ref<BindGroupLayoutBase>> CreateEmptyBindGroupLayout();
+
         MaybeError CreateBindGroupInternal(BindGroupBase** result,
                                            const BindGroupDescriptor* descriptor);
         MaybeError CreateBindGroupLayoutInternal(BindGroupLayoutBase** result,
                                                  const BindGroupLayoutDescriptor* descriptor);
-        ResultOrError<BufferBase*> CreateBufferInternal(const BufferDescriptor* descriptor);
+        ResultOrError<Ref<BufferBase>> CreateBufferInternal(const BufferDescriptor* descriptor);
         MaybeError CreateComputePipelineInternal(ComputePipelineBase** result,
                                                  const ComputePipelineDescriptor* descriptor);
         MaybeError CreatePipelineLayoutInternal(PipelineLayoutBase** result,
@@ -300,22 +323,24 @@ namespace dawn_native {
 
         // Each backend should implement to check their passed fences if there are any and return a
         // completed serial. Return 0 should indicate no fences to check.
-        virtual Serial CheckAndUpdateCompletedSerials() = 0;
+        virtual ExecutionSerial CheckAndUpdateCompletedSerials() = 0;
         // During shut down of device, some operations might have been started since the last submit
         // and waiting on a serial that doesn't have a corresponding fence enqueued. Fake serials to
         // make all commands look completed.
         void AssumeCommandsComplete();
+        bool IsDeviceIdle();
+
         // mCompletedSerial tracks the last completed command serial that the fence has returned.
         // mLastSubmittedSerial tracks the last submitted command serial.
         // During device removal, the serials could be artificially incremented
         // to make it appear as if commands have been compeleted. They can also be artificially
         // incremented when no work is being done in the GPU so CPU operations don't have to wait on
         // stale serials.
-        // mFutureCallbackSerial tracks the largest serial we need to tick to for the callbacks to
-        // fire
-        Serial mCompletedSerial = 0;
-        Serial mLastSubmittedSerial = 0;
-        Serial mFutureCallbackSerial = 0;
+        // mFutureSerial tracks the largest serial we need to tick to for asynchronous commands or
+        // callbacks to fire
+        ExecutionSerial mCompletedSerial = ExecutionSerial(0);
+        ExecutionSerial mLastSubmittedSerial = ExecutionSerial(0);
+        ExecutionSerial mFutureSerial = ExecutionSerial(0);
 
         // ShutDownImpl is used to clean up and release resources used by device, does not wait for
         // GPU or check errors.
@@ -340,10 +365,11 @@ namespace dawn_native {
         struct Caches;
         std::unique_ptr<Caches> mCaches;
 
+        Ref<BindGroupLayoutBase> mEmptyBindGroupLayout;
+
         std::unique_ptr<DynamicUploader> mDynamicUploader;
         std::unique_ptr<ErrorScopeTracker> mErrorScopeTracker;
-        std::unique_ptr<FenceSignalTracker> mFenceSignalTracker;
-        std::unique_ptr<MapRequestTracker> mMapRequestTracker;
+        std::unique_ptr<CreateReadyPipelineTracker> mCreateReadyPipelineTracker;
         Ref<QueueBase> mDefaultQueue;
 
         struct DeprecationWarnings;

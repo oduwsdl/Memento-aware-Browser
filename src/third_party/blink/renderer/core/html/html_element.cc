@@ -26,7 +26,7 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 
 #include "base/stl_util.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_script.h"
 #include "third_party/blink/renderer/bindings/core/v8/string_treat_null_as_empty_string_or_trusted_script.h"
 #include "third_party/blink/renderer/core/css/css_color_value.h"
@@ -51,6 +51,7 @@
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element.h"
@@ -65,13 +66,16 @@
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
+#include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/mathml_names.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
+#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_script.h"
 #include "third_party/blink/renderer/core/xml_names.h"
@@ -733,7 +737,8 @@ void HTMLElement::ParseAttribute(const AttributeModificationParams& params) {
   if (triggers->event != g_null_atom) {
     SetAttributeEventListener(
         triggers->event,
-        CreateAttributeEventListener(this, params.name, params.new_value));
+        JSEventHandlerForContentAttribute::Create(
+            GetExecutionContext(), params.name, params.new_value));
   }
 
   if (triggers->web_feature != kNoWebFeature) {
@@ -1076,6 +1081,12 @@ void HTMLElement::setDir(const AtomicString& value) {
   setAttribute(html_names::kDirAttr, value);
 }
 
+HTMLFormElement* HTMLElement::formOwner() const {
+  if (const auto* internals = GetElementInternals())
+    return internals->Form();
+  return nullptr;
+}
+
 HTMLFormElement* HTMLElement::FindFormAncestor() const {
   return Traversal<HTMLFormElement>::FirstAncestor(*this);
 }
@@ -1122,7 +1133,8 @@ TextDirection HTMLElement::Directionality() const {
     if (EqualIgnoringASCIICase(node->nodeName(), "bdi") ||
         IsA<HTMLScriptElement>(*node) || IsA<HTMLStyleElement>(*node) ||
         (element && element->IsTextControl()) ||
-        (element && element->ShadowPseudoId() == "-webkit-input-placeholder")) {
+        (element && element->ShadowPseudoId() ==
+                        shadow_element_names::kPseudoInputPlaceholder)) {
       node = FlatTreeTraversal::NextSkippingChildren(*node, this);
       continue;
     }
@@ -1231,7 +1243,8 @@ void HTMLElement::DidMoveToNewDocument(Document& old_document) {
 void HTMLElement::AddHTMLLengthToStyle(MutableCSSPropertyValueSet* style,
                                        CSSPropertyID property_id,
                                        const String& value,
-                                       AllowPercentage allow_percentage) {
+                                       AllowPercentage allow_percentage,
+                                       AllowZero allow_zero) {
   HTMLDimension dimension;
   if (!ParseDimensionValue(value, dimension))
     return;
@@ -1241,7 +1254,10 @@ void HTMLElement::AddHTMLLengthToStyle(MutableCSSPropertyValueSet* style,
   }
   if (dimension.IsRelative())
     return;
-  if (dimension.IsPercentage() && allow_percentage != kAllowPercentageValues)
+  if (dimension.IsPercentage() &&
+      allow_percentage == kDontAllowPercentageValues)
+    return;
+  if (dimension.Value() == 0 && allow_zero == kDontAllowZeroValues)
     return;
   CSSPrimitiveValue::UnitType unit =
       dimension.IsPercentage() ? CSSPrimitiveValue::UnitType::kPercentage
@@ -1483,13 +1499,17 @@ int HTMLElement::offsetWidthForBinding() {
   GetDocument().EnsurePaintLocationDataValidForNode(
       this, DocumentUpdateReason::kJavaScript);
   Element* offset_parent = unclosedOffsetParent();
-  if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
-    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-               LayoutUnit(
-                   layout_object->PixelSnappedOffsetWidth(offset_parent)),
-               layout_object->StyleRef())
-        .Round();
-  return 0;
+  int result = 0;
+  if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject()) {
+    result =
+        AdjustForAbsoluteZoom::AdjustLayoutUnit(
+            LayoutUnit(layout_object->PixelSnappedOffsetWidth(offset_parent)),
+            layout_object->StyleRef())
+            .Round();
+    RecordScrollbarSizeForStudy(result, /* isWidth= */ true,
+                                /* is_offset= */ true);
+  }
+  return result;
 }
 
 DISABLE_CFI_PERF
@@ -1497,13 +1517,17 @@ int HTMLElement::offsetHeightForBinding() {
   GetDocument().EnsurePaintLocationDataValidForNode(
       this, DocumentUpdateReason::kJavaScript);
   Element* offset_parent = unclosedOffsetParent();
-  if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
-    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-               LayoutUnit(
-                   layout_object->PixelSnappedOffsetHeight(offset_parent)),
-               layout_object->StyleRef())
-        .Round();
-  return 0;
+  int result = 0;
+  if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject()) {
+    result =
+        AdjustForAbsoluteZoom::AdjustLayoutUnit(
+            LayoutUnit(layout_object->PixelSnappedOffsetHeight(offset_parent)),
+            layout_object->StyleRef())
+            .Round();
+    RecordScrollbarSizeForStudy(result, /* is_width= */ false,
+                                /* is_offset= */ true);
+  }
+  return result;
 }
 
 Element* HTMLElement::unclosedOffsetParent() {
@@ -1575,6 +1599,7 @@ ElementInternals* HTMLElement::attachInternals(
         "Unable to attach ElementInternals to a customized built-in element.");
     return nullptr;
   }
+
   CustomElementRegistry* registry = CustomElement::Registry(*this);
   auto* definition =
       registry ? registry->DefinitionForName(localName()) : nullptr;
@@ -1584,6 +1609,7 @@ ElementInternals* HTMLElement::attachInternals(
         "Unable to attach ElementInternals to non-custom elements.");
     return nullptr;
   }
+
   if (definition->DisableInternals()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
@@ -1596,6 +1622,24 @@ ElementInternals* HTMLElement::attachInternals(
         "ElementInternals for the specified element was already attached.");
     return nullptr;
   }
+
+  // If element's custom element state is not "precustomized" or "custom",
+  // throw "NotSupportedError" DOMException.
+  if (GetCustomElementState() != CustomElementState::kCustom &&
+      GetCustomElementState() != CustomElementState::kPreCustomized) {
+    if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+            GetExecutionContext())) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotSupportedError,
+          "The attachInternals() function cannot be called prior to the "
+          "execution of the custom element constructor.");
+      return nullptr;
+    }
+    UseCounter::Count(GetDocument(),
+                      WebFeature::kElementAttachInternalsBeforeConstructor);
+  }
+
+  UseCounter::Count(GetDocument(), WebFeature::kElementAttachInternals);
   SetDidAttachInternals();
   return &EnsureElementInternals();
 }

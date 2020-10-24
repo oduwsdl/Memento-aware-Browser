@@ -35,8 +35,6 @@ namespace {
 
 class BodyConsumerBase : public GarbageCollected<BodyConsumerBase>,
                          public FetchDataLoader::Client {
-  USING_GARBAGE_COLLECTED_MIXIN(BodyConsumerBase);
-
  public:
   explicit BodyConsumerBase(ScriptPromiseResolver* resolver)
       : resolver_(resolver),
@@ -206,8 +204,10 @@ ScriptPromise Body::blob(ScriptState* script_state,
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
   if (BodyBuffer()) {
+    ExecutionContext* context = ExecutionContext::From(script_state);
     BodyBuffer()->StartLoading(
-        FetchDataLoader::CreateLoaderAsBlobHandle(MimeType()),
+        FetchDataLoader::CreateLoaderAsBlobHandle(
+            MimeType(), context->GetTaskRunner(TaskType::kNetworking)),
         MakeGarbageCollected<BodyBlobConsumer>(resolver), exception_state);
     if (exception_state.HadException()) {
       // Need to resolve the ScriptPromiseResolver to avoid a DCHECK().

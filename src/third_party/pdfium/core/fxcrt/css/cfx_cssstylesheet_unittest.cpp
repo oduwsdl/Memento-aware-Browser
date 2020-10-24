@@ -15,7 +15,6 @@
 #include "core/fxcrt/css/cfx_cssstylerule.h"
 #include "core/fxcrt/css/cfx_cssvaluelist.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/base/stl_util.h"
 
 class CFX_CSSStyleSheetTest : public testing::Test {
  public:
@@ -42,6 +41,7 @@ class CFX_CSSStyleSheetTest : public testing::Test {
                          size_t decl_count) {
     LoadAndVerifyRuleCount(buf, 1);
     CFX_CSSStyleRule* style = sheet_->GetRule(0);
+    ASSERT_TRUE(style);
     EXPECT_EQ(selectors.size(), style->CountSelectorLists());
 
     for (size_t i = 0; i < selectors.size(); i++) {
@@ -50,6 +50,7 @@ class CFX_CSSStyleSheetTest : public testing::Test {
     }
 
     decl_ = style->GetDeclaration();
+    ASSERT_TRUE(decl_);
     EXPECT_EQ(decl_->PropertyCountForTesting(), decl_count);
   }
 
@@ -73,19 +74,30 @@ class CFX_CSSStyleSheetTest : public testing::Test {
   }
 
   void VerifyList(CFX_CSSProperty prop,
-                  std::vector<CFX_CSSPropertyValue> values) {
+                  std::vector<CFX_CSSPropertyValue> expected_values) {
     ASSERT(decl_);
 
     bool important;
     RetainPtr<CFX_CSSValueList> list =
         decl_->GetProperty(prop, &important).As<CFX_CSSValueList>();
-    EXPECT_EQ(list->CountValues(), pdfium::CollectionSize<int32_t>(values));
+    ASSERT_TRUE(list);
+    const std::vector<RetainPtr<CFX_CSSValue>>& values = list->values();
+    ASSERT_EQ(values.size(), expected_values.size());
 
-    for (size_t i = 0; i < values.size(); i++) {
-      RetainPtr<CFX_CSSValue> val = list->GetValue(i);
+    for (size_t i = 0; i < expected_values.size(); ++i) {
+      const auto& val = values[i];
       EXPECT_EQ(val->GetType(), CFX_CSSPrimitiveType::Enum);
-      EXPECT_EQ(val.As<CFX_CSSEnumValue>()->Value(), values[i]);
+      EXPECT_EQ(val.As<CFX_CSSEnumValue>()->Value(), expected_values[i]);
     }
+  }
+
+  static bool HasSelector(CFX_CSSStyleRule* style, WideStringView selector) {
+    uint32_t hash = FX_HashCode_GetW(selector, true);
+    for (size_t i = 0; i < style->CountSelectorLists(); ++i) {
+      if (style->GetSelectorList(i)->name_hash() == hash)
+        return true;
+    }
+    return false;
   }
 
   std::unique_ptr<CFX_CSSStyleSheet> sheet_;
@@ -122,51 +134,54 @@ TEST_F(CFX_CSSStyleSheetTest, ParseEmptyBody) {
 
 TEST_F(CFX_CSSStyleSheetTest, ParseMultipleSelectors) {
   const wchar_t* buf =
-      L"a { border: 10px; }\nb { text-decoration: underline; }";
+      L"a { border: 10px; }\n"
+      L"bcdef { text-decoration: underline; }\n"
+      L"* { padding: 0; }\n";
   EXPECT_TRUE(sheet_->LoadBuffer(buf));
-  EXPECT_EQ(2u, sheet_->CountRules());
+  ASSERT_EQ(3u, sheet_->CountRules());
 
   CFX_CSSStyleRule* style = sheet_->GetRule(0);
+  ASSERT_TRUE(style);
   EXPECT_EQ(1u, style->CountSelectorLists());
-
-  bool found_selector = false;
-  uint32_t hash = FX_HashCode_GetW(L"a", true);
-  for (size_t i = 0; i < style->CountSelectorLists(); i++) {
-    if (style->GetSelectorList(i)->name_hash() == hash) {
-      found_selector = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_selector);
+  EXPECT_TRUE(HasSelector(style, L"a"));
 
   decl_ = style->GetDeclaration();
+  ASSERT_TRUE(decl_);
   EXPECT_EQ(4u, decl_->PropertyCountForTesting());
 
-  VerifyFloat(CFX_CSSProperty::BorderLeftWidth, 10.0,
+  VerifyFloat(CFX_CSSProperty::BorderLeftWidth, 10.0f,
               CFX_CSSNumberType::Pixels);
-  VerifyFloat(CFX_CSSProperty::BorderRightWidth, 10.0,
+  VerifyFloat(CFX_CSSProperty::BorderRightWidth, 10.0f,
               CFX_CSSNumberType::Pixels);
-  VerifyFloat(CFX_CSSProperty::BorderTopWidth, 10.0, CFX_CSSNumberType::Pixels);
-  VerifyFloat(CFX_CSSProperty::BorderBottomWidth, 10.0,
+  VerifyFloat(CFX_CSSProperty::BorderTopWidth, 10.0f,
+              CFX_CSSNumberType::Pixels);
+  VerifyFloat(CFX_CSSProperty::BorderBottomWidth, 10.0f,
               CFX_CSSNumberType::Pixels);
 
   style = sheet_->GetRule(1);
+  ASSERT_TRUE(style);
   EXPECT_EQ(1u, style->CountSelectorLists());
-
-  found_selector = false;
-  hash = FX_HashCode_GetW(L"b", true);
-  for (size_t i = 0; i < style->CountSelectorLists(); i++) {
-    if (style->GetSelectorList(i)->name_hash() == hash) {
-      found_selector = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_selector);
+  EXPECT_TRUE(HasSelector(style, L"bcdef"));
+  EXPECT_FALSE(HasSelector(style, L"bcde"));
 
   decl_ = style->GetDeclaration();
+  ASSERT_TRUE(decl_);
   EXPECT_EQ(1u, decl_->PropertyCountForTesting());
   VerifyList(CFX_CSSProperty::TextDecoration,
              {CFX_CSSPropertyValue::Underline});
+
+  style = sheet_->GetRule(2);
+  ASSERT_TRUE(style);
+  EXPECT_EQ(1u, style->CountSelectorLists());
+  EXPECT_TRUE(HasSelector(style, L"*"));
+
+  decl_ = style->GetDeclaration();
+  ASSERT_TRUE(decl_);
+  EXPECT_EQ(4u, decl_->PropertyCountForTesting());
+  VerifyFloat(CFX_CSSProperty::PaddingLeft, 0.0f, CFX_CSSNumberType::Number);
+  VerifyFloat(CFX_CSSProperty::PaddingRight, 0.0f, CFX_CSSNumberType::Number);
+  VerifyFloat(CFX_CSSProperty::PaddingTop, 0.0f, CFX_CSSNumberType::Number);
+  VerifyFloat(CFX_CSSProperty::PaddingBottom, 0.0f, CFX_CSSNumberType::Number);
 }
 
 TEST_F(CFX_CSSStyleSheetTest, ParseChildSelectors) {
@@ -175,6 +190,7 @@ TEST_F(CFX_CSSStyleSheetTest, ParseChildSelectors) {
   EXPECT_EQ(1u, sheet_->CountRules());
 
   CFX_CSSStyleRule* style = sheet_->GetRule(0);
+  ASSERT_TRUE(style);
   EXPECT_EQ(1u, style->CountSelectorLists());
 
   const auto* sel = style->GetSelectorList(0);
@@ -193,14 +209,16 @@ TEST_F(CFX_CSSStyleSheetTest, ParseChildSelectors) {
   EXPECT_FALSE(sel);
 
   decl_ = style->GetDeclaration();
+  ASSERT_TRUE(decl_);
   EXPECT_EQ(4u, decl_->PropertyCountForTesting());
 
-  VerifyFloat(CFX_CSSProperty::BorderLeftWidth, 10.0,
+  VerifyFloat(CFX_CSSProperty::BorderLeftWidth, 10.0f,
               CFX_CSSNumberType::Pixels);
-  VerifyFloat(CFX_CSSProperty::BorderRightWidth, 10.0,
+  VerifyFloat(CFX_CSSProperty::BorderRightWidth, 10.0f,
               CFX_CSSNumberType::Pixels);
-  VerifyFloat(CFX_CSSProperty::BorderTopWidth, 10.0, CFX_CSSNumberType::Pixels);
-  VerifyFloat(CFX_CSSProperty::BorderBottomWidth, 10.0,
+  VerifyFloat(CFX_CSSProperty::BorderTopWidth, 10.0f,
+              CFX_CSSNumberType::Pixels);
+  VerifyFloat(CFX_CSSProperty::BorderBottomWidth, 10.0f,
               CFX_CSSNumberType::Pixels);
 }
 

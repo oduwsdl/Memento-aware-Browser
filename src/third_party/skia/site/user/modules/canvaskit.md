@@ -55,7 +55,7 @@ Samples
   <figure>
     <canvas id=shaping width=500 height=500></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/56cb197c724dfdfad0c3d8133d4fcab587e4c4e7f31576e62c17251637d3745c"
+      <a href="https://jsfiddle.skia.org/canvaskit/48c67bde53f66a2f1e578e14b88a85bd062fdcf80c143c5eb92071233d4d86ae"
           target=_blank rel=noopener>
         SkParagraph JSFiddle</a>
     </figcaption>
@@ -63,7 +63,7 @@ Samples
   <figure>
     <canvas id=shader1 width=512 height=512></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/33ff9bed883cd5742b4770169da0b36fb0cbc18fd395ddd9563213e178362d30"
+      <a href="https://jsfiddle.skia.org/canvaskit/b9a8d33dc9853e491d5e464bc3b212560d9c546c44d71f00c9db15180ab6d5b8"
           target=_blank rel=noopener>
         Shader JSFiddle</a>
     </figcaption>
@@ -71,26 +71,26 @@ Samples
   <figure>
     <canvas id=camera3d width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/4b7f2cb6683ad3254ac46e3bab62da9a09e994044b2e7512c93d166abeaa2549"
+      <a href="https://jsfiddle.skia.org/canvaskit/47d4b2eee53519aaa95e8cf01fcae0596e99ddee8662b2d3aee7649471fddbb0"
           target=_blank rel=noopener>
         3D Cube JSFiddle</a>
     </figcaption>
   </figure>
 
   <h3>Play back bodymovin lottie files with skottie (click for fiddles)</h3>
-  <a href="https://jsfiddle.skia.org/canvaskit/092690b273b41076d2f00f0d43d004893d6bb9992c387c0385efa8e6f6bc83d7"
+  <a href="https://jsfiddle.skia.org/canvaskit/6f4540a485ecbb8f0663b5ab3e04d9f3626a45234595d65f1b87942b90678aff"
      target=_blank rel=noopener>
     <canvas id=sk_legos width=300 height=300></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/e7ac983d9859f89aff1b6d385190919202c2eb53d028a79992892cacceffd209"
+  <a href="https://jsfiddle.skia.org/canvaskit/2fdbd163e5a4ec55e38e84b6c3e069738d3b12fd858362265192109917f9dd2c"
      target=_blank rel=noopener>
     <canvas id=sk_drinks width=500 height=500></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/0e06547181759731e7369d3e3613222a0826692f48c41b16504ed68d671583e1"
+  <a href="https://jsfiddle.skia.org/canvaskit/73624637ee6d96a8ce8ff8d523b90acdae3ec75b3fe16ddf3040990544c870ec"
      target=_blank rel=noopener>
     <canvas id=sk_party width=500 height=500></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/be3fc1c5c351e7f43cc2840033f80b44feb3475925264808f321bb9e2a21174a"
+  <a href="https://jsfiddle.skia.org/canvaskit/d63a544b87ccbe6bf8f15c772355d1c6dbc5eafc355bcd27457eca41da843cb5"
      target=_blank rel=noopener>
     <canvas id=sk_onboarding width=500 height=500></canvas>
   </a>
@@ -99,7 +99,7 @@ Samples
   <figure>
     <canvas id=patheffect width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/43b38b83ca77dabe47f18f31cafe83f3018b3a24e569db27fe711c70bc3f7d62"
+      <a href="https://jsfiddle.skia.org/canvaskit/97d4b9ce527a7ffb0f4bed77d9b7f01f889c8dbe68ac053d56739a5122c65b53"
           target=_blank rel=noopener>
         Star JSFiddle</a>
     </figcaption>
@@ -107,7 +107,7 @@ Samples
   <figure>
     <canvas id=ink width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/ad0a5454db3ac757684ed2fa8ce9f1f0175f1c043d2cbe33597d81481cdb4baa"
+      <a href="https://jsfiddle.skia.org/canvaskit/07c83d37d8115413442fda2c8b7f1bc56823d1c597473970638480e95cba42ee"
           target=_blank rel=noopener>
         Ink JSFiddle</a>
     </figcaption>
@@ -138,7 +138,7 @@ Samples
   let drinksJSON = null;
   let confettiJSON = null;
   let onboardingJSON = null;
-  let fullBounds = {fLeft: 0, fTop: 0, fRight: 500, fBottom: 500};
+  let fullBounds = [0, 0, 500, 500];
   const ckLoaded = CanvasKitInit({
     locateFile: (file) => locate_file + file,
   });
@@ -149,7 +149,7 @@ Samples
     InkExample(CanvasKit);
     ShapingExample(CanvasKit);
      // Set bounds to fix the 4:3 resolution of the legos
-    SkottieExample(CanvasKit, 'sk_legos', legoJSON, {fLeft: -50, fTop: 0, fRight: 350, fBottom: 300});
+    SkottieExample(CanvasKit, 'sk_legos', legoJSON, [-183, -100, 483, 400]);
     // Re-size to fit
     SkottieExample(CanvasKit, 'sk_drinks', drinksJSON, fullBounds);
     SkottieExample(CanvasKit, 'sk_party', confettiJSON, fullBounds);
@@ -160,7 +160,7 @@ Samples
   fetch('https://storage.googleapis.com/skia-cdn/misc/lego_loader.json').then((resp) => {
     resp.text().then((str) => {
       legoJSON = str;
-      SkottieExample(CanvasKit, 'sk_legos', legoJSON, {fLeft: -50, fTop: 0, fRight: 350, fBottom: 300});
+      SkottieExample(CanvasKit, 'sk_legos', legoJSON, [-183, -100, 483, 400]);
     });
   });
 
@@ -206,13 +206,13 @@ Samples
 
     const canvas = surface.getCanvas();
 
-    const paint = new CanvasKit.SkPaint();
+    const paint = new CanvasKit.Paint();
 
-    const textPaint = new CanvasKit.SkPaint();
+    const textPaint = new CanvasKit.Paint();
     textPaint.setColor(CanvasKit.Color(40, 0, 0, 1.0));
     textPaint.setAntiAlias(true);
 
-    const textFont = new CanvasKit.SkFont(null, 30);
+    const textFont = new CanvasKit.Font(null, 30);
 
     let i = 0;
 
@@ -222,7 +222,7 @@ Samples
     function drawFrame() {
       const path = starPath(CanvasKit, X, Y);
       CanvasKit.setCurrentContext(context);
-      const dpe = CanvasKit.SkPathEffect.MakeDash([15, 5, 5, 10], i/5);
+      const dpe = CanvasKit.PathEffect.MakeDash([15, 5, 5, 10], i/5);
       i++;
 
       paint.setPathEffect(dpe);
@@ -268,16 +268,16 @@ Samples
 
     const canvas = surface.getCanvas();
 
-    let paint = new CanvasKit.SkPaint();
+    let paint = new CanvasKit.Paint();
     paint.setAntiAlias(true);
     paint.setColor(CanvasKit.Color(0, 0, 0, 1.0));
     paint.setStyle(CanvasKit.PaintStyle.Stroke);
     paint.setStrokeWidth(4.0);
     // This effect smooths out the drawn lines a bit.
-    paint.setPathEffect(CanvasKit.SkPathEffect.MakeCorner(50));
+    paint.setPathEffect(CanvasKit.PathEffect.MakeCorner(50));
 
     // Draw I N K
-    let path = new CanvasKit.SkPath();
+    let path = new CanvasKit.Path();
     path.moveTo(80, 30);
     path.lineTo(80, 80);
 
@@ -319,7 +319,7 @@ Samples
         paint = paint.copy();
         paint.setColor(CanvasKit.Color(Math.random() * 255, Math.random() * 255, Math.random() * 255, Math.random() + .2));
         paints.push(paint);
-        path = new CanvasKit.SkPath();
+        path = new CanvasKit.Path();
         paths.push(path);
         path.moveTo(e.offsetX, e.offsetY);
       }
@@ -357,8 +357,8 @@ Samples
 
     const skcanvas = surface.getCanvas();
 
-    const font = new CanvasKit.SkFont(null, 18);
-    const fontPaint = new CanvasKit.SkPaint();
+    const font = new CanvasKit.Font(null, 18);
+    const fontPaint = new CanvasKit.Paint();
     fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
     fontPaint.setAntiAlias(true);
 
@@ -374,7 +374,7 @@ Samples
 
     function drawFrame() {
       if (robotoData && emojiData && !paragraph) {
-        const fontMgr = CanvasKit.SkFontMgr.FromData([robotoData, emojiData]);
+        const fontMgr = CanvasKit.FontMgr.FromData([robotoData, emojiData]);
 
         const paraStyle = new CanvasKit.ParagraphStyle({
           textStyle: {
@@ -430,7 +430,7 @@ Samples
   }
 
   function starPath(CanvasKit, X=128, Y=128, R=116) {
-    let p = new CanvasKit.SkPath();
+    let p = new CanvasKit.Path();
     p.moveTo(X + R, Y);
     for (let i = 1; i < 8; i++) {
       let a = 2.6927937 * i;
@@ -481,7 +481,7 @@ Samples
       throw 'Could not make surface';
     }
     const skcanvas = surface.getCanvas();
-    const paint = new CanvasKit.SkPaint();
+    const paint = new CanvasKit.Paint();
 
     const prog = `
 uniform float rad_scale;
@@ -489,7 +489,7 @@ uniform float2 in_center;
 uniform float4 in_colors0;
 uniform float4 in_colors1;
 
-void main(float2 p, inout half4 color) {
+half4 main(float2 p) {
     float2 pp = p - in_center;
     float radius = sqrt(dot(pp, pp));
     radius = sqrt(radius);
@@ -497,14 +497,14 @@ void main(float2 p, inout half4 color) {
     float t = (angle + 3.1415926/2) / (3.1415926);
     t += radius * rad_scale;
     t = fract(t);
-    color = half4(mix(in_colors0, in_colors1, t));
+    return half4(mix(in_colors0, in_colors1, t));
 }
 `;
 
     // If there are multiple contexts on the screen, we need to make sure
     // we switch to this one before we draw.
     const context = CanvasKit.currentContext();
-    const fact = CanvasKit.SkRuntimeEffect.Make(prog);
+    const fact = CanvasKit.RuntimeEffect.Make(prog);
     function drawFrame() {
       CanvasKit.setCurrentContext(context);
       skcanvas.clear(CanvasKit.WHITE);
@@ -534,12 +534,12 @@ void main(float2 p, inout half4 color) {
     const sizeX = document.getElementById('camera3d').width;
     const sizeY = document.getElementById('camera3d').height;
 
-    let clickToWorld = CanvasKit.SkM44.identity();
-    let worldToClick = CanvasKit.SkM44.identity();
+    let clickToWorld = CanvasKit.M44.identity();
+    let worldToClick = CanvasKit.M44.identity();
     // rotation of the cube shown in the demo
-    let rotation = CanvasKit.SkM44.identity();
+    let rotation = CanvasKit.M44.identity();
     // temporary during a click and drag
-    let clickRotation = CanvasKit.SkM44.identity();
+    let clickRotation = CanvasKit.M44.identity();
 
     // A virtual sphere used for tumbling the object on screen.
     const vSphereCenter = [sizeX/2, sizeY/2];
@@ -550,13 +550,15 @@ void main(float2 p, inout half4 color) {
     const rr = CanvasKit.RRectXY(CanvasKit.LTRBRect(margin, margin,
       vSphereRadius - margin, vSphereRadius - margin), margin*2.5, margin*2.5);
 
-    const camNear = 0.05;
-    const camFar = 4;
     const camAngle = Math.PI / 12;
-
-    const camEye = [0, 0, 1 / Math.tan(camAngle/2) - 1];
-    const camCOA = [0, 0, 0];
-    const camUp =  [0, 1, 0];
+    const cam = {
+      'eye'  : [0, 0, 1 / Math.tan(camAngle/2) - 1],
+      'coa'  : [0, 0, 0],
+      'up'   : [0, 1, 0],
+      'near' : 0.05,
+      'far'  : 4,
+      'angle': camAngle,
+    };
 
     let mouseDown = false;
     let clickDown = [0, 0]; // location of click down
@@ -569,7 +571,7 @@ void main(float2 p, inout half4 color) {
     let lastRadians = 0;
     let spinning = setInterval(keepSpinning, 30);
 
-    const imgscale = CanvasKit.SkMatrix.scaled(2, 2);
+    const imgscale = CanvasKit.Matrix.scaled(2, 2);
     const textureShader = CanvasKit.MakeImageFromEncoded(textureImgData).makeShader(
       CanvasKit.TileMode.Clamp, CanvasKit.TileMode.Clamp, imgscale);
     const normalShader = CanvasKit.MakeImageFromEncoded(normalImgData).makeShader(
@@ -590,7 +592,7 @@ void main(float2 p, inout half4 color) {
         return n;
       }
 
-      void main(float2 p, inout half4 color) {
+      half4 main(float2 p) {
         float3 norm = convert_normal_sample(sample(normal_map, p));
         float3 plane_norm = normalize(localToWorldAdjInv * float4(norm, 0)).xyz;
 
@@ -601,11 +603,11 @@ void main(float2 p, inout half4 color) {
         float dp = dot(plane_norm, light_dir);
         float scale = min(ambient + max(dp, 0), 1);
 
-        color = sample(color_map, p) * half4(float4(scale, scale, scale, 1));
+        return sample(color_map, p) * half4(float4(scale, scale, scale, 1));
       }
 `;
 
-    const fact = CanvasKit.SkRuntimeEffect.Make(prog);
+    const fact = CanvasKit.RuntimeEffect.Make(prog);
 
     // properties of light
     let lightLocation = [...vSphereCenter];
@@ -614,14 +616,14 @@ void main(float2 p, inout half4 color) {
     let draggingLight = false;
 
     function computeLightWorldPos() {
-      return CanvasKit.SkVector.add(CanvasKit.SkVector.mulScalar([...vSphereCenter, 0], 0.5),
-        CanvasKit.SkVector.mulScalar(vSphereUnitV3(lightLocation), lightDistance));
+      return CanvasKit.Vector.add(CanvasKit.Vector.mulScalar([...vSphereCenter, 0], 0.5),
+        CanvasKit.Vector.mulScalar(vSphereUnitV3(lightLocation), lightDistance));
     }
 
     let lightWorldPos = computeLightWorldPos();
 
     function drawLight(canvas) {
-      const paint = new CanvasKit.SkPaint();
+      const paint = new CanvasKit.Paint();
       paint.setAntiAlias(true);
       paint.setColor(CanvasKit.WHITE);
       canvas.drawCircle(...lightLocation, lightIconRadius + 2, paint);
@@ -632,10 +634,10 @@ void main(float2 p, inout half4 color) {
     // Takes an x and y rotation in radians and a scale and returns a 4x4 matrix used to draw a
     // face of the cube in that orientation.
     function faceM44(rx, ry, scale) {
-      return CanvasKit.SkM44.multiply(
-        CanvasKit.SkM44.rotated([0,1,0], ry),
-        CanvasKit.SkM44.rotated([1,0,0], rx),
-        CanvasKit.SkM44.translated([0, 0, scale]));
+      return CanvasKit.M44.multiply(
+        CanvasKit.M44.rotated([0,1,0], ry),
+        CanvasKit.M44.rotated([1,0,0], rx),
+        CanvasKit.M44.translated([0, 0, scale]));
     }
 
     const faceScale = vSphereRadius/2
@@ -655,52 +657,24 @@ void main(float2 p, inout half4 color) {
     // that face is currently in front.
     function front(m) {
       // Is this invertible?
-      var m2 = CanvasKit.SkM44.invert(m);
+      var m2 = CanvasKit.M44.invert(m);
       if (m2 === null) {
-        m2 = CanvasKit.SkM44.identity();
+        m2 = CanvasKit.M44.identity();
       }
       // look at the sign of the z-scale of the inverse of m.
       // that's the number in row 2, col 2.
       return m2[10]
     }
 
-    // Return the inverse of an SkM44. throw an error if it's not invertible
-    function mustInvert(m) {
-      var m2 = CanvasKit.SkM44.invert(m);
-      if (m2 === null) {
-        throw "Matrix not invertible";
-      }
-      return m2;
-    }
-
-    function saveCamera(canvas, /* rect */ area, /* scalar */ zscale) {
-      const camera = CanvasKit.SkM44.lookat(camEye, camCOA, camUp);
-      const perspective = CanvasKit.SkM44.perspective(camNear, camFar, camAngle);
-      // Calculate viewport scale. Even through we know these values are all constants in this
-      // example it might be handy to change the size later.
-      const center = [(area.fLeft + area.fRight)/2, (area.fTop + area.fBottom)/2, 0];
-      const viewScale = [(area.fRight - area.fLeft)/2, (area.fBottom - area.fTop)/2, zscale];
-      const viewport = CanvasKit.SkM44.multiply(
-        CanvasKit.SkM44.translated(center),
-        CanvasKit.SkM44.scaled(viewScale));
-
-      // want "world" to be in our big coordinates (e.g. area), so apply this inverse
-      // as part of our "camera".
-      canvas.concat(CanvasKit.SkM44.multiply(viewport, perspective));
-      canvas.concat(CanvasKit.SkM44.multiply(camera, mustInvert(viewport)));
-      // Mark the matrix to make it available to the shader by this name.
-      canvas.markCTM('local_to_world');
-    }
-
     function setClickToWorld(canvas, matrix) {
       const l2d = canvas.getLocalToDevice();
-      worldToClick = CanvasKit.SkM44.multiply(mustInvert(matrix), l2d);
-      clickToWorld = mustInvert(worldToClick);
+      worldToClick = CanvasKit.M44.multiply(CanvasKit.M44.mustInvert(matrix), l2d);
+      clickToWorld = CanvasKit.M44.mustInvert(worldToClick);
     }
 
     function drawCubeFace(canvas, m, color) {
-      const trans = new CanvasKit.SkM44.translated([vSphereRadius/2, vSphereRadius/2, 0]);
-      canvas.concat(CanvasKit.SkM44.multiply(trans, m, mustInvert(trans)));
+      const trans = new CanvasKit.M44.translated([vSphereRadius/2, vSphereRadius/2, 0]);
+      canvas.concat(CanvasKit.M44.multiply(trans, m, CanvasKit.M44.mustInvert(trans)));
       const znormal = front(canvas.getLocalToDevice());
       if (znormal < 0) {
         return; // skip faces facing backwards
@@ -708,7 +682,7 @@ void main(float2 p, inout half4 color) {
       // Pad with space for two 4x4 matrices. Even though the shader uses a layout()
       // statement to populate them, we still have to reserve space for them.
       const uniforms = [...lightWorldPos, ...Array(32).fill(0)];
-      const paint = new CanvasKit.SkPaint();
+      const paint = new CanvasKit.Paint();
       paint.setAntiAlias(true);
       const shader = fact.makeShaderWithChildren(uniforms, true /*=opaque*/, children);
       paint.setShader(shader);
@@ -720,19 +694,22 @@ void main(float2 p, inout half4 color) {
       canvas.save();
       canvas.translate(vSphereCenter[0] - vSphereRadius/2, vSphereCenter[1] - vSphereRadius/2);
       // pass surface dimensions as viewport size.
-      saveCamera(canvas, CanvasKit.LTRBRect(0, 0, vSphereRadius, vSphereRadius), vSphereRadius/2);
+      canvas.concat(CanvasKit.M44.setupCamera(
+        CanvasKit.LTRBRect(0, 0, vSphereRadius, vSphereRadius), vSphereRadius/2, cam));
+      // Mark the matrix to make it available to the shader by this name.
+      canvas.markCTM('local_to_world');
       setClickToWorld(canvas, clickM);
       for (let f of faces) {
         const saveCount = canvas.getSaveCount();
         canvas.save();
-        drawCubeFace(canvas, CanvasKit.SkM44.multiply(clickRotation, rotation, f.matrix), f.color);
+        drawCubeFace(canvas, CanvasKit.M44.multiply(clickRotation, rotation, f.matrix), f.color);
         canvas.restoreToCount(saveCount);
       }
       canvas.restore();  // camera
       canvas.restore();  // center the following content in the window
 
       // draw virtual sphere outline.
-      const paint = new CanvasKit.SkPaint();
+      const paint = new CanvasKit.Paint();
       paint.setAntiAlias(true);
       paint.setStyle(CanvasKit.PaintStyle.Stroke);
       paint.setColor(CanvasKit.Color(64, 255, 0, 1.0));
@@ -750,12 +727,12 @@ void main(float2 p, inout half4 color) {
     // of a hemisphere.
     function vSphereUnitV3(p) {
       // v = (v - fCenter) * (1 / fRadius);
-      let v = CanvasKit.SkVector.mulScalar(CanvasKit.SkVector.sub(p, vSphereCenter), 1/vSphereRadius);
+      let v = CanvasKit.Vector.mulScalar(CanvasKit.Vector.sub(p, vSphereCenter), 1/vSphereRadius);
 
       // constrain the clicked point within the circle.
-      let len2 = CanvasKit.SkVector.lengthSquared(v);
+      let len2 = CanvasKit.Vector.lengthSquared(v);
       if (len2 > 1) {
-          v = CanvasKit.SkVector.normalize(v);
+          v = CanvasKit.Vector.normalize(v);
           len2 = 1;
       }
       // the closer to the edge of the circle you are, the closer z is to zero.
@@ -768,14 +745,14 @@ void main(float2 p, inout half4 color) {
       const u = vSphereUnitV3(start);
       const v = vSphereUnitV3(end);
       // Axis is in the scope of the Camera3D function so it can be used in keepSpinning.
-      axis = CanvasKit.SkVector.cross(u, v);
-      const sinValue = CanvasKit.SkVector.length(axis);
-      const cosValue = CanvasKit.SkVector.dot(u, v);
+      axis = CanvasKit.Vector.cross(u, v);
+      const sinValue = CanvasKit.Vector.length(axis);
+      const cosValue = CanvasKit.Vector.dot(u, v);
 
-      let m = new CanvasKit.SkM44.identity();
+      let m = new CanvasKit.M44.identity();
       if (Math.abs(sinValue) > 0.000000001) {
-          m = CanvasKit.SkM44.rotatedUnitSinCos(
-            CanvasKit.SkVector.mulScalar(axis, 1/sinValue), sinValue, cosValue);
+          m = CanvasKit.M44.rotatedUnitSinCos(
+            CanvasKit.Vector.mulScalar(axis, 1/sinValue), sinValue, cosValue);
           const radians = Math.atan(cosValue / sinValue);
           spinRate = lastRadians - radians;
           lastRadians = radians;
@@ -785,7 +762,7 @@ void main(float2 p, inout half4 color) {
 
     function keepSpinning() {
       totalSpin += spinRate;
-      clickRotation = CanvasKit.SkM44.rotated(axis, totalSpin);
+      clickRotation = CanvasKit.M44.rotated(axis, totalSpin);
       spinRate *= .998;
       if (spinRate < 0.01) {
         stopSpinning();
@@ -795,8 +772,8 @@ void main(float2 p, inout half4 color) {
 
     function stopSpinning() {
         clearInterval(spinning);
-        rotation = CanvasKit.SkM44.multiply(clickRotation, rotation);
-        clickRotation = CanvasKit.SkM44.identity();
+        rotation = CanvasKit.M44.multiply(clickRotation, rotation);
+        clickRotation = CanvasKit.M44.identity();
     }
 
     function interact(e) {
@@ -827,7 +804,7 @@ void main(float2 p, inout half4 color) {
         }
       } else if (type === 'pointerdown') {
         // Are we repositioning the light?
-        if (CanvasKit.SkVector.dist(eventPos, lightLocation) < lightIconRadius) {
+        if (CanvasKit.Vector.dist(eventPos, lightLocation) < lightIconRadius) {
           draggingLight = true;
           return;
         }
@@ -865,4 +842,9 @@ Test your code on our [CanvasKit Fiddle](https://jsfiddle.skia.org/canvaskit)
 
 Download
 --------
-Get [CanvasKit on NPM](https://www.npmjs.com/package/canvaskit-wasm)
+Get [CanvasKit on NPM](https://www.npmjs.com/package/canvaskit-wasm).
+Documentation and Typescript definitions are available in the `types/` subfolder
+of the npm package or from the
+[Skia repo](https://github.com/google/skia/tree/master/modules/canvaskit/canvaskit/types).
+
+Check out the [quickstart guide](../modules/quickstart) as well.

@@ -186,22 +186,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        for (const auto& path : fPaths) {
-            string.appendf(
-                    "Color: 0x%08x, StrokeWidth: %.2f, Style: %d, Join: %d, "
-                    "MiterLimit: %.2f\n",
-                    path.fColor.toBytes_RGBA(), path.fStrokeWidth, path.fStyle, path.fJoin,
-                    path.fMiterLimit);
-        }
-        string += fHelper.dumpInfo();
-        string += INHERITED::dumpInfo();
-        return string;
-    }
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
     GrProcessorSet::Analysis finalize(
@@ -219,7 +203,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         GrGeometryProcessor* gp = create_lines_only_gp(arena,
                                                        fHelper.compatibleWithCoverageAsAlpha(),
                                                        fHelper.usesLocalCoords(),
@@ -231,7 +216,8 @@ private:
 
         fProgramInfo = fHelper.createProgramInfoWithStencil(caps, arena, writeView,
                                                             std::move(appliedClip), dstProxyView,
-                                                            gp, GrPrimitiveType::kTriangles);
+                                                            gp, GrPrimitiveType::kTriangles,
+                                                            renderPassXferBarriers);
     }
 
     void recordDraw(Target* target,
@@ -364,6 +350,20 @@ private:
         return CombineResult::kMerged;
     }
 
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString string;
+        for (const auto& path : fPaths) {
+            string.appendf(
+                    "Color: 0x%08x, StrokeWidth: %.2f, Style: %d, Join: %d, "
+                    "MiterLimit: %.2f\n",
+                    path.fColor.toBytes_RGBA(), path.fStrokeWidth, path.fStyle, path.fJoin,
+                    path.fMiterLimit);
+        }
+        string += fHelper.dumpInfo();
+        return string;
+    }
+#endif
 
     struct PathData {
         SkMatrix fViewMatrix;
@@ -382,7 +382,7 @@ private:
     SkTDArray<GrSimpleMesh*> fMeshes;
     GrProgramInfo*           fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 }  // anonymous namespace
@@ -415,7 +415,7 @@ bool GrAALinearizingConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 GR_DRAW_OP_TEST_DEFINE(AAFlatteningConvexPathOp) {
     SkMatrix viewMatrix = GrTest::TestMatrixPreservesRightAngles(random);
-    SkPath path = GrTest::TestPathConvex(random);
+    const SkPath& path = GrTest::TestPathConvex(random);
 
     SkStrokeRec::Style styles[3] = { SkStrokeRec::kFill_Style,
                                      SkStrokeRec::kStroke_Style,

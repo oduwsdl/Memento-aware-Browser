@@ -286,7 +286,27 @@ class IdlCompiler(object):
                                     posixpath.extsep.join([filename, 'h']))
             new_ir.code_generator_info.set_blink_headers([header])
 
+    def _check_existence_of_non_partials(self, non_partial_kind, partial_kind):
+        non_partials = self._ir_map.find_by_kind(non_partial_kind)
+        partials = self._ir_map.find_by_kind(partial_kind)
+        for identifier, partial_irs in partials.items():
+            if not non_partials.get(identifier):
+                locations = ''.join(
+                    map(lambda ir: '  {}\n'.format(ir.debug_info.location),
+                        partial_irs))
+                raise ValueError(
+                    '{} {} is defined without a non-partial definition.\n'
+                    '{}'.format(partial_irs[0].kind, identifier, locations))
+
     def _merge_partial_interface_likes(self):
+        self._check_existence_of_non_partials(IRMap.IR.Kind.INTERFACE,
+                                              IRMap.IR.Kind.PARTIAL_INTERFACE)
+        self._check_existence_of_non_partials(
+            IRMap.IR.Kind.INTERFACE_MIXIN,
+            IRMap.IR.Kind.PARTIAL_INTERFACE_MIXIN)
+        self._check_existence_of_non_partials(IRMap.IR.Kind.NAMESPACE,
+                                              IRMap.IR.Kind.PARTIAL_NAMESPACE)
+
         irs = self._ir_map.irs_of_kinds(IRMap.IR.Kind.INTERFACE,
                                         IRMap.IR.Kind.INTERFACE_MIXIN,
                                         IRMap.IR.Kind.NAMESPACE)
@@ -304,6 +324,9 @@ class IdlCompiler(object):
         self._merge_interface_like_irs(ir_sets_to_merge)
 
     def _merge_partial_dictionaries(self):
+        self._check_existence_of_non_partials(IRMap.IR.Kind.DICTIONARY,
+                                              IRMap.IR.Kind.PARTIAL_DICTIONARY)
+
         old_dictionaries = self._ir_map.find_by_kind(IRMap.IR.Kind.DICTIONARY)
         old_partial_dictionaries = self._ir_map.find_by_kind(
             IRMap.IR.Kind.PARTIAL_DICTIONARY)
@@ -385,7 +408,7 @@ class IdlCompiler(object):
         )
 
         def is_own_member(member):
-            return 'Unforgeable' in member.extended_attributes
+            return 'LegacyUnforgeable' in member.extended_attributes
 
         old_interfaces = self._ir_map.find_by_kind(IRMap.IR.Kind.INTERFACE)
 
@@ -517,9 +540,9 @@ class IdlCompiler(object):
                         OperationGroup.IR, item.operations)
 
     def _propagate_extattrs_to_overload_group(self):
-        ANY_OF = ('CrossOrigin', 'Custom', 'LenientThis', 'NotEnumerable',
-                  'PerWorldBindings', 'SecureContext', 'Unforgeable',
-                  'Unscopable')
+        ANY_OF = ('CrossOrigin', 'Custom', 'LegacyLenientThis',
+                  'LegacyUnforgeable', 'NoAllocDirectCall', 'NotEnumerable',
+                  'PerWorldBindings', 'SecureContext', 'Unscopable')
 
         old_irs = self._ir_map.irs_of_kinds(IRMap.IR.Kind.INTERFACE,
                                             IRMap.IR.Kind.NAMESPACE)

@@ -163,9 +163,11 @@ TEST(PerformanceLifetimeTest, SurviveContextSwitch) {
   // Emulate a new window inheriting the origin for its initial empty document
   // from its opener. This is necessary to ensure window reuse below, as that
   // only happens when origins match.
-  KURL url("https://example.com");
-  page_holder->GetDocument().GetSecurityContext().SetSecurityOriginForTesting(
-      SecurityOrigin::Create(KURL(url)));
+  KURL url("http://example.com");
+  page_holder->GetFrame()
+      .DomWindow()
+      ->GetSecurityContext()
+      .SetSecurityOriginForTesting(SecurityOrigin::Create(KURL(url)));
 
   WindowPerformance* perf =
       DOMWindowPerformance::performance(*page_holder->GetFrame().DomWindow());
@@ -175,8 +177,8 @@ TEST(PerformanceLifetimeTest, SurviveContextSwitch) {
   ASSERT_TRUE(document_loader);
   document_loader->GetTiming().SetNavigationStart(base::TimeTicks::Now());
 
-  EXPECT_EQ(&page_holder->GetFrame(), perf->GetFrame());
-  EXPECT_EQ(&page_holder->GetFrame(), timing->GetFrame());
+  EXPECT_EQ(page_holder->GetFrame().DomWindow(), perf->DomWindow());
+  EXPECT_EQ(page_holder->GetFrame().DomWindow(), timing->DomWindow());
   auto navigation_start = timing->navigationStart();
   EXPECT_NE(0U, navigation_start);
 
@@ -188,8 +190,8 @@ TEST(PerformanceLifetimeTest, SurviveContextSwitch) {
   EXPECT_EQ(perf, DOMWindowPerformance::performance(
                       *page_holder->GetFrame().DomWindow()));
   EXPECT_EQ(timing, perf->timing());
-  EXPECT_EQ(&page_holder->GetFrame(), perf->GetFrame());
-  EXPECT_EQ(&page_holder->GetFrame(), timing->GetFrame());
+  EXPECT_EQ(page_holder->GetFrame().DomWindow(), perf->DomWindow());
+  EXPECT_EQ(page_holder->GetFrame().DomWindow(), timing->DomWindow());
   EXPECT_LE(navigation_start, timing->navigationStart());
 }
 

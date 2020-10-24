@@ -6,10 +6,8 @@
 
 #include "xfa/fwl/cfwl_picturebox.h"
 
-#include <memory>
-
-CFWL_PictureBox::CFWL_PictureBox(const CFWL_App* app)
-    : CFWL_Widget(app, std::make_unique<CFWL_WidgetProperties>(), nullptr) {}
+CFWL_PictureBox::CFWL_PictureBox(CFWL_App* app)
+    : CFWL_Widget(app, CFWL_Widget::Properties(), nullptr) {}
 
 CFWL_PictureBox::~CFWL_PictureBox() = default;
 
@@ -20,25 +18,20 @@ FWL_Type CFWL_PictureBox::GetClassID() const {
 void CFWL_PictureBox::Update() {
   if (IsLocked())
     return;
-  if (!m_pProperties->m_pThemeProvider)
-    m_pProperties->m_pThemeProvider = GetAvailableTheme();
 
   m_ClientRect = GetClientRect();
 }
 
-void CFWL_PictureBox::DrawWidget(CXFA_Graphics* pGraphics,
+void CFWL_PictureBox::DrawWidget(CFGAS_GEGraphics* pGraphics,
                                  const CFX_Matrix& matrix) {
   if (!pGraphics)
     return;
-  if (!m_pProperties->m_pThemeProvider)
-    return;
 
-  IFWL_ThemeProvider* pTheme = GetAvailableTheme();
   if (HasBorder())
-    DrawBorder(pGraphics, CFWL_Part::Border, pTheme, matrix);
+    DrawBorder(pGraphics, CFWL_Part::Border, matrix);
 }
 
-void CFWL_PictureBox::OnDrawWidget(CXFA_Graphics* pGraphics,
+void CFWL_PictureBox::OnDrawWidget(CFGAS_GEGraphics* pGraphics,
                                    const CFX_Matrix& matrix) {
   DrawWidget(pGraphics, matrix);
 }

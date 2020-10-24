@@ -71,14 +71,8 @@ static int gm_get_params_cost(const WarpedMotionParams *gm,
 }
 
 // Calculates the threshold to be used for warp error computation.
-// TODO(Remya): Can include erroradv_prod_tr[] for threshold calculation.
-static AOM_INLINE int64_t calc_erroradv_threshold(AV1_COMP *cpi,
-                                                  int64_t ref_frame_error) {
-  if (!cpi->sf.gm_sf.disable_adaptive_warp_error_thresh)
-    return (int64_t)(
-        ref_frame_error * erroradv_tr[cpi->sf.gm_sf.gm_erroradv_type] + 0.5);
-  else
-    return INT64_MAX;
+static AOM_INLINE int64_t calc_erroradv_threshold(int64_t ref_frame_error) {
+  return (int64_t)(ref_frame_error * erroradv_tr + 0.5);
 }
 
 // For the given reference frame, computes the global motion parameters for
@@ -152,8 +146,8 @@ static AOM_INLINE void compute_global_motion_for_ref_frame(
             ref_buf[frame]->y_stride, cpi->source->y_buffer, src_width,
             src_height, src_stride, segment_map, segment_map_w);
 
-        int64_t erroradv_threshold =
-            calc_erroradv_threshold(cpi, ref_frame_error);
+        const int64_t erroradv_threshold =
+            calc_erroradv_threshold(ref_frame_error);
 
         const int64_t warp_error = av1_refine_integerized_param(
             &tmp_wm_params, tmp_wm_params.wmtype, is_cur_buf_hbd(xd), xd->bd,
@@ -197,8 +191,7 @@ static AOM_INLINE void compute_global_motion_for_ref_frame(
     if (!av1_is_enough_erroradvantage(
             (double)best_warp_error / ref_frame_error,
             gm_get_params_cost(&cm->global_motion[frame], ref_params,
-                               cm->features.allow_high_precision_mv),
-            cpi->sf.gm_sf.gm_erroradv_type)) {
+                               cm->features.allow_high_precision_mv))) {
       cm->global_motion[frame] = default_warp_params;
     }
 
@@ -312,6 +305,10 @@ static AOM_INLINE void update_valid_ref_frames_for_gm(
   const OrderHintInfo *const order_hint_info = &cm->seq_params.order_hint_info;
   int *num_past_ref_frames = &num_ref_frames[0];
   int *num_future_ref_frames = &num_ref_frames[1];
+  const GF_GROUP *gf_group = &cpi->gf_group;
+  int ref_pruning_enabled = is_frame_eligible_for_ref_pruning(
+      gf_group, cpi->sf.inter_sf.selective_ref_frame, 1, gf_group->index);
+
   for (int frame = ALTREF_FRAME; frame >= LAST_FRAME; --frame) {
     const MV_REFERENCE_FRAME ref_frame[2] = { frame, NONE_FRAME };
     RefCntBuffer *buf = get_ref_frame_buf(cm, frame);
@@ -328,11 +325,14 @@ static AOM_INLINE void update_valid_ref_frames_for_gm(
       ref_buf[frame] = &buf->buf;
     }
 
+    int prune_ref_frames =
+        ref_pruning_enabled &&
+        prune_ref_by_selective_ref_frame(cpi, NULL, ref_frame,
+                                         cm->cur_frame->ref_display_order_hint);
+
     if (ref_buf[frame]->y_crop_width == cpi->source->y_crop_width &&
         ref_buf[frame]->y_crop_height == cpi->source->y_crop_height &&
-        do_gm_search_logic(&cpi->sf, frame) &&
-        !prune_ref_by_selective_ref_frame(
-            cpi, NULL, ref_frame, cm->cur_frame->ref_display_order_hint) &&
+        do_gm_search_logic(&cpi->sf, frame) && !prune_ref_frames &&
         !(cpi->sf.gm_sf.selective_ref_gm && skip_gm_frame(cm, frame))) {
       assert(ref_buf[frame] != NULL);
       int relative_frame_dist = av1_encoder_get_relative_dist(
@@ -462,7 +462,7 @@ void av1_compute_global_motion_facade(AV1_COMP *cpi) {
   av1_zero(gm_info->params_cost);
 
   if (cpi->common.current_frame.frame_type == INTER_FRAME && cpi->source &&
-      cpi->oxcf.enable_global_motion && !gm_info->search_done) {
+      cpi->oxcf.tool_cfg.enable_global_motion && !gm_info->search_done) {
     setup_global_motion_info_params(cpi);
     if (cpi->mt_info.num_workers > 1)
       av1_global_motion_estimation_mt(cpi);

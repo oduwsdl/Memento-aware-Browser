@@ -121,6 +121,7 @@ TEST_P(LevelTest, TestLevelMonitoringLowBitrate) {
                                        30, 1, 0, 40);
     target_level_ = kLevelKeepStats;
     cfg_.rc_target_bitrate = 1000;
+    cfg_.g_limit = 40;
     ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
     ASSERT_EQ(level_[0], 0);
   }
@@ -133,8 +134,9 @@ TEST_P(LevelTest, TestLevelMonitoringHighBitrate) {
                                        30, 1, 0, 40);
     target_level_ = kLevelKeepStats;
     cfg_.rc_target_bitrate = 4000;
+    cfg_.g_limit = 40;
     ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
-    ASSERT_EQ(level_[0], 0);
+    ASSERT_EQ(level_[0], 4);
   }
 }
 
@@ -151,7 +153,8 @@ TEST_P(LevelTest, TestTargetLevel0) {
   }
 }
 
-AV1_INSTANTIATE_TEST_CASE(LevelTest,
-                          ::testing::Values(::libaom_test::kTwoPassGood),
-                          ::testing::ValuesIn(kCpuUsedVectors));
+AV1_INSTANTIATE_TEST_SUITE(LevelTest,
+                           ::testing::Values(::libaom_test::kTwoPassGood,
+                                             ::libaom_test::kOnePassGood),
+                           ::testing::ValuesIn(kCpuUsedVectors));
 }  // namespace

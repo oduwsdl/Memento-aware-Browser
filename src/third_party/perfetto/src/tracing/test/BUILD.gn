@@ -112,7 +112,13 @@ source_set("api_test_support") {
   deps = [
     "../../../gn:default_deps",
     "../../base",
+    "../../tracing:client_api_without_backends",
   ]
+
+  # The system tracing backend requires IPC support.
+  if (enable_perfetto_ipc) {
+    deps += [ "../../../test:test_helper" ]
+  }
   sources = [
     "api_test_support.cc",
     "api_test_support.h",

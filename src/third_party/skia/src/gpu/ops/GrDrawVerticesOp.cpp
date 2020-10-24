@@ -9,6 +9,7 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkDevice.h"
+#include "src/core/SkMatrixPriv.h"
 #include "src/core/SkVerticesPriv.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrProgramInfo.h"
@@ -185,12 +186,7 @@ public:
             // emit transforms using either explicit local coords or positions
             const auto& coordsAttr = gp.localCoordsAttr().isInitialized() ? gp.localCoordsAttr()
                                                                           : gp.positionAttr();
-            this->emitTransforms(vertBuilder,
-                                 varyingHandler,
-                                 uniformHandler,
-                                 coordsAttr.asShaderVar(),
-                                 SkMatrix::I(),
-                                 args.fFPCoordTransformHandler);
+            gpArgs->fLocalCoordVar = coordsAttr.asShaderVar();
 
             // Add varyings and globals for all custom attributes
             using Usage = SkVertices::Attribute::Usage;
@@ -306,7 +302,7 @@ public:
             const VerticesGP& vgp = gp.cast<VerticesGP>();
             uint32_t key = 0;
             key |= (vgp.fColorArrayType == ColorArrayType::kSkColor) ? 0x1 : 0;
-            key |= ComputePosKey(vgp.viewMatrix()) << 20;
+            key |= ComputeMatrixKey(vgp.viewMatrix()) << 20;
             b->add32(key);
             b->add32(GrColorSpaceXform::XformKey(vgp.fColorSpaceXform.get()));
 
@@ -319,22 +315,15 @@ public:
         }
 
         void setData(const GrGLSLProgramDataManager& pdman,
-                     const GrPrimitiveProcessor& gp,
-                     const CoordTransformRange& transformRange) override {
+                     const GrPrimitiveProcessor& gp) override {
             const VerticesGP& vgp = gp.cast<VerticesGP>();
 
-            if (!vgp.viewMatrix().isIdentity() &&
-                !SkMatrixPriv::CheapEqual(fViewMatrix, vgp.viewMatrix())) {
-                fViewMatrix = vgp.viewMatrix();
-                pdman.setSkMatrix(fViewMatrixUniform, fViewMatrix);
-            }
+            this->setTransform(pdman, fViewMatrixUniform, vgp.viewMatrix(), &fViewMatrix);
 
             if (!vgp.colorAttr().isInitialized() && vgp.color() != fColor) {
                 pdman.set4fv(fColorUniform, 1, vgp.color().vec());
                 fColor = vgp.color();
             }
-
-            this->setTransformDataHelper(SkMatrix::I(), pdman, transformRange);
 
             fColorSpaceHelper.setData(pdman, vgp.fColorSpaceXform.get());
 
@@ -374,7 +363,7 @@ public:
         };
         std::vector<MarkedUniform> fCustomMatrixUniforms;
 
-        typedef GrGLSLGeometryProcessor INHERITED;
+        using INHERITED = GrGLSLGeometryProcessor;
     };
 
     void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
@@ -442,7 +431,7 @@ private:
     int                          fCustomAttributeCount;
     const MarkedMatrices*        fCustomMatrices;
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 class DrawVerticesOp final : public GrMeshDrawOp {
@@ -466,10 +455,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override;
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override;
 
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
@@ -482,10 +467,14 @@ private:
                              SkArenaAlloc*,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&&,
-                             const GrXferProcessor::DstProxyView&) override;
+                             const GrXferProcessor::DstProxyView&,
+                             GrXferBarrierFlags renderPassXferBarriers) override;
 
     void onPrepareDraws(Target*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
 
     GrGeometryProcessor* makeGP(SkArenaAlloc*);
 
@@ -545,7 +534,7 @@ private:
     GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 DrawVerticesOp::DrawVerticesOp(const Helper::MakeArgs& helperArgs,
@@ -592,14 +581,11 @@ DrawVerticesOp::DrawVerticesOp(const Helper::MakeArgs& helperArgs,
                                 zeroArea);
 }
 
-#ifdef SK_DEBUG
-SkString DrawVerticesOp::dumpInfo() const {
-    SkString string;
-    string.appendf("PrimType: %d, MeshCount %d, VCount: %d, ICount: %d\n", (int)fPrimitiveType,
-                   fMeshes.count(), fVertexCount, fIndexCount);
-    string += fHelper.dumpInfo();
-    string += INHERITED::dumpInfo();
-    return string;
+#if GR_TEST_UTILS
+SkString DrawVerticesOp::onDumpInfo() const {
+    return SkStringPrintf("PrimType: %d, MeshCount %d, VCount: %d, ICount: %d\n%s",
+                          (int)fPrimitiveType, fMeshes.count(), fVertexCount, fIndexCount,
+                          fHelper.dumpInfo().c_str());
 }
 #endif
 
@@ -649,10 +635,12 @@ void DrawVerticesOp::onCreateProgramInfo(const GrCaps* caps,
                                          SkArenaAlloc* arena,
                                          const GrSurfaceProxyView* writeView,
                                          GrAppliedClip&& appliedClip,
-                                         const GrXferProcessor::DstProxyView& dstProxyView) {
+                                         const GrXferProcessor::DstProxyView& dstProxyView,
+                                         GrXferBarrierFlags renderPassXferBarriers) {
     GrGeometryProcessor* gp = this->makeGP(arena);
     fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
-                                             dstProxyView, gp, this->primitiveType());
+                                             dstProxyView, gp, this->primitiveType(),
+                                             renderPassXferBarriers);
 }
 
 void DrawVerticesOp::onPrepareDraws(Target* target) {

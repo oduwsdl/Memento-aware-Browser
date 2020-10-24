@@ -6,13 +6,18 @@
 - Added `WUFFS_BASE__PIXEL_BLEND__SRC_OVER`.
 - Added `WUFFS_BASE__PIXEL_FORMAT__BGR_565`.
 - Added `WUFFS_CONFIG__MODULE__BASE__ETC` sub-modules.
+- Added `auxiliary` code.
 - Added `base` library support for UTF-8.
 - Added `base` library support for `atoi`-like string conversion.
 - Added `endwhile` syntax.
+- Added `example/cbor-to-json`.
 - Added `example/convert-to-nia`.
 - Added `example/imageviewer`.
+- Added `example/json-to-cbor`.
+- Added `example/jsonfindptrs`.
 - Added `example/jsonptr`.
 - Added `std/bmp`.
+- Added `std/cbor`.
 - Added `std/gif.config_decoder`.
 - Added `std/json`.
 - Added `std/wbmp`.
@@ -25,6 +30,7 @@
 - Added single-quoted strings.
 - Added tokens.
 - Changed `gif.decoder_workbuf_len_max_incl_worst_case` from 1 to 0.
+- Changed default C compilers from `clang-5.0,gcc` to `clang-9,gcc`.
 - Changed the C formatting style; removed the `-cformatter` flag.
 - Changed what the `std/gif` benchmarks actually measure.
 - Made `wuffs_base__pixel_format` a struct.
@@ -32,7 +38,10 @@
 - Made `wuffs_base__status` a struct.
 - Removed `ack_metadata_chunk?`.
 - Removed `wuffs_base__frame_config__blend`.
+- Renamed I/O `available` methods to `length`.
 - Renamed `decode_io_writer?` methods to `transform_io?`.
+- Renamed `example/library` to `example/toy-genlib`.
+- Renamed `{read,writ}er_io_position` to `{read,writ}er_position`.
 - Renamed `swizzle_interleaved!` to `swizzle_interleaved_from_slice!`.
 - Renamed warnings to notes.
 

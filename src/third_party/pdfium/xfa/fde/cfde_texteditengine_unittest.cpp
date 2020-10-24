@@ -6,7 +6,7 @@
 
 #include "core/fxge/text_char_pos.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "testing/xfa_unit_test_support.h"
+#include "testing/xfa_test_environment.h"
 #include "xfa/fgas/font/cfgas_gefont.h"
 
 class CFDE_TextEditEngineTest : public testing::Test {
@@ -37,16 +37,18 @@ class CFDE_TextEditEngineTest : public testing::Test {
   ~CFDE_TextEditEngineTest() override {}
 
   void SetUp() override {
-    font_ =
-        CFGAS_GEFont::LoadFont(L"Arial Black", 0, 0, GetGlobalFontManager());
-    ASSERT_TRUE(font_.Get() != nullptr);
+    font_ = CFGAS_GEFont::LoadFont(L"Arial Black", 0, 0);
+    ASSERT_TRUE(font_);
 
     engine_ = std::make_unique<CFDE_TextEditEngine>();
     engine_->SetFont(font_);
     engine_->SetFontSize(12.0f);
   }
 
-  void TearDown() override { engine_.reset(); }
+  void TearDown() override {
+    engine_.reset();
+    font_.Reset();
+  }
 
   CFDE_TextEditEngine* engine() const { return engine_.get(); }
 

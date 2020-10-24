@@ -45,9 +45,10 @@ _log = logging.getLogger(__file__)
 
 
 class TestImporter(object):
-    def __init__(self, host, wpt_github=None):
+    def __init__(self, host, wpt_github=None, wpt_manifests=None):
         self.host = host
         self.wpt_github = wpt_github
+        self.port = host.port_factory.get()
 
         self.executive = host.executive
         self.fs = host.filesystem
@@ -70,8 +71,10 @@ class TestImporter(object):
         self.new_test_expectations = {}
         self.verbose = False
 
-        args = ['--clean-up-affected-tests-only']
-        self._expectations_updater = WPTExpectationsUpdater(self.host, args)
+        args = ['--clean-up-affected-tests-only',
+                '--clean-up-test-expectations']
+        self._expectations_updater = WPTExpectationsUpdater(
+            self.host, args, wpt_manifests)
 
     def main(self, argv=None):
         # TODO(robertma): Test this method! Split it to make it easier to test
@@ -154,14 +157,15 @@ class TestImporter(object):
         # TODO(robertma): Implement `add --all` in Git (it is different from `commit --all`).
         self.chromium_git.run(['add', '--all', self.dest_path])
 
+        # Remove expectations for tests that were deleted and rename tests
+        # in expectations for renamed tests.
+        self._expectations_updater.cleanup_test_expectations_files()
+
         self._generate_manifest()
 
         # TODO(crbug.com/800570 robertma): Re-enable it once we fix the bug.
         # self._delete_orphaned_baselines()
 
-        # Remove expectations for tests that were deleted and rename tests
-        # in expectations for renamed tests.
-        self._expectations_updater.cleanup_test_expectations_files()
 
         if not self.chromium_git.has_working_directory_changes():
             _log.info('Done: no changes to import.')
@@ -523,7 +527,7 @@ class TestImporter(object):
         """Returns a mapping of email addresses to owners of changed tests."""
         _log.info('Gathering directory owners emails to CC.')
         changed_files = self.chromium_git.changed_files()
-        extractor = DirectoryOwnersExtractor(self.fs)
+        extractor = DirectoryOwnersExtractor(self.host)
         return extractor.list_owners(changed_files)
 
     def _cl_description(self, directory_owners):
@@ -552,7 +556,17 @@ class TestImporter(object):
         # Move any No-Export tag to the end of the description.
         description = description.replace('No-Export: true', '')
         description = description.replace('\n\n\n\n', '\n\n')
-        description += 'No-Export: true'
+        description += 'No-Export: true\n'
+
+        # Add the wptrunner MVP tryjobs as blocking trybots, to catch any test
+        # changes or infrastructure changes from upstream.
+        #
+        # If this starts blocking the importer unnecessarily, revert
+        # https://chromium-review.googlesource.com/c/chromium/src/+/2451504
+        description += (
+            'Cq-Include-Trybots: luci.chromium.try:linux-wpt-identity-fyi-rel,'
+            'linux-wpt-payments-fyi-rel')
+
         return description
 
     @staticmethod

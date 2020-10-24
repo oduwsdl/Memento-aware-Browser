@@ -21,6 +21,8 @@ from dashboard.models import alert_group_workflow
 from dashboard.models import anomaly
 from dashboard.models import subscription
 
+_SERVICE_ACCOUNT_EMAIL = 'service-account@chromium.org'
+
 
 class AlertGroupWorkflowTest(testing_common.TestCase):
 
@@ -32,12 +34,32 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self._pinpoint = testing_common.FakePinpoint()
     self._crrev = testing_common.FakeCrrev()
     self._gitiles = testing_common.FakeGitiles()
+    self._revision_info = testing_common.FakeRevisionInfoClient(
+        infos={
+            'r_chromium_commit_pos': {
+                'name':
+                    'Chromium Commit Position',
+                'url':
+                    'http://test-results.appspot.com/revision_range?start={{R1}}&end={{R2}}',
+            },
+        },
+        revisions={
+            'master/bot/test_suite/measurement/test_case': {
+                0: {
+                    'r_chromium_commit_pos': '0'
+                },
+                100: {
+                    'r_chromium_commit_pos': '100'
+                },
+            }
+        })
+    self._service_account = lambda: _SERVICE_ACCOUNT_EMAIL
 
   @staticmethod
   def _AddAnomaly(**kwargs):
     default = {
         'test': 'master/bot/test_suite/measurement/test_case',
-        'start_revision': 0,
+        'start_revision': 1,
         'end_revision': 100,
         'is_improvement': False,
         'median_before_anomaly': 1.1,
@@ -45,6 +67,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
         'ownership': {
             'component': 'Foo>Bar',
             'emails': ['x@google.com', 'y@google.com'],
+            'info_blurb': 'This is an info blurb.',
         },
     }
     default.update(kwargs)
@@ -63,6 +86,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
 
   @staticmethod
   def _AddAlertGroup(anomaly_key,
+                     subscription_name=None,
                      issue=None,
                      anomalies=None,
                      status=None,
@@ -72,6 +96,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     group = alert_group.AlertGroup(
         id=str(uuid.uuid4()),
         name=anomaly_entity.benchmark_name,
+        subscription_name=subscription_name or 'sheriff',
         status=alert_group.AlertGroup.Status.untriaged,
         project_id=project_id or 'chromium',
         active=True,
@@ -154,6 +179,11 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
                        self._issue_tracker.add_comment_args[0])
       self.assertIn('Added 2 regressions to the group',
                     self._issue_tracker.add_comment_args[1])
+      self.assertIn('4 regressions in test_suite',
+                    self._issue_tracker.add_comment_kwargs['summary'])
+      self.assertIn('sheriff',
+                    self._issue_tracker.add_comment_kwargs['summary'])
+      self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
 
   def testAddAnomalies_GroupTriaged_IssueClosed(self):
     anomalies = [self._AddAnomaly(), self._AddAnomaly()]
@@ -165,7 +195,15 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
         status=alert_group.AlertGroup.Status.closed,
     )
     self._issue_tracker.issue.update({
-        'state': 'closed',
+        'state':
+            'closed',
+        'comments': [{
+            'id': 1,
+            'author': _SERVICE_ACCOUNT_EMAIL,
+            'updates': {
+                'status': 'WontFix'
+            },
+        }],
     })
     self._sheriff_config.patterns = {
         '*': [
@@ -176,6 +214,62 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
         group.get(),
         sheriff_config=self._sheriff_config,
         issue_tracker=self._issue_tracker,
+        service_account=self._service_account,
+    )
+    w.Process(
+        update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
+            now=datetime.datetime.utcnow(),
+            anomalies=ndb.get_multi(anomalies + added),
+            issue=self._issue_tracker.issue,
+        ))
+
+    self.assertEqual(len(group.get().anomalies), 4)
+    self.assertEqual('closed', self._issue_tracker.issue.get('state'))
+    for a in added:
+      self.assertIn(a, group.get().anomalies)
+      self.assertEqual(group.get().bug.bug_id,
+                       self._issue_tracker.add_comment_args[0])
+      self.assertIn('Added 2 regressions to the group',
+                    self._issue_tracker.add_comment_args[1])
+      self.assertIn('4 regressions in test_suite',
+                    self._issue_tracker.add_comment_kwargs['summary'])
+      self.assertIn('sheriff',
+                    self._issue_tracker.add_comment_kwargs['summary'])
+      self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
+
+  def testAddAnomalies_GroupTriaged_IssueClosed_AutoBisect(self):
+    anomalies = [self._AddAnomaly(), self._AddAnomaly()]
+    added = [self._AddAnomaly(), self._AddAnomaly()]
+    group = self._AddAlertGroup(
+        anomalies[0],
+        issue=self._issue_tracker.issue,
+        anomalies=anomalies,
+        status=alert_group.AlertGroup.Status.closed,
+    )
+    self._issue_tracker.issue.update({
+        'state':
+            'closed',
+        'comments': [{
+            'id': 1,
+            'author': _SERVICE_ACCOUNT_EMAIL,
+            'updates': {
+                'status': 'WontFix'
+            },
+        }],
+    })
+    self._sheriff_config.patterns = {
+        '*': [
+            subscription.Subscription(
+                name='sheriff',
+                auto_triage_enable=True,
+                auto_bisect_enable=True)
+        ],
+    }
+    w = alert_group_workflow.AlertGroupWorkflow(
+        group.get(),
+        sheriff_config=self._sheriff_config,
+        issue_tracker=self._issue_tracker,
+        service_account=self._service_account,
     )
     w.Process(
         update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
@@ -192,6 +286,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
                        self._issue_tracker.add_comment_args[0])
       self.assertIn('Added 2 regressions to the group',
                     self._issue_tracker.add_comment_args[1])
+    self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
 
   def testUpdate_GroupTriaged_IssueClosed(self):
     anomalies = [self._AddAnomaly(), self._AddAnomaly()]
@@ -201,7 +296,15 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
         status=alert_group.AlertGroup.Status.triaged,
     )
     self._issue_tracker.issue.update({
-        'state': 'closed',
+        'state':
+            'closed',
+        'comments': [{
+            'id': 1,
+            'author': _SERVICE_ACCOUNT_EMAIL,
+            'updates': {
+                'status': 'WontFix'
+            },
+        }],
     })
     self._sheriff_config.patterns = {
         '*': [
@@ -212,6 +315,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
         group.get(),
         sheriff_config=self._sheriff_config,
         issue_tracker=self._issue_tracker,
+        service_account=self._service_account,
     )
     w.Process(
         update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
@@ -219,8 +323,150 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             anomalies=ndb.get_multi(anomalies),
             issue=self._issue_tracker.issue,
         ))
-
     self.assertEqual(group.get().status, alert_group.AlertGroup.Status.closed)
+
+  def testAddAnomalies_GroupTriaged_IssueClosed_Manual(self):
+    anomalies = [self._AddAnomaly(), self._AddAnomaly()]
+    added = [self._AddAnomaly(), self._AddAnomaly()]
+    group = self._AddAlertGroup(
+        anomalies[0],
+        issue=self._issue_tracker.issue,
+        anomalies=anomalies,
+        status=alert_group.AlertGroup.Status.closed,
+    )
+    self._issue_tracker.issue.update({
+        'state':
+            'closed',
+        'comments': [{
+            'id': 2,
+            'author': "sheriff@chromium.org",
+            'updates': {
+                'status': 'WontFix'
+            },
+        }, {
+            'id': 1,
+            'author': _SERVICE_ACCOUNT_EMAIL,
+            'updates': {
+                'status': 'WontFix'
+            },
+        }],
+    })
+    self._sheriff_config.patterns = {
+        '*': [
+            subscription.Subscription(
+                name='sheriff',
+                auto_triage_enable=True,
+                auto_bisect_enable=True)
+        ],
+    }
+    w = alert_group_workflow.AlertGroupWorkflow(
+        group.get(),
+        sheriff_config=self._sheriff_config,
+        issue_tracker=self._issue_tracker,
+        service_account=self._service_account,
+    )
+    w.Process(
+        update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
+            now=datetime.datetime.utcnow(),
+            anomalies=ndb.get_multi(anomalies + added),
+            issue=self._issue_tracker.issue,
+        ))
+
+    self.assertEqual(len(group.get().anomalies), 4)
+    self.assertEqual('closed', self._issue_tracker.issue.get('state'))
+    for a in added:
+      self.assertIn(a, group.get().anomalies)
+      self.assertEqual(group.get().bug.bug_id,
+                       self._issue_tracker.add_comment_args[0])
+      self.assertIn('Added 2 regressions to the group',
+                    self._issue_tracker.add_comment_args[1])
+    self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
+
+  def testUpdate_GroupTriaged_IssueClosed_AllTriaged(self):
+    anomalies = [
+        self._AddAnomaly(recovered=True),
+        self._AddAnomaly(recovered=True)
+    ]
+    group = self._AddAlertGroup(
+        anomalies[0],
+        issue=self._issue_tracker.issue,
+        anomalies=anomalies,
+        status=alert_group.AlertGroup.Status.triaged,
+    )
+    self._issue_tracker.issue.update({
+        'state':
+            'closed',
+        'comments': [{
+            'id': 1,
+            'author': _SERVICE_ACCOUNT_EMAIL,
+            'updates': {
+                'status': 'WontFix'
+            },
+        }],
+    })
+    self._sheriff_config.patterns = {
+        '*': [
+            subscription.Subscription(name='sheriff', auto_triage_enable=True)
+        ],
+    }
+    w = alert_group_workflow.AlertGroupWorkflow(
+        group.get(),
+        sheriff_config=self._sheriff_config,
+        issue_tracker=self._issue_tracker,
+        service_account=self._service_account,
+    )
+    w.Process(
+        update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
+            now=datetime.datetime.utcnow(),
+            anomalies=ndb.get_multi(anomalies),
+            issue=self._issue_tracker.issue,
+        ))
+    self.assertEqual(group.get().status, alert_group.AlertGroup.Status.closed)
+    self.assertIsNone(self._issue_tracker.add_comment_args)
+
+  def testAddAnomalies_GroupTriaged_CommentsNone(self):
+    anomalies = [self._AddAnomaly(), self._AddAnomaly()]
+    added = [self._AddAnomaly(), self._AddAnomaly()]
+    group = self._AddAlertGroup(
+        anomalies[0],
+        issue=self._issue_tracker.issue,
+        anomalies=anomalies,
+        status=alert_group.AlertGroup.Status.closed,
+    )
+    self._issue_tracker.issue.update({
+        'state': 'closed',
+        'comments': None,
+    })
+    self._sheriff_config.patterns = {
+        '*': [
+            subscription.Subscription(
+                name='sheriff',
+                auto_triage_enable=True,
+                auto_bisect_enable=True)
+        ],
+    }
+    w = alert_group_workflow.AlertGroupWorkflow(
+        group.get(),
+        sheriff_config=self._sheriff_config,
+        issue_tracker=self._issue_tracker,
+        service_account=self._service_account,
+    )
+    w.Process(
+        update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
+            now=datetime.datetime.utcnow(),
+            anomalies=ndb.get_multi(anomalies + added),
+            issue=self._issue_tracker.issue,
+        ))
+
+    self.assertEqual(len(group.get().anomalies), 4)
+    self.assertEqual('closed', self._issue_tracker.issue.get('state'))
+    for a in added:
+      self.assertIn(a, group.get().anomalies)
+      self.assertEqual(group.get().bug.bug_id,
+                       self._issue_tracker.add_comment_args[0])
+      self.assertIn('Added 2 regressions to the group',
+                    self._issue_tracker.add_comment_args[1])
+    self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
 
   def testUpdate_GroupClosed_IssueOpen(self):
     anomalies = [self._AddAnomaly(), self._AddAnomaly()]
@@ -327,6 +573,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
         group.get(),
         sheriff_config=self._sheriff_config,
         issue_tracker=self._issue_tracker,
+        revision_info=self._revision_info,
         config=alert_group_workflow.AlertGroupWorkflow.Config(
             active_window=datetime.timedelta(days=7),
             triage_delay=datetime.timedelta(hours=0),
@@ -339,8 +586,42 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             issue=None,
         ))
     self.assertIn('2 regressions', self._issue_tracker.new_bug_args[0])
+    self.assertIn(
+        'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
+        self._issue_tracker.new_bug_args[1])
 
-  def testTriage_NonChromiumProject(self):
+  def testTriage_GroupUntriaged_MultiSubscriptions(self):
+    anomalies = [self._AddAnomaly(), self._AddAnomaly()]
+    group = self._AddAlertGroup(
+        anomalies[0],
+        status=alert_group.AlertGroup.Status.untriaged,
+    )
+    self._sheriff_config.patterns = {
+        '*': [
+            subscription.Subscription(name='sheriff'),
+            subscription.Subscription(
+                name='sheriff_not_bind', auto_triage_enable=True)
+        ],
+    }
+    w = alert_group_workflow.AlertGroupWorkflow(
+        group.get(),
+        sheriff_config=self._sheriff_config,
+        issue_tracker=self._issue_tracker,
+        revision_info=self._revision_info,
+        config=alert_group_workflow.AlertGroupWorkflow.Config(
+            active_window=datetime.timedelta(days=7),
+            triage_delay=datetime.timedelta(hours=0),
+        ),
+    )
+    w.Process(
+        update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
+            now=datetime.datetime.utcnow(),
+            anomalies=ndb.get_multi(anomalies),
+            issue=None,
+        ))
+    self.assertIsNone(self._issue_tracker.new_bug_args)
+
+  def testTriage_GroupUntriaged_NonChromiumProject(self):
     anomalies = [self._AddAnomaly()]
     # TODO(dberris): Figure out a way to not have to hack the fake service to
     # seed it with the correct issue in the correct project.
@@ -368,6 +649,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
         group.get(),
         sheriff_config=self._sheriff_config,
         issue_tracker=self._issue_tracker,
+        revision_info=self._revision_info,
         config=alert_group_workflow.AlertGroupWorkflow.Config(
             active_window=datetime.timedelta(days=7),
             triage_delay=datetime.timedelta(hours=0),
@@ -379,6 +661,41 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             issue=None))
     self.assertEqual(group.get().bug.project, 'v8')
     self.assertEqual(anomalies[0].get().project_id, 'v8')
+
+  def testTriage_GroupUntriaged_MultipleRange(self):
+    anomalies = [
+        self._AddAnomaly(median_before_anomaly=0.2, start_revision=10),
+        self._AddAnomaly(median_before_anomaly=0.1)
+    ]
+    group = self._AddAlertGroup(
+        anomalies[0],
+        status=alert_group.AlertGroup.Status.untriaged,
+    )
+    self._sheriff_config.patterns = {
+        '*': [
+            subscription.Subscription(name='sheriff', auto_triage_enable=True)
+        ],
+    }
+    w = alert_group_workflow.AlertGroupWorkflow(
+        group.get(),
+        sheriff_config=self._sheriff_config,
+        issue_tracker=self._issue_tracker,
+        revision_info=self._revision_info,
+        config=alert_group_workflow.AlertGroupWorkflow.Config(
+            active_window=datetime.timedelta(days=7),
+            triage_delay=datetime.timedelta(hours=0),
+        ),
+    )
+    w.Process(
+        update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
+            now=datetime.datetime.utcnow(),
+            anomalies=ndb.get_multi(anomalies),
+            issue=None,
+        ))
+    self.assertIn('2 regressions', self._issue_tracker.new_bug_args[0])
+    self.assertIn(
+        'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
+        self._issue_tracker.new_bug_args[1])
 
   def testTriage_GroupUntriaged_InfAnomaly(self):
     anomalies = [self._AddAnomaly(median_before_anomaly=0), self._AddAnomaly()]
@@ -395,6 +712,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
         group.get(),
         sheriff_config=self._sheriff_config,
         issue_tracker=self._issue_tracker,
+        revision_info=self._revision_info,
         config=alert_group_workflow.AlertGroupWorkflow.Config(
             active_window=datetime.timedelta(days=7),
             triage_delay=datetime.timedelta(hours=0),
@@ -432,6 +750,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             issue=self._issue_tracker.issue,
         ))
     self.assertIn('inf', self._issue_tracker.add_comment_args[1])
+    self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
 
   def testArchive_GroupUntriaged(self):
     anomalies = [self._AddAnomaly(), self._AddAnomaly()]
@@ -538,6 +857,43 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual(['123456'], group.get().bisection_ids)
     self.assertEqual(['Chromeperf-Auto-Bisected'],
                      self._issue_tracker.add_comment_kwargs['labels'])
+
+  def testBisect_GroupTriaged_MultiSubscriptions(self):
+    anomalies = [
+        self._AddAnomaly(median_before_anomaly=0.2),
+        self._AddAnomaly(median_before_anomaly=0.1),
+    ]
+    group = self._AddAlertGroup(
+        anomalies[0],
+        issue=self._issue_tracker.issue,
+        status=alert_group.AlertGroup.Status.triaged,
+    )
+    self._issue_tracker.issue.update({
+        'state': 'open',
+    })
+    self._sheriff_config.patterns = {
+        '*': [
+            subscription.Subscription(name='sheriff'),
+            subscription.Subscription(
+                name='sheriff_not_bind',
+                auto_triage_enable=True,
+                auto_bisect_enable=True)
+        ],
+    }
+    w = alert_group_workflow.AlertGroupWorkflow(
+        group.get(),
+        sheriff_config=self._sheriff_config,
+        issue_tracker=self._issue_tracker,
+        pinpoint=self._pinpoint,
+        crrev=self._crrev,
+    )
+    w.Process(
+        update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
+            now=datetime.datetime.utcnow(),
+            anomalies=ndb.get_multi(anomalies),
+            issue=self._issue_tracker.issue,
+        ))
+    self.assertIsNone(self._pinpoint.new_job_request)
 
   def testBisect_GroupBisected(self):
     anomalies = [self._AddAnomaly(), self._AddAnomaly()]
@@ -981,44 +1337,6 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual([], group.get().bisection_ids)
     self.assertEqual(['Chromeperf-Auto-NeedsAttention'],
                      self._issue_tracker.add_comment_kwargs['labels'])
-
-  def testBisect_UnsupportedTarget(self):
-    anomalies = [
-        self._AddAnomaly(test='master/bot/performance_browser_tests/some_case')
-    ]
-    group = self._AddAlertGroup(
-        anomalies[0],
-        issue=self._issue_tracker.issue,
-        status=alert_group.AlertGroup.Status.triaged,
-    )
-    self._issue_tracker.issue.update({
-        'state': 'open',
-    })
-    self._sheriff_config.patterns = {
-        '*': [
-            subscription.Subscription(
-                name='sheriff',
-                auto_triage_enable=True,
-                auto_bisect_enable=True)
-        ]
-    }
-    w = alert_group_workflow.AlertGroupWorkflow(
-        group.get(),
-        sheriff_config=self._sheriff_config,
-        issue_tracker=self._issue_tracker,
-        pinpoint=self._pinpoint,
-        crrev=self._crrev)
-    w.Process(
-        update=alert_group_workflow.AlertGroupWorkflow.GroupUpdate(
-            now=datetime.datetime.utcnow(),
-            anomalies=ndb.get_multi(anomalies),
-            issue=self._issue_tracker.issue))
-    self.assertEqual(alert_group.AlertGroup.Status.bisected, group.get().status)
-    self.assertEqual([], group.get().bisection_ids)
-    self.assertEqual(['Chromeperf-Auto-NeedsAttention'],
-                     self._issue_tracker.add_comment_kwargs['labels'])
-    self.assertIn('Only telemetry is supported at the moment.',
-                  self._issue_tracker.add_comment_args[1])
 
   def testBisect_SingleCL(self):
     anomalies = [

@@ -110,16 +110,18 @@ CPDF_Document::CPDF_Document(std::unique_ptr<RenderDataIface> pRenderData,
   m_pDocPage->SetDocument(this);
 }
 
-CPDF_Document::~CPDF_Document() = default;
+CPDF_Document::~CPDF_Document() {
+  // Be absolutely certain that |m_pExtension| is null before destroying
+  // the extension, to avoid re-entering it while being destroyed. clang
+  // seems to already do this for us, but the C++ standards seem to
+  // indicate the opposite.
+  m_pExtension.reset();
+}
 
 // static
 bool CPDF_Document::IsValidPageObject(const CPDF_Object* obj) {
   const CPDF_Dictionary* dict = ToDictionary(obj);
-  if (!dict)
-    return false;
-
-  const CPDF_Name* name = ToName(dict->GetObjectFor("Type"));
-  return name && name->GetString() == "Page";
+  return dict && dict->GetNameFor("Type") == "Page";
 }
 
 RetainPtr<CPDF_Object> CPDF_Document::ParseIndirectObject(uint32_t objnum) {
@@ -390,7 +392,7 @@ bool CPDF_Document::InsertDeletePDFPage(CPDF_Dictionary* pPages,
 
   for (size_t i = 0; i < pKidList->size(); i++) {
     CPDF_Dictionary* pKid = pKidList->GetDictAt(i);
-    if (pKid->GetStringFor("Type") == "Page") {
+    if (pKid->GetNameFor("Type") == "Page") {
       if (nPagesToGo != 0) {
         nPagesToGo--;
         continue;

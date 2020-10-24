@@ -25,8 +25,6 @@ class SensorProviderProxy;
 class MODULES_EXPORT SensorProxy : public GarbageCollected<SensorProxy>,
                                    public PageVisibilityObserver,
                                    public FocusChangedObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(SensorProxy);
-
  public:
   class Observer : public GarbageCollectedMixin {
    public:
@@ -83,7 +81,7 @@ class MODULES_EXPORT SensorProxy : public GarbageCollected<SensorProxy>,
   virtual void Suspend() {}
   virtual void Resume() {}
 
-  device::mojom::blink::SensorProvider* sensor_provider() const;
+  SensorProviderProxy* sensor_provider_proxy() const { return provider_; }
 
   device::mojom::blink::SensorType type_;
   using ObserversSet = HeapHashSet<WeakMember<Observer>>;

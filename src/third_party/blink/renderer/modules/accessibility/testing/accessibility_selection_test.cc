@@ -8,6 +8,7 @@
 #include <iterator>
 
 #include "base/memory/scoped_refptr.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/renderer/core/dom/character_data.h"
 #include "third_party/blink/renderer/core/dom/container_node.h"
 #include "third_party/blink/renderer/core/dom/node.h"
@@ -28,8 +29,6 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
-namespace test {
-
 namespace {
 
 constexpr char kSelectionTestsRelativePath[] = "selection/";
@@ -348,7 +347,7 @@ AccessibilitySelectionTest::AccessibilitySelectionTest(
 
 void AccessibilitySelectionTest::SetUp() {
   AccessibilityTest::SetUp();
-  RuntimeEnabledFeatures::SetAccessibilityExposeHTMLElementEnabled(false);
+  RuntimeEnabledFeatures::SetAccessibilityExposeHTMLElementEnabled(true);
 }
 
 std::string AccessibilitySelectionTest::GetCurrentSelectionText() const {
@@ -402,10 +401,10 @@ void AccessibilitySelectionTest::RunSelectionTest(
   static const std::string separator_line = '\n' + std::string(80, '=') + '\n';
   const String relative_path = String::FromUTF8(kSelectionTestsRelativePath) +
                                String::FromUTF8(test_name);
-  const String test_path = AccessibilityTestDataPath(relative_path);
+  const String test_path = test::AccessibilityTestDataPath(relative_path);
 
   const String test_file = test_path + String::FromUTF8(kTestFileSuffix);
-  scoped_refptr<SharedBuffer> test_file_buffer = ReadFromFile(test_file);
+  scoped_refptr<SharedBuffer> test_file_buffer = test::ReadFromFile(test_file);
   auto test_file_chars = test_file_buffer->CopyAs<Vector<char>>();
   std::string test_file_contents;
   std::copy(test_file_chars.begin(), test_file_chars.end(),
@@ -418,7 +417,7 @@ void AccessibilitySelectionTest::RunSelectionTest(
   const String ax_file =
       test_path +
       String::FromUTF8(suffix.empty() ? kAXTestExpectationSuffix : suffix);
-  scoped_refptr<SharedBuffer> ax_file_buffer = ReadFromFile(ax_file);
+  scoped_refptr<SharedBuffer> ax_file_buffer = test::ReadFromFile(ax_file);
   auto ax_file_chars = ax_file_buffer->CopyAs<Vector<char>>();
   std::string ax_file_contents;
   std::copy(ax_file_chars.begin(), ax_file_chars.end(),
@@ -444,6 +443,11 @@ void AccessibilitySelectionTest::RunSelectionTest(
   }
 
   EXPECT_EQ(ax_file_contents, actual_ax_file_contents);
+
+  // Uncomment these lines to write the output to the expectations file.
+  // TODO(dmazzoni): make this a command-line parameter.
+  // if (ax_file_contents != actual_ax_file_contents)
+  //  base::WriteFile(WebStringToFilePath(ax_file), actual_ax_file_contents);
 }
 
 ParameterizedAccessibilitySelectionTest::
@@ -459,5 +463,4 @@ void ParameterizedAccessibilitySelectionTest::RunSelectionTest(
   AccessibilitySelectionTest::RunSelectionTest(test_name, suffix);
 }
 
-}  // namespace test
 }  // namespace blink

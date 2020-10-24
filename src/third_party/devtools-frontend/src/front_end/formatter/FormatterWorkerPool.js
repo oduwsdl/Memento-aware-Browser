@@ -1,6 +1,8 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
 
 import * as Common from '../common/common.js';
 
@@ -107,27 +109,13 @@ export class FormatterWorkerPool {
    */
   _runTask(methodName, params) {
     let callback;
-    const promise = new Promise(fulfill => callback = fulfill);
+    const promise = new Promise(fulfill => {
+      callback = fulfill;
+    });
     const task = new Task(methodName, params, callback, false);
     this._taskQueue.push(task);
     this._processNextTask();
     return promise;
-  }
-
-  /**
-   * @param {string} content
-   * @return {!Promise<*>}
-   */
-  parseJSONRelaxed(content) {
-    return this._runTask('parseJSONRelaxed', {content: content});
-  }
-
-  /**
-   * @param {string} content
-   * @return {!Promise<!Array<!SCSSRule>>}
-   */
-  parseSCSS(content) {
-    return this._runTask('parseSCSS', {content: content}).then(rules => rules || []);
   }
 
   /**

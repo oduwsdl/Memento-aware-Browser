@@ -13,6 +13,8 @@
 
 #include <set>
 
+#if defined(SKSL_STANDALONE) || GR_TEST_UTILS
+
 namespace SkSL {
 
 class CPPCodeGenerator : public GLSLCodeGenerator {
@@ -36,8 +38,6 @@ private:
     String getTypeName(const Type& type) override;
 
     void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence) override;
-
-    void writeIndexExpression(const IndexExpression& i) override;
 
     void writeIntLiteral(const IntLiteral& i) override;
 
@@ -67,6 +67,8 @@ private:
 
     // writes a printf escape that will be filled in at runtime by the given C++ expression string
     void writeRuntimeValue(const Type& type, const Layout& layout, const String& cppCode);
+    String formatRuntimeValue(const Type& type, const Layout& layout, const String& cppCode,
+                              std::vector<String>* formatArgs);
 
     void writeVarInitializer(const Variable& var, const Expression& value) override;
 
@@ -87,6 +89,8 @@ private:
     void writeOnTextureSampler();
 
     void writeClone();
+
+    void writeDumpInfo();
 
     void writeTest();
 
@@ -115,6 +119,15 @@ private:
     // Append CPP code to the current extra emit code block.
     void addExtraEmitCodeLine(const String& toAppend);
 
+    // Called when we encounter `sk_OutColor = xxxxx` or `return xxxxx` during the parse. If both
+    // return types are encountered in a single file, an error is generated.
+    enum class ReturnType {
+        kNothing,
+        kUsesExplicitReturn,
+        kUsesSkOutColor
+    };
+    void setReturnType(int offset, ReturnType typeToSet);
+
     int getChildFPIndex(const Variable& var) const;
 
     String fName;
@@ -123,19 +136,29 @@ private:
     std::vector<String> fExtraEmitCodeBlocks;
 
     std::vector<String> fFormatArgs;
-    std::set<int> fWrittenTransformedCoords;
-    // if true, we are writing a C++ expression instead of a GLSL expression
+    // true if the sksl declared its main() function with a float2 parameter AND referenced that
+    // parameter in its body.
+    bool fAccessSampleCoordsDirectly = false;
+
+    // If true, we are writing a C++ expression instead of a GLSL expression
     bool fCPPMode = false;
+
+    // True while compiling the main() function of the FP.
     bool fInMain = false;
+
+    // Keeps track of how main() returns a color to the caller. An FP file cannot mix return types.
+    ReturnType fReturnType = ReturnType::kNothing;
 
     // if not null, we are accumulating SkSL for emitCode into fOut, which
     // replaced the original buffer with a StringStream. The original buffer is
     // stored here for restoration.
     OutputStream* fCPPBuffer = nullptr;
 
-    typedef GLSLCodeGenerator INHERITED;
+    using INHERITED = GLSLCodeGenerator;
 };
 
-}
+}  // namespace SkSL
 
-#endif
+#endif // defined(SKSL_STANDALONE) || GR_TEST_UTILS
+
+#endif // SKSL_CPPCODEGENERATOR

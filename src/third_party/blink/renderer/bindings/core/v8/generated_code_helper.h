@@ -99,6 +99,24 @@ void V8SetReflectedNullableDOMStringAttribute(
 
 namespace bindings {
 
+CORE_EXPORT void SetupIDLInterfaceTemplates(
+    v8::Isolate* isolate,
+    const WrapperTypeInfo* wrapper_type_info,
+    v8::Local<v8::ObjectTemplate> instance_template,
+    v8::Local<v8::ObjectTemplate> prototype_template,
+    v8::Local<v8::FunctionTemplate> interface_template,
+    v8::Local<v8::FunctionTemplate> parent_interface_template);
+
+CORE_EXPORT void SetupIDLNamespaceTemplate(
+    v8::Isolate* isolate,
+    const WrapperTypeInfo* wrapper_type_info,
+    v8::Local<v8::ObjectTemplate> interface_template);
+
+CORE_EXPORT void SetupIDLCallbackInterfaceTemplate(
+    v8::Isolate* isolate,
+    const WrapperTypeInfo* wrapper_type_info,
+    v8::Local<v8::FunctionTemplate> interface_template);
+
 // Returns the length of arguments ignoring the undefined values at the end.
 inline int NonUndefinedArgumentLength(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -168,7 +186,7 @@ CORE_EXPORT ExecutionContext* ExecutionContextFromV8Wrappable(
 CORE_EXPORT ExecutionContext* ExecutionContextFromV8Wrappable(
     const DOMParser* parser);
 
-CORE_EXPORT v8::MaybeLocal<v8::Function> CreateNamedConstructorFunction(
+CORE_EXPORT v8::MaybeLocal<v8::Value> CreateNamedConstructorFunction(
     ScriptState* script_state,
     v8::FunctionCallback callback,
     const char* func_name,
@@ -227,6 +245,43 @@ bool ConvertDictionaryMember(v8::Isolate* isolate,
   presence = true;
   return true;
 }
+
+// [CSSProperty]
+CORE_EXPORT void InstallCSSPropertyAttributes(
+    v8::Isolate* isolate,
+    const DOMWrapperWorld& world,
+    v8::Local<v8::Template> instance_template,
+    v8::Local<v8::Template> prototype_template,
+    v8::Local<v8::Template> interface_template,
+    v8::Local<v8::Signature> signature,
+    base::span<const char* const> css_property_names);
+CORE_EXPORT void CSSPropertyAttributeGet(
+    const v8::FunctionCallbackInfo<v8::Value>& info);
+CORE_EXPORT void CSSPropertyAttributeSet(
+    const v8::FunctionCallbackInfo<v8::Value>& info);
+
+// Common implementation to reduce the binary size of attribute set callbacks.
+CORE_EXPORT void PerformAttributeSetCEReactionsReflectTypeBoolean(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name);
+CORE_EXPORT void PerformAttributeSetCEReactionsReflectTypeString(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name);
+CORE_EXPORT void
+PerformAttributeSetCEReactionsReflectTypeStringLegacyNullToEmptyString(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name);
+CORE_EXPORT void PerformAttributeSetCEReactionsReflectTypeStringOrNull(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name);
 
 }  // namespace bindings
 

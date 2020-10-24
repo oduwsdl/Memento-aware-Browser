@@ -118,126 +118,85 @@
     {
       "type": "setting",
       "category": "Grid",
-      "title": "Grid Border",
+      "title": "Show area names",
       "experiment": "cssGridFeatures",
-      "settingName": "showGridBorder",
-      "settingType": "enum",
-      "defaultValue": "none",
+      "settingName": "showGridAreas",
+      "settingType": "boolean",
       "options": [
         {
-          "title": "Do not show grid container border",
-          "text": "None",
-          "value": "none"
+          "value": true,
+          "title": "Show grid named areas"
         },
         {
-          "title": "Show dashed grid container border",
-          "text": "Dashed",
-          "value": "dashed"
-        },
-        {
-          "title": "Show solid grid container border",
-          "text": "Solid",
-          "value": "solid"
+          "value": false,
+          "title": "Do not show grid named areas"
         }
-      ]
+      ],
+      "defaultValue": false
     },
     {
       "type": "setting",
       "category": "Grid",
-      "title": "Grid Lines",
+      "title": "Show track sizes",
       "experiment": "cssGridFeatures",
-      "settingName": "showGridLines",
-      "settingType": "enum",
-      "defaultValue": "dashed",
+      "settingName": "showGridTrackSizes",
+      "settingType": "boolean",
       "options": [
         {
-          "title": "Do not show grid lines",
-          "text": "None",
-          "value": "none"
+          "value": true,
+          "title": "Show grid track sizes"
         },
         {
-          "title": "Show dashed grid lines",
-          "text": "Dashed",
-          "value": "dashed"
-        },
-        {
-          "title": "Show solid grid lines",
-          "text": "Solid",
-          "value": "solid"
-        },
-        {
-          "title": "Show dashed grid lines extended to the edge of page",
-          "text": "Extended Dashed",
-          "value": "extended-dashed"
-        },
-        {
-          "title": "Show solid grid lines extended to the edge of the page",
-          "text": "Extended Solid",
-          "value": "extended-solid"
+          "value": false,
+          "title": "Do not show grid track sizes"
         }
-      ]
+      ],
+      "defaultValue": false
     },
     {
       "type": "setting",
       "category": "Grid",
-      "title": "Grid Line Numbers",
+      "title": "Extend grid lines",
       "experiment": "cssGridFeatures",
-      "settingName": "showGridLineNumbers",
-      "settingType": "enum",
-      "defaultValue": "none",
+      "settingName": "extendGridLines",
+      "settingType": "boolean",
       "options": [
         {
-          "title": "Do not show grid line numbers",
-          "text": "None",
-          "value": "none"
+          "value": true,
+          "title": "Extend grid lines"
         },
         {
-          "title": "Show positive grid line numbers",
-          "text": "Positive",
-          "value": "positive"
-        },
-        {
-          "title": "Show negative grid line numbers",
-          "text": "Negative",
-          "value": "negative"
-        },
-        {
-          "title": "Show both positive and negative grid line numbers",
-          "text": "Both",
-          "value": "both"
+          "value": false,
+          "title": "Do not extend grid lines"
         }
-      ]
+      ],
+      "defaultValue": false
     },
     {
       "type": "setting",
       "category": "Grid",
-      "title": "Grid Gaps",
+      "title": "Show line labels",
       "experiment": "cssGridFeatures",
-      "settingName": "showGridGaps",
+      "settingName": "showGridLineLabels",
       "settingType": "enum",
-      "defaultValue": "both",
       "options": [
         {
-          "title": "Do not shade grid gaps",
-          "text": "None",
+          "title": "Hide line labels",
+          "text": "Hide line labels",
           "value": "none"
         },
         {
-          "title": "Shade row gaps",
-          "text": "Row Gaps",
-          "value": "row-gaps"
+          "title": "Show line numbers",
+          "text": "Show line numbers",
+          "value": "lineNumbers"
         },
         {
-          "title": "Shade column gaps",
-          "text": "Column Gaps",
-          "value": "column-gaps"
-        },
-        {
-          "title": "Shade both row and column gaps",
-          "text": "Both",
-          "value": "both"
+          "title": "Show line names",
+          "text": "Show line names",
+          "value": "lineNames"
         }
-      ]
+      ],
+      "defaultValue": "lineNumbers"
     },
     {
       "type": "setting",
@@ -368,6 +327,25 @@
     {
       "type": "setting",
       "category": "Rendering",
+      "title": "Emulate a focused page",
+      "settingName": "emulatePageFocus",
+      "settingType": "boolean",
+      "storageType": "session",
+      "defaultValue": false,
+      "options": [
+        {
+          "value": true,
+          "title": "Emulate a focused page"
+        },
+        {
+          "value": false,
+          "title": "Do not emulate a focused page"
+        }
+      ]
+    },
+    {
+      "type": "setting",
+      "category": "Rendering",
       "settingName": "emulatedCSSMedia",
       "settingType": "enum",
       "storageType": "session",
@@ -443,6 +421,26 @@
     },
     {
       "type": "setting",
+      "settingName": "emulatedCSSMediaFeaturePrefersReducedData",
+      "settingType": "enum",
+      "storageType": "session",
+      "defaultValue": "",
+      "options": [
+        {
+          "title": "Do not emulate CSS prefers-reduced-data",
+          "text": "No emulation",
+          "value": ""
+        },
+        {
+          "title": "Emulate CSS prefers-reduced-data: reduce",
+          "text": "prefers-reduced-data: reduce",
+          "value": "reduce"
+        }
+      ],
+      "title": "Emulate CSS media feature prefers-reduced-data"
+    },
+    {
+      "type": "setting",
       "category": "Rendering",
       "settingName": "emulatedVisionDeficiency",
       "settingType": "enum",
@@ -485,6 +483,24 @@
     },
     {
       "type": "setting",
+      "category": "Rendering",
+      "settingName": "localFontsDisabled",
+      "settingType": "boolean",
+      "storageType": "session",
+      "options": [
+        {
+          "value": true,
+          "title": "Disable local fonts"
+        },
+        {
+          "value": false,
+          "title": "Enable local fonts"
+        }
+      ],
+      "defaultValue": false
+    },
+    {
+      "type": "setting",
       "category": "Console",
       "title": "Enable custom formatters",
       "settingName": "customFormatters",
@@ -494,7 +510,7 @@
     {
       "type": "setting",
       "category": "Network",
-      "title": "Enable request blocking",
+      "title": "Enable network request blocking",
       "settingName": "requestBlockingEnabled",
       "settingType": "boolean",
       "storageType": "session",
@@ -502,11 +518,11 @@
       "options": [
         {
           "value": true,
-          "title": "Enable request blocking"
+          "title": "Enable network request blocking"
         },
         {
           "value": false,
-          "title": "Disable request blocking"
+          "title": "Disable network request blocking"
         }
       ]
     },
@@ -530,9 +546,7 @@
         }
       ]
     }
-  ],
-  "scripts": [],
-  "modules": [
+  ],  "modules": [
     "../generated/SupportedCSSProperties.js",
     "sdk.js",
     "sdk-legacy.js",
@@ -546,17 +560,21 @@
     "ProfileTreeModel.js",
     "Issue.js",
     "IssuesModel.js",
+    "WebAuthnModel.js",
     "SameSiteCookieIssue.js",
     "MixedContentIssue.js",
+    "ContentSecurityPolicyIssue.js",
     "CrossOriginEmbedderPolicyIssue.js",
     "ServerTiming.js",
     "CPUProfileDataModel.js",
     "CPUProfilerModel.js",
+    "CSSFontFace.js",
     "CSSMatchedStyles.js",
     "CSSMedia.js",
     "CSSMetadata.js",
     "CSSModel.js",
     "CSSProperty.js",
+    "CSSPropertyParser.js",
     "CSSRule.js",
     "CSSStyleDeclaration.js",
     "CSSStyleSheetHeader.js",
@@ -565,7 +583,9 @@
     "DOMModel.js",
     "DebuggerModel.js",
     "EmulationModel.js",
+    "FrameManager.js",
     "HARLog.js",
+    "HeavyAdIssue.js",
     "LayerTreeBase.js",
     "LogModel.js",
     "ServiceWorkerManager.js",
@@ -591,7 +611,9 @@
     "PerformanceMetricsModel.js",
     "FilmStripModel.js",
     "ConsoleModel.js",
-    "wasm_source_map/pkg/wasm_source_map.js"
+    "wasm_source_map/pkg/wasm_source_map.js",
+    "PageResourceLoader.js",
+    "IOModel.js"
   ],
   "skip_compilation": [
     "wasm_source_map/pkg/wasm_source_map.js"

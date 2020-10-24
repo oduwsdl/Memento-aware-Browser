@@ -23,6 +23,8 @@ set(DEQP_VK_TEXTURE_SRCS
 	vktTextureFilteringTests.hpp
 	vktTextureMipmapTests.cpp
 	vktTextureMipmapTests.hpp
+	vktTextureMultisampleTests.cpp
+	vktTextureMultisampleTests.hpp
 	vktTextureShadowTests.cpp
 	vktTextureShadowTests.hpp
 	vktTextureSubgroupLodTests.cpp
@@ -33,6 +35,10 @@ set(DEQP_VK_TEXTURE_SRCS
 	vktTextureCompressedFormatTests.hpp
 	vktTextureSwizzleTests.cpp
 	vktTextureSwizzleTests.hpp
+	vktTextureTexelBufferTests.cpp
+	vktTextureTexelBufferTests.hpp
+	vktTextureTexelOffsetTests.cpp
+	vktTextureTexelOffsetTests.hpp
 	)
 
 set(DEQP_VK_TEXTURE_LIBS

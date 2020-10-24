@@ -68,6 +68,14 @@ ResourceError ResourceError::CancelledDueToAccessCheckError(
   return error;
 }
 
+ResourceError ResourceError::BlockedByResponse(
+    const KURL& url,
+    network::mojom::BlockedByResponseReason blocked_by_response_reason) {
+  ResourceError error(net::ERR_BLOCKED_BY_RESPONSE, url, base::nullopt);
+  error.blocked_by_response_reason_ = blocked_by_response_reason;
+  return error;
+}
+
 ResourceError ResourceError::CacheMissError(const KURL& url) {
   return ResourceError(net::ERR_CACHE_MISS, url, base::nullopt);
 }
@@ -108,18 +116,6 @@ ResourceError::ResourceError(const WebURLError& error)
       trust_token_operation_error_(error.trust_token_operation_error()) {
   DCHECK_NE(error_code_, 0);
   InitializeDescription();
-}
-
-ResourceError ResourceError::Copy() const {
-  ResourceError error_copy(error_code_, failing_url_.Copy(),
-                           cors_error_status_);
-  error_copy.extended_error_code_ = extended_error_code_;
-  error_copy.resolve_error_info_ = resolve_error_info_;
-  error_copy.has_copy_in_cache_ = has_copy_in_cache_;
-  error_copy.localized_description_ = localized_description_.IsolatedCopy();
-  error_copy.is_access_check_ = is_access_check_;
-  error_copy.trust_token_operation_error_ = trust_token_operation_error_;
-  return error_copy;
 }
 
 ResourceError::operator WebURLError() const {
@@ -183,8 +179,11 @@ bool ResourceError::IsCancellation() const {
   return error_code_ == net::ERR_ABORTED;
 }
 
-bool ResourceError::IsTrustTokenCacheHit() const {
-  return error_code_ == net::ERR_TRUST_TOKEN_OPERATION_CACHE_HIT;
+bool ResourceError::IsUnactionableTrustTokensStatus() const {
+  return error_code_ == net::ERR_TRUST_TOKEN_OPERATION_CACHE_HIT ||
+         (error_code_ == net::ERR_TRUST_TOKEN_OPERATION_FAILED &&
+          trust_token_operation_error_ ==
+              network::mojom::TrustTokenOperationStatus::kUnavailable);
 }
 
 bool ResourceError::IsCacheMiss() const {
@@ -296,6 +295,10 @@ String DescriptionForBlockedByClientOrResponse(int error, int extended_error) {
       break;
     case ResourceRequestBlockedReason::kCorpNotSameSite:
       detail = "NotSameSite";
+      break;
+    case ResourceRequestBlockedReason::
+        kBlockedByExtensionCrbug1128174Investigation:
+      detail = "BlockedByExtensionCrbug1128174Investigation";
       break;
   }
   return WebString::FromASCII(net::ErrorToString(error) + "." + detail);

@@ -847,6 +847,47 @@ TEST_P(StateChangeRenderTest, DepthRangeUpdates)
                          GLColor::green);
 }
 
+class StateChangeRenderTestES3 : public StateChangeRenderTest
+{};
+
+TEST_P(StateChangeRenderTestES3, InvalidateNonCurrentFramebuffer)
+{
+    glBindTexture(GL_TEXTURE_2D, mTextures[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 16, 16, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, mFramebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mTextures[0], 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    EXPECT_GLENUM_EQ(GL_FRAMEBUFFER_COMPLETE, glCheckFramebufferStatus(GL_FRAMEBUFFER));
+    ASSERT_GL_NO_ERROR();
+
+    // Draw with red to the FBO.
+    GLColor red(255, 0, 0, 255);
+    setUniformColor(red);
+    drawQuad(mProgram, "position", 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, red);
+
+    // Go back to default framebuffer, draw green
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLColor green(0, 255, 0, 255);
+    setUniformColor(green);
+    drawQuad(mProgram, "position", 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, green);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, mFramebuffer);
+
+    // Invalidate color buffer of FBO
+    GLenum attachments1[] = {GL_COLOR_ATTACHMENT0};
+    glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, attachments1);
+    ASSERT_GL_NO_ERROR();
+
+    // Verify drawing blue gives blue.
+    GLColor blue(0, 0, 255, 255);
+    setUniformColor(blue);
+    drawQuad(mProgram, "position", 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, blue);
+}
+
 // Tests that D3D11 dirty bit updates don't forget about BufferSubData attrib updates.
 TEST_P(StateChangeTest, VertexBufferUpdatedAfterDraw)
 {
@@ -1109,10 +1150,10 @@ void main()
 })";
 
     constexpr char kFragmentShader[] = R"(#version 300 es
-out mediump float dummy;
+out mediump float unused;
 void main()
 {
-    dummy = 1.0;
+    unused = 1.0;
 })";
 
     std::vector<std::string> tfVaryings = {"valueOut"};
@@ -1389,9 +1430,31 @@ class SimpleStateChangeTest : public ANGLETest
 };
 
 class SimpleStateChangeTestES3 : public SimpleStateChangeTest
-{};
+{
+  protected:
+    void blendAndVerifyColor(const GLColor32F blendColor, const GLColor expectedColor)
+    {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        EXPECT_GL_NO_ERROR();
 
-class SimpleStateChangeTestES31 : public SimpleStateChangeTest
+        ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::UniformColor());
+        glUseProgram(program);
+
+        GLint colorUniformLocation =
+            glGetUniformLocation(program, angle::essl1_shaders::ColorUniform());
+        ASSERT_NE(colorUniformLocation, -1);
+
+        glUniform4f(colorUniformLocation, blendColor.R, blendColor.G, blendColor.B, blendColor.A);
+        EXPECT_GL_NO_ERROR();
+
+        drawQuad(program, essl1_shaders::PositionAttrib(), 0.5f);
+        EXPECT_GL_NO_ERROR();
+        EXPECT_PIXEL_COLOR_NEAR(0, 0, expectedColor, 1);
+    }
+};
+
+class SimpleStateChangeTestES31 : public SimpleStateChangeTestES3
 {};
 
 class SimpleStateChangeTestComputeES31 : public SimpleStateChangeTest
@@ -2488,6 +2551,363 @@ TEST_P(SimpleStateChangeTestES3, ReadFramebufferDrawFramebufferDifferentAttachme
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::blue);
 }
 
+// Tests that invalidate then copy then blend works.
+TEST_P(SimpleStateChangeTestES3, InvalidateThenCopyThenBlend)
+{
+    // Create a framebuffer as the source of copy
+    const GLColor kSrcData = GLColor::cyan;
+    GLTexture copySrc;
+    glBindTexture(GL_TEXTURE_2D, copySrc);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &kSrcData);
+
+    GLFramebuffer readFBO;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFBO);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, copySrc, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_READ_FRAMEBUFFER);
+
+    // Create the framebuffer that will be invalidated
+    GLTexture renderTarget;
+    glBindTexture(GL_TEXTURE_2D, renderTarget);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTarget,
+                           0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_DRAW_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer and invalidate it.
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    GLenum invalidateAttachment = GL_COLOR_ATTACHMENT0;
+    glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &invalidateAttachment);
+    EXPECT_GL_NO_ERROR();
+
+    // Copy into the framebuffer's texture.  The framebuffer should now be cyan.
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 1, 1);
+    EXPECT_GL_NO_ERROR();
+
+    // Blend into the framebuffer, then verify that the framebuffer should have had cyan.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    blendAndVerifyColor(GLColor32F(1.0f, 0.0f, 0.0f, 0.5f), GLColor(127, 127, 127, 191));
+}
+
+// Tests that invalidate then blit then blend works.
+TEST_P(SimpleStateChangeTestES3, InvalidateThenBlitThenBlend)
+{
+    // Create a framebuffer as the source of blit
+    const GLColor kSrcData = GLColor::cyan;
+    GLTexture blitSrc;
+    glBindTexture(GL_TEXTURE_2D, blitSrc);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &kSrcData);
+
+    GLFramebuffer readFBO;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFBO);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, blitSrc, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_READ_FRAMEBUFFER);
+
+    // Create the framebuffer that will be invalidated
+    GLTexture renderTarget;
+    glBindTexture(GL_TEXTURE_2D, renderTarget);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTarget,
+                           0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_DRAW_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer and invalidate it.
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    GLenum invalidateAttachment = GL_COLOR_ATTACHMENT0;
+    glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &invalidateAttachment);
+    EXPECT_GL_NO_ERROR();
+
+    // Blit into the framebuffer.  The framebuffer should now be cyan.
+    glBlitFramebuffer(0, 0, 1, 1, 0, 0, 1, 1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    EXPECT_GL_NO_ERROR();
+
+    // Blend into the framebuffer, then verify that the framebuffer should have had cyan.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    blendAndVerifyColor(GLColor32F(1.0f, 0.0f, 0.0f, 0.5f), GLColor(127, 127, 127, 191));
+}
+
+// Tests that invalidate then generate mipmaps works
+TEST_P(SimpleStateChangeTestES3, InvalidateThenGenerateMipmapsThenBlend)
+{
+    // Create a texture on which generate mipmaps would be called
+    const GLColor kMip0Data[4] = {GLColor::cyan, GLColor::cyan, GLColor::cyan, GLColor::cyan};
+    const GLColor kMip1Data    = GLColor::blue;
+    GLTexture texture;
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, kMip0Data);
+    glTexImage2D(GL_TEXTURE_2D, 1, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &kMip1Data);
+
+    // Create the framebuffer that will be invalidated
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 1);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_DRAW_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer and invalidate it.
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    GLenum invalidateAttachment = GL_COLOR_ATTACHMENT0;
+    glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &invalidateAttachment);
+    EXPECT_GL_NO_ERROR();
+
+    // Generate mipmaps
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    // Blend into the framebuffer, then verify that the framebuffer should have had cyan.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    blendAndVerifyColor(GLColor32F(1.0f, 0.0f, 0.0f, 0.5f), GLColor(127, 127, 127, 191));
+}
+
+// Tests that invalidate then upload works
+TEST_P(SimpleStateChangeTestES3, InvalidateThenUploadThenBlend)
+{
+    // http://anglebug.com/4870
+    ANGLE_SKIP_TEST_IF(IsAndroid() && IsOpenGLES());
+
+    // Create the framebuffer that will be invalidated
+    GLTexture renderTarget;
+    glBindTexture(GL_TEXTURE_2D, renderTarget);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTarget,
+                           0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_DRAW_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer and invalidate it.
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    GLenum invalidateAttachment = GL_COLOR_ATTACHMENT0;
+    glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &invalidateAttachment);
+    EXPECT_GL_NO_ERROR();
+
+    // Upload data to it
+    const GLColor kUploadColor = GLColor::cyan;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &kUploadColor);
+
+    // Blend into the framebuffer, then verify that the framebuffer should have had cyan.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    blendAndVerifyColor(GLColor32F(1.0f, 0.0f, 0.0f, 0.5f), GLColor(127, 127, 127, 191));
+}
+
+// Tests that invalidate then sub upload works
+TEST_P(SimpleStateChangeTestES3, InvalidateThenSubUploadThenBlend)
+{
+    // http://anglebug.com/4870
+    ANGLE_SKIP_TEST_IF(IsAndroid() && IsOpenGLES());
+
+    // Create the framebuffer that will be invalidated
+    GLTexture renderTarget;
+    glBindTexture(GL_TEXTURE_2D, renderTarget);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTarget,
+                           0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_DRAW_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer and invalidate it.
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    GLenum invalidateAttachment = GL_COLOR_ATTACHMENT0;
+    glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &invalidateAttachment);
+    EXPECT_GL_NO_ERROR();
+
+    // Upload data to it
+    const GLColor kUploadColor = GLColor::cyan;
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &kUploadColor);
+
+    // Blend into the framebuffer, then verify that the framebuffer should have had cyan.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    blendAndVerifyColor(GLColor32F(1.0f, 0.0f, 0.0f, 0.5f), GLColor(127, 127, 127, 191));
+}
+
+// Tests that invalidate then compute write works
+TEST_P(SimpleStateChangeTestES31, InvalidateThenStorageWriteThenBlend)
+{
+    // Fails on AMD OpenGL Windows. This configuration isn't maintained.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsAMD() && IsOpenGL());
+
+    constexpr char kCS[] = R"(#version 310 es
+layout(local_size_x=1, local_size_y=1) in;
+layout (rgba8, binding = 1) writeonly uniform highp image2D dstImage;
+void main()
+{
+    imageStore(dstImage, ivec2(gl_GlobalInvocationID.xy), vec4(0.0f, 1.0f, 1.0f, 1.0f));
+})";
+
+    ANGLE_GL_COMPUTE_PROGRAM(program, kCS);
+    glUseProgram(program);
+    EXPECT_GL_NO_ERROR();
+
+    // Create the framebuffer texture
+    GLTexture renderTarget;
+    glBindTexture(GL_TEXTURE_2D, renderTarget);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 1, 1);
+    glBindImageTexture(1, renderTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+
+    // Write to the texture with compute once.  In the Vulkan backend, this will make sure the image
+    // is already created with STORAGE usage and avoids recreate later.
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+
+    // Create the framebuffer that will be invalidated
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTarget,
+                           0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_DRAW_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer and invalidate it.
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    GLenum invalidateAttachment = GL_COLOR_ATTACHMENT0;
+    glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &invalidateAttachment);
+    EXPECT_GL_NO_ERROR();
+
+    // Write to it with a compute shader
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+
+    glMemoryBarrier(GL_FRAMEBUFFER_BARRIER_BIT);
+
+    // Blend into the framebuffer, then verify that the framebuffer should have had cyan.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    blendAndVerifyColor(GLColor32F(1.0f, 0.0f, 0.0f, 0.5f), GLColor(127, 127, 127, 191));
+}
+
+// Tests that invalidate then compute write works inside PPO
+TEST_P(SimpleStateChangeTestES31, InvalidateThenStorageWriteThenBlendPpo)
+{
+    // Fails on AMD OpenGL Windows. This configuration isn't maintained.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsAMD() && IsOpenGL());
+    // PPOs are only supported in the Vulkan backend
+    ANGLE_SKIP_TEST_IF(!isVulkanRenderer());
+
+    constexpr char kCS[] = R"(#version 310 es
+layout(local_size_x=1, local_size_y=1) in;
+layout (rgba8, binding = 1) writeonly uniform highp image2D dstImage;
+void main()
+{
+    imageStore(dstImage, ivec2(gl_GlobalInvocationID.xy), vec4(0.0f, 1.0f, 1.0f, 1.0f));
+})";
+
+    GLProgramPipeline pipeline;
+    ANGLE_GL_COMPUTE_PROGRAM(program, kCS);
+    glProgramParameteri(program, GL_PROGRAM_SEPARABLE, GL_TRUE);
+    glUseProgramStages(pipeline, GL_COMPUTE_SHADER_BIT, program);
+    EXPECT_GL_NO_ERROR();
+    glBindProgramPipeline(pipeline);
+    EXPECT_GL_NO_ERROR();
+    glUseProgram(0);
+
+    // Create the framebuffer texture
+    GLTexture renderTarget;
+    glBindTexture(GL_TEXTURE_2D, renderTarget);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 1, 1);
+    glBindImageTexture(1, renderTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+
+    // Write to the texture with compute once.  In the Vulkan backend, this will make sure the image
+    // is already created with STORAGE usage and avoids recreate later.
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+
+    // Create the framebuffer that will be invalidated
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTarget,
+                           0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_DRAW_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer and invalidate it.
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    GLenum invalidateAttachment = GL_COLOR_ATTACHMENT0;
+    glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &invalidateAttachment);
+    EXPECT_GL_NO_ERROR();
+
+    // Write to it with a compute shader
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+
+    glMemoryBarrier(GL_FRAMEBUFFER_BARRIER_BIT);
+
+    // Blend into the framebuffer, then verify that the framebuffer should have had cyan.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    blendAndVerifyColor(GLColor32F(1.0f, 0.0f, 0.0f, 0.5f), GLColor(127, 127, 127, 191));
+}
+
+// Tests that sub-invalidate then draw works.
+TEST_P(SimpleStateChangeTestES3, SubInvalidateThenDraw)
+{
+    // Fails on AMD OpenGL Windows. This configuration isn't maintained.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsAMD() && IsOpenGL());
+
+    // Create the framebuffer that will be invalidated
+    GLTexture renderTarget;
+    glBindTexture(GL_TEXTURE_2D, renderTarget);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTarget,
+                           0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_DRAW_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer.
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Draw into a quarter of the framebuffer, then invalidate that same region.
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::Red());
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(1, 1, 1, 1);
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5f);
+
+    // Only invalidate a quarter of the framebuffer.
+    GLenum invalidateAttachment = GL_COLOR_ATTACHMENT0;
+    glInvalidateSubFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &invalidateAttachment, 1, 1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+
+    glDisable(GL_SCISSOR_TEST);
+
+    // Blend into the framebuffer, then verify that the framebuffer should have had cyan.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    blendAndVerifyColor(GLColor32F(0.0f, 0.0f, 1.0f, 0.5f), GLColor(127, 127, 127, 191));
+}
+
 // Tests deleting a Framebuffer that is in use.
 TEST_P(SimpleStateChangeTest, DeleteFramebufferInUse)
 {
@@ -2716,6 +3136,177 @@ TEST_P(SimpleStateChangeTest, DrawAndClearTextureRepeatedly)
             EXPECT_COLOR_NEAR(expectedColor, actualColor, 1);
         }
     }
+}
+
+// Test that clear followed by rebind of framebuffer attachment works (with noop clear in between).
+TEST_P(SimpleStateChangeTestES3, ClearThenNoopClearThenRebindAttachment)
+{
+    // Create a texture with red
+    const GLColor kInitColor1 = GLColor::red;
+    GLTexture texture1;
+    glBindTexture(GL_TEXTURE_2D, texture1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &kInitColor1);
+
+    // Create a framebuffer to be cleared
+    GLTexture texture2;
+    glBindTexture(GL_TEXTURE_2D, texture2);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer to green
+    glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Clear again, but in a way that would be a no-op.  In the Vulkan backend, this will result in
+    // a framebuffer sync state, which extracts deferred clears.  However, as the clear is actually
+    // a noop, the deferred clears will remain unflushed.
+    glClear(0);
+
+    // Change framebuffer's attachment to the other texture.
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    // A bogus draw to make sure the render pass is cleared in the Vulkan backend.
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::Blue());
+    glUseProgram(program);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ZERO, GL_ONE);
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5);
+    EXPECT_GL_NO_ERROR();
+
+    // Expect red, which is the original contents of texture1.  If the clear is mistakenly applied
+    // to the new attachment, green will be read back.
+    EXPECT_PIXEL_COLOR_EQ(0, 0, kInitColor1);
+
+    // Attach back to texture2.  It should be cleared to green.
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2, 0);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
+// Test that clear followed by rebind of framebuffer attachment works (with 0-sized scissor clear in
+// between).
+TEST_P(SimpleStateChangeTestES3, ClearThenZeroSizeScissoredClearThenRebindAttachment)
+{
+    // Create a texture with red
+    const GLColor kInitColor1 = GLColor::red;
+    GLTexture texture1;
+    glBindTexture(GL_TEXTURE_2D, texture1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &kInitColor1);
+
+    // Create a framebuffer to be cleared
+    GLTexture texture2;
+    glBindTexture(GL_TEXTURE_2D, texture2);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer to green
+    glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Clear again, but in a way that would be a no-op.  In the Vulkan backend, this will result in
+    // a framebuffer sync state, which extracts deferred clears.  However, as the clear is actually
+    // a noop, the deferred clears will remain unflushed.
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_SCISSOR_TEST);
+
+    // Change framebuffer's attachment to the other texture.
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    // A bogus draw to make sure the render pass is cleared in the Vulkan backend.
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::Blue());
+    glUseProgram(program);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ZERO, GL_ONE);
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5);
+    EXPECT_GL_NO_ERROR();
+
+    // Expect red, which is the original contents of texture1.  If the clear is mistakenly applied
+    // to the new attachment, green will be read back.
+    EXPECT_PIXEL_COLOR_EQ(0, 0, kInitColor1);
+
+    // Attach back to texture2.  It should be cleared to green.
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2, 0);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
+// Test that clear followed by rebind of framebuffer attachment works (with noop blit in between).
+TEST_P(SimpleStateChangeTestES3, ClearThenNoopBlitThenRebindAttachment)
+{
+    // Create a texture with red
+    const GLColor kInitColor1 = GLColor::red;
+    GLTexture texture1;
+    glBindTexture(GL_TEXTURE_2D, texture1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &kInitColor1);
+
+    // Create a framebuffer to be cleared
+    GLTexture texture2;
+    glBindTexture(GL_TEXTURE_2D, texture2);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer drawFBO;
+    glBindFramebuffer(GL_FRAMEBUFFER, drawFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    EXPECT_GL_NO_ERROR();
+
+    // Clear the framebuffer to green
+    glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Issue noop blit.  In the Vulkan backend, this will result in a framebuffer sync state, which
+    // extracts deferred clears.  However, as the blit is actually a noop, the deferred clears will
+    // remain unflushed.
+    GLTexture blitSrc;
+    glBindTexture(GL_TEXTURE_2D, blitSrc);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    GLFramebuffer readFBO;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFBO);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, blitSrc, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_READ_FRAMEBUFFER);
+
+    glBlitFramebuffer(0, 0, 1, 1, 0, 0, 1, 1, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    EXPECT_GL_NO_ERROR();
+
+    // Change framebuffer's attachment to the other texture.
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    // A bogus draw to make sure the render pass is cleared in the Vulkan backend.
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::Blue());
+    glUseProgram(program);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ZERO, GL_ONE);
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5);
+    EXPECT_GL_NO_ERROR();
+
+    // Expect red, which is the original contents of texture1.  If the clear is mistakenly applied
+    // to the new attachment, green will be read back.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, drawFBO);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, kInitColor1);
+
+    // Attach back to texture2.  It should be cleared to green.
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2, 0);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
 }
 
 // Validates disabling cull face really disables it.
@@ -3190,7 +3781,7 @@ void main()
     glUseProgram(program);
     glUniform1i(s1loc, 0);
     glUniform1i(s2loc, 1);
-    // Draw. This first draw is a sanitycheck and not really necessary for the test
+    // Draw. This first draw is a confidence check and not really necessary for the test
     drawQuad(program, std::string(essl1_shaders::PositionAttrib()), 0.5f);
     ASSERT_GL_NO_ERROR();
 
@@ -3572,6 +4163,19 @@ class WebGLComputeValidationStateChangeTest : public ANGLETest
 {
   public:
     WebGLComputeValidationStateChangeTest() { setWebGLCompatibilityEnabled(true); }
+};
+
+class RobustBufferAccessWebGL2ValidationStateChangeTest : public WebGL2ValidationStateChangeTest
+{
+  protected:
+    RobustBufferAccessWebGL2ValidationStateChangeTest()
+    {
+        // SwS/OSX GL do not support robustness. Mali does not support it.
+        if (!isSwiftshader() && !IsOSX() && !IsARM())
+        {
+            setRobustAccess(true);
+        }
+    }
 };
 
 // Tests that mapping and unmapping an array buffer in various ways causes rendering to fail.
@@ -5128,12 +5732,100 @@ TEST_P(ImageRespecificationTest, ImageTarget2DOESSwitch)
     eglDestroyImageKHR(window->getDisplay(), firstEGLImage);
     eglDestroyImageKHR(window->getDisplay(), secondEGLImage);
 }
+
+// Covers a bug where sometimes we wouldn't catch invalid element buffer sizes.
+TEST_P(WebGL2ValidationStateChangeTest, DeleteElementArrayBufferValidation)
+{
+    GLushort indexData[] = {0, 1, 2, 3};
+
+    GLBuffer elementArrayBuffer;
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementArrayBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indexData), indexData, GL_STATIC_DRAW);
+
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Zero(), essl1_shaders::fs::Red());
+    glUseProgram(program);
+
+    glDrawElements(GL_POINTS, 4, GL_UNSIGNED_SHORT, 0);
+
+    elementArrayBuffer.reset();
+
+    // Must use a non-0 offset and a multiple of the type size.
+    glDrawElements(GL_POINTS, 4, GL_UNSIGNED_SHORT, reinterpret_cast<const void *>(0x4));
+    EXPECT_GL_ERROR(GL_INVALID_OPERATION);
+}
+
+// Covers a bug in the D3D11 back-end related to how buffers are translated.
+TEST_P(RobustBufferAccessWebGL2ValidationStateChangeTest, BindZeroSizeBufferThenDeleteBufferBug)
+{
+    // SwiftShader does not currently support robustness.
+    ANGLE_SKIP_TEST_IF(isSwiftshader());
+
+    // http://anglebug.com/4872
+    ANGLE_SKIP_TEST_IF(IsAndroid() && IsVulkan());
+
+    // no intent to follow up on this failure.
+    ANGLE_SKIP_TEST_IF(IsAndroid() && IsOpenGL());
+
+    // no intent to follow up on this failure.
+    ANGLE_SKIP_TEST_IF(IsAMD() && IsOpenGL());
+
+    // no intent to follow up on this failure.
+    ANGLE_SKIP_TEST_IF(IsOSX());
+
+    // Mali does not support robustness now.
+    ANGLE_SKIP_TEST_IF(IsARM());
+
+    std::vector<GLubyte> data(48, 1);
+
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Passthrough(), essl1_shaders::fs::Red());
+    glUseProgram(program);
+
+    // First bind and draw with a buffer with a format we know to be "Direct" in D3D11.
+    GLBuffer arrayBuffer;
+    glBindBuffer(GL_ARRAY_BUFFER, arrayBuffer);
+    glBufferData(GL_ARRAY_BUFFER, 48, data.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(0);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    // Then bind a zero size buffer and draw.
+    GLBuffer secondBuffer;
+    glBindBuffer(GL_ARRAY_BUFFER, secondBuffer);
+    glVertexAttribPointer(0, 4, GL_UNSIGNED_BYTE, GL_FALSE, 1, 0);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    // Finally delete the original buffer. This triggers the bug.
+    arrayBuffer.reset();
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    ASSERT_GL_NO_ERROR();
+}
+
+// Tests DrawElements with an empty buffer using a VAO.
+TEST_P(WebGL2ValidationStateChangeTest, DrawElementsEmptyVertexArray)
+{
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::Red());
+
+    glUseProgram(program);
+
+    // Draw with empty buffer. Out of range but valid.
+    GLBuffer buffer;
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer);
+    glDrawElements(GL_TRIANGLES, 0, GL_UNSIGNED_SHORT, reinterpret_cast<const GLvoid *>(0x1000));
+
+    // Switch VAO. No buffer bound, should be an error.
+    GLVertexArray vao;
+    glBindVertexArray(vao);
+    glDrawElements(GL_LINE_STRIP, 0x1000, GL_UNSIGNED_SHORT,
+                   reinterpret_cast<const GLvoid *>(0x1000));
+    EXPECT_GL_ERROR(GL_INVALID_OPERATION);
+}
 }  // anonymous namespace
 
 ANGLE_INSTANTIATE_TEST_ES2(StateChangeTest);
 ANGLE_INSTANTIATE_TEST_ES2(LineLoopStateChangeTest);
 ANGLE_INSTANTIATE_TEST_ES2(StateChangeRenderTest);
 ANGLE_INSTANTIATE_TEST_ES3(StateChangeTestES3);
+ANGLE_INSTANTIATE_TEST_ES3(StateChangeRenderTestES3);
 ANGLE_INSTANTIATE_TEST_ES2(SimpleStateChangeTest);
 ANGLE_INSTANTIATE_TEST_ES3(SimpleStateChangeTestES3);
 ANGLE_INSTANTIATE_TEST_ES3(ImageRespecificationTest);
@@ -5142,5 +5834,6 @@ ANGLE_INSTANTIATE_TEST_ES31(SimpleStateChangeTestComputeES31);
 ANGLE_INSTANTIATE_TEST_ES31(SimpleStateChangeTestComputeES31PPO);
 ANGLE_INSTANTIATE_TEST_ES3(ValidationStateChangeTest);
 ANGLE_INSTANTIATE_TEST_ES3(WebGL2ValidationStateChangeTest);
+ANGLE_INSTANTIATE_TEST_ES3(RobustBufferAccessWebGL2ValidationStateChangeTest);
 ANGLE_INSTANTIATE_TEST_ES31(ValidationStateChangeTestES31);
 ANGLE_INSTANTIATE_TEST_ES31(WebGLComputeValidationStateChangeTest);

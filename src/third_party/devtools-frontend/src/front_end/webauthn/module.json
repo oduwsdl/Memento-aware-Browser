@@ -13,11 +13,11 @@
   ],
   "dependencies": [
     "common",
+    "data_grid",
     "platform",
     "ui",
     "host"
   ],
-  "scripts": [],
   "modules": [
     "webauthn.js",
     "WebauthnPane.js",

@@ -35,12 +35,15 @@ n * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 #include "base/single_thread_task_runner.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-blink-forward.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/loader/content_security_notifier.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/loader/base_fetch_context.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
+#include "third_party/blink/renderer/platform/loader/fetch/loading_behavior_observer.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/network/content_security_policy_parsers.h"
@@ -59,7 +62,8 @@ class LocalFrameClient;
 class Settings;
 class WebContentSettingsClient;
 
-class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
+class CORE_EXPORT FrameFetchContext final : public BaseFetchContext,
+                                            public LoadingBehaviorObserver {
  public:
   static ResourceFetcher* CreateFetcherForCommittedDocument(DocumentLoader&,
                                                             Document&);
@@ -93,7 +97,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
                                const ClientHintsPreferences&,
                                const FetchParameters::ResourceWidth&,
                                ResourceRequest&,
-                               const FetchInitiatorInfo&) override;
+                               const ResourceLoaderOptions&) override;
 
   // Exposed for testing.
   void ModifyRequestForCSP(ResourceRequest&);
@@ -118,6 +122,14 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
   TakePendingWorkerTimingReceiver(int request_id) override;
 
+  // LoadingBehaviorObserver overrides:
+  void DidObserveLoadingBehavior(LoadingBehaviorFlag) override;
+
+  std::unique_ptr<ResourceLoadInfoNotifierWrapper>
+  CreateResourceLoadInfoNotifierWrapper() override;
+
+  mojom::blink::ContentSecurityNotifier& GetContentSecurityNotifier() const;
+
  private:
   friend class FrameFetchContextTest;
 
@@ -136,14 +148,15 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   SubresourceFilter* GetSubresourceFilter() const override;
   PreviewsResourceLoadingHints* GetPreviewsResourceLoadingHints()
       const override;
-  WebURLRequest::PreviewsState previews_state() const override;
+  PreviewsState previews_state() const override;
   bool AllowScriptFromSource(const KURL&) const override;
   bool ShouldBlockRequestByInspector(const KURL&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
                                const FetchInitiatorInfo&,
                                ResourceRequestBlockedReason,
                                ResourceType) const override;
-  bool ShouldBypassMainWorldCSP() const override;
+  const ContentSecurityPolicy* GetContentSecurityPolicyForWorld(
+      const DOMWrapperWorld* world) const override;
   bool IsSVGImageChromeClient() const override;
   void CountUsage(WebFeature) const override;
   void CountDeprecation(WebFeature) const override;
@@ -178,8 +191,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
                             const url::Origin& resource_origin,
                             bool is_1p_origin,
                             network::mojom::blink::WebClientHintsType,
-                            const ClientHintsPreferences&,
-                            const WebEnabledClientHints&) const;
+                            const ClientHintsPreferences&) const;
   void SetFirstPartyCookie(ResourceRequest&);
 
   // Returns true if execution of scripts from the url are allowed. Compared to

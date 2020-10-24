@@ -28,6 +28,7 @@
 #include <cmath>
 
 #include "base/notreached.h"
+#include "build/build_config.h"
 #include "third_party/blink/renderer/platform/audio/audio_utilities.h"
 #include "third_party/blink/renderer/platform/audio/vector_math.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
@@ -88,32 +89,68 @@ double AudioDelayDSPKernel::DelayTime(float sample_rate) {
   return desired_delay_frames_ / sample_rate;
 }
 
-void AudioDelayDSPKernel::ProcessARate(const float* source,
-                                       float* destination,
-                                       uint32_t frames_to_process) {
-  int buffer_length = buffer_.size();
-  float* buffer = buffer_.Data();
+static void CopyToCircularBuffer(float* buffer,
+                                 int write_index,
+                                 int buffer_length,
+                                 const float* source,
+                                 uint32_t frames_to_process) {
+  // The algorithm below depends on this being true because we don't expect to
+  // have to fill the entire buffer more than once.
+  DCHECK_GE(static_cast<uint32_t>(buffer_length), frames_to_process);
+
+  // Copy |frames_to_process| values from |source| to the circular buffer that
+  // starts at |buffer| of length |buffer_length|.  The copy starts at index
+  // |write_index| into the buffer.
+  float* write_pointer = &buffer[write_index];
+  int remainder = buffer_length - write_index;
+
+  // Copy the sames over, carefully handling the case where we need to wrap
+  // around to the beginning of the buffer.
+  memcpy(write_pointer, source,
+         sizeof(*write_pointer) *
+             std::min(static_cast<int>(frames_to_process), remainder));
+  memcpy(buffer, source + remainder,
+         sizeof(*write_pointer) *
+             std::max(0, static_cast<int>(frames_to_process) - remainder));
+}
+
+#if !(defined(ARCH_CPU_X86_FAMILY) || defined(CPU_ARM_NEON))
+// Default scalar versions if simd/neon are not available.
+std::tuple<unsigned, int> AudioDelayDSPKernel::ProcessARateVector(
+    float* destination,
+    uint32_t frames_to_process) const {
+  // We don't have a vectorized version, so just do nothing and return the 0 to
+  // indicate no frames processed and return the current write_index_.
+  return std::make_tuple(0, write_index_);
+}
+
+void AudioDelayDSPKernel::HandleNaN(float* delay_times,
+                                    uint32_t frames_to_process,
+                                    float max_time) {
+  for (unsigned k = 0; k < frames_to_process; ++k) {
+    if (std::isnan(delay_times[k]))
+      delay_times[k] = max_time;
+  }
+}
+#endif
+
+int AudioDelayDSPKernel::ProcessARateScalar(unsigned start,
+                                            int w_index,
+                                            float* destination,
+                                            uint32_t frames_to_process) const {
+  const int buffer_length = buffer_.size();
+  const float* buffer = buffer_.Data();
 
   DCHECK(buffer_length);
-  DCHECK(source);
   DCHECK(destination);
   DCHECK_GE(write_index_, 0);
   DCHECK_LT(write_index_, buffer_length);
 
   float sample_rate = this->SampleRate();
-  double max_time = MaxDelayTime();
+  const float* delay_times = delay_times_.Data();
 
-  float* delay_times = delay_times_.Data();
-  CalculateSampleAccurateValues(delay_times, frames_to_process);
-
-  int w_index = write_index_;
-
-  for (unsigned i = 0; i < frames_to_process; ++i) {
+  for (unsigned i = start; i < frames_to_process; ++i) {
     double delay_time = delay_times[i];
-    // TODO(crbug.com/1013345): Don't need this if that bug is fixed
-    if (std::isnan(delay_time))
-      delay_time = max_time;
-
     double desired_delay_frames = delay_time * sample_rate;
 
     double read_position = w_index + buffer_length - desired_delay_frames;
@@ -130,8 +167,6 @@ void AudioDelayDSPKernel::ProcessARate(const float* source,
     DCHECK_GE(read_index2, 0);
     DCHECK_LT(read_index2, buffer_length);
 
-    buffer[w_index] = *source++;
-
     float interpolation_factor = read_position - read_index1;
 
     float sample1 = buffer[read_index1];
@@ -141,10 +176,43 @@ void AudioDelayDSPKernel::ProcessARate(const float* source,
     if (w_index >= buffer_length)
       w_index -= buffer_length;
 
-    *destination++ = sample1 + interpolation_factor * (sample2 - sample1);
+    destination[i] = sample1 + interpolation_factor * (sample2 - sample1);
   }
 
-  write_index_ = w_index;
+  return w_index;
+}
+
+void AudioDelayDSPKernel::ProcessARate(const float* source,
+                                       float* destination,
+                                       uint32_t frames_to_process) {
+  int buffer_length = buffer_.size();
+  float* buffer = buffer_.Data();
+
+  DCHECK(buffer_length);
+  DCHECK(source);
+  DCHECK(destination);
+  DCHECK_GE(write_index_, 0);
+  DCHECK_LT(write_index_, buffer_length);
+
+  float* delay_times = delay_times_.Data();
+  CalculateSampleAccurateValues(delay_times, frames_to_process);
+
+  // Any NaN's get converted to max time
+  // TODO(crbug.com/1013345): Don't need this if that bug is fixed
+  double max_time = MaxDelayTime();
+  HandleNaN(delay_times, frames_to_process, max_time);
+
+  CopyToCircularBuffer(buffer, write_index_, buffer_length, source,
+                       frames_to_process);
+
+  unsigned frames_processed;
+  std::tie(frames_processed, write_index_) =
+      ProcessARateVector(destination, frames_to_process);
+
+  if (frames_processed < frames_to_process) {
+    write_index_ = ProcessARateScalar(frames_processed, write_index_,
+                                      destination, frames_to_process);
+  }
 }
 
 void AudioDelayDSPKernel::ProcessKRate(const float* source,
@@ -188,8 +256,6 @@ void AudioDelayDSPKernel::ProcessKRate(const float* source,
   int read_index1 = static_cast<int>(read_position);
   float interpolation_factor = read_position - read_index1;
   float* buffer_end = &buffer[buffer_length];
-  float* write_pointer = &buffer[w_index];
-
   DCHECK_GE(static_cast<unsigned>(buffer_length), frames_to_process);
 
   // sample1 and sample2 hold the current and next samples in the buffer.
@@ -200,27 +266,18 @@ void AudioDelayDSPKernel::ProcessKRate(const float* source,
   // Copy data from the source into the buffer, starting at the write index.
   // The buffer is circular, so carefully handle the wrapping of the write
   // pointer.
-  int remainder = buffer_length - w_index;
-
-  memcpy(write_pointer, source,
-         sizeof(*write_pointer) *
-             std::min(static_cast<int>(frames_to_process), remainder));
-  memcpy(buffer, source + remainder,
-         sizeof(*write_pointer) *
-             std::max(0, static_cast<int>(frames_to_process) - remainder));
-
-  write_pointer += frames_to_process;
-  if (write_pointer >= buffer_end) {
-    write_pointer -= buffer_length;
-  }
-
-  write_index_ = write_pointer - buffer;
+  CopyToCircularBuffer(buffer, write_index_, buffer_length, source,
+                       frames_to_process);
+  w_index += frames_to_process;
+  if (w_index >= buffer_length)
+    w_index -= buffer_length;
+  write_index_ = w_index;
 
   // Now copy out the samples from the buffer, starting at the read pointer,
   // carefully handling wrapping of the read pointer.
   float* read_pointer = &buffer[read_index1];
 
-  remainder = buffer_end - read_pointer;
+  int remainder = buffer_end - read_pointer;
   memcpy(sample1, read_pointer,
          sizeof(*sample1) *
              std::min(static_cast<int>(frames_to_process), remainder));

@@ -346,11 +346,12 @@ test_wuffs_strconv_hpd_rounded_integer() {
   int tc;
   for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
     wuffs_base__private_implementation__high_prec_dec hpd;
-    CHECK_STATUS(
-        "hpd__parse",
-        wuffs_base__private_implementation__high_prec_dec__parse(
-            &hpd, wuffs_base__make_slice_u8((void*)test_cases[tc].str,
-                                            strlen(test_cases[tc].str))));
+    CHECK_STATUS("hpd__parse",
+                 wuffs_base__private_implementation__high_prec_dec__parse(
+                     &hpd,
+                     wuffs_base__make_slice_u8((void*)test_cases[tc].str,
+                                               strlen(test_cases[tc].str)),
+                     WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS));
     uint64_t have =
         wuffs_base__private_implementation__high_prec_dec__rounded_integer(
             &hpd);
@@ -391,11 +392,12 @@ test_wuffs_strconv_hpd_shift() {
   int tc;
   for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
     wuffs_base__private_implementation__high_prec_dec hpd;
-    CHECK_STATUS(
-        "hpd__parse",
-        wuffs_base__private_implementation__high_prec_dec__parse(
-            &hpd, wuffs_base__make_slice_u8((void*)test_cases[tc].str,
-                                            strlen(test_cases[tc].str))));
+    CHECK_STATUS("hpd__parse",
+                 wuffs_base__private_implementation__high_prec_dec__parse(
+                     &hpd,
+                     wuffs_base__make_slice_u8((void*)test_cases[tc].str,
+                                               strlen(test_cases[tc].str)),
+                     WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS));
     int32_t shift = test_cases[tc].shift;
     if (shift > 0) {
       wuffs_base__private_implementation__high_prec_dec__small_rshift(
@@ -419,147 +421,275 @@ test_wuffs_strconv_hpd_shift() {
   return NULL;
 }
 
+// ----------------
+
 const char*  //
-test_wuffs_strconv_mpb_assign_from_hpd() {
+test_wuffs_strconv_ieee_754_bit_representation_from_u16() {
   CHECK_FOCUS(__func__);
 
+  double inf = 1.0 / 0.0;
+  uint64_t nan_u64 = 0x7FFFFFFFFFFFFFFF;
+  double nan =
+      wuffs_base__ieee_754_bit_representation__from_u64_to_f64(nan_u64);
+
   struct {
-    const char* str;
-    int32_t decimal_point;
-    uint64_t want_mantissa;
-    int32_t want_exp2;
+    uint16_t u16_bits;
+    uint64_t want_u64;
     double want_f64;
   } test_cases[] = {
-
-      // (0x818995CE7AA0E1B2 * (2 ** -1136)) is roughly 1e-323
-      //
-      // 1e-323 is roughly twice 4.94066e-324, the minimum subnormal positive
-      // double-precision floating point number.
-      {.str = "1",
-       .decimal_point = -322,
-       .want_mantissa = 0x818995CE7AA0E1B2,
-       .want_exp2 = -1136,
-       .want_f64 = 1e-323},
-
-      // (0xD1B71758E219652C * (2 **   -77)) is roughly .0001
-      {.str = "1",
-       .decimal_point = -3,
-       .want_mantissa = 0xD1B71758E219652C,
-       .want_exp2 = -77,
-       .want_f64 = .0001},
-
-      // (0xCCCCCCCCCCCCCCCD * (2 **   -67)) is roughly .1
-      {.str = "1",
-       .decimal_point = +0,
-       .want_mantissa = 0xCCCCCCCCCCCCCCCD,
-       .want_exp2 = -67,
-       .want_f64 = .1},
-
-      // (0x8000000000000000 * (2 **   -63)) is         1.
-      {.str = "1",
-       .decimal_point = +1,
-       .want_mantissa = 0x8000000000000000,
-       .want_exp2 = -63,
-       .want_f64 = 1},
-
-      // (0xA000000000000000 * (2 **   -60)) is         10.
-      {.str = "1",
-       .decimal_point = +2,
-       .want_mantissa = 0xA000000000000000,
-       .want_exp2 = -60,
-       .want_f64 = 10},
-
-      // (0xC9F2C9CD04674EDE * (2 **   +36)) is roughly 1e30.
-      {.str = "1",
-       .decimal_point = +31,
-       .want_mantissa = 0xC9F2C9CD04674EDE,
-       .want_exp2 = +36,
-       .want_f64 = 1e30},
-
-      // (0xDE81E40A034BCF50 * (2 **  +966)) is roughly 1e310.
-      //
-      // 1e310 is almost 50 times larger than DBL_MAX (roughly 1.8e308), so it
-      // should be converted to +infinity.
-      {.str = "1",
-       .decimal_point = +311,
-       .want_mantissa = 0xDE81E40A034BCF50,
-       .want_exp2 = +966,
-       .want_f64 = (1.0 / 0.0)},
-
-      // (0x9A40000000000000 * (2 **   -53)) is         1234.
-      {.str = "1234",
-       .decimal_point = +4,
-       .want_mantissa = 0x9A40000000000000,
-       .want_exp2 = -53,
-       .want_f64 = 1234},
-
-      // (0xC90FCF80DC33721E * (2 **   -62)) is roughly 3.14159
-      {.str = "314159",
-       .decimal_point = +1,
-       .want_mantissa = 0xC90FCF80DC33721E,
-       .want_exp2 = -62,
-       .want_f64 = 3.14159},
+      {
+          .u16_bits = 0x0000,
+          .want_u64 = 0x0000000000000000,
+          .want_f64 = 0.0,
+      },
+      {
+          .u16_bits = 0x0001,
+          .want_u64 = 0x3E70000000000000,
+          .want_f64 = 0.000000059604644775390625,
+      },
+      {
+          .u16_bits = 0x0123,
+          .want_u64 = 0x3EF2300000000000,
+          .want_f64 = 0.000017344951629638671875,
+      },
+      {
+          .u16_bits = 0x03FF,
+          .want_u64 = 0x3F0FF80000000000,
+          .want_f64 = 0.000060975551605224609375,
+      },
+      {
+          .u16_bits = 0x0400,
+          .want_u64 = 0x3F10000000000000,
+          .want_f64 = 0.00006103515625,
+      },
+      {
+          .u16_bits = 0x0401,
+          .want_u64 = 0x3F10040000000000,
+          .want_f64 = 0.000061094760894775390625,
+      },
+      {
+          .u16_bits = 0x3C00,
+          .want_u64 = 0x3FF0000000000000,
+          .want_f64 = 1.0,
+      },
+      {
+          .u16_bits = 0x4580,
+          .want_u64 = 0x4016000000000000,
+          .want_f64 = 5.5,
+      },
+      {
+          .u16_bits = 0x7BFF,
+          .want_u64 = 0x40EFFC0000000000,
+          .want_f64 = 65504.0,
+      },
+      {
+          .u16_bits = 0x7C00,
+          .want_u64 = 0x7FF0000000000000,
+          .want_f64 = inf,
+      },
+      {
+          .u16_bits = 0x7FFF,
+          .want_u64 = nan_u64,
+          .want_f64 = nan,
+      },
+      {
+          .u16_bits = 0xFC00,
+          .want_u64 = 0xFFF0000000000000,
+          .want_f64 = -inf,
+      },
   };
 
   int tc;
   for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
-    wuffs_base__private_implementation__high_prec_dec hpd;
-
-    // Initialize hpd.
-    uint32_t i;
-    for (i = 0; test_cases[tc].str[i]; i++) {
-      hpd.digits[i] = test_cases[tc].str[i] - '0';
-    }
-    hpd.num_digits = i;
-    hpd.decimal_point = test_cases[tc].decimal_point;
-    hpd.negative = false;
-    hpd.truncated = false;
-
-    static const bool skip_fast_path_for_tests = true;
-    wuffs_base__private_implementation__medium_prec_bin mpb;
-    wuffs_base__private_implementation__medium_prec_bin__parse_number_f64(
-        &mpb, &hpd, skip_fast_path_for_tests);
-
-    uint64_t have_mantissa = mpb.mantissa;
-    if (have_mantissa != test_cases[tc].want_mantissa) {
-      RETURN_FAIL("%s@%d: mantissa: have 0x%" PRIX64 ", want 0x%" PRIX64,
-                  test_cases[tc].str, test_cases[tc].decimal_point,
-                  have_mantissa, test_cases[tc].want_mantissa);
+    double have_f64 = wuffs_base__ieee_754_bit_representation__from_u16_to_f64(
+        test_cases[tc].u16_bits);
+    double want_f64 = test_cases[tc].want_f64;
+    // See if they're equal, considering that NaN != NaN.
+    bool equal = ((have_f64 == want_f64) ||
+                  ((have_f64 != have_f64) && (want_f64 != want_f64)));
+    if (!equal) {
+      RETURN_FAIL("tc=%d: to_f64: have %g, want %g", tc, have_f64, want_f64);
     }
 
-    int32_t have_exp2 = mpb.exp2;
-    if (have_exp2 != test_cases[tc].want_exp2) {
-      RETURN_FAIL("%s@%d: exp2: have %" PRId32 ", want %" PRId32,
-                  test_cases[tc].str, test_cases[tc].decimal_point, have_exp2,
-                  test_cases[tc].want_exp2);
+    uint64_t have_u64 =
+        wuffs_base__ieee_754_bit_representation__from_f64_to_u64(have_f64);
+    uint64_t want_u64 = test_cases[tc].want_u64;
+    // There's more than one representation of NaN.
+    if ((have_u64 != want_u64) && (want_u64 != nan_u64)) {
+      RETURN_FAIL("tc=%d: to_u64: have 0x%016" PRIX64 ", want 0x%016" PRIX64,
+                  tc, have_u64, want_u64);
     }
 
-    double have_f64 =
-        wuffs_base__private_implementation__medium_prec_bin__as_f64(&mpb,
-                                                                    false);
-    if (have_f64 != test_cases[tc].want_f64) {
-      RETURN_FAIL("%s@%d: f64: have %g, want %g", test_cases[tc].str,
-                  test_cases[tc].decimal_point, have_f64,
-                  test_cases[tc].want_f64);
+    int noise;
+    for (noise = 0; noise < 2; noise++) {
+      if ((noise > 0) && ((want_f64 == inf) || (want_f64 == -inf))) {
+        continue;
+      }
+      wuffs_base__lossy_value_u16 lv =
+          wuffs_base__ieee_754_bit_representation__from_f64_to_u16_truncate(
+              wuffs_base__ieee_754_bit_representation__from_u64_to_f64(
+                  want_u64 ^ ((uint64_t)noise)));
+      if (lv.value != test_cases[tc].u16_bits) {
+        RETURN_FAIL("tc=%d: noise=%d: to_u16 value: have 0x%04" PRIX16
+                    ", want 0x%04" PRIX16,
+                    tc, noise, lv.value, test_cases[tc].u16_bits);
+      }
+      int want_lossy = (want_f64 == want_f64) ? noise : 0;
+      if (((int)lv.lossy) != want_lossy) {
+        RETURN_FAIL("tc=%d: noise=%d: to_u16 lossy: have %d, want %d", tc,
+                    noise, ((int)(lv.lossy)), want_lossy);
+      }
     }
   }
+
+  return NULL;
+}
+
+const char*  //
+test_wuffs_strconv_ieee_754_bit_representation_from_u32() {
+  CHECK_FOCUS(__func__);
+
+  double inf = 1.0 / 0.0;
+  uint64_t nan_u64 = 0x7FFFFFFFFFFFFFFF;
+  double nan =
+      wuffs_base__ieee_754_bit_representation__from_u64_to_f64(nan_u64);
+
+  struct {
+    uint32_t u32_bits;
+    uint64_t want_u64;
+    double want_f64;
+  } test_cases[] = {
+      {
+          .u32_bits = 0x00000000,
+          .want_u64 = 0x0000000000000000,
+          .want_f64 = 0.0,
+      },
+      {
+          .u32_bits = 0x00000001,
+          .want_u64 = 0x36A0000000000000,
+          .want_f64 = 1.4012984643248170709237295832899161312802619418765e-45,
+      },
+      {
+          .u32_bits = 0x00000123,
+          .want_u64 = 0x3722300000000000,
+          .want_f64 = 4.0777785311852176763880530873736559420255622508607e-43,
+      },
+      {
+          .u32_bits = 0x007FFFFF,
+          .want_u64 = 0x380FFFFFC0000000,
+          .want_f64 = 1.1754942106924410754870294448492873488270524287459e-38,
+      },
+      {
+          .u32_bits = 0x00800000,
+          .want_u64 = 0x3810000000000000,
+          .want_f64 = 1.1754943508222875079687365372222456778186655567721e-38,
+      },
+      {
+          .u32_bits = 0x00800001,
+          .want_u64 = 0x3810000020000000,
+          .want_f64 = 1.1754944909521339404504436295952040068102786847983e-38,
+      },
+      {
+          .u32_bits = 0x3F800000,
+          .want_u64 = 0x3FF0000000000000,
+          .want_f64 = 1.0,
+      },
+      {
+          .u32_bits = 0x40B00000,
+          .want_u64 = 0x4016000000000000,
+          .want_f64 = 5.5,
+      },
+      {
+          .u32_bits = 0x7F7FFFFF,
+          .want_u64 = 0x47EFFFFFE0000000,
+          .want_f64 = 3.40282346638528859811704183484516925440e38,
+      },
+      {
+          .u32_bits = 0x7F800000,
+          .want_u64 = 0x7FF0000000000000,
+          .want_f64 = inf,
+      },
+      {
+          .u32_bits = 0x7FFFFFFF,
+          .want_u64 = nan_u64,
+          .want_f64 = nan,
+      },
+      {
+          .u32_bits = 0xFF800000,
+          .want_u64 = 0xFFF0000000000000,
+          .want_f64 = -inf,
+      },
+  };
+
+  int tc;
+  for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
+    double have_f64 = wuffs_base__ieee_754_bit_representation__from_u32_to_f64(
+        test_cases[tc].u32_bits);
+    double want_f64 = test_cases[tc].want_f64;
+    // See if they're equal, considering that NaN != NaN.
+    bool equal = ((have_f64 == want_f64) ||
+                  ((have_f64 != have_f64) && (want_f64 != want_f64)));
+    if (!equal) {
+      RETURN_FAIL("tc=%d: to_f64: have %g, want %g", tc, have_f64, want_f64);
+    }
+
+    uint64_t have_u64 =
+        wuffs_base__ieee_754_bit_representation__from_f64_to_u64(have_f64);
+    uint64_t want_u64 = test_cases[tc].want_u64;
+    // There's more than one representation of NaN.
+    if ((have_u64 != want_u64) && (want_u64 != nan_u64)) {
+      RETURN_FAIL("tc=%d: to_u64: have 0x%016" PRIX64 ", want 0x%016" PRIX64,
+                  tc, have_u64, want_u64);
+    }
+
+    int noise;
+    for (noise = 0; noise < 2; noise++) {
+      if ((noise > 0) && ((want_f64 == inf) || (want_f64 == -inf))) {
+        continue;
+      }
+      wuffs_base__lossy_value_u32 lv =
+          wuffs_base__ieee_754_bit_representation__from_f64_to_u32_truncate(
+              wuffs_base__ieee_754_bit_representation__from_u64_to_f64(
+                  want_u64 ^ ((uint64_t)noise)));
+      if (lv.value != test_cases[tc].u32_bits) {
+        RETURN_FAIL("tc=%d: noise=%d: to_u32 value: have 0x%08" PRIX32
+                    ", want 0x%08" PRIX32,
+                    tc, noise, lv.value, test_cases[tc].u32_bits);
+      }
+      int want_lossy = (want_f64 == want_f64) ? noise : 0;
+      if (((int)lv.lossy) != want_lossy) {
+        RETURN_FAIL("tc=%d: noise=%d: to_u32 lossy: have %d, want %d", tc,
+                    noise, ((int)(lv.lossy)), want_lossy);
+      }
+    }
+  }
+
   return NULL;
 }
 
 // ----------------
 
 const char*  //
-test_wuffs_strconv_hexadecimal() {
+test_wuffs_strconv_base_16() {
   CHECK_FOCUS(__func__);
+  const bool src_closed = true;
 
   {
-    const char* str = "6A6b7";  // The "7" should be ignored.
+    const char* str = "6A6b7";  // The "7" should cause "#base: bad data".
     wuffs_base__slice_u8 dst = g_have_slice_u8;
     wuffs_base__slice_u8 src =
         wuffs_base__make_slice_u8((void*)str, strlen(str));
-    size_t have = wuffs_base__hexadecimal__decode2(dst, src);
-    if (have != 2) {
-      RETURN_FAIL("decode2: have %zu, want 2", have);
+    wuffs_base__transform__output have = wuffs_base__base_16__decode2(
+        dst, src, src_closed, WUFFS_BASE__BASE_16__DEFAULT_OPTIONS);
+    if (have.status.repr != wuffs_base__error__bad_data) {
+      RETURN_FAIL("decode2: have \"%s\", want \"%s\"", have.status.repr,
+                  wuffs_base__error__bad_data);
+    }
+    if (have.num_dst != 2) {
+      RETURN_FAIL("decode2: num_dst: have %zu, want 2", have.num_dst);
+    }
+    if (have.num_src != 4) {
+      RETURN_FAIL("decode2: num_src: have %zu, want 3", have.num_src);
     }
     if (g_have_array_u8[0] != 0x6A) {
       RETURN_FAIL("decode2: dst[0]: have 0x%02X, want 0x6A",
@@ -576,9 +706,16 @@ test_wuffs_strconv_hexadecimal() {
     wuffs_base__slice_u8 dst = g_have_slice_u8;
     wuffs_base__slice_u8 src =
         wuffs_base__make_slice_u8((void*)str, strlen(str));
-    size_t have = wuffs_base__hexadecimal__decode4(dst, src);
-    if (have != 3) {
-      RETURN_FAIL("decode4: have %zu, want 3", have);
+    wuffs_base__transform__output have = wuffs_base__base_16__decode4(
+        dst, src, src_closed, WUFFS_BASE__BASE_16__DEFAULT_OPTIONS);
+    if (have.status.repr) {
+      RETURN_FAIL("decode2: %s", have.status.repr);
+    }
+    if (have.num_dst != 3) {
+      RETURN_FAIL("decode4: num_dst: have %zu, want 3", have.num_dst);
+    }
+    if (have.num_src != 12) {
+      RETURN_FAIL("decode4: num_src: have %zu, want 3", have.num_src);
     }
     if (g_have_array_u8[0] != 0xA9) {
       RETURN_FAIL("decode4: dst[0]: have 0x%02X, want 0xA9",
@@ -598,7 +735,219 @@ test_wuffs_strconv_hexadecimal() {
 }
 
 const char*  //
-test_wuffs_strconv_parse_number_f64() {
+test_wuffs_strconv_base_64() {
+  CHECK_FOCUS(__func__);
+
+  char* foobar = "foobar";
+  const char* wants[] = {
+      "",          //
+      "Zg==",      //
+      "Zm8=",      //
+      "Zm9v",      //
+      "Zm9vYg==",  //
+      "Zm9vYmE=",  //
+      "Zm9vYmFy",  //
+  };
+
+  size_t tc;
+  for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(wants); tc++) {
+    const bool src_closed = true;
+
+    wuffs_base__transform__output e = wuffs_base__base_64__encode(
+        g_have_slice_u8, wuffs_base__make_slice_u8(((uint8_t*)foobar), tc),
+        src_closed, WUFFS_BASE__BASE_64__ENCODE_EMIT_PADDING);
+    if (e.status.repr) {
+      RETURN_FAIL("tc=%zu: encode: \"%s\"", tc, e.status.repr);
+    }
+    if (e.num_src != tc) {
+      RETURN_FAIL("tc=%zu: encode: num_src: have %zu, want %zu", tc, e.num_src,
+                  tc);
+    }
+    if (e.num_dst != (((tc + 2) / 3) * 4)) {
+      RETURN_FAIL("tc=%zu: encode: num_dst: have %zu, want %zu", tc, e.num_dst,
+                  (((tc + 2) / 3) * 4));
+    }
+    if ((e.num_dst + 1) > g_have_slice_u8.len) {
+      RETURN_FAIL("tc=%zu: encode: num_dst is too large", tc);
+    }
+    g_have_slice_u8.ptr[e.num_dst] = '\x00';
+    if (strncmp((const char*)(g_have_slice_u8.ptr), wants[tc], e.num_dst) !=
+        0) {
+      RETURN_FAIL("tc=%zu: encode:\nhave \"%s\"\nwant \"%s\"", tc,
+                  g_have_slice_u8.ptr, wants[tc]);
+    }
+
+    int trim;
+    for (trim = 0; trim < 2; trim++) {
+      size_t n = e.num_dst;
+      if (trim) {
+        while ((n > 0) && (g_have_slice_u8.ptr[n - 1] == '=')) {
+          n--;
+        }
+      }
+
+      wuffs_base__transform__output d = wuffs_base__base_64__decode(
+          g_work_slice_u8, wuffs_base__make_slice_u8(g_have_slice_u8.ptr, n),
+          src_closed, WUFFS_BASE__BASE_64__DECODE_ALLOW_PADDING);
+      if (d.status.repr) {
+        RETURN_FAIL("tc=%zu: trim=%d: decode: \"%s\"", tc, trim, d.status.repr);
+      }
+      if (d.num_src != n) {
+        RETURN_FAIL("tc=%zu: trim=%d: decode: num_src: have %zu, want %zu", tc,
+                    trim, d.num_src, n);
+      }
+      if (d.num_dst != tc) {
+        RETURN_FAIL("tc=%zu: trim=%d: decode: num_dst: have %zu, want %zu", tc,
+                    trim, d.num_dst, tc);
+      }
+      if ((d.num_dst + 1) > g_work_slice_u8.len) {
+        RETURN_FAIL("tc=%zu: trim=%d: decode: num_dst is too large", tc, trim);
+      }
+      g_work_slice_u8.ptr[d.num_dst] = '\x00';
+      if ((tc + 1) > g_want_slice_u8.len) {
+        RETURN_FAIL("tc=%zu: trim=%d: decode: tc is too large", tc, trim);
+      }
+      memcpy(g_want_slice_u8.ptr, foobar, tc);
+      g_want_slice_u8.ptr[tc] = '\x00';
+      if (strcmp(((const char*)(g_work_slice_u8.ptr)),
+                 ((const char*)(g_want_slice_u8.ptr))) != 0) {
+        RETURN_FAIL("tc=%zu: trim=%d: decode:\nhave \"%s\"\nwant \"%s\"", tc,
+                    trim, g_work_slice_u8.ptr, g_want_slice_u8.ptr);
+      }
+    }
+  }
+
+  return NULL;
+}
+
+// ----------------
+
+const char*  //
+test_wuffs_strconv_parse_number_f64_options() {
+  CHECK_FOCUS(__func__);
+
+  // Test WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_MULTIPLE_LEADING_ZEROES.
+  {
+    int o;
+    for (o = 0; o < 2; o++) {
+      const char* str = "001.25";
+      wuffs_base__result_f64 r = wuffs_base__parse_number_f64(
+          wuffs_base__make_slice_u8((void*)str, strlen(str)),
+          (o ? WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_MULTIPLE_LEADING_ZEROES
+             : WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS));
+
+      if (o == 0) {
+        if (r.status.repr != wuffs_base__error__bad_argument) {
+          RETURN_FAIL(
+              "ALLOW_MULTIPLE_LEADING_ZEROES off: have \"%s\", want \"%s\"",
+              r.status.repr, wuffs_base__error__bad_argument);
+        }
+        continue;
+      }
+
+      CHECK_STATUS("ALLOW_MULTIPLE_LEADING_ZEROES on", r.status);
+      uint64_t have =
+          wuffs_base__ieee_754_bit_representation__from_f64_to_u64(r.value);
+      uint64_t want = 0x3FF4000000000000;
+      if (have != want) {
+        RETURN_FAIL("ALLOW_MULTIPLE_LEADING_ZEROES on: have 0x%016" PRIX64
+                    ", want 0x%016" PRIX64,
+                    have, want);
+      }
+    }
+  }
+
+  // Test WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_UNDERSCORES.
+  {
+    int o;
+    for (o = 0; o < 2; o++) {
+      const char* str = "_1.2__5";
+      wuffs_base__result_f64 r = wuffs_base__parse_number_f64(
+          wuffs_base__make_slice_u8((void*)str, strlen(str)),
+          (o ? WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_UNDERSCORES
+             : WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS));
+
+      if (o == 0) {
+        if (r.status.repr != wuffs_base__error__bad_argument) {
+          RETURN_FAIL("ALLOW_UNDERSCORES off: have \"%s\", want \"%s\"",
+                      r.status.repr, wuffs_base__error__bad_argument);
+        }
+        continue;
+      }
+
+      CHECK_STATUS("ALLOW_UNDERSCORES on", r.status);
+      uint64_t have =
+          wuffs_base__ieee_754_bit_representation__from_f64_to_u64(r.value);
+      uint64_t want = 0x3FF4000000000000;
+      if (have != want) {
+        RETURN_FAIL("ALLOW_UNDERSCORES on: have 0x%016" PRIX64
+                    ", want 0x%016" PRIX64,
+                    have, want);
+      }
+    }
+  }
+
+  // Test WUFFS_BASE__PARSE_NUMBER_FXX__DECIMAL_SEPARATOR_IS_A_COMMA.
+  {
+    int o;
+    for (o = 0; o < 2; o++) {
+      const char* str = "1,75";
+      wuffs_base__result_f64 r = wuffs_base__parse_number_f64(
+          wuffs_base__make_slice_u8((void*)str, strlen(str)),
+          (o ? WUFFS_BASE__PARSE_NUMBER_FXX__DECIMAL_SEPARATOR_IS_A_COMMA
+             : WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS));
+
+      if (o == 0) {
+        if (r.status.repr != wuffs_base__error__bad_argument) {
+          RETURN_FAIL(
+              "DECIMAL_SEPARATOR_IS_A_COMMA off: have \"%s\", want \"%s\"",
+              r.status.repr, wuffs_base__error__bad_argument);
+        }
+        continue;
+      }
+
+      CHECK_STATUS("DECIMAL_SEPARATOR_IS_A_COMMA on", r.status);
+      uint64_t have =
+          wuffs_base__ieee_754_bit_representation__from_f64_to_u64(r.value);
+      uint64_t want = 0x3FFC000000000000;
+      if (have != want) {
+        RETURN_FAIL("DECIMAL_SEPARATOR_IS_A_COMMA on: have 0x%016" PRIX64
+                    ", want 0x%016" PRIX64,
+                    have, want);
+      }
+    }
+  }
+
+  // Test WUFFS_BASE__PARSE_NUMBER_FXX__REJECT_INF_AND_NAN.
+  {
+    int o;
+    for (o = 0; o < 4; o++) {
+      const char* str = (o & 2) ? "1e999" : "nan";
+      wuffs_base__result_f64 r = wuffs_base__parse_number_f64(
+          wuffs_base__make_slice_u8((void*)str, strlen(str)),
+          ((o & 1) ? WUFFS_BASE__PARSE_NUMBER_FXX__REJECT_INF_AND_NAN
+                   : WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS));
+
+      if (o & 1) {
+        if (r.status.repr != wuffs_base__error__bad_argument) {
+          RETURN_FAIL("REJECT_INF_AND_NAN off: have \"%s\", want \"%s\"",
+                      r.status.repr, wuffs_base__error__bad_argument);
+        }
+        continue;
+      }
+
+      if (r.status.repr != NULL) {
+        RETURN_FAIL("REJECT_INF_AND_NAN on: have \"%s\", want NULL",
+                    r.status.repr);
+      }
+    }
+  }
+
+  return NULL;
+}
+
+const char*  //
+test_wuffs_strconv_parse_number_f64_regular() {
   CHECK_FOCUS(__func__);
 
   const uint64_t fail = 0xDEADBEEF;
@@ -607,13 +956,21 @@ test_wuffs_strconv_parse_number_f64() {
     uint64_t want;
     const char* str;
   } test_cases[] = {
+      // If adding new cases, consider updating u64TestCases in
+      // script/print-render-number-f64-tests.go
+
       {.want = 0x0000000000000000, .str = "+0.0"},
       {.want = 0x0000000000000000, .str = "0"},
       {.want = 0x0000000000000000, .str = "0e0"},
+      {.want = 0x0000000000000000, .str = "0e99"},
       {.want = 0x0000000000000000, .str = "1e-332"},
       {.want = 0x0000000000000001, .str = "4.9406564584124654e-324"},
+      {.want = 0x0000000000000002, .str = "9.8813129168249309e-324"},
+      {.want = 0x0000000000000003, .str = "1.4821969375237396e-323"},
+      {.want = 0x000730D67819E8D2, .str = "1e-308"},
       {.want = 0x000FFFFFFFFFFFFF, .str = "2.2250738585072009E-308"},
       {.want = 0x0010000000000000, .str = "2.2250738585072014E-308"},
+      {.want = 0x0031FA182C40C60D, .str = "1e-307"},
       {.want = 0x369C314ABE948EB1,
        .str = "0.0000000000000000000000000000000000000000000012345678900000"},
       {.want = 0x3F88000000000000, .str = "0.01171875"},
@@ -637,6 +994,8 @@ test_wuffs_strconv_parse_number_f64() {
       {.want = 0x400921FB54442D11, .str = "3.14159265358979"},
       {.want = 0x400921FB54442D18, .str = "3.141592653589793"},
       {.want = 0x400921FB54442D18, .str = "3.141592653589793238462643383279"},
+      {.want = 0x400921FB54442D18,
+       .str = "3.1415926535897932384626433832795028841971693993751"},
       {.want = 0x400C000000000000, .str = "3.5"},
       {.want = 0x4014000000000000, .str = "5"},
       {.want = 0x4036000000000000, .str = "22"},
@@ -648,26 +1007,41 @@ test_wuffs_strconv_parse_number_f64() {
       {.want = 0x4038000000000000, .str = "24"},
       {.want = 0x4038000000000000, .str = "2400_00000_00000.00000_e-_1_2"},
       {.want = 0x40FE240C9FCB0C02, .str = "123456.789012"},
+      {.want = 0x41E0246690000001,
+       .str = "2.16656806400000023841857910156251e9"},
       {.want = 0x4202A05F20000000, .str = "1e10"},
       {.want = 0x4330000000000000, .str = "4503599627370496"},  // 1 << 52.
       {.want = 0x4330000000000000, .str = "4503599627370496.5"},
       {.want = 0x4330000000000001, .str = "4503599627370497"},
       {.want = 0x4330000000000002, .str = "4503599627370497.5"},
       {.want = 0x4330000000000002, .str = "4503599627370498"},
+      {.want = 0x433FFFFFFFFFFFFE, .str = "9007199254740990"},
+      {.want = 0x433FFFFFFFFFFFFF, .str = "9.007199254740991e+15"},
       {.want = 0x4340000000000000, .str = "9007199254740992"},  // 1 << 53.
       {.want = 0x4340000000000000, .str = "9007199254740993"},
       {.want = 0x4340000000000001, .str = "9007199254740994"},
       {.want = 0x4340000000000002, .str = "9007199254740995"},
       {.want = 0x4340000000000002, .str = "9007199254740996"},
       {.want = 0x4340000000000002, .str = "9_007__199_254__740_996"},
+      {.want = 0x4370000000000000, .str = "7.2057594037927933e+16"},
+      {.want = 0x43F002F1776DDA67, .str = "18459999196907202592"},
       {.want = 0x4415AF1D78B58C40, .str = "1e20"},
+      {.want = 0x44B52D02C7E14AF6, .str = "1e23"},
       {.want = 0x46293E5939A08CEA, .str = "1e30"},
       {.want = 0x54B249AD2594C37D, .str = "+1E+100"},
       {.want = 0x54B249AD2594C37D, .str = "+_1_E_+_1_0_0_"},
+      {.want = 0x7BBA44DF832B8D46, .str = "1e+288"},
+      {.want = 0x7BF06B0BB1FB384C, .str = "1e+289"},
+      {.want = 0x7C2485CE9E7A065F, .str = "1e+290"},
+      {.want = 0x7FAC7B1F3CAC7433, .str = "9999999999999999999e+288"},
+      {.want = 0x7FE1CCF385EBC8A0, .str = "9999999999999999999e+289"},
       {.want = 0x7FEFFFFFFFFFFFFF, .str = "1.7976931348623157e308"},
       {.want = 0x7FF0000000000000, .str = "1.8e308"},
       {.want = 0x7FF0000000000000, .str = "1e+316"},
+      {.want = 0x7FF0000000000000,
+       .str = "10000000000000000000000000000000000000000000e+308"},
       {.want = 0x7FF0000000000000, .str = "1e999"},
+      {.want = 0x7FF0000000000000, .str = "9999999999999999999e+290"},
       {.want = 0x7FF0000000000000, .str = "__InFinity__"},
       {.want = 0x7FF0000000000000, .str = "inf"},
       {.want = 0x7FFFFFFFFFFFFFFF, .str = "+nan"},
@@ -679,9 +1053,8 @@ test_wuffs_strconv_parse_number_f64() {
       {.want = 0xFFF0000000000000, .str = "-inf"},
       {.want = 0xFFFFFFFFFFFFFFFF, .str = "-NAN"},
 
-      // We accept either ',' or '.'.
-      {.want = 0x3FFC000000000000, .str = "1,75"},
-      {.want = 0x3FFC000000000000, .str = "1.75"},
+      // If adding new cases, consider updating u64TestCases in
+      // script/print-render-number-f64-tests.go
 
       {.want = fail, .str = " 0"},
       {.want = fail, .str = ""},
@@ -707,15 +1080,16 @@ test_wuffs_strconv_parse_number_f64() {
 
   int tc;
   for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
-    wuffs_base__result_f64 r =
-        wuffs_base__parse_number_f64(wuffs_base__make_slice_u8(
-            (void*)test_cases[tc].str, strlen(test_cases[tc].str)));
+    wuffs_base__result_f64 r = wuffs_base__parse_number_f64(
+        wuffs_base__make_slice_u8((void*)test_cases[tc].str,
+                                  strlen(test_cases[tc].str)),
+        WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_UNDERSCORES);
     uint64_t have =
         (r.status.repr == NULL)
-            ? wuffs_base__ieee_754_bit_representation__from_f64(r.value)
+            ? wuffs_base__ieee_754_bit_representation__from_f64_to_u64(r.value)
             : fail;
     if (have != test_cases[tc].want) {
-      RETURN_FAIL("\"%s\": have 0x%" PRIX64 ", want 0x%" PRIX64,
+      RETURN_FAIL("\"%s\": have 0x%016" PRIX64 ", want 0x%016" PRIX64,
                   test_cases[tc].str, have, test_cases[tc].want);
     }
   }
@@ -759,9 +1133,10 @@ test_wuffs_strconv_parse_number_i64() {
 
   int tc;
   for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
-    wuffs_base__result_i64 r =
-        wuffs_base__parse_number_i64(wuffs_base__make_slice_u8(
-            (void*)test_cases[tc].str, strlen(test_cases[tc].str)));
+    wuffs_base__result_i64 r = wuffs_base__parse_number_i64(
+        wuffs_base__make_slice_u8((void*)test_cases[tc].str,
+                                  strlen(test_cases[tc].str)),
+        WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_UNDERSCORES);
     int64_t have = (r.status.repr == NULL) ? r.value : fail;
     if (have != test_cases[tc].want) {
       RETURN_FAIL("\"%s\": have 0x%" PRIX64 ", want 0x%" PRIX64,
@@ -845,9 +1220,10 @@ test_wuffs_strconv_parse_number_u64() {
 
   int tc;
   for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
-    wuffs_base__result_u64 r =
-        wuffs_base__parse_number_u64(wuffs_base__make_slice_u8(
-            (void*)test_cases[tc].str, strlen(test_cases[tc].str)));
+    wuffs_base__result_u64 r = wuffs_base__parse_number_u64(
+        wuffs_base__make_slice_u8((void*)test_cases[tc].str,
+                                  strlen(test_cases[tc].str)),
+        WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_UNDERSCORES);
     uint64_t have = (r.status.repr == NULL) ? r.value : fail;
     if (have != test_cases[tc].want) {
       RETURN_FAIL("\"%s\": have 0x%" PRIX64 ", want 0x%" PRIX64,
@@ -855,8 +1231,1102 @@ test_wuffs_strconv_parse_number_u64() {
     }
   }
 
+  // Test WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_MULTIPLE_LEADING_ZEROES.
+  {
+    int o;
+    for (o = 0; o < 2; o++) {
+      const char* str = "007";
+      wuffs_base__result_u64 r = wuffs_base__parse_number_u64(
+          wuffs_base__make_slice_u8((void*)str, strlen(str)),
+          (o ? WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_MULTIPLE_LEADING_ZEROES
+             : WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS));
+
+      if (o == 0) {
+        if (r.status.repr != wuffs_base__error__bad_argument) {
+          RETURN_FAIL(
+              "ALLOW_MULTIPLE_LEADING_ZEROES off: have \"%s\", want \"%s\"",
+              r.status.repr, wuffs_base__error__bad_argument);
+        }
+        continue;
+      }
+
+      CHECK_STATUS("ALLOW_MULTIPLE_LEADING_ZEROES on", r.status);
+      uint64_t want = 7;
+      if (r.value != want) {
+        RETURN_FAIL("ALLOW_MULTIPLE_LEADING_ZEROES on: have %" PRIu64
+                    ", want %" PRIu64,
+                    r.value, want);
+      }
+    }
+  }
+
+  // Test WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_UNDERSCORES.
+  {
+    int o;
+    for (o = 0; o < 2; o++) {
+      const char* str = "56_7__8";
+      wuffs_base__result_u64 r = wuffs_base__parse_number_u64(
+          wuffs_base__make_slice_u8((void*)str, strlen(str)),
+          (o ? WUFFS_BASE__PARSE_NUMBER_XXX__ALLOW_UNDERSCORES
+             : WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS));
+
+      if (o == 0) {
+        if (r.status.repr != wuffs_base__error__bad_argument) {
+          RETURN_FAIL(
+              "ALLOW_MULTIPLE_LEADING_ZEROES off: have \"%s\", want \"%s\"",
+              r.status.repr, wuffs_base__error__bad_argument);
+        }
+        continue;
+      }
+
+      CHECK_STATUS("ALLOW_MULTIPLE_LEADING_ZEROES on", r.status);
+      uint64_t want = 5678;
+      if (r.value != want) {
+        RETURN_FAIL("ALLOW_MULTIPLE_LEADING_ZEROES on: have %" PRIu64
+                    ", want %" PRIu64,
+                    r.value, want);
+      }
+    }
+  }
+
   return NULL;
 }
+
+// ----------------
+
+const char*  //
+test_wuffs_strconv_render_number_f64() {
+  CHECK_FOCUS(__func__);
+
+  struct {
+    uint64_t x;
+    // These want strings come from Go's strconv.FormatFloat.
+    const char* want__e;  // FormatFloat(etc, 'e', -1, etc)
+    const char* want__f;  // FormatFloat(etc, 'f', -1, etc)
+    const char* want_0g;  // FormatFloat(etc, 'g', +0, etc)
+    const char* want_2e;  // FormatFloat(etc, 'e', +2, etc)
+    const char* want_3f;  // FormatFloat(etc, 'f', +3, etc)
+    const char* want_4g;  // FormatFloat(etc, 'g', +4, etc)
+  } test_cases[] = {
+      // These test cases were generated by
+      // script/print-render-number-f64-tests.go
+
+      {
+          .x = 0x0000000000000000,
+          .want__e = "0e+00",
+          .want__f = "0",
+          .want_0g = "0",
+          .want_2e = "0.00e+00",
+          .want_3f = "0.000",
+          .want_4g = "0",
+      },
+      {
+          .x = 0x0000000000000001,
+          .want__e = "5e-324",
+          .want__f = "0.000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000005",
+          .want_0g = "5e-324",
+          .want_2e = "4.94e-324",
+          .want_3f = "0.000",
+          .want_4g = "4.941e-324",
+      },
+      {
+          .x = 0x0000000000000002,
+          .want__e = "1e-323",
+          .want__f = "0.000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "0000000000000000000000001",
+          .want_0g = "1e-323",
+          .want_2e = "9.88e-324",
+          .want_3f = "0.000",
+          .want_4g = "9.881e-324",
+      },
+      {
+          .x = 0x0000000000000003,
+          .want__e = "1.5e-323",
+          .want__f = "0.000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000015",
+          .want_0g = "1e-323",
+          .want_2e = "1.48e-323",
+          .want_3f = "0.000",
+          .want_4g = "1.482e-323",
+      },
+      {
+          .x = 0x000730D67819E8D2,
+          .want__e = "1e-308",
+          .want__f = "0.000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "0000000001",
+          .want_0g = "1e-308",
+          .want_2e = "1.00e-308",
+          .want_3f = "0.000",
+          .want_4g = "1e-308",
+      },
+      {
+          .x = 0x000FFFFFFFFFFFFF,
+          .want__e = "2.225073858507201e-308",
+          .want__f = "0.000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "0000000002225073858507201",
+          .want_0g = "2e-308",
+          .want_2e = "2.23e-308",
+          .want_3f = "0.000",
+          .want_4g = "2.225e-308",
+      },
+      {
+          .x = 0x0010000000000000,
+          .want__e = "2.2250738585072014e-308",
+          .want__f = "0.000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000022250738585072014",
+          .want_0g = "2e-308",
+          .want_2e = "2.23e-308",
+          .want_3f = "0.000",
+          .want_4g = "2.225e-308",
+      },
+      {
+          .x = 0x0031FA182C40C60D,
+          .want__e = "1e-307",
+          .want__f = "0.000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "000000001",
+          .want_0g = "1e-307",
+          .want_2e = "1.00e-307",
+          .want_3f = "0.000",
+          .want_4g = "1e-307",
+      },
+      {
+          .x = 0x369C314ABE948EB1,
+          .want__e = "1.23456789e-45",
+          .want__f = "0.000000000000000000000000000000000000000000001234"
+                     "56789",
+          .want_0g = "1e-45",
+          .want_2e = "1.23e-45",
+          .want_3f = "0.000",
+          .want_4g = "1.235e-45",
+      },
+      {
+          .x = 0x3F88000000000000,
+          .want__e = "1.171875e-02",
+          .want__f = "0.01171875",
+          .want_0g = "0.01",
+          .want_2e = "1.17e-02",
+          .want_3f = "0.012",
+          .want_4g = "0.01172",
+      },
+      {
+          .x = 0x3FD0000000000000,
+          .want__e = "2.5e-01",
+          .want__f = "0.25",
+          .want_0g = "0.2",
+          .want_2e = "2.50e-01",
+          .want_3f = "0.250",
+          .want_4g = "0.25",
+      },
+      {
+          .x = 0x3FD3333333333333,
+          .want__e = "3e-01",
+          .want__f = "0.3",
+          .want_0g = "0.3",
+          .want_2e = "3.00e-01",
+          .want_3f = "0.300",
+          .want_4g = "0.3",
+      },
+      {
+          .x = 0x3FD3333333333334,
+          .want__e = "3.0000000000000004e-01",
+          .want__f = "0.30000000000000004",
+          .want_0g = "0.3",
+          .want_2e = "3.00e-01",
+          .want_3f = "0.300",
+          .want_4g = "0.3",
+      },
+      {
+          .x = 0x3FD5555555555555,
+          .want__e = "3.333333333333333e-01",
+          .want__f = "0.3333333333333333",
+          .want_0g = "0.3",
+          .want_2e = "3.33e-01",
+          .want_3f = "0.333",
+          .want_4g = "0.3333",
+      },
+      {
+          .x = 0x3FEFFFFFFFFFFFFF,
+          .want__e = "9.999999999999999e-01",
+          .want__f = "0.9999999999999999",
+          .want_0g = "1",
+          .want_2e = "1.00e+00",
+          .want_3f = "1.000",
+          .want_4g = "1",
+      },
+      {
+          .x = 0x3FF0000000000000,
+          .want__e = "1e+00",
+          .want__f = "1",
+          .want_0g = "1",
+          .want_2e = "1.00e+00",
+          .want_3f = "1.000",
+          .want_4g = "1",
+      },
+      {
+          .x = 0x3FF0000000000001,
+          .want__e = "1.0000000000000002e+00",
+          .want__f = "1.0000000000000002",
+          .want_0g = "1",
+          .want_2e = "1.00e+00",
+          .want_3f = "1.000",
+          .want_4g = "1",
+      },
+      {
+          .x = 0x3FF0000000000002,
+          .want__e = "1.0000000000000004e+00",
+          .want__f = "1.0000000000000004",
+          .want_0g = "1",
+          .want_2e = "1.00e+00",
+          .want_3f = "1.000",
+          .want_4g = "1",
+      },
+      {
+          .x = 0x3FF4000000000000,
+          .want__e = "1.25e+00",
+          .want__f = "1.25",
+          .want_0g = "1",
+          .want_2e = "1.25e+00",
+          .want_3f = "1.250",
+          .want_4g = "1.25",
+      },
+      {
+          .x = 0x3FF8000000000000,
+          .want__e = "1.5e+00",
+          .want__f = "1.5",
+          .want_0g = "2",
+          .want_2e = "1.50e+00",
+          .want_3f = "1.500",
+          .want_4g = "1.5",
+      },
+      {
+          .x = 0x400599999999999A,
+          .want__e = "2.7e+00",
+          .want__f = "2.7",
+          .want_0g = "3",
+          .want_2e = "2.70e+00",
+          .want_3f = "2.700",
+          .want_4g = "2.7",
+      },
+      {
+          .x = 0x4005BE76C8B43958,
+          .want__e = "2.718e+00",
+          .want__f = "2.718",
+          .want_0g = "3",
+          .want_2e = "2.72e+00",
+          .want_3f = "2.718",
+          .want_4g = "2.718",
+      },
+      {
+          .x = 0x4005BF0995AAF790,
+          .want__e = "2.71828e+00",
+          .want__f = "2.71828",
+          .want_0g = "3",
+          .want_2e = "2.72e+00",
+          .want_3f = "2.718",
+          .want_4g = "2.718",
+      },
+      {
+          .x = 0x4005BF0A87427F01,
+          .want__e = "2.7182818e+00",
+          .want__f = "2.7182818",
+          .want_0g = "3",
+          .want_2e = "2.72e+00",
+          .want_3f = "2.718",
+          .want_4g = "2.718",
+      },
+      {
+          .x = 0x4005BF0A8B4949CB,
+          .want__e = "2.71828183e+00",
+          .want__f = "2.71828183",
+          .want_0g = "3",
+          .want_2e = "2.72e+00",
+          .want_3f = "2.718",
+          .want_4g = "2.718",
+      },
+      {
+          .x = 0x4005BF0AA21A719B,
+          .want__e = "2.718282e+00",
+          .want__f = "2.718282",
+          .want_0g = "3",
+          .want_2e = "2.72e+00",
+          .want_3f = "2.718",
+          .want_4g = "2.718",
+      },
+      {
+          .x = 0x4005BF141205BC02,
+          .want__e = "2.7183e+00",
+          .want__f = "2.7183",
+          .want_0g = "3",
+          .want_2e = "2.72e+00",
+          .want_3f = "2.718",
+          .want_4g = "2.718",
+      },
+      {
+          .x = 0x4005C28F5C28F5C3,
+          .want__e = "2.72e+00",
+          .want__f = "2.72",
+          .want_0g = "3",
+          .want_2e = "2.72e+00",
+          .want_3f = "2.720",
+          .want_4g = "2.72",
+      },
+      {
+          .x = 0x4008000000000000,
+          .want__e = "3e+00",
+          .want__f = "3",
+          .want_0g = "3",
+          .want_2e = "3.00e+00",
+          .want_3f = "3.000",
+          .want_4g = "3",
+      },
+      {
+          .x = 0x400921F9F01B866E,
+          .want__e = "3.14159e+00",
+          .want__f = "3.14159",
+          .want_0g = "3",
+          .want_2e = "3.14e+00",
+          .want_3f = "3.142",
+          .want_4g = "3.142",
+      },
+      {
+          .x = 0x400921FB54442D11,
+          .want__e = "3.14159265358979e+00",
+          .want__f = "3.14159265358979",
+          .want_0g = "3",
+          .want_2e = "3.14e+00",
+          .want_3f = "3.142",
+          .want_4g = "3.142",
+      },
+      {
+          .x = 0x400921FB54442D18,
+          .want__e = "3.141592653589793e+00",
+          .want__f = "3.141592653589793",
+          .want_0g = "3",
+          .want_2e = "3.14e+00",
+          .want_3f = "3.142",
+          .want_4g = "3.142",
+      },
+      {
+          .x = 0x400C000000000000,
+          .want__e = "3.5e+00",
+          .want__f = "3.5",
+          .want_0g = "4",
+          .want_2e = "3.50e+00",
+          .want_3f = "3.500",
+          .want_4g = "3.5",
+      },
+      {
+          .x = 0x4014000000000000,
+          .want__e = "5e+00",
+          .want__f = "5",
+          .want_0g = "5",
+          .want_2e = "5.00e+00",
+          .want_3f = "5.000",
+          .want_4g = "5",
+      },
+      {
+          .x = 0x4036000000000000,
+          .want__e = "2.2e+01",
+          .want__f = "22",
+          .want_0g = "2e+01",
+          .want_2e = "2.20e+01",
+          .want_3f = "22.000",
+          .want_4g = "22",
+      },
+      {
+          .x = 0x4037000000000000,
+          .want__e = "2.3e+01",
+          .want__f = "23",
+          .want_0g = "2e+01",
+          .want_2e = "2.30e+01",
+          .want_3f = "23.000",
+          .want_4g = "23",
+      },
+      {
+          .x = 0x4038000000000000,
+          .want__e = "2.4e+01",
+          .want__f = "24",
+          .want_0g = "2e+01",
+          .want_2e = "2.40e+01",
+          .want_3f = "24.000",
+          .want_4g = "24",
+      },
+      {
+          .x = 0x40FE240C9FCB0C02,
+          .want__e = "1.23456789012e+05",
+          .want__f = "123456.789012",
+          .want_0g = "1e+05",
+          .want_2e = "1.23e+05",
+          .want_3f = "123456.789",
+          .want_4g = "1.235e+05",
+      },
+      {
+          .x = 0x41E0246690000001,
+          .want__e = "2.1665680640000005e+09",
+          .want__f = "2166568064.0000005",
+          .want_0g = "2e+09",
+          .want_2e = "2.17e+09",
+          .want_3f = "2166568064.000",
+          .want_4g = "2.167e+09",
+      },
+      {
+          .x = 0x4202A05F20000000,
+          .want__e = "1e+10",
+          .want__f = "10000000000",
+          .want_0g = "1e+10",
+          .want_2e = "1.00e+10",
+          .want_3f = "10000000000.000",
+          .want_4g = "1e+10",
+      },
+      {
+          .x = 0x4330000000000000,
+          .want__e = "4.503599627370496e+15",
+          .want__f = "4503599627370496",
+          .want_0g = "5e+15",
+          .want_2e = "4.50e+15",
+          .want_3f = "4503599627370496.000",
+          .want_4g = "4.504e+15",
+      },
+      {
+          .x = 0x4330000000000001,
+          .want__e = "4.503599627370497e+15",
+          .want__f = "4503599627370497",
+          .want_0g = "5e+15",
+          .want_2e = "4.50e+15",
+          .want_3f = "4503599627370497.000",
+          .want_4g = "4.504e+15",
+      },
+      {
+          .x = 0x4330000000000002,
+          .want__e = "4.503599627370498e+15",
+          .want__f = "4503599627370498",
+          .want_0g = "5e+15",
+          .want_2e = "4.50e+15",
+          .want_3f = "4503599627370498.000",
+          .want_4g = "4.504e+15",
+      },
+      {
+          .x = 0x433FFFFFFFFFFFFE,
+          .want__e = "9.00719925474099e+15",
+          .want__f = "9007199254740990",
+          .want_0g = "9e+15",
+          .want_2e = "9.01e+15",
+          .want_3f = "9007199254740990.000",
+          .want_4g = "9.007e+15",
+      },
+      {
+          .x = 0x433FFFFFFFFFFFFF,
+          .want__e = "9.007199254740991e+15",
+          .want__f = "9007199254740991",
+          .want_0g = "9e+15",
+          .want_2e = "9.01e+15",
+          .want_3f = "9007199254740991.000",
+          .want_4g = "9.007e+15",
+      },
+      {
+          .x = 0x4340000000000000,
+          .want__e = "9.007199254740992e+15",
+          .want__f = "9007199254740992",
+          .want_0g = "9e+15",
+          .want_2e = "9.01e+15",
+          .want_3f = "9007199254740992.000",
+          .want_4g = "9.007e+15",
+      },
+      {
+          .x = 0x4340000000000001,
+          .want__e = "9.007199254740994e+15",
+          .want__f = "9007199254740994",
+          .want_0g = "9e+15",
+          .want_2e = "9.01e+15",
+          .want_3f = "9007199254740994.000",
+          .want_4g = "9.007e+15",
+      },
+      {
+          .x = 0x4340000000000002,
+          .want__e = "9.007199254740996e+15",
+          .want__f = "9007199254740996",
+          .want_0g = "9e+15",
+          .want_2e = "9.01e+15",
+          .want_3f = "9007199254740996.000",
+          .want_4g = "9.007e+15",
+      },
+      {
+          .x = 0x4370000000000000,
+          .want__e = "7.205759403792794e+16",
+          .want__f = "72057594037927940",
+          .want_0g = "7e+16",
+          .want_2e = "7.21e+16",
+          .want_3f = "72057594037927936.000",
+          .want_4g = "7.206e+16",
+      },
+      {
+          .x = 0x43F002F1776DDA67,
+          .want__e = "1.8459999196907205e+19",
+          .want__f = "18459999196907205000",
+          .want_0g = "2e+19",
+          .want_2e = "1.85e+19",
+          .want_3f = "18459999196907204608.000",
+          .want_4g = "1.846e+19",
+      },
+      {
+          .x = 0x4415AF1D78B58C40,
+          .want__e = "1e+20",
+          .want__f = "100000000000000000000",
+          .want_0g = "1e+20",
+          .want_2e = "1.00e+20",
+          .want_3f = "100000000000000000000.000",
+          .want_4g = "1e+20",
+      },
+      {
+          .x = 0x44B52D02C7E14AF6,
+          .want__e = "1e+23",
+          .want__f = "100000000000000000000000",
+          .want_0g = "1e+23",
+          .want_2e = "1.00e+23",
+          .want_3f = "99999999999999991611392.000",
+          .want_4g = "1e+23",
+      },
+      {
+          .x = 0x44DFC3842BD1F072,
+          .want__e = "6e+23",
+          .want__f = "600000000000000000000000",
+          .want_0g = "6e+23",
+          .want_2e = "6.00e+23",
+          .want_3f = "600000000000000016777216.000",
+          .want_4g = "6e+23",
+      },
+      {
+          .x = 0x44DFDE9F10A8D361,
+          .want__e = "6.02e+23",
+          .want__f = "602000000000000000000000",
+          .want_0g = "6e+23",
+          .want_2e = "6.02e+23",
+          .want_3f = "601999999999999995805696.000",
+          .want_4g = "6.02e+23",
+      },
+      {
+          .x = 0x44DFE154F457EA13,
+          .want__e = "6.022e+23",
+          .want__f = "602200000000000000000000",
+          .want_0g = "6e+23",
+          .want_2e = "6.02e+23",
+          .want_3f = "602200000000000027262976.000",
+          .want_4g = "6.022e+23",
+      },
+      {
+          .x = 0x44DFE177A620AB35,
+          .want__e = "6.0221e+23",
+          .want__f = "602210000000000000000000",
+          .want_0g = "6e+23",
+          .want_2e = "6.02e+23",
+          .want_3f = "602209999999999995281408.000",
+          .want_4g = "6.022e+23",
+      },
+      {
+          .x = 0x44DFE18586D75EDC,
+          .want__e = "6.02214e+23",
+          .want__f = "602214000000000000000000",
+          .want_0g = "6e+23",
+          .want_2e = "6.02e+23",
+          .want_3f = "602213999999999969067008.000",
+          .want_4g = "6.022e+23",
+      },
+      {
+          .x = 0x44DFE185CA57C517,
+          .want__e = "6.02214076e+23",
+          .want__f = "602214076000000000000000",
+          .want_0g = "6e+23",
+          .want_2e = "6.02e+23",
+          .want_3f = "602214075999999987023872.000",
+          .want_4g = "6.022e+23",
+      },
+      {
+          .x = 0x44DFE185CDE543BC,
+          .want__e = "6.0221408e+23",
+          .want__f = "602214080000000000000000",
+          .want_0g = "6e+23",
+          .want_2e = "6.02e+23",
+          .want_3f = "602214080000000002097152.000",
+          .want_4g = "6.022e+23",
+      },
+      {
+          .x = 0x44DFE185DFA8BCF4,
+          .want__e = "6.022141e+23",
+          .want__f = "602214100000000000000000",
+          .want_0g = "6e+23",
+          .want_2e = "6.02e+23",
+          .want_3f = "602214100000000010354688.000",
+          .want_4g = "6.022e+23",
+      },
+      {
+          .x = 0x46293E5939A08CEA,
+          .want__e = "1e+30",
+          .want__f = "1000000000000000000000000000000",
+          .want_0g = "1e+30",
+          .want_2e = "1.00e+30",
+          .want_3f = "1000000000000000019884624838656.000",
+          .want_4g = "1e+30",
+      },
+      {
+          .x = 0x54B249AD2594C37D,
+          .want__e = "1e+100",
+          .want__f = "10000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "0",
+          .want_0g = "1e+100",
+          .want_2e = "1.00e+100",
+          .want_3f = "10000000000000000159028911097599180468360808563945"
+                     "28138978132755774783877217038106081346998585681510"
+                     "4.000",
+          .want_4g = "1e+100",
+      },
+      {
+          .x = 0x7BBA44DF832B8D46,
+          .want__e = "1e+288",
+          .want__f = "10000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "000000000000000000000000000000000000000",
+          .want_0g = "1e+288",
+          .want_2e = "1.00e+288",
+          .want_3f = "10000000000000000076304735395750356605147783355117"
+                     "10750780086664439969510636494954611131549135839186"
+                     "51398345555539522089568786054480958499982972526059"
+                     "48732710873996264866061464425509888400169173946264"
+                     "49536395208620267012778077787723395914064607119962"
+                     "069483324573977857832138825282954985472.000",
+          .want_4g = "1e+288",
+      },
+      {
+          .x = 0x7BF06B0BB1FB384C,
+          .want__e = "1e+289",
+          .want__f = "10000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "0000000000000000000000000000000000000000",
+          .want_0g = "1e+289",
+          .want_2e = "1.00e+289",
+          .want_3f = "10000000000000000617278335278671568869943723109630"
+                     "11258310052850538813376539671558942539170944464796"
+                     "69431045845149126131034590785433956171738211535366"
+                     "98722855425910210916188218613474303381375362727338"
+                     "59602462772449948462578903480308154011242367042019"
+                     "1213257583185130503608895092113260150784.000",
+          .want_4g = "1e+289",
+      },
+      {
+          .x = 0x7C2485CE9E7A065F,
+          .want__e = "1e+290",
+          .want__f = "10000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000",
+          .want_0g = "1e+290",
+          .want_2e = "1.00e+290",
+          .want_3f = "10000000000000000617278335278671568869943723109630"
+                     "11258310052850538813376539671558942539170944464796"
+                     "69431045845149126131034590785433956171738211535366"
+                     "98722855425910210916188218613474303381375362727338"
+                     "59602462772449948462578903480308154011242367042019"
+                     "12132575831851305036088950921132601507840.000",
+          .want_4g = "1e+290",
+      },
+      {
+          .x = 0x7FAC7B1F3CAC7433,
+          .want__e = "1e+307",
+          .want__f = "10000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000",
+          .want_0g = "1e+307",
+          .want_2e = "1.00e+307",
+          .want_3f = "99999999999999998603105976025645777170026418381263"
+                     "63875249660735883565852672743849064846414228960666"
+                     "78637928039265461539335317285025210333627595237061"
+                     "53970107306916646893751785690398510731463396416232"
+                     "66071126720011020169553304018596457812688561947201"
+                     "17148846117292182213906692985128212200267666775002"
+                     "1070848.000",
+          .want_4g = "1e+307",
+      },
+      {
+          .x = 0x7FE1CCF385EBC8A0,
+          .want__e = "1e+308",
+          .want__f = "10000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "000000000",
+          .want_0g = "1e+308",
+          .want_2e = "1.00e+308",
+          .want_3f = "10000000000000000109790636294404554174049230967731"
+                     "18463368106829031575854049114915371633289784946888"
+                     "99061249669721172515611590283743140088328307009198"
+                     "14604603127166450293302718569748969958855904333838"
+                     "44661650011784268976262129451776280911957867074581"
+                     "22783970171784415105291802893207873272974885715430"
+                     "223118336.000",
+          .want_4g = "1e+308",
+      },
+      {
+          .x = 0x7FEFFFFFFFFFFFFF,
+          .want__e = "1.7976931348623157e+308",
+          .want__f = "17976931348623157000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "00000000000000000000000000000000000000000000000000"
+                     "000000000",
+          .want_0g = "2e+308",
+          .want_2e = "1.80e+308",
+          .want_3f = "17976931348623157081452742373170435679807056752584"
+                     "49965989174768031572607800285387605895586327668781"
+                     "71540458953514382464234321326889464182768467546703"
+                     "53751698604991057655128207624549009038932894407586"
+                     "85084551339423045832369032229481658085593321233482"
+                     "74797826204144723168738177180919299881250404026184"
+                     "124858368.000",
+          .want_4g = "1.798e+308",
+      },
+      {
+          .x = 0x7FF0000000000000,
+          .want__e = "Inf",
+          .want__f = "Inf",
+          .want_0g = "Inf",
+          .want_2e = "Inf",
+          .want_3f = "Inf",
+          .want_4g = "Inf",
+      },
+      {
+          .x = 0x7FFFFFFFFFFFFFFF,
+          .want__e = "NaN",
+          .want__f = "NaN",
+          .want_0g = "NaN",
+          .want_2e = "NaN",
+          .want_3f = "NaN",
+          .want_4g = "NaN",
+      },
+      {
+          .x = 0x8000000000000000,
+          .want__e = "-0e+00",
+          .want__f = "-0",
+          .want_0g = "-0",
+          .want_2e = "-0.00e+00",
+          .want_3f = "-0.000",
+          .want_4g = "-0",
+      },
+      {
+          .x = 0xC008000000000000,
+          .want__e = "-3e+00",
+          .want__f = "-3",
+          .want_0g = "-3",
+          .want_2e = "-3.00e+00",
+          .want_3f = "-3.000",
+          .want_4g = "-3",
+      },
+      {
+          .x = 0xFFF0000000000000,
+          .want__e = "-Inf",
+          .want__f = "-Inf",
+          .want_0g = "-Inf",
+          .want_2e = "-Inf",
+          .want_3f = "-Inf",
+          .want_4g = "-Inf",
+      },
+      {
+          .x = 0xFFFFFFFFFFFFFFFF,
+          .want__e = "NaN",
+          .want__f = "NaN",
+          .want_0g = "NaN",
+          .want_2e = "NaN",
+          .want_3f = "NaN",
+          .want_4g = "NaN",
+      },
+  };
+
+  int tc;
+  for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
+    double f64 = wuffs_base__ieee_754_bit_representation__from_u64_to_f64(
+        test_cases[tc].x);
+    int o;
+    for (o = 0; o < 6; o++) {
+      uint32_t precision = 0;
+      uint32_t options = 0;
+      const char* want = NULL;
+      if (o == 0) {
+        options = WUFFS_BASE__RENDER_NUMBER_FXX__EXPONENT_PRESENT |
+                  WUFFS_BASE__RENDER_NUMBER_FXX__JUST_ENOUGH_PRECISION;
+        want = test_cases[tc].want__e;
+      } else if (o == 1) {
+        options = WUFFS_BASE__RENDER_NUMBER_FXX__EXPONENT_ABSENT |
+                  WUFFS_BASE__RENDER_NUMBER_FXX__JUST_ENOUGH_PRECISION;
+        want = test_cases[tc].want__f;
+      } else if (o == 2) {
+        precision = 0;
+        options = 0;
+        want = test_cases[tc].want_0g;
+      } else if (o == 3) {
+        precision = 2;
+        options = WUFFS_BASE__RENDER_NUMBER_FXX__EXPONENT_PRESENT;
+        want = test_cases[tc].want_2e;
+      } else if (o == 4) {
+        precision = 3;
+        options = WUFFS_BASE__RENDER_NUMBER_FXX__EXPONENT_ABSENT;
+        want = test_cases[tc].want_3f;
+      } else if (o == 5) {
+        precision = 4;
+        options = 0;
+        want = test_cases[tc].want_4g;
+      }
+
+      size_t n = wuffs_base__render_number_f64(g_have_slice_u8, f64, precision,
+                                               options);
+      if (n == 0) {
+        RETURN_FAIL("x=0x%016" PRIX64 ", o=%d: could not render",
+                    test_cases[tc].x, o);
+      } else if (n >= g_have_slice_u8.len) {
+        RETURN_FAIL("x=0x%016" PRIX64 ", o=%d: n is too large",
+                    test_cases[tc].x, o);
+      }
+      g_have_slice_u8.ptr[n] = 0x00;
+      if (strcmp((const char*)(g_have_slice_u8.ptr), want) != 0) {
+        RETURN_FAIL("x=0x%016" PRIX64 ", o=%d: have \"%s\", want \"%s\"",
+                    test_cases[tc].x, o, g_have_slice_u8.ptr, want);
+      }
+    }
+  }
+
+  // Test WUFFS_BASE__RENDER_NUMBER_FXX__DECIMAL_SEPARATOR_IS_A_COMMA.
+  {
+    int o;
+    for (o = 0; o < 2; o++) {
+      uint8_t dst[8] = {0};
+      const double f64 = 1.75;
+      const uint32_t precision = 2;
+      size_t n = wuffs_base__render_number_f64(
+          wuffs_base__make_slice_u8(&dst[0], WUFFS_TESTLIB_ARRAY_SIZE(dst)),
+          f64, precision,
+          WUFFS_BASE__RENDER_NUMBER_FXX__EXPONENT_ABSENT |
+              (o ? WUFFS_BASE__RENDER_NUMBER_FXX__DECIMAL_SEPARATOR_IS_A_COMMA
+                 : 0));
+      if (n != 4) {
+        RETURN_FAIL("DECIMAL_SEPARATOR_IS_A_COMMA, o=%d: n != 4", o);
+      }
+      uint8_t have = dst[1];
+      uint8_t want = o ? ',' : '.';
+      if (have != want) {
+        RETURN_FAIL(
+            "DECIMAL_SEPARATOR_IS_A_COMMA, o=%d: have 0x%02X, want 0x%02X", o,
+            (int)have, (int)want);
+      }
+    }
+  }
+
+  return NULL;
+}
+
+const char*  //
+test_wuffs_strconv_render_number_i64() {
+  CHECK_FOCUS(__func__);
+
+  struct {
+    int64_t x;
+    const char* want;
+  } test_cases[] = {
+      {.x = +0x0000000000000000l, .want = "0"},
+      {.x = +0x0000000000000009l, .want = "9"},
+      {.x = +0x000000000000000Al, .want = "10"},
+      {.x = +0x000000000000004Al, .want = "74"},
+      {.x = +0x0000000000000063l, .want = "99"},
+      {.x = +0x0000000000000064l, .want = "100"},
+      {.x = +0x000000000000007Cl, .want = "124"},
+      {.x = +0x00000000000001F4l, .want = "500"},
+      {.x = +0x000000000000036Cl, .want = "876"},
+      {.x = +0x000000000000036Fl, .want = "879"},
+      {.x = +0x0000000000000929l, .want = "2345"},
+      {.x = +0x0000000000010932l, .want = "67890"},
+      {.x = +0x00000000FFFFFFFFl, .want = "4294967295"},
+      {.x = +0x0000000100000000l, .want = "4294967296"},
+      {.x = +0x0123456789ABCDEFl, .want = "81985529216486895"},
+      {.x = +0x7FFFFFFFFFFFFFFFl, .want = "9223372036854775807"},
+
+      {.x = -0x0000000000000009l, .want = "-9"},
+      {.x = -0x000000000000000Al, .want = "-10"},
+      {.x = -0x000000000000004Al, .want = "-74"},
+      {.x = -0x0000000000000063l, .want = "-99"},
+      {.x = -0x0000000000000064l, .want = "-100"},
+      {.x = -0x000000000000007Cl, .want = "-124"},
+      {.x = -0x00000000000001F4l, .want = "-500"},
+      {.x = -0x000000000000036Cl, .want = "-876"},
+      {.x = -0x000000000000036Fl, .want = "-879"},
+      {.x = -0x0000000000000929l, .want = "-2345"},
+      {.x = -0x0000000000010932l, .want = "-67890"},
+      {.x = -0x00000000FFFFFFFFl, .want = "-4294967295"},
+      {.x = -0x0000000100000000l, .want = "-4294967296"},
+      {.x = -0x0123456789ABCDEFl, .want = "-81985529216486895"},
+      {.x = -0x7FFFFFFFFFFFFFFFl, .want = "-9223372036854775807"},
+      {.x = -0x8000000000000000l, .want = "-9223372036854775808"},
+  };
+
+  if (g_have_slice_u8.len < WUFFS_BASE__I64__BYTE_LENGTH__MAX_INCL) {
+    return "g_have_slice_u8.len is too short";
+  }
+
+  int tc;
+  for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
+    size_t n = wuffs_base__render_number_i64(
+        g_have_slice_u8, test_cases[tc].x,
+        WUFFS_BASE__RENDER_NUMBER_XXX__DEFAULT_OPTIONS);
+    if (n == 0) {
+      RETURN_FAIL("%" PRId64 ": could not render", test_cases[tc].x);
+    } else if (n >= g_have_slice_u8.len) {
+      RETURN_FAIL("%" PRId64 ": n is too large", test_cases[tc].x);
+    }
+    g_have_slice_u8.ptr[n] = 0x00;
+    if (strcmp((const char*)(g_have_slice_u8.ptr), test_cases[tc].want) != 0) {
+      RETURN_FAIL("%" PRId64 ": have \"%s\", want \"%s\"", test_cases[tc].x,
+                  g_have_slice_u8.ptr, test_cases[tc].want);
+    }
+  }
+
+  return NULL;
+}
+
+const char*  //
+test_wuffs_strconv_render_number_u64() {
+  CHECK_FOCUS(__func__);
+
+  struct {
+    uint64_t x;
+    const char* want;
+  } test_cases[] = {
+      {.x = 0x0000000000000000l, .want = "0"},
+      {.x = 0x0000000000000009l, .want = "9"},
+      {.x = 0x000000000000000Al, .want = "10"},
+      {.x = 0x000000000000004Al, .want = "74"},
+      {.x = 0x0000000000000063l, .want = "99"},
+      {.x = 0x0000000000000064l, .want = "100"},
+      {.x = 0x000000000000007Cl, .want = "124"},
+      {.x = 0x00000000000001F4l, .want = "500"},
+      {.x = 0x000000000000036Cl, .want = "876"},
+      {.x = 0x000000000000036Fl, .want = "879"},
+      {.x = 0x0000000000000929l, .want = "2345"},
+      {.x = 0x0000000000010932l, .want = "67890"},
+      {.x = 0x00000000FFFFFFFFl, .want = "4294967295"},
+      {.x = 0x0000000100000000l, .want = "4294967296"},
+      {.x = 0x0123456789ABCDEFl, .want = "81985529216486895"},
+      {.x = 0x7FFFFFFFFFFFFFFFl, .want = "9223372036854775807"},
+      {.x = 0x8000000000000000l, .want = "9223372036854775808"},
+      {.x = 0xFFFFFFFFFFFFFFF9l, .want = "18446744073709551609"},
+      {.x = 0xFFFFFFFFFFFFFFFAl, .want = "18446744073709551610"},
+      {.x = 0xFFFFFFFFFFFFFFFEl, .want = "18446744073709551614"},
+      {.x = 0xFFFFFFFFFFFFFFFFl, .want = "18446744073709551615"},
+  };
+
+  if (g_have_slice_u8.len < WUFFS_BASE__U64__BYTE_LENGTH__MAX_INCL) {
+    return "g_have_slice_u8.len is too short";
+  }
+
+  int tc;
+  for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
+    size_t n = wuffs_base__render_number_u64(
+        g_have_slice_u8, test_cases[tc].x,
+        WUFFS_BASE__RENDER_NUMBER_XXX__DEFAULT_OPTIONS);
+    if (n == 0) {
+      RETURN_FAIL("%" PRIu64 ": could not render", test_cases[tc].x);
+    } else if (n >= g_have_slice_u8.len) {
+      RETURN_FAIL("%" PRIu64 ": n is too large", test_cases[tc].x);
+    }
+    g_have_slice_u8.ptr[n] = 0x00;
+    if (strcmp((const char*)(g_have_slice_u8.ptr), test_cases[tc].want) != 0) {
+      RETURN_FAIL("%" PRIu64 ": have \"%s\", want \"%s\"", test_cases[tc].x,
+                  g_have_slice_u8.ptr, test_cases[tc].want);
+    }
+  }
+
+  // Test dst slice is too short.
+  {
+    uint8_t dst[5];
+    size_t n = wuffs_base__render_number_u64(
+        wuffs_base__make_slice_u8(&dst[0], sizeof(dst)), 123456,
+        WUFFS_BASE__RENDER_NUMBER_XXX__DEFAULT_OPTIONS);
+    if (n != 0) {
+      RETURN_FAIL("dst too short: have %zu, want 0", n);
+    }
+  }
+
+  // Test options.
+  {
+    uint8_t dst[8];
+    memcpy(&dst[0], "ABCDEFG\x00", 8);
+    size_t n = wuffs_base__render_number_u64(
+        wuffs_base__make_slice_u8(&dst[0], sizeof(dst) - 1), 1234,
+        WUFFS_BASE__RENDER_NUMBER_XXX__ALIGN_RIGHT |
+            WUFFS_BASE__RENDER_NUMBER_XXX__LEADING_PLUS_SIGN);
+    if (n != 5) {
+      RETURN_FAIL("ALIGN_RIGHT | LEADING_PLUS_SIGN: have %zu, want 5", n);
+    }
+    uint64_t have = wuffs_base__load_u64be__no_bounds_check(&dst[0]);
+    uint64_t want = 0x41422B3132333400;  // "AB+1234\x00".
+    if (have != want) {
+      RETURN_FAIL("ALIGN_RIGHT | LEADING_PLUS_SIGN: have 0x%" PRIX64
+                  ", want 0x%" PRIX64,
+                  have, want);
+    }
+  }
+
+  return NULL;
+}
+
+// ----------------
 
 const char*  //
 test_wuffs_strconv_utf_8_next() {
@@ -868,99 +2338,126 @@ test_wuffs_strconv_utf_8_next() {
   the_nul_byte[0] = '\x00';
 
   struct {
-    uint32_t want_cp;
-    uint32_t want_bl;
+    // The uint32_t want is packed as:
+    //  - the high 8 bits are the byte length.
+    //  - the low 24 bits are the code point.
+    uint32_t want0;  // For wuffs_base__utf_8__next.
+    uint32_t want1;  // For wuffs_base__utf_8__next_from_end.
     const char* str;
   } test_cases[] = {
-      {.want_cp = 0x00000000, .want_bl = 0, .str = ""},
-      {.want_cp = 0x00000000, .want_bl = 1, .str = "The <NUL> byte"},
-      {.want_cp = 0x00000009, .want_bl = 1, .str = "\t"},
-      {.want_cp = 0x00000041, .want_bl = 1, .str = "A"},
-      {.want_cp = 0x00000061, .want_bl = 1, .str = "abdefghij"},
-      {.want_cp = 0x0000007F, .want_bl = 1, .str = "\x7F"},
-      {.want_cp = 0x00000080, .want_bl = 2, .str = "\xC2\x80"},
-      {.want_cp = 0x000007FF, .want_bl = 2, .str = "\xDF\xBF"},
-      {.want_cp = 0x00000800, .want_bl = 3, .str = "\xE0\xA0\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 3, .str = "\xEF\xBF\xBD"},
-      {.want_cp = 0x0000FFFF, .want_bl = 3, .str = "\xEF\xBF\xBF"},
-      {.want_cp = 0x00010000, .want_bl = 4, .str = "\xF0\x90\x80\x80"},
-      {.want_cp = 0x0010FFFF, .want_bl = 4, .str = "\xF4\x8F\xBF\xBF"},
+      {.want0 = 0x00000000, .want1 = 0x00000000, .str = ""},
+      {.want0 = 0x01000000, .want1 = 0x01000000, .str = "The <NUL> byte"},
+      {.want0 = 0x01000009, .want1 = 0x01000009, .str = "\t"},
+      {.want0 = 0x01000041, .want1 = 0x01000041, .str = "A"},
+      {.want0 = 0x01000061, .want1 = 0x0100006A, .str = "abdefghij"},
+      {.want0 = 0x0100007F, .want1 = 0x0100007F, .str = "\x7F"},
+      {.want0 = 0x02000080, .want1 = 0x02000080, .str = "\xC2\x80"},
+      {.want0 = 0x020007FF, .want1 = 0x020007FF, .str = "\xDF\xBF"},
+      {.want0 = 0x03000800, .want1 = 0x03000800, .str = "\xE0\xA0\x80"},
+      {.want0 = 0x0300FFFD, .want1 = 0x0300FFFD, .str = "\xEF\xBF\xBD"},
+      {.want0 = 0x0300FFFF, .want1 = 0x0300FFFF, .str = "\xEF\xBF\xBF"},
+      {.want0 = 0x04010000, .want1 = 0x04010000, .str = "\xF0\x90\x80\x80"},
+      {.want0 = 0x0410FFFF, .want1 = 0x0410FFFF, .str = "\xF4\x8F\xBF\xBF"},
 
       // U+00000394 GREEK CAPITAL LETTER DELTA.
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94"},
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94+"},
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94++"},
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94+++"},
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94++++"},
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94\x80"},
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94\x80\x80"},
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94\x80\x80\x80"},
-      {.want_cp = 0x00000394, .want_bl = 2, .str = "\xCE\x94\x80\x80\x80\x80"},
+      {.want0 = 0x02000394, .want1 = 0x02000394, .str = "\xCE\x94"},
+      {.want0 = 0x02000394, .want1 = 0x01000070, .str = "\xCE\x94p"},
+      {.want0 = 0x02000394, .want1 = 0x01000071, .str = "\xCE\x94pq"},
+      {.want0 = 0x02000394, .want1 = 0x01000072, .str = "\xCE\x94pqr"},
+      {.want0 = 0x02000394, .want1 = 0x01000073, .str = "\xCE\x94pqrs"},
+      {.want0 = 0x02000394, .want1 = 0x0100FFFD, .str = "\xCE\x94\x80"},
+      {.want0 = 0x02000394, .want1 = 0x0100FFFD, .str = "\xCE\x94\x80\x81"},
+      {.want0 = 0x02000394, .want1 = 0x0100FFFD, .str = "\xCE\x94\x80\x81\x82"},
+      {.want0 = 0x02000394,
+       .want1 = 0x0100FFFD,
+       .str = "\xCE\x94\x80\x81\x82\x83"},
+      {.want0 = 0x01000070, .want1 = 0x02000394, .str = "p\xCE\x94"},
 
       // U+00002603 SNOWMAN.
-      {.want_cp = 0x00002603, .want_bl = 3, .str = "\xE2\x98\x83"},
-      {.want_cp = 0x00002603, .want_bl = 3, .str = "\xE2\x98\x83+"},
-      {.want_cp = 0x00002603, .want_bl = 3, .str = "\xE2\x98\x83++"},
-      {.want_cp = 0x00002603, .want_bl = 3, .str = "\xE2\x98\x83+++"},
-      {.want_cp = 0x00002603, .want_bl = 3, .str = "\xE2\x98\x83++++"},
-      {.want_cp = 0x00002603, .want_bl = 3, .str = "\xE2\x98\x83\xFF"},
+      {.want0 = 0x03002603, .want1 = 0x03002603, .str = "\xE2\x98\x83"},
+      {.want0 = 0x03002603, .want1 = 0x01000070, .str = "\xE2\x98\x83p"},
+      {.want0 = 0x03002603, .want1 = 0x01000071, .str = "\xE2\x98\x83pq"},
+      {.want0 = 0x03002603, .want1 = 0x01000072, .str = "\xE2\x98\x83pqr"},
+      {.want0 = 0x03002603, .want1 = 0x01000073, .str = "\xE2\x98\x83pqrs"},
+      {.want0 = 0x03002603, .want1 = 0x0100FFFD, .str = "\xE2\x98\x83\xFF"},
+      {.want0 = 0x01000070, .want1 = 0x03002603, .str = "p\xE2\x98\x83"},
 
       // U+0001F4A9 PILE OF POO.
-      {.want_cp = 0x0001F4A9, .want_bl = 4, .str = "\xF0\x9F\x92\xA9"},
-      {.want_cp = 0x0001F4A9, .want_bl = 4, .str = "\xF0\x9F\x92\xA9+"},
-      {.want_cp = 0x0001F4A9, .want_bl = 4, .str = "\xF0\x9F\x92\xA9++"},
-      {.want_cp = 0x0001F4A9, .want_bl = 4, .str = "\xF0\x9F\x92\xA9+++"},
-      {.want_cp = 0x0001F4A9, .want_bl = 4, .str = "\xF0\x9F\x92\xA9++++"},
-      {.want_cp = 0x0001F4A9, .want_bl = 4, .str = "\xF0\x9F\x92\xA9\xFF"},
+      {.want0 = 0x0401F4A9, .want1 = 0x0401F4A9, .str = "\xF0\x9F\x92\xA9"},
+      {.want0 = 0x0401F4A9, .want1 = 0x01000070, .str = "\xF0\x9F\x92\xA9p"},
+      {.want0 = 0x0401F4A9, .want1 = 0x01000071, .str = "\xF0\x9F\x92\xA9pq"},
+      {.want0 = 0x0401F4A9, .want1 = 0x01000072, .str = "\xF0\x9F\x92\xA9pqr"},
+      {.want0 = 0x0401F4A9, .want1 = 0x01000073, .str = "\xF0\x9F\x92\xA9pqrs"},
+      {.want0 = 0x0401F4A9, .want1 = 0x0100FFFD, .str = "\xF0\x9F\x92\xA9\xFF"},
+      {.want0 = 0x01000070, .want1 = 0x0401F4A9, .str = "p\xF0\x9F\x92\xA9"},
 
       // Invalid.
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xBF"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xC0\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xC1\xBF"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xC2"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xC2\x7F"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xC2\xC0"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xC2\xFF"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xCE"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xDF\xC0"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xDF\xFF"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xE0\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xE0\x80\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xE0\x9F\xBF"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xE2"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xF0"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xF0\x80\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xF0\x80\x80\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xF0\x8F\xBF\xBF"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xF4\x90\x80\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xF5"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xF6\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xF7\x80\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xFF\xFF\xFF\xFF"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\x80"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xBF"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xC0\x80"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xC1\xBF"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xC2"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100007F, .str = "\xC2\x7F"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xC2\xC0"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xC2\xFF"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xCE"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xDF\xC0"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xDF\xFF"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xE0\x80"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xE0\x80\x81"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xE0\x9F\xBF"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xE2"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF0"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF0\x80\x81"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF0\x80\x81\x82"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF0\x8F\xBF\xBF"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF4\x90\x81\x82"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF5"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF6\x80"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF7\x80\x81"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xF8\x90\x91\x92\x93"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xFF\xFF\xFF\xFF"},
 
       // Invalid. UTF-8 cannot contain the surrogates U+D800 ..= U+DFFF.
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xED\xA0\x80"},
-      {.want_cp = 0x0000FFFD, .want_bl = 1, .str = "\xED\xBF\xBF"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xED\xA0\x80"},
+      {.want0 = 0x0100FFFD, .want1 = 0x0100FFFD, .str = "\xED\xBF\xBF"},
   };
 
   int tc;
   for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
     wuffs_base__slice_u8 s = wuffs_base__make_slice_u8(
         (void*)test_cases[tc].str, strlen(test_cases[tc].str));
-
     // Override "The <NUL> byte" with "\x00".
-    if ((test_cases[tc].want_cp == 0) && (test_cases[tc].want_bl == 1)) {
+    if (test_cases[tc].want0 == 0x01000000) {
       s = wuffs_base__make_slice_u8(&the_nul_byte[0], 1);
     }
 
-    wuffs_base__utf_8__next__output have = wuffs_base__utf_8__next(s);
-    if ((have.code_point != test_cases[tc].want_cp) ||
-        (have.byte_length != test_cases[tc].want_bl)) {
-      RETURN_FAIL("\"%s\": have cp=0x%" PRIX32 " bl=%" PRIu32
-                  ", want cp=0x%" PRIX32 " bl=%" PRIu32,
-                  test_cases[tc].str, have.code_point, have.byte_length,
-                  test_cases[tc].want_cp, test_cases[tc].want_bl);
+    // Test wuffs_base__utf_8__next.
+    {
+      uint32_t want_bl = test_cases[tc].want0 >> 24;
+      uint32_t want_cp = test_cases[tc].want0 & 0xFFFFFF;
+      wuffs_base__utf_8__next__output have =
+          wuffs_base__utf_8__next(s.ptr, s.len);
+      if ((have.code_point != want_cp) || (have.byte_length != want_bl)) {
+        RETURN_FAIL("next(\"%s\"): have cp=0x%" PRIX32 " bl=%" PRIu32
+                    ", want cp=0x%" PRIX32 " bl=%" PRIu32,
+                    test_cases[tc].str, have.code_point, have.byte_length,
+                    want_cp, want_bl);
+      }
+    }
+
+    // Test wuffs_base__utf_8__next_from_end.
+    {
+      uint32_t want_bl = test_cases[tc].want1 >> 24;
+      uint32_t want_cp = test_cases[tc].want1 & 0xFFFFFF;
+      wuffs_base__utf_8__next__output have =
+          wuffs_base__utf_8__next_from_end(s.ptr, s.len);
+      if ((have.code_point != want_cp) || (have.byte_length != want_bl)) {
+        RETURN_FAIL("next_from_end(\"%s\"): have cp=0x%" PRIX32 " bl=%" PRIu32
+                    ", want cp=0x%" PRIX32 " bl=%" PRIu32,
+                    test_cases[tc].str, have.code_point, have.byte_length,
+                    want_cp, want_bl);
+      }
     }
   }
 
@@ -1032,7 +2529,7 @@ test_wuffs_json_decode_interface() {
         WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_QUESTION_MARK,
         WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_SINGLE_QUOTE,
         WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_V,
-        WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_X,
+        WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_X_AS_CODE_POINTS,
         WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_ZERO,
         WUFFS_JSON__QUIRK_ALLOW_COMMENT_BLOCK,
         WUFFS_JSON__QUIRK_ALLOW_COMMENT_LINE,
@@ -1040,7 +2537,7 @@ test_wuffs_json_decode_interface() {
         WUFFS_JSON__QUIRK_ALLOW_INF_NAN_NUMBERS,
         WUFFS_JSON__QUIRK_ALLOW_LEADING_ASCII_RECORD_SEPARATOR,
         WUFFS_JSON__QUIRK_ALLOW_LEADING_UNICODE_BYTE_ORDER_MARK,
-        WUFFS_JSON__QUIRK_ALLOW_TRAILING_NEW_LINE,
+        WUFFS_JSON__QUIRK_ALLOW_TRAILING_FILLER,
         WUFFS_JSON__QUIRK_REPLACE_INVALID_UNICODE,
         0,
     };
@@ -1326,9 +2823,8 @@ test_wuffs_json_decode_prior_valid_utf_8() {
     size_t n = strlen(test_cases[tc]);
     size_t num_preceding = 0;
     while (num_preceding < n) {
-      wuffs_base__utf_8__next__output x =
-          wuffs_base__utf_8__next(wuffs_base__make_slice_u8(
-              (void*)(test_cases[tc]) + num_preceding, n - num_preceding));
+      wuffs_base__utf_8__next__output x = wuffs_base__utf_8__next(
+          (void*)(test_cases[tc]) + num_preceding, n - num_preceding);
       if (!wuffs_base__utf_8__next__output__is_valid(&x) ||
           (x.code_point < 0x20) || (x.code_point == '\\')) {
         break;
@@ -1518,23 +3014,29 @@ test_wuffs_json_decode_quirk_allow_backslash_x() {
   CHECK_FOCUS(__func__);
 
   struct {
-    uint64_t want_bytes;
+    uint64_t want_code_points;
     const char* want_status_repr;
     const char* str;
   } test_cases[] = {
-      {.want_bytes = 0x12789A,
+      // U+009A in UTF-8 is C2 9A.
+      // U+00FF in UTF-8 is C3 BF.
+      // U+3456 in UTF-8 is E3 91 96.
+      {.want_code_points = 0x12E3919678C29A,
        .want_status_repr = NULL,
        .str = "\"\\x12\\u3456\\x78\\x9A\""},
-      {.want_bytes = 0x00,
+      {.want_code_points = 0xC3BF,
+       .want_status_repr = NULL,
+       .str = "\"\\xFf\""},
+      {.want_code_points = 0x00,
        .want_status_repr = wuffs_json__error__bad_backslash_escape,
        .str = "\"a\\X6A\""},
-      {.want_bytes = 0x6A6B,
+      {.want_code_points = 0x6A6B,
        .want_status_repr = NULL,
        .str = "\"a\\x6A\\x6bz\""},
-      {.want_bytes = 0x6A,
+      {.want_code_points = 0x6A,
        .want_status_repr = wuffs_json__error__bad_backslash_escape,
        .str = "\"a\\x6A\\x6yz\""},
-      {.want_bytes = 0x00,
+      {.want_code_points = 0x00,
        .want_status_repr = wuffs_json__error__bad_backslash_escape,
        .str = "\"a\\x\""},
   };
@@ -1546,7 +3048,7 @@ test_wuffs_json_decode_quirk_allow_backslash_x() {
                                    &dec, sizeof dec, WUFFS_VERSION,
                                    WUFFS_INITIALIZE__DEFAULT_OPTIONS));
     wuffs_json__decoder__set_quirk_enabled(
-        &dec, WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_X, true);
+        &dec, WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_X_AS_CODE_POINTS, true);
 
     wuffs_base__token_buffer tok =
         wuffs_base__slice_token__writer(g_have_slice_token);
@@ -1562,31 +3064,31 @@ test_wuffs_json_decode_quirk_allow_backslash_x() {
     }
 
     uint64_t src_index = 0;
-    uint64_t have_bytes = 0;
+    uint64_t have = 0;
     while (tok.meta.ri < tok.meta.wi) {
       wuffs_base__token* t = &tok.data.ptr[tok.meta.ri++];
       int64_t vbc = wuffs_base__token__value_base_category(t);
       uint64_t vbd = wuffs_base__token__value_base_detail(t);
       uint64_t token_length = wuffs_base__token__length(t);
-      if ((vbc == WUFFS_BASE__TOKEN__VBC__STRING) &&
-          (vbd ==
-           WUFFS_BASE__TOKEN__VBD__STRING__CONVERT_1_DST_4_SRC_BACKSLASH_X)) {
-        uint8_t b[8] = {0};
-        size_t n = wuffs_base__hexadecimal__decode4(
-            wuffs_base__make_slice_u8(&b[0], 8),
-            wuffs_base__make_slice_u8(src_slice.ptr + src_index, token_length));
+      if (vbc == WUFFS_BASE__TOKEN__VBC__UNICODE_CODE_POINT) {
+        uint8_t b[WUFFS_BASE__UTF_8__BYTE_LENGTH__MAX_INCL];
+        size_t n = wuffs_base__utf_8__encode(
+            wuffs_base__make_slice_u8(&b[0],
+                                      WUFFS_BASE__UTF_8__BYTE_LENGTH__MAX_INCL),
+            vbd);
         size_t i = 0;
         for (; i < n; i++) {
-          have_bytes <<= 8;
-          have_bytes |= b[i];
+          have <<= 8;
+          have |= b[i];
         }
       }
 
       src_index += token_length;
     }
-    if (have_bytes != test_cases[tc].want_bytes) {
-      RETURN_FAIL("tc=%d: have U+%08" PRIX64 ", want U+%08" PRIX64, tc,
-                  have_bytes, test_cases[tc].want_bytes);
+    uint64_t want = test_cases[tc].want_code_points;
+    if (have != want) {
+      RETURN_FAIL("tc=%d: have U+%08" PRIX64 ", want U+%08" PRIX64, tc, have,
+                  want);
     }
   }
 
@@ -1884,43 +3386,173 @@ test_wuffs_json_decode_quirk_allow_leading_etc() {
 }
 
 const char*  //
-test_wuffs_json_decode_quirk_allow_trailing_etc() {
+test_wuffs_json_decode_quirk_allow_trailing_comments() {
+  CHECK_FOCUS(__func__);
+
+  // The first byte is a code.
+  //  - '1' means that there is zero or one '\n' bytes
+  //  - '2' means that there are two '\n' bytes but no comments
+  //  - '3' means that there are comments
+  //  - '4' means that there is non-filler after  eof-or-'\n'
+  //  - '5' means that there is non-filler before eof-or-'\n'
+  //
+  // WUFFS_JSON__QUIRK_ALLOW_TRAILING_FILLER (together with
+  // WUFFS_JSON__QUIRK_ALLOW_COMMENT_ETC) should decode the '1's, '2's and '3's
+  // completely and the '4's and '5's up to but excluding the non-filler.
+  //
+  // WUFFS_JSON__QUIRK_EXPECT_TRAILING_NEW_LINE_OR_EOF should decode the '1's
+  // completely and the '2's and '4's just after the first '\n'.
+  const char* test_cases[] = {
+      "100",                         //
+      "101 \n",                      //
+      "202\n\n",                     //
+      "203 \n\n",                    //
+      "304 /*foo*/",                 //
+      "305 /*foo*/ ",                //
+      "306 /*foo*/ \n",              //
+      "307 /*foo*/ \n\n",            //
+      "308/*bar\nbaz*/\n\n",         //
+      "309 // qux\n\n",              //
+      "310 /*c0*/ /*c1*/\n\n",       //
+      "311 /*c0*/ \n\n // c2 \n\n",  //
+      "412 \n9",                     //
+      "513 9",                       //
+  };
+
+  int tc;
+
+  // Test ALLOW_ETC.
+  for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
+    void* tc_ptr = (void*)(test_cases[tc]);
+    size_t tc_len = strlen(test_cases[tc]);
+    char code = test_cases[tc][0];
+
+    wuffs_base__token_buffer tok =
+        wuffs_base__slice_token__writer(g_have_slice_token);
+    wuffs_base__io_buffer src =
+        wuffs_base__ptr_u8__reader(tc_ptr, tc_len, true);
+    wuffs_json__decoder dec;
+    CHECK_STATUS("initialize", wuffs_json__decoder__initialize(
+                                   &dec, sizeof dec, WUFFS_VERSION,
+                                   WUFFS_INITIALIZE__DEFAULT_OPTIONS));
+    wuffs_json__decoder__set_quirk_enabled(
+        &dec, WUFFS_JSON__QUIRK_ALLOW_COMMENT_BLOCK, true);
+    wuffs_json__decoder__set_quirk_enabled(
+        &dec, WUFFS_JSON__QUIRK_ALLOW_COMMENT_LINE, true);
+    wuffs_json__decoder__set_quirk_enabled(
+        &dec, WUFFS_JSON__QUIRK_ALLOW_TRAILING_FILLER, true);
+
+    const char* have_repr =
+        wuffs_json__decoder__decode_tokens(&dec, &tok, &src, g_work_slice_u8)
+            .repr;
+    if (have_repr != NULL) {
+      RETURN_FAIL("tc=%d, ALLOW_ETC: decode_tokens: have \"%s\", want NULL", tc,
+                  have_repr);
+    }
+
+    size_t have_total_length = 0;
+    while (tok.meta.ri < tok.meta.wi) {
+      have_total_length +=
+          wuffs_base__token__length(&tok.data.ptr[tok.meta.ri++]);
+    }
+    size_t want_total_length = tc_len - ((code >= '4') ? 1 : 0);
+    if (have_total_length != src.meta.ri) {
+      RETURN_FAIL("tc=%d, ALLOW_ETC: total_length: have %zu, want %zu", tc,
+                  have_total_length, src.meta.ri);
+    } else if (have_total_length != want_total_length) {
+      RETURN_FAIL("tc=%d, ALLOW_ETC: total_length: have %zu, want %zu", tc,
+                  have_total_length, want_total_length);
+    }
+  }
+
+  // Test EXPECT_ETC.
+  for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
+    void* tc_ptr = (void*)(test_cases[tc]);
+    size_t tc_len = strlen(test_cases[tc]);
+    char code = test_cases[tc][0];
+
+    wuffs_base__token_buffer tok =
+        wuffs_base__slice_token__writer(g_have_slice_token);
+    wuffs_base__io_buffer src =
+        wuffs_base__ptr_u8__reader(tc_ptr, tc_len, true);
+    wuffs_json__decoder dec;
+    CHECK_STATUS("initialize", wuffs_json__decoder__initialize(
+                                   &dec, sizeof dec, WUFFS_VERSION,
+                                   WUFFS_INITIALIZE__DEFAULT_OPTIONS));
+    wuffs_json__decoder__set_quirk_enabled(
+        &dec, WUFFS_JSON__QUIRK_EXPECT_TRAILING_NEW_LINE_OR_EOF, true);
+
+    const char* have_repr =
+        wuffs_json__decoder__decode_tokens(&dec, &tok, &src, g_work_slice_u8)
+            .repr;
+    const char* want_repr =
+        ((code == '3') || (code == '5')) ? wuffs_json__error__bad_input : NULL;
+    if (have_repr != want_repr) {
+      RETURN_FAIL("tc=%d, EXPECT_ETC: decode_tokens: have \"%s\", want \"%s\"",
+                  tc, have_repr, want_repr);
+    } else if (have_repr != NULL) {
+      continue;
+    }
+
+    size_t have_total_length = 0;
+    while (tok.meta.ri < tok.meta.wi) {
+      have_total_length +=
+          wuffs_base__token__length(&tok.data.ptr[tok.meta.ri++]);
+    }
+    size_t want_total_length = tc_len - ((code == '1') ? 0 : 1);
+    if (have_total_length != src.meta.ri) {
+      RETURN_FAIL("tc=%d, EXPECT_ETC: total_length: have %zu, want %zu", tc,
+                  have_total_length, src.meta.ri);
+    } else if (have_total_length != want_total_length) {
+      RETURN_FAIL("tc=%d, EXPECT_ETC: total_length: have %zu, want %zu", tc,
+                  have_total_length, want_total_length);
+    }
+  }
+
+  return NULL;
+}
+
+const char*  //
+test_wuffs_json_decode_quirk_allow_trailing_filler() {
   CHECK_FOCUS(__func__);
 
   struct {
-    // want has 2 bytes, one for each possible q:
-    //  - q&1 sets WUFFS_JSON__QUIRK_ALLOW_TRAILING_NEW_LINE.
+    // want has 3 bytes, one for each possible q:
+    //  - q&1 sets WUFFS_JSON__QUIRK_ALLOW_TRAILING_FILLER.
+    //  - q&2 sets WUFFS_JSON__QUIRK_EXPECT_TRAILING_NEW_LINE_OR_EOF.
     // An 'X', '+' or '-' means that decoding should succeed (and consume the
     // entire input), succeed (without consuming the entire input) or fail.
     const char* want;
     const char* str;
   } test_cases[] = {
-      {.want = "++", .str = "0 \n "},      //
-      {.want = "++", .str = "0 \n\n"},     //
-      {.want = "++", .str = "0\n\n"},      //
-      {.want = "+-", .str = "0 true \n"},  //
-      {.want = "+-", .str = "007"},        //
-      {.want = "+-", .str = "007\n"},      //
-      {.want = "+-", .str = "0true "},     //
-      {.want = "+-", .str = "0true"},      //
-      {.want = "+X", .str = "0 "},         //
-      {.want = "+X", .str = "0 \n"},       //
-      {.want = "+X", .str = "0\n"},        //
-      {.want = "+X", .str = "0\t\r\n"},    //
-      {.want = "--", .str = "\n"},         //
-      {.want = "XX", .str = "0"},          //
+      {.want = "+X+", .str = "0 \n "},      //
+      {.want = "+X+", .str = "0 \n\n"},     //
+      {.want = "+X+", .str = "0\n\n"},      //
+      {.want = "++-", .str = "0 true \n"},  //
+      {.want = "++-", .str = "007"},        //
+      {.want = "++-", .str = "007\n"},      //
+      {.want = "++-", .str = "0true "},     //
+      {.want = "++-", .str = "0true"},      //
+      {.want = "+XX", .str = "0 "},         //
+      {.want = "+XX", .str = "0 \n"},       //
+      {.want = "+XX", .str = "0\n"},        //
+      {.want = "+XX", .str = "0\t\r\n"},    //
+      {.want = "---", .str = "\n"},         //
+      {.want = "XXX", .str = "0"},          //
   };
 
   int tc;
   for (tc = 0; tc < WUFFS_TESTLIB_ARRAY_SIZE(test_cases); tc++) {
     int q;
-    for (q = 0; q < 2; q++) {
+    for (q = 0; q < 3; q++) {
       wuffs_json__decoder dec;
       CHECK_STATUS("initialize", wuffs_json__decoder__initialize(
                                      &dec, sizeof dec, WUFFS_VERSION,
                                      WUFFS_INITIALIZE__DEFAULT_OPTIONS));
       wuffs_json__decoder__set_quirk_enabled(
-          &dec, WUFFS_JSON__QUIRK_ALLOW_TRAILING_NEW_LINE, q & 1);
+          &dec, WUFFS_JSON__QUIRK_ALLOW_TRAILING_FILLER, q & 1);
+      wuffs_json__decoder__set_quirk_enabled(
+          &dec, WUFFS_JSON__QUIRK_EXPECT_TRAILING_NEW_LINE_OR_EOF, q & 2);
 
       wuffs_base__token_buffer tok =
           wuffs_base__slice_token__writer(g_have_slice_token);
@@ -2389,7 +4021,9 @@ do_bench_wuffs_strconv_parse_number_f64(const char* str,
   uint64_t i;
   uint64_t iters = iters_unscaled * g_flags.iterscale;
   for (i = 0; i < iters; i++) {
-    CHECK_STATUS("", wuffs_base__parse_number_f64(s).status);
+    CHECK_STATUS("", wuffs_base__parse_number_f64(
+                         s, WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS)
+                         .status);
   }
   bench_finish(iters, 0);
 
@@ -2421,6 +4055,72 @@ const char*  //
 bench_wuffs_strconv_parse_number_f64_pi_short() {
   CHECK_FOCUS(__func__);
   return do_bench_wuffs_strconv_parse_number_f64("3.14159", 1000);
+}
+
+const char*  //
+do_bench_wuffs_strconv_render_number_f64(wuffs_base__slice_u64 test_cases,
+                                         uint64_t iters_unscaled) {
+  bench_start();
+  uint64_t i;
+  uint64_t iters = iters_unscaled * g_flags.iterscale;
+  for (i = 0; i < iters; i++) {
+    size_t tc;
+    for (tc = 0; tc < test_cases.len; tc++) {
+      size_t n = wuffs_base__render_number_f64(
+          g_have_slice_u8,
+          wuffs_base__ieee_754_bit_representation__from_u64_to_f64(
+              test_cases.ptr[tc]),
+          0, WUFFS_BASE__RENDER_NUMBER_FXX__JUST_ENOUGH_PRECISION);
+      if (n == 0) {
+        RETURN_FAIL("0x%016" PRIX64 ": failed", test_cases.ptr[tc]);
+      }
+    }
+  }
+  bench_finish(iters, 0);
+
+  return NULL;
+}
+
+const char*  //
+bench_wuffs_strconv_render_number_f64_just_enough_fractions() {
+  CHECK_FOCUS(__func__);
+  uint64_t test_cases[] = {
+      0x400B000000000000,  // 3.375
+      0x40753C74538EF34D,  // 339.7784
+      0xCFA681AD0223D5B2,  // -5.09e+75
+      0xAC5B4988314D17B8,  // -5.11e-95
+      0x455987BF7CB8EC68,  // 1.2345678912345679e+26
+      0xBFF8000000000000,  // -1.5
+      0x405EDD2F1A9FBE77,  // 123.456
+      0x502552E0653BDA6F,  // 1.23456e+78
+      0x2FC24C42A75EFC06,  // 1.23456e-78
+      0x00047A3A3EF0896C,  // 6.226662346353213e-309
+  };
+  return do_bench_wuffs_strconv_render_number_f64(
+      wuffs_base__make_slice_u64(&test_cases[0],
+                                 WUFFS_TESTLIB_ARRAY_SIZE(test_cases)),
+      200);
+}
+
+const char*  //
+bench_wuffs_strconv_render_number_f64_just_enough_small_integers() {
+  CHECK_FOCUS(__func__);
+  uint64_t test_cases[] = {
+      0x4008000000000000,  // 3
+      0x402C000000000000,  // 14
+      0x4063E00000000000,  // 159
+      0x40A4BA0000000000,  // 2653
+      0x40ECCC6000000000,  // 58979
+      0x4113C41800000000,  // 323846
+      0x41442ADB80000000,  // 2643383
+      0x417AA7CD00000000,  // 27950288
+      0x41B9045F4B000000,  // 419716939
+      0x4201766618E00000,  // 9375105820
+  };
+  return do_bench_wuffs_strconv_render_number_f64(
+      wuffs_base__make_slice_u64(&test_cases[0],
+                                 WUFFS_TESTLIB_ARRAY_SIZE(test_cases)),
+      2000);
 }
 
 // ---------------- JSON Benches
@@ -2474,13 +4174,19 @@ proc g_tests[] = {
     // good as any other place.
     test_wuffs_core_count_leading_zeroes_u64,
     test_wuffs_core_multiply_u64,
-    test_wuffs_strconv_hexadecimal,
+    test_wuffs_strconv_base_16,
+    test_wuffs_strconv_base_64,
     test_wuffs_strconv_hpd_rounded_integer,
     test_wuffs_strconv_hpd_shift,
-    test_wuffs_strconv_mpb_assign_from_hpd,
-    test_wuffs_strconv_parse_number_f64,
+    test_wuffs_strconv_ieee_754_bit_representation_from_u16,
+    test_wuffs_strconv_ieee_754_bit_representation_from_u32,
+    test_wuffs_strconv_parse_number_f64_options,
+    test_wuffs_strconv_parse_number_f64_regular,
     test_wuffs_strconv_parse_number_i64,
     test_wuffs_strconv_parse_number_u64,
+    test_wuffs_strconv_render_number_f64,
+    test_wuffs_strconv_render_number_i64,
+    test_wuffs_strconv_render_number_u64,
     test_wuffs_strconv_utf_8_next,
 
     test_wuffs_json_decode_end_of_data,
@@ -2493,7 +4199,8 @@ proc g_tests[] = {
     test_wuffs_json_decode_quirk_allow_extra_comma,
     test_wuffs_json_decode_quirk_allow_inf_nan_numbers,
     test_wuffs_json_decode_quirk_allow_leading_etc,
-    test_wuffs_json_decode_quirk_allow_trailing_etc,
+    test_wuffs_json_decode_quirk_allow_trailing_comments,
+    test_wuffs_json_decode_quirk_allow_trailing_filler,
     test_wuffs_json_decode_quirk_replace_invalid_unicode,
     test_wuffs_json_decode_src_io_buffer_length,
     test_wuffs_json_decode_string,
@@ -2514,6 +4221,8 @@ proc g_benches[] = {
     bench_wuffs_strconv_parse_number_f64_1_lsh53_add1,
     bench_wuffs_strconv_parse_number_f64_pi_long,
     bench_wuffs_strconv_parse_number_f64_pi_short,
+    bench_wuffs_strconv_render_number_f64_just_enough_fractions,
+    bench_wuffs_strconv_render_number_f64_just_enough_small_integers,
 
     bench_wuffs_json_decode_1k,
     bench_wuffs_json_decode_21k_formatted,

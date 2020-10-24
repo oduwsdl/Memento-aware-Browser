@@ -15,7 +15,7 @@
 
 namespace SkSL {
 class ShaderCapsFactory;
-}
+}  // namespace SkSL
 
 struct GrContextOptions;
 class SkJSONWriter;
@@ -87,6 +87,8 @@ public:
 
     // SkSL only.
     bool builtinFMASupport() const { return fBuiltinFMASupport; }
+
+    bool builtinDeterminantSupport() const { return fBuiltinDeterminantSupport; }
 
     AdvBlendEqInteraction advBlendEqInteraction() const { return fAdvBlendEqInteraction; }
 
@@ -251,8 +253,6 @@ public:
 
     bool tessellationSupport() const { return SkToBool(fMaxTessellationSegments);}
 
-    bool textureSwizzleAppliedInShader() const { return fTextureSwizzleAppliedInShader; }
-
     GrGLSLGeneration generation() const { return fGLSLGeneration; }
 
 private:
@@ -280,10 +280,10 @@ private:
     bool fFloatIs32Bits                     : 1;
     bool fHalfIs32Bits                      : 1;
     bool fHasLowFragmentPrecision           : 1;
-    bool fTextureSwizzleAppliedInShader     : 1;
 
     // Used by SkSL to know when to generate polyfills.
     bool fBuiltinFMASupport : 1;
+    bool fBuiltinDeterminantSupport : 1;
 
     // Used for specific driver bug work arounds
     bool fCanUseAnyFunctionInShader                   : 1;

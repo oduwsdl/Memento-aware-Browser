@@ -10,7 +10,7 @@
 #include "third_party/blink/renderer/platform/context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/heap/heap_test_utilities.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/heap_observer_list.h"
+#include "third_party/blink/renderer/platform/heap_observer_set.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 
 namespace blink {
@@ -19,8 +19,6 @@ namespace {
 
 class MockContext final : public GarbageCollected<MockContext>,
                           public ContextLifecycleNotifier {
-  USING_GARBAGE_COLLECTED_MIXIN(MockContext);
-
  public:
   void AddContextLifecycleObserver(
       ContextLifecycleObserver* observer) override {
@@ -43,7 +41,7 @@ class MockContext final : public GarbageCollected<MockContext>,
   }
 
  private:
-  HeapObserverList<ContextLifecycleObserver> observers_;
+  HeapObserverSet<ContextLifecycleObserver> observers_;
 };
 
 class ServiceImpl : public sample::blink::Service {
@@ -162,20 +160,20 @@ class HeapMojoAssociatedRemoteDestroyContextWithContextObserverTest
           HeapMojoWrapperMode::kWithContextObserver> {};
 class HeapMojoAssociatedRemoteDestroyContextWithoutContextObserverTest
     : public HeapMojoAssociatedRemoteDestroyContextBaseTest<
-          HeapMojoWrapperMode::kWithoutContextObserver> {};
+          HeapMojoWrapperMode::kForceWithoutContextObserver> {};
 class HeapMojoAssociatedRemoteDisconnectWithReasonHandlerWithContextObserverTest
     : public HeapMojoAssociatedRemoteDisconnectWithReasonHandlerBaseTest<
           HeapMojoWrapperMode::kWithContextObserver> {};
 class
     HeapMojoAssociatedRemoteDisconnectWithReasonHandlerWithoutContextObserverTest
     : public HeapMojoAssociatedRemoteDisconnectWithReasonHandlerBaseTest<
-          HeapMojoWrapperMode::kWithoutContextObserver> {};
+          HeapMojoWrapperMode::kForceWithoutContextObserver> {};
 class HeapMojoAssociatedRemoteMoveWithContextObserverTest
     : public HeapMojoAssociatedRemoteMoveBaseTest<
           HeapMojoWrapperMode::kWithContextObserver> {};
 class HeapMojoAssociatedRemoteMoveWithoutContextObserverTest
     : public HeapMojoAssociatedRemoteMoveBaseTest<
-          HeapMojoWrapperMode::kWithoutContextObserver> {};
+          HeapMojoWrapperMode::kForceWithoutContextObserver> {};
 
 // Destroy the context with context observer and check that the connection is
 // disconnected.

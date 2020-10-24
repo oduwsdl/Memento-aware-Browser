@@ -35,7 +35,6 @@ class CSSValue;
 class FloatSize;
 class Image;
 class ImageResourceContent;
-class LayoutSize;
 class SVGImage;
 class Document;
 class ComputedStyle;
@@ -92,7 +91,7 @@ class CORE_EXPORT StyleImage : public GarbageCollected<StyleImage> {
   // supports it.
   virtual FloatSize ImageSize(const Document&,
                               float multiplier,
-                              const LayoutSize& default_object_size,
+                              const FloatSize& default_object_size,
                               RespectImageOrientationEnum) const = 0;
 
   // The <image> has intrinsic dimensions.
@@ -134,6 +133,13 @@ class CORE_EXPORT StyleImage : public GarbageCollected<StyleImage> {
   // underlying ImageResourceContent, or otherwise nullptr.
   virtual ImageResourceContent* CachedImage() const { return nullptr; }
 
+  // Correct the image orientation preference for potentially cross-origin
+  // content.
+  virtual RespectImageOrientationEnum ForceOrientationIfNecessary(
+      RespectImageOrientationEnum default_orientation) const {
+    return default_orientation;
+  }
+
   ALWAYS_INLINE bool IsImageResource() const { return is_image_resource_; }
   ALWAYS_INLINE bool IsPendingImage() const { return is_pending_image_; }
   ALWAYS_INLINE bool IsGeneratedImage() const { return is_generated_image_; }
@@ -168,7 +174,7 @@ class CORE_EXPORT StyleImage : public GarbageCollected<StyleImage> {
   FloatSize ApplyZoom(const FloatSize&, float multiplier) const;
   FloatSize ImageSizeForSVGImage(SVGImage*,
                                  float multiplier,
-                                 const LayoutSize& default_object_size) const;
+                                 const FloatSize& default_object_size) const;
 };
 
 }  // namespace blink

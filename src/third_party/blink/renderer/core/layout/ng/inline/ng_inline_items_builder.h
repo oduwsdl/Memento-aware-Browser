@@ -8,8 +8,8 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/empty_offset_mapping_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_height_metrics.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping_builder.h"
+#include "third_party/blink/renderer/platform/fonts/font_height.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -62,12 +62,10 @@ class NGInlineItemsBuilderTemplate {
 
   bool IsBlockLevel() const { return is_block_level_; }
 
-  // True if changes to an item may affect different layout of earlier lines.
-  // May not be able to use line caches even when the line or earlier lines are
-  // not dirty.
-  bool ChangesMayAffectEarlierLines() const {
-    return changes_may_affect_earlier_lines_;
-  }
+  // True if there were any `unicode-bidi: plaintext`. In this case, changes to
+  // an item may affect different layout of earlier lines. May not be able to
+  // use line caches even when the line or earlier lines are not dirty.
+  bool HasUnicodeBidiPlainText() const { return has_unicode_bidi_plain_text_; }
 
   // Append a string from |LayoutText|.
   //
@@ -165,7 +163,7 @@ class NGInlineItemsBuilderTemplate {
     unsigned item_index;
     bool should_create_box_fragment;
     bool may_have_margin_;
-    NGLineHeightMetrics text_metrics;
+    FontHeight text_metrics;
 
     BoxInfo(unsigned item_index, const NGInlineItem& item);
     bool ShouldCreateBoxFragmentForChild(const BoxInfo& child) const;
@@ -184,7 +182,7 @@ class NGInlineItemsBuilderTemplate {
   bool has_ruby_ = false;
   bool is_empty_inline_ = true;
   bool is_block_level_ = true;
-  bool changes_may_affect_earlier_lines_ = false;
+  bool has_unicode_bidi_plain_text_ = false;
 
   // Append a character.
   // Currently this function is for adding control characters such as

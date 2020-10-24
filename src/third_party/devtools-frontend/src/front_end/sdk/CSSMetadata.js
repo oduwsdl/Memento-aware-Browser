@@ -197,6 +197,23 @@ export class CSSMetadata {
    * @param {string} propertyName
    * @return {boolean}
    */
+  isFontFamilyProperty(propertyName) {
+    return propertyName.toLowerCase() === 'font-family';
+  }
+
+  /**
+ * @param {string} propertyName
+ * @return {boolean}
+ */
+  isAngleAwareProperty(propertyName) {
+    const lowerCasedName = propertyName.toLowerCase();
+    return _colorAwareProperties.has(lowerCasedName) || _valuePresets.has(lowerCasedName);
+  }
+
+  /**
+   * @param {string} propertyName
+   * @return {boolean}
+   */
   isGridAreaDefiningProperty(propertyName) {
     propertyName = propertyName.toLowerCase();
     return propertyName === 'grid' || propertyName === 'grid-template' || propertyName === 'grid-template-areas';
@@ -409,24 +426,23 @@ const _imageValuePresetMap = new Map([
   ['url', 'url(||)'],
 ]);
 
+const _filterValuePresetMap = new Map([
+  ['blur', 'blur(|1px|)'],
+  ['brightness', 'brightness(|0.5|)'],
+  ['contrast', 'contrast(|0.5|)'],
+  ['drop-shadow', 'drop-shadow(|2px 4px 6px black|)'],
+  ['grayscale', 'grayscale(|1|)'],
+  ['hue-rotate', 'hue-rotate(|45deg|)'],
+  ['invert', 'invert(|1|)'],
+  ['opacity', 'opacity(|0.5|)'],
+  ['saturate', 'saturate(|0.5|)'],
+  ['sepia', 'sepia(|1|)'],
+  ['url', 'url(||)'],
+]);
+
 const _valuePresets = new Map([
-  [
-    'filter', new Map([
-      ['blur', 'blur(|1px|)'],
-      ['brightness', 'brightness(|0.5|)'],
-      ['contrast', 'contrast(|0.5|)'],
-      ['drop-shadow', 'drop-shadow(|2px 4px 6px black|)'],
-      ['grayscale', 'grayscale(|1|)'],
-      ['hue-rotate', 'hue-rotate(|45deg|)'],
-      ['invert', 'invert(|1|)'],
-      ['opacity', 'opacity(|0.5|)'],
-      ['saturate', 'saturate(|0.5|)'],
-      ['sepia', 'sepia(|1|)'],
-      ['url', 'url(||)'],
-    ])
-  ],
-  ['background', _imageValuePresetMap], ['background-image', _imageValuePresetMap],
-  ['-webkit-mask-image', _imageValuePresetMap],
+  ['filter', _filterValuePresetMap], ['backdrop-filter', _filterValuePresetMap], ['background', _imageValuePresetMap],
+  ['background-image', _imageValuePresetMap], ['-webkit-mask-image', _imageValuePresetMap],
   [
     'transform', new Map([
       ['scale', 'scale(|1.5|)'],
@@ -465,7 +481,6 @@ const _bezierAwareProperties = new Set([
 ]);
 
 const _colorAwareProperties = new Set([
-  'backdrop-filter',
   'background',
   'background-color',
   'background-image',
@@ -504,7 +519,6 @@ const _colorAwareProperties = new Set([
   '-webkit-box-reflect',
   '-webkit-box-shadow',
   '-webkit-column-rule-color',
-  '-webkit-filter',
   '-webkit-mask',
   '-webkit-mask-box-image',
   '-webkit-mask-box-image-source',
@@ -526,7 +540,7 @@ const _extraPropertyValues = {
   'max-height': {values: ['min-content', 'max-content', '-webkit-fill-available', 'fit-content']},
   'color': {values: ['black']},
   'background-color': {values: ['white']},
-  'box-shadow': {values: ['inset', '0 0 black']},
+  'box-shadow': {values: ['inset']},
   'text-shadow': {values: ['0 0 black']},
   '-webkit-writing-mode': {values: ['horizontal-tb', 'vertical-rl', 'vertical-lr']},
   'writing-mode': {values: ['lr', 'rl', 'tb', 'lr-tb', 'rl-tb', 'tb-rl']},
@@ -539,6 +553,7 @@ const _extraPropertyValues = {
   'overscroll-behavior': {values: ['contain']},
   'text-rendering': {values: ['optimizeSpeed', 'optimizeLegibility', 'geometricPrecision']},
   'text-align': {values: ['-webkit-auto', '-webkit-match-parent']},
+  'clip-path': {values: ['circle', 'ellipse', 'inset', 'polygon', 'url']},
   'color-interpolation': {values: ['sRGB', 'linearRGB']},
   'word-wrap': {values: ['normal', 'break-word']},
   'font-weight': {values: ['100', '200', '300', '400', '500', '600', '700', '800', '900']},
@@ -680,6 +695,12 @@ const _extraPropertyValues = {
   '-webkit-column-span': {values: ['all']},
   '-webkit-column-gap': {values: ['normal']},
   'filter': {
+    values: [
+      'url', 'blur', 'brightness', 'contrast', 'drop-shadow', 'grayscale', 'hue-rotate', 'invert', 'opacity',
+      'saturate', 'sepia'
+    ]
+  },
+  'backdrop-filter': {
     values: [
       'url', 'blur', 'brightness', 'contrast', 'drop-shadow', 'grayscale', 'hue-rotate', 'invert', 'opacity',
       'saturate', 'sepia'

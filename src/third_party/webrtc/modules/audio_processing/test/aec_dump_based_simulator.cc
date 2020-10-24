@@ -287,7 +287,6 @@ void AecDumpBasedSimulator::HandleMessage(
     if (settings_.use_verbose_logging) {
       std::cout << "Setting used in config:" << std::endl;
     }
-    Config config;
     AudioProcessing::Config apm_config = ap_->GetConfig();
 
     if (msg.has_aec_enabled() || settings_.use_aec) {
@@ -438,7 +437,6 @@ void AecDumpBasedSimulator::HandleMessage(
     }
 
     ap_->ApplyConfig(apm_config);
-    ap_->SetExtraOptions(config);
   }
 }
 
@@ -544,6 +542,10 @@ void AecDumpBasedSimulator::HandleMessage(
         AudioProcessing::RuntimeSetting::CreatePlayoutAudioDeviceChange(
             {msg.playout_audio_device_change().id(),
              msg.playout_audio_device_change().max_volume()}));
+  } else if (msg.has_capture_output_used()) {
+    ap_->SetRuntimeSetting(
+        AudioProcessing::RuntimeSetting::CreateCaptureOutputUsedSetting(
+            msg.capture_output_used()));
   }
 }
 

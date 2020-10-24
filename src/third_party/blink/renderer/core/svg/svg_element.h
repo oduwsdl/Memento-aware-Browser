@@ -93,17 +93,21 @@ class CORE_EXPORT SVGElement : public Element {
   void SetWebAnimationsPending();
   void ApplyActiveWebAnimations();
 
+  void BaseValueChanged(const SVGAnimatedPropertyBase&);
   void EnsureAttributeAnimValUpdated();
 
   void SetWebAnimatedAttribute(const QualifiedName& attribute,
                                SVGPropertyBase*);
   void ClearWebAnimatedAttributes();
 
-  ElementSMILAnimations* GetSMILAnimations();
+  ElementSMILAnimations* GetSMILAnimations() const;
   ElementSMILAnimations& EnsureSMILAnimations();
+  const ComputedStyle* BaseComputedStyleForSMIL();
 
   void SetAnimatedAttribute(const QualifiedName&, SVGPropertyBase*);
   void ClearAnimatedAttribute(const QualifiedName&);
+
+  bool HasNonCSSPropertyAnimations() const;
 
   SVGSVGElement* ownerSVGElement() const;
   SVGElement* viewportElement() const;
@@ -119,7 +123,6 @@ class CORE_EXPORT SVGElement : public Element {
   virtual bool IsValid() const { return true; }
 
   virtual void SvgAttributeChanged(const QualifiedName&);
-  void SvgAttributeBaseValChanged(const QualifiedName&);
 
   SVGAnimatedPropertyBase* PropertyFromAttribute(
       const QualifiedName& attribute_name) const;
@@ -131,9 +134,6 @@ class CORE_EXPORT SVGElement : public Element {
 
   virtual AffineTransform* AnimateMotionTransform() { return nullptr; }
 
-  void InvalidateSVGAttributes() {
-    EnsureUniqueElementData().SetSvgAttributesAreDirty(true);
-  }
   void InvalidateSVGPresentationAttributeStyle() {
     EnsureUniqueElementData().SetPresentationAttributeStyleIsDirty(true);
   }
@@ -159,7 +159,6 @@ class CORE_EXPORT SVGElement : public Element {
 
   MutableCSSPropertyValueSet* AnimatedSMILStyleProperties() const;
   MutableCSSPropertyValueSet* EnsureAnimatedSMILStyleProperties();
-  void SetUseOverrideComputedStyle(bool);
 
   virtual bool HaveLoadedRequiredResources();
 
@@ -261,7 +260,7 @@ class CORE_EXPORT SVGElement : public Element {
   bool HasFocusEventListeners() const;
 
   void AddedEventListener(const AtomicString& event_type,
-                          RegisteredEventListener&) final;
+                          RegisteredEventListener&) override;
   void RemovedEventListener(const AtomicString& event_type,
                             const RegisteredEventListener&) final;
 
@@ -273,11 +272,6 @@ class CORE_EXPORT SVGElement : public Element {
   bool IsStyledElement() const =
       delete;  // This will catch anyone doing an unnecessary check.
 
-  const ComputedStyle* EnsureComputedStyle(PseudoId = kPseudoIdNone);
-  const ComputedStyle* VirtualEnsureComputedStyle(
-      PseudoId pseudo_element_specifier = kPseudoIdNone) final {
-    return EnsureComputedStyle(pseudo_element_specifier);
-  }
   void WillRecalcStyle(const StyleRecalcChange) override;
   static SVGElementSet& GetDependencyTraversalVisitedSet();
   void UpdateWebAnimatedAttributeOnBaseValChange(const QualifiedName&);

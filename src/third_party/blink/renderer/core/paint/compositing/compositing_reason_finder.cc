@@ -14,9 +14,11 @@
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_video.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/svg/layout_svg_transformable_container.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/svg/svg_element.h"
 
 namespace blink {
 
@@ -120,8 +122,11 @@ static CompositingReasons BackfaceInvisibility3DAncestorReason(
 CompositingReasons CompositingReasonFinder::DirectReasonsForPaintProperties(
     const LayoutObject& object) {
   // TODO(wangxianzhu): Don't depend on PaintLayer for CompositeAfterPaint.
-  if (!object.HasLayer())
+  if (!object.HasLayer()) {
+    if (object.IsSVGChild())
+      return DirectReasonsForSVGChildPaintProperties(object);
     return CompositingReason::kNone;
+  }
 
   const ComputedStyle& style = object.StyleRef();
   auto reasons = CompositingReasonsForAnimation(object) |
@@ -164,7 +169,7 @@ CompositingReasons CompositingReasonFinder::DirectReasonsForPaintProperties(
               force_prefer_compositing_to_lcd_text)) {
         reasons |= CompositingReason::kOverflowScrolling;
       }
-    } else if (scrollable_area->UsesCompositedScrolling()) {
+    } else if (scrollable_area->NeedsCompositedScrolling()) {
       // For pre-CompositeAfterPaint, just let |reasons| reflect the current
       // composited scrolling status.
       reasons |= CompositingReason::kOverflowScrolling;
@@ -176,6 +181,23 @@ CompositingReasons CompositingReasonFinder::DirectReasonsForPaintProperties(
   if (object.CanHaveAdditionalCompositingReasons())
     reasons |= object.AdditionalCompositingReasons();
 
+  return reasons;
+}
+
+CompositingReasons
+CompositingReasonFinder::DirectReasonsForSVGChildPaintProperties(
+    const LayoutObject& object) {
+  DCHECK(object.IsSVGChild());
+  if (!RuntimeEnabledFeatures::CompositeSVGEnabled())
+    return CompositingReason::kNone;
+  if (object.IsText())
+    return CompositingReason::kNone;
+
+  const ComputedStyle& style = object.StyleRef();
+  auto reasons = CompositingReasonsForAnimation(object);
+  reasons |= CompositingReasonsForWillChange(style);
+  if (style.HasBackdropFilter())
+    reasons |= CompositingReason::kBackdropFilter;
   return reasons;
 }
 
@@ -221,7 +243,10 @@ CompositingReasons CompositingReasonFinder::NonStyleDeterminedDirectReasons(
   // |layer|. See the definition of the scrollParent property in Layer for
   // more detail.
   if (const PaintLayer* scrolling_ancestor = layer.AncestorScrollingLayer()) {
-    if (scrolling_ancestor->NeedsCompositedScrolling() &&
+    if ((scrolling_ancestor->NeedsCompositedScrolling() ||
+         // If this is true, we'll force scrolling_ancestor to use composited
+         // scrolling because this layer is composited.
+         scrolling_ancestor->NeedsReorderOverlayOverflowControls()) &&
         layer.ScrollParent()) {
       DCHECK(!scrolling_ancestor->GetLayoutObject()
                   .IsStackingContext());
@@ -262,6 +287,14 @@ CompositingReasons CompositingReasonFinder::NonStyleDeterminedDirectReasons(
   return direct_reasons;
 }
 
+static bool ObjectTypeSupportsCompositedTransformAnimation(
+    const LayoutObject& object) {
+  if (object.IsSVGChild())
+    return RuntimeEnabledFeatures::CompositeSVGEnabled();
+  // Transforms don't apply on non-replaced inline elements.
+  return object.IsBox();
+}
+
 CompositingReasons CompositingReasonFinder::CompositingReasonsForAnimation(
     const LayoutObject& object) {
   CompositingReasons reasons = CompositingReason::kNone;
@@ -269,9 +302,8 @@ CompositingReasons CompositingReasonFinder::CompositingReasonsForAnimation(
   if (style.SubtreeWillChangeContents())
     return reasons;
 
-  // Transforms don't apply on non-replaced inline elements.
-  // TODO(crbug.com/666244): Support composited transform animation for SVG.
-  if (object.IsBox() && style.HasCurrentTransformAnimation())
+  if (style.HasCurrentTransformAnimation() &&
+      ObjectTypeSupportsCompositedTransformAnimation(object))
     reasons |= CompositingReason::kActiveTransformAnimation;
   if (style.HasCurrentOpacityAnimation())
     reasons |= CompositingReason::kActiveOpacityAnimation;
@@ -339,7 +371,7 @@ bool CompositingReasonFinder::RequiresCompositingForScrollDependentPosition(
   // Don't promote sticky position elements that cannot move with scrolls.
   if (!layer.SticksToScroller())
     return false;
-  return layer.AncestorOverflowLayer()->ScrollsOverflow();
+  return layer.AncestorScrollContainerLayer()->ScrollsOverflow();
 }
 
 }  // namespace blink

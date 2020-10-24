@@ -7,7 +7,7 @@
 
 #include "src/gpu/ccpr/GrCCPerFlushResources.h"
 
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOnFlushResourceProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
@@ -60,7 +60,8 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) final {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) final {}
     void onPrepare(GrOpFlushState*) final {}
 };
 
@@ -82,7 +83,7 @@ public:
     const char* name() const override { return "CopyAtlasOp (CCPR)"; }
 
     void visitProxies(const VisitProxyFunc& fn) const override {
-        fn(fSrcProxy.get(), GrMipMapped::kNo);
+        fn(fSrcProxy.get(), GrMipmapped::kNo);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
@@ -161,7 +162,7 @@ private:
     const SkIRect fDrawBounds;
 };
 
-}
+}  // namespace
 
 static int inst_buffer_count(const GrCCPerFlushResourceSpecs& specs) {
     return specs.fNumCachedPaths +
@@ -207,7 +208,7 @@ GrCCPerFlushResources::GrCCPerFlushResources(
     }
     fPathInstanceBuffer.resetAndMapBuffer(onFlushRP,
                                           inst_buffer_count(specs) * sizeof(PathInstance));
-    if (!fPathInstanceBuffer.gpuBuffer()) {
+    if (!fPathInstanceBuffer.hasGpuBuffer()) {
         SkDebugf("WARNING: failed to allocate CCPR instance buffer. No paths will be drawn.\n");
         return;
     }
@@ -218,7 +219,7 @@ GrCCPerFlushResources::GrCCPerFlushResources(
                 specs.fNumClipPaths;
         fStencilResolveBuffer.resetAndMapBuffer(
                 onFlushRP, numRenderedPaths * sizeof(GrStencilAtlasOp::ResolveRectInstance));
-        if (!fStencilResolveBuffer.gpuBuffer()) {
+        if (!fStencilResolveBuffer.hasGpuBuffer()) {
             SkDebugf("WARNING: failed to allocate CCPR stencil resolve buffer. "
                      "No paths will be drawn.\n");
             return;
@@ -504,7 +505,7 @@ bool GrCCPerFlushResources::finalize(GrOnFlushResourceProvider* onFlushRP) {
 
     fPathInstanceBuffer.unmapBuffer();
 
-    if (fStencilResolveBuffer.gpuBuffer()) {
+    if (fStencilResolveBuffer.hasGpuBuffer()) {
         fStencilResolveBuffer.unmapBuffer();
     }
 

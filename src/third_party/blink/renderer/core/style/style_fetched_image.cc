@@ -109,7 +109,7 @@ bool StyleFetchedImage::ErrorOccurred() const {
 FloatSize StyleFetchedImage::ImageSize(
     const Document&,
     float multiplier,
-    const LayoutSize& default_object_size,
+    const FloatSize& default_object_size,
     RespectImageOrientationEnum respect_orientation) const {
   Image* image = image_->GetImage();
   if (image_->HasDevicePixelRatioHeaderValue()) {
@@ -118,7 +118,7 @@ FloatSize StyleFetchedImage::ImageSize(
   if (auto* svg_image = DynamicTo<SVGImage>(image)) {
     return ImageSizeForSVGImage(svg_image, multiplier, default_object_size);
   }
-
+  respect_orientation = ForceOrientationIfNecessary(respect_orientation);
   FloatSize size(image->Size(respect_orientation));
   return ApplyZoom(size, multiplier);
 }
@@ -187,7 +187,21 @@ void StyleFetchedImage::LoadDeferredImage(const Document& document) {
   image_->LoadDeferredImage(document_->Fetcher());
 }
 
-bool StyleFetchedImage::GetImageAnimationPolicy(ImageAnimationPolicy& policy) {
+RespectImageOrientationEnum StyleFetchedImage::ForceOrientationIfNecessary(
+    RespectImageOrientationEnum default_orientation) const {
+  // SVG Images don't have orientation and assert on loading when
+  // IsAccessAllowed is called.
+  if (image_->GetImage()->IsSVGImage())
+    return default_orientation;
+  // Cross-origin images must always respect orientation to prevent
+  // potentially private data leakage.
+  if (!image_->IsAccessAllowed())
+    return kRespectImageOrientation;
+  return default_orientation;
+}
+
+bool StyleFetchedImage::GetImageAnimationPolicy(
+    mojom::blink::ImageAnimationPolicy& policy) {
   if (!document_ || !document_->GetSettings()) {
     return false;
   }

@@ -45,7 +45,8 @@ class NGBlockLayoutAlgorithmTest : public NGBaseLayoutAlgorithmTest {
 
     NGBlockLayoutAlgorithm algorithm({node, fragment_geometry, space});
     MinMaxSizesInput input(
-        /* percentage_resolution_block_size */ (LayoutUnit()));
+        /* percentage_resolution_block_size */ LayoutUnit(),
+        MinMaxSizesType::kContent);
     return algorithm.ComputeMinMaxSizes(input).sizes;
   }
 
@@ -2494,6 +2495,14 @@ TEST_F(NGBlockLayoutAlgorithmTest, DetailsFlexDoesntCrash) {
   )HTML");
   UpdateAllLifecyclePhasesForTest();
   // No crash is good.
+}
+
+TEST_F(NGBlockLayoutAlgorithmTest, LayoutRubyTextCrash) {
+  // crbug.com/1102186. This test passes if no DCHECK failure.
+  SetBodyInnerHTML(R"HTML(
+    <ruby>base<rt style="writing-mode:vertical-rl">annotation</ruby>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
 }
 
 }  // namespace

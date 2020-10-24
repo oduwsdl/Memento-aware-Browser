@@ -22,7 +22,7 @@
 
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/core/css/css_resolution_units.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -39,8 +39,12 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_model_object.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_viewport_container.h"
+#include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/svg/animation/smil_time_container.h"
 #include "third_party/blink/renderer/core/svg/svg_angle_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_length.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_preserve_aspect_ratio.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_rect.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/core/svg/svg_length_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_matrix_tear_off.h"
@@ -162,16 +166,16 @@ void SVGSVGElement::ParseAttribute(const AttributeModificationParams& params) {
     // Only handle events if we're the outermost <svg> element
     if (name == html_names::kOnunloadAttr) {
       GetDocument().SetWindowAttributeEventListener(
-          event_type_names::kUnload,
-          CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+          event_type_names::kUnload, JSEventHandlerForContentAttribute::Create(
+                                         GetExecutionContext(), name, value));
     } else if (name == html_names::kOnresizeAttr) {
       GetDocument().SetWindowAttributeEventListener(
-          event_type_names::kResize,
-          CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+          event_type_names::kResize, JSEventHandlerForContentAttribute::Create(
+                                         GetExecutionContext(), name, value));
     } else if (name == html_names::kOnscrollAttr) {
       GetDocument().SetWindowAttributeEventListener(
-          event_type_names::kScroll,
-          CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+          event_type_names::kScroll, JSEventHandlerForContentAttribute::Create(
+                                         GetExecutionContext(), name, value));
     } else {
       set_listener = false;
     }
@@ -182,13 +186,13 @@ void SVGSVGElement::ParseAttribute(const AttributeModificationParams& params) {
 
   if (name == html_names::kOnabortAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        event_type_names::kAbort,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+        event_type_names::kAbort, JSEventHandlerForContentAttribute::Create(
+                                      GetExecutionContext(), name, value));
   } else if (name == html_names::kOnerrorAttr) {
     GetDocument().SetWindowAttributeEventListener(
         event_type_names::kError,
-        CreateAttributeEventListener(
-            GetDocument().GetFrame(), name, value,
+        JSEventHandlerForContentAttribute::Create(
+            GetExecutionContext(), name, value,
             JSEventHandler::HandlerType::kOnErrorEventHandler));
   } else if (SVGZoomAndPan::ParseAttribute(name, value)) {
   } else {
@@ -318,8 +322,10 @@ bool SVGSVGElement::CheckIntersectionOrEnclosure(
 
   AffineTransform ctm =
       To<SVGGraphicsElement>(element).ComputeCTM(kAncestorScope, this);
-  FloatRect mapped_repaint_rect =
-      ctm.MapRect(layout_object->VisualRectInLocalSVGCoordinates());
+  FloatRect visual_rect = layout_object->VisualRectInLocalSVGCoordinates();
+  SVGLayoutSupport::AdjustWithClipPathAndMask(
+      *layout_object, layout_object->ObjectBoundingBox(), visual_rect);
+  FloatRect mapped_repaint_rect = ctm.MapRect(visual_rect);
 
   bool result = false;
   switch (mode) {
@@ -477,10 +483,8 @@ AffineTransform SVGSVGElement::LocalCoordinateSpaceTransform(
       return matrix.ToAffineTransform();
     }
   }
-  if (!HasEmptyViewBox()) {
-    FloatSize size = CurrentViewportSize();
-    transform.Multiply(ViewBoxToViewTransform(size.Width(), size.Height()));
-  }
+  if (!HasEmptyViewBox())
+    transform.Multiply(ViewBoxToViewTransform(CurrentViewportSize()));
   return transform;
 }
 
@@ -663,11 +667,10 @@ float SVGSVGElement::IntrinsicHeight() const {
   return height()->CurrentValue()->Value(length_context);
 }
 
-AffineTransform SVGSVGElement::ViewBoxToViewTransform(float view_width,
-                                                      float view_height) const {
+AffineTransform SVGSVGElement::ViewBoxToViewTransform(
+    const FloatSize& viewport_size) const {
   AffineTransform ctm = SVGFitToViewBox::ViewBoxToViewTransform(
-      CurrentViewBoxRect(), CurrentPreserveAspectRatio(), view_width,
-      view_height);
+      CurrentViewBoxRect(), CurrentPreserveAspectRatio(), viewport_size);
   if (!view_spec_ || !view_spec_->Transform())
     return ctm;
   const SVGTransformList* transform_list = view_spec_->Transform();

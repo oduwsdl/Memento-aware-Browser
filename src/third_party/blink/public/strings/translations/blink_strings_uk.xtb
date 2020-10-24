@@ -13,9 +13,12 @@
 <translation id="1211441953136645838">кінцева виноска</translation>
 <translation id="1281252709823657822">діалогове вікно</translation>
 <translation id="1306460908038601864">Вимкнено</translation>
+<translation id="1311894908970423688">Укажіть значення <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">подяки</translation>
 <translation id="1342835525016946179">стаття</translation>
 <translation id="1359897965706325498">банер</translation>
+<translation id="145015347812617860">Закладок: <ph name="COUNT" /></translation>
+<translation id="1480676835519562650">можна вибрати кілька параметрів, вибрано <ph name="SELECTED" /> з <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">регіон</translation>
 <translation id="1591562245178063882">Цей місяць</translation>
 <translation id="1637811476055996098">Вибрати файли</translation>
@@ -27,6 +30,7 @@
 <translation id="1806710327868736751">вікно сповіщення</translation>
 <translation id="1821985195704844674">сітка дерева</translation>
 <translation id="1822429046913737220">д.п./п.п.</translation>
+<translation id="1823704031293214298">нижній колонтитул</translation>
 <translation id="1832974991323546415">відтворити на віддаленому пристрої</translation>
 <translation id="190587075670221089">видалення</translation>
 <translation id="1907737156431278478">приклад</translation>
@@ -44,6 +48,7 @@
 <translation id="2247351761944213033">Тиждень <ph name="WEEKNUMBER" />, <ph name="YEAR" /> р.</translation>
 <translation id="2277199496770840904">Композиція <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">прапорець</translation>
+<translation id="2307576640803031502">у списку, пункт <ph name="INDEX" /> з <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">розрив сторінки</translation>
 <translation id="2335594187091864976">засіб вибору дати й часу</translation>
 <translation id="2393030564806080191">Шістнадцяткове значення кольору</translation>
@@ -51,6 +56,7 @@
 <translation id="248395913932153421">День</translation>
 <translation id="2507943997699731163">Заповніть це поле.</translation>
 <translation id="2508569020611168319">cписок вкладок</translation>
+<translation id="2530182415807757784">можна вибрати кілька параметрів, не вибрано жодного.</translation>
 <translation id="2561842179657104141">показати більше елементів керування мультимедійним вмістом</translation>
 <translation id="2572483411312390101">відтворити</translation>
 <translation id="2613802280814924224">Введіть дійсне значення. Найближче дійсне значення: <ph name="VALID_VALUE" />.</translation>
@@ -100,9 +106,9 @@
 <translation id="4201051445878709314">Показати попередній місяць</translation>
 <translation id="421884353938374759">вибір кольору</translation>
 <translation id="4248100235867064564">панель меню</translation>
+<translation id="4293574643247337246">верхній колонтитул</translation>
 <translation id="4360991593054037559">Введіть дійсне значення. Два найближчі дійсні значення: <ph name="VALID_VALUE_LOW" /> і <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Запитання</translation>
-<translation id="4413860115965805769">кнопка меню</translation>
 <translation id="4444765639179266822">Схоже, на зображенні написано "<ph name="OCR_TEXT" />"</translation>
 <translation id="4446524499724042288">посилання на глосарій</translation>
 <translation id="4522570452068850558">Деталі</translation>
@@ -144,7 +150,7 @@
 <translation id="5466621249238537318">Виберіть один або декілька файлів.</translation>
 <translation id="5468998798572797635">вийти з повноекранного режиму</translation>
 <translation id="5516424706154626233">засіб вибору дати</translation>
-<translation id="5537725057119320332">Трансляція екрана</translation>
+<translation id="5537725057119320332">Трансляція</translation>
 <translation id="5546461542133609677">увімкнути звук</translation>
 <translation id="5608153257855394627">виділити</translation>
 <translation id="561939826962581046">час</translation>
@@ -154,9 +160,11 @@
 <translation id="5677946354068040947">більше опцій</translation>
 <translation id="576709008726043716">вступ</translation>
 <translation id="57838592816432529">Вимкнути звук</translation>
+<translation id="5860033963881614850">Вимк.</translation>
 <translation id="588258955323874662">Повноекранний режим</translation>
 <translation id="5888666972993069672">Транслюється на пристрій <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">вікно пошуку</translation>
+<translation id="5916664084637901428">Увімкнено</translation>
 <translation id="5939518447894949180">Скинути</translation>
 <translation id="5966707198760109579">Тиждень</translation>
 <translation id="5987525920412732405">лічильник</translation>
@@ -184,6 +192,7 @@
 <translation id="6643016212128521049">Очистити</translation>
 <translation id="668171684555832681">Інший...</translation>
 <translation id="6692633176391053278">повторювач stepper</translation>
+<translation id="6709093583001123835">Укажіть значення <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Низька якість відтворення</translation>
 <translation id="6755330956360078551">підказка</translation>
 <translation id="6790428901817661496">Відтворити</translation>
@@ -284,6 +293,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, починається <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Картинка в картинці</translation>
 <translation id="9168329111483466115">виноска</translation>
+<translation id="945780513535800434">Частково позначено</translation>
 <translation id="954003015749068518">увімкнути режим "Картинка в картинці"</translation>
 <translation id="966787709310836684">меню</translation>
 </translationbundle>

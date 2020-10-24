@@ -244,7 +244,7 @@ bool WebURLRequest::ReportRawHeaders() const {
   return resource_request_->ReportRawHeaders();
 }
 
-mojom::RequestContextType WebURLRequest::GetRequestContext() const {
+mojom::blink::RequestContextType WebURLRequest::GetRequestContext() const {
   return resource_request_->GetRequestContext();
 }
 
@@ -278,12 +278,16 @@ bool WebURLRequest::HasUserGesture() const {
   return resource_request_->HasUserGesture();
 }
 
+bool WebURLRequest::HasTextFragmentToken() const {
+  return resource_request_->HasTextFragmentToken();
+}
+
 void WebURLRequest::SetHasUserGesture(bool has_user_gesture) {
   resource_request_->SetHasUserGesture(has_user_gesture);
 }
 
 void WebURLRequest::SetRequestContext(
-    mojom::RequestContextType request_context) {
+    mojom::blink::RequestContextType request_context) {
   resource_request_->SetRequestContext(request_context);
 }
 
@@ -368,12 +372,11 @@ void WebURLRequest::SetFetchIntegrity(const WebString& integrity) {
   return resource_request_->SetFetchIntegrity(integrity);
 }
 
-WebURLRequest::PreviewsState WebURLRequest::GetPreviewsState() const {
+PreviewsState WebURLRequest::GetPreviewsState() const {
   return resource_request_->GetPreviewsState();
 }
 
-void WebURLRequest::SetPreviewsState(
-    WebURLRequest::PreviewsState previews_state) {
+void WebURLRequest::SetPreviewsState(PreviewsState previews_state) {
   return resource_request_->SetPreviewsState(previews_state);
 }
 
@@ -496,14 +499,8 @@ int WebURLRequest::GetLoadFlagsForWebUrlRequest() const {
       break;
   }
 
-  if (!resource_request_->AllowStoredCredentials()) {
-    load_flags |= net::LOAD_DO_NOT_SAVE_COOKIES;
-    load_flags |= net::LOAD_DO_NOT_SEND_COOKIES;
-    load_flags |= net::LOAD_DO_NOT_SEND_AUTH_DATA;
-  }
-
   if (resource_request_->GetRequestContext() ==
-      blink::mojom::RequestContextType::PREFETCH)
+      blink::mojom::blink::RequestContextType::PREFETCH)
     load_flags |= net::LOAD_PREFETCH;
 
   if (resource_request_->GetExtraData()) {
@@ -515,7 +512,7 @@ int WebURLRequest::GetLoadFlagsForWebUrlRequest() const {
   }
   if (resource_request_->PrefetchMaybeForTopLeveNavigation()) {
     DCHECK_EQ(resource_request_->GetRequestContext(),
-              blink::mojom::RequestContextType::PREFETCH);
+              blink::mojom::blink::RequestContextType::PREFETCH);
     if (!resource_request_->RequestorOrigin()->IsSameOriginWith(
             SecurityOrigin::Create(resource_request_->Url()).get())) {
       load_flags |= net::LOAD_RESTRICTED_PREFETCH;

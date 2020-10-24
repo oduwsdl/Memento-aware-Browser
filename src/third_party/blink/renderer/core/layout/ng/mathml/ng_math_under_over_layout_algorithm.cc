@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_layout_part.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/mathml/mathml_operator_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_under_over_element.h"
 
 namespace blink {
@@ -32,43 +33,106 @@ struct UnderOverVerticalParameters {
 };
 
 UnderOverVerticalParameters GetUnderOverVerticalParameters(
-    const ComputedStyle& style) {
+    const ComputedStyle& style,
+    bool is_base_large_operator,
+    bool is_base_stretchy_in_inline_axis) {
   UnderOverVerticalParameters parameters;
+  const SimpleFontData* font_data = style.GetFont().PrimaryFont();
+  if (!font_data)
+    return parameters;
 
-  if (!OpenTypeMathSupport::HasMathData(
-          style.GetFont().PrimaryFont()->PlatformData().GetHarfBuzzFace())) {
-    // The MATH table specification does not really provide any suggestions,
-    // except for some underbar/overbar values and AccentBaseHeight.
-    LayoutUnit default_line_thickness =
-        LayoutUnit(RuleThicknessFallback(style));
-    parameters.under_gap_min = 3 * default_line_thickness;
-    parameters.over_gap_min = 3 * default_line_thickness;
-    parameters.under_extra_descender = default_line_thickness;
-    parameters.over_extra_ascender = default_line_thickness;
-    parameters.accent_base_height =
-        LayoutUnit(style.GetFont().PrimaryFont()->GetFontMetrics().XHeight());
-    parameters.use_under_over_bar_fallback = true;
+  // https://mathml-refresh.github.io/mathml-core/#dfn-default-fallback-constant
+  const float default_fallback_constant = 0;
+
+  if (is_base_large_operator) {
+    parameters.under_gap_min = LayoutUnit(
+        MathConstant(style,
+                     OpenTypeMathSupport::MathConstants::kLowerLimitGapMin)
+            .value_or(default_fallback_constant));
+    parameters.over_gap_min = LayoutUnit(
+        MathConstant(style,
+                     OpenTypeMathSupport::MathConstants::kUpperLimitGapMin)
+            .value_or(default_fallback_constant));
+    parameters.under_shift_min = LayoutUnit(
+        MathConstant(
+            style,
+            OpenTypeMathSupport::MathConstants::kLowerLimitBaselineDropMin)
+            .value_or(default_fallback_constant));
+    parameters.over_shift_min = LayoutUnit(
+        MathConstant(
+            style,
+            OpenTypeMathSupport::MathConstants::kUpperLimitBaselineRiseMin)
+            .value_or(default_fallback_constant));
+    parameters.under_extra_descender = LayoutUnit();
+    parameters.over_extra_ascender = LayoutUnit();
+    parameters.accent_base_height = LayoutUnit();
+    parameters.use_under_over_bar_fallback = false;
     return parameters;
   }
 
-  // The base is a large operator so we read UpperLimit/LowerLimit constants
-  // from the MATH table.
+  if (is_base_stretchy_in_inline_axis) {
+    parameters.under_gap_min = LayoutUnit(
+        MathConstant(
+            style, OpenTypeMathSupport::MathConstants::kStretchStackGapBelowMin)
+            .value_or(default_fallback_constant));
+    parameters.over_gap_min = LayoutUnit(
+        MathConstant(
+            style, OpenTypeMathSupport::MathConstants::kStretchStackGapAboveMin)
+            .value_or(default_fallback_constant));
+    parameters.under_shift_min = LayoutUnit(
+        MathConstant(
+            style,
+            OpenTypeMathSupport::MathConstants::kStretchStackBottomShiftDown)
+            .value_or(default_fallback_constant));
+    parameters.over_shift_min = LayoutUnit(
+        MathConstant(
+            style, OpenTypeMathSupport::MathConstants::kStretchStackTopShiftUp)
+            .value_or(default_fallback_constant));
+    parameters.under_extra_descender = LayoutUnit();
+    parameters.over_extra_ascender = LayoutUnit();
+    parameters.accent_base_height = LayoutUnit();
+    parameters.use_under_over_bar_fallback = false;
+    return parameters;
+  }
+
+  const float default_rule_thickness = RuleThicknessFallback(style);
   parameters.under_gap_min = LayoutUnit(
-      MathConstant(style, OpenTypeMathSupport::MathConstants::kLowerLimitGapMin)
-          .value_or(0));
+      MathConstant(style,
+                   OpenTypeMathSupport::MathConstants::kUnderbarVerticalGap)
+          .value_or(3 * default_rule_thickness));
   parameters.over_gap_min = LayoutUnit(
-      MathConstant(style, OpenTypeMathSupport::MathConstants::kUpperLimitGapMin)
-          .value_or(0));
-  parameters.under_shift_min = LayoutUnit(
-      MathConstant(
-          style, OpenTypeMathSupport::MathConstants::kLowerLimitBaselineDropMin)
-          .value_or(0));
-  parameters.over_shift_min = LayoutUnit(
-      MathConstant(
-          style, OpenTypeMathSupport::MathConstants::kUpperLimitBaselineRiseMin)
-          .value_or(0));
-  parameters.use_under_over_bar_fallback = false;
+      MathConstant(style,
+                   OpenTypeMathSupport::MathConstants::kOverbarVerticalGap)
+          .value_or(3 * default_rule_thickness));
+  parameters.under_shift_min = LayoutUnit();
+  parameters.over_shift_min = LayoutUnit();
+  parameters.under_extra_descender = LayoutUnit(
+      MathConstant(style,
+                   OpenTypeMathSupport::MathConstants::kUnderbarExtraDescender)
+          .value_or(default_rule_thickness));
+  parameters.over_extra_ascender = LayoutUnit(
+      MathConstant(style,
+                   OpenTypeMathSupport::MathConstants::kOverbarExtraAscender)
+          .value_or(default_rule_thickness));
+  parameters.accent_base_height = LayoutUnit(
+      MathConstant(style, OpenTypeMathSupport::MathConstants::kAccentBaseHeight)
+          .value_or(font_data->GetFontMetrics().XHeight() / 2));
+  parameters.use_under_over_bar_fallback = true;
   return parameters;
+}
+
+// https://mathml-refresh.github.io/mathml-core/#underscripts-and-overscripts-munder-mover-munderover
+bool HasAccent(const NGBlockNode& node, bool accent_under) {
+  DCHECK(node);
+  auto* underover = To<MathMLUnderOverElement>(node.GetDOMNode());
+  auto script_type = underover->GetScriptType();
+  DCHECK(script_type == MathScriptType::kUnderOver ||
+         (accent_under && script_type == MathScriptType::kUnder) ||
+         (!accent_under && script_type == MathScriptType::kOver));
+
+  base::Optional<bool> attribute_value =
+      accent_under ? underover->AccentUnder() : underover->Accent();
+  return attribute_value && *attribute_value;
 }
 
 }  // namespace
@@ -77,9 +141,6 @@ NGMathUnderOverLayoutAlgorithm::NGMathUnderOverLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
     : NGLayoutAlgorithm(params) {
   DCHECK(params.space.IsNewFormattingContext());
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
 }
 
 void NGMathUnderOverLayoutAlgorithm::GatherChildren(NGBlockNode* base,
@@ -136,10 +197,33 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
       BorderScrollbarPadding().StartOffset();
 
   LayoutUnit block_offset = content_start_offset.block_offset;
-  UnderOverVerticalParameters parameters =
-      GetUnderOverVerticalParameters(Style());
-  // TODO(rbuis): handle stretchy operators.
-  // TODO(rbuis): handle accent.
+
+  bool is_base_large_operator = false;
+  bool is_base_stretchy_in_inline_axis = false;
+  if (auto* core_operator =
+          DynamicTo<MathMLOperatorElement>(base.GetDOMNode())) {
+    // TODO(crbug.com/1124298): Implement embellished operators.
+    is_base_large_operator =
+        core_operator->HasBooleanProperty(MathMLOperatorElement::kLargeOp);
+    is_base_stretchy_in_inline_axis =
+        core_operator->HasBooleanProperty(MathMLOperatorElement::kStretchy) &&
+        !core_operator->GetOperatorContent().is_vertical;
+  }
+  UnderOverVerticalParameters parameters = GetUnderOverVerticalParameters(
+      Style(), is_base_large_operator, is_base_stretchy_in_inline_axis);
+  // TODO(crbug.com/1124301): handle stretchy operators.
+  // TODO(crbug.com/1125136): take into account italic correction.
+
+  auto base_space = CreateConstraintSpaceForMathChild(
+      Node(), ChildAvailableSize(), ConstraintSpace(), base);
+  auto base_layout_result = base.Layout(base_space);
+  auto base_margins =
+      ComputeMarginsFor(base_space, base.Style(), ConstraintSpace());
+
+  NGBoxFragment base_fragment(
+      ConstraintSpace().GetWritingDirection(),
+      To<NGPhysicalBoxFragment>(base_layout_result->PhysicalFragment()));
+  LayoutUnit base_ascent = base_fragment.BaselineOrSynthesize();
 
   // All children are positioned centered relative to the container (and
   // therefore centered relative to themselves).
@@ -151,7 +235,7 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
     NGBoxStrut over_margins =
         ComputeMarginsFor(over_space, over.Style(), ConstraintSpace());
     NGBoxFragment over_fragment(
-        ConstraintSpace().GetWritingMode(), ConstraintSpace().Direction(),
+        ConstraintSpace().GetWritingDirection(),
         To<NGPhysicalBoxFragment>(over_layout_result->PhysicalFragment()));
     block_offset += parameters.over_extra_ascender + over_margins.block_start;
     LogicalOffset over_offset = {
@@ -165,26 +249,20 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
     over.StoreMargins(ConstraintSpace(), over_margins);
     if (parameters.use_under_over_bar_fallback) {
       block_offset += over_fragment.BlockSize();
-      block_offset += parameters.over_gap_min;
+      if (HasAccent(Node(), false)) {
+        if (base_ascent < parameters.accent_base_height)
+          block_offset += parameters.accent_base_height - base_ascent;
+      } else {
+        block_offset += parameters.over_gap_min;
+      }
     } else {
-      LayoutUnit over_ascent =
-          over_fragment.Baseline().value_or(over_fragment.BlockSize());
+      LayoutUnit over_ascent = over_fragment.BaselineOrSynthesize();
       block_offset +=
           std::max(over_fragment.BlockSize() + parameters.over_gap_min,
                    over_ascent + parameters.over_shift_min);
     }
     block_offset += over_margins.block_end;
   }
-
-  auto base_space = CreateConstraintSpaceForMathChild(
-      Node(), ChildAvailableSize(), ConstraintSpace(), base);
-  auto base_layout_result = base.Layout(base_space);
-  auto base_margins =
-      ComputeMarginsFor(base_space, base.Style(), ConstraintSpace());
-
-  NGBoxFragment base_fragment(
-      ConstraintSpace().GetWritingMode(), ConstraintSpace().Direction(),
-      To<NGPhysicalBoxFragment>(base_layout_result->PhysicalFragment()));
 
   block_offset += base_margins.block_start;
   LogicalOffset base_offset = {
@@ -206,14 +284,14 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
     NGBoxStrut under_margins =
         ComputeMarginsFor(under_space, under.Style(), ConstraintSpace());
     NGBoxFragment under_fragment(
-        ConstraintSpace().GetWritingMode(), ConstraintSpace().Direction(),
+        ConstraintSpace().GetWritingDirection(),
         To<NGPhysicalBoxFragment>(under_layout_result->PhysicalFragment()));
     block_offset += under_margins.block_start;
     if (parameters.use_under_over_bar_fallback) {
-      block_offset += parameters.under_gap_min;
+      if (!HasAccent(Node(), true))
+        block_offset += parameters.under_gap_min;
     } else {
-      LayoutUnit under_ascent =
-          under_fragment.Baseline().value_or(under_fragment.BlockSize());
+      LayoutUnit under_ascent = under_fragment.BaselineOrSynthesize();
       block_offset += std::max(parameters.under_gap_min,
                                parameters.under_shift_min - under_ascent);
     }
@@ -231,8 +309,6 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
     block_offset += under_margins.block_end;
   }
 
-  LayoutUnit base_ascent =
-      base_fragment.Baseline().value_or(base_fragment.BlockSize());
   container_builder_.SetBaseline(base_offset.block_offset + base_ascent);
 
   block_offset += BorderScrollbarPadding().block_end;
@@ -242,11 +318,9 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
                                   block_offset, border_box_size.inline_size);
 
   container_builder_.SetIntrinsicBlockSize(block_offset);
-  container_builder_.SetBlockSize(block_size);
+  container_builder_.SetFragmentsTotalBlockSize(block_size);
 
-  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), container_builder_.Borders(),
-                        &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   return container_builder_.ToBoxFragment();
 }
@@ -266,8 +340,9 @@ MinMaxSizesResult NGMathUnderOverLayoutAlgorithm::ComputeMinMaxSizes(
        child = child.NextSibling()) {
     if (child.IsOutOfFlowPositioned())
       continue;
-    auto child_result =
-        ComputeMinAndMaxContentContribution(Style(), child, child_input);
+    // TODO(crbug.com/1125136): take into account italic correction.
+    auto child_result = ComputeMinAndMaxContentContribution(
+        Style(), To<NGBlockNode>(child), child_input);
     NGBoxStrut margins = ComputeMinMaxMargins(Style(), child);
     child_result.sizes += margins.InlineSum();
 

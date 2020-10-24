@@ -15,15 +15,14 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/GrRecordingContext.h"
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkColorData.h"
 #include "src/gpu/GrBuffer.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOpFlushState.h"
@@ -85,7 +84,8 @@ private:
     }
 
     SkISize onISize() override { return SkISize::Make(200, 200); }
-    DrawResult onDraw(GrContext*, GrRenderTargetContext*, SkCanvas*, SkString* errorMsg) override;
+    DrawResult onDraw(GrRecordingContext*, GrRenderTargetContext*,
+                      SkCanvas*, SkString* errorMsg) override;
 
     const GradType fGradType;
     const GrSurfaceOrigin fOrigin;
@@ -121,7 +121,7 @@ private:
 
     class Impl;
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 class SampleLocationsTestProcessor::Impl : public GrGLSLGeometryProcessor {
@@ -194,8 +194,7 @@ class SampleLocationsTestProcessor::Impl : public GrGLSLGeometryProcessor {
         f->codeAppendf("}");
     }
 
-    void setData(const GrGLSLProgramDataManager&, const GrPrimitiveProcessor&,
-                 const CoordTransformRange&) override {}
+    void setData(const GrGLSLProgramDataManager&, const GrPrimitiveProcessor&) override {}
 };
 
 GrGLSLPrimitiveProcessor* SampleLocationsTestProcessor::createGLSLInstance(
@@ -245,7 +244,8 @@ private:
                                      SkArenaAlloc* arena,
                                      const GrSurfaceProxyView* writeView,
                                      GrAppliedClip&& appliedClip,
-                                     const GrXferProcessor::DstProxyView& dstProxyView) const {
+                                     const GrXferProcessor::DstProxyView& dstProxyView,
+                                     GrXferBarrierFlags renderPassXferBarriers) const {
         GrGeometryProcessor* geomProc = SampleLocationsTestProcessor::Make(arena, fGradType);
 
         GrPipeline::InputFlags flags = GrPipeline::InputFlags::kHWAntialias;
@@ -254,6 +254,7 @@ private:
                                               std::move(appliedClip), dstProxyView,
                                               geomProc, SkBlendMode::kSrcOver,
                                               GrPrimitiveType::kTriangleStrip,
+                                              renderPassXferBarriers,
                                               flags, &gStencilWrite);
     }
 
@@ -262,13 +263,15 @@ private:
                                        flushState->allocator(),
                                        flushState->writeView(),
                                        flushState->detachAppliedClip(),
-                                       flushState->dstProxyView());
+                                       flushState->dstProxyView(),
+                                       flushState->renderPassBarriers());
     }
 
     void onPrePrepare(GrRecordingContext* context,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip* clip,
-                      const GrXferProcessor::DstProxyView& dstProxyView) final {
+                      const GrXferProcessor::DstProxyView& dstProxyView,
+                      GrXferBarrierFlags renderPassXferBarriers) final {
         // We're going to create the GrProgramInfo (and the GrPipeline and geometry processor
         // it relies on) in the DDL-record-time arena.
         SkArenaAlloc* arena = context->priv().recordTimeAllocator();
@@ -277,7 +280,8 @@ private:
         GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip::Disabled();
 
         fProgramInfo = this->createProgramInfo(context->priv().caps(), arena, writeView,
-                                               std::move(appliedClip), dstProxyView);
+                                               std::move(appliedClip), dstProxyView,
+                                               renderPassXferBarriers);
 
         context->priv().recordProgramInfo(fProgramInfo);
     }
@@ -305,14 +309,14 @@ private:
 
     friend class ::GrOpMemoryPool; // for ctor
 
-    typedef GrDrawOp INHERITED;
+    using INHERITED = GrDrawOp;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Test.
 
-DrawResult SampleLocationsGM::onDraw(
-        GrContext* ctx, GrRenderTargetContext* rtc, SkCanvas* canvas, SkString* errorMsg) {
+DrawResult SampleLocationsGM::onDraw(GrRecordingContext* ctx, GrRenderTargetContext* rtc,
+                                     SkCanvas* canvas, SkString* errorMsg) {
     if (!ctx->priv().caps()->sampleLocationsSupport()) {
         *errorMsg = "Requires support for sample locations.";
         return DrawResult::kSkip;
@@ -332,7 +336,7 @@ DrawResult SampleLocationsGM::onDraw(
 
     auto offscreenRTC = GrRenderTargetContext::Make(
             ctx, rtc->colorInfo().colorType(), nullptr, SkBackingFit::kExact, {200, 200},
-            rtc->numSamples(), GrMipMapped::kNo, GrProtected::kNo, fOrigin);
+            rtc->numSamples(), GrMipmapped::kNo, GrProtected::kNo, fOrigin);
     if (!offscreenRTC) {
         *errorMsg = "Failed to create offscreen render target.";
         return DrawResult::kFail;
@@ -367,11 +371,19 @@ DrawResult SampleLocationsGM::onDraw(
                             SkMatrix::I(), SkRect::MakeWH(200, 200));
 
     // Copy offscreen texture to canvas.
-    rtc->drawTexture(nullptr, offscreenRTC->readSurfaceView(),
+    rtc->drawTexture(nullptr,
+                     offscreenRTC->readSurfaceView(),
                      offscreenRTC->colorInfo().alphaType(),
-                     GrSamplerState::Filter::kNearest, SkBlendMode::kSrc, SK_PMColor4fWHITE,
-                     {0,0,200,200}, {0,0,200,200}, GrAA::kNo, GrQuadAAFlags::kNone,
-                     SkCanvas::SrcRectConstraint::kStrict_SrcRectConstraint, SkMatrix::I(),
+                     GrSamplerState::Filter::kNearest,
+                     GrSamplerState::MipmapMode::kNone,
+                     SkBlendMode::kSrc,
+                     SK_PMColor4fWHITE,
+                     {0, 0, 200, 200},
+                     {0, 0, 200, 200},
+                     GrAA::kNo,
+                     GrQuadAAFlags::kNone,
+                     SkCanvas::SrcRectConstraint::kStrict_SrcRectConstraint,
+                     SkMatrix::I(),
                      nullptr);
 
     return skiagm::DrawResult::kOk;
@@ -382,4 +394,4 @@ DEF_GM( return new SampleLocationsGM(GradType::kHW, kBottomLeft_GrSurfaceOrigin)
 DEF_GM( return new SampleLocationsGM(GradType::kSW, kTopLeft_GrSurfaceOrigin); )
 DEF_GM( return new SampleLocationsGM(GradType::kSW, kBottomLeft_GrSurfaceOrigin); )
 
-}
+}  // namespace skiagm

@@ -130,12 +130,11 @@ class _TargetHost(object):
             self._amber_repo = None
             self._target = None
             target_args = {
-                'output_dir': build_path,
+                'out_dir': build_path,
                 'target_cpu': 'x64',
                 'system_log_file': None,
                 'cpu_cores': CPU_CORES,
                 'require_kvm': True,
-                'emu_type': target_device,
                 'ram_size_mb': 8192
             }
             if target_device == 'qemu':
@@ -174,7 +173,7 @@ class _TargetHost(object):
                                                       stdout=subprocess.PIPE,
                                                       stderr=subprocess.STDOUT)
 
-        listener_log_path = os.path.join(results_directory, 'system.log')
+        listener_log_path = os.path.join(results_directory, 'system_log')
         listener_log = open(listener_log_path, 'w')
         self.symbolizer = symbolizer.RunSymbolizer(
             self._listener.stdout, listener_log, [build_ids_path])
@@ -332,7 +331,9 @@ class ChromiumFuchsiaDriver(driver.Driver):
         elif self._port._target_device == 'aemu':
             cmd.extend([
                 '--ozone-platform=scenic', '--enable-oop-rasterization',
-                '--use-gl=stub', '--enable-features=UseSkiaRenderer,Vulkan'
+                '--use-vulkan', '--enable-gpu-rasterization',
+                '--force-device-scale-factor=1', '--use-gl=stub',
+                '--enable-features=UseSkiaRenderer,Vulkan'
             ])
         return cmd
 

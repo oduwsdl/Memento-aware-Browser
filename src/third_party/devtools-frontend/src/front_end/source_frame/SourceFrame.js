@@ -43,7 +43,6 @@ import {Events, SourcesTextEditor, SourcesTextEditorDelegate} from './SourcesTex
  * @implements {UI.SearchableView.Replaceable}
  * @implements {SourcesTextEditorDelegate}
  * @implements {Transformer}
- * @unrestricted
  */
 export class SourceFrameImpl extends UI.View.SimpleView {
   /**
@@ -69,7 +68,7 @@ export class SourceFrameImpl extends UI.View.SimpleView {
     this._shouldAutoPrettyPrint = false;
     this._prettyToggle.setVisible(false);
 
-    this._progressToolbarItem = new UI.Toolbar.ToolbarItem(createElement('div'));
+    this._progressToolbarItem = new UI.Toolbar.ToolbarItem(document.createElement('div'));
 
     this._textEditor = new SourcesTextEditor(this, codeMirrorOptions);
     this._textEditor.show(this.element);
@@ -81,6 +80,7 @@ export class SourceFrameImpl extends UI.View.SimpleView {
     this._searchConfig = null;
     this._delayedFindSearchMatches = null;
     this._currentSearchResultIndex = -1;
+    /** @type {!Array<!TextUtils.TextRange.TextRange>} */
     this._searchResults = [];
     this._searchRegex = null;
     this._loadError = false;
@@ -159,7 +159,7 @@ export class SourceFrameImpl extends UI.View.SimpleView {
 
   /**
    * @param {boolean} value
-   * @return {!Promise}
+   * @return {!Promise<void>}
    */
   async _setPretty(value) {
     this._pretty = value;
@@ -315,8 +315,15 @@ export class SourceFrameImpl extends UI.View.SimpleView {
       progressIndicator.setTotalWork(100);
       this._progressToolbarItem.element.appendChild(progressIndicator.element);
 
-      const {content, error} = (await this._lazyContent());
-      this._rawContent = error || content || '';
+      const deferredContent = (await this._lazyContent());
+      let error, content;
+      if (deferredContent.content === null) {
+        error = deferredContent.error;
+        this._rawContent = deferredContent.error;
+      } else {
+        content = deferredContent.content;
+        this._rawContent = deferredContent.content;
+      }
 
       progressIndicator.setWorked(1);
 
@@ -334,7 +341,11 @@ export class SourceFrameImpl extends UI.View.SimpleView {
             } else if ('method' in data) {
               switch (data.method) {
                 case 'disassemble':
-                  resolve(data.result);
+                  if ('error' in data) {
+                    reject(data.error);
+                  } else {
+                    resolve(data.result);
+                  }
                   break;
               }
             }
@@ -342,10 +353,15 @@ export class SourceFrameImpl extends UI.View.SimpleView {
           worker.onerror = reject;
         });
         worker.postMessage({method: 'disassemble', params: {content}});
-        const {source, offsets, functionBodyOffsets} = await promise;
-        worker.terminate();
-        this._rawContent = source;
-        this._wasmDisassembly = new Common.WasmDisassembly.WasmDisassembly(offsets, functionBodyOffsets);
+        try {
+          const {source, offsets, functionBodyOffsets} = await promise;
+          this._rawContent = content = source;
+          this._wasmDisassembly = new Common.WasmDisassembly.WasmDisassembly(offsets, functionBodyOffsets);
+        } catch (e) {
+          this._rawContent = content = error = e.message;
+        } finally {
+          worker.terminate();
+        }
       }
 
       progressIndicator.setWorked(100);
@@ -370,7 +386,7 @@ export class SourceFrameImpl extends UI.View.SimpleView {
         // CRBug 1011445
         setTimeout(() => this.setHighlighterType('text/plain'), 50);
       } else {
-        if (this._shouldAutoPrettyPrint && TextUtils.TextUtils.isMinified(content || '')) {
+        if (this._shouldAutoPrettyPrint && TextUtils.TextUtils.isMinified(content)) {
           await this._setPretty(true);
         } else {
           this.setContent(this._rawContent, null);
@@ -386,8 +402,11 @@ export class SourceFrameImpl extends UI.View.SimpleView {
     if (this._formattedContentPromise) {
       return this._formattedContentPromise;
     }
+    /** @type {function({content: string, map: !Formatter.ScriptFormatter.FormatterSourceMapping}): void} */
     let fulfill;
-    this._formattedContentPromise = new Promise(x => fulfill = x);
+    this._formattedContentPromise = new Promise(x => {
+      fulfill = x;
+    });
     new Formatter.ScriptFormatter.ScriptFormatter(this._highlighterType, this._rawContent || '', (content, map) => {
       fulfill({content, map});
     });
@@ -747,6 +766,9 @@ export class SourceFrameImpl extends UI.View.SimpleView {
     return true;
   }
 
+  /**
+   * @param {number} index
+   */
   jumpToSearchResult(index) {
     if (!this.loaded || !this._searchResults.length) {
       return;
@@ -829,6 +851,9 @@ export class SourceFrameImpl extends UI.View.SimpleView {
     this._textEditor.setSelection(TextUtils.TextRange.TextRange.createFromLocation(lastLineNumber, lastColumnNumber));
   }
 
+  /**
+   * @param {!RegExp} regexObject
+   */
   _collectRegexMatches(regexObject) {
     const ranges = [];
     for (let i = 0; i < this._textEditor.linesCount; ++i) {
@@ -852,7 +877,9 @@ export class SourceFrameImpl extends UI.View.SimpleView {
 
   /**
    * @override
-   * @return {!Promise}
+   * @param {!UI.ContextMenu.ContextMenu} contextMenu
+   * @param {number} editorLineNumber
+   * @return {!Promise<void>}
    */
   populateLineGutterContextMenu(contextMenu, editorLineNumber) {
     return Promise.resolve();
@@ -860,7 +887,10 @@ export class SourceFrameImpl extends UI.View.SimpleView {
 
   /**
    * @override
-   * @return {!Promise}
+   * @param {!UI.ContextMenu.ContextMenu} contextMenu
+   * @param {number} editorLineNumber
+   * @param {number} editorColumnNumber
+   * @return {!Promise<void>}
    */
   populateTextAreaContextMenu(contextMenu, editorLineNumber, editorColumnNumber) {
     return Promise.resolve();
@@ -906,7 +936,7 @@ export class SourceFrameImpl extends UI.View.SimpleView {
 export class LineDecorator {
   /**
    * @param {!Workspace.UISourceCode.UISourceCode} uiSourceCode
-   * @param {!TextEditor.CodeMirrorTextEditor.CodeMirrorTextEditor} textEditor
+   * @param {!SourcesTextEditor} textEditor
    * @param {string} type
    */
   decorate(uiSourceCode, textEditor, type) {}

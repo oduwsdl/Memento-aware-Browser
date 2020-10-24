@@ -14,6 +14,7 @@
 #include "common/Color.h"
 #include "common/platform.h"
 #include "test_utils/ANGLETest.h"
+#include "test_utils/gl_raii.h"
 #include "util/EGLWindow.h"
 #include "util/OSWindow.h"
 #include "util/Timer.h"
@@ -164,7 +165,7 @@ class EGLSurfaceTest : public ANGLETest
         initializeContext();
     }
 
-    void initializeSurfaceWithDefaultConfig()
+    void initializeSurfaceWithDefaultConfig(bool requireWindowSurface)
     {
         const EGLint configAttributes[] = {EGL_RED_SIZE,
                                            EGL_DONT_CARE,
@@ -180,6 +181,8 @@ class EGLSurfaceTest : public ANGLETest
                                            EGL_DONT_CARE,
                                            EGL_SAMPLE_BUFFERS,
                                            0,
+                                           EGL_SURFACE_TYPE,
+                                           requireWindowSurface ? EGL_WINDOW_BIT : EGL_DONT_CARE,
                                            EGL_NONE};
 
         EGLint configCount;
@@ -294,7 +297,9 @@ class EGLFloatSurfaceTest : public EGLSurfaceTest
 
     bool initializeSurfaceWithFloatConfig()
     {
-        const EGLint configAttributes[] = {EGL_RED_SIZE,
+        const EGLint configAttributes[] = {EGL_SURFACE_TYPE,
+                                           EGL_WINDOW_BIT,
+                                           EGL_RED_SIZE,
                                            16,
                                            EGL_GREEN_SIZE,
                                            16,
@@ -363,14 +368,14 @@ class EGLSurfaceTest3 : public EGLSurfaceTest
 // at one time, blocking message loops. See http://crbug.com/475085
 TEST_P(EGLSurfaceTest, MessageLoopBug)
 {
-    // TODO(syoussefi): http://anglebug.com/3123
+    // http://anglebug.com/3123
     ANGLE_SKIP_TEST_IF(IsAndroid());
 
     // http://anglebug.com/3138
     ANGLE_SKIP_TEST_IF(IsOzone());
 
     initializeDisplay();
-    initializeSurfaceWithDefaultConfig();
+    initializeSurfaceWithDefaultConfig(true);
 
     runMessageLoopTest(EGL_NO_SURFACE, EGL_NO_CONTEXT);
 }
@@ -379,14 +384,14 @@ TEST_P(EGLSurfaceTest, MessageLoopBug)
 // instead of null.
 TEST_P(EGLSurfaceTest, MessageLoopBugContext)
 {
-    // TODO(syoussefi): http://anglebug.com/3123
+    // http://anglebug.com/3123
     ANGLE_SKIP_TEST_IF(IsAndroid());
 
     // http://anglebug.com/3138
     ANGLE_SKIP_TEST_IF(IsOzone());
 
     initializeDisplay();
-    initializeSurfaceWithDefaultConfig();
+    initializeSurfaceWithDefaultConfig(true);
 
     ANGLE_SKIP_TEST_IF(!mPbufferSurface);
     runMessageLoopTest(mPbufferSurface, mSecondContext);
@@ -396,7 +401,7 @@ TEST_P(EGLSurfaceTest, MessageLoopBugContext)
 TEST_P(EGLSurfaceTest, MakeCurrentTwice)
 {
     initializeDisplay();
-    initializeSurfaceWithDefaultConfig();
+    initializeSurfaceWithDefaultConfig(false);
 
     eglMakeCurrent(mDisplay, mWindowSurface, mWindowSurface, mContext);
     ASSERT_EGL_SUCCESS();
@@ -425,8 +430,9 @@ TEST_P(EGLSurfaceTest, ResizeWindow)
     int minSize = platformSupportsZeroSize ? 0 : 1;
 
     initializeDisplay();
-    initializeSurfaceWithDefaultConfig();
+    initializeSurfaceWithDefaultConfig(true);
     initializeContext();
+    ASSERT_NE(mWindowSurface, EGL_NO_SURFACE);
 
     eglMakeCurrent(mDisplay, mWindowSurface, mWindowSurface, mContext);
     eglSwapBuffers(mDisplay, mWindowSurface);
@@ -466,17 +472,15 @@ TEST_P(EGLSurfaceTest, ResizeWindow)
 TEST_P(EGLSurfaceTest, ResizeWindowWithDraw)
 {
     // http://anglebug.com/4453
-    ANGLE_SKIP_TEST_IF(isVulkanRenderer() && IsLinux() && IsIntel());
-
-    // Flaky on Linux SwANGLE http://anglebug.com/4453
-    ANGLE_SKIP_TEST_IF(IsLinux() && isSwiftshader());
+    ANGLE_SKIP_TEST_IF(IsLinux());
 
     // Necessary for a window resizing test if there is no per-frame window size query
     setWindowVisible(mOSWindow, true);
 
     initializeDisplay();
-    initializeSurfaceWithDefaultConfig();
+    initializeSurfaceWithDefaultConfig(true);
     initializeContext();
+    ASSERT_NE(mWindowSurface, EGL_NO_SURFACE);
 
     int size      = 64;
     EGLint height = 0;
@@ -564,8 +568,9 @@ TEST_P(EGLSurfaceTest, ResetNativeWindow)
         mOSWindow->resetNativeWindow();
     }
 
-    initializeSurfaceWithDefaultConfig();
+    initializeSurfaceWithDefaultConfig(true);
     initializeContext();
+    ASSERT_NE(mWindowSurface, EGL_NO_SURFACE);
 
     eglMakeCurrent(mDisplay, mWindowSurface, mWindowSurface, mContext);
 
@@ -577,9 +582,23 @@ TEST_P(EGLSurfaceTest, ResetNativeWindow)
 // support GL_RGB565
 TEST_P(EGLSurfaceTest, CreateWithEGLConfig5650Support)
 {
-    const EGLint configAttributes[] = {
-        EGL_RED_SIZE,   5, EGL_GREEN_SIZE,   6, EGL_BLUE_SIZE,      5, EGL_ALPHA_SIZE, 0,
-        EGL_DEPTH_SIZE, 0, EGL_STENCIL_SIZE, 0, EGL_SAMPLE_BUFFERS, 0, EGL_NONE};
+    const EGLint configAttributes[] = {EGL_SURFACE_TYPE,
+                                       EGL_WINDOW_BIT,
+                                       EGL_RED_SIZE,
+                                       5,
+                                       EGL_GREEN_SIZE,
+                                       6,
+                                       EGL_BLUE_SIZE,
+                                       5,
+                                       EGL_ALPHA_SIZE,
+                                       0,
+                                       EGL_DEPTH_SIZE,
+                                       0,
+                                       EGL_STENCIL_SIZE,
+                                       0,
+                                       EGL_SAMPLE_BUFFERS,
+                                       0,
+                                       EGL_NONE};
 
     initializeDisplay();
     EGLConfig config;
@@ -606,9 +625,23 @@ TEST_P(EGLSurfaceTest, CreateWithEGLConfig5650Support)
 // support GL_RGBA4
 TEST_P(EGLSurfaceTest, CreateWithEGLConfig4444Support)
 {
-    const EGLint configAttributes[] = {
-        EGL_RED_SIZE,   4, EGL_GREEN_SIZE,   4, EGL_BLUE_SIZE,      4, EGL_ALPHA_SIZE, 4,
-        EGL_DEPTH_SIZE, 0, EGL_STENCIL_SIZE, 0, EGL_SAMPLE_BUFFERS, 0, EGL_NONE};
+    const EGLint configAttributes[] = {EGL_SURFACE_TYPE,
+                                       EGL_WINDOW_BIT,
+                                       EGL_RED_SIZE,
+                                       4,
+                                       EGL_GREEN_SIZE,
+                                       4,
+                                       EGL_BLUE_SIZE,
+                                       4,
+                                       EGL_ALPHA_SIZE,
+                                       4,
+                                       EGL_DEPTH_SIZE,
+                                       0,
+                                       EGL_STENCIL_SIZE,
+                                       0,
+                                       EGL_SAMPLE_BUFFERS,
+                                       0,
+                                       EGL_NONE};
 
     initializeDisplay();
     EGLConfig config;
@@ -635,9 +668,23 @@ TEST_P(EGLSurfaceTest, CreateWithEGLConfig4444Support)
 // support GL_RGB5_A1
 TEST_P(EGLSurfaceTest, CreateWithEGLConfig5551Support)
 {
-    const EGLint configAttributes[] = {
-        EGL_RED_SIZE,   5, EGL_GREEN_SIZE,   5, EGL_BLUE_SIZE,      5, EGL_ALPHA_SIZE, 1,
-        EGL_DEPTH_SIZE, 0, EGL_STENCIL_SIZE, 0, EGL_SAMPLE_BUFFERS, 0, EGL_NONE};
+    const EGLint configAttributes[] = {EGL_SURFACE_TYPE,
+                                       EGL_WINDOW_BIT,
+                                       EGL_RED_SIZE,
+                                       5,
+                                       EGL_GREEN_SIZE,
+                                       5,
+                                       EGL_BLUE_SIZE,
+                                       5,
+                                       EGL_ALPHA_SIZE,
+                                       1,
+                                       EGL_DEPTH_SIZE,
+                                       0,
+                                       EGL_STENCIL_SIZE,
+                                       0,
+                                       EGL_SAMPLE_BUFFERS,
+                                       0,
+                                       EGL_NONE};
 
     initializeDisplay();
     EGLConfig config;
@@ -663,9 +710,23 @@ TEST_P(EGLSurfaceTest, CreateWithEGLConfig5551Support)
 // Test creating a surface that supports a EGLConfig without alpha support
 TEST_P(EGLSurfaceTest, CreateWithEGLConfig8880Support)
 {
-    const EGLint configAttributes[] = {
-        EGL_RED_SIZE,   8, EGL_GREEN_SIZE,   8, EGL_BLUE_SIZE,      8, EGL_ALPHA_SIZE, 0,
-        EGL_DEPTH_SIZE, 0, EGL_STENCIL_SIZE, 0, EGL_SAMPLE_BUFFERS, 0, EGL_NONE};
+    const EGLint configAttributes[] = {EGL_SURFACE_TYPE,
+                                       EGL_WINDOW_BIT,
+                                       EGL_RED_SIZE,
+                                       8,
+                                       EGL_GREEN_SIZE,
+                                       8,
+                                       EGL_BLUE_SIZE,
+                                       8,
+                                       EGL_ALPHA_SIZE,
+                                       0,
+                                       EGL_DEPTH_SIZE,
+                                       0,
+                                       EGL_STENCIL_SIZE,
+                                       0,
+                                       EGL_SAMPLE_BUFFERS,
+                                       0,
+                                       EGL_NONE};
 
     initializeDisplay();
     EGLConfig config;
@@ -690,9 +751,23 @@ TEST_P(EGLSurfaceTest, CreateWithEGLConfig8880Support)
 
 TEST_P(EGLSurfaceTest, FixedSizeWindow)
 {
-    const EGLint configAttributes[] = {
-        EGL_RED_SIZE,   8, EGL_GREEN_SIZE,   8, EGL_BLUE_SIZE,      8, EGL_ALPHA_SIZE, 0,
-        EGL_DEPTH_SIZE, 0, EGL_STENCIL_SIZE, 0, EGL_SAMPLE_BUFFERS, 0, EGL_NONE};
+    const EGLint configAttributes[] = {EGL_SURFACE_TYPE,
+                                       EGL_WINDOW_BIT,
+                                       EGL_RED_SIZE,
+                                       8,
+                                       EGL_GREEN_SIZE,
+                                       8,
+                                       EGL_BLUE_SIZE,
+                                       8,
+                                       EGL_ALPHA_SIZE,
+                                       0,
+                                       EGL_DEPTH_SIZE,
+                                       0,
+                                       EGL_STENCIL_SIZE,
+                                       0,
+                                       EGL_SAMPLE_BUFFERS,
+                                       0,
+                                       EGL_NONE};
 
     initializeDisplay();
     ANGLE_SKIP_TEST_IF(EGLWindow::FindEGLConfig(mDisplay, configAttributes, &mConfig) == EGL_FALSE);
@@ -992,14 +1067,12 @@ TEST_P(EGLSurfaceTestD3D11, CreateSurfaceWithTextureOffset)
     EXPECT_GL_NO_ERROR();
 
     // Blit framebuffer should also blit to the same subrect despite the dstX/Y arguments.
-    GLuint renderBuffer = 0;
-    glGenRenderbuffers(1u, &renderBuffer);
+    GLRenderbuffer renderBuffer;
     glBindRenderbuffer(GL_RENDERBUFFER, renderBuffer);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, 50, 50);
     EXPECT_GL_NO_ERROR();
 
-    GLuint framebuffer = 0;
-    glGenFramebuffers(1u, &framebuffer);
+    GLFramebuffer framebuffer;
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderBuffer);
     EXPECT_GL_NO_ERROR();
@@ -1017,10 +1090,6 @@ TEST_P(EGLSurfaceTestD3D11, CreateSurfaceWithTextureOffset)
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0u);
     EXPECT_PIXEL_EQ(25, 25, 0, 0, 0, 255);
     EXPECT_PIXEL_EQ(75, 75, 0, 255, 0, 255);
-    EXPECT_GL_NO_ERROR();
-
-    glDeleteFramebuffers(1u, &framebuffer);
-    glDeleteRenderbuffers(1u, &renderBuffer);
     EXPECT_GL_NO_ERROR();
 }
 

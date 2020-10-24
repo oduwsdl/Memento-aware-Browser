@@ -28,12 +28,6 @@
 
 namespace blink {
 
-// Disabling this will cause parkable strings to never be compressed.
-// This is useful for headless mode + virtual time. Since virtual time advances
-// quickly, strings may be parked too eagerly in that mode.
-const base::Feature kCompressParkableStrings{"CompressParkableStrings",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
-
 struct ParkableStringManager::Statistics {
   size_t original_size;
   size_t uncompressed_size;
@@ -49,13 +43,11 @@ struct ParkableStringManager::Statistics {
 namespace {
 
 bool CompressionEnabled() {
-  return base::FeatureList::IsEnabled(kCompressParkableStrings);
+  return base::FeatureList::IsEnabled(features::kCompressParkableStrings);
 }
 
 class OnPurgeMemoryListener : public GarbageCollected<OnPurgeMemoryListener>,
                               public MemoryPressureListener {
-  USING_GARBAGE_COLLECTED_MIXIN(OnPurgeMemoryListener);
-
   void OnPurgeMemory() override {
     if (!CompressionEnabled()) {
       return;
@@ -336,12 +328,12 @@ void ParkableStringManager::RecordStatisticsAfter5Minutes() const {
   if (stats.compressed_original_size != 0) {
     size_t ratio_percentage =
         (100 * stats.compressed_size) / stats.compressed_original_size;
-    base::UmaHistogramPercentage("Memory.ParkableString.CompressionRatio.5min",
-                                 ratio_percentage);
+    base::UmaHistogramPercentageObsoleteDoNotUse(
+        "Memory.ParkableString.CompressionRatio.5min", ratio_percentage);
   }
 
   // May not be usable, e.g. Incognito, permission or write failure.
-  if (base::FeatureList::IsEnabled(features::kParkableStringsToDisk)) {
+  if (features::IsParkableStringsToDiskEnabled()) {
     base::UmaHistogramBoolean("Memory.ParkableString.DiskIsUsable.5min",
                               data_allocator().may_write());
   }

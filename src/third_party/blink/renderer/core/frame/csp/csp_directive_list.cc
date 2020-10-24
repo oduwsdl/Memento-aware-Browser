@@ -182,7 +182,7 @@ void CSPDirectiveList::ReportViolation(
     const String& console_message,
     const KURL& blocked_url,
     ResourceRequest::RedirectStatus redirect_status,
-    ContentSecurityPolicy::ViolationType violation_type,
+    ContentSecurityPolicy::ContentSecurityPolicyViolationType violation_type,
     const String& sample,
     const String& sample_prefix) const {
   String message =
@@ -265,7 +265,7 @@ void CSPDirectiveList::ReportEvalViolation(
                            report_endpoints_, use_reporting_api_, header_,
                            header_type_, ContentSecurityPolicy::kEvalViolation,
                            std::unique_ptr<SourceLocation>(), nullptr,
-                           RedirectStatus::kFollowedRedirect, nullptr, content);
+                           RedirectStatus::kNoRedirect, nullptr, content);
 }
 
 bool CSPDirectiveList::CheckEval(SourceListDirective* directive) const {
@@ -340,7 +340,7 @@ bool CSPDirectiveList::AllowTrustedTypeAssignmentFailure(
       ContentSecurityPolicy::GetDirectiveName(
           ContentSecurityPolicy::DirectiveType::kRequireTrustedTypesFor),
       ContentSecurityPolicy::DirectiveType::kRequireTrustedTypesFor, message,
-      KURL(), RedirectStatus::kFollowedRedirect,
+      KURL(), RedirectStatus::kNoRedirect,
       ContentSecurityPolicy::kTrustedTypesSinkViolation, sample, sample_prefix);
   return IsReportOnly();
 }
@@ -356,27 +356,6 @@ bool CSPDirectiveList::CheckSource(
          directive->Allows(
              url.IsEmpty() ? policy_->FallbackUrlForPlugin() : url,
              redirect_status);
-}
-
-bool CSPDirectiveList::CheckAncestors(SourceListDirective* directive,
-                                      LocalFrame* frame) const {
-  if (!frame || !directive)
-    return true;
-
-  for (Frame* current = frame->Tree().Parent(); current;
-       current = current->Tree().Parent()) {
-    // The |current| frame might be a remote frame which has no URL, so use
-    // its origin instead.  This should suffice for this check since it
-    // doesn't do path comparisons.  See https://crbug.com/582544.
-    //
-    // TODO(mkwst): Move this check up into the browser process.  See
-    // https://crbug.com/555418.
-    KURL url(NullURL(),
-             current->GetSecurityContext()->GetSecurityOrigin()->ToString());
-    if (!directive->Allows(url, ResourceRequest::RedirectStatus::kNoRedirect))
-      return false;
-  }
-  return true;
 }
 
 bool CSPDirectiveList::CheckMediaType(MediaListDirective* directive,
@@ -521,7 +500,7 @@ bool CSPDirectiveList::CheckSourceAndReportViolation(
   if (!directive)
     return true;
 
-  // We ignore URL-based whitelists if we're allowing dynamic script injection.
+  // We ignore URL-based allowlists if we're allowing dynamic script injection.
   if (CheckSource(directive, url, redirect_status) && !CheckDynamic(directive))
     return true;
 
@@ -562,9 +541,10 @@ bool CSPDirectiveList::CheckSourceAndReportViolation(
     prefix = prefix + "navigate to '";
 
   String suffix = String();
-  if (CheckDynamic(directive))
+  if (CheckDynamic(directive)) {
     suffix =
-        " 'strict-dynamic' is present, so host-based whitelisting is disabled.";
+        " 'strict-dynamic' is present, so host-based allowlisting is disabled.";
+  }
 
   String directive_name = directive->GetName();
   String effective_directive_name =
@@ -581,25 +561,6 @@ bool CSPDirectiveList::CheckSourceAndReportViolation(
                       "Policy directive: \"" +
                       directive->GetText() + "\"." + suffix + "\n",
                   url_before_redirects, redirect_status);
-  return DenyIfEnforcingPolicy();
-}
-
-bool CSPDirectiveList::CheckAncestorsAndReportViolation(
-    SourceListDirective* directive,
-    LocalFrame* frame,
-    const KURL& url) const {
-  if (CheckAncestors(directive, frame))
-    return true;
-
-  ReportViolationWithFrame(
-      directive->GetText(),
-      ContentSecurityPolicy::DirectiveType::kFrameAncestors,
-      "Refused to display '" + url.ElidedString() +
-          "' in a frame because an ancestor violates the "
-          "following Content Security Policy directive: "
-          "\"" +
-          directive->GetText() + "\".",
-      url, frame);
   return DenyIfEnforcingPolicy();
 }
 
@@ -674,7 +635,8 @@ bool CSPDirectiveList::AllowInline(
 }
 
 bool CSPDirectiveList::ShouldCheckEval() const {
-  return script_src_ && !script_src_->AllowEval();
+  return !CheckEval(
+      OperativeDirective(ContentSecurityPolicy::DirectiveType::kScriptSrc));
 }
 
 bool CSPDirectiveList::AllowEval(
@@ -815,21 +777,6 @@ bool CSPDirectiveList::AllowTrustedTypePolicy(const String& policy_name,
       ContentSecurityPolicy::kTrustedTypesPolicyViolation, policy_name);
 
   return DenyIfEnforcingPolicy();
-}
-
-bool CSPDirectiveList::AllowAncestors(
-    LocalFrame* frame,
-    const KURL& url,
-    ReportingDisposition reporting_disposition) const {
-  return reporting_disposition == ReportingDisposition::kReport
-             ? CheckAncestorsAndReportViolation(
-                   OperativeDirective(
-                       ContentSecurityPolicy::DirectiveType::kFrameAncestors),
-                   frame, url)
-             : CheckAncestors(
-                   OperativeDirective(
-                       ContentSecurityPolicy::DirectiveType::kFrameAncestors),
-                   frame);
 }
 
 bool CSPDirectiveList::AllowHash(
@@ -1442,7 +1389,7 @@ SourceListDirectiveVector CSPDirectiveList::GetSourceVector(
 }
 
 bool CSPDirectiveList::Subsumes(const CSPDirectiveListVector& other) {
-  // A white-list of directives that we consider for subsumption.
+  // A list of directives that we consider for subsumption.
   // See more about source lists here:
   // https://w3c.github.io/webappsec-csp/#framework-directive-source-list
   static ContentSecurityPolicy::DirectiveType directives[] = {

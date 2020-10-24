@@ -14,6 +14,23 @@
 
 namespace gl
 {
+namespace
+{
+bool IsStencilNoOp(GLenum stencilFunc,
+                   GLenum stencilFail,
+                   GLenum stencilPassDepthFail,
+                   GLenum stencilPassDepthPass)
+{
+    const bool isNeverAndKeep           = stencilFunc == GL_NEVER && stencilFail == GL_KEEP;
+    const bool isAlwaysAndKeepOrAllKeep = (stencilFunc == GL_ALWAYS || stencilFail == GL_KEEP) &&
+                                          stencilPassDepthFail == GL_KEEP &&
+                                          stencilPassDepthPass == GL_KEEP;
+
+    return isNeverAndKeep || isAlwaysAndKeepOrAllKeep;
+}
+
+}  // anonymous namespace
+
 RasterizerState::RasterizerState()
 {
     memset(this, 0, sizeof(RasterizerState));
@@ -104,6 +121,30 @@ DepthStencilState::DepthStencilState(const DepthStencilState &other)
     memcpy(this, &other, sizeof(DepthStencilState));
 }
 
+bool DepthStencilState::isDepthMaskedOut() const
+{
+    return !depthMask;
+}
+
+bool DepthStencilState::isStencilMaskedOut() const
+{
+    return (stencilMask & stencilWritemask) == 0;
+}
+
+bool DepthStencilState::isStencilNoOp() const
+{
+    return isStencilMaskedOut() ||
+           IsStencilNoOp(stencilFunc, stencilFail, stencilPassDepthFail, stencilPassDepthPass);
+}
+
+bool DepthStencilState::isStencilBackNoOp() const
+{
+    const bool isStencilBackMaskedOut = (stencilBackMask & stencilBackWritemask) == 0;
+    return isStencilBackMaskedOut ||
+           IsStencilNoOp(stencilBackFunc, stencilBackFail, stencilBackPassDepthFail,
+                         stencilBackPassDepthPass);
+}
+
 bool operator==(const DepthStencilState &a, const DepthStencilState &b)
 {
     return memcmp(&a, &b, sizeof(DepthStencilState)) == 0;
@@ -132,6 +173,8 @@ SamplerState::SamplerState()
 }
 
 SamplerState::SamplerState(const SamplerState &other) = default;
+
+SamplerState &SamplerState::operator=(const SamplerState &other) = default;
 
 // static
 SamplerState SamplerState::CreateDefaultForTarget(TextureType type)
@@ -546,13 +589,39 @@ bool Rectangle::encloses(const gl::Rectangle &inside) const
 
 bool ClipRectangle(const Rectangle &source, const Rectangle &clip, Rectangle *intersection)
 {
+    angle::CheckedNumeric<int> sourceX2(source.x);
+    sourceX2 += source.width;
+    if (!sourceX2.IsValid())
+    {
+        return false;
+    }
+    angle::CheckedNumeric<int> sourceY2(source.y);
+    sourceY2 += source.height;
+    if (!sourceY2.IsValid())
+    {
+        return false;
+    }
+
     int minSourceX, maxSourceX, minSourceY, maxSourceY;
-    MinMax(source.x, source.x + source.width, &minSourceX, &maxSourceX);
-    MinMax(source.y, source.y + source.height, &minSourceY, &maxSourceY);
+    MinMax(source.x, sourceX2.ValueOrDie(), &minSourceX, &maxSourceX);
+    MinMax(source.y, sourceY2.ValueOrDie(), &minSourceY, &maxSourceY);
+
+    angle::CheckedNumeric<int> clipX2(clip.x);
+    clipX2 += clip.width;
+    if (!clipX2.IsValid())
+    {
+        return false;
+    }
+    angle::CheckedNumeric<int> clipY2(clip.y);
+    clipY2 += clip.height;
+    if (!clipY2.IsValid())
+    {
+        return false;
+    }
 
     int minClipX, maxClipX, minClipY, maxClipY;
-    MinMax(clip.x, clip.x + clip.width, &minClipX, &maxClipX);
-    MinMax(clip.y, clip.y + clip.height, &minClipY, &maxClipY);
+    MinMax(clip.x, clipX2.ValueOrDie(), &minClipX, &maxClipX);
+    MinMax(clip.y, clipY2.ValueOrDie(), &minClipY, &maxClipY);
 
     if (minSourceX >= maxClipX || maxSourceX <= minClipX || minSourceY >= maxClipY ||
         maxSourceY <= minClipY)
@@ -584,6 +653,12 @@ Rectangle Box::toRect() const
 {
     ASSERT(z == 0 && depth == 1);
     return Rectangle(x, y, width, height);
+}
+
+bool Box::coversSameExtent(const Extents &size) const
+{
+    return x == 0 && y == 0 && z == 0 && width == size.width && height == size.height &&
+           depth == size.depth;
 }
 
 bool operator==(const Offset &a, const Offset &b)

@@ -280,7 +280,7 @@ angle::Result TextureGL::reserveTexImageToBeFilled(const gl::Context *context,
                                                    GLenum type)
 {
     StateManagerGL *stateManager = GetStateManagerGL(context);
-    stateManager->setPixelUnpackBuffer(nullptr);
+    ANGLE_TRY(stateManager->setPixelUnpackBuffer(context, nullptr));
     ANGLE_TRY(setImageHelper(context, target, level, internalFormat, size, format, type, nullptr));
     return angle::Result::Continue;
 }
@@ -372,8 +372,8 @@ angle::Result TextureGL::setSubImageRowByRowWorkaround(const gl::Context *contex
 
     gl::PixelUnpackState directUnpack;
     directUnpack.alignment = 1;
-    stateManager->setPixelUnpackState(directUnpack);
-    stateManager->setPixelUnpackBuffer(unpackBuffer);
+    ANGLE_TRY(stateManager->setPixelUnpackState(context, directUnpack));
+    ANGLE_TRY(stateManager->setPixelUnpackBuffer(context, unpackBuffer));
 
     const gl::InternalFormat &glFormat = gl::GetInternalFormatInfo(format, type);
     GLuint rowBytes                    = 0;
@@ -446,8 +446,8 @@ angle::Result TextureGL::setSubImagePaddingWorkaround(const gl::Context *context
     ANGLE_CHECK_GL_MATH(contextGL, glFormat.computeSkipBytes(type, rowBytes, imageBytes, unpack,
                                                              useTexImage3D, &skipBytes));
 
-    stateManager->setPixelUnpackState(unpack);
-    stateManager->setPixelUnpackBuffer(unpackBuffer);
+    ANGLE_TRY(stateManager->setPixelUnpackState(context, unpack));
+    ANGLE_TRY(stateManager->setPixelUnpackBuffer(context, unpackBuffer));
 
     gl::PixelUnpackState directUnpack;
     directUnpack.alignment = 1;
@@ -477,7 +477,7 @@ angle::Result TextureGL::setSubImagePaddingWorkaround(const gl::Context *context
         }
 
         // Upload the last row of the last slice "manually"
-        stateManager->setPixelUnpackState(directUnpack);
+        ANGLE_TRY(stateManager->setPixelUnpackState(context, directUnpack));
 
         GLint lastRowOffset =
             skipBytes + (area.depth - 1) * imageBytes + (area.height - 1) * rowBytes;
@@ -500,7 +500,7 @@ angle::Result TextureGL::setSubImagePaddingWorkaround(const gl::Context *context
         }
 
         // Upload the last row "manually"
-        stateManager->setPixelUnpackState(directUnpack);
+        ANGLE_TRY(stateManager->setPixelUnpackState(context, directUnpack));
 
         GLint lastRowOffset          = skipBytes + (area.height - 1) * rowBytes;
         const GLubyte *lastRowPixels = pixels + lastRowOffset;
@@ -651,8 +651,8 @@ angle::Result TextureGL::copyImage(const gl::Context *context,
 
         gl::PixelUnpackState unpack;
         unpack.alignment = 1;
-        stateManager->setPixelUnpackState(unpack);
-        stateManager->setPixelUnpackBuffer(nullptr);
+        ANGLE_TRY(stateManager->setPixelUnpackState(context, unpack));
+        ANGLE_TRY(stateManager->setPixelUnpackBuffer(context, nullptr));
 
         ANGLE_GL_TRY_ALWAYS_CHECK(
             context, functions->texImage2D(ToGLenum(target), static_cast<GLint>(level),
@@ -833,7 +833,7 @@ angle::Result TextureGL::copyTexture(const gl::Context *context,
                                      const gl::ImageIndex &index,
                                      GLenum internalFormat,
                                      GLenum type,
-                                     size_t sourceLevel,
+                                     GLint sourceLevel,
                                      bool unpackFlipY,
                                      bool unpackPremultiplyAlpha,
                                      bool unpackUnmultiplyAlpha,
@@ -859,7 +859,7 @@ angle::Result TextureGL::copyTexture(const gl::Context *context,
 angle::Result TextureGL::copySubTexture(const gl::Context *context,
                                         const gl::ImageIndex &index,
                                         const gl::Offset &destOffset,
-                                        size_t sourceLevel,
+                                        GLint sourceLevel,
                                         const gl::Box &sourceBox,
                                         bool unpackFlipY,
                                         bool unpackPremultiplyAlpha,
@@ -878,7 +878,7 @@ angle::Result TextureGL::copySubTextureHelper(const gl::Context *context,
                                               gl::TextureTarget target,
                                               size_t level,
                                               const gl::Offset &destOffset,
-                                              size_t sourceLevel,
+                                              GLint sourceLevel,
                                               const gl::Rectangle &sourceArea,
                                               const gl::InternalFormat &destFormat,
                                               bool unpackFlipY,
@@ -1217,8 +1217,14 @@ angle::Result TextureGL::setStorageExternalMemory(const gl::Context *context,
                                                   GLenum internalFormat,
                                                   const gl::Extents &size,
                                                   gl::MemoryObject *memoryObject,
-                                                  GLuint64 offset)
+                                                  GLuint64 offset,
+                                                  GLbitfield createFlags,
+                                                  GLbitfield usageFlags)
 {
+    // GL_ANGLE_external_objects_flags not supported.
+    ASSERT(createFlags == 0);
+    ASSERT(usageFlags == std::numeric_limits<uint32_t>::max());
+
     const FunctionsGL *functions      = GetFunctionsGL(context);
     StateManagerGL *stateManager      = GetStateManagerGL(context);
     const angle::FeaturesGL &features = GetFeaturesGL(context);
@@ -1332,9 +1338,10 @@ angle::Result TextureGL::bindTexImage(const gl::Context *context, egl::Surface *
 
     SurfaceGL *surfaceGL = GetImplAs<SurfaceGL>(surface);
 
+    const gl::Format &surfaceFormat = surface->getBindTexImageFormat();
     setLevelInfo(context, getType(), 0, 1,
-                 LevelInfoGL(GL_NONE, GL_NONE, false, LUMAWorkaroundGL(),
-                             surfaceGL->hasEmulatedAlphaChannel()));
+                 LevelInfoGL(surfaceFormat.info->format, surfaceFormat.info->internalFormat, false,
+                             LUMAWorkaroundGL(), surfaceGL->hasEmulatedAlphaChannel()));
     return angle::Result::Continue;
 }
 
@@ -1383,7 +1390,7 @@ GLint TextureGL::getNativeID() const
 
 angle::Result TextureGL::syncState(const gl::Context *context,
                                    const gl::Texture::DirtyBits &dirtyBits,
-                                   gl::TextureCommand source)
+                                   gl::Command source)
 {
     if (dirtyBits.none() && mLocalDirtyBits.none())
     {
@@ -1930,7 +1937,7 @@ angle::Result TextureGL::initializeContents(const gl::Context *context,
 
     gl::PixelUnpackState unpackState;
     unpackState.alignment = 1;
-    stateManager->setPixelUnpackState(unpackState);
+    ANGLE_TRY(stateManager->setPixelUnpackState(context, unpackState));
 
     GLuint prevUnpackBuffer = stateManager->getBufferID(gl::BufferBinding::PixelUnpack);
     stateManager->bindBuffer(gl::BufferBinding::PixelUnpack, 0);
@@ -2002,7 +2009,7 @@ angle::Result TextureGL::initializeContents(const gl::Context *context,
     // Reset the pixel unpack state.  Because this call is made after synchronizing dirty bits in a
     // glTexImage call, we need to make sure that the texture data to be uploaded later has the
     // expected unpack state.
-    stateManager->setPixelUnpackState(context->getState().getUnpackState());
+    ANGLE_TRY(stateManager->setPixelUnpackState(context, context->getState().getUnpackState()));
     stateManager->bindBuffer(gl::BufferBinding::PixelUnpack, prevUnpackBuffer);
 
     return angle::Result::Continue;

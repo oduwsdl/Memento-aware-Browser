@@ -8,6 +8,8 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_input_node.h"
+#include "third_party/blink/renderer/core/layout/ng/table/ng_table_borders.h"
+#include "third_party/blink/renderer/core/layout/ng/table/ng_table_layout_algorithm_types.h"
 #include "third_party/blink/renderer/platform/fonts/font_baseline.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 
@@ -94,6 +96,21 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   NGBlockNode GetRenderedLegend() const;
   NGBlockNode GetFieldsetContent() const;
 
+  bool IsNGTable() const { return IsTable() && box_->IsLayoutNGMixin(); }
+  bool IsNGTableCell() const {
+    return box_->IsTableCell() && !box_->IsTableCellLegacy();
+  }
+
+  // TODO(atotic) Move table-specific calls to NGTableNode
+  const NGBoxStrut& GetTableBordersStrut() const;
+  scoped_refptr<const NGTableBorders> GetTableBorders() const;
+  scoped_refptr<const NGTableTypes::Columns> GetColumnConstraints(
+      const NGTableGroupedChildren&,
+      const NGBoxStrut& border_padding) const;
+
+  LayoutUnit ComputeTableInlineSize(const NGConstraintSpace&,
+                                    const NGBoxStrut& border_padding) const;
+
   // Return true if this block node establishes an inline formatting context.
   // This will only be the case if there is actual inline content. Empty nodes
   // or nodes consisting purely of block-level, floats, and/or out-of-flow
@@ -107,6 +124,19 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
 
   // Returns the aspect ratio of a replaced element.
   LogicalSize GetAspectRatio() const;
+
+  // Returns the transform to apply to a child (e.g. for layout-overflow).
+  base::Optional<TransformationMatrix> GetTransformForChildFragment(
+      const NGPhysicalBoxFragment& child_fragment,
+      PhysicalSize size) const;
+
+  bool HasLeftOverflow() const { return box_->HasLeftOverflow(); }
+  bool HasTopOverflow() const { return box_->HasTopOverflow(); }
+  bool HasNonVisibleOverflow() const { return box_->HasNonVisibleOverflow(); }
+
+  OverflowClipAxes GetOverflowClipAxes() const {
+    return box_->GetOverflowClipAxes();
+  }
 
   // Returns true if this node should fill the viewport.
   // This occurs when we are in quirks-mode and we are *not* OOF-positioned,
@@ -133,6 +163,9 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   // munderover).
   MathScriptType ScriptType() const;
 
+  // Find out if the radical has an index.
+  bool HasIndex() const;
+
   // Layout an atomic inline; e.g., inline block.
   scoped_refptr<const NGLayoutResult> LayoutAtomicInline(
       const NGConstraintSpace& parent_constraint_space,
@@ -157,6 +190,16 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
 
   static bool CanUseNewLayout(const LayoutBox&);
   bool CanUseNewLayout() const;
+
+  bool ShouldApplyLayoutContainment() const {
+    return box_->ShouldApplyLayoutContainment();
+  }
+
+  bool HasLineIfEmpty() const {
+    if (const auto* block = DynamicTo<LayoutBlock>(box_))
+      return block->HasLineIfEmpty();
+    return false;
+  }
 
   String ToString() const;
 
@@ -185,8 +228,10 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
       const NGConstraintSpace&,
       const NGLayoutResult&,
       const NGBlockBreakToken* previous_break_token) const;
-  void CopyFragmentItemsToLayoutBox(const NGPhysicalBoxFragment& container,
-                                    const NGFragmentItems& items) const;
+  void CopyFragmentItemsToLayoutBox(
+      const NGPhysicalBoxFragment& container,
+      const NGFragmentItems& items,
+      const NGBlockBreakToken* previous_break_token) const;
   void CopyFragmentDataToLayoutBoxForInlineChildren(
       const NGPhysicalContainerFragment& container,
       LayoutUnit initial_container_width,
@@ -195,7 +240,11 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   void PlaceChildrenInLayoutBox(
       const NGPhysicalBoxFragment&,
       const NGBlockBreakToken* previous_break_token) const;
-  void PlaceChildrenInFlowThread(const NGPhysicalBoxFragment&) const;
+  void PlaceChildrenInFlowThread(
+      LayoutMultiColumnFlowThread*,
+      const NGConstraintSpace&,
+      const NGPhysicalBoxFragment&,
+      const NGBlockBreakToken* previous_container_break_token) const;
   void CopyChildFragmentPosition(
       const NGPhysicalBoxFragment& child_fragment,
       PhysicalOffset,

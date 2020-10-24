@@ -31,12 +31,10 @@
 extern "C" {
 #endif
 
-//! Linear dimension of a tpl block
-#define MC_FLOW_BSIZE_1D 16
-//! Number of pixels in a tpl block
-#define MC_FLOW_NUM_PELS (MC_FLOW_BSIZE_1D * MC_FLOW_BSIZE_1D)
-//! Number of tpl block in a super block
-#define MAX_MC_FLOW_BLK_IN_SB (MAX_SB_SIZE / MC_FLOW_BSIZE_1D)
+//! Minimum linear dimension of a tpl block
+#define MIN_TPL_BSIZE_1D 16
+//! Maximum number of tpl block in a super block
+#define MAX_TPL_BLK_IN_SB (MAX_SB_SIZE / MIN_TPL_BSIZE_1D)
 //! Number of intra winner modes kept
 #define MAX_WINNER_MODE_COUNT_INTRA 3
 //! Number of inter winner modes kept
@@ -61,19 +59,18 @@ typedef struct {
   /*****************************************************************************
    * \name TPL Info
    *
-   * Information gathered from tpl_model at MC_FLOW_BSIZE_1D precision for the
+   * Information gathered from tpl_model at tpl block precision for the
    * superblock to speed up the encoding process..
    ****************************************************************************/
   /**@{*/
   //! Number of TPL blocks in this superblock.
   int tpl_data_count;
   //! TPL's estimate of inter cost for each tpl block.
-  int64_t tpl_inter_cost[MAX_MC_FLOW_BLK_IN_SB * MAX_MC_FLOW_BLK_IN_SB];
+  int64_t tpl_inter_cost[MAX_TPL_BLK_IN_SB * MAX_TPL_BLK_IN_SB];
   //! TPL's estimate of tpl cost for each tpl block.
-  int64_t tpl_intra_cost[MAX_MC_FLOW_BLK_IN_SB * MAX_MC_FLOW_BLK_IN_SB];
+  int64_t tpl_intra_cost[MAX_TPL_BLK_IN_SB * MAX_TPL_BLK_IN_SB];
   //! Motion vectors found by TPL model for each tpl block.
-  int_mv tpl_mv[MAX_MC_FLOW_BLK_IN_SB * MAX_MC_FLOW_BLK_IN_SB]
-               [INTER_REFS_PER_FRAME];
+  int_mv tpl_mv[MAX_TPL_BLK_IN_SB * MAX_TPL_BLK_IN_SB][INTER_REFS_PER_FRAME];
   //! TPL's stride for the arrays in this struct.
   int tpl_stride;
   /**@}*/
@@ -299,27 +296,6 @@ typedef struct {
   //! Number of info stored in this record.
   int num;
 } TXB_RD_RECORD;
-
-/*! \brief Simple translation rd_stats for prune_comp_search_by_single_result().
- *
- * This is only used by the rd-path of AV1 realtime.
- */
-typedef struct {
-  //! rd_stats for single_ref single_translation.
-  RD_STATS rd_stats;
-  //! Luma rd_stats for single_ref single_translation.
-  RD_STATS rd_stats_y;
-  //! Chroma rd_stats for single_ref single_translation.
-  RD_STATS rd_stats_uv;
-  //! Txfm skip map of the txfm subblocks.
-  uint8_t blk_skip[MAX_MIB_SIZE * MAX_MIB_SIZE];
-  //! Txfm type map of the txfm subblocks.
-  uint8_t tx_type_map[MAX_MIB_SIZE * MAX_MIB_SIZE];
-  //! Whether to skip the txfm process.
-  uint8_t skip_txfm;
-  //! Whether simple_ref single_trans result decides to prune the mode.
-  uint8_t early_skipped;
-} SimpleRDState;
 
 //! Number of compound rd stats
 #define MAX_COMP_RD_STATS 64
@@ -1078,14 +1054,6 @@ typedef struct macroblock {
   // processing.
   struct inter_modes_info *inter_modes_info;
 
-  /*! \brief Store the cost of single ref simple_translation predictor.
-   *
-   * This is used in another 2-pass approach that tries to prune compound mode
-   * by first doing a simple_translational search on single ref modes. This
-   * however does not have good trade-off so it is only used by real-time mode.
-   */
-  SimpleRDState simple_rd_state[SINGLE_REF_MODES][3];
-
   //! How to blend the compound predictions.
   uint8_t compound_idx;
 
@@ -1164,28 +1132,10 @@ typedef struct macroblock {
   //! SSE of the current predictor.
   unsigned int pred_sse[REF_FRAMES];
   /**@}*/
-
-  /*****************************************************************************
-   * \name Unused
-   ****************************************************************************/
-  /**@{*/
-  //! To be removed.
-  unsigned int simple_motion_pred_sse;
-  /**@}*/
 } MACROBLOCK;
 #undef SINGLE_REF_MODES
 
 /*!\cond */
-
-static INLINE int tpl_blocks_in_sb(BLOCK_SIZE bsize) {
-  switch (bsize) {
-    case BLOCK_64X64: return 16;
-    case BLOCK_128X128: return 64;
-    default: assert(0);
-  }
-  return -1;
-}
-
 static INLINE int is_rect_tx_allowed_bsize(BLOCK_SIZE bsize) {
   static const char LUT[BLOCK_SIZES_ALL] = {
     0,  // BLOCK_4X4

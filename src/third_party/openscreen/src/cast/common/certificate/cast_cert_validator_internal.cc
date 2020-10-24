@@ -10,10 +10,12 @@
 #include <openssl/x509v3.h>
 #include <time.h>
 
+#include <chrono>
 #include <string>
 #include <vector>
 
 #include "cast/common/certificate/types.h"
+#include "util/crypto/pem_helpers.h"
 #include "util/osp_logging.h"
 
 namespace openscreen {
@@ -62,12 +64,27 @@ uint8_t ParseAsn1TimeDoubleDigit(ASN1_GENERALIZEDTIME* time, int index) {
   return (time->data[index] - '0') * 10 + (time->data[index + 1] - '0');
 }
 
+bssl::UniquePtr<BASIC_CONSTRAINTS> GetConstraints(X509* issuer) {
+  const int basic_constraints_index =
+      X509_get_ext_by_NID(issuer, NID_basic_constraints, -1);
+  if (basic_constraints_index == -1) {
+    return nullptr;
+  }
+
+  X509_EXTENSION* const basic_constraints_extension =
+      X509_get_ext(issuer, basic_constraints_index);
+  return bssl::UniquePtr<BASIC_CONSTRAINTS>{
+      reinterpret_cast<BASIC_CONSTRAINTS*>(
+          X509V3_EXT_d2i(basic_constraints_extension))};
+}
+
 Error::Code VerifyCertTime(X509* cert, const DateTime& time) {
   DateTime not_before;
   DateTime not_after;
   if (!GetCertValidTimeRange(cert, &not_before, &not_after)) {
     return Error::Code::kErrCertsVerifyGeneric;
   }
+
   if ((time < not_before) || (not_after < time)) {
     return Error::Code::kErrCertsDateInvalid;
   }
@@ -132,19 +149,11 @@ Error::Code VerifyCertificateChain(const std::vector<CertPathStep>& path,
       }
     }
 
-    // Check that basicConstraints is present, specifies the CA bit, and use
-    // pathLenConstraint if present.
-    const int basic_constraints_index =
-        X509_get_ext_by_NID(issuer, NID_basic_constraints, -1);
-    if (basic_constraints_index == -1) {
-      return Error::Code::kErrCertsVerifyGeneric;
-    }
-    X509_EXTENSION* const basic_constraints_extension =
-        X509_get_ext(issuer, basic_constraints_index);
-    bssl::UniquePtr<BASIC_CONSTRAINTS> basic_constraints{
-        reinterpret_cast<BASIC_CONSTRAINTS*>(
-            X509V3_EXT_d2i(basic_constraints_extension))};
-
+    // Certificates issued by a valid CA authority shall have the
+    // basicConstraints property present with the CA bit set. Self-signed
+    // certificates do not have this property present.
+    bssl::UniquePtr<BASIC_CONSTRAINTS> basic_constraints =
+        GetConstraints(issuer);
     if (!basic_constraints || !basic_constraints->ca) {
       return Error::Code::kErrCertsVerifyGeneric;
     }
@@ -355,6 +364,19 @@ bool GetCertValidTimeRange(X509* cert,
   return times_valid;
 }
 
+// static
+TrustStore TrustStore::CreateInstanceFromPemFile(absl::string_view file_path) {
+  TrustStore store;
+
+  std::vector<std::string> certs = ReadCertificatesFromPemFile(file_path);
+  for (const auto& der_cert : certs) {
+    const uint8_t* data = (const uint8_t*)der_cert.data();
+    store.certs.emplace_back(d2i_X509(nullptr, &data, der_cert.size()));
+  }
+
+  return store;
+}
+
 bool VerifySignedData(const EVP_MD* digest,
                       EVP_PKEY* public_key,
                       const ConstDataSpan& data,
@@ -374,7 +396,7 @@ Error FindCertificatePath(const std::vector<std::string>& der_certs,
                           CertificatePathResult* result_path,
                           TrustStore* trust_store) {
   if (der_certs.empty()) {
-    return Error::Code::kErrCertsMissing;
+    return Error(Error::Code::kErrCertsMissing, "Missing DER certificates");
   }
 
   bssl::UniquePtr<X509>& target_cert = result_path->target_cert;
@@ -500,7 +522,7 @@ Error FindCertificatePath(const std::vector<std::string>& der_certs,
         if (last_error == Error::Code::kNone) {
           OSP_DVLOG << "FindCertificatePath: Failed after trying all "
                        "certificate paths, no matches";
-          return Error::Code::kErrCertsVerifyGeneric;
+          return Error::Code::kErrCertsVerifyUntrustedCert;
         }
         return last_error;
       } else {

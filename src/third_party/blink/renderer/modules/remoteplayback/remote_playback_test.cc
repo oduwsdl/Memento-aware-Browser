@@ -95,7 +95,8 @@ TEST_F(RemotePlaybackTest, PromptCancelledRejectsWithNotAllowedError) {
   EXPECT_CALL(*resolve, Call(testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(testing::_)).Times(1);
 
-  LocalFrame::NotifyUserActivation(&page_holder->GetFrame());
+  LocalFrame::NotifyUserActivation(
+      &page_holder->GetFrame(), mojom::UserActivationNotificationType::kTest);
   remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
   CancelPrompt(remote_playback);
@@ -127,7 +128,8 @@ TEST_F(RemotePlaybackTest, PromptConnectedRejectsWhenCancelled) {
   SetState(remote_playback,
            mojom::blink::PresentationConnectionState::CONNECTED);
 
-  LocalFrame::NotifyUserActivation(&page_holder->GetFrame());
+  LocalFrame::NotifyUserActivation(
+      &page_holder->GetFrame(), mojom::UserActivationNotificationType::kTest);
   remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
   CancelPrompt(remote_playback);
@@ -159,7 +161,8 @@ TEST_F(RemotePlaybackTest, PromptConnectedResolvesWhenDisconnected) {
   SetState(remote_playback,
            mojom::blink::PresentationConnectionState::CONNECTED);
 
-  LocalFrame::NotifyUserActivation(&page_holder->GetFrame());
+  LocalFrame::NotifyUserActivation(
+      &page_holder->GetFrame(), mojom::UserActivationNotificationType::kTest);
   remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
 
@@ -259,7 +262,8 @@ TEST_F(RemotePlaybackTest,
   EXPECT_CALL(*resolve, Call(testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(testing::_)).Times(1);
 
-  LocalFrame::NotifyUserActivation(&page_holder->GetFrame());
+  LocalFrame::NotifyUserActivation(
+      &page_holder->GetFrame(), mojom::UserActivationNotificationType::kTest);
   remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
   HTMLMediaElementRemotePlayback::SetBooleanAttribute(
@@ -315,6 +319,59 @@ TEST_F(RemotePlaybackTest, DisableRemotePlaybackCancelsAvailabilityCallbacks) {
   testing::Mock::VerifyAndClear(callback_function);
 }
 
+TEST_F(RemotePlaybackTest, CallingWatchAvailabilityFromAvailabilityCallback) {
+  V8TestingScope scope;
+
+  auto page_holder = std::make_unique<DummyPageHolder>();
+
+  auto* element =
+      MakeGarbageCollected<HTMLVideoElement>(page_holder->GetDocument());
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
+
+  MockFunction* callback_function =
+      MockFunction::Create(scope.GetScriptState());
+  V8RemotePlaybackAvailabilityCallback* availability_callback =
+      V8RemotePlaybackAvailabilityCallback::Create(callback_function->Bind());
+
+  const int kNumberCallbacks = 10;
+  for (int i = 0; i < kNumberCallbacks; ++i) {
+    remote_playback.watchAvailability(scope.GetScriptState(),
+                                      availability_callback);
+  }
+
+  auto add_callback_lambda = [&]() {
+    remote_playback.watchAvailability(scope.GetScriptState(),
+                                      availability_callback);
+    return blink::ScriptValue::CreateNull(scope.GetScriptState()->GetIsolate());
+  };
+
+  // When the availability changes, we should get exactly kNumberCallbacks
+  // calls, due to the kNumberCallbacks initial current callbacks. The extra
+  // callbacks we are adding should not be executed.
+  EXPECT_CALL(*callback_function, Call(testing::_))
+      .Times(kNumberCallbacks)
+      .WillRepeatedly(testing::InvokeWithoutArgs(add_callback_lambda));
+
+  remote_playback.AvailabilityChangedForTesting(true);
+
+  v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
+  testing::Mock::VerifyAndClear(callback_function);
+
+  // We now have twice as many callbacks as we started with, and should get
+  // twice as many calls, but no more.
+  EXPECT_CALL(*callback_function, Call(testing::_))
+      .Times(kNumberCallbacks * 2)
+      .WillRepeatedly(testing::InvokeWithoutArgs(add_callback_lambda));
+
+  remote_playback.AvailabilityChangedForTesting(false);
+
+  v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
+
+  // Verify mock expectations explicitly as the mock objects are garbage
+  // collected.
+  testing::Mock::VerifyAndClear(callback_function);
+}
+
 TEST_F(RemotePlaybackTest, PromptThrowsWhenBackendDisabled) {
   ScopedRemotePlaybackBackendForTest remote_playback_backend(false);
   V8TestingScope scope;
@@ -331,7 +388,8 @@ TEST_F(RemotePlaybackTest, PromptThrowsWhenBackendDisabled) {
   EXPECT_CALL(*resolve, Call(testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(testing::_)).Times(1);
 
-  LocalFrame::NotifyUserActivation(&page_holder->GetFrame());
+  LocalFrame::NotifyUserActivation(
+      &page_holder->GetFrame(), mojom::UserActivationNotificationType::kTest);
   remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
 

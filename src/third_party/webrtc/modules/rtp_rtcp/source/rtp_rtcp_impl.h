@@ -33,8 +33,8 @@
 #include "modules/rtp_rtcp/source/rtp_packet_history.h"
 #include "modules/rtp_rtcp/source/rtp_packet_to_send.h"
 #include "modules/rtp_rtcp/source/rtp_sender.h"
-#include "rtc_base/critical_section.h"
 #include "rtc_base/gtest_prod_util.h"
+#include "rtc_base/synchronization/mutex.h"
 
 namespace webrtc {
 
@@ -138,6 +138,11 @@ class ModuleRtpRtcpImpl : public RtpRtcp, public RTCPReceiver::ModuleRtpRtcp {
 
   bool TrySendPacket(RtpPacketToSend* packet,
                      const PacedPacketInfo& pacing_info) override;
+
+  void SetFecProtectionParams(const FecProtectionParams& delta_params,
+                              const FecProtectionParams& key_params) override;
+
+  std::vector<std::unique_ptr<RtpPacketToSend>> FetchFecPackets() override;
 
   void OnPacketsAcknowledged(
       rtc::ArrayView<const uint16_t> sequence_numbers) override;
@@ -259,11 +264,6 @@ class ModuleRtpRtcpImpl : public RtpRtcp, public RTCPReceiver::ModuleRtpRtcp {
                        uint32_t* NTPfrac,
                        uint32_t* remote_sr) const;
 
-  void BitrateSent(uint32_t* total_rate,
-                   uint32_t* video_rate,
-                   uint32_t* fec_rate,
-                   uint32_t* nackRate) const override;
-
   RtpSendRates GetSendRates() const override;
 
   void OnReceivedNack(
@@ -347,7 +347,7 @@ class ModuleRtpRtcpImpl : public RtpRtcp, public RTCPReceiver::ModuleRtpRtcp {
   RtcpRttStats* const rtt_stats_;
 
   // The processed RTT from RtcpRttStats.
-  rtc::CriticalSection critical_section_rtt_;
+  mutable Mutex mutex_rtt_;
   int64_t rtt_ms_;
 };
 

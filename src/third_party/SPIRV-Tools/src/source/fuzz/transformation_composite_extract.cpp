@@ -29,7 +29,8 @@ TransformationCompositeExtract::TransformationCompositeExtract(
 
 TransformationCompositeExtract::TransformationCompositeExtract(
     const protobufs::InstructionDescriptor& instruction_to_insert_before,
-    uint32_t fresh_id, uint32_t composite_id, std::vector<uint32_t>&& index) {
+    uint32_t fresh_id, uint32_t composite_id,
+    const std::vector<uint32_t>& index) {
   *message_.mutable_instruction_to_insert_before() =
       instruction_to_insert_before;
   message_.set_fresh_id(fresh_id);
@@ -103,25 +104,48 @@ void TransformationCompositeExtract::Apply(
   ir_context->InvalidateAnalysesExceptFor(
       opt::IRContext::Analysis::kAnalysisNone);
 
-  // Add the fact that the id storing the extracted element is synonymous with
-  // the index into the structure.
-  std::vector<uint32_t> indices;
-  for (auto an_index : message_.index()) {
-    indices.push_back(an_index);
-  }
-  protobufs::DataDescriptor data_descriptor_for_extracted_element =
-      MakeDataDescriptor(message_.composite_id(), std::move(indices));
-  protobufs::DataDescriptor data_descriptor_for_result_id =
-      MakeDataDescriptor(message_.fresh_id(), {});
-  transformation_context->GetFactManager()->AddFactDataSynonym(
-      data_descriptor_for_extracted_element, data_descriptor_for_result_id,
-      ir_context);
+  AddDataSynonymFacts(ir_context, transformation_context);
 }
 
 protobufs::Transformation TransformationCompositeExtract::ToMessage() const {
   protobufs::Transformation result;
   *result.mutable_composite_extract() = message_;
   return result;
+}
+
+std::unordered_set<uint32_t> TransformationCompositeExtract::GetFreshIds()
+    const {
+  return {message_.fresh_id()};
+}
+
+void TransformationCompositeExtract::AddDataSynonymFacts(
+    opt::IRContext* ir_context,
+    TransformationContext* transformation_context) const {
+  // Don't add synonyms if the composite being extracted from is not suitable,
+  // or if the result id into which we are extracting is irrelevant.
+  if (!fuzzerutil::CanMakeSynonymOf(
+          ir_context, *transformation_context,
+          ir_context->get_def_use_mgr()->GetDef(message_.composite_id())) ||
+      transformation_context->GetFactManager()->IdIsIrrelevant(
+          message_.fresh_id())) {
+    return;
+  }
+
+  // Add the fact that the id storing the extracted element is synonymous with
+  // the index into the structure.
+  if (!transformation_context->GetFactManager()->IdIsIrrelevant(
+          message_.composite_id())) {
+    std::vector<uint32_t> indices;
+    for (auto an_index : message_.index()) {
+      indices.push_back(an_index);
+    }
+    protobufs::DataDescriptor data_descriptor_for_extracted_element =
+        MakeDataDescriptor(message_.composite_id(), indices);
+    protobufs::DataDescriptor data_descriptor_for_result_id =
+        MakeDataDescriptor(message_.fresh_id(), {});
+    transformation_context->GetFactManager()->AddFactDataSynonym(
+        data_descriptor_for_extracted_element, data_descriptor_for_result_id);
+  }
 }
 
 }  // namespace fuzz

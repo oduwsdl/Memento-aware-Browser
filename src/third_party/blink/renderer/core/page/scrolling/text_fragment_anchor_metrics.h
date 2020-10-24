@@ -40,7 +40,18 @@ class CORE_EXPORT TextFragmentAnchorMetrics final
     kMaxValue = kTextRangeWithContext,
   };
 
+  // Update corresponding |TextFragmentLinkOpenSource| in enums.xml.
+  enum class TextFragmentLinkOpenSource {
+    kUnknown,
+    kSearchEngine,
+
+    kMaxValue = kSearchEngine,
+  };
+
   explicit TextFragmentAnchorMetrics(Document* document);
+
+  static TextFragmentAnchorParameters GetParametersForSelector(
+      const TextFragmentSelector& selector);
 
   void DidCreateAnchor(int selector_count, int directive_length);
 
@@ -65,11 +76,11 @@ class CORE_EXPORT TextFragmentAnchorMetrics final
 
   void SetTickClockForTesting(const base::TickClock* tick_clock);
 
+  void SetSearchEngineSource(bool has_search_engine_source);
+
   void Trace(Visitor*) const;
 
  private:
-  TextFragmentAnchorParameters GetParametersForMatch(const Match& match);
-
   Member<Document> document_;
 
 #ifndef NDEBUG
@@ -85,6 +96,7 @@ class CORE_EXPORT TextFragmentAnchorMetrics final
   base::TimeTicks first_scroll_into_view_time_;
   bool did_non_zero_scroll_ = false;
   bool did_scroll_to_top_ = false;
+  bool has_search_engine_source_ = false;
 
   const base::TickClock* tick_clock_;
 };

@@ -205,7 +205,7 @@ protected:
     }
 
 private:
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -301,11 +301,14 @@ DEF_SIMPLE_GM(vertices_data, canvas, 512, 256) {
         SkPaint paint;
         const char* gProg = R"(
             varying float4 vtx_color;
-            void main(float2 p, inout half4 color) {
-                color = half4(vtx_color);
+            half4 main(float2 p) {
+                return vtx_color;
             }
         )";
         auto[effect, errorText] = SkRuntimeEffect::Make(SkString(gProg));
+        if (!effect) {
+            SK_ABORT("RuntimeEffect error: %s\n", errorText.c_str());
+        }
         paint.setShader(effect->makeShader(nullptr, nullptr, 0, nullptr, true));
         canvas->drawVertices(builder.detach(), paint);
         canvas->translate(r.width(), 0);
@@ -377,10 +380,10 @@ DEF_SIMPLE_GM(vertices_data_lerp, canvas, 256, 256) {
         in shader c0;
         in shader c1;
         varying float vtx_lerp;
-        void main(float2 p, inout half4 color) {
+        half4 main(float2 p) {
             half4 col0 = sample(c0, p);
             half4 col1 = sample(c1, p);
-            color = mix(col0, col1, half(vtx_lerp));
+            return mix(col0, col1, vtx_lerp);
         }
     )";
     auto [effect, errorText] = SkRuntimeEffect::Make(SkString(gProg));
@@ -458,8 +461,8 @@ DEF_SIMPLE_GM(vertices_custom_colors, canvas, 400, 200) {
 
     const char* gProg = R"(
         varying half4 vtx_color;
-        void main(float2 p, inout half4 color) {
-            color = vtx_color;
+        half4 main(float2 p) {
+            return vtx_color;
         }
     )";
     SkPaint skslPaint;
@@ -524,8 +527,8 @@ static sk_sp<SkVertices> make_cone(Attr::Usage u, const char* markerName) {
     // +1 for the center, +1 to repeat the first perimeter point (so we draw a complete circle)
     constexpr int kNumVerts = kPerimeterVerts + 2;
 
-    SkVertices::Builder builder(SkVertices::kTriangleFan_VertexMode, kNumVerts, /*index_count=*/ 0,
-                                &attr, /*attr_count=*/ 1);
+    SkVertices::Builder builder(SkVertices::kTriangleFan_VertexMode, kNumVerts, /*indexCount=*/0,
+                                &attr, /*attrCount=*/1);
 
     SkPoint* pos = builder.positions();
     SkPoint3* vec = static_cast<SkPoint3*>(builder.customData());
@@ -580,8 +583,8 @@ DEF_SIMPLE_GM(vertices_custom_matrices, canvas, 400, 400) {
 
     const char* vectorProg = R"(
         varying float3 vtx_vec;
-        void main(float2 p, inout half4 color) {
-            color.rgb = half3(vtx_vec) * 0.5 + 0.5;
+        half4 main(float2 p) {
+            return (vtx_vec * 0.5 + 0.5).rgb1;
         })";
 
     // raw, local vectors, normals, and positions should all look the same (no real transform)
@@ -610,16 +613,16 @@ DEF_SIMPLE_GM(vertices_custom_matrices, canvas, 400, 400) {
 
     const char* ctmPositionProg250 = R"(
         varying float3 vtx_pos;
-        void main(float2 p, inout half4 color) {
-            color.rgb = (half3(vtx_pos) - half3(250, 350, 0)) / 50 + 0.5;
+        half4 main(float2 p) {
+            return ((vtx_pos - float3(250, 350, 0)) / 50 + 0.5).rgb1;
         }
     )";
     draw(250, 350, make_cone(Attr::Usage::kPosition, nullptr), ctmPositionProg250, 0.5f);
 
     const char* ctmPositionProg350 = R"(
         varying float3 vtx_pos;
-        void main(float2 p, inout half4 color) {
-            color.rgb = (half3(vtx_pos) - half3(350, 350, 0)) / 50 + 0.5;
+        half4 main(float2 p) {
+            return ((vtx_pos - float3(350, 350, 0)) / 50 + 0.5).rgb1;
         }
     )";
     canvas->saveLayer({ 300, 300, 400, 400 }, nullptr);

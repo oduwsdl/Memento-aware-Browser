@@ -15,7 +15,6 @@
 #include "dawn_wire/client/Device.h"
 
 #include "common/Assert.h"
-#include "dawn_wire/WireCmd_autogen.h"
 #include "dawn_wire/client/ApiObjects_autogen.h"
 #include "dawn_wire/client/Client.h"
 #include "dawn_wire/client/ObjectAllocator.h"
@@ -31,7 +30,7 @@ namespace dawn_wire { namespace client {
         mDefaultQueue = allocation->object.get();
 
         DeviceGetDefaultQueueCmd cmd;
-        cmd.self = reinterpret_cast<WGPUDevice>(this);
+        cmd.self = ToAPI(this);
         cmd.result = ObjectHandle{allocation->object->id, allocation->generation};
 
         mClient->SerializeCommand(cmd);
@@ -42,6 +41,20 @@ namespace dawn_wire { namespace client {
         auto errorScopes = std::move(mErrorScopes);
         for (const auto& it : errorScopes) {
             it.second.callback(WGPUErrorType_Unknown, "Device destroyed", it.second.userdata);
+        }
+
+        auto createReadyPipelineRequests = std::move(mCreateReadyPipelineRequests);
+        for (const auto& it : createReadyPipelineRequests) {
+            if (it.second.createReadyComputePipelineCallback != nullptr) {
+                it.second.createReadyComputePipelineCallback(WGPUCreateReadyPipelineStatus_Unknown,
+                                                             nullptr, "Device destroyed",
+                                                             it.second.userdata);
+            } else {
+                ASSERT(it.second.createReadyRenderPipelineCallback != nullptr);
+                it.second.createReadyRenderPipelineCallback(WGPUCreateReadyPipelineStatus_Unknown,
+                                                            nullptr, "Device destroyed",
+                                                            it.second.userdata);
+            }
         }
 
         // Destroy the default queue
@@ -85,13 +98,13 @@ namespace dawn_wire { namespace client {
         mErrorScopeStackSize++;
 
         DevicePushErrorScopeCmd cmd;
-        cmd.self = reinterpret_cast<WGPUDevice>(this);
+        cmd.self = ToAPI(this);
         cmd.filter = filter;
 
         mClient->SerializeCommand(cmd);
     }
 
-    bool Device::RequestPopErrorScope(WGPUErrorCallback callback, void* userdata) {
+    bool Device::PopErrorScope(WGPUErrorCallback callback, void* userdata) {
         if (mErrorScopeStackSize == 0) {
             return false;
         }
@@ -103,7 +116,7 @@ namespace dawn_wire { namespace client {
         mErrorScopes[serial] = {callback, userdata};
 
         DevicePopErrorScopeCmd cmd;
-        cmd.device = reinterpret_cast<WGPUDevice>(this);
+        cmd.device = ToAPI(this);
         cmd.requestSerial = serial;
 
         mClient->SerializeCommand(cmd);
@@ -111,7 +124,9 @@ namespace dawn_wire { namespace client {
         return true;
     }
 
-    bool Device::PopErrorScope(uint64_t requestSerial, WGPUErrorType type, const char* message) {
+    bool Device::OnPopErrorScopeCallback(uint64_t requestSerial,
+                                         WGPUErrorType type,
+                                         const char* message) {
         switch (type) {
             case WGPUErrorType_NoError:
             case WGPUErrorType_Validation:
@@ -135,9 +150,126 @@ namespace dawn_wire { namespace client {
         return true;
     }
 
-    WGPUQueue Device::GetDefaultQueue() {
-        mDefaultQueue->refcount++;
-        return reinterpret_cast<WGPUQueue>(mDefaultQueue);
+    void Device::InjectError(WGPUErrorType type, const char* message) {
+        DeviceInjectErrorCmd cmd;
+        cmd.self = ToAPI(this);
+        cmd.type = type;
+        cmd.message = message;
+        mClient->SerializeCommand(cmd);
     }
 
+    WGPUBuffer Device::CreateBuffer(const WGPUBufferDescriptor* descriptor) {
+        return Buffer::Create(this, descriptor);
+    }
+
+    WGPUBuffer Device::CreateErrorBuffer() {
+        return Buffer::CreateError(this);
+    }
+
+    WGPUQueue Device::GetDefaultQueue() {
+        mDefaultQueue->refcount++;
+        return ToAPI(mDefaultQueue);
+    }
+
+    void Device::CreateReadyComputePipeline(WGPUComputePipelineDescriptor const* descriptor,
+                                            WGPUCreateReadyComputePipelineCallback callback,
+                                            void* userdata) {
+        DeviceCreateReadyComputePipelineCmd cmd;
+        cmd.device = ToAPI(this);
+        cmd.descriptor = descriptor;
+
+        uint64_t serial = mCreateReadyPipelineRequestSerial++;
+        ASSERT(mCreateReadyPipelineRequests.find(serial) == mCreateReadyPipelineRequests.end());
+        cmd.requestSerial = serial;
+
+        auto* allocation = GetClient()->ComputePipelineAllocator().New(this);
+        CreateReadyPipelineRequest request = {};
+        request.createReadyComputePipelineCallback = callback;
+        request.userdata = userdata;
+        request.pipelineObjectID = allocation->object->id;
+
+        cmd.pipelineObjectHandle = ObjectHandle{allocation->object->id, allocation->generation};
+        GetClient()->SerializeCommand(cmd);
+
+        mCreateReadyPipelineRequests[serial] = std::move(request);
+    }
+
+    bool Device::OnCreateReadyComputePipelineCallback(uint64_t requestSerial,
+                                                      WGPUCreateReadyPipelineStatus status,
+                                                      const char* message) {
+        const auto& requestIt = mCreateReadyPipelineRequests.find(requestSerial);
+        if (requestIt == mCreateReadyPipelineRequests.end()) {
+            return false;
+        }
+
+        CreateReadyPipelineRequest request = std::move(requestIt->second);
+        mCreateReadyPipelineRequests.erase(requestIt);
+
+        auto pipelineAllocation =
+            GetClient()->ComputePipelineAllocator().GetObject(request.pipelineObjectID);
+
+        // If the return status is a failure we should give a null pipeline to the callback and
+        // free the allocation both on the client side and the server side.
+        if (status != WGPUCreateReadyPipelineStatus_Success) {
+            GetClient()->ComputePipelineAllocator().Free(pipelineAllocation);
+            request.createReadyComputePipelineCallback(status, nullptr, message, request.userdata);
+            return true;
+        }
+
+        WGPUComputePipeline pipeline = reinterpret_cast<WGPUComputePipeline>(pipelineAllocation);
+        request.createReadyComputePipelineCallback(status, pipeline, message, request.userdata);
+
+        return true;
+    }
+
+    void Device::CreateReadyRenderPipeline(WGPURenderPipelineDescriptor const* descriptor,
+                                           WGPUCreateReadyRenderPipelineCallback callback,
+                                           void* userdata) {
+        DeviceCreateReadyRenderPipelineCmd cmd;
+        cmd.device = ToAPI(this);
+        cmd.descriptor = descriptor;
+
+        uint64_t serial = mCreateReadyPipelineRequestSerial++;
+        ASSERT(mCreateReadyPipelineRequests.find(serial) == mCreateReadyPipelineRequests.end());
+        cmd.requestSerial = serial;
+
+        auto* allocation = GetClient()->RenderPipelineAllocator().New(this);
+        CreateReadyPipelineRequest request = {};
+        request.createReadyRenderPipelineCallback = callback;
+        request.userdata = userdata;
+        request.pipelineObjectID = allocation->object->id;
+
+        cmd.pipelineObjectHandle = ObjectHandle(allocation->object->id, allocation->generation);
+        GetClient()->SerializeCommand(cmd);
+
+        mCreateReadyPipelineRequests[serial] = std::move(request);
+    }
+
+    bool Device::OnCreateReadyRenderPipelineCallback(uint64_t requestSerial,
+                                                     WGPUCreateReadyPipelineStatus status,
+                                                     const char* message) {
+        const auto& requestIt = mCreateReadyPipelineRequests.find(requestSerial);
+        if (requestIt == mCreateReadyPipelineRequests.end()) {
+            return false;
+        }
+
+        CreateReadyPipelineRequest request = std::move(requestIt->second);
+        mCreateReadyPipelineRequests.erase(requestIt);
+
+        auto pipelineAllocation =
+            GetClient()->RenderPipelineAllocator().GetObject(request.pipelineObjectID);
+
+        // If the return status is a failure we should give a null pipeline to the callback and
+        // free the allocation both on the client side and the server side.
+        if (status != WGPUCreateReadyPipelineStatus_Success) {
+            GetClient()->RenderPipelineAllocator().Free(pipelineAllocation);
+            request.createReadyRenderPipelineCallback(status, nullptr, message, request.userdata);
+            return true;
+        }
+
+        WGPURenderPipeline pipeline = reinterpret_cast<WGPURenderPipeline>(pipelineAllocation);
+        request.createReadyRenderPipelineCallback(status, pipeline, message, request.userdata);
+
+        return true;
+    }
 }}  // namespace dawn_wire::client

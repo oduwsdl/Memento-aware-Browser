@@ -101,8 +101,7 @@ static void fuzzer_release_tmpfile(char* filename) {
 class FuzzerTemporaryFile {
  public:
   FuzzerTemporaryFile(const uint8_t* data, size_t size)
-      : original_filename_(
-            fuzzer_get_tmpfile_with_suffix(data, size, nullptr)) {  // NOLINT
+      : original_filename_(fuzzer_get_tmpfile(data, size)) {
     filename_ = strdup(original_filename_);
     if (!filename_) {
       perror("Failed to allocate file name copy.");

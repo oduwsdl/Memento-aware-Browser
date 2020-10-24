@@ -17,9 +17,9 @@
     "inspector_main",
     "sdk",
     "services",
-    "ui"
+    "ui",
+    "theme_support"
   ],
-  "scripts": [],
   "modules": [
     "../third_party/lighthouse/report-assets/report.js",
     "../third_party/lighthouse/report-assets/report-generator.js",

@@ -112,9 +112,9 @@ FrameSelection::FrameSelection(LocalFrame& frame)
 
 FrameSelection::~FrameSelection() = default;
 
-const DisplayItemClient& FrameSelection::CaretDisplayItemClientForTesting()
+const CaretDisplayItemClient& FrameSelection::CaretDisplayItemClientForTesting()
     const {
-  return frame_caret_->GetDisplayItemClient();
+  return frame_caret_->CaretDisplayItemClientForTesting();
 }
 
 bool FrameSelection::IsAvailable() const {
@@ -160,10 +160,6 @@ VisibleSelection FrameSelection::ComputeVisibleSelectionInDOMTreeDeprecated()
   // to caller. See http://crbug.com/590369 for more details.
   GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kSelection);
   return ComputeVisibleSelectionInDOMTree();
-}
-
-VisibleSelectionInFlatTree FrameSelection::GetSelectionInFlatTree() const {
-  return ComputeVisibleSelectionInFlatTree();
 }
 
 void FrameSelection::MoveCaretSelection(const IntPoint& point) {
@@ -351,6 +347,17 @@ void FrameSelection::DidSetSelectionDeprecated(
   frame_->DomWindow()->EnqueueDocumentEvent(
       *Event::Create(event_type_names::kSelectionchange),
       TaskType::kMiscPlatformAPI);
+}
+
+void FrameSelection::SetSelectionForAccessibility(
+    const SelectionInDOMTree& selection,
+    const SetSelectionOptions& options) {
+  ClearDocumentCachedRange();
+
+  const bool did_set = SetSelectionDeprecated(selection, options);
+  CacheRangeOfDocument(CreateRange(selection.ComputeRange()));
+  if (did_set)
+    DidSetSelectionDeprecated(selection, options);
 }
 
 void FrameSelection::NodeChildrenWillBeRemoved(ContainerNode& container) {
@@ -547,10 +554,6 @@ void FrameSelection::ContextDestroyed() {
   layout_selection_->ContextDestroyed();
 
   frame_->GetEditor().ClearTypingStyle();
-}
-
-void FrameSelection::ClearPreviousCaretVisualRect(const LayoutBlock& block) {
-  frame_caret_->ClearPreviousVisualRect(block);
 }
 
 void FrameSelection::LayoutBlockWillBeDestroyed(const LayoutBlock& block) {
@@ -871,9 +874,7 @@ void FrameSelection::FocusedOrActiveStateChanged() {
   // Caret appears in the active frame.
   if (active_and_focused)
     SetSelectionFromNone();
-  frame_caret_->SetCaretVisibility(active_and_focused
-                                       ? CaretVisibility::kVisible
-                                       : CaretVisibility::kHidden);
+  frame_caret_->SetCaretEnabled(active_and_focused);
 
   // Update for caps lock state
   frame_->GetEventHandler().CapsLockStateMayHaveChanged();
@@ -1022,7 +1023,6 @@ PhysicalRect FrameSelection::AbsoluteUnclippedBounds() const {
   if (!view || !layout_view)
     return PhysicalRect();
 
-  view->UpdateLifecycleToLayoutClean(DocumentUpdateReason::kSelection);
   return PhysicalRect(layout_selection_->AbsoluteSelectionBounds());
 }
 
@@ -1266,9 +1266,8 @@ void FrameSelection::MoveRangeSelectionInternal(
                                     .Build());
 }
 
-void FrameSelection::SetCaretVisible(bool caret_is_visible) {
-  frame_caret_->SetCaretVisibility(caret_is_visible ? CaretVisibility::kVisible
-                                                    : CaretVisibility::kHidden);
+void FrameSelection::SetCaretEnabled(bool enabled) {
+  frame_caret_->SetCaretEnabled(enabled);
 }
 
 void FrameSelection::SetCaretBlinkingSuspended(bool suspended) {

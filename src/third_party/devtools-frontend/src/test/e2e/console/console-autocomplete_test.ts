@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {beforeEach, describe, it} from 'mocha';
 import {click, getBrowserAndPages, typeText, waitFor, waitForNone} from '../../shared/helper.js';
+import {beforeEach, describe, it} from '../../shared/mocha-extensions.js';
 import {CONSOLE_TAB_SELECTOR, focusConsolePrompt} from '../helpers/console-helpers.js';
 
 describe('The Console Tab', async () => {
@@ -34,20 +34,23 @@ describe('The Console Tab', async () => {
     await frontend.keyboard.press('Escape');
     await disappearPromise;
 
-    const appearPromise2 = waitFor('.suggest-box', undefined, 1000);
+    const appearPromise2 = waitFor('.suggest-box');
     await typeText(textAfterObject);
     await appearPromise2;
   }
 
-  it('triggers autocompletion for `object.`', async () => {
+  // Flaky test
+  it.skip('[crbug.com/1134579] triggers autocompletion for `object.`', async () => {
     await objectAutocompleteTest('.');
   });
 
-  it('triggers autocompletion for `object?.`', async () => {
+  // Flaky test
+  it.skip('[crbug.com/1134579] triggers autocompletion for `object?.`', async () => {
     await objectAutocompleteTest('?.');
   });
 
-  it('triggers autocompletion for `object[`', async () => {
+  // Flaky test
+  it.skip('[crbug.com/1134579] triggers autocompletion for `object[`', async () => {
     await objectAutocompleteTest('[');
   });
 });

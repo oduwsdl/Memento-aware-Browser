@@ -440,7 +440,7 @@ bool LockManager::AllowLocks(ScriptState* script_state) {
   if (!cached_allowed_.has_value()) {
     ExecutionContext* execution_context = ExecutionContext::From(script_state);
     DCHECK(execution_context->IsContextThread());
-    SECURITY_DCHECK(execution_context->IsDocument() ||
+    SECURITY_DCHECK(execution_context->IsWindow() ||
                     execution_context->IsWorkerGlobalScope());
     if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
       LocalFrame* frame = window->GetFrame();
@@ -448,7 +448,8 @@ bool LockManager::AllowLocks(ScriptState* script_state) {
         cached_allowed_ = false;
       } else if (auto* settings_client = frame->GetContentSettingsClient()) {
         // This triggers a sync IPC.
-        cached_allowed_ = settings_client->AllowWebLocks();
+        cached_allowed_ = settings_client->AllowStorageAccessSync(
+            WebContentSettingsClient::StorageType::kWebLocks);
       } else {
         cached_allowed_ = true;
       }
@@ -459,7 +460,8 @@ bool LockManager::AllowLocks(ScriptState* script_state) {
         cached_allowed_ = true;
       } else {
         // This triggers a sync IPC.
-        cached_allowed_ = content_settings_client->AllowWebLocks();
+        cached_allowed_ = content_settings_client->AllowStorageAccessSync(
+            WebContentSettingsClient::StorageType::kWebLocks);
       }
     }
   }

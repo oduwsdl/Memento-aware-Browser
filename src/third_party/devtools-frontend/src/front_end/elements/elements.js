@@ -7,7 +7,6 @@ import './ColorSwatchPopoverIcon.js';
 import './ComputedStyleModel.js';
 import './DOMLinkifier.js';
 import './DOMPath.js';
-import './ElementsBreadcrumbs.js';
 import './ElementsSidebarPane.js';
 import './ElementsTreeElement.js';
 import './ElementsTreeOutline.js';
@@ -33,15 +32,17 @@ import * as ComputedStyleModel from './ComputedStyleModel.js';
 import * as ComputedStyleWidget from './ComputedStyleWidget.js';
 import * as DOMLinkifier from './DOMLinkifier.js';
 import * as DOMPath from './DOMPath.js';
-import * as ElementsBreadcrumbs from './ElementsBreadcrumbs.js';
 import * as ElementsPanel from './ElementsPanel.js';
+import * as ElementsPanelLink from './ElementsPanelLink_bridge.js';
 import * as ElementsSidebarPane from './ElementsSidebarPane.js';
 import * as ElementStatePaneWidget from './ElementStatePaneWidget.js';
 import * as ElementsTreeElement from './ElementsTreeElement.js';
 import * as ElementsTreeElementHighlighter from './ElementsTreeElementHighlighter.js';
 import * as ElementsTreeOutline from './ElementsTreeOutline.js';
 import * as EventListenersWidget from './EventListenersWidget.js';
+import * as Icon from './Icon_bridge.js';
 import * as InspectElementModeController from './InspectElementModeController.js';
+import * as LayoutSidebarPane from './LayoutSidebarPane.js';
 import * as MarkerDecorator from './MarkerDecorator.js';
 import * as MetricsSidebarPane from './MetricsSidebarPane.js';
 import * as NodeStackTraceWidget from './NodeStackTraceWidget.js';
@@ -59,15 +60,17 @@ export {
   ComputedStyleWidget,
   DOMLinkifier,
   DOMPath,
-  ElementsBreadcrumbs,
   ElementsPanel,
+  ElementsPanelLink,
   ElementsSidebarPane,
   ElementStatePaneWidget,
   ElementsTreeElement,
   ElementsTreeElementHighlighter,
   ElementsTreeOutline,
   EventListenersWidget,
+  Icon,
   InspectElementModeController,
+  LayoutSidebarPane,
   MarkerDecorator,
   MetricsSidebarPane,
   NodeStackTraceWidget,

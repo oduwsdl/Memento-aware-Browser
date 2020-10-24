@@ -49,7 +49,6 @@ class TransformFeedbackVk : public TransformFeedbackImpl
                                    vk::DescriptorSetLayoutDesc *descSetLayoutOut) const;
     void initDescriptorSet(ContextVk *contextVk,
                            size_t xfbBufferCount,
-                           vk::BufferHelper *emptyBuffer,
                            VkDescriptorSet descSet) const;
     void updateDescriptorSet(ContextVk *contextVk,
                              const gl::ProgramState &programState,
@@ -91,11 +90,15 @@ class TransformFeedbackVk : public TransformFeedbackImpl
         return mCounterBufferHandles;
     }
 
+    vk::UniformsAndXfbDesc &getTransformFeedbackDesc() { return mXFBBuffersDesc; }
+
   private:
     void writeDescriptorSet(ContextVk *contextVk,
                             size_t xfbBufferCount,
                             VkDescriptorBufferInfo *pBufferInfo,
                             VkDescriptorSet descSet) const;
+
+    void initializeXFBBuffersDesc(ContextVk *contextVk, size_t xfbBufferCount);
 
     // This member variable is set when glBindTransformFeedbackBuffers/glBeginTransformFeedback
     // is called and unset in dirty bit handler for transform feedback state change. If this
@@ -114,6 +117,9 @@ class TransformFeedbackVk : public TransformFeedbackImpl
     // Counter buffer used for pause and resume.
     gl::TransformFeedbackBuffersArray<vk::BufferHelper> mCounterBufferHelpers;
     gl::TransformFeedbackBuffersArray<VkBuffer> mCounterBufferHandles;
+
+    // Keys to look up in the descriptor set cache
+    vk::UniformsAndXfbDesc mXFBBuffersDesc;
 };
 
 }  // namespace rx

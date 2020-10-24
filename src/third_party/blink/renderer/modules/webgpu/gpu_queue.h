@@ -11,7 +11,6 @@
 
 namespace blink {
 
-class CanvasColorParams;
 class DawnTextureFromImageBitmap;
 class ExceptionState;
 class GPUBuffer;
@@ -20,6 +19,7 @@ class GPUFence;
 class GPUFenceDescriptor;
 class GPUImageBitmapCopyView;
 class GPUTextureCopyView;
+class GPUTextureDataLayout;
 class StaticBitmapImage;
 class UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict;
 
@@ -56,14 +56,18 @@ class GPUQueue : public DawnObject<WGPUQueue> {
                    uint64_t data_byte_offset,
                    uint64_t byte_size,
                    ExceptionState& exception_state);
-  void WriteBufferImpl(GPUBuffer* buffer,
-                       uint64_t buffer_offset,
-                       uint64_t data_byte_length,
-                       const void* data_base_ptr,
-                       unsigned data_bytes_per_element,
-                       uint64_t data_byte_offset,
-                       base::Optional<uint64_t> byte_size,
-                       ExceptionState& exception_state);
+  void writeTexture(
+      GPUTextureCopyView* destination,
+      const MaybeShared<DOMArrayBufferView>& data,
+      GPUTextureDataLayout* data_layout,
+      UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
+      ExceptionState& exception_state);
+  void writeTexture(
+      GPUTextureCopyView* destination,
+      const DOMArrayBufferBase* data,
+      GPUTextureDataLayout* data_layout,
+      UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
+      ExceptionState& exception_state);
   void copyImageBitmapToTexture(
       GPUImageBitmapCopyView* source,
       GPUTextureCopyView* destination,
@@ -72,7 +76,6 @@ class GPUQueue : public DawnObject<WGPUQueue> {
 
  private:
   bool CopyContentFromCPU(StaticBitmapImage* image,
-                          const CanvasColorParams& color_params,
                           const WGPUOrigin3D& origin,
                           const WGPUExtent3D& copy_size,
                           const WGPUTextureCopyView& destination,
@@ -81,6 +84,21 @@ class GPUQueue : public DawnObject<WGPUQueue> {
                           const WGPUOrigin3D& origin,
                           const WGPUExtent3D& copy_size,
                           const WGPUTextureCopyView& destination);
+  void WriteBufferImpl(GPUBuffer* buffer,
+                       uint64_t buffer_offset,
+                       uint64_t data_byte_length,
+                       const void* data_base_ptr,
+                       unsigned data_bytes_per_element,
+                       uint64_t data_byte_offset,
+                       base::Optional<uint64_t> byte_size,
+                       ExceptionState& exception_state);
+  void WriteTextureImpl(
+      GPUTextureCopyView* destination,
+      const void* data,
+      size_t dataSize,
+      GPUTextureDataLayout* data_layout,
+      UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
+      ExceptionState& exception_state);
 
   scoped_refptr<DawnTextureFromImageBitmap> produce_dawn_texture_handler_;
 

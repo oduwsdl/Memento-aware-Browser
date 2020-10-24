@@ -226,7 +226,7 @@ avifImage * image = avifImageCreate(width, height, depth, format);
 // matrixCoefficients to indicate how you would like YUV<->RGB conversion to be done.
 image->colorPrimaries = AVIF_COLOR_PRIMARIES_BT709;
 image->transferCharacteristics = AVIF_TRANSFER_CHARACTERISTICS_SRGB;
-image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT709;
+image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT601;
 image->yuvRange = AVIF_RANGE_FULL;
 
 // Option 1: Populate YUV planes
@@ -235,25 +235,26 @@ avifImageAllocatePlanes(image, AVIF_PLANES_YUV);
 ... image->yuvRowBytes;
 
 // Option 2: Convert from interleaved RGB(A)/BGR(A) using a libavif-allocated buffer.
-uint32_t rgbDepth = ...;                        // [8, 10, 12, 16]; Does not need to match image->depth.
-                                                // If >8, rgb->pixels is uint16_t*
-avifRGBFormat rgbFormat = AVIF_RGB_FORMAT_RGBA; // See choices in avif.h
-avifRGBImage * rgb = avifRGBImageCreate(image->width, image->height, rgbDepth, rgbFormat);
+avifRGBImage rgb;
+avifRGBImageSetDefaults(&rgb, image);
+rgb.depth = ...;   // [8, 10, 12, 16]; Does not need to match image->depth.
+                   // If >8, rgb->pixels is uint16_t*
+rgb.format = ...;  // See choices in avif.h
+avifRGBImageAllocatePixels(&rgb);
 ... rgb->pixels;  // fill these pixels; all channel data must be full range
 ... rgb->rowBytes;
-avifImageRGBToYUV(image, rgb); // if alpha is present, it will also be copied/converted
-avifRGBImageDestroy(rgb);
+avifImageRGBToYUV(image, &rgb); // if alpha is present, it will also be copied/converted
+avifRGBImageFreePixels(&rgb);
 
 // Option 3: Convert directly from your own pre-existing interleaved RGB(A)/BGR(A) buffer
 avifRGBImage rgb;
-rgb.width = image->width;
-rgb.height = image->height;
+avifRGBImageSetDefaults(&rgb, image);
 rgb.depth = ...;   // [8, 10, 12, 16]; Does not need to match image->depth.
                    // If >8, rgb->pixels is uint16_t*
 rgb.format = ...;  // See choices in avif.h, match to your buffer's pixel format
 rgb.pixels = ...;  // Point at your RGB(A)/BGR(A) pixels here
 rgb.rowBytes = ...;
-avifImageRGBToYUV(image, rgb); // if alpha is present, it will also be copied/converted
+avifImageRGBToYUV(image, &rgb); // if alpha is present, it will also be copied/converted
 // no need to cleanup avifRGBImage
 
 // Optional: Populate alpha plane

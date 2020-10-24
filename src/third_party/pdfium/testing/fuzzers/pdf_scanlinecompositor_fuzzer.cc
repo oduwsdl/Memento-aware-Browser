@@ -4,19 +4,33 @@
 
 #include <memory>
 
+#include "core/fxcrt/fx_safe_types.h"
 #include "core/fxge/cfx_cliprgn.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
-#include "core/fxge/fx_dib.h"
+#include "core/fxge/dib/fx_dib.h"
 #include "testing/fuzzers/pdfium_fuzzer_util.h"
 #include "third_party/base/stl_util.h"
 
 namespace {
 
+// Some unused formats were removed, and their slots have been filled in
+// `FXDIB_Format::kInvalid` to keep the fuzzer input stable.
 constexpr FXDIB_Format kFormat[] = {
-    FXDIB_Invalid, FXDIB_1bppRgb,   FXDIB_8bppRgb,  FXDIB_Rgb,
-    FXDIB_Rgb32,   FXDIB_1bppMask,  FXDIB_8bppMask, FXDIB_8bppRgba,
-    FXDIB_Rgba,    FXDIB_Argb,      FXDIB_1bppCmyk, FXDIB_8bppCmyk,
-    FXDIB_Cmyk,    FXDIB_8bppCmyka, FXDIB_Cmyka};
+    FXDIB_Format::kInvalid,
+    FXDIB_Format::k1bppRgb,
+    FXDIB_Format::k8bppRgb,
+    FXDIB_Format::kRgb,
+    FXDIB_Format::kRgb32,
+    FXDIB_Format::k1bppMask,
+    FXDIB_Format::k8bppMask,
+    FXDIB_Format::kInvalid /* Was FXDIB_Format::k8bppRgba */,
+    FXDIB_Format::kInvalid /* Was FXDIB_Format::kRgba */,
+    FXDIB_Format::kArgb,
+    FXDIB_Format::kInvalid /* Was FXDIB_Format::k1bppCmyk */,
+    FXDIB_Format::kInvalid /* Was FXDIB_Format::k8bppCmyk */,
+    FXDIB_Format::kInvalid /* Was FXDIB_Format::kCmyk */,
+    FXDIB_Format::kInvalid /* Was FXDIB_Format::k8bppCmyka */,
+    FXDIB_Format::kInvalid /* Was FXDIB_Format::kCmyka */};
 
 }  // namespace
 
@@ -42,6 +56,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   size -= kParameterSize;
   data += kParameterSize;
 
+  static constexpr uint32_t kMemLimit = 512000000;  // 512 MB
+  static constexpr uint32_t kComponents = 4;
+  FX_SAFE_UINT32 mem = width;
+  mem *= height;
+  mem *= kComponents;
+  if (!mem.IsValid() || mem.ValueOrDie() > kMemLimit)
+    return 0;
+
   auto src_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   auto dest_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   if (!src_bitmap->Create(width, height, src_format) ||
@@ -55,7 +77,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   std::unique_ptr<CFX_ClipRgn> clip_rgn;
   if (is_clip)
     clip_rgn = std::make_unique<CFX_ClipRgn>(width, height);
-  if (src_bitmap->IsAlphaMask()) {
+  if (src_bitmap->IsMask()) {
     dest_bitmap->CompositeMask(dest_left, dest_top, width, height, src_bitmap,
                                argb, src_left, src_top, blend_mode,
                                clip_rgn.get(), is_rgb_byte_order);

@@ -19,7 +19,9 @@
 #include "dawn_native/Buffer.h"
 #include "dawn_native/CommandBufferStateTracker.h"
 #include "dawn_native/Commands.h"
+#include "dawn_native/Device.h"
 #include "dawn_native/PassResourceUsage.h"
+#include "dawn_native/QuerySet.h"
 #include "dawn_native/RenderBundle.h"
 #include "dawn_native/RenderPipeline.h"
 
@@ -100,8 +102,8 @@ namespace dawn_native {
                 }
 
                 case Command::SetIndexBuffer: {
-                    commands->NextCommand<SetIndexBufferCmd>();
-                    commandBufferState->SetIndexBuffer();
+                    SetIndexBufferCmd* cmd = commands->NextCommand<SetIndexBufferCmd>();
+                    commandBufferState->SetIndexBuffer(cmd->format);
                     break;
                 }
 
@@ -202,6 +204,11 @@ namespace dawn_native {
                     break;
                 }
 
+                case Command::WriteTimestamp: {
+                    commands->NextCommand<WriteTimestampCmd>();
+                    break;
+                }
+
                 default:
                     DAWN_TRY(ValidateRenderBundleCommand(
                         commands, type, &commandBufferState, renderPass->attachmentState.Get(),
@@ -274,6 +281,11 @@ namespace dawn_native {
                     break;
                 }
 
+                case Command::WriteTimestamp: {
+                    commands->NextCommand<WriteTimestampCmd>();
+                    break;
+                }
+
                 default:
                     return DAWN_VALIDATION_ERROR("Command disallowed inside a compute pass");
             }
@@ -339,11 +351,272 @@ namespace dawn_native {
         return {};
     }
 
+    MaybeError ValidateTimestampQuery(QuerySetBase* querySet,
+                                      uint32_t queryIndex,
+                                      const UsedQueryMap& usedQueryIndices) {
+        if (querySet->GetQueryType() != wgpu::QueryType::Timestamp) {
+            return DAWN_VALIDATION_ERROR("The query type of query set must be Timestamp");
+        }
+
+        if (queryIndex >= querySet->GetQueryCount()) {
+            return DAWN_VALIDATION_ERROR("Query index exceeds the number of queries in query set");
+        }
+
+        UsedQueryMap::const_iterator it = usedQueryIndices.find(querySet);
+        if (it != usedQueryIndices.end()) {
+            // Get the used query index records
+            const std::vector<bool>& queryIndices = it->second;
+            if (queryIndices[queryIndex] == 1) {
+                return DAWN_VALIDATION_ERROR("Duplicated query index writen");
+            }
+        }
+
+        return {};
+    }
+
     bool IsRangeOverlapped(uint32_t startA, uint32_t startB, uint32_t length) {
         uint32_t maxStart = std::max(startA, startB);
         uint32_t minStart = std::min(startA, startB);
         return static_cast<uint64_t>(minStart) + static_cast<uint64_t>(length) >
                static_cast<uint64_t>(maxStart);
+    }
+
+    ResultOrError<uint64_t> ComputeRequiredBytesInCopy(const TexelBlockInfo& blockInfo,
+                                                       const Extent3D& copySize,
+                                                       uint32_t bytesPerRow,
+                                                       uint32_t rowsPerImage) {
+        ASSERT(copySize.height % blockInfo.height == 0);
+        uint32_t heightInBlocks = copySize.height / blockInfo.height;
+
+        // Default value for rowsPerImage
+        if (rowsPerImage == 0) {
+            rowsPerImage = heightInBlocks;
+        }
+
+        ASSERT(rowsPerImage >= heightInBlocks);
+        if (copySize.height > 1 || copySize.depth > 1) {
+            ASSERT(bytesPerRow >= copySize.width / blockInfo.width * blockInfo.byteSize);
+        }
+
+        if (copySize.width == 0 || copySize.height == 0 || copySize.depth == 0) {
+            return 0;
+        }
+
+        ASSERT(copySize.height >= 1);
+        ASSERT(copySize.depth >= 1);
+
+        // bytesPerImage won't overflow since we're multiplying two uint32_t numbers
+        uint64_t bytesPerImage = uint64_t(rowsPerImage) * bytesPerRow;
+        // Provided that copySize.height > 1: bytesInLastSlice won't overflow since it's at most
+        // bytesPerImage. Otherwise the result is a multiplication of two uint32_t numbers.
+        uint64_t bytesInLastSlice =
+            uint64_t(bytesPerRow) * (heightInBlocks - 1) +
+            (uint64_t(copySize.width) / blockInfo.width * blockInfo.byteSize);
+
+        // This error cannot be thrown for copySize.depth = 1.
+        // For copySize.depth > 1 we know that:
+        // requiredBytesInCopy >= (copySize.depth * bytesPerImage) / 2, so if
+        // copySize.depth * bytesPerImage overflows uint64_t, then requiredBytesInCopy is definitely
+        // too large to fit in the available data size.
+        if (std::numeric_limits<uint64_t>::max() / copySize.depth < bytesPerImage) {
+            return DAWN_VALIDATION_ERROR("requiredBytesInCopy is too large");
+        }
+        return bytesPerImage * (copySize.depth - 1) + bytesInLastSlice;
+    }
+
+    MaybeError ValidateCopySizeFitsInBuffer(const Ref<BufferBase>& buffer,
+                                            uint64_t offset,
+                                            uint64_t size) {
+        uint64_t bufferSize = buffer->GetSize();
+        bool fitsInBuffer = offset <= bufferSize && (size <= (bufferSize - offset));
+        if (!fitsInBuffer) {
+            return DAWN_VALIDATION_ERROR("Copy would overflow the buffer");
+        }
+
+        return {};
+    }
+
+    MaybeError ValidateLinearTextureData(const TextureDataLayout& layout,
+                                         uint64_t byteSize,
+                                         const TexelBlockInfo& blockInfo,
+                                         const Extent3D& copyExtent) {
+        // Validation for the texel block alignments:
+        if (layout.offset % blockInfo.byteSize != 0) {
+            return DAWN_VALIDATION_ERROR("Offset must be a multiple of the texel or block size");
+        }
+
+        // Validation for other members in layout:
+        if ((copyExtent.height > 1 || copyExtent.depth > 1) &&
+            layout.bytesPerRow < copyExtent.width / blockInfo.width * blockInfo.byteSize) {
+            return DAWN_VALIDATION_ERROR(
+                "bytesPerRow must not be less than the number of bytes per row");
+        }
+
+        // TODO(tommek@google.com): to match the spec there should be another condition here
+        // on rowsPerImage >= copyExtent.height if copyExtent.depth > 1.
+
+        ASSERT(copyExtent.height % blockInfo.height == 0);
+        uint32_t heightInBlocks = copyExtent.height / blockInfo.height;
+
+        // Validation for the copy being in-bounds:
+        if (layout.rowsPerImage != 0 && layout.rowsPerImage < heightInBlocks) {
+            return DAWN_VALIDATION_ERROR(
+                "rowsPerImage must not be less than the copy height in blocks.");
+        }
+
+        // We compute required bytes in copy after validating texel block alignments
+        // because the divisibility conditions are necessary for the algorithm to be valid,
+        // also the bytesPerRow bound is necessary to avoid overflows.
+        uint64_t requiredBytesInCopy;
+        DAWN_TRY_ASSIGN(requiredBytesInCopy,
+                        ComputeRequiredBytesInCopy(blockInfo, copyExtent, layout.bytesPerRow,
+                                                   layout.rowsPerImage));
+
+        bool fitsInData =
+            layout.offset <= byteSize && (requiredBytesInCopy <= (byteSize - layout.offset));
+        if (!fitsInData) {
+            return DAWN_VALIDATION_ERROR(
+                "Required size for texture data layout exceeds the given size");
+        }
+
+        return {};
+    }
+
+    MaybeError ValidateBufferCopyView(DeviceBase const* device,
+                                      const BufferCopyView& bufferCopyView) {
+        DAWN_TRY(device->ValidateObject(bufferCopyView.buffer));
+        if (bufferCopyView.layout.bytesPerRow % kTextureBytesPerRowAlignment != 0) {
+            return DAWN_VALIDATION_ERROR("bytesPerRow must be a multiple of 256");
+        }
+
+        return {};
+    }
+
+    MaybeError ValidateTextureCopyView(DeviceBase const* device,
+                                       const TextureCopyView& textureCopy,
+                                       const Extent3D& copySize) {
+        const TextureBase* texture = textureCopy.texture;
+        DAWN_TRY(device->ValidateObject(texture));
+        if (textureCopy.mipLevel >= texture->GetNumMipLevels()) {
+            return DAWN_VALIDATION_ERROR("mipLevel out of range");
+        }
+
+        switch (textureCopy.aspect) {
+            case wgpu::TextureAspect::All:
+                break;
+            case wgpu::TextureAspect::DepthOnly:
+                if ((texture->GetFormat().aspects & Aspect::Depth) == 0) {
+                    return DAWN_VALIDATION_ERROR(
+                        "Texture does not have depth aspect for texture copy");
+                }
+                break;
+            case wgpu::TextureAspect::StencilOnly:
+                if ((texture->GetFormat().aspects & Aspect::Stencil) == 0) {
+                    return DAWN_VALIDATION_ERROR(
+                        "Texture does not have stencil aspect for texture copy");
+                }
+                break;
+            default:
+                UNREACHABLE();
+                break;
+        }
+
+        if (texture->GetSampleCount() > 1 || texture->GetFormat().HasDepthOrStencil()) {
+            Extent3D subresourceSize = texture->GetMipLevelPhysicalSize(textureCopy.mipLevel);
+            ASSERT(texture->GetDimension() == wgpu::TextureDimension::e2D);
+            if (textureCopy.origin.x != 0 || textureCopy.origin.y != 0 ||
+                subresourceSize.width != copySize.width ||
+                subresourceSize.height != copySize.height) {
+                return DAWN_VALIDATION_ERROR(
+                    "The entire subresource must be copied when using a depth/stencil texture, or "
+                    "when sample count is greater than 1.");
+            }
+        }
+
+        return {};
+    }
+
+    MaybeError ValidateTextureCopyRange(const TextureCopyView& textureCopy,
+                                        const Extent3D& copySize) {
+        // TODO(jiawei.shao@intel.com): add validations on the texture-to-texture copies within the
+        // same texture.
+        const TextureBase* texture = textureCopy.texture;
+
+        // Validation for the copy being in-bounds:
+        Extent3D mipSize = texture->GetMipLevelPhysicalSize(textureCopy.mipLevel);
+        // For 2D textures, include the array layer as depth so it can be checked with other
+        // dimensions.
+        ASSERT(texture->GetDimension() == wgpu::TextureDimension::e2D);
+        mipSize.depth = texture->GetArrayLayers();
+
+        // All texture dimensions are in uint32_t so by doing checks in uint64_t we avoid
+        // overflows.
+        if (static_cast<uint64_t>(textureCopy.origin.x) + static_cast<uint64_t>(copySize.width) >
+                static_cast<uint64_t>(mipSize.width) ||
+            static_cast<uint64_t>(textureCopy.origin.y) + static_cast<uint64_t>(copySize.height) >
+                static_cast<uint64_t>(mipSize.height) ||
+            static_cast<uint64_t>(textureCopy.origin.z) + static_cast<uint64_t>(copySize.depth) >
+                static_cast<uint64_t>(mipSize.depth)) {
+            return DAWN_VALIDATION_ERROR("Touching outside of the texture");
+        }
+
+        // Validation for the texel block alignments:
+        const Format& format = textureCopy.texture->GetFormat();
+        if (format.isCompressed) {
+            const TexelBlockInfo& blockInfo = format.GetAspectInfo(textureCopy.aspect).block;
+            if (textureCopy.origin.x % blockInfo.width != 0) {
+                return DAWN_VALIDATION_ERROR(
+                    "Offset.x must be a multiple of compressed texture format block width");
+            }
+            if (textureCopy.origin.y % blockInfo.height != 0) {
+                return DAWN_VALIDATION_ERROR(
+                    "Offset.y must be a multiple of compressed texture format block height");
+            }
+            if (copySize.width % blockInfo.width != 0) {
+                return DAWN_VALIDATION_ERROR(
+                    "copySize.width must be a multiple of compressed texture format block width");
+            }
+
+            if (copySize.height % blockInfo.height != 0) {
+                return DAWN_VALIDATION_ERROR(
+                    "copySize.height must be a multiple of compressed texture format block height");
+            }
+        }
+
+        return {};
+    }
+
+    MaybeError ValidateBufferToTextureCopyRestrictions(const TextureCopyView& dst) {
+        const Format& format = dst.texture->GetFormat();
+
+        bool depthSelected = false;
+        switch (dst.aspect) {
+            case wgpu::TextureAspect::All:
+                switch (format.aspects) {
+                    case Aspect::Color:
+                    case Aspect::Stencil:
+                        break;
+                    case Aspect::Depth:
+                        depthSelected = true;
+                        break;
+                    default:
+                        return DAWN_VALIDATION_ERROR(
+                            "A single aspect must be selected for multi planar formats in buffer "
+                            "to texture copies");
+                }
+                break;
+            case wgpu::TextureAspect::DepthOnly:
+                ASSERT(format.aspects & Aspect::Depth);
+                depthSelected = true;
+                break;
+            case wgpu::TextureAspect::StencilOnly:
+                ASSERT(format.aspects & Aspect::Stencil);
+                break;
+        }
+        if (depthSelected) {
+            return DAWN_VALIDATION_ERROR("Cannot copy into the depth aspect of a texture");
+        }
+        return {};
     }
 
 }  // namespace dawn_native

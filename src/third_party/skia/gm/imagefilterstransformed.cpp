@@ -120,10 +120,10 @@ protected:
 private:
     sk_sp<SkImage> fCheckerboard;
     sk_sp<SkImage> fGradientCircle;
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 DEF_GM( return new ImageFiltersTransformedGM; )
-}
+}  // namespace skiagm
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -135,7 +135,7 @@ DEF_SIMPLE_GM(rotate_imagefilter, canvas, 500, 500) {
     sk_sp<SkImageFilter> filters[] = {
         nullptr,
         SkImageFilters::Blur(6, 0, nullptr),
-        SkImageFilters::Xfermode(SkBlendMode::kSrcOver, nullptr),
+        SkImageFilters::Blend(SkBlendMode::kSrcOver, nullptr),
     };
 
     for (auto& filter : filters) {

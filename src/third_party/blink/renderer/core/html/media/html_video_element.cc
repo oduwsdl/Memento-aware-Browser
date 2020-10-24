@@ -332,7 +332,10 @@ void HTMLVideoElement::OnPlay() {
     return;
   }
 
-  LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+  // TODO(mustaq): This is problematic, see https://crbug.com/1082258.
+  LocalFrame::NotifyUserActivation(
+      GetDocument().GetFrame(),
+      mojom::blink::UserActivationNotificationType::kMedia);
   webkitEnterFullscreen();
 }
 
@@ -460,7 +463,7 @@ void HTMLVideoElement::webkitEnterFullscreen() {
     FullscreenOptions* options = FullscreenOptions::Create();
     options->setNavigationUI("hide");
     Fullscreen::RequestFullscreen(*this, options,
-                                  Fullscreen::RequestType::kPrefixed);
+                                  FullscreenRequestType::kPrefixed);
   }
 }
 
@@ -488,7 +491,8 @@ bool HTMLVideoElement::UsesOverlayFullscreenVideo() const {
 void HTMLVideoElement::DidEnterFullscreen() {
   UpdateControlsVisibility();
 
-  if (DisplayType() == WebMediaPlayer::DisplayType::kPictureInPicture) {
+  if (DisplayType() == WebMediaPlayer::DisplayType::kPictureInPicture &&
+      !IsInAutoPIP()) {
     PictureInPictureController::From(GetDocument())
         .ExitPictureInPicture(this, nullptr);
   }
@@ -573,7 +577,8 @@ scoped_refptr<Image> HTMLVideoElement::GetSourceImageForCanvas(
   // TODO(fserb): this should not be default software.
   std::unique_ptr<CanvasResourceProvider> resource_provider =
       CanvasResourceProvider::CreateBitmapProvider(
-          intrinsic_size, kLow_SkFilterQuality, CanvasColorParams());
+          intrinsic_size, kLow_SkFilterQuality, CanvasColorParams(),
+          CanvasResourceProvider::ShouldInitialize::kNo);
   if (!resource_provider) {
     *status = kInvalidSourceImageStatus;
     return nullptr;

@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 import {assert} from 'chai';
-import {describe, it} from 'mocha';
 
 import {click, goToResource, waitFor} from '../../shared/helper.js';
+import {describe, it} from '../../shared/mocha-extensions.js';
 import {createSelectorsForWorkerFile, expandFileTree, NestedFileSelector} from '../helpers/sources-helpers.js';
 
-const WORKER1_SELECTORS = createSelectorsForFile('worker1.js');
-const WORKER2_SELECTORS = createSelectorsForFile('worker2.js');
+let WORKER1_SELECTORS: NestedFileSelector;
+let WORKER2_SELECTORS: NestedFileSelector;
 
 function createSelectorsForFile(fileName: string) {
   return createSelectorsForWorkerFile(fileName, 'test/e2e/resources/sources', fileName);
@@ -18,12 +18,17 @@ function createSelectorsForFile(fileName: string) {
 async function openNestedWorkerFile(selectors: NestedFileSelector) {
   const workerFile = await expandFileTree(selectors);
 
-  return workerFile.asElement()!.evaluate(node => node.textContent);
+  return workerFile.evaluate(node => node.textContent);
 }
 
 describe('The Sources Tab', async function() {
   // The tests in this suite are particularly slow, as they perform a lot of actions
   this.timeout(10000);
+
+  before(() => {
+    WORKER1_SELECTORS = createSelectorsForFile('worker1.js');
+    WORKER2_SELECTORS = createSelectorsForFile('worker2.js');
+  });
 
   it('can show multiple dedicated workers with different scripts', async () => {
     // Have the target load the page.

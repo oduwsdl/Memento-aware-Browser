@@ -247,7 +247,8 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper {
       if (initiator.type === Protocol.Network.InitiatorType.Parser) {
         type = InitiatorType.Parser;
         url = initiator.url ? initiator.url : url;
-        lineNumber = initiator.lineNumber ? initiator.lineNumber : lineNumber;
+        lineNumber = typeof initiator.lineNumber === 'number' ? initiator.lineNumber : lineNumber;
+        columnNumber = typeof initiator.columnNumber === 'number' ? initiator.columnNumber : columnNumber;
       } else if (initiator.type === Protocol.Network.InitiatorType.Script) {
         for (let stack = initiator.stack; stack;) {
           const topFrame = stack.callFrames.length ? stack.callFrames[0] : null;
@@ -372,6 +373,13 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper {
       return;
     }
 
+    // If a page resulted in an error, the browser will navigate to an internal error page
+    // hosted at 'chrome-error://...'. In this case, skip the frame navigated event to preserve
+    // the network log.
+    if (mainFrame.url !== mainFrame.unreachableUrl() && mainFrame.url.startsWith('chrome-error://')) {
+      return;
+    }
+
     const oldRequests = this._requests;
     const oldManagerRequests = this._requests.filter(request => NetworkManager.forRequest(request) === manager);
     const oldRequestsSet = this._requestsSet;
@@ -471,7 +479,6 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper {
    */
   _onRequestStarted(event) {
     const request = /** @type {!NetworkRequest} */ (event.data.request);
-    this._requests.push(request);
     if (event.data.originalRequest) {
       this._sentNetworkRequests.push(event.data.originalRequest);
     }

@@ -7,7 +7,7 @@
 
 #include "src/gpu/gl/GrGLUniformHandler.h"
 
-#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/gl/GrGLCaps.h"
 #include "src/gpu/gl/GrGLGpu.h"
 #include "src/gpu/gl/builders/GrGLProgramBuilder.h"
@@ -83,10 +83,8 @@ GrGLSLUniformHandler::SamplerHandle GrGLUniformHandler::addSampler(
         -1
     });
 
-    if (shaderCaps->textureSwizzleAppliedInShader()) {
-        fSamplerSwizzles.push_back(swizzle);
-        SkASSERT(fSamplers.count() == fSamplerSwizzles.count());
-    }
+    fSamplerSwizzles.push_back(swizzle);
+    SkASSERT(fSamplers.count() == fSamplerSwizzles.count());
     return GrGLSLUniformHandler::SamplerHandle(fSamplers.count() - 1);
 }
 

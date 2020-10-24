@@ -29,7 +29,6 @@
 #include "core/fxge/cfx_fontmapper.h"
 #include "core/fxge/fx_font.h"
 #include "core/fxge/fx_freetype.h"
-#include "third_party/base/logging.h"
 #include "third_party/base/stl_util.h"
 
 namespace {
@@ -115,7 +114,7 @@ size_t CPDF_Font::CountChar(ByteStringView pString) const {
   return pString.GetLength();
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 int CPDF_Font::GlyphFromCharCodeExt(uint32_t charcode) {
   return GlyphFromCharCode(charcode, nullptr);
 }
@@ -275,9 +274,9 @@ void CPDF_Font::LoadUnicodeMap() const {
   m_pToUnicodeMap = std::make_unique<CPDF_ToUnicodeMap>(pStream);
 }
 
-uint32_t CPDF_Font::GetStringWidth(ByteStringView pString) {
+int CPDF_Font::GetStringWidth(ByteStringView pString) {
   size_t offset = 0;
-  uint32_t width = 0;
+  int width = 0;
   while (offset < pString.GetLength())
     width += GetCharWidthF(GetNextChar(pString, &offset));
   return width;

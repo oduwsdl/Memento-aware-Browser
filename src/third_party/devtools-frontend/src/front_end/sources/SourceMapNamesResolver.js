@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Bindings from '../bindings/bindings.js';
 import * as Formatter from '../formatter/formatter.js';
 import * as SDK from '../sdk/sdk.js';
@@ -28,7 +31,7 @@ export class Identifier {
 }
 
 /**
- * @param {!SDK.DebuggerModel.Scope} scope
+ * @param {!SDK.DebuggerModel.ScopeChainEntry} scope
  * @return {!Promise<!Array<!Identifier>>}
  */
 export const scopeIdentifiers = function(scope) {
@@ -89,7 +92,7 @@ export const scopeIdentifiers = function(scope) {
 };
 
 /**
- * @param {!SDK.DebuggerModel.Scope} scope
+ * @param {!SDK.DebuggerModel.ScopeChainEntry} scope
  * @return {!Promise.<!Map<string, string>>}
  */
 export const resolveScope = function(scope) {
@@ -247,6 +250,12 @@ export const allVariablesInCallFrame = function(callFrame) {
  */
 export const resolveExpression = function(
     callFrame, originalText, uiSourceCode, lineNumber, startColumnNumber, endColumnNumber) {
+  if (uiSourceCode.mimeType() === 'application/wasm') {
+    // For WebAssembly disassembly, lookup the different possiblities.
+    return Promise.resolve(
+        `memories["${originalText}"] ?? locals["${originalText}"] ?? tables["${originalText}"] ?? functions["${
+            originalText}"] ?? globals["${originalText}"] ?? imports["${originalText}"] ?? exports["${originalText}"]`);
+  }
   if (!uiSourceCode.contentType().isFromSourceMap()) {
     return Promise.resolve('');
   }
@@ -371,7 +380,7 @@ export const resolveThisObject = function(callFrame) {
 };
 
 /**
- * @param {!SDK.DebuggerModel.Scope} scope
+ * @param {!SDK.DebuggerModel.ScopeChainEntry} scope
  * @return {!SDK.RemoteObject.RemoteObject}
  */
 export const resolveScopeInObject = function(scope) {
@@ -392,7 +401,7 @@ export const resolveScopeInObject = function(scope) {
  */
 export class RemoteObject extends SDK.RemoteObject.RemoteObject {
   /**
-   * @param {!SDK.DebuggerModel.Scope} scope
+   * @param {!SDK.DebuggerModel.ScopeChainEntry} scope
    */
   constructor(scope) {
     super();

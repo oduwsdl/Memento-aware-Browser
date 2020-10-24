@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "experimental/svg/model/SkSVGDOM.h"
 #include "include/core/SkData.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
+#include "modules/svg/include/SkSVGDOM.h"
 
 void FuzzSVG(sk_sp<SkData> bytes) {
     uint8_t w = 100;
@@ -31,7 +31,7 @@ void FuzzSVG(sk_sp<SkData> bytes) {
 
 }
 
-#if defined(IS_FUZZING_WITH_LIBFUZZER)
+#if defined(SK_BUILD_FOR_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 30000) {
         return 0;

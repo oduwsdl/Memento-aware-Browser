@@ -9,8 +9,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/navigation_controls.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_init.h"
@@ -30,10 +28,12 @@
 #include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/viewport_data.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
@@ -41,10 +41,14 @@
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/core/testing/color_scheme_helper.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_request.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
+#include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 namespace blink {
 
@@ -89,6 +93,15 @@ class StyleEngineTest : public testing::Test {
     auto* sheet = MakeGarbageCollected<StyleSheetContents>(context);
     sheet->ParseString(text);
     GetStyleEngine().InjectSheet(StyleSheetKey(key), sheet, origin);
+  }
+
+  bool IsUseCounted(mojom::WebFeature feature) {
+    return GetDocument().IsUseCounted(feature);
+  }
+
+  void ClearUseCounter(mojom::WebFeature feature) {
+    GetDocument().ClearUseCounterForTesting(feature);
+    DCHECK(!IsUseCounted(feature));
   }
 
  private:
@@ -364,7 +377,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   ASSERT_TRUE(t5);
 
   // There's no @keyframes rule named dummy-animation
-  ASSERT_FALSE(GetStyleEngine().Resolver()->FindKeyframesRule(
+  ASSERT_FALSE(GetStyleEngine().GetStyleResolver().FindKeyframesRule(
       t5, AtomicString("dummy-animation")));
 
   auto* keyframes_parsed_sheet = MakeGarbageCollected<StyleSheetContents>(
@@ -378,7 +391,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   // After injecting the style sheet, a @keyframes rule named dummy-animation
   // is found with one keyframe.
   StyleRuleKeyframes* keyframes =
-      GetStyleEngine().Resolver()->FindKeyframesRule(
+      GetStyleEngine().GetStyleResolver().FindKeyframesRule(
           t5, AtomicString("dummy-animation"));
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(1u, keyframes->Keyframes().size());
@@ -391,7 +404,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
 
   // Author @keyframes rules take precedence; now there are two keyframes (from
   // and to).
-  keyframes = GetStyleEngine().Resolver()->FindKeyframesRule(
+  keyframes = GetStyleEngine().GetStyleResolver().FindKeyframesRule(
       t5, AtomicString("dummy-animation"));
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(2u, keyframes->Keyframes().size());
@@ -399,7 +412,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   GetDocument().body()->RemoveChild(style_element);
   UpdateAllLifecyclePhases();
 
-  keyframes = GetStyleEngine().Resolver()->FindKeyframesRule(
+  keyframes = GetStyleEngine().GetStyleResolver().FindKeyframesRule(
       t5, AtomicString("dummy-animation"));
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(1u, keyframes->Keyframes().size());
@@ -408,7 +421,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   UpdateAllLifecyclePhases();
 
   // Injected @keyframes rules are no longer available once removed.
-  ASSERT_FALSE(GetStyleEngine().Resolver()->FindKeyframesRule(
+  ASSERT_FALSE(GetStyleEngine().GetStyleResolver().FindKeyframesRule(
       t5, AtomicString("dummy-animation")));
 
   // Custom properties
@@ -1182,10 +1195,6 @@ TEST_F(StyleEngineTest, StyleSheetsForStyleSheetList_Document) {
       GetStyleEngine().StyleSheetsForStyleSheetList(GetDocument());
   EXPECT_EQ(2u, second_sheet_list.size());
   EXPECT_TRUE(GetStyleEngine().NeedsActiveStyleUpdate());
-
-  GetStyleEngine().MarkAllTreeScopesDirty();
-  GetStyleEngine().StyleSheetsForStyleSheetList(GetDocument());
-  EXPECT_FALSE(GetStyleEngine().NeedsActiveStyleUpdate());
 }
 
 TEST_F(StyleEngineTest, StyleSheetsForStyleSheetList_ShadowRoot) {
@@ -1213,37 +1222,14 @@ TEST_F(StyleEngineTest, StyleSheetsForStyleSheetList_ShadowRoot) {
       GetStyleEngine().StyleSheetsForStyleSheetList(shadow_root);
   EXPECT_EQ(2u, second_sheet_list.size());
   EXPECT_TRUE(GetStyleEngine().NeedsActiveStyleUpdate());
-
-  GetStyleEngine().MarkAllTreeScopesDirty();
-  GetStyleEngine().StyleSheetsForStyleSheetList(shadow_root);
-  EXPECT_FALSE(GetStyleEngine().NeedsActiveStyleUpdate());
 }
 
-class StyleEngineClient : public frame_test_helpers::TestWebWidgetClient {
- public:
-  // WebWidgetClient overrides.
-  void ConvertWindowToViewport(WebFloatRect* rect) override {
-    rect->x *= device_scale_factor_;
-    rect->y *= device_scale_factor_;
-    rect->width *= device_scale_factor_;
-    rect->height *= device_scale_factor_;
-  }
-
-  void set_device_scale_factor(float device_scale_factor) {
-    device_scale_factor_ = device_scale_factor;
-  }
-
- private:
-  float device_scale_factor_ = 1.f;
-};
-
 TEST_F(StyleEngineTest, ViewportDescriptionForZoomDSF) {
-  StyleEngineClient client;
-  client.set_device_scale_factor(1.f);
-
+  ScopedTestingPlatformSupport<TestingPlatformSupport> platform;
+  platform->SetUseZoomForDSF(true);
   frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view_impl =
-      web_view_helper.Initialize(nullptr, nullptr, &client);
+  WebViewImpl* web_view_impl = web_view_helper.Initialize();
+  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(1.f);
   web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
 
@@ -1257,7 +1243,8 @@ TEST_F(StyleEngineTest, ViewportDescriptionForZoomDSF) {
   float max_height = desc.max_height.GetFloatValue();
 
   const float device_scale = 3.5f;
-  client.set_device_scale_factor(device_scale);
+  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(
+      device_scale);
   web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
 
@@ -1506,7 +1493,8 @@ TEST_F(StyleEngineTest, MediaQueriesChangeDefaultFontSize) {
 
 TEST_F(StyleEngineTest, MediaQueriesChangeColorScheme) {
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
 
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
@@ -1523,7 +1511,8 @@ TEST_F(StyleEngineTest, MediaQueriesChangeColorScheme) {
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
 
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
   UpdateAllLifecyclePhases();
   EXPECT_EQ(MakeRGB(0, 128, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
@@ -1533,7 +1522,8 @@ TEST_F(StyleEngineTest, MediaQueriesChangeColorScheme) {
 TEST_F(StyleEngineTest, MediaQueriesChangeColorSchemeForcedDarkMode) {
   GetDocument().GetSettings()->SetForceDarkModeEnabled(true);
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
 
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
@@ -1549,6 +1539,125 @@ TEST_F(StyleEngineTest, MediaQueriesChangeColorSchemeForcedDarkMode) {
 
   UpdateAllLifecyclePhases();
   EXPECT_EQ(MakeRGB(0, 128, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+}
+
+TEST_F(StyleEngineTest, MediaQueriesChangePrefersContrast) {
+  ScopedForcedColorsForTest forced_scoped_feature(true);
+  ScopedPrefersContrastForTest contrast_scoped_feature(true);
+
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredContrast(
+      mojom::blink::PreferredContrast::kNoPreference);
+  color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kNone);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { color: red; forced-color-adjust: none; }
+      @media (prefers-contrast: no-preference) {
+        body { color: green }
+      }
+      @media (prefers-contrast) {
+        body { color: blue }
+      }
+    </style>
+    <body></body>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 128, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  color_scheme_helper.SetPreferredContrast(
+      mojom::blink::PreferredContrast::kMore);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 0, 255),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  color_scheme_helper.SetPreferredContrast(
+      mojom::blink::PreferredContrast::kLess);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 0, 255),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 0, 255),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+}
+
+TEST_F(StyleEngineTest, MediaQueriesChangeSpecificPrefersContrast) {
+  ScopedForcedColorsForTest forced_scoped_feature(true);
+  ScopedPrefersContrastForTest contrast_scoped_feature(true);
+
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredContrast(
+      mojom::blink::PreferredContrast::kNoPreference);
+  color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kNone);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { color: red; forced-color-adjust: none; }
+      @media (prefers-contrast: more) {
+        body { color: blue }
+      }
+      @media (prefers-contrast: less) {
+        body { color: orange }
+      }
+      @media (prefers-contrast: forced) {
+        body { color: yellow }
+      }
+      @media (prefers-contrast: forced) and (prefers-contrast: more) {
+        body { color: green }
+      }
+      @media (prefers-contrast: forced) and (prefers-contrast: less) {
+        body { color: purple }
+      }
+    </style>
+    <body></body>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(255, 0, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  color_scheme_helper.SetPreferredContrast(
+      mojom::blink::PreferredContrast::kMore);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 0, 255),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  color_scheme_helper.SetPreferredContrast(
+      mojom::blink::PreferredContrast::kLess);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(255, 165, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(128, 0, 128),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  color_scheme_helper.SetPreferredContrast(
+      mojom::blink::PreferredContrast::kMore);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 128, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  color_scheme_helper.SetPreferredContrast(
+      mojom::blink::PreferredContrast::kNoPreference);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(255, 255, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
 }
@@ -1674,14 +1783,16 @@ TEST_F(StyleEngineTest, MediaQueriesChangeForcedColorsAndPreferredColorScheme) {
   // ForcedColors = kNone, PreferredColorScheme = kLight
   ColorSchemeHelper color_scheme_helper(GetDocument());
   color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kNone);
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
   UpdateAllLifecyclePhases();
   EXPECT_EQ(MakeRGB(255, 0, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
 
   // ForcedColors = kNone, PreferredColorScheme = kDark
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
   UpdateAllLifecyclePhases();
   EXPECT_EQ(MakeRGB(0, 128, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
@@ -1695,7 +1806,8 @@ TEST_F(StyleEngineTest, MediaQueriesChangeForcedColorsAndPreferredColorScheme) {
                 GetCSSPropertyColor()));
 
   // ForcedColors = kActive, PreferredColorScheme = kLight
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
   UpdateAllLifecyclePhases();
   EXPECT_EQ(MakeRGB(0, 0, 255),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
@@ -1704,8 +1816,9 @@ TEST_F(StyleEngineTest, MediaQueriesChangeForcedColorsAndPreferredColorScheme) {
 
 TEST_F(StyleEngineTest, MediaQueriesColorSchemeOverride) {
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
-  EXPECT_EQ(PreferredColorScheme::kLight,
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
+  EXPECT_EQ(mojom::blink::PreferredColorScheme::kLight,
             GetDocument().GetSettings()->GetPreferredColorScheme());
 
   GetDocument().body()->setInnerHTML(R"HTML(
@@ -1735,6 +1848,102 @@ TEST_F(StyleEngineTest, MediaQueriesColorSchemeOverride) {
   EXPECT_EQ(MakeRGB(255, 0, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
+}
+
+TEST_F(StyleEngineTest, PreferredColorSchemeMetric) {
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
+  EXPECT_FALSE(IsUseCounted(WebFeature::kPreferredColorSchemeDark));
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
+  EXPECT_TRUE(IsUseCounted(WebFeature::kPreferredColorSchemeDark));
+}
+
+// The preferred color scheme setting can differ from the preferred color
+// scheme when forced dark mode is enabled. This is so that forced dark mode
+// does not invert pages that support dark mode.
+TEST_F(StyleEngineTest, PreferredColorSchemeSettingMetric) {
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
+  GetDocument().GetSettings()->SetForceDarkModeEnabled(false);
+  EXPECT_FALSE(IsUseCounted(WebFeature::kPreferredColorSchemeDark));
+  EXPECT_FALSE(IsUseCounted(WebFeature::kPreferredColorSchemeDarkSetting));
+
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
+  // Clear the UseCounters before they are updated by the
+  // |SetForceDarkModeEnabled| call, below.
+  ClearUseCounter(WebFeature::kPreferredColorSchemeDark);
+  ClearUseCounter(WebFeature::kPreferredColorSchemeDarkSetting);
+  GetDocument().GetSettings()->SetForceDarkModeEnabled(true);
+
+  EXPECT_FALSE(IsUseCounted(WebFeature::kPreferredColorSchemeDark));
+  EXPECT_TRUE(IsUseCounted(WebFeature::kPreferredColorSchemeDarkSetting));
+}
+
+TEST_F(StyleEngineTest, ForcedDarkModeMetric) {
+  GetDocument().GetSettings()->SetForceDarkModeEnabled(false);
+  EXPECT_FALSE(IsUseCounted(WebFeature::kForcedDarkMode));
+  GetDocument().GetSettings()->SetForceDarkModeEnabled(true);
+  EXPECT_TRUE(IsUseCounted(WebFeature::kForcedDarkMode));
+}
+
+TEST_F(StyleEngineTest, ColorSchemeDarkSupportedOnRootMetricFromMetaDark) {
+  EXPECT_FALSE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <meta name="color-scheme" content="dark">
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+}
+
+TEST_F(StyleEngineTest, ColorSchemeDarkSupportedOnRootMetricFromMetaLightDark) {
+  EXPECT_FALSE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <meta name="color-scheme" content="light dark">
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+}
+
+TEST_F(StyleEngineTest, ColorSchemeDarkSupportedOnRootMetricFromCSSDark) {
+  EXPECT_FALSE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style> :root { color-scheme: dark; } </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+}
+
+TEST_F(StyleEngineTest, ColorSchemeDarkSupportedOnRootMetricFromCSSLightDark) {
+  EXPECT_FALSE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style> :root { color-scheme: light dark; } </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+}
+
+TEST_F(StyleEngineTest, ColorSchemeDarkSupportedOnRootMetricFromChildCSSDark) {
+  EXPECT_FALSE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style> div { color-scheme: dark; } </style>
+    <div></div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+}
+
+TEST_F(StyleEngineTest, ColorSchemeDarkSupportedOnRootMetricFromLight) {
+  EXPECT_FALSE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <meta name="color-scheme" content="light">
+    <style> :root { color-scheme: light; } </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kColorSchemeDarkSupportedOnRoot));
 }
 
 TEST_F(StyleEngineTest, MediaQueriesReducedMotionOverride) {
@@ -2164,9 +2373,9 @@ TEST_F(StyleEngineTest, NoCrashWhenMarkingPartiallyRemovedSubtree) {
 }
 
 TEST_F(StyleEngineTest, ColorSchemeBaseBackgroundChange) {
-  ScopedCSSColorSchemeForTest enable_color_scheme(true);
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
   UpdateAllLifecyclePhases();
 
   EXPECT_EQ(Color::kWhite, GetDocument().View()->BaseBackgroundColor());
@@ -2175,30 +2384,31 @@ TEST_F(StyleEngineTest, ColorSchemeBaseBackgroundChange) {
       CSSPropertyID::kColorScheme, "dark");
   UpdateAllLifecyclePhases();
 
-  EXPECT_EQ(Color::kBlack, GetDocument().View()->BaseBackgroundColor());
+  EXPECT_EQ(Color(0x12, 0x12, 0x12),
+            GetDocument().View()->BaseBackgroundColor());
 
   color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
   UpdateAllLifecyclePhases();
   Color system_background_color = LayoutTheme::GetTheme().SystemColor(
-      CSSValueID::kCanvas, WebColorScheme::kLight);
+      CSSValueID::kCanvas, mojom::blink::ColorScheme::kLight);
 
   EXPECT_EQ(system_background_color,
             GetDocument().View()->BaseBackgroundColor());
 }
 
 TEST_F(StyleEngineTest, ColorSchemeOverride) {
-  ScopedCSSColorSchemeForTest enable_color_scheme(true);
   ScopedCSSColorSchemeUARenderingForTest enable_color_scheme_ua(true);
 
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
 
   GetDocument().documentElement()->SetInlineStyleProperty(
       CSSPropertyID::kColorScheme, "light dark");
   UpdateAllLifecyclePhases();
 
   EXPECT_EQ(
-      WebColorScheme::kLight,
+      mojom::blink::ColorScheme::kLight,
       GetDocument().documentElement()->GetComputedStyle()->UsedColorScheme());
 
   GetDocument().GetPage()->SetMediaFeatureOverride("prefers-color-scheme",
@@ -2206,7 +2416,7 @@ TEST_F(StyleEngineTest, ColorSchemeOverride) {
 
   UpdateAllLifecyclePhases();
   EXPECT_EQ(
-      WebColorScheme::kDark,
+      mojom::blink::ColorScheme::kDark,
       GetDocument().documentElement()->GetComputedStyle()->UsedColorScheme());
 }
 
@@ -2324,8 +2534,8 @@ TEST_F(StyleEngineTest, GetComputedStyleOutsideFlatTree) {
   EXPECT_FALSE(innermost->GetComputedStyle());
 
   inner->EnsureComputedStyle();
-  auto* outer_style = outer->GetComputedStyle();
-  auto* inner_style = inner->GetComputedStyle();
+  scoped_refptr<const ComputedStyle> outer_style = outer->GetComputedStyle();
+  scoped_refptr<const ComputedStyle> inner_style = inner->GetComputedStyle();
 
   ASSERT_TRUE(outer_style);
   ASSERT_TRUE(inner_style);
@@ -2550,7 +2760,8 @@ TEST_F(StyleEngineTest, ForceReattachRecalcRootAttachShadow) {
 TEST_F(StyleEngineTest, InitialColorChange) {
   // Set color scheme to light.
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
 
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
@@ -2576,7 +2787,8 @@ TEST_F(StyleEngineTest, InitialColorChange) {
             initial_style->VisitedDependentColor(GetCSSPropertyColor()));
 
   // Change color scheme to dark.
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
   UpdateAllLifecyclePhases();
 
   document_element_style = GetDocument().documentElement()->GetComputedStyle();
@@ -2705,6 +2917,29 @@ TEST_F(StyleEngineTest,
                                     GetCSSPropertyColor()));
 }
 
+TEST_F(StyleEngineTest, SummaryDisplayUseCount) {
+  // Should not be use-counted: wrong element type.
+  GetDocument().body()->setInnerHTML(
+      "<style>div { display: block; }</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(
+      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
+
+  // Should not be use-counted: wrong display type:
+  GetDocument().body()->setInnerHTML(
+      "<style>summary { display: inline; }</style><summary></summary>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(
+      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
+
+  // Should be use-counted:
+  GetDocument().body()->setInnerHTML(
+      "<style>summary { display: block; }</style><summary></summary>");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(
+      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
+}
+
 TEST_F(StyleEngineTest, RevertUseCount) {
   ScopedCSSRevertForTest scoped_feature(true);
 
@@ -2719,9 +2954,57 @@ TEST_F(StyleEngineTest, RevertUseCount) {
   EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSKeywordRevert));
 }
 
+TEST_F(StyleEngineTest, RevertUseCountForCustomProperties) {
+  ScopedCSSRevertForTest scoped_feature(true);
+
+  GetDocument().body()->setInnerHTML(
+      "<style>div { --x: unset; }</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSKeywordRevert));
+
+  GetDocument().body()->setInnerHTML(
+      "<style>div { --x: revert; }</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSKeywordRevert));
+}
+
+TEST_F(StyleEngineTest, NoRevertUseCountForForcedColors) {
+  ScopedForcedColorsForTest scoped_feature(true);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #elem { color: red; }
+    </style>
+    <div id=ref></div>
+    <div id=elem></div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  Element* ref = GetDocument().getElementById("ref");
+  Element* elem = GetDocument().getElementById("elem");
+  ASSERT_TRUE(ref);
+  ASSERT_TRUE(elem);
+
+  // This test assumes that the initial color is not 'red'. Verify that
+  // assumption.
+  ASSERT_NE(ComputedValue(ref, "color")->CssText(),
+            ComputedValue(elem, "color")->CssText());
+
+  EXPECT_EQ("rgb(255, 0, 0)", ComputedValue(elem, "color")->CssText());
+
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(ComputedValue(ref, "color")->CssText(),
+            ComputedValue(elem, "color")->CssText());
+
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSKeywordRevert));
+}
+
 TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
 
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
@@ -2740,7 +3023,7 @@ TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
 
   EXPECT_EQ(Color::kWhite, root->GetComputedStyle()->VisitedDependentColor(
                                GetCSSPropertyColor()));
-  EXPECT_EQ(WebColorScheme::kDark,
+  EXPECT_EQ(mojom::blink::ColorScheme::kDark,
             root->GetComputedStyle()->UsedColorSchemeForInitialColors());
   EXPECT_EQ(MakeRGB(255, 0, 0), body->GetComputedStyle()->VisitedDependentColor(
                                     GetCSSPropertyColor()));
@@ -2749,7 +3032,7 @@ TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
   GetDocument().GetFrame()->StartPrinting(page_size, page_size, 1);
   EXPECT_EQ(Color::kBlack, root->GetComputedStyle()->VisitedDependentColor(
                                GetCSSPropertyColor()));
-  EXPECT_EQ(WebColorScheme::kLight,
+  EXPECT_EQ(mojom::blink::ColorScheme::kLight,
             root->GetComputedStyle()->UsedColorSchemeForInitialColors());
   EXPECT_EQ(MakeRGB(0, 128, 0), body->GetComputedStyle()->VisitedDependentColor(
                                     GetCSSPropertyColor()));
@@ -2757,7 +3040,7 @@ TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
   GetDocument().GetFrame()->EndPrinting();
   EXPECT_EQ(Color::kWhite, root->GetComputedStyle()->VisitedDependentColor(
                                GetCSSPropertyColor()));
-  EXPECT_EQ(WebColorScheme::kDark,
+  EXPECT_EQ(mojom::blink::ColorScheme::kDark,
             root->GetComputedStyle()->UsedColorSchemeForInitialColors());
   EXPECT_EQ(MakeRGB(255, 0, 0), body->GetComputedStyle()->VisitedDependentColor(
                                     GetCSSPropertyColor()));
@@ -2858,20 +3141,261 @@ TEST_F(StyleEngineTest, AtPropertyInUserOrigin) {
   EXPECT_EQ("30px", ComputedValue(GetDocument().body(), "--y")->CssText());
 }
 
-class ParameterizedStyleEngineTest
-    : public testing::WithParamInterface<bool>,
-      private ScopedCSSReducedFontLoadingInvalidationsForTest,
-      public StyleEngineTest {
- public:
-  ParameterizedStyleEngineTest()
-      : ScopedCSSReducedFontLoadingInvalidationsForTest(GetParam()) {}
-};
+TEST_F(StyleEngineTest, SystemColorComputeToSelfUseCount) {
+  // Don't count system color use by itself - only in conjunction with
+  // color-scheme.
+  GetDocument().body()->setInnerHTML(
+      "<style>div { color: MenuText; }</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(
+      GetDocument().IsUseCounted(WebFeature::kCSSSystemColorComputeToSelf));
 
-INSTANTIATE_TEST_SUITE_P(All, ParameterizedStyleEngineTest, testing::Bool());
+  // Count system color use when used on an element with a different
+  // color-scheme from its parent.
+  GetDocument().body()->setInnerHTML(
+      "<style>"
+      "div { color: MenuText; color-scheme: dark; }"
+      "</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(
+      GetDocument().IsUseCounted(WebFeature::kCSSSystemColorComputeToSelf));
+}
+
+TEST_F(StyleEngineTest, InvalidVariableUnsetUseCount) {
+  // Do not count for basic variable usage.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #outer { --x: foo; }
+      #inner { --x: bar; }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count when a fallback handles the unknown variable.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #outer { --x: foo; }
+      #inner { --x: var(--unknown,bar); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count for explicit 'unset'.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #outer { --x: foo; }
+      #inner { --x: unset; }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count when we anyway end up with the guaranteed-invalid value.
+  // (Applies to registered properties as well).
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --y {
+        syntax: "*";
+        inherits: true;
+      }
+      @property --z {
+        syntax: "*";
+        inherits: false;
+      }
+      #inner {
+        --x: var(--unknown);
+        --y: var(--unknown);
+        --z: var(--unknown);
+      }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Count when 'unset' inherits something that not guaranteed-invalid.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #outer { --x: foo; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count for non-universal registered custom properties.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --x {
+        syntax: "<length>";
+        inherits: true;
+        initial-value: 0px;
+      }
+      #outer { --x: 1px; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Count for universal registered custom properties.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --x {
+        syntax: "*";
+        inherits: true;
+      }
+      #outer { --x: bar; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count for non-inherited universal registered custom properties
+  // without initial value.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --x {
+        syntax: "*";
+        inherits: false;
+      }
+      #outer { --x: bar; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Count for universal registered custom properties even with an
+  // initial-value defined.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --x {
+        syntax: "*";
+        inherits: true;
+        initial-value: foo;
+      }
+      #outer { --x: bar; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count for cycles.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --a {
+        syntax: "*";
+        inherits: true;
+      }
+      @property --b {
+        syntax: "*";
+        inherits: true;
+      }
+      #outer {
+        --a: foo;
+        --b: foo;
+        --c: foo;
+        --d: foo;
+      }
+      #inner {
+        --a: var(--b);
+        --b: var(--a);
+        --c: var(--d);
+        --d: var(--c);
+      }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Count for @keyframes
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @keyframes anim {
+        from { --x: var(--unknown); }
+        to { --x: var(--unknown); }
+      }
+      #outer {
+        --x: foo;
+      }
+      #inner {
+        animation: anim 10s;
+      }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Don't count for @keyframes if there's nothing to inherit.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @keyframes anim {
+        from { --x: var(--unknown); }
+        to { --x: var(--unknown); }
+      }
+      #inner {
+        animation: anim 10s;
+      }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+}
 
 // https://crbug.com/1050564
-TEST_P(ParameterizedStyleEngineTest,
-       MediaAttributeChangeUpdatesFontCacheVersion) {
+TEST_F(StyleEngineTest, MediaAttributeChangeUpdatesFontCacheVersion) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
       @font-face { font-family: custom-font; src: url(fake-font.woff); }
@@ -2889,6 +3413,128 @@ TEST_P(ParameterizedStyleEngineTest,
 
   // Shouldn't crash.
   UpdateAllLifecyclePhases();
+}
+
+// https://crbug.com/1137624
+TEST_F(StyleEngineTest, DisabledAdvanceOverrideDescriptor) {
+  ScopedCSSFontFaceAdvanceOverrideForTest advance_override_disabled(false);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @font-face {
+        font-family: custom-font;
+        src: url(fake-font.woff);
+        advance-override: 0.1;
+      }
+    </style>
+  )HTML");
+
+  // Shouldn't crash.
+  UpdateAllLifecyclePhases();
+
+  // 'advance-override' should be ignored when disabled.
+  const FontFace* font_face = GetStyleEngine()
+                                  .GetFontSelector()
+                                  ->GetFontFaceCache()
+                                  ->CssConnectedFontFaces()
+                                  .front()
+                                  .Get();
+  ASSERT_TRUE(font_face);
+  EXPECT_FALSE(font_face->HasFontMetricsOverride());
+}
+
+class StyleEngineSimTest : public SimTest {};
+
+TEST_F(StyleEngineSimTest, OwnerColorScheme) {
+  SimRequest main_resource("https://example.com", "text/html");
+  SimRequest frame_resource("https://example.com/frame.html", "text/html");
+
+  LoadURL("https://example.com");
+
+  main_resource.Complete(R"HTML(
+    <!doctype html>
+    <style>
+      iframe { color-scheme: dark }
+    </style>
+    <iframe id="frame" src="https://example.com/frame.html"></iframe>
+  )HTML");
+
+  frame_resource.Complete(R"HTML(
+    <!doctype html>
+    <p>Frame</p>
+  )HTML");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+
+  auto* frame_element =
+      To<HTMLIFrameElement>(GetDocument().getElementById("frame"));
+  auto* frame_document = frame_element->contentDocument();
+  ASSERT_TRUE(frame_document);
+  EXPECT_EQ(mojom::blink::ColorScheme::kDark,
+            frame_document->GetStyleEngine().GetOwnerColorScheme());
+
+  frame_element->SetInlineStyleProperty(CSSPropertyID::kColorScheme, "light");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+  EXPECT_EQ(mojom::blink::ColorScheme::kLight,
+            frame_document->GetStyleEngine().GetOwnerColorScheme());
+}
+
+TEST_F(StyleEngineSimTest, OwnerColorSchemeBaseBackground) {
+  SimRequest main_resource("https://example.com", "text/html");
+  SimRequest dark_frame_resource("https://example.com/dark.html", "text/html");
+  SimRequest light_frame_resource("https://example.com/light.html",
+                                  "text/html");
+
+  LoadURL("https://example.com");
+
+  main_resource.Complete(R"HTML(
+    <style>
+      .dark { color-scheme: dark }
+    </style>
+    <iframe id="dark-frame" src="dark.html"></iframe>
+    <iframe id="light-frame" src="light.html"></iframe>
+  )HTML");
+
+  dark_frame_resource.Complete(R"HTML(
+    <!doctype html>
+    <meta name=color-scheme content="dark">
+    <p>Frame</p>
+  )HTML");
+
+  light_frame_resource.Complete(R"HTML(
+    <!doctype html>
+    <p>Frame</p>
+  )HTML");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+
+  auto* dark_document =
+      To<HTMLIFrameElement>(GetDocument().getElementById("dark-frame"))
+          ->contentDocument();
+  auto* light_document =
+      To<HTMLIFrameElement>(GetDocument().getElementById("light-frame"))
+          ->contentDocument();
+  ASSERT_TRUE(dark_document);
+  ASSERT_TRUE(light_document);
+
+  EXPECT_TRUE(dark_document->View()->ShouldPaintBaseBackgroundColor());
+  EXPECT_EQ(Color(0x12, 0x12, 0x12),
+            dark_document->View()->BaseBackgroundColor());
+  EXPECT_FALSE(light_document->View()->ShouldPaintBaseBackgroundColor());
+
+  GetDocument().documentElement()->setAttribute(blink::html_names::kClassAttr,
+                                                "dark");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+
+  EXPECT_FALSE(dark_document->View()->ShouldPaintBaseBackgroundColor());
+  EXPECT_TRUE(light_document->View()->ShouldPaintBaseBackgroundColor());
+  EXPECT_EQ(Color::kWhite, light_document->View()->BaseBackgroundColor());
 }
 
 }  // namespace blink

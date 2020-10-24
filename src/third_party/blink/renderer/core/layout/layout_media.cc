@@ -42,10 +42,12 @@ LayoutMedia::LayoutMedia(HTMLMediaElement* video) : LayoutImage(video) {
 LayoutMedia::~LayoutMedia() = default;
 
 HTMLMediaElement* LayoutMedia::MediaElement() const {
+  NOT_DESTROYED();
   return To<HTMLMediaElement>(GetNode());
 }
 
 void LayoutMedia::UpdateLayout() {
+  NOT_DESTROYED();
   LayoutSize old_size(ContentWidth(), ContentHeight());
 
   LayoutImage::UpdateLayout();
@@ -104,13 +106,15 @@ void LayoutMedia::UpdateLayout() {
 
 bool LayoutMedia::IsChildAllowed(LayoutObject* child,
                                  const ComputedStyle& style) const {
+  NOT_DESTROYED();
   // Two types of child layout objects are allowed: media controls
   // and the text track container. Filter children by node type.
   DCHECK(child->GetNode());
 
   // Out-of-flow positioned or floating child breaks layout hierarchy.
   // This check can be removed if ::-webkit-media-controls is made internal.
-  if (style.HasOutOfFlowPosition() || style.IsFloating())
+  if (style.HasOutOfFlowPosition() ||
+      (style.IsFloating() && !style.IsFlexOrGridItem()))
     return false;
 
   // The user agent stylesheet (mediaControls.css) has
@@ -131,9 +135,12 @@ bool LayoutMedia::IsChildAllowed(LayoutObject* child,
 }
 
 void LayoutMedia::PaintReplaced(const PaintInfo&,
-                                const PhysicalOffset& paint_offset) const {}
+                                const PhysicalOffset& paint_offset) const {
+  NOT_DESTROYED();
+}
 
 LayoutUnit LayoutMedia::ComputePanelWidth(const LayoutRect& media_rect) const {
+  NOT_DESTROYED();
   // TODO(mlamouri): we don't know if the main frame has an horizontal scrollbar
   // if it is out of process. See https://crbug.com/662480
   if (GetDocument().GetPage()->MainFrame()->IsRemoteFrame())

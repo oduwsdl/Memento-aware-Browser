@@ -9,8 +9,8 @@
  * PATENTS file, you can obtain it at www.aomedia.org/license/patent.
  */
 
+#include <vector>
 #include "config/aom_config.h"
-
 #include "third_party/googletest/src/googletest/include/gtest/gtest.h"
 #include "test/codec_factory.h"
 #include "test/datarate_test.h"
@@ -20,9 +20,19 @@
 #include "test/y4m_video_source.h"
 #include "aom/aom_codec.h"
 #include "av1/common/enums.h"
+#include "av1/encoder/encoder.h"
 
 namespace datarate_test {
 namespace {
+
+struct FrameInfo {
+  FrameInfo(aom_codec_pts_t _pts, unsigned int _w, unsigned int _h)
+      : pts(_pts), w(_w), h(_h) {}
+
+  aom_codec_pts_t pts;
+  unsigned int w;
+  unsigned int h;
+};
 
 class DatarateTestSVC
     : public ::libaom_test::CodecTestWith4Params<libaom_test::TestMode, int,
@@ -40,6 +50,14 @@ class DatarateTestSVC
     SetMode(GET_PARAM(1));
     ResetModel();
   }
+
+  virtual void DecompressedFrameHook(const aom_image_t &img,
+                                     aom_codec_pts_t pts) {
+    frame_info_list_.push_back(FrameInfo(pts, img.d_w, img.d_h));
+    ++decoded_nframes_;
+  }
+
+  std::vector<FrameInfo> frame_info_list_;
 
   virtual int GetNumSpatialLayers() { return number_spatial_layers_; }
 
@@ -62,6 +80,7 @@ class DatarateTestSVC
     mismatch_nframes_ = 0;
     mismatch_psnr_ = 0.0;
     set_frame_level_er_ = 0;
+    multi_ref_ = 0;
   }
 
   virtual void PreEncodeFrameHook(::libaom_test::VideoSource *video,
@@ -84,8 +103,9 @@ class DatarateTestSVC
     }
     // Set the reference/update flags, layer_id, and reference_map
     // buffer index.
-    frame_flags_ = set_layer_pattern(video->frame(), &layer_id_,
-                                     &ref_frame_config_, spatial_layer_id);
+    frame_flags_ =
+        set_layer_pattern(video->frame(), &layer_id_, &ref_frame_config_,
+                          spatial_layer_id, multi_ref_);
     encoder->Control(AV1E_SET_SVC_LAYER_ID, &layer_id_);
     encoder->Control(AV1E_SET_SVC_REF_FRAME_CONFIG, &ref_frame_config_);
     if (set_frame_level_er_) {
@@ -118,13 +138,6 @@ class DatarateTestSVC
     }
   }
 
-  virtual void DecompressedFrameHook(const aom_image_t &img,
-                                     aom_codec_pts_t pts) {
-    (void)img;
-    (void)pts;
-    ++decoded_nframes_;
-  }
-
   virtual bool DoDecode() const {
     if (drop_frames_ > 0) {
       for (unsigned int i = 0; i < drop_frames_; ++i) {
@@ -150,7 +163,9 @@ class DatarateTestSVC
   // Layer pattern configuration.
   virtual int set_layer_pattern(int frame_cnt, aom_svc_layer_id_t *layer_id,
                                 aom_svc_ref_frame_config_t *ref_frame_config,
-                                int spatial_layer) {
+                                int spatial_layer, int multi_ref) {
+    int lag_index = 0;
+    int base_count = frame_cnt >> 2;
     layer_id->spatial_layer_id = spatial_layer;
     // Set the referende map buffer idx for the 7 references:
     // LAST_FRAME (0), LAST2_FRAME(1), LAST3_FRAME(2), GOLDEN_FRAME(3),
@@ -169,12 +184,26 @@ class DatarateTestSVC
       //   1    3   5    7
       //     2        6
       // 0        4        8
+      if (multi_ref) {
+        // Keep golden fixed at slot 3.
+        ref_frame_config->ref_idx[3] = 3;
+        // Cyclically refresh slots 4, 5, 6, 7, for lag altref.
+        lag_index = 4 + (base_count % 4);
+        // Set the altref slot to lag_index.
+        ref_frame_config->ref_idx[6] = lag_index;
+      }
       if (frame_cnt % 4 == 0) {
         // Base layer.
         layer_id->temporal_layer_id = 0;
         // Update LAST on layer 0, reference LAST and GF.
         ref_frame_config->refresh[0] = 1;
         ref_frame_config->reference[3] = 1;
+        if (multi_ref) {
+          // Refresh GOLDEN every x ~10 base layer frames.
+          if (base_count % 10 == 0) ref_frame_config->refresh[3] = 1;
+          // Refresh lag_index slot, needed for lagging altref.
+          ref_frame_config->refresh[lag_index] = 1;
+        }
       } else if ((frame_cnt - 1) % 4 == 0) {
         layer_id->temporal_layer_id = 2;
         // First top layer: no updates, only reference LAST (TL0).
@@ -189,6 +218,11 @@ class DatarateTestSVC
         // updated in previous frame. So LAST is TL1 frame.
         ref_frame_config->ref_idx[0] = 1;
         ref_frame_config->ref_idx[1] = 0;
+      }
+      if (multi_ref) {
+        // Every frame can reference GOLDEN AND ALTREF.
+        ref_frame_config->reference[3] = 1;
+        ref_frame_config->reference[6] = 1;
       }
     } else if (number_temporal_layers_ == 1 && number_spatial_layers_ == 2) {
       layer_id->temporal_layer_id = 0;
@@ -408,6 +442,59 @@ class DatarateTestSVC
       ASSERT_LE(effective_datarate_tl[i], target_layer_bitrate_[i] * 1.30)
           << " The datarate for the file is greater than target by too much!";
     }
+    // Top temporal layers are non_reference, so exlcude them from
+    // mismatch count, since loopfilter/cdef is not applied for these on
+    // encoder side, but is always applied on decoder.
+    // This means 150 = #frames(300) - #TL2_frames(150).
+    EXPECT_EQ((int)GetMismatchFrames(), 150);
+  }
+
+  virtual void BasicRateTargetingSVC3TL1SLResizeTest() {
+    cfg_.rc_buf_initial_sz = 500;
+    cfg_.rc_buf_optimal_sz = 500;
+    cfg_.rc_buf_sz = 1000;
+    cfg_.rc_dropframe_thresh = 0;
+    cfg_.rc_min_quantizer = 0;
+    cfg_.rc_max_quantizer = 63;
+    cfg_.rc_end_usage = AOM_CBR;
+    cfg_.g_lag_in_frames = 0;
+    cfg_.g_error_resilient = 1;
+    cfg_.rc_resize_mode = RESIZE_DYNAMIC;
+
+    ::libaom_test::I420VideoSource video("niklas_640_480_30.yuv", 640, 480, 30,
+                                         1, 0, 400);
+    cfg_.g_w = 640;
+    cfg_.g_h = 480;
+    const int bitrate_array[2] = { 70, 100 };
+    cfg_.rc_target_bitrate = bitrate_array[GET_PARAM(4)];
+    ResetModel();
+    number_temporal_layers_ = 3;
+    target_layer_bitrate_[0] = 50 * cfg_.rc_target_bitrate / 100;
+    target_layer_bitrate_[1] = 70 * cfg_.rc_target_bitrate / 100;
+    target_layer_bitrate_[2] = cfg_.rc_target_bitrate;
+    ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
+    for (int i = 0; i < number_temporal_layers_ * number_spatial_layers_; i++) {
+      ASSERT_GE(effective_datarate_tl[i], target_layer_bitrate_[i] * 0.80)
+          << " The datarate for the file is lower than target by too much!";
+      ASSERT_LE(effective_datarate_tl[i], target_layer_bitrate_[i] * 1.60)
+          << " The datarate for the file is greater than target by too much!";
+    }
+    unsigned int last_w = cfg_.g_w;
+    unsigned int last_h = cfg_.g_h;
+    int resize_down_count = 0;
+    for (std::vector<FrameInfo>::const_iterator info = frame_info_list_.begin();
+         info != frame_info_list_.end(); ++info) {
+      if (info->w != last_w || info->h != last_h) {
+        // Verify that resize down occurs.
+        ASSERT_LT(info->w, last_w);
+        ASSERT_LT(info->h, last_h);
+        last_w = info->w;
+        last_h = info->h;
+        resize_down_count++;
+      }
+    }
+    // Must be at least one resize down.
+    ASSERT_GE(resize_down_count, 1);
   }
 
   virtual void BasicRateTargetingSVC1TL2SLTest() {
@@ -639,6 +726,52 @@ class DatarateTestSVC
     }
   }
 
+  virtual void BasicRateTargetingSVC3TL1SLMultiRefDropAllEnhTest() {
+    cfg_.rc_buf_initial_sz = 500;
+    cfg_.rc_buf_optimal_sz = 500;
+    cfg_.rc_buf_sz = 1000;
+    cfg_.rc_dropframe_thresh = 0;
+    cfg_.rc_min_quantizer = 0;
+    cfg_.rc_max_quantizer = 63;
+    cfg_.rc_end_usage = AOM_CBR;
+    cfg_.g_lag_in_frames = 0;
+    // error_resilient can set to off/0, since for SVC the context update
+    // is done per-layer.
+    cfg_.g_error_resilient = 0;
+
+    ::libaom_test::I420VideoSource video("hantro_collage_w352h288.yuv", 352,
+                                         288, 30, 1, 0, 300);
+    const int bitrate_array[2] = { 200, 550 };
+    cfg_.rc_target_bitrate = bitrate_array[GET_PARAM(4)];
+    ResetModel();
+    multi_ref_ = 1;
+    // Drop TL1 and TL2: #frames(300) - #TL0.
+    drop_frames_ = 300 - 300 / 4;
+    int n = 0;
+    for (int i = 0; i < 300; i++) {
+      if (i % 4 != 0) {
+        drop_frames_list_[n] = i;
+        n++;
+      }
+    }
+    number_temporal_layers_ = 3;
+    target_layer_bitrate_[0] = 50 * cfg_.rc_target_bitrate / 100;
+    target_layer_bitrate_[1] = 70 * cfg_.rc_target_bitrate / 100;
+    target_layer_bitrate_[2] = cfg_.rc_target_bitrate;
+    ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
+    for (int i = 0; i < number_temporal_layers_ * number_spatial_layers_; i++) {
+      ASSERT_GE(effective_datarate_tl[i], target_layer_bitrate_[i] * 0.80)
+          << " The datarate for the file is lower than target by too much!";
+      ASSERT_LE(effective_datarate_tl[i], target_layer_bitrate_[i] * 1.30)
+          << " The datarate for the file is greater than target by too much!";
+    }
+    // Test that no mismatches have been found.
+    std::cout << "          Decoded frames: " << GetDecodedFrames() << "\n";
+    std::cout << "          Mismatch frames: " << GetMismatchFrames() << "\n";
+    EXPECT_EQ(300 - GetDecodedFrames(), drop_frames_);
+    EXPECT_EQ((int)GetMismatchFrames(), 0);
+  }
+
   virtual void BasicRateTargetingSVC3TL1SLDropAllEnhTest() {
     cfg_.rc_buf_initial_sz = 500;
     cfg_.rc_buf_optimal_sz = 500;
@@ -791,11 +924,19 @@ class DatarateTestSVC
   unsigned int decoded_nframes_;
   double mismatch_psnr_;
   int set_frame_level_er_;
+  int multi_ref_;
 };
 
 // Check basic rate targeting for CBR, for 3 temporal layers, 1 spatial.
 TEST_P(DatarateTestSVC, BasicRateTargetingSVC3TL1SL) {
   BasicRateTargetingSVC3TL1SLTest();
+}
+
+// Check basic rate targeting for CBR, for 3 temporal layers, 1 spatial,
+// with dynamic resize on. Encode at very low bitrate and check that
+// there is at least one resize (down) event.
+TEST_P(DatarateTestSVC, BasicRateTargetingSVC3TL1SLResize) {
+  BasicRateTargetingSVC3TL1SLResizeTest();
 }
 
 // Check basic rate targeting for CBR, for 2 spatial layers, 1 temporal.
@@ -833,6 +974,15 @@ TEST_P(DatarateTestSVC, BasicRateTargeting444SVC3TL3SL) {
 // Check basic rate targeting for CBR, for 3 temporal layers, 1 spatial layer,
 // with dropping of all enhancement layers (TL 1 and TL2). Check that the base
 // layer (TL0) can still be decodeable (with no mismatch) with the
+// error_resilient flag set to 0. This test used the pattern with multiple
+// references (last, golden, and altref), updated on base layer.
+TEST_P(DatarateTestSVC, BasicRateTargetingSVC3TL1SLMultiRefDropAllEnh) {
+  BasicRateTargetingSVC3TL1SLMultiRefDropAllEnhTest();
+}
+
+// Check basic rate targeting for CBR, for 3 temporal layers, 1 spatial layer,
+// with dropping of all enhancement layers (TL 1 and TL2). Check that the base
+// layer (TL0) can still be decodeable (with no mismatch) with the
 // error_resilient flag set to 0.
 TEST_P(DatarateTestSVC, BasicRateTargetingSVC3TL1SLDropAllEnh) {
   BasicRateTargetingSVC3TL1SLDropAllEnhTest();
@@ -856,11 +1006,11 @@ TEST_P(DatarateTestSVC, BasicRateTargetingSVC3TL1SLDropAllEnhFrameER) {
   BasicRateTargetingSVC3TL1SLDropAllEnhFrameERTest();
 }
 
-AV1_INSTANTIATE_TEST_CASE(DatarateTestSVC,
-                          ::testing::Values(::libaom_test::kRealTime),
-                          ::testing::Range(7, 9),
-                          ::testing::Range<unsigned int>(0, 4),
-                          ::testing::Values(0, 1));
+AV1_INSTANTIATE_TEST_SUITE(DatarateTestSVC,
+                           ::testing::Values(::libaom_test::kRealTime),
+                           ::testing::Range(7, 10),
+                           ::testing::Range<unsigned int>(0, 4),
+                           ::testing::Values(0, 1));
 
 }  // namespace
 }  // namespace datarate_test

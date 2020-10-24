@@ -26,13 +26,8 @@
 #include "cast_utils.h"
 #include "layer_validation_tests.h"
 
-void SetEnvVar(const char *env_var, const char *value) {
-#if defined(_WIN32)
-    SetEnvironmentVariable(env_var, value);
-#else
-    setenv(env_var, value, true);
-#endif
-}
+// Global list of sType,size identifiers
+std::vector<std::pair<uint32_t, uint32_t>> custom_stype_info{};
 
 VkFormat FindSupportedDepthOnlyFormat(VkPhysicalDevice phy) {
     const VkFormat ds_formats[] = {VK_FORMAT_D16_UNORM, VK_FORMAT_X8_D24_UNORM_PACK32, VK_FORMAT_D32_SFLOAT};
@@ -132,6 +127,13 @@ bool ImageFormatAndFeaturesSupported(const VkInstance inst, const VkPhysicalDevi
 #endif
 
     return true;
+}
+
+bool BufferFormatAndFeaturesSupported(VkPhysicalDevice phy, VkFormat format, VkFormatFeatureFlags features) {
+    VkFormatProperties format_props;
+    vk::GetPhysicalDeviceFormatProperties(phy, format, &format_props);
+    VkFormatFeatureFlags phy_features = format_props.bufferFeatures;
+    return (features == (phy_features & features));
 }
 
 VkPhysicalDevicePushDescriptorPropertiesKHR GetPushDescriptorProperties(VkInstance instance, VkPhysicalDevice gpu) {
@@ -243,6 +245,9 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
     VkResult err;
 
     if (rp1_vuid) {
+        // Some tests mismatch attachment type with layout
+        error_monitor->SetUnexpectedError("VUID-VkSubpassDescription-None-04437");
+
         error_monitor->SetDesiredFailureMsg(kErrorBit, rp1_vuid);
         err = vk::CreateRenderPass(device, create_info, nullptr, &render_pass);
         if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
@@ -255,6 +260,12 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
         safe_VkRenderPassCreateInfo2 create_info2;
         ConvertVkRenderPassCreateInfoToV2KHR(*create_info, &create_info2);
 
+        // aspectMasks might never get set in ConvertVkRenderPassCreateInfoToV2KHR
+        error_monitor->SetUnexpectedError("VUID-VkAttachmentReference2-attachment-03311");
+        error_monitor->SetUnexpectedError("VUID-VkAttachmentReference2-attachment-03312");
+        // Some tests mismatch attachment type with layout
+        error_monitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
+
         error_monitor->SetDesiredFailureMsg(kErrorBit, rp2_vuid);
         err = vkCreateRenderPass2KHR(device, create_info2.ptr(), nullptr, &render_pass);
         if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
@@ -263,6 +274,12 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
         // For api version >= 1.2, try core entrypoint
         PFN_vkCreateRenderPass2 vkCreateRenderPass2 = (PFN_vkCreateRenderPass2)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2");
         if (vkCreateRenderPass2) {
+            // aspectMasks might never get set in ConvertVkRenderPassCreateInfoToV2KHR
+            error_monitor->SetUnexpectedError("VUID-VkAttachmentReference2-attachment-03311");
+            error_monitor->SetUnexpectedError("VUID-VkAttachmentReference2-attachment-03312");
+            // Some tests mismatch attachment type with layout
+            error_monitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
+
             error_monitor->SetDesiredFailureMsg(kErrorBit, rp2_vuid);
             err = vkCreateRenderPass2(device, create_info2.ptr(), nullptr, &render_pass);
             if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
@@ -1287,10 +1304,13 @@ void VkVerticesObj::BindVertexBuffers(VkCommandBuffer aCommandBuffer, unsigned a
 
 OneOffDescriptorSet::OneOffDescriptorSet(VkDeviceObj *device, const Bindings &bindings,
                                          VkDescriptorSetLayoutCreateFlags layout_flags, void *layout_pnext,
-                                         VkDescriptorPoolCreateFlags poolFlags, void *allocate_pnext)
+                                         VkDescriptorPoolCreateFlags poolFlags, void *allocate_pnext, int buffer_info_size,
+                                         int image_info_size, int buffer_view_size)
     : device_{device}, pool_{}, layout_(device, bindings, layout_flags, layout_pnext), set_{} {
     VkResult err;
-
+    buffer_infos.reserve(buffer_info_size);
+    image_infos.reserve(image_info_size);
+    buffer_views.reserve(buffer_view_size);
     std::vector<VkDescriptorPoolSize> sizes;
     for (const auto &b : bindings) sizes.push_back({b.descriptorType, std::max(1u, b.descriptorCount)});
 
@@ -1313,21 +1333,32 @@ OneOffDescriptorSet::~OneOffDescriptorSet() {
 
 bool OneOffDescriptorSet::Initialized() { return pool_ != VK_NULL_HANDLE && layout_.initialized() && set_ != VK_NULL_HANDLE; }
 
+void OneOffDescriptorSet::Clear() {
+    buffer_infos.clear();
+    image_infos.clear();
+    buffer_views.clear();
+    descriptor_writes.clear();
+}
+
 void OneOffDescriptorSet::WriteDescriptorBufferInfo(int blinding, VkBuffer buffer, VkDeviceSize size,
-                                                    VkDescriptorType descriptorType) {
+                                                    VkDescriptorType descriptorType, uint32_t count) {
+    const auto index = buffer_infos.size();
+
     VkDescriptorBufferInfo buffer_info = {};
     buffer_info.buffer = buffer;
     buffer_info.offset = 0;
     buffer_info.range = size;
-    buffer_infos.emplace_back(buffer_info);
-    size_t index = buffer_infos.size() - 1;
+
+    for (uint32_t i = 0; i < count; ++i) {
+        buffer_infos.emplace_back(buffer_info);
+    }
 
     VkWriteDescriptorSet descriptor_write;
     memset(&descriptor_write, 0, sizeof(descriptor_write));
     descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptor_write.dstSet = set_;
     descriptor_write.dstBinding = blinding;
-    descriptor_write.descriptorCount = 1;
+    descriptor_write.descriptorCount = count;
     descriptor_write.descriptorType = descriptorType;
     descriptor_write.pBufferInfo = &buffer_infos[index];
     descriptor_write.pImageInfo = nullptr;
@@ -1336,15 +1367,22 @@ void OneOffDescriptorSet::WriteDescriptorBufferInfo(int blinding, VkBuffer buffe
     descriptor_writes.emplace_back(descriptor_write);
 }
 
-void OneOffDescriptorSet::WriteDescriptorBufferView(int blinding, VkBufferView &buffer_view, VkDescriptorType descriptorType) {
+void OneOffDescriptorSet::WriteDescriptorBufferView(int blinding, VkBufferView &buffer_view, VkDescriptorType descriptorType,
+                                                    uint32_t count) {
+    const auto index = buffer_views.size();
+
+    for (uint32_t i = 0; i < count; ++i) {
+        buffer_views.emplace_back(buffer_view);
+    }
+
     VkWriteDescriptorSet descriptor_write;
     memset(&descriptor_write, 0, sizeof(descriptor_write));
     descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptor_write.dstSet = set_;
     descriptor_write.dstBinding = blinding;
-    descriptor_write.descriptorCount = 1;
+    descriptor_write.descriptorCount = count;
     descriptor_write.descriptorType = descriptorType;
-    descriptor_write.pTexelBufferView = &buffer_view;
+    descriptor_write.pTexelBufferView = &buffer_views[index];
     descriptor_write.pImageInfo = nullptr;
     descriptor_write.pBufferInfo = nullptr;
 
@@ -1352,20 +1390,24 @@ void OneOffDescriptorSet::WriteDescriptorBufferView(int blinding, VkBufferView &
 }
 
 void OneOffDescriptorSet::WriteDescriptorImageInfo(int blinding, VkImageView image_view, VkSampler sampler,
-                                                   VkDescriptorType descriptorType) {
+                                                   VkDescriptorType descriptorType, VkImageLayout imageLayout, uint32_t count) {
+    const auto index = image_infos.size();
+
     VkDescriptorImageInfo image_info = {};
     image_info.imageView = image_view;
     image_info.sampler = sampler;
-    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    image_infos.emplace_back(image_info);
-    size_t index = image_infos.size() - 1;
+    image_info.imageLayout = imageLayout;
+
+    for (uint32_t i = 0; i < count; ++i) {
+        image_infos.emplace_back(image_info);
+    }
 
     VkWriteDescriptorSet descriptor_write;
     memset(&descriptor_write, 0, sizeof(descriptor_write));
     descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptor_write.dstSet = set_;
     descriptor_write.dstBinding = blinding;
-    descriptor_write.descriptorCount = 1;
+    descriptor_write.descriptorCount = count;
     descriptor_write.descriptorType = descriptorType;
     descriptor_write.pImageInfo = &image_infos[index];
     descriptor_write.pBufferInfo = nullptr;
@@ -3133,6 +3175,11 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     }
 }
 
+void VkSyncValTest::InitSyncValFramework() {
+    // Enable synchronization validation
+    InitFramework(m_errorMonitor, &features_);
+}
+
 void print_android(const char *c) {
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
     __android_log_print(ANDROID_LOG_INFO, "VulkanLayerValidationTests", "%s", c);
@@ -3334,8 +3381,15 @@ void android_main(struct android_app *app) {
 int main(int argc, char **argv) {
     int result;
 
-#if defined(_WIN32) && !defined(NDEBUG)
+#if defined(_WIN32)
+#if !defined(NDEBUG)
     _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
+    // Avoid "Abort, Retry, Ignore" dialog boxes
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 #endif
 

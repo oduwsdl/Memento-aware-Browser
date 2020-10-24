@@ -221,7 +221,7 @@ void WebEmbeddedWorkerImpl::StartWorkerThread(
       nullptr /* OriginTrialTokens */, worker_start_data->devtools_worker_token,
       std::move(worker_settings),
       // Generate the full code cache in the first execution of the script.
-      kV8CacheOptionsFullCodeWithoutHeatCheck,
+      mojom::blink::V8CacheOptions::kFullCodeWithoutHeatCheck,
       nullptr /* worklet_module_respones_map */,
       std::move(browser_interface_broker), BeginFrameProviderParams(),
       nullptr /* parent_feature_policy */,
@@ -231,7 +231,8 @@ void WebEmbeddedWorkerImpl::StartWorkerThread(
       std::make_unique<ServiceWorkerGlobalScopeProxy>(
           *this, *worker_context_client_, initiator_thread_task_runner),
       std::move(installed_scripts_manager), std::move(cache_storage_remote),
-      initiator_thread_task_runner);
+      initiator_thread_task_runner, worker_start_data->service_worker_token,
+      worker_start_data->ukm_source_id);
 
   auto devtools_params = std::make_unique<WorkerDevToolsParams>();
   devtools_params->devtools_worker_token =
@@ -263,9 +264,10 @@ void WebEmbeddedWorkerImpl::StartWorkerThread(
     // > "classic": Fetch a classic worker script given job's serialized script
     // > url, job's client, "serviceworker", and the to-be-created environment
     // > settings object for this service worker.
-    case mojom::ScriptType::kClassic:
+    case mojom::blink::ScriptType::kClassic:
       worker_thread_->FetchAndRunClassicScript(
           worker_start_data->script_url,
+          nullptr /* worker_main_script_load_params */,
           std::move(fetch_client_setting_object_data),
           nullptr /* outside_resource_timing_notifier */,
           v8_inspector::V8StackTraceId());
@@ -274,9 +276,10 @@ void WebEmbeddedWorkerImpl::StartWorkerThread(
     // > "module": Fetch a module worker script graph given job’s serialized
     // > script url, job’s client, "serviceworker", "omit", and the
     // > to-be-created environment settings object for this service worker.
-    case mojom::ScriptType::kModule:
+    case mojom::blink::ScriptType::kModule:
       worker_thread_->FetchAndRunModuleScript(
           worker_start_data->script_url,
+          nullptr /* worker_main_script_load_params */,
           std::move(fetch_client_setting_object_data),
           nullptr /* outside_resource_timing_notifier */,
           network::mojom::CredentialsMode::kOmit);

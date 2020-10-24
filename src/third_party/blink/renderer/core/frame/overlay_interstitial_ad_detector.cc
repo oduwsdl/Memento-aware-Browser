@@ -18,6 +18,8 @@ namespace blink {
 
 namespace {
 
+static bool g_frequency_capping_enabled = true;
+
 constexpr base::TimeDelta kFireInterval = base::TimeDelta::FromSeconds(1);
 constexpr double kLargeAdSizeToViewportSizeThreshold = 0.1;
 
@@ -27,10 +29,7 @@ constexpr double kLargeAdSizeToViewportSizeThreshold = 0.1;
 // 2) <body> or <html> has style="overflow:hidden", and among its container
 // ancestors (including itself), the 2nd to the top (where the top should always
 // be the <body>) has absolute position.
-bool IsOverlayAdCandidate(Element* element) {
-  if (!element->IsAdRelated())
-    return false;
-
+bool IsOverlayCandidate(Element* element) {
   const ComputedStyle* style = nullptr;
   LayoutView* layout_view = element->GetDocument().GetLayoutView();
   LayoutObject* object = element->GetLayoutObject();
@@ -62,7 +61,7 @@ bool IsOverlayAdCandidate(Element* element) {
 void OverlayInterstitialAdDetector::MaybeFireDetection(LocalFrame* main_frame) {
   DCHECK(main_frame);
   DCHECK(main_frame->IsMainFrame());
-  if (done_detection_)
+  if (popup_ad_detected_)
     return;
 
   DCHECK(main_frame->GetDocument());
@@ -76,7 +75,8 @@ void OverlayInterstitialAdDetector::MaybeFireDetection(LocalFrame* main_frame) {
   }
 
   base::Time current_time = base::Time::Now();
-  if (started_detection_ && current_time < last_detection_time_ + kFireInterval)
+  if (started_detection_ && g_frequency_capping_enabled &&
+      current_time < last_detection_time_ + kFireInterval)
     return;
 
   TRACE_EVENT0("blink,benchmark",
@@ -86,7 +86,6 @@ void OverlayInterstitialAdDetector::MaybeFireDetection(LocalFrame* main_frame) {
   last_detection_time_ = current_time;
 
   IntSize main_frame_size = main_frame->GetMainFrameViewportSize();
-  last_detection_main_frame_size_ = main_frame_size;
 
   if (main_frame_size != last_detection_main_frame_size_) {
     // Reset the candidate when the the viewport size has changed. Changing
@@ -95,6 +94,14 @@ void OverlayInterstitialAdDetector::MaybeFireDetection(LocalFrame* main_frame) {
     // could have happened is that the element no longer covers the center,
     // but still exists (e.g. a sticky ad at the top).
     candidate_id_ = kInvalidDOMNodeId;
+
+    // Reset |content_has_been_stable_| to so that the current hit-test element
+    // will be marked unqualified. We don't want to consider an overlay as a
+    // popup if it wasn't counted before and only satisfies the conditions later
+    // due to viewport size change.
+    content_has_been_stable_ = false;
+
+    last_detection_main_frame_size_ = main_frame_size;
   }
 
   // We want to explicitly prevent mid-roll ads from being categorized as
@@ -114,14 +121,14 @@ void OverlayInterstitialAdDetector::MaybeFireDetection(LocalFrame* main_frame) {
   DOMNodeId element_id = DOMNodeIds::IdForNode(element);
 
   // Skip considering the overlay for a pop-up candidate if we haven't seen or
-  // have just seen the first meaningful paint. If we have just seen the first
-  // meaningful paint, however, we would consider future overlays for pop-up
-  // candidates.
-  if (!main_content_has_loaded_) {
+  // have just seen the first meaningful paint, or if the viewport size has just
+  // changed. If we have just seen the first meaningful paint, however, we
+  // would consider future overlays for pop-up candidates.
+  if (!content_has_been_stable_) {
     if (!PaintTiming::From(*main_frame->GetDocument())
              .FirstMeaningfulPaint()
              .is_null()) {
-      main_content_has_loaded_ = true;
+      content_has_been_stable_ = true;
     }
 
     last_unqualified_element_id_ = element_id;
@@ -130,24 +137,36 @@ void OverlayInterstitialAdDetector::MaybeFireDetection(LocalFrame* main_frame) {
 
   bool is_new_element = (element_id != candidate_id_);
 
+  // The popup candidate has just been dismissed.
   if (is_new_element && candidate_id_ != kInvalidDOMNodeId) {
     // If the main frame scrolling offset hasn't changed since the candidate's
     // appearance, we consider it to be a overlay interstitial; otherwise, we
     // skip that candidate because it could be a parallax/scroller ad.
     if (main_frame->GetMainFrameScrollOffset().Y() ==
         candidate_start_main_frame_scroll_offset_) {
-      OnPopupAdDetected(main_frame);
-      return;
+      OnPopupDetected(main_frame, candidate_is_ad_);
     }
+
+    if (popup_ad_detected_)
+      return;
+
     last_unqualified_element_id_ = candidate_id_;
     candidate_id_ = kInvalidDOMNodeId;
+    candidate_is_ad_ = false;
   }
-
-  if (!is_new_element)
-    return;
 
   if (element_id == last_unqualified_element_id_)
     return;
+
+  if (!is_new_element) {
+    // Potentially update the ad status of the candidate from non-ad to ad.
+    // Ad tagging could occur after the initial painting (e.g. at loading time),
+    // and we are making the best effort to catch it.
+    if (element->IsAdRelated())
+      candidate_is_ad_ = true;
+
+    return;
+  }
 
   if (!element->GetLayoutObject())
     return;
@@ -159,16 +178,22 @@ void OverlayInterstitialAdDetector::MaybeFireDetection(LocalFrame* main_frame) {
        main_frame_size.Area() * kLargeAdSizeToViewportSizeThreshold);
 
   bool has_gesture = LocalFrame::HasTransientUserActivation(main_frame);
+  bool is_ad = element->IsAdRelated();
 
-  if (!has_gesture && is_large && IsOverlayAdCandidate(element)) {
+  if (!has_gesture && is_large && (!popup_detected_ || is_ad) &&
+      IsOverlayCandidate(element)) {
     // If main page is not scrollable, immediately determinine the overlay
     // to be a popup. There's is no need to check any state at the dismissal
     // time.
     if (!main_frame->GetDocument()->GetLayoutView()->HasScrollableOverflowY()) {
-      OnPopupAdDetected(main_frame);
-      return;
+      OnPopupDetected(main_frame, is_ad);
     }
+
+    if (popup_ad_detected_)
+      return;
+
     candidate_id_ = element_id;
+    candidate_is_ad_ = is_ad;
     candidate_start_main_frame_scroll_offset_ =
         main_frame->GetMainFrameScrollOffset().Y();
   } else {
@@ -176,9 +201,23 @@ void OverlayInterstitialAdDetector::MaybeFireDetection(LocalFrame* main_frame) {
   }
 }
 
-void OverlayInterstitialAdDetector::OnPopupAdDetected(LocalFrame* main_frame) {
-  UseCounter::Count(main_frame->GetDocument(), WebFeature::kOverlayPopupAd);
-  done_detection_ = true;
+// static
+void OverlayInterstitialAdDetector::DisableFrequencyCappingForTesting() {
+  g_frequency_capping_enabled = false;
+}
+
+void OverlayInterstitialAdDetector::OnPopupDetected(LocalFrame* main_frame,
+                                                    bool is_ad) {
+  if (!popup_detected_) {
+    UseCounter::Count(main_frame->GetDocument(), WebFeature::kOverlayPopup);
+    popup_detected_ = true;
+  }
+
+  if (is_ad) {
+    DCHECK(!popup_ad_detected_);
+    UseCounter::Count(main_frame->GetDocument(), WebFeature::kOverlayPopupAd);
+    popup_ad_detected_ = true;
+  }
 }
 
 }  // namespace blink

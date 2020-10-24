@@ -54,9 +54,9 @@ bool WakeUpBudgetPool::CanRunTasksAt(base::TimeTicks moment,
   if (!last_wake_up_)
     return false;
   // |is_wake_up| flag means that we're in the beginning of the wake-up and
-  // |OnWakeUp| has just been called. This is needed to support backwards
-  // compability with old throttling mechanism (when |wake_up_duration| is zero)
-  // and allow only one task to run.
+  // |OnWakeUp| has just been called. This is needed to support
+  // backwards compatibility with old throttling mechanism (when
+  // |wake_up_duration| is zero) and allow only one task to run.
   if (last_wake_up_ == moment && is_wake_up)
     return true;
   return moment < last_wake_up_.value() + wake_up_duration_;
@@ -124,7 +124,7 @@ void WakeUpBudgetPool::OnWakeUp(base::TimeTicks now) {
 
 void WakeUpBudgetPool::AsValueInto(base::trace_event::TracedValue* state,
                                    base::TimeTicks now) const {
-  state->BeginDictionary(name_);
+  auto dictionary_scope = state->BeginDictionaryScoped(name_);
 
   state->SetString("name", name_);
   state->SetDouble("wake_up_interval_in_seconds",
@@ -137,13 +137,12 @@ void WakeUpBudgetPool::AsValueInto(base::trace_event::TracedValue* state,
   }
   state->SetBoolean("is_enabled", is_enabled_);
 
-  state->BeginArray("task_queues");
-  for (TaskQueue* queue : associated_task_queues_) {
-    state->AppendString(PointerToString(queue));
+  {
+    auto array_scope = state->BeginArrayScoped("task_queues");
+    for (TaskQueue* queue : associated_task_queues_) {
+      state->AppendString(PointerToString(queue));
+    }
   }
-  state->EndArray();
-
-  state->EndDictionary();
 }
 
 }  // namespace scheduler

@@ -74,7 +74,10 @@ class MockBaseFetchContext final : public BaseFetchContext {
                                const FetchInitiatorInfo&,
                                ResourceRequestBlockedReason,
                                ResourceType) const override {}
-  bool ShouldBypassMainWorldCSP() const override { return false; }
+  const ContentSecurityPolicy* GetContentSecurityPolicyForWorld(
+      const DOMWrapperWorld* world) const override {
+    return GetContentSecurityPolicy();
+  }
   bool IsSVGImageChromeClient() const override { return false; }
   void CountUsage(WebFeature) const override {}
   void CountDeprecation(WebFeature) const override {}
@@ -86,7 +89,7 @@ class MockBaseFetchContext final : public BaseFetchContext {
     return nullptr;
   }
   bool ShouldBlockFetchByMixedContentCheck(
-      mojom::RequestContextType,
+      mojom::blink::RequestContextType,
       const base::Optional<ResourceRequest::RedirectInfo>&,
       const KURL&,
       ReportingDisposition,
@@ -131,10 +134,11 @@ class BaseFetchContextTest : public testing::Test {
     auto& properties = resource_fetcher_properties_->MakeDetachable();
     fetch_context_ = MakeGarbageCollected<MockBaseFetchContext>(
         properties, execution_context_);
-    resource_fetcher_ = MakeGarbageCollected<ResourceFetcher>(
-        ResourceFetcherInit(properties, fetch_context_,
-                            base::MakeRefCounted<scheduler::FakeTaskRunner>(),
-                            MakeGarbageCollected<TestLoaderFactory>()));
+    resource_fetcher_ =
+        MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
+            properties, fetch_context_,
+            base::MakeRefCounted<scheduler::FakeTaskRunner>(),
+            MakeGarbageCollected<TestLoaderFactory>(), execution_context_));
   }
 
   const FetchClientSettingsObject& GetFetchClientSettingsObject() const {
@@ -163,10 +167,10 @@ TEST_F(BaseFetchContextTest, CanRequest) {
 
   KURL url(NullURL(), "http://baz.test");
   ResourceRequest resource_request(url);
-  resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
+  resource_request.SetRequestContext(mojom::blink::RequestContextType::SCRIPT);
   resource_request.SetRequestorOrigin(GetSecurityOrigin());
 
-  ResourceLoaderOptions options;
+  ResourceLoaderOptions options(nullptr /* world */);
 
   EXPECT_EQ(ResourceRequestBlockedReason::kCSP,
             fetch_context_->CanRequest(
@@ -188,11 +192,11 @@ TEST_F(BaseFetchContextTest, CheckCSPForRequest) {
 
   KURL url(NullURL(), "http://baz.test");
 
-  ResourceLoaderOptions options;
+  ResourceLoaderOptions options(nullptr /* world */);
 
   EXPECT_EQ(base::nullopt,
             fetch_context_->CheckCSPForRequest(
-                mojom::RequestContextType::SCRIPT,
+                mojom::blink::RequestContextType::SCRIPT,
                 network::mojom::RequestDestination::kScript, url, options,
                 ReportingDisposition::kReport,
                 KURL(NullURL(), "http://www.redirecting.com/"),
@@ -210,52 +214,56 @@ TEST_F(BaseFetchContextTest, CanRequestWhenDetached) {
 
   EXPECT_EQ(base::nullopt,
             fetch_context_->CanRequest(
-                ResourceType::kRaw, request, url, ResourceLoaderOptions(),
+                ResourceType::kRaw, request, url,
+                ResourceLoaderOptions(nullptr /* world */),
                 ReportingDisposition::kSuppressReporting, base::nullopt));
 
   EXPECT_EQ(base::nullopt,
-            fetch_context_->CanRequest(ResourceType::kRaw, keepalive_request,
-                                       url, ResourceLoaderOptions(),
-                                       ReportingDisposition::kSuppressReporting,
-                                       base::nullopt));
+            fetch_context_->CanRequest(
+                ResourceType::kRaw, keepalive_request, url,
+                ResourceLoaderOptions(nullptr /* world */),
+                ReportingDisposition::kSuppressReporting, base::nullopt));
 
   ResourceRequest::RedirectInfo redirect_info(
       KURL(NullURL(), "http://www.redirecting.com/"),
       KURL(NullURL(), "http://www.redirecting.com/"));
   EXPECT_EQ(base::nullopt,
             fetch_context_->CanRequest(
-                ResourceType::kRaw, request, url, ResourceLoaderOptions(),
+                ResourceType::kRaw, request, url,
+                ResourceLoaderOptions(nullptr /* world */),
                 ReportingDisposition::kSuppressReporting, redirect_info));
 
   EXPECT_EQ(base::nullopt,
-            fetch_context_->CanRequest(ResourceType::kRaw, keepalive_request,
-                                       url, ResourceLoaderOptions(),
-                                       ReportingDisposition::kSuppressReporting,
-                                       redirect_info));
+            fetch_context_->CanRequest(
+                ResourceType::kRaw, keepalive_request, url,
+                ResourceLoaderOptions(nullptr /* world */),
+                ReportingDisposition::kSuppressReporting, redirect_info));
 
   resource_fetcher_->ClearContext();
 
   EXPECT_EQ(ResourceRequestBlockedReason::kOther,
             fetch_context_->CanRequest(
-                ResourceType::kRaw, request, url, ResourceLoaderOptions(),
+                ResourceType::kRaw, request, url,
+                ResourceLoaderOptions(nullptr /* world */),
                 ReportingDisposition::kSuppressReporting, base::nullopt));
 
   EXPECT_EQ(ResourceRequestBlockedReason::kOther,
-            fetch_context_->CanRequest(ResourceType::kRaw, keepalive_request,
-                                       url, ResourceLoaderOptions(),
-                                       ReportingDisposition::kSuppressReporting,
-                                       base::nullopt));
+            fetch_context_->CanRequest(
+                ResourceType::kRaw, keepalive_request, url,
+                ResourceLoaderOptions(nullptr /* world */),
+                ReportingDisposition::kSuppressReporting, base::nullopt));
 
   EXPECT_EQ(ResourceRequestBlockedReason::kOther,
             fetch_context_->CanRequest(
-                ResourceType::kRaw, request, url, ResourceLoaderOptions(),
+                ResourceType::kRaw, request, url,
+                ResourceLoaderOptions(nullptr /* world */),
                 ReportingDisposition::kSuppressReporting, redirect_info));
 
   EXPECT_EQ(base::nullopt,
-            fetch_context_->CanRequest(ResourceType::kRaw, keepalive_request,
-                                       url, ResourceLoaderOptions(),
-                                       ReportingDisposition::kSuppressReporting,
-                                       redirect_info));
+            fetch_context_->CanRequest(
+                ResourceType::kRaw, keepalive_request, url,
+                ResourceLoaderOptions(nullptr /* world */),
+                ReportingDisposition::kSuppressReporting, redirect_info));
 }
 
 // Test that User Agent CSS can only load images with data urls.
@@ -265,7 +273,7 @@ TEST_F(BaseFetchContextTest, UACSSTest) {
 
   ResourceRequest resource_request(test_url);
   resource_request.SetRequestorOrigin(GetSecurityOrigin());
-  ResourceLoaderOptions options;
+  ResourceLoaderOptions options(nullptr /* world */);
   options.initiator_info.name = fetch_initiator_type_names::kUacss;
 
   ResourceRequest::RedirectInfo redirect_info(
@@ -299,7 +307,7 @@ TEST_F(BaseFetchContextTest, UACSSTest_BypassCSP) {
 
   ResourceRequest resource_request(data_url);
   resource_request.SetRequestorOrigin(GetSecurityOrigin());
-  ResourceLoaderOptions options;
+  ResourceLoaderOptions options(nullptr /* world */);
   options.initiator_info.name = fetch_initiator_type_names::kUacss;
 
   ResourceRequest::RedirectInfo redirect_info(

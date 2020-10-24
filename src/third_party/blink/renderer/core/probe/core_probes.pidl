@@ -142,7 +142,7 @@ interface CoreProbes {
   void PseudoElementDestroyed([Keep] PseudoElement*);
   void DidCreateAnimation(Document*, unsigned);
   void AnimationPlayStateChanged(Document*, Animation*, Animation::AnimationPlayState old_play_state, Animation::AnimationPlayState new_play_state);
-  void WindowOpen([Keep] Document*, const String& url, const AtomicString& window_name, const WebWindowFeatures& window_features, bool user_gestrue);
+  void WindowOpen(ExecutionContext*, const KURL& url, const AtomicString& window_name, const WebWindowFeatures& window_features, bool user_gestrue);
   void ConsoleMessageAdded(ExecutionContext*, ConsoleMessage*);
   void InspectorIssueAdded(CoreProbeSink*, InspectorIssue*);
   void WillRunJavaScriptDialog(LocalFrame* frame);
@@ -152,7 +152,7 @@ interface CoreProbes {
   void BreakableLocation(ExecutionContext* context, const char* name);
   RecalculateStyle(Document* document);
   UpdateLayout(Document* document);
-  ExecuteScript([Keep] ExecutionContext* context, const String& script_url);
+  ExecuteScript([Keep] ExecutionContext* context, const String& script_url, int script_id);
   CallFunction([Keep] ExecutionContext* context, v8::Local<v8::Function> function, int depth = 0);
   UserCallback([Keep] ExecutionContext* context, const char* name, const AtomicString& atomic_name, bool recurring, EventTarget* event_target = nullptr);
   V8Compile([Keep] ExecutionContext* context, const String& file_name, int line, int column);
@@ -170,7 +170,7 @@ interface CoreProbes {
   void DidCloseAudioContext(Document*);
   void DidResumeAudioContext(Document*);
   void DidSuspendAudioContext(Document*);
-  void ProduceCompilationCache(LocalFrame*, const ScriptSourceCode& source, v8::Local<v8::Script> script);
+  void ProduceCompilationCache(CoreProbeSink*, const ScriptSourceCode& source, v8::Local<v8::Script> script);
   void ConsumeCompilationCache(ExecutionContext*, const ScriptSourceCode& source, v8::ScriptCompiler::CachedData** cached_data);
   void NodeCreated([Keep] Node* node);
   void PortalRemoteFrameCreated(Document*, HTMLPortalElement* portal_element);
@@ -182,4 +182,6 @@ interface CoreProbes {
   void PlayersCreated(ExecutionContext* context, const Vector<WebString>& players);
   void SetDevToolsIds(CoreProbeSink*, ResourceRequest& request, const FetchInitiatorInfo&);
   void DidMutateStyleSheet(Document*, CSSStyleSheet* style_sheet);
+  void LocalFontsEnabled(ExecutionContext*, bool* result);
+  void DidUpdateComputedStyle([Keep] Element*, const ComputedStyle* old_style, const ComputedStyle* new_style);
 }

@@ -9,6 +9,8 @@
 #ifndef LIBANGLE_RENDERER_GL_CGL_DISPLAYCGL_H_
 #define LIBANGLE_RENDERER_GL_CGL_DISPLAYCGL_H_
 
+#include <thread>
+
 #include "libANGLE/renderer/gl/DisplayGL.h"
 
 struct _CGLContextObject;
@@ -22,6 +24,17 @@ namespace rx
 
 class WorkerContext;
 
+struct EnsureCGLContextIsCurrent : angle::NonCopyable
+{
+  public:
+    EnsureCGLContextIsCurrent(CGLContextObj context);
+    ~EnsureCGLContextIsCurrent();
+
+  private:
+    CGLContextObj mOldContext;
+    bool mResetContext;
+};
+
 class DisplayCGL : public DisplayGL
 {
   public:
@@ -31,7 +44,8 @@ class DisplayCGL : public DisplayGL
     egl::Error initialize(egl::Display *display) override;
     void terminate() override;
 
-    egl::Error makeCurrent(egl::Surface *drawSurface,
+    egl::Error makeCurrent(egl::Display *display,
+                           egl::Surface *drawSurface,
                            egl::Surface *readSurface,
                            gl::Context *context) override;
 
@@ -101,6 +115,7 @@ class DisplayCGL : public DisplayGL
 
     egl::Display *mEGLDisplay;
     CGLContextObj mContext;
+    std::unordered_map<std::thread::id, CGLContextObj> mCurrentContexts;
     CGLPixelFormatObj mPixelFormat;
     bool mSupportsGPUSwitching;
     uint64_t mCurrentGPUID;

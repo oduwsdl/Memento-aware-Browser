@@ -18,6 +18,7 @@
 #include "core/fpdfdoc/ipvt_fontmap.h"
 #include "core/fxcrt/autorestorer.h"
 #include "core/fxcrt/fx_codepage.h"
+#include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_graphstatedata.h"
 #include "core/fxge/cfx_pathdata.h"
 #include "core/fxge/cfx_renderdevice.h"
@@ -109,8 +110,7 @@ IPVT_FontMap* CPWL_EditImpl_Provider::GetFontMap() const {
   return m_pFontMap;
 }
 
-uint32_t CPWL_EditImpl_Provider::GetCharWidth(int32_t nFontIndex,
-                                              uint16_t word) {
+int CPWL_EditImpl_Provider::GetCharWidth(int32_t nFontIndex, uint16_t word) {
   RetainPtr<CPDF_Font> pPDFFont = m_pFontMap->GetPDFFont(nFontIndex);
   if (!pPDFFont)
     return 0;
@@ -149,7 +149,7 @@ bool CPWL_EditImpl_Provider::IsLatinWord(uint16_t word) {
   return FX_EDIT_ISLATINWORD(word);
 }
 
-CPWL_EditImpl_Refresh::CPWL_EditImpl_Refresh() {}
+CPWL_EditImpl_Refresh::CPWL_EditImpl_Refresh() = default;
 
 CPWL_EditImpl_Refresh::~CPWL_EditImpl_Refresh() = default;
 
@@ -520,7 +520,7 @@ void CPWL_EditImpl::DrawEdit(CFX_RenderDevice* pDevice,
                                line.ptLine.y + line.fLineAscent);
 
           pDevice->DrawPath(&pathSelBK, &mtUser2Device, nullptr, crSelBK, 0,
-                            FXFILL_WINDING);
+                            CFX_FillRenderOptions::WindingOptions());
         }
       }
 
@@ -1889,7 +1889,7 @@ ByteString CPWL_EditImpl::GetPDFWordString(int32_t nFontIndex,
   return sWord;
 }
 
-CPWL_EditImpl_Select::CPWL_EditImpl_Select() {}
+CPWL_EditImpl_Select::CPWL_EditImpl_Select() = default;
 
 CPWL_EditImpl_Select::CPWL_EditImpl_Select(const CPVT_WordRange& range) {
   Set(range.BeginPos, range.EndPos);

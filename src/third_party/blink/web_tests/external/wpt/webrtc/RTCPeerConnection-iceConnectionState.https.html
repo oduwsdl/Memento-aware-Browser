@@ -122,6 +122,8 @@
         assert_true(had_checking, 'state should pass checking before' +
                                   ' reaching connected or completed');
         t.done();
+      } else if (iceConnectionState === 'failed') {
+        assert_unreached("ICE should not fail");
       }
     });
 
@@ -165,6 +167,8 @@ async_test(t => {
           'Expect ICE transport to be in connected state when' +
           ' iceConnectionState is completed');
         t.done();
+      } else if (iceConnectionState === 'failed') {
+        assert_unreached("ICE should not fail");
       }
     });
 
@@ -389,7 +393,7 @@ promise_test(async t => {
 
   pc2.oniceconnectionstatechange = t.unreached_func();
   pc2.close();
-  assert_true(pc2.iceConnectionState === 'closed');
+  assert_equals(pc2.iceConnectionState, 'closed');
   await new Promise(r => t.step_timeout(r, 100));
 }, 'Closing a PeerConnection should not fire iceconnectionstatechange event');
 

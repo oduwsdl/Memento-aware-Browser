@@ -33,8 +33,10 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "net/base/ip_endpoint.h"
 #include "services/network/public/mojom/cross_origin_embedder_policy.mojom-shared.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
+#include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/renderer/platform/network/http_header_map.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
@@ -219,12 +221,6 @@ class PLATFORM_EXPORT ResourceResponse final {
   int HttpStatusCode() const;
   void SetHttpStatusCode(int);
 
-  bool MementoInfo() const;
-  void SetMementoInfo(bool);
-
-  std::string MementoDatetime() const;
-  void SetMementoDatetime(std::string);
-
   const AtomicString& HttpStatusText() const;
   void SetHttpStatusText(const AtomicString&);
 
@@ -289,6 +285,9 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   bool IsLegacyTLSVersion() const { return is_legacy_tls_version_; }
   void SetIsLegacyTLSVersion(bool value) { is_legacy_tls_version_ = value; }
+
+  bool HasRangeRequested() const { return has_range_requested_; }
+  void SetHasRangeRequested(bool value) { has_range_requested_ = value; }
 
   bool TimingAllowPassed() const { return timing_allow_passed_; }
   void SetTimingAllowPassed(bool value) { timing_allow_passed_ = value; }
@@ -393,13 +392,17 @@ class PLATFORM_EXPORT ResourceResponse final {
     response_time_ = response_time;
   }
 
-  const AtomicString& RemoteIPAddress() const { return remote_ip_address_; }
-  void SetRemoteIPAddress(const AtomicString& value) {
-    remote_ip_address_ = value;
+  const net::IPEndPoint& RemoteIPEndpoint() const {
+    return remote_ip_endpoint_;
+  }
+  void SetRemoteIPEndpoint(const net::IPEndPoint& value) {
+    remote_ip_endpoint_ = value;
   }
 
-  uint16_t RemotePort() const { return remote_port_; }
-  void SetRemotePort(uint16_t value) { remote_port_ = value; }
+  network::mojom::IPAddressSpace AddressSpace() const { return address_space_; }
+  void SetAddressSpace(network::mojom::IPAddressSpace value) {
+    address_space_ = value;
+  }
 
   bool WasAlpnNegotiated() const { return was_alpn_negotiated_; }
   void SetWasAlpnNegotiated(bool was_alpn_negotiated) {
@@ -485,6 +488,12 @@ class PLATFORM_EXPORT ResourceResponse final {
     was_in_prefetch_cache_ = was_in_prefetch_cache;
   }
 
+  bool WasCookieInRequest() const { return was_cookie_in_request_; }
+
+  void SetWasCookieInRequest(bool was_cookie_in_request) {
+    was_cookie_in_request_ = was_cookie_in_request;
+  }
+
   network::mojom::CrossOriginEmbedderPolicyValue GetCrossOriginEmbedderPolicy()
       const;
 
@@ -498,16 +507,15 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   unsigned connection_id_ = 0;
   int http_status_code_ = 0;
-  bool memento_info_ = false;
-  std::string memento_datetime_ = "";
   AtomicString http_status_text_;
   HTTPHeaderMap http_header_fields_;
 
-  // Remote IP address of the socket which fetched this resource.
-  AtomicString remote_ip_address_;
+  // Remote IP endpoint of the socket which fetched this resource.
+  net::IPEndPoint remote_ip_endpoint_;
 
-  // Remote port number of the socket which fetched this resource.
-  uint16_t remote_port_ = 0;
+  // The address space from which this resource was fetched.
+  network::mojom::IPAddressSpace address_space_ =
+      network::mojom::IPAddressSpace::kUnknown;
 
   bool was_cached_ = false;
   bool connection_reused_ = false;
@@ -528,6 +536,10 @@ class PLATFORM_EXPORT ResourceResponse final {
   // True if the response was sent over TLS 1.0 or 1.1, which are deprecated and
   // will be removed in the future.
   bool is_legacy_tls_version_ = false;
+
+  // This corresponds to the range-requested flag in the Fetch spec:
+  // https://fetch.spec.whatwg.org/#concept-response-range-requested-flag
+  bool has_range_requested_ = false;
 
   // True if the Timing-Allow-Origin check passes.
   // https://fetch.spec.whatwg.org/#concept-response-timing-allow-passed
@@ -565,6 +577,9 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   // True if this resource is served from the prefetch cache.
   bool was_in_prefetch_cache_ = false;
+
+  // True if a cookie was sent in the request for this resource.
+  bool was_cookie_in_request_ = false;
 
   // True if this resource was loaded from the network.
   bool network_accessed_ = false;

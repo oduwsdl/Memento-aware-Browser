@@ -22,6 +22,7 @@
 #include "core/fpdfapi/render/cpdf_rendercontext.h"
 #include "core/fpdfapi/render/cpdf_renderoptions.h"
 #include "core/fpdfdoc/cpvt_generateap.h"
+#include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_graphstatedata.h"
 #include "core/fxge/cfx_pathdata.h"
 #include "core/fxge/cfx_renderdevice.h"
@@ -440,8 +441,7 @@ void CPDF_Annot::DrawBorder(CFX_RenderDevice* pDevice,
   if (annot_flags & pdfium::annotation_flags::kHidden)
     return;
 
-  bool bPrinting = pDevice->GetDeviceType() == DeviceType::kPrinter ||
-                   (pOptions && pOptions->GetOptions().bPrintPreview);
+  bool bPrinting = pDevice->GetDeviceType() == DeviceType::kPrinter;
   if (bPrinting && (annot_flags & pdfium::annotation_flags::kPrint) == 0) {
     return;
   }
@@ -482,7 +482,7 @@ void CPDF_Annot::DrawBorder(CFX_RenderDevice* pDevice,
   } else {
     ByteString style = pBS->GetStringFor("S");
     pDashArray = pBS->GetArrayFor("D");
-    style_char = style[1];
+    style_char = style[0];
     width = pBS->GetNumberFor("W");
   }
   if (width <= 0) {
@@ -498,6 +498,12 @@ void CPDF_Annot::DrawBorder(CFX_RenderDevice* pDevice,
   }
   CFX_GraphStateData graph_state;
   graph_state.m_LineWidth = width;
+  if (style_char == 'U') {
+    // TODO(https://crbug.com/237527): Handle the "Underline" border style
+    // instead of drawing the rectangle border.
+    return;
+  }
+
   if (style_char == 'D') {
     if (pDashArray) {
       graph_state.m_DashArray =
@@ -514,9 +520,10 @@ void CPDF_Annot::DrawBorder(CFX_RenderDevice* pDevice,
   CFX_PathData path;
   path.AppendFloatRect(rect);
 
-  int fill_type = 0;
+  CFX_FillRenderOptions fill_options;
   if (pOptions && pOptions->GetOptions().bNoPathSmooth)
-    fill_type |= FXFILL_NOPATHSMOOTH;
+    fill_options.aliased_path = true;
 
-  pDevice->DrawPath(&path, pUser2Device, &graph_state, argb, argb, fill_type);
+  pDevice->DrawPath(&path, pUser2Device, &graph_state, argb, argb,
+                    fill_options);
 }

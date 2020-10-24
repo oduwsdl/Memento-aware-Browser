@@ -13,9 +13,12 @@
 <translation id="1211441953136645838">sluttnote</translation>
 <translation id="1281252709823657822">dialog</translation>
 <translation id="1306460908038601864">Av</translation>
+<translation id="1311894908970423688">Verdien må være <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">anerkjennelser</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> elementer</translation>
+<translation id="1480676835519562650">node med flere mulige valg – <ph name="SELECTED" /> av <ph name="COUNT" /> er valgt.</translation>
 <translation id="1589122976691792535">område</translation>
 <translation id="1591562245178063882">Denne måneden</translation>
 <translation id="1637811476055996098">Velg filer</translation>
@@ -27,6 +30,7 @@
 <translation id="1806710327868736751">varseldialog</translation>
 <translation id="1821985195704844674">trerutenett</translation>
 <translation id="1822429046913737220">AM/PM</translation>
+<translation id="1823704031293214298">bunntekst</translation>
 <translation id="1832974991323546415">spill på ekstern enhet</translation>
 <translation id="190587075670221089">sletting</translation>
 <translation id="1907737156431278478">eksempel</translation>
@@ -44,6 +48,7 @@
 <translation id="2247351761944213033">Uke <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Spor <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">avmerkingsboks</translation>
+<translation id="2307576640803031502">på listen, element <ph name="INDEX" /> av <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">sideskift</translation>
 <translation id="2335594187091864976">dato- og klokkeslettvelger</translation>
 <translation id="2393030564806080191">Heksadesimal fargeverdi</translation>
@@ -51,11 +56,12 @@
 <translation id="248395913932153421">Dag</translation>
 <translation id="2507943997699731163">Vennligst fyll ut dette feltet.</translation>
 <translation id="2508569020611168319">faneliste</translation>
+<translation id="2530182415807757784">node med flere mulige valg – ingen er valgt.</translation>
 <translation id="2561842179657104141">vis flere mediakontroller</translation>
 <translation id="2572483411312390101">spill av</translation>
 <translation id="2613802280814924224">Skriv inn en gyldig verdi. Den nærmeste, gyldige verdien er <ph name="VALID_VALUE" />.</translation>
 <translation id="2634240155926812724">Grønn kanal</translation>
-<translation id="2653659639078652383">Send</translation>
+<translation id="2653659639078652383">Send inn</translation>
 <translation id="2657045182931379222">grafikkobjekt</translation>
 <translation id="2674318244760992338">fotnote</translation>
 <translation id="2709516037105925701">Autofyll</translation>
@@ -100,9 +106,9 @@
 <translation id="4201051445878709314">Se forrige måned</translation>
 <translation id="421884353938374759">fargevelger</translation>
 <translation id="4248100235867064564">menyrad</translation>
+<translation id="4293574643247337246">sideoverskrift</translation>
 <translation id="4360991593054037559">Skriv inn en gyldig verdi. De to nærmeste, gyldige verdiene er <ph name="VALID_VALUE_LOW" /> og <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Spørsmål og svar</translation>
-<translation id="4413860115965805769">menyknapp</translation>
 <translation id="4444765639179266822">Det ser ut til at det står <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">ordlistereferanse</translation>
 <translation id="4522570452068850558">Detaljer</translation>
@@ -154,9 +160,11 @@
 <translation id="5677946354068040947">flere alternativer</translation>
 <translation id="576709008726043716">innledning</translation>
 <translation id="57838592816432529">Kutt lyden</translation>
+<translation id="5860033963881614850">Av</translation>
 <translation id="588258955323874662">Fullskjerm</translation>
 <translation id="5888666972993069672">Caster nå til <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">søkefelt</translation>
+<translation id="5916664084637901428">På</translation>
 <translation id="5939518447894949180">Tilbakestill</translation>
 <translation id="5966707198760109579">Uke</translation>
 <translation id="5987525920412732405">verdisettingsknapp</translation>
@@ -184,6 +192,7 @@
 <translation id="6643016212128521049">Tøm</translation>
 <translation id="668171684555832681">Annen</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Verdien må være <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Dårlig avspillingskvalitet</translation>
 <translation id="6755330956360078551">verktøytips</translation>
 <translation id="6790428901817661496">Spill av</translation>
@@ -284,6 +293,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, med start <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Bilde i bilde</translation>
 <translation id="9168329111483466115">fotnote</translation>
+<translation id="945780513535800434">delvis avmerket</translation>
 <translation id="954003015749068518">start bilde-i-bilde</translation>
 <translation id="966787709310836684">meny</translation>
 </translationbundle>

@@ -67,6 +67,9 @@ class LocalWindowProxy final : public WindowProxy {
   // (e.g., after setting docoument.domain).
   void UpdateSecurityOrigin(const SecurityOrigin*);
 
+  void SetAbortScriptExecution(
+      v8::Context::AbortScriptExecutionCallback callback);
+
  private:
   bool IsLocal() const override { return true; }
   void Initialize() override;
@@ -106,6 +109,7 @@ class LocalWindowProxy final : public WindowProxy {
   }
 
   Member<ScriptState> script_state_;
+  bool context_was_created_from_snapshot_ = false;
 };
 
 template <>

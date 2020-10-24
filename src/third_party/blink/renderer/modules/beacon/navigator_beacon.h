@@ -14,12 +14,11 @@ namespace blink {
 class ScriptState;
 class ExceptionState;
 class KURL;
-class ArrayBufferViewOrBlobOrStringOrFormDataOrReadableStream;
+class
+    ReadableStreamOrBlobOrArrayBufferOrArrayBufferViewOrFormDataOrURLSearchParamsOrUSVString;
 
 class NavigatorBeacon final : public GarbageCollected<NavigatorBeacon>,
                               public Supplement<Navigator> {
-  USING_GARBAGE_COLLECTED_MIXIN(NavigatorBeacon);
-
  public:
   static const char kSupplementName[];
 
@@ -32,7 +31,7 @@ class NavigatorBeacon final : public GarbageCollected<NavigatorBeacon>,
       ScriptState*,
       Navigator&,
       const String&,
-      const ArrayBufferViewOrBlobOrStringOrFormDataOrReadableStream&,
+      const ReadableStreamOrBlobOrArrayBufferOrArrayBufferViewOrFormDataOrURLSearchParamsOrUSVString&,
       ExceptionState&);
 
   void Trace(Visitor*) const override;
@@ -41,7 +40,7 @@ class NavigatorBeacon final : public GarbageCollected<NavigatorBeacon>,
   bool SendBeaconImpl(
       ScriptState*,
       const String&,
-      const ArrayBufferViewOrBlobOrStringOrFormDataOrReadableStream&,
+      const ReadableStreamOrBlobOrArrayBufferOrArrayBufferViewOrFormDataOrURLSearchParamsOrUSVString&,
       ExceptionState&);
   bool CanSendBeacon(ExecutionContext*, const KURL&, ExceptionState&);
 };

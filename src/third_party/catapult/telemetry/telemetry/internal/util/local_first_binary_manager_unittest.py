@@ -10,16 +10,27 @@ import unittest
 import mock
 
 from telemetry.core import exceptions
+from telemetry.internal.util import binary_manager
 from telemetry.internal.util import local_first_binary_manager
 
 
-def ResetBinaryManagerInstance():
+def ClearBinaryManagerInstance(test):
+  test.previous_manager_instance =\
+      local_first_binary_manager.LocalFirstBinaryManager._instance
   local_first_binary_manager.LocalFirstBinaryManager._instance = None
+
+
+def RestoreBinaryManagerInstance(test):
+  local_first_binary_manager.LocalFirstBinaryManager._instance =\
+      test.previous_manager_instance
 
 
 class LocalFirstBinaryManagerFetchPathTest(unittest.TestCase):
   def setUp(self):
-    ResetBinaryManagerInstance()
+    ClearBinaryManagerInstance(self)
+
+  def tearDown(self):
+    RestoreBinaryManagerInstance(self)
 
   @mock.patch.object(local_first_binary_manager.LocalFirstBinaryManager,
                      '_FetchBinaryManagerPath')
@@ -56,13 +67,34 @@ class LocalFirstBinaryManagerFetchPathTest(unittest.TestCase):
     self.assertEqual(local_mock.call_count, 1)
     self.assertEqual(remote_mock.call_count, 1)
 
+  @mock.patch.object(local_first_binary_manager.LocalFirstBinaryManager,
+                     '_FetchBinaryManagerPath')
+  @mock.patch.object(local_first_binary_manager.LocalFirstBinaryManager,
+                     '_FetchLocalPath')
+  def testRemotePathException(self, local_mock, remote_mock):
+    def RaiseException(_):
+      raise binary_manager.NoPathFoundError(None, None)
+    local_mock.return_value = None
+    remote_mock.side_effect = RaiseException
+    bm = local_first_binary_manager.LocalFirstBinaryManager(
+        None, None, None, None, None, None)
+    path = bm.FetchPath('dep')
+    self.assertEqual(path, None)
+    # Ensure the value is cached.
+    self.assertIn('dep', bm._dependency_cache)
+    local_mock.assert_called_once_with('dep')
+    remote_mock.assert_called_once_with('dep')
+    self.assertEqual(local_mock.call_count, 1)
+    self.assertEqual(remote_mock.call_count, 1)
+
 
 class LocalFirstBinaryManagerFetchLocalPathTest(unittest.TestCase):
   def setUp(self):
-    ResetBinaryManagerInstance()
+    ClearBinaryManagerInstance(self)
     self._build_dir = tempfile.mkdtemp()
 
   def tearDown(self):
+    RestoreBinaryManagerInstance(self)
     shutil.rmtree(self._build_dir)
     self._build_dir = None
 
@@ -92,7 +124,10 @@ class LocalFirstBinaryManagerFetchLocalPathTest(unittest.TestCase):
 
 class LocalFirstBinaryManagerFetchBinaryManagerPathTest(unittest.TestCase):
   def setUp(self):
-    ResetBinaryManagerInstance()
+    ClearBinaryManagerInstance(self)
+
+  def tearDown(self):
+    RestoreBinaryManagerInstance(self)
 
   @mock.patch('telemetry.internal.util.binary_manager.FetchPath')
   @mock.patch('telemetry.internal.util.binary_manager.NeedsInit')
@@ -134,7 +169,10 @@ class LocalFirstBinaryManagerFetchBinaryManagerPathTest(unittest.TestCase):
 
 class LocalFirstBinaryManagerInitializationTest(unittest.TestCase):
   def setUp(self):
-    ResetBinaryManagerInstance()
+    ClearBinaryManagerInstance(self)
+
+  def tearDown(self):
+    RestoreBinaryManagerInstance(self)
 
   def testSuccessfulInit(self):
     self.assertTrue(

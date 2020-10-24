@@ -23,6 +23,7 @@ using CompositingReasons = uint64_t;
   V(Canvas)                                                                   \
   V(Plugin)                                                                   \
   V(IFrame)                                                                   \
+  V(SVGRoot)                                                                  \
   V(BackfaceVisibilityHidden)                                                 \
   V(ActiveTransformAnimation)                                                 \
   V(ActiveOpacityAnimation)                                                   \
@@ -45,6 +46,7 @@ using CompositingReasons = uint64_t;
   V(BackdropFilter)                                                           \
   V(RootScroller)                                                             \
   V(XrOverlay)                                                                \
+  V(Viewport)                                                                 \
                                                                               \
   /* Overlap reasons that require knowing what's behind you in paint-order    \
      before knowing the answer. */                                            \
@@ -63,6 +65,7 @@ using CompositingReasons = uint64_t;
   V(PerspectiveWith3DDescendants)                                             \
   V(Preserve3DWith3DDescendants)                                              \
   V(IsolateCompositedDescendants)                                             \
+  V(FullscreenVideoWithCompositedDescendants)                                 \
                                                                               \
   /* The root layer is a special case. It may be forced to be a layer, but it \
   also needs to be a layer if anything else in the subtree is composited. */  \
@@ -72,7 +75,6 @@ using CompositingReasons = uint64_t;
   used in CompositeAfterPaint. */                                             \
   V(LayerForHorizontalScrollbar)                                              \
   V(LayerForVerticalScrollbar)                                                \
-  V(LayerForOverflowControlsHost)                                             \
   V(LayerForScrollCorner)                                                     \
   V(LayerForScrollingContents)                                                \
   V(LayerForSquashingContents)                                                \
@@ -124,17 +126,13 @@ class PLATFORM_EXPORT CompositingReason {
         kWillChangeBackdropFilter,
 
     kComboAllDirectNonStyleDeterminedReasons =
-        kVideo | kCanvas | kPlugin | kIFrame | kOverflowScrollingParent |
-        kOutOfFlowClipping | kVideoOverlay | kXrOverlay | kRoot |
-        kRootScroller | kScrollDependentPosition |
+        kVideo | kCanvas | kPlugin | kIFrame | kSVGRoot |
+        kOverflowScrollingParent | kOutOfFlowClipping | kVideoOverlay |
+        kXrOverlay | kRoot | kRootScroller | kScrollDependentPosition |
         kBackfaceInvisibility3DAncestor,
 
     kComboAllDirectReasons = kComboAllDirectStyleDeterminedReasons |
                              kComboAllDirectNonStyleDeterminedReasons,
-
-    kComboTransformedRasterizationDisallowedReasons =
-        kComboAllDirectReasons & ~kScrollDependentPosition &
-        ~kTrivial3DTransform & ~kBackfaceVisibilityHidden,
 
     kComboAllCompositedScrollingDeterminedReasons =
         kScrollDependentPosition | kOverflowScrolling,
@@ -155,9 +153,12 @@ class PLATFORM_EXPORT CompositingReason {
     kComboSquashableReasons =
         kOverlap | kAssumedOverlap | kOverflowScrollingParent,
 
-    kDirectReasonsForPaintOffsetTranslationProperty =
-        kScrollDependentPosition | kVideo | kCanvas | kPlugin | kIFrame,
+    kPreventingSubpixelAccumulationReasons =
+        kWillChangeTransform | kActiveTransformAnimation,
 
+    kDirectReasonsForPaintOffsetTranslationProperty =
+        kScrollDependentPosition | kVideo | kCanvas | kPlugin | kIFrame |
+        kSVGRoot,
     kDirectReasonsForTransformProperty =
         k3DTransform | kTrivial3DTransform | kWillChangeTransform |
         kWillChangeOther | kPerspectiveWith3DDescendants |

@@ -441,7 +441,7 @@ private:
     SkString fFamilyName;
     const std::unique_ptr<const SkFontData> fData;
 
-    typedef SkTypeface_FreeType INHERITED;
+    using INHERITED = SkTypeface_FreeType;
 };
 
 class SkTypeface_fontconfig : public SkTypeface_FreeType {
@@ -538,6 +538,16 @@ public:
                                              this->isFixedPitch());
     }
 
+    std::unique_ptr<SkFontData> onMakeFontData() const override {
+        int index;
+        std::unique_ptr<SkStreamAsset> stream(this->onOpenStream(&index));
+        if (!stream) {
+            return nullptr;
+        }
+        // TODO: FC_VARIABLE and FC_FONT_VARIATIONS
+        return std::make_unique<SkFontData>(std::move(stream), index, nullptr, 0);
+    }
+
     ~SkTypeface_fontconfig() override {
         // Hold the lock while unrefing the pattern.
         FCLocker lock;
@@ -552,7 +562,7 @@ private:
         , fSysroot(std::move(sysroot))
     { }
 
-    typedef SkTypeface_FreeType INHERITED;
+    using INHERITED = SkTypeface_FreeType;
 };
 
 class SkFontMgr_fontconfig : public SkFontMgr {

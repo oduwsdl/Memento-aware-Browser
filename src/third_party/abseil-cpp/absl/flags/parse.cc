@@ -611,6 +611,11 @@ std::vector<char*> ParseCommandLineImpl(int argc, char* argv[],
                                         OnUndefinedFlag on_undef_flag) {
   ABSL_INTERNAL_CHECK(argc > 0, "Missing argv[0]");
 
+  // Once parsing has started we will not have more flag registrations.
+  // If we did, they would be missing during parsing, which is a problem on
+  // itself.
+  flags_internal::FinalizeRegistry();
+
   // This routine does not return anything since we abort on failure.
   CheckDefaultValuesParsingRoundtrip();
 
@@ -729,12 +734,13 @@ std::vector<char*> ParseCommandLineImpl(int argc, char* argv[],
     }
 
     // 100. Set the located flag to a new new value, unless it is retired.
-    // Setting retired flag fails, but we ignoring it here.
-    if (flag->IsRetired()) continue;
-
+    // Setting retired flag fails, but we ignoring it here while also reporting
+    // access to retired flag.
     std::string error;
     if (!flags_internal::PrivateHandleAccessor::ParseFrom(
             *flag, value, SET_FLAGS_VALUE, kCommandLine, error)) {
+      if (flag->IsRetired()) continue;
+
       flags_internal::ReportUsageError(error, true);
       success = false;
     } else {

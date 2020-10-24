@@ -32,7 +32,7 @@
 #include <memory>
 #include <vector>
 
-class GrContext;
+class GrRecordingContext;
 class GrRenderTargetContext;
 class SkBaseDevice;
 class SkBitmap;
@@ -177,7 +177,7 @@ public:
     explicit SkCanvas(sk_sp<SkBaseDevice> device);
 
     /** Constructs a canvas that draws into bitmap.
-        Sets SkSurfaceProps::kLegacyFontHost_InitType in constructed SkSurface.
+        Sets kUnknown_SkPixelGeometry in constructed SkSurface.
 
         SkBitmap is copied so that subsequently editing bitmap will not affect
         constructed SkCanvas.
@@ -285,9 +285,9 @@ public:
 
         @return  GPU context, if available; nullptr otherwise
 
-        example: https://fiddle.skia.org/c/@Canvas_getGrContext
-    */
-    virtual GrContext* getGrContext();
+        example: https://fiddle.skia.org/c/@Canvas_recordingContext
+     */
+    virtual GrRecordingContext* recordingContext();
 
     /** Sometimes a canvas is owned by a surface. If it is, getSurface() will return a bare
      *  pointer to that surface, else this will return nullptr.
@@ -918,6 +918,8 @@ public:
         Pass an empty rect to disable maximum clip.
         This private API is for use by Android framework only.
 
+        DEPRECATED: Replace usage with SkAndroidFrameworkUtils::replaceClip()
+
         @param rect  maximum allowed clip in device coordinates
     */
     void androidFramework_setDeviceClipRestriction(const SkIRect& rect);
@@ -1139,9 +1141,9 @@ public:
     */
     void discard() { this->onDiscard(); }
 
-    /** Fills clip with SkPaint paint. SkPaint components SkMaskFilter, SkShader,
+    /** Fills clip with SkPaint paint. SkPaint components, SkShader,
         SkColorFilter, SkImageFilter, and SkBlendMode affect drawing;
-        SkPathEffect in paint is ignored.
+        SkMaskFilter and SkPathEffect in paint are ignored.
 
         @param paint  graphics state used to fill SkCanvas
 
@@ -2638,7 +2640,7 @@ private:
     // the first N recs that can fit here mean we won't call malloc
     static constexpr int kMCRecSize      = 128;  // most recent measurement
     static constexpr int kMCRecCount     = 32;   // common depth for save/restores
-    static constexpr int kDeviceCMSize   = 224;  // most recent measurement
+    static constexpr int kDeviceCMSize   = 64;   // most recent measurement
 
     intptr_t fMCRecStorage[kMCRecSize * kMCRecCount / sizeof(intptr_t)];
     intptr_t fDeviceCMStorage[kDeviceCMSize / sizeof(intptr_t)];
@@ -2747,6 +2749,13 @@ private:
      */
     bool androidFramework_isClipAA() const;
 
+    /**
+     * Reset the clip to be just the intersection with the global-space 'rect'. This operates within
+     * the save/restore stack of the canvas, so restore() will bring back any saved clip. However,
+     * since 'rect' is already in global space, it is not modified by the canvas matrix.
+     */
+    void androidFramework_replaceClip(const SkIRect& rect);
+
     virtual SkPaintFilterCanvas* internal_private_asPaintFilterCanvas() const { return nullptr; }
 
     /**
@@ -2780,7 +2789,7 @@ private:
 
     std::unique_ptr<SkGlyphRunBuilder> fScratchGlyphRunBuilder;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 /** \class SkAutoCanvasRestore
@@ -2834,8 +2843,5 @@ private:
     SkAutoCanvasRestore& operator=(SkAutoCanvasRestore&&) = delete;
     SkAutoCanvasRestore& operator=(const SkAutoCanvasRestore&) = delete;
 };
-
-// Private
-#define SkAutoCanvasRestore(...) SK_REQUIRE_LOCAL_VAR(SkAutoCanvasRestore)
 
 #endif

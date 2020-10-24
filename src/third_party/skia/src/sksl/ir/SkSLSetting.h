@@ -17,43 +17,44 @@ namespace SkSL {
  * Represents a compile-time constant setting, such as sk_Caps.fbFetchSupport. These are generally
  * collapsed down to their constant representations during the compilation process.
  */
-struct Setting : public Expression {
-    Setting(int offset, String name, std::unique_ptr<Expression> value)
-    : INHERITED(offset, kSetting_Kind, value->fType)
-    , fName(std::move(name))
-    , fValue(std::move(value)) {
-        SkASSERT(fValue->isConstant());
-    }
+class Setting : public Expression {
+public:
+    static constexpr Kind kExpressionKind = Kind::kSetting;
+
+    Setting(int offset, String name, const Type* type)
+    : INHERITED(offset, SettingData{std::move(name), type}) {}
 
     std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
                                                   const DefinitionMap& definitions) override;
 
-    int nodeCount() const override {
-        return 1;
+    std::unique_ptr<Expression> clone() const override {
+        return std::unique_ptr<Expression>(new Setting(fOffset, this->name(), &this->type()));
     }
 
-    std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new Setting(fOffset, fName, fValue->clone()));
+    const String& name() const {
+        return this->settingData().fName;
+    }
+
+    const Type& type() const override {
+        return *this->settingData().fType;
     }
 
     String description() const override {
-        return fName;
+        return this->name();
     }
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
-    bool isConstant() const override {
+    bool isCompileTimeConstant() const override {
         return true;
     }
 
-    const String fName;
-    std::unique_ptr<Expression> fValue;
-
-    typedef Expression INHERITED;
+private:
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

@@ -44,12 +44,13 @@ class DebugAnnotation;
 namespace internal {
 class TrackEventCategoryRegistry;
 
-class BaseTrackEventInternedDataIndex {
+class PERFETTO_EXPORT BaseTrackEventInternedDataIndex {
  public:
   virtual ~BaseTrackEventInternedDataIndex();
 
 #if PERFETTO_DCHECK_IS_ON()
   const char* type_id_ = nullptr;
+  const void* add_function_ptr_ = nullptr;
 #endif  // PERFETTO_DCHECK_IS_ON()
 };
 
@@ -150,7 +151,7 @@ class PERFETTO_EXPORT TrackEventInternal {
 
   // Get the clock used by GetTimeNs().
   static constexpr protos::pbzero::BuiltinClock GetClockId() {
-#if !PERFETTO_BUILDFLAG(PERFETTO_OS_MACOSX) && \
+#if !PERFETTO_BUILDFLAG(PERFETTO_OS_APPLE) && \
     !PERFETTO_BUILDFLAG(PERFETTO_OS_WIN)
     return protos::pbzero::BUILTIN_CLOCK_BOOTTIME;
 #else

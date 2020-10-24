@@ -238,8 +238,7 @@ class QualityTestVideoEncoder : public VideoEncoder,
  private:
   // Implement EncodedImageCallback
   Result OnEncodedImage(const EncodedImage& encoded_image,
-                        const CodecSpecificInfo* codec_specific_info,
-                        const RTPFragmentationHeader* fragmentation) override {
+                        const CodecSpecificInfo* codec_specific_info) override {
     if (codec_specific_info) {
       int simulcast_index;
       if (codec_specific_info->codecType == kVideoCodecVP9) {
@@ -258,8 +257,7 @@ class QualityTestVideoEncoder : public VideoEncoder,
       }
     }
 
-    return callback_->OnEncodedImage(encoded_image, codec_specific_info,
-                                     fragmentation);
+    return callback_->OnEncodedImage(encoded_image, codec_specific_info);
   }
 
   void OnDroppedFrame(DropReason reason) override {
@@ -433,58 +431,6 @@ VideoQualityTest::VideoQualityTest(
   network_controller_factory_ =
       std::move(injection_components_->network_controller_factory);
 }
-
-VideoQualityTest::Params::Params()
-    : call({false, false, BitrateConstraints(), 0}),
-      video{{false,
-             640,
-             480,
-             30,
-             50,
-             800,
-             800,
-             false,
-             "VP8",
-             1,
-             -1,
-             0,
-             false,
-             false,
-             false,
-             "",
-             0,
-             {},
-             0.0},
-            {false,
-             640,
-             480,
-             30,
-             50,
-             800,
-             800,
-             false,
-             "VP8",
-             1,
-             -1,
-             0,
-             false,
-             false,
-             false,
-             "",
-             0,
-             {},
-             0.0}},
-      audio({false, false, false, false}),
-      screenshare{{false, false, 10, 0}, {false, false, 10, 0}},
-      analyzer({"", 0.0, 0.0, 0, "", ""}),
-      config(absl::nullopt),
-      ss{{std::vector<VideoStream>(), 0, 0, -1, InterLayerPredMode::kOn,
-          std::vector<SpatialLayer>()},
-         {std::vector<VideoStream>(), 0, 0, -1, InterLayerPredMode::kOn,
-          std::vector<SpatialLayer>()}},
-      logging({"", "", ""}) {}
-
-VideoQualityTest::Params::~Params() = default;
 
 VideoQualityTest::InjectionComponents::InjectionComponents() = default;
 
@@ -1158,6 +1104,11 @@ void VideoQualityTest::CreateCapturers() {
           static_cast<int>(params_.video[video_idx].width),
           static_cast<int>(params_.video[video_idx].height),
           test::FrameGeneratorInterface::OutputType::kI010, absl::nullopt);
+    } else if (params_.video[video_idx].clip_path == "GeneratorNV12") {
+      frame_generator = test::CreateSquareFrameGenerator(
+          static_cast<int>(params_.video[video_idx].width),
+          static_cast<int>(params_.video[video_idx].height),
+          test::FrameGeneratorInterface::OutputType::kNV12, absl::nullopt);
     } else if (params_.video[video_idx].clip_path.empty()) {
       video_sources_[video_idx] = test::CreateVideoCapturer(
           params_.video[video_idx].width, params_.video[video_idx].height,

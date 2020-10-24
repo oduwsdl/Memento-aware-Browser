@@ -44,7 +44,10 @@ if (enable_perfetto_trace_processor && enable_perfetto_trace_processor_sqlite) {
 }
 
 if (enable_perfetto_heapprofd) {
-  all_targets += [ "src/profiling/memory:heapprofd" ]
+  all_targets += [
+    "src/profiling/memory:heapprofd",
+    "src/profiling/memory:heapprofd_preload",
+  ]
   if (perfetto_build_with_android) {
     all_targets += [
       "src/profiling/memory:heapprofd_client",
@@ -81,6 +84,7 @@ if (enable_perfetto_integration_tests) {
   all_targets += [
     ":perfetto_integrationtests",
     "test:client_api_example",
+    "test/stress_test",
   ]
 }
 
@@ -234,6 +238,7 @@ if (build_with_chromium) {
   component("libperfetto") {
     public_configs = [ "gn:public_config" ]
     deps = [
+      "src/trace_processor/importers/memory_tracker:graph_processor",
       "src/tracing:client_api",
       "src/tracing/core",
 
@@ -243,6 +248,7 @@ if (build_with_chromium) {
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
     public_deps = [
+      "include/perfetto/ext/trace_processor/importers/memory_tracker",
       "include/perfetto/ext/tracing/core",
       "include/perfetto/tracing",
       "protos/perfetto/common:zero",
@@ -250,6 +256,7 @@ if (build_with_chromium) {
       "protos/perfetto/trace/chrome:zero",
       "protos/perfetto/trace/interned_data:zero",
       "protos/perfetto/trace/profiling:zero",
+      "protos/perfetto/trace/ps:zero",
       "protos/perfetto/trace/track_event:zero",
     ]
     if (enable_perfetto_ipc) {

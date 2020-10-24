@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+
 import * as ResourcesModule from './resources.js';
 
 self.Resources = self.Resources || {};
@@ -65,6 +67,9 @@ Resources.DatabaseQueryView.Events = ResourcesModule.DatabaseQueryView.Events;
 
 /** @constructor */
 Resources.DatabaseTableView = ResourcesModule.DatabaseTableView.DatabaseTableView;
+
+/** @constructor */
+Resources.FrameDetailsView = ResourcesModule.FrameDetailsView.FrameDetailsView;
 
 /** @constructor */
 Resources.IndexedDBModel = ResourcesModule.IndexedDBModel.IndexedDBModel;

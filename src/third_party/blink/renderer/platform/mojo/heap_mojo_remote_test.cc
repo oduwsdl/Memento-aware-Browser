@@ -4,13 +4,15 @@
 
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "base/test/null_task_runner.h"
+#include "base/test/scoped_feature_list.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/interfaces/bindings/tests/sample_service.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/heap/heap_test_utilities.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/heap_observer_list.h"
+#include "third_party/blink/renderer/platform/heap_observer_set.h"
+#include "third_party/blink/renderer/platform/mojo/features.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 
 namespace blink {
@@ -19,8 +21,6 @@ namespace {
 
 class MockContext final : public GarbageCollected<MockContext>,
                           public ContextLifecycleNotifier {
-  USING_GARBAGE_COLLECTED_MIXIN(MockContext);
-
  public:
   MockContext() = default;
 
@@ -45,7 +45,7 @@ class MockContext final : public GarbageCollected<MockContext>,
   }
 
  private:
-  HeapObserverList<ContextLifecycleObserver> observers_;
+  HeapObserverSet<ContextLifecycleObserver> observers_;
 };
 
 class ServiceImpl : public sample::blink::Service {
@@ -154,18 +154,21 @@ class HeapMojoRemoteDestroyContextWithContextObserverTest
 class HeapMojoRemoteDestroyContextWithoutContextObserverTest
     : public HeapMojoRemoteDestroyContextBaseTest<
           HeapMojoWrapperMode::kWithoutContextObserver> {};
+class HeapMojoRemoteDestroyContextForceWithoutContextObserverTest
+    : public HeapMojoRemoteDestroyContextBaseTest<
+          HeapMojoWrapperMode::kForceWithoutContextObserver> {};
 class HeapMojoRemoteDisconnectWithReasonHandlerWithContextObserverTest
     : public HeapMojoRemoteDisconnectWithReasonHandlerBaseTest<
           HeapMojoWrapperMode::kWithContextObserver> {};
 class HeapMojoRemoteDisconnectWithReasonHandlerWithoutContextObserverTest
     : public HeapMojoRemoteDisconnectWithReasonHandlerBaseTest<
-          HeapMojoWrapperMode::kWithoutContextObserver> {};
+          HeapMojoWrapperMode::kForceWithoutContextObserver> {};
 class HeapMojoRemoteMoveWithContextObserverTest
     : public HeapMojoRemoteMoveBaseTest<
           HeapMojoWrapperMode::kWithContextObserver> {};
 class HeapMojoRemoteMoveWithoutContextObserverTest
     : public HeapMojoRemoteMoveBaseTest<
-          HeapMojoWrapperMode::kWithoutContextObserver> {};
+          HeapMojoWrapperMode::kForceWithoutContextObserver> {};
 
 // Destroy the context with context observer and check that the connection is
 // disconnected.
@@ -177,8 +180,31 @@ TEST_F(HeapMojoRemoteDestroyContextWithContextObserverTest,
 }
 
 // Destroy the context without context observer and check that the connection is
+// disconnected.
+TEST_F(HeapMojoRemoteDestroyContextWithoutContextObserverTest,
+       ResetsOnContextDestroyedWhenFinchEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeaturesAndParameters(
+      {{kHeapMojoUseContextObserver, {}}}, {});
+  EXPECT_TRUE(owner_->remote().is_bound());
+  context_->NotifyContextDestroyed();
+  EXPECT_FALSE(owner_->remote().is_bound());
+}
+
+// Destroy the context without context observer and check that the connection is
 // still connected.
 TEST_F(HeapMojoRemoteDestroyContextWithoutContextObserverTest,
+       ResetsOnContextDestroyedWhenFinchDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeaturesAndParameters({}, {kHeapMojoUseContextObserver});
+  EXPECT_TRUE(owner_->remote().is_bound());
+  context_->NotifyContextDestroyed();
+  EXPECT_TRUE(owner_->remote().is_bound());
+}
+
+// Destroy the context without context observer and check that the connection is
+// still connected.
+TEST_F(HeapMojoRemoteDestroyContextForceWithoutContextObserverTest,
        ResetsOnContextDestroyed) {
   EXPECT_TRUE(owner_->remote().is_bound());
   context_->NotifyContextDestroyed();

@@ -7,7 +7,10 @@ cmake_minimum_required(VERSION 3.5)
 # and find_package()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 
-project(libavif LANGUAGES C CXX VERSION 0.7.3)
+project(libavif LANGUAGES C VERSION 0.8.2)
+
+# Set C99 as the default
+set(CMAKE_C_STANDARD 99)
 
 # SOVERSION scheme: MAJOR.MINOR.PATCH
 #   If there was an incompatible interface change:
@@ -16,13 +19,15 @@ project(libavif LANGUAGES C CXX VERSION 0.7.3)
 #     Increment MINOR. Set PATCH to 0
 #   If the source code was changed, but there were no interface changes:
 #     Increment PATCH.
-set(LIBRARY_VERSION_MAJOR 4)
+set(LIBRARY_VERSION_MAJOR 7)
 set(LIBRARY_VERSION_MINOR 0)
-set(LIBRARY_VERSION_PATCH 1)
+set(LIBRARY_VERSION_PATCH 0)
 set(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}")
 set(LIBRARY_SOVERSION ${LIBRARY_VERSION_MAJOR})
 
 option(BUILD_SHARED_LIBS "Build shared avif library" ON)
+
+option(AVIF_ENABLE_WERROR "Treat all compiler warnings as errors" ON)
 
 option(AVIF_CODEC_AOM "Use the AOM codec for encoding (and decoding if no other decoder is present)" OFF)
 option(AVIF_CODEC_DAV1D "Use the dav1d codec for decoding (overrides AOM decoding if also enabled)" OFF)
@@ -33,6 +38,16 @@ option(AVIF_LOCAL_AOM "Build the AOM codec by providing your own copy of the rep
 option(AVIF_LOCAL_DAV1D "Build the dav1d codec by providing your own copy of the repo in ext/dav1d (see Local Builds in README)" OFF)
 option(AVIF_LOCAL_LIBGAV1 "Build the libgav1 codec by providing your own copy of the repo in ext/libgav1 (see Local Builds in README)" OFF)
 option(AVIF_LOCAL_RAV1E "Build the rav1e codec by providing your own copy of the repo in ext/rav1e (see Local Builds in README)" OFF)
+
+if(AVIF_LOCAL_LIBGAV1)
+    enable_language(CXX)
+endif()
+
+if(APPLE)
+    set(XCRUN xcrun)
+else()
+    set(XCRUN)
+endif()
 
 # ---------------------------------------------------------------------------------------
 # This insanity is for people embedding libavif or making fully static or Windows builds.
@@ -72,52 +87,81 @@ endif()
 # ---------------------------------------------------------------------------------------
 
 # Enable all warnings
+include(CheckCCompilerFlag)
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-  MESSAGE(STATUS "libavif: Enabling warnings for Clang")
-  add_definitions(
-    -Weverything
-    -Werror
-    -Wno-bad-function-cast
-    -Wno-cast-align
-    -Wno-conversion
-    -Wno-covered-switch-default
-    -Wno-disabled-macro-expansion
-    -Wno-documentation
-    -Wno-documentation-unknown-command
-    -Wno-double-promotion
-    -Wno-float-equal
-    -Wno-missing-noreturn
-    -Wno-padded
-    -Wno-sign-conversion
-  )
+    MESSAGE(STATUS "libavif: Enabling warnings for Clang")
+    add_definitions(
+        -Weverything
+        -Wno-bad-function-cast
+        -Wno-cast-align
+        -Wno-conversion
+        -Wno-covered-switch-default
+        -Wno-disabled-macro-expansion
+        -Wno-documentation
+        -Wno-documentation-unknown-command
+        -Wno-double-promotion
+        -Wno-float-equal
+        -Wno-missing-noreturn
+        -Wno-padded
+        -Wno-sign-conversion
+        -Wno-error=c11-extensions
+    )
+    # The detection of cross compilation by -Wpoison-system-directories has false positives on macOS because
+    # --sysroot is implicitly added. Turn the warning off.
+    check_c_compiler_flag(-Wpoison-system-directories HAVE_POISON_SYSTEM_DIRECTORIES_WARNING)
+    if(HAVE_POISON_SYSTEM_DIRECTORIES_WARNING)
+        add_definitions(-Wno-poison-system-directories)
+    endif()
 elseif(CMAKE_C_COMPILER_ID MATCHES "GNU")
-  add_definitions(-std=gnu99) # Enforce C99 for gcc
-  MESSAGE(STATUS "libavif: Enabling warnings for GCC")
-  add_definitions(-Werror -Wall -Wextra)
+    MESSAGE(STATUS "libavif: Enabling warnings for GCC")
+    add_definitions(-Wall -Wextra)
 elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
-  MESSAGE(STATUS "libavif: Enabling warnings for MS CL")
-  add_definitions(
-    /Wall   # All warnings
-    /WX     # Warnings as errors
-    /wd4255 # Disable: no function prototype given
-    /wd4324 # Disable: structure was padded due to alignment specifier
-    /wd4668 # Disable: is not defined as a preprocessor macro, replacing with '0'
-    /wd4710 # Disable: function not inlined
-    /wd4711 # Disable: function selected for inline expansion
-    /wd4738 # Disable: storing 32-bit float result in memory, possible loss of performance
-    /wd4820 # Disable: bytes padding added after data member
-    /wd4996 # Disable: potentially unsafe stdlib methods
-    /wd5045 # Disable: Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified
-  )
+    MESSAGE(STATUS "libavif: Enabling warnings for MS CL")
+    add_definitions(
+        /Wall   # All warnings
+        /wd4255 # Disable: no function prototype given
+        /wd4324 # Disable: structure was padded due to alignment specifier
+        /wd4668 # Disable: is not defined as a preprocessor macro, replacing with '0'
+        /wd4710 # Disable: function not inlined
+        /wd4711 # Disable: function selected for inline expansion
+        /wd4738 # Disable: storing 32-bit float result in memory, possible loss of performance
+        /wd4820 # Disable: bytes padding added after data member
+        /wd4996 # Disable: potentially unsafe stdlib methods
+        /wd5045 # Disable: Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified
+    )
 else()
-  MESSAGE(FATAL_ERROR "libavif: Unknown compiler, bailing out")
+    MESSAGE(FATAL_ERROR "libavif: Unknown compiler, bailing out")
+endif()
+
+if(AVIF_ENABLE_WERROR)
+    # Warnings as errors
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU")
+        add_definitions(-Werror)
+    elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+        add_definitions(/WX)
+    else()
+        MESSAGE(FATAL_ERROR "libavif: Unknown compiler, bailing out")
+    endif()
+endif()
+
+if(AVIF_ENABLE_COVERAGE)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU")
+        MESSAGE(STATUS "libavif: Enabling coverage for Clang")
+        add_definitions(-fprofile-instr-generate -fcoverage-mapping -O0)
+        set(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} "-fprofile-instr-generate -fcoverage-mapping")
+    else()
+        # TODO: Add support for other compilers
+        message(WARNING "libavif: Ignoring request for coverage (AVIF_ENABLE_COVERAGE); only clang is currently supported.")
+    endif()
 endif()
 
 set(AVIF_SRCS
     src/alpha.c
     src/avif.c
     src/colr.c
+    src/io.c
     src/mem.c
+    src/obu.c
     src/rawdata.c
     src/read.c
     src/reformat.c
@@ -208,12 +252,9 @@ if(AVIF_CODEC_RAV1E)
     )
 
     if(AVIF_LOCAL_RAV1E)
-        set(LIB_FILENAME "${CMAKE_CURRENT_SOURCE_DIR}/ext/rav1e/target/release/rav1e.lib")
+        set(LIB_FILENAME "${CMAKE_CURRENT_SOURCE_DIR}/ext/rav1e/target/release/${CMAKE_STATIC_LIBRARY_PREFIX}rav1e${CMAKE_STATIC_LIBRARY_SUFFIX}")
         if(NOT EXISTS "${LIB_FILENAME}")
-            set(LIB_FILENAME "${CMAKE_CURRENT_SOURCE_DIR}/ext/rav1e/target/release/librav1e.a")
-            if(NOT EXISTS "${LIB_FILENAME}")
-                message(FATAL_ERROR "libavif: compiled rav1e library is missing (in ext/rav1e/target/release), bailing out")
-            endif()
+            message(FATAL_ERROR "libavif: compiled rav1e library is missing (in ext/rav1e/target/release), bailing out")
         endif()
 
         set(AVIF_CODEC_INCLUDES ${AVIF_CODEC_INCLUDES}
@@ -244,11 +285,7 @@ if(AVIF_CODEC_AOM)
         src/codec_aom.c
     )
     if(AVIF_LOCAL_AOM)
-        if(WIN32)
-            set(LIB_FILENAME "${CMAKE_CURRENT_SOURCE_DIR}/ext/aom/build.libavif/aom.lib")
-        else()
-            set(LIB_FILENAME "${CMAKE_CURRENT_SOURCE_DIR}/ext/aom/build.libavif/libaom.a")
-        endif()
+        set(LIB_FILENAME "${CMAKE_CURRENT_SOURCE_DIR}/ext/aom/build.libavif/${CMAKE_STATIC_LIBRARY_PREFIX}aom${CMAKE_STATIC_LIBRARY_SUFFIX}")
         if(NOT EXISTS "${LIB_FILENAME}")
             message(FATAL_ERROR "libavif: ${LIB_FILENAME} is missing, bailing out")
         endif()
@@ -270,7 +307,7 @@ if(AVIF_CODEC_AOM)
 endif()
 
 if(NOT AVIF_CODEC_AOM AND NOT AVIF_CODEC_DAV1D AND NOT AVIF_CODEC_LIBGAV1)
-    message(FATAL_ERROR "libavif: No decoding library is enabled, bailing out.")
+    message(WARNING "libavif: No decoding library is enabled.")
 endif()
 
 add_library(avif ${AVIF_SRCS})
@@ -323,7 +360,13 @@ if(AVIF_BUILD_APPS)
         set_target_properties(avifenc PROPERTIES LINKER_LANGUAGE "CXX")
     endif()
     target_link_libraries(avifenc avif ${AVIF_PLATFORM_LIBRARIES} ${ZLIB_LIBRARY} ${PNG_LIBRARY} ${JPEG_LIBRARY})
-    target_include_directories(avifenc PRIVATE apps/shared ${ZLIB_INCLUDE_DIR} ${PNG_PNG_INCLUDE_DIR} ${JPEG_INCLUDE_DIR})
+    target_include_directories(avifenc
+                               PRIVATE
+                                   $<TARGET_PROPERTY:avif,INTERFACE_INCLUDE_DIRECTORIES>
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/apps/shared
+                                   ${ZLIB_INCLUDE_DIR}
+                                   ${PNG_PNG_INCLUDE_DIR}
+                                   ${JPEG_INCLUDE_DIR})
     add_executable(avifdec
         apps/avifdec.c
 
@@ -337,18 +380,13 @@ if(AVIF_BUILD_APPS)
         set_target_properties(avifdec PROPERTIES LINKER_LANGUAGE "CXX")
     endif()
     target_link_libraries(avifdec avif ${AVIF_PLATFORM_LIBRARIES} ${ZLIB_LIBRARY} ${PNG_LIBRARY} ${JPEG_LIBRARY})
-    target_include_directories(avifdec PRIVATE apps/shared ${ZLIB_INCLUDE_DIR} ${PNG_PNG_INCLUDE_DIR} ${JPEG_INCLUDE_DIR})
-
-    add_executable(avifdump
-        apps/avifdump.c
-
-        apps/shared/avifutil.c
-    )
-    if(AVIF_LOCAL_LIBGAV1)
-        set_target_properties(avifdump PROPERTIES LINKER_LANGUAGE "CXX")
-    endif()
-    target_link_libraries(avifdump avif ${AVIF_PLATFORM_LIBRARIES})
-    target_include_directories(avifdump PRIVATE apps/shared)
+    target_include_directories(avifdec
+                               PRIVATE
+                                   $<TARGET_PROPERTY:avif,INTERFACE_INCLUDE_DIRECTORIES>
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/apps/shared
+                                   ${ZLIB_INCLUDE_DIR}
+                                   ${PNG_PNG_INCLUDE_DIR}
+                                   ${JPEG_INCLUDE_DIR})
 
     if(NOT SKIP_INSTALL_APPS AND NOT SKIP_INSTALL_ALL)
         install(TARGETS avifenc avifdec
@@ -386,6 +424,17 @@ if(AVIF_BUILD_TESTS)
         COMMAND $<TARGET_FILE:aviftest> ${CMAKE_CURRENT_SOURCE_DIR}/tests/data
         DEPENDS aviftest
     )
+
+    if(AVIF_ENABLE_COVERAGE)
+        add_custom_target(avif_coverage
+            COMMAND LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/aviftest.profraw $<TARGET_FILE:aviftest> ${CMAKE_CURRENT_SOURCE_DIR}/tests/data --io-only
+            COMMAND ${XCRUN} llvm-profdata merge -sparse ${CMAKE_BINARY_DIR}/aviftest.profraw -o ${CMAKE_BINARY_DIR}/aviftest.profdata
+            COMMAND cmake -E make_directory ${CMAKE_BINARY_DIR}/coverage
+            COMMAND ${XCRUN} llvm-cov show $<TARGET_FILE:aviftest> -instr-profile=${CMAKE_BINARY_DIR}/aviftest.profdata -project-title=libavif --format html -output-dir=${CMAKE_BINARY_DIR}/coverage
+            COMMAND echo Coverage report here: ${CMAKE_BINARY_DIR}/coverage/index.html
+            DEPENDS aviftest
+        )
+    endif()
 endif()
 
 configure_file(libavif.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/libavif.pc @ONLY)
@@ -393,6 +442,7 @@ configure_file(libavif.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/libavif.pc @ONLY)
 if(NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
     install(TARGETS avif
         EXPORT ${PROJECT_NAME}-config
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     )
@@ -455,4 +505,4 @@ if(WIN32)
     endif()
 endif()
 
-# ---------------------------------------------------------------------------------------
+add_subdirectory(contrib)

@@ -99,20 +99,24 @@ static AOM_INLINE void realloc_segmentation_maps(AV1_COMP *cpi) {
                   aom_calloc(mi_params->mi_rows * mi_params->mi_cols, 1));
 }
 
-static AOM_INLINE void set_tpl_stats_block_size(int width, int height,
-                                                uint8_t *block_mis_log2) {
-  const int is_720p_or_larger = AOMMIN(width, height) >= 720;
-
-  // 0: 4x4, 1: 8x8, 2: 16x16
-  *block_mis_log2 = is_720p_or_larger ? 2 : 1;
+static AOM_INLINE void set_tpl_stats_block_size(uint8_t *block_mis_log2,
+                                                uint8_t *tpl_bsize_1d) {
+  // tpl stats bsize: 2 means 16x16
+  *block_mis_log2 = 2;
+  // Block size used in tpl motion estimation
+  *tpl_bsize_1d = 16;
+  // MIN_TPL_BSIZE_1D = 16;
+  assert(*tpl_bsize_1d >= 16);
 }
 
 static AOM_INLINE void setup_tpl_buffers(AV1_COMMON *const cm,
                                          TplParams *const tpl_data) {
   CommonModeInfoParams *const mi_params = &cm->mi_params;
-  set_tpl_stats_block_size(cm->width, cm->height,
-                           &tpl_data->tpl_stats_block_mis_log2);
+  set_tpl_stats_block_size(&tpl_data->tpl_stats_block_mis_log2,
+                           &tpl_data->tpl_bsize_1d);
   const uint8_t block_mis_log2 = tpl_data->tpl_stats_block_mis_log2;
+  tpl_data->border_in_pixels =
+      ALIGN_POWER_OF_TWO(tpl_data->tpl_bsize_1d + 2 * AOM_INTERP_EXTEND, 5);
 
   for (int frame = 0; frame < MAX_LENGTH_TPL_FRAME_STATS; ++frame) {
     const int mi_cols =
@@ -138,7 +142,7 @@ static AOM_INLINE void setup_tpl_buffers(AV1_COMMON *const cm,
     if (aom_alloc_frame_buffer(
             &tpl_data->tpl_rec_pool[frame], cm->width, cm->height,
             cm->seq_params.subsampling_x, cm->seq_params.subsampling_y,
-            cm->seq_params.use_highbitdepth, AOM_ENC_NO_SCALE_BORDER,
+            cm->seq_params.use_highbitdepth, tpl_data->border_in_pixels,
             cm->features.byte_alignment))
       aom_internal_error(&cm->error, AOM_CODEC_MEM_ERROR,
                          "Failed to allocate frame buffer");
@@ -304,6 +308,11 @@ static AOM_INLINE void dealloc_compressor_data(AV1_COMP *cpi) {
   }
 
   if (cpi->use_svc) av1_free_svc_cyclic_refresh(cpi);
+
+  if (cpi->consec_zero_mv) {
+    aom_free(cpi->consec_zero_mv);
+    cpi->consec_zero_mv = NULL;
+  }
 }
 
 static AOM_INLINE void variance_partition_alloc(AV1_COMP *cpi) {
@@ -392,8 +401,9 @@ static AOM_INLINE YV12_BUFFER_CONFIG *realloc_and_scale_source(
                        "Failed to reallocate scaled source buffer");
   assert(cpi->scaled_source.y_crop_width == scaled_width);
   assert(cpi->scaled_source.y_crop_height == scaled_height);
-  av1_resize_and_extend_frame(cpi->unscaled_source, &cpi->scaled_source,
-                              (int)cm->seq_params.bit_depth, num_planes);
+  av1_resize_and_extend_frame_nonnormative(
+      cpi->unscaled_source, &cpi->scaled_source, (int)cm->seq_params.bit_depth,
+      num_planes);
   return &cpi->scaled_source;
 }
 

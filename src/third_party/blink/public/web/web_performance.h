@@ -50,6 +50,7 @@ class WebPerformance {
   struct BackForwardCacheRestoreTiming {
     double navigation_start = 0;
     double first_paint = 0;
+    base::Optional<base::TimeDelta> first_input_delay;
   };
 
   using BackForwardCacheRestoreTimings =
@@ -111,6 +112,7 @@ class WebPerformance {
   BLINK_EXPORT uint64_t ExperimentalLargestImagePaintSize() const;
   BLINK_EXPORT double ExperimentalLargestTextPaint() const;
   BLINK_EXPORT uint64_t ExperimentalLargestTextPaintSize() const;
+  BLINK_EXPORT double FirstEligibleToPaint() const;
   BLINK_EXPORT double FirstInputOrScrollNotifiedTimestamp() const;
   BLINK_EXPORT base::Optional<base::TimeDelta> FirstInputDelay() const;
   BLINK_EXPORT base::Optional<base::TimeDelta> FirstInputTimestamp() const;

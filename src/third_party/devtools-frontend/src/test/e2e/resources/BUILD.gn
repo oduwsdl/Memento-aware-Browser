@@ -10,8 +10,10 @@ group("resources") {
     "console",
     "coverage",
     "cross_tool",
+    "css_overview",
     "elements",
     "emulation",
+    "host",
     "layers",
     "lighthouse",
     "media",
@@ -21,6 +23,7 @@ group("resources") {
     "performance",
     "profiler",
     "search",
+    "sensors",
     "sources",
     "webaudio",
   ]

@@ -976,6 +976,7 @@ func (c *changeInfo) update(client *gerrit.Client) error {
 	codeReviewScore := change.Labels["Code-Review"].Value
 	codeReviewApproved := change.Labels["Code-Review"].Approved.AccountID != 0
 	presubmitReady := change.Labels["Presubmit-Ready"].Approved.AccountID != 0
+	verifiedScore := change.Labels["Verified"].Value
 
 	c.priority = 0
 	if presubmitReady {
@@ -994,6 +995,13 @@ func (c *changeInfo) update(client *gerrit.Client) error {
 		strings.HasSuffix(change.Labels["Code-Review"].Approved.Email, "@google.com") ||
 		strings.HasSuffix(change.Labels["Code-Review"].Recommended.Email, "@google.com") ||
 		strings.HasSuffix(change.Labels["Presubmit-Ready"].Approved.Email, "@google.com")
+
+	// Don't test if the change has negative scores.
+	if canTest {
+		if codeReviewScore < 0 || verifiedScore < 0 {
+			canTest = false
+		}
+	}
 
 	// Has the latest patchset already been tested?
 	if canTest {
@@ -1325,6 +1333,31 @@ func compare(old, new *deqp.Results) (msg string, alert bool) {
 		}
 	}
 
+	if n := len(broken); n > 0 {
+		sort.Strings(broken)
+		sb.WriteString(fmt.Sprintf("\n--- This change breaks %d tests: ---\n", n))
+		list(broken)
+	}
+	if n := len(fixed); n > 0 {
+		sort.Strings(fixed)
+		sb.WriteString(fmt.Sprintf("\n--- This change fixes %d tests: ---\n", n))
+		list(fixed)
+	}
+	if n := len(removed); n > 0 {
+		sort.Strings(removed)
+		sb.WriteString(fmt.Sprintf("\n--- This change removes %d tests: ---\n", n))
+		list(removed)
+	}
+	if n := len(changed); n > 0 {
+		sort.Strings(changed)
+		sb.WriteString(fmt.Sprintf("\n--- This change alters %d tests: ---\n", n))
+		list(changed)
+	}
+
+	if len(broken) == 0 && len(fixed) == 0 && len(removed) == 0 && len(changed) == 0 {
+		sb.WriteString(fmt.Sprintf("\n--- No change in test results ---\n"))
+	}
+
 	sb.WriteString(fmt.Sprintf("          Total tests: %d\n", totalTests))
 	for _, s := range []struct {
 		label  string
@@ -1369,31 +1402,6 @@ func compare(old, new *deqp.Results) (msg string, alert bool) {
 		default:
 			sb.WriteString(fmt.Sprintf("%s: %v -> %v (%+d%%)\n", label, old, new, change))
 		}
-	}
-
-	if n := len(broken); n > 0 {
-		sort.Strings(broken)
-		sb.WriteString(fmt.Sprintf("\n--- This change breaks %d tests: ---\n", n))
-		list(broken)
-	}
-	if n := len(fixed); n > 0 {
-		sort.Strings(fixed)
-		sb.WriteString(fmt.Sprintf("\n--- This change fixes %d tests: ---\n", n))
-		list(fixed)
-	}
-	if n := len(removed); n > 0 {
-		sort.Strings(removed)
-		sb.WriteString(fmt.Sprintf("\n--- This change removes %d tests: ---\n", n))
-		list(removed)
-	}
-	if n := len(changed); n > 0 {
-		sort.Strings(changed)
-		sb.WriteString(fmt.Sprintf("\n--- This change alters %d tests: ---\n", n))
-		list(changed)
-	}
-
-	if len(broken) == 0 && len(fixed) == 0 && len(removed) == 0 && len(changed) == 0 {
-		sb.WriteString(fmt.Sprintf("\n--- No change in test results ---\n"))
 	}
 
 	type timingDiff struct {

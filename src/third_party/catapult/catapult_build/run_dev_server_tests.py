@@ -206,6 +206,7 @@ def RunTests(args, chrome_path):
         '--enable-features=ForceWebRequestProxyForTest',
         '--enable-blink-features=CustomElementsV0,'
         'HTMLImports,ShadowDOMV0',
+        '--force-device-scale-factor=1',
         ('http://localhost:%s/%s/tests.html?' % (port, args.tests)) +
         'headless=true&testTypeToRun=all',
     ]
@@ -300,6 +301,11 @@ def Main(argv):
   parser.set_defaults(install_hooks=True)
   parser.set_defaults(use_local_chrome=True)
   args = parser.parse_args(argv[1:])
+
+  # TODO(crbug.com/1132884) Test consistently fails with canary channel on Mac.
+  if args.channel == 'canary' and sys.platform == 'darwin':
+    print ('Skipping canary channel tests on MacOS')
+    sys.exit(0)
 
   if args.install_hooks:
     install.InstallHooks()

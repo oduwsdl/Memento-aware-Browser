@@ -67,7 +67,7 @@ class StyleFetchedImageSet final : public StyleImage,
   bool ErrorOccurred() const override;
   FloatSize ImageSize(const Document&,
                       float multiplier,
-                      const LayoutSize& default_object_size,
+                      const FloatSize& default_object_size,
                       RespectImageOrientationEnum) const override;
   bool HasIntrinsicSize() const override;
   void AddClient(ImageResourceObserver*) override;
@@ -79,6 +79,9 @@ class StyleFetchedImageSet final : public StyleImage,
   float ImageScaleFactor() const override { return image_scale_factor_; }
   bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override;
   ImageResourceContent* CachedImage() const override;
+
+  RespectImageOrientationEnum ForceOrientationIfNecessary(
+      RespectImageOrientationEnum default_orientation) const override;
 
   void Trace(Visitor*) const override;
 

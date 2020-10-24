@@ -55,13 +55,13 @@ namespace {
     struct FooRefCnt : public SkRefCnt {
         FooRefCnt() : x(-2), y(-3.0f) { created++; }
         FooRefCnt(int X, float Y) : x(X), y(Y) { created++; }
-        ~FooRefCnt() { destroyed++; }
+        ~FooRefCnt() override { destroyed++; }
 
         int x;
         float y;
     };
 
-}
+}  // namespace
 
 struct WithDtor {
     ~WithDtor() { }
@@ -149,7 +149,7 @@ DEF_TEST(ArenaAlloc, r) {
     REPORTER_ASSERT(r, destroyed == 11);
 
     {
-        SkSTArenaAlloc<64> arena;
+        SkSTArenaAllocWithReset<64> arena;
         arena.makeArrayDefault<char>(256);
         arena.reset();
         arena.reset();
@@ -180,4 +180,8 @@ DEF_TEST(ArenaAlloc, r) {
     REPORTER_ASSERT(r, created == 128);
     REPORTER_ASSERT(r, destroyed == 128);
 
+    {
+        SkArenaAlloc arena(4096);
+        arena.makeBytesAlignedTo(4081, 8);
+    }
 }

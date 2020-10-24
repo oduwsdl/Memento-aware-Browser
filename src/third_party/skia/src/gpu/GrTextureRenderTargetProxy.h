@@ -32,8 +32,8 @@ private:
                                const GrBackendFormat&,
                                SkISize,
                                int sampleCnt,
-                               GrMipMapped,
-                               GrMipMapsStatus,
+                               GrMipmapped,
+                               GrMipmapStatus,
                                SkBackingFit,
                                SkBudgeted,
                                GrProtected,
@@ -47,8 +47,8 @@ private:
                                const GrBackendFormat&,
                                SkISize,
                                int sampleCnt,
-                               GrMipMapped,
-                               GrMipMapsStatus,
+                               GrMipmapped,
+                               GrMipmapStatus,
                                SkBackingFit,
                                SkBudgeted,
                                GrProtected,
@@ -66,7 +66,7 @@ private:
     bool instantiate(GrResourceProvider*) override;
     sk_sp<GrSurface> createSurface(GrResourceProvider*) const override;
 
-    size_t onUninstantiatedGpuMemorySize(const GrCaps&) const override;
+    size_t onUninstantiatedGpuMemorySize() const override;
     LazySurfaceDesc callbackDesc() const override;
     SkDEBUGCODE(void onValidateSurface(const GrSurface*) override;)
 };

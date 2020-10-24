@@ -32,12 +32,12 @@
 #include "base/optional.h"
 #include "cc/layers/picture_layer.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "third_party/blink/public/common/widget/device_emulation_params.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
-#include "third_party/blink/public/web/web_device_emulation_params.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -126,12 +126,10 @@
 #include "third_party/blink/renderer/core/page/print_context.h"
 #include "third_party/blink/renderer/core/page/scrolling/root_scroller_controller.h"
 #include "third_party/blink/renderer/core/page/scrolling/scroll_state.h"
-#include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator_context.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation_controller.h"
 #include "third_party/blink/renderer/core/page/validation_message_client.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
-#include "third_party/blink/renderer/core/paint/compositing/graphics_layer_tree_as_text.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -276,9 +274,7 @@ void Internals::ResetToConsistentState(Page* page) {
 
   page->SetIsCursorVisible(true);
   // Ensure the PageScaleFactor always stays within limits, if the test changed
-  // the limits. BlinkTestRunner will reset the limits to those set by
-  // LayoutTestDefaultPreferences when preferences are reapplied after this
-  // call.
+  // the limits.
   page->SetDefaultPageScaleLimits(1, 4);
   page->SetPageScaleFactor(1);
   page->GetChromeClient().GetWebView()->DisableDeviceEmulation();
@@ -478,9 +474,11 @@ bool Internals::isPreloadedBy(const String& url, Document* document) {
 bool Internals::isLoading(const String& url) {
   if (!document_)
     return false;
-  const String cache_identifier = document_->Fetcher()->GetCacheIdentifier();
-  Resource* resource = GetMemoryCache()->ResourceForURL(
-      document_->CompleteURL(url), cache_identifier);
+  const KURL full_url = document_->CompleteURL(url);
+  const String cache_identifier =
+      document_->Fetcher()->GetCacheIdentifier(full_url);
+  Resource* resource =
+      GetMemoryCache()->ResourceForURL(full_url, cache_identifier);
   // We check loader() here instead of isLoading(), because a multipart
   // ImageResource lies isLoading() == false after the first part is loaded.
   return resource && resource->Loader();
@@ -489,9 +487,11 @@ bool Internals::isLoading(const String& url) {
 bool Internals::isLoadingFromMemoryCache(const String& url) {
   if (!document_)
     return false;
-  const String cache_identifier = document_->Fetcher()->GetCacheIdentifier();
-  Resource* resource = GetMemoryCache()->ResourceForURL(
-      document_->CompleteURL(url), cache_identifier);
+  const KURL full_url = document_->CompleteURL(url);
+  const String cache_identifier =
+      document_->Fetcher()->GetCacheIdentifier(full_url);
+  Resource* resource =
+      GetMemoryCache()->ResourceForURL(full_url, cache_identifier);
   return resource && resource->GetStatus() == ResourceStatus::kCached;
 }
 
@@ -1476,6 +1476,23 @@ void Internals::setAutofilled(Element* element,
       enabled ? WebAutofillState::kAutofilled : WebAutofillState::kNotFilled);
 }
 
+void Internals::setSelectionRangeForNumberType(
+    Element* input_element,
+    uint32_t start,
+    uint32_t end,
+    ExceptionState& exception_state) {
+  DCHECK(input_element);
+  auto* html_input_element = DynamicTo<HTMLInputElement>(input_element);
+  if (!html_input_element) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidNodeTypeError,
+        "The element provided is not an input element.");
+    return;
+  }
+
+  html_input_element->SetSelectionRangeForTesting(start, end, exception_state);
+}
+
 Range* Internals::rangeFromLocationAndLength(Element* scope,
                                              int range_location,
                                              int range_length) {
@@ -2179,16 +2196,6 @@ String Internals::mainThreadScrollingReasons(
   return document->GetFrame()->View()->MainThreadScrollingReasonsAsText();
 }
 
-void Internals::markGestureScrollRegionDirty(
-    Document* document,
-    ExceptionState& exception_state) const {
-  FrameView* frame_view = document->View();
-  if (!frame_view || !frame_view->IsLocalFrameView())
-    return;
-  LocalFrameView* lfv = static_cast<LocalFrameView*>(frame_view);
-  lfv->GetScrollingContext()->SetScrollGestureRegionIsDirty(true);
-}
-
 DOMRectList* Internals::nonFastScrollableRects(
     Document* document,
     ExceptionState& exception_state) const {
@@ -2301,7 +2308,7 @@ int Internals::numberOfPages(float page_width,
 }
 
 String Internals::pageProperty(String property_name,
-                               int page_number,
+                               unsigned page_number,
                                ExceptionState& exception_state) const {
   if (!GetFrame()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
@@ -2314,7 +2321,7 @@ String Internals::pageProperty(String property_name,
 }
 
 String Internals::pageSizeAndMarginsInPixels(
-    int page_number,
+    unsigned page_number,
     int width,
     int height,
     int margin_top,
@@ -2584,9 +2591,8 @@ void Internals::forceFullRepaint(Document* document,
     return;
   }
 
-  auto* layout_view = document->GetLayoutView();
-  if (layout_view)
-    layout_view->InvalidatePaintForViewAndCompositedLayers();
+  if (auto* layout_view = document->GetLayoutView())
+    layout_view->InvalidatePaintForViewAndDescendants();
 }
 
 DOMRectList* Internals::draggableRegions(Document* document,
@@ -2880,6 +2886,8 @@ DOMRect* Internals::selectionBounds(ExceptionState& exception_state) {
     return nullptr;
   }
 
+  GetFrame()->View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kSelection);
   return DOMRect::FromFloatRect(
       FloatRect(GetFrame()->Selection().AbsoluteUnclippedBounds()));
 }
@@ -3143,6 +3151,13 @@ Element* Internals::interestedElement() {
       .GetInterestedElement();
 }
 
+bool Internals::isActivated() {
+  if (!GetFrame())
+    return false;
+
+  return GetFrame()->GetPage()->GetFocusController().IsActive();
+}
+
 bool Internals::isInCanvasFontCache(Document* document,
                                     const String& font_string) {
   return document->GetCanvasFontCache()->IsInCache(font_string);
@@ -3317,6 +3332,11 @@ double Internals::monotonicTimeToZeroBasedDocumentTime(
       .InSecondsF();
 }
 
+int64_t Internals::zeroBasedDocumentTimeToMonotonicTime(double dom_event_time) {
+  return document_->Loader()->GetTiming().ZeroBasedDocumentTimeToMonotonicTime(
+      dom_event_time);
+}
+
 int64_t Internals::currentTimeTicks() {
   return base::TimeTicks::Now().since_origin().InMicroseconds();
 }
@@ -3331,14 +3351,6 @@ String Internals::getProgrammaticScrollAnimationState(Node* node) const {
   if (ScrollableArea* scrollable_area = ScrollableAreaForNode(node))
     return scrollable_area->GetProgrammaticScrollAnimator().RunStateAsText();
   return String();
-}
-
-DOMRect* Internals::visualRect(Node* node) {
-  if (!node || !node->GetLayoutObject())
-    return DOMRect::Create();
-
-  return DOMRect::FromFloatRect(
-      FloatRect(node->GetLayoutObject()->FragmentsVisualRectBoundingBox()));
 }
 
 void Internals::crash() {
@@ -3387,6 +3399,10 @@ bool Internals::isTrackingOcclusionForIFrame(HTMLIFrameElement* iframe) const {
     return false;
   RemoteFrame* remote_frame = To<RemoteFrame>(iframe->ContentFrame());
   return remote_frame->View()->NeedsOcclusionTracking();
+}
+
+void Internals::DisableFrequencyCappingForOverlayPopupDetection() const {
+  OverlayInterstitialAdDetector::DisableFrequencyCappingForTesting();
 }
 
 void Internals::addEmbedderCustomElementName(const AtomicString& name,
@@ -3451,7 +3467,7 @@ void Internals::setDeviceEmulationScale(float scale,
         "The document's page cannot be retrieved.");
     return;
   }
-  WebDeviceEmulationParams params;
+  DeviceEmulationParams params;
   params.scale = scale;
   page->GetChromeClient().GetWebView()->EnableDeviceEmulation(params);
 }
@@ -3495,6 +3511,21 @@ void Internals::generateTestReport(const String& message) {
 
   // Send the test report to any ReportingObservers.
   ReportingContext::From(document_->domWindow())->QueueReport(report);
+}
+
+void Internals::setIsAdSubframe(HTMLIFrameElement* iframe,
+                                ExceptionState& exception_state) {
+  if (!iframe->ContentFrame() || !iframe->ContentFrame()->IsLocalFrame()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      "Frame cannot be accessed.");
+    return;
+  }
+  LocalFrame* parent_frame = iframe->GetDocument().GetFrame();
+  LocalFrame* child_frame = To<LocalFrame>(iframe->ContentFrame());
+  bool parent_is_ad = parent_frame && parent_frame->IsAdSubframe();
+  child_frame->SetIsAdSubframe(parent_is_ad
+                                   ? blink::mojom::AdFrameType::kChildAd
+                                   : blink::mojom::AdFrameType::kRootAd);
 }
 
 }  // namespace blink

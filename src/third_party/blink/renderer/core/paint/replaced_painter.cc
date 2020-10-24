@@ -43,9 +43,8 @@ ScopedReplacedContentPaintState::ScopedReplacedContentPaintState(
   if (!paint_properties)
     return;
 
-  PropertyTreeState new_properties =
-      input_paint_info_.context.GetPaintController()
-          .CurrentPaintChunkProperties();
+  auto new_properties = input_paint_info_.context.GetPaintController()
+                            .CurrentPaintChunkProperties();
   bool property_changed = false;
 
   const auto* content_transform = paint_properties->ReplacedContentTransform();
@@ -104,8 +103,10 @@ void ReplacedPainter::Paint(const PaintInfo& paint_info) {
     if (layout_replaced_.StyleRef().Visibility() == EVisibility::kVisible) {
       if (layout_replaced_.HasBoxDecorationBackground())
         should_paint_background = true;
-      if (layout_replaced_.HasEffectiveAllowedTouchAction())
+      if (layout_replaced_.HasEffectiveAllowedTouchAction() ||
+          layout_replaced_.InsideBlockingWheelEventHandler()) {
         should_paint_background = true;
+      }
     }
     if (should_paint_background) {
       if (layout_replaced_.HasLayer() &&
@@ -186,7 +187,8 @@ void ReplacedPainter::Paint(const PaintInfo& paint_info) {
         PixelSnappedIntRect(selection_painting_rect);
 
     DrawingRecorder recorder(local_paint_info.context, layout_replaced_,
-                             DisplayItem::kSelectionTint);
+                             DisplayItem::kSelectionTint,
+                             selection_painting_int_rect);
     Color selection_bg = SelectionPaintingUtils::SelectionBackgroundColor(
         layout_replaced_.GetDocument(), layout_replaced_.StyleRef(),
         layout_replaced_.GetNode());

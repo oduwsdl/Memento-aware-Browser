@@ -102,15 +102,7 @@ std::shared_ptr<sw::SpirvShader> createShader(
 	// instructions.
 	const bool optimize = !dbgctx;
 
-	// TODO(b/147726513): Do not preprocess the shader if we have a debugger
-	// context.
-	// This is a work-around for the SPIR-V tools incorrectly reporting errors
-	// when debug information is provided. This can be removed once the
-	// following SPIR-V tools bugs are fixed:
-	// https://github.com/KhronosGroup/SPIRV-Tools/issues/3102
-	// https://github.com/KhronosGroup/SPIRV-Tools/issues/3103
-	// https://github.com/KhronosGroup/SPIRV-Tools/issues/3118
-	auto code = dbgctx ? key.getInsns() : preprocessSpirv(key.getInsns(), key.getSpecializationInfo(), optimize);
+	auto code = preprocessSpirv(key.getInsns(), key.getSpecializationInfo(), optimize);
 	ASSERT(code.size() > 0);
 
 	// If the pipeline has specialization constants, assume they're unique and
@@ -122,13 +114,13 @@ std::shared_ptr<sw::SpirvShader> createShader(
 	                                         code, key.getRenderPass(), key.getSubpassIndex(), robustBufferAccess, dbgctx);
 }
 
-std::shared_ptr<sw::ComputeProgram> createProgram(const vk::PipelineCache::ComputeProgramKey &key)
+std::shared_ptr<sw::ComputeProgram> createProgram(vk::Device *device, const vk::PipelineCache::ComputeProgramKey &key)
 {
 	MARL_SCOPED_EVENT("createProgram");
 
 	vk::DescriptorSet::Bindings descriptorSets;  // FIXME(b/129523279): Delay code generation until invoke time.
 	// TODO(b/119409619): use allocator.
-	auto program = std::make_shared<sw::ComputeProgram>(key.getShader(), key.getLayout(), descriptorSets);
+	auto program = std::make_shared<sw::ComputeProgram>(device, key.getShader(), key.getLayout(), descriptorSets);
 	program->generate();
 	program->finalize();
 	return program;
@@ -138,7 +130,7 @@ std::shared_ptr<sw::ComputeProgram> createProgram(const vk::PipelineCache::Compu
 
 namespace vk {
 
-Pipeline::Pipeline(PipelineLayout *layout, const Device *device)
+Pipeline::Pipeline(PipelineLayout *layout, Device *device)
     : layout(layout)
     , device(device)
     , robustBufferAccess(device->getEnabledFeatures().robustBufferAccess)
@@ -153,7 +145,7 @@ void Pipeline::destroy(const VkAllocationCallbacks *pAllocator)
 	vk::release(static_cast<VkPipelineLayout>(*layout), pAllocator);
 }
 
-GraphicsPipeline::GraphicsPipeline(const VkGraphicsPipelineCreateInfo *pCreateInfo, void *mem, const Device *device)
+GraphicsPipeline::GraphicsPipeline(const VkGraphicsPipelineCreateInfo *pCreateInfo, void *mem, Device *device)
     : Pipeline(vk::Cast(pCreateInfo->layout), device)
 {
 	context.robustBufferAccess = robustBufferAccess;
@@ -258,8 +250,24 @@ GraphicsPipeline::GraphicsPipeline(const VkGraphicsPipelineCreateInfo *pCreateIn
 	context.cullMode = rasterizationState->cullMode;
 	context.frontFace = rasterizationState->frontFace;
 	context.polygonMode = rasterizationState->polygonMode;
-	context.depthBias = (rasterizationState->depthBiasEnable != VK_FALSE) ? rasterizationState->depthBiasConstantFactor : 0.0f;
+	context.constantDepthBias = (rasterizationState->depthBiasEnable != VK_FALSE) ? rasterizationState->depthBiasConstantFactor : 0.0f;
 	context.slopeDepthBias = (rasterizationState->depthBiasEnable != VK_FALSE) ? rasterizationState->depthBiasSlopeFactor : 0.0f;
+	context.depthBiasClamp = (rasterizationState->depthBiasEnable != VK_FALSE) ? rasterizationState->depthBiasClamp : 0.0f;
+	context.depthRangeUnrestricted = device->hasExtension(VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME);
+
+	// From the Vulkan spec for vkCmdSetDepthBias:
+	//    The bias value O for a polygon is:
+	//        O = dbclamp(...)
+	//    where dbclamp(x) =
+	//        * x                       depthBiasClamp = 0 or NaN
+	//        * min(x, depthBiasClamp)  depthBiasClamp > 0
+	//        * max(x, depthBiasClamp)  depthBiasClamp < 0
+	// So it should be safe to resolve NaNs to 0.0f.
+	if(std::isnan(context.depthBiasClamp))
+	{
+		context.depthBiasClamp = 0.0f;
+	}
+
 	context.lineWidth = rasterizationState->lineWidth;
 
 	const VkBaseInStructure *extensionCreateInfo = reinterpret_cast<const VkBaseInStructure *>(rasterizationState->pNext);
@@ -566,7 +574,7 @@ bool GraphicsPipeline::hasDynamicState(VkDynamicState dynamicState) const
 	return (dynamicStateFlags & (1 << dynamicState)) != 0;
 }
 
-ComputePipeline::ComputePipeline(const VkComputePipelineCreateInfo *pCreateInfo, void *mem, const Device *device)
+ComputePipeline::ComputePipeline(const VkComputePipelineCreateInfo *pCreateInfo, void *mem, Device *device)
     : Pipeline(vk::Cast(pCreateInfo->layout), device)
 {
 }
@@ -600,26 +608,27 @@ void ComputePipeline::compileShaders(const VkAllocationCallbacks *pAllocator, co
 
 		const PipelineCache::ComputeProgramKey programKey(shader.get(), layout);
 		program = pPipelineCache->getOrCreateComputeProgram(programKey, [&] {
-			return createProgram(programKey);
+			return createProgram(device, programKey);
 		});
 	}
 	else
 	{
 		shader = createShader(shaderKey, module, robustBufferAccess, device->getDebuggerContext());
 		const PipelineCache::ComputeProgramKey programKey(shader.get(), layout);
-		program = createProgram(programKey);
+		program = createProgram(device, programKey);
 	}
 }
 
 void ComputePipeline::run(uint32_t baseGroupX, uint32_t baseGroupY, uint32_t baseGroupZ,
                           uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
+                          vk::DescriptorSet::Array const &descriptorSetObjects,
                           vk::DescriptorSet::Bindings const &descriptorSets,
                           vk::DescriptorSet::DynamicOffsets const &descriptorDynamicOffsets,
                           sw::PushConstantStorage const &pushConstants)
 {
 	ASSERT_OR_RETURN(program != nullptr);
 	program->run(
-	    descriptorSets, descriptorDynamicOffsets, pushConstants,
+	    descriptorSetObjects, descriptorSets, descriptorDynamicOffsets, pushConstants,
 	    baseGroupX, baseGroupY, baseGroupZ,
 	    groupCountX, groupCountY, groupCountZ);
 }

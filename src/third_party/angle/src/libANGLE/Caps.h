@@ -95,6 +95,8 @@ struct Extensions
     Extensions();
     Extensions(const Extensions &other);
 
+    Extensions &operator=(const Extensions &other);
+
     // Generate a vector of supported extension strings
     std::vector<std::string> getStrings() const;
 
@@ -351,6 +353,9 @@ struct Extensions
     // GL_EXT_multisampled_render_to_texture
     bool multisampledRenderToTexture = false;
 
+    // GL_EXT_multisampled_render_to_texture2
+    bool multisampledRenderToTexture2 = false;
+
     // GL_ANGLE_instanced_arrays
     bool instancedArraysANGLE = false;
     // GL_EXT_instanced_arrays
@@ -412,6 +417,9 @@ struct Extensions
 
     // GL_EXT_memory_object_fd
     bool memoryObjectFd = false;
+
+    // GL_ANGLE_memory_object_flags
+    bool memoryObjectFlagsANGLE = false;
 
     // GL_ANGLE_memory_object_fuchsia
     bool memoryObjectFuchsiaANGLE = false;
@@ -633,6 +641,24 @@ struct Extensions
     {
         return (textureCubeMapArrayOES || textureCubeMapArrayEXT);
     }
+
+    // GL_EXT_shadow_samplers
+    bool shadowSamplersEXT = false;
+
+    // GL_EXT_buffer_storage
+    bool bufferStorageEXT = false;
+
+    // GL_OES_texture_stencil8
+    bool stencilIndex8 = false;
+
+    // GL_OES_sample_shading
+    bool sampleShadingOES = false;
+
+    // GL_NV_robustness_video_memory_purge
+    bool robustnessVideoMemoryPurgeNV = false;
+
+    // GL_ANGLE_get_tex_level_parameter
+    bool getTexLevelParameterANGLE = false;
 };
 
 // Pointer to a boolean memeber of the Extensions struct
@@ -689,6 +715,8 @@ struct TypePrecision
 {
     TypePrecision();
     TypePrecision(const TypePrecision &other);
+
+    TypePrecision &operator=(const TypePrecision &other);
 
     void setIEEEFloat();
     void setTwosComplementInt(unsigned int bits);
@@ -876,6 +904,9 @@ struct Caps
 
     // Support for NPOT surfaces
     bool textureNPOT;
+
+    // Support for Stencil8 configs
+    bool stencil8;
 };
 
 struct DisplayExtensions
@@ -996,6 +1027,9 @@ struct DisplayExtensions
     // EGL_ANGLE_display_texture_share_group
     bool displayTextureShareGroup = false;
 
+    // EGL_ANGLE_display_semaphore_share_group
+    bool displaySemaphoreShareGroup = false;
+
     // EGL_ANGLE_create_context_client_arrays
     bool createContextClientArrays = false;
 
@@ -1034,6 +1068,9 @@ struct DisplayExtensions
 
     // EGL_ANDROID_get_native_client_buffer
     bool getNativeClientBufferANDROID = false;
+
+    // EGL_ANDROID_create_native_client_buffer
+    bool createNativeClientBufferANDROID = false;
 
     // EGL_ANDROID_native_fence_sync
     bool nativeFenceSyncANDROID = false;
@@ -1085,6 +1122,12 @@ struct DisplayExtensions
 
     // EGL_NOK_texture_from_pixmap
     bool textureFromPixmapNOK = false;
+
+    // EGL_NV_robustness_video_memory_purge
+    bool robustnessVideoMemoryPurgeNV = false;
+
+    // EGL_KHR_reusable_sync
+    bool reusableSyncKHR = false;
 };
 
 struct DeviceExtensions

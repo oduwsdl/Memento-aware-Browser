@@ -18,7 +18,7 @@
 
 #include <ft2build.h>
   /* we use our special ftconfig.h file, not the standard one */
-#include <ftconfig.h>
+#include FT_CONFIG_CONFIG_H
 #include <freetype/internal/ftdebug.h>
 #include <freetype/ftsystem.h>
 #include <freetype/fterrors.h>
@@ -351,7 +351,7 @@
     stream->read = 0;
 
     FT_TRACE1(( "FT_Stream_Open:" ));
-    FT_TRACE1(( " opened `%s' (%d bytes) successfully\n",
+    FT_TRACE1(( " opened `%s' (%ld bytes) successfully\n",
                 filepathname, stream->size ));
 
     return FT_Err_Ok;

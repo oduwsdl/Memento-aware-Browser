@@ -17,6 +17,7 @@
 #include "common/Assert.h"
 #include "common/Constants.h"
 #include "common/Math.h"
+#include "dawn_native/EnumMaskIterator.h"
 #include "dawn_native/opengl/BufferGL.h"
 #include "dawn_native/opengl/DeviceGL.h"
 #include "dawn_native/opengl/UtilsGL.h"
@@ -39,9 +40,9 @@ namespace dawn_native { namespace opengl {
                         }
                     }
 
-                default:
+                case wgpu::TextureDimension::e1D:
+                case wgpu::TextureDimension::e3D:
                     UNREACHABLE();
-                    return GL_TEXTURE_2D;
             }
         }
 
@@ -61,9 +62,11 @@ namespace dawn_native { namespace opengl {
                     return GL_TEXTURE_CUBE_MAP;
                 case wgpu::TextureViewDimension::CubeArray:
                     return GL_TEXTURE_CUBE_MAP_ARRAY;
-                default:
+
+                case wgpu::TextureViewDimension::e1D:
+                case wgpu::TextureViewDimension::e3D:
+                case wgpu::TextureViewDimension::Undefined:
                     UNREACHABLE();
-                    return GL_TEXTURE_2D;
             }
         }
 
@@ -140,7 +143,9 @@ namespace dawn_native { namespace opengl {
                     }
                 }
                 break;
-            default:
+
+            case wgpu::TextureDimension::e1D:
+            case wgpu::TextureDimension::e3D:
                 UNREACHABLE();
         }
 
@@ -199,25 +204,25 @@ namespace dawn_native { namespace opengl {
         float fClearColor = (clearValue == TextureBase::ClearValue::Zero) ? 0.f : 1.f;
 
         if (GetFormat().isRenderable) {
-            if (GetFormat().HasDepthOrStencil()) {
-                bool doDepthClear = GetFormat().HasDepth();
-                bool doStencilClear = GetFormat().HasStencil();
+            if ((range.aspects & (Aspect::Depth | Aspect::Stencil)) != 0) {
                 GLfloat depth = fClearColor;
                 GLint stencil = clearColor;
-                if (doDepthClear) {
+                if (range.aspects & Aspect::Depth) {
                     gl.DepthMask(GL_TRUE);
                 }
-                if (doStencilClear) {
+                if (range.aspects & Aspect::Stencil) {
                     gl.StencilMask(GetStencilMaskFromStencilFormat(GetFormat().format));
                 }
 
-                auto DoClear = [&]() {
-                    if (doDepthClear && doStencilClear) {
+                auto DoClear = [&](Aspect aspects) {
+                    if (aspects == (Aspect::Depth | Aspect::Stencil)) {
                         gl.ClearBufferfi(GL_DEPTH_STENCIL, 0, depth, stencil);
-                    } else if (doDepthClear) {
+                    } else if (aspects == Aspect::Depth) {
                         gl.ClearBufferfv(GL_DEPTH, 0, &depth);
-                    } else if (doStencilClear) {
+                    } else if (aspects == Aspect::Stencil) {
                         gl.ClearBufferiv(GL_STENCIL, 0, &stencil);
+                    } else {
+                        UNREACHABLE();
                     }
                 };
 
@@ -230,23 +235,42 @@ namespace dawn_native { namespace opengl {
                     switch (GetDimension()) {
                         case wgpu::TextureDimension::e2D:
                             if (GetArrayLayers() == 1) {
-                                if (clearValue == TextureBase::ClearValue::Zero &&
-                                    IsSubresourceContentInitialized(
-                                        SubresourceRange::SingleSubresource(level, 0))) {
-                                    // Skip lazy clears if already initialized.
+                                Aspect aspectsToClear = Aspect::None;
+                                for (Aspect aspect : IterateEnumMask(range.aspects)) {
+                                    if (clearValue == TextureBase::ClearValue::Zero &&
+                                        IsSubresourceContentInitialized(
+                                            SubresourceRange::SingleMipAndLayer(level, 0,
+                                                                                aspect))) {
+                                        // Skip lazy clears if already initialized.
+                                        continue;
+                                    }
+                                    aspectsToClear |= aspect;
+                                }
+
+                                if (aspectsToClear == Aspect::None) {
                                     continue;
                                 }
+
                                 gl.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER,
                                                         GL_DEPTH_STENCIL_ATTACHMENT, GetGLTarget(),
                                                         GetHandle(), static_cast<GLint>(level));
-                                DoClear();
+                                DoClear(aspectsToClear);
                             } else {
                                 for (uint32_t layer = range.baseArrayLayer;
                                      layer < range.baseArrayLayer + range.layerCount; ++layer) {
-                                    if (clearValue == TextureBase::ClearValue::Zero &&
-                                        IsSubresourceContentInitialized(
-                                            SubresourceRange::SingleSubresource(level, layer))) {
-                                        // Skip lazy clears if already initialized.
+                                    Aspect aspectsToClear = Aspect::None;
+                                    for (Aspect aspect : IterateEnumMask(range.aspects)) {
+                                        if (clearValue == TextureBase::ClearValue::Zero &&
+                                            IsSubresourceContentInitialized(
+                                                SubresourceRange::SingleMipAndLayer(level, layer,
+                                                                                    aspect))) {
+                                            // Skip lazy clears if already initialized.
+                                            continue;
+                                        }
+                                        aspectsToClear |= aspect;
+                                    }
+
+                                    if (aspectsToClear == Aspect::None) {
                                         continue;
                                     }
 
@@ -254,20 +278,25 @@ namespace dawn_native { namespace opengl {
                                         GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
                                         GetHandle(), static_cast<GLint>(level),
                                         static_cast<GLint>(layer));
-                                    DoClear();
+                                    DoClear(aspectsToClear);
                                 }
                             }
                             break;
 
-                        default:
+                        case wgpu::TextureDimension::e1D:
+                        case wgpu::TextureDimension::e3D:
                             UNREACHABLE();
                     }
                 }
 
                 gl.DeleteFramebuffers(1, &framebuffer);
             } else {
+                ASSERT(range.aspects == Aspect::Color);
+
                 static constexpr uint32_t MAX_TEXEL_SIZE = 16;
-                ASSERT(GetFormat().blockByteSize <= MAX_TEXEL_SIZE);
+                const TexelBlockInfo& blockInfo = GetFormat().GetAspectInfo(Aspect::Color).block;
+                ASSERT(blockInfo.byteSize <= MAX_TEXEL_SIZE);
+
                 std::array<GLbyte, MAX_TEXEL_SIZE> clearColorData;
                 clearColor = (clearValue == TextureBase::ClearValue::Zero) ? 0 : 255;
                 clearColorData.fill(clearColor);
@@ -280,7 +309,7 @@ namespace dawn_native { namespace opengl {
                          layer < range.baseArrayLayer + range.layerCount; ++layer) {
                         if (clearValue == TextureBase::ClearValue::Zero &&
                             IsSubresourceContentInitialized(
-                                SubresourceRange::SingleSubresource(level, layer))) {
+                                SubresourceRange::SingleMipAndLayer(level, layer, Aspect::Color))) {
                             // Skip lazy clears if already initialized.
                             continue;
                         }
@@ -292,40 +321,38 @@ namespace dawn_native { namespace opengl {
                 }
             }
         } else {
-            // TODO(natlee@microsoft.com): test compressed textures are cleared
+            ASSERT(range.aspects == Aspect::Color);
+
             // create temp buffer with clear color to copy to the texture image
-            ASSERT(kTextureBytesPerRowAlignment % GetFormat().blockByteSize == 0);
-            uint32_t bytesPerRow =
-                Align((GetWidth() / GetFormat().blockWidth) * GetFormat().blockByteSize,
-                      kTextureBytesPerRowAlignment);
+            const TexelBlockInfo& blockInfo = GetFormat().GetAspectInfo(Aspect::Color).block;
+            ASSERT(kTextureBytesPerRowAlignment % blockInfo.byteSize == 0);
+            uint32_t bytesPerRow = Align((GetWidth() / blockInfo.width) * blockInfo.byteSize,
+                                         kTextureBytesPerRowAlignment);
 
             // Make sure that we are not rounding
-            ASSERT(bytesPerRow % GetFormat().blockByteSize == 0);
-            ASSERT(GetHeight() % GetFormat().blockHeight == 0);
+            ASSERT(bytesPerRow % blockInfo.byteSize == 0);
+            ASSERT(GetHeight() % blockInfo.height == 0);
 
-            dawn_native::BufferDescriptor descriptor;
-            descriptor.size = bytesPerRow * (GetHeight() / GetFormat().blockHeight);
+            dawn_native::BufferDescriptor descriptor = {};
+            descriptor.mappedAtCreation = true;
+            descriptor.usage = wgpu::BufferUsage::CopySrc;
+            descriptor.size = bytesPerRow * (GetHeight() / blockInfo.height);
             if (descriptor.size > std::numeric_limits<uint32_t>::max()) {
                 return DAWN_OUT_OF_MEMORY_ERROR("Unable to allocate buffer.");
             }
-            descriptor.nextInChain = nullptr;
-            descriptor.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::MapWrite;
-            // TODO(natlee@microsoft.com): use Dynamic Uplaoder here for temp buffer
-            Ref<Buffer> srcBuffer = ToBackend(device->CreateBuffer(&descriptor));
-            // Call release here to prevent memory leak since CreateBuffer will up the ref count to
-            // 1, then assigning to Ref<Buffer> ups the ref count to 2. Release will reduce the ref
-            // count and ensure it to reach 0 when out of use.
-            srcBuffer->Release();
+
+            // We don't count the lazy clear of srcBuffer because it is an internal buffer.
+            // TODO(natlee@microsoft.com): use Dynamic Uploader here for temp buffer
+            Ref<Buffer> srcBuffer;
+            DAWN_TRY_ASSIGN(srcBuffer, Buffer::CreateInternalBuffer(device, &descriptor, false));
 
             // Fill the buffer with clear color
-            uint8_t* clearBuffer = nullptr;
-            DAWN_TRY(srcBuffer->MapAtCreation(&clearBuffer));
-            memset(clearBuffer, clearColor, descriptor.size);
+            memset(srcBuffer->GetMappedRange(0, descriptor.size), clearColor, descriptor.size);
             srcBuffer->Unmap();
 
             // Bind buffer and texture, and make the buffer to texture copy
             gl.PixelStorei(GL_UNPACK_ROW_LENGTH,
-                           (bytesPerRow / GetFormat().blockByteSize) * GetFormat().blockWidth);
+                           (bytesPerRow / blockInfo.byteSize) * blockInfo.width);
             gl.PixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
             for (uint32_t level = range.baseMipLevel; level < range.baseMipLevel + range.levelCount;
                  ++level) {
@@ -339,7 +366,7 @@ namespace dawn_native { namespace opengl {
                         if (GetArrayLayers() == 1) {
                             if (clearValue == TextureBase::ClearValue::Zero &&
                                 IsSubresourceContentInitialized(
-                                    SubresourceRange::SingleSubresource(level, 0))) {
+                                    SubresourceRange::SingleMipAndLayer(level, 0, Aspect::Color))) {
                                 // Skip lazy clears if already initialized.
                                 continue;
                             }
@@ -351,7 +378,8 @@ namespace dawn_native { namespace opengl {
                                  layer < range.baseArrayLayer + range.layerCount; ++layer) {
                                 if (clearValue == TextureBase::ClearValue::Zero &&
                                     IsSubresourceContentInitialized(
-                                        SubresourceRange::SingleSubresource(level, layer))) {
+                                        SubresourceRange::SingleMipAndLayer(level, layer,
+                                                                            Aspect::Color))) {
                                     // Skip lazy clears if already initialized.
                                     continue;
                                 }
@@ -362,7 +390,8 @@ namespace dawn_native { namespace opengl {
                         }
                         break;
 
-                    default:
+                    case wgpu::TextureDimension::e1D:
+                    case wgpu::TextureDimension::e3D:
                         UNREACHABLE();
                 }
             }

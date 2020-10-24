@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "base/metrics/histogram_macros.h"
+#include "third_party/blink/public/common/feature_policy/policy_value.h"
+#include "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/feature_policy/policy_value.mojom-blink.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -31,8 +33,6 @@ namespace {
 class NullImageResourceInfo final
     : public GarbageCollected<NullImageResourceInfo>,
       public ImageResourceInfo {
-  USING_GARBAGE_COLLECTED_MIXIN(NullImageResourceInfo);
-
  public:
   NullImageResourceInfo() = default;
 
@@ -226,7 +226,16 @@ IntSize ImageResourceContent::IntrinsicSize(
     RespectImageOrientationEnum should_respect_image_orientation) const {
   if (!image_)
     return IntSize();
-  return image_->Size(should_respect_image_orientation);
+  RespectImageOrientationEnum respect_orientation =
+      ForceOrientationIfNecessary(should_respect_image_orientation);
+  return image_->Size(respect_orientation);
+}
+
+RespectImageOrientationEnum ImageResourceContent::ForceOrientationIfNecessary(
+    RespectImageOrientationEnum default_orientation) const {
+  if (image_ && image_->IsBitmapImage() && !IsAccessAllowed())
+    return kRespectImageOrientation;
+  return default_orientation;
 }
 
 void ImageResourceContent::NotifyObservers(
@@ -481,23 +490,30 @@ bool ImageResourceContent::IsAcceptableCompressionRatio(
   // Pass image url to reporting API.
   const String& image_url = Url().GetString();
 
+  const char* message_format =
+      "Image bpp (byte per pixel) exceeds max value set in %s.";
+
   if (compression_format == ImageDecoder::kLossyFormat) {
     // Enforce the lossy image policy.
     return context.IsFeatureEnabled(
-        mojom::blink::DocumentPolicyFeature::kUnoptimizedLossyImages,
-        PolicyValue(compression_ratio_1k), ReportOptions::kReportOnFailure,
-        g_empty_string, image_url);
+        mojom::blink::DocumentPolicyFeature::kLossyImagesMaxBpp,
+        PolicyValue::CreateDecDouble(compression_ratio_1k),
+        ReportOptions::kReportOnFailure,
+        String::Format(message_format, "lossy-images-max-bpp"), image_url);
   }
   if (compression_format == ImageDecoder::kLosslessFormat) {
     // Enforce the lossless image policy.
     bool enabled_by_10k_policy = context.IsFeatureEnabled(
-        mojom::blink::DocumentPolicyFeature::kUnoptimizedLosslessImages,
-        PolicyValue(compression_ratio_10k), ReportOptions::kReportOnFailure,
-        g_empty_string, image_url);
+        mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
+        PolicyValue::CreateDecDouble(compression_ratio_10k),
+        ReportOptions::kReportOnFailure,
+        String::Format(message_format, "lossless-images-max-bpp"), image_url);
     bool enabled_by_1k_policy = context.IsFeatureEnabled(
-        mojom::blink::DocumentPolicyFeature::kUnoptimizedLosslessImagesStrict,
-        PolicyValue(compression_ratio_1k), ReportOptions::kReportOnFailure,
-        g_empty_string, image_url);
+        mojom::blink::DocumentPolicyFeature::kLosslessImagesStrictMaxBpp,
+        PolicyValue::CreateDecDouble(compression_ratio_1k),
+        ReportOptions::kReportOnFailure,
+        String::Format(message_format, "lossless-images-strict-max-bpp"),
+        image_url);
     return enabled_by_10k_policy && enabled_by_1k_policy;
   }
 
@@ -535,7 +551,8 @@ void ImageResourceContent::UpdateImageAnimationPolicy() {
   if (!image_)
     return;
 
-  ImageAnimationPolicy new_policy = kImageAnimationPolicyAllowed;
+  mojom::blink::ImageAnimationPolicy new_policy =
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed;
   {
     ProhibitAddRemoveObserverInScope prohibit_add_remove_observer_in_scope(
         this);
@@ -558,7 +575,7 @@ void ImageResourceContent::Changed(const blink::Image* image) {
   NotifyObservers(kDoNotNotifyFinish, CanDeferInvalidation::kYes);
 }
 
-bool ImageResourceContent::IsAccessAllowed() {
+bool ImageResourceContent::IsAccessAllowed() const {
   return info_->IsAccessAllowed(
       GetImage()->CurrentFrameHasSingleSecurityOrigin()
           ? ImageResourceInfo::kHasSingleSecurityOrigin

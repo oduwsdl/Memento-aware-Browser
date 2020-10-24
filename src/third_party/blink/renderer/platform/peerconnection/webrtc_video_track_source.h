@@ -10,12 +10,11 @@
 #include "base/threading/thread_checker.h"
 #include "media/base/video_frame_pool.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/webrtc/webrtc_video_frame_adapter.h"
 #include "third_party/webrtc/media/base/adapted_video_track_source.h"
 #include "third_party/webrtc/rtc_base/timestamp_aligner.h"
 
 namespace blink {
-
-PLATFORM_EXPORT extern const base::Feature kWebRtcLogWebRtcVideoFrameAdapter;
 
 // This class implements webrtc's VideoTrackSourceInterface. To pass frames down
 // the webrtc video pipeline, each received a media::VideoFrame is converted to
@@ -41,6 +40,8 @@ class PLATFORM_EXPORT WebRtcVideoTrackSource
   void SetCustomFrameAdaptationParamsForTesting(
       const FrameAdaptationParams& params);
 
+  void SetSinkWantsForTesting(const rtc::VideoSinkWants& sink_wants);
+
   SourceState state() const override;
 
   bool remote() const override;
@@ -52,6 +53,8 @@ class PLATFORM_EXPORT WebRtcVideoTrackSource
   using webrtc::VideoTrackSourceInterface::RemoveSink;
 
  private:
+  void SetFrameFeedback(scoped_refptr<media::VideoFrame> frame);
+
   FrameAdaptationParams ComputeAdaptationParams(int width,
                                                 int height,
                                                 int64_t time_us);
@@ -66,7 +69,7 @@ class PLATFORM_EXPORT WebRtcVideoTrackSource
 
   // |thread_checker_| is bound to the libjingle worker thread.
   THREAD_CHECKER(thread_checker_);
-  media::VideoFramePool scaled_frame_pool_;
+  scoped_refptr<WebRtcVideoFrameAdapter::BufferPoolOwner> scaled_frame_pool_;
   // State for the timestamp translation.
   rtc::TimestampAligner timestamp_aligner_;
 
@@ -82,8 +85,6 @@ class PLATFORM_EXPORT WebRtcVideoTrackSource
 
   absl::optional<FrameAdaptationParams>
       custom_frame_adaptation_params_for_testing_;
-
-  const bool log_to_webrtc_;
 
   DISALLOW_COPY_AND_ASSIGN(WebRtcVideoTrackSource);
 };

@@ -141,6 +141,13 @@ const KURL* FetchResponseData::Url() const {
   return &url_list_.back();
 }
 
+uint16_t FetchResponseData::InternalStatus() const {
+  if (internal_response_) {
+    return internal_response_->Status();
+  }
+  return Status();
+}
+
 FetchHeaderList* FetchResponseData::InternalHeaderList() const {
   if (internal_response_) {
     return internal_response_->HeaderList();
@@ -191,6 +198,7 @@ FetchResponseData* FetchResponseData::Clone(ScriptState* script_state,
   new_response->status_message_ = status_message_;
   new_response->header_list_ = header_list_->Clone();
   new_response->mime_type_ = mime_type_;
+  new_response->request_method_ = request_method_;
   new_response->response_time_ = response_time_;
   new_response->cache_storage_cache_name_ = cache_storage_cache_name_;
   new_response->cors_exposed_header_names_ = cors_exposed_header_names_;
@@ -198,6 +206,7 @@ FetchResponseData* FetchResponseData::Clone(ScriptState* script_state,
   new_response->alpn_negotiated_protocol_ = alpn_negotiated_protocol_;
   new_response->loaded_with_credentials_ = loaded_with_credentials_;
   new_response->was_fetched_via_spdy_ = was_fetched_via_spdy_;
+  new_response->has_range_requested_ = has_range_requested_;
 
   switch (type_) {
     case Type::kBasic:
@@ -262,6 +271,7 @@ mojom::blink::FetchAPIResponsePtr FetchResponseData::PopulateFetchAPIResponse(
   response->response_type = type_;
   response->response_source = response_source_;
   response->mime_type = mime_type_;
+  response->request_method = request_method_;
   response->response_time = response_time_;
   response->cache_storage_cache_name = cache_storage_cache_name_;
   response->cors_exposed_header_names =
@@ -270,6 +280,7 @@ mojom::blink::FetchAPIResponsePtr FetchResponseData::PopulateFetchAPIResponse(
   response->alpn_negotiated_protocol = alpn_negotiated_protocol_;
   response->loaded_with_credentials = loaded_with_credentials_;
   response->was_fetched_via_spdy = was_fetched_via_spdy_;
+  response->has_range_requested = has_range_requested_;
   for (const auto& header : HeaderList()->List())
     response->headers.insert(header.first, header.second);
   response->parsed_headers = ParseHeaders(
@@ -279,6 +290,7 @@ mojom::blink::FetchAPIResponsePtr FetchResponseData::PopulateFetchAPIResponse(
 
 void FetchResponseData::InitFromResourceResponse(
     const Vector<KURL>& request_url_list,
+    const AtomicString& request_method,
     network::mojom::CredentialsMode request_credentials,
     FetchRequestData::Tainting tainting,
     const ResourceResponse& response) {
@@ -308,6 +320,7 @@ void FetchResponseData::InitFromResourceResponse(
   }
 
   SetMimeType(response.MimeType());
+  SetRequestMethod(request_method);
   SetResponseTime(response.ResponseTime());
 
   if (response.WasCached()) {
@@ -332,6 +345,8 @@ void FetchResponseData::InitFromResourceResponse(
       request_credentials == network::mojom::CredentialsMode::kInclude ||
       (request_credentials == network::mojom::CredentialsMode::kSameOrigin &&
        tainting == FetchRequestData::kBasicTainting));
+
+  SetHasRangeRequested(response.HasRangeRequested());
 }
 
 FetchResponseData::FetchResponseData(Type type,
@@ -347,7 +362,8 @@ FetchResponseData::FetchResponseData(Type type,
       connection_info_(net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN),
       alpn_negotiated_protocol_("unknown"),
       loaded_with_credentials_(false),
-      was_fetched_via_spdy_(false) {}
+      was_fetched_via_spdy_(false),
+      has_range_requested_(false) {}
 
 void FetchResponseData::ReplaceBodyStreamBuffer(BodyStreamBuffer* buffer) {
   if (type_ == Type::kBasic || type_ == Type::kCors) {

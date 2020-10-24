@@ -16,9 +16,9 @@
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxge/cfx_face.h"
 
-#if defined _SKIA_SUPPORT_ || _SKIA_SUPPORT_PATHS_
+#if defined(_SKIA_SUPPORT_) || defined(_SKIA_SUPPORT_PATHS_)
 #include "core/fxge/fx_font.h"
-#include "third_party/skia/include/core/SkTypeface.h"
+#include "third_party/skia/include/core/SkTypeface.h"  // nogncheck
 #endif
 
 class CFX_Font;
@@ -36,17 +36,17 @@ class CFX_GlyphCache : public Retainable, public Observable {
                                          uint32_t glyph_index,
                                          bool bFontStyle,
                                          const CFX_Matrix& matrix,
-                                         uint32_t dest_width,
+                                         int dest_width,
                                          int anti_alias,
                                          CFX_TextRenderOptions* text_options);
   const CFX_PathData* LoadGlyphPath(const CFX_Font* pFont,
                                     uint32_t glyph_index,
-                                    uint32_t dest_width);
+                                    int dest_width);
 
   RetainPtr<CFX_Face> GetFace() { return m_Face; }
   FXFT_FaceRec* GetFaceRec() { return m_Face ? m_Face->GetRec() : nullptr; }
 
-#if defined _SKIA_SUPPORT_ || _SKIA_SUPPORT_PATHS_
+#if defined(_SKIA_SUPPORT_) || defined(_SKIA_SUPPORT_PATHS_)
   CFX_TypeFace* GetDeviceCache(const CFX_Font* pFont);
 #endif
 
@@ -55,26 +55,26 @@ class CFX_GlyphCache : public Retainable, public Observable {
 
   using SizeGlyphCache = std::map<uint32_t, std::unique_ptr<CFX_GlyphBitmap>>;
   // <glyph_index, width, weight, angle, vertical>
-  using PathMapKey = std::tuple<uint32_t, uint32_t, int, int, bool>;
+  using PathMapKey = std::tuple<uint32_t, int, int, int, bool>;
 
   std::unique_ptr<CFX_GlyphBitmap> RenderGlyph(const CFX_Font* pFont,
                                                uint32_t glyph_index,
                                                bool bFontStyle,
                                                const CFX_Matrix& matrix,
-                                               uint32_t dest_width,
+                                               int dest_width,
                                                int anti_alias);
   std::unique_ptr<CFX_GlyphBitmap> RenderGlyph_Nativetext(
       const CFX_Font* pFont,
       uint32_t glyph_index,
       const CFX_Matrix& matrix,
-      uint32_t dest_width,
+      int dest_width,
       int anti_alias);
   CFX_GlyphBitmap* LookUpGlyphBitmap(const CFX_Font* pFont,
                                      const CFX_Matrix& matrix,
                                      const ByteString& FaceGlyphsKey,
                                      uint32_t glyph_index,
                                      bool bFontStyle,
-                                     uint32_t dest_width,
+                                     int dest_width,
                                      int anti_alias);
   void InitPlatform();
   void DestroyPlatform();
@@ -82,7 +82,7 @@ class CFX_GlyphCache : public Retainable, public Observable {
   RetainPtr<CFX_Face> const m_Face;
   std::map<ByteString, SizeGlyphCache> m_SizeMap;
   std::map<PathMapKey, std::unique_ptr<CFX_PathData>> m_PathMap;
-#if defined _SKIA_SUPPORT_ || _SKIA_SUPPORT_PATHS_
+#if defined(_SKIA_SUPPORT_) || defined(_SKIA_SUPPORT_PATHS_)
   sk_sp<SkTypeface> m_pTypeface;
 #endif
 };

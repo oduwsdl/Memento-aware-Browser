@@ -8,10 +8,11 @@
 #include "gm/gm.h"
 
 #include "include/core/SkPath.h"
-#include "include/gpu/GrContext.h"
 #include "include/gpu/GrContextOptions.h"
-#include "src/gpu/GrContextPriv.h"
+#include "include/gpu/GrRecordingContext.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrDrawingManager.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/ccpr/GrCCPathCache.h"
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
@@ -58,7 +59,7 @@ private:
         ctxOptions->fAllowPathMaskCaching = true;
     }
 
-    DrawResult onDraw(GrContext* ctx, GrRenderTargetContext* rtc, SkCanvas* canvas,
+    DrawResult onDraw(GrRecordingContext* rContext, GrRenderTargetContext* rtc, SkCanvas* canvas,
                       SkString* errorMsg) override {
         using CoverageType = GrCCAtlas::CoverageType;
 
@@ -67,7 +68,7 @@ private:
             return DrawResult::kSkip;
         }
 
-        auto* ccpr = ctx->priv().drawingManager()->getCoverageCountingPathRenderer();
+        auto* ccpr = rContext->priv().drawingManager()->getCoverageCountingPathRenderer();
         if (!ccpr) {
             errorMsg->set("ccpr only");
             return DrawResult::kSkip;
@@ -79,6 +80,8 @@ private:
                           "Are you using viewer? Launch with \"--cachePathMasks true\".");
             return DrawResult::kFail;
         }
+
+        auto dContext = GrAsDirectContext(rContext);
 
         auto starRect = SkRect::MakeWH(fStarSize, fStarSize);
         SkPath star7_winding = ToolUtils::make_star(starRect, 7);
@@ -135,8 +138,11 @@ private:
                 }
                 ++numCachedPaths;
             }
-            // Verify all 4 paths are tracked by the path cache.
-            ERR_MSG_ASSERT(4 == numCachedPaths);
+
+            if (dContext) {
+                // Verify all 4 paths are tracked by the path cache.
+                ERR_MSG_ASSERT(4 == numCachedPaths);
+            }
         }
 
         return DrawResult::kOk;
@@ -150,4 +156,4 @@ private:
 DEF_GM( return new PreserveFillRuleGM(true); )
 DEF_GM( return new PreserveFillRuleGM(false); )
 
-}
+}  // namespace skiagm

@@ -802,8 +802,14 @@ SourceListDirective::ExposeForNavigationalChecks() const {
   for (const auto& source : list_)
     sources.push_back(source->ExposeForNavigationalChecks());
 
+  // We do not need nonces and hashes for navigational checks
+  WTF::Vector<WTF::String> nonces;
+  WTF::Vector<network::mojom::blink::CSPHashSourcePtr> hashes;
+
   return network::mojom::blink::CSPSourceList::New(
-      std::move(sources), allow_self_, allow_star_, allow_redirects_);
+      std::move(sources), std::move(nonces), std::move(hashes), allow_self_,
+      allow_star_, allow_redirects_, allow_inline_, allow_eval_,
+      allow_wasm_eval_, allow_dynamic_, allow_unsafe_hashes_, report_sample_);
 }
 
 bool SourceListDirective::SubsumesNoncesAndHashes(
@@ -892,28 +898,14 @@ HeapVector<Member<CSPSource>> SourceListDirective::GetIntersectCSPSources(
     if (schemes_map.Contains(source_a->GetScheme()))
       continue;
 
-    CSPSource* match(nullptr);
     for (const auto& source_b : other) {
       // No need to add a host source expression if it is subsumed by the
       // matching scheme source expression.
       if (schemes_map.Contains(source_b->GetScheme()))
         continue;
-      // If sourceA is scheme only but there was no intersection for it in the
-      // `other` list, we add all the sourceB with that scheme.
-      if (source_a->IsSchemeOnly()) {
-        if (CSPSource* local_match = source_b->Intersect(source_a))
-          normalized.push_back(local_match);
-        continue;
-      }
-      if (source_b->Subsumes(source_a)) {
-        match = source_a;
-        break;
-      }
-      if (CSPSource* local_match = source_b->Intersect(source_a))
-        match = local_match;
+      if (CSPSource* match = source_b->Intersect(source_a))
+        normalized.push_back(match);
     }
-    if (match)
-      normalized.push_back(match);
   }
   return normalized;
 }

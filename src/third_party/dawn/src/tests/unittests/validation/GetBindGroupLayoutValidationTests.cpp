@@ -19,9 +19,6 @@
 
 class GetBindGroupLayoutTests : public ValidationTest {
   protected:
-    static constexpr wgpu::ShaderStage kVisibilityAll =
-        wgpu::ShaderStage::Compute | wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Vertex;
-
     wgpu::RenderPipeline RenderPipelineFromFragmentShader(const char* shader) {
         wgpu::ShaderModule vsModule =
             utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, R"(
@@ -78,19 +75,21 @@ TEST_F(GetBindGroupLayoutTests, SameObject) {
 
     wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
 
+    // The same value is returned for the same index.
     EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), pipeline.GetBindGroupLayout(0).Get());
 
-    EXPECT_EQ(pipeline.GetBindGroupLayout(1).Get(), pipeline.GetBindGroupLayout(1).Get());
-
+    // Matching bind group layouts at different indices are the same object.
     EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), pipeline.GetBindGroupLayout(1).Get());
 
-    EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), pipeline.GetBindGroupLayout(2).Get());
+    // BGLs with different bindings types are different objects.
+    EXPECT_NE(pipeline.GetBindGroupLayout(2).Get(), pipeline.GetBindGroupLayout(3).Get());
 
-    EXPECT_NE(pipeline.GetBindGroupLayout(0).Get(), pipeline.GetBindGroupLayout(3).Get());
+    // BGLs with different visibilities are different objects.
+    EXPECT_NE(pipeline.GetBindGroupLayout(0).Get(), pipeline.GetBindGroupLayout(2).Get());
 }
 
 // Test that getBindGroupLayout defaults are correct
-// - shader stage visibility is All
+// - shader stage visibility is the stage that adds the binding.
 // - dynamic offsets is false
 TEST_F(GetBindGroupLayoutTests, DefaultShaderStageAndDynamicOffsets) {
     wgpu::RenderPipeline pipeline = RenderPipelineFromFragmentShader(R"(
@@ -114,14 +113,11 @@ TEST_F(GetBindGroupLayoutTests, DefaultShaderStageAndDynamicOffsets) {
 
     // Check that visibility and dynamic offsets match
     binding.hasDynamicOffset = false;
-    binding.visibility = kVisibilityAll;
+    binding.visibility = wgpu::ShaderStage::Fragment;
     EXPECT_EQ(device.CreateBindGroupLayout(&desc).Get(), pipeline.GetBindGroupLayout(0).Get());
 
     // Check that any change in visibility doesn't match.
     binding.visibility = wgpu::ShaderStage::Vertex;
-    EXPECT_NE(device.CreateBindGroupLayout(&desc).Get(), pipeline.GetBindGroupLayout(0).Get());
-
-    binding.visibility = wgpu::ShaderStage::Fragment;
     EXPECT_NE(device.CreateBindGroupLayout(&desc).Get(), pipeline.GetBindGroupLayout(0).Get());
 
     binding.visibility = wgpu::ShaderStage::Compute;
@@ -129,7 +125,7 @@ TEST_F(GetBindGroupLayoutTests, DefaultShaderStageAndDynamicOffsets) {
 
     // Check that any change in hasDynamicOffsets doesn't match.
     binding.hasDynamicOffset = true;
-    binding.visibility = kVisibilityAll;
+    binding.visibility = wgpu::ShaderStage::Fragment;
     EXPECT_NE(device.CreateBindGroupLayout(&desc).Get(), pipeline.GetBindGroupLayout(0).Get());
 }
 
@@ -154,7 +150,7 @@ TEST_F(GetBindGroupLayoutTests, ComputePipeline) {
     wgpu::BindGroupLayoutEntry binding = {};
     binding.binding = 0;
     binding.type = wgpu::BindingType::UniformBuffer;
-    binding.visibility = kVisibilityAll;
+    binding.visibility = wgpu::ShaderStage::Compute;
     binding.hasDynamicOffset = false;
     binding.minBufferBindingSize = 4 * sizeof(float);
 
@@ -172,6 +168,7 @@ TEST_F(GetBindGroupLayoutTests, BindingType) {
     binding.hasDynamicOffset = false;
     binding.multisampled = false;
     binding.minBufferBindingSize = 4 * sizeof(float);
+    binding.visibility = wgpu::ShaderStage::Fragment;
 
     wgpu::BindGroupLayoutDescriptor desc = {};
     desc.entryCount = 1;
@@ -179,7 +176,7 @@ TEST_F(GetBindGroupLayoutTests, BindingType) {
 
     {
         // Storage buffer binding is not supported in vertex shader.
-        binding.visibility = wgpu::ShaderStage::Compute | wgpu::ShaderStage::Fragment;
+        binding.visibility = wgpu::ShaderStage::Fragment;
         binding.type = wgpu::BindingType::StorageBuffer;
         wgpu::RenderPipeline pipeline = RenderPipelineFromFragmentShader(R"(
         #version 450
@@ -190,8 +187,6 @@ TEST_F(GetBindGroupLayoutTests, BindingType) {
         void main() {})");
         EXPECT_EQ(device.CreateBindGroupLayout(&desc).Get(), pipeline.GetBindGroupLayout(0).Get());
     }
-
-    binding.visibility = kVisibilityAll;
     {
         binding.type = wgpu::BindingType::UniformBuffer;
         wgpu::RenderPipeline pipeline = RenderPipelineFromFragmentShader(R"(
@@ -228,6 +223,16 @@ TEST_F(GetBindGroupLayoutTests, BindingType) {
     }
 
     {
+        binding.type = wgpu::BindingType::MultisampledTexture;
+        wgpu::RenderPipeline pipeline = RenderPipelineFromFragmentShader(R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform texture2DMS tex;
+
+        void main() {})");
+        EXPECT_EQ(device.CreateBindGroupLayout(&desc).Get(), pipeline.GetBindGroupLayout(0).Get());
+    }
+
+    {
         binding.type = wgpu::BindingType::Sampler;
         wgpu::RenderPipeline pipeline = RenderPipelineFromFragmentShader(R"(
         #version 450
@@ -243,7 +248,7 @@ TEST_F(GetBindGroupLayoutTests, Multisampled) {
     wgpu::BindGroupLayoutEntry binding = {};
     binding.binding = 0;
     binding.type = wgpu::BindingType::SampledTexture;
-    binding.visibility = kVisibilityAll;
+    binding.visibility = wgpu::ShaderStage::Fragment;
     binding.hasDynamicOffset = false;
 
     wgpu::BindGroupLayoutDescriptor desc = {};
@@ -276,7 +281,7 @@ TEST_F(GetBindGroupLayoutTests, ViewDimension) {
     wgpu::BindGroupLayoutEntry binding = {};
     binding.binding = 0;
     binding.type = wgpu::BindingType::SampledTexture;
-    binding.visibility = kVisibilityAll;
+    binding.visibility = wgpu::ShaderStage::Fragment;
     binding.hasDynamicOffset = false;
     binding.multisampled = false;
 
@@ -350,7 +355,7 @@ TEST_F(GetBindGroupLayoutTests, TextureComponentType) {
     wgpu::BindGroupLayoutEntry binding = {};
     binding.binding = 0;
     binding.type = wgpu::BindingType::SampledTexture;
-    binding.visibility = kVisibilityAll;
+    binding.visibility = wgpu::ShaderStage::Fragment;
     binding.hasDynamicOffset = false;
     binding.multisampled = false;
 
@@ -393,7 +398,7 @@ TEST_F(GetBindGroupLayoutTests, TextureComponentType) {
 TEST_F(GetBindGroupLayoutTests, BindingIndices) {
     wgpu::BindGroupLayoutEntry binding = {};
     binding.type = wgpu::BindingType::UniformBuffer;
-    binding.visibility = kVisibilityAll;
+    binding.visibility = wgpu::ShaderStage::Fragment;
     binding.hasDynamicOffset = false;
     binding.multisampled = false;
     binding.minBufferBindingSize = 4 * sizeof(float);
@@ -471,6 +476,152 @@ TEST_F(GetBindGroupLayoutTests, DuplicateBinding) {
     device.CreateRenderPipeline(&descriptor);
 }
 
+// Test that minBufferSize is set on the BGL and that the max of the min buffer sizes is used.
+TEST_F(GetBindGroupLayoutTests, MinBufferSize) {
+    wgpu::ShaderModule vsModule4 =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform UniformBuffer {
+            float pos;
+        };
+        void main() {})");
+
+    wgpu::ShaderModule vsModule64 =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform UniformBuffer1 {
+            mat4 pos;
+        };
+        void main() {})");
+
+    wgpu::ShaderModule fsModule4 =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Fragment, R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform UniformBuffer {
+            float pos;
+        };
+
+        void main() {})");
+
+    wgpu::ShaderModule fsModule64 =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Fragment, R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform UniformBuffer {
+            mat4 pos;
+        };
+
+        void main() {})");
+
+    // Create BGLs with minBufferBindingSize 4 and 64.
+    wgpu::BindGroupLayoutEntry binding = {};
+    binding.binding = 0;
+    binding.type = wgpu::BindingType::UniformBuffer;
+    binding.visibility = wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Vertex;
+
+    wgpu::BindGroupLayoutDescriptor desc = {};
+    desc.entryCount = 1;
+    desc.entries = &binding;
+
+    binding.minBufferBindingSize = 4;
+    wgpu::BindGroupLayout bgl4 = device.CreateBindGroupLayout(&desc);
+    binding.minBufferBindingSize = 64;
+    wgpu::BindGroupLayout bgl64 = device.CreateBindGroupLayout(&desc);
+
+    utils::ComboRenderPipelineDescriptor descriptor(device);
+    descriptor.layout = nullptr;
+
+    // Check with both stages using 4 bytes.
+    {
+        descriptor.vertexStage.module = vsModule4;
+        descriptor.cFragmentStage.module = fsModule4;
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
+        EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), bgl4.Get());
+    }
+
+    // Check that the max is taken between 4 and 64.
+    {
+        descriptor.vertexStage.module = vsModule64;
+        descriptor.cFragmentStage.module = fsModule4;
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
+        EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), bgl64.Get());
+    }
+
+    // Check that the order doesn't change that the max is taken.
+    {
+        descriptor.vertexStage.module = vsModule4;
+        descriptor.cFragmentStage.module = fsModule64;
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
+        EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), bgl64.Get());
+    }
+}
+
+// Test that the visibility is correctly aggregated if two stages have the exact same binding.
+TEST_F(GetBindGroupLayoutTests, StageAggregation) {
+    wgpu::ShaderModule vsModuleNoSampler =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, R"(
+        #version 450
+        void main() {})");
+
+    wgpu::ShaderModule vsModuleSampler =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform sampler mySampler;
+        void main() {})");
+
+    wgpu::ShaderModule fsModuleNoSampler =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Fragment, R"(
+        #version 450
+        void main() {})");
+
+    wgpu::ShaderModule fsModuleSampler =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Fragment, R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform sampler mySampler;
+        void main() {})");
+
+    // Create BGLs with minBufferBindingSize 4 and 64.
+    wgpu::BindGroupLayoutEntry binding = {};
+    binding.binding = 0;
+    binding.type = wgpu::BindingType::Sampler;
+
+    wgpu::BindGroupLayoutDescriptor desc = {};
+    desc.entryCount = 1;
+    desc.entries = &binding;
+
+    utils::ComboRenderPipelineDescriptor descriptor(device);
+    descriptor.layout = nullptr;
+
+    // Check with only the vertex shader using the sampler
+    {
+        descriptor.vertexStage.module = vsModuleSampler;
+        descriptor.cFragmentStage.module = fsModuleNoSampler;
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
+
+        binding.visibility = wgpu::ShaderStage::Vertex;
+        EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), device.CreateBindGroupLayout(&desc).Get());
+    }
+
+    // Check with only the fragment shader using the sampler
+    {
+        descriptor.vertexStage.module = vsModuleNoSampler;
+        descriptor.cFragmentStage.module = fsModuleSampler;
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
+
+        binding.visibility = wgpu::ShaderStage::Fragment;
+        EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), device.CreateBindGroupLayout(&desc).Get());
+    }
+
+    // Check with both shaders using the sampler
+    {
+        descriptor.vertexStage.module = vsModuleSampler;
+        descriptor.cFragmentStage.module = fsModuleSampler;
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
+
+        binding.visibility = wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Vertex;
+        EXPECT_EQ(pipeline.GetBindGroupLayout(0).Get(), device.CreateBindGroupLayout(&desc).Get());
+    }
+}
+
 // Test it is invalid to have conflicting binding types in the shaders.
 TEST_F(GetBindGroupLayoutTests, ConflictingBindingType) {
     wgpu::ShaderModule vsModule =
@@ -500,8 +651,7 @@ TEST_F(GetBindGroupLayoutTests, ConflictingBindingType) {
 }
 
 // Test it is invalid to have conflicting binding texture multisampling in the shaders.
-// TODO: Support multisampling
-TEST_F(GetBindGroupLayoutTests, DISABLED_ConflictingBindingTextureMultisampling) {
+TEST_F(GetBindGroupLayoutTests, ConflictingBindingTextureMultisampling) {
     wgpu::ShaderModule vsModule =
         utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, R"(
         #version 450
@@ -674,4 +824,53 @@ TEST_F(GetBindGroupLayoutTests, Reflection) {
         EXPECT_EQ(pipeline.GetBindGroupLayout(2).Get(), emptyBindGroupLayout.Get());
         EXPECT_EQ(pipeline.GetBindGroupLayout(3).Get(), emptyBindGroupLayout.Get());
     }
+}
+
+// Test that fragment output validation is for the correct entryPoint
+// TODO(dawn:216): Re-enable when we correctly reflect which bindings are used for an entryPoint.
+TEST_F(GetBindGroupLayoutTests, DISABLED_FromCorrectEntryPoint) {
+    wgpu::ShaderModule module = utils::CreateShaderModuleFromWGSL(device, R"(
+        [[block]] struct Data {
+            [[offset 0]] data : f32;
+        };
+        [[binding 0, set 0]] var<storage_buffer> data0 : Data;
+        [[binding 1, set 0]] var<storage_buffer> data1 : Data;
+
+        fn compute0() -> void {
+            data0.data = 0.0;
+            return;
+        }
+        fn compute1() -> void {
+            data1.data = 0.0;
+            return;
+        }
+        entry_point compute = compute0;
+        entry_point compute = compute1;
+    )");
+
+    wgpu::ComputePipelineDescriptor pipelineDesc;
+    pipelineDesc.computeStage.module = module;
+
+    // Get each entryPoint's BGL.
+    pipelineDesc.computeStage.entryPoint = "compute0";
+    wgpu::ComputePipeline pipeline0 = device.CreateComputePipeline(&pipelineDesc);
+    wgpu::BindGroupLayout bgl0 = pipeline0.GetBindGroupLayout(0);
+
+    pipelineDesc.computeStage.entryPoint = "compute1";
+    wgpu::ComputePipeline pipeline1 = device.CreateComputePipeline(&pipelineDesc);
+    wgpu::BindGroupLayout bgl1 = pipeline1.GetBindGroupLayout(0);
+
+    // Create the buffer used in the bindgroups.
+    wgpu::BufferDescriptor bufferDesc;
+    bufferDesc.size = 4;
+    bufferDesc.usage = wgpu::BufferUsage::Storage;
+    wgpu::Buffer buffer = device.CreateBuffer(&bufferDesc);
+
+    // Success case, the BGL matches the descriptor for the bindgroup.
+    utils::MakeBindGroup(device, bgl0, {{0, buffer}});
+    utils::MakeBindGroup(device, bgl1, {{1, buffer}});
+
+    // Error case, the BGL doesn't match the descriptor for the bindgroup.
+    ASSERT_DEVICE_ERROR(utils::MakeBindGroup(device, bgl0, {{1, buffer}}));
+    ASSERT_DEVICE_ERROR(utils::MakeBindGroup(device, bgl1, {{0, buffer}}));
 }

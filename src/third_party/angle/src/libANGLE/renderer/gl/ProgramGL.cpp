@@ -221,7 +221,8 @@ class ProgramGL::LinkEventGL final : public LinkEvent
 
 std::unique_ptr<LinkEvent> ProgramGL::link(const gl::Context *context,
                                            const gl::ProgramLinkedResources &resources,
-                                           gl::InfoLog &infoLog)
+                                           gl::InfoLog &infoLog,
+                                           const gl::ProgramMergedVaryings & /*mergedVaryings*/)
 {
     ANGLE_TRACE_EVENT0("gpu.angle", "ProgramGL::link");
 
@@ -367,12 +368,12 @@ std::unique_ptr<LinkEvent> ProgramGL::link(const gl::Context *context,
                     {
                         const sh::ShaderVariable &outputVar =
                             mState.getOutputVariables()[outputLocation.index];
-                        if (outputVar.location == -1)
+                        if (outputVar.location == -1 || outputVar.index == -1)
                         {
                             // We only need to assign the location and index via the API in case the
-                            // variable doesn't have its location set in the shader. If a variable
-                            // doesn't have its location set in the shader it doesn't have the index
-                            // set either.
+                            // variable doesn't have a shader-assigned location and index. If a
+                            // variable doesn't have its location set in the shader it doesn't have
+                            // the index set either.
                             ASSERT(outputVar.index == -1);
                             mFunctions->bindFragDataLocationIndexed(
                                 mProgramID, static_cast<int>(outputLocationIndex), 0,
@@ -475,6 +476,8 @@ std::unique_ptr<LinkEvent> ProgramGL::link(const gl::Context *context,
     if (mRenderer->hasNativeParallelCompile())
     {
         mFunctions->linkProgram(mProgramID);
+        // Verify the link
+        checkLinkStatus(infoLog);
         return std::make_unique<LinkEventNativeParallel>(postLinkImplTask, mFunctions, mProgramID);
     }
     else if (workerPool->isAsync() &&

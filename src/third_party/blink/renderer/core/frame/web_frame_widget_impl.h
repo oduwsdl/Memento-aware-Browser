@@ -67,6 +67,11 @@ class WebMouseEvent;
 class WebMouseWheelEvent;
 class WebFrameWidgetImpl;
 
+// Implements WebFrameWidget for a child local root frame (OOPIF). This object
+// is created in the child renderer and attached to the OOPIF's WebLocalFrame.
+//
+// For the main frame's WebFrameWidget implementation, see WebViewFrameWidget.
+//
 class WebFrameWidgetImpl final : public WebFrameWidgetBase,
                                  public PageWidgetEventHandler {
  public:
@@ -80,16 +85,16 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
       CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
           widget_host,
       CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
-          widget);
+          widget,
+      bool hidden,
+      bool never_composited);
   ~WebFrameWidgetImpl() override;
 
   // WebWidget functions:
-  void Close(scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
-             base::OnceCallback<void()> cleanup_task) override;
-  WebSize Size() override;
-  void Resize(const WebSize&) override;
-  void DidEnterFullscreen() override;
-  void DidExitFullscreen() override;
+  void Close(
+      scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner) override;
+  gfx::Size Size() override;
+  void Resize(const gfx::Size&) override;
   void UpdateLifecycle(WebLifecycleUpdate requested_update,
                        DocumentUpdateReason reason) override;
   void ThemeChanged() override;
@@ -99,18 +104,24 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   void SetCursorVisibilityState(bool is_visible) override;
 
   void MouseCaptureLost() override;
-  bool SelectionBounds(WebRect& anchor, WebRect& focus) const override;
-  void SetRemoteViewportIntersection(const ViewportIntersectionState&) override;
+  void SetRemoteViewportIntersection(
+      const mojom::blink::ViewportIntersectionState& intersection_state)
+      override;
   void SetIsInertForSubFrame(bool) override;
   void SetInheritedEffectiveTouchActionForSubFrame(TouchAction) override;
   void UpdateRenderThrottlingStatusForSubFrame(bool is_throttled,
                                                bool subtree_throttled) override;
-  WebURL GetURLForDebugTrace() override;
+
+  void SetViewportIntersection(
+      mojom::blink::ViewportIntersectionStatePtr intersection_state) override;
 
   // WebFrameWidget implementation.
   void DidDetachLocalFrameTree() override;
   WebInputMethodController* GetActiveWebInputMethodController() const override;
   bool ScrollFocusedEditableElementIntoView() override;
+  void SetZoomLevelForTesting(double zoom_level) override;
+  void ResetZoomLevelForTesting() override;
+  void SetDeviceScaleFactorForTesting(float factor) override;
 
   Frame* FocusedCoreFrame() const;
 
@@ -121,14 +132,23 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
 
   // WebFrameWidgetBase overrides:
   bool ForSubframe() const override { return true; }
+  bool ForTopLevelFrame() const override { return false; }
   void IntrinsicSizingInfoChanged(
       mojom::blink::IntrinsicSizingInfoPtr) override;
   void DidCreateLocalRootView() override;
   HitTestResult CoreHitTestResultAt(const gfx::PointF&) override;
   void ZoomToFindInPageRect(const WebRect& rect_in_root_frame) override;
+  void SetAutoResizeMode(bool auto_resize,
+                         const gfx::Size& min_size_before_dsf,
+                         const gfx::Size& max_size_before_dsf,
+                         float device_scale_factor) override;
+  void ApplyVisualPropertiesSizing(
+      const VisualProperties& visual_properties) override;
+  void CalculateSelectionBounds(gfx::Rect& anchor, gfx::Rect& focus) override;
 
   // FrameWidget overrides:
   void SetRootLayer(scoped_refptr<cc::Layer>) override;
+  bool ShouldHandleImeEvents() override;
 
   // WidgetBaseClient overrides:
   void BeginMainFrame(base::TimeTicks last_frame_time) override;
@@ -145,6 +165,12 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   void EndCommitCompositorFrame(base::TimeTicks commit_start_time) override;
   void DidBeginMainFrame() override;
   void FocusChanged(bool enable) override;
+  gfx::Rect ViewportVisibleRect() override;
+  void DidCompletePageScaleAnimation() override;
+
+  // blink::mojom::FrameWidget
+  void EnableDeviceEmulation(const DeviceEmulationParams& parameters) override;
+  void DisableDeviceEmulation() override;
 
   void UpdateMainFrameLayoutSize();
 
@@ -186,7 +212,7 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
       PhysicalRect& rect_to_scroll,
       mojom::blink::ScrollIntoViewParamsPtr& params);
 
-  base::Optional<WebSize> size_;
+  base::Optional<gfx::Size> size_;
 
   // If set, the (plugin) element which has mouse capture.
   Member<HTMLPlugInElement> mouse_capture_element_;
@@ -203,6 +229,8 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   // when there is no page focus?
   // Represents whether or not this object should process incoming IME events.
   bool ime_accept_events_ = true;
+
+  gfx::Rect compositor_visible_rect_;
 
   SelfKeepAlive<WebFrameWidgetImpl> self_keep_alive_;
 };

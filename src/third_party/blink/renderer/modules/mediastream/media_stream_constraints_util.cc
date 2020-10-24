@@ -249,10 +249,6 @@ VideoTrackAdapterSettings SelectVideoTrackAdapterSettings(
     if (frame_rate_set.Max() && track_max_frame_rate > *frame_rate_set.Max())
       track_max_frame_rate = *frame_rate_set.Max();
   }
-  // Disable frame-rate adjustment if the requested rate is greater than the
-  // source rate.
-  if (track_max_frame_rate >= source_format.frame_rate)
-    track_max_frame_rate = 0.0;
 
   return VideoTrackAdapterSettings(target_resolution, track_min_aspect_ratio,
                                    track_max_aspect_ratio,
@@ -282,18 +278,18 @@ double StringConstraintFitnessDistance(const WebString& value,
   return 1.0;
 }
 
-WebMediaStreamSource::Capabilities ComputeCapabilitiesForVideoSource(
-    const WebString& device_id,
+MediaStreamSource::Capabilities ComputeCapabilitiesForVideoSource(
+    const String& device_id,
     const media::VideoCaptureFormats& formats,
     media::VideoFacingMode facing_mode,
     bool is_device_capture,
     const base::Optional<std::string>& group_id) {
-  WebMediaStreamSource::Capabilities capabilities;
+  MediaStreamSource::Capabilities capabilities;
   capabilities.device_id = std::move(device_id);
   if (is_device_capture) {
-    capabilities.facing_mode = ToWebFacingMode(facing_mode);
+    capabilities.facing_mode = ToPlatformFacingMode(facing_mode);
     if (group_id)
-      capabilities.group_id = WebString::FromUTF8(*group_id);
+      capabilities.group_id = String::FromUTF8(*group_id);
   }
   if (!formats.empty()) {
     int max_width = 1;

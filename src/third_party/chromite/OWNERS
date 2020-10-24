@@ -1,6 +1,0 @@
-include /OWNERS.build
-include /OWNERS.ci
-
-per-file OWNERS.kernel = file://OWNERS.kernel
-
-# COMPONENT: Infra>ChromeOS>Build

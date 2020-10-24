@@ -11,7 +11,7 @@
 #include "core/fpdfapi/page/cpdf_pageobject.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/retain_ptr.h"
-#include "core/fxge/fx_dib.h"
+#include "core/fxge/dib/fx_dib.h"
 
 class CPDF_RenderOptions {
  public:
@@ -24,8 +24,6 @@ class CPDF_RenderOptions {
     Options(const Options& rhs);
 
     bool bClearType = false;
-    bool bPrintPreview = false;
-    bool bBGRStripe = false;
     bool bNoNativeText = false;
     bool bForceHalftone = false;
     bool bRectAA = false;

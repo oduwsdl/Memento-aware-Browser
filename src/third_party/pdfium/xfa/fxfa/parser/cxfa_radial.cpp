@@ -6,13 +6,12 @@
 
 #include "xfa/fxfa/parser/cxfa_radial.h"
 
-#include <memory>
 #include <utility>
 
-#include "core/fxge/render_defines.h"
 #include "fxjs/xfa/cjx_node.h"
+#include "xfa/fgas/graphics/cfgas_geshading.h"
 #include "xfa/fxfa/parser/cxfa_color.h"
-#include "xfa/fxgraphics/cxfa_geshading.h"
+#include "xfa/fxfa/parser/cxfa_document.h"
 
 namespace {
 
@@ -39,7 +38,9 @@ CXFA_Radial::CXFA_Radial(CXFA_Document* doc, XFA_PacketType packet)
                 XFA_Element::Radial,
                 kRadialPropertyData,
                 kRadialAttributeData,
-                std::make_unique<CJX_Node>(this)) {}
+                cppgc::MakeGarbageCollected<CJX_Node>(
+                    doc->GetHeap()->GetAllocationHandle(),
+                    this)) {}
 
 CXFA_Radial::~CXFA_Radial() = default;
 
@@ -52,8 +53,8 @@ CXFA_Color* CXFA_Radial::GetColorIfExists() {
   return GetChild<CXFA_Color>(0, XFA_Element::Color, false);
 }
 
-void CXFA_Radial::Draw(CXFA_Graphics* pGS,
-                       CXFA_GEPath* fillPath,
+void CXFA_Radial::Draw(CFGAS_GEGraphics* pGS,
+                       CFGAS_GEPath* fillPath,
                        FX_ARGB crStart,
                        const CFX_RectF& rtFill,
                        const CFX_Matrix& matrix) {
@@ -65,11 +66,11 @@ void CXFA_Radial::Draw(CXFA_Graphics* pGS,
   float endRadius = sqrt(rtFill.Width() * rtFill.Width() +
                          rtFill.Height() * rtFill.Height()) /
                     2;
-  CXFA_GEShading shading(rtFill.Center(), rtFill.Center(), 0, endRadius, true,
-                         true, crStart, crEnd);
+  CFGAS_GEShading shading(rtFill.Center(), rtFill.Center(), 0, endRadius, true,
+                          true, crStart, crEnd);
 
   pGS->SaveGraphState();
-  pGS->SetFillColor(CXFA_GEColor(&shading));
-  pGS->FillPath(fillPath, FXFILL_WINDING, &matrix);
+  pGS->SetFillColor(CFGAS_GEColor(&shading));
+  pGS->FillPath(fillPath, CFX_FillRenderOptions::FillType::kWinding, &matrix);
   pGS->RestoreGraphState();
 }

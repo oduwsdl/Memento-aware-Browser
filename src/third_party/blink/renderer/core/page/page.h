@@ -27,9 +27,10 @@
 
 #include "base/macros.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
+#include "third_party/blink/public/mojom/page/page.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
-#include "third_party/blink/public/platform/web_text_autosizer_page_info.h"
 #include "third_party/blink/public/web/web_window_features.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/vision_deficiency.h"
@@ -40,7 +41,7 @@
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/heap_observer_list.h"
+#include "third_party/blink/renderer/platform/heap_observer_set.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -89,11 +90,14 @@ typedef uint64_t LinkHash;
 
 float DeviceScaleFactorDeprecated(LocalFrame*);
 
+// A Page roughly corresponds to a tab or popup window in a browser. It owns a
+// tree of frames (a blink::FrameTree). The root frame is called the main frame.
+//
+// Note that frames can be local or remote to this process.
 class CORE_EXPORT Page final : public GarbageCollected<Page>,
                                public Supplementable<Page>,
                                public SettingsDelegate,
                                public PageScheduler::Delegate {
-  USING_GARBAGE_COLLECTED_MIXIN(Page);
   friend class Settings;
 
  public:
@@ -329,10 +333,11 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   void SetInsidePortal(bool inside_portal);
   bool InsidePortal() const;
 
-  void SetTextAutosizerPageInfo(const WebTextAutosizerPageInfo& page_info) {
+  void SetTextAutosizerPageInfo(
+      const mojom::blink::TextAutosizerPageInfo& page_info) {
     web_text_autosizer_page_info_ = page_info;
   }
-  const WebTextAutosizerPageInfo& TextAutosizerPageInfo() const {
+  const mojom::blink::TextAutosizerPageInfo& TextAutosizerPageInfo() const {
     return web_text_autosizer_page_info_;
   }
 
@@ -350,9 +355,28 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
     return history_navigation_virtual_time_pauser_;
   }
 
-  HeapObserverList<PageVisibilityObserver>& PageVisibilityObserverList() {
-    return page_visibility_observer_list_;
+  HeapObserverSet<PageVisibilityObserver>& PageVisibilityObserverSet() {
+    return page_visibility_observer_set_;
   }
+
+  void SetPageLifecycleState(
+      mojom::blink::PageLifecycleStatePtr lifecycle_state) {
+    lifecycle_state_ = std::move(lifecycle_state);
+  }
+
+  const mojom::blink::PageLifecycleStatePtr& GetPageLifecycleState() {
+    return lifecycle_state_;
+  }
+
+  // Whether we've dispatched "pagehide" on this page previously, and haven't
+  // dispatched the "pageshow" event after the last time we've dispatched
+  // "pagehide". This means that we've navigated away from the page and it's
+  // still hidden (possibly preserved in the back-forward cache, or unloaded).
+  bool DispatchedPagehideAndStillHidden();
+
+  // Similar to above, but will only return true if we've dispatched 'pagehide'
+  // with the 'persisted' property set to 'true'.
+  bool DispatchedPagehidePersistedAndStillHidden();
 
   static void PrepareForLeakDetection();
 
@@ -393,7 +417,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   const Member<FocusController> focus_controller_;
   const Member<ContextMenuController> context_menu_controller_;
   const Member<PageScaleConstraintsSet> page_scale_constraints_set_;
-  HeapObserverList<PageVisibilityObserver> page_visibility_observer_list_;
+  HeapObserverSet<PageVisibilityObserver> page_visibility_observer_set_;
   const Member<PointerLockController> pointer_lock_controller_;
   Member<ScrollingCoordinator> scrolling_coordinator_;
   const Member<BrowserControls> browser_controls_;
@@ -429,7 +453,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
   float device_scale_factor_;
 
-  mojom::blink::PageVisibilityState visibility_state_;
+  mojom::blink::PageLifecycleStatePtr lifecycle_state_;
 
   bool is_ordinary_;
 
@@ -473,7 +497,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   // Accessed by frames to determine whether to expose the PortalHost object.
   bool inside_portal_ = false;
 
-  WebTextAutosizerPageInfo web_text_autosizer_page_info_;
+  mojom::blink::TextAutosizerPageInfo web_text_autosizer_page_info_;
 
   WebScopedVirtualTimePauser history_navigation_virtual_time_pauser_;
 

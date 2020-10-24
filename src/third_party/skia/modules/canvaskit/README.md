@@ -2,9 +2,14 @@
 
 To compile CanvasKit, you will first need to [install `emscripten`][1].  This
 will set the environment `EMSDK` (among others) which is required for
-compilation.
+compilation. Which version should you use?  [`/infra/wasm-common/docker/emsdk-base/Dockerfile`][2]
+shows the version we build and test with. We try to keep this up-to-date.
 
 [1]: https://emscripten.org/docs/getting_started/downloads.html
+[2]: https://github.com/google/skia/blob/master/infra/wasm-common/docker/emsdk-base/Dockerfile
+
+This document also assumes you have followed the instructions to download Skia and its deps
+<https://skia.org/user/download>.
 
 ## MacOS specific notes
 Make sure you have Python3 installed, otherwise the downloading emscripten toolchain
@@ -94,6 +99,15 @@ gold results are reported to gold.skia.org
 
 Coverage is not measured while running tests this way.
 
+# Inspecting output WASM
+
+The `wasm2wat` tool from [the WebAssembly Binary Toolkit](https://github.com/WebAssembly/wabt)
+can be used to produce a human-readable text version of a `.wasm` file.
+
+The output of `wasm2wat --version` should be `1.0.13 (1.0.17)`. This version has been checked to
+work with the tools in `wasm_tools/SIMD/`. These tools programmatically inspect the `.wasm` output
+of a CanvasKit build to detect the presence of [wasm SIMD](https://github.com/WebAssembly/simd)
+operations.
 
 # Infrastructure Playbook
 
@@ -124,6 +138,8 @@ sdk and verified/fixed any build issues that have arisen.
   7. In `$SKIA_ROOT/infra/bots/recipe_modules/build/`, update `canvaskit.py`
      and `pathkit.py` to have `DOCKER_IMAGE` point to the desired tagged Docker
      containers from steps 2 and 5 (which should be the same).
+  8. In `$SKIA_ROOT/infra/bots/task_drivers/compile_wasm_gm_tests.go`, update dockerImage
+     to refer to the desired Docker containers from steps 2 and 5.
   9. In `$SKIA_ROOT/infra/bots/`, run `make train` to re-train the recipes.
   10. Optional: Run something like `git grep 1\\.38\\.` in `$SKIA_ROOT` to see if
      there are any other references that need updating.

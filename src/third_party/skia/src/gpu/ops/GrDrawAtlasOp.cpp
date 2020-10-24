@@ -8,8 +8,9 @@
 #include "src/gpu/ops/GrDrawAtlasOp.h"
 
 #include "include/core/SkRSXform.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/utils/SkRandom.h"
+#include "src/core/SkMatrixPriv.h"
 #include "src/core/SkRectPriv.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrDefaultGeoProcFactory.h"
@@ -43,10 +44,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override;
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override;
 
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
@@ -59,10 +56,14 @@ private:
                              SkArenaAlloc*,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&&,
-                             const GrXferProcessor::DstProxyView&) override;
+                             const GrXferProcessor::DstProxyView&,
+                             GrXferBarrierFlags renderPassXferBarriers) override;
 
     void onPrepareDraws(Target*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
 
     const SkPMColor4f& color() const { return fColor; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
@@ -86,7 +87,7 @@ private:
     GrSimpleMesh* fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 static GrGeometryProcessor* make_gp(SkArenaAlloc* arena,
@@ -185,15 +186,14 @@ DrawAtlasOp::DrawAtlasOp(const Helper::MakeArgs& helperArgs, const SkPMColor4f& 
     this->setTransformedBounds(bounds, viewMatrix, HasAABloat::kNo, IsHairline::kNo);
 }
 
-#ifdef SK_DEBUG
-SkString DrawAtlasOp::dumpInfo() const {
+#if GR_TEST_UTILS
+SkString DrawAtlasOp::onDumpInfo() const {
     SkString string;
     for (const auto& geo : fGeoData) {
         string.appendf("Color: 0x%08x, Quads: %d\n", geo.fColor.toBytes_RGBA(),
                        geo.fVerts.count() / 4);
     }
     string += fHelper.dumpInfo();
-    string += INHERITED::dumpInfo();
     return string;
 }
 #endif
@@ -202,7 +202,8 @@ void DrawAtlasOp::onCreateProgramInfo(const GrCaps* caps,
                                       SkArenaAlloc* arena,
                                       const GrSurfaceProxyView* writeView,
                                       GrAppliedClip&& appliedClip,
-                                      const GrXferProcessor::DstProxyView& dstProxyView) {
+                                      const GrXferProcessor::DstProxyView& dstProxyView,
+                                      GrXferBarrierFlags renderPassXferBarriers) {
     // Setup geometry processor
     GrGeometryProcessor* gp = make_gp(arena,
                                       this->hasColors(),
@@ -210,7 +211,8 @@ void DrawAtlasOp::onCreateProgramInfo(const GrCaps* caps,
                                       this->viewMatrix());
 
     fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
-                                             dstProxyView, gp, GrPrimitiveType::kTriangles);
+                                             dstProxyView, gp, GrPrimitiveType::kTriangles,
+                                             renderPassXferBarriers);
 }
 
 void DrawAtlasOp::onPrepareDraws(Target* target) {

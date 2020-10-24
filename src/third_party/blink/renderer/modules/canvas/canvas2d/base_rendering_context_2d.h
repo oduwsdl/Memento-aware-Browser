@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_path.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/identifiability_study_helper.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 
@@ -30,8 +31,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                                               public CanvasPath {
  public:
   ~BaseRenderingContext2D() override;
-
-  void Reset();
 
   void strokeStyle(StringOrCanvasGradientOrCanvasPattern&) const;
   void setStrokeStyle(const StringOrCanvasGradientOrCanvasPattern&);
@@ -80,6 +79,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   void save();
   void restore();
+  void reset();
 
   void scale(double sx, double sy);
   void rotate(double angle_in_radians);
@@ -169,6 +169,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                                        double y1,
                                        double r1,
                                        ExceptionState&);
+  CanvasGradient* createConicGradient(double startAngle,
+                                      double centerX,
+                                      double centerY);
   CanvasPattern* createPattern(ScriptState*,
                                const CanvasImageSourceUnion&,
                                const String& repetition_type,
@@ -181,15 +184,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   ImageData* createImageData(ImageData*, ExceptionState&) const;
   ImageData* createImageData(int width, int height, ExceptionState&) const;
   ImageData* createImageData(unsigned,
-                             unsigned,
-                             ImageDataColorSettings*,
-                             ExceptionState&) const;
-  ImageData* createImageData(ImageDataArray&,
-                             unsigned,
-                             unsigned,
-                             ExceptionState&) const;
-  ImageData* createImageData(ImageDataArray&,
-                             unsigned,
                              unsigned,
                              ImageDataColorSettings*,
                              ExceptionState&) const;
@@ -269,6 +263,11 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   String textBaseline() const;
   void setTextBaseline(const String&);
 
+  double textLetterSpacing() const;
+
+  double textWordSpacing() const;
+  String fontKerning() const;
+
   void Trace(Visitor*) const override;
 
   enum DrawCallType {
@@ -289,6 +288,12 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
     kRadialGradientFillType,
     kPatternFillType,
     kPathFillTypeCount  // used to specify the size of storage arrays
+  };
+
+  enum class GPUFallbackToCPUScenario {
+    kLargePatternDrawnToGPU = 0,
+    kGetImageData = 1,
+    kMaxValue = kGetImageData
   };
 
   struct UsageCounters {
@@ -378,6 +383,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   static const char kInheritDirectionString[];
   static const char kRtlDirectionString[];
   static const char kLtrDirectionString[];
+  static const char kAutoKerningString[];
+  static const char kNormalKerningString[];
+  static const char kNoneKerningString[];
   // Canvas is device independent
   static const double kCDeviceScaleFactor;
 
@@ -385,6 +393,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   virtual bool IsPaint2D() const { return false; }
   virtual void WillOverwriteCanvas() = 0;
+
+  IdentifiabilityStudyHelper identifiability_study_helper_;
 
  private:
   void RealizeSaves();
@@ -456,6 +466,12 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   int getScaledElapsedTime(float width,
                            float height,
                            base::TimeTicks start_time);
+
+  void IdentifiabilityMaybeUpdateForStyleUnion(
+      const StringOrCanvasGradientOrCanvasPattern& style);
+
+  RespectImageOrientationEnum RespectImageOrientationInternal(
+      CanvasImageSource*);
 
   bool origin_tainted_by_content_;
 

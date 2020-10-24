@@ -10,6 +10,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/renderer/platform/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/mojo/features.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 
 namespace blink {
@@ -76,8 +77,6 @@ class HeapMojoRemote {
   // Garbage collected wrapper class to add ContextLifecycleObserver.
   class Wrapper final : public GarbageCollected<Wrapper>,
                         public ContextLifecycleObserver {
-    USING_GARBAGE_COLLECTED_MIXIN(Wrapper);
-
    public:
     explicit Wrapper(ContextLifecycleNotifier* notifier) {
       SetContextLifecycleNotifier(notifier);
@@ -95,7 +94,9 @@ class HeapMojoRemote {
 
     // ContextLifecycleObserver methods
     void ContextDestroyed() override {
-      if (Mode == HeapMojoWrapperMode::kWithContextObserver)
+      if (Mode == HeapMojoWrapperMode::kWithContextObserver ||
+          (Mode == HeapMojoWrapperMode::kWithoutContextObserver &&
+           base::FeatureList::IsEnabled(kHeapMojoUseContextObserver)))
         remote_.reset();
     }
 

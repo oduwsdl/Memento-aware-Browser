@@ -15,47 +15,28 @@
 #include "VkPhysicalDevice.hpp"
 
 #include "VkConfig.hpp"
+#include "VkStringify.hpp"
 #include "Pipeline/SpirvShader.hpp"  // sw::SIMD::Width
 #include "Reactor/Reactor.hpp"
 
 #include <cstring>
 #include <limits>
 
+#ifdef __ANDROID__
+#	include <android/hardware_buffer.h>
+#endif
+
 namespace vk {
 
-static void setExternalMemoryProperties(VkExternalMemoryHandleTypeFlagBits handleType, VkExternalMemoryProperties *properties)
-{
-#if SWIFTSHADER_EXTERNAL_MEMORY_OPAQUE_FD
-	if(handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)
-	{
-		properties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-		properties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-		properties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
-		return;
-	}
-#endif
-#if SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
-	if(handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
-	{
-		properties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
-		properties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
-		properties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
-		return;
-	}
-#endif
 #if VK_USE_PLATFORM_FUCHSIA
-	if(handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA)
-	{
-		properties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
-		properties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
-		properties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
-		return;
-	}
-#endif
-	properties->compatibleHandleTypes = 0;
-	properties->exportFromImportedHandleTypes = 0;
-	properties->externalMemoryFeatures = 0;
+if(handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA)
+{
+	properties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
+	properties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
+	properties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+	return;
 }
+#endif
 
 PhysicalDevice::PhysicalDevice(const void *, void *mem)
 {
@@ -76,7 +57,7 @@ const VkPhysicalDeviceFeatures &PhysicalDevice::getFeatures() const
 		VK_TRUE,   // multiDrawIndirect
 		VK_TRUE,   // drawIndirectFirstInstance
 		VK_FALSE,  // depthClamp
-		VK_FALSE,  // depthBiasClamp
+		VK_TRUE,   // depthBiasClamp
 		VK_TRUE,   // fillModeNonSolid
 		VK_FALSE,  // depthBounds
 		VK_FALSE,  // wideLines
@@ -90,15 +71,15 @@ const VkPhysicalDeviceFeatures &PhysicalDevice::getFeatures() const
 #else
 		VK_FALSE,  // textureCompressionASTC_LDR
 #endif
-		VK_FALSE,  // textureCompressionBC
-		VK_FALSE,  // occlusionQueryPrecise
+		VK_TRUE,   // textureCompressionBC
+		VK_TRUE,   // occlusionQueryPrecise
 		VK_FALSE,  // pipelineStatisticsQuery
 		VK_TRUE,   // vertexPipelineStoresAndAtomics
 		VK_TRUE,   // fragmentStoresAndAtomics
 		VK_FALSE,  // shaderTessellationAndGeometryPointSize
 		VK_FALSE,  // shaderImageGatherExtended
-		VK_FALSE,  // shaderStorageImageExtendedFormats
-		VK_FALSE,  // shaderStorageImageMultisample
+		VK_TRUE,   // shaderStorageImageExtendedFormats
+		VK_TRUE,   // shaderStorageImageMultisample
 		VK_FALSE,  // shaderStorageImageReadWithoutFormat
 		VK_FALSE,  // shaderStorageImageWriteWithoutFormat
 		VK_TRUE,   // shaderUniformBufferArrayDynamicIndexing
@@ -128,12 +109,14 @@ const VkPhysicalDeviceFeatures &PhysicalDevice::getFeatures() const
 	return features;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDeviceSamplerYcbcrConversionFeatures *features) const
+template<typename T>
+static void getPhysicalDeviceSamplerYcbcrConversionFeatures(T *features)
 {
 	features->samplerYcbcrConversion = VK_TRUE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDevice16BitStorageFeatures *features) const
+template<typename T>
+static void getPhysicalDevice16BitStorageFeatures(T *features)
 {
 	features->storageBuffer16BitAccess = VK_FALSE;
 	features->storageInputOutput16 = VK_FALSE;
@@ -141,42 +124,49 @@ void PhysicalDevice::getFeatures(VkPhysicalDevice16BitStorageFeatures *features)
 	features->uniformAndStorageBuffer16BitAccess = VK_FALSE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDeviceVariablePointerFeatures *features) const
+template<typename T>
+static void getPhysicalDeviceVariablePointersFeatures(T *features)
 {
 	features->variablePointersStorageBuffer = VK_FALSE;
 	features->variablePointers = VK_FALSE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDevice8BitStorageFeaturesKHR *features) const
+template<typename T>
+static void getPhysicalDevice8BitStorageFeaturesKHR(T *features)
 {
 	features->storageBuffer8BitAccess = VK_FALSE;
 	features->uniformAndStorageBuffer8BitAccess = VK_FALSE;
 	features->storagePushConstant8 = VK_FALSE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDeviceMultiviewFeatures *features) const
+template<typename T>
+static void getPhysicalDeviceMultiviewFeatures(T *features)
 {
 	features->multiview = VK_TRUE;
 	features->multiviewGeometryShader = VK_FALSE;
 	features->multiviewTessellationShader = VK_FALSE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDeviceProtectedMemoryFeatures *features) const
+template<typename T>
+static void getPhysicalDeviceProtectedMemoryFeatures(T *features)
 {
 	features->protectedMemory = VK_FALSE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDeviceShaderDrawParameterFeatures *features) const
+template<typename T>
+static void getPhysicalDeviceShaderDrawParameterFeatures(T *features)
 {
 	features->shaderDrawParameters = VK_FALSE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR *features) const
+template<typename T>
+static void getPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR(T *features)
 {
 	features->separateDepthStencilLayouts = VK_TRUE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDeviceLineRasterizationFeaturesEXT *features) const
+template<typename T>
+static void getPhysicalDeviceLineRasterizationFeaturesEXT(T *features)
 {
 	features->rectangularLines = VK_TRUE;
 	features->bresenhamLines = VK_TRUE;
@@ -186,9 +176,147 @@ void PhysicalDevice::getFeatures(VkPhysicalDeviceLineRasterizationFeaturesEXT *f
 	features->stippledSmoothLines = VK_FALSE;
 }
 
-void PhysicalDevice::getFeatures(VkPhysicalDeviceProvokingVertexFeaturesEXT *features) const
+template<typename T>
+static void getPhysicalDeviceProvokingVertexFeaturesEXT(T *features)
 {
 	features->provokingVertexLast = VK_TRUE;
+}
+
+template<typename T>
+static void getPhysicalDeviceImageRobustnessFeaturesEXT(T *features)
+{
+	features->robustImageAccess = VK_TRUE;
+}
+
+template<typename T>
+static void getPhysicalDeviceShaderDrawParametersFeatures(T *features)
+{
+	features->shaderDrawParameters = VK_FALSE;
+}
+
+template<typename T>
+static void getPhysicalDeviceVulkan11Features(T *features)
+{
+	getPhysicalDevice16BitStorageFeatures(features);
+	getPhysicalDeviceMultiviewFeatures(features);
+	getPhysicalDeviceVariablePointersFeatures(features);
+	getPhysicalDeviceProtectedMemoryFeatures(features);
+	getPhysicalDeviceSamplerYcbcrConversionFeatures(features);
+	getPhysicalDeviceShaderDrawParametersFeatures(features);
+}
+
+template<typename T>
+static void getPhysicalDeviceImagelessFramebufferFeatures(T *features)
+{
+	features->imagelessFramebuffer = VK_TRUE;
+}
+
+template<typename T>
+static void getPhysicalDeviceVulkan12Features(T *features)
+{
+	features->samplerMirrorClampToEdge = VK_FALSE;
+	features->drawIndirectCount = VK_FALSE;
+	getPhysicalDevice8BitStorageFeaturesKHR(features);
+	features->shaderBufferInt64Atomics = VK_FALSE;
+	features->shaderSharedInt64Atomics = VK_FALSE;
+	features->shaderFloat16 = VK_FALSE;
+	features->shaderInt8 = VK_FALSE;
+	features->descriptorIndexing = VK_FALSE;
+	features->shaderInputAttachmentArrayDynamicIndexing = VK_FALSE;
+	features->shaderUniformTexelBufferArrayDynamicIndexing = VK_FALSE;
+	features->shaderStorageTexelBufferArrayDynamicIndexing = VK_FALSE;
+	features->shaderSampledImageArrayNonUniformIndexing = VK_FALSE;
+	features->shaderStorageBufferArrayNonUniformIndexing = VK_FALSE;
+	features->shaderStorageImageArrayNonUniformIndexing = VK_FALSE;
+	features->shaderInputAttachmentArrayNonUniformIndexing = VK_FALSE;
+	features->shaderUniformTexelBufferArrayNonUniformIndexing = VK_FALSE;
+	features->shaderStorageTexelBufferArrayNonUniformIndexing = VK_FALSE;
+	features->descriptorBindingUniformBufferUpdateAfterBind = VK_FALSE;
+	features->descriptorBindingSampledImageUpdateAfterBind = VK_FALSE;
+	features->descriptorBindingStorageImageUpdateAfterBind = VK_FALSE;
+	features->descriptorBindingStorageBufferUpdateAfterBind = VK_FALSE;
+	features->descriptorBindingUniformTexelBufferUpdateAfterBind = VK_FALSE;
+	features->descriptorBindingStorageBufferUpdateAfterBind = VK_FALSE;
+	features->descriptorBindingUpdateUnusedWhilePending = VK_FALSE;
+	features->descriptorBindingPartiallyBound = VK_FALSE;
+	features->descriptorBindingVariableDescriptorCount = VK_FALSE;
+	features->runtimeDescriptorArray = VK_FALSE;
+	features->samplerFilterMinmax = VK_FALSE;
+	features->scalarBlockLayout = VK_FALSE;
+	getPhysicalDeviceImagelessFramebufferFeatures(features);
+	features->uniformBufferStandardLayout = VK_FALSE;
+	features->shaderSubgroupExtendedTypes = VK_FALSE;
+	getPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR(features);
+	features->hostQueryReset = VK_FALSE;
+	features->timelineSemaphore = VK_FALSE;
+	features->bufferDeviceAddress = VK_FALSE;
+	features->bufferDeviceAddressCaptureReplay = VK_FALSE;
+	features->bufferDeviceAddressMultiDevice = VK_FALSE;
+	features->vulkanMemoryModel = VK_FALSE;
+	features->vulkanMemoryModelDeviceScope = VK_FALSE;
+	features->vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
+	features->shaderOutputViewportIndex = VK_FALSE;
+	features->shaderOutputLayer = VK_FALSE;
+	features->subgroupBroadcastDynamicId = VK_FALSE;
+}
+
+void PhysicalDevice::getFeatures2(VkPhysicalDeviceFeatures2 *features) const
+{
+	features->features = getFeatures();
+	VkBaseOutStructure *curExtension = reinterpret_cast<VkBaseOutStructure *>(features->pNext);
+	while(curExtension != nullptr)
+	{
+		// Need to switch on an integer since Provoking Vertex isn't a part of the Vulkan spec.
+		switch((int)curExtension->sType)
+		{
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
+				getPhysicalDeviceVulkan11Features(reinterpret_cast<VkPhysicalDeviceVulkan11Features *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
+				getPhysicalDeviceVulkan12Features(reinterpret_cast<VkPhysicalDeviceVulkan12Features *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
+				getPhysicalDeviceMultiviewFeatures(reinterpret_cast<VkPhysicalDeviceMultiviewFeatures *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES:
+				getPhysicalDeviceVariablePointersFeatures(reinterpret_cast<VkPhysicalDeviceVariablePointersFeatures *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
+				getPhysicalDevice16BitStorageFeatures(reinterpret_cast<VkPhysicalDevice16BitStorageFeatures *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
+				getPhysicalDeviceSamplerYcbcrConversionFeatures(reinterpret_cast<VkPhysicalDeviceSamplerYcbcrConversionFeatures *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
+				getPhysicalDeviceProtectedMemoryFeatures(reinterpret_cast<VkPhysicalDeviceProtectedMemoryFeatures *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES:
+				getPhysicalDeviceShaderDrawParameterFeatures(reinterpret_cast<VkPhysicalDeviceShaderDrawParameterFeatures *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT:
+				getPhysicalDeviceImageRobustnessFeaturesEXT(reinterpret_cast<VkPhysicalDeviceImageRobustnessFeaturesEXT *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
+				getPhysicalDeviceLineRasterizationFeaturesEXT(reinterpret_cast<VkPhysicalDeviceLineRasterizationFeaturesEXT *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES:
+				getPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR(reinterpret_cast<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR:
+				getPhysicalDevice8BitStorageFeaturesKHR(reinterpret_cast<VkPhysicalDevice8BitStorageFeaturesKHR *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT:
+				getPhysicalDeviceProvokingVertexFeaturesEXT(reinterpret_cast<VkPhysicalDeviceProvokingVertexFeaturesEXT *>(curExtension));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES:
+				getPhysicalDeviceImagelessFramebufferFeatures(reinterpret_cast<VkPhysicalDeviceImagelessFramebufferFeatures *>(curExtension));
+				break;
+			default:
+				LOG_TRAP("curExtension->pNext->sType = %s", vk::Stringify(curExtension->sType).c_str());
+				break;
+		}
+		curExtension = reinterpret_cast<VkBaseOutStructure *>(curExtension->pNext);
+	}
 }
 
 VkSampleCountFlags PhysicalDevice::getSampleCounts() const
@@ -290,7 +418,7 @@ const VkPhysicalDeviceLimits &PhysicalDevice::getLimits() const
 		sampleCounts,                                     // sampledImageIntegerSampleCounts
 		sampleCounts,                                     // sampledImageDepthSampleCounts
 		sampleCounts,                                     // sampledImageStencilSampleCounts
-		VK_SAMPLE_COUNT_1_BIT,                            // storageImageSampleCounts (unsupported)
+		sampleCounts,                                     // storageImageSampleCounts
 		1,                                                // maxSampleMaskWords
 		VK_FALSE,                                         // timestampComputeAndGraphics
 		60,                                               // timestampPeriod
@@ -389,7 +517,72 @@ void PhysicalDevice::getProperties(VkPhysicalDeviceSubgroupProperties *propertie
 
 void PhysicalDevice::getProperties(const VkExternalMemoryHandleTypeFlagBits *handleType, VkExternalImageFormatProperties *properties) const
 {
-	setExternalMemoryProperties(*handleType, &properties->externalMemoryProperties);
+	VkExternalMemoryProperties *extMemProperties = &properties->externalMemoryProperties;
+#if SWIFTSHADER_EXTERNAL_MEMORY_OPAQUE_FD
+	if(*handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)
+	{
+		extMemProperties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+		extMemProperties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+		extMemProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+		return;
+	}
+#endif
+#if SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
+	if(*handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+	{
+		extMemProperties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+		extMemProperties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+		extMemProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT;
+		return;
+	}
+#endif
+#if VK_USE_PLATFORM_FUCHSIA
+	if(handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA)
+	{
+		properties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
+		properties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
+		properties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+		return;
+	}
+#endif
+	extMemProperties->compatibleHandleTypes = 0;
+	extMemProperties->exportFromImportedHandleTypes = 0;
+	extMemProperties->externalMemoryFeatures = 0;
+}
+
+void PhysicalDevice::getProperties(const VkExternalMemoryHandleTypeFlagBits *handleType, VkExternalBufferProperties *properties) const
+{
+	VkExternalMemoryProperties *extMemProperties = &properties->externalMemoryProperties;
+#if SWIFTSHADER_EXTERNAL_MEMORY_OPAQUE_FD
+	if(*handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)
+	{
+		extMemProperties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+		extMemProperties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+		extMemProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+		return;
+	}
+#endif
+#if SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
+	if(*handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+	{
+		extMemProperties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+		extMemProperties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+		extMemProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+		return;
+	}
+#endif
+#if VK_USE_PLATFORM_FUCHSIA
+	if(handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA)
+	{
+		properties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
+		properties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
+		properties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+		return;
+	}
+#endif
+	extMemProperties->compatibleHandleTypes = 0;
+	extMemProperties->exportFromImportedHandleTypes = 0;
+	extMemProperties->externalMemoryFeatures = 0;
 }
 
 void PhysicalDevice::getProperties(VkSamplerYcbcrConversionImageFormatProperties *properties) const
@@ -402,11 +595,46 @@ void PhysicalDevice::getProperties(VkPhysicalDevicePresentationPropertiesANDROID
 {
 	properties->sharedImage = VK_FALSE;
 }
+
+void PhysicalDevice::getProperties(VkAndroidHardwareBufferUsageANDROID *properties) const
+{
+	// TODO(b/169439421)
+	//   This AHB could be either a framebuffer, OR a sampled image
+	//     Here we just say it's both
+	//   Need to pass down info on the type of image in question
+	properties->androidHardwareBufferUsage |= AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE | AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT;
+}
 #endif
 
 void PhysicalDevice::getProperties(const VkPhysicalDeviceExternalBufferInfo *pExternalBufferInfo, VkExternalBufferProperties *pExternalBufferProperties) const
 {
-	setExternalMemoryProperties(pExternalBufferInfo->handleType, &pExternalBufferProperties->externalMemoryProperties);
+	VkExternalMemoryProperties *properties = &pExternalBufferProperties->externalMemoryProperties;
+
+#if SWIFTSHADER_EXTERNAL_MEMORY_OPAQUE_FD || SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
+	const VkExternalMemoryHandleTypeFlagBits *handleType = &pExternalBufferInfo->handleType;
+#endif
+
+#if SWIFTSHADER_EXTERNAL_MEMORY_OPAQUE_FD
+	if(*handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)
+	{
+		properties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+		properties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+		properties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+		return;
+	}
+#endif
+#if SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
+	if(*handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+	{
+		properties->compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+		properties->exportFromImportedHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+		properties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT | VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+		return;
+	}
+#endif
+	properties->compatibleHandleTypes = 0;
+	properties->exportFromImportedHandleTypes = 0;
+	properties->externalMemoryFeatures = 0;
 }
 
 void PhysicalDevice::getProperties(const VkPhysicalDeviceExternalFenceInfo *pExternalFenceInfo, VkExternalFenceProperties *pExternalFenceProperties) const
@@ -482,7 +710,7 @@ bool PhysicalDevice::hasFeatures(const VkPhysicalDeviceFeatures &requestedFeatur
 	return true;
 }
 
-void PhysicalDevice::getFormatProperties(Format format, VkFormatProperties *pFormatProperties) const
+void PhysicalDevice::GetFormatProperties(Format format, VkFormatProperties *pFormatProperties)
 {
 	pFormatProperties->linearTilingFeatures = 0;   // Unsupported format
 	pFormatProperties->optimalTilingFeatures = 0;  // Unsupported format
@@ -530,6 +758,8 @@ void PhysicalDevice::getFormatProperties(Format format, VkFormatProperties *pFor
 		case VK_FORMAT_BC4_SNORM_BLOCK:
 		case VK_FORMAT_BC5_UNORM_BLOCK:
 		case VK_FORMAT_BC5_SNORM_BLOCK:
+		case VK_FORMAT_BC6H_UFLOAT_BLOCK:
+		case VK_FORMAT_BC6H_SFLOAT_BLOCK:
 		case VK_FORMAT_BC7_UNORM_BLOCK:
 		case VK_FORMAT_BC7_SRGB_BLOCK:
 		case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
@@ -637,6 +867,10 @@ void PhysicalDevice::getFormatProperties(Format format, VkFormatProperties *pFor
 		case VK_FORMAT_R8G8B8A8_SNORM:
 		case VK_FORMAT_R8G8B8A8_UINT:
 		case VK_FORMAT_R8G8B8A8_SINT:
+		case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+		case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
+		case VK_FORMAT_A8B8G8R8_UINT_PACK32:
+		case VK_FORMAT_A8B8G8R8_SINT_PACK32:
 		case VK_FORMAT_R16G16B16A16_UINT:
 		case VK_FORMAT_R16G16B16A16_SINT:
 		case VK_FORMAT_R16G16B16A16_SFLOAT:
@@ -647,16 +881,33 @@ void PhysicalDevice::getFormatProperties(Format format, VkFormatProperties *pFor
 		case VK_FORMAT_R32G32B32A32_UINT:
 		case VK_FORMAT_R32G32B32A32_SINT:
 		case VK_FORMAT_R32G32B32A32_SFLOAT:
-		case VK_FORMAT_R16G16_UINT:
-		case VK_FORMAT_R16G16_SINT:
+		// shaderStorageImageExtendedFormats
 		case VK_FORMAT_R16G16_SFLOAT:
+		case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
+		case VK_FORMAT_R16_SFLOAT:
+		case VK_FORMAT_R16G16B16A16_UNORM:
+		case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+		case VK_FORMAT_R16G16_UNORM:
+		case VK_FORMAT_R8G8_UNORM:
+		case VK_FORMAT_R16_UNORM:
+		case VK_FORMAT_R8_UNORM:
+		case VK_FORMAT_R16G16B16A16_SNORM:
+		case VK_FORMAT_R16G16_SNORM:
+		case VK_FORMAT_R8G8_SNORM:
+		case VK_FORMAT_R16_SNORM:
+		case VK_FORMAT_R8_SNORM:
+		case VK_FORMAT_R16G16_SINT:
+		case VK_FORMAT_R8G8_SINT:
+		case VK_FORMAT_R16_SINT:
+		case VK_FORMAT_R8_SINT:
+		case VK_FORMAT_A2B10G10R10_UINT_PACK32:
+		case VK_FORMAT_R16G16_UINT:
+		case VK_FORMAT_R8G8_UINT:
+		case VK_FORMAT_R16_UINT:
+		case VK_FORMAT_R8_UINT:
 			pFormatProperties->optimalTilingFeatures |=
 			    VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
 			// [[fallthrough]]
-		case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-		case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
-		case VK_FORMAT_A8B8G8R8_UINT_PACK32:
-		case VK_FORMAT_A8B8G8R8_SINT_PACK32:
 			pFormatProperties->bufferFeatures |=
 			    VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT;
 			break;
@@ -791,6 +1042,7 @@ void PhysicalDevice::getFormatProperties(Format format, VkFormatProperties *pFor
 
 	switch(format)
 	{
+		// Vulkan 1.1 mandatory
 		case VK_FORMAT_R8_UNORM:
 		case VK_FORMAT_R8_SNORM:
 		case VK_FORMAT_R8_UINT:
@@ -810,8 +1062,6 @@ void PhysicalDevice::getFormatProperties(Format format, VkFormatProperties *pFor
 		case VK_FORMAT_A8B8G8R8_SINT_PACK32:
 		case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
 		case VK_FORMAT_A2B10G10R10_UINT_PACK32:
-		case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-		case VK_FORMAT_A2R10G10B10_UINT_PACK32:
 		case VK_FORMAT_R16_UINT:
 		case VK_FORMAT_R16_SINT:
 		case VK_FORMAT_R16_SFLOAT:
@@ -831,6 +1081,9 @@ void PhysicalDevice::getFormatProperties(Format format, VkFormatProperties *pFor
 		case VK_FORMAT_R32G32B32A32_SINT:
 		case VK_FORMAT_R32G32B32A32_SFLOAT:
 		case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
+		// Optional
+		case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+		case VK_FORMAT_A2R10G10B10_UINT_PACK32:
 			pFormatProperties->bufferFeatures |=
 			    VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
 			break;
@@ -874,7 +1127,7 @@ void PhysicalDevice::getImageFormatProperties(Format format, VkImageType type, V
 				pImageFormatProperties->maxExtent.height = 1 << (vk::MAX_IMAGE_LEVELS_2D - 1);
 
 				VkFormatProperties props;
-				getFormatProperties(format, &props);
+				GetFormatProperties(format, &props);
 				auto features = tiling == VK_IMAGE_TILING_LINEAR ? props.linearTilingFeatures : props.optimalTilingFeatures;
 				if(features & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
 				{
@@ -949,7 +1202,7 @@ void PhysicalDevice::getQueueFamilyProperties(uint32_t pQueueFamilyPropertyCount
 	}
 }
 
-const VkPhysicalDeviceMemoryProperties &PhysicalDevice::getMemoryProperties() const
+const VkPhysicalDeviceMemoryProperties &PhysicalDevice::GetMemoryProperties()
 {
 	static const VkPhysicalDeviceMemoryProperties properties{
 		1,  // memoryTypeCount

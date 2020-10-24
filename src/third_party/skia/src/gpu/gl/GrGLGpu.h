@@ -17,11 +17,11 @@
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrWindowRectsState.h"
 #include "src/gpu/GrXferProcessor.h"
+#include "src/gpu/gl/GrGLAttachment.h"
 #include "src/gpu/gl/GrGLContext.h"
 #include "src/gpu/gl/GrGLPathRendering.h"
 #include "src/gpu/gl/GrGLProgram.h"
 #include "src/gpu/gl/GrGLRenderTarget.h"
-#include "src/gpu/gl/GrGLStencilAttachment.h"
 #include "src/gpu/gl/GrGLTexture.h"
 #include "src/gpu/gl/GrGLVertexArray.h"
 
@@ -32,7 +32,7 @@ class GrSwizzle;
 
 class GrGLGpu final : public GrGpu {
 public:
-    static sk_sp<GrGpu> Make(sk_sp<const GrGLInterface>, const GrContextOptions&, GrContext*);
+    static sk_sp<GrGpu> Make(sk_sp<const GrGLInterface>, const GrContextOptions&, GrDirectContext*);
     ~GrGLGpu() override;
 
     void disconnect(DisconnectType) override;
@@ -119,19 +119,30 @@ public:
     void endCommandBuffer(GrRenderTarget*, const GrOpsRenderPass::LoadAndStoreInfo& colorLoadStore,
                           const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilLoadStore);
 
-    GrOpsRenderPass* getOpsRenderPass(
-            GrRenderTarget*, GrStencilAttachment*,
-            GrSurfaceOrigin, const SkIRect&,
-            const GrOpsRenderPass::LoadAndStoreInfo&,
-            const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) override;
+    GrOpsRenderPass* getOpsRenderPass(GrRenderTarget*,
+                                      GrAttachment*,
+                                      GrSurfaceOrigin,
+                                      const SkIRect&,
+                                      const GrOpsRenderPass::LoadAndStoreInfo&,
+                                      const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+                                      const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+                                      GrXferBarrierFlags renderPassXferBarriers) override;
 
     void invalidateBoundRenderTarget() {
         fHWBoundRenderTargetUniqueID.makeInvalid();
     }
 
-    GrStencilAttachment* createStencilAttachmentForRenderTarget(
-            const GrRenderTarget* rt, int width, int height, int numStencilSamples) override;
+    sk_sp<GrAttachment> makeStencilAttachmentForRenderTarget(const GrRenderTarget* rt,
+                                                             SkISize dimensions,
+                                                             int numStencilSamples) override;
+
+    sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
+                                           const GrBackendFormat& format,
+                                           int numSamples,
+                                           GrProtected isProtected) override {
+        return nullptr;
+    }
+
     void deleteBackendTexture(const GrBackendTexture&) override;
 
     bool compile(const GrProgramDesc&, const GrProgramInfo&) override;
@@ -143,7 +154,10 @@ public:
 #if GR_TEST_UTILS
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
-    GrBackendRenderTarget createTestingOnlyBackendRenderTarget(int w, int h, GrColorType) override;
+    GrBackendRenderTarget createTestingOnlyBackendRenderTarget(SkISize dimensions,
+                                                               GrColorType,
+                                                               int sampleCnt,
+                                                               GrProtected) override;
     void deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) override;
 
     const GrGLContext* glContextForTesting() const override { return &this->glContext(); }
@@ -169,6 +183,11 @@ public:
 
     void checkFinishProcs() override;
 
+    // Calls glGetError() until no errors are reported. Also looks for OOMs.
+    void clearErrorsAndCheckForOOM();
+    // Calls glGetError() once and returns the result. Also looks for an OOM.
+    GrGLenum getErrorAndCheckForOOM();
+
     std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
 
     void deleteSync(GrGLsync) const;
@@ -184,25 +203,27 @@ public:
     void flushProgram(GrGLuint);
 
 private:
-    GrGLGpu(std::unique_ptr<GrGLContext>, GrContext*);
+    GrGLGpu(std::unique_ptr<GrGLContext>, GrDirectContext*);
 
     // GrGpu overrides
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
-                                            GrMipMapped,
+                                            GrMipmapped,
                                             GrProtected) override;
 
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
-                                                      GrMipMapped,
-                                                      GrProtected,
-                                                      sk_sp<GrRefCntedCallback> finishedCallback,
-                                                      const BackendTextureData*) override;
+                                                      GrMipmapped,
+                                                      GrProtected) override;
 
     bool onUpdateBackendTexture(const GrBackendTexture&,
                                 sk_sp<GrRefCntedCallback> finishedCallback,
                                 const BackendTextureData*) override;
+
+    bool onUpdateCompressedBackendTexture(const GrBackendTexture&,
+                                          sk_sp<GrRefCntedCallback> finishedCallback,
+                                          const BackendTextureData*) override;
 
     void onResetContext(uint32_t resetBits) override;
 
@@ -223,7 +244,7 @@ private:
     sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
                                                const GrBackendFormat&,
                                                SkBudgeted,
-                                               GrMipMapped,
+                                               GrMipmapped,
                                                GrProtected,
                                                const void* data, size_t dataSize) override;
 
@@ -242,12 +263,19 @@ private:
                                                     GrWrapOwnership,
                                                     GrWrapCacheable) override;
     sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&) override;
-    sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
-                                                             int sampleCnt) override;
 
     // Given a GL format return the index into the stencil format array on GrGLCaps to a
     // compatible stencil format, or negative if there is no compatible stencil format.
     int getCompatibleStencilIndex(GrGLFormat format);
+
+    GrBackendFormat getPreferredStencilFormat(const GrBackendFormat& format) override {
+        int idx = this->getCompatibleStencilIndex(format.asGLFormat());
+        if (idx < 0) {
+            return {};
+        }
+        return GrBackendFormat::MakeGL(GrGLFormatToEnum(this->glCaps().stencilFormats()[idx]),
+                                       GR_GL_TEXTURE_NONE);
+    }
 
     void onFBOChanged();
 
@@ -255,18 +283,18 @@ private:
     // returned. On failure, zero is returned.
     // The texture is populated with |texels|, if it is non-null.
     // The texture parameters are cached in |initialTexParams|.
-    GrGLuint createTexture2D(SkISize dimensions,
-                             GrGLFormat,
-                             GrRenderable,
-                             GrGLTextureParameters::SamplerOverriddenState*,
-                             int mipLevelCount);
+    GrGLuint createTexture(SkISize dimensions,
+                           GrGLFormat,
+                           GrGLenum target,
+                           GrRenderable,
+                           GrGLTextureParameters::SamplerOverriddenState*,
+                           int mipLevelCount);
 
     GrGLuint createCompressedTexture2D(SkISize dimensions,
                                        SkImage::CompressionType compression,
                                        GrGLFormat,
-                                       GrMipMapped,
-                                       GrGLTextureParameters::SamplerOverriddenState*,
-                                       const void* data, size_t dataSize);
+                                       GrMipmapped,
+                                       GrGLTextureParameters::SamplerOverriddenState*);
 
     bool onReadPixels(GrSurface*, int left, int top, int width, int height,
                       GrColorType surfaceColorType, GrColorType dstColorType, void* buffer,
@@ -291,8 +319,7 @@ private:
     // PIXEL_UNPACK_BUFFER is unbound.
     void unbindCpuToGpuXferBuffer();
 
-    void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                               ForExternalIO) override;
+    void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect) override;
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
 
@@ -449,7 +476,7 @@ private:
     bool uploadCompressedTexData(SkImage::CompressionType compressionType,
                                  GrGLFormat,
                                  SkISize dimensions,
-                                 GrMipMapped,
+                                 GrMipmapped,
                                  GrGLenum target,
                                  const void* data, size_t dataSize);
 
@@ -745,7 +772,7 @@ private:
 
     friend class GrGLPathRendering; // For accessing setTextureUnit.
 
-    typedef GrGpu INHERITED;
+    using INHERITED = GrGpu;
 };
 
 #endif

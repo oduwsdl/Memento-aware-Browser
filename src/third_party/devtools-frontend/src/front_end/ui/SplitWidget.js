@@ -75,7 +75,6 @@ export class SplitWidget extends Widget {
     this._defaultSidebarHeight = defaultSidebarHeight || this._defaultSidebarWidth;
     this._constraintsInDip = !!constraintsInDip;
     this._resizeStartSizeDIP = 0;
-    // Note: go via self.Common for globally-namespaced singletons.
     this._setting = settingName ? Common.Settings.Settings.instance().createSetting(settingName, {}) : null;
 
     this._totalSizeCSS = 0;
@@ -818,14 +817,14 @@ export class SplitWidget extends Widget {
    * @param {!Element} resizerElement
    */
   installResizer(resizerElement) {
-    this._resizerWidget.addElement(resizerElement);
+    this._resizerWidget.addElement(/** @type {!HTMLElement} */ (resizerElement));
   }
 
   /**
    * @param {!Element} resizerElement
    */
   uninstallResizer(resizerElement) {
-    this._resizerWidget.removeElement(resizerElement);
+    this._resizerWidget.removeElement(/** @type {!HTMLElement} */ (resizerElement));
   }
 
   /**

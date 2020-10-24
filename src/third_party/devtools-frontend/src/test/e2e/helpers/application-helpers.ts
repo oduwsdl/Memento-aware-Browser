@@ -23,15 +23,18 @@ export async function getDataGridData(selector: string, columns: string[]) {
   await waitFor(selector);
 
   const dataGridNodes = await $$('.data-grid-data-grid-node');
-  const dataGridRowValues = await dataGridNodes.evaluate(
-      (nodes, columns) => nodes.map((row: Element) => {
-        const data: {[key: string]: string|null} = {};
-        for (const column of columns) {
-          data[column] = row.querySelector(`.${column}-column`)!.textContent;
-        }
-        return data;
-      }),
-      columns);
+  const dataGridRowValues = await Promise.all(dataGridNodes.map(node => node.evaluate((row: Element, columns) => {
+    const data: {[key: string]: string|null} = {};
+    for (const column of columns) {
+      data[column] = row.querySelector(`.${column}-column`)!.textContent;
+    }
+    return data;
+  }, columns)));
 
   return dataGridRowValues;
+}
+
+export async function getReportValues() {
+  const fields = await $$('.report-field-value');
+  return Promise.all(fields.map(node => node.evaluate(e => e.textContent)));
 }

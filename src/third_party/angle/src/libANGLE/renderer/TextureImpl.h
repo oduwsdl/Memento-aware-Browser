@@ -97,7 +97,7 @@ class TextureImpl : public FramebufferAttachmentObjectImpl
                                       const gl::ImageIndex &index,
                                       GLenum internalFormat,
                                       GLenum type,
-                                      size_t sourceLevel,
+                                      GLint sourceLevel,
                                       bool unpackFlipY,
                                       bool unpackPremultiplyAlpha,
                                       bool unpackUnmultiplyAlpha,
@@ -105,7 +105,7 @@ class TextureImpl : public FramebufferAttachmentObjectImpl
     virtual angle::Result copySubTexture(const gl::Context *context,
                                          const gl::ImageIndex &index,
                                          const gl::Offset &destOffset,
-                                         size_t sourceLevel,
+                                         GLint sourceLevel,
                                          const gl::Box &sourceBox,
                                          bool unpackFlipY,
                                          bool unpackPremultiplyAlpha,
@@ -119,8 +119,8 @@ class TextureImpl : public FramebufferAttachmentObjectImpl
                                         gl::TextureTarget target,
                                         GLenum internalFormat,
                                         GLenum type,
-                                        size_t sourceLevel,
-                                        size_t destLevel,
+                                        GLint sourceLevel,
+                                        GLint destLevel,
                                         bool unpackFlipY,
                                         bool unpackPremultiplyAlpha,
                                         bool unpackUnmultiplyAlpha,
@@ -128,8 +128,8 @@ class TextureImpl : public FramebufferAttachmentObjectImpl
     virtual angle::Result copy3DSubTexture(const gl::Context *context,
                                            const gl::TextureTarget target,
                                            const gl::Offset &destOffset,
-                                           size_t sourceLevel,
-                                           size_t destLevel,
+                                           GLint sourceLevel,
+                                           GLint destLevel,
                                            const gl::Box &srcBox,
                                            bool unpackFlipY,
                                            bool unpackPremultiplyAlpha,
@@ -155,7 +155,9 @@ class TextureImpl : public FramebufferAttachmentObjectImpl
                                                    GLenum internalFormat,
                                                    const gl::Extents &size,
                                                    gl::MemoryObject *memoryObject,
-                                                   GLuint64 offset) = 0;
+                                                   GLuint64 offset,
+                                                   GLbitfield createFlags,
+                                                   GLbitfield usageFlags) = 0;
 
     virtual angle::Result setImageExternal(const gl::Context *context,
                                            const gl::ImageIndex &index,
@@ -188,7 +190,7 @@ class TextureImpl : public FramebufferAttachmentObjectImpl
 
     virtual angle::Result syncState(const gl::Context *context,
                                     const gl::Texture::DirtyBits &dirtyBits,
-                                    gl::TextureCommand source) = 0;
+                                    gl::Command source) = 0;
 
     virtual GLenum getColorReadFormat(const gl::Context *context);
     virtual GLenum getColorReadType(const gl::Context *context);

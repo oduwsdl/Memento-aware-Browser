@@ -91,14 +91,18 @@ struct FrameDependencyStructure {
   int num_decode_targets = 0;
   int num_chains = 0;
   // If chains are used (num_chains > 0), maps decode target index into index of
-  // the chain protecting that target or |num_chains| value if decode target is
-  // not protected by a chain.
+  // the chain protecting that target.
   absl::InlinedVector<int, 10> decode_target_protected_by_chain;
   absl::InlinedVector<RenderResolution, 4> resolutions;
   std::vector<FrameDependencyTemplate> templates;
 };
 
 struct DependencyDescriptor {
+  static constexpr int kMaxSpatialIds = 4;
+  static constexpr int kMaxTemporalIds = 8;
+  static constexpr int kMaxDecodeTargets = 32;
+  static constexpr int kMaxTemplates = 64;
+
   bool first_packet_in_frame = true;
   bool last_packet_in_frame = true;
   int frame_number = 0;

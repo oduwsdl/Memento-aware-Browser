@@ -9,7 +9,7 @@
 #include "include/effects/SkGradientShader.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/ops/GrFillRectOp.h"
@@ -25,8 +25,7 @@ public:
             : INHERITED(CLASS_ID, kNone_OptimizationFlags)
             , fXOffset(xOffset)
             , fYOffset(yOffset) {
-        child->setSampleMatrix(SkSL::SampleMatrix(SkSL::SampleMatrix::Kind::kVariable));
-        this->registerChildProcessor(std::move(child));
+        this->registerChild(std::move(child), SkSL::SampleUsage::VariableMatrix());
     }
 
     const char* name() const override { return "SampleMatrixVariableEffect"; }
@@ -45,7 +44,7 @@ private:
     float fXOffset;
     float fYOffset;
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
     friend class GLSLSampleMatrixVariableEffect;
 };
 
@@ -74,7 +73,7 @@ DEF_SIMPLE_GPU_GM(sample_matrix_variable, ctx, rtCtx, canvas, 512, 256) {
         auto fp = std::unique_ptr<GrFragmentProcessor>(
                 new SampleMatrixVariableEffect(std::move(baseFP), ofsX, ofsY));
         GrPaint paint;
-        paint.addColorFragmentProcessor(std::move(fp));
+        paint.setColorFragmentProcessor(std::move(fp));
         rtCtx->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::Translate(tx, ty),
                         SkRect::MakeIWH(256, 256));
     };
@@ -83,7 +82,7 @@ DEF_SIMPLE_GPU_GM(sample_matrix_variable, ctx, rtCtx, canvas, 512, 256) {
         SkBitmap bmp;
         GetResourceAsBitmap("images/mandrill_256.png", &bmp);
         GrBitmapTextureMaker maker(ctx, bmp, GrImageTexGenPolicy::kDraw);
-        auto view = maker.view(GrMipMapped::kNo);
+        auto view = maker.view(GrMipmapped::kNo);
         std::unique_ptr<GrFragmentProcessor> imgFP =
                 GrTextureEffect::Make(std::move(view), bmp.alphaType(), SkMatrix());
         draw(std::move(imgFP), -128, 256, 0, 0);
@@ -101,6 +100,6 @@ DEF_SIMPLE_GPU_GM(sample_matrix_variable, ctx, rtCtx, canvas, 512, 256) {
         GrColorInfo colorInfo;
         GrFPArgs args(ctx, matrixProvider, kHigh_SkFilterQuality, &colorInfo);
         std::unique_ptr<GrFragmentProcessor> gradientFP = as_SB(shader)->asFragmentProcessor(args);
-        draw(std::move(gradientFP), -0.5f, 1.0f, 256, 0);
+        draw(std::move(gradientFP), -128, 256, 256, 0);
     }
 }

@@ -26,7 +26,8 @@ void IJS_Runtime::Initialize(unsigned int slot, void* isolate, void* platform) {
 #ifdef PDF_ENABLE_V8
   FXJS_Initialize(slot, static_cast<v8::Isolate*>(isolate));
 #ifdef PDF_ENABLE_XFA
-  FXGC_Initialize(static_cast<v8::Platform*>(platform));
+  FXGC_Initialize(static_cast<v8::Platform*>(platform),
+                  static_cast<v8::Isolate*>(isolate));
 #endif  // PDF_ENABLE_XFA
 #endif  // PDF_ENABLE_V8
 }
@@ -34,7 +35,7 @@ void IJS_Runtime::Initialize(unsigned int slot, void* isolate, void* platform) {
 // static
 void IJS_Runtime::Destroy() {
 #ifdef PDF_ENABLE_V8
-#ifdef PDF_ENABL_XFA
+#ifdef PDF_ENABLE_XFA
   FXGC_Release();
 #endif  // PDF_ENABLE_XFA
   FXJS_Release();

@@ -35,6 +35,7 @@
 #include "rtc_base/async_invoker.h"
 #include "rtc_base/constructor_magic.h"
 #include "rtc_base/ref_counted_object.h"
+#include "rtc_base/callback_list.h"
 #include "rtc_base/third_party/sigslot/sigslot.h"
 
 namespace rtc {
@@ -101,7 +102,7 @@ class JsepTransportController : public sigslot::has_slots<> {
     RtcEventLog* event_log = nullptr;
 
     // Factory for SCTP transports.
-    cricket::SctpTransportInternalFactory* sctp_factory = nullptr;
+    SctpTransportFactoryInterface* sctp_factory = nullptr;
   };
 
   // The ICE related events are signaled on the |signaling_thread|.
@@ -197,10 +198,11 @@ class JsepTransportController : public sigslot::has_slots<> {
   // Else if all completed => completed,
   // Else if all connected => connected,
   // Else => connecting
-  sigslot::signal1<cricket::IceConnectionState> SignalIceConnectionState;
+  CallbackList<cricket::IceConnectionState> SignalIceConnectionState;
 
   sigslot::signal1<PeerConnectionInterface::PeerConnectionState>
       SignalConnectionState;
+
   sigslot::signal1<PeerConnectionInterface::IceConnectionState>
       SignalStandardizedIceConnectionState;
 
@@ -246,9 +248,7 @@ class JsepTransportController : public sigslot::has_slots<> {
       const cricket::ContentInfo& content_info,
       const cricket::TransportInfo& transport_info,
       const std::vector<int>& encrypted_extension_ids,
-      int rtp_abs_sendtime_extn_id,
-      absl::optional<std::string> media_alt_protocol,
-      absl::optional<std::string> data_alt_protocol);
+      int rtp_abs_sendtime_extn_id);
 
   absl::optional<std::string> bundled_mid() const {
     absl::optional<std::string> bundled_mid;
@@ -269,12 +269,6 @@ class JsepTransportController : public sigslot::has_slots<> {
       const cricket::SessionDescription* description);
   std::vector<int> GetEncryptedHeaderExtensionIds(
       const cricket::ContentInfo& content_info);
-
-  // Extracts the alt-protocol settings that apply to the bundle group.
-  RTCError GetAltProtocolsForBundle(
-      const cricket::SessionDescription* description,
-      absl::optional<std::string>* media_alt_protocol,
-      absl::optional<std::string>* data_alt_protocol);
 
   int GetRtpAbsSendTimeHeaderExtensionId(
       const cricket::ContentInfo& content_info);
@@ -354,10 +348,6 @@ class JsepTransportController : public sigslot::has_slots<> {
   void OnTransportStateChanged_n(cricket::IceTransportInternal* transport);
   void OnTransportCandidatePairChanged_n(
       const cricket::CandidatePairChangeEvent& event);
-  void OnDataChannelTransportNegotiated_n(
-      cricket::JsepTransport* transport,
-      DataChannelTransportInterface* data_channel_transport);
-
   void UpdateAggregateStates_n();
 
   void OnRtcpPacketReceived_n(rtc::CopyOnWriteBuffer* packet,

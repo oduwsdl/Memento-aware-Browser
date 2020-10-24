@@ -46,6 +46,16 @@ GLOBAL_TYPESCRIPT_DEFINITION_FILES = [
     # Types for W3C FileSystem API
     path.join(ROOT_DIRECTORY_OF_REPOSITORY, 'node_modules', '@types',
               'filesystem', 'index.d.ts'),
+    # Global types required for our usage of ESTree (coming from Acorn)
+    path.join(ROOT_DIRECTORY_OF_REPOSITORY, 'node_modules', '@types', 'estree',
+              'index.d.ts'),
+    path.join(ROOT_DIRECTORY_OF_REPOSITORY, 'front_end', 'legacy',
+              'estree-legacy.d.ts'),
+    # CodeMirror types
+    path.join(ROOT_DIRECTORY_OF_REPOSITORY, 'node_modules', '@types',
+              'codemirror', 'index.d.ts'),
+    path.join(ROOT_DIRECTORY_OF_REPOSITORY, 'front_end', 'legacy',
+              'codemirror-legacy.d.ts'),
 ]
 
 
@@ -66,6 +76,7 @@ def main():
     parser.add_argument('-b', '--tsconfig_output_location', required=True)
     parser.add_argument('--test-only', action='store_true')
     parser.add_argument('--verify-lib-check', action='store_true')
+    parser.add_argument('--is_web_worker', action='store_true')
     parser.add_argument('--module', required=False)
     parser.set_defaults(test_only=False,
                         verify_lib_check=False,
@@ -93,9 +104,6 @@ def main():
 
     if (opts.deps is not None):
         tsconfig['references'] = [{'path': src} for src in opts.deps]
-    tsconfig['compilerOptions']['declaration'] = True
-    tsconfig['compilerOptions']['composite'] = True
-    tsconfig['compilerOptions']['sourceMap'] = True
     tsconfig['compilerOptions']['module'] = opts.module
     if (not opts.verify_lib_check):
         tsconfig['compilerOptions']['skipLibCheck'] = True
@@ -103,8 +111,14 @@ def main():
     tsconfig['compilerOptions']['typeRoots'] = opts.test_only and [
         get_relative_path_from_output_directory(TYPES_NODE_MODULES_DIRECTORY)
     ] or []
+    if opts.test_only:
+        tsconfig['compilerOptions']['moduleResolution'] = 'node'
     tsconfig['compilerOptions']['outDir'] = '.'
     tsconfig['compilerOptions']['tsBuildInfoFile'] = tsbuildinfo_name
+    tsconfig['compilerOptions']['lib'] = ['esnext'] + (
+        opts.is_web_worker and ['webworker', 'webworker.iterable']
+        or ['dom', 'dom.iterable'])
+
     with open(tsconfig_output_location, 'w') as generated_tsconfig:
         try:
             json.dump(tsconfig, generated_tsconfig)
@@ -128,41 +142,8 @@ def main():
         print('')
         return 1
 
-    if not opts.test_only and not opts.verify_lib_check:
-        # We are currently still loading devtools from out/<NAME>/resources/inspector
-        # but we generate our sources in out/<NAME>/gen/ (which is the proper location).
-        # For now, copy paste the build output back into resources/inspector to keep
-        # DevTools loading properly
-        copy_all_typescript_sources(sources, path.dirname(tsconfig_output_location))
-
     return 0
 
-
-def copy_all_typescript_sources(sources, output_directory):
-    front_end_output_location = output_directory
-    while path.basename(front_end_output_location) != 'front_end':
-        front_end_output_location = path.dirname(front_end_output_location)
-    for src in sources:
-        if src.endswith('.ts') or src.endswith('_bridge.js'):
-            generated_javascript_location = path.join(output_directory, path.basename(src).replace('.ts', '.js'))
-
-            relative_path_from_generated_front_end_folder = path.relpath(generated_javascript_location, front_end_output_location)
-
-            dest = path.join(RESOURCES_INSPECTOR_PATH, relative_path_from_generated_front_end_folder)
-
-            if path.exists(dest):
-                os.remove(dest)
-            # Make sure that the directory actually exists, otherwise
-            # the copy action will throw an error
-            dest_directory = path.dirname(dest)
-            try:
-                os.makedirs(dest_directory)
-            except OSError as exc:  # Python >2.5
-                if exc.errno == errno.EEXIST and os.path.isdir(dest_directory):
-                    pass
-                else:
-                    raise
-            shutil.copy(generated_javascript_location, dest)
 
 
 if __name__ == '__main__':

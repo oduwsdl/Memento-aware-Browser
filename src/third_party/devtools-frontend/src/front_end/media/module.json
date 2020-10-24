@@ -8,8 +8,7 @@
       "persistence": "closeable",
       "order": 100,
       "className": "Media.MainView",
-      "tags": "media, video",
-      "experiment": "mediaInspector"
+      "tags": "media, video"
     }
   ],
   "dependencies": [
@@ -17,9 +16,9 @@
     "sdk",
     "ui",
     "data_grid",
-    "source_frame"
-  ],
-  "modules": [
+    "source_frame",
+    "perf_ui"
+  ],  "modules": [
     "media.js",
     "media-legacy.js",
     "EventDisplayTable.js",
@@ -28,9 +27,11 @@
     "PlayerListView.js",
     "PlayerMessagesView.js",
     "PlayerPropertiesView.js",
-    "MediaModel.js"
+    "MediaModel.js",
+    "EventTimelineView.js",
+    "TickingFlameChart.js",
+    "TickingFlameChartHelpers.js"
   ],
-  "scripts": [],
   "resources": [
     "eventDisplayTable.css",
     "mediaView.css",

@@ -703,12 +703,6 @@ TEST_P(StorageTextureTests, BindGroupLayoutWithStorageTextureBindingType) {
 
 // Test that read-only storage textures are supported in compute shader.
 TEST_P(StorageTextureTests, ReadonlyStorageTextureInComputeShader) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsD3D12() && IsSpvcParserBeingUsed());
-
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format)) {
             continue;
@@ -743,12 +737,6 @@ TEST_P(StorageTextureTests, ReadonlyStorageTextureInComputeShader) {
 
 // Test that read-only storage textures are supported in vertex shader.
 TEST_P(StorageTextureTests, ReadonlyStorageTextureInVertexShader) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsSpvcParserBeingUsed());
-
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format)) {
             continue;
@@ -789,12 +777,6 @@ TEST_P(StorageTextureTests, ReadonlyStorageTextureInVertexShader) {
 
 // Test that read-only storage textures are supported in fragment shader.
 TEST_P(StorageTextureTests, ReadonlyStorageTextureInFragmentShader) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsSpvcParserBeingUsed());
-
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format)) {
             continue;
@@ -827,12 +809,6 @@ TEST_P(StorageTextureTests, ReadonlyStorageTextureInFragmentShader) {
 
 // Test that write-only storage textures are supported in compute shader.
 TEST_P(StorageTextureTests, WriteonlyStorageTextureInComputeShader) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsD3D12() && IsSpvcParserBeingUsed());
-
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format)) {
             continue;
@@ -860,12 +836,6 @@ TEST_P(StorageTextureTests, WriteonlyStorageTextureInComputeShader) {
 // Test that reading from one read-only storage texture then writing into another write-only storage
 // texture in one dispatch are supported in compute shader.
 TEST_P(StorageTextureTests, ReadWriteDifferentStorageTextureInOneDispatchInComputeShader) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsD3D12() && IsSpvcParserBeingUsed());
-
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format)) {
             continue;
@@ -898,12 +868,6 @@ TEST_P(StorageTextureTests, ReadWriteDifferentStorageTextureInOneDispatchInCompu
 
 // Test that write-only storage textures are supported in fragment shader.
 TEST_P(StorageTextureTests, WriteonlyStorageTextureInFragmentShader) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsD3D12() && IsSpvcParserBeingUsed());
-
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format)) {
             continue;
@@ -931,16 +895,6 @@ TEST_P(StorageTextureTests, WriteonlyStorageTextureInFragmentShader) {
 
 // Verify 2D array read-only storage texture works correctly.
 TEST_P(StorageTextureTests, Readonly2DArrayStorageTexture) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsSpvcParserBeingUsed());
-
-    // TODO(jiawei.shao@intel.com): investigate why copies with multiple texture array layer fail
-    // with swiftshader.
-    DAWN_SKIP_TEST_IF(IsSwiftshader());
-
     constexpr uint32_t kArrayLayerCount = 3u;
 
     constexpr wgpu::TextureFormat kTextureFormat = wgpu::TextureFormat::R32Uint;
@@ -973,16 +927,6 @@ TEST_P(StorageTextureTests, Readonly2DArrayStorageTexture) {
 
 // Verify 2D array write-only storage texture works correctly.
 TEST_P(StorageTextureTests, Writeonly2DArrayStorageTexture) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsD3D12() && IsSpvcParserBeingUsed());
-
-    // TODO(jiawei.shao@intel.com): investigate why copies with multiple texture array layer fail
-    // with swiftshader.
-    DAWN_SKIP_TEST_IF(IsSwiftshader());
-
     constexpr uint32_t kArrayLayerCount = 3u;
 
     constexpr wgpu::TextureFormat kTextureFormat = wgpu::TextureFormat::R32Uint;
@@ -998,6 +942,163 @@ TEST_P(StorageTextureTests, Writeonly2DArrayStorageTexture) {
 
     // Verify the pixel data in the write-only storage texture is expected.
     CheckOutputStorageTexture(writeonlyStorageTexture, kTextureFormat, kArrayLayerCount);
+}
+
+// Test that multiple dispatches to increment values by ping-ponging between a read-only storage
+// texture and a write-only storage texture are synchronized in one pass.
+TEST_P(StorageTextureTests, ReadonlyAndWriteonlyStorageTexturePingPong) {
+    constexpr wgpu::TextureFormat kTextureFormat = wgpu::TextureFormat::R32Uint;
+    wgpu::Texture storageTexture1 = CreateTexture(
+        kTextureFormat, wgpu::TextureUsage::Storage | wgpu::TextureUsage::CopySrc, 1u, 1u);
+    wgpu::Texture storageTexture2 = CreateTexture(
+        kTextureFormat, wgpu::TextureUsage::Storage | wgpu::TextureUsage::CopySrc, 1u, 1u);
+
+    wgpu::ShaderModule module =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Compute, R"(
+        #version 450
+        layout(set = 0, binding = 0, r32ui) uniform readonly uimage2D Src;
+        layout(set = 0, binding = 1, r32ui) uniform writeonly uimage2D Dst;
+        void main() {
+            uvec4 srcValue = imageLoad(Src, ivec2(0, 0));
+            ++srcValue.x;
+            imageStore(Dst, ivec2(0, 0), srcValue);
+        }
+    )");
+
+    wgpu::ComputePipelineDescriptor pipelineDesc = {};
+    pipelineDesc.computeStage.module = module;
+    pipelineDesc.computeStage.entryPoint = "main";
+    wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDesc);
+
+    // In bindGroupA storageTexture1 is bound as read-only storage texture and storageTexture2 is
+    // bound as write-only storage texture.
+    wgpu::BindGroup bindGroupA = utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                      {
+                                                          {0, storageTexture1.CreateView()},
+                                                          {1, storageTexture2.CreateView()},
+                                                      });
+
+    // In bindGroupA storageTexture2 is bound as read-only storage texture and storageTexture1 is
+    // bound as write-only storage texture.
+    wgpu::BindGroup bindGroupB = utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                      {
+                                                          {0, storageTexture2.CreateView()},
+                                                          {1, storageTexture1.CreateView()},
+                                                      });
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
+    pass.SetPipeline(pipeline);
+
+    // After the first dispatch the value in storageTexture2 should be 1u.
+    pass.SetBindGroup(0, bindGroupA);
+    pass.Dispatch(1);
+
+    // After the second dispatch the value in storageTexture1 should be 2u;
+    pass.SetBindGroup(0, bindGroupB);
+    pass.Dispatch(1);
+
+    pass.EndPass();
+
+    wgpu::BufferDescriptor bufferDescriptor;
+    bufferDescriptor.size = sizeof(uint32_t);
+    bufferDescriptor.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst;
+    wgpu::Buffer resultBuffer = device.CreateBuffer(&bufferDescriptor);
+
+    wgpu::TextureCopyView textureCopyView;
+    textureCopyView.texture = storageTexture1;
+
+    wgpu::BufferCopyView bufferCopyView = utils::CreateBufferCopyView(resultBuffer, 0, 256, 1);
+    wgpu::Extent3D extent3D = {1, 1, 1};
+    encoder.CopyTextureToBuffer(&textureCopyView, &bufferCopyView, &extent3D);
+
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    constexpr uint32_t kFinalPixelValueInTexture1 = 2u;
+    EXPECT_BUFFER_U32_EQ(kFinalPixelValueInTexture1, resultBuffer, 0);
+}
+
+// Test that multiple dispatches to increment values by ping-ponging between a sampled texture and
+// a write-only storage texture are synchronized in one pass.
+TEST_P(StorageTextureTests, SampledAndWriteonlyStorageTexturePingPong) {
+    constexpr wgpu::TextureFormat kTextureFormat = wgpu::TextureFormat::R32Uint;
+    wgpu::Texture storageTexture1 = CreateTexture(
+        kTextureFormat,
+        wgpu::TextureUsage::Sampled | wgpu::TextureUsage::Storage | wgpu::TextureUsage::CopySrc, 1u,
+        1u);
+    wgpu::Texture storageTexture2 = CreateTexture(
+        kTextureFormat, wgpu::TextureUsage::Sampled | wgpu::TextureUsage::Storage, 1u, 1u);
+    wgpu::SamplerDescriptor samplerDesc;
+    wgpu::Sampler sampler = device.CreateSampler(&samplerDesc);
+
+    wgpu::ShaderModule module =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Compute, R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform sampler mySampler;
+        layout(set = 0, binding = 1) uniform utexture2D Src;
+        layout(set = 0, binding = 2, r32ui) uniform writeonly uimage2D Dst;
+        void main() {
+            uvec4 srcValue = texelFetch(usampler2D(Src, mySampler), ivec2(0, 0), 0);
+            ++srcValue.x;
+            imageStore(Dst, ivec2(0, 0), srcValue);
+        }
+    )");
+
+    wgpu::ComputePipelineDescriptor pipelineDesc = {};
+    pipelineDesc.computeStage.module = module;
+    pipelineDesc.computeStage.entryPoint = "main";
+    wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDesc);
+
+    // In bindGroupA storageTexture1 is bound as read-only storage texture and storageTexture2 is
+    // bound as write-only storage texture.
+    wgpu::BindGroup bindGroupA = utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                      {
+                                                          {0, sampler},
+                                                          {1, storageTexture1.CreateView()},
+                                                          {2, storageTexture2.CreateView()},
+                                                      });
+
+    // In bindGroupA storageTexture2 is bound as read-only storage texture and storageTexture1 is
+    // bound as write-only storage texture.
+    wgpu::BindGroup bindGroupB = utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                      {
+                                                          {0, sampler},
+                                                          {1, storageTexture2.CreateView()},
+                                                          {2, storageTexture1.CreateView()},
+                                                      });
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
+    pass.SetPipeline(pipeline);
+
+    // After the first dispatch the value in storageTexture2 should be 1u.
+    pass.SetBindGroup(0, bindGroupA);
+    pass.Dispatch(1);
+
+    // After the second dispatch the value in storageTexture1 should be 2u;
+    pass.SetBindGroup(0, bindGroupB);
+    pass.Dispatch(1);
+
+    pass.EndPass();
+
+    wgpu::BufferDescriptor bufferDescriptor;
+    bufferDescriptor.size = sizeof(uint32_t);
+    bufferDescriptor.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst;
+    wgpu::Buffer resultBuffer = device.CreateBuffer(&bufferDescriptor);
+
+    wgpu::TextureCopyView textureCopyView;
+    textureCopyView.texture = storageTexture1;
+
+    wgpu::BufferCopyView bufferCopyView = utils::CreateBufferCopyView(resultBuffer, 0, 256, 1);
+    wgpu::Extent3D extent3D = {1, 1, 1};
+    encoder.CopyTextureToBuffer(&textureCopyView, &bufferCopyView, &extent3D);
+
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    constexpr uint32_t kFinalPixelValueInTexture1 = 2u;
+    EXPECT_BUFFER_U32_EQ(kFinalPixelValueInTexture1, resultBuffer, 0);
 }
 
 DAWN_INSTANTIATE_TEST(StorageTextureTests,
@@ -1045,12 +1146,6 @@ class StorageTextureZeroInitTests : public StorageTextureTests {
 // Verify that the texture is correctly cleared to 0 before its first usage as a read-only storage
 // texture in a render pass.
 TEST_P(StorageTextureZeroInitTests, ReadonlyStorageTextureClearsToZeroInRenderPass) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsSpvcParserBeingUsed());
-
     wgpu::Texture readonlyStorageTexture =
         CreateTexture(wgpu::TextureFormat::R32Uint, wgpu::TextureUsage::Storage);
 
@@ -1077,12 +1172,6 @@ TEST_P(StorageTextureZeroInitTests, ReadonlyStorageTextureClearsToZeroInRenderPa
 // Verify that the texture is correctly cleared to 0 before its first usage as a read-only storage
 // texture in a compute pass.
 TEST_P(StorageTextureZeroInitTests, ReadonlyStorageTextureClearsToZeroInComputePass) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsSpvcParserBeingUsed());
-
     wgpu::Texture readonlyStorageTexture =
         CreateTexture(wgpu::TextureFormat::R32Uint, wgpu::TextureUsage::Storage);
 
@@ -1110,12 +1199,6 @@ TEST_P(StorageTextureZeroInitTests, ReadonlyStorageTextureClearsToZeroInComputeP
 // Verify that the texture is correctly cleared to 0 before its first usage as a write-only storage
 // storage texture in a render pass.
 TEST_P(StorageTextureZeroInitTests, WriteonlyStorageTextureClearsToZeroInRenderPass) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsD3D12() && IsSpvcParserBeingUsed());
-
     // Prepare the write-only storage texture.
     constexpr uint32_t kTexelSizeR32Uint = 4u;
     wgpu::Texture writeonlyStorageTexture = CreateTexture(
@@ -1129,12 +1212,6 @@ TEST_P(StorageTextureZeroInitTests, WriteonlyStorageTextureClearsToZeroInRenderP
 // Verify that the texture is correctly cleared to 0 before its first usage as a write-only storage
 // texture in a compute pass.
 TEST_P(StorageTextureZeroInitTests, WriteonlyStorageTextureClearsToZeroInComputePass) {
-    // When we run dawn_end2end_tests with "--use-spvc-parser", extracting the binding type of a
-    // read-only image will always return shaderc_spvc_binding_type_writeonly_storage_texture.
-    // TODO(jiawei.shao@intel.com): enable this test when we specify "--use-spvc-parser" after the
-    // bug in spvc parser is fixed.
-    DAWN_SKIP_TEST_IF(IsD3D12() && IsSpvcParserBeingUsed());
-
     // Prepare the write-only storage texture.
     constexpr uint32_t kTexelSizeR32Uint = 4u;
     wgpu::Texture writeonlyStorageTexture = CreateTexture(

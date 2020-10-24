@@ -5,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkPointPriv.h"
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrDefaultGeoProcFactory.h"
 #include "src/gpu/GrDrawOpTest.h"
 #include "src/gpu/GrGeometryProcessor.h"
@@ -245,25 +244,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        for (const auto& geo : fLines) {
-            string.appendf("Pt0: [%.2f, %.2f], Pt1: [%.2f, %.2f], Width: %.2f, Ival0: %.2f, "
-                           "Ival1 : %.2f, Phase: %.2f\n",
-                           geo.fPtsRot[0].fX, geo.fPtsRot[0].fY,
-                           geo.fPtsRot[1].fX, geo.fPtsRot[1].fY,
-                           geo.fSrcStrokeWidth,
-                           geo.fIntervals[0],
-                           geo.fIntervals[1],
-                           geo.fPhase);
-        }
-        string += fProcessorSet.dumpProcessors();
-        string += INHERITED::dumpInfo();
-        return string;
-    }
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override {
         FixedFunctionFlags flags = FixedFunctionFlags::kNone;
         if (AAMode::kCoverageWithMSAA == fAAMode) {
@@ -341,7 +321,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
 
         DashCap capType = (this->cap() == SkPaint::kRound_Cap) ? kRound_DashCap : kNonRound_DashCap;
 
@@ -380,6 +361,7 @@ private:
                                                                    gp,
                                                                    std::move(fProcessorSet),
                                                                    GrPrimitiveType::kTriangles,
+                                                                   renderPassXferBarriers,
                                                                    pipelineFlags,
                                                                    fStencilSettings);
     }
@@ -565,7 +547,7 @@ private:
                 lineDone = true;
 
                 SkPoint devicePts[2];
-                args.fViewMatrix.mapPoints(devicePts, draw.fPtsRot, 2);
+                args.fSrcRotInv.mapPoints(devicePts, draw.fPtsRot, 2);
                 SkScalar lineLength = SkPoint::Distance(devicePts[0], devicePts[1]);
                 if (hasCap) {
                     lineLength += 2.f * halfDevStroke;
@@ -585,7 +567,7 @@ private:
 
             if (!lineDone) {
                 SkPoint devicePts[2];
-                args.fViewMatrix.mapPoints(devicePts, draw.fPtsRot, 2);
+                args.fSrcRotInv.mapPoints(devicePts, draw.fPtsRot, 2);
                 draw.fLineLength = SkPoint::Distance(devicePts[0], devicePts[1]);
                 if (hasCap) {
                     draw.fLineLength += 2.f * halfDevStroke;
@@ -715,6 +697,24 @@ private:
         return CombineResult::kMerged;
     }
 
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString string;
+        for (const auto& geo : fLines) {
+            string.appendf("Pt0: [%.2f, %.2f], Pt1: [%.2f, %.2f], Width: %.2f, Ival0: %.2f, "
+                           "Ival1 : %.2f, Phase: %.2f\n",
+                           geo.fPtsRot[0].fX, geo.fPtsRot[0].fY,
+                           geo.fPtsRot[1].fX, geo.fPtsRot[1].fY,
+                           geo.fSrcStrokeWidth,
+                           geo.fIntervals[0],
+                           geo.fIntervals[1],
+                           geo.fPhase);
+        }
+        string += fProcessorSet.dumpProcessors();
+        return string;
+    }
+#endif
+
     const SkPMColor4f& color() const { return fColor; }
     const SkMatrix& viewMatrix() const { return fLines[0].fViewMatrix; }
     AAMode aaMode() const { return fAAMode; }
@@ -737,7 +737,7 @@ private:
     GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 std::unique_ptr<GrDrawOp> GrDashOp::MakeDashLineOp(GrRecordingContext* context,
@@ -773,8 +773,7 @@ std::unique_ptr<GrDrawOp> GrDashOp::MakeDashLineOp(GrRecordingContext* context,
     }
 
     // Scale corrections of intervals and stroke from view matrix
-    calc_dash_scaling(&lineData.fParallelScale, &lineData.fPerpendicularScale, viewMatrix,
-                      lineData.fPtsRot);
+    calc_dash_scaling(&lineData.fParallelScale, &lineData.fPerpendicularScale, viewMatrix, pts);
     if (SkScalarNearlyZero(lineData.fParallelScale) ||
         SkScalarNearlyZero(lineData.fPerpendicularScale)) {
         return nullptr;
@@ -855,7 +854,7 @@ private:
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -870,20 +869,24 @@ public:
                               const GrShaderCaps&,
                               GrProcessorKeyBuilder*);
 
-    void setData(const GrGLSLProgramDataManager&, const GrPrimitiveProcessor&,
-                 const CoordTransformRange& transformRange) override;
+    void setData(const GrGLSLProgramDataManager&, const GrPrimitiveProcessor&) override;
 
 private:
     UniformHandle fParamUniform;
     UniformHandle fColorUniform;
+    UniformHandle fLocalMatrixUniform;
+
+    SkMatrix      fLocalMatrix;
     SkPMColor4f   fColor;
     SkScalar      fPrevRadius;
     SkScalar      fPrevCenterX;
     SkScalar      fPrevIntervalLength;
-    typedef GrGLSLGeometryProcessor INHERITED;
+
+    using INHERITED = GrGLSLGeometryProcessor;
 };
 
 GLDashingCircleEffect::GLDashingCircleEffect() {
+    fLocalMatrix = SkMatrix::InvalidMatrix();
     fColor = SK_PMColor4fILLEGAL;
     fPrevRadius = SK_ScalarMin;
     fPrevCenterX = SK_ScalarMin;
@@ -915,14 +918,10 @@ void GLDashingCircleEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 
     // Setup position
     this->writeOutputPosition(vertBuilder, gpArgs, dce.fInPosition.name());
-
-    // emit transforms
-    this->emitTransforms(vertBuilder,
-                         varyingHandler,
-                         uniformHandler,
-                         dce.fInPosition.asShaderVar(),
-                         dce.localMatrix(),
-                         args.fFPCoordTransformHandler);
+    if (dce.usesLocalCoords()) {
+        this->writeLocalCoord(vertBuilder, uniformHandler, gpArgs, dce.fInPosition.asShaderVar(),
+                              dce.localMatrix(), &fLocalMatrixUniform);
+    }
 
     // transforms all points so that we can compare them to our test circle
     fragBuilder->codeAppendf("half xShifted = half(%s.x - floor(%s.x / %s.z) * %s.z);",
@@ -944,14 +943,13 @@ void GLDashingCircleEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 }
 
 void GLDashingCircleEffect::setData(const GrGLSLProgramDataManager& pdman,
-                                    const GrPrimitiveProcessor& processor,
-                                    const CoordTransformRange& transformRange) {
+                                    const GrPrimitiveProcessor& processor) {
     const DashingCircleEffect& dce = processor.cast<DashingCircleEffect>();
     if (dce.color() != fColor) {
         pdman.set4fv(fColorUniform, 1, dce.color().vec());
         fColor = dce.color();
     }
-    this->setTransformDataHelper(dce.localMatrix(), pdman, transformRange);
+    this->setTransform(pdman, fLocalMatrixUniform, dce.localMatrix(), &fLocalMatrix);
 }
 
 void GLDashingCircleEffect::GenKey(const GrGeometryProcessor& gp,
@@ -959,8 +957,9 @@ void GLDashingCircleEffect::GenKey(const GrGeometryProcessor& gp,
                                    GrProcessorKeyBuilder* b) {
     const DashingCircleEffect& dce = gp.cast<DashingCircleEffect>();
     uint32_t key = 0;
-    key |= dce.usesLocalCoords() && dce.localMatrix().hasPerspective() ? 0x1 : 0x0;
+    key |= dce.usesLocalCoords() ? 0x1 : 0x0;
     key |= static_cast<uint32_t>(dce.aaMode()) << 1;
+    key |= ComputeMatrixKey(dce.localMatrix()) << 3;
     b->add32(key);
 }
 
@@ -1065,7 +1064,7 @@ private:
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1080,13 +1079,16 @@ public:
                               const GrShaderCaps&,
                               GrProcessorKeyBuilder*);
 
-    void setData(const GrGLSLProgramDataManager&, const GrPrimitiveProcessor&,
-                 const CoordTransformRange&) override;
+    void setData(const GrGLSLProgramDataManager&, const GrPrimitiveProcessor&) override;
 
 private:
     SkPMColor4f   fColor;
     UniformHandle fColorUniform;
-    typedef GrGLSLGeometryProcessor INHERITED;
+
+    SkMatrix      fLocalMatrix;
+    UniformHandle fLocalMatrixUniform;
+
+    using INHERITED = GrGLSLGeometryProcessor;
 };
 
 GLDashingLineEffect::GLDashingLineEffect() : fColor(SK_PMColor4fILLEGAL) {}
@@ -1118,14 +1120,10 @@ void GLDashingLineEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 
     // Setup position
     this->writeOutputPosition(vertBuilder, gpArgs, de.fInPosition.name());
-
-    // emit transforms
-    this->emitTransforms(vertBuilder,
-                         varyingHandler,
-                         uniformHandler,
-                         de.fInPosition.asShaderVar(),
-                         de.localMatrix(),
-                         args.fFPCoordTransformHandler);
+    if (de.usesLocalCoords()) {
+        this->writeLocalCoord(vertBuilder, uniformHandler, gpArgs, de.fInPosition.asShaderVar(),
+                              de.localMatrix(), &fLocalMatrixUniform);
+    }
 
     // transforms all points so that we can compare them to our test rect
     fragBuilder->codeAppendf("half xShifted = half(%s.x - floor(%s.x / %s.z) * %s.z);",
@@ -1171,14 +1169,13 @@ void GLDashingLineEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 }
 
 void GLDashingLineEffect::setData(const GrGLSLProgramDataManager& pdman,
-                                  const GrPrimitiveProcessor& processor,
-                                  const CoordTransformRange& transformRange) {
+                                  const GrPrimitiveProcessor& processor) {
     const DashingLineEffect& de = processor.cast<DashingLineEffect>();
     if (de.color() != fColor) {
         pdman.set4fv(fColorUniform, 1, de.color().vec());
         fColor = de.color();
     }
-    this->setTransformDataHelper(de.localMatrix(), pdman, transformRange);
+    this->setTransform(pdman, fLocalMatrixUniform, de.localMatrix(), &fLocalMatrix);
 }
 
 void GLDashingLineEffect::GenKey(const GrGeometryProcessor& gp,
@@ -1186,8 +1183,9 @@ void GLDashingLineEffect::GenKey(const GrGeometryProcessor& gp,
                                  GrProcessorKeyBuilder* b) {
     const DashingLineEffect& de = gp.cast<DashingLineEffect>();
     uint32_t key = 0;
-    key |= de.usesLocalCoords() && de.localMatrix().hasPerspective() ? 0x1 : 0x0;
-    key |= static_cast<int>(de.aaMode()) << 8;
+    key |= de.usesLocalCoords() ? 0x1 : 0x0;
+    key |= static_cast<int>(de.aaMode()) << 1;
+    key |= ComputeMatrixKey(de.localMatrix()) << 3;
     b->add32(key);
 }
 

@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/core/html/forms/input_type_view.h"
 
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
@@ -37,6 +38,10 @@
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 
 namespace blink {
+
+void InputTypeView::WillBeDestroyed() {
+  will_be_destroyed_ = true;
+}
 
 InputTypeView::~InputTypeView() = default;
 
@@ -175,6 +180,12 @@ void InputTypeView::SubtreeHasChanged() {
 
 void InputTypeView::ListAttributeTargetChanged() {}
 
+void InputTypeView::CapsLockStateMayHaveChanged() {}
+
+bool InputTypeView::ShouldDrawCapsLockIndicator() const {
+  return false;
+}
+
 void InputTypeView::UpdateClearButtonVisibility() {}
 
 void InputTypeView::UpdatePlaceholderText() {}
@@ -205,10 +216,6 @@ bool InputTypeView::HasBadInput() const {
 void ClickHandlingState::Trace(Visitor* visitor) const {
   visitor->Trace(checked_radio_button);
   EventDispatchHandlingState::Trace(visitor);
-}
-
-String InputTypeView::RawValue() const {
-  return g_empty_string;
 }
 
 }  // namespace blink

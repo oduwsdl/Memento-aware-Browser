@@ -11,10 +11,9 @@
 #include <vector>
 
 #include "base/optional.h"
-#include "base/strings/nullable_string16.h"
 #include "base/strings/string16.h"
+#include "services/device/public/mojom/screen_orientation_lock_types.mojom-shared.h"
 #include "third_party/blink/public/common/common_export.h"
-#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_lock_type.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
@@ -31,7 +30,7 @@ struct BLINK_COMMON_EXPORT Manifest {
   struct BLINK_COMMON_EXPORT ImageResource {
     enum class Purpose {
       ANY = 0,
-      BADGE,
+      MONOCHROME,
       MASKABLE,
       IMAGE_RESOURCE_PURPOSE_LAST = MASKABLE,
     };
@@ -68,8 +67,8 @@ struct BLINK_COMMON_EXPORT Manifest {
     ~ShortcutItem();
 
     base::string16 name;
-    base::NullableString16 short_name;
-    base::NullableString16 description;
+    base::Optional<base::string16> short_name;
+    base::Optional<base::string16> description;
     GURL url;
     std::vector<ImageResource> icons;
   };
@@ -84,9 +83,9 @@ struct BLINK_COMMON_EXPORT Manifest {
     ShareTargetParams();
     ~ShareTargetParams();
 
-    base::NullableString16 title;
-    base::NullableString16 text;
-    base::NullableString16 url;
+    base::Optional<base::string16> title;
+    base::Optional<base::string16> text;
+    base::Optional<base::string16> url;
     std::vector<FileFilter> files;
   };
 
@@ -140,7 +139,7 @@ struct BLINK_COMMON_EXPORT Manifest {
     // The platform on which the application can be found. This can be any
     // string, and is interpreted by the consumer of the object. Empty if the
     // parsing failed.
-    base::NullableString16 platform;
+    base::Optional<base::string16> platform;
 
     // URL at which the application can be found. One of |url| and |id| must be
     // present. Empty if the parsing failed or the field was not present.
@@ -149,7 +148,7 @@ struct BLINK_COMMON_EXPORT Manifest {
     // An id which is used to represent the application on the platform. One of
     // |url| and |id| must be present. Empty if the parsing failed or the field
     // was not present.
-    base::NullableString16 id;
+    base::Optional<base::string16> id;
   };
 
   Manifest();
@@ -161,21 +160,26 @@ struct BLINK_COMMON_EXPORT Manifest {
   bool IsEmpty() const;
 
   // Null if the parsing failed or the field was not present.
-  base::NullableString16 name;
+  base::Optional<base::string16> name;
 
   // Null if the parsing failed or the field was not present.
-  base::NullableString16 short_name;
+  base::Optional<base::string16> short_name;
 
   // Empty if the parsing failed or the field was not present.
   GURL start_url;
 
   // Set to DisplayMode::kUndefined if the parsing failed or the field was not
   // present.
-  blink::mojom::DisplayMode display;
+  blink::mojom::DisplayMode display = blink::mojom::DisplayMode::kUndefined;
 
-  // Set to blink::WebScreenOrientationLockDefault if the parsing failed or the
-  // field was not present.
-  blink::WebScreenOrientationLockType orientation;
+  // Empty if the parsing failed, the field was not present, or all the
+  // values inside the JSON array were invalid.
+  std::vector<blink::mojom::DisplayMode> display_override;
+
+  // Set to device::mojom::ScreenOrientationLockType::DEFAULT if the parsing
+  // failed or the field was not present.
+  device::mojom::ScreenOrientationLockType orientation =
+      device::mojom::ScreenOrientationLockType::DEFAULT;
 
   // Empty if the parsing failed, the field was not present, or all the
   // icons inside the JSON array were invalid.
@@ -209,7 +213,7 @@ struct BLINK_COMMON_EXPORT Manifest {
   // A boolean that is used as a hint for the user agent to say that related
   // applications should be preferred over the web application. False if missing
   // or there is a parsing failure.
-  bool prefer_related_applications;
+  bool prefer_related_applications = false;
 
   // Null if field is not present or parsing failed.
   base::Optional<SkColor> theme_color;
@@ -220,7 +224,7 @@ struct BLINK_COMMON_EXPORT Manifest {
   // This is a proprietary extension of the web Manifest, double-check that it
   // is okay to use this entry.
   // Null if parsing failed or the field was not present.
-  base::NullableString16 gcm_sender_id;
+  base::Optional<base::string16> gcm_sender_id;
 
   // Empty if the parsing failed. Otherwise defaults to the start URL (or
   // document URL if start URL isn't present) with filename, query, and fragment

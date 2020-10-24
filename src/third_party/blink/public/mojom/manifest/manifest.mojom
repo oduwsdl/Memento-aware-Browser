@@ -24,6 +24,8 @@ struct Manifest {
 
   DisplayMode display;
 
+  array<DisplayMode> display_override;
+
   device.mojom.ScreenOrientationLockType orientation;
 
   array<ManifestImageResource> icons;
@@ -87,7 +89,7 @@ struct ManifestShortcutItem {
 struct ManifestImageResource {
   enum Purpose {
     ANY = 0,
-    BADGE,
+    MONOCHROME,
     MASKABLE,
   };
 
@@ -184,7 +186,7 @@ struct ManifestShareTarget {
 struct ManifestFileHandler {
   // The URL that will be opened when the file handler is invoked.
   url.mojom.Url action;
-  mojo_base.mojom.String16? name;
+  mojo_base.mojom.String16 name;
   // A mapping of a MIME types to a corresponding list of file extensions.
   map<mojo_base.mojom.String16, array<mojo_base.mojom.String16>> accept;
 };

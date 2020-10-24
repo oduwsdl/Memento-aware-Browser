@@ -248,6 +248,7 @@ export const enum OperatorCode {
   atomic_notify = 0xfe00,
   i32_atomic_wait = 0xfe01,
   i64_atomic_wait = 0xfe02,
+  atomic_fence = 0xfe03,
   i32_atomic_load = 0xfe10,
   i64_atomic_load = 0xfe11,
   i32_atomic_load8_u = 0xfe12,
@@ -1029,10 +1030,10 @@ export const OperatorCodeNames = [
 });
 
 [
-  "atomic.notify",
-  "i32.atomic.wait",
-  "i64.atomic.wait",
-  undefined,
+  "memory.atomic.notify",
+  "memory.atomic.wait32",
+  "memory.atomic.wait64",
+  "atomic.fence",
   undefined,
   undefined,
   undefined,
@@ -1147,6 +1148,10 @@ export const enum NameType {
   Module = 0,
   Function = 1,
   Local = 2,
+  Type = 4,
+  Table = 5,
+  Memory = 6,
+  Global = 7,
 }
 export const enum BinaryReaderState {
   ERROR = -1,
@@ -1286,6 +1291,18 @@ export interface ILocalName {
 }
 export interface ILocalNameEntry extends INameEntry {
   funcs: ILocalName[];
+}
+export interface ITypeNameEntry extends INameEntry {
+  names: INaming[];
+}
+export interface ITableNameEntry extends INameEntry {
+  names: INaming[];
+}
+export interface IMemoryNameEntry extends INameEntry {
+  names: INaming[];
+}
+export interface IGlobalNameEntry extends INameEntry {
+  names: INaming[];
 }
 export interface ILinkingEntry {
   type: LinkingType;
@@ -1604,6 +1621,9 @@ export class BinaryReader {
     this._pos += length;
     return new Uint8Array(result); // making a clone of the data
   }
+  private skipBytes(length: number) {
+    this._pos += length;
+  }
   private hasStringBytes(): boolean {
     if (!this.hasVarIntBytes()) return false;
     var pos = this._pos;
@@ -1793,32 +1813,43 @@ export class BinaryReader {
   }
   private readElementEntryBody(): boolean {
     let funcType = Type.unspecified;
+    const pos = this._pos;
     if (
       this._segmentFlags &
       (SegmentFlags.IsPassive | SegmentFlags.HasTableIndex)
     ) {
+      if (!this.hasMoreBytes()) return false;
       funcType = this.readVarInt7();
     }
-    if (!this.hasVarIntBytes()) return false;
-    const pos = this._pos;
-    const numElemements = this.readVarUint32();
-    if (!this.hasBytes(numElemements)) {
-      // Shall have at least the numElemements amount of bytes.
+    if (!this.hasVarIntBytes()) {
       this._pos = pos;
       return false;
     }
+    const numElemements = this.readVarUint32();
     const elements = new Uint32Array(numElemements);
     for (let i = 0; i < numElemements; i++) {
       if (this._segmentFlags & SegmentFlags.FunctionsAsElements) {
+        if (!this.hasMoreBytes()) {
+          this._pos = pos;
+          return false;
+        }
         // Read initializer expression, which must either be null ref or func ref
         let operator = this.readUint8();
         if (operator == OperatorCode.ref_null) {
           elements[i] = NULL_FUNCTION_INDEX;
         } else if (operator == OperatorCode.ref_func) {
+          if (!this.hasVarIntBytes()) {
+            this._pos = pos;
+            return false;
+          }
           elements[i] = this.readVarInt32();
         } else {
           this.error = new Error("Invalid initializer expression for element");
           return true;
+        }
+        if (!this.hasMoreBytes()) {
+          this._pos = pos;
+          return false;
         }
         operator = this.readUint8();
         if (operator != OperatorCode.end) {
@@ -1915,17 +1946,28 @@ export class BinaryReader {
       this._pos = pos;
       return false;
     }
-    var result: IModuleNameEntry | IFunctionNameEntry | ILocalNameEntry;
+    var result:
+      | IModuleNameEntry
+      | IFunctionNameEntry
+      | ILocalNameEntry
+      | ITypeNameEntry
+      | ITableNameEntry
+      | IMemoryNameEntry
+      | IGlobalNameEntry;
     switch (type) {
       case NameType.Module:
         result = {
-          type: type,
+          type,
           moduleName: this.readStringBytes(),
         };
         break;
       case NameType.Function:
+      case NameType.Type:
+      case NameType.Table:
+      case NameType.Memory:
+      case NameType.Global:
         result = {
-          type: type,
+          type,
           names: this.readNameMap(),
         };
         break;
@@ -1940,14 +1982,15 @@ export class BinaryReader {
           });
         }
         result = {
-          type: type,
+          type,
           funcs: funcs,
         };
         break;
       default:
-        this.error = new Error(`Bad name entry type: ${type}`);
-        this.state = BinaryReaderState.ERROR;
-        return true;
+        // Skip this unknown name subsection (as per specification,
+        // custom section errors shouldn't cause Wasm parsing to fail).
+        this.skipBytes(payloadLength);
+        return this.read();
     }
     this.state = BinaryReaderState.NAME_SECTION_ENTRY;
     this.result = result;
@@ -2061,7 +2104,10 @@ export class BinaryReader {
   }
 
   private readCodeOperator_0xfc(): boolean {
-    var code = this._data[this._pos++] | 0xfc00;
+    if (!this.hasVarIntBytes()) {
+      return false;
+    }
+    var code = this.readVarUint32() | 0xfc00;
     var reserved, segmentIndex, destinationIndex, tableIndex;
     switch (code) {
       case OperatorCode.i32_trunc_sat_f32_s:
@@ -2131,6 +2177,9 @@ export class BinaryReader {
     const MAX_CODE_OPERATOR_0XFD_SIZE = 17;
     var pos = this._pos;
     if (!this._eof && pos + MAX_CODE_OPERATOR_0XFD_SIZE > this._length) {
+      return false;
+    }
+    if (!this.hasVarIntBytes()) {
       return false;
     }
     var code = this.readVarUint32() | 0xfd00;
@@ -2319,7 +2368,10 @@ export class BinaryReader {
     if (!this._eof && pos + MAX_CODE_OPERATOR_0XFE_SIZE > this._length) {
       return false;
     }
-    var code = this._data[this._pos++] | 0xfe00;
+    if (!this.hasVarIntBytes()) {
+      return false;
+    }
+    var code = this.readVarUint32() | 0xfe00;
     var memoryAddress;
     switch (code) {
       case OperatorCode.atomic_notify:
@@ -2390,6 +2442,15 @@ export class BinaryReader {
       case OperatorCode.i64_atomic_rmw32_cmpxchg_u:
         memoryAddress = this.readMemoryImmediate();
         break;
+      case OperatorCode.atomic_fence: {
+        var consistency_model = this.readUint8();
+        if (consistency_model != 0) {
+          this.error = new Error("atomic.fence consistency model must be 0");
+          this.state = BinaryReaderState.ERROR;
+          return true;
+        }
+        break;
+      }
       default:
         this.error = new Error(`Unknown operator: ${code}`);
         this.state = BinaryReaderState.ERROR;

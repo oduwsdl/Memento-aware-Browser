@@ -10,8 +10,8 @@
 
 #include "absl/strings/str_cat.h"
 #include "cast/common/public/service_info.h"
+#include "cast/receiver/channel/static_credentials.h"
 #include "cast/standalone_receiver/cast_agent.h"
-#include "cast/standalone_receiver/static_credentials.h"
 #include "cast/streaming/ssrc.h"
 #include "discovery/common/config.h"
 #include "discovery/common/reporting_client.h"
@@ -52,7 +52,10 @@ struct DiscoveryState {
 
 ErrorOr<std::unique_ptr<DiscoveryState>> StartDiscovery(
     TaskRunner* task_runner,
-    const InterfaceInfo& interface) {
+    const InterfaceInfo& interface,
+    const std::string& friendly_name,
+    const std::string& model_name) {
+  TRACE_DEFAULT_SCOPED(TraceCategory::kStandaloneReceiver);
   discovery::Config config;
 
   discovery::Config::NetworkInfo::AddressFamilies supported_address_families =
@@ -76,14 +79,16 @@ ErrorOr<std::unique_ptr<DiscoveryState>> StartDiscovery(
   ServiceInfo info;
   info.port = kDefaultCastPort;
 
-  OSP_CHECK(std::any_of(interface.hardware_address.begin(),
-                        interface.hardware_address.end(),
-                        [](int e) { return e > 0; }));
+  if (std::all_of(interface.hardware_address.begin(),
+                  interface.hardware_address.end(),
+                  [](int e) { return e == 0; })) {
+    OSP_LOG_WARN
+        << "Hardware address is empty. Either you are on a loopback device "
+           "or getting the network interface information failed somehow.";
+  }
   info.unique_id = HexEncode(interface.hardware_address);
-
-  // TODO(jophba): add command line arguments to set these fields.
-  info.model_name = "cast_standalone_receiver";
-  info.friendly_name = "Cast Standalone Receiver";
+  info.friendly_name = friendly_name;
+  info.model_name = model_name;
 
   state->publisher =
       std::make_unique<discovery::DnsSdServicePublisher<ServiceInfo>>(
@@ -96,21 +101,18 @@ ErrorOr<std::unique_ptr<DiscoveryState>> StartDiscovery(
   return state;
 }
 
-void StartCastAgent(TaskRunnerImpl* task_runner,
-                    InterfaceInfo interface,
-                    GeneratedCredentials* creds) {
-  CastAgent agent(task_runner, interface, creds->provider.get(),
-                  creds->tls_credentials);
-  const auto error = agent.Start();
+std::unique_ptr<CastAgent> StartCastAgent(TaskRunnerImpl* task_runner,
+                                          const InterfaceInfo& interface,
+                                          GeneratedCredentials* creds) {
+  TRACE_DEFAULT_SCOPED(TraceCategory::kStandaloneReceiver);
+  auto agent = std::make_unique<CastAgent>(
+      task_runner, interface, creds->provider.get(), creds->tls_credentials);
+  const auto error = agent->Start();
   if (!error.ok()) {
     OSP_LOG_ERROR << "Error occurred while starting agent: " << error;
-    return;
+    agent.reset();
   }
-
-  // Run the event loop until an exit is requested (e.g., the video player GUI
-  // window is closed, a SIGINT or SIGTERM is received, or whatever other
-  // appropriate user indication that shutdown is requested).
-  task_runner->RunUntilSignaled();
+  return agent;
 }
 
 void LogUsage(const char* argv0) {
@@ -121,8 +123,30 @@ usage: )" << argv0
 options:
     interface
         Specifies the network interface to bind to. The interface is
-        looked up from the system interface registry. This argument is
-        mandatory, as it must be known for publishing discovery.
+        looked up from the system interface registry.
+        Mandatory, as it must be known for publishing discovery.
+
+    -p, --private-key=path-to-key: Path to OpenSSL-generated private key to be
+                    used for TLS authentication. If a private key is not
+                    provided, a randomly generated one will be used for this
+                    session.
+
+    -s, --developer-certificate=path-to-cert: Path to PEM file containing a
+                           developer generated server root TLS certificate.
+                           If a root server certificate is not provided, one
+                           will be generated using a randomly generated
+                           private key. Note that if a certificate path is
+                           passed, the private key path is a mandatory field.
+
+    -g, --generate-credentials: Instructs the binary to generate a private key
+                                and self-signed root certificate with the CA
+                                bit set to true, and then exit. The resulting
+                                private key and certificate can then be used as
+                                values for the -p and -s flags.
+
+    -f, --friendly-name: Friendly name to be used for device discovery.
+
+    -m, --model-name: Model name to be used for device discovery.
 
     -t, --tracing: Enable performance tracing logging.
 
@@ -142,60 +166,148 @@ InterfaceInfo GetInterfaceInfoFromName(const char* name) {
       break;
     }
   }
+
+  if (interface_info.name.empty()) {
+    auto error_or_info = GetLoopbackInterfaceForTesting();
+    if (error_or_info.has_value()) {
+      if (error_or_info.value().name == name) {
+        interface_info = std::move(error_or_info.value());
+      }
+    }
+  }
   OSP_CHECK(!interface_info.name.empty()) << "Invalid interface specified.";
   return interface_info;
 }
 
 int RunStandaloneReceiver(int argc, char* argv[]) {
+#if !defined(CAST_ALLOW_DEVELOPER_CERTIFICATE)
+  OSP_LOG_FATAL
+      << "It compiled! However cast_receiver currently only supports using a "
+         "passed-in certificate and private key, and must be built with "
+         "cast_allow_developer_certificate=true set in the GN args to "
+         "actually do anything interesting.";
+  return 1;
+#endif
+
   // A note about modifying command line arguments: consider uniformity
   // between all Open Screen executables. If it is a platform feature
   // being exposed, consider if it applies to the standalone receiver,
   // standalone sender, osp demo, and test_main argument options.
   const struct option kArgumentOptions[] = {
+      {"private-key", required_argument, nullptr, 'p'},
+      {"developer-certificate", required_argument, nullptr, 'd'},
+      {"generate-credentials", no_argument, nullptr, 'g'},
+      {"friendly-name", required_argument, nullptr, 'f'},
+      {"model-name", required_argument, nullptr, 'm'},
       {"tracing", no_argument, nullptr, 't'},
       {"verbose", no_argument, nullptr, 'v'},
       {"help", no_argument, nullptr, 'h'},
+
+      // Discovery is enabled by default, however there are cases where it
+      // needs to be disabled, such as on Mac OS X.
+      {"disable-discovery", no_argument, nullptr, 'x'},
       {nullptr, 0, nullptr, 0}};
 
   bool is_verbose = false;
+  bool discovery_enabled = true;
+  std::string private_key_path;
+  std::string developer_certificate_path;
+  std::string friendly_name = "Cast Standalone Receiver";
+  std::string model_name = "cast_standalone_receiver";
+  bool should_generate_credentials = false;
   std::unique_ptr<openscreen::TextTraceLoggingPlatform> trace_logger;
   int ch = -1;
-  while ((ch = getopt_long(argc, argv, "tvh", kArgumentOptions, nullptr)) !=
-         -1) {
+  while ((ch = getopt_long(argc, argv, "p:d:f:m:gtvhx", kArgumentOptions,
+                           nullptr)) != -1) {
     switch (ch) {
+      case 'p':
+        private_key_path = optarg;
+        break;
+      case 'd':
+        developer_certificate_path = optarg;
+        break;
+      case 'f':
+        friendly_name = optarg;
+        break;
+      case 'm':
+        model_name = optarg;
+        break;
+      case 'g':
+        should_generate_credentials = true;
+        break;
       case 't':
         trace_logger = std::make_unique<openscreen::TextTraceLoggingPlatform>();
         break;
       case 'v':
         is_verbose = true;
         break;
+      case 'x':
+        discovery_enabled = false;
+        break;
       case 'h':
         LogUsage(argv[0]);
         return 1;
     }
   }
-  InterfaceInfo interface_info = GetInterfaceInfoFromName(argv[optind]);
+
   SetLogLevel(is_verbose ? openscreen::LogLevel::kVerbose
                          : openscreen::LogLevel::kInfo);
+
+  // Either -g is required, or both -p and -d.
+  if (should_generate_credentials) {
+    GenerateDeveloperCredentialsToFile();
+    return 0;
+  }
+  if (private_key_path.empty() || developer_certificate_path.empty()) {
+    OSP_LOG_FATAL << "You must either invoke with -g to generate credentials, "
+                     "or provide both a private key path and root certificate "
+                     "using -p and -d";
+    return 1;
+  }
 
   auto* const task_runner = new TaskRunnerImpl(&Clock::now);
   PlatformClientPosix::Create(milliseconds(50), milliseconds(50),
                               std::unique_ptr<TaskRunnerImpl>(task_runner));
 
-  auto discovery_state = StartDiscovery(task_runner, interface_info);
-  OSP_CHECK(discovery_state.is_value()) << "Failed to start discovery.";
+  // Post tasks to kick-off the CastAgent and, if successful, start discovery to
+  // make this standalone receiver visible to senders on the network.
+  std::unique_ptr<DiscoveryState> discovery_state;
+  std::unique_ptr<CastAgent> cast_agent;
+  const char* interface_name = argv[optind];
+  OSP_CHECK(interface_name && strlen(interface_name) > 0)
+      << "No interface name provided.";
 
-  auto creds = GenerateCredentials(
-      absl::StrCat("Standalone Receiver on ", argv[optind]));
-  OSP_CHECK(creds.is_value());
+  std::string device_id =
+      absl::StrCat("Standalone Receiver on ", interface_name);
+  ErrorOr<GeneratedCredentials> creds = GenerateCredentials(
+      device_id, private_key_path, developer_certificate_path);
+  OSP_CHECK(creds.is_value()) << creds.error();
+  task_runner->PostTask(
+      [&, interface = GetInterfaceInfoFromName(interface_name)] {
+        cast_agent = StartCastAgent(task_runner, interface, &(creds.value()));
+        OSP_CHECK(cast_agent) << "Failed to start CastAgent.";
 
-  // Runs until the process is interrupted.  Safe to pass |task_runner| as it
-  // will not be destroyed by ShutDown() until this exits.
-  StartCastAgent(task_runner, interface_info, &(creds.value()));
+        if (discovery_enabled) {
+          auto result =
+              StartDiscovery(task_runner, interface, friendly_name, model_name);
+          OSP_CHECK(result.is_value()) << "Failed to start discovery.";
+          discovery_state = std::move(result.value());
+        }
+      });
 
-  // The task runner must be deleted after all serial delete pointers, such
-  // as the one stored in the discovery state.
-  discovery_state.value().reset();
+  // Run the event loop until an exit is requested (e.g., the video player GUI
+  // window is closed, a SIGINT or SIGTERM is received, or whatever other
+  // appropriate user indication that shutdown is requested).
+  task_runner->RunUntilSignaled();
+
+  // Shutdown the Cast Agent and discovery-related entities. This may cause one
+  // or more tasks to be posted, and so the TaskRunner is spun to give them a
+  // chance to execute.
+  discovery_state.reset();
+  cast_agent.reset();
+  task_runner->PostTask([task_runner] { task_runner->RequestStopSoon(); });
+  task_runner->RunUntilStopped();
+
   PlatformClientPosix::ShutDown();
   return 0;
 }

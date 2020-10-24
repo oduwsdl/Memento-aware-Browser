@@ -7,8 +7,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import jinja2
-from collections import namedtuple
+import logging
 import math
 import os.path
 
@@ -17,13 +18,13 @@ from dashboard.common import utils
 from dashboard.services import issue_tracker_service
 from dashboard.models import histogram
 from dashboard.pinpoint.models import job_state
+from dashboard.pinpoint.models.change import commit as commit_module
+from dashboard.pinpoint.models.change import patch as patch_module
 
 from tracing.value.diagnostics import reserved_infos
 
-
 _INFINITY = u'\u221e'
 _RIGHT_ARROW = u'\u2192'
-
 
 _TEMPLATE_ENV = jinja2.Environment(
     loader=jinja2.FileSystemLoader(
@@ -31,6 +32,44 @@ _TEMPLATE_ENV = jinja2.Environment(
             os.path.dirname(os.path.realpath(__file__)), 'templates')))
 _DIFFERENCES_FOUND_TMPL = _TEMPLATE_ENV.get_template('differences_found.j2')
 _CREATED_TEMPL = _TEMPLATE_ENV.get_template('job_created.j2')
+_MISSING_VALUES_TMPL = _TEMPLATE_ENV.get_template('missing_values.j2')
+
+_LABEL_EXCLUSION_SETS = [
+    {
+        'Pinpoint-Job-Started',
+        'Pinpoint-Job-Completed',
+        'Pinpoint-Job-Failed',
+        'Pinpoint-Job-Pending',
+        'Pinpoint-Job-Cancelled',
+    },
+    {
+        'Pinpoint-Culprit-Found',
+        'Pinpoint-No-Repro',
+        'Pinpoint-Multiple-Culprits',
+        'Pinpoint-Multiple-MissingValues',
+    },
+]
+
+
+def ComputeLabelUpdates(labels):
+  """Builds a set of label updates for known labels applied by Pinpoint."""
+  # Validate that the labels aren't found in the same sets.
+  label_updates = set()
+  for label in labels:
+    found_in_sets = sum(
+        label in label_set for label_set in _LABEL_EXCLUSION_SETS)
+    if found_in_sets > 1:
+      raise ValueError(
+          'label "%s" is found in %s label sets',
+          label,
+          found_in_sets,
+      )
+
+  for label_set in _LABEL_EXCLUSION_SETS:
+    label_updates |= set('-' + l for l in label_set)
+  label_updates -= set('-' + l for l in labels)
+  label_updates |= set(labels)
+  return list(label_updates)
 
 
 class JobUpdateBuilder(object):
@@ -49,6 +88,7 @@ class JobUpdateBuilder(object):
     builder.AddFailure(...)
     issue_update_info = builder.FailureUpdate()
   """
+
   def __init__(self, job):
     self._env = {
         'url': job.url,
@@ -61,7 +101,8 @@ class JobUpdateBuilder(object):
     env = self._env.copy()
     env.update({'pending': pending})
     comment_text = _CREATED_TEMPL.render(**env)
-    return _BugUpdateInfo(comment_text, None, None, None)
+    labels = ComputeLabelUpdates(['Pinpoint-Job-Pending'])
+    return _BugUpdateInfo(comment_text, None, None, labels, None)
 
 
 class DifferencesFoundBugUpdateBuilder(object):
@@ -84,40 +125,80 @@ class DifferencesFoundBugUpdateBuilder(object):
     self._differences = []
     self._examined_count = None
     self._cached_ordered_diffs_by_delta = None
+    self._cached_commits_with_no_values = None
 
   def SetExaminedCount(self, examined_count):
     self._examined_count = examined_count
 
-  def AddDifference(self, commit, values_a, values_b):
+  def AddDifference(self, change, values_a, values_b):
     """Add a difference (a commit where the metric changed significantly).
 
     Args:
-      commit: a Commit.
+      change: a Change.
       values_a: (list) result values for the prior commit.
       values_b: (list) result values for this commit.
     """
-    commit_info = commit.AsDict()
-    self._differences.append(_Difference(commit_info, values_a, values_b))
+    if change.patch:
+      kind = 'patch'
+      commit_dict = {
+          'server': change.patch.server,
+          'change': change.patch.change,
+          'revision': change.patch.revision,
+      }
+    else:
+      kind = 'commit'
+      commit_dict = {
+          'repository': change.last_commit.repository,
+          'git_hash': change.last_commit.git_hash,
+      }
+
+    # Store just the commit repository + hash to ensure we don't attempt to
+    # serialize too much data into datastore.  See https://crbug.com/1140309.
+    self._differences.append(_Difference(kind, commit_dict, values_a, values_b))
     self._cached_ordered_diffs_by_delta = None
 
   def BuildUpdate(self, tags, url):
     """Return _BugUpdateInfo for the differences."""
     if len(self._differences) == 0:
       raise ValueError("BuildUpdate called with 0 differences")
+    differences = self._OrderedDifferencesByDelta()
+    missing_values = self._DifferencesWithNoValues()
     owner, cc_list, notify_why_text = self._PeopleToNotify()
-    comment_text = _DIFFERENCES_FOUND_TMPL.render(
-        differences=self._OrderedDifferencesByDelta(),
-        url=url,
-        metric=self._metric,
-        notify_why_text=notify_why_text,
-        doc_links=_FormatDocumentationUrls(tags),
-        examined_count=self._examined_count,
-    )
-    labels = [
-        'Pinpoint-Culprit-Found'
-        if len(self._differences) == 1 else 'Pinpoint-Multiple-Culprits'
-    ]
-    return _BugUpdateInfo(comment_text, owner, cc_list, labels)
+    status = None
+
+    # Here we're only going to consider the cases where we find differences
+    # that have non-empty values, to consider whether we've found no, a single,
+    # or multiple culprits.
+    if differences:
+      labels = [
+          'Pinpoint-Culprit-Found'
+          if len(differences) == 1 else 'Pinpoint-Multiple-Culprits',
+          'Pinpoint-Job-Completed',
+      ]
+      if missing_values:
+        labels.append('Pinpoint-Multiple-MissingValues')
+      labels = ComputeLabelUpdates(labels)
+      status = 'Assigned'
+      comment_text = _DIFFERENCES_FOUND_TMPL.render(
+          differences=differences,
+          url=url,
+          metric=self._metric,
+          notify_why_text=notify_why_text,
+          doc_links=_FormatDocumentationUrls(tags),
+          examined_count=self._examined_count,
+          missing_values=missing_values,
+      )
+    elif missing_values:
+      status = 'Assigned'
+      labels = ComputeLabelUpdates(
+          ['Pinpoint-Multiple-MissingValues', 'Pinpoint-Job-Completed'])
+      comment_text = _MISSING_VALUES_TMPL.render(
+          missing_values=missing_values,
+          metric=self._metric,
+          url=url,
+      )
+
+    return _BugUpdateInfo(comment_text, owner, cc_list, labels, status)
 
   def GenerateCommitCacheKey(self):
     commit_cache_key = None
@@ -131,21 +212,26 @@ class DifferencesFoundBugUpdateBuilder(object):
     if self._cached_ordered_diffs_by_delta is not None:
       return self._cached_ordered_diffs_by_delta
 
-    # First, the diffs with deltas.
     diffs_with_deltas = [(diff.MeanDelta(), diff)
                          for diff in self._differences
                          if diff.values_a and diff.values_b]
-    # Followed by the remaining diffs (those with "No values" on either side),
-    # in the original order.
-    no_values_diffs = [diff for diff in self._differences
-                       if not (diff.values_a and diff.values_b)]
     ordered_diffs = [
         diff for _, diff in sorted(
             diffs_with_deltas, key=lambda i: abs(i[0]), reverse=True)
-    ] + no_values_diffs
-
+    ]
     self._cached_ordered_diffs_by_delta = ordered_diffs
     return ordered_diffs
+
+  def _DifferencesWithNoValues(self):
+    """Return the list of differences where one side has no values."""
+    if self._cached_commits_with_no_values is not None:
+      return self._cached_commits_with_no_values
+
+    self._cached_commits_with_no_values = [
+        diff for diff in self._differences
+        if not (diff.values_a and diff.values_b)
+    ]
+    return self._cached_commits_with_no_values
 
   def _PeopleToNotify(self):
     """Return the people to notify for these differences.
@@ -157,7 +243,7 @@ class DifferencesFoundBugUpdateBuilder(object):
     """
     ordered_commits = [
         diff.commit_info for diff in self._OrderedDifferencesByDelta()
-    ]
+    ] + [diff.commit_info for diff in self._DifferencesWithNoValues()]
 
     # CC the folks in the top N commits.  N is scaled by the number of commits
     # (fewer than 10 means N=1, fewer than 100 means N=2, etc.)
@@ -182,10 +268,35 @@ class DifferencesFoundBugUpdateBuilder(object):
 
 class _Difference(object):
 
-  def __init__(self, commit_info, values_a, values_b):
-    self.commit_info = commit_info
+  # Define this as a class attribute so that accessing it never fails with
+  # AttributeError, even if working with a serialized version of _Difference
+  # that didn't define them.
+  _cached_commit = None
+
+  def __init__(self, commit_kind, commit_dict, values_a, values_b):
+    self.commit_kind = commit_kind
+    self.commit_dict = commit_dict
     self.values_a = values_a
     self.values_b = values_b
+
+  @property
+  def commit_info(self):
+    if 'commit_info' in self.__dict__:
+      # Older versions of this object had this value serialized, so just use
+      # that.
+      # TODO: Delete this code path once we're sure all old deferred calls using
+      # this have expired.
+      return self.__dict__['commit_info']
+    if self._cached_commit is None:
+      if self.commit_kind == 'patch':
+        commit = patch_module.GerritPatch(**self.commit_dict)
+      elif self.commit_kind == 'commit':
+        commit = commit_module.Commit(**self.commit_dict)
+      else:
+        assert False, "Unexpectied commit_kind: " + str(self.commit_kind)
+      self._cached_commit = commit.AsDict()
+
+    return self._cached_commit
 
   def MeanDelta(self):
     return job_state.Mean(self.values_b) - job_state.Mean(self.values_a)
@@ -216,8 +327,13 @@ class _Difference(object):
 
 
 class _BugUpdateInfo(
-    namedtuple('_BugUpdateInfo',
-               ['comment_text', 'owner', 'cc_list', 'labels'])):
+    collections.namedtuple('_BugUpdateInfo', [
+        'comment_text',
+        'owner',
+        'cc_list',
+        'labels',
+        'status',
+    ])):
   """An update to post to a bug.
 
   This is the return type of DifferencesFoundBugUpdateBuilder.BuildUpdate.
@@ -236,13 +352,13 @@ def _ComputePostMergeDetails(issue_tracker, commit_cache_key, cc_list):
 
 def _GetBugStatus(issue_tracker, bug_id, project='chromium'):
   if not bug_id:
-    return None
+    return None, None
 
   issue_data = issue_tracker.GetIssue(bug_id, project=project)
   if not issue_data:
-    return None
+    return None, None
 
-  return issue_data.get('status')
+  return issue_data.get('owner'), issue_data.get('status')
 
 
 def _FormatDocumentationUrls(tags):
@@ -276,10 +392,16 @@ def UpdatePostAndMergeDeferred(bug_update_builder, bug_id, tags, url, project):
   bug_update = bug_update_builder.BuildUpdate(tags, url)
   issue_tracker = issue_tracker_service.IssueTrackerService(
       utils.ServiceAccountHttp())
-  merge_details, cc_list = _ComputePostMergeDetails(issue_tracker,
-                                                    commit_cache_key,
-                                                    bug_update.cc_list)
-  current_bug_status = _GetBugStatus(issue_tracker, bug_id, project=project)
+  merge_details, cc_list = _ComputePostMergeDetails(
+      issue_tracker,
+      commit_cache_key,
+      bug_update.cc_list,
+  )
+  owner, current_bug_status = _GetBugStatus(
+      issue_tracker,
+      bug_id,
+      project=project,
+  )
   if not current_bug_status:
     return
 
@@ -288,8 +410,19 @@ def UpdatePostAndMergeDeferred(bug_update_builder, bug_id, tags, url, project):
 
   if current_bug_status in ['Untriaged', 'Unconfirmed', 'Available']:
     # Set the bug status and owner if this bug is opened and unowned.
-    status = 'Assigned'
+    status = bug_update.status
     bug_owner = bug_update.owner
+  elif current_bug_status == 'Assigned':
+    # Always set the owner, and move the current owner to CC.
+    bug_owner = bug_update.owner
+    if owner:
+      logging.debug(
+          'Current owner for issue %s:%s = %s',
+          project,
+          bug_id,
+          owner,
+      )
+      cc_list.add(owner.get('email', ''))
 
   issue_tracker.AddBugComment(
       bug_id,

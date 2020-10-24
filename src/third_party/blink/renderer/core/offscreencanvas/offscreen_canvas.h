@@ -7,6 +7,8 @@
 
 #include <memory>
 
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
@@ -42,7 +44,6 @@ class CORE_EXPORT OffscreenCanvas final
       public CanvasRenderingContextHost,
       public CanvasResourceDispatcherClient {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(OffscreenCanvas);
   USING_PRE_FINALIZER(OffscreenCanvas, Dispose);
 
  public:
@@ -232,6 +233,9 @@ class CORE_EXPORT OffscreenCanvas final
       Vector<std::unique_ptr<CanvasRenderingContextFactory>>;
   static ContextFactoryVector& RenderingContextFactories();
   static CanvasRenderingContextFactory* GetRenderingContextFactory(int);
+
+  void RecordIdentifiabilityMetric(const blink::IdentifiableSurface& surface,
+                                   const IdentifiableToken& token) const;
 
   Member<CanvasRenderingContext> context_;
   WeakMember<ExecutionContext> execution_context_;

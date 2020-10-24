@@ -207,6 +207,14 @@ void CountFiringEventListeners(const Event& event,
       {event_type_names::kPointerover, WebFeature::kPointerOverOutFired},
       {event_type_names::kPointerout, WebFeature::kPointerOverOutFired},
       {event_type_names::kSearch, WebFeature::kSearchEventFired},
+      {event_type_names::kWebkitprerenderstart,
+       WebFeature::kWebkitPrerenderStartEventFired},
+      {event_type_names::kWebkitprerenderstop,
+       WebFeature::kWebkitPrerenderStopEventFired},
+      {event_type_names::kWebkitprerenderload,
+       WebFeature::kWebkitPrerenderLoadEventFired},
+      {event_type_names::kWebkitprerenderdomcontentloaded,
+       WebFeature::kWebkitPrerenderDOMContentLoadedEventFired},
   };
   for (const auto& counted_event : counted_events) {
     if (CheckTypeThenUseCount(event, counted_event.event_type,
@@ -537,14 +545,17 @@ void EventTarget::AddedEventListener(
     RegisteredEventListener& registered_listener) {
   if (const LocalDOMWindow* executing_window = ExecutingWindow()) {
     if (Document* document = executing_window->document()) {
-      if (event_type == event_type_names::kAuxclick)
+      if (event_type == event_type_names::kAuxclick) {
         UseCounter::Count(*document, WebFeature::kAuxclickAddListenerCount);
-      else if (event_type == event_type_names::kAppinstalled)
+      } else if (event_type == event_type_names::kAppinstalled) {
         UseCounter::Count(*document, WebFeature::kAppInstalledEventAddListener);
-      else if (event_util::IsPointerEventType(event_type))
+      } else if (event_util::IsPointerEventType(event_type)) {
         UseCounter::Count(*document, WebFeature::kPointerEventAddListenerCount);
-      else if (event_type == event_type_names::kSlotchange)
+      } else if (event_type == event_type_names::kSlotchange) {
         UseCounter::Count(*document, WebFeature::kSlotChangeEventAddListener);
+      } else if (event_type == event_type_names::kBeforematch) {
+        UseCounter::Count(*document, WebFeature::kBeforematchHandlerRegistered);
+      }
     }
   }
 
@@ -875,6 +886,11 @@ bool EventTarget::FireEventListeners(Event& event,
   bool fired_listener = false;
 
   while (i < size) {
+    // If stopImmediatePropagation has been called, we just break out
+    // immediately, without handling any more events on this target.
+    if (event.ImmediatePropagationStopped())
+      break;
+
     RegisteredEventListener registered_listener = entry[i];
 
     // Move the iterator past this event listener. This must match
@@ -892,11 +908,6 @@ bool EventTarget::FireEventListeners(Event& event,
     if (registered_listener.Once())
       removeEventListener(event.type(), listener,
                           registered_listener.Capture());
-
-    // If stopImmediatePropagation has been called, we just break out
-    // immediately, without handling any more events on this target.
-    if (event.ImmediatePropagationStopped())
-      break;
 
     event.SetHandlingPassive(EventPassiveMode(registered_listener));
 
@@ -941,6 +952,12 @@ EventListenerVector* EventTarget::GetEventListeners(
   if (!data)
     return nullptr;
   return data->event_listener_map.Find(event_type);
+}
+
+int EventTarget::NumberOfEventListeners(const AtomicString& event_type) const {
+  EventListenerVector* listeners =
+      const_cast<EventTarget*>(this)->GetEventListeners(event_type);
+  return listeners ? listeners->size() : 0;
 }
 
 Vector<AtomicString> EventTarget::EventTypes() {

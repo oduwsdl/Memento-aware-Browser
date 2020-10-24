@@ -36,15 +36,6 @@
 
 #include <cstring>
 
-class vk::CommandBuffer::Command
-{
-public:
-	// FIXME (b/119421344): change the commandBuffer argument to a CommandBuffer state
-	virtual void play(vk::CommandBuffer::ExecutionState &executionState) = 0;
-	virtual std::string description() = 0;
-	virtual ~Command() {}
-};
-
 namespace {
 
 class CmdBeginRenderPass : public vk::CommandBuffer::Command
@@ -186,6 +177,7 @@ public:
 		vk::ComputePipeline *pipeline = static_cast<vk::ComputePipeline *>(pipelineState.pipeline);
 		pipeline->run(baseGroupX, baseGroupY, baseGroupZ,
 		              groupCountX, groupCountY, groupCountZ,
+		              pipelineState.descriptorSetObjects,
 		              pipelineState.descriptorSets,
 		              pipelineState.descriptorDynamicOffsets,
 		              executionState.pushConstants);
@@ -219,6 +211,7 @@ public:
 
 		auto pipeline = static_cast<vk::ComputePipeline *>(pipelineState.pipeline);
 		pipeline->run(0, 0, 0, cmd->x, cmd->y, cmd->z,
+		              pipelineState.descriptorSetObjects,
 		              pipelineState.descriptorSets,
 		              pipelineState.descriptorDynamicOffsets,
 		              executionState.pushConstants);
@@ -534,6 +527,7 @@ public:
 
 		executionState.bindVertexInputs(context, firstInstance);
 
+		context.descriptorSetObjects = pipelineState.descriptorSetObjects;
 		context.descriptorSets = pipelineState.descriptorSets;
 		context.descriptorDynamicOffsets = pipelineState.descriptorDynamicOffsets;
 
@@ -544,11 +538,9 @@ public:
 
 		if(pipeline->hasDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS))
 		{
-			// If the depth bias clamping feature is not enabled, depthBiasClamp must be 0.0
-			ASSERT(executionState.dynamicState.depthBiasClamp == 0.0f);
-
-			context.depthBias = executionState.dynamicState.depthBiasConstantFactor;
+			context.constantDepthBias = executionState.dynamicState.depthBiasConstantFactor;
 			context.slopeDepthBias = executionState.dynamicState.depthBiasSlopeFactor;
+			context.depthBiasClamp = executionState.dynamicState.depthBiasClamp;
 		}
 
 		if(pipeline->hasDynamicState(VK_DYNAMIC_STATE_DEPTH_BOUNDS) && context.depthBoundsTestEnable)
@@ -746,10 +738,10 @@ private:
 	uint32_t stride;
 };
 
-class CmdImageToImageCopy : public vk::CommandBuffer::Command
+class CmdCopyImage : public vk::CommandBuffer::Command
 {
 public:
-	CmdImageToImageCopy(const vk::Image *srcImage, vk::Image *dstImage, const VkImageCopy &region)
+	CmdCopyImage(const vk::Image *srcImage, vk::Image *dstImage, const VkImageCopy &region)
 	    : srcImage(srcImage)
 	    , dstImage(dstImage)
 	    , region(region)
@@ -761,7 +753,7 @@ public:
 		srcImage->copyTo(dstImage, region);
 	}
 
-	std::string description() override { return "vkCmdImageToImageCopy()"; }
+	std::string description() override { return "vkCmdCopyImage()"; }
 
 private:
 	const vk::Image *srcImage;
@@ -769,10 +761,10 @@ private:
 	const VkImageCopy region;
 };
 
-class CmdBufferToBufferCopy : public vk::CommandBuffer::Command
+class CmdCopyBuffer : public vk::CommandBuffer::Command
 {
 public:
-	CmdBufferToBufferCopy(const vk::Buffer *srcBuffer, vk::Buffer *dstBuffer, const VkBufferCopy &region)
+	CmdCopyBuffer(const vk::Buffer *srcBuffer, vk::Buffer *dstBuffer, const VkBufferCopy &region)
 	    : srcBuffer(srcBuffer)
 	    , dstBuffer(dstBuffer)
 	    , region(region)
@@ -784,7 +776,7 @@ public:
 		srcBuffer->copyTo(dstBuffer, region);
 	}
 
-	std::string description() override { return "vkCmdBufferToBufferCopy()"; }
+	std::string description() override { return "vkCmdCopyBuffer()"; }
 
 private:
 	const vk::Buffer *srcBuffer;
@@ -792,10 +784,10 @@ private:
 	const VkBufferCopy region;
 };
 
-class CmdImageToBufferCopy : public vk::CommandBuffer::Command
+class CmdCopyImageToBuffer : public vk::CommandBuffer::Command
 {
 public:
-	CmdImageToBufferCopy(vk::Image *srcImage, vk::Buffer *dstBuffer, const VkBufferImageCopy &region)
+	CmdCopyImageToBuffer(vk::Image *srcImage, vk::Buffer *dstBuffer, const VkBufferImageCopy &region)
 	    : srcImage(srcImage)
 	    , dstBuffer(dstBuffer)
 	    , region(region)
@@ -807,7 +799,7 @@ public:
 		srcImage->copyTo(dstBuffer, region);
 	}
 
-	std::string description() override { return "vkCmdImageToBufferCopy()"; }
+	std::string description() override { return "vkCmdCopyImageToBuffer()"; }
 
 private:
 	vk::Image *srcImage;
@@ -815,10 +807,10 @@ private:
 	const VkBufferImageCopy region;
 };
 
-class CmdBufferToImageCopy : public vk::CommandBuffer::Command
+class CmdCopyBufferToImage : public vk::CommandBuffer::Command
 {
 public:
-	CmdBufferToImageCopy(vk::Buffer *srcBuffer, vk::Image *dstImage, const VkBufferImageCopy &region)
+	CmdCopyBufferToImage(vk::Buffer *srcBuffer, vk::Image *dstImage, const VkBufferImageCopy &region)
 	    : srcBuffer(srcBuffer)
 	    , dstImage(dstImage)
 	    , region(region)
@@ -830,7 +822,7 @@ public:
 		dstImage->copyFrom(srcBuffer, region);
 	}
 
-	std::string description() override { return "vkCmdBufferToImageCopy()"; }
+	std::string description() override { return "vkCmdCopyBufferToImage()"; }
 
 private:
 	vk::Buffer *srcBuffer;
@@ -1100,6 +1092,8 @@ public:
 	{
 		for(uint32_t i = 0; i < descriptorSetCount; i++)
 		{
+			// We need both a descriptor set object for updates and a descriptor set data pointer for routines
+			descriptorSetObjects[firstSet + i] = vk::Cast(pDescriptorSets[i]);
 			descriptorSets[firstSet + i] = vk::Cast(pDescriptorSets[i])->data;
 		}
 
@@ -1119,6 +1113,7 @@ public:
 
 		for(uint32_t i = firstSet; i < firstSet + descriptorSetCount; i++)
 		{
+			pipelineState.descriptorSetObjects[i] = descriptorSetObjects[i];
 			pipelineState.descriptorSets[i] = descriptorSets[i];
 		}
 
@@ -1137,6 +1132,7 @@ private:
 	const uint32_t firstDynamicOffset;
 	const uint32_t dynamicOffsetCount;
 
+	vk::DescriptorSet::Array descriptorSetObjects;
 	vk::DescriptorSet::Bindings descriptorSets;
 	vk::DescriptorSet::DynamicOffsets dynamicOffsets;
 };
@@ -1311,19 +1307,16 @@ CommandBuffer::CommandBuffer(Device *device, VkCommandBufferLevel pLevel)
     : device(device)
     , level(pLevel)
 {
-	// FIXME (b/119409619): replace this vector by an allocator so we can control all memory allocations
-	commands = new std::vector<std::unique_ptr<Command>>();
 }
 
 void CommandBuffer::destroy(const VkAllocationCallbacks *pAllocator)
 {
-	delete commands;
 }
 
 void CommandBuffer::resetState()
 {
 	// FIXME (b/119409619): replace this vector by an allocator so we can control all memory allocations
-	commands->clear();
+	commands.clear();
 
 	state = INITIAL;
 }
@@ -1372,7 +1365,7 @@ VkResult CommandBuffer::end()
 	if(debuggerContext)
 	{
 		std::string source;
-		for(auto &command : *commands)
+		for(auto &command : commands)
 		{
 			source += command->description() + "\n";
 		}
@@ -1396,14 +1389,22 @@ template<typename T, typename... Args>
 void CommandBuffer::addCommand(Args &&... args)
 {
 	// FIXME (b/119409619): use an allocator here so we can control all memory allocations
-	commands->push_back(std::make_unique<T>(std::forward<Args>(args)...));
+	commands.push_back(std::make_unique<T>(std::forward<Args>(args)...));
 }
 
 void CommandBuffer::beginRenderPass(RenderPass *renderPass, Framebuffer *framebuffer, VkRect2D renderArea,
-                                    uint32_t clearValueCount, const VkClearValue *clearValues, VkSubpassContents contents)
+                                    uint32_t clearValueCount, const VkClearValue *clearValues, VkSubpassContents contents,
+                                    const VkRenderPassAttachmentBeginInfo *attachmentInfo)
 {
 	ASSERT(state == RECORDING);
 
+	if(attachmentInfo)
+	{
+		for(uint32_t i = 0; i < attachmentInfo->attachmentCount; i++)
+		{
+			framebuffer->setAttachment(vk::Cast(attachmentInfo->pAttachments[i]), i);
+		}
+	}
 	addCommand<::CmdBeginRenderPass>(renderPass, framebuffer, renderArea, clearValueCount, clearValues);
 }
 
@@ -1608,7 +1609,7 @@ void CommandBuffer::copyBuffer(const Buffer *srcBuffer, Buffer *dstBuffer, uint3
 
 	for(uint32_t i = 0; i < regionCount; i++)
 	{
-		addCommand<::CmdBufferToBufferCopy>(srcBuffer, dstBuffer, pRegions[i]);
+		addCommand<::CmdCopyBuffer>(srcBuffer, dstBuffer, pRegions[i]);
 	}
 }
 
@@ -1623,7 +1624,7 @@ void CommandBuffer::copyImage(const Image *srcImage, VkImageLayout srcImageLayou
 
 	for(uint32_t i = 0; i < regionCount; i++)
 	{
-		addCommand<::CmdImageToImageCopy>(srcImage, dstImage, pRegions[i]);
+		addCommand<::CmdCopyImage>(srcImage, dstImage, pRegions[i]);
 	}
 }
 
@@ -1649,7 +1650,7 @@ void CommandBuffer::copyBufferToImage(Buffer *srcBuffer, Image *dstImage, VkImag
 
 	for(uint32_t i = 0; i < regionCount; i++)
 	{
-		addCommand<::CmdBufferToImageCopy>(srcBuffer, dstImage, pRegions[i]);
+		addCommand<::CmdCopyBufferToImage>(srcBuffer, dstImage, pRegions[i]);
 	}
 }
 
@@ -1661,7 +1662,7 @@ void CommandBuffer::copyImageToBuffer(Image *srcImage, VkImageLayout srcImageLay
 
 	for(uint32_t i = 0; i < regionCount; i++)
 	{
-		addCommand<::CmdImageToBufferCopy>(srcImage, dstBuffer, pRegions[i]);
+		addCommand<::CmdCopyImageToBuffer>(srcImage, dstBuffer, pRegions[i]);
 	}
 }
 
@@ -1780,6 +1781,21 @@ void CommandBuffer::drawIndexedIndirect(Buffer *buffer, VkDeviceSize offset, uin
 	addCommand<::CmdDrawIndexedIndirect>(buffer, offset, drawCount, stride);
 }
 
+void CommandBuffer::beginDebugUtilsLabel(const VkDebugUtilsLabelEXT *pLabelInfo)
+{
+	// Optional debug label region
+}
+
+void CommandBuffer::endDebugUtilsLabel()
+{
+	// Close debug label region opened with beginDebugUtilsLabel()
+}
+
+void CommandBuffer::insertDebugUtilsLabel(const VkDebugUtilsLabelEXT *pLabelInfo)
+{
+	// Optional single debug label
+}
+
 void CommandBuffer::submit(CommandBuffer::ExecutionState &executionState)
 {
 	// Perform recorded work
@@ -1790,17 +1806,15 @@ void CommandBuffer::submit(CommandBuffer::ExecutionState &executionState)
 	auto debuggerContext = device->getDebuggerContext();
 	if(debuggerContext)
 	{
-		auto lock = debuggerContext->lock();
-		debuggerThread = lock.currentThread();
+		debuggerThread = debuggerContext->lock().currentThread();
 		debuggerThread->setName("vkQueue processor");
-		debuggerThread->enter(lock, debuggerFile, "vkCommandBuffer::submit");
-		lock.unlock();
+		debuggerThread->enter(debuggerFile, "vkCommandBuffer::submit");
 	}
 	defer(if(debuggerThread) { debuggerThread->exit(); });
 	int line = 1;
 #endif  // ENABLE_VK_DEBUGGER
 
-	for(auto &command : *commands)
+	for(auto &command : commands)
 	{
 #ifdef ENABLE_VK_DEBUGGER
 		if(debuggerThread)
@@ -1820,7 +1834,7 @@ void CommandBuffer::submit(CommandBuffer::ExecutionState &executionState)
 
 void CommandBuffer::submitSecondary(CommandBuffer::ExecutionState &executionState) const
 {
-	for(auto &command : *commands)
+	for(auto &command : commands)
 	{
 		command->play(executionState);
 	}

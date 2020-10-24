@@ -27,11 +27,13 @@
 #include "gtest/gtest.h"
 #include "absl/base/attributes.h"
 #include "absl/base/casts.h"
+#include "absl/base/config.h"
 #include "absl/base/internal/per_thread_tls.h"
 #include "absl/base/internal/raw_logging.h"
 #include "absl/base/optimization.h"
 #include "absl/debugging/internal/stack_consumption.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/string_view.h"
 
 using testing::Contains;
 
@@ -219,8 +221,8 @@ static const char *SymbolizeStackConsumption(void *pc, int *stack_consumed) {
 static int GetStackConsumptionUpperLimit() {
   // Symbolize stack consumption should be within 2kB.
   int stack_consumption_upper_limit = 2048;
-#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
-    defined(THREAD_SANITIZER)
+#if defined(ABSL_HAVE_ADDRESS_SANITIZER) || \
+    defined(ABSL_HAVE_MEMORY_SANITIZER) || defined(ABSL_HAVE_THREAD_SANITIZER)
   // Account for sanitizer instrumentation requiring additional stack space.
   stack_consumption_upper_limit *= 5;
 #endif
@@ -401,8 +403,8 @@ TEST(Symbolize, ForEachSection) {
 
   std::vector<std::string> sections;
   ASSERT_TRUE(absl::debugging_internal::ForEachSection(
-      fd, [&sections](const std::string &name, const ElfW(Shdr) &) {
-        sections.push_back(name);
+      fd, [&sections](const absl::string_view name, const ElfW(Shdr) &) {
+        sections.emplace_back(name);
         return true;
       }));
 

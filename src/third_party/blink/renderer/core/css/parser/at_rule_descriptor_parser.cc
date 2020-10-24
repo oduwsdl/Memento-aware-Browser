@@ -79,7 +79,7 @@ CSSValue* ConsumeFontFaceSrcURI(CSSParserTokenRange& range,
     return nullptr;
   CSSFontFaceSrcValue* uri_value(CSSFontFaceSrcValue::Create(
       url, context.CompleteURL(url), context.GetReferrer(),
-      context.ShouldCheckContentSecurityPolicy(),
+      context.JavascriptWorld(),
       context.IsOriginClean() ? OriginClean::kTrue : OriginClean::kFalse,
       context.IsAdRelated()));
 
@@ -100,14 +100,12 @@ CSSValue* ConsumeFontFaceSrcURI(CSSParserTokenRange& range,
 CSSValue* ConsumeFontFaceSrcLocal(CSSParserTokenRange& range,
                                   const CSSParserContext& context) {
   CSSParserTokenRange args = css_parsing_utils::ConsumeFunction(range);
-  network::mojom::CSPDisposition should_check_content_security_policy =
-      context.ShouldCheckContentSecurityPolicy();
   if (args.Peek().GetType() == kStringToken) {
     const CSSParserToken& arg = args.ConsumeIncludingWhitespace();
     if (!args.AtEnd())
       return nullptr;
     return CSSFontFaceSrcValue::CreateLocal(
-        arg.Value().ToString(), should_check_content_security_policy,
+        arg.Value().ToString(), context.JavascriptWorld(),
         context.IsOriginClean() ? OriginClean::kTrue : OriginClean::kFalse,
         context.IsAdRelated());
   }
@@ -116,7 +114,7 @@ CSSValue* ConsumeFontFaceSrcLocal(CSSParserTokenRange& range,
     if (!args.AtEnd())
       return nullptr;
     return CSSFontFaceSrcValue::CreateLocal(
-        family_name, should_check_content_security_policy,
+        family_name, context.JavascriptWorld(),
         context.IsOriginClean() ? OriginClean::kTrue : OriginClean::kFalse,
         context.IsAdRelated());
   }
@@ -143,20 +141,12 @@ CSSValueList* ConsumeFontFaceSrc(CSSParserTokenRange& range,
 }
 
 CSSValue* ConsumeScrollTimelineSource(CSSParserTokenRange& range) {
-  if (range.Peek().FunctionId() == CSSValueID::kSelector) {
-    auto block = css_parsing_utils::ConsumeFunction(range);
-    block.ConsumeWhitespace();
-    if (auto* id_value = css_parsing_utils::ConsumeIdSelector(block)) {
-      if (!block.AtEnd())
-        return nullptr;
-      auto* selector_function =
-          MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kSelector);
-      selector_function->Append(*id_value);
-      return selector_function;
-    }
-    return nullptr;
+  if (auto* selector_function =
+          css_parsing_utils::ConsumeSelectorFunction(range)) {
+    return selector_function;
   }
-  return css_parsing_utils::ConsumeIdent<CSSValueID::kNone>(range);
+  return css_parsing_utils::ConsumeIdent<CSSValueID::kAuto, CSSValueID::kNone>(
+      range);
 }
 
 CSSValue* ConsumeScrollTimelineOrientation(CSSParserTokenRange& range) {
@@ -199,6 +189,32 @@ CSSValue* ConsumeDescriptor(StyleRule::RuleType rule_type,
       NOTREACHED();
       return nullptr;
   }
+}
+
+CSSValue* ConsumeFontMetricOverride(CSSParserTokenRange& range,
+                                    const CSSParserContext& context) {
+  if (!RuntimeEnabledFeatures::CSSFontMetricsOverrideEnabled())
+    return nullptr;
+  if (CSSIdentifierValue* normal =
+          css_parsing_utils::ConsumeIdent<CSSValueID::kNormal>(range)) {
+    return normal;
+  }
+  return css_parsing_utils::ConsumePercent(range, context,
+                                           kValueRangeNonNegative);
+}
+
+CSSValue* ConsumeAdvanceOverride(CSSParserTokenRange& range,
+                                 const CSSParserContext& context) {
+  if (!RuntimeEnabledFeatures::CSSFontFaceAdvanceOverrideEnabled())
+    return nullptr;
+  return css_parsing_utils::ConsumeNumber(range, context, kValueRangeAll);
+}
+
+CSSValue* ConsumeAdvanceProportionalOverride(CSSParserTokenRange& range,
+                                             const CSSParserContext& context) {
+  if (!RuntimeEnabledFeatures::CSSFontFaceAdvanceProportionalOverrideEnabled())
+    return nullptr;
+  return ConsumeFontMetricOverride(range, context);
 }
 
 }  // namespace
@@ -249,6 +265,17 @@ CSSValue* AtRuleDescriptorParser::ParseFontFaceDescriptor(
     case AtRuleDescriptorID::FontFeatureSettings:
       parsed_value =
           css_parsing_utils::ConsumeFontFeatureSettings(range, context);
+      break;
+    case AtRuleDescriptorID::AscentOverride:
+    case AtRuleDescriptorID::DescentOverride:
+    case AtRuleDescriptorID::LineGapOverride:
+      parsed_value = ConsumeFontMetricOverride(range, context);
+      break;
+    case AtRuleDescriptorID::AdvanceOverride:
+      parsed_value = ConsumeAdvanceOverride(range, context);
+      break;
+    case AtRuleDescriptorID::AdvanceProportionalOverride:
+      parsed_value = ConsumeAdvanceProportionalOverride(range, context);
       break;
     default:
       break;
@@ -360,7 +387,7 @@ bool AtRuleDescriptorParser::ParseAtRule(
   // the CSSPropertyID.
   CSSPropertyID equivalent_property_id = AtRuleDescriptorIDAsCSSPropertyID(id);
   parsed_descriptors.push_back(
-      CSSPropertyValue(CSSProperty::Get(equivalent_property_id), *result));
+      CSSPropertyValue(CSSPropertyName(equivalent_property_id), *result));
   return true;
 }
 

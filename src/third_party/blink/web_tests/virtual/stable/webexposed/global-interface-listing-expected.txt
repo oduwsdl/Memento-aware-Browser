@@ -72,6 +72,7 @@ interface Animation : EventTarget
     setter onremove
     setter playbackRate
     setter startTime
+    setter timeline
 interface AnimationEffect
     attribute @@toStringTag
     method constructor
@@ -452,6 +453,7 @@ interface CSSKeyframesRule : CSSRule
     attribute @@toStringTag
     getter cssRules
     getter name
+    method @@iterator
     method appendRule
     method constructor
     method deleteRule
@@ -896,6 +898,26 @@ interface ConvolverNode : AudioNode
     method constructor
     setter buffer
     setter normalize
+interface CookieChangeEvent : Event
+    attribute @@toStringTag
+    getter changed
+    getter deleted
+    method constructor
+interface CookieStore : EventTarget
+    attribute @@toStringTag
+    getter onchange
+    method constructor
+    method delete
+    method get
+    method getAll
+    method set
+    setter onchange
+interface CookieStoreManager
+    attribute @@toStringTag
+    method constructor
+    method getSubscriptions
+    method subscribe
+    method unsubscribe
 interface CountQueuingStrategy
     attribute @@toStringTag
     getter highWaterMark
@@ -1202,6 +1224,7 @@ interface DataTransferItem
     getter type
     method constructor
     method getAsFile
+    method getAsFileSystemHandle
     method getAsString
     method webkitGetAsEntry
 interface DataTransferItemList
@@ -1280,6 +1303,7 @@ interface Document : Node
     getter firstElementChild
     getter fonts
     getter forms
+    getter fragmentDirective
     getter fullscreen
     getter fullscreenElement
     getter fullscreenEnabled
@@ -1385,7 +1409,10 @@ interface Document : Node
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter ontransitioncancel
     getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
     getter onvisibilitychange
     getter onvolumechange
     getter onwaiting
@@ -1468,6 +1495,7 @@ interface Document : Node
     method querySelector
     method querySelectorAll
     method releaseEvents
+    method replaceChildren
     method webkitCancelFullScreen
     method webkitExitFullscreen
     method write
@@ -1578,7 +1606,10 @@ interface Document : Node
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter ontransitioncancel
     setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
     setter onvisibilitychange
     setter onvolumechange
     setter onwaiting
@@ -1606,6 +1637,7 @@ interface DocumentFragment : Node
     method prepend
     method querySelector
     method querySelectorAll
+    method replaceChildren
 interface DocumentTimeline : AnimationTimeline
     attribute @@toStringTag
     method constructor
@@ -1748,6 +1780,7 @@ interface Element : Node
     method removeAttribute
     method removeAttributeNS
     method removeAttributeNode
+    method replaceChildren
     method replaceWith
     method requestFullscreen
     method requestPointerLock
@@ -2036,15 +2069,49 @@ interface FileReader : EventTarget
     setter onloadend
     setter onloadstart
     setter onprogress
+interface FileSystemDirectoryHandle : FileSystemHandle
+    attribute @@toStringTag
+    method @@asyncIterator
+    method constructor
+    method entries
+    method getDirectoryHandle
+    method getFileHandle
+    method keys
+    method removeEntry
+    method resolve
+    method values
+interface FileSystemFileHandle : FileSystemHandle
+    attribute @@toStringTag
+    method constructor
+    method createWritable
+    method getFile
+interface FileSystemHandle
+    attribute @@toStringTag
+    getter kind
+    getter name
+    method constructor
+    method isSameEntry
+    method queryPermission
+    method requestPermission
+interface FileSystemWritableFileStream : WritableStream
+    attribute @@toStringTag
+    method close
+    method constructor
+    method seek
+    method truncate
+    method write
 interface FocusEvent : UIEvent
     attribute @@toStringTag
     getter relatedTarget
     method constructor
 interface FontFace
     attribute @@toStringTag
+    getter ascentOverride
+    getter descentOverride
     getter display
     getter family
     getter featureSettings
+    getter lineGapOverride
     getter loaded
     getter status
     getter stretch
@@ -2054,9 +2121,12 @@ interface FontFace
     getter weight
     method constructor
     method load
+    setter ascentOverride
+    setter descentOverride
     setter display
     setter family
     setter featureSettings
+    setter lineGapOverride
     setter stretch
     setter style
     setter unicodeRange
@@ -2532,7 +2602,10 @@ interface HTMLElement : Element
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter ontransitioncancel
     getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
     getter onvolumechange
     getter onwaiting
     getter onwebkitanimationend
@@ -2644,7 +2717,10 @@ interface HTMLElement : Element
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter ontransitioncancel
     setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
     setter onvolumechange
     setter onwaiting
     setter onwebkitanimationend
@@ -2701,6 +2777,7 @@ interface HTMLFontElement : HTMLElement
     setter size
 interface HTMLFormControlsCollection : HTMLCollection
     attribute @@toStringTag
+    method @@iterator
     method constructor
     method namedItem
 interface HTMLFormElement : HTMLElement
@@ -2839,6 +2916,7 @@ interface HTMLIFrameElement : HTMLElement
     getter contentDocument
     getter contentWindow
     getter csp
+    getter disallowDocumentAccess
     getter featurePolicy
     getter frameBorder
     getter height
@@ -2860,6 +2938,7 @@ interface HTMLIFrameElement : HTMLElement
     setter allowFullscreen
     setter allowPaymentRequest
     setter csp
+    setter disallowDocumentAccess
     setter frameBorder
     setter height
     setter loading
@@ -3146,6 +3225,7 @@ interface HTMLMediaElement : HTMLElement
     getter playbackRate
     getter played
     getter preload
+    getter preservesPitch
     getter readyState
     getter remote
     getter seekable
@@ -3180,6 +3260,7 @@ interface HTMLMediaElement : HTMLElement
     setter onwaitingforkey
     setter playbackRate
     setter preload
+    setter preservesPitch
     setter src
     setter srcObject
     setter volume
@@ -3441,6 +3522,7 @@ interface HTMLShadowElement : HTMLElement
 interface HTMLSlotElement : HTMLElement
     attribute @@toStringTag
     getter name
+    method assign
     method assignedElements
     method assignedNodes
     method constructor
@@ -4082,7 +4164,6 @@ interface LinearAccelerationSensor : Accelerometer
     method constructor
 interface Location
     attribute @@toStringTag
-    getter fragmentDirective
     method constructor
 interface Lock
     attribute @@toStringTag
@@ -4309,12 +4390,6 @@ interface MediaSession
     method setPositionState
     setter metadata
     setter playbackState
-interface MediaSettingsRange
-    attribute @@toStringTag
-    getter max
-    getter min
-    getter step
-    method constructor
 interface MediaSource : EventTarget
     static method isTypeSupported
     attribute @@toStringTag
@@ -4540,12 +4615,12 @@ interface Navigator
     getter presentation
     getter product
     getter productSub
+    getter scheduling
     getter serviceWorker
     getter storage
     getter usb
     getter userActivation
     getter userAgent
-    getter userAgentData
     getter vendor
     getter vendorSub
     getter wakeLock
@@ -4567,12 +4642,6 @@ interface Navigator
     method unregisterProtocolHandler
     method vibrate
     method webkitGetUserMedia
-interface NavigatorUAData
-    attribute @@toStringTag
-    getter brands
-    getter mobile
-    method constructor
-    method getHighEntropyValues
 interface NetworkInformation : EventTarget
     attribute @@toStringTag
     getter downlink
@@ -5124,13 +5193,6 @@ interface Permissions
     attribute @@toStringTag
     method constructor
     method query
-interface PhotoCapabilities
-    attribute @@toStringTag
-    getter fillLightMode
-    getter imageHeight
-    getter imageWidth
-    getter redEyeReduction
-    method constructor
 interface PictureInPictureEvent : Event
     attribute @@toStringTag
     getter pictureInPictureWindow
@@ -5162,6 +5224,8 @@ interface PluginArray
     method refresh
 interface PointerEvent : MouseEvent
     attribute @@toStringTag
+    getter altitudeAngle
+    getter azimuthAngle
     getter height
     getter isPrimary
     getter pointerId
@@ -5343,6 +5407,23 @@ interface RTCDtlsTransport : EventTarget
     method getRemoteCertificates
     setter onerror
     setter onstatechange
+interface RTCEncodedAudioFrame
+    attribute @@toStringTag
+    getter data
+    getter timestamp
+    method constructor
+    method getMetadata
+    method toString
+    setter data
+interface RTCEncodedVideoFrame
+    attribute @@toStringTag
+    getter data
+    getter timestamp
+    getter type
+    method constructor
+    method getMetadata
+    method toString
+    setter data
 interface RTCError : DOMException
     attribute @@toStringTag
     getter errorDetail
@@ -5472,6 +5553,7 @@ interface RTCRtpReceiver
     getter track
     getter transport
     method constructor
+    method createEncodedStreams
     method getContributingSources
     method getParameters
     method getStats
@@ -5485,6 +5567,7 @@ interface RTCRtpSender
     getter track
     getter transport
     method constructor
+    method createEncodedStreams
     method getParameters
     method getStats
     method replaceTrack
@@ -5500,6 +5583,7 @@ interface RTCRtpTransceiver
     getter stopped
     method constructor
     method setCodecPreferences
+    method stop
     setter direction
 interface RTCSctpTransport : EventTarget
     attribute @@toStringTag
@@ -5539,6 +5623,7 @@ interface RTCTrackEvent : Event
 interface RadioNodeList : NodeList
     attribute @@toStringTag
     getter value
+    method @@iterator
     method constructor
     setter value
 interface Range
@@ -5914,7 +5999,10 @@ interface SVGElement : Element
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter ontransitioncancel
     getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
     getter onvolumechange
     getter onwaiting
     getter onwebkitanimationend
@@ -6012,7 +6100,10 @@ interface SVGElement : Element
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter ontransitioncancel
     setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
     setter onvolumechange
     setter onwaiting
     setter onwebkitanimationend
@@ -6802,6 +6893,10 @@ interface SVGViewElement : SVGElement
     getter zoomAndPan
     method constructor
     setter zoomAndPan
+interface Scheduling
+    attribute @@toStringTag
+    method constructor
+    method isInputPending
 interface Screen
     attribute @@toStringTag
     getter availHeight
@@ -6921,6 +7016,7 @@ interface ServiceWorkerRegistration : EventTarget
     attribute @@toStringTag
     getter active
     getter backgroundFetch
+    getter cookies
     getter installing
     getter navigationPreload
     getter onupdatefound
@@ -6948,6 +7044,7 @@ interface ShadowRoot : DocumentFragment
     getter mode
     getter pictureInPictureElement
     getter pointerLockElement
+    getter slotAssignment
     getter styleSheets
     method constructor
     method elementFromPoint
@@ -7070,10 +7167,11 @@ interface StorageEvent : Event
     getter url
     method constructor
     method initStorageEvent
-interface StorageManager
+interface StorageManager : EventTarget
     attribute @@toStringTag
     method constructor
     method estimate
+    method getDirectory
     method persist
     method persisted
 interface StylePropertyMap : StylePropertyMapReadOnly
@@ -7189,6 +7287,8 @@ interface TextMetrics
     getter actualBoundingBoxDescent
     getter actualBoundingBoxLeft
     getter actualBoundingBoxRight
+    getter fontBoundingBoxAscent
+    getter fontBoundingBoxDescent
     getter width
     method constructor
 interface TextTrack : EventTarget
@@ -7326,7 +7426,7 @@ interface TrustedTypePolicy
     method createHTML
     method createScript
     method createScriptURL
-interface TrustedTypePolicyFactory
+interface TrustedTypePolicyFactory : EventTarget
     attribute @@toStringTag
     getter defaultPolicy
     getter emptyHTML
@@ -7562,6 +7662,7 @@ interface WakeLock
 interface WakeLockSentinel : EventTarget
     attribute @@toStringTag
     getter onrelease
+    getter released
     getter type
     method constructor
     method release
@@ -9081,6 +9182,21 @@ interface XPathResult
     method constructor
     method iterateNext
     method snapshotItem
+interface XRAnchor
+    attribute @@toStringTag
+    getter anchorSpace
+    method constructor
+    method delete
+interface XRAnchorSet
+    attribute @@toStringTag
+    getter size
+    method @@iterator
+    method constructor
+    method entries
+    method forEach
+    method has
+    method keys
+    method values
 interface XRBoundedReferenceSpace : XRReferenceSpace
     attribute @@toStringTag
     getter boundsGeometry
@@ -9092,7 +9208,9 @@ interface XRDOMOverlayState
 interface XRFrame
     attribute @@toStringTag
     getter session
+    getter trackedAnchors
     method constructor
+    method createAnchor
     method getHitTestResults
     method getHitTestResultsForTransientInput
     method getPose
@@ -9100,6 +9218,7 @@ interface XRFrame
 interface XRHitTestResult
     attribute @@toStringTag
     method constructor
+    method createAnchor
     method getPose
 interface XRHitTestSource
     attribute @@toStringTag
@@ -9234,6 +9353,7 @@ interface XRTransientInputHitTestSource
 interface XRView
     attribute @@toStringTag
     getter eye
+    getter isFirstPersonObserver
     getter projectionMatrix
     getter transform
     method constructor
@@ -9353,7 +9473,6 @@ interface webkitSpeechGrammar
     attribute @@toStringTag
     getter src
     getter weight
-    method constructor
     setter src
     setter weight
 interface webkitSpeechGrammarList
@@ -9362,7 +9481,6 @@ interface webkitSpeechGrammarList
     method @@iterator
     method addFromString
     method addFromUri
-    method constructor
     method item
 interface webkitSpeechRecognition : EventTarget
     attribute @@toStringTag
@@ -9383,7 +9501,6 @@ interface webkitSpeechRecognition : EventTarget
     getter onspeechstart
     getter onstart
     method abort
-    method constructor
     method start
     method stop
     setter continuous
@@ -9406,14 +9523,12 @@ interface webkitSpeechRecognitionError : Event
     attribute @@toStringTag
     getter error
     getter message
-    method constructor
 interface webkitSpeechRecognitionEvent : Event
     attribute @@toStringTag
     getter emma
     getter interpretation
     getter resultIndex
     getter results
-    method constructor
 interface webkitURL
     static method createObjectURL
     static method revokeObjectURL
@@ -9447,25 +9562,19 @@ interface webkitURL
     attribute GCController
     attribute accessibilityController
     attribute chrome
-    attribute closed
     attribute console
     attribute eventSender
-    attribute frames
     attribute gamepadController
     attribute globalThis
     attribute internals
-    attribute length
-    attribute location
-    attribute opener
-    attribute parent
     attribute propertyNamesInGlobal
-    attribute self
     attribute testRunner
     attribute textInputController
-    attribute top
-    attribute window
     getter caches
     getter clientInformation
+    getter closed
+    getter cookieStore
+    getter crossOriginIsolated
     getter crypto
     getter customElements
     getter defaultStatus
@@ -9475,12 +9584,15 @@ interface webkitURL
     getter event
     getter external
     getter frameElement
+    getter frames
     getter history
     getter indexedDB
     getter innerHeight
     getter innerWidth
     getter isSecureContext
+    getter length
     getter localStorage
+    getter location
     getter locationbar
     getter menubar
     getter name
@@ -9584,7 +9696,10 @@ interface webkitURL
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter ontransitioncancel
     getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
     getter onunhandledrejection
     getter onunload
     getter onvolumechange
@@ -9594,11 +9709,13 @@ interface webkitURL
     getter onwebkitanimationstart
     getter onwebkittransitionend
     getter onwheel
+    getter opener
     getter origin
     getter outerHeight
     getter outerWidth
     getter pageXOffset
     getter pageYOffset
+    getter parent
     getter performance
     getter personalbar
     getter screen
@@ -9609,15 +9726,18 @@ interface webkitURL
     getter scrollX
     getter scrollY
     getter scrollbars
+    getter self
     getter sessionStorage
     getter speechSynthesis
     getter status
     getter statusbar
     getter styleMedia
     getter toolbar
+    getter top
     getter trustedTypes
     getter visualViewport
     getter webkitStorageInfo
+    getter window
     method NodeFilter
     method alert
     method atob
@@ -9656,6 +9776,9 @@ interface webkitURL
     method scrollTo
     method setInterval
     method setTimeout
+    method showDirectoryPicker
+    method showOpenFilePicker
+    method showSaveFilePicker
     method stop
     method webkitCancelAnimationFrame
     method webkitRequestAnimationFrame
@@ -9667,8 +9790,11 @@ interface webkitURL
     setter devicePixelRatio
     setter event
     setter external
+    setter frames
     setter innerHeight
     setter innerWidth
+    setter length
+    setter location
     setter locationbar
     setter menubar
     setter name
@@ -9771,7 +9897,10 @@ interface webkitURL
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter ontransitioncancel
     setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
     setter onunhandledrejection
     setter onunload
     setter onvolumechange
@@ -9781,11 +9910,13 @@ interface webkitURL
     setter onwebkitanimationstart
     setter onwebkittransitionend
     setter onwheel
+    setter opener
     setter origin
     setter outerHeight
     setter outerWidth
     setter pageXOffset
     setter pageYOffset
+    setter parent
     setter performance
     setter personalbar
     setter screen
@@ -9796,6 +9927,7 @@ interface webkitURL
     setter scrollX
     setter scrollY
     setter scrollbars
+    setter self
     setter status
     setter statusbar
     setter toolbar

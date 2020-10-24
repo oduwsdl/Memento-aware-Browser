@@ -49,7 +49,7 @@ struct AdjustPointerTrait<T, true> {
 
   static TraceDescriptor GetTraceDescriptor(const void* self) {
     // Tracing an object, and more specifically GetTraceDescriptor for an
-    // object, implies having a reference whichmeans the object is at least in
+    // object, implies having a reference which means the object is at least in
     // construction. Therefore it is guaranteed that the ObjectStartBitmap was
     // already updated to include the object, and its HeapObjectHeader was
     // already created.
@@ -162,11 +162,6 @@ struct TraceTrait {
 
   static TraceDescriptor GetWeakTraceDescriptor(const void* self) {
     return {self, nullptr};
-  }
-
-  static HeapObjectHeader* GetHeapObjectHeader(const void* self) {
-    return AdjustPointerTrait<T>::GetHeapObjectHeader(
-        static_cast<const T*>(self));
   }
 
   static void Trace(Visitor*, const void* self);
@@ -285,31 +280,10 @@ struct TraceInCollectionTrait<kNoWeakHandling, T, Traits> {
 };
 
 template <typename T, typename Traits>
-struct TraceInCollectionTrait<kNoWeakHandling, blink::Member<T>, Traits> {
-  static bool IsAlive(const blink::LivenessBroker& info,
-                      const blink::Member<T>& t) {
-    return true;
-  }
-  static void Trace(blink::Visitor* visitor, const blink::Member<T>& t) {
-    visitor->TraceMaybeDeleted(t);
-  }
-};
-
-template <typename T, typename Traits>
-struct TraceInCollectionTrait<kWeakHandling, blink::Member<T>, Traits> {
-  static bool IsAlive(const blink::LivenessBroker& info,
-                      const blink::Member<T>& t) {
-    return true;
-  }
-  static void Trace(blink::Visitor* visitor, const blink::Member<T>& t) {
-    visitor->TraceMaybeDeleted(t);
-  }
-};
-
-template <typename T, typename Traits>
 struct TraceInCollectionTrait<kNoWeakHandling, blink::WeakMember<T>, Traits> {
   static void Trace(blink::Visitor* visitor, const blink::WeakMember<T>& t) {
-    visitor->TraceMaybeDeleted(t);
+    // Extract raw pointer to avoid using the WeakMember<> overload in Visitor.
+    visitor->TraceStrongly(t);
   }
 };
 
@@ -378,47 +352,6 @@ struct TraceInCollectionTrait<
         visitor->Trace(node);
       }
     }
-  }
-};
-
-// Nodes used by LinkedHashSet.  Again we need two versions to disambiguate the
-// template.
-template <typename Value, typename Traits>
-struct TraceInCollectionTrait<kNoWeakHandling,
-                              LinkedHashSetNode<Value>,
-                              Traits> {
-  static bool IsAlive(const blink::LivenessBroker& info,
-                      const LinkedHashSetNode<Value>& self) {
-    return TraceInCollectionTrait<
-        kNoWeakHandling, Value,
-        typename Traits::ValueTraits>::IsAlive(info, self.value_);
-  }
-
-  static void Trace(blink::Visitor* visitor,
-                    const LinkedHashSetNode<Value>& self) {
-    static_assert(
-        IsTraceableInCollectionTrait<Traits>::value || IsWeak<Value>::value,
-        "T should be traceable (or weak)");
-    TraceInCollectionTrait<kNoWeakHandling, Value,
-                           typename Traits::ValueTraits>::Trace(visitor,
-                                                                self.value_);
-  }
-};
-
-template <typename Value, typename Traits>
-struct TraceInCollectionTrait<kWeakHandling, LinkedHashSetNode<Value>, Traits> {
-  static bool IsAlive(const blink::LivenessBroker& info,
-                      const LinkedHashSetNode<Value>& self) {
-    return TraceInCollectionTrait<
-        kWeakHandling, Value,
-        typename Traits::ValueTraits>::IsAlive(info, self.value_);
-  }
-
-  static void Trace(blink::Visitor* visitor,
-                    const LinkedHashSetNode<Value>& self) {
-    TraceInCollectionTrait<kWeakHandling, Value,
-                           typename Traits::ValueTraits>::Trace(visitor,
-                                                                self.value_);
   }
 };
 

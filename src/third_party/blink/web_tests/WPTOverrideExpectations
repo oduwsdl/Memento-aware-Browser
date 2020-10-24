@@ -1,5 +1,4 @@
-# tags: [ Android Fuchsia IOS IOS12.2 IOS13.0 Linux Mac Mac10.10 Mac10.11 Mac10.12 Retina
-#         Mac10.13 Win Win7 Win10 ]
+# tags: [ Android Fuchsia Linux Mac Mac10.12 Mac10.13 Win Win7 Win10 ]
 # tags: [ Release Debug ]
 # results: [ Timeout Crash Pass Failure Slow Skip ]
 
@@ -168,7 +167,6 @@ external/wpt/client-hints/accept-ch-stickiness/same-origin-iframe.https.html [ P
 external/wpt/client-hints/accept-ch-stickiness/same-origin-navigation.https.html [ Pass ] # wpt_subtest_failure
 external/wpt/client-hints/sec-ch-ua.https.html [ Pass ] # wpt_subtest_failure
 external/wpt/compat/webkit-box-rtl-flex.html [ Failure ]
-external/wpt/compat/webkit-text-fill-color-property-002.html [ Pass Failure ]
 external/wpt/contacts/contacts-select.https.window.html [ Failure ] # wpt_subtest_failure
 external/wpt/content-security-policy/frame-ancestors/frame-ancestors-nested-cross-in-same-url-allow.html [ Pass Failure ]
 external/wpt/content-security-policy/object-src/object-src-no-url-allowed.html [ Pass Failure ]
@@ -178,9 +176,6 @@ external/wpt/content-security-policy/reporting-api/reporting-api-sends-reports-o
 external/wpt/content-security-policy/reporting-api/reporting-api-works-on-frame-src.https.sub.html [ Pass ] # wpt_subtest_failure
 external/wpt/content-security-policy/script-src/script-src-strict_dynamic_hashes.html [ Failure ]
 external/wpt/content-security-policy/securitypolicyviolation/img-src-redirect-upgrade-reporting.https.html [ Timeout ] # wpt_subtest_failure
-external/wpt/content-security-policy/securitypolicyviolation/inside-dedicated-worker.html [ Timeout ] # wpt_subtest_failure
-external/wpt/content-security-policy/securitypolicyviolation/inside-service-worker.https.html [ Timeout ] # wpt_subtest_failure
-external/wpt/content-security-policy/securitypolicyviolation/inside-shared-worker.html [ Timeout ] # wpt_subtest_failure
 external/wpt/content-security-policy/securitypolicyviolation/securitypolicyviolation-block-cross-origin-image.sub.html [ Pass ] # wpt_subtest_failure
 external/wpt/content-security-policy/securitypolicyviolation/targeting.html [ Timeout ] # wpt_subtest_failure
 external/wpt/content-security-policy/worker-src/service-none.https.sub.html [ Pass Failure ]
@@ -720,8 +715,6 @@ external/wpt/infrastructure/testdriver/actions/multiDevice.html [ Pass Failure ]
 external/wpt/input-events/input-events-exec-command.html [ Failure Pass ]
 external/wpt/input-events/input-events-typing.html [ Pass Failure ]
 external/wpt/intersection-observer/v2/delay-test.html [ Pass Failure ] # wpt_subtest_failure
-external/wpt/js-self-profiling/idlharness.any.html [ Pass ] # wpt_subtest_failure
-external/wpt/js-self-profiling/idlharness.any.worker.html [ Pass ] # wpt_subtest_failure
 external/wpt/kv-storage/key-types.https.html [ Pass Failure ]
 external/wpt/largest-contentful-paint/invisible-images-composited-2.html [ Pass ] # wpt_subtest_failure
 external/wpt/layout-instability/buffer-layout-shift.html [ Timeout Pass ]
@@ -741,18 +734,6 @@ external/wpt/mathml/presentation-markup/mrow/legacy-mrow-like-elements-001.html 
 external/wpt/mathml/presentation-markup/operators/mo-axis-height-1.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/operators/operator-dictionary-001.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/operators/operator-dictionary-002.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/radicals/root-parameters-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-2.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-3.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-5.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-parameters-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-parameters-2.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-parameters-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-parameters-2.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-parameters-3.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-parameters-4.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/spaces/space-1.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/spaces/space-like-001.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/spaces/space-like-002.html [ Failure Pass ] # wpt_subtest_failure
@@ -775,9 +756,6 @@ external/wpt/mathml/relations/css-styling/mathcolor-003.html [ Failure Pass ]
 external/wpt/mathml/relations/css-styling/mathsize-attribute-css-keywords.html [ Failure Pass ]
 external/wpt/mathml/relations/css-styling/mathsize-attribute-legacy-values.html [ Failure Pass ]
 external/wpt/mathml/relations/css-styling/mathsize-attribute.html [ Failure Pass ]
-external/wpt/mathml/relations/css-styling/padding-border-margin/border-002.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/relations/css-styling/padding-border-margin/margin-002.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/relations/css-styling/padding-border-margin/padding-002.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/relations/css-styling/width-height-001.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/relations/html5-tree/color-attributes-1.html [ Failure Pass ]
 external/wpt/mathml/relations/html5-tree/display-1.html [ Failure Pass ] # wpt_subtest_failure
@@ -963,11 +941,6 @@ external/wpt/orientation-sensor/AbsoluteOrientationSensor.https.html [ Pass ] # 
 external/wpt/orientation-sensor/RelativeOrientationSensor-iframe-access.https.html [ Pass ] # wpt_subtest_failure
 external/wpt/orientation-sensor/RelativeOrientationSensor.https.html [ Pass ] # wpt_subtest_failure
 external/wpt/paint-timing/sibling-painting-first-image.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/payment-request/payment-is-showing.https.html [ Failure ] # wpt_subtest_failure
-external/wpt/payment-request/payment-request-canmakepayment-method-protection.https.html [ Pass ] # wpt_subtest_failure
-external/wpt/payment-request/payment-request-canmakepayment-method.https.html [ Failure ]
-external/wpt/payment-request/payment-request-hasenrolledinstrument-method.tentative.https.html [ Failure ] # wpt_subtest_failure
-external/wpt/payment-request/payment-request-show-method.https.html [ Failure ]
 external/wpt/picture-in-picture/css-selector.html [ Pass ] # wpt_subtest_failure
 external/wpt/picture-in-picture/disable-picture-in-picture.html [ Pass ] # wpt_subtest_failure
 external/wpt/picture-in-picture/enter-picture-in-picture.html [ Pass ] # wpt_subtest_failure
@@ -1463,18 +1436,6 @@ external/wpt/webaudio/the-audio-api/the-audioworklet-interface/suspended-context
 external/wpt/webaudio/the-audio-api/the-mediaelementaudiosourcenode-interface/mediaElementAudioSourceToScriptProcessorTest.html [ Pass Failure ]
 external/wpt/webaudio/the-audio-api/the-mediastreamaudiosourcenode-interface/mediastreamaudiosourcenode-routing.html [ Pass Failure ]
 external/wpt/webaudio/the-audio-api/the-offlineaudiocontext-interface/offlineaudiocontext-detached-execution-context.tentative.html [ Failure ]
-external/wpt/webauthn/createcredential-badargs-authnrselection.https.html [ Failure ]
-external/wpt/webauthn/createcredential-excludecredentials.https.html [ Failure ]
-external/wpt/webauthn/createcredential-extensions.https.html [ Failure Timeout ]
-external/wpt/webauthn/createcredential-passing.https.html [ Failure ]
-external/wpt/webauthn/createcredential-pubkeycredparams.https.html [ Failure ]
-external/wpt/webauthn/createcredential-timeout.https.html [ Failure Pass ]
-external/wpt/webauthn/getcredential-badargs-rpid.https.html [ Failure ]
-external/wpt/webauthn/getcredential-badargs-userverification.https.html [ Failure ]
-external/wpt/webauthn/getcredential-extensions.https.html [ Failure ]
-external/wpt/webauthn/getcredential-passing.https.html [ Failure ]
-external/wpt/webauthn/getcredential-timeout.https.html [ Failure ]
-external/wpt/webauthn/webauthn-testdriver-basic.https.html [ Failure ]
 external/wpt/webmessaging/broadcastchannel/sandbox.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/webmessaging/with-options/broken-origin.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/webmessaging/with-ports/001.html [ Failure Pass ] # wpt_subtest_failure

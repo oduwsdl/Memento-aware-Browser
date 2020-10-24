@@ -751,6 +751,30 @@ TEST_P(ScrollAnchorTest, SerializeAnchorVerticalWritingMode) {
   ValidateSerializedAnchor("html>body>.barbaz", LayoutPoint(-50, 0));
 }
 
+TEST_P(ScrollAnchorTest, RestoreAnchorVerticalRlWritingMode) {
+  SetBodyInnerHTML(R"HTML(
+      <style>
+      body {
+          height: 100px;
+          margin: 0;
+          writing-mode:
+          vertical-rl;
+        }
+        div.big { width: 800px; }
+        div { width: 100px; height: 100px; }
+      </style>
+      <div class='big'></div>
+      <div id='last'></div>
+      )HTML");
+
+  SerializedAnchor serialized_anchor("#last", LayoutPoint(0, 0));
+
+  EXPECT_TRUE(
+      GetScrollAnchor(LayoutViewport()).RestoreAnchor(serialized_anchor));
+  EXPECT_EQ(LayoutViewport()->ScrollOffsetInt().Width(), 0);
+  EXPECT_EQ(LayoutViewport()->ScrollOffsetInt().Height(), 0);
+}
+
 TEST_P(ScrollAnchorTest, SerializeAnchorQualifiedTagName) {
   SetBodyInnerHTML(R"HTML(
       <style>
@@ -999,7 +1023,7 @@ TEST_P(ScrollAnchorTest, ClampAdjustsAnchorAnimation) {
   GetDocument().getElementById("hidden")->setAttribute(html_names::kStyleAttr,
                                                        "display:block");
   GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   EXPECT_EQ(IntSize(0, 200), LayoutViewport()
                                  ->GetScrollAnimator()
                                  .ImplOnlyAnimationAdjustmentForTesting());
@@ -1068,7 +1092,7 @@ class ScrollAnchorFindInPageTest : public testing::Test {
   }
 
   void ResizeAndFocus() {
-    web_view_helper_.Resize(WebSize(640, 480));
+    web_view_helper_.Resize(gfx::Size(640, 480));
     web_view_helper_.GetWebView()->MainFrameWidget()->SetFocus(true);
     test::RunPendingTasks();
   }
@@ -1157,7 +1181,7 @@ TEST_F(ScrollAnchorFindInPageTest, FocusPrioritizedOverFindInPage) {
     <div class=spacer></div>
     <div class=spacer></div>
     <div class=spacer></div>
-    <div id=focus_target tabindex=0></div>
+    <div id=focus_target contenteditable></div>
     <div id=growing></div>
     <div id=find_target>findme</div>
     <div class=spacer></div>
@@ -1215,7 +1239,7 @@ TEST_F(ScrollAnchorFindInPageTest, FocusedUnderStickyIsSkipped) {
     <div class=spacer></div>
     <div id=check></div>
     <div class=sticky>
-      <div id=target tabindex=0></div>
+      <div id=target contenteditable></div>
     </div>
     <div class=spacer></div>
     <div class=spacer></div>

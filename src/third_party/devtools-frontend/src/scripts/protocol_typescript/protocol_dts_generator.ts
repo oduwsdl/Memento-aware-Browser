@@ -81,13 +81,6 @@ const emitGlobalTypeDefs = () => {
   emitLine('getError(): string|undefined;');
   numIndents--;
   emitLine('}');
-  emitLine('export type UsesObjectNotation = true;');
-  emitLine('export interface Dispatcher {');
-  numIndents++;
-  emitLine('/** This dispatcher requires objects as parameters, rather than multiple arguments */');
-  emitLine('usesObjectNotation(): UsesObjectNotation;');
-  numIndents--;
-  emitLine('}');
 };
 
 const emitDomain = (domain: Protocol.Domain) => {
@@ -375,7 +368,7 @@ const emitDomainApi = (domain: Protocol.Domain, modulePrefix: string) => {
     domain.commands.forEach(c => emitApiCommand(c, domainName, modulePrefix));
   }
   emitCloseBlock();
-  emitOpenBlock(`export interface ${domainName}Dispatcher extends Protocol.Dispatcher`);
+  emitOpenBlock(`export interface ${domainName}Dispatcher`);
   if (domain.events) {
     domain.events.forEach(e => emitApiEvent(e, domainName, modulePrefix));
   }
@@ -402,12 +395,6 @@ const emitApi = (moduleName: string, protocolModuleName: string, domains: Protoc
   domains.forEach(d => emitDomainApi(d, protocolModulePrefix));
   emitCloseBlock();
   emitLine();
-
-  emitLine('// Include the workaround for https://github.com/microsoft/TypeScript/issues/38640');
-  domains.forEach(d => {
-    emitLine(
-        `interface ProtocolProxyApiWorkaround_${d.domain}Dispatcher extends ProtocolProxyApi.${d.domain}Dispatcher {}`);
-  });
 };
 
 const flushEmitToFile = (path: string) => {

@@ -19,69 +19,85 @@ namespace SkSL {
 /**
  * An expression modified by a unary operator appearing before it, such as '!flag'.
  */
-struct PrefixExpression : public Expression {
-    PrefixExpression(Token::Kind op, std::unique_ptr<Expression> operand)
-    : INHERITED(operand->fOffset, kPrefix_Kind, operand->fType)
-    , fOperand(std::move(operand))
-    , fOperator(op) {}
+class PrefixExpression : public Expression {
+public:
+    static constexpr Kind kExpressionKind = Kind::kPrefix;
 
-    bool isConstant() const override {
-        return fOperator == Token::Kind::TK_MINUS && fOperand->isConstant();
+    PrefixExpression(Token::Kind op, std::unique_ptr<Expression> operand)
+    : INHERITED(operand->fOffset, kExpressionKind, TypeTokenData{&operand->type(), op}) {
+        fExpressionChildren.push_back(std::move(operand));
+    }
+
+    const Type& type() const override {
+        return *this->typeTokenData().fType;
+    }
+
+    Token::Kind getOperator() const {
+        return this->typeTokenData().fToken;
+    }
+
+    std::unique_ptr<Expression>& operand() {
+        return fExpressionChildren[0];
+    }
+
+    const std::unique_ptr<Expression>& operand() const {
+        return fExpressionChildren[0];
+    }
+
+    bool isCompileTimeConstant() const override {
+        return this->getOperator() == Token::Kind::TK_MINUS &&
+               this->operand()->isCompileTimeConstant();
     }
 
     bool hasProperty(Property property) const override {
-        if (property == Property::kSideEffects && (fOperator == Token::Kind::TK_PLUSPLUS ||
-                                                   fOperator == Token::Kind::TK_MINUSMINUS)) {
+        if (property == Property::kSideEffects &&
+            (this->getOperator() == Token::Kind::TK_PLUSPLUS ||
+             this->getOperator() == Token::Kind::TK_MINUSMINUS)) {
             return true;
         }
-        return fOperand->hasProperty(property);
+        return this->operand()->hasProperty(property);
     }
 
     std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
                                                   const DefinitionMap& definitions) override {
-        if (fOperand->fKind == Expression::kFloatLiteral_Kind) {
+        if (this->operand()->kind() == Expression::Kind::kFloatLiteral) {
             return std::unique_ptr<Expression>(new FloatLiteral(
-                                                              irGenerator.fContext,
-                                                              fOffset,
-                                                              -((FloatLiteral&) *fOperand).fValue));
+                                                     irGenerator.fContext,
+                                                     fOffset,
+                                                     -this->operand()->as<FloatLiteral>().value()));
 
         }
         return nullptr;
     }
 
     SKSL_FLOAT getFVecComponent(int index) const override {
-        SkASSERT(fOperator == Token::Kind::TK_MINUS);
-        return -fOperand->getFVecComponent(index);
+        SkASSERT(this->getOperator() == Token::Kind::TK_MINUS);
+        return -this->operand()->getFVecComponent(index);
     }
 
     SKSL_INT getIVecComponent(int index) const override {
-        SkASSERT(fOperator == Token::Kind::TK_MINUS);
-        return -fOperand->getIVecComponent(index);
+        SkASSERT(this->getOperator() == Token::Kind::TK_MINUS);
+        return -this->operand()->getIVecComponent(index);
     }
 
     SKSL_FLOAT getMatComponent(int col, int row) const override {
-        SkASSERT(fOperator == Token::Kind::TK_MINUS);
-        return -fOperand->getMatComponent(col, row);
-    }
-
-    int nodeCount() const override {
-        return 1 + fOperand->nodeCount();
+        SkASSERT(this->getOperator() == Token::Kind::TK_MINUS);
+        return -this->operand()->getMatComponent(col, row);
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new PrefixExpression(fOperator, fOperand->clone()));
+        return std::unique_ptr<Expression>(new PrefixExpression(this->getOperator(),
+                                                                this->operand()->clone()));
     }
 
     String description() const override {
-        return Compiler::OperatorName(fOperator) + fOperand->description();
+        return Compiler::OperatorName(this->getOperator()) + this->operand()->description();
     }
 
-    std::unique_ptr<Expression> fOperand;
-    const Token::Kind fOperator;
-
-    typedef Expression INHERITED;
+private:
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

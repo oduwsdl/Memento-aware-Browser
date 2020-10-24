@@ -27,8 +27,6 @@ class Element;
 class CanvasRenderingContext2DState final
     : public GarbageCollected<CanvasRenderingContext2DState>,
       public FontSelectorClient {
-  USING_GARBAGE_COLLECTED_MIXIN(CanvasRenderingContext2DState);
-
  public:
   enum ClipListCopyMode { kCopyClipList, kDontCopyClipList };
 
@@ -131,6 +129,16 @@ class CanvasRenderingContext2DState final
 
   void SetTextBaseline(TextBaseline baseline) { text_baseline_ = baseline; }
   TextBaseline GetTextBaseline() const { return text_baseline_; }
+
+  void SetTextLetterSpacing(float letter_space, FontSelector* selector);
+  float GetTextLetterSpacing() const { return letter_spacing_; }
+
+  void SetTextWordSpacing(float word_space, FontSelector* selector);
+  float GetTextWordSpacing() const { return word_spacing_; }
+
+  void SetFontKerning(FontDescription::Kerning font_kerning,
+                      FontSelector* selector);
+  FontDescription::Kerning GetFontKerning() const { return font_kerning_; }
 
   void SetLineWidth(double line_width) {
     stroke_flags_.setStrokeWidth(clampTo<float>(line_width));
@@ -243,8 +251,11 @@ class CanvasRenderingContext2DState final
 
   // Text state.
   TextAlign text_align_;
-  TextBaseline text_baseline_;
-  Direction direction_;
+  TextBaseline text_baseline_{kAlphabeticTextBaseline};
+  Direction direction_{kDirectionInherit};
+  float letter_spacing_{0};
+  float word_spacing_{0};
+  FontDescription::Kerning font_kerning_{FontDescription::kAutoKerning};
 
   bool realized_font_ : 1;
   bool is_transform_invertible_ : 1;

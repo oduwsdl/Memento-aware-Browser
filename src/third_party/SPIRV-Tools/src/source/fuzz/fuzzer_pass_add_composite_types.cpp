@@ -97,7 +97,7 @@ void FuzzerPassAddCompositeTypes::AddNewArrayType() {
   ApplyTransformation(TransformationAddTypeArray(
       GetFuzzerContext()->GetFreshId(), ChooseScalarOrCompositeType(),
       FindOrCreateIntegerConstant(
-          {GetFuzzerContext()->GetRandomSizeForNewArray()}, 32, false)));
+          {GetFuzzerContext()->GetRandomSizeForNewArray()}, 32, false, false)));
 }
 
 void FuzzerPassAddCompositeTypes::AddNewStructType() {
@@ -120,10 +120,15 @@ uint32_t FuzzerPassAddCompositeTypes::ChooseScalarOrCompositeType() {
       case SpvOpTypeFloat:
       case SpvOpTypeInt:
       case SpvOpTypeMatrix:
-      case SpvOpTypeStruct:
       case SpvOpTypeVector:
         candidates.push_back(inst.result_id());
         break;
+      case SpvOpTypeStruct: {
+        if (!fuzzerutil::MembersHaveBuiltInDecoration(GetIRContext(),
+                                                      inst.result_id())) {
+          candidates.push_back(inst.result_id());
+        }
+      } break;
       default:
         break;
     }

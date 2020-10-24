@@ -113,10 +113,16 @@ CSSValue* ComputedStyleUtils::ValueForOffset(const ComputedStyle& style,
 
 CSSValue* ComputedStyleUtils::CurrentColorOrValidColor(
     const ComputedStyle& style,
-    const StyleColor& color) {
+    const StyleColor& color,
+    CSSValuePhase value_phase) {
   // This function does NOT look at visited information, so that computed style
   // doesn't expose that.
-  return cssvalue::CSSColorValue::Create(color.Resolve(style.GetColor()).Rgb());
+  if (value_phase == CSSValuePhase::kComputedValue && color.IsSystemColor() &&
+      RuntimeEnabledFeatures::CSSSystemColorComputeToSelfEnabled()) {
+    return CSSIdentifierValue::Create(color.GetColorKeyword());
+  }
+  return cssvalue::CSSColorValue::Create(
+      color.Resolve(style.GetCurrentColor(), style.UsedColorScheme()).Rgb());
 }
 
 const blink::Color ComputedStyleUtils::BorderSideColor(
@@ -124,16 +130,20 @@ const blink::Color ComputedStyleUtils::BorderSideColor(
     const StyleColor& color,
     EBorderStyle border_style,
     bool visited_link) {
-  if (!color.IsCurrentColor())
-    return color.GetColor();
-  // FIXME: Treating styled borders with initial color differently causes
-  // problems, see crbug.com/316559, crbug.com/276231
-  if (!visited_link && (border_style == EBorderStyle::kInset ||
-                        border_style == EBorderStyle::kOutset ||
-                        border_style == EBorderStyle::kRidge ||
-                        border_style == EBorderStyle::kGroove))
-    return blink::Color(238, 238, 238);
-  return visited_link ? style.InternalVisitedColor() : style.GetColor();
+  Color current_color;
+  if (visited_link) {
+    current_color = style.GetInternalVisitedCurrentColor();
+  } else if (border_style == EBorderStyle::kInset ||
+             border_style == EBorderStyle::kOutset ||
+             border_style == EBorderStyle::kRidge ||
+             border_style == EBorderStyle::kGroove) {
+    // FIXME: Treating styled borders with initial color differently causes
+    // problems, see crbug.com/316559, crbug.com/276231
+    current_color = blink::Color(238, 238, 238);
+  } else {
+    current_color = style.GetCurrentColor();
+  }
+  return color.Resolve(current_color, style.UsedColorScheme());
 }
 
 const CSSValue* ComputedStyleUtils::BackgroundImageOrWebkitMaskImage(
@@ -1166,6 +1176,9 @@ class OrderedNamedLinesCollector {
         ordered_named_auto_repeat_grid_lines_(
             is_row_axis ? style.AutoRepeatOrderedNamedGridColumnLines()
                         : style.AutoRepeatOrderedNamedGridRowLines()) {}
+  OrderedNamedLinesCollector(const OrderedNamedLinesCollector&) = delete;
+  OrderedNamedLinesCollector& operator=(const OrderedNamedLinesCollector&) =
+      delete;
   virtual ~OrderedNamedLinesCollector() = default;
 
   bool IsEmpty() const {
@@ -1183,7 +1196,6 @@ class OrderedNamedLinesCollector {
 
   const OrderedNamedGridLines& ordered_named_grid_lines_;
   const OrderedNamedGridLines& ordered_named_auto_repeat_grid_lines_;
-  DISALLOW_COPY_AND_ASSIGN(OrderedNamedLinesCollector);
 };
 
 class OrderedNamedLinesCollectorInsideRepeat
@@ -1309,7 +1321,8 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackSizeList(
     GridTrackSizingDirection direction,
     const ComputedStyle& style) {
   const Vector<GridTrackSize>& auto_track_sizes =
-      direction == kForColumns ? style.GridAutoColumns() : style.GridAutoRows();
+      direction == kForColumns ? style.GridAutoColumns().LegacyTrackList()
+                               : style.GridAutoRows().LegacyTrackList();
 
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   for (auto& track_size : auto_track_sizes) {
@@ -1354,7 +1367,8 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
     const ComputedStyle& style) {
   bool is_row_axis = direction == kForColumns;
   const Vector<GridTrackSize>& track_sizes =
-      is_row_axis ? style.GridTemplateColumns() : style.GridTemplateRows();
+      is_row_axis ? style.GridTemplateColumns().LegacyTrackList()
+                  : style.GridTemplateRows().LegacyTrackList();
   const Vector<GridTrackSize>& auto_repeat_track_sizes =
       is_row_axis ? style.GridAutoRepeatColumns() : style.GridAutoRepeatRows();
   bool is_layout_grid = layout_object && layout_object->IsLayoutGrid();
@@ -2226,27 +2240,25 @@ CSSValue* ComputedStyleUtils::StrokeDashArrayToCSSValueList(
   return list;
 }
 
-CSSValue* ComputedStyleUtils::AdjustSVGPaintForCurrentColor(
-    const SVGPaint& paint,
-    const Color& current_color) {
+CSSValue* ComputedStyleUtils::ValueForSVGPaint(const SVGPaint& paint,
+                                               const ComputedStyle& style) {
   if (paint.type >= SVG_PAINTTYPE_URI_NONE) {
     CSSValueList* values = CSSValueList::CreateSpaceSeparated();
     values->Append(
         *MakeGarbageCollected<cssvalue::CSSURIValue>(paint.GetUrl()));
-    if (paint.type == SVG_PAINTTYPE_URI_NONE)
+    if (paint.type == SVG_PAINTTYPE_URI_NONE) {
       values->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
-    else if (paint.type == SVG_PAINTTYPE_URI_CURRENTCOLOR)
-      values->Append(*cssvalue::CSSColorValue::Create(current_color.Rgb()));
-    else if (paint.type == SVG_PAINTTYPE_URI_RGBCOLOR)
-      values->Append(*cssvalue::CSSColorValue::Create(paint.GetColor().Rgb()));
+    } else if (paint.type == SVG_PAINTTYPE_URI_COLOR) {
+      values->Append(*CurrentColorOrValidColor(style, paint.GetColor(),
+                                               CSSValuePhase::kComputedValue));
+    }
     return values;
   }
   if (paint.type == SVG_PAINTTYPE_NONE)
     return CSSIdentifierValue::Create(CSSValueID::kNone);
-  if (paint.type == SVG_PAINTTYPE_CURRENTCOLOR)
-    return cssvalue::CSSColorValue::Create(current_color.Rgb());
 
-  return cssvalue::CSSColorValue::Create(paint.GetColor().Rgb());
+  return CurrentColorOrValidColor(style, paint.GetColor(),
+                                  CSSValuePhase::kComputedValue);
 }
 
 CSSValue* ComputedStyleUtils::ValueForSVGResource(
@@ -2258,32 +2270,35 @@ CSSValue* ComputedStyleUtils::ValueForSVGResource(
 
 CSSValue* ComputedStyleUtils::ValueForShadowData(const ShadowData& shadow,
                                                  const ComputedStyle& style,
-                                                 bool use_spread) {
+                                                 bool use_spread,
+                                                 CSSValuePhase value_phase) {
   CSSPrimitiveValue* x = ZoomAdjustedPixelValue(shadow.X(), style);
   CSSPrimitiveValue* y = ZoomAdjustedPixelValue(shadow.Y(), style);
   CSSPrimitiveValue* blur = ZoomAdjustedPixelValue(shadow.Blur(), style);
   CSSPrimitiveValue* spread =
       use_spread ? ZoomAdjustedPixelValue(shadow.Spread(), style) : nullptr;
   CSSIdentifierValue* shadow_style =
-      shadow.Style() == kNormal
+      shadow.Style() == ShadowStyle::kNormal
           ? nullptr
           : CSSIdentifierValue::Create(CSSValueID::kInset);
-  CSSValue* color = CurrentColorOrValidColor(style, shadow.GetColor());
+  CSSValue* color =
+      CurrentColorOrValidColor(style, shadow.GetColor(), value_phase);
   return MakeGarbageCollected<CSSShadowValue>(x, y, blur, spread, shadow_style,
                                               color);
 }
 
 CSSValue* ComputedStyleUtils::ValueForShadowList(const ShadowList* shadow_list,
                                                  const ComputedStyle& style,
-                                                 bool use_spread) {
+                                                 bool use_spread,
+                                                 CSSValuePhase value_phase) {
   if (!shadow_list)
     return CSSIdentifierValue::Create(CSSValueID::kNone);
 
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
   wtf_size_t shadow_count = shadow_list->Shadows().size();
   for (wtf_size_t i = 0; i < shadow_count; ++i) {
-    list->Append(
-        *ValueForShadowData(shadow_list->Shadows()[i], style, use_spread));
+    list->Append(*ValueForShadowData(shadow_list->Shadows()[i], style,
+                                     use_spread, value_phase));
   }
   return list;
 }
@@ -2381,7 +2396,8 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
         // We want our computed style to look like that of a text shadow (has
         // neither spread nor inset style).
         filter_value->Append(
-            *ValueForShadowData(drop_shadow_operation.Shadow(), style, false));
+            *ValueForShadowData(drop_shadow_operation.Shadow(), style, false,
+                                CSSValuePhase::kComputedValue));
         break;
       }
       default:
@@ -2757,6 +2773,20 @@ CSSValue* ComputedStyleUtils::ValueForStyleNameOrKeyword(
   return ValueForStyleName(value.GetName());
 }
 
+const CSSValue* ComputedStyleUtils::ValueForStyleAutoColor(
+    const ComputedStyle& style,
+    const StyleAutoColor& color,
+    CSSValuePhase value_phase) {
+  if (color.IsAutoColor()) {
+    return cssvalue::CSSColorValue::Create(
+        StyleColor::CurrentColor()
+            .Resolve(style.GetCurrentColor(), style.UsedColorScheme())
+            .Rgb());
+  }
+  return ComputedStyleUtils::CurrentColorOrValidColor(
+      style, color.ToStyleColor(), value_phase);
+}
+
 std::unique_ptr<CrossThreadStyleValue>
 ComputedStyleUtils::CrossThreadStyleValueFromCSSStyleValue(
     CSSStyleValue* style_value) {
@@ -2794,6 +2824,44 @@ const CSSValue* ComputedStyleUtils::ComputedPropertyValue(
     // Returns a transform list instead of converting to a (resolved) matrix.
     case CSSPropertyID::kTransform:
       return ComputedStyleUtils::ComputedTransformList(style, layout_object);
+
+    // For the following properties, the resolved value is the used value, which
+    // is not what we want. Obtain the computed value instead.
+    case CSSPropertyID::kBackgroundColor:
+      return ComputedStyleUtils::CurrentColorOrValidColor(
+          style, style.BackgroundColor(), CSSValuePhase::kComputedValue);
+    case CSSPropertyID::kBorderBlockEndColor:
+    case CSSPropertyID::kBorderBlockStartColor:
+    case CSSPropertyID::kBorderInlineEndColor:
+    case CSSPropertyID::kBorderInlineStartColor:
+      return ComputedStyleUtils::ComputedPropertyValue(
+          property.ResolveDirectionAwareProperty(style.Direction(),
+                                                 style.GetWritingMode()),
+          style, layout_object);
+    case CSSPropertyID::kBorderBottomColor:
+      return ComputedStyleUtils::CurrentColorOrValidColor(
+          style, style.BorderBottomColor(), CSSValuePhase::kComputedValue);
+    case CSSPropertyID::kBorderLeftColor:
+      return ComputedStyleUtils::CurrentColorOrValidColor(
+          style, style.BorderLeftColor(), CSSValuePhase::kComputedValue);
+    case CSSPropertyID::kBorderRightColor:
+      return ComputedStyleUtils::CurrentColorOrValidColor(
+          style, style.BorderRightColor(), CSSValuePhase::kComputedValue);
+    case CSSPropertyID::kBorderTopColor:
+      return ComputedStyleUtils::CurrentColorOrValidColor(
+          style, style.BorderTopColor(), CSSValuePhase::kComputedValue);
+    case CSSPropertyID::kBoxShadow:
+      return ComputedStyleUtils::ValueForShadowList(
+          style.BoxShadow(), style, true, CSSValuePhase::kComputedValue);
+    case CSSPropertyID::kCaretColor:
+      return ComputedStyleUtils::ValueForStyleAutoColor(
+          style, style.CaretColor(), CSSValuePhase::kComputedValue);
+    case CSSPropertyID::kColor:
+      return ComputedStyleUtils::CurrentColorOrValidColor(
+          style, style.GetColor(), CSSValuePhase::kComputedValue);
+    case CSSPropertyID::kOutlineColor:
+      return ComputedStyleUtils::CurrentColorOrValidColor(
+          style, style.OutlineColor(), CSSValuePhase::kComputedValue);
 
     // For all other properties, the resolved value is either always the same
     // as the computed value (most properties), or the same as the computed

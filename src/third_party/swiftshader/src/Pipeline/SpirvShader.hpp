@@ -439,7 +439,7 @@ public:
 	};
 
 	struct TypeOrObject
-	{};  // Dummy struct to represent a Type or Object.
+	{};
 
 	// TypeOrObjectID is an identifier that represents a Type or an Object,
 	// and supports implicit casting to and from Type::ID or Object::ID.
@@ -511,12 +511,12 @@ public:
 				uint32_t gatherComponent : 2;
 
 				// Parameters are passed to the sampling routine in this order:
-				uint32_t coordinates : 3;  // 1-4 (does not contain projection component)
-				                           //	uint32_t dref : 1;              // Indicated by Variant::ProjDref|Dref
-				                           //	uint32_t lodOrBias : 1;         // Indicated by SamplerMethod::Lod|Bias|Fetch
-				uint32_t grad : 2;         // 0-3 components (for each of dx / dy)
-				uint32_t offset : 2;       // 0-3 components
-				uint32_t sample : 1;       // 0-1 scalar integer
+				uint32_t coordinates : 3;       // 1-4 (does not contain projection component)
+				/*	uint32_t dref : 1; */       // Indicated by Variant::ProjDref|Dref
+				/*	uint32_t lodOrBias : 1; */  // Indicated by SamplerMethod::Lod|Bias|Fetch
+				uint32_t grad : 2;              // 0-3 components (for each of dx / dy)
+				uint32_t offset : 2;            // 0-3 components
+				uint32_t sample : 1;            // 0-1 scalar integer
 			};
 
 			uint32_t parameters;
@@ -569,15 +569,17 @@ public:
 	{
 		bool Matrix : 1;
 		bool Shader : 1;
+		bool StorageImageMultisample : 1;
 		bool ClipDistance : 1;
 		bool CullDistance : 1;
+		bool ImageCubeArray : 1;
 		bool InputAttachment : 1;
 		bool Sampled1D : 1;
 		bool Image1D : 1;
-		bool ImageCubeArray : 1;
 		bool SampledBuffer : 1;
 		bool SampledCubeArray : 1;
 		bool ImageBuffer : 1;
+		bool ImageMSArray : 1;
 		bool StorageImageExtendedFormats : 1;
 		bool ImageQuery : 1;
 		bool DerivativeControl : 1;
@@ -782,6 +784,8 @@ public:
 	void emit(SpirvRoutine *routine, RValue<SIMD::Int> const &activeLaneMask, RValue<SIMD::Int> const &storesAndAtomicsMask, const vk::DescriptorSet::Bindings &descriptorSets) const;
 	void emitEpilog(SpirvRoutine *routine) const;
 
+	bool containsImageWrite() const { return imageWriteEmitted; }
+
 	using BuiltInHash = std::hash<std::underlying_type<spv::BuiltIn>::type>;
 	std::unordered_map<spv::BuiltIn, BuiltinMapping, BuiltInHash> inputBuiltins;
 	std::unordered_map<spv::BuiltIn, BuiltinMapping, BuiltInHash> outputBuiltins;
@@ -796,8 +800,9 @@ private:
 	HandleMap<Function> functions;
 	std::unordered_map<StringID, String> strings;
 	HandleMap<Extension> extensionsByID;
-	std::unordered_set<Extension::Name> extensionsImported;
+	std::unordered_set<uint32_t> extensionsImported;
 	Function::ID entryPoint;
+	mutable bool imageWriteEmitted = false;
 
 	const bool robustBufferAccess = true;
 	spv::ExecutionModel executionModel = spv::ExecutionModelMax;  // Invalid prior to OpEntryPoint parsing.
@@ -1064,6 +1069,8 @@ private:
 			return SIMD::UInt(constant[i]);
 		}
 
+		bool isConstantZero() const;
+
 	private:
 		RR_PRINT_ONLY(friend struct rr::PrintValue::Ty<Operand>;)
 
@@ -1269,7 +1276,7 @@ private:
 	static std::shared_ptr<rr::Routine> emitSamplerRoutine(ImageInstruction instruction, const Sampler &samplerState);
 
 	// TODO(b/129523279): Eliminate conversion and use vk::Sampler members directly.
-	static sw::FilterType convertFilterMode(const vk::Sampler *sampler);
+	static sw::FilterType convertFilterMode(const vk::Sampler *sampler, VkImageViewType imageViewType, ImageInstruction instruction);
 	static sw::MipmapType convertMipmapMode(const vk::Sampler *sampler);
 	static sw::AddressingMode convertAddressingMode(int coordinateIndex, const vk::Sampler *sampler, VkImageViewType imageViewType);
 
@@ -1363,7 +1370,7 @@ public:
 	// are only used when debugging. See b/146486064 for more information.
 	// Give careful consideration to the runtime performance loss before adding
 	// more state here.
-	SIMD::Int windowSpacePosition[2];
+	std::array<SIMD::Int, 2> windowSpacePosition;
 	Int viewID;  // slice offset into input attachments for multiview, even if the shader doesn't use ViewIndex
 	Int instanceID;
 	SIMD::Int vertexIndex;

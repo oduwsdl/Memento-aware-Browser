@@ -8,6 +8,7 @@
 #ifndef SkArenaAlloc_DEFINED
 #define SkArenaAlloc_DEFINED
 
+#include "include/core/SkTypes.h"
 #include "include/private/SkTFitsIn.h"
 
 #include <array>
@@ -67,8 +68,7 @@ public:
     SkArenaAlloc(char* block, size_t blockSize, size_t firstHeapAllocation);
 
     explicit SkArenaAlloc(size_t firstHeapAllocation)
-        : SkArenaAlloc(nullptr, 0, firstHeapAllocation)
-    {}
+        : SkArenaAlloc(nullptr, 0, firstHeapAllocation) {}
 
     ~SkArenaAlloc();
 
@@ -136,9 +136,6 @@ public:
         return objStart;
     }
 
-    // Destroy all allocated objects, free any heap allocations.
-    void reset();
-
 private:
     static void AssertRelease(bool cond) { if (!cond) { ::abort(); } }
     static uint32_t ToU32(size_t v) {
@@ -146,16 +143,22 @@ private:
         return (uint32_t)v;
     }
 
-    using Footer = int64_t;
     using FooterAction = char* (char*);
+    struct Footer {
+        uint8_t unaligned_action[sizeof(FooterAction*)];
+        uint8_t padding;
+    };
 
     static char* SkipPod(char* footerEnd);
     static void RunDtorsOnBlock(char* footerEnd);
     static char* NextBlock(char* footerEnd);
 
+    template <typename T>
+    void installRaw(const T& val) {
+        memcpy(fCursor, &val, sizeof(val));
+        fCursor += sizeof(val);
+    }
     void installFooter(FooterAction* releaser, uint32_t padding);
-    void installUint32Footer(FooterAction* action, uint32_t value, uint32_t padding);
-    void installPtrFooter(FooterAction* action, char* ptr, uint32_t padding);
 
     void ensureSpace(uint32_t size, uint32_t alignment);
 
@@ -168,7 +171,13 @@ private:
             this->ensureSpace(size, alignment);
             alignedOffset = (~reinterpret_cast<uintptr_t>(fCursor) + 1) & mask;
         }
-        return fCursor + alignedOffset;
+
+        char* object = fCursor + alignedOffset;
+
+        SkASSERT((reinterpret_cast<uintptr_t>(object) & (alignment - 1)) == 0);
+        SkASSERT(object + size <= fEnd);
+
+        return object;
     }
 
     char* allocObjectWithFooter(uint32_t sizeIncludingFooter, uint32_t alignment);
@@ -197,7 +206,8 @@ private:
 
             // Advance to end of array to install footer.?
             fCursor = objStart + arraySize;
-            this->installUint32Footer(
+            this->installRaw(ToU32(count));
+            this->installFooter(
                 [](char* footerEnd) {
                     char* objEnd = footerEnd - (sizeof(Footer) + sizeof(uint32_t));
                     uint32_t count;
@@ -209,7 +219,6 @@ private:
                     }
                     return objStart;
                 },
-                ToU32(count),
                 padding);
         }
 
@@ -219,14 +228,38 @@ private:
     char*          fDtorCursor;
     char*          fCursor;
     char*          fEnd;
+
+    // We found allocating strictly doubling amounts of memory from the heap left too
+    // much unused slop, particularly on Android.  Instead we'll follow a Fibonacci-like
+    // progression that's simple to implement and grows with roughly a 1.6 exponent:
+    //
+    // To start,
+    //    fNextHeapAlloc = fYetNextHeapAlloc = 1*fFirstHeapAllocationSize;
+    //
+    // And then when we do allocate, follow a Fibonacci f(n+2) = f(n+1) + f(n) rule:
+    //    void* block = malloc(fNextHeapAlloc);
+    //    std::swap(fNextHeapAlloc, fYetNextHeapAlloc)
+    //    fYetNextHeapAlloc += fNextHeapAlloc;
+    //
+    // That makes the nth allocation fib(n) * fFirstHeapAllocationSize bytes.
+    uint32_t fNextHeapAlloc,     // How many bytes minimum will we allocate next from the heap?
+    fYetNextHeapAlloc;           // And then how many the next allocation after that?
+};
+
+class SkArenaAllocWithReset : public SkArenaAlloc {
+public:
+    SkArenaAllocWithReset(char* block, size_t blockSize, size_t firstHeapAllocation);
+
+    explicit SkArenaAllocWithReset(size_t firstHeapAllocation)
+            : SkArenaAllocWithReset(nullptr, 0, firstHeapAllocation) {}
+
+    // Destroy all allocated objects, free any heap allocations.
+    void reset();
+
+private:
     char* const    fFirstBlock;
     const uint32_t fFirstSize;
     const uint32_t fFirstHeapAllocationSize;
-
-    // Use the Fibonacci sequence as the growth factor for block size. The size of the block
-    // allocated is fFib0 * fFirstHeapAllocationSize. Using 2 ^ n * fFirstHeapAllocationSize
-    // had too much slop for Android.
-    uint32_t       fFib0 {1}, fFib1 {1};
 };
 
 // Helper for defining allocators with inline/reserved storage.
@@ -239,6 +272,14 @@ class SkSTArenaAlloc : private std::array<char, InlineStorageSize>, public SkAre
 public:
     explicit SkSTArenaAlloc(size_t firstHeapAllocation = InlineStorageSize)
         : SkArenaAlloc{this->data(), this->size(), firstHeapAllocation} {}
+};
+
+template <size_t InlineStorageSize>
+class SkSTArenaAllocWithReset
+        : private std::array<char, InlineStorageSize>, public SkArenaAllocWithReset {
+public:
+    explicit SkSTArenaAllocWithReset(size_t firstHeapAllocation = InlineStorageSize)
+            : SkArenaAllocWithReset{this->data(), this->size(), firstHeapAllocation} {}
 };
 
 #endif  // SkArenaAlloc_DEFINED

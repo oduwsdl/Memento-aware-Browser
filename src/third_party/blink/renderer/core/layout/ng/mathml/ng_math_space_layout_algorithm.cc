@@ -13,8 +13,7 @@ NGMathSpaceLayoutAlgorithm::NGMathSpaceLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
     : NGLayoutAlgorithm(params) {
   DCHECK(params.fragment_geometry.scrollbar.IsEmpty());
-  container_builder_.SetIsNewFormattingContext(true);
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
+  DCHECK(params.space.IsNewFormattingContext());
 }
 
 scoped_refptr<const NGLayoutResult> NGMathSpaceLayoutAlgorithm::Layout() {
@@ -26,7 +25,7 @@ scoped_refptr<const NGLayoutResult> NGMathSpaceLayoutAlgorithm::Layout() {
       container_builder_.InitialBorderBoxSize().inline_size);
 
   container_builder_.SetIntrinsicBlockSize(intrinsic_block_size);
-  container_builder_.SetBlockSize(block_size);
+  container_builder_.SetFragmentsTotalBlockSize(block_size);
 
   container_builder_.SetBaseline(
       BorderScrollbarPadding().block_start +

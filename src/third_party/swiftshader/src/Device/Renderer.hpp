@@ -37,6 +37,7 @@ namespace vk {
 class DescriptorSet;
 class Device;
 class Query;
+class PipelineLayout;
 
 }  // namespace vk
 
@@ -86,9 +87,12 @@ struct DrawData
 	float4 halfPixelX;
 	float4 halfPixelY;
 	float viewportHeight;
-	float slopeDepthBias;
 	float depthRange;
 	float depthNear;
+	float minimumResolvableDepthDifference;
+	float constantDepthBias;
+	float slopeDepthBias;
+	float depthBiasClamp;
 
 	unsigned int *colorBuffer[RENDERTARGETS];
 	int colorPitchB[RENDERTARGETS];
@@ -157,13 +161,17 @@ struct DrawCall
 	VertexProcessor::RoutineType vertexRoutine;
 	SetupProcessor::RoutineType setupRoutine;
 	PixelProcessor::RoutineType pixelRoutine;
+	bool containsImageWrite;
 
 	SetupFunction setupPrimitives;
 	SetupProcessor::State setupState;
 
+	vk::Device *device;
 	vk::ImageView *renderTarget[RENDERTARGETS];
 	vk::ImageView *depthBuffer;
 	vk::ImageView *stencilBuffer;
+	vk::DescriptorSet::Array descriptorSetObjects;
+	const vk::PipelineLayout *pipelineLayout;
 	TaskEvents *events;
 
 	vk::Query *occlusionQuery;

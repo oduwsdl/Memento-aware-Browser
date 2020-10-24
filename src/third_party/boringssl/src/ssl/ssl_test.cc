@@ -5070,6 +5070,22 @@ class QUICMethodTest : public testing::Test {
     SSL_CTX_set_max_proto_version(server_ctx_.get(), TLS1_3_VERSION);
     SSL_CTX_set_min_proto_version(client_ctx_.get(), TLS1_3_VERSION);
     SSL_CTX_set_max_proto_version(client_ctx_.get(), TLS1_3_VERSION);
+
+    static const uint8_t kALPNProtos[] = {0x03, 'f', 'o', 'o'};
+    ASSERT_EQ(SSL_CTX_set_alpn_protos(client_ctx_.get(), kALPNProtos,
+                                      sizeof(kALPNProtos)),
+              0);
+    SSL_CTX_set_alpn_select_cb(
+        server_ctx_.get(),
+        [](SSL *ssl, const uint8_t **out, uint8_t *out_len, const uint8_t *in,
+           unsigned in_len, void *arg) -> int {
+          return SSL_select_next_proto(
+                     const_cast<uint8_t **>(out), out_len, in, in_len,
+                     kALPNProtos, sizeof(kALPNProtos)) == OPENSSL_NPN_NEGOTIATED
+                     ? SSL_TLSEXT_ERR_OK
+                     : SSL_TLSEXT_ERR_NOACK;
+        },
+        nullptr);
   }
 
   static MockQUICTransport *TransportFromSSL(const SSL *ssl) {
@@ -5418,6 +5434,46 @@ TEST_F(QUICMethodTest, ZeroRTTAccept) {
   EXPECT_FALSE(SSL_in_early_data(server_.get()));
   EXPECT_TRUE(SSL_early_data_accepted(client_.get()));
   EXPECT_TRUE(SSL_early_data_accepted(server_.get()));
+
+  // Finish handling post-handshake messages after the first 0-RTT resumption.
+  EXPECT_TRUE(ProvideHandshakeData(client_.get()));
+  EXPECT_TRUE(SSL_process_quic_post_handshake(client_.get()));
+
+  // Perform a second 0-RTT resumption attempt, and confirm that 0-RTT is
+  // accepted again.
+  ASSERT_TRUE(CreateClientAndServer());
+  SSL_set_session(client_.get(), g_last_session.get());
+
+  // The client handshake should return immediately into the early data state.
+  ASSERT_EQ(SSL_do_handshake(client_.get()), 1);
+  EXPECT_TRUE(SSL_in_early_data(client_.get()));
+  // The transport should have keys for sending 0-RTT data.
+  EXPECT_TRUE(transport_->client()->HasWriteSecret(ssl_encryption_early_data));
+
+  // The server will consume the ClientHello and also enter the early data
+  // state.
+  ASSERT_TRUE(ProvideHandshakeData(server_.get()));
+  ASSERT_EQ(SSL_do_handshake(server_.get()), 1);
+  EXPECT_TRUE(SSL_in_early_data(server_.get()));
+  EXPECT_TRUE(transport_->SecretsMatch(ssl_encryption_early_data));
+  // At this point, the server has half-RTT write keys, but it cannot access
+  // 1-RTT read keys until client Finished.
+  EXPECT_TRUE(transport_->server()->HasWriteSecret(ssl_encryption_application));
+  EXPECT_FALSE(transport_->server()->HasReadSecret(ssl_encryption_application));
+
+  // Finish up the client and server handshakes.
+  ASSERT_TRUE(CompleteHandshakesForQUIC());
+
+  // Both sides can now exchange 1-RTT data.
+  ExpectHandshakeSuccess();
+  EXPECT_TRUE(SSL_session_reused(client_.get()));
+  EXPECT_TRUE(SSL_session_reused(server_.get()));
+  EXPECT_FALSE(SSL_in_early_data(client_.get()));
+  EXPECT_FALSE(SSL_in_early_data(server_.get()));
+  EXPECT_TRUE(SSL_early_data_accepted(client_.get()));
+  EXPECT_TRUE(SSL_early_data_accepted(server_.get()));
+  EXPECT_EQ(SSL_get_early_data_reason(client_.get()), ssl_early_data_accepted);
+  EXPECT_EQ(SSL_get_early_data_reason(server_.get()), ssl_early_data_accepted);
 }
 
 TEST_F(QUICMethodTest, ZeroRTTRejectMismatchedParameters) {
@@ -6113,6 +6169,111 @@ TEST_P(SSLVersionTest, DoubleSSLError) {
                 server_err == SSL_ERROR_WANT_READ ||
                 server_err == SSL_ERROR_WANT_WRITE);
   }
+}
+
+TEST_P(SSLVersionTest, SameKeyResume) {
+  uint8_t key[48];
+  RAND_bytes(key, sizeof(key));
+
+  bssl::UniquePtr<SSL_CTX> server_ctx2 = CreateContext();
+  ASSERT_TRUE(server_ctx2);
+  ASSERT_TRUE(UseCertAndKey(server_ctx2.get()));
+  ASSERT_TRUE(
+      SSL_CTX_set_tlsext_ticket_keys(server_ctx_.get(), key, sizeof(key)));
+  ASSERT_TRUE(
+      SSL_CTX_set_tlsext_ticket_keys(server_ctx2.get(), key, sizeof(key)));
+
+  SSL_CTX_set_session_cache_mode(client_ctx_.get(), SSL_SESS_CACHE_BOTH);
+  SSL_CTX_set_session_cache_mode(server_ctx_.get(), SSL_SESS_CACHE_BOTH);
+  SSL_CTX_set_session_cache_mode(server_ctx2.get(), SSL_SESS_CACHE_BOTH);
+
+  // Establish a session for |server_ctx_|.
+  bssl::UniquePtr<SSL_SESSION> session =
+      CreateClientSession(client_ctx_.get(), server_ctx_.get());
+  ASSERT_TRUE(session);
+  ClientConfig config;
+  config.session = session.get();
+
+  // Resuming with |server_ctx_| again works.
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx_.get(),
+                                     server_ctx_.get(), config));
+  EXPECT_TRUE(SSL_session_reused(client.get()));
+  EXPECT_TRUE(SSL_session_reused(server.get()));
+
+  // Resuming with |server_ctx2| also works.
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx_.get(),
+                                     server_ctx2.get(), config));
+  EXPECT_TRUE(SSL_session_reused(client.get()));
+  EXPECT_TRUE(SSL_session_reused(server.get()));
+}
+
+TEST_P(SSLVersionTest, DifferentKeyNoResume) {
+  uint8_t key1[48], key2[48];
+  RAND_bytes(key1, sizeof(key1));
+  RAND_bytes(key2, sizeof(key2));
+
+  bssl::UniquePtr<SSL_CTX> server_ctx2 = CreateContext();
+  ASSERT_TRUE(server_ctx2);
+  ASSERT_TRUE(UseCertAndKey(server_ctx2.get()));
+  ASSERT_TRUE(
+      SSL_CTX_set_tlsext_ticket_keys(server_ctx_.get(), key1, sizeof(key1)));
+  ASSERT_TRUE(
+      SSL_CTX_set_tlsext_ticket_keys(server_ctx2.get(), key2, sizeof(key2)));
+
+  SSL_CTX_set_session_cache_mode(client_ctx_.get(), SSL_SESS_CACHE_BOTH);
+  SSL_CTX_set_session_cache_mode(server_ctx_.get(), SSL_SESS_CACHE_BOTH);
+  SSL_CTX_set_session_cache_mode(server_ctx2.get(), SSL_SESS_CACHE_BOTH);
+
+  // Establish a session for |server_ctx_|.
+  bssl::UniquePtr<SSL_SESSION> session =
+      CreateClientSession(client_ctx_.get(), server_ctx_.get());
+  ASSERT_TRUE(session);
+  ClientConfig config;
+  config.session = session.get();
+
+  // Resuming with |server_ctx_| again works.
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx_.get(),
+                                     server_ctx_.get(), config));
+  EXPECT_TRUE(SSL_session_reused(client.get()));
+  EXPECT_TRUE(SSL_session_reused(server.get()));
+
+  // Resuming with |server_ctx2| does not work.
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx_.get(),
+                                     server_ctx2.get(), config));
+  EXPECT_FALSE(SSL_session_reused(client.get()));
+  EXPECT_FALSE(SSL_session_reused(server.get()));
+}
+
+TEST_P(SSLVersionTest, UnrelatedServerNoResume) {
+  bssl::UniquePtr<SSL_CTX> server_ctx2 = CreateContext();
+  ASSERT_TRUE(server_ctx2);
+  ASSERT_TRUE(UseCertAndKey(server_ctx2.get()));
+
+  SSL_CTX_set_session_cache_mode(client_ctx_.get(), SSL_SESS_CACHE_BOTH);
+  SSL_CTX_set_session_cache_mode(server_ctx_.get(), SSL_SESS_CACHE_BOTH);
+  SSL_CTX_set_session_cache_mode(server_ctx2.get(), SSL_SESS_CACHE_BOTH);
+
+  // Establish a session for |server_ctx_|.
+  bssl::UniquePtr<SSL_SESSION> session =
+      CreateClientSession(client_ctx_.get(), server_ctx_.get());
+  ASSERT_TRUE(session);
+  ClientConfig config;
+  config.session = session.get();
+
+  // Resuming with |server_ctx_| again works.
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx_.get(),
+                                     server_ctx_.get(), config));
+  EXPECT_TRUE(SSL_session_reused(client.get()));
+  EXPECT_TRUE(SSL_session_reused(server.get()));
+
+  // Resuming with |server_ctx2| does not work.
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx_.get(),
+                                     server_ctx2.get(), config));
+  EXPECT_FALSE(SSL_session_reused(client.get()));
+  EXPECT_FALSE(SSL_session_reused(server.get()));
 }
 
 TEST(SSLTest, WriteWhileExplicitRenegotiate) {

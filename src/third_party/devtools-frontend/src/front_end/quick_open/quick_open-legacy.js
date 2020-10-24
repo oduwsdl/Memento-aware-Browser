@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+
 import * as QuickOpenModule from './quick_open.js';
 
 self.QuickOpen = self.QuickOpen || {};
@@ -45,12 +47,16 @@ QuickOpen.FilteredListWidget.Provider = QuickOpenModule.FilteredListWidget.Provi
  */
 QuickOpen.HelpQuickOpen = QuickOpenModule.HelpQuickOpen.HelpQuickOpen;
 
+QuickOpen.QuickInput = QuickOpenModule.QuickInput.QuickInput;
+
 /**
  * @constructor
  */
 QuickOpen.QuickOpen = QuickOpenModule.QuickOpen.QuickOpenImpl;
 
 QuickOpen.QuickOpen._history = QuickOpenModule.QuickOpen.history;
+
+QuickOpen.QuickPick = QuickOpenModule.QuickPick.QuickPick;
 
 /**
  * @constructor

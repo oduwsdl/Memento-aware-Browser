@@ -213,7 +213,7 @@ dsp::MaskBlendFunc GetMaskBlendFunc(const dsp::Dsp& dsp, bool is_inter_intra,
                                     bool is_wedge_inter_intra,
                                     int subsampling_x, int subsampling_y) {
   return (is_inter_intra && !is_wedge_inter_intra)
-             ? dsp.mask_blend[0][is_inter_intra]
+             ? dsp.mask_blend[0][/*is_inter_intra=*/true]
              : dsp.mask_blend[subsampling_x + subsampling_y][is_inter_intra];
 }
 
@@ -804,9 +804,7 @@ bool Tile::InterPrediction(const Block& block, const Plane plane, const int x,
                             dest, dest_stride);
   } else if (prediction_parameters.motion_mode == kMotionModeObmc) {
     // Obmc mode is allowed only for single reference (!is_compound).
-    if (!ObmcPrediction(block, plane, prediction_width, prediction_height)) {
-      return false;
-    }
+    return ObmcPrediction(block, plane, prediction_width, prediction_height);
   } else if (is_inter_intra) {
     // InterIntra and obmc must be mutually exclusive.
     InterIntraPrediction(
@@ -1009,12 +1007,9 @@ void Tile::BuildConvolveBlock(
                     kScaleSubPixelBits) +
                    kSubPixelTaps;
   }
-  const int copy_start_x =
-      std::min(std::max(ref_block_start_x, ref_start_x), ref_last_x);
-  const int copy_end_x =
-      std::max(std::min(ref_block_end_x, ref_last_x), copy_start_x);
-  const int copy_start_y =
-      std::min(std::max(ref_block_start_y, ref_start_y), ref_last_y);
+  const int copy_start_x = Clip3(ref_block_start_x, ref_start_x, ref_last_x);
+  const int copy_start_y = Clip3(ref_block_start_y, ref_start_y, ref_last_y);
+  const int copy_end_x = Clip3(ref_block_end_x, copy_start_x, ref_last_x);
   const int block_width = copy_end_x - copy_start_x + 1;
   const bool extend_left = ref_block_start_x < ref_start_x;
   const bool extend_right = ref_block_end_x > ref_last_x;
@@ -1186,10 +1181,6 @@ bool Tile::BlockInterPrediction(
                                    kConvolveBorderLeftTop * pixel_size);
   }
 
-  const int has_horizontal_filter = static_cast<int>(
-      ((mv.mv[MotionVector::kColumn] * (1 << (1 - subsampling_x))) & 15) != 0);
-  const int has_vertical_filter = static_cast<int>(
-      ((mv.mv[MotionVector::kRow] * (1 << (1 - subsampling_y))) & 15) != 0);
   void* const output =
       (is_compound || is_inter_intra) ? prediction : static_cast<void*>(dest);
   ptrdiff_t output_stride = (is_compound || is_inter_intra)
@@ -1214,14 +1205,17 @@ bool Tile::BlockInterPrediction(
                   vertical_filter_index, start_x, start_y, step_x, step_y,
                   width, height, output, output_stride);
   } else {
+    const int horizontal_filter_id = (start_x >> 6) & kSubPixelMask;
+    const int vertical_filter_id = (start_y >> 6) & kSubPixelMask;
+
     dsp::ConvolveFunc convolve_func =
         dsp_.convolve[reference_frame_index == -1][is_compound]
-                     [has_vertical_filter][has_horizontal_filter];
+                     [vertical_filter_id != 0][horizontal_filter_id != 0];
     assert(convolve_func != nullptr);
 
     convolve_func(block_start, convolve_buffer_stride, horizontal_filter_index,
-                  vertical_filter_index, start_x, start_y, width, height,
-                  output, output_stride);
+                  vertical_filter_index, horizontal_filter_id,
+                  vertical_filter_id, width, height, output, output_stride);
   }
   return true;
 }

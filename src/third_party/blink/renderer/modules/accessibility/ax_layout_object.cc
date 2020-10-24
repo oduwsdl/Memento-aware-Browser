@@ -71,11 +71,12 @@
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
 #include "third_party/blink/renderer/core/layout/layout_table_row.h"
 #include "third_party/blink/renderer/core/layout/layout_table_section.h"
-#include "third_party/blink/renderer/core/layout/layout_text_control.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
+#include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
 #include "third_party/blink/renderer/core/loader/progress_tracker.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
@@ -83,6 +84,7 @@
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
+#include "third_party/blink/renderer/core/svg/svg_g_element.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_image_map_link.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_inline_text_box.h"
@@ -117,10 +119,9 @@ LayoutBoxModelObject* AXLayoutObject::GetLayoutBoxModelObject() const {
 }
 
 bool IsProgrammaticallyScrollable(LayoutBox* box) {
-  if (!box->HasOverflowClip()) {
-    // If overflow is visible it is not scrollable.
+  if (!box->IsScrollContainer())
     return false;
-  }
+
   // Return true if the content is larger than the available space.
   return box->PixelSnappedScrollWidth() != box->PixelSnappedClientWidth() ||
          box->PixelSnappedScrollHeight() != box->PixelSnappedClientHeight();
@@ -260,9 +261,18 @@ Node* AXLayoutObject::GetNodeOrContainingBlockNode() const {
   if (IsDetached())
     return nullptr;
 
+  // For legacy layout, or editable list marker when disabling EditingNG.
   if (layout_object_->IsListMarker()) {
     // Return the originating list item node.
     return layout_object_->GetNode()->parentNode();
+  }
+
+  // For LayoutNG list marker.
+  // Note: When EditingNG is disabled, editable list items are laid out legacy
+  // layout even if LayoutNG enabled.
+  if (auto* list_marker = ListMarker::Get(layout_object_)) {
+    // Return the originating list item node.
+    return list_marker->ListItem(*layout_object_)->GetNode();
   }
 
   if (layout_object_->IsAnonymous()) {
@@ -327,7 +337,7 @@ bool AXLayoutObject::IsEditable() const {
   const auto* elem = DynamicTo<Element>(node);
   if (!elem)
     elem = FlatTreeTraversal::ParentElement(*node);
-  if (GetLayoutObject()->IsTextControl())
+  if (GetLayoutObject()->IsTextControlIncludingNG())
     return true;
 
   // Contrary to Firefox, we mark editable all auto-generated content, such as
@@ -352,6 +362,7 @@ bool AXLayoutObject::IsEditable() const {
 
 // Requires layoutObject to be present because it relies on style
 // user-modify. Don't move this logic to AXNodeObject.
+// Returns true for a contenteditable or any descendant of it.
 bool AXLayoutObject::IsRichlyEditable() const {
   if (IsDetached())
     return false;
@@ -408,10 +419,6 @@ bool AXLayoutObject::IsLinked() const {
   return false;
 }
 
-bool AXLayoutObject::IsLoaded() const {
-  return !layout_object_->GetDocument().Parser();
-}
-
 bool AXLayoutObject::IsOffScreen() const {
   DCHECK(layout_object_);
   IntRect content_rect =
@@ -438,21 +445,15 @@ bool AXLayoutObject::IsFocused() const {
   if (!GetDocument())
     return false;
 
-  Element* focused_element = GetDocument()->FocusedElement();
-  if (!focused_element)
-    return false;
-  AXObject* focused_object = AXObjectCache().GetOrCreate(focused_element);
-  if (!IsA<AXLayoutObject>(focused_object))
-    return false;
-
   // A web area is represented by the Document node in the DOM tree, which isn't
-  // focusable.  Check instead if the frame's selection controller is focused
-  if (focused_object == this ||
-      (RoleValue() == ax::mojom::blink::Role::kRootWebArea &&
-       GetDocument()->GetFrame()->Selection().FrameIsFocusedAndActive()))
+  // focusable.  Check instead if the frame's selection controller is focused.
+  if (IsWebArea() &&
+      GetDocument()->GetFrame()->Selection().FrameIsFocusedAndActive()) {
     return true;
+  }
 
-  return false;
+  Element* focused_element = GetDocument()->FocusedElement();
+  return focused_element && focused_element == GetElement();
 }
 
 // aria-grabbed is deprecated in WAI-ARIA 1.1.
@@ -466,7 +467,7 @@ AccessibilityGrabbedState AXLayoutObject::IsGrabbed() const {
 }
 
 AccessibilitySelectedState AXLayoutObject::IsSelected() const {
-  if (!GetLayoutObject() || !GetNode() || !CanSetSelectedAttribute())
+  if (!GetLayoutObject() || !GetNode() || !IsSubWidget())
     return kSelectedStateUndefined;
 
   // The aria-selected attribute overrides automatic behaviors.
@@ -514,6 +515,18 @@ bool AXLayoutObject::IsSelectedFromFocus() const {
   bool is_selected;
   return !HasAOMPropertyOrARIAAttribute(AOMBooleanProperty::kSelected,
                                         is_selected);
+}
+
+// Returns true if the object is marked user-select:none
+bool AXLayoutObject::IsNotUserSelectable() const {
+  if (!GetLayoutObject())
+    return false;
+
+  const ComputedStyle* style = GetLayoutObject()->Style();
+  if (!style)
+    return false;
+
+  return (style->UserSelect() == EUserSelect::kNone);
 }
 
 // Returns true if the node's aria-selected attribute should be set to true
@@ -572,18 +585,12 @@ bool AXLayoutObject::IsPlaceholder() const {
     return false;
 
   LayoutObject* parent_layout_object = parent_object->GetLayoutObject();
-  auto* layout_text_control =
-      DynamicTo<LayoutTextControl>(parent_layout_object);
-  if (!layout_text_control)
+  if (!parent_layout_object ||
+      !parent_layout_object->IsTextControlIncludingNG())
     return false;
 
-  DCHECK(layout_text_control);
-
-  TextControlElement* text_control_element =
-      layout_text_control->GetTextControlElement();
-  if (!text_control_element)
-    return false;
-
+  const auto* text_control_element =
+      To<TextControlElement>(parent_layout_object->GetNode());
   HTMLElement* placeholder_element = text_control_element->PlaceholderElement();
 
   return GetElement() == static_cast<Element*>(placeholder_element);
@@ -704,7 +711,7 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   // used to compute the character extent for index 0. This is the same as
   // what the caret's bounds would be if the editable area is focused.
   if (ParentObject() && ParentObject()->GetLayoutObject() &&
-      ParentObject()->GetLayoutObject()->IsTextControl()) {
+      ParentObject()->GetLayoutObject()->IsTextControlIncludingNG()) {
     return false;
   }
 
@@ -724,6 +731,14 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
     if (ignored_reasons)
       ignored_reasons->push_back(IgnoredReason(kAXUninteresting));
     return true;
+  }
+
+  // If setting enabled, do not ignore SVG grouping (<g>) elements.
+  if (IsA<SVGGElement>(GetNode())) {
+    Settings* settings = GetDocument()->GetSettings();
+    if (settings->GetAccessibilityIncludeSvgGElement()) {
+      return false;
+    }
   }
 
   // By default, objects should be ignored so that the AX hierarchy is not
@@ -797,8 +812,8 @@ bool AXLayoutObject::CanIgnoreSpaceNextTo(LayoutObject* layout,
 }
 
 bool AXLayoutObject::CanIgnoreTextAsEmpty() const {
-  DCHECK(layout_object_->IsText());
-  DCHECK(layout_object_->Parent());
+  if (!layout_object_ || !layout_object_->IsText() || !layout_object_->Parent())
+    return false;
 
   LayoutText* layout_text = ToLayoutText(layout_object_);
 
@@ -915,7 +930,7 @@ String AXLayoutObject::GetText() const {
   return AXNodeObject::GetText();
 }
 
-ax::mojom::blink::TextDirection AXLayoutObject::GetTextDirection() const {
+ax::mojom::blink::WritingDirection AXLayoutObject::GetTextDirection() const {
   if (!GetLayoutObject())
     return AXNodeObject::GetTextDirection();
 
@@ -926,16 +941,16 @@ ax::mojom::blink::TextDirection AXLayoutObject::GetTextDirection() const {
   if (style->IsHorizontalWritingMode()) {
     switch (style->Direction()) {
       case TextDirection::kLtr:
-        return ax::mojom::blink::TextDirection::kLtr;
+        return ax::mojom::blink::WritingDirection::kLtr;
       case TextDirection::kRtl:
-        return ax::mojom::blink::TextDirection::kRtl;
+        return ax::mojom::blink::WritingDirection::kRtl;
     }
   } else {
     switch (style->Direction()) {
       case TextDirection::kLtr:
-        return ax::mojom::blink::TextDirection::kTtb;
+        return ax::mojom::blink::WritingDirection::kTtb;
       case TextDirection::kRtl:
-        return ax::mojom::blink::TextDirection::kBtt;
+        return ax::mojom::blink::WritingDirection::kBtt;
     }
   }
 
@@ -1431,9 +1446,16 @@ AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
       !layout_object_->IsBox())
     return nullptr;
 
-  // Must be called with lifecycle >= compositing clean.
-  DCHECK_GE(GetDocument()->Lifecycle().GetState(),
-            DocumentLifecycle::kCompositingClean);
+    // Must be called with lifecycle >= compositing clean
+#if DCHECK_IS_ON()
+  if (RuntimeEnabledFeatures::CompositingOptimizationsEnabled()) {
+    DCHECK_GE(GetDocument()->Lifecycle().GetState(),
+              DocumentLifecycle::kPrePaintClean);
+  } else {
+    DCHECK_GE(GetDocument()->Lifecycle().GetState(),
+              DocumentLifecycle::kCompositingAssignmentsClean);
+  }
+#endif
 
   PaintLayer* layer = ToLayoutBox(layout_object_)->Layer();
 
@@ -1742,14 +1764,6 @@ AXObject* AXLayoutObject::ComputeParent() const {
   if (AriaRoleAttribute() == ax::mojom::blink::Role::kMenuBar)
     return AXObjectCache().GetOrCreate(layout_object_->Parent());
 
-  // menuButton and its corresponding menu are DOM siblings, but Accessibility
-  // needs them to be parent/child.
-  if (AriaRoleAttribute() == ax::mojom::blink::Role::kMenu) {
-    AXObject* parent = MenuButtonForMenu();
-    if (parent)
-      return parent;
-  }
-
   if (GetNode())
     return AXNodeObject::ComputeParent();
 
@@ -1772,14 +1786,6 @@ AXObject* AXLayoutObject::ComputeParentIfExists() const {
 
   if (AriaRoleAttribute() == ax::mojom::blink::Role::kMenuBar)
     return AXObjectCache().Get(layout_object_->Parent());
-
-  // menuButton and its corresponding menu are DOM siblings, but Accessibility
-  // needs them to be parent/child.
-  if (AriaRoleAttribute() == ax::mojom::blink::Role::kMenu) {
-    AXObject* parent = MenuButtonForMenuIfExists();
-    if (parent)
-      return parent;
-  }
 
   if (GetNode())
     return AXNodeObject::ComputeParentIfExists();
@@ -1805,22 +1811,6 @@ bool AXLayoutObject::CanHaveChildren() const {
   if (layout_object_->IsListMarkerForNormalContent())
     return false;
   return AXNodeObject::CanHaveChildren();
-}
-
-//
-// Properties of the object's owning document or page.
-//
-
-double AXLayoutObject::EstimatedLoadingProgress() const {
-  if (!layout_object_)
-    return 0;
-
-  if (IsLoaded())
-    return 1.0;
-
-  if (LocalFrame* frame = layout_object_->GetDocument().GetFrame())
-    return frame->Loader().Progress().EstimatedProgress();
-  return 0;
 }
 
 //
@@ -1900,14 +1890,14 @@ bool AXLayoutObject::OnNativeSetValueAction(const String& string) {
 
   LayoutBoxModelObject* layout_object = ToLayoutBoxModelObject(layout_object_);
   auto* html_input_element = DynamicTo<HTMLInputElement>(*GetNode());
-  if (html_input_element && layout_object->IsTextField()) {
+  if (html_input_element && layout_object->IsTextFieldIncludingNG()) {
     html_input_element->setValue(
         string, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
     return true;
   }
 
   if (auto* text_area_element = DynamicTo<HTMLTextAreaElement>(*GetNode())) {
-    DCHECK(layout_object->IsTextArea());
+    DCHECK(layout_object->IsTextAreaIncludingNG());
     text_area_element->setValue(
         string, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
     return true;
@@ -1933,11 +1923,11 @@ bool AXLayoutObject::OnNativeSetValueAction(const String& string) {
 //
 
 void AXLayoutObject::HandleActiveDescendantChanged() {
-  if (!GetLayoutObject())
+  if (!GetLayoutObject() || !GetNode() || !GetDocument())
     return;
 
-  AXObject* focused_object = AXObjectCache().FocusedObject();
-  if (focused_object == this) {
+  Node* focused_node = GetDocument()->FocusedElement();
+  if (focused_node == GetNode()) {
     AXObject* active_descendant = ActiveDescendant();
     if (active_descendant && active_descendant->IsSelectedFromFocus()) {
       // In single selection containers, selection follows focus, so a selection
@@ -2012,20 +2002,6 @@ bool AXLayoutObject::IsAutofillAvailable() const {
 void AXLayoutObject::HandleAutofillStateChanged(WebAXAutofillState state) {
   // Autofill state is stored in AXObjectCache.
   AXObjectCache().SetAutofillState(AXObjectID(), state);
-}
-
-void AXLayoutObject::TextChanged() {
-  if (!layout_object_)
-    return;
-
-  Settings* settings = GetDocument()->GetSettings();
-  if (settings && settings->GetInlineTextBoxAccessibilityEnabled() &&
-      RoleValue() == ax::mojom::blink::Role::kStaticText)
-    ChildrenChanged();
-
-  // Do this last - AXNodeObject::textChanged posts live region announcements,
-  // and we should update the inline text boxes first.
-  AXNodeObject::TextChanged();
 }
 
 // The following is a heuristic used to determine if a

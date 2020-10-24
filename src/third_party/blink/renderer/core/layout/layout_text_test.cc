@@ -775,6 +775,46 @@ TEST_P(ParameterizedLayoutTextTest, GetTextBoxInfoWithEllipsisForPseudoAfter) {
   EXPECT_EQ(LayoutRect(30, 0, 10, 10), boxes[0].local_rect);
 }
 
+// Test the specialized code path in |PlainText| for when |!GetNode()|.
+TEST_P(ParameterizedLayoutTextTest, PlainTextInPseudo) {
+  SetBodyInnerHTML(String(R"HTML(
+    <style>
+    :root {
+      font-family: monospace;
+      font-size: 10px;
+    }
+    #before_parent::before {
+      display: inline-block;
+      width: 5ch;
+      content: "123 456";
+    }
+    #before_parent_cjk::before {
+      display: inline-block;
+      width: 5ch;
+      content: "123)HTML") +
+                   String(u"\u4E00") + R"HTML(456";
+    }
+    </style>
+    <div id="before_parent"></div>
+    <div id="before_parent_cjk"></div>
+  )HTML");
+
+  const auto GetPlainText = [](const LayoutObject* parent) {
+    const LayoutObject* before = parent->SlowFirstChild();
+    EXPECT_TRUE(before->IsBeforeContent());
+    const LayoutText* before_text = ToLayoutText(before->SlowFirstChild());
+    EXPECT_FALSE(before_text->GetNode());
+    return before_text->PlainText();
+  };
+
+  const LayoutObject* before_parent =
+      GetLayoutObjectByElementId("before_parent");
+  EXPECT_EQ("123 456", GetPlainText(before_parent));
+  const LayoutObject* before_parent_cjk =
+      GetLayoutObjectByElementId("before_parent_cjk");
+  EXPECT_EQ(String(u"123\u4E00456"), GetPlainText(before_parent_cjk));
+}
+
 TEST_P(ParameterizedLayoutTextTest,
        IsBeforeAfterNonCollapsedCharacterNoLineWrap) {
   // Basic tests
@@ -1240,6 +1280,57 @@ TEST_P(ParameterizedLayoutTextTest, VisualRectInDocumentSVGTspanTB) {
   PhysicalRect expected(50 + 15 - 20 / 2, 10 + 25, 20, 20 * 5);
   EXPECT_EQ(expected, target->VisualRectInDocument());
   EXPECT_EQ(expected, target->VisualRectInDocument(kUseGeometryMapper));
+}
+
+TEST_P(ParameterizedLayoutTextTest, PositionForPointAtLeading) {
+  LoadAhem();
+  SetBodyInnerHTML(R"HTML(
+    <style>
+    body {
+      margin: 0;
+      font-size: 10px;
+      line-height: 3;
+      font-family: Ahem;
+    }
+    #container {
+      width: 5ch;
+    }
+    </style>
+    <div id="container">line1 line2</div>
+  )HTML");
+  LayoutObject* container = GetLayoutObjectByElementId("container");
+  LayoutText* text = ToLayoutText(container->SlowFirstChild());
+  // The 1st line is at {0, 0}x{50,30} and 2nd line is {0,30}x{50,30}, with
+  // 10px half-leading, 10px text, and  10px half-leading. {10, 30} is the
+  // middle of the two lines, at the half-leading.
+
+  // line 1
+  // Note: All |PositionForPoint()| should return "line1"[1].
+  EXPECT_EQ(Position(text->GetNode(), LayoutNGEnabled() ? 1 : 7),
+            text->PositionForPoint({10, 0}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), LayoutNGEnabled() ? 1 : 7),
+            text->PositionForPoint({10, 5}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), 1),
+            text->PositionForPoint({10, 10}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), 1),
+            text->PositionForPoint({10, 15}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), LayoutNGEnabled() ? 1 : 7),
+            text->PositionForPoint({10, 20}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), LayoutNGEnabled() ? 1 : 7),
+            text->PositionForPoint({10, 25}).GetPosition());
+  // line 2
+  EXPECT_EQ(Position(text->GetNode(), 7),
+            text->PositionForPoint({10, 30}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), 7),
+            text->PositionForPoint({10, 35}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), 7),
+            text->PositionForPoint({10, 40}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), 7),
+            text->PositionForPoint({10, 45}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), 7),
+            text->PositionForPoint({10, 50}).GetPosition());
+  EXPECT_EQ(Position(text->GetNode(), 7),
+            text->PositionForPoint({10, 55}).GetPosition());
 }
 
 }  // namespace blink

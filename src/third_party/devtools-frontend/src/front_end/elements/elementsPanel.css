@@ -33,29 +33,24 @@
   padding: 2px 0 0 0;
 }
 
+.style-panes-wrapper {
+  overflow: scroll;
+}
+
+.style-panes-wrapper > div:not(:first-child) {
+  border-top: 1px solid var(--divider-color);
+}
+
 #elements-content:not(.elements-wrap) > div {
   display: inline-block;
   min-width: 100%;
 }
 
-#elements-content.elements-wrap {
-  overflow-x: hidden;
-}
-
 #elements-crumbs {
-  flex: 0 0 23px;
   background-color: white;
   border-top: 1px solid var(--divider-color);
   overflow: hidden;
   width: 100%;
-}
-
-.style-panes-wrapper {
-  overflow: hidden auto;
-}
-
-.style-panes-wrapper > div:not(:first-child) {
-  border-top: 1px solid var(--divider-color);
 }
 
 .elements-tree-header {

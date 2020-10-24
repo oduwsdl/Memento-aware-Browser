@@ -4,35 +4,12 @@
 
 #include "testing/js_embedder_test.h"
 
-#include "fxjs/cfxjs_engine.h"
+#include "testing/v8_test_environment.h"
 
-JSEmbedderTest::JSEmbedderTest()
-    : m_pArrayBufferAllocator(std::make_unique<CFX_V8ArrayBufferAllocator>()) {}
+JSEmbedderTest::JSEmbedderTest() = default;
 
 JSEmbedderTest::~JSEmbedderTest() = default;
 
-void JSEmbedderTest::SetUp() {
-  v8::Isolate::CreateParams params;
-  params.array_buffer_allocator = m_pArrayBufferAllocator.get();
-  m_pIsolate.reset(v8::Isolate::New(params));
-
-  EmbedderTest::SetExternalIsolate(isolate());
-  EmbedderTest::SetUp();
-
-  v8::Isolate::Scope isolate_scope(isolate());
-  v8::HandleScope handle_scope(isolate());
-  FXJS_PerIsolateData::SetUp(isolate());
-  m_Engine = std::make_unique<CFXJS_Engine>(isolate());
-  m_Engine->InitializeEngine();
-}
-
-void JSEmbedderTest::TearDown() {
-  m_Engine->ReleaseEngine();
-  m_Engine.reset();
-  EmbedderTest::TearDown();
-  m_pIsolate.reset();
-}
-
-v8::Local<v8::Context> JSEmbedderTest::GetV8Context() {
-  return m_Engine->GetV8Context();
+v8::Isolate* JSEmbedderTest::isolate() const {
+  return V8TestEnvironment::GetInstance()->isolate();
 }

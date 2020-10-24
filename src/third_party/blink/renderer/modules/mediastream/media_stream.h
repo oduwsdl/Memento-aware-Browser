@@ -57,7 +57,6 @@ class MODULES_EXPORT MediaStream final
       public ExecutionContextClient,
       public ActiveScriptWrappable<MediaStream>,
       public MediaStreamDescriptorClient {
-  USING_GARBAGE_COLLECTED_MIXIN(MediaStream);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -67,9 +66,12 @@ class MODULES_EXPORT MediaStream final
   // Creates a MediaStream matching the MediaStreamDescriptor. MediaStreamTracks
   // are created for any MediaStreamComponents attached to the descriptor.
   static MediaStream* Create(ExecutionContext*, MediaStreamDescriptor*);
-  static MediaStream* Create(ExecutionContext*,
-                             MediaStreamDescriptor*,
-                             bool pan_tilt_zoom_allowed);
+  // Creates a MediaStream matching the MediaStreamDescriptor. MediaStreamTracks
+  // are created for any MediaStreamComponents attached to the descriptor. It
+  // returns the stream via callback.
+  static void Create(ExecutionContext*,
+                     MediaStreamDescriptor*,
+                     base::OnceCallback<void(MediaStream*)> callback);
   // Creates a MediaStream with the specified MediaStreamDescriptor and
   // MediaStreamTracks. The tracks must match the MediaStreamComponents attached
   // to the descriptor (or else a DCHECK fails). This allows you to create
@@ -86,7 +88,7 @@ class MODULES_EXPORT MediaStream final
 
   MediaStream(ExecutionContext*,
               MediaStreamDescriptor*,
-              bool pan_tilt_zoom_allowed);
+              base::OnceCallback<void(MediaStream*)> callback);
   MediaStream(ExecutionContext*,
               MediaStreamDescriptor*,
               const MediaStreamTrackVector& audio_tracks,
@@ -124,13 +126,15 @@ class MODULES_EXPORT MediaStream final
 
   // MediaStreamDescriptorClient implementation
   void StreamEnded() override;
-  void AddTrackByComponentAndFireEvents(MediaStreamComponent*) override;
-  void RemoveTrackByComponentAndFireEvents(MediaStreamComponent*) override;
+  void AddTrackByComponentAndFireEvents(MediaStreamComponent*,
+                                        DispatchEventTiming) override;
+  void RemoveTrackByComponentAndFireEvents(MediaStreamComponent*,
+                                           DispatchEventTiming) override;
 
   // Adds the track and, unlike JavaScript-invoked addTrack(), fires related
-  // events like "onaddtrack".
-  void AddTrackAndFireEvents(MediaStreamTrack*);
-  void RemoveTrackAndFireEvents(MediaStreamTrack*);
+  // events like "onaddtrack" either synchronously or in a scheduled event.
+  void AddTrackAndFireEvents(MediaStreamTrack*, DispatchEventTiming);
+  void RemoveTrackAndFireEvents(MediaStreamTrack*, DispatchEventTiming);
 
   void AddRemoteTrack(MediaStreamTrack*);
   void RemoveRemoteTrack(MediaStreamTrack*);
@@ -161,14 +165,22 @@ class MODULES_EXPORT MediaStream final
   void ScheduleDispatchEvent(Event*);
   void ScheduledEventTimerFired(TimerBase*);
 
+  void OnMediaStreamTrackInitialized();
+
   MediaStreamTrackVector audio_tracks_;
   MediaStreamTrackVector video_tracks_;
   Member<MediaStreamDescriptor> descriptor_;
   // Observers are informed when |addTrack| and |removeTrack| are called.
   HeapHashSet<WeakMember<MediaStreamObserver>> observers_;
 
+  // The callback to be called when the media stream is fully initialized,
+  // including image capture for video tracks.
+  base::OnceCallback<void(MediaStream*)> media_stream_initialized_callback_;
+
   TaskRunnerTimer<MediaStream> scheduled_event_timer_;
   HeapVector<Member<Event>> scheduled_events_;
+
+  uint32_t number_of_video_tracks_initialized_ = 0;
 };
 
 using MediaStreamVector = HeapVector<Member<MediaStream>>;

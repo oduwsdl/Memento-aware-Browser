@@ -24,6 +24,7 @@
 #include "dawn_native/DawnNative.h"
 #include "dawn_wire/WireClient.h"
 #include "dawn_wire/WireServer.h"
+#include "utils/PlatformDebugLogger.h"
 #include "utils/SystemUtils.h"
 #include "utils/TerribleCommandBuffer.h"
 #include "utils/WGPUHelpers.h"
@@ -35,7 +36,7 @@
 #include <sstream>
 #include <unordered_map>
 
-#ifdef DAWN_ENABLE_BACKEND_OPENGL
+#if defined(DAWN_ENABLE_BACKEND_OPENGL)
 #    include "GLFW/glfw3.h"
 #    include "dawn_native/OpenGLBackend.h"
 #endif  // DAWN_ENABLE_BACKEND_OPENGL
@@ -81,7 +82,7 @@ namespace {
 
     DawnTestEnvironment* gTestEnv = nullptr;
 
-}  // namespace
+}  // anonymous namespace
 
 const RGBA8 RGBA8::kZero = RGBA8(0, 0, 0, 0);
 const RGBA8 RGBA8::kBlack = RGBA8(0, 0, 0, 255);
@@ -186,6 +187,11 @@ void DawnTestEnvironment::SetEnvironment(DawnTestEnvironment* env) {
 DawnTestEnvironment::DawnTestEnvironment(int argc, char** argv) {
     ParseArgs(argc, argv);
 
+    if (mEnableBackendValidation) {
+        mPlatformDebugLogger =
+            std::unique_ptr<utils::PlatformDebugLogger>(utils::CreatePlatformDebugLogger());
+    }
+
     // Create a temporary instance to select available and preferred adapters. This is done before
     // test instantiation so GetAvailableAdapterTestParamsForBackends can generate test
     // parameterizations all selected adapters. We drop the instance at the end of this function
@@ -198,6 +204,8 @@ DawnTestEnvironment::DawnTestEnvironment(int argc, char** argv) {
     SelectPreferredAdapterProperties(instance.get());
     PrintTestConfigurationAndAdapterInfo();
 }
+
+DawnTestEnvironment::~DawnTestEnvironment() = default;
 
 void DawnTestEnvironment::ParseArgs(int argc, char** argv) {
     size_t argLen = 0;  // Set when parsing --arg=X arguments
@@ -219,72 +227,6 @@ void DawnTestEnvironment::ParseArgs(int argc, char** argv) {
 
         if (strcmp("--skip-validation", argv[i]) == 0) {
             mSkipDawnValidation = true;
-            continue;
-        }
-
-        if (strcmp("--use-spvc", argv[i]) == 0) {
-            if (mSpvcFlagSeen) {
-                dawn::WarningLog() << "Multiple flags passed in that force whether or not to use "
-                                      "the spvc. This may lead to unexpected behaviour.";
-            }
-            ASSERT(!mSpvcFlagSeen);
-
-            mUseSpvc = true;
-            mSpvcFlagSeen = true;
-            continue;
-        }
-
-        if (strcmp("--no-use-spvc", argv[i]) == 0) {
-            if (mSpvcFlagSeen) {
-                dawn::WarningLog() << "Multiple flags passed in that force whether or not to use "
-                                      "the spvc. This may lead to unexpected behaviour.";
-            }
-            ASSERT(!mSpvcFlagSeen);
-
-            mUseSpvc = false;
-            mSpvcFlagSeen = true;
-            continue;
-        }
-
-        if (strcmp("--use-spvc-parser", argv[i]) == 0) {
-            if (mSpvcParserFlagSeen) {
-                dawn::WarningLog() << "Multiple flags passed in that force whether or not to use "
-                                      "the spvc parser. This may cause unexpected behaviour.";
-            }
-            ASSERT(!mSpvcParserFlagSeen);
-
-            if (!mUseSpvc) {
-                if (mSpvcFlagSeen) {
-                    dawn::ErrorLog()
-                        << "Overriding force disabling of spvc since it is required for using the "
-                           "spvc parser. This indicates a likely misconfiguration.";
-                } else {
-                    dawn::InfoLog()
-                        << "Enabling spvc since it is required for using the spvc parser.";
-                }
-                ASSERT(!mSpvcFlagSeen);
-            }
-
-            mUseSpvc = true;  // It's impossible to use the spvc parser without using spvc, so
-                              // turning on mUseSpvc implicitly.
-            mUseSpvcParser = true;
-            mSpvcParserFlagSeen = true;
-            continue;
-        }
-
-        if (strcmp("--no-use-spvc-parser", argv[i]) == 0) {
-            if (mSpvcParserFlagSeen) {
-                dawn::WarningLog() << "Multiple flags passed in that force whether or not to use "
-                                      "the spvc parser. This may cause unexpected behaviour.";
-            }
-            ASSERT(!mSpvcParserFlagSeen);
-
-            // Intentionally not changing mUseSpvc, since the dependency is one-way. This will
-            // not correctly handle the case where spvc is off by default, then there is a spvc
-            // parser on flag followed by a off flag, but that is already being indicated as a
-            // misuse.
-            mUseSpvcParser = false;
-            mSpvcParserFlagSeen = true;
             continue;
         }
 
@@ -348,12 +290,6 @@ void DawnTestEnvironment::ParseArgs(int argc, char** argv) {
                    "  -c, --begin-capture-on-startup: Begin debug capture on startup "
                    "(defaults to no capture)\n"
                    "  --skip-validation: Skip Dawn validation\n"
-                   "  --use-spvc: Use spvc for accessing spirv-cross\n"
-                   "  --no-use-spvc: Do not use spvc for accessing spirv-cross\n"
-                   "  --use-spvc-parser: Use spvc's spir-v parsing insteads of spirv-cross's, "
-                   "implies --use-spvc\n"
-                   "  --no-use-spvc-parser: Do no use spvc's spir-v parsing insteads of "
-                   "spirv-cross's\n"
                    "  --adapter-vendor-id: Select adapter by vendor id to run end2end tests"
                    "on multi-GPU systems \n"
                    "  --exclusive-device-type-preference: Comma-delimited list of preferred device "
@@ -368,6 +304,7 @@ std::unique_ptr<dawn_native::Instance> DawnTestEnvironment::CreateInstanceAndDis
     const {
     auto instance = std::make_unique<dawn_native::Instance>();
     instance->EnableBackendValidation(mEnableBackendValidation);
+    instance->EnableGPUBasedBackendValidation(mEnableBackendValidation);
     instance->EnableBeginCaptureOnStartup(mBeginCaptureOnStartup);
 
     instance->DiscoverDefaultAdapters();
@@ -480,12 +417,6 @@ void DawnTestEnvironment::PrintTestConfigurationAndAdapterInfo() const {
            "SkipDawnValidation: "
         << (mSkipDawnValidation ? "true" : "false")
         << "\n"
-           "UseSpvc: "
-        << (mUseSpvc ? "true" : "false")
-        << "\n"
-           "UseSpvcParser: "
-        << (mUseSpvcParser ? "true" : "false")
-        << "\n"
            "BeginCaptureOnStartup: "
         << (mBeginCaptureOnStartup ? "true" : "false")
         << "\n"
@@ -503,7 +434,8 @@ void DawnTestEnvironment::PrintTestConfigurationAndAdapterInfo() const {
         // Preparing for outputting hex numbers
         log << std::showbase << std::hex << std::setfill('0') << std::setw(4)
 
-            << " - \"" << properties.adapterName << "\"\n"
+            << " - \"" << properties.adapterName << "\" - \"" << properties.driverDescription
+            << "\"\n"
             << "   type: " << AdapterTypeName(properties.adapterType)
             << ", backend: " << ParamName(properties.backendType) << "\n"
             << "   vendorId: 0x" << vendorId.str() << ", deviceId: 0x" << deviceId.str()
@@ -532,14 +464,6 @@ bool DawnTestEnvironment::IsBackendValidationEnabled() const {
 
 bool DawnTestEnvironment::IsDawnValidationSkipped() const {
     return mSkipDawnValidation;
-}
-
-bool DawnTestEnvironment::IsSpvcBeingUsed() const {
-    return mUseSpvc;
-}
-
-bool DawnTestEnvironment::IsSpvcParserBeingUsed() const {
-    return mUseSpvcParser;
 }
 
 dawn_native::Instance* DawnTestEnvironment::GetInstance() const {
@@ -647,6 +571,10 @@ bool DawnTestBase::IsSwiftshader() const {
                                    mParam.adapterProperties.deviceID);
 }
 
+bool DawnTestBase::IsWARP() const {
+    return gpu_info::IsWARP(mParam.adapterProperties.vendorID, mParam.adapterProperties.deviceID);
+}
+
 bool DawnTestBase::IsWindows() const {
 #ifdef DAWN_PLATFORM_WINDOWS
     return true;
@@ -683,12 +611,12 @@ bool DawnTestBase::IsDawnValidationSkipped() const {
     return gTestEnv->IsDawnValidationSkipped();
 }
 
-bool DawnTestBase::IsSpvcBeingUsed() const {
-    return gTestEnv->IsSpvcBeingUsed();
-}
-
-bool DawnTestBase::IsSpvcParserBeingUsed() const {
-    return gTestEnv->IsSpvcParserBeingUsed();
+bool DawnTestBase::HasWGSL() const {
+#ifdef DAWN_ENABLE_WGSL
+    return true;
+#else
+    return false;
+#endif
 }
 
 bool DawnTestBase::IsAsan() const {
@@ -777,24 +705,6 @@ void DawnTestBase::SetUp() {
         deviceDescriptor.forceEnabledToggles.push_back(kSkipValidationToggle);
     }
 
-    static constexpr char kUseSpvcToggle[] = "use_spvc";
-    static constexpr char kUseSpvcParserToggle[] = "use_spvc_parser";
-    if (gTestEnv->IsSpvcBeingUsed()) {
-        ASSERT(gTestEnv->GetInstance()->GetToggleInfo(kUseSpvcToggle) != nullptr);
-        deviceDescriptor.forceEnabledToggles.push_back(kUseSpvcToggle);
-
-        if (gTestEnv->IsSpvcParserBeingUsed()) {
-            ASSERT(gTestEnv->GetInstance()->GetToggleInfo(kUseSpvcParserToggle) != nullptr);
-            deviceDescriptor.forceEnabledToggles.push_back(kUseSpvcParserToggle);
-        }
-
-    } else {
-        // Turning on spvc parser should always turn on spvc.
-        ASSERT(!gTestEnv->IsSpvcParserBeingUsed());
-        ASSERT(gTestEnv->GetInstance()->GetToggleInfo(kUseSpvcToggle) != nullptr);
-        deviceDescriptor.forceDisabledToggles.push_back(kUseSpvcToggle);
-    }
-
     backendDevice = mBackendAdapter.CreateDevice(&deviceDescriptor);
     ASSERT_NE(nullptr, backendDevice);
 
@@ -835,12 +745,9 @@ void DawnTestBase::SetUp() {
         clientDesc.serializer = mC2sBuf.get();
 
         mWireClient.reset(new dawn_wire::WireClient(clientDesc));
-        WGPUDevice clientDevice = mWireClient->GetDevice();
-        DawnProcTable clientProcs = dawn_wire::WireClient::GetProcs();
+        cDevice = mWireClient->GetDevice();
+        procs = dawn_wire::client::GetProcs();
         mS2cBuf->SetHandler(mWireClient.get());
-
-        procs = clientProcs;
-        cDevice = clientDevice;
     } else {
         procs = backendProcs;
         cDevice = backendDevice;
@@ -887,7 +794,10 @@ void DawnTestBase::OnDeviceError(WGPUErrorType type, const char* message, void* 
 }
 
 void DawnTestBase::OnDeviceLost(const char* message, void* userdata) {
-    FAIL() << "Device Lost during test: " << message;
+    // Using ADD_FAILURE + ASSERT instead of FAIL to prevent the current test from continuing with a
+    // corrupt state.
+    ADD_FAILURE() << "Device Lost during test: " << message;
+    ASSERT(false);
 }
 
 std::ostringstream& DawnTestBase::AddBufferExpectation(const char* file,
@@ -921,26 +831,36 @@ std::ostringstream& DawnTestBase::AddBufferExpectation(const char* file,
     return *(mDeferredExpectations.back().message.get());
 }
 
-std::ostringstream& DawnTestBase::AddTextureExpectation(const char* file,
-                                                        int line,
-                                                        const wgpu::Texture& texture,
-                                                        uint32_t x,
-                                                        uint32_t y,
-                                                        uint32_t width,
-                                                        uint32_t height,
-                                                        uint32_t level,
-                                                        uint32_t slice,
-                                                        uint32_t pixelSize,
-                                                        detail::Expectation* expectation) {
-    uint32_t bytesPerRow = Align(width * pixelSize, kTextureBytesPerRowAlignment);
-    uint32_t size = bytesPerRow * (height - 1) + width * pixelSize;
+std::ostringstream& DawnTestBase::AddTextureExpectationImpl(const char* file,
+                                                            int line,
+                                                            detail::Expectation* expectation,
+                                                            const wgpu::Texture& texture,
+                                                            uint32_t x,
+                                                            uint32_t y,
+                                                            uint32_t width,
+                                                            uint32_t height,
+                                                            uint32_t level,
+                                                            uint32_t slice,
+                                                            wgpu::TextureAspect aspect,
+                                                            uint32_t dataSize,
+                                                            uint32_t bytesPerRow) {
+    if (bytesPerRow == 0) {
+        bytesPerRow = Align(width * dataSize, kTextureBytesPerRowAlignment);
+    } else {
+        ASSERT(bytesPerRow >= width * dataSize);
+        ASSERT(bytesPerRow == Align(bytesPerRow, kTextureBytesPerRowAlignment));
+    }
 
-    auto readback = ReserveReadback(size);
+    uint32_t size = bytesPerRow * (height - 1) + width * dataSize;
+
+    // TODO(enga): We should have the map async alignment in Contants.h. Also, it should change to 8
+    // for Float64Array.
+    auto readback = ReserveReadback(Align(size, 4));
 
     // We need to enqueue the copy immediately because by the time we resolve the expectation,
     // the texture might have been modified.
     wgpu::TextureCopyView textureCopyView =
-        utils::CreateTextureCopyView(texture, level, {x, y, slice});
+        utils::CreateTextureCopyView(texture, level, {x, y, slice}, aspect);
     wgpu::BufferCopyView bufferCopyView =
         utils::CreateBufferCopyView(readback.buffer, readback.offset, bytesPerRow, 0);
     wgpu::Extent3D copySize = {width, height, 1};
@@ -957,7 +877,7 @@ std::ostringstream& DawnTestBase::AddTextureExpectation(const char* file,
     deferred.readbackSlot = readback.slot;
     deferred.readbackOffset = readback.offset;
     deferred.size = size;
-    deferred.rowBytes = width * pixelSize;
+    deferred.rowBytes = width * dataSize;
     deferred.bytesPerRow = bytesPerRow;
     deferred.expectation.reset(expectation);
 
@@ -982,16 +902,29 @@ void DawnTestBase::FlushWire() {
     }
 }
 
+void DawnTestBase::WaitForAllOperations() {
+    wgpu::Queue queue = device.GetDefaultQueue();
+    wgpu::Fence fence = queue.CreateFence();
+
+    // Force the currently submitted operations to completed.
+    queue.Signal(fence, 1);
+    while (fence.GetCompletedValue() < 1) {
+        WaitABit();
+    }
+}
+
 DawnTestBase::ReadbackReservation DawnTestBase::ReserveReadback(uint64_t readbackSize) {
     // For now create a new MapRead buffer for each readback
     // TODO(cwallez@chromium.org): eventually make bigger buffers and allocate linearly?
-    wgpu::BufferDescriptor descriptor;
-    descriptor.size = readbackSize;
-    descriptor.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
-
     ReadbackSlot slot;
     slot.bufferSize = readbackSize;
-    slot.buffer = device.CreateBuffer(&descriptor);
+
+    // Create and initialize the slot buffer so that it won't unexpectedly affect the count of
+    // resource lazy clear in the tests.
+    const std::vector<uint8_t> initialBufferData(readbackSize, 0u);
+    slot.buffer =
+        utils::CreateBufferFromData(device, initialBufferData.data(), readbackSize,
+                                    wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst);
 
     ReadbackReservation reservation;
     reservation.buffer = slot.buffer;
@@ -1011,8 +944,8 @@ void DawnTestBase::MapSlotsSynchronously() {
     for (size_t i = 0; i < mReadbackSlots.size(); ++i) {
         MapReadUserdata* userdata = new MapReadUserdata{this, i};
 
-        auto& slot = mReadbackSlots[i];
-        slot.buffer.MapReadAsync(SlotMapReadCallback, userdata);
+        const ReadbackSlot& slot = mReadbackSlots[i];
+        slot.buffer.MapAsync(wgpu::MapMode::Read, 0, 0, SlotMapCallback, userdata);
     }
 
     // Busy wait until all map operations are done.
@@ -1022,17 +955,15 @@ void DawnTestBase::MapSlotsSynchronously() {
 }
 
 // static
-void DawnTestBase::SlotMapReadCallback(WGPUBufferMapAsyncStatus status,
-                                       const void* data,
-                                       uint64_t,
-                                       void* userdata_) {
+void DawnTestBase::SlotMapCallback(WGPUBufferMapAsyncStatus status, void* userdata_) {
     DAWN_ASSERT(status == WGPUBufferMapAsyncStatus_Success);
 
-    auto userdata = static_cast<MapReadUserdata*>(userdata_);
-    userdata->test->mReadbackSlots[userdata->slot].mappedData = data;
-    userdata->test->mNumPendingMapOperations--;
+    std::unique_ptr<MapReadUserdata> userdata(static_cast<MapReadUserdata*>(userdata_));
+    DawnTestBase* test = userdata->test;
+    ReadbackSlot* slot = &test->mReadbackSlots[userdata->slot];
 
-    delete userdata;
+    slot->mappedData = slot->buffer.GetConstMappedRange();
+    test->mNumPendingMapOperations--;
 }
 
 void DawnTestBase::ResolveExpectations() {
@@ -1154,6 +1085,7 @@ namespace detail {
     template class ExpectEq<uint8_t>;
     template class ExpectEq<uint16_t>;
     template class ExpectEq<uint32_t>;
+    template class ExpectEq<uint64_t>;
     template class ExpectEq<RGBA8>;
     template class ExpectEq<float>;
 }  // namespace detail

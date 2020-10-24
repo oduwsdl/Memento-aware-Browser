@@ -13,9 +13,12 @@
 <translation id="1211441953136645838">inothi lokugcina</translation>
 <translation id="1281252709823657822">ingxoxo</translation>
 <translation id="1306460908038601864">Valiwe</translation>
+<translation id="1311894908970423688">Inani kufanele libe ngu-<ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">amakhredithi</translation>
 <translation id="1342835525016946179">i-athikili</translation>
 <translation id="1359897965706325498">isibhengezo</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> izinto</translation>
+<translation id="1480676835519562650">i-multiselectable, okungu-<ph name="SELECTED" /> kokukhethiwe okungu-<ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">isifunda</translation>
 <translation id="1591562245178063882">Le nyanga</translation>
 <translation id="1637811476055996098">Khetha amafayela</translation>
@@ -27,6 +30,7 @@
 <translation id="1806710327868736751">ingxoxo_yokwazisa</translation>
 <translation id="1821985195704844674">igridi yesihlahla</translation>
 <translation id="1822429046913737220">AM/PM</translation>
+<translation id="1823704031293214298">phansi ekhasini</translation>
 <translation id="1832974991323546415">dlala kudivayisi yerimothi</translation>
 <translation id="190587075670221089">ukususwa</translation>
 <translation id="1907737156431278478">isibonelo</translation>
@@ -44,6 +48,7 @@
 <translation id="2247351761944213033">Iviki elingu-<ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Ithrekhi engu-<ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">chofoza</translation>
+<translation id="2307576640803031502">phakathi kohlu, into engu-<ph name="INDEX" /> kwezingu-<ph name="COUNT" /></translation>
 <translation id="2311842470354187719">ukuhlukana kwekhasi</translation>
 <translation id="2335594187091864976">isikhi sedethi nesesikhathi</translation>
 <translation id="2393030564806080191">Inani lombala we-Hexadecimal</translation>
@@ -51,6 +56,7 @@
 <translation id="248395913932153421">Usuku</translation>
 <translation id="2507943997699731163">Sicela ugcwalise le nkambu.</translation>
 <translation id="2508569020611168319">uhlu lwethebhu</translation>
+<translation id="2530182415807757784">i-multiselectable, akukho okukhethiwe.</translation>
 <translation id="2561842179657104141">bonisa izilawuli eziningi zemidiya</translation>
 <translation id="2572483411312390101">dlala</translation>
 <translation id="2613802280814924224">Sicela ufake inani elivumelekile. Inani elivumelekile eliseduze ngu-<ph name="VALID_VALUE" />.</translation>
@@ -100,9 +106,9 @@
 <translation id="4201051445878709314">bonisa inyanga yangaphambilini</translation>
 <translation id="421884353938374759">isikhethi sombala</translation>
 <translation id="4248100235867064564">ibha yemenyu</translation>
+<translation id="4293574643247337246">phezulu ekhasini</translation>
 <translation id="4360991593054037559">Sicela ufake inani elivumelekile. Amanani amabili avumelekile asondele kakhulu ngu-<ph name="VALID_VALUE_LOW" /> no-<ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">I-Q&amp;A</translation>
-<translation id="4413860115965805769">inkinobho yemenyu</translation>
 <translation id="4444765639179266822">Ibonakala ithi: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">ireferensi yeglosari</translation>
 <translation id="4522570452068850558">Imininingwane</translation>
@@ -154,9 +160,11 @@
 <translation id="5677946354068040947">izinketho eziningi</translation>
 <translation id="576709008726043716">isingeniso</translation>
 <translation id="57838592816432529">Thulisa</translation>
+<translation id="5860033963881614850">Valiwe</translation>
 <translation id="588258955323874662">Isikrini esigcwele</translation>
 <translation id="5888666972993069672">Manje isakazela ku-<ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">ibhokisi lokusesha</translation>
+<translation id="5916664084637901428">Vuliwe</translation>
 <translation id="5939518447894949180">Setha kabusha</translation>
 <translation id="5966707198760109579">Iviki</translation>
 <translation id="5987525920412732405">inkinobho yokujikelezisa</translation>
@@ -184,6 +192,7 @@
 <translation id="6643016212128521049">Sula</translation>
 <translation id="668171684555832681">Okunye...</translation>
 <translation id="6692633176391053278">i-stepper</translation>
+<translation id="6709093583001123835">Inani kufanele libe ngu-<ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Ikhwalithi yokudlalwa embi</translation>
 <translation id="6755330956360078551">ithulithiphu</translation>
 <translation id="6790428901817661496">Dlala</translation>
@@ -284,6 +293,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, kusuka ngomhla ka-<ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Isithombe-esithombeni</translation>
 <translation id="9168329111483466115">umbhalo waphansi</translation>
+<translation id="945780513535800434">Ihlolwe Kancane</translation>
 <translation id="954003015749068518">ngena kusithombe-esithombeni</translation>
 <translation id="966787709310836684">imenyu</translation>
 </translationbundle>

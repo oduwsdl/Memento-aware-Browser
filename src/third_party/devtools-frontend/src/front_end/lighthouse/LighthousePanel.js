@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
 import * as Emulation from '../emulation/emulation.js';  // eslint-disable-line no-unused-vars
 import * as HostModule from '../host/host.js';
+import * as Root from '../root/root.js';
 import * as SDK from '../sdk/sdk.js';
 import * as UI from '../ui/ui.js';
 
@@ -29,6 +33,7 @@ export class LighthousePanel extends UI.Panel.Panel {
     this._startView = new StartView(this._controller);
     this._statusView = new StatusView(this._controller);
 
+    this._warningText = null;
     this._unauditableExplanation = null;
     this._cachedRenderedReports = new Map();
 
@@ -37,6 +42,7 @@ export class LighthousePanel extends UI.Panel.Panel {
         this._handleDrop.bind(this));
 
     this._controller.addEventListener(Events.PageAuditabilityChanged, this._refreshStartAuditUI.bind(this));
+    this._controller.addEventListener(Events.PageWarningsChanged, this._refreshWarningsUI.bind(this));
     this._controller.addEventListener(Events.AuditProgressChanged, this._refreshStatusUI.bind(this));
     this._controller.addEventListener(Events.RequestLighthouseStart, event => {
       this._startLighthouse(event);
@@ -50,6 +56,23 @@ export class LighthousePanel extends UI.Panel.Panel {
     this._renderStartView();
 
     this._controller.recomputePageAuditability();
+  }
+
+  static getEvents() {
+    return Events;
+  }
+
+  /**
+   * @param {!Common.EventTarget.EventTargetEvent} evt
+   */
+  _refreshWarningsUI(evt) {
+    // PageWarningsChanged fires multiple times during an audit, which we want to ignore.
+    if (this._isLHAttached) {
+      return;
+    }
+
+    this._warningText = evt.data.warning;
+    this._startView.setWarningText(evt.data.warning);
   }
 
   /**
@@ -145,6 +168,7 @@ export class LighthousePanel extends UI.Panel.Panel {
     if (!this._unauditableExplanation) {
       this._startView.focusStartButton();
     }
+    this._startView.setWarningText(this._warningText);
 
     this._newButton.setEnabled(false);
     this._refreshToolbarUI();
@@ -195,7 +219,7 @@ export class LighthousePanel extends UI.Panel.Panel {
     const dom = new DOM(/** @type {!Document} */ (this._auditResultsElement.ownerDocument));
     const renderer = new LighthouseReportRenderer(dom);
 
-    const templatesHTML = self.Runtime.cachedResources['third_party/lighthouse/report-assets/templates.html'];
+    const templatesHTML = Root.Runtime.cachedResources.get('third_party/lighthouse/report-assets/templates.html');
     const templatesDOM = new DOMParser().parseFromString(templatesHTML, 'text/html');
     if (!templatesDOM) {
       return;
@@ -310,10 +334,6 @@ export class LighthousePanel extends UI.Panel.Panel {
       this._buildReportUI(lighthouseResponse.lhr, lighthouseResponse.artifacts);
       // Give focus to the new audit button when completed
       this._newButton.element.focus();
-      const keyboardInitiated = /** @type {boolean} */ (event.data);
-      if (keyboardInitiated) {
-        UI.UIUtils.markAsFocusedByKeyboard(this._newButton.element);
-      }
     } catch (err) {
       await this._resetEmulationAndProtocolConnection();
       if (err instanceof Error) {
@@ -338,7 +358,7 @@ export class LighthousePanel extends UI.Panel.Panel {
   async _setupEmulationAndProtocolConnection() {
     const flags = this._controller.getFlags();
 
-    const emulationModel = self.singleton(Emulation.DeviceModeModel.DeviceModeModel);
+    const emulationModel = Emulation.DeviceModeModel.DeviceModeModel.instance();
     this._stateBefore = {
       emulation: {
         enabled: emulationModel.enabledSetting().get(),
@@ -376,7 +396,7 @@ export class LighthousePanel extends UI.Panel.Panel {
     await this._protocolService.detach();
 
     if (this._stateBefore) {
-      const emulationModel = self.singleton(Emulation.DeviceModeModel.DeviceModeModel);
+      const emulationModel = Emulation.DeviceModeModel.DeviceModeModel.instance();
       emulationModel.enabledSetting().set(this._stateBefore.emulation.enabled);
       emulationModel.deviceOutlineSetting().set(this._stateBefore.emulation.outlineEnabled);
       emulationModel.toolbarControlsEnabledSetting().set(this._stateBefore.emulation.toolbarControlsEnabled);
@@ -385,7 +405,7 @@ export class LighthousePanel extends UI.Panel.Panel {
       delete this._stateBefore;
     }
 
-    Emulation.InspectedPagePlaceholder.instance().update(true);
+    Emulation.InspectedPagePlaceholder.InspectedPagePlaceholder.instance().update(true);
 
     const resourceTreeModel =
         SDK.SDKModel.TargetManager.instance().mainTarget().model(SDK.ResourceTreeModel.ResourceTreeModel);

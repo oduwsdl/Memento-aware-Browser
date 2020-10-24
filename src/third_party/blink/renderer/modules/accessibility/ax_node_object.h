@@ -30,6 +30,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_ACCESSIBILITY_AX_NODE_OBJECT_H_
 
 #include "base/macros.h"
+#include "third_party/blink/renderer/core/editing/markers/document_marker.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
@@ -59,6 +60,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   AXObjectInclusion ShouldIncludeBasedOnSemantics(
       IgnoredReasons* = nullptr) const;
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
+  bool CanIgnoreTextAsEmpty() const override;
   const AXObject* InheritsPresentationalRoleFrom() const override;
   ax::mojom::blink::Role DetermineTableSectionRole() const;
   ax::mojom::blink::Role DetermineTableCellRole() const;
@@ -74,8 +76,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
 
   bool HasContentEditableAttributeSet() const;
   bool IsTextControl() const override;
-  AXObject* MenuButtonForMenu() const;
-  AXObject* MenuButtonForMenuIfExists() const;
   Element* MenuItemElementForMenu() const;
   Element* MouseButtonListener() const;
   bool IsNativeCheckboxOrRadio() const;
@@ -104,6 +104,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsImageButton() const;
   bool IsInputImage() const final;
   bool IsInPageLinkTarget() const override;
+  bool IsLoaded() const override;
   bool IsMultiSelectable() const override;
   bool IsNativeImage() const final;
   bool IsNativeTextControl() const final;
@@ -137,8 +138,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool CanvasHasFallbackContent() const final;
   int HeadingLevel() const final;
   unsigned HierarchicalLevel() const final;
-  void Markers(Vector<DocumentMarker::MarkerType>&,
-               Vector<AXRange>&) const override;
+  void GetDocumentMarkers(Vector<DocumentMarker::MarkerType>* marker_types,
+                          Vector<AXRange>* marker_ranges) const override;
   AXObject* InPageLinkTarget() const override;
   AccessibilityOrientation Orientation() const override;
   AXObjectVector RadioButtonsInGroup() const override;
@@ -147,6 +148,11 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   String GetText() const override;
   String ImageDataUrl(const IntSize& max_size) const final;
   int TextLength() const override;
+  int TextOffsetInFormattingContext(int offset) const override;
+
+  // Object attributes.
+  ax::mojom::blink::TextAlign GetTextAlign() const final;
+  float GetTextIndent() const final;
 
   // Properties of interactive elements.
   ax::mojom::blink::AriaCurrentState GetAriaCurrentState() const final;
@@ -216,13 +222,20 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void AddChildren() override;
 
   bool CanHaveChildren() const override;
-  void AddChild(AXObject*);
-  void InsertChild(AXObject*, unsigned index);
+  // Set is_from_aria_owns to true if the child is being added because it was
+  // pointed to from aria-owns.
+  void AddChild(AXObject*, bool is_from_aria_owns = false);
+  // Set is_from_aria_owns to true if the child is being insert because it was
+  // pointed to from aria-owns.
+  void InsertChild(AXObject*, unsigned index, bool is_from_aria_owns = false);
   void ClearChildren() override;
   bool NeedsToUpdateChildren() const override { return children_dirty_; }
   void SetNeedsToUpdateChildren() override { children_dirty_ = true; }
   void UpdateChildrenIfNecessary() override;
   void SelectedOptions(AXObjectVector&) const override;
+
+  // Properties of the object's owning document or page.
+  double EstimatedLoadingProgress() const override;
 
   // DOM and Render tree access.
   Element* ActionElement() const override;
@@ -242,7 +255,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   // Notifications that this object may have changed.
   void ChildrenChanged() override;
   void SelectionChanged() final;
-  void TextChanged() override;
 
   // The aria-errormessage object or native object from a validationMessage
   // alert.

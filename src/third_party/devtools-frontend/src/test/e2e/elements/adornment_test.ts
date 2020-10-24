@@ -2,54 +2,45 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chai';
-import {describe, it} from 'mocha';
-
-import {$$, click, enableExperiment, getBrowserAndPages, resourcesPath} from '../../shared/helper.js';
-import {assertContentOfSelectedElementsNode, expandSelectedNodeRecursively, waitForElementsStyleSection} from '../helpers/elements-helpers.js';
-
-const INACTIVE_GRID_ADORNER_SELECTOR = '[aria-label="Enable grid mode"]';
-const ACTIVE_GRID_ADORNER_SELECTOR = '[aria-label="Disable grid mode"]';
+import {click, enableExperiment, goToResource} from '../../shared/helper.js';
+import {describe, it} from '../../shared/mocha-extensions.js';
+import {expandSelectedNodeRecursively, INACTIVE_GRID_ADORNER_SELECTOR, waitForAdorners, waitForContentOfSelectedElementsNode, waitForElementsStyleSection} from '../helpers/elements-helpers.js';
 
 const prepareElementsTab = async () => {
   await waitForElementsStyleSection();
-  await assertContentOfSelectedElementsNode('<body>\u200B');
+  await waitForContentOfSelectedElementsNode('<body>\u200B');
   await expandSelectedNodeRecursively();
 };
 
 describe('Adornment in the Elements Tab', async () => {
-  beforeEach(async function() {
-    const {target} = getBrowserAndPages();
-    await target.goto(`${resourcesPath}/elements/adornment.html`);
-    await prepareElementsTab();
-  });
-
-  it('displays Grid adorners and they can be toggled', async () => {
+  // Flaky test
+  it.skip('[crbug.com/1134593] displays Grid adorners and they can be toggled', async () => {
+    await goToResource('elements/adornment.html');
     await enableExperiment('cssGridFeatures');
     await prepareElementsTab();
 
-    const inactiveGridAdorners = await $$(INACTIVE_GRID_ADORNER_SELECTOR);
-    const getNodesContent = (nodes: HTMLElement[]) => nodes.map((node: HTMLElement) => node.textContent);
-    const inactiveContent = await inactiveGridAdorners.evaluate(getNodesContent);
-    assert.deepEqual(
-        inactiveContent,
-        [
-          'grid',
-          'grid',
-        ],
-        'did not have exactly 2 Grid adorners in the inactive state');
+    await waitForAdorners([
+      {textContent: 'grid', isActive: false},
+      {textContent: 'grid', isActive: false},
+    ]);
 
     // Toggle both grid adorners on and try to select them with the active selector
     await click(INACTIVE_GRID_ADORNER_SELECTOR);
     await click(INACTIVE_GRID_ADORNER_SELECTOR);
-    const activeGridAdorners = await $$(ACTIVE_GRID_ADORNER_SELECTOR);
-    const activeContent = await activeGridAdorners.evaluate(getNodesContent);
-    assert.deepEqual(
-        activeContent,
-        [
-          'grid',
-          'grid',
-        ],
-        'did not have exactly 2 Grid adorners in the active state');
+
+    await waitForAdorners([
+      {textContent: 'grid', isActive: true},
+      {textContent: 'grid', isActive: true},
+    ]);
+  });
+
+  it('does not display adorners on shadow roots when their parents are grids', async () => {
+    await goToResource('elements/adornment-shadow.html');
+    await enableExperiment('cssGridFeatures');
+    await prepareElementsTab();
+
+    await waitForAdorners([
+      {textContent: 'grid', isActive: false},
+    ]);
   });
 });

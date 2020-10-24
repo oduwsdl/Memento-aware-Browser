@@ -54,6 +54,7 @@ rtc_library("audio_coding") {
     "../../rtc_base:checks",
     "../../rtc_base:deprecation",
     "../../rtc_base:rtc_base_approved",
+    "../../rtc_base/synchronization:mutex",
     "../../system_wrappers",
     "../../system_wrappers:metrics",
   ]
@@ -386,6 +387,8 @@ rtc_source_set("isac_common") {
     "../../api/units:time_delta",
     "../../rtc_base:checks",
     "../../rtc_base:rtc_base_approved",
+    "../../rtc_base:safe_minmax",
+    "../../system_wrappers:field_trial",
   ]
   absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
 }
@@ -480,7 +483,7 @@ rtc_library("isac_c") {
     "codecs/isac/main/source/transform.c",
   ]
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     libs = [ "m" ]
   }
 
@@ -606,7 +609,7 @@ rtc_library("isac_fix_c") {
     "../../rtc_base:compile_assert_c",
     "../../rtc_base:rtc_base_approved",
     "../../rtc_base:sanitizer",
-    "../../system_wrappers:cpu_features_api",
+    "../../system_wrappers",
     "../third_party/fft",
   ]
 
@@ -790,7 +793,6 @@ rtc_library("webrtc_multiopus") {
     "../../api/units:time_delta",
     "../../rtc_base:checks",
     "../../rtc_base:logging",
-    "../../rtc_base:macromagic",
     "../../rtc_base:rtc_base_approved",
     "../../rtc_base:safe_minmax",
     "../../rtc_base:stringutils",
@@ -1005,6 +1007,7 @@ rtc_library("neteq") {
     "../../rtc_base:safe_minmax",
     "../../rtc_base:sanitizer",
     "../../rtc_base/experiments:field_trial_parser",
+    "../../rtc_base/synchronization:mutex",
     "../../system_wrappers",
     "../../system_wrappers:field_trial",
     "../../system_wrappers:metrics",
@@ -1386,6 +1389,7 @@ if (rtc_include_tests) {
       "../../common_audio",
       "../../rtc_base:checks",
       "../../rtc_base:rtc_base_approved",
+      "../../rtc_base/synchronization:mutex",
       "../../rtc_base/synchronization:rw_lock_wrapper",
       "../../system_wrappers",
       "../../test:fileutils",
@@ -1452,6 +1456,7 @@ if (rtc_include_tests) {
     defines = audio_coding_defines
 
     deps = audio_coding_deps + [
+             "//third_party/abseil-cpp/absl/strings",
              "../../api/audio:audio_frame_api",
              "../../rtc_base:checks",
              ":audio_coding",
@@ -1971,7 +1976,9 @@ if (rtc_include_tests) {
       "neteq/expand_unittest.cc",
       "neteq/histogram_unittest.cc",
       "neteq/merge_unittest.cc",
+      "neteq/mock/mock_buffer_level_filter.h",
       "neteq/mock/mock_decoder_database.h",
+      "neteq/mock/mock_delay_manager.h",
       "neteq/mock/mock_dtmf_buffer.h",
       "neteq/mock/mock_dtmf_tone_generator.h",
       "neteq/mock/mock_expand.h",
@@ -2058,9 +2065,9 @@ if (rtc_include_tests) {
       "../../rtc_base:rtc_base_tests_utils",
       "../../rtc_base:sanitizer",
       "../../rtc_base:timeutils",
+      "../../rtc_base/synchronization:mutex",
       "../../rtc_base/system:arch",
       "../../system_wrappers",
-      "../../system_wrappers:cpu_features_api",
       "../../test:audio_codec_mocks",
       "../../test:field_trial",
       "../../test:fileutils",
@@ -2075,6 +2082,7 @@ if (rtc_include_tests) {
     absl_deps = [
       "//third_party/abseil-cpp/absl/flags:flag",
       "//third_party/abseil-cpp/absl/memory",
+      "//third_party/abseil-cpp/absl/strings",
       "//third_party/abseil-cpp/absl/types:optional",
     ]
 

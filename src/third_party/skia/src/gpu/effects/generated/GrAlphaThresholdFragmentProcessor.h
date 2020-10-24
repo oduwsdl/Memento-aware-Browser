@@ -14,7 +14,6 @@
 #include "include/core/SkM44.h"
 #include "include/core/SkTypes.h"
 
-#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrFragmentProcessor.h"
 
 class GrAlphaThresholdFragmentProcessor : public GrFragmentProcessor {
@@ -29,8 +28,7 @@ public:
     GrAlphaThresholdFragmentProcessor(const GrAlphaThresholdFragmentProcessor& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "AlphaThresholdFragmentProcessor"; }
-    int inputFP_index = -1;
-    int maskFP_index = -1;
+    bool usesExplicitReturn() const override;
     float innerThreshold;
     float outerThreshold;
 
@@ -46,16 +44,17 @@ private:
                                                          : kNone_OptimizationFlags))
             , innerThreshold(innerThreshold)
             , outerThreshold(outerThreshold) {
-        if (inputFP) {
-            inputFP_index = this->registerChildProcessor(std::move(inputFP));
-        }
+        this->registerChild(std::move(inputFP), SkSL::SampleUsage::PassThrough());
         SkASSERT(maskFP);
-        maskFP_index = this->registerChildProcessor(std::move(maskFP));
+        this->registerChild(std::move(maskFP), SkSL::SampleUsage::PassThrough());
     }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 #endif

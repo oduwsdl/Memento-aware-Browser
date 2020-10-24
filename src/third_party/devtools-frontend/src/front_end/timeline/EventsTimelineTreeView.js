@@ -1,6 +1,8 @@
 // Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
 
 import * as Common from '../common/common.js';
 import * as DataGrid from '../data_grid/data_grid.js';
@@ -126,7 +128,9 @@ export class EventsTimelineTreeView extends TimelineTreeView {
       sortable: true
     });
     super.populateColumns(columns);
-    columns.filter(c => c.fixedWidth).forEach(c => c.width = '80px');
+    columns.filter(c => c.fixedWidth).forEach(c => {
+      c.width = '80px';
+    });
   }
 
   /**

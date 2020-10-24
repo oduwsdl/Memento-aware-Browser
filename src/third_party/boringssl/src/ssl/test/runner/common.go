@@ -124,7 +124,8 @@ const (
 	extensionRenegotiationInfo          uint16 = 0xff01
 	extensionQUICTransportParams        uint16 = 0xffa5 // draft-ietf-quic-tls-13
 	extensionChannelID                  uint16 = 30032  // not IANA assigned
-	extensionDelegatedCredentials       uint16 = 0xff02 // not IANA assigned
+	extensionDelegatedCredentials       uint16 = 0x22   // draft-ietf-tls-subcerts-06
+	extensionDuplicate                  uint16 = 0xffff // not IANA assigned
 )
 
 // TLS signaling cipher suite values
@@ -249,6 +250,7 @@ type ConnectionState struct {
 	ServerName                 string                // server name requested by client, if any (server side only)
 	PeerCertificates           []*x509.Certificate   // certificate chain presented by remote peer
 	VerifiedChains             [][]*x509.Certificate // verified chains built from PeerCertificates
+	OCSPResponse               []byte                // stapled OCSP response from the peer, if any
 	ChannelID                  *ecdsa.PublicKey      // the channel ID for this connection
 	TokenBindingNegotiated     bool                  // whether Token Binding was negotiated
 	TokenBindingParam          uint8                 // the negotiated Token Binding key parameter
@@ -1670,6 +1672,10 @@ type ProtocolBugs struct {
 	// DisableDelegatedCredentials, if true, disables client support for delegated
 	// credentials.
 	DisableDelegatedCredentials bool
+
+	// CompatModeWithQUIC, if true, enables TLS 1.3 compatibility mode
+	// when running over QUIC.
+	CompatModeWithQUIC bool
 }
 
 func (c *Config) serverInit() {

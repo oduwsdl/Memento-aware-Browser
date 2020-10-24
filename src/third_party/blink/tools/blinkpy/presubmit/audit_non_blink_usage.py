@@ -46,6 +46,7 @@ _CONFIG = [
             'base::Location',
             'base::MakeRefCounted',
             'base::Optional',
+            'base::OptionalFromPtr',
             'base::OptionalOrNullptr',
             'base::PlatformThread',
             'base::PlatformThreadId',
@@ -105,6 +106,14 @@ _CONFIG = [
             'base::RepeatingCallback',
             'base::RepeatingClosure',
 
+            # //base/cancelable_callback.h
+            'base::CancelableOnceCallback',
+            'base::CancelableOnceClosure',
+            'base::CancelableRepeatingCallback',
+            'base::CancelableRepeatingClosure',
+            'base::CancelableCallback',
+            'base::CancelableClosure',
+
             # //base/mac/scoped_nsobject.h
             'base::scoped_nsobject',
 
@@ -137,14 +146,17 @@ _CONFIG = [
             'base::as_signed',
             'base::as_unsigned',
             'base::checked_cast',
-            'base::strict_cast',
             'base::saturated_cast',
+            'base::strict_cast',
+            'base::ClampCeil',
+            'base::ClampFloor',
+            'base::IsTypeInRangeForNumericType',
+            'base::IsValueInRangeForNumericType',
+            'base::IsValueNegative',
+            'base::MakeStrictNum',
+            'base::ClampRound',
             'base::SafeUnsignedAbs',
             'base::StrictNumeric',
-            'base::MakeStrictNum',
-            'base::IsValueInRangeForNumericType',
-            'base::IsTypeInRangeForNumericType',
-            'base::IsValueNegative',
 
             # //base/strings/char_traits.h.
             'base::CharTraits',
@@ -241,9 +253,11 @@ _CONFIG = [
             'cc::PaintFlags',
             'cc::PaintImage',
             'cc::PaintImageBuilder',
+            'cc::PaintRecord',
             'cc::PaintShader',
             'cc::PaintWorkletInput',
             'cc::NodeId',
+            'cc::NodeInfo',
 
             # Chromium geometry types.
             'gfx::Point',
@@ -253,12 +267,16 @@ _CONFIG = [
             'gfx::Rect',
             'gfx::RectF',
             'gfx::RRectF',
+            'gfx::ScaleToCeiledSize',
             'gfx::ScaleVector2d',
             'gfx::Size',
             'gfx::SizeF',
             'gfx::Transform',
             'gfx::Vector2d',
             'gfx::Vector2dF',
+
+            # Chromium geometry operations.
+            'gfx::ToFlooredPoint',
 
             # Range type.
             'gfx::Range',
@@ -312,10 +330,10 @@ _CONFIG = [
             'cc::PaintHoldingCommitTrigger',
 
             # Scrolling
-            'cc::kManipulationInfoHasPinchZoomed',
-            'cc::kManipulationInfoHasScrolledByPrecisionTouchPad',
-            'cc::kManipulationInfoHasScrolledByTouch',
-            'cc::kManipulationInfoHasScrolledByWheel',
+            'cc::kManipulationInfoPinchZoom',
+            'cc::kManipulationInfoPrecisionTouchPad',
+            'cc::kManipulationInfoTouch',
+            'cc::kManipulationInfoWheel',
             'cc::kPixelsPerLineStep',
             'cc::kMinFractionToStepWhenPaging',
             'cc::kPercentDeltaForDirectionalScroll',
@@ -336,6 +354,7 @@ _CONFIG = [
             'cc::SnapStrictness',
             'cc::TargetSnapAreaElementIds',
             'gfx::RectToSkRect',
+            'gfx::RectToSkIRect',
             'gfx::ScrollOffset',
             'ui::ScrollGranularity',
 
@@ -410,6 +429,12 @@ _CONFIG = [
             # HTTP structured headers
             'net::structured_headers::.+',
 
+            # CanonicalCookie and related headers
+            'net::CanonicalCookie',
+            'net::CookiePriority',
+            'net::CookieSameSite',
+            'net::CookieSourceScheme',
+
             # HTTP status codes
             'net::HTTP_.+',
 
@@ -456,11 +481,21 @@ _CONFIG = [
             # depend on.
             'ui::AXEvent',
             'ui::AXEventIntent',
+            'ui::AXMode',
             'ui::AXNodeData',
-            'ui::IsDialog',
             'ax::mojom::BoolAttribute',
             'ax::mojom::HasPopup',
             'ax::mojom::State',
+            'ax::mojom::Restriction',
+
+            # Accessibility helper functions - mostly used in Blink for
+            # serialization.
+            'ui::IsDialog',
+            'ui::IsContainerWithSelectableChildren',
+            'ui::IsTableLike',
+            'ui::IsTableRow',
+            'ui::IsCellOrTableHeader',
+            'ui::IsTableHeader',
 
             # Blink uses UKM for logging e.g. always-on leak detection (crbug/757374)
             'ukm::.+',
@@ -473,6 +508,10 @@ _CONFIG = [
             'base::mac::(CFToNSCast|NSToCFCast)',
             'base::mac::Is(AtMost|AtLeast)?OS.+',
             'base::(scoped_nsobject|ScopedCFTypeRef)',
+
+            # absl::variant and getters:
+            'absl::variant',
+            'absl::get_if',
         ],
         'disallowed': [
             ('base::Bind(|Once|Repeating)',
@@ -570,8 +609,12 @@ _CONFIG = [
             'cc::ActiveFrameSequenceTrackers',
             'cc::ApplyViewportChangesArgs',
             'cc::LayerTreeSettings',
+            'cc::PaintBenchmarkResult',
             'cc::TaskGraphRunner',
+            'gfx::DisplayColorSpaces',
             'ui::ImeTextSpan',
+            'viz::FrameSinkId',
+            'viz::LocalSurfaceId',
         ],
     },
     {
@@ -618,8 +661,24 @@ _CONFIG = [
         'paths':
         ['third_party/blink/renderer/core/frame/web_frame_widget_base.cc'],
         'allowed': [
+            'cc::InputHandlerScrollResult',
             'cc::SwapPromise',
             'viz::CompositorFrameMetadata',
+        ],
+    },
+    {
+        'paths':
+        ['third_party/blink/renderer/core/frame/web_local_frame_impl.cc'],
+        'allowed': [
+            'ui::AXTreeID',
+            'ui::AXTreeIDUnknown',
+        ],
+    },
+    {
+        'paths':
+        ['third_party/blink/renderer/core/frame/web_local_frame_impl.h'],
+        'allowed': [
+            'ui::AXTreeID',
         ],
     },
     {
@@ -780,6 +839,7 @@ _CONFIG = [
             'third_party/blink/renderer/modules/webcodecs/',
         ],
         'allowed': [
+            'gpu::kNullSurfaceHandle',
             'media::.+',
         ]
     },
@@ -792,6 +852,29 @@ _CONFIG = [
         ],
         'allowed': [
             'media::.+',
+            'media_capabilities_identifiability_metrics::.+',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/media/audio/',
+        ],
+        'allowed': [
+            # TODO(https://crbug.com/787252): Remove most of the entries below,
+            # once the directory is fully Onion soup'ed.
+            'base::Bind.*',
+            'base::Unretained',
+            'base::NoDestructor',
+            'base::flat_map',
+            'base::AutoLock',
+            'base::Lock',
+            'base::EraseIf',
+            'base::ScopedPlatformFile',
+            'mojo::WrapCallbackWithDefaultInvokeIfNotRun',
+
+            # TODO(https://crrev.com/787252): Consider allowlisting fidl::*
+            # usage more broadly in Blink.
+            'fidl::InterfaceHandle',
         ]
     },
     {
@@ -913,6 +996,16 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/modules/webcodecs/video_decoder_fuzzer.cc',
+            'third_party/blink/renderer/modules/webcodecs/fuzzer_utils.cc',
+            'third_party/blink/renderer/modules/webcodecs/fuzzer_utils.h',
+        ],
+        'allowed': [
+            'wc_fuzzer::.+',
+        ]
+    },
+    {
+        'paths': [
             'third_party/blink/renderer/modules/webgpu/',
         ],
         # The WebGPU Blink module needs access to the WebGPU control
@@ -995,8 +1088,6 @@ _CONFIG = [
         'paths': [
             'third_party/blink/renderer/core/layout/layout_theme.cc',
             'third_party/blink/renderer/core/layout/layout_theme_mac.mm',
-            'third_party/blink/renderer/core/paint/fallback_theme.cc',
-            'third_party/blink/renderer/core/paint/fallback_theme.h',
             'third_party/blink/renderer/core/paint/object_painter_base.cc',
             'third_party/blink/renderer/core/paint/theme_painter.cc',
         ],
@@ -1029,7 +1120,7 @@ _CONFIG = [
     {
         'paths': [
             # TODO(crbug.com/787254): Separate the two paths below and their own
-            # whitelist.
+            # allowlist.
             'third_party/blink/renderer/modules/peerconnection/',
             'third_party/blink/renderer/bindings/modules/v8/serialization/',
         ],
@@ -1040,14 +1131,12 @@ _CONFIG = [
             'base::LazyInstance',
             'base::Lock',
             # TODO(crbug.com/787254): Remove base::BindOnce, base::Unretained,
-            # base::Passed, base::Closure, base::MessageLoopCurrent,
-            # base::RetainedRef, base::EndsWith and base::CompareCase.
+            # base::Passed, base::Closure, base::CurrentThread and
+            # base::RetainedRef.
             'base::Bind.*',
             'base::Closure',
-            'base::CompareCase',
-            'base::EndsWith',
             'base::MD5.*',
-            'base::MessageLoopCurrent',
+            'base::CurrentThread',
             'base::Passed',
             'base::PowerObserver',
             'base::RetainedRef',
@@ -1085,11 +1174,19 @@ _CONFIG = [
         ],
     },
     {
-        'paths': ['third_party/blink/renderer/modules/manifest/'],
-        'allowed': [
-            'base::NullableString16',
-            'net::ParseMimeTypeWithoutParameter',
+        'paths': [
+            'third_party/blink/renderer/modules/direct_sockets/',
         ],
+        'allowed': [
+            'net::DefineNetworkTrafficAnnotation',
+            'net::Error',
+            'net::MutableNetworkTrafficAnnotationTag',
+            'net::NetworkTrafficAnnotationTag',
+        ]
+    },
+    {
+        'paths': ['third_party/blink/renderer/modules/manifest/'],
+        'allowed': ['net::ParseMimeTypeWithoutParameter'],
     },
     {
         'paths':
@@ -1098,12 +1195,16 @@ _CONFIG = [
     },
     {
         'paths': ['third_party/blink/renderer/core/frame/local_frame_view.cc'],
-        'allowed':
-        ['cc::frame_viewer_instrumentation::IsTracingLayerTreeSnapshots'],
+        'allowed': [
+            'base::LapTimer',
+            'cc::frame_viewer_instrumentation::IsTracingLayerTreeSnapshots',
+        ],
     },
     {
         'paths': [
-            'third_party/blink/renderer/modules/webaudio/audio_worklet_thread.cc'
+            'third_party/blink/renderer/modules/webaudio/offline_audio_worklet_thread.cc',
+            'third_party/blink/renderer/modules/webaudio/realtime_audio_worklet_thread.cc',
+            'third_party/blink/renderer/modules/webaudio/semi_realtime_audio_worklet_thread.cc',
         ],
         'allowed': ['base::ThreadPriority'],
     },

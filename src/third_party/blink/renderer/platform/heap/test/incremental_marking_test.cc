@@ -55,12 +55,10 @@ class BackingVisitor : public Visitor {
       EXPECT_TRUE(header->TryMark());
   }
 
-  void VisitEphemeron(const void* key,
-                      const void* value,
-                      TraceCallback value_trace_callback) final {
+  void VisitEphemeron(const void* key, TraceDescriptor value_desc) final {
     if (!HeapObjectHeader::FromPayload(key)->IsMarked())
       return;
-    value_trace_callback(this, value);
+    value_desc.callback(this, value_desc.base_object_payload);
   }
 
  private:
@@ -413,8 +411,6 @@ class ClassWithVirtual {
 class Child : public GarbageCollected<Child>,
               public ClassWithVirtual,
               public Mixin {
-  USING_GARBAGE_COLLECTED_MIXIN(Child);
-
  public:
   Child() : ClassWithVirtual(), Mixin() {}
   ~Child() override {}
@@ -933,9 +929,6 @@ TEST_F(IncrementalMarkingTest, HeapLinkedHashSetSwap) {
   Swap<HeapLinkedHashSet<WeakMember<Object>>>();
 }
 
-// TODO(keinakashima): add tests for NewLinkedHashSet after supporting
-// WeakMember
-
 // =============================================================================
 // HeapHashCountedSet support. =================================================
 // =============================================================================
@@ -1355,8 +1348,6 @@ class RegisteringMixin : public GarbageCollectedMixin {
 
 class RegisteringObject : public GarbageCollected<RegisteringObject>,
                           public RegisteringMixin {
-  USING_GARBAGE_COLLECTED_MIXIN(RegisteringObject);
-
  public:
   explicit RegisteringObject(ObjectRegistry* registry)
       : RegisteringMixin(registry) {}
@@ -1835,51 +1826,52 @@ TEST_F(IncrementalMarkingTest, LinkedHashSetMovingCallback) {
   EXPECT_EQ(10u, Destructed::n_destructed);
 }
 
-class NewLinkedHashSetWrapper final
-    : public GarbageCollected<NewLinkedHashSetWrapper> {
+class DestructedAndTraced final : public GarbageCollected<DestructedAndTraced> {
  public:
-  using HashType = HeapNewLinkedHashSet<Member<Destructed>>;
+  ~DestructedAndTraced() { n_destructed++; }
 
-  NewLinkedHashSetWrapper() {
-    for (size_t i = 0; i < 10; ++i) {
-      hash_set_.insert(MakeGarbageCollected<Destructed>());
-    }
-  }
+  void Trace(Visitor*) const { n_traced++; }
 
-  void Trace(Visitor* v) const { v->Trace(hash_set_); }
-
-  void Swap() {
-    HashType hash_set;
-    hash_set_.Swap(hash_set);
-  }
-
-  HashType hash_set_;
+  static size_t n_destructed;
+  static size_t n_traced;
 };
 
-TEST_F(IncrementalMarkingTest, NewLinkedHashSetMovingCallback) {
-  ClearOutOldGarbage();
+size_t DestructedAndTraced::n_destructed = 0;
+size_t DestructedAndTraced::n_traced = 0;
 
-  Destructed::n_destructed = 0;
-  {
-    HeapHashSet<Member<Destructed>> to_be_destroyed;
-    to_be_destroyed.ReserveCapacityForSize(100);
+TEST_F(IncrementalMarkingTest, ConservativeGCOfWeakContainer) {
+  // Regression test: https://crbug.com/1108676
+  //
+  // Test ensures that on-stack references to weak containers (e.g. iterators)
+  // force re-tracing of the entire container. Otherwise, if the container was
+  // previously traced and is not re-traced, some bucket might be deleted which
+  // will make existing iterators invalid.
+
+  using WeakContainer = HeapHashMap<WeakMember<DestructedAndTraced>, size_t>;
+  Persistent<WeakContainer> map = MakeGarbageCollected<WeakContainer>();
+  static constexpr size_t kNumObjects = 10u;
+  for (size_t i = 0; i < kNumObjects; ++i) {
+    map->insert(MakeGarbageCollected<DestructedAndTraced>(), i);
   }
-  Persistent<NewLinkedHashSetWrapper> wrapper =
-      MakeGarbageCollected<NewLinkedHashSetWrapper>();
+  DestructedAndTraced::n_destructed = 0;
 
-  IncrementalMarkingTestDriver driver(ThreadState::Current());
-  ThreadState::Current()->EnableCompactionForNextGCForTesting();
-  driver.Start();
-  driver.FinishSteps();
+  for (auto it = map->begin(); it != map->end(); ++it) {
+    size_t value = it->value;
+    DestructedAndTraced::n_traced = 0;
+    IncrementalMarkingTestDriver driver(ThreadState::Current());
+    driver.Start();
+    driver.FinishSteps();
+    // map should now be marked, but has not been traced since it's weak.
+    EXPECT_EQ(0u, DestructedAndTraced::n_traced);
+    ConservativelyCollectGarbage();
+    // map buckets were traced (at least once).
+    EXPECT_NE(kNumObjects, DestructedAndTraced::n_traced);
+    // Check that iterator is still valid.
+    EXPECT_EQ(value, it->value);
+  }
 
-  // Destroy the link between original NewHeapLinkedHashSet object and its
-  // backing store.
-  wrapper->Swap();
-  DCHECK(wrapper->hash_set_.IsEmpty());
-
-  PreciselyCollectGarbage();
-
-  EXPECT_EQ(10u, Destructed::n_destructed);
+  // All buckets were kept alive.
+  EXPECT_EQ(0u, DestructedAndTraced::n_destructed);
 }
 
 }  // namespace incremental_marking_test

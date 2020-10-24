@@ -17,6 +17,7 @@
 #include "VkCommandBuffer.hpp"
 #include "VkCommandPool.hpp"
 #include "VkConfig.hpp"
+#include "VkDebugUtilsMessenger.hpp"
 #include "VkDescriptorPool.hpp"
 #include "VkDescriptorSetLayout.hpp"
 #include "VkDescriptorUpdateTemplate.hpp"
@@ -56,6 +57,14 @@
 #	include "WSI/XlibSurfaceKHR.hpp"
 #endif
 
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+#	include "WSI/WaylandSurfaceKHR.hpp"
+#endif
+
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+#	include "WSI/DirectFBSurfaceEXT.hpp"
+#endif
+
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 #	include "WSI/Win32SurfaceKHR.hpp"
 #endif
@@ -64,7 +73,11 @@
 #	include "commit.h"
 #	include "System/GrallocAndroid.hpp"
 #	include <android/log.h>
+#	include <hardware/gralloc1.h>
 #	include <sync/sync.h>
+#	ifdef SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
+#		include "VkDeviceMemoryExternalAndroid.hpp"
+#	endif
 #endif
 
 #include "WSI/VkSwapchainKHR.hpp"
@@ -93,19 +106,6 @@ void logBuildVersionInformation()
 	__android_log_print(ANDROID_LOG_INFO, "SwiftShader", "SwiftShader Version: %s", SWIFTSHADER_VERSION_STRING);
 }
 #endif  // __ANDROID__ && ENABLE_BUILD_VERSION_OUTPUT
-
-bool HasExtensionProperty(const char *extensionName, const VkExtensionProperties *extensionProperties, uint32_t extensionPropertiesCount)
-{
-	for(uint32_t j = 0; j < extensionPropertiesCount; ++j)
-	{
-		if(strcmp(extensionName, extensionProperties[j].extensionName) == 0)
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
 
 // setReactorDefaultConfig() sets the default configuration for Vulkan's use of
 // Reactor.
@@ -302,6 +302,7 @@ static const VkExtensionProperties instanceExtensionProperties[] = {
 	{ VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_SPEC_VERSION },
 	{ VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME, VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_SPEC_VERSION },
 	{ VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION },
+	{ VK_EXT_DEBUG_UTILS_EXTENSION_NAME, VK_EXT_DEBUG_UTILS_SPEC_VERSION },
 #ifndef __ANDROID__
 	{ VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_SURFACE_SPEC_VERSION },
 #endif
@@ -310,6 +311,12 @@ static const VkExtensionProperties instanceExtensionProperties[] = {
 #endif
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 	{ VK_KHR_XLIB_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_SPEC_VERSION },
+#endif
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+	{ VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_SPEC_VERSION },
+#endif
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+	{ VK_EXT_DIRECTFB_SURFACE_EXTENSION_NAME, VK_EXT_DIRECTFB_SURFACE_SPEC_VERSION },
 #endif
 #ifdef VK_USE_PLATFORM_MACOS_MVK
 	{ VK_MVK_MACOS_SURFACE_EXTENSION_NAME, VK_MVK_MACOS_SURFACE_SPEC_VERSION },
@@ -325,7 +332,6 @@ static const VkExtensionProperties instanceExtensionProperties[] = {
 static const VkExtensionProperties deviceExtensionProperties[] = {
 	{ VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME, VK_KHR_DRIVER_PROPERTIES_SPEC_VERSION },
 	// Vulkan 1.1 promoted extensions
-	{ VK_KHR_16BIT_STORAGE_EXTENSION_NAME, VK_KHR_16BIT_STORAGE_SPEC_VERSION },
 	{ VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_KHR_BIND_MEMORY_2_SPEC_VERSION },
 	{ VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, VK_KHR_CREATE_RENDERPASS_2_SPEC_VERSION },
 	{ VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, VK_KHR_DEDICATED_ALLOCATION_SPEC_VERSION },
@@ -352,6 +358,7 @@ static const VkExtensionProperties deviceExtensionProperties[] = {
 	{ VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME, VK_EXT_LINE_RASTERIZATION_SPEC_VERSION },
 	// The following extension is used by ANGLE to emulate blitting the stencil buffer
 	{ VK_EXT_SHADER_STENCIL_EXPORT_EXTENSION_NAME, VK_EXT_SHADER_STENCIL_EXPORT_SPEC_VERSION },
+	{ VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME, VK_EXT_IMAGE_ROBUSTNESS_SPEC_VERSION },
 #ifndef __ANDROID__
 	// We fully support the KHR_swapchain v70 additions, so just track the spec version.
 	{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_SPEC_VERSION },
@@ -381,7 +388,34 @@ static const VkExtensionProperties deviceExtensionProperties[] = {
 #endif
 	{ VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME, VK_EXT_PROVOKING_VERTEX_SPEC_VERSION },
 	{ VK_GOOGLE_SAMPLER_FILTERING_PRECISION_EXTENSION_NAME, VK_GOOGLE_SAMPLER_FILTERING_PRECISION_SPEC_VERSION },
+	{ VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME, VK_EXT_DEPTH_RANGE_UNRESTRICTED_SPEC_VERSION },
+	// Vulkan 1.2 promoted extensions
+	{ VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, VK_KHR_IMAGE_FORMAT_LIST_SPEC_VERSION },
+	{ VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME, VK_KHR_IMAGELESS_FRAMEBUFFER_SPEC_VERSION }
 };
+
+static bool hasExtension(const char *extensionName, const VkExtensionProperties *extensionProperties, uint32_t extensionPropertiesCount)
+{
+	for(uint32_t i = 0; i < extensionPropertiesCount; i++)
+	{
+		if(strcmp(extensionName, extensionProperties[i].extensionName) == 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool hasInstanceExtension(const char *extensionName)
+{
+	return hasExtension(extensionName, instanceExtensionProperties, sizeof(instanceExtensionProperties) / sizeof(instanceExtensionProperties[0]));
+}
+
+static bool hasDeviceExtension(const char *extensionName)
+{
+	return hasExtension(extensionName, deviceExtensionProperties, sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0]));
+}
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkInstance *pInstance)
 {
@@ -401,20 +435,30 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *pCre
 		UNIMPLEMENTED("b/148240133: pCreateInfo->enabledLayerCount != 0");  // FIXME(b/148240133)
 	}
 
-	uint32_t extensionPropertiesCount = sizeof(instanceExtensionProperties) / sizeof(instanceExtensionProperties[0]);
 	for(uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; ++i)
 	{
-		if(!HasExtensionProperty(pCreateInfo->ppEnabledExtensionNames[i], instanceExtensionProperties, extensionPropertiesCount))
+		if(!hasInstanceExtension(pCreateInfo->ppEnabledExtensionNames[i]))
 		{
 			return VK_ERROR_EXTENSION_NOT_PRESENT;
 		}
 	}
 
+	VkDebugUtilsMessengerEXT messenger = { VK_NULL_HANDLE };
 	if(pCreateInfo->pNext)
 	{
 		const VkBaseInStructure *createInfo = reinterpret_cast<const VkBaseInStructure *>(pCreateInfo->pNext);
 		switch(createInfo->sType)
 		{
+			case VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT:
+			{
+				const VkDebugUtilsMessengerCreateInfoEXT *debugUtilsMessengerCreateInfoEXT = reinterpret_cast<const VkDebugUtilsMessengerCreateInfoEXT *>(createInfo);
+				VkResult result = vk::DebugUtilsMessenger::Create(pAllocator, debugUtilsMessengerCreateInfoEXT, &messenger);
+				if(result != VK_SUCCESS)
+				{
+					return result;
+				}
+			}
+			break;
 			case VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO:
 				// According to the Vulkan spec, section 2.7.2. Implicit Valid Usage:
 				// "The values VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO and
@@ -434,12 +478,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *pCre
 	VkResult result = vk::DispatchablePhysicalDevice::Create(pAllocator, pCreateInfo, &physicalDevice);
 	if(result != VK_SUCCESS)
 	{
+		vk::destroy(messenger, pAllocator);
 		return result;
 	}
 
-	result = vk::DispatchableInstance::Create(pAllocator, pCreateInfo, pInstance, physicalDevice);
+	result = vk::DispatchableInstance::Create(pAllocator, pCreateInfo, pInstance, physicalDevice, vk::Cast(messenger));
 	if(result != VK_SUCCESS)
 	{
+		vk::destroy(messenger, pAllocator);
 		vk::destroy(physicalDevice, pAllocator);
 		return result;
 	}
@@ -475,7 +521,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFormatProperties(VkPhysicalDevice 
 	TRACE("GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice = %p, VkFormat format = %d, VkFormatProperties* pFormatProperties = %p)",
 	      physicalDevice, (int)format, pFormatProperties);
 
-	vk::Cast(physicalDevice)->getFormatProperties(format, pFormatProperties);
+	vk::PhysicalDevice::GetFormatProperties(format, pFormatProperties);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties *pImageFormatProperties)
@@ -488,7 +534,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties(VkPhysic
 	memset(pImageFormatProperties, 0, sizeof(VkImageFormatProperties));
 
 	VkFormatProperties properties;
-	vk::Cast(physicalDevice)->getFormatProperties(format, &properties);
+	vk::PhysicalDevice::GetFormatProperties(format, &properties);
 
 	VkFormatFeatureFlags features;
 	switch(tiling)
@@ -613,7 +659,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice 
 {
 	TRACE("(VkPhysicalDevice physicalDevice = %p, VkPhysicalDeviceMemoryProperties* pMemoryProperties = %p)", physicalDevice, pMemoryProperties);
 
-	*pMemoryProperties = vk::Cast(physicalDevice)->getMemoryProperties();
+	*pMemoryProperties = vk::PhysicalDevice::GetMemoryProperties();
 }
 
 VK_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance, const char *pName)
@@ -647,10 +693,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice physicalDevice, c
 		UNSUPPORTED("pCreateInfo->enabledLayerCount != 0");
 	}
 
-	uint32_t extensionPropertiesCount = sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0]);
 	for(uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; ++i)
 	{
-		if(!HasExtensionProperty(pCreateInfo->ppEnabledExtensionNames[i], deviceExtensionProperties, extensionPropertiesCount))
+		if(!hasDeviceExtension(pCreateInfo->ppEnabledExtensionNames[i]))
 		{
 			return VK_ERROR_EXTENSION_NOT_PRESENT;
 		}
@@ -779,6 +824,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice physicalDevice, c
 				// No action needs to be taken on our end in either case; it's the apps responsibility to check
 				// that the provokingVertexLast feature is enabled before using the provoking vertex convention.
 				(void)provokingVertexFeatures->provokingVertexLast;
+			}
+			break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT:
+			{
+				const VkPhysicalDeviceImageRobustnessFeaturesEXT *imageRobustnessFeatures = reinterpret_cast<const VkPhysicalDeviceImageRobustnessFeaturesEXT *>(extensionCreateInfo);
+
+				// We currently always provide robust image accesses. When the feature is disabled, results are
+				// undefined (for images with Dim != Buffer), so providing robustness is also acceptable.
+				// TODO(b/159329067): Only provide robustness when requested.
+				(void)imageRobustnessFeatures->robustImageAccess;
+			}
+			break;
+			// For unsupported structures, check that we don't expose the corresponding extension string:
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT:
+				ASSERT(!hasDeviceExtension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME));
+				break;
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR:
+			{
+				const VkPhysicalDeviceImagelessFramebufferFeaturesKHR *imagelessFramebufferFeatures = reinterpret_cast<const VkPhysicalDeviceImagelessFramebufferFeaturesKHR *>(extensionCreateInfo);
+				// Always provide Imageless Framebuffers
+				(void)imagelessFramebufferFeatures->imagelessFramebuffer;
 			}
 			break;
 			default:
@@ -1022,7 +1088,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice device, const VkMemoryA
 		allocationInfo = allocationInfo->pNext;
 	}
 
-	VkResult result = vk::DeviceMemory::Create(pAllocator, pAllocateInfo, pMemory);
+	VkResult result = vk::DeviceMemory::Create(pAllocator, pAllocateInfo, pMemory, vk::Cast(device));
 	if(result != VK_SUCCESS)
 	{
 		return result;
@@ -1078,7 +1144,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(VkDevice device, VkExt
 	}
 
 	const VkPhysicalDeviceMemoryProperties &memoryProperties =
-	    vk::Cast(device)->getPhysicalDevice()->getMemoryProperties();
+	    vk::PhysicalDevice::GetMemoryProperties();
 
 	// All SwiftShader memory types support this!
 	pMemoryFdProperties->memoryTypeBits = (1U << memoryProperties.memoryTypeCount) - 1U;
@@ -1117,7 +1183,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryZirconHandlePropertiesFUCHSIA(VkDevice
 	}
 
 	const VkPhysicalDeviceMemoryProperties &memoryProperties =
-	    vk::Cast(device)->getPhysicalDevice()->getMemoryProperties();
+	    vk::PhysicalDevice::GetMemoryProperties();
 
 	// All SwiftShader memory types support this!
 	pMemoryZirconHandleProperties->memoryTypeBits = (1U << memoryProperties.memoryTypeCount) - 1U;
@@ -1147,7 +1213,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryAndroidHardwareBufferANDROID(VkDevice 
 	TRACE("(VkDevice device = %p, const VkMemoryGetAndroidHardwareBufferInfoANDROID *pInfo = %p, struct AHardwareBuffer **pBuffer = %p)",
 	      device, pInfo, pBuffer);
 
-	return vk::Cast(pInfo->memory)->exportAhb(pBuffer);
+	return vk::Cast(pInfo->memory)->exportAndroidHardwareBuffer(pBuffer);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetAndroidHardwareBufferPropertiesANDROID(VkDevice device, const struct AHardwareBuffer *buffer, VkAndroidHardwareBufferPropertiesANDROID *pProperties)
@@ -1155,7 +1221,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetAndroidHardwareBufferPropertiesANDROID(VkDev
 	TRACE("(VkDevice device = %p, const struct AHardwareBuffer *buffer = %p, VkAndroidHardwareBufferPropertiesANDROID *pProperties = %p)",
 	      device, buffer, pProperties);
 
-	return vk::DeviceMemory::getAhbProperties(buffer, pProperties);
+	return vk::DeviceMemory::GetAndroidHardwareBufferProperties(device, buffer, pProperties);
 }
 #endif  // SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
 
@@ -1208,7 +1274,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryCommitment(VkDevice pDevice, VkDevic
 	auto memory = vk::Cast(pMemory);
 
 #if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
-	const auto &memoryProperties = vk::Cast(pDevice)->getPhysicalDevice()->getMemoryProperties();
+	const auto &memoryProperties = vk::PhysicalDevice::GetMemoryProperties();
 	uint32_t typeIndex = memory->getMemoryTypeIndex();
 	ASSERT(typeIndex < memoryProperties.memoryTypeCount);
 	ASSERT(memoryProperties.memoryTypes[typeIndex].propertyFlags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT);
@@ -1606,12 +1672,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice device, const VkImageCreat
 				swapchainImage = true;
 			}
 			break;
+			case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID:
+				break;
 #endif
 			case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
 				// Do nothing. Should be handled by vk::Image::Create()
 				break;
 			case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR:
 				/* Do nothing. We don't actually need the swapchain handle yet; we'll do all the work in vkBindImageMemory2. */
+				break;
+			case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
+				// Do nothing. This extension tells the driver which image formats will be used
+				// by the application. Swiftshader is not impacted from lacking this information,
+				// so we don't need to track the format list.
 				break;
 			default:
 				// "the [driver] must skip over, without processing (other than reading the sType and pNext members) any structures in the chain with sType values not defined by [supported extenions]"
@@ -1711,10 +1784,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice device, const VkImageV
 
 				if(ycbcrConversion)
 				{
-					ASSERT((pCreateInfo->components.r == VK_COMPONENT_SWIZZLE_IDENTITY) &&
-					       (pCreateInfo->components.g == VK_COMPONENT_SWIZZLE_IDENTITY) &&
-					       (pCreateInfo->components.b == VK_COMPONENT_SWIZZLE_IDENTITY) &&
-					       (pCreateInfo->components.a == VK_COMPONENT_SWIZZLE_IDENTITY));
+					ASSERT((pCreateInfo->components.r == VK_COMPONENT_SWIZZLE_IDENTITY || pCreateInfo->components.r == VK_COMPONENT_SWIZZLE_R) &&
+					       (pCreateInfo->components.g == VK_COMPONENT_SWIZZLE_IDENTITY || pCreateInfo->components.g == VK_COMPONENT_SWIZZLE_G) &&
+					       (pCreateInfo->components.b == VK_COMPONENT_SWIZZLE_IDENTITY || pCreateInfo->components.b == VK_COMPONENT_SWIZZLE_B) &&
+					       (pCreateInfo->components.a == VK_COMPONENT_SWIZZLE_IDENTITY || pCreateInfo->components.a == VK_COMPONENT_SWIZZLE_A));
 				}
 			}
 			break;
@@ -1726,7 +1799,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice device, const VkImageV
 		extensionCreateInfo = extensionCreateInfo->pNext;
 	}
 
-	return vk::ImageView::Create(pAllocator, pCreateInfo, pView, ycbcrConversion);
+	VkResult result = vk::ImageView::Create(pAllocator, pCreateInfo, pView, ycbcrConversion);
+	if(result == VK_SUCCESS)
+	{
+		vk::Cast(device)->registerImageView(vk::Cast(*pView));
+	}
+
+	return result;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkDestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator)
@@ -1734,6 +1813,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyImageView(VkDevice device, VkImageView image
 	TRACE("(VkDevice device = %p, VkImageView imageView = %p, const VkAllocationCallbacks* pAllocator = %p)",
 	      device, static_cast<void *>(imageView), pAllocator);
 
+	vk::Cast(device)->unregisterImageView(vk::Cast(imageView));
 	vk::destroy(imageView, pAllocator);
 }
 
@@ -2086,18 +2166,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice device, const VkFram
 	TRACE("(VkDevice device = %p, const VkFramebufferCreateInfo* pCreateInfo = %p, const VkAllocationCallbacks* pAllocator = %p, VkFramebuffer* pFramebuffer = %p)",
 	      device, pCreateInfo, pAllocator, pFramebuffer);
 
-	if(pCreateInfo->flags != 0)
-	{
-		UNSUPPORTED("pCreateInfo->flags %d", int(pCreateInfo->flags));
-	}
-
-	auto *nextInfo = reinterpret_cast<const VkBaseInStructure *>(pCreateInfo->pNext);
-	while(nextInfo)
-	{
-		LOG_TRAP("pCreateInfo->pNext sType = %s", vk::Stringify(nextInfo->sType).c_str());
-		nextInfo = nextInfo->pNext;
-	}
-
 	return vk::Framebuffer::Create(pAllocator, pCreateInfo, pFramebuffer);
 }
 
@@ -2125,7 +2193,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice device, const VkRende
 	return vk::RenderPass::Create(pAllocator, pCreateInfo, pRenderPass);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2KHR(VkDevice device, const VkRenderPassCreateInfo2KHR *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass)
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2(VkDevice device, const VkRenderPassCreateInfo2KHR *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass)
 {
 	TRACE("(VkDevice device = %p, const VkRenderPassCreateInfo* pCreateInfo = %p, const VkAllocationCallbacks* pAllocator = %p, VkRenderPass* pRenderPass = %p)",
 	      device, pCreateInfo, pAllocator, pRenderPass);
@@ -2563,10 +2631,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants(VkCommandBuffer commandBuffer, VkP
 
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *pRenderPassBegin, VkSubpassContents contents)
 {
-	TRACE("(VkCommandBuffer commandBuffer = %p, const VkRenderPassBeginInfo* pRenderPassBegin = %p, VkSubpassContents contents = %d)",
-	      commandBuffer, pRenderPassBegin, contents);
+	VkSubpassBeginInfo subpassBeginInfo = { VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO, nullptr, contents };
+	vkCmdBeginRenderPass2(commandBuffer, pRenderPassBegin, &subpassBeginInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass2(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *pRenderPassBegin, const VkSubpassBeginInfoKHR *pSubpassBeginInfo)
+{
+	TRACE("(VkCommandBuffer commandBuffer = %p, const VkRenderPassBeginInfo* pRenderPassBegin = %p, const VkSubpassBeginInfoKHR* pSubpassBeginInfo = %p)",
+	      commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
 
 	const VkBaseInStructure *renderPassBeginInfo = reinterpret_cast<const VkBaseInStructure *>(pRenderPassBegin->pNext);
+	const VkRenderPassAttachmentBeginInfo *attachmentBeginInfo = nullptr;
 	while(renderPassBeginInfo)
 	{
 		switch(renderPassBeginInfo->sType)
@@ -2576,6 +2651,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer commandBuffer, c
 				// in order to distribute rendering between multiple physical devices.
 				// SwiftShader only has a single physical device, so this extension does nothing in this case.
 				break;
+			case VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO:
+				attachmentBeginInfo = reinterpret_cast<const VkRenderPassAttachmentBeginInfo *>(renderPassBeginInfo);
+				break;
 			default:
 				LOG_TRAP("pRenderPassBegin->pNext sType = %s", vk::Stringify(renderPassBeginInfo->sType).c_str());
 				break;
@@ -2584,15 +2662,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer commandBuffer, c
 		renderPassBeginInfo = renderPassBeginInfo->pNext;
 	}
 
-	vk::Cast(commandBuffer)->beginRenderPass(vk::Cast(pRenderPassBegin->renderPass), vk::Cast(pRenderPassBegin->framebuffer), pRenderPassBegin->renderArea, pRenderPassBegin->clearValueCount, pRenderPassBegin->pClearValues, contents);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass2KHR(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *pRenderPassBegin, const VkSubpassBeginInfoKHR *pSubpassBeginInfo)
-{
-	TRACE("(VkCommandBuffer commandBuffer = %p, const VkRenderPassBeginInfo* pRenderPassBegin = %p, const VkSubpassBeginInfoKHR* pSubpassBeginInfo = %p)",
-	      commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
-
-	vk::Cast(commandBuffer)->beginRenderPass(vk::Cast(pRenderPassBegin->renderPass), vk::Cast(pRenderPassBegin->framebuffer), pRenderPassBegin->renderArea, pRenderPassBegin->clearValueCount, pRenderPassBegin->pClearValues, pSubpassBeginInfo->contents);
+	vk::Cast(commandBuffer)->beginRenderPass(vk::Cast(pRenderPassBegin->renderPass), vk::Cast(pRenderPassBegin->framebuffer), pRenderPassBegin->renderArea, pRenderPassBegin->clearValueCount, pRenderPassBegin->pClearValues, pSubpassBeginInfo->contents, attachmentBeginInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents)
@@ -2603,7 +2673,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSub
 	vk::Cast(commandBuffer)->nextSubpass(contents);
 }
 
-VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass2KHR(VkCommandBuffer commandBuffer, const VkSubpassBeginInfoKHR *pSubpassBeginInfo, const VkSubpassEndInfoKHR *pSubpassEndInfo)
+VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass2(VkCommandBuffer commandBuffer, const VkSubpassBeginInfoKHR *pSubpassBeginInfo, const VkSubpassEndInfoKHR *pSubpassEndInfo)
 {
 	TRACE("(VkCommandBuffer commandBuffer = %p, const VkSubpassBeginInfoKHR* pSubpassBeginInfo = %p, const VkSubpassEndInfoKHR* pSubpassEndInfo = %p)",
 	      commandBuffer, pSubpassBeginInfo, pSubpassEndInfo);
@@ -2618,7 +2688,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
 	vk::Cast(commandBuffer)->endRenderPass();
 }
 
-VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass2KHR(VkCommandBuffer commandBuffer, const VkSubpassEndInfoKHR *pSubpassEndInfo)
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass2(VkCommandBuffer commandBuffer, const VkSubpassEndInfoKHR *pSubpassEndInfo)
 {
 	TRACE("(VkCommandBuffer commandBuffer = %p, const VkSubpassEndInfoKHR* pSubpassEndInfo = %p)", commandBuffer, pSubpassEndInfo);
 
@@ -2773,6 +2843,12 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2(VkDevice device, const 
 			{
 				auto requirements = reinterpret_cast<VkMemoryDedicatedRequirements *>(extensionRequirements);
 				vk::Cast(device)->getRequirements(requirements);
+#if SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
+				if(vk::Cast(pInfo->image)->getSupportedExternalMemoryHandleTypes() == VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+				{
+					requirements->requiresDedicatedAllocation = VK_TRUE;
+				}
+#endif
 			}
 			break;
 			default:
@@ -2848,96 +2924,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2(VkPhysicalDevice physica
 {
 	TRACE("(VkPhysicalDevice physicalDevice = %p, VkPhysicalDeviceFeatures2* pFeatures = %p)", physicalDevice, pFeatures);
 
-	VkBaseOutStructure *extensionFeatures = reinterpret_cast<VkBaseOutStructure *>(pFeatures->pNext);
-	while(extensionFeatures)
-	{
-		switch((long)(extensionFeatures->sType))
-		{
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
-			{
-				auto features = reinterpret_cast<VkPhysicalDeviceSamplerYcbcrConversionFeatures *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
-			{
-				auto features = reinterpret_cast<VkPhysicalDevice16BitStorageFeatures *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES:
-			{
-				auto features = reinterpret_cast<VkPhysicalDeviceVariablePointerFeatures *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR:
-			{
-				auto features = reinterpret_cast<VkPhysicalDevice8BitStorageFeaturesKHR *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
-			{
-				auto features = reinterpret_cast<VkPhysicalDeviceMultiviewFeatures *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
-			{
-				auto features = reinterpret_cast<VkPhysicalDeviceProtectedMemoryFeatures *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES:
-			{
-				auto features = reinterpret_cast<VkPhysicalDeviceShaderDrawParameterFeatures *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES_KHR:
-			{
-				auto features = reinterpret_cast<VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
-			{
-				auto features = reinterpret_cast<VkPhysicalDeviceLineRasterizationFeaturesEXT *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT:
-			{
-				auto features = reinterpret_cast<VkPhysicalDeviceProvokingVertexFeaturesEXT *>(extensionFeatures);
-				vk::Cast(physicalDevice)->getFeatures(features);
-			}
-			break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
-				ASSERT(!HasExtensionProperty(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
-				break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT:
-				ASSERT(!HasExtensionProperty(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
-				break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR:
-				ASSERT(!HasExtensionProperty(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
-				break;
-			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR:
-				ASSERT(!HasExtensionProperty(VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
-				break;
-			default:
-				LOG_TRAP("pFeatures->pNext sType = %s", vk::Stringify(extensionFeatures->sType).c_str());
-				break;
-		}
-
-		extensionFeatures = extensionFeatures->pNext;
-	}
-
-	vkGetPhysicalDeviceFeatures(physicalDevice, &(pFeatures->features));
+	vk::Cast(physicalDevice)->getFeatures2(pFeatures);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2 *pProperties)
@@ -2991,8 +2978,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2(VkPhysicalDevice physi
 			break;
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT:
 				// Explicitly ignored, since VK_EXT_sample_locations is not supported
-				ASSERT(!HasExtensionProperty(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
+				ASSERT(!hasDeviceExtension(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME));
 				break;
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT:
 			{
@@ -3068,15 +3054,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2(VkPhysi
 			case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR:
 			{
 				// Explicitly ignored, since VK_KHR_image_format_list is not supported
-				ASSERT(!HasExtensionProperty(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
+				ASSERT(!hasDeviceExtension(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME));
 			}
 			break;
 			case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT:
 			{
 				// Explicitly ignored, since VK_EXT_separate_stencil_usage is not supported
-				ASSERT(!HasExtensionProperty(VK_EXT_SEPARATE_STENCIL_USAGE_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
+				ASSERT(!hasDeviceExtension(VK_EXT_SEPARATE_STENCIL_USAGE_EXTENSION_NAME));
 			}
 			break;
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
@@ -3088,8 +3072,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2(VkPhysi
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
 			{
 				// Explicitly ignored, since VK_EXT_image_drm_format_modifier is not supported
-				ASSERT(!HasExtensionProperty(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
+				ASSERT(!hasDeviceExtension(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME));
 			}
 			break;
 			default:
@@ -3121,10 +3104,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2(VkPhysi
 			case VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD:
 			{
 				// Explicitly ignored, since VK_AMD_texture_gather_bias_lod is not supported
-				ASSERT(!HasExtensionProperty(VK_AMD_TEXTURE_GATHER_BIAS_LOD_EXTENSION_NAME, deviceExtensionProperties,
-				                             sizeof(deviceExtensionProperties) / sizeof(deviceExtensionProperties[0])));
+				ASSERT(!hasDeviceExtension(VK_AMD_TEXTURE_GATHER_BIAS_LOD_EXTENSION_NAME));
 			}
 			break;
+#ifdef __ANDROID__
+			case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID:
+			{
+				auto properties = reinterpret_cast<VkAndroidHardwareBufferUsageANDROID *>(extensionProperties);
+				vk::Cast(physicalDevice)->getProperties(properties);
+			}
+			break;
+#endif
 			default:
 				LOG_TRAP("pImageFormatProperties->pNext sType = %s", vk::Stringify(extensionProperties->sType).c_str());
 				break;
@@ -3338,10 +3328,102 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(VkDevice device, cons
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(VkCommandBuffer commandBuffer, uint32_t lineStippleFactor, uint16_t lineStipplePattern)
 {
-	TRACE("(VkCommandBuffer commandBuffer = %p, uint32_t lineStippleFactor = %u, uint16_t lineStipplePattern = %u",
+	TRACE("(VkCommandBuffer commandBuffer = %p, uint32_t lineStippleFactor = %u, uint16_t lineStipplePattern = %u)",
 	      commandBuffer, lineStippleFactor, lineStipplePattern);
 
 	UNSUPPORTED("VkPhysicalDeviceLineRasterizationFeaturesEXT::stippled*Lines");
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer commandBuffer, const VkDebugUtilsLabelEXT *pLabelInfo)
+{
+	TRACE("(VkCommandBuffer commandBuffer = %p, const VkDebugUtilsLabelEXT* pLabelInfo = %p)",
+	      commandBuffer, pLabelInfo);
+
+	vk::Cast(commandBuffer)->beginDebugUtilsLabel(pLabelInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(VkCommandBuffer commandBuffer)
+{
+	TRACE("(VkCommandBuffer commandBuffer = %p)", commandBuffer);
+
+	vk::Cast(commandBuffer)->endDebugUtilsLabel();
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdInsertDebugUtilsLabelEXT(VkCommandBuffer commandBuffer, const VkDebugUtilsLabelEXT *pLabelInfo)
+{
+	TRACE("(VkCommandBuffer commandBuffer = %p, const VkDebugUtilsLabelEXT* pLabelInfo = %p)",
+	      commandBuffer, pLabelInfo);
+
+	vk::Cast(commandBuffer)->insertDebugUtilsLabel(pLabelInfo);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pMessenger)
+{
+	TRACE("(VkInstance instance = %p, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo = %p, const VkAllocationCallbacks* pAllocator = %p, VkDebugUtilsMessengerEXT* pMessenger = %p)",
+	      instance, pCreateInfo, pAllocator, pMessenger);
+
+	if(pCreateInfo->flags != 0)
+	{
+		// Vulkan 1.2: "flags is reserved for future use." "flags must be 0"
+		UNSUPPORTED("pCreateInfo->flags %d", int(pCreateInfo->flags));
+	}
+
+	return vk::DebugUtilsMessenger::Create(pAllocator, pCreateInfo, pMessenger);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger, const VkAllocationCallbacks *pAllocator)
+{
+	TRACE("(VkInstance instance = %p, VkDebugUtilsMessengerEXT messenger = %p, const VkAllocationCallbacks* pAllocator = %p)",
+	      instance, static_cast<void *>(messenger), pAllocator);
+
+	vk::destroy(messenger, pAllocator);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkQueueBeginDebugUtilsLabelEXT(VkQueue queue, const VkDebugUtilsLabelEXT *pLabelInfo)
+{
+	TRACE("(VkQueue queue = %p, const VkDebugUtilsLabelEXT* pLabelInfo = %p)",
+	      queue, pLabelInfo);
+
+	vk::Cast(queue)->beginDebugUtilsLabel(pLabelInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkQueueEndDebugUtilsLabelEXT(VkQueue queue)
+{
+	TRACE("(VkQueue queue = %p)", queue);
+
+	vk::Cast(queue)->endDebugUtilsLabel();
+}
+
+VKAPI_ATTR void VKAPI_CALL vkQueueInsertDebugUtilsLabelEXT(VkQueue queue, const VkDebugUtilsLabelEXT *pLabelInfo)
+{
+	TRACE("(VkQueue queue = %p, const VkDebugUtilsLabelEXT* pLabelInfo = %p)",
+	      queue, pLabelInfo);
+
+	vk::Cast(queue)->insertDebugUtilsLabel(pLabelInfo);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(VkDevice device, const VkDebugUtilsObjectNameInfoEXT *pNameInfo)
+{
+	TRACE("(VkDevice device = %p, const VkDebugUtilsObjectNameInfoEXT* pNameInfo = %p)",
+	      device, pNameInfo);
+
+	return vk::Cast(device)->setDebugUtilsObjectName(pNameInfo);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(VkDevice device, const VkDebugUtilsObjectTagInfoEXT *pTagInfo)
+{
+	TRACE("(VkDevice device = %p, const VkDebugUtilsObjectTagInfoEXT* pTagInfo = %p)",
+	      device, pTagInfo);
+
+	return vk::Cast(device)->setDebugUtilsObjectTag(pTagInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkSubmitDebugUtilsMessageEXT(VkInstance instance, VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageTypes, const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData)
+{
+	TRACE("(VkInstance instance = %p, VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity = %d, VkDebugUtilsMessageTypeFlagsEXT messageTypes = %d, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData = %p)",
+	      instance, messageSeverity, messageTypes, pCallbackData);
+
+	vk::Cast(instance)->submitDebugUtilsMessage(messageSeverity, messageTypes, pCallbackData);
 }
 
 #ifdef VK_USE_PLATFORM_XCB_KHR
@@ -3375,6 +3457,42 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXlibPresentationSupportKHR(VkP
 {
 	TRACE("(VkPhysicalDevice physicalDevice = %p, uint32_t queueFamilyIndex = %d, Display* dpy = %p, VisualID visualID = %lu)",
 	      physicalDevice, int(queueFamilyIndex), dpy, visualID);
+
+	return VK_TRUE;
+}
+#endif
+
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface)
+{
+	TRACE("(VkInstance instance = %p, VkWaylandSurfaceCreateInfoKHR* pCreateInfo = %p, VkAllocationCallbacks* pAllocator = %p, VkSurface* pSurface = %p)",
+	      instance, pCreateInfo, pAllocator, pSurface);
+
+	return vk::WaylandSurfaceKHR::Create(pAllocator, pCreateInfo, pSurface);
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display *display)
+{
+	TRACE("(VkPhysicalDevice physicalDevice = %p, uint32_t queueFamilyIndex = %d, struct wl_display* display = %p)",
+	      physicalDevice, int(queueFamilyIndex), display);
+
+	return VK_TRUE;
+}
+#endif
+
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDirectFBSurfaceEXT(VkInstance instance, const VkDirectFBSurfaceCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface)
+{
+	TRACE("(VkInstance instance = %p, VkDirectFBSurfaceCreateInfoEXT* pCreateInfo = %p, VkAllocationCallbacks* pAllocator = %p, VkSurface* pSurface = %p)",
+	      instance, pCreateInfo, pAllocator, pSurface);
+
+	return vk::DirectFBSurfaceEXT::Create(pAllocator, pCreateInfo, pSurface);
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceDirectFBPresentationSupportEXT(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, IDirectFB *dfb)
+{
+	TRACE("(VkPhysicalDevice physicalDevice = %p, uint32_t queueFamilyIndex = %d, IDirectFB* dfb = %p)",
+	      physicalDevice, int(queueFamilyIndex), dfb);
 
 	return VK_TRUE;
 }

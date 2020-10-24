@@ -482,7 +482,8 @@ class FlagImpl final : public CommandLineFlag {
   friend class FlagState;
 
   // Ensures that `data_guard_` is initialized and returns it.
-  absl::Mutex* DataGuard() const ABSL_LOCK_RETURNED((absl::Mutex*)&data_guard_);
+  absl::Mutex* DataGuard() const
+      ABSL_LOCK_RETURNED(reinterpret_cast<absl::Mutex*>(data_guard_));
   // Returns heap allocated value of type T initialized with default value.
   std::unique_ptr<void, DynValueDeleter> MakeInitValue() const
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(*DataGuard());
@@ -631,20 +632,9 @@ class Flag {
   std::string CurrentValue() const { return impl_.CurrentValue(); }
 
  private:
-  template <typename U, bool do_register>
+  template <typename, bool>
   friend class FlagRegistrar;
-
-#if !defined(_MSC_VER) || defined(__clang__)
-  template <typename U>
-  friend U absl::GetFlag(const flags_internal::Flag<U>& flag);
-  template <typename U>
-  friend void absl::SetFlag(flags_internal::Flag<U>* flag, const U& v);
-  template <typename U, typename V>
-  friend void absl::SetFlag(flags_internal::Flag<U>* flag, const V& v);
-#else
-  template <typename U>
-  friend class absl::Flag;
-#endif
+  friend class FlagImplPeer;
 
   T Get() const {
     // See implementation notes in CommandLineFlag::Get().
@@ -667,10 +657,6 @@ class Flag {
     impl_.Write(&v);
   }
 
-  template <typename U>
-  friend const CommandLineFlag& absl::GetFlagReflectionHandle(
-      const absl::Flag<U>& f);
-
   // Access to the reflection.
   const CommandLineFlag& Reflect() const { return impl_; }
 
@@ -680,6 +666,25 @@ class Flag {
   // access it.
   FlagImpl impl_;
   FlagValue<T> value_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Trampoline for friend access
+
+class FlagImplPeer {
+ public:
+  template <typename T, typename FlagType>
+  static T InvokeGet(const FlagType& flag) {
+    return flag.Get();
+  }
+  template <typename FlagType, typename T>
+  static void InvokeSet(FlagType& flag, const T& v) {
+    flag.Set(v);
+  }
+  template <typename FlagType>
+  static const CommandLineFlag& InvokeReflect(const FlagType& f) {
+    return f.Reflect();
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -130,11 +130,11 @@ bool CanAccessWindowInternal(
     return false;
 
   const SecurityOrigin* accessing_origin =
-      accessing_window->document()->GetSecurityOrigin();
+      accessing_window->GetSecurityOrigin();
 
   SecurityOrigin::AccessResultDomainDetail detail;
   bool can_access = accessing_origin->CanAccess(
-      local_target_window->document()->GetSecurityOrigin(), detail);
+      local_target_window->GetSecurityOrigin(), detail);
   if (detail ==
           SecurityOrigin::AccessResultDomainDetail::kDomainSetByOnlyOneOrigin ||
       detail ==
@@ -165,9 +165,9 @@ bool CanAccessWindowInternal(
 
   // Notify the loader's client if the initial document has been accessed.
   LocalFrame* target_frame = local_target_window->GetFrame();
-  if (target_frame &&
-      target_frame->Loader().StateMachine()->IsDisplayingInitialEmptyDocument())
+  if (target_frame && target_frame->GetDocument()->IsInitialEmptyDocument()) {
     target_frame->Loader().DidAccessInitialDocument();
+  }
 
   return true;
 }

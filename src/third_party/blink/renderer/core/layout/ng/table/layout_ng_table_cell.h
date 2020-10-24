@@ -13,6 +13,8 @@
 
 namespace blink {
 
+class LayoutNGTable;
+
 class CORE_EXPORT LayoutNGTableCell
     : public LayoutNGBlockFlowMixin<LayoutBlockFlow>,
       public LayoutNGTableCellInterface {
@@ -28,14 +30,37 @@ class CORE_EXPORT LayoutNGTableCell
     return rowspan;
   }
 
+  const NGBoxStrut& IntrinsicLogicalWidthsBorderSizes() const {
+    return intrinsical_logical_widths_border_sizes_;
+  }
+
+  void SetIntrinsicLogicalWidthsBorderSizes(const NGBoxStrut& border_sizes) {
+    intrinsical_logical_widths_border_sizes_ = border_sizes;
+  }
+
+  // This method is called after a new *measure* layout-result is set.
+  // Tables are special in that the table accesses the table-cells directly
+  // for computing the size of the table-grid (bypassing the section/row).
+  // Due to this when we set a new measure layout-result, we also invalidate
+  // the layout-result cache of the associated section/row (as the cell
+  // fragment would be in the incorrect state).
+  void InvalidateLayoutResultCacheAfterMeasure() const;
+
+  LayoutNGTable* Table() const;
+
   // LayoutBlockFlow methods start.
 
   void UpdateBlockLayout(bool relayout_children) override;
+
+  void StyleDidChange(StyleDifference diff,
+                      const ComputedStyle* old_style) final;
 
   // TODO(atotic) Remove "New" from name.
   // Currently,  LayoutNGTableCellLegacy is named LayoutNGTableCell for test
   // compat.
   const char* GetName() const final { return "LayoutNGTableCellNew"; }
+
+  bool CreatesNewFormattingContext() const final { return true; }
 
   LayoutBox* CreateAnonymousBoxWithSameTypeAs(
       const LayoutObject* parent) const override;
@@ -73,6 +98,7 @@ class CORE_EXPORT LayoutNGTableCell
 
   unsigned AbsoluteColumnIndex() const final;
 
+  // Guaranteed to be between kMinColSpan and kMaxColSpan.
   unsigned ColSpan() const final;
 
   LayoutNGTableCellInterface* NextCellInterface() const final;
@@ -103,6 +129,10 @@ class CORE_EXPORT LayoutNGTableCell
       return 1;
     return ParseRowSpanFromDOM();
   }
+
+  // Cached cell border. Used to invalidate calculation of
+  // intrinsic logical width.
+  NGBoxStrut intrinsical_logical_widths_border_sizes_;
 
   unsigned has_col_span_ : 1;
   unsigned has_rowspan_ : 1;

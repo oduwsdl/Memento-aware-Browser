@@ -39,6 +39,7 @@ namespace {
 class MockWebMediaPlayer : public EmptyWebMediaPlayer {
  public:
   MOCK_METHOD0(OnTimeUpdate, void());
+  MOCK_CONST_METHOD0(Seekable, WebTimeRanges());
   MOCK_CONST_METHOD0(HasAudio, bool());
   MOCK_CONST_METHOD0(HasVideo, bool());
   MOCK_CONST_METHOD0(Duration, double());
@@ -89,6 +90,8 @@ class HTMLMediaElementTest : public testing::TestWithParam<MediaTestParam> {
 
     // Most tests do not care about this call, nor its return value. Those that
     // do will clear this expectation and set custom expectations/returns.
+    EXPECT_CALL(*mock_media_player, Seekable())
+        .WillRepeatedly(Return(WebTimeRanges()));
     EXPECT_CALL(*mock_media_player, HasAudio()).WillRepeatedly(Return(true));
     EXPECT_CALL(*mock_media_player, HasVideo()).WillRepeatedly(Return(true));
     EXPECT_CALL(*mock_media_player, Duration()).WillRepeatedly(Return(1.0));
@@ -366,7 +369,9 @@ TEST_P(HTMLMediaElementTest, AutoplayInitiated_DocumentActivation_Low_Gesture) {
   ScopedMediaEngagementBypassAutoplayPoliciesForTest scoped_feature(true);
   Media()->GetDocument().GetSettings()->SetAutoplayPolicy(
       AutoplayPolicy::Type::kDocumentUserActivationRequired);
-  LocalFrame::NotifyUserActivation(Media()->GetDocument().GetFrame());
+  LocalFrame::NotifyUserActivation(
+      Media()->GetDocument().GetFrame(),
+      mojom::UserActivationNotificationType::kTest);
 
   Media()->Play();
 
@@ -383,7 +388,9 @@ TEST_P(HTMLMediaElementTest,
   Media()->GetDocument().GetSettings()->SetAutoplayPolicy(
       AutoplayPolicy::Type::kDocumentUserActivationRequired);
   SimulateHighMediaEngagement();
-  LocalFrame::NotifyUserActivation(Media()->GetDocument().GetFrame());
+  LocalFrame::NotifyUserActivation(
+      Media()->GetDocument().GetFrame(),
+      mojom::UserActivationNotificationType::kTest);
 
   Media()->Play();
 
@@ -413,7 +420,9 @@ TEST_P(HTMLMediaElementTest, AutoplayInitiated_GestureRequired_Gesture) {
   // - MEI doesn't matter as it's not used by the policy.
   Media()->GetDocument().GetSettings()->SetAutoplayPolicy(
       AutoplayPolicy::Type::kUserGestureRequired);
-  LocalFrame::NotifyUserActivation(Media()->GetDocument().GetFrame());
+  LocalFrame::NotifyUserActivation(
+      Media()->GetDocument().GetFrame(),
+      mojom::UserActivationNotificationType::kTest);
 
   Media()->Play();
 
@@ -427,7 +436,9 @@ TEST_P(HTMLMediaElementTest, AutoplayInitiated_NoGestureRequired_Gesture) {
   // - MEI doesn't matter as it's not used by the policy.
   Media()->GetDocument().GetSettings()->SetAutoplayPolicy(
       AutoplayPolicy::Type::kNoUserGestureRequired);
-  LocalFrame::NotifyUserActivation(Media()->GetDocument().GetFrame());
+  LocalFrame::NotifyUserActivation(
+      Media()->GetDocument().GetFrame(),
+      mojom::UserActivationNotificationType::kTest);
 
   Media()->Play();
 
@@ -610,49 +621,83 @@ TEST_P(HTMLMediaElementTest, NoPendingActivityEvenIfBeforeMetadata) {
 }
 
 TEST_P(HTMLMediaElementTest, OnTimeUpdate_DurationChange) {
+  // Prepare the player.
+  Media()->SetSrc(SrcSchemeToURL(TestURLScheme::kHttp));
+  test::RunPendingTasks();
+
   // Change from no duration to 1s will trigger OnTimeUpdate().
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   Media()->DurationChanged(1, false);
+  testing::Mock::VerifyAndClearExpectations(MockMediaPlayer());
 
   // Change from 1s to 2s will trigger OnTimeUpdate().
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   Media()->DurationChanged(2, false);
+  testing::Mock::VerifyAndClearExpectations(MockMediaPlayer());
 
   // No duration change -> no OnTimeUpdate().
   Media()->DurationChanged(2, false);
 }
 
 TEST_P(HTMLMediaElementTest, OnTimeUpdate_PlayPauseSetRate) {
+  // Prepare the player.
+  Media()->SetSrc(SrcSchemeToURL(TestURLScheme::kHttp));
+  test::RunPendingTasks();
+
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   Media()->Play();
+  testing::Mock::VerifyAndClearExpectations(MockMediaPlayer());
 
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   Media()->setPlaybackRate(0.5);
+  testing::Mock::VerifyAndClearExpectations(MockMediaPlayer());
 
-  EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
+  EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate()).Times(testing::AtLeast(1));
   Media()->pause();
+  testing::Mock::VerifyAndClearExpectations(MockMediaPlayer());
 
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   Media()->setPlaybackRate(1.5);
+  testing::Mock::VerifyAndClearExpectations(MockMediaPlayer());
 
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   Media()->Play();
 }
 
 TEST_P(HTMLMediaElementTest, OnTimeUpdate_ReadyState) {
+  // Prepare the player.
+  Media()->SetSrc(SrcSchemeToURL(TestURLScheme::kHttp));
+  test::RunPendingTasks();
+
   // The ready state affects the progress of media time, so the player should
   // be kept informed.
+  EXPECT_CALL(*MockMediaPlayer(), GetSrcAfterRedirects)
+      .WillRepeatedly(Return(GURL()));
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   SetReadyState(HTMLMediaElement::kHaveCurrentData);
+  testing::Mock::VerifyAndClearExpectations(MockMediaPlayer());
 
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   SetReadyState(HTMLMediaElement::kHaveFutureData);
 }
 
 TEST_P(HTMLMediaElementTest, OnTimeUpdate_Seeking) {
+  // Prepare the player and seekable ranges -- setCurrentTime()'s prerequisites.
+  WebTimeRanges seekable;
+  seekable.Add(0, 3);
+  EXPECT_CALL(*MockMediaPlayer(), Seekable).WillRepeatedly(Return(seekable));
+  EXPECT_CALL(*MockMediaPlayer(), GetSrcAfterRedirects)
+      .WillRepeatedly(Return(GURL()));
+  EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
+  Media()->SetSrc(SrcSchemeToURL(TestURLScheme::kHttp));
+  test::RunPendingTasks();
+  SetReadyState(HTMLMediaElement::kHaveCurrentData);
+
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   Media()->setCurrentTime(1);
+  testing::Mock::VerifyAndClearExpectations(MockMediaPlayer());
 
+  EXPECT_CALL(*MockMediaPlayer(), Seekable).WillRepeatedly(Return(seekable));
   EXPECT_CALL(*MockMediaPlayer(), OnTimeUpdate());
   Media()->setCurrentTime(2);
 }

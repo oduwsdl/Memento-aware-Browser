@@ -55,11 +55,9 @@ class MIDIAccess final : public EventTargetWithInlineData,
                          public ExecutionContextLifecycleObserver,
                          public MIDIDispatcher::Client {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(MIDIAccess);
-  USING_PRE_FINALIZER(MIDIAccess, Dispose);
 
  public:
-  MIDIAccess(std::unique_ptr<MIDIDispatcher>,
+  MIDIAccess(MIDIDispatcher*,
              bool sysex_enabled,
              const Vector<MIDIAccessInitializer::PortDescriptor>&,
              ExecutionContext*);
@@ -85,7 +83,7 @@ class MIDIAccess final : public EventTargetWithInlineData,
   bool HasPendingActivity() const final;
 
   // ExecutionContextLifecycleObserver
-  void ContextDestroyed() override;
+  void ContextDestroyed() override {}
 
   // MIDIDispatcher::Client
   void DidAddInputPort(const String& id,
@@ -125,9 +123,7 @@ class MIDIAccess final : public EventTargetWithInlineData,
   void Trace(Visitor*) const override;
 
  private:
-  void Dispose();
-
-  std::unique_ptr<MIDIDispatcher> dispatcher_;
+  Member<MIDIDispatcher> dispatcher_;
   bool sysex_enabled_;
   bool has_pending_activity_;
   HeapVector<Member<MIDIInput>> inputs_;

@@ -856,14 +856,15 @@ const GridTrackSize& GridTrackSizingAlgorithm::RawGridTrackSize(
     size_t translated_index) const {
   bool is_row_axis = direction == kForColumns;
   const Vector<GridTrackSize>& track_styles =
-      is_row_axis ? layout_grid_->StyleRef().GridTemplateColumns()
-                  : layout_grid_->StyleRef().GridTemplateRows();
+      is_row_axis
+          ? layout_grid_->StyleRef().GridTemplateColumns().LegacyTrackList()
+          : layout_grid_->StyleRef().GridTemplateRows().LegacyTrackList();
   const Vector<GridTrackSize>& auto_repeat_track_styles =
       is_row_axis ? layout_grid_->StyleRef().GridAutoRepeatColumns()
                   : layout_grid_->StyleRef().GridAutoRepeatRows();
   const Vector<GridTrackSize>& auto_track_styles =
-      is_row_axis ? layout_grid_->StyleRef().GridAutoColumns()
-                  : layout_grid_->StyleRef().GridAutoRows();
+      is_row_axis ? layout_grid_->StyleRef().GridAutoColumns().LegacyTrackList()
+                  : layout_grid_->StyleRef().GridAutoRows().LegacyTrackList();
   size_t insertion_point =
       is_row_axis
           ? layout_grid_->StyleRef().GridAutoRepeatColumnsInsertionPoint()
@@ -1258,9 +1259,9 @@ LayoutUnit GridTrackSizingAlgorithm::ItemSizeForTrackSizeComputationPhase(
     LayoutBox& grid_item) const {
   switch (phase) {
     case kResolveIntrinsicMinimums:
-    case kResolveIntrinsicMaximums:
       return strategy_->MinSizeForChild(grid_item);
     case kResolveContentBasedMinimums:
+    case kResolveIntrinsicMaximums:
       return strategy_->MinContentForChild(grid_item);
     case kResolveMaxContentMinimums:
     case kResolveMaxContentMaximums:

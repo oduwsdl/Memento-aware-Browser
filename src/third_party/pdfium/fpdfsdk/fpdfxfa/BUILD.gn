@@ -26,11 +26,14 @@ source_set("fpdfxfa") {
     "../../core/fpdfapi/parser",
     "../../core/fpdfapi/render",
     "../../core/fxcrt",
+    "../../fxbarcode",
     "../../fxjs",
+    "../../fxjs:gc",
+    "../../xfa/fgas/font",
+    "../../xfa/fgas/graphics",
     "../../xfa/fwl",
     "../../xfa/fxfa",
     "../../xfa/fxfa/parser",
-    "../../xfa/fxgraphics",
   ]
   configs += [ "../../:pdfium_core_config" ]
   visibility = [ "../../*" ]

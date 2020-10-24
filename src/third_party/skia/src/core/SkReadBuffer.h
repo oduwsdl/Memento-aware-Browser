@@ -8,7 +8,6 @@
 #ifndef SkReadBuffer_DEFINED
 #define SkReadBuffer_DEFINED
 
-#include "include/core/SkColorFilter.h"
 #include "include/core/SkDrawLooper.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkImageFilter.h"
@@ -18,6 +17,7 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSerialProcs.h"
+#include "src/core/SkColorFilterBase.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkPicturePriv.h"
@@ -92,6 +92,7 @@ public:
     void readPoint(SkPoint* point);
     SkPoint readPoint() { SkPoint p; this->readPoint(&p); return p; }
     void readPoint3(SkPoint3* point);
+    void read(SkM44*);
     void readMatrix(SkMatrix* matrix);
     void readIRect(SkIRect* rect);
     void readRect(SkRect* rect);
@@ -108,7 +109,7 @@ public:
     template <typename T> sk_sp<T> readFlattenable() {
         return sk_sp<T>((T*)this->readFlattenable(T::GetFlattenableType()));
     }
-    sk_sp<SkColorFilter> readColorFilter() { return this->readFlattenable<SkColorFilter>(); }
+    sk_sp<SkColorFilter> readColorFilter() { return this->readFlattenable<SkColorFilterBase>(); }
     sk_sp<SkDrawLooper> readDrawLooper() { return this->readFlattenable<SkDrawLooper>(); }
     sk_sp<SkImageFilter> readImageFilter() { return this->readFlattenable<SkImageFilter>(); }
     sk_sp<SkMaskFilter> readMaskFilter() { return this->readFlattenable<SkMaskFilterBase>(); }
@@ -201,6 +202,8 @@ private:
     void setInvalid();
     bool readArray(void* value, size_t size, size_t elementSize);
     bool isAvailable(size_t size) const { return size <= this->available(); }
+
+    sk_sp<SkImage> readImage_preV78();
 
     // These are always 4-byte aligned
     const char* fCurr = nullptr;  // current position within buffer

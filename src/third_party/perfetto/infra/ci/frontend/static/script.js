@@ -128,7 +128,8 @@ function main() {
 function renderHeader() {
   const active = id => m.route.get().startsWith(`/${id}`) ? '.active' : '';
   const logUrl = 'https://goto.google.com/perfetto-ci-logs-';
-  const docsUrl = 'https://docs.perfetto.dev/#/continuous-integration';
+  const docsUrl =
+      'https://perfetto.dev/docs/design-docs/continuous-integration';
   return m('header',
     m('a[href=/#!/cls]', m('h1', 'Perfetto ', m('span', 'CI'))),
     m('nav',
@@ -373,7 +374,8 @@ function renderClJobCell(src, jobType) {
 const TermRenderer = {
   oncreate: function (vnode) {
     console.log('Creating terminal object');
-    term = new Terminal({ rows: 6, fontSize: 12, scrollback: 100000 });
+    term = new Terminal(
+        {rows: 6, fontFamily: 'monospace', fontSize: 12, scrollback: 100000});
     term.open(vnode.dom);
     term.fit();
     if (vnode.attrs.focused) term.focus();

@@ -86,7 +86,7 @@ void VCMDecodedFrameCallback::Decoded(VideoFrame& decodedImage,
   // callbacks from one call to Decode().
   VCMFrameInformation* frameInfo;
   {
-    rtc::CritScope cs(&lock_);
+    MutexLock lock(&lock_);
     frameInfo = _timestampMap.Pop(decodedImage.timestamp());
   }
 
@@ -101,13 +101,14 @@ void VCMDecodedFrameCallback::Decoded(VideoFrame& decodedImage,
   decodedImage.set_packet_infos(frameInfo->packet_infos);
   decodedImage.set_rotation(frameInfo->rotation);
 
-  const Timestamp now = _clock->CurrentTime();
   RTC_DCHECK(frameInfo->decodeStart);
-  if (!decode_time_ms) {
-    decode_time_ms = (now - *frameInfo->decodeStart).ms();
-  }
-  _timing->StopDecodeTimer(*decode_time_ms, now.ms());
-  decodedImage.set_processing_time({*frameInfo->decodeStart, now});
+  const Timestamp now = _clock->CurrentTime();
+  const TimeDelta decode_time = decode_time_ms
+                                    ? TimeDelta::Millis(*decode_time_ms)
+                                    : now - *frameInfo->decodeStart;
+  _timing->StopDecodeTimer(decode_time.ms(), now.ms());
+  decodedImage.set_processing_time(
+      {*frameInfo->decodeStart, *frameInfo->decodeStart + decode_time});
 
   // Report timing information.
   TimingFrameInfo timing_frame_info;
@@ -161,7 +162,7 @@ void VCMDecodedFrameCallback::Decoded(VideoFrame& decodedImage,
 
   decodedImage.set_timestamp_us(frameInfo->renderTimeMs *
                                 rtc::kNumMicrosecsPerMillisec);
-  _receiveCallback->FrameToRender(decodedImage, qp, *decode_time_ms,
+  _receiveCallback->FrameToRender(decodedImage, qp, decode_time.ms(),
                                   frameInfo->content_type);
 }
 
@@ -172,12 +173,12 @@ void VCMDecodedFrameCallback::OnDecoderImplementationName(
 
 void VCMDecodedFrameCallback::Map(uint32_t timestamp,
                                   VCMFrameInformation* frameInfo) {
-  rtc::CritScope cs(&lock_);
+  MutexLock lock(&lock_);
   _timestampMap.Add(timestamp, frameInfo);
 }
 
 int32_t VCMDecodedFrameCallback::Pop(uint32_t timestamp) {
-  rtc::CritScope cs(&lock_);
+  MutexLock lock(&lock_);
   if (_timestampMap.Pop(timestamp) == NULL) {
     return VCM_GENERAL_ERROR;
   }

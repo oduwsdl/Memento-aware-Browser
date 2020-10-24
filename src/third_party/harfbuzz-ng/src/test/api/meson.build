@@ -16,6 +16,7 @@ tests = [
   'test-font.c',
   'test-map.c',
   'test-object.c',
+  'test-ot-alternates.c',
   'test-ot-color.c',
   'test-ot-face.c',
   'test-ot-glyphname.c',
@@ -28,6 +29,7 @@ tests = [
   'test-ot-metrics-tt-var.c',
   'test-set.c',
   'test-shape.c',
+  'test-style.c',
   'test-subset.c',
   'test-subset-cmap.c',
   'test-subset-drop-tables.c',
@@ -71,17 +73,16 @@ env.set('G_TEST_BUILDDIR', meson.current_build_dir())
 foreach source : tests
   test_name = source.split('.')[0]
 
-  link_withs = libharfbuzz
+  deps = [glib_dep, freetype_dep, thread_dep, libharfbuzz_dep, libharfbuzz_icu_dep]
+  suite = ['api']
   if test_name.contains('-subset')
-    link_withs = [libharfbuzz, libharfbuzz_subset]
-  elif test_name == 'test-unicode' and have_icu and not have_icu_builtin
-    link_withs = [libharfbuzz, libharfbuzz_icu]
+    deps += libharfbuzz_subset_dep
+    suite += 'subset'
   endif
 
   test(test_name, executable(test_name, source,
-    include_directories: [incconfig, incsrc],
+    include_directories: [incconfig],
     dependencies: deps,
-    link_with: link_withs,
     install: false,
-  ), env: env)
+  ), env: env, suite: suite)
 endforeach

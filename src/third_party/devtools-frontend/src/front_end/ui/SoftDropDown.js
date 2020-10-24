@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @ts-nocheck
-// TODO(crbug.com/1011811): Enable TypeScript compiler checks
-
 import * as Common from '../common/common.js';  // eslint-disable-line no-unused-vars
 
 import * as ARIAUtils from './ARIAUtils.js';
@@ -95,7 +92,9 @@ export class SoftDropDown {
       this._list.selectItem(this._selectedItem);
     }
     event.consume(true);
-    setTimeout(() => this._listWasShowing200msAgo = true, 200);
+    setTimeout(() => {
+      this._listWasShowing200msAgo = true;
+    }, 200);
   }
 
   _updateGlasspaneSize() {
@@ -108,7 +107,9 @@ export class SoftDropDown {
    * @param {!Event} event
    */
   _hide(event) {
-    setTimeout(() => this._listWasShowing200msAgo = false, 200);
+    setTimeout(() => {
+      this._listWasShowing200msAgo = false;
+    }, 200);
     this._glassPane.hide();
     this._list.selectItem(null);
     ARIAUtils.setExpanded(this.element, false);
@@ -117,9 +118,10 @@ export class SoftDropDown {
   }
 
   /**
-   * @param {!Event} event
+   * @param {!Event} ev
    */
-  _onKeyDownButton(event) {
+  _onKeyDownButton(ev) {
+    const event = /** @type {!KeyboardEvent} */ (ev);
     let handled = false;
     switch (event.key) {
       case 'ArrowUp':
@@ -147,9 +149,10 @@ export class SoftDropDown {
   }
 
   /**
-   * @param {!Event} event
+   * @param {!Event} ev
    */
-  _onKeyDownList(event) {
+  _onKeyDownList(ev) {
+    const event = /** @type {!KeyboardEvent} */ (ev);
     let handled = false;
     switch (event.key) {
       case 'ArrowLeft':
@@ -238,7 +241,7 @@ export class SoftDropDown {
    */
   _itemsReplaced(event) {
     const removed = /** @type {!Array<T>} */ (event.data.removed);
-    if (removed.indexOf(this._selectedItem) !== -1) {
+    if (this._selectedItem && removed.indexOf(this._selectedItem) !== -1) {
       this._selectedItem = null;
       this._selectHighlightedItem();
     }
@@ -350,6 +353,7 @@ export class Delegate {
    * @return {string}
    */
   titleFor(item) {
+    throw new Error('not implemented yet');
   }
 
   /**
@@ -357,6 +361,7 @@ export class Delegate {
    * @return {!Element}
    */
   createElementForItem(item) {
+    throw new Error('not implemented yet');
   }
 
   /**
@@ -364,6 +369,7 @@ export class Delegate {
    * @return {boolean}
    */
   isItemSelectable(item) {
+    throw new Error('not implemented yet');
   }
 
   /**

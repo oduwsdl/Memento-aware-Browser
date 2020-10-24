@@ -111,7 +111,7 @@ DOMMatrixReadOnly* DOMMatrixReadOnly::Create(
     const StringOrUnrestrictedDoubleSequence& init,
     ExceptionState& exception_state) {
   if (init.IsString()) {
-    if (!execution_context->IsDocument()) {
+    if (!execution_context->IsWindow()) {
       exception_state.ThrowTypeError(
           "DOMMatrix can't be constructed with strings on workers.");
       return nullptr;
@@ -499,7 +499,7 @@ void DOMMatrixReadOnly::SetMatrixValueFromString(
       *value,
       CSSToLengthConversionData(&initial_style, &initial_style, nullptr, 1.0f));
 
-  if (operations.DependsOnBoxSize()) {
+  if (operations.BoxSizeDependencies()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
         "Lengths must be absolute, not depend on the box size");

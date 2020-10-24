@@ -26,9 +26,8 @@
 #include <string.h>
 #include <mutex>
 
-#define VALIDATION_ERROR_MAP_IMPL
-
 #include "chassis.h"
+#include "layer_options.h"
 #include "layer_chassis_dispatch.h"
 
 small_unordered_map<void*, ValidationObject*, 2> layer_data_map;
@@ -51,7 +50,11 @@ bool wrap_handles = true;
 #include "object_lifetime_validation.h"
 #include "debug_printf.h"
 #include "stateless_validation.h"
+#include "synchronization_validation.h"
 #include "thread_safety.h"
+
+// Global list of sType,size identifiers
+std::vector<std::pair<uint32_t, uint32_t>> custom_stype_info{};
 
 namespace vulkan_layer_chassis {
 
@@ -110,294 +113,12 @@ static void DeviceExtensionWhitelist(ValidationObject *layer_data, const VkDevic
     }
 }
 
-
-// Process validation features, flags and settings specified through extensions, a layer settings file, or environment variables
-
-static const std::unordered_map<std::string, VkValidationFeatureDisableEXT> VkValFeatureDisableLookup = {
-    {"VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT", VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT},
-    {"VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT", VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT},
-    {"VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT", VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT},
-    {"VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT", VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT},
-    {"VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT", VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT},
-    {"VK_VALIDATION_FEATURE_DISABLE_UNIQUE_HANDLES_EXT", VK_VALIDATION_FEATURE_DISABLE_UNIQUE_HANDLES_EXT},
-    {"VK_VALIDATION_FEATURE_DISABLE_ALL_EXT", VK_VALIDATION_FEATURE_DISABLE_ALL_EXT},
-};
-
-static const std::unordered_map<std::string, VkValidationFeatureEnableEXT> VkValFeatureEnableLookup = {
-    {"VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT", VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT},
-    {"VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT", VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT},
-    {"VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT", VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT},
-    {"VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT", VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT}, 
-};
-
-static const std::unordered_map<std::string, ValidationCheckDisables> ValidationDisableLookup = {
-    {"VALIDATION_CHECK_DISABLE_COMMAND_BUFFER_STATE", VALIDATION_CHECK_DISABLE_COMMAND_BUFFER_STATE},
-    {"VALIDATION_CHECK_DISABLE_OBJECT_IN_USE", VALIDATION_CHECK_DISABLE_OBJECT_IN_USE},
-    {"VALIDATION_CHECK_DISABLE_IDLE_DESCRIPTOR_SET", VALIDATION_CHECK_DISABLE_IDLE_DESCRIPTOR_SET},
-    {"VALIDATION_CHECK_DISABLE_PUSH_CONSTANT_RANGE", VALIDATION_CHECK_DISABLE_PUSH_CONSTANT_RANGE},
-    {"VALIDATION_CHECK_DISABLE_QUERY_VALIDATION", VALIDATION_CHECK_DISABLE_QUERY_VALIDATION},
-    {"VALIDATION_CHECK_DISABLE_IMAGE_LAYOUT_VALIDATION", VALIDATION_CHECK_DISABLE_IMAGE_LAYOUT_VALIDATION},
-};
-
-static const std::unordered_map<std::string, ValidationCheckEnables> ValidationEnableLookup = {
-    {"VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM", VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM},
-    {"VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ALL", VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ALL},
-};
-
-// This should mirror the 'DisableFlags' enumerated type
-static const std::vector<std::string> DisableFlagNameHelper = {
-    "VALIDATION_CHECK_DISABLE_COMMAND_BUFFER_STATE",        // command_buffer_state,
-    "VALIDATION_CHECK_DISABLE_OBJECT_IN_USE",               // object_in_use,
-    "VALIDATION_CHECK_DISABLE_IDLE_DESCRIPTOR_SET",         // idle_descriptor_set,
-    "VALIDATION_CHECK_DISABLE_PUSH_CONSTANT_RANGE",         // push_constant_range,
-    "VALIDATION_CHECK_DISABLE_QUERY_VALIDATION",            // query_validation,
-    "VALIDATION_CHECK_DISABLE_IMAGE_LAYOUT_VALIDATION",     // image_layout_validation,
-    "VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT",   // object_tracking,
-    "VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT",        // core_checks,
-    "VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT",      // thread_safety,
-    "VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT",     // stateless_checks,
-    "VK_VALIDATION_FEATURE_DISABLE_UNIQUE_HANDLES_EXT",     // handle_wrapping,
-    "VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT"             // shader_validation,
-};
-
-// This should mirror the 'EnableFlags' enumerated type
-static const std::vector<std::string> EnableFlagNameHelper = {
-    "VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT",        // gpu_validation,
-    "VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT", // gpu_validation_reserve_binding_slot,
-    "VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT",      // best_practices,
-    "VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM",          // vendor_specific_arm,
-    "VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT"         // debug_printf,
-};
-
-// Set the local disable flag for the appropriate VALIDATION_CHECK_DISABLE enum
-void SetValidationDisable(CHECK_DISABLED &disable_data, const ValidationCheckDisables disable_id) {
-    switch (disable_id) {
-        case VALIDATION_CHECK_DISABLE_COMMAND_BUFFER_STATE:
-            disable_data[command_buffer_state] = true;
-            break;
-        case VALIDATION_CHECK_DISABLE_OBJECT_IN_USE:
-            disable_data[object_in_use] = true;
-            break;
-        case VALIDATION_CHECK_DISABLE_IDLE_DESCRIPTOR_SET:
-            disable_data[idle_descriptor_set] = true;
-            break;
-        case VALIDATION_CHECK_DISABLE_PUSH_CONSTANT_RANGE:
-            disable_data[push_constant_range] = true;
-            break;
-        case VALIDATION_CHECK_DISABLE_QUERY_VALIDATION:
-            disable_data[query_validation] = true;
-            break;
-        case VALIDATION_CHECK_DISABLE_IMAGE_LAYOUT_VALIDATION:
-            disable_data[image_layout_validation] = true;
-            break;
-        default:
-            assert(true);
-    }
-}
-
-// Set the local disable flag for a single VK_VALIDATION_FEATURE_DISABLE_* flag
-void SetValidationFeatureDisable(CHECK_DISABLED &disable_data, const VkValidationFeatureDisableEXT feature_disable) {
-    switch (feature_disable) {
-        case VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT:
-            disable_data[shader_validation] = true;
-            break;
-        case VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT:
-            disable_data[thread_safety] = true;
-            break;
-        case VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT:
-            disable_data[stateless_checks] = true;
-            break;
-        case VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT:
-            disable_data[object_tracking] = true;
-            break;
-        case VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT:
-            disable_data[core_checks] = true;
-            break;
-        case VK_VALIDATION_FEATURE_DISABLE_UNIQUE_HANDLES_EXT:
-            disable_data[handle_wrapping] = true;
-            break;
-        case VK_VALIDATION_FEATURE_DISABLE_ALL_EXT:
-            // Set all disabled flags to true
-            std::fill(disable_data.begin(), disable_data.end(), true);
-            break;
-        default:
-            break;
-    }
-}
-
-// Set the local enable flag for the appropriate VALIDATION_CHECK_ENABLE enum
-void SetValidationEnable(CHECK_ENABLED &enable_data, const ValidationCheckEnables enable_id) {
-    switch (enable_id) {
-        case VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM:
-            enable_data[vendor_specific_arm] = true;
-            break;
-        case VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ALL:
-            enable_data[vendor_specific_arm] = true;
-            break;
-        default:
-            assert(true);
-    }
-}
-
-// Set the local enable flag for a single VK_VALIDATION_FEATURE_ENABLE_* flag
-void SetValidationFeatureEnable(CHECK_ENABLED &enable_data, const VkValidationFeatureEnableEXT feature_enable) {
-    switch (feature_enable) {
-        case VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT:
-            enable_data[gpu_validation] = true;
-            break;
-        case VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT:
-            enable_data[gpu_validation_reserve_binding_slot] = true;
-            break;
-        case VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT:
-            enable_data[best_practices] = true;
-            break;
-        case VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT:
-            enable_data[debug_printf] = true;
-        default:
-            break;
-    }
-}
-
-// Set the local disable flag for settings specified through the VK_EXT_validation_flags extension
-void SetValidationFlags(CHECK_DISABLED &disables, const VkValidationFlagsEXT* val_flags_struct) {
-    for (uint32_t i = 0; i < val_flags_struct->disabledValidationCheckCount; ++i) {
-        switch (val_flags_struct->pDisabledValidationChecks[i]) {
-            case VK_VALIDATION_CHECK_SHADERS_EXT:
-                disables[shader_validation] = true;
-                break;
-            case VK_VALIDATION_CHECK_ALL_EXT:
-                // Set all disabled flags to true
-                disables[shader_validation] = true;
-                break;
-            default:
-                break;
-        }
-    }
-}
-
-// Process Validation Features flags specified through the ValidationFeature extension
-void SetValidationFeatures(CHECK_DISABLED &disable_data, CHECK_ENABLED &enable_data,
-                           const VkValidationFeaturesEXT *val_features_struct) {
-    for (uint32_t i = 0; i < val_features_struct->disabledValidationFeatureCount; ++i) {
-        SetValidationFeatureDisable(disable_data, val_features_struct->pDisabledValidationFeatures[i]);
-    }
-    for (uint32_t i = 0; i < val_features_struct->enabledValidationFeatureCount; ++i) {
-        SetValidationFeatureEnable(enable_data, val_features_struct->pEnabledValidationFeatures[i]);
-    }
-}
-
-std::string GetNextToken(std::string *token_list, const std::string &delimiter, size_t *pos) {
-    std::string token;
-    *pos = token_list->find(delimiter);
-    if (*pos != std::string::npos) {
-        token = token_list->substr(0, *pos);
-    } else {
-        *pos = token_list->length() - delimiter.length();
-        token = *token_list;
-    }
-    token_list->erase(0, *pos + delimiter.length());
-    return token;
-}
-
-// Given a string representation of a list of enable enum values, call the appropriate setter function
-void SetLocalEnableSetting(std::string list_of_enables, std::string delimiter, CHECK_ENABLED &enables) {
-    size_t pos = 0;
-    std::string token;
-    while (list_of_enables.length() != 0) {
-        token = GetNextToken(&list_of_enables, delimiter, &pos);
-        if (token.find("VK_VALIDATION_FEATURE_ENABLE_") != std::string::npos) {
-            auto result = VkValFeatureEnableLookup.find(token);
-            if (result != VkValFeatureEnableLookup.end()) {
-                SetValidationFeatureEnable(enables, result->second);
-            } 
-        } else if (token.find("VALIDATION_CHECK_ENABLE_") != std::string::npos) {
-            auto result = ValidationEnableLookup.find(token);
-            if (result != ValidationEnableLookup.end()) {
-                SetValidationEnable(enables, result->second);
-            }
-        }
-    }
-}
-
-// Given a string representation of a list of disable enum values, call the appropriate setter function
-void SetLocalDisableSetting(std::string list_of_disables, std::string delimiter, CHECK_DISABLED &disables) {
-    size_t pos = 0;
-    std::string token;
-    while (list_of_disables.length() != 0) {
-        token = GetNextToken(&list_of_disables, delimiter, &pos);
-        if (token.find("VK_VALIDATION_FEATURE_DISABLE_") != std::string::npos) {
-            auto result = VkValFeatureDisableLookup.find(token);
-            if (result != VkValFeatureDisableLookup.end()) {
-                SetValidationFeatureDisable(disables, result->second);
-            }
-        } else if (token.find("VALIDATION_CHECK_DISABLE_") != std::string::npos) {
-            auto result = ValidationDisableLookup.find(token);
-            if (result != ValidationDisableLookup.end()) {
-                SetValidationDisable(disables, result->second);
-            }
-        }
-    }
-}
-
-void CreateFilterMessageIdList(std::string raw_id_list, std::string delimiter, std::vector<uint32_t> &filter_list) {
-    size_t pos = 0;
-    std::string token;
-    while (raw_id_list.length() != 0) {
-        token = GetNextToken(&raw_id_list, delimiter, &pos);
-        uint32_t int_id = 0;
-        if (token.find("0x") == 0) {                                             // Handle hex number
-            int_id = std::strtoul(token.c_str(), nullptr, 16);
-        } else {
-            int_id = std::strtoul(token.c_str(), nullptr, 10);                   // Decimal number
-            if (int_id == 0) {
-                size_t id_hash = XXH32(token.c_str(), strlen(token.c_str()), 8); // String
-                if (id_hash != 0) {
-                    int_id = static_cast<uint32_t>(id_hash);
-                }
-            }
-        }
-        if ((int_id != 0) && (std::find(filter_list.begin(), filter_list.end(), int_id)) == filter_list.end()) {
-            filter_list.push_back(int_id);
-        }
-   }
-}
-
-// Process enables and disables set though the vk_layer_settings.txt config file or through an environment variable
-void ProcessConfigAndEnvSettings(const char* layer_description, CHECK_ENABLED &enables, CHECK_DISABLED &disables,
-    std::vector<uint32_t> &message_filter_list) {
-    std::string enable_key = layer_description;
-    std::string disable_key = layer_description;
-    std::string filter_msg_key = layer_description;
-    enable_key.append(".enables");
-    disable_key.append(".disables");
-    filter_msg_key.append(".message_id_filter");
-    std::string list_of_config_enables = getLayerOption(enable_key.c_str());
-    std::string list_of_env_enables = GetLayerEnvVar("VK_LAYER_ENABLES");
-    std::string list_of_config_disables = getLayerOption(disable_key.c_str());
-    std::string list_of_env_disables = GetLayerEnvVar("VK_LAYER_DISABLES");
-    std::string list_of_config_filter_ids = getLayerOption(filter_msg_key.c_str());
-    std::string list_of_env_filter_ids = GetLayerEnvVar("VK_LAYER_MESSAGE_ID_FILTER");
-#if defined(_WIN32)
-    std::string env_delimiter = ";";
-#else
-    std::string env_delimiter = ":";
-#endif
-    // Process layer enables and disable settings
-    SetLocalEnableSetting(list_of_config_enables, ",", enables);
-    SetLocalEnableSetting(list_of_env_enables, env_delimiter, enables);
-    SetLocalDisableSetting(list_of_config_disables, ",", disables);
-    SetLocalDisableSetting(list_of_env_disables, env_delimiter, disables);
-    // Process message filter ID list
-    CreateFilterMessageIdList(list_of_config_filter_ids, ",", message_filter_list);
-    CreateFilterMessageIdList(list_of_env_filter_ids, env_delimiter, message_filter_list);
-}
-
 void OutputLayerStatusInfo(ValidationObject *context) {
     std::string list_of_enables;
     std::string list_of_disables;
     for (uint32_t i = 0; i < kMaxEnableFlags; i++) {
         if (context->enabled[i]) {
-            list_of_enables.append(", ");
+            if (list_of_enables.size()) list_of_enables.append(", ");
             list_of_enables.append(EnableFlagNameHelper[i]);
         }
     }
@@ -406,7 +127,7 @@ void OutputLayerStatusInfo(ValidationObject *context) {
     }
     for (uint32_t i = 0; i < kMaxDisableFlags; i++) {
         if (context->disabled[i]) {
-            list_of_disables.append(", ");
+            if (list_of_disables.size()) list_of_disables.append(", ");
             list_of_disables.append(DisableFlagNameHelper[i]);
         }
     }
@@ -545,16 +266,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *pCreat
     // Set up enable and disable features flags
     CHECK_ENABLED local_enables {};
     CHECK_DISABLED local_disables {};
-
-    const auto *validation_features_ext = lvl_find_in_chain<VkValidationFeaturesEXT>(pCreateInfo->pNext);
-    if (validation_features_ext) {
-        SetValidationFeatures(local_disables, local_enables, validation_features_ext);
-    }
-    const auto *validation_flags_ext = lvl_find_in_chain<VkValidationFlagsEXT>(pCreateInfo->pNext);
-    if (validation_flags_ext) {
-        SetValidationFlags(local_disables, validation_flags_ext);
-    }
-    ProcessConfigAndEnvSettings(OBJECT_LAYER_DESCRIPTION, local_enables, local_disables, report_data->filter_message_ids);
+    ConfigAndEnvSettings config_and_env_settings_data {OBJECT_LAYER_DESCRIPTION, pCreateInfo->pNext, local_enables, local_disables,
+        report_data->filter_message_ids, &report_data->duplicate_message_limit};
+    ProcessConfigAndEnvSettings(&config_and_env_settings_data);
     layer_debug_messenger_actions(report_data, pAllocator, OBJECT_LAYER_DESCRIPTION);
 
     // Create temporary dispatch vector for pre-calls until instance is created
@@ -581,6 +295,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *pCreat
 
     auto debug_printf_obj = new DebugPrintf;
     debug_printf_obj->RegisterValidationObject(local_enables[debug_printf], api_version, report_data, local_object_dispatch);
+
+    auto sync_validation_obj = new SyncValidator;
+    sync_validation_obj->RegisterValidationObject(local_enables[sync_validation], api_version, report_data, local_object_dispatch);
 
     // If handle wrapping is disabled via the ValidationFeatures extension, override build flag
     if (local_disables[handle_wrapping]) {
@@ -626,10 +343,23 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *pCreat
     best_practices_obj->FinalizeInstanceValidationObject(framework);
     gpu_assisted_obj->FinalizeInstanceValidationObject(framework);
     debug_printf_obj->FinalizeInstanceValidationObject(framework);
+    sync_validation_obj->FinalizeInstanceValidationObject(framework);
 
     for (auto intercept : framework->object_dispatch) {
         auto lock = intercept->write_lock();
         intercept->PostCallRecordCreateInstance(pCreateInfo, pAllocator, pInstance, result);
+    }
+
+    // Delete unused validation objects to avoid memory leak.
+    std::vector<ValidationObject*> local_objs = {
+        thread_checker_obj, object_tracker_obj, parameter_validation_obj,
+        core_checks_obj, best_practices_obj, gpu_assisted_obj, debug_printf_obj,
+        sync_validation_obj,
+    };
+    for (auto obj : local_objs) {
+        if (std::find(local_object_dispatch.begin(), local_object_dispatch.end(), obj) == local_object_dispatch.end()) {
+            delete obj;
+        }
     }
 
     InstanceExtensionWhitelist(framework, pCreateInfo, *pInstance);
@@ -756,6 +486,22 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const VkDevice
 
     auto debug_printf_obj = new DebugPrintf;
     debug_printf_obj->InitDeviceValidationObject(enables[debug_printf], instance_interceptor, device_interceptor);
+
+    auto sync_validation_obj = new SyncValidator;
+    sync_validation_obj->InitDeviceValidationObject(enables[sync_validation], instance_interceptor, device_interceptor);
+
+    // Delete unused validation objects to avoid memory leak.
+    std::vector<ValidationObject *> local_objs = {
+        thread_safety_obj, stateless_validation_obj, object_tracker_obj,
+        core_checks_obj, best_practices_obj, gpu_assisted_obj, debug_printf_obj,
+        sync_validation_obj,
+    };
+    for (auto obj : local_objs) {
+        if (std::find(device_interceptor->object_dispatch.begin(), device_interceptor->object_dispatch.end(), obj) ==
+            device_interceptor->object_dispatch.end()) {
+            delete obj;
+        }
+    }
 
     for (auto intercept : instance_interceptor->object_dispatch) {
         auto lock = intercept->write_lock();
@@ -1003,11 +749,13 @@ VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(
     auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
     bool skip = false;
 
-    cvdescriptorset::AllocateDescriptorSetsData ads_state(pAllocateInfo->descriptorSetCount);
+    cvdescriptorset::AllocateDescriptorSetsData ads_state[LayerObjectTypeMaxEnum];
 
     for (auto intercept : layer_data->object_dispatch) {
+        ads_state[intercept->container_type].Init(pAllocateInfo->descriptorSetCount);
         auto lock = intercept->read_lock();
-        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets, &ads_state);
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateAllocateDescriptorSets(device,
+            pAllocateInfo, pDescriptorSets, &(ads_state[intercept->container_type]));
         if (skip) return VK_ERROR_VALIDATION_FAILED_EXT;
     }
     for (auto intercept : layer_data->object_dispatch) {
@@ -1017,7 +765,8 @@ VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(
     VkResult result = DispatchAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets);
     for (auto intercept : layer_data->object_dispatch) {
         auto lock = intercept->write_lock();
-        intercept->PostCallRecordAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets, result, &ads_state);
+        intercept->PostCallRecordAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets,
+            result, &(ads_state[intercept->container_type]));
     }
     return result;
 }
@@ -6913,6 +6662,9 @@ VKAPI_ATTR VkResult VKAPI_CALL BindImageMemory2KHR(
     return result;
 }
 
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
 
 VKAPI_ATTR void VKAPI_CALL GetDescriptorSetLayoutSupportKHR(
     VkDevice                                    device,
@@ -7328,6 +7080,133 @@ VKAPI_ATTR VkResult VKAPI_CALL GetPipelineExecutableInternalRepresentationsKHR(
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 #endif // VK_ENABLE_BETA_EXTENSIONS
 
+
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferInfo2KHR*                 pCopyBufferInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdCopyBuffer2KHR(commandBuffer, pCopyBufferInfo);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdCopyBuffer2KHR(commandBuffer, pCopyBufferInfo);
+    }
+    DispatchCmdCopyBuffer2KHR(commandBuffer, pCopyBufferInfo);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdCopyBuffer2KHR(commandBuffer, pCopyBufferInfo);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageInfo2KHR*                  pCopyImageInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdCopyImage2KHR(commandBuffer, pCopyImageInfo);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdCopyImage2KHR(commandBuffer, pCopyImageInfo);
+    }
+    DispatchCmdCopyImage2KHR(commandBuffer, pCopyImageInfo);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdCopyImage2KHR(commandBuffer, pCopyImageInfo);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyBufferToImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdCopyBufferToImage2KHR(commandBuffer, pCopyBufferToImageInfo);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdCopyBufferToImage2KHR(commandBuffer, pCopyBufferToImageInfo);
+    }
+    DispatchCmdCopyBufferToImage2KHR(commandBuffer, pCopyBufferToImageInfo);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdCopyBufferToImage2KHR(commandBuffer, pCopyBufferToImageInfo);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyImageToBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdCopyImageToBuffer2KHR(commandBuffer, pCopyImageToBufferInfo);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdCopyImageToBuffer2KHR(commandBuffer, pCopyImageToBufferInfo);
+    }
+    DispatchCmdCopyImageToBuffer2KHR(commandBuffer, pCopyImageToBufferInfo);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdCopyImageToBuffer2KHR(commandBuffer, pCopyImageToBufferInfo);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdBlitImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkBlitImageInfo2KHR*                  pBlitImageInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdBlitImage2KHR(commandBuffer, pBlitImageInfo);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdBlitImage2KHR(commandBuffer, pBlitImageInfo);
+    }
+    DispatchCmdBlitImage2KHR(commandBuffer, pBlitImageInfo);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdBlitImage2KHR(commandBuffer, pBlitImageInfo);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdResolveImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkResolveImageInfo2KHR*               pResolveImageInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdResolveImage2KHR(commandBuffer, pResolveImageInfo);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdResolveImage2KHR(commandBuffer, pResolveImageInfo);
+    }
+    DispatchCmdResolveImage2KHR(commandBuffer, pResolveImageInfo);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdResolveImage2KHR(commandBuffer, pResolveImageInfo);
+    }
+}
 
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateDebugReportCallbackEXT(
@@ -9701,6 +9580,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateMetalSurfaceEXT(
 
 
 
+
 VKAPI_ATTR VkDeviceAddress VKAPI_CALL GetBufferDeviceAddressEXT(
     VkDevice                                    device,
     const VkBufferDeviceAddressInfo*            pInfo) {
@@ -9919,6 +9799,7 @@ VKAPI_ATTR void VKAPI_CALL CmdSetLineStippleEXT(
 }
 
 
+
 VKAPI_ATTR void VKAPI_CALL ResetQueryPoolEXT(
     VkDevice                                    device,
     VkQueryPool                                 queryPool,
@@ -9942,6 +9823,270 @@ VKAPI_ATTR void VKAPI_CALL ResetQueryPoolEXT(
     }
 }
 
+
+
+VKAPI_ATTR void VKAPI_CALL CmdSetCullModeEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkCullModeFlags                             cullMode) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetCullModeEXT(commandBuffer, cullMode);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetCullModeEXT(commandBuffer, cullMode);
+    }
+    DispatchCmdSetCullModeEXT(commandBuffer, cullMode);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetCullModeEXT(commandBuffer, cullMode);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetFrontFaceEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkFrontFace                                 frontFace) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetFrontFaceEXT(commandBuffer, frontFace);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetFrontFaceEXT(commandBuffer, frontFace);
+    }
+    DispatchCmdSetFrontFaceEXT(commandBuffer, frontFace);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetFrontFaceEXT(commandBuffer, frontFace);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetPrimitiveTopologyEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPrimitiveTopology                         primitiveTopology) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetPrimitiveTopologyEXT(commandBuffer, primitiveTopology);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetPrimitiveTopologyEXT(commandBuffer, primitiveTopology);
+    }
+    DispatchCmdSetPrimitiveTopologyEXT(commandBuffer, primitiveTopology);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetPrimitiveTopologyEXT(commandBuffer, primitiveTopology);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetViewportWithCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    viewportCount,
+    const VkViewport*                           pViewports) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetViewportWithCountEXT(commandBuffer, viewportCount, pViewports);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetViewportWithCountEXT(commandBuffer, viewportCount, pViewports);
+    }
+    DispatchCmdSetViewportWithCountEXT(commandBuffer, viewportCount, pViewports);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetViewportWithCountEXT(commandBuffer, viewportCount, pViewports);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetScissorWithCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    scissorCount,
+    const VkRect2D*                             pScissors) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetScissorWithCountEXT(commandBuffer, scissorCount, pScissors);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetScissorWithCountEXT(commandBuffer, scissorCount, pScissors);
+    }
+    DispatchCmdSetScissorWithCountEXT(commandBuffer, scissorCount, pScissors);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetScissorWithCountEXT(commandBuffer, scissorCount, pScissors);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdBindVertexBuffers2EXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstBinding,
+    uint32_t                                    bindingCount,
+    const VkBuffer*                             pBuffers,
+    const VkDeviceSize*                         pOffsets,
+    const VkDeviceSize*                         pSizes,
+    const VkDeviceSize*                         pStrides) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdBindVertexBuffers2EXT(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdBindVertexBuffers2EXT(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
+    }
+    DispatchCmdBindVertexBuffers2EXT(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdBindVertexBuffers2EXT(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDepthTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthTestEnable) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetDepthTestEnableEXT(commandBuffer, depthTestEnable);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetDepthTestEnableEXT(commandBuffer, depthTestEnable);
+    }
+    DispatchCmdSetDepthTestEnableEXT(commandBuffer, depthTestEnable);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetDepthTestEnableEXT(commandBuffer, depthTestEnable);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDepthWriteEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthWriteEnable) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetDepthWriteEnableEXT(commandBuffer, depthWriteEnable);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetDepthWriteEnableEXT(commandBuffer, depthWriteEnable);
+    }
+    DispatchCmdSetDepthWriteEnableEXT(commandBuffer, depthWriteEnable);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetDepthWriteEnableEXT(commandBuffer, depthWriteEnable);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDepthCompareOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkCompareOp                                 depthCompareOp) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetDepthCompareOpEXT(commandBuffer, depthCompareOp);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetDepthCompareOpEXT(commandBuffer, depthCompareOp);
+    }
+    DispatchCmdSetDepthCompareOpEXT(commandBuffer, depthCompareOp);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetDepthCompareOpEXT(commandBuffer, depthCompareOp);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDepthBoundsTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthBoundsTestEnable) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetDepthBoundsTestEnableEXT(commandBuffer, depthBoundsTestEnable);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetDepthBoundsTestEnableEXT(commandBuffer, depthBoundsTestEnable);
+    }
+    DispatchCmdSetDepthBoundsTestEnableEXT(commandBuffer, depthBoundsTestEnable);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetDepthBoundsTestEnableEXT(commandBuffer, depthBoundsTestEnable);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetStencilTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    stencilTestEnable) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetStencilTestEnableEXT(commandBuffer, stencilTestEnable);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetStencilTestEnableEXT(commandBuffer, stencilTestEnable);
+    }
+    DispatchCmdSetStencilTestEnableEXT(commandBuffer, stencilTestEnable);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetStencilTestEnableEXT(commandBuffer, stencilTestEnable);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetStencilOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkStencilFaceFlags                          faceMask,
+    VkStencilOp                                 failOp,
+    VkStencilOp                                 passOp,
+    VkStencilOp                                 depthFailOp,
+    VkCompareOp                                 compareOp) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdSetStencilOpEXT(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCmdSetStencilOpEXT(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp);
+    }
+    DispatchCmdSetStencilOpEXT(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCmdSetStencilOpEXT(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp);
+    }
+}
 
 
 
@@ -10085,6 +10230,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyIndirectCommandsLayoutNV(
 
 
 
+
 VKAPI_ATTR VkResult VKAPI_CALL CreatePrivateDataSlotEXT(
     VkDevice                                    device,
     const VkPrivateDataSlotCreateInfoEXT*       pCreateInfo,
@@ -10182,6 +10328,59 @@ VKAPI_ATTR void VKAPI_CALL GetPrivateDataEXT(
 
 
 
+
+
+
+
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+
+VKAPI_ATTR VkResult VKAPI_CALL CreateDirectFBSurfaceEXT(
+    VkInstance                                  instance,
+    const VkDirectFBSurfaceCreateInfoEXT*       pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSurfaceKHR*                               pSurface) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(instance), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCreateDirectFBSurfaceEXT(instance, pCreateInfo, pAllocator, pSurface);
+        if (skip) return VK_ERROR_VALIDATION_FAILED_EXT;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordCreateDirectFBSurfaceEXT(instance, pCreateInfo, pAllocator, pSurface);
+    }
+    VkResult result = DispatchCreateDirectFBSurfaceEXT(instance, pCreateInfo, pAllocator, pSurface);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordCreateDirectFBSurfaceEXT(instance, pCreateInfo, pAllocator, pSurface, result);
+    }
+    return result;
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL GetPhysicalDeviceDirectFBPresentationSupportEXT(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t                                    queueFamilyIndex,
+    IDirectFB*                                  dfb) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(physicalDevice), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->read_lock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateGetPhysicalDeviceDirectFBPresentationSupportEXT(physicalDevice, queueFamilyIndex, dfb);
+        if (skip) return VK_FALSE;
+    }
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PreCallRecordGetPhysicalDeviceDirectFBPresentationSupportEXT(physicalDevice, queueFamilyIndex, dfb);
+    }
+    VkBool32 result = DispatchGetPhysicalDeviceDirectFBPresentationSupportEXT(physicalDevice, queueFamilyIndex, dfb);
+    for (auto intercept : layer_data->object_dispatch) {
+        auto lock = intercept->write_lock();
+        intercept->PostCallRecordGetPhysicalDeviceDirectFBPresentationSupportEXT(physicalDevice, queueFamilyIndex, dfb);
+    }
+    return result;
+}
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
 
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
@@ -10906,6 +11105,12 @@ const std::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkGetPipelineExecutablePropertiesKHR", {kFuncTypeDev, (void*)GetPipelineExecutablePropertiesKHR}},
     {"vkGetPipelineExecutableStatisticsKHR", {kFuncTypeDev, (void*)GetPipelineExecutableStatisticsKHR}},
     {"vkGetPipelineExecutableInternalRepresentationsKHR", {kFuncTypeDev, (void*)GetPipelineExecutableInternalRepresentationsKHR}},
+    {"vkCmdCopyBuffer2KHR", {kFuncTypeDev, (void*)CmdCopyBuffer2KHR}},
+    {"vkCmdCopyImage2KHR", {kFuncTypeDev, (void*)CmdCopyImage2KHR}},
+    {"vkCmdCopyBufferToImage2KHR", {kFuncTypeDev, (void*)CmdCopyBufferToImage2KHR}},
+    {"vkCmdCopyImageToBuffer2KHR", {kFuncTypeDev, (void*)CmdCopyImageToBuffer2KHR}},
+    {"vkCmdBlitImage2KHR", {kFuncTypeDev, (void*)CmdBlitImage2KHR}},
+    {"vkCmdResolveImage2KHR", {kFuncTypeDev, (void*)CmdResolveImage2KHR}},
     {"vkCreateDebugReportCallbackEXT", {kFuncTypeInst, (void*)CreateDebugReportCallbackEXT}},
     {"vkDestroyDebugReportCallbackEXT", {kFuncTypeInst, (void*)DestroyDebugReportCallbackEXT}},
     {"vkDebugReportMessageEXT", {kFuncTypeInst, (void*)DebugReportMessageEXT}},
@@ -11048,6 +11253,18 @@ const std::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkCreateHeadlessSurfaceEXT", {kFuncTypeInst, (void*)CreateHeadlessSurfaceEXT}},
     {"vkCmdSetLineStippleEXT", {kFuncTypeDev, (void*)CmdSetLineStippleEXT}},
     {"vkResetQueryPoolEXT", {kFuncTypeDev, (void*)ResetQueryPoolEXT}},
+    {"vkCmdSetCullModeEXT", {kFuncTypeDev, (void*)CmdSetCullModeEXT}},
+    {"vkCmdSetFrontFaceEXT", {kFuncTypeDev, (void*)CmdSetFrontFaceEXT}},
+    {"vkCmdSetPrimitiveTopologyEXT", {kFuncTypeDev, (void*)CmdSetPrimitiveTopologyEXT}},
+    {"vkCmdSetViewportWithCountEXT", {kFuncTypeDev, (void*)CmdSetViewportWithCountEXT}},
+    {"vkCmdSetScissorWithCountEXT", {kFuncTypeDev, (void*)CmdSetScissorWithCountEXT}},
+    {"vkCmdBindVertexBuffers2EXT", {kFuncTypeDev, (void*)CmdBindVertexBuffers2EXT}},
+    {"vkCmdSetDepthTestEnableEXT", {kFuncTypeDev, (void*)CmdSetDepthTestEnableEXT}},
+    {"vkCmdSetDepthWriteEnableEXT", {kFuncTypeDev, (void*)CmdSetDepthWriteEnableEXT}},
+    {"vkCmdSetDepthCompareOpEXT", {kFuncTypeDev, (void*)CmdSetDepthCompareOpEXT}},
+    {"vkCmdSetDepthBoundsTestEnableEXT", {kFuncTypeDev, (void*)CmdSetDepthBoundsTestEnableEXT}},
+    {"vkCmdSetStencilTestEnableEXT", {kFuncTypeDev, (void*)CmdSetStencilTestEnableEXT}},
+    {"vkCmdSetStencilOpEXT", {kFuncTypeDev, (void*)CmdSetStencilOpEXT}},
     {"vkGetGeneratedCommandsMemoryRequirementsNV", {kFuncTypeDev, (void*)GetGeneratedCommandsMemoryRequirementsNV}},
     {"vkCmdPreprocessGeneratedCommandsNV", {kFuncTypeDev, (void*)CmdPreprocessGeneratedCommandsNV}},
     {"vkCmdExecuteGeneratedCommandsNV", {kFuncTypeDev, (void*)CmdExecuteGeneratedCommandsNV}},
@@ -11058,6 +11275,12 @@ const std::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkDestroyPrivateDataSlotEXT", {kFuncTypeDev, (void*)DestroyPrivateDataSlotEXT}},
     {"vkSetPrivateDataEXT", {kFuncTypeDev, (void*)SetPrivateDataEXT}},
     {"vkGetPrivateDataEXT", {kFuncTypeDev, (void*)GetPrivateDataEXT}},
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    {"vkCreateDirectFBSurfaceEXT", {kFuncTypeInst, (void*)CreateDirectFBSurfaceEXT}},
+#endif
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    {"vkGetPhysicalDeviceDirectFBPresentationSupportEXT", {kFuncTypePdev, (void*)GetPhysicalDeviceDirectFBPresentationSupportEXT}},
+#endif
 #ifdef VK_ENABLE_BETA_EXTENSIONS
     {"vkCreateAccelerationStructureKHR", {kFuncTypeDev, (void*)CreateAccelerationStructureKHR}},
 #endif

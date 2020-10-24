@@ -153,15 +153,6 @@ Array.prototype.mergeOrdered = function(array, comparator) {};
  */
 Int32Array.prototype.lowerBound = function(object, comparator, left, right) {};
 
-// TODO(luoe): remove these BigInt and ArrayLike types once closure supports them.
-/**
- * @param {number|string} value
- */
-const BigInt = function(value) {};
-
-/** @typedef {*} */
-const bigint = null;
-
 /** @typedef {Array|NodeList|Arguments|{length: number}} */
 let ArrayLike;
 
@@ -559,7 +550,7 @@ CodeMirror.cmpPos = function(pos1, pos2) {};
 
 /**
  * @constructor
- * @param {(!Array<string>|string)} line
+ * @param {string} line
  * @param {number=} index
  */
 CodeMirror.StringStream = function(line, index) {
@@ -712,6 +703,62 @@ ESTree.TemplateLiteralNode = function() {
 };
 
 /**
+ * @extends {ESTree.Node}
+ * @constructor
+ */
+ESTree.SimpleLiteral = function() {
+  /** @type {?(string|boolean|number)} */
+  this.value;
+  /** @type {(string|undefined)} */
+  this.raw;
+};
+
+/**
+ * @extends {ESTree.Node}
+ * @constructor
+ */
+ESTree.ForStatement = function() {
+  /** @type {(!ESTree.Node|undefined)} */
+  this.update;
+};
+
+/**
+ * @extends {ESTree.Node}
+ * @constructor
+ */
+ESTree.ForInStatement = function() {};
+
+/**
+ * @extends {ESTree.Node}
+ * @constructor
+ */
+ESTree.ForOfStatement = function() {};
+
+/**
+ * @extends {ESTree.Node}
+ * @constructor
+ */
+ESTree.IfStatement = function() {
+  /** @type {(!ESTree.Node|undefined)} */
+  this.consequent;
+};
+
+/**
+ * @extends {ESTree.Node}
+ * @constructor
+ */
+ESTree.TryStatement = function() {
+  /** @type {(!ESTree.Node|undefined)} */
+  this.block;
+};
+
+/**
+ * @extends {ESTree.Node}
+ * @constructor
+ */
+ESTree.CatchClause = function() {};
+
+/**
  * @type {string}
  * @see http://heycam.github.io/webidl/#es-DOMException-prototype-object
  * TODO(jsbell): DOMException should be a subclass of Error.
@@ -812,31 +859,10 @@ const mod = function(m, n) {};
 
 /**
  * @param {string} query
- * @param {boolean} caseSensitive
- * @param {boolean} isRegex
- * @return {!RegExp}
- */
-const createSearchRegex = function(query, caseSensitive, isRegex) {};
-
-/**
- * @param {string} query
  * @param {string=} flags
  * @return {!RegExp}
  */
 const createPlainTextSearchRegex = function(query, flags) {};
-
-/**
- * @param {number} spacesCount
- * @return {string}
- */
-const spacesPadding = function(spacesCount) {};
-
-/**
- * @param {number} value
- * @param {number} symbolsCount
- * @return {string}
- */
-const numberToStringWithSpacesPadding = function(value, symbolsCount) {};
 
 /**
  * @param {*} value
@@ -867,12 +893,6 @@ const base64ToSize = function(content) {};
  * @return {string}
  */
 const unescapeCssString = function(input) {};
-
-/**
- * @constructor
- * @param {function(!Array<*>)} callback
- */
-const ResizeObserver = function(callback) {};
 
 
 // Lighthouse Report Renderer
@@ -1251,7 +1271,7 @@ class InspectorFrontendHostAPI {
   }
 
   /**
-   * @param {string} actionName
+   * @param {!InspectorFrontendHostAPI.EnumeratedHistogram} actionName
    * @param {number} actionCode
    * @param {number} bucketSize
    */
@@ -1398,12 +1418,41 @@ InspectorFrontendHostAPI.ContextMenuDescriptor;
 InspectorFrontendHostAPI.LoadNetworkResourceResult;
 
 /**
+ * Enum for recordEnumeratedHistogram
+ * Warning: There are two other definitions of this enum in the DevTools code
+ * base, keep them in sync:
+ * front_end/devtools_compatibility.js
+ * front_end/host/InspectorFrontendHostAPI.js
+ * @readonly
+ * @enum {string}
+ */
+InspectorFrontendHostAPI.EnumeratedHistogram = {
+  ActionTaken: 'DevTools.ActionTaken',
+  ColorPickerFixedColor: 'DevTools.ColorPicker.FixedColor',
+  PanelClosed: 'DevTools.PanelClosed',
+  PanelShown: 'DevTools.PanelShown',
+  SidebarPaneShown: 'DevTools.SidebarPaneShown',
+  KeyboardShortcutFired: 'DevTools.KeyboardShortcutFired',
+  IssuesPanelIssueExpanded: 'DevTools.IssuesPanelIssueExpanded',
+  IssuesPanelOpenedFrom: 'DevTools.IssuesPanelOpenedFrom',
+  IssuesPanelResourceOpened: 'DevTools.IssuesPanelResourceOpened',
+  KeybindSetSettingChanged: 'DevTools.KeybindSetSettingChanged',
+  DualScreenDeviceEmulated: 'DevTools.DualScreenDeviceEmulated',
+  CSSGridSettings: 'DevTools.CSSGridSettings2',
+  HighlightedPersistentCSSGridCount: 'DevTools.HighlightedPersistentCSSGridCount',
+  ExperimentEnabledAtLaunch: 'DevTools.ExperimentEnabledAtLaunch',
+  ExperimentEnabled: 'DevTools.ExperimentEnabled',
+  ExperimentDisabled: 'DevTools.ExperimentDisabled',
+  GridOverlayOpenedFrom: 'DevTools.GridOverlayOpenedFrom',
+};
+
+/**
  * @interface
  */
 class ServicePort {
   /**
    * @param {function(string)} messageHandler
-   * @param {function(string)} closeHandler
+   * @param {function()} closeHandler
    */
   setHandlers(messageHandler, closeHandler) {
   }

@@ -59,15 +59,13 @@ class CORE_EXPORT ModulePendingScript : public PendingScript {
 
  private:
   // PendingScript
-  mojom::ScriptType GetScriptType() const override {
-    return mojom::ScriptType::kModule;
+  mojom::blink::ScriptType GetScriptType() const override {
+    return mojom::blink::ScriptType::kModule;
   }
   Script* GetSource(const KURL& document_url) const override;
   bool IsReady() const override { return ready_; }
   bool IsExternal() const override { return is_external_; }
   bool WasCanceled() const override { return false; }
-
-  void StartStreamingIfPossible() override {}
 
   KURL UrlForTracing() const override { return NullURL(); }
 

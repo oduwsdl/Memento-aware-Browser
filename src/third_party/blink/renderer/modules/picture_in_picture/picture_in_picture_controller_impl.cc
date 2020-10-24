@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
@@ -239,6 +240,9 @@ void PictureInPictureControllerImpl::ExitPictureInPicture(
     HTMLVideoElement* element,
     ScriptPromiseResolver* resolver) {
   if (!EnsureService())
+    return;
+
+  if (!picture_in_picture_session_.is_bound())
     return;
 
   picture_in_picture_session_->Stop(

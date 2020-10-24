@@ -14,8 +14,9 @@ export class SignedExchangeInfoView extends UI.Widget.VBox {
    */
   constructor(request) {
     super();
-    const signedExchangeInfo = request.signedExchangeInfo();
-    console.assert(signedExchangeInfo);
+    console.assert(request.signedExchangeInfo() !== null);
+    /** @type {!Protocol.Network.SignedExchangeInfo} */
+    const signedExchangeInfo = /** @type {!Protocol.Network.SignedExchangeInfo} */ (request.signedExchangeInfo());
 
     this.registerRequiredCSS('network/signedExchangeInfoView.css');
     this.element.classList.add('signed-exchange-info-view');
@@ -34,7 +35,7 @@ export class SignedExchangeInfoView extends UI.Widget.VBox {
     if (signedExchangeInfo.errors && signedExchangeInfo.errors.length) {
       const errorMessagesCategory = new Category(root, Common.UIString.UIString('Errors'));
       for (const error of signedExchangeInfo.errors) {
-        const fragment = createDocumentFragment();
+        const fragment = document.createDocumentFragment();
         fragment.appendChild(UI.Icon.Icon.create('smallicon-error', 'prompt-icon'));
         fragment.createChild('div', 'error-log').textContent = error.message;
         errorMessagesCategory.createLeaf(fragment);
@@ -49,7 +50,7 @@ export class SignedExchangeInfoView extends UI.Widget.VBox {
       }
     }
 
-    const titleElement = createDocumentFragment();
+    const titleElement = document.createDocumentFragment();
     titleElement.createChild('div', 'header-name').textContent = Common.UIString.UIString('Signed HTTP exchange');
     const learnMoreNode = UI.XLink.XLink.create(
         'https://github.com/WICG/webpackage', Common.UIString.UIString('Learn\xa0more'), 'header-toggle');
@@ -142,7 +143,7 @@ export class SignedExchangeInfoView extends UI.Widget.VBox {
    * @return {!DocumentFragment}
    */
   _formatHeader(name, value, highlighted) {
-    const fragment = createDocumentFragment();
+    const fragment = document.createDocumentFragment();
     const nameElement = fragment.createChild('div', 'header-name');
     nameElement.textContent = name + ': ';
     fragment.createChild('span', 'header-separator');
@@ -162,7 +163,7 @@ export class SignedExchangeInfoView extends UI.Widget.VBox {
    * @return {!DocumentFragment}
    */
   _formatHeaderForHexData(name, value, highlighted) {
-    const fragment = createDocumentFragment();
+    const fragment = document.createDocumentFragment();
     const nameElement = fragment.createChild('div', 'header-name');
     nameElement.textContent = name + ': ';
     fragment.createChild('span', 'header-separator');

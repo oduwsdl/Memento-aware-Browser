@@ -232,7 +232,7 @@ class HTMLPreloadScannerTest : public PageTestBase {
     data.device_pixel_ratio = 2.0;
     data.color_bits_per_component = 24;
     data.monochrome_bits_per_component = 0;
-    data.primary_pointer_type = kPointerTypeFine;
+    data.primary_pointer_type = ui::POINTER_TYPE_FINE;
     data.default_font_size = 16;
     data.three_d_enabled = true;
     data.media_type = media_type_names::kScreen;
@@ -616,16 +616,14 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCH) {
   ClientHintsPreferences resource_width;
   ClientHintsPreferences all;
   ClientHintsPreferences viewport_width;
-  dpr.SetShouldSendForTesting(network::mojom::WebClientHintsType::kDpr);
-  all.SetShouldSendForTesting(network::mojom::WebClientHintsType::kDpr);
-  resource_width.SetShouldSendForTesting(
+  dpr.SetShouldSend(network::mojom::WebClientHintsType::kDpr);
+  all.SetShouldSend(network::mojom::WebClientHintsType::kDpr);
+  resource_width.SetShouldSend(
       network::mojom::WebClientHintsType::kResourceWidth);
-  all.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kResourceWidth);
-  viewport_width.SetShouldSendForTesting(
+  all.SetShouldSend(network::mojom::WebClientHintsType::kResourceWidth);
+  viewport_width.SetShouldSend(
       network::mojom::WebClientHintsType::kViewportWidth);
-  all.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kViewportWidth);
+  all.SetShouldSend(network::mojom::WebClientHintsType::kViewportWidth);
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='bla'><img srcset='bla.gif 320w, "
@@ -684,11 +682,9 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCH) {
 
 TEST_F(HTMLPreloadScannerTest, testMetaAcceptCHInsecureDocument) {
   ClientHintsPreferences all;
-  all.SetShouldSendForTesting(network::mojom::WebClientHintsType::kDpr);
-  all.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kResourceWidth);
-  all.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kViewportWidth);
+  all.SetShouldSend(network::mojom::WebClientHintsType::kDpr);
+  all.SetShouldSend(network::mojom::WebClientHintsType::kResourceWidth);
+  all.SetShouldSend(network::mojom::WebClientHintsType::kViewportWidth);
 
   const PreloadScannerTestCase expect_no_client_hint = {
       "http://example.test",
@@ -764,6 +760,10 @@ TEST_F(HTMLPreloadScannerTest, testPicture) {
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test",
        "<picture><source srcset='srcset_bla.gif'><img src='bla.gif'></picture>",
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 0},
+      {"http://example.test",
+       "<picture><source srcset='srcset_bla.gif' type=''><img "
+       "src='bla.gif'></picture>",
        "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<picture><source sizes='50vw' srcset='srcset_bla.gif'><img "
@@ -1454,6 +1454,38 @@ TEST_F(HTMLPreloadScannerTest,
   Test(test1);
   LazyLoadImageTestCase test2 = {"<img src='bar.jpg'>", true};
   Test(test2);
+}
+
+// https://crbug.com/1087854
+TEST_F(HTMLPreloadScannerTest, CSSImportWithSemicolonInUrl) {
+  PreloadScannerTestCase test_cases[] = {
+      {"https://example.test",
+       "<style>@import "
+       "url(\"https://example2.test/css?foo=a;b&bar=d\");</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+      {"https://example.test",
+       "<style>@import "
+       "url('https://example2.test/css?foo=a;b&bar=d');</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+      {"https://example.test",
+       "<style>@import "
+       "url(https://example2.test/css?foo=a;b&bar=d);</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+      {"https://example.test",
+       "<style>@import \"https://example2.test/css?foo=a;b&bar=d\";</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+      {"https://example.test",
+       "<style>@import 'https://example2.test/css?foo=a;b&bar=d';</style>",
+       "https://example2.test/css?foo=a;b&bar=d", "https://example.test/",
+       ResourceType::kCSSStyleSheet, 0},
+  };
+
+  for (const auto& test : test_cases)
+    Test(test);
 }
 
 }  // namespace blink

@@ -49,7 +49,7 @@ function testPixels(ctx, tests, sourceType)
     if (sourceType === 'video')
         tolerance = 0.03;
     for (var i = 0; i < tests.length; i++) {
-        actual = ctx.getImageData(tests[i][0], tests[i][1], 1, 1).dataUnion;
+        actual = ctx.getImageData(tests[i][0], tests[i][1], 1, 1).data;
         expected = tests[i][2];
         assert_true(actual.length === expected.length);
         for (var j = 0; j < actual.length; j++)
@@ -176,8 +176,8 @@ function compareBitmaps(bitmap1, bitmap2)
     ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
     ctx1.drawImage(bitmap1, 0, 0);
     ctx2.drawImage(bitmap2, 0, 0);
-    var data1 = ctx1.getImageData(0, 0, 50, 50).dataUnion;
-    var data2 = ctx2.getImageData(0, 0, 50, 50).dataUnion;
+    var data1 = ctx1.getImageData(0, 0, 50, 50).data;
+    var data2 = ctx2.getImageData(0, 0, 50, 50).data;
     var dataMatched = true;
     for (var i = 0; i < data1.length; i++) {
         if (data1[i] != data2[i]) {
@@ -291,32 +291,34 @@ function initializeTestCanvasTransparent(canvasColorSpace, canvasPixelFormat)
 ////////////////////////////////////////////////////////////////////////////////
 
 // HTMLImageElement - Opaque sRGB
-// File formats: Bitmap, GIF, ICO, JPEG, PNG, WEBP
-promise_test(function() {
-    return Promise.all(['bmp', 'gif', 'ico', 'jpg', 'png', 'webp'].map(
-        ext => new Promise((resolve,reject) => {
+// File formats: AVIF, Bitmap, GIF, ICO, JPEG, PNG, WEBP
+['avif', 'bmp', 'gif', 'ico', 'jpg', 'png', 'webp'].forEach(ext => {
+    promise_test(function() {
+        return new Promise((resolve,reject) => {
             var image = new Image();
             image.onload = function() {
                 resolve(image);
             }
             image.src = 'resources/pattern-srgb.' + ext;
-        }).then(testImageBitmapOpaque)));
-}, 'createImageBitmap in e-sRGB from an opaque sRGB HTMLImageElement (BMP, \
-GIF, ICO, JPG, PNG, WEBP) with resize.');
+        }).then(testImageBitmapOpaque);
+    }, 'createImageBitmap in e-sRGB from an opaque sRGB HTMLImageElement (' + ext +
+        ') with resize.');
+});
 
 // HTMLImageElement - Transparent sRGB
-// File formats: Bitmap, GIF, ICO, PNG, WEBP
-promise_test(function() {
-    return Promise.all(['bmp', 'ico', 'png', 'webp'].map(
-        ext => new Promise((resolve,reject) => {
+// File formats: AVIF, Bitmap, ICO, PNG, WEBP
+['avif', 'bmp', 'ico', 'png', 'webp'].forEach(ext => {
+    promise_test(function() {
+        return new Promise((resolve,reject) => {
             var image = new Image();
             image.onload = function() {
                 resolve(image);
             }
             image.src = 'resources/pattern-srgb-transparent.' + ext;
-        }).then(testImageBitmapFromTransparentImage)));
-}, 'createImageBitmap in e-sRGB from a transparent sRGB HTMLImageElement \
-(BMP, ICO, PNG, WEBP) with resize.');
+        }).then(testImageBitmapFromTransparentImage);
+    }, 'createImageBitmap in e-sRGB from a transparent sRGB HTMLImageElement (' + ext +
+        ') with resize.');
+});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -400,30 +402,36 @@ promise_test(function() {
 //////////////////////////////////////////////////////////////////////////////
 
 // Blob from file - Opaque sRGB
-promise_test(function() {
-    return new Promise((resolve, reject) => {
-        var xhr = new XMLHttpRequest();
-        xhr.open("GET", 'resources/pattern-srgb.png');
-        xhr.responseType = 'blob';
-        xhr.send();
-        xhr.onload = function() {
-            resolve(xhr.response);
-        };
-    }).then(testImageBitmapOpaque);
-}, 'createImageBitmap in e-sRGB from an opaque sRGB Blob with resize.');
+// File formats: AVIF, Bitmap, GIF, ICO, JPEG, PNG, WEBP
+['avif', 'bmp', 'gif', 'ico', 'jpg', 'png', 'webp'].forEach(ext => {
+    promise_test(function() {
+        return new Promise((resolve, reject) => {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", 'resources/pattern-srgb.' + ext);
+            xhr.responseType = 'blob';
+            xhr.send();
+            xhr.onload = function() {
+                resolve(xhr.response);
+            };
+        }).then(testImageBitmapOpaque);
+    }, 'createImageBitmap in e-sRGB from an opaque sRGB Blob (' + ext + ') with resize.');
+});
 
 // Blob form file - Transparent sRGB
-promise_test(function() {
-    return new Promise((resolve, reject) => {
-        var xhr = new XMLHttpRequest();
-        xhr.open("GET", 'resources/pattern-srgb-transparent.png');
-        xhr.responseType = 'blob';
-        xhr.send();
-        xhr.onload = function() {
-            resolve(xhr.response);
-        };
-    }).then(testImageBitmapFromTransparentImage);
-}, 'createImageBitmap in e-sRGB from a transparent sRGB Blob with resize.');
+// File formats: AVIF, Bitmap, ICO, PNG, WEBP
+['avif', 'bmp', 'ico', 'png', 'webp'].forEach(ext => {
+    promise_test(function() {
+        return new Promise((resolve, reject) => {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", 'resources/pattern-srgb-transparent.' + ext);
+            xhr.responseType = 'blob';
+            xhr.send();
+            xhr.onload = function() {
+                resolve(xhr.response);
+            };
+        }).then(testImageBitmapFromTransparentImage);
+    }, 'createImageBitmap in e-sRGB from a transparent sRGB Blob (' + ext + ') with resize.');
+});
 
 // Color managed blob from canvas
 function testCreateImageBitmapFromColorManagedBlob(colorSpace, pixelFormat,

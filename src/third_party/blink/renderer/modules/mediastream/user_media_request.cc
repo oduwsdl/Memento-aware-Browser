@@ -35,16 +35,17 @@
 
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_stream_constraints.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_constraints.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/space_split_string.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/modules/mediastream/identifiability_metrics.h"
 #include "third_party/blink/renderer/modules/mediastream/media_constraints_impl.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/overconstrained_error.h"
@@ -52,6 +53,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_descriptor.h"
+#include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
@@ -331,7 +333,8 @@ UserMediaRequest* UserMediaRequest::Create(
     UserMediaRequest::MediaType media_type,
     const MediaStreamConstraints* options,
     Callbacks* callbacks,
-    MediaErrorState& error_state) {
+    MediaErrorState& error_state,
+    IdentifiableSurface surface) {
   MediaConstraints audio = ParseOptions(context, options->audio(), error_state);
   if (error_state.HadException())
     return nullptr;
@@ -340,7 +343,21 @@ UserMediaRequest* UserMediaRequest::Create(
   if (error_state.HadException())
     return nullptr;
 
-  if (media_type == UserMediaRequest::MediaType::kDisplayMedia) {
+  if (media_type == UserMediaRequest::MediaType::kUserMedia &&
+      !video.IsNull()) {
+    if (video.Basic().pan.HasMandatory()) {
+      error_state.ThrowTypeError("Mandatory pan constraint is not supported");
+      return nullptr;
+    }
+    if (video.Basic().tilt.HasMandatory()) {
+      error_state.ThrowTypeError("Mandatory tilt constraint is not supported");
+      return nullptr;
+    }
+    if (video.Basic().zoom.HasMandatory()) {
+      error_state.ThrowTypeError("Mandatory zoom constraint is not supported");
+      return nullptr;
+    }
+  } else if (media_type == UserMediaRequest::MediaType::kDisplayMedia) {
     // https://w3c.github.io/mediacapture-screen-share/#mediadevices-additions
     // MediaDevices Additions
     // The user agent MUST reject audio-only requests.
@@ -395,8 +412,8 @@ UserMediaRequest* UserMediaRequest::Create(
   if (!video.IsNull())
     CountVideoConstraintUses(context, video);
 
-  return MakeGarbageCollected<UserMediaRequest>(context, controller, media_type,
-                                                audio, video, callbacks);
+  return MakeGarbageCollected<UserMediaRequest>(
+      context, controller, media_type, audio, video, callbacks, surface);
 }
 
 UserMediaRequest* UserMediaRequest::Create(
@@ -405,11 +422,12 @@ UserMediaRequest* UserMediaRequest::Create(
     const MediaStreamConstraints* options,
     V8NavigatorUserMediaSuccessCallback* success_callback,
     V8NavigatorUserMediaErrorCallback* error_callback,
-    MediaErrorState& error_state) {
+    MediaErrorState& error_state,
+    IdentifiableSurface surface) {
   return Create(
       context, controller, UserMediaRequest::MediaType::kUserMedia, options,
       MakeGarbageCollected<V8Callbacks>(success_callback, error_callback),
-      error_state);
+      error_state, surface);
 }
 
 UserMediaRequest* UserMediaRequest::CreateForTesting(
@@ -417,7 +435,7 @@ UserMediaRequest* UserMediaRequest::CreateForTesting(
     const MediaConstraints& video) {
   return MakeGarbageCollected<UserMediaRequest>(
       nullptr, nullptr, UserMediaRequest::MediaType::kUserMedia, audio, video,
-      nullptr);
+      nullptr, IdentifiableSurface());
 }
 
 UserMediaRequest::UserMediaRequest(ExecutionContext* context,
@@ -425,7 +443,8 @@ UserMediaRequest::UserMediaRequest(ExecutionContext* context,
                                    UserMediaRequest::MediaType media_type,
                                    MediaConstraints audio,
                                    MediaConstraints video,
-                                   Callbacks* callbacks)
+                                   Callbacks* callbacks,
+                                   IdentifiableSurface surface)
     : ExecutionContextLifecycleObserver(context),
       media_type_(media_type),
       audio_(audio),
@@ -434,7 +453,8 @@ UserMediaRequest::UserMediaRequest(ExecutionContext* context,
           RuntimeEnabledFeatures::DisableHardwareNoiseSuppressionEnabled(
               context)),
       controller_(controller),
-      callbacks_(callbacks) {
+      callbacks_(callbacks),
+      surface_(surface) {
   if (should_disable_hardware_noise_suppression_) {
     UseCounter::Count(context,
                       WebFeature::kUserMediaDisableHardwareNoiseSuppression);
@@ -472,7 +492,7 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
 
   if (window->IsSecureContext(error_message)) {
     UseCounter::Count(window, WebFeature::kGetUserMediaSecureOrigin);
-    window->document()->CountUseOnlyInCrossOriginIframe(
+    window->CountUseOnlyInCrossOriginIframe(
         WebFeature::kGetUserMediaSecureOriginIframe);
 
     // Feature policy deprecation messages.
@@ -500,7 +520,7 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
   Deprecation::CountDeprecation(window,
                                 WebFeature::kGetUserMediaInsecureOrigin);
   Deprecation::CountDeprecationCrossOriginIframe(
-      *window->document(), WebFeature::kGetUserMediaInsecureOriginIframe);
+      window, WebFeature::kGetUserMediaInsecureOriginIframe);
   return false;
 }
 
@@ -513,28 +533,30 @@ void UserMediaRequest::Start() {
     controller_->RequestUserMedia(this);
 }
 
-void UserMediaRequest::Succeed(MediaStreamDescriptor* stream_descriptor,
-                               bool pan_tilt_zoom_allowed) {
+void UserMediaRequest::Succeed(MediaStreamDescriptor* stream_descriptor) {
   DCHECK(!is_resolved_);
   if (!GetExecutionContext())
     return;
 
-  MediaStream* stream = MediaStream::Create(
-      GetExecutionContext(), stream_descriptor, pan_tilt_zoom_allowed);
+  MediaStream::Create(GetExecutionContext(), stream_descriptor,
+                      WTF::Bind(&UserMediaRequest::OnMediaStreamInitialized,
+                                WrapPersistent(this)));
+}
+
+void UserMediaRequest::OnMediaStreamInitialized(MediaStream* stream) {
+  DCHECK(!is_resolved_);
 
   MediaStreamTrackVector audio_tracks = stream->getAudioTracks();
-  for (MediaStreamTrackVector::iterator iter = audio_tracks.begin();
-       iter != audio_tracks.end(); ++iter) {
-    (*iter)->SetConstraints(audio_);
-  }
+  for (const auto& audio_track : audio_tracks)
+    audio_track->SetConstraints(audio_);
 
   MediaStreamTrackVector video_tracks = stream->getVideoTracks();
-  for (MediaStreamTrackVector::iterator iter = video_tracks.begin();
-       iter != video_tracks.end(); ++iter) {
-    (*iter)->SetConstraints(video_);
-  }
+  for (const auto& video_track : video_tracks)
+    video_track->SetConstraints(video_);
 
   callbacks_->OnSuccess(nullptr, stream);
+  RecordIdentifiabilityMetric(surface_, GetExecutionContext(),
+                              IdentifiabilityBenignStringToken(g_empty_string));
   is_resolved_ = true;
 }
 
@@ -547,6 +569,8 @@ void UserMediaRequest::FailConstraint(const String& constraint_name,
   callbacks_->OnError(
       nullptr, DOMExceptionOrOverconstrainedError::FromOverconstrainedError(
                    OverconstrainedError::Create(constraint_name, message)));
+  RecordIdentifiabilityMetric(surface_, GetExecutionContext(),
+                              IdentifiabilityBenignStringToken(message));
   is_resolved_ = true;
 }
 
@@ -589,6 +613,8 @@ void UserMediaRequest::Fail(Error name, const String& message) {
       nullptr,
       DOMExceptionOrOverconstrainedError::FromDOMException(
           MakeGarbageCollected<DOMException>(exception_code, message)));
+  RecordIdentifiabilityMetric(surface_, GetExecutionContext(),
+                              IdentifiabilityBenignStringToken(message));
   is_resolved_ = true;
 }
 

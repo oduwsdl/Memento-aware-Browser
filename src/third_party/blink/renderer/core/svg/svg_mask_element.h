@@ -21,7 +21,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_MASK_ELEMENT_H_
 
 #include "third_party/blink/renderer/core/svg/svg_animated_enumeration.h"
-#include "third_party/blink/renderer/core/svg/svg_animated_length.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_tests.h"
 #include "third_party/blink/renderer/core/svg/svg_unit_types.h"
@@ -29,9 +28,10 @@
 
 namespace blink {
 
+class SVGAnimatedLength;
+
 class SVGMaskElement final : public SVGElement, public SVGTests {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(SVGMaskElement);
 
  public:
   explicit SVGMaskElement(Document&);

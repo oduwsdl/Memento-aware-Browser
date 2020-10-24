@@ -236,7 +236,7 @@ static void aa_square_proc(const PtProcRec& rec, const SkPoint devPts[],
     }
 }
 
-// If this guy returns true, then chooseProc() must return a valid proc
+// If this returns true, then chooseProc() must return a valid proc
 bool PtProcRec::init(SkCanvas::PointMode mode, const SkPaint& paint,
                      const SkMatrix* matrix, const SkRasterClip* rc) {
     if ((unsigned)mode > (unsigned)SkCanvas::kPolygon_PointMode) {
@@ -436,9 +436,7 @@ void SkDraw::drawPoints(SkCanvas::PointMode mode, size_t count,
                     SkStrokeRec rec(paint);
                     SkPathEffect::PointData pointData;
 
-                    SkPath path;
-                    path.moveTo(pts[0]);
-                    path.lineTo(pts[1]);
+                    SkPath path = SkPath::Line(pts[0], pts[1]);
 
                     SkRect cullRect = SkRect::Make(fRC->getBounds());
 
@@ -836,7 +834,7 @@ void SkDraw::drawDevPath(const SkPath& devPath, const SkPaint& paint, bool drawC
         }
     }
 
-    void (*proc)(const SkPath&, const SkRasterClip&, SkBlitter*);
+    void (*proc)(const SkPathView&, const SkRasterClip&, SkBlitter*);
     if (doFill) {
         if (paint.isAntiAlias()) {
             proc = SkScan::AntiFillPath;
@@ -877,7 +875,7 @@ void SkDraw::drawDevPath(const SkPath& devPath, const SkPaint& paint, bool drawC
         }
     }
 
-    proc(devPath, *fRC, blitter);
+    proc(devPath.view(), *fRC, blitter);
 }
 
 void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& origPaint,
@@ -957,6 +955,12 @@ void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& origPaint,
 
     // transform the path into device space
     pathPtr->transform(matrixProvider->localToDevice(), devPathPtr);
+
+#if defined(SK_BUILD_FOR_FUZZER)
+    if (devPathPtr->countPoints() > 1000) {
+        return;
+    }
+#endif
 
     this->drawDevPath(*devPathPtr, *paint, drawCoverage, customBlitter, doFill);
 }

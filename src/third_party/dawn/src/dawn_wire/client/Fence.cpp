@@ -14,22 +14,69 @@
 
 #include "dawn_wire/client/Fence.h"
 
+#include "dawn_wire/client/Client.h"
+#include "dawn_wire/client/Device.h"
+
 namespace dawn_wire { namespace client {
 
     Fence::~Fence() {
         // Callbacks need to be fired in all cases, as they can handle freeing resources
         // so we call them with "Unknown" status.
-        for (auto& request : requests.IterateAll()) {
-            request.completionCallback(WGPUFenceCompletionStatus_Unknown, request.userdata);
+        for (auto& it : mOnCompletionRequests) {
+            if (it.second.callback) {
+                it.second.callback(WGPUFenceCompletionStatus_Unknown, it.second.userdata);
+            }
         }
-        requests.Clear();
+        mOnCompletionRequests.clear();
     }
 
-    void Fence::CheckPassedFences() {
-        for (auto& request : requests.IterateUpTo(completedValue)) {
-            request.completionCallback(WGPUFenceCompletionStatus_Success, request.userdata);
+    void Fence::Initialize(Queue* queue, const WGPUFenceDescriptor* descriptor) {
+        mQueue = queue;
+
+        mCompletedValue = descriptor != nullptr ? descriptor->initialValue : 0u;
+    }
+
+    void Fence::OnCompletion(uint64_t value,
+                             WGPUFenceOnCompletionCallback callback,
+                             void* userdata) {
+        uint32_t serial = mOnCompletionRequestSerial++;
+        ASSERT(mOnCompletionRequests.find(serial) == mOnCompletionRequests.end());
+
+        FenceOnCompletionCmd cmd;
+        cmd.fenceId = this->id;
+        cmd.value = value;
+        cmd.requestSerial = serial;
+
+        mOnCompletionRequests[serial] = {callback, userdata};
+
+        this->device->GetClient()->SerializeCommand(cmd);
+    }
+
+    void Fence::OnUpdateCompletedValueCallback(uint64_t value) {
+        mCompletedValue = value;
+    }
+
+    bool Fence::OnCompletionCallback(uint64_t requestSerial, WGPUFenceCompletionStatus status) {
+        auto requestIt = mOnCompletionRequests.find(requestSerial);
+        if (requestIt == mOnCompletionRequests.end()) {
+            return false;
         }
-        requests.ClearUpTo(completedValue);
+
+        // Remove the request data so that the callback cannot be called again.
+        // ex.) inside the callback: if the fence is deleted, all callbacks reject.
+        OnCompletionData request = std::move(requestIt->second);
+        mOnCompletionRequests.erase(requestIt);
+
+        request.callback(status, request.userdata);
+        return true;
+    }
+
+    uint64_t Fence::GetCompletedValue() const {
+        return mCompletedValue;
+    }
+
+    Queue* Fence::GetQueue() const {
+        return mQueue;
     }
 
 }}  // namespace dawn_wire::client

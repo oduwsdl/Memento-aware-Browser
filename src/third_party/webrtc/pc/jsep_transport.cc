@@ -38,16 +38,12 @@ JsepTransportDescription::JsepTransportDescription(
     const std::vector<CryptoParams>& cryptos,
     const std::vector<int>& encrypted_header_extension_ids,
     int rtp_abs_sendtime_extn_id,
-    const TransportDescription& transport_desc,
-    absl::optional<std::string> media_alt_protocol,
-    absl::optional<std::string> data_alt_protocol)
+    const TransportDescription& transport_desc)
     : rtcp_mux_enabled(rtcp_mux_enabled),
       cryptos(cryptos),
       encrypted_header_extension_ids(encrypted_header_extension_ids),
       rtp_abs_sendtime_extn_id(rtp_abs_sendtime_extn_id),
-      transport_desc(transport_desc),
-      media_alt_protocol(media_alt_protocol),
-      data_alt_protocol(data_alt_protocol) {}
+      transport_desc(transport_desc) {}
 
 JsepTransportDescription::JsepTransportDescription(
     const JsepTransportDescription& from)
@@ -55,9 +51,7 @@ JsepTransportDescription::JsepTransportDescription(
       cryptos(from.cryptos),
       encrypted_header_extension_ids(from.encrypted_header_extension_ids),
       rtp_abs_sendtime_extn_id(from.rtp_abs_sendtime_extn_id),
-      transport_desc(from.transport_desc),
-      media_alt_protocol(from.media_alt_protocol),
-      data_alt_protocol(from.data_alt_protocol) {}
+      transport_desc(from.transport_desc) {}
 
 JsepTransportDescription::~JsepTransportDescription() = default;
 
@@ -71,8 +65,6 @@ JsepTransportDescription& JsepTransportDescription::operator=(
   encrypted_header_extension_ids = from.encrypted_header_extension_ids;
   rtp_abs_sendtime_extn_id = from.rtp_abs_sendtime_extn_id;
   transport_desc = from.transport_desc;
-  media_alt_protocol = from.media_alt_protocol;
-  data_alt_protocol = from.data_alt_protocol;
 
   return *this;
 }
@@ -141,13 +133,6 @@ JsepTransport::JsepTransport(
     composite_rtp_transport_ = std::make_unique<webrtc::CompositeRtpTransport>(
         std::vector<webrtc::RtpTransportInternal*>{
             datagram_rtp_transport_.get(), default_rtp_transport()});
-  }
-
-  if (data_channel_transport_ && sctp_data_channel_transport_) {
-    composite_data_channel_transport_ =
-        std::make_unique<webrtc::CompositeDataChannelTransport>(
-            std::vector<webrtc::DataChannelTransportInterface*>{
-                data_channel_transport_, sctp_data_channel_transport_.get()});
   }
 }
 
@@ -242,7 +227,6 @@ webrtc::RTCError JsepTransport::SetLocalJsepTransportDescription(
   // If PRANSWER/ANSWER is set, we should decide transport protocol type.
   if (type == SdpType::kPrAnswer || type == SdpType::kAnswer) {
     error = NegotiateAndSetDtlsParameters(type);
-    NegotiateDatagramTransport(type);
   }
   if (!error.ok()) {
     local_description_.reset();
@@ -320,7 +304,6 @@ webrtc::RTCError JsepTransport::SetRemoteJsepTransportDescription(
   // If PRANSWER/ANSWER is set, we should decide transport protocol type.
   if (type == SdpType::kPrAnswer || type == SdpType::kAnswer) {
     error = NegotiateAndSetDtlsParameters(SdpType::kOffer);
-    NegotiateDatagramTransport(type);
   }
   if (!error.ok()) {
     remote_description_.reset();
@@ -734,12 +717,6 @@ bool JsepTransport::GetTransportStats(DtlsTransportInternal* dtls_transport,
   }
   stats->channel_stats.push_back(substats);
   return true;
-}
-
-// TODO(nisse): Delete.
-void JsepTransport::NegotiateDatagramTransport(SdpType type) {
-  RTC_DCHECK(type == SdpType::kAnswer || type == SdpType::kPrAnswer);
-  return;  // No need to negotiate the use of datagram transport.
 }
 
 }  // namespace cricket

@@ -90,7 +90,8 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
       rtc::scoped_refptr<FrameTransformerInterface> frame_transformer);
   ~RtpVideoStreamReceiver2() override;
 
-  void AddReceiveCodec(const VideoCodec& video_codec,
+  void AddReceiveCodec(uint8_t payload_type,
+                       const VideoCodec& video_codec,
                        const std::map<std::string, std::string>& codec_params,
                        bool raw_payload);
 
@@ -117,8 +118,7 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   // Implements RtpPacketSinkInterface.
   void OnRtpPacket(const RtpPacketReceived& packet) override;
 
-  // TODO(philipel): Stop using VCMPacket in the new jitter buffer and then
-  //                 remove this function. Public only for tests.
+  // Public only for tests.
   void OnReceivedPayloadData(rtc::CopyOnWriteBuffer codec_payload,
                              const RtpPacketReceived& rtp_packet,
                              const RTPVideoHeader& video);

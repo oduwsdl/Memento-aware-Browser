@@ -185,22 +185,6 @@ void ResourceResponse::SetHttpStatusCode(int status_code) {
   http_status_code_ = status_code;
 }
 
-bool ResourceResponse::MementoInfo() const {
-  return memento_info_;
-}
-
-void ResourceResponse::SetMementoInfo(bool memento_info) {
-  memento_info_ = memento_info;
-}
-
-std::string ResourceResponse::MementoDatetime() const {
-  return memento_datetime_;
-}
-
-void ResourceResponse::SetMementoDatetime(std::string memento_datetime) {
-  memento_datetime_ = memento_datetime;
-}
-
 const AtomicString& ResourceResponse::HttpStatusText() const {
   return http_status_text_;
 }

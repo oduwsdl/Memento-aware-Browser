@@ -135,13 +135,13 @@ void CustomScrollbarTheme::PaintScrollCorner(
     const Scrollbar* vertical_scrollbar,
     const DisplayItemClient& display_item_client,
     const IntRect& corner_rect,
-    WebColorScheme color_scheme) {
+    mojom::blink::ColorScheme color_scheme) {
   if (DrawingRecorder::UseCachedDrawingIfPossible(context, display_item_client,
                                                   DisplayItem::kScrollCorner))
     return;
 
   DrawingRecorder recorder(context, display_item_client,
-                           DisplayItem::kScrollCorner);
+                           DisplayItem::kScrollCorner, corner_rect);
   // FIXME: Implement.
   context.FillRect(corner_rect, Color::kWhite);
 }

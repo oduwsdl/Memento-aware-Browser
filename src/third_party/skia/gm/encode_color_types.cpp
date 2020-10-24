@@ -150,7 +150,7 @@ private:
     const Variant              fVariant;
     const char*                fName;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 
@@ -167,4 +167,4 @@ private:
 
 DEF_VARIANTS(SkEncodedImageFormat::kWEBP, 100, "webp-lossless")
 DEF_VARIANTS(SkEncodedImageFormat::kWEBP,  80, "webp-lossy")
-}
+}  // namespace skiagm

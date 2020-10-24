@@ -25,20 +25,6 @@
 
 namespace blink {
 
-namespace {
-
-// Convenience helper for frame tree helpers in FrameClient to reduce the amount
-// of null-checking boilerplate code. Since the frame tree is maintained in the
-// web/ layer, the frame tree helpers often have to deal with null WebFrames:
-// for example, a frame with no parent will return null for WebFrame::parent().
-// TODO(dcheng): Remove duplication between LocalFrameClientImpl and
-// RemoteFrameClientImpl somehow...
-Frame* ToCoreFrame(WebFrame* frame) {
-  return frame ? WebFrame::ToCoreFrame(*frame) : nullptr;
-}
-
-}  // namespace
-
 RemoteFrameClientImpl::RemoteFrameClientImpl(WebRemoteFrameImpl* web_frame)
     : web_frame_(web_frame) {}
 
@@ -57,11 +43,16 @@ void RemoteFrameClientImpl::Detached(FrameDetachType type) {
   if (!client)
     return;
 
+  // We only notify the browser process when the frame is being detached for
+  // removal, not after a swap.
+  if (type == FrameDetachType::kRemove)
+    web_frame_->GetFrame()->GetRemoteFrameHostRemote().Detach();
+
   client->FrameDetached(static_cast<WebRemoteFrameClient::DetachType>(type));
 
   if (web_frame_->Parent()) {
     if (type == FrameDetachType::kRemove)
-      web_frame_->DetachFromParent();
+      WebFrame::ToCoreFrame(*web_frame_)->DetachFromParent();
   } else if (web_frame_->View()) {
     // If the RemoteFrame being detached is also the main frame in the renderer
     // process, we need to notify the webview to allow it to clean things up.
@@ -71,26 +62,6 @@ void RemoteFrameClientImpl::Detached(FrameDetachType type) {
   // Clear our reference to RemoteFrame at the very end, in case the client
   // refers to it.
   web_frame_->SetCoreFrame(nullptr);
-}
-
-Frame* RemoteFrameClientImpl::Opener() const {
-  return ToCoreFrame(web_frame_->Opener());
-}
-
-Frame* RemoteFrameClientImpl::Parent() const {
-  return ToCoreFrame(web_frame_->Parent());
-}
-
-Frame* RemoteFrameClientImpl::Top() const {
-  return ToCoreFrame(web_frame_->Top());
-}
-
-Frame* RemoteFrameClientImpl::NextSibling() const {
-  return ToCoreFrame(web_frame_->NextSibling());
-}
-
-Frame* RemoteFrameClientImpl::FirstChild() const {
-  return ToCoreFrame(web_frame_->FirstChild());
 }
 
 base::UnguessableToken RemoteFrameClientImpl::GetDevToolsFrameToken() const {
@@ -135,19 +106,53 @@ void RemoteFrameClientImpl::FrameRectsChanged(
   web_frame_->Client()->FrameRectsChanged(local_frame_rect, screen_space_rect);
 }
 
-void RemoteFrameClientImpl::UpdateRemoteViewportIntersection(
-    const ViewportIntersectionState& intersection_state) {
-  web_frame_->Client()->UpdateRemoteViewportIntersection(intersection_state);
+void RemoteFrameClientImpl::ZoomLevelChanged(double zoom_level) {
+  web_frame_->Client()->ZoomLevelChanged(zoom_level);
 }
 
-uint32_t RemoteFrameClientImpl::Print(const IntRect& rect,
-                                      cc::PaintCanvas* canvas) const {
-  return web_frame_->Client()->Print(rect, canvas);
+void RemoteFrameClientImpl::UpdateCaptureSequenceNumber(
+    uint32_t sequence_number) {
+  web_frame_->Client()->UpdateCaptureSequenceNumber(sequence_number);
+}
+
+void RemoteFrameClientImpl::PageScaleFactorChanged(
+    float page_scale_factor,
+    bool is_pinch_gesture_active) {
+  web_frame_->Client()->PageScaleFactorChanged(page_scale_factor,
+                                               is_pinch_gesture_active);
+}
+
+void RemoteFrameClientImpl::DidChangeScreenInfo(
+    const ScreenInfo& original_screen_info) {
+  web_frame_->Client()->DidChangeScreenInfo(original_screen_info);
+}
+
+void RemoteFrameClientImpl::DidChangeRootWindowSegments(
+    const std::vector<gfx::Rect>& root_widget_window_segments) {
+  web_frame_->Client()->DidChangeRootWindowSegments(
+      root_widget_window_segments);
+}
+
+void RemoteFrameClientImpl::DidChangeVisibleViewportSize(
+    const gfx::Size& visible_viewport_size) {
+  web_frame_->Client()->DidChangeVisibleViewportSize(visible_viewport_size);
+}
+
+void RemoteFrameClientImpl::SynchronizeVisualProperties() {
+  web_frame_->Client()->SynchronizeVisualProperties();
 }
 
 AssociatedInterfaceProvider*
 RemoteFrameClientImpl::GetRemoteAssociatedInterfaces() {
   return web_frame_->Client()->GetRemoteAssociatedInterfaces();
+}
+
+viz::FrameSinkId RemoteFrameClientImpl::GetFrameSinkId() {
+  return web_frame_->Client()->GetFrameSinkId();
+}
+
+void RemoteFrameClientImpl::WasEvicted() {
+  return web_frame_->Client()->WasEvicted();
 }
 
 }  // namespace blink

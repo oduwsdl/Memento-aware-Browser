@@ -56,6 +56,7 @@ def RunSteps(api):
   gerrit_no_rebase_patch_ref = bool(
       api.properties.get('gerrit_no_rebase_patch_ref'))
   patch_refs = api.properties.get('patch_refs')
+  add_blamelists = api.properties.get('add_blamelists', False)
   set_output_commit = api.properties.get('set_output_commit', True)
 
   step_test_data = None
@@ -74,6 +75,7 @@ def RunSteps(api):
       gerrit_no_rebase_patch_ref=gerrit_no_rebase_patch_ref,
       disable_syntax_validation=True,
       patch_refs=patch_refs,
+      add_blamelists=add_blamelists,
       set_output_commit=set_output_commit,
       step_test_data=step_test_data,
     )
@@ -118,10 +120,11 @@ def GenTests(api):
       ci_build(git_repo='https://unrecognized/repo')
   )
   yield (
-      api.test('basic_luci') +
+      api.test('bot_update_failure') +
       ci_build() +
-      api.runtime(is_experimental=False, is_luci=True)
+      api.properties(bot_update_output={'did_run': True})
   )
+
   yield (
       api.test('resolve_chromium_fixed_version') +
       ci_build() +
@@ -174,7 +177,7 @@ def GenTests(api):
   )
   yield (
       api.test('reset_root_solution_revision') +
-      api.properties(root_solution_revision='revision')
+      api.properties(root_solution_revision=api.bot_update.gen_revision('fake-revision'))
   )
   yield (
       api.test('gerrit_no_reset') +
@@ -230,12 +233,34 @@ def GenTests(api):
           ],
       )
   )
+  yield (
+      api.test('origin_master') +
+      ci_build(revision='origin/master')
+  )
+
+  yield (
+      api.test('add_blamelists') +
+      ci_build() +
+      api.properties(
+          add_blamelists=True,
+          revisions={'src/v8': 'HEAD'},
+      )
+  )
+
+  yield (
+      api.test('add_blamelists_bot_update_failure') +
+      ci_build() +
+      api.properties(
+          add_blamelists=True,
+          bot_update_output={'did_run': True},
+          revisions={'src/v8': 'HEAD'},
+      )
+  )
 
   yield (
       api.test('no_cp_checkout_a_specific_commit') +
       ci_build(revision='a' * 40) +
       api.properties(
-          revisions={'got_revision': 'src'},
           bot_update_output={
             'properties': {
               'got_revision': 'a' * 40,
@@ -254,7 +279,6 @@ def GenTests(api):
       api.test('no_cp_checkout_master') +
       ci_build(revision='') +
       api.properties(
-          revisions={'got_revision': 'src'},
           bot_update_output={
             'properties': {
               'got_revision': 'a' * 40,
@@ -273,7 +297,6 @@ def GenTests(api):
       api.test('no_cp_checkout_a_branch_head') +
       ci_build(revision='', git_ref='refs/branch-heads/x') +
       api.properties(
-          revisions={'got_revision': 'src'},
           bot_update_output={
             'properties': {
               'got_revision': 'a' * 40,
@@ -292,7 +315,6 @@ def GenTests(api):
       api.test('no_cp_checkout_HEAD') +
       ci_build(revision='HEAD') +
       api.properties(
-          revisions={'got_revision': 'src'},
           bot_update_output={
             'properties': {
               'got_revision': 'a' * 40,

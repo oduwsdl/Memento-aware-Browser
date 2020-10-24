@@ -30,15 +30,14 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-blink.h"
 #include "third_party/blink/renderer/platform/geometry/float_point.h"
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
-#include "third_party/blink/renderer/platform/graphics/image_animation_policy.h"
 #include "third_party/blink/renderer/platform/graphics/image_observer.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_record.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -60,9 +59,9 @@ namespace blink {
 class FloatRect;
 class GraphicsContext;
 class Image;
-class KURL;
 class WebGraphicsContext3DProvider;
 class WebGraphicsContext3DProviderWrapper;
+class DarkModeImageCache;
 
 class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   friend class GeneratedImage;
@@ -87,11 +86,9 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
       InterpolationQuality = kInterpolationNone);
 
   virtual bool IsSVGImage() const { return false; }
-  virtual bool IsSVGImageForContainer() const { return false; }
   virtual bool IsBitmapImage() const { return false; }
   virtual bool IsStaticBitmapImage() const { return false; }
   virtual bool IsPlaceholderImage() const { return false; }
-  virtual bool IsGradientGeneratedImage() const { return false; }
 
   virtual bool CurrentFrameKnownToBeOpaque() = 0;
 
@@ -110,8 +107,9 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   virtual bool HasIntrinsicSize() const { return true; }
 
   virtual IntSize Size() const = 0;
+  virtual IntSize DensityCorrectedSize() const { return Size(); }
   IntSize Size(RespectImageOrientationEnum) const;
-  virtual IntSize SizeRespectingOrientation() const { return Size(); }
+  virtual IntSize PreferredDisplaySize() const { return Size(); }
   virtual FloatSize SizeAsFloat(
       RespectImageOrientationEnum respect_orientation) const {
     return FloatSize(Size(respect_orientation));
@@ -158,9 +156,9 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   virtual bool MaybeAnimated() { return false; }
 
   // Set animationPolicy
-  virtual void SetAnimationPolicy(ImageAnimationPolicy) {}
-  virtual ImageAnimationPolicy AnimationPolicy() {
-    return kImageAnimationPolicyAllowed;
+  virtual void SetAnimationPolicy(mojom::blink::ImageAnimationPolicy) {}
+  virtual mojom::blink::ImageAnimationPolicy AnimationPolicy() {
+    return mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed;
   }
 
   // Advances an animated image. For BitmapImage (e.g., animated gifs) this
@@ -217,6 +215,8 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     return kDefaultImageOrientation;
   }
 
+  virtual IntSize CurrentFrameDensityCorrectedSize() const { return IntSize(); }
+
   // Correct the src rect (rotate and maybe translate it) to account for a
   // non-default image orientation. The image must have non-default orientation
   // to call this method. The image_size is the oriented size of the image (i.e.
@@ -251,19 +251,12 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     return nullptr;
   }
 
-  virtual sk_sp<PaintRecord> PaintRecordForContainer(
-      const KURL& url,
-      const IntSize& container_size,
-      const IntRect& draw_src_rect,
-      const IntRect& draw_dst_rect,
-      bool flip_y) {
-    return nullptr;
-  }
-
   PaintImage::Id paint_image_id() const { return stable_image_id_; }
 
   // Returns an SkBitmap that is a copy of the image's current frame.
   SkBitmap AsSkBitmapForCurrentFrame(RespectImageOrientationEnum);
+
+  DarkModeImageCache* GetDarkModeImageCache();
 
  protected:
   Image(ImageObserver* = nullptr, bool is_multipart = false);
@@ -297,6 +290,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   WeakPersistent<ImageObserver> image_observer_;
   PaintImage::Id stable_image_id_;
   const bool is_multipart_;
+  std::unique_ptr<DarkModeImageCache> dark_mode_image_cache_;
   DISALLOW_COPY_AND_ASSIGN(Image);
 };
 

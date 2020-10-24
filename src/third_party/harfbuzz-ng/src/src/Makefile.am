@@ -98,7 +98,12 @@ BUILT_SOURCES += \
 	hb-version.h
 
 $(srcdir)/hb-version.h: hb-version.h.in $(top_srcdir)/configure.ac
-	$(AM_V_GEN) $(srcdir)/gen-hb-version.py $(HB_VERSION) "$<" "$@"
+	$(AM_V_GEN) $(SED) \
+		-e 's/[@]HB_VERSION_MAJOR@/$(HB_VERSION_MAJOR)/' \
+		-e 's/[@]HB_VERSION_MINOR@/$(HB_VERSION_MINOR)/' \
+		-e 's/[@]HB_VERSION_MICRO@/$(HB_VERSION_MICRO)/' \
+		-e 's/[@]HB_VERSION@/$(HB_VERSION)/' \
+		"$<" > "$@" || ($(RM) "$@"; false)
 
 # Put the library together
 
@@ -243,6 +248,7 @@ harfbuzz-deprecated-symbols.txt: $(srcdir)/hb-deprecated.h
 
 
 GENERATORS = \
+	gen-arabic-joining-list.py \
 	gen-arabic-table.py \
 	gen-def.py \
 	gen-emoji-table.py \
@@ -258,42 +264,9 @@ GENERATORS = \
 	$(NULL)
 EXTRA_DIST += $(GENERATORS)
 
-unicode-tables: \
-	arabic-table \
-	emoji-table \
-	indic-table \
-	tag-table \
-	ucd-table \
-	use-table \
-	vowel-constraints \
-	$(NULL)
-
-arabic-table: gen-arabic-table.py ArabicShaping.txt UnicodeData.txt Blocks.txt
-	$(AM_V_GEN) $(builddir)/$^ > $(srcdir)/hb-ot-shape-complex-arabic-table.hh \
-	|| ($(RM) $(srcdir)/hb-ot-shape-complex-arabic-table.hh; false)
-emoji-table: gen-emoji-table.py emoji-data.txt
-	$(AM_V_GEN) $(builddir)/$^ > $(srcdir)/hb-unicode-emoji-table.hh \
-	|| ($(RM) $(srcdir)/hb-unicode-emoji-table.hh; false)
-indic-table: gen-indic-table.py IndicSyllabicCategory.txt IndicPositionalCategory.txt Blocks.txt
-	$(AM_V_GEN) $(builddir)/$^ > $(srcdir)/hb-ot-shape-complex-indic-table.cc \
-	|| ($(RM) $(srcdir)/hb-ot-shape-complex-indic-table.cc; false)
-tag-table: gen-tag-table.py languagetags language-subtag-registry
-	$(AM_V_GEN) $(builddir)/$^ > $(srcdir)/hb-ot-tag-table.hh \
-	|| ($(RM) $(srcdir)/hb-ot-tag-table.hh; false)
-ucd-table: gen-ucd-table.py ucd.nounihan.grouped.zip hb-common.h
-	$(AM_V_GEN) $(builddir)/$^ > $(srcdir)/hb-ucd-table.hh \
-	|| ($(RM) $(srcdir)/hb-ucd-table.hh; false)
-use-table: gen-use-table.py IndicSyllabicCategory.txt IndicPositionalCategory.txt UnicodeData.txt Blocks.txt
-	$(AM_V_GEN) $(builddir)/$^ > $(srcdir)/hb-ot-shape-complex-use-table.cc \
-	|| ($(RM) $(srcdir)/hb-ot-shape-complex-use-table.cc; false)
-vowel-constraints: gen-vowel-constraints.py ms-use/IndicShapingInvalidCluster.txt Scripts.txt
-	$(AM_V_GEN) $(builddir)/$^ > $(srcdir)/hb-ot-shape-complex-vowel-constraints.cc \
-	|| ($(RM) $(srcdir)/hb-ot-shape-complex-vowel-constraints.cc; false)
-
-
 built-sources: $(BUILT_SOURCES)
 
-.PHONY: unicode-tables arabic-table indic-table tag-table use-table vowel-constraints emoji-table built-sources
+.PHONY: built-sources
 
 RAGEL_GENERATED = \
 	$(patsubst %,$(srcdir)/%,$(HB_BASE_RAGEL_GENERATED_sources)) \
@@ -310,8 +283,7 @@ $(srcdir)/%.hh: $(srcdir)/%.rl
 
 harfbuzz.cc: Makefile.sources
 	$(AM_V_GEN) \
-	$(srcdir)/gen-harfbuzzcc.py \
-		$(srcdir)/harfbuzz.cc \
+	for f in \
 		$(HB_BASE_sources) \
 		$(HB_GLIB_sources) \
 		$(HB_FT_sources) \
@@ -319,7 +291,10 @@ harfbuzz.cc: Makefile.sources
 		$(HB_UNISCRIBE_sources) \
 		$(HB_GDI_sources) \
 		$(HB_DIRECTWRITE_sources) \
-		$(HB_CORETEXT_sources)
+		$(HB_CORETEXT_sources) \
+		; do echo '#include "'$$f'"'; done | \
+	grep '[.]cc"' > $(srcdir)/harfbuzz.cc \
+	|| ($(RM) $(srcdir)/harfbuzz.cc; false)
 BUILT_SOURCES += harfbuzz.cc
 
 noinst_PROGRAMS = \
@@ -424,18 +399,18 @@ test_bimap_CPPFLAGS = $(COMPILED_TESTS_CPPFLAGS)
 test_bimap_LDADD = $(COMPILED_TESTS_LDADD)
 
 dist_check_SCRIPTS = \
-	check-c-linkage-decls.sh \
-	check-externs.sh \
-	check-header-guards.sh \
-	check-includes.sh \
-	check-static-inits.sh \
-	check-symbols.sh \
+	check-c-linkage-decls.py \
+	check-externs.py \
+	check-header-guards.py \
+	check-includes.py \
+	check-static-inits.py \
+	check-symbols.py \
 	$(NULL)
 TESTS += $(dist_check_SCRIPTS)
 
 if !WITH_LIBSTDCXX
 dist_check_SCRIPTS += \
-	check-libstdc++.sh \
+	check-libstdc++.py \
 	$(NULL)
 endif
 

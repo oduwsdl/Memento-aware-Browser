@@ -50,7 +50,7 @@ namespace dawn_native { namespace null {
     class Queue;
     using RenderPipeline = RenderPipelineBase;
     using Sampler = SamplerBase;
-    using ShaderModule = ShaderModuleBase;
+    class ShaderModule;
     class SwapChain;
     using Texture = TextureBase;
     using TextureView = TextureViewBase;
@@ -105,9 +105,16 @@ namespace dawn_native { namespace null {
                                            BufferBase* destination,
                                            uint64_t destinationOffset,
                                            uint64_t size) override;
+        MaybeError CopyFromStagingToTexture(const StagingBufferBase* source,
+                                            const TextureDataLayout& src,
+                                            TextureCopy* dst,
+                                            const Extent3D& copySizePixels) override;
 
-        MaybeError IncrementMemoryUsage(size_t bytes);
-        void DecrementMemoryUsage(size_t bytes);
+        MaybeError IncrementMemoryUsage(uint64_t bytes);
+        void DecrementMemoryUsage(uint64_t bytes);
+
+        uint32_t GetOptimalBytesPerRowAlignment() const override;
+        uint64_t GetOptimalBufferToTextureCopyOffsetAlignment() const override;
 
       private:
         using DeviceBase::DeviceBase;
@@ -116,7 +123,8 @@ namespace dawn_native { namespace null {
             const BindGroupDescriptor* descriptor) override;
         ResultOrError<BindGroupLayoutBase*> CreateBindGroupLayoutImpl(
             const BindGroupLayoutDescriptor* descriptor) override;
-        ResultOrError<BufferBase*> CreateBufferImpl(const BufferDescriptor* descriptor) override;
+        ResultOrError<Ref<BufferBase>> CreateBufferImpl(
+            const BufferDescriptor* descriptor) override;
         ResultOrError<ComputePipelineBase*> CreateComputePipelineImpl(
             const ComputePipelineDescriptor* descriptor) override;
         ResultOrError<PipelineLayoutBase*> CreatePipelineLayoutImpl(
@@ -140,14 +148,14 @@ namespace dawn_native { namespace null {
             TextureBase* texture,
             const TextureViewDescriptor* descriptor) override;
 
-        Serial CheckAndUpdateCompletedSerials() override;
+        ExecutionSerial CheckAndUpdateCompletedSerials() override;
 
         void ShutDownImpl() override;
         MaybeError WaitForIdleForDestruction() override;
 
         std::vector<std::unique_ptr<PendingOperation>> mPendingOperations;
 
-        static constexpr size_t kMaxMemoryUsage = 256 * 1024 * 1024;
+        static constexpr uint64_t kMaxMemoryUsage = 256 * 1024 * 1024;
         size_t mMemoryUsage = 0;
     };
 
@@ -196,16 +204,11 @@ namespace dawn_native { namespace null {
 
       private:
         ~Buffer() override;
-
-        // Dawn API
-        MaybeError MapReadAsyncImpl(uint32_t serial) override;
-        MaybeError MapWriteAsyncImpl(uint32_t serial) override;
+        MaybeError MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) override;
         void UnmapImpl() override;
         void DestroyImpl() override;
-
-        bool IsMapWritable() const override;
-        MaybeError MapAtCreationImpl(uint8_t** mappedPointer) override;
-        void MapAsyncImplCommon(uint32_t serial, bool isWrite);
+        bool IsCPUWritableAtCreation() const override;
+        MaybeError MapAtCreationImpl() override;
         void* GetMappedPointerImpl() override;
 
         std::unique_ptr<uint8_t[]> mBackingData;
@@ -214,11 +217,6 @@ namespace dawn_native { namespace null {
     class CommandBuffer final : public CommandBufferBase {
       public:
         CommandBuffer(CommandEncoder* encoder, const CommandBufferDescriptor* descriptor);
-
-      private:
-        ~CommandBuffer() override;
-
-        CommandIterator mCommands;
     };
 
     class QuerySet final : public QuerySetBase {
@@ -242,6 +240,13 @@ namespace dawn_native { namespace null {
                                    uint64_t bufferOffset,
                                    const void* data,
                                    size_t size) override;
+    };
+
+    class ShaderModule final : public ShaderModuleBase {
+      public:
+        using ShaderModuleBase::ShaderModuleBase;
+
+        MaybeError Initialize();
     };
 
     class SwapChain final : public NewSwapChainBase {

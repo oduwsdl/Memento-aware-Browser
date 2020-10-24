@@ -1513,6 +1513,31 @@ EGLClientBuffer EGLAPIENTRY EGL_GetNativeClientBufferANDROID(const struct AHardw
     return egl::Display::GetNativeClientBuffer(buffer);
 }
 
+EGLClientBuffer EGLAPIENTRY EGL_CreateNativeClientBufferANDROID(const EGLint *attrib_list)
+{
+    ANGLE_SCOPED_GLOBAL_LOCK();
+    FUNC_EVENT("const EGLint *attrib_list = 0x%016" PRIxPTR, (uintptr_t)attrib_list);
+
+    Thread *thread = egl::GetCurrentThread();
+    ANGLE_EGL_TRY_RETURN(thread,
+                         (attrib_list == nullptr || attrib_list[0] == EGL_NONE)
+                             ? egl::EglBadParameter() << "invalid attribute list."
+                             : NoError(),
+                         "eglCreateNativeClientBufferANDROID", nullptr, nullptr);
+
+    const AttributeMap &attribMap = AttributeMap::CreateFromIntArray(attrib_list);
+    ANGLE_EGL_TRY_RETURN(thread, ValidateCreateNativeClientBufferANDROID(attribMap),
+                         "eglCreateNativeClientBufferANDROID", nullptr, nullptr);
+
+    EGLClientBuffer eglClientBuffer = nullptr;
+    ANGLE_EGL_TRY_RETURN(thread,
+                         egl::Display::CreateNativeClientBuffer(attribMap, &eglClientBuffer),
+                         "eglCreateNativeClientBufferANDROID", nullptr, nullptr);
+
+    thread->setSuccess();
+    return eglClientBuffer;
+}
+
 EGLint EGLAPIENTRY EGL_DupNativeFenceFDANDROID(EGLDisplay dpy, EGLSyncKHR sync)
 {
     ANGLE_SCOPED_GLOBAL_LOCK();
@@ -1611,6 +1636,29 @@ void EGLAPIENTRY EGL_HandleGPUSwitchANGLE(EGLDisplay dpy)
                   GetDisplayIfValid(display));
 
     thread->setSuccess();
+}
+
+// EGL_KHR_reusable_sync
+ANGLE_EXPORT EGLBoolean EGLAPIENTRY EGL_SignalSyncKHR(EGLDisplay dpy, EGLSync sync, EGLenum mode)
+{
+    ANGLE_SCOPED_GLOBAL_LOCK();
+    FUNC_EVENT("EGLDisplay dpy = 0x%016" PRIxPTR ", EGLSync sync = 0x%016" PRIxPTR
+               ", EGLint mode = 0x%X",
+               (uintptr_t)dpy, (uintptr_t)sync, mode);
+
+    Thread *thread        = egl::GetCurrentThread();
+    egl::Display *display = static_cast<egl::Display *>(dpy);
+    egl::Sync *syncObject = static_cast<Sync *>(sync);
+
+    ANGLE_EGL_TRY_RETURN(thread, ValidateSignalSyncKHR(display, syncObject, mode),
+                         "eglSignalSyncKHR", GetSyncIfValid(display, syncObject), EGL_FALSE);
+
+    gl::Context *currentContext = thread->getContext();
+    ANGLE_EGL_TRY_RETURN(thread, syncObject->signal(display, currentContext, mode),
+                         "eglSignalSyncKHR", GetSyncIfValid(display, syncObject), EGL_FALSE);
+
+    thread->setSuccess();
+    return EGL_TRUE;
 }
 
 }  // extern "C"

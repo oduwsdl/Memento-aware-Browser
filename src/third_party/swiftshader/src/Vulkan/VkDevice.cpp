@@ -146,6 +146,10 @@ Device::Device(const VkDeviceCreateInfo *pCreateInfo, void *mem, PhysicalDevice 
 		debugger.server = vk::dbg::Server::create(debugger.context, atoi(port));
 	}
 #endif  // ENABLE_VK_DEBUGGER
+
+#if SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
+	ahbAddressMap.reset(new AHBAddressMap());
+#endif
 }
 
 void Device::destroy(const VkAllocationCallbacks *pAllocator)
@@ -312,5 +316,123 @@ void Device::removeSampler(const SamplerState &samplerState)
 {
 	samplerIndexer->remove(samplerState);
 }
+
+VkResult Device::setDebugUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT *pNameInfo)
+{
+	// Optionally maps user-friendly name to an object
+	return VK_SUCCESS;
+}
+
+VkResult Device::setDebugUtilsObjectTag(const VkDebugUtilsObjectTagInfoEXT *pTagInfo)
+{
+	// Optionally attach arbitrary data to an object
+	return VK_SUCCESS;
+}
+
+void Device::registerImageView(ImageView *imageView)
+{
+	if(imageView != nullptr)
+	{
+		marl::lock lock(imageViewSetMutex);
+		imageViewSet.insert(imageView);
+	}
+}
+
+void Device::unregisterImageView(ImageView *imageView)
+{
+	if(imageView != nullptr)
+	{
+		marl::lock lock(imageViewSetMutex);
+		auto it = imageViewSet.find(imageView);
+		if(it != imageViewSet.end())
+		{
+			imageViewSet.erase(it);
+		}
+	}
+}
+
+void Device::prepareForSampling(ImageView *imageView)
+{
+	if(imageView != nullptr)
+	{
+		marl::lock lock(imageViewSetMutex);
+
+		auto it = imageViewSet.find(imageView);
+		if(it != imageViewSet.end())
+		{
+			imageView->prepareForSampling();
+		}
+	}
+}
+
+void Device::contentsChanged(ImageView *imageView)
+{
+	if(imageView != nullptr)
+	{
+		marl::lock lock(imageViewSetMutex);
+
+		auto it = imageViewSet.find(imageView);
+		if(it != imageViewSet.end())
+		{
+			imageView->contentsChanged();
+		}
+	}
+}
+
+#if SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
+Device::AHBAddressMap *Device::getAHBAddressMap() const
+{
+	return ahbAddressMap.get();
+}
+
+void *Device::AHBAddressMap::query(const uint32_t key)
+{
+	std::unique_lock<std::mutex> lock(addressMapMutex);
+	if(addressMap.find(key) == addressMap.end())
+		return nullptr;
+
+	return addressMap[key].address;
+}
+
+void Device::AHBAddressMap::add(const uint32_t key, void *value)
+{
+	std::unique_lock<std::mutex> lock(addressMapMutex);
+	auto it = addressMap.find(key);
+	if(it == addressMap.end())
+	{
+		MapValue mv;
+		mv.refCount = 1;
+		mv.address = value;
+		addressMap[key] = mv;
+	}
+	else
+	{
+		it->second.address = value;
+		it->second.refCount++;
+	}
+}
+
+int Device::AHBAddressMap::incrementReference(const uint32_t key)
+{
+	std::unique_lock<std::mutex> lock(addressMapMutex);
+	auto it = addressMap.find(key);
+	if(it == addressMap.end())
+		return -1;
+
+	it->second.refCount++;
+	return it->second.refCount;
+}
+
+int Device::AHBAddressMap::decrementReference(const uint32_t key)
+{
+	std::unique_lock<std::mutex> lock(addressMapMutex);
+	auto it = addressMap.find(key);
+	if(it == addressMap.end())
+		return -1;
+
+	it->second.refCount--;
+	return it->second.refCount;
+}
+#endif  // SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER
 
 }  // namespace vk

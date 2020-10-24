@@ -22,12 +22,6 @@ class GrD3DRenderTarget;
 
 struct GrD3DTextureResourceInfo;
 
-#ifdef SK_BUILD_FOR_WIN
-// Windows gives bogus warnings about inheriting asTexture/asRenderTarget via dominance.
-#pragma warning(push)
-#pragma warning(disable: 4250)
-#endif
-
 class GrD3DRenderTarget: public GrRenderTarget, public virtual GrD3DTextureResource {
 public:
     static sk_sp<GrD3DRenderTarget> MakeWrappedRenderTarget(GrD3DGpu*, SkISize, int sampleCnt,
@@ -37,7 +31,13 @@ public:
 
     GrBackendFormat backendFormat() const override { return this->getBackendFormat(); }
 
-    GrD3DTextureResource* msaaTextureResource() const { return fMSAATextureResource.get(); }
+    /**
+     * If this render target is multisampled, this returns the MSAA texture for rendering. This
+     * will be different than *this* when we have separate render/resolve images. If not
+     * multisampled returns nullptr.
+     */
+    const GrD3DTextureResource* msaaTextureResource() const;
+    GrD3DTextureResource* msaaTextureResource();
 
     bool canAttemptStencilAttachment() const override {
         return true;
@@ -57,7 +57,6 @@ public:
 protected:
     GrD3DRenderTarget(GrD3DGpu* gpu,
                       SkISize dimensions,
-                      int sampleCnt,
                       const GrD3DTextureResourceInfo& info,
                       sk_sp<GrD3DResourceState> state,
                       const GrD3DTextureResourceInfo& msaaInfo,
@@ -81,9 +80,8 @@ protected:
             // Add one to account for the resolved VkImage.
             numColorSamples += 1;
         }
-        const GrCaps& caps = *this->getGpu()->caps();
-        return GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(),
-                                      numColorSamples, GrMipMapped::kNo);
+        return GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
+                                      numColorSamples, GrMipmapped::kNo);
     }
 
 private:
@@ -91,7 +89,6 @@ private:
     enum Wrapped { kWrapped };
     GrD3DRenderTarget(GrD3DGpu* gpu,
                       SkISize dimensions,
-                      int sampleCnt,
                       const GrD3DTextureResourceInfo& info,
                       sk_sp<GrD3DResourceState> state,
                       const GrD3DTextureResourceInfo& msaaInfo,

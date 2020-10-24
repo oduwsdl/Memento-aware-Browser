@@ -73,14 +73,9 @@ XMLDocument* DOMImplementation::createDocument(
     const AtomicString& qualified_name,
     DocumentType* doctype,
     ExceptionState& exception_state) {
-  if (!document_->GetExecutionContext())
-    return nullptr;
-
   XMLDocument* doc = nullptr;
-  DocumentInit init =
-      DocumentInit::Create()
-          .WithExecutionContext(document_->GetExecutionContext())
-          .WithOwnerDocument(document_);
+  ExecutionContext* context = document_->GetExecutionContext();
+  DocumentInit init = DocumentInit::Create().WithExecutionContext(context);
   if (namespace_uri == svg_names::kNamespaceURI) {
     doc = XMLDocument::CreateSVG(init);
   } else if (namespace_uri == html_names::xhtmlNamespaceURI) {
@@ -109,12 +104,9 @@ XMLDocument* DOMImplementation::createDocument(
 }
 
 Document* DOMImplementation::createHTMLDocument(const String& title) {
-  if (!document_->GetExecutionContext())
-    return nullptr;
   DocumentInit init =
       DocumentInit::Create()
           .WithExecutionContext(document_->GetExecutionContext())
-          .WithOwnerDocument(document_)
           .WithRegistrationContext(document_->RegistrationContext());
   auto* d = MakeGarbageCollected<HTMLDocument>(init);
   d->open();

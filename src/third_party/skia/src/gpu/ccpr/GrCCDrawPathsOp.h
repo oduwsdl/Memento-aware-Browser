@@ -40,7 +40,7 @@ public:
     CombineResult onCombineIfPossible(GrOp*, GrRecordingContext::Arenas*, const GrCaps&) override;
     void visitProxies(const VisitProxyFunc& fn) const override {
         for (const auto& range : fInstanceRanges) {
-            fn(range.fAtlasProxy, GrMipMapped::kNo);
+            fn(range.fAtlasProxy, GrMipmapped::kNo);
         }
         fProcessors.visitProxies(fn);
     }
@@ -74,7 +74,8 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) override {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) override {}
 
     friend class GrOpMemoryPool;
 
@@ -120,10 +121,10 @@ private:
         SkPMColor4f fColor;
 
         GrCCPathCache::OnFlushEntryRef fCacheEntry;
+        sk_sp<GrTextureProxy> fCachedAtlasProxy;
+        GrCCAtlas::CoverageType fCachedAtlasCoverageType;
         SkIVector fCachedMaskShift;
-        bool fDoCopyToA8Coverage = false;
         bool fDoCachePathMask = false;
-        SkDEBUGCODE(bool fWasCountedAsRender = false);
 
         SingleDraw* fNext = nullptr;
 

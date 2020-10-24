@@ -26,8 +26,8 @@
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/binding_security.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -103,13 +103,11 @@ void HTMLFrameElementBase::OpenURL(bool replace_current_item) {
             "Invalid relative frame source URL (" + url_ +
                 ") within data URL."));
   }
-  DVLOG(0) << "HTMLFrameElementBase::OpenURL";
   LoadOrRedirectSubframe(url, frame_name_, replace_current_item);
 }
 
 void HTMLFrameElementBase::ParseAttribute(
     const AttributeModificationParams& params) {
-  DVLOG(0) << "HTMLFrameElementBase::ParseAttribute";
   const QualifiedName& name = params.name;
   const AtomicString& value = params.new_value;
   if (name == html_names::kSrcdocAttr) {
@@ -151,8 +149,8 @@ void HTMLFrameElementBase::ParseAttribute(
     // FIXME: should <frame> elements have beforeunload handlers?
     SetAttributeEventListener(
         event_type_names::kBeforeunload,
-        CreateAttributeEventListener(
-            this, name, value,
+        JSEventHandlerForContentAttribute::Create(
+            GetExecutionContext(), name, value,
             JSEventHandler::HandlerType::kOnBeforeUnloadEventHandler));
   } else {
     HTMLFrameOwnerElement::ParseAttribute(params);
@@ -172,7 +170,7 @@ HTMLFrameElementBase::GetOriginForFeaturePolicy() const {
   // origin when constructing the container policy.
   KURL url = GetDocument().CompleteURL(url_);
   if (Document::ShouldInheritSecurityOriginFromOwner(url))
-    return GetDocument().GetSecurityOrigin();
+    return GetExecutionContext()->GetSecurityOrigin();
 
   // Other frames should use the origin defined by the absolute URL (this will
   // be a unique origin for data: URLs)
@@ -215,8 +213,6 @@ void HTMLFrameElementBase::AttachLayoutTree(AttachContext& context) {
 
 void HTMLFrameElementBase::SetLocation(const String& str) {
   url_ = AtomicString(str);
-
-  DVLOG(0) << "HTMLFrameElementBase::SetLocation";
 
   if (isConnected())
     OpenURL(false);
@@ -268,7 +264,8 @@ void HTMLFrameElementBase::SetScrollbarMode(
 
   if (contentDocument()) {
     contentDocument()->WillChangeFrameOwnerProperties(
-        margin_width_, margin_height_, scrollbar_mode, IsDisplayNone());
+        margin_width_, margin_height_, scrollbar_mode, IsDisplayNone(),
+        GetColorScheme());
   }
   scrollbar_mode_ = scrollbar_mode;
   FrameOwnerPropertiesChanged();
@@ -280,7 +277,8 @@ void HTMLFrameElementBase::SetMarginWidth(int margin_width) {
 
   if (contentDocument()) {
     contentDocument()->WillChangeFrameOwnerProperties(
-        margin_width, margin_height_, scrollbar_mode_, IsDisplayNone());
+        margin_width, margin_height_, scrollbar_mode_, IsDisplayNone(),
+        GetColorScheme());
   }
   margin_width_ = margin_width;
   FrameOwnerPropertiesChanged();
@@ -292,7 +290,8 @@ void HTMLFrameElementBase::SetMarginHeight(int margin_height) {
 
   if (contentDocument()) {
     contentDocument()->WillChangeFrameOwnerProperties(
-        margin_width_, margin_height, scrollbar_mode_, IsDisplayNone());
+        margin_width_, margin_height, scrollbar_mode_, IsDisplayNone(),
+        GetColorScheme());
   }
   margin_height_ = margin_height;
   FrameOwnerPropertiesChanged();

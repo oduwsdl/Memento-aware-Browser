@@ -29,8 +29,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_NETWORK_RESOURCES_DATA_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_NETWORK_RESOURCES_DATA_H_
 
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/html/parser/text_resource_decoder.h"
 #include "third_party/blink/renderer/core/inspector/inspector_page_agent.h"
+#include "third_party/blink/renderer/core/loader/resource/font_resource.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
 #include "third_party/blink/renderer/platform/network/http_header_map.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -44,7 +46,6 @@ namespace blink {
 
 class EncodedFormData;
 class ExecutionContext;
-class Resource;
 class ResourceResponse;
 class TextResourceDecoder;
 
@@ -81,7 +82,8 @@ class XHRReplayData final : public GarbageCollected<XHRReplayData> {
 class NetworkResourcesData final
     : public GarbageCollected<NetworkResourcesData> {
  public:
-  class ResourceData final : public GarbageCollected<ResourceData> {
+  class ResourceData final : public GarbageCollected<ResourceData>,
+                             public FontResourceClearDataObserver {
     friend class NetworkResourcesData;
 
    public:
@@ -162,7 +164,11 @@ class NetworkResourcesData final
       post_data_ = post_data;
     }
     EncodedFormData* PostData() const { return post_data_.get(); }
-    void Trace(Visitor*) const;
+
+    // FontResourceClearDataObserver implementation.
+    void FontResourceDataWillBeCleared() override;
+
+    void Trace(Visitor*) const override;
 
    private:
     bool HasData() const { return data_buffer_.get(); }

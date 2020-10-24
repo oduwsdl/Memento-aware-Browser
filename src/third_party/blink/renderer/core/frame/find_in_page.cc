@@ -95,15 +95,13 @@ void FindInPage::Find(int request_id,
   bool result = false;
   bool active_now = false;
 
-  if (options->new_session) {
-    // If this is an initial find request, cancel any pending scoping effort
-    // done by the previous find request.
-    EnsureTextFinder().CancelPendingScopingEffort();
-  }
+  if (options->new_session)
+    EnsureTextFinder().InitNewSession(*options);
 
   // Search for an active match only if this frame is focused or if this is an
   // existing session.
-  if (frame_->IsFocused() || !options->new_session) {
+  if (options->find_match &&
+      (frame_->IsFocused() || !options->new_session)) {
     result = FindInternal(request_id, search_text, *options,
                           false /* wrap_within_frame */, &active_now);
   }
@@ -151,13 +149,14 @@ bool WebLocalFrameImpl::FindForTesting(int identifier,
                                        bool forward,
                                        bool new_session,
                                        bool force,
-                                       bool wrap_within_frame) {
+                                       bool wrap_within_frame,
+                                       bool async) {
   auto options = mojom::blink::FindOptions::New();
   options->match_case = match_case;
   options->forward = forward;
   options->new_session = new_session;
   options->force = force;
-  options->run_synchronously_for_testing = true;
+  options->run_synchronously_for_testing = !async;
   bool result = find_in_page_->FindInternal(identifier, search_text, *options,
                                             wrap_within_frame, nullptr);
   find_in_page_->StopFinding(
@@ -277,17 +276,24 @@ void FindInPage::ClearActiveFindMatch() {
   EnsureTextFinder().ClearActiveFindMatch();
 }
 
-void WebLocalFrameImpl::SetTickmarks(const WebVector<WebRect>& tickmarks) {
-  find_in_page_->SetTickmarks(tickmarks);
+void WebLocalFrameImpl::SetTickmarks(const WebElement& target,
+                                     const WebVector<WebRect>& tickmarks) {
+  find_in_page_->SetTickmarks(target, tickmarks);
 }
 
-void FindInPage::SetTickmarks(const WebVector<WebRect>& tickmarks) {
-  if (LayoutView* layout_view = frame_->GetFrame()->ContentLayoutObject()) {
-    Vector<IntRect> tickmarks_converted(SafeCast<wtf_size_t>(tickmarks.size()));
-    for (wtf_size_t i = 0; i < tickmarks.size(); ++i)
-      tickmarks_converted[i] = tickmarks[i];
-    layout_view->OverrideTickmarks(tickmarks_converted);
-  }
+void FindInPage::SetTickmarks(const WebElement& target,
+                              const WebVector<WebRect>& tickmarks) {
+  Vector<IntRect> tickmarks_converted(SafeCast<wtf_size_t>(tickmarks.size()));
+  for (wtf_size_t i = 0; i < tickmarks.size(); ++i)
+    tickmarks_converted[i] = tickmarks[i];
+
+  LayoutBox* box;
+  if (target.IsNull())
+    box = frame_->GetFrame()->ContentLayoutObject();
+  else
+    box = target.ConstUnwrap<Element>()->GetLayoutBoxForScrolling();
+  if (box)
+    box->OverrideTickmarks(std::move(tickmarks_converted));
 }
 
 TextFinder* WebLocalFrameImpl::GetTextFinder() const {

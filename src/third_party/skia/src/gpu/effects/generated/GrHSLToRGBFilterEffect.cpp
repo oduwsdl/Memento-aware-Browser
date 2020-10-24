@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrHSLToRGBFilterEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -23,18 +24,12 @@ public:
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
         const GrHSLToRGBFilterEffect& _outer = args.fFp.cast<GrHSLToRGBFilterEffect>();
         (void)_outer;
-        SkString _input523(args.fInputColor);
-        SkString _sample523;
-        if (_outer.inputFP_index >= 0) {
-            _sample523 = this->invokeChild(_outer.inputFP_index, _input523.c_str(), args);
-        } else {
-            _sample523.swap(_input523);
-        }
+        SkString _sample523 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
                 R"SkSL(half4 inputColor = %s;
 half3 hsl = inputColor.xyz;
 half C = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y;
-half3 p = hsl.xxx + half3(0.0, 0.66666666666666663, 0.33333333333333331);
+half3 p = hsl.xxx + half3(0.0, 0.66666668653488159, 0.3333333432674408);
 half3 q = clamp(abs(fract(p) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
 half3 rgb = (q - 0.5) * C + hsl.z;
 %s = clamp(half4(rgb, inputColor.w), 0.0, 1.0);
@@ -57,12 +52,14 @@ bool GrHSLToRGBFilterEffect::onIsEqual(const GrFragmentProcessor& other) const {
     (void)that;
     return true;
 }
+bool GrHSLToRGBFilterEffect::usesExplicitReturn() const { return false; }
 GrHSLToRGBFilterEffect::GrHSLToRGBFilterEffect(const GrHSLToRGBFilterEffect& src)
         : INHERITED(kGrHSLToRGBFilterEffect_ClassID, src.optimizationFlags()) {
-    if (src.inputFP_index >= 0) {
-        inputFP_index = this->cloneAndRegisterChildProcessor(src.childProcessor(src.inputFP_index));
-    }
+    this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrHSLToRGBFilterEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrHSLToRGBFilterEffect(*this));
+    return std::make_unique<GrHSLToRGBFilterEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrHSLToRGBFilterEffect::onDumpInfo() const { return SkString(); }
+#endif

@@ -63,7 +63,10 @@ class Error {
     kSocketReadFailure,
     kSocketSendFailure,
 
+    // MDNS errors.
     kMdnsRegisterFailure,
+    kMdnsReadFailure,
+    kMdnsNonConformingFailure,
 
     kParseError,
     kUnknownMessageType,
@@ -116,6 +119,9 @@ class Error {
 
     // The certificate failed to chain to a trusted root.
     kErrCertsVerifyGeneric,
+
+    // The certificate was not found in the trust store.
+    kErrCertsVerifyUntrustedCert,
 
     // The CRL is missing or failed to verify.
     kErrCrlInvalid,
@@ -260,6 +266,7 @@ class ErrorOr {
     assert(error_.code() != Error::Code::kNone);
   }
 
+  ErrorOr(const ErrorOr& other) = delete;
   ErrorOr(ErrorOr&& other) noexcept : is_value_(other.is_value_) {
     // NB: Both |value_| and |error_| are uninitialized memory at this point!
     // Unlike the other constructors, the compiler will not auto-generate
@@ -272,6 +279,7 @@ class ErrorOr {
     }
   }
 
+  ErrorOr& operator=(const ErrorOr& other) = delete;
   ErrorOr& operator=(ErrorOr&& other) noexcept {
     this->~ErrorOr<ValueType>();
     new (this) ErrorOr<ValueType>(std::move(other));

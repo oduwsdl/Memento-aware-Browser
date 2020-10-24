@@ -93,18 +93,68 @@ bool CheckForUnoptimizedImagePolicy(ExecutionContext* context,
   return false;
 }
 
-}  // namespace
+// This implements the HTML Standard's list of available images tuple-matching
+// logic [1]. In our implementation, it is only used to determine whether or not
+// we should skip queueing the microtask that continues the rest of the image
+// loading algorithm. But the actual decision to reuse the image is determined
+// by ResourceFetcher, and is much stricter.
+// [1]:
+// https://html.spec.whatwg.org/multipage/images.html#updating-the-image-data:list-of-available-images
+bool CanReuseFromListOfAvailableImages(
+    const Resource* resource,
+    CrossOriginAttributeValue cross_origin_attribute,
+    const SecurityOrigin* origin) {
+  const ResourceRequestHead& request = resource->GetResourceRequest();
+  bool is_same_origin = request.RequestorOrigin()->IsSameOriginWith(origin);
+  if (cross_origin_attribute != kCrossOriginAttributeNotSet && !is_same_origin)
+    return false;
 
-static ImageLoader::BypassMainWorldBehavior ShouldBypassMainWorldCSP(
-    ImageLoader* loader) {
-  DCHECK(loader);
-  DCHECK(loader->GetElement());
-  if (ContentSecurityPolicy::ShouldBypassMainWorld(
-          loader->GetElement()->GetExecutionContext())) {
-    return ImageLoader::kBypassMainWorldCSP;
+  if (request.GetCredentialsMode() ==
+          network::mojom::CredentialsMode::kSameOrigin &&
+      cross_origin_attribute != kCrossOriginAttributeAnonymous) {
+    return false;
   }
-  return ImageLoader::kDoNotBypassMainWorldCSP;
+
+  return true;
 }
+
+// Returns whether subresource redirect can be attempted for the image fetch.
+// Redirect to other origins could be disabled due to CSP or CORS restrictions.
+bool ShouldEnableSubresourceRedirect(HTMLImageElement* image_element,
+                                     const KURL& url) {
+  // Allow redirection only when DataSaver is enabled and subresource redirect
+  // feature is enabled which allows redirecting to better optimized versions.
+  if (!base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect) ||
+      !GetNetworkStateNotifier().SaveDataEnabled()) {
+    return false;
+  }
+  // Enable subresource redirect only for <img> elements created by parser.
+  // Images created from javascript, fetched via XHR/Fetch API should not be
+  // subresource redirected due to the additional CORB/CORS handling needed for
+  // them.
+  if (!image_element || !image_element->ElementCreatedByParser()) {
+    return false;
+  }
+  // Create a cross origin URL by appending a string to the original host. This
+  // is used to find whether CSP is restricting image fetches from other
+  // origins.
+  KURL cross_origin_url = url;
+  cross_origin_url.SetHost(url.Host() + "crossorigin.com");
+  auto* content_security_policy =
+      image_element->GetExecutionContext()->GetContentSecurityPolicy();
+  if (content_security_policy &&
+      !content_security_policy->AllowImageFromSource(
+          cross_origin_url, cross_origin_url, RedirectStatus::kNoRedirect,
+          ReportingDisposition::kSuppressReporting)) {
+    return false;
+  }
+  // Allow subresource redirect only when cross-origin attribute is not set,
+  // which indicates CORS validation is not triggered for the image.
+  return (GetCrossOriginAttributeValue(image_element->FastGetAttribute(
+              html_names::kCrossoriginAttr)) == kCrossOriginAttributeNotSet);
+}
+
+}  // namespace
 
 class ImageLoader::Task {
  public:
@@ -112,22 +162,11 @@ class ImageLoader::Task {
        UpdateFromElementBehavior update_behavior,
        network::mojom::ReferrerPolicy referrer_policy)
       : loader_(loader),
-        should_bypass_main_world_csp_(ShouldBypassMainWorldCSP(loader)),
         update_behavior_(update_behavior),
         referrer_policy_(referrer_policy) {
     ExecutionContext* context = loader_->GetElement()->GetExecutionContext();
     probe::AsyncTaskScheduled(context, "Image", &async_task_id_);
-    v8::Isolate* isolate = V8PerIsolateData::MainThreadIsolate();
-    v8::HandleScope scope(isolate);
-    // If we're invoked from C++ without a V8 context on the stack, we should
-    // run the microtask in the context of the element's document's main world.
-    if (!isolate->GetCurrentContext().IsEmpty()) {
-      script_state_ = ScriptState::Current(isolate);
-    } else {
-      script_state_ = ToScriptStateForMainWorld(
-          loader->GetElement()->GetDocument().GetFrame());
-      DCHECK(script_state_);
-    }
+    world_ = context->GetCurrentWorld();
   }
 
   void Run() {
@@ -135,29 +174,20 @@ class ImageLoader::Task {
       return;
     ExecutionContext* context = loader_->GetElement()->GetExecutionContext();
     probe::AsyncTask async_task(context, &async_task_id_);
-    if (script_state_ && script_state_->ContextIsValid()) {
-      ScriptState::Scope scope(script_state_);
-      loader_->DoUpdateFromElement(should_bypass_main_world_csp_,
-                                   update_behavior_, referrer_policy_);
-    } else {
-      // This call does not access v8::Context internally.
-      loader_->DoUpdateFromElement(should_bypass_main_world_csp_,
-                                   update_behavior_, referrer_policy_);
-    }
+    loader_->DoUpdateFromElement(world_, update_behavior_, referrer_policy_);
   }
 
   void ClearLoader() {
     loader_ = nullptr;
-    script_state_ = nullptr;
+    world_ = nullptr;
   }
 
   base::WeakPtr<Task> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:
   WeakPersistent<ImageLoader> loader_;
-  BypassMainWorldBehavior should_bypass_main_world_csp_;
   UpdateFromElementBehavior update_behavior_;
-  WeakPersistent<ScriptState> script_state_;
+  scoped_refptr<const DOMWrapperWorld> world_;
   network::mojom::ReferrerPolicy referrer_policy_;
 
   probe::AsyncTaskId async_task_id_;
@@ -376,22 +406,17 @@ void ImageLoader::SetImageWithoutConsideringPendingLoadEvent(
 
 static void ConfigureRequest(
     FetchParameters& params,
-    ImageLoader::BypassMainWorldBehavior bypass_behavior,
     Element& element,
     const ClientHintsPreferences& client_hints_preferences) {
-  if (bypass_behavior == ImageLoader::kBypassMainWorldCSP) {
-    params.SetContentSecurityCheck(
-        network::mojom::CSPDisposition::DO_NOT_CHECK);
-  }
-
   CrossOriginAttributeValue cross_origin = GetCrossOriginAttributeValue(
       element.FastGetAttribute(html_names::kCrossoriginAttr));
   if (cross_origin != kCrossOriginAttributeNotSet) {
     params.SetCrossOriginAccessControl(
-        element.GetDocument().GetSecurityOrigin(), cross_origin);
+        element.GetExecutionContext()->GetSecurityOrigin(), cross_origin);
   }
 
-  if (RuntimeEnabledFeatures::PriorityHintsEnabled(&element.GetDocument())) {
+  if (RuntimeEnabledFeatures::PriorityHintsEnabled(
+          element.GetExecutionContext())) {
     mojom::FetchImportanceMode importance_mode =
         GetFetchImportanceAttributeValue(
             element.FastGetAttribute(html_names::kImportanceAttr));
@@ -457,7 +482,7 @@ void ImageLoader::UpdateImageState(ImageResourceContent* new_image_content) {
 }
 
 void ImageLoader::DoUpdateFromElement(
-    BypassMainWorldBehavior bypass_behavior,
+    scoped_refptr<const DOMWrapperWorld> world,
     UpdateFromElementBehavior update_behavior,
     network::mojom::ReferrerPolicy referrer_policy,
     UpdateType update_type) {
@@ -484,12 +509,12 @@ void ImageLoader::DoUpdateFromElement(
   if (!url.IsNull() && !url.IsEmpty()) {
     // Unlike raw <img>, we block mixed content inside of <picture> or
     // <img srcset>.
-    ResourceLoaderOptions resource_loader_options;
+    ResourceLoaderOptions resource_loader_options(std::move(world));
     resource_loader_options.initiator_info.name = GetElement()->localName();
     ResourceRequest resource_request(url);
     if (update_behavior == kUpdateForcedReload) {
       resource_request.SetCacheMode(mojom::FetchCacheMode::kBypassCache);
-      resource_request.SetPreviewsState(WebURLRequest::kPreviewsNoTransform);
+      resource_request.SetPreviewsState(PreviewsTypes::kPreviewsNoTransform);
     }
 
     resource_request.SetReferrerPolicy(referrer_policy);
@@ -497,15 +522,18 @@ void ImageLoader::DoUpdateFromElement(
     // Correct the RequestContext if necessary.
     if (IsA<HTMLPictureElement>(GetElement()->parentNode()) ||
         !GetElement()->FastGetAttribute(html_names::kSrcsetAttr).IsNull()) {
-      resource_request.SetRequestContext(mojom::RequestContextType::IMAGE_SET);
+      resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::IMAGE_SET);
       resource_request.SetRequestDestination(
           network::mojom::RequestDestination::kImage);
     } else if (IsA<HTMLObjectElement>(GetElement())) {
-      resource_request.SetRequestContext(mojom::RequestContextType::OBJECT);
+      resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::OBJECT);
       resource_request.SetRequestDestination(
           network::mojom::RequestDestination::kObject);
     } else if (IsA<HTMLEmbedElement>(GetElement())) {
-      resource_request.SetRequestContext(mojom::RequestContextType::EMBED);
+      resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::EMBED);
       resource_request.SetRequestDestination(
           network::mojom::RequestDestination::kEmbed);
     }
@@ -516,7 +544,8 @@ void ImageLoader::DoUpdateFromElement(
       resource_request.SetHttpHeaderField(http_names::kCacheControl,
                                           "max-age=0");
       resource_request.SetKeepalive(true);
-      resource_request.SetRequestContext(mojom::RequestContextType::PING);
+      resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::PING);
     }
 
     // Plug-ins should not load via service workers as plug-ins may have their
@@ -531,7 +560,7 @@ void ImageLoader::DoUpdateFromElement(
     DCHECK(document.GetFrame());
     FetchParameters params(std::move(resource_request),
                            resource_loader_options);
-    ConfigureRequest(params, bypass_behavior, *element_,
+    ConfigureRequest(params, *element_,
                      document.GetFrame()->GetClientHintsPreferences());
 
     if (update_behavior != kUpdateForcedReload &&
@@ -565,21 +594,12 @@ void ImageLoader::DoUpdateFromElement(
       params.SetLazyImageNonBlocking();
     }
 
-    // Enable subresource redirect for <img> elements created by parser when
-    // data saver is on. Images created from javascript, fetched via XHR/Fetch
-    // API should not be subresource redirected due to the additional CORB/CORS
-    // handling needed for them.
-    // TODO(rajendrant): Disable subresource redirect when CORS,
-    // content-security-policy does not allow cross-origin accesses.
-    if (auto* html_image = DynamicTo<HTMLImageElement>(GetElement())) {
-      if (base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect) &&
-          html_image->ElementCreatedByParser() &&
-          GetNetworkStateNotifier().SaveDataEnabled()) {
-        auto& resource_request = params.MutableResourceRequest();
-        resource_request.SetPreviewsState(
-            resource_request.GetPreviewsState() |
-            WebURLRequest::kSubresourceRedirectOn);
-      }
+    if (ShouldEnableSubresourceRedirect(
+            DynamicTo<HTMLImageElement>(GetElement()), params.Url())) {
+      auto& subresource_request = params.MutableResourceRequest();
+      subresource_request.SetPreviewsState(
+          subresource_request.GetPreviewsState() |
+          PreviewsTypes::kSubresourceRedirectOn);
     }
 
     new_image_content = ImageResourceContent::Fetch(params, document.Fetcher());
@@ -686,8 +706,8 @@ void ImageLoader::UpdateFromElement(
   }
 
   if (ShouldLoadImmediately(ImageSourceToKURL(image_source_url))) {
-    DoUpdateFromElement(kDoNotBypassMainWorldCSP, update_behavior,
-                        referrer_policy, UpdateType::kSync);
+    DoUpdateFromElement(element_->GetExecutionContext()->GetCurrentWorld(),
+                        update_behavior, referrer_policy, UpdateType::kSync);
     return;
   }
   // Allow the idiom "img.src=''; img.src='.." to clear down the image before an
@@ -739,10 +759,18 @@ bool ImageLoader::ShouldLoadImmediately(const KURL& url) const {
   // content when style recalc is over and DOM mutation is allowed again.
   if (!url.IsNull()) {
     Resource* resource = GetMemoryCache()->ResourceForURL(
-        url, element_->GetDocument().Fetcher()->GetCacheIdentifier());
-    if (resource && !resource->ErrorOccurred())
+        url, element_->GetDocument().Fetcher()->GetCacheIdentifier(url));
+
+    if (resource && !resource->ErrorOccurred() &&
+        CanReuseFromListOfAvailableImages(
+            resource,
+            GetCrossOriginAttributeValue(
+                element_->FastGetAttribute(html_names::kCrossoriginAttr)),
+            element_->GetExecutionContext()->GetSecurityOrigin())) {
       return true;
+    }
   }
+
   return (IsA<HTMLObjectElement>(*element_) ||
           IsA<HTMLEmbedElement>(*element_));
 }
@@ -916,7 +944,8 @@ void ImageLoader::DispatchPendingErrorEvent(
   count->ClearAndCheckLoadEvent();
 }
 
-bool ImageLoader::GetImageAnimationPolicy(ImageAnimationPolicy& policy) {
+bool ImageLoader::GetImageAnimationPolicy(
+    mojom::blink::ImageAnimationPolicy& policy) {
   if (!GetElement()->GetDocument().GetSettings())
     return false;
 

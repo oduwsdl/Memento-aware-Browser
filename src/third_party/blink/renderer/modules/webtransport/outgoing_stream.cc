@@ -66,6 +66,7 @@ class OutgoingStream::UnderlyingSink final : public UnderlyingSinkBase {
     DCHECK(!outgoing_stream_->write_promise_resolver_);
 
     if (outgoing_stream_->client_) {
+      outgoing_stream_->state_ = State::kSentFin;
       outgoing_stream_->client_->SendFin();
       outgoing_stream_->client_ = nullptr;
     }
@@ -211,6 +212,7 @@ void OutgoingStream::OnPeerClosed(MojoResult result,
 void OutgoingStream::HandlePipeClosed() {
   DVLOG(1) << "OutgoingStream::HandlePipeClosed() this=" << this;
 
+  ScriptState::Scope scope(script_state_);
   ErrorStreamAbortAndReset(IsLocalAbort(false));
 }
 
@@ -388,6 +390,8 @@ void OutgoingStream::AbortAndReset() {
   }
 
   if (client_) {
+    DCHECK_EQ(state_, State::kOpen);
+    state_ = State::kAborted;
     client_->OnOutgoingStreamAbort();
     client_ = nullptr;
   }

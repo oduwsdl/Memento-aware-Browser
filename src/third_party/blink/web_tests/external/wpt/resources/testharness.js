@@ -520,6 +520,43 @@ policies and contribution forms [3].
             Object.prototype.toString.call(worker) == '[object ServiceWorker]';
     }
 
+    var seen_func_name = Object.create(null);
+
+    function get_test_name(func, name)
+    {
+        if (name) {
+            return name;
+        }
+
+        if (func) {
+            var func_code = func.toString();
+
+            // Try and match with brackets, but fallback to matching without
+            var arrow = func_code.match(/^\(\)\s*=>\s*(?:{(.*)}\s*|(.*))$/);
+
+            // Check for JS line separators
+            if (arrow !== null && !/[\u000A\u000D\u2028\u2029]/.test(func_code)) {
+                var trimmed = (arrow[1] !== undefined ? arrow[1] : arrow[2]).trim();
+                // drop trailing ; if there's no earlier ones
+                trimmed = trimmed.replace(/^([^;]*)(;\s*)+$/, "$1");
+
+                if (trimmed) {
+                    let name = trimmed;
+                    if (seen_func_name[trimmed]) {
+                        // This subtest name already exists, so add a suffix.
+                        name += " " + seen_func_name[trimmed];
+                    } else {
+                        seen_func_name[trimmed] = 0;
+                    }
+                    seen_func_name[trimmed] += 1;
+                    return name;
+                }
+            }
+        }
+
+        return test_environment.next_default_test_name();
+    }
+
     /*
      * API functions
      */
@@ -530,17 +567,18 @@ policies and contribution forms [3].
             tests.status.message = '`test` invoked after `promise_setup`';
             tests.complete();
         }
-        var test_name = name ? name : test_environment.next_default_test_name();
+        var test_name = get_test_name(func, name);
         var test_obj = new Test(test_name, properties);
         var value = test_obj.step(func, test_obj, test_obj);
 
         if (value !== undefined) {
-            var msg = "Test named \"" + test_name +
-                "\" inappropriately returned a value";
+            var msg = 'Test named "' + test_name +
+                '" passed a function to `test` that returned a value.';
 
             try {
-                if (value && value.hasOwnProperty("then")) {
-                    msg += ", consider using `promise_test` instead";
+                if (value && typeof value.then === 'function') {
+                    msg += ' Consider using `promise_test` instead when ' +
+                        'using Promises or async/await.';
                 }
             } catch (err) {}
 
@@ -565,10 +603,33 @@ policies and contribution forms [3].
             name = func;
             func = null;
         }
-        var test_name = name ? name : test_environment.next_default_test_name();
+        var test_name = get_test_name(func, name);
         var test_obj = new Test(test_name, properties);
         if (func) {
-            test_obj.step(func, test_obj, test_obj);
+            var value = test_obj.step(func, test_obj, test_obj);
+
+            // Test authors sometimes return values to async_test, expecting us
+            // to handle the value somehow. Make doing so a harness error to be
+            // clear this is invalid, and point authors to promise_test if it
+            // may be appropriate.
+            //
+            // Note that we only perform this check on the initial function
+            // passed to async_test, not on any later steps - we haven't seen a
+            // consistent problem with those (and it's harder to check).
+            if (value !== undefined) {
+                var msg = 'Test named "' + test_name +
+                    '" passed a function to `async_test` that returned a value.';
+
+                try {
+                    if (value && typeof value.then === 'function') {
+                        msg += ' Consider using `promise_test` instead when ' +
+                            'using Promises or async/await.';
+                    }
+                } catch (err) {}
+
+                tests.set_status(tests.status.ERROR, msg);
+                tests.complete();
+            }
         }
         return test_obj;
     }
@@ -579,7 +640,7 @@ policies and contribution forms [3].
             name = func;
             func = null;
         }
-        var test_name = name ? name : test_environment.next_default_test_name();
+        var test_name = get_test_name(func, name);
         var test = new Test(test_name, properties);
         test._is_promise_test = true;
 
@@ -2069,7 +2130,7 @@ policies and contribution forms [3].
                 func();
             } else {
                 if(remaining === 0) {
-                    assert(false, "wait_for", description,
+                    assert(false, "step_wait_func", description,
                            "Timed out waiting on condition");
                 }
                 remaining--;
@@ -2084,7 +2145,7 @@ policies and contribution forms [3].
                                                   timeout=3000, interval=100) {
         /**
          * Poll for a function to return true, and invoke a callback
-         * followed this.done() once it does, or assert if a timeout
+         * followed by this.done() once it does, or assert if a timeout
          * is reached. This is preferred over a simple step_timeout
          * whenever possible since it allows the timeout to be longer
          * to reduce intermittents without compromising test execution speed
@@ -2609,6 +2670,7 @@ policies and contribution forms [3].
         this.test_done_callbacks = [];
         this.all_done_callbacks = [];
 
+        this.hide_test_state = false;
         this.pending_remotes = [];
 
         this.status = new TestsStatus();
@@ -2656,6 +2718,8 @@ policies and contribution forms [3].
                     if (this.timeout_length) {
                          this.timeout_length *= this.timeout_multiplier;
                     }
+                } else if (p == "hide_test_state") {
+                    this.hide_test_state = value;
                 }
             }
         }
@@ -3162,7 +3226,7 @@ policies and contribution forms [3].
             this.phase = this.HAVE_RESULTS;
         }
         var done_count = tests.tests.length - tests.num_pending;
-        if (this.output_node) {
+        if (this.output_node && !tests.hide_test_state) {
             if (done_count < 100 ||
                 (done_count < 1000 && done_count % 100 === 0) ||
                 done_count % 1000 === 0) {
@@ -3770,7 +3834,7 @@ policies and contribution forms [3].
     function get_title()
     {
         if ('document' in global_scope) {
-            //Don't use document.title to work around an Opera bug in XHTML documents
+            //Don't use document.title to work around an Opera/Presto bug in XHTML documents
             var title = document.getElementsByTagName("title")[0];
             if (title && title.firstChild && title.firstChild.data) {
                 return title.firstChild.data;
@@ -3995,5 +4059,5 @@ span.ok, span.timeout, span.error {\
 }\
 ";
 
-})(this);
+})(self);
 // vim: set expandtab shiftwidth=4 tabstop=4:

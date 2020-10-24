@@ -48,6 +48,7 @@ struct ResourceRequest;
 
 namespace blink {
 
+class ResourceLoadInfoNotifierWrapper;
 class WebData;
 class WebURLLoaderClient;
 class WebURLResponse;
@@ -68,7 +69,6 @@ class WebURLLoader {
       std::unique_ptr<network::ResourceRequest> request,
       scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
       int requestor_id,
-      bool download_to_network_cache_only,
       bool pass_response_pipe_to_client,
       bool no_mime_sniffing,
       base::TimeDelta timeout_interval,
@@ -78,7 +78,9 @@ class WebURLLoader {
       WebData&,
       int64_t& encoded_data_length,
       int64_t& encoded_body_length,
-      WebBlobInfo& downloaded_blob) = 0;
+      WebBlobInfo& downloaded_blob,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper) = 0;
 
   // Load the request asynchronously, sending notifications to the given
   // client.  The client will receive no further notifications if the
@@ -87,8 +89,8 @@ class WebURLLoader {
       std::unique_ptr<network::ResourceRequest> request,
       scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
       int requestor_id,
-      bool download_to_network_cache_only,
       bool no_mime_sniffing,
+      std::unique_ptr<ResourceLoadInfoNotifierWrapper>,
       WebURLLoaderClient*) = 0;
 
   // Suspends/resumes an asynchronous load.

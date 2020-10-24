@@ -83,6 +83,18 @@ static const std::unordered_map<std::string, PFN_vkVoidFunction> instanceFunctio
 	MAKE_VULKAN_INSTANCE_ENTRY(vkGetPhysicalDeviceQueueFamilyProperties2KHR),
 	MAKE_VULKAN_INSTANCE_ENTRY(vkGetPhysicalDeviceMemoryProperties2KHR),
 	MAKE_VULKAN_INSTANCE_ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties2KHR),
+	// VK_EXT_debug_utils
+	MAKE_VULKAN_INSTANCE_ENTRY(vkCmdBeginDebugUtilsLabelEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkCmdEndDebugUtilsLabelEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkCmdInsertDebugUtilsLabelEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkCreateDebugUtilsMessengerEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkDestroyDebugUtilsMessengerEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkQueueBeginDebugUtilsLabelEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkQueueEndDebugUtilsLabelEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkQueueInsertDebugUtilsLabelEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkSetDebugUtilsObjectNameEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkSetDebugUtilsObjectTagEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkSubmitDebugUtilsMessageEXT),
 #ifndef __ANDROID__
 	// VK_KHR_surface
 	MAKE_VULKAN_INSTANCE_ENTRY(vkDestroySurfaceKHR),
@@ -101,6 +113,16 @@ static const std::unordered_map<std::string, PFN_vkVoidFunction> instanceFunctio
 	// VK_KHR_xlib_surface
 	MAKE_VULKAN_INSTANCE_ENTRY(vkCreateXlibSurfaceKHR),
 	MAKE_VULKAN_INSTANCE_ENTRY(vkGetPhysicalDeviceXlibPresentationSupportKHR),
+#endif
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+	// VK_KHR_wayland_surface
+	MAKE_VULKAN_INSTANCE_ENTRY(vkCreateWaylandSurfaceKHR),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkGetPhysicalDeviceWaylandPresentationSupportKHR),
+#endif
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+	// VK_EXT_directfb_surface
+	MAKE_VULKAN_INSTANCE_ENTRY(vkCreateDirectFBSurfaceEXT),
+	MAKE_VULKAN_INSTANCE_ENTRY(vkGetPhysicalDeviceDirectFBPresentationSupportEXT),
 #endif
 #ifdef VK_USE_PLATFORM_MACOS_MVK
 	// VK_MVK_macos_surface
@@ -261,12 +283,26 @@ static const std::unordered_map<std::string, PFN_vkVoidFunction> deviceFunctionP
 	MAKE_VULKAN_DEVICE_ENTRY(vkDestroyDescriptorUpdateTemplate),
 	MAKE_VULKAN_DEVICE_ENTRY(vkUpdateDescriptorSetWithTemplate),
 	MAKE_VULKAN_DEVICE_ENTRY(vkGetDescriptorSetLayoutSupport),
+	// Device level VK_EXT_debug_utils functions
+	MAKE_VULKAN_DEVICE_ENTRY(vkCmdBeginDebugUtilsLabelEXT),
+	MAKE_VULKAN_DEVICE_ENTRY(vkCmdEndDebugUtilsLabelEXT),
+	MAKE_VULKAN_DEVICE_ENTRY(vkCmdInsertDebugUtilsLabelEXT),
+	MAKE_VULKAN_DEVICE_ENTRY(vkQueueBeginDebugUtilsLabelEXT),
+	MAKE_VULKAN_DEVICE_ENTRY(vkQueueEndDebugUtilsLabelEXT),
+	MAKE_VULKAN_DEVICE_ENTRY(vkQueueInsertDebugUtilsLabelEXT),
+	MAKE_VULKAN_DEVICE_ENTRY(vkSetDebugUtilsObjectNameEXT),
+	MAKE_VULKAN_DEVICE_ENTRY(vkSetDebugUtilsObjectTagEXT),
 #ifdef __ANDROID__
 	MAKE_VULKAN_DEVICE_ENTRY(vkGetSwapchainGrallocUsageANDROID),
 	MAKE_VULKAN_DEVICE_ENTRY(vkGetSwapchainGrallocUsage2ANDROID),
 	MAKE_VULKAN_DEVICE_ENTRY(vkAcquireImageANDROID),
 	MAKE_VULKAN_DEVICE_ENTRY(vkQueueSignalReleaseImageANDROID),
 #endif
+	// Vulkan 1.2 Entry point functions
+	MAKE_VULKAN_DEVICE_ENTRY(vkCreateRenderPass2),
+	MAKE_VULKAN_DEVICE_ENTRY(vkCmdBeginRenderPass2),
+	MAKE_VULKAN_DEVICE_ENTRY(vkCmdEndRenderPass2),
+	MAKE_VULKAN_DEVICE_ENTRY(vkCmdNextSubpass2),
 };
 
 static const std::vector<std::pair<const char *, std::unordered_map<std::string, PFN_vkVoidFunction>>> deviceExtensionFunctionPointers = {

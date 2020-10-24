@@ -49,9 +49,6 @@ TEST_P(NonzeroTextureCreationTests, Depth32TextureCreationDepthClears) {
     // Copies from depth textures not supported on the OpenGL backend right now.
     DAWN_SKIP_TEST_IF(IsOpenGL());
 
-    // Closing the pending command list crashes flakily on D3D12 NVIDIA only.
-    DAWN_SKIP_TEST_IF(IsD3D12() && IsNvidia());
-
     wgpu::TextureDescriptor descriptor;
     descriptor.dimension = wgpu::TextureDimension::e2D;
     descriptor.size.width = kSize;
@@ -66,7 +63,8 @@ TEST_P(NonzeroTextureCreationTests, Depth32TextureCreationDepthClears) {
     // format.
     // TODO(crbug.com/dawn/145): Test other formats via sampling.
     wgpu::Texture texture = device.CreateTexture(&descriptor);
-    EXPECT_PIXEL_FLOAT_EQ(1.f, texture, 0, 0);
+    std::vector<float> expected(kSize * kSize, 1.f);
+    EXPECT_TEXTURE_EQ(expected.data(), texture, 0, 0, kSize, kSize, 0, 0);
 }
 
 // Test that non-zero mip level clears 0xFF because toggle is enabled.
@@ -145,7 +143,8 @@ TEST_P(NonzeroTextureCreationTests, NonrenderableTextureFormat) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    std::vector<uint32_t> expected(bufferSize, 0x01010101);
+    uint32_t expectedBytes = IsVulkan() ? 0x7F7F7F7F : 0x01010101;
+    std::vector<uint32_t> expected(bufferSize, expectedBytes);
     EXPECT_BUFFER_U32_RANGE_EQ(expected.data(), bufferDst, 0, 8);
 }
 
@@ -178,7 +177,8 @@ TEST_P(NonzeroTextureCreationTests, NonRenderableTextureClearWithMultiArrayLayer
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    std::vector<uint32_t> expected(bufferSize, 0x01010101);
+    uint32_t expectedBytes = IsVulkan() ? 0x7F7F7F7F : 0x01010101;
+    std::vector<uint32_t> expected(bufferSize, expectedBytes);
     EXPECT_BUFFER_U32_RANGE_EQ(expected.data(), bufferDst, 0, 8);
 }
 
@@ -246,7 +246,7 @@ TEST_P(NonzeroTextureCreationTests, NonRenderableAllSubresourcesFilled) {
     baseDescriptor.mipLevelCount = 1;
     baseDescriptor.usage = wgpu::TextureUsage::CopySrc;
 
-    RGBA8 filled(1, 1, 1, 1);
+    RGBA8 filled = IsVulkan() ? RGBA8(127, 127, 127, 127) : RGBA8(1, 1, 1, 1);
 
     {
         wgpu::TextureDescriptor descriptor = baseDescriptor;
@@ -292,6 +292,6 @@ DAWN_INSTANTIATE_TEST(NonzeroTextureCreationTests,
                       MetalBackend({"nonzero_clear_resources_on_creation_for_testing"},
                                    {"lazy_clear_resource_on_first_use"}),
                       OpenGLBackend({"nonzero_clear_resources_on_creation_for_testing"},
-                                   {"lazy_clear_resource_on_first_use"}),
+                                    {"lazy_clear_resource_on_first_use"}),
                       VulkanBackend({"nonzero_clear_resources_on_creation_for_testing"},
-                                   {"lazy_clear_resource_on_first_use"}));
+                                    {"lazy_clear_resource_on_first_use"}));

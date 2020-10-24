@@ -30,13 +30,13 @@ $VerifiedPlatform linux-arm64 linux-armv6l
 $VerifiedPlatform linux-mips64 linux-mips64le linux-mipsle
 
 # vpython.
-infra/tools/luci/vpython/${platform} git_revision:b01b3ede35a24f76f21420f11d13f234848e5d34
+infra/tools/luci/vpython/${platform} git_revision:e5cc6d29d10646efa929a716e0791af434534341
 
 # LUCI editor
-infra/tools/luci/led/${platform} git_revision:425f77b00872a18804a94f13cbb852690f72e2de
+infra/tools/luci/led/${platform} git_revision:8124183344c6456fb776116b5bcf4a41ddcdc85f
 
 # LUCI config generator
-infra/tools/luci/lucicfg/${platform} git_revision:a6ae45eac1d7aba7e6ace764899ed4af4905ee87
+infra/tools/luci/lucicfg/${platform} git_revision:71ad967b1f3b33b610a3d523706d43162f6a1907
 
 # Mac toolchain installer
 infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:9a1adc55bf4a1173784da3ba2f8cb06421606748
@@ -48,13 +48,16 @@ infra/tools/prpc/${platform} git_revision:dace3c38ddbc95ee87f77f6fac1d30b8333283
 infra/tools/luci-auth/${platform} git_revision:510e7187aa80b1b0d490f069437d119c28d1ea48
 
 # LUCI Buildbucket CLI
-infra/tools/bb/${platform} git_revision:616b3dd4ae6ab7225f2f2cad6e45e16030ffa6e8
+infra/tools/bb/${platform} git_revision:165c851a5838dd48e66240a0de3da872b4b31d01
 
 # LUCI ResultDB CLI
-infra/tools/rdb/${platform} git_revision:1d80903917747292c1642f80de334a319d74b97c
+infra/tools/rdb/${platform} git_revision:9995c74a42bb6d1e5af62ea6b9fc88ae84550c84
 
 # CHROMEOS Buildjobs CLI
 chromiumos/infra/crosjobs/${platform=linux-amd64} git_revision:ed616d595eb7241d39d34907050d2949121d6ae8
 
 # goma client
-infra/goma/client/${os}-amd64 git_revision:cd24ea8563312b0425106ac19de593d00fac789d
+infra/goma/client/${os}-amd64 git_revision:b3d6d03fbdc1d0cfcdae70db30830a08eece4ae1
+
+# dirmd, a tool to work with DIR_METADATA files
+infra/tools/dirmd/${platform} git_revision:1d24fedc0739eae2d2efec0ff5cf54c20c44171e

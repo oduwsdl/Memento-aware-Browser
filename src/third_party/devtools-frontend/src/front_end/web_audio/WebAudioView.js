@@ -128,7 +128,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget {
   }
 
   /**
-   * @param {!WebAudio.WebAudioModel} webAudioModel
+   * @param {!WebAudioModel} webAudioModel
    */
   _removeEventListeners(webAudioModel) {
     webAudioModel.removeEventListener(ModelEvents.ContextCreated, this._contextCreated, this);
@@ -392,7 +392,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget {
       return;
     }
 
-    for (const model of SDK.SDKModel.TargetManager.instance().models(WebAudio.WebAudioModel)) {
+    for (const model of SDK.SDKModel.TargetManager.instance().models(WebAudioModel)) {
       // Display summary only for real-time context.
       if (context.contextType === 'realtime') {
         if (!this._graphManager.hasContext(context.contextId)) {

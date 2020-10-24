@@ -38,10 +38,11 @@ void RenderbufferVk::onDestroy(const gl::Context *context)
 }
 
 angle::Result RenderbufferVk::setStorageImpl(const gl::Context *context,
-                                             size_t samples,
+                                             GLsizei samples,
                                              GLenum internalformat,
-                                             size_t width,
-                                             size_t height)
+                                             GLsizei width,
+                                             GLsizei height,
+                                             gl::MultisamplingMode mode)
 {
     ContextVk *contextVk       = vk::GetImpl(context);
     RendererVk *renderer       = contextVk->getRenderer();
@@ -56,38 +57,70 @@ angle::Result RenderbufferVk::setStorageImpl(const gl::Context *context,
     {
         // Check against the state if we need to recreate the storage.
         if (internalformat != mState.getFormat().info->internalFormat ||
-            static_cast<GLsizei>(width) != mState.getWidth() ||
-            static_cast<GLsizei>(height) != mState.getHeight())
+            width != mState.getWidth() || height != mState.getHeight() ||
+            samples != mState.getSamples() || mode != mState.getMultisamplingMode())
         {
             releaseImage(contextVk);
         }
     }
 
-    if ((mImage == nullptr || !mImage->valid()) && (width != 0 && height != 0))
+    if ((mImage != nullptr && mImage->valid()) || width == 0 || height == 0)
     {
-        if (mImage == nullptr)
-        {
-            mImage     = new vk::ImageHelper();
-            mOwnsImage = true;
-            mImageObserverBinding.bind(mImage);
-        }
+        return angle::Result::Continue;
+    }
 
-        const angle::Format &textureFormat = vkFormat.actualImageFormat();
-        bool isDepthOrStencilFormat = textureFormat.depthBits > 0 || textureFormat.stencilBits > 0;
-        const VkImageUsageFlags usage =
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-            VK_IMAGE_USAGE_SAMPLED_BIT |
-            (textureFormat.redBits > 0 ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT : 0) |
-            (isDepthOrStencilFormat ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : 0);
+    if (mImage == nullptr)
+    {
+        mImage     = new vk::ImageHelper();
+        mOwnsImage = true;
+        mImageObserverBinding.bind(mImage);
+        mImageViews.init(renderer);
+    }
 
-        VkExtent3D extents = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1u};
-        ANGLE_TRY(mImage->init(contextVk, gl::TextureType::_2D, extents, vkFormat,
-                               static_cast<uint32_t>(samples), usage, 0, 0, 1, 1));
+    const angle::Format &textureFormat = vkFormat.actualImageFormat();
+    const bool isDepthStencilFormat    = textureFormat.hasDepthOrStencilBits();
+    ASSERT(textureFormat.redBits > 0 || isDepthStencilFormat);
 
-        VkMemoryPropertyFlags flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        ANGLE_TRY(mImage->initMemory(contextVk, renderer->getMemoryProperties(), flags));
+    // TODO(syoussefi): Currently not supported for depth/stencil images if
+    // VK_KHR_depth_stencil_resolve is not supported.  Chromium only uses this for depth/stencil
+    // buffers and doesn't attempt to read from it.  http://anglebug.com/5065
+    const bool isRenderToTexture =
+        mode == gl::MultisamplingMode::MultisampledRenderToTexture &&
+        (!isDepthStencilFormat || renderer->getFeatures().supportsDepthStencilResolve.enabled);
 
-        mRenderTarget.init(mImage, &mImageViews, 0, 0);
+    const VkImageUsageFlags usage =
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_SAMPLED_BIT |
+        (isDepthStencilFormat ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                              : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) |
+        (isRenderToTexture ? VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT : 0);
+
+    const uint32_t imageSamples = isRenderToTexture ? 1 : samples;
+
+    VkExtent3D extents = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1u};
+    ANGLE_TRY(mImage->init(contextVk, gl::TextureType::_2D, extents, vkFormat, imageSamples, usage,
+                           gl::LevelIndex(0), gl::LevelIndex(0), 1, 1));
+
+    VkMemoryPropertyFlags flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    ANGLE_TRY(mImage->initMemory(contextVk, renderer->getMemoryProperties(), flags));
+
+    // If multisampled render to texture, an implicit multisampled image is created which is used as
+    // the color or depth/stencil attachment.  At the end of the render pass, this image is
+    // automatically resolved into |mImage| and its contents are discarded.
+    if (isRenderToTexture)
+    {
+        mMultisampledImageViews.init(renderer);
+
+        ANGLE_TRY(mMultisampledImage.initImplicitMultisampledRenderToTexture(
+            contextVk, renderer->getMemoryProperties(), gl::TextureType::_2D, samples, *mImage));
+
+        mRenderTarget.init(&mMultisampledImage, &mMultisampledImageViews, mImage, &mImageViews,
+                           gl::LevelIndex(0), 0, RenderTargetTransience::MultisampledTransient);
+    }
+    else
+    {
+        mRenderTarget.init(mImage, &mImageViews, nullptr, nullptr, gl::LevelIndex(0), 0,
+                           RenderTargetTransience::Default);
     }
 
     return angle::Result::Continue;
@@ -95,19 +128,21 @@ angle::Result RenderbufferVk::setStorageImpl(const gl::Context *context,
 
 angle::Result RenderbufferVk::setStorage(const gl::Context *context,
                                          GLenum internalformat,
-                                         size_t width,
-                                         size_t height)
+                                         GLsizei width,
+                                         GLsizei height)
 {
-    return setStorageImpl(context, 1, internalformat, width, height);
+    return setStorageImpl(context, 1, internalformat, width, height,
+                          gl::MultisamplingMode::Regular);
 }
 
 angle::Result RenderbufferVk::setStorageMultisample(const gl::Context *context,
-                                                    size_t samples,
+                                                    GLsizei samples,
                                                     GLenum internalformat,
-                                                    size_t width,
-                                                    size_t height)
+                                                    GLsizei width,
+                                                    GLsizei height,
+                                                    gl::MultisamplingMode mode)
 {
-    return setStorageImpl(context, samples, internalformat, width, height);
+    return setStorageImpl(context, samples, internalformat, width, height, mode);
 }
 
 angle::Result RenderbufferVk::setStorageEGLImageTarget(const gl::Context *context,
@@ -122,6 +157,7 @@ angle::Result RenderbufferVk::setStorageEGLImageTarget(const gl::Context *contex
     mImage           = imageVk->getImage();
     mOwnsImage       = false;
     mImageObserverBinding.bind(mImage);
+    mImageViews.init(renderer);
 
     const vk::Format &vkFormat = renderer->getFormat(image->getFormat().info->sizedInternalFormat);
     const angle::Format &textureFormat = vkFormat.actualImageFormat();
@@ -132,10 +168,9 @@ angle::Result RenderbufferVk::setStorageEGLImageTarget(const gl::Context *contex
     uint32_t rendererQueueFamilyIndex = contextVk->getRenderer()->getQueueFamilyIndex();
     if (mImage->isQueueChangeNeccesary(rendererQueueFamilyIndex))
     {
-        vk::CommandBuffer *commandBuffer = nullptr;
-        ANGLE_TRY(contextVk->endRenderPassAndGetCommandBuffer(&commandBuffer));
+        vk::CommandBuffer &commandBuffer = contextVk->getOutsideRenderPassCommandBuffer();
         mImage->changeLayoutAndQueue(aspect, vk::ImageLayout::ColorAttachment,
-                                     rendererQueueFamilyIndex, commandBuffer);
+                                     rendererQueueFamilyIndex, &commandBuffer);
     }
 
     gl::TextureType viewType = imageVk->getImageTextureType();
@@ -146,7 +181,8 @@ angle::Result RenderbufferVk::setStorageEGLImageTarget(const gl::Context *contex
                                         imageVk->getImage()->getSamples());
     }
 
-    mRenderTarget.init(mImage, &mImageViews, imageVk->getImageLevel(), imageVk->getImageLayer());
+    mRenderTarget.init(mImage, &mImageViews, nullptr, nullptr, imageVk->getImageLevel(),
+                       imageVk->getImageLayer(), RenderTargetTransience::Default);
 
     return angle::Result::Continue;
 }
@@ -191,7 +227,7 @@ void RenderbufferVk::releaseImage(ContextVk *contextVk)
 
     if (mImage && mOwnsImage)
     {
-        mImage->releaseImage(renderer);
+        mImage->releaseImageFromShareContexts(renderer, contextVk);
         mImage->releaseStagingBuffer(renderer);
     }
     else
@@ -201,6 +237,12 @@ void RenderbufferVk::releaseImage(ContextVk *contextVk)
     }
 
     mImageViews.release(renderer);
+
+    if (mMultisampledImage.valid())
+    {
+        mMultisampledImage.releaseImageFromShareContexts(renderer, contextVk);
+    }
+    mMultisampledImageViews.release(renderer);
 }
 
 const gl::InternalFormat &RenderbufferVk::getImplementationSizedFormat() const
@@ -230,12 +272,18 @@ angle::Result RenderbufferVk::getRenderbufferImage(const gl::Context *context,
 {
     // Storage not defined.
     if (!mImage || !mImage->valid())
+    {
         return angle::Result::Continue;
+    }
 
     ContextVk *contextVk = vk::GetImpl(context);
     ANGLE_TRY(mImage->flushAllStagedUpdates(contextVk));
-    return mImage->readPixelsForGetImage(contextVk, packState, packBuffer, 0, 0, format, type,
-                                         pixels);
+
+    gl::MaybeOverrideLuminance(format, type, getColorReadFormat(context),
+                               getColorReadType(context));
+
+    return mImage->readPixelsForGetImage(contextVk, packState, packBuffer, gl::LevelIndex(0), 0,
+                                         format, type, pixels);
 }
 
 void RenderbufferVk::onSubjectStateChange(angle::SubjectIndex index, angle::SubjectMessage message)

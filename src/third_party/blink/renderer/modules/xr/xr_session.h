@@ -41,6 +41,7 @@ class V8XRFrameRequestCallback;
 class XRAnchor;
 class XRAnchorSet;
 class XRCanvasInputProvider;
+class XRDepthInformation;
 class XRDOMOverlayState;
 class XRHitTestOptionsInit;
 class XRHitTestSource;
@@ -48,6 +49,7 @@ class XRLightProbe;
 class XRReferenceSpace;
 class XRRenderState;
 class XRRenderStateInit;
+class XRSessionViewportScaler;
 class XRSpace;
 class XRSystem;
 class XRTransientInputHitTestOptionsInit;
@@ -56,7 +58,6 @@ class XRViewData;
 class XRWebGLLayer;
 class XRWorldInformation;
 class XRWorldTrackingState;
-class XRWorldTrackingStateInit;
 
 using XRSessionFeatureSet = HashSet<device::mojom::XRSessionFeature>;
 
@@ -66,7 +67,6 @@ class XRSession final
       public device::mojom::blink::XRInputSourceButtonListener,
       public ActiveScriptWrappable<XRSession> {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(XRSession);
 
  public:
   // Error strings used outside of XRSession:
@@ -79,13 +79,13 @@ class XRSession final
   static constexpr char kAnchorsFeatureNotSupported[] =
       "Anchors feature is not supported by the session.";
 
-  enum EnvironmentBlendMode {
-    kBlendModeOpaque = 0,
-    kBlendModeAdditive,
-    kBlendModeAlphaBlend
-  };
-
-  enum InteractionMode { kInteractionModeScreen = 0, kInteractionModeWorld };
+  // Runs all the video.requestVideoFrameCallback() callbacks associated with
+  // one HTMLVideoElement. |double| is the |high_res_now_ms|, derived from
+  // MonotonicTimeToZeroBasedDocumentTime(|current_frame_time|), to be passed as
+  // the "now" parameter when executing rVFC callbacks. In other words, a
+  // video.rVFC and an xrSession.rAF callback share the same "now" parameters if
+  // they are run in the same turn of the render loop.
+  using ExecuteVfcCallback = base::OnceCallback<void(double)>;
 
   struct MetricsReporter {
     explicit MetricsReporter(
@@ -107,9 +107,9 @@ class XRSession final
             mojo::PendingReceiver<device::mojom::blink::XRSessionClient>
                 client_receiver,
             device::mojom::blink::XRSessionMode mode,
-            EnvironmentBlendMode environment_blend_mode,
-            InteractionMode interaction_mode,
-            bool uses_input_eventing,
+            device::mojom::blink::XREnvironmentBlendMode environment_blend_mode,
+            device::mojom::blink::XRInteractionMode interaction_mode,
+            device::mojom::blink::XRSessionDeviceConfigPtr device_config,
             bool sensorless_session,
             XRSessionFeatureSet enabled_features);
   ~XRSession() override = default;
@@ -140,9 +140,6 @@ class XRSession final
 
   void updateRenderState(XRRenderStateInit* render_state_init,
                          ExceptionState& exception_state);
-  void updateWorldTrackingState(
-      XRWorldTrackingStateInit* world_tracking_state_init,
-      ExceptionState& exception_state);
   ScriptPromise requestReferenceSpace(ScriptState* script_state,
                                       const String& type,
                                       ExceptionState&);
@@ -238,22 +235,24 @@ class XRSession final
   const AtomicString& InterfaceName() const override;
 
   void OnFocusChanged();
-  void OnFrame(double timestamp,
-               const base::Optional<gpu::MailboxHolder>& output_mailbox_holder);
+  void OnFrame(
+      double timestamp,
+      const base::Optional<gpu::MailboxHolder>& output_mailbox_holder,
+      const base::Optional<gpu::MailboxHolder>& camera_image_mailbox_holder);
 
   // XRInputSourceButtonListener
   void OnButtonEvent(
       device::mojom::blink::XRInputSourceStatePtr input_source) override;
 
-  Vector<XRViewData>& views();
+  const HeapVector<Member<XRViewData>>& views();
 
   void AddTransientInputSource(XRInputSource* input_source);
   void RemoveTransientInputSource(XRInputSource* input_source);
 
   void OnMojoSpaceReset();
 
-  const device::mojom::blink::VRDisplayInfoPtr& GetVRDisplayInfo() const {
-    return display_info_;
+  const device::mojom::blink::VRStageParametersPtr& GetStageParameters() const {
+    return stage_parameters_;
   }
 
   mojo::PendingAssociatedRemote<
@@ -263,7 +262,7 @@ class XRSession final
   bool EmulatedPosition() const {
     // If we don't have display info then we should be using the identity
     // reference space, which by definition will be emulating the position.
-    if (!display_info_) {
+    if (!pending_view_parameters_.size()) {
       return true;
     }
 
@@ -271,27 +270,26 @@ class XRSession final
   }
 
   // Immersive sessions currently use two views for VR, and only a single view
-  // for smartphone immersive AR mode. Convention is that we use the left eye
-  // if there's only a single view.
-  bool StereoscopicViews() { return display_info_ && display_info_->right_eye; }
+  // for smartphone immersive AR mode.
+  bool StereoscopicViews() { return pending_view_parameters_.size() >= 2; }
 
   void UpdateEyeParameters(
       const device::mojom::blink::VREyeParametersPtr& left_eye,
       const device::mojom::blink::VREyeParametersPtr& right_eye);
   void UpdateStageParameters(
+      uint32_t stage_parameters_id,
       const device::mojom::blink::VRStageParametersPtr& stage_parameters);
-  // Incremented every time display_info_ is changed, so that other objects that
-  // depend on it can know when they need to update.
-  unsigned int DisplayInfoPtrId() const { return display_info_id_; }
-  unsigned int StageParametersId() const { return stage_parameters_id_; }
+  // Incremented every time stage_parameters_ is changed, so that other objects
+  // that depend on it can know when they need to update.
+  uint32_t StageParametersId() const { return stage_parameters_id_; }
 
   // Returns true if the session recognizes passed in hit_test_source as still
   // existing. Intended to be used by XRFrame to implement
   // XRFrame.getHitTestResults() &
   // XRFrame.getHitTestResultsForTransientInput().
-  bool ValidateHitTestSourceExists(XRHitTestSource* hit_test_source);
+  bool ValidateHitTestSourceExists(XRHitTestSource* hit_test_source) const;
   bool ValidateHitTestSourceExists(
-      XRTransientInputHitTestSource* hit_test_source);
+      XRTransientInputHitTestSource* hit_test_source) const;
 
   // Removes hit test source (effectively unsubscribing from the hit test).
   // Intended to be used by hit test source interfaces (XRHitTestSource and
@@ -321,6 +319,8 @@ class XRSession final
   base::Optional<TransformationMatrix> GetMojoFrom(
       device::mojom::blink::XRReferenceSpaceType space_type) const;
 
+  XRDepthInformation* GetDepthInformation() const;
+
   // Creates presentation frame based on current state of the session.
   // State currently used in XRFrame creation is mojo_from_viewer_ and
   // world_information_. The created XRFrame also stores a reference to this
@@ -347,6 +347,10 @@ class XRSession final
 
   // Sets the metrics reporter for this session. This should only be done once.
   void SetMetricsReporter(std::unique_ptr<MetricsReporter> reporter);
+
+  // Queues up the execution of video.requestVideoFrameCallback() callbacks for
+  // a specific HTMLVideoELement, for the next requestAnimationFrame() call.
+  void ScheduleVideoFrameCallbacksExecution(ExecuteVfcCallback);
 
  private:
   class XRSessionResizeObserverDelegate;
@@ -413,7 +417,11 @@ class XRSession final
       const device::mojom::blink::XRHitTestSubscriptionResultsData*
           hit_test_data);
 
+  void ProcessDepthData(device::mojom::blink::XRDepthDataPtr depth_data);
+
   void HandleShutdown();
+
+  void ExecuteVideoFrameCallbacks(double timestamp);
 
   const Member<XRSystem> xr_;
   const device::mojom::blink::XRSessionMode mode_;
@@ -478,15 +486,31 @@ class XRSession final
 
   // Mapping of hit test source ids (aka hit test subscription ids) to hit test
   // sources. Hit test source has to be stored via weak member - JavaScript side
-  // will communicate that it's no longer interested in the subscription by
+  // can communicate that it's no longer interested in the subscription by
   // dropping all its references to the hit test source & we need to make sure
-  // that we don't keep the XRHitTestSources alive.
+  // that we don't keep the XRHitTestSources alive. HeapHashMap entries will
+  // automatically be removed when the hit test sources get reclaimed, so we
+  // need to maintain additional sets with their IDs to be able to clean them up
+  // on the device - this is done in |hit_test_source_ids_| and
+  // |hit_test_source_for_transient_input_ids_|.
+  // For the specifics of HeapHashMap<Key, WeakMember<Value>> behavior, see:
+  // https://chromium.googlesource.com/chromium/src/+/master/third_party/blink/renderer/platform/heap/BlinkGCAPIReference.md#weak-collections
   HeapHashMap<uint64_t, WeakMember<XRHitTestSource>>
       hit_test_source_ids_to_hit_test_sources_;
   HeapHashMap<uint64_t, WeakMember<XRTransientInputHitTestSource>>
       hit_test_source_ids_to_transient_input_hit_test_sources_;
 
-  Vector<XRViewData> views_;
+  // The entries in the above hash sets will be automatically removed by garbage
+  // collection once the application drops all references to them. To avoid
+  // introducing pre-finalizers on hit test sources, store the set of IDs that
+  // we know about. We will then subsequently cross-reference the sets with hash
+  // maps and notify the device about hit test sources that are no longer alive.
+  HashSet<uint64_t> hit_test_source_ids_;
+  HashSet<uint64_t> hit_test_source_for_transient_input_ids_;
+
+  uint32_t view_parameters_id_ = 0;
+  HeapVector<Member<XRViewData>> views_;
+  Vector<device::mojom::blink::VREyeParametersPtr> pending_view_parameters_;
 
   Member<XRInputSourceArray> input_sources_;
   Member<XRWebGLLayer> prev_base_layer_;
@@ -500,9 +524,8 @@ class XRSession final
   HeapHashSet<Member<ScriptPromiseResolver>> request_hit_test_source_promises_;
   HeapVector<Member<XRReferenceSpace>> reference_spaces_;
 
-  unsigned int display_info_id_ = 0;
-  unsigned int stage_parameters_id_ = 0;
-  device::mojom::blink::VRDisplayInfoPtr display_info_;
+  uint32_t stage_parameters_id_ = 0;
+  device::mojom::blink::VRStageParametersPtr stage_parameters_;
 
   HeapMojoReceiver<device::mojom::blink::XRSessionClient,
                    XRSession,
@@ -513,9 +536,15 @@ class XRSession final
                              HeapMojoWrapperMode::kWithoutContextObserver>
       input_receiver_;
 
+  // Used to schedule video.rVFC callbacks for immersive sessions.
+  Vector<ExecuteVfcCallback> vfc_execution_queue_;
+
   Member<XRFrameRequestCallbackCollection> callback_collection_;
   // Viewer pose in mojo space.
   std::unique_ptr<TransformationMatrix> mojo_from_viewer_;
+
+  // Current depth data buffer.
+  device::mojom::blink::XRDepthDataUpdatedPtr depth_data_;
 
   bool pending_frame_ = false;
   bool resolving_frame_ = false;
@@ -533,6 +562,12 @@ class XRSession final
   int output_height_ = 1;
 
   bool uses_input_eventing_ = false;
+  float default_framebuffer_scale_ = 1.0;
+
+  // Corresponds to mojo XRSession.supportsViewportScaling
+  bool supports_viewport_scaling_ = false;
+
+  std::unique_ptr<XRSessionViewportScaler> viewport_scaler_;
 
   // Indicates that this is a sensorless session which should only support the
   // identity reference space.

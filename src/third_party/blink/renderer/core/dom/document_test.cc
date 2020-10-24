@@ -59,6 +59,7 @@
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/viewport_data.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
@@ -66,11 +67,14 @@
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/loader/appcache/application_cache_host_for_frame.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/validation_message_client.h"
 #include "third_party/blink/renderer/core/testing/color_scheme_helper.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/core/testing/scoped_mock_overlay_scrollbars.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_request.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
@@ -106,13 +110,13 @@ void DocumentTest::SetHtmlInnerHTML(const char* html_content) {
   UpdateAllLifecyclePhasesForTest();
 }
 
+class DocumentSimTest : public SimTest {};
+
 namespace {
 
 class TestSynchronousMutationObserver
     : public GarbageCollected<TestSynchronousMutationObserver>,
       public SynchronousMutationObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(TestSynchronousMutationObserver);
-
  public:
   struct MergeTextNodesRecord : GarbageCollected<MergeTextNodesRecord> {
     Member<const Text> node_;
@@ -152,6 +156,10 @@ class TestSynchronousMutationObserver
   };
 
   explicit TestSynchronousMutationObserver(Document&);
+  TestSynchronousMutationObserver(const TestSynchronousMutationObserver&) =
+      delete;
+  TestSynchronousMutationObserver& operator=(
+      const TestSynchronousMutationObserver&) = delete;
   virtual ~TestSynchronousMutationObserver() = default;
 
   int CountContextDestroyedCalled() const {
@@ -212,8 +220,6 @@ class TestSynchronousMutationObserver
   HeapVector<Member<Node>> removed_nodes_;
   HeapVector<Member<const Text>> split_text_nodes_;
   HeapVector<Member<UpdateCharacterDataRecord>> updated_character_data_records_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestSynchronousMutationObserver);
 };
 
 TestSynchronousMutationObserver::TestSynchronousMutationObserver(
@@ -281,8 +287,6 @@ void TestSynchronousMutationObserver::Trace(Visitor* visitor) const {
 class MockDocumentValidationMessageClient
     : public GarbageCollected<MockDocumentValidationMessageClient>,
       public ValidationMessageClient {
-  USING_GARBAGE_COLLECTED_MIXIN(MockDocumentValidationMessageClient);
-
  public:
   MockDocumentValidationMessageClient() { Reset(); }
   void Reset() {
@@ -533,40 +537,6 @@ TEST_F(DocumentTest, StyleVersion) {
   previous_style_version = GetDocument().StyleVersion();
   element->setAttribute(blink::html_names::kClassAttr, "a b");
   EXPECT_NE(previous_style_version, GetDocument().StyleVersion());
-}
-
-TEST_F(DocumentTest, EnforceSandboxFlags) {
-  NavigateTo(KURL("http://example.test/"), {{http_names::kContentSecurityPolicy,
-                                             "sandbox allow-same-origin"}});
-  EXPECT_FALSE(GetDocument().GetSecurityOrigin()->IsOpaque());
-  EXPECT_FALSE(GetDocument().GetSecurityOrigin()->IsPotentiallyTrustworthy());
-
-  NavigateTo(KURL("http://example.test/"),
-             {{http_names::kContentSecurityPolicy, "sandbox"}});
-  EXPECT_TRUE(GetDocument().GetSecurityOrigin()->IsOpaque());
-  EXPECT_FALSE(GetDocument().GetSecurityOrigin()->IsPotentiallyTrustworthy());
-
-  // A unique origin does not bypass secure context checks unless it
-  // is also potentially trustworthy.
-  url::ScopedSchemeRegistryForTests scoped_registry;
-  url::AddStandardScheme("very-special-scheme", url::SCHEME_WITH_HOST);
-  SchemeRegistry::RegisterURLSchemeBypassingSecureContextCheck(
-      "very-special-scheme");
-  NavigateTo(KURL("very-special-scheme://example.test"),
-             {{http_names::kContentSecurityPolicy, "sandbox"}});
-  EXPECT_TRUE(GetDocument().GetSecurityOrigin()->IsOpaque());
-  EXPECT_FALSE(GetDocument().GetSecurityOrigin()->IsPotentiallyTrustworthy());
-
-  SchemeRegistry::RegisterURLSchemeAsSecure("very-special-scheme");
-  NavigateTo(KURL("very-special-scheme://example.test"),
-             {{http_names::kContentSecurityPolicy, "sandbox"}});
-  EXPECT_TRUE(GetDocument().GetSecurityOrigin()->IsOpaque());
-  EXPECT_TRUE(GetDocument().GetSecurityOrigin()->IsPotentiallyTrustworthy());
-
-  NavigateTo(KURL("https://example.test"),
-             {{http_names::kContentSecurityPolicy, "sandbox"}});
-  EXPECT_TRUE(GetDocument().GetSecurityOrigin()->IsOpaque());
-  EXPECT_TRUE(GetDocument().GetSecurityOrigin()->IsPotentiallyTrustworthy());
 }
 
 TEST_F(DocumentTest, SynchronousMutationNotifier) {
@@ -990,7 +960,8 @@ TEST_F(DocumentTest, ElementFromPointWithPageZoom) {
 
 TEST_F(DocumentTest, PrefersColorSchemeChanged) {
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
   UpdateAllLifecyclePhasesForTest();
 
   auto* list = GetDocument().GetMediaQueryMatcher().MatchMedia(
@@ -1000,7 +971,8 @@ TEST_F(DocumentTest, PrefersColorSchemeChanged) {
 
   EXPECT_FALSE(listener->IsNotified());
 
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
 
   UpdateAllLifecyclePhasesForTest();
   GetDocument().ServiceScriptedAnimations(base::TimeTicks());
@@ -1318,5 +1290,119 @@ INSTANTIATE_TEST_SUITE_P(
         ViewportTestCase("contain", mojom::ViewportFit::kContain),
         ViewportTestCase("cover", mojom::ViewportFit::kCover),
         ViewportTestCase("invalid", mojom::ViewportFit::kAuto)));
+
+class BatterySavingsChromeClient : public EmptyChromeClient {
+ public:
+  MOCK_METHOD2(BatterySavingsChanged,
+               void(LocalFrame&, WebBatterySavingsFlags));
+};
+
+class DocumentBatterySavingsTest : public PageTestBase,
+                                   private ScopedBatterySavingsMetaForTest {
+ protected:
+  DocumentBatterySavingsTest() : ScopedBatterySavingsMetaForTest(true) {}
+
+  void SetUp() override {
+    chrome_client_ = MakeGarbageCollected<BatterySavingsChromeClient>();
+    Page::PageClients page_clients;
+    FillWithEmptyClients(page_clients);
+    page_clients.chrome_client = chrome_client_;
+    SetupPageWithClients(&page_clients);
+  }
+
+  Persistent<BatterySavingsChromeClient> chrome_client_;
+};
+
+TEST_F(DocumentBatterySavingsTest, ChromeClientCalls) {
+  testing::InSequence s;
+  // The client is called twice, once for each meta element, but is called with
+  // the same parameter both times because the first meta in DOM order takes
+  // precedence.
+  EXPECT_CALL(*chrome_client_,
+              BatterySavingsChanged(testing::_, kAllowReducedFrameRate))
+      .Times(2);
+
+  EXPECT_FALSE(
+      GetDocument().Loader()->GetUseCounterHelper().HasRecordedMeasurement(
+          WebFeature::kBatterySavingsMeta));
+
+  SetHtmlInnerHTML(R"HTML(
+    <meta id="first" name="battery-savings" content="allow-reduced-framerate">
+    <meta id="second" name="battery-savings" content="allow-reduced-script-speed">
+  )HTML");
+
+  EXPECT_TRUE(
+      GetDocument().Loader()->GetUseCounterHelper().HasRecordedMeasurement(
+          WebFeature::kBatterySavingsMeta));
+
+  // Remove the first meta causing the second to apply.
+  EXPECT_CALL(*chrome_client_,
+              BatterySavingsChanged(testing::_, kAllowReducedScriptSpeed))
+      .Times(1);
+
+  GetDocument().getElementById("first")->remove();
+
+  // Change the content attribute to an unsupported value.
+  EXPECT_CALL(*chrome_client_, BatterySavingsChanged(testing::_, 0)).Times(1);
+
+  Element* second = GetDocument().getElementById("second");
+  second->setAttribute(html_names::kContentAttr, "allow-blah");
+
+  // Change the content attribute to both supported values.
+  EXPECT_CALL(*chrome_client_,
+              BatterySavingsChanged(testing::_, kAllowReducedFrameRate |
+                                                    kAllowReducedScriptSpeed))
+      .Times(1);
+
+  second->setAttribute(html_names::kContentAttr,
+                       "allow-reduced-framerate allow-reduced-script-speed");
+
+  // Change the meta name to "viewport".
+  EXPECT_CALL(*chrome_client_, BatterySavingsChanged(testing::_, 0)).Times(1);
+
+  second->setAttribute(html_names::kNameAttr, "viewport");
+}
+
+namespace {
+class MockReportingContext final : public ReportingContext {
+ public:
+  explicit MockReportingContext(ExecutionContext& ec) : ReportingContext(ec) {}
+
+  void QueueReport(Report* report, const Vector<String>& endpoint) override {
+    report_count++;
+  }
+
+  unsigned report_count = 0;
+};
+
+}  // namespace
+
+TEST_F(DocumentSimTest, DuplicatedDocumentPolicyViolationsAreIgnored) {
+  blink::ScopedDocumentPolicyForTest scoped_document_policy(true);
+  SimRequest::Params params;
+  params.response_http_headers = {
+      {"Document-Policy", "lossless-images-max-bpp=1.0"}};
+  SimRequest main_resource("https://example.com", "text/html", params);
+  LoadURL("https://example.com");
+  main_resource.Finish();
+
+  ExecutionContext* execution_context = GetDocument().GetExecutionContext();
+  MockReportingContext* mock_reporting_context =
+      MakeGarbageCollected<MockReportingContext>(*execution_context);
+  Supplement<ExecutionContext>::ProvideTo(*execution_context,
+                                          mock_reporting_context);
+
+  EXPECT_FALSE(execution_context->IsFeatureEnabled(
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
+      PolicyValue::CreateDecDouble(1.1), ReportOptions::kReportOnFailure));
+
+  EXPECT_EQ(mock_reporting_context->report_count, 1u);
+
+  EXPECT_FALSE(execution_context->IsFeatureEnabled(
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
+      PolicyValue::CreateDecDouble(1.1), ReportOptions::kReportOnFailure));
+
+  EXPECT_EQ(mock_reporting_context->report_count, 1u);
+}
 
 }  // namespace blink

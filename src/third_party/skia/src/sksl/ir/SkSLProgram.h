@@ -32,6 +32,7 @@
 namespace SkSL {
 
 class Context;
+class Pool;
 
 /**
  * Represents a fully-digested program, ready for code generation.
@@ -117,8 +118,14 @@ struct Program {
         // If true, remove any uncalled functions other than main(). Note that a function which
         // starts out being used may end up being uncalled after optimization.
         bool fRemoveDeadFunctions = true;
-
-        std::unordered_map<String, Value> fArgs;
+        // Functions larger than this (measured in IR nodes) will not be inlined. The default value
+        // is arbitrary. A value of zero will disable the inliner entirely.
+        int fInlineThreshold = 49;
+        // true to enable optimization passes
+        bool fOptimize = true;
+        // If true, implicit conversions to lower precision numeric types are allowed
+        // (eg, float to half)
+        bool fAllowNarrowingConversions = false;
     };
 
     struct Inputs {
@@ -143,92 +150,6 @@ struct Program {
         }
     };
 
-    class iterator {
-    public:
-        ProgramElement& operator*() {
-            if (fIter1 != fEnd1) {
-                return **fIter1;
-            }
-            return **fIter2;
-        }
-
-        iterator& operator++() {
-            if (fIter1 != fEnd1) {
-                ++fIter1;
-                return *this;
-            }
-            ++fIter2;
-            return *this;
-        }
-
-        bool operator==(const iterator& other) const {
-            return fIter1 == other.fIter1 && fIter2 == other.fIter2;
-        }
-
-        bool operator!=(const iterator& other) const {
-            return !(*this == other);
-        }
-
-    private:
-        using inner = std::vector<std::unique_ptr<ProgramElement>>::iterator;
-
-        iterator(inner begin1, inner end1, inner begin2, inner end2)
-        : fIter1(begin1)
-        , fEnd1(end1)
-        , fIter2(begin2)
-        , fEnd2(end2) {}
-
-        inner fIter1;
-        inner fEnd1;
-        inner fIter2;
-        inner fEnd2;
-
-        friend struct Program;
-    };
-
-    class const_iterator {
-    public:
-        const ProgramElement& operator*() {
-            if (fIter1 != fEnd1) {
-                return **fIter1;
-            }
-            return **fIter2;
-        }
-
-        const_iterator& operator++() {
-            if (fIter1 != fEnd1) {
-                ++fIter1;
-                return *this;
-            }
-            ++fIter2;
-            return *this;
-        }
-
-        bool operator==(const const_iterator& other) const {
-            return fIter1 == other.fIter1 && fIter2 == other.fIter2;
-        }
-
-        bool operator!=(const const_iterator& other) const {
-            return !(*this == other);
-        }
-
-    private:
-        using inner = std::vector<std::unique_ptr<ProgramElement>>::const_iterator;
-
-        const_iterator(inner begin1, inner end1, inner begin2, inner end2)
-        : fIter1(begin1)
-        , fEnd1(end1)
-        , fIter2(begin2)
-        , fEnd2(end2) {}
-
-        inner fIter1;
-        inner fEnd1;
-        inner fIter2;
-        inner fEnd2;
-
-        friend struct Program;
-    };
-
     enum Kind {
         kFragment_Kind,
         kVertex_Kind,
@@ -242,50 +163,38 @@ struct Program {
             std::unique_ptr<String> source,
             Settings settings,
             std::shared_ptr<Context> context,
-            std::vector<std::unique_ptr<ProgramElement>>* inheritedElements,
             std::vector<std::unique_ptr<ProgramElement>> elements,
+            std::unique_ptr<ModifiersPool> modifiers,
             std::shared_ptr<SymbolTable> symbols,
+            std::unique_ptr<Pool> pool,
             Inputs inputs)
     : fKind(kind)
     , fSource(std::move(source))
     , fSettings(settings)
     , fContext(context)
     , fSymbols(symbols)
+    , fPool(std::move(pool))
     , fInputs(inputs)
-    , fInheritedElements(inheritedElements)
-    , fElements(std::move(elements)) {}
+    , fElements(std::move(elements))
+    , fModifiers(std::move(modifiers)) {}
 
-    iterator begin() {
-        if (fInheritedElements) {
-            return iterator(fInheritedElements->begin(), fInheritedElements->end(),
-                            fElements.begin(), fElements.end());
-        }
-        return iterator(fElements.begin(), fElements.end(), fElements.end(), fElements.end());
+    ~Program() {
+        // Some or all of the program elements are in the pool. To free them safely, we must attach
+        // the pool before destroying any program elements. (Otherwise, we may accidentally call
+        // delete on a pooled node.)
+        fPool->attachToThread();
+        fElements.clear();
+        fContext.reset();
+        fSymbols.reset();
+        fModifiers.reset();
+        fPool->detachFromThread();
+
+        // We are done with the pool; recycle it so that it can be reused for future program
+        // compilation.
+        Pool::Recycle(std::move(fPool));
     }
 
-    iterator end() {
-        if (fInheritedElements) {
-            return iterator(fInheritedElements->end(), fInheritedElements->end(),
-                            fElements.end(), fElements.end());
-        }
-        return iterator(fElements.end(), fElements.end(), fElements.end(), fElements.end());
-    }
-
-    const_iterator begin() const {
-        if (fInheritedElements) {
-            return const_iterator(fInheritedElements->begin(), fInheritedElements->end(),
-                                  fElements.begin(), fElements.end());
-        }
-        return const_iterator(fElements.begin(), fElements.end(), fElements.end(), fElements.end());
-    }
-
-    const_iterator end() const {
-        if (fInheritedElements) {
-            return const_iterator(fInheritedElements->end(), fInheritedElements->end(),
-                                  fElements.end(), fElements.end());
-        }
-        return const_iterator(fElements.end(), fElements.end(), fElements.end(), fElements.end());
-    }
+    const std::vector<std::unique_ptr<ProgramElement>>& elements() const { return fElements; }
 
     Kind fKind;
     std::unique_ptr<String> fSource;
@@ -294,16 +203,17 @@ struct Program {
     // it's important to keep fElements defined after (and thus destroyed before) fSymbols,
     // because destroying elements can modify reference counts in symbols
     std::shared_ptr<SymbolTable> fSymbols;
+    std::unique_ptr<Pool> fPool;
     Inputs fInputs;
-    bool fIsOptimized = false;
 
 private:
-    std::vector<std::unique_ptr<ProgramElement>>* fInheritedElements;
     std::vector<std::unique_ptr<ProgramElement>> fElements;
+    std::unique_ptr<ModifiersPool> fModifiers;
 
     friend class Compiler;
+    friend class SPIRVCodeGenerator;  // fModifiers
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

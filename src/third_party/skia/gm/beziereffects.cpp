@@ -20,8 +20,7 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrContext.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/private/GrSharedEnums.h"
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkColorData.h"
@@ -29,7 +28,7 @@
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPointPriv.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOpFlushState.h"
@@ -94,7 +93,8 @@ protected:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         auto gp = this->makeGP(*caps, arena);
         if (!gp) {
             return;
@@ -107,6 +107,7 @@ protected:
                                                                    dstProxyView, gp,
                                                                    std::move(fProcessorSet),
                                                                    GrPrimitiveType::kTriangles,
+                                                                   renderPassXferBarriers,
                                                                    flags);
     }
 
@@ -136,7 +137,7 @@ private:
     GrProcessorSet       fProcessorSet;
     GrProgramInfo*       fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 /**
@@ -200,7 +201,7 @@ private:
     static constexpr int kVertsPerCubic = 4;
     static constexpr int kIndicesPerCubic = 6;
 
-    typedef BezierTestOp INHERITED;
+    using INHERITED = BezierTestOp;
 };
 
 
@@ -226,7 +227,7 @@ protected:
         return SkISize::Make(kCellWidth, kNumConics*kCellHeight);
     }
 
-    void onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
+    void onDraw(GrRecordingContext* context, GrRenderTargetContext* renderTargetContext,
                 SkCanvas* canvas) override {
 
         const SkScalar w = kCellWidth, h = kCellHeight;
@@ -343,7 +344,7 @@ private:
         return conicCnt;
     }
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -403,7 +404,7 @@ private:
     static constexpr int kVertsPerCubic = 4;
     static constexpr int kIndicesPerCubic = 6;
 
-    typedef BezierTestOp INHERITED;
+    using INHERITED = BezierTestOp;
 };
 
 /**
@@ -428,7 +429,7 @@ protected:
         return SkISize::Make(kCellWidth, kNumQuads*kCellHeight);
     }
 
-    void onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
+    void onDraw(GrRecordingContext* context, GrRenderTargetContext* renderTargetContext,
                 SkCanvas* canvas) override {
 
         const SkScalar w = kCellWidth, h = kCellHeight;
@@ -498,9 +499,9 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 DEF_GM(return new BezierConicEffects;)
 DEF_GM(return new BezierQuadEffects;)
-}
+}  // namespace skiagm

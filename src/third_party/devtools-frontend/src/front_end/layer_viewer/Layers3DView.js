@@ -27,6 +27,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
 import * as Platform from '../platform/platform.js';
 import * as SDK from '../sdk/sdk.js';  // eslint-disable-line no-unused-vars
@@ -49,12 +53,13 @@ export class Layers3DView extends UI.Widget.VBox {
     this.contentElement.classList.add('layers-3d-view');
     this._failBanner = new UI.Widget.VBox();
     this._failBanner.element.classList.add('full-widget-dimmed-banner');
-    this._failBanner.element.createTextChild(Common.UIString.UIString('Layer information is not yet available.'));
+    UI.UIUtils.createTextChild(
+        this._failBanner.element, Common.UIString.UIString('Layer information is not yet available.'));
 
     this._layerViewHost = layerViewHost;
     this._layerViewHost.registerView(this);
 
-    this._transformController = new TransformController(this.contentElement);
+    this._transformController = new TransformController(/** @type {!HTMLElement} */ (this.contentElement));
     this._transformController.addEventListener(TransformControllerEvents.TransformChanged, this._update, this);
     this._initToolbar();
 

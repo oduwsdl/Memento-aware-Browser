@@ -27,19 +27,13 @@ struct NGInlineItemsData;
 // inline nodes and their descendants.
 class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
  public:
-  NGInlineNode(LayoutBlockFlow*);
+  explicit NGInlineNode(LayoutBlockFlow*);
+  explicit NGInlineNode(std::nullptr_t) : NGLayoutInputNode(nullptr) {}
 
   LayoutBlockFlow* GetLayoutBlockFlow() const {
     return To<LayoutBlockFlow>(box_);
   }
-  NGLayoutInputNode NextSibling() { return nullptr; }
-
-  // True in quirks mode or limited-quirks mode, which require line-height
-  // quirks.
-  // https://quirks.spec.whatwg.org/#the-line-height-calculation-quirk
-  bool InLineHeightQuirksMode() const {
-    return GetDocument().InLineHeightQuirksMode();
-  }
+  NGLayoutInputNode NextSibling() const { return nullptr; }
 
   scoped_refptr<const NGLayoutResult> Layout(
       const NGConstraintSpace&,
@@ -98,7 +92,7 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
 
   // Returns the DOM to text content offset mapping of this block. If it is not
   // computed before, compute and store it in NGInlineNodeData.
-  // This funciton must be called with clean layout.
+  // This function must be called with clean layout.
   const NGOffsetMapping* ComputeOffsetMappingIfNeeded() const;
 
   // Get |NGOffsetMapping| for the |layout_block_flow|. |layout_block_flow|
@@ -126,6 +120,11 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   bool UseFirstLineStyle() const;
   void CheckConsistency() const;
 
+  bool ShouldReportLetterSpacingUseCounterForTesting(
+      const LayoutObject* layout_object,
+      bool first_line,
+      const LayoutBlockFlow* block_flow);
+
   String ToString() const;
 
   struct FloatingObject {
@@ -139,6 +138,8 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   };
 
  protected:
+  FRIEND_TEST_ALL_PREFIXES(NGInlineNodeTest, SegmentBidiChangeSetsNeedsLayout);
+
   bool IsPrepareLayoutFinished() const;
 
   // Prepare inline and text content for layout. Must be called before

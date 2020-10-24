@@ -9,7 +9,7 @@
 #include "core/fxcodec/cfx_codec_memory.h"
 #include "core/fxcodec/fx_codec.h"
 #include "core/fxcodec/gif/cfx_gifcontext.h"
-#include "core/fxge/fx_dib.h"
+#include "core/fxge/dib/fx_dib.h"
 
 namespace fxcodec {
 
@@ -34,7 +34,7 @@ CFX_GifDecodeStatus GifDecoder::ReadHeader(
 
   *width = context->width_;
   *height = context->height_;
-  *pal_num = (2 << context->global_pal_exp_);
+  *pal_num = (2 << context->global_palette_exp_);
   *pal_pp = context->global_palette_.empty() ? nullptr
                                              : context->global_palette_.data();
   *bg_index = context->bc_index_;

@@ -27,14 +27,23 @@
 
 @namespace "http://www.w3.org/1998/Math/MathML";
 
+/* Default display */
+* {
+    display: block math;
+    font-size: math;
+}
+
 /* By default, we only display the MathML formulas without any formatting other than the one specified by the display attribute. */
 math {
-    display: inline-math;
-    math-superscript-shift-style: display;
+    display: inline math;
+    math-shift: normal;
+    math-style: compact;
+    font-size: inherited;
+    math-depth: 0;
 }
 
 math[display="block"] {
-    display: math;
+    display: block math;
     text-align: center;
 }
 
@@ -47,13 +56,13 @@ math[display="block"] {
     outline: auto 1px -webkit-focus-ring-color;
 }
 
-maction, merror, mfrac, mphantom, mrow, mspace, mstyle, msub, msup, msubsup, munder, mover, munderover
-{
-    display: math;
+mspace {
+    overflow: hidden !important;
 }
 
-mphantom {
-    visibility: hidden;
+/* <mrow>-like elements */
+semantics > :not(:first-child) {
+  display: none;
 }
 
 merror {
@@ -61,13 +70,18 @@ merror {
     background-color: lightYellow;
 }
 
-mspace {
-    overflow: hidden !important;
+mphantom {
+    visibility: hidden;
 }
 
 /* Token elements */
 mi {
   text-transform: math-auto;
+}
+
+/* Tables */
+mtable {
+  math-style: compact;
 }
 
 /* Fractions */
@@ -77,15 +91,22 @@ mfrac {
 }
 
 mfrac > * {
-  font-size: scriptlevel(auto);
-  math-style: inline;
+  math-depth: auto-add;
+  math-style: compact;
 }
 
 mfrac > :nth-child(2) {
-  math-superscript-shift-style: inline;
+  math-shift: compact;
 }
 
-/* Other rules for scriptlevel, displaystyle and math-superscript-shift-style */
+/* Other rules for scriptlevel, displaystyle and math-shift */
+mroot > :not(:first-child) {
+    math-depth: add(2);
+    math-style: compact;
+}
+mroot, msqrt {
+    math-shift: compact;
+}
 msub > :not(:first-child),
 msup > :not(:first-child),
 msubsup > :not(:first-child),
@@ -93,8 +114,8 @@ mmultiscripts > :not(:first-child),
 munder > :not(:first-child),
 mover > :not(:first-child),
 munderover > :not(:first-child) {
-  font-size: scriptlevel(add(1));
-  math-style: inline;
+  math-depth: add(1);
+  math-style: compact;
 }
 
 munder[accentunder="true" i] > :nth-child(2),
@@ -108,6 +129,5 @@ munder > :nth-child(2),
 munderover > :nth-child(2),
 mover[accent="true" i] > :first-child,
 munderover[accent="true" i] > :first-child {
-  math-superscript-shift-style: inline;
+  math-shift: compact;
 }
-

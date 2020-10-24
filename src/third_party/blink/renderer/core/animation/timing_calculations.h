@@ -61,14 +61,14 @@ inline bool LessThanOrEqualToWithinEpsilon(double a, double b) {
 }
 
 static inline double MultiplyZeroAlwaysGivesZero(double x, double y) {
-  DCHECK(!Timing::IsNull(x));
-  DCHECK(!Timing::IsNull(y));
+  DCHECK(!std::isnan(x));
+  DCHECK(!std::isnan(y));
   return x && y ? x * y : 0;
 }
 
 static inline double MultiplyZeroAlwaysGivesZero(AnimationTimeDelta x,
                                                  double y) {
-  DCHECK(!Timing::IsNull(y));
+  DCHECK(!std::isnan(y));
   return x.is_zero() || y == 0 ? 0 : (x * y).InSecondsF();
 }
 
@@ -174,8 +174,7 @@ static inline base::Optional<double> CalculateOverallProgress(
 // through the current iteration that ignores transformations to the time
 // introduced by the playback direction or timing functions applied to the
 // effect.
-// https://drafts.csswg.org/web-animations/#calculating-the-simple-iteration
-// -progress
+// https://drafts.csswg.org/web-animations/#calculating-the-simple-iteration-progress
 static inline base::Optional<double> CalculateSimpleIterationProgress(
     Timing::Phase phase,
     base::Optional<double> overall_progress,

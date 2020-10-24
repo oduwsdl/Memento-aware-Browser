@@ -92,7 +92,9 @@ public:
 		bool alphaToCoverage;
 		bool centroid;
 		VkFrontFace frontFace;
-		VkFormat depthFormat;
+		vk::Format depthFormat;
+		bool depthBias;
+		bool depthClamp;
 	};
 
 	struct State : States

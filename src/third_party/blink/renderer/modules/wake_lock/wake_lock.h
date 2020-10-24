@@ -35,7 +35,6 @@ class WakeLockManager;
 class MODULES_EXPORT WakeLock final : public ScriptWrappable,
                                       public ExecutionContextLifecycleObserver,
                                       public PageVisibilityObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(WakeLock);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -74,7 +73,7 @@ class MODULES_EXPORT WakeLock final : public ScriptWrappable,
                  HeapMojoWrapperMode::kWithoutContextObserver>
       permission_service_;
 
-  // https://w3c.github.io/wake-lock/#concepts-and-state-record
+  // https://w3c.github.io/screen-wake-lock/#concepts-and-state-record
   // Each platform wake lock (one per wake lock type) has an associated state
   // record per responsible document [...] internal slots.
   Member<WakeLockManager> managers_[kWakeLockTypeCount];

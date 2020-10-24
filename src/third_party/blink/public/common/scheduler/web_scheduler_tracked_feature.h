@@ -22,6 +22,8 @@ enum class WebSchedulerTrackedFeature {
   kWebSocket = 0,
   kWebRTC = 1,
 
+  // TODO(rakina): Move tracking of cache-control usage from
+  // WebSchedulerTrackedFeature to RenderFrameHost.
   kMainResourceHasCacheControlNoCache = 2,
   kMainResourceHasCacheControlNoStore = 3,
   kSubresourceHasCacheControlNoCache = 4,
@@ -43,9 +45,8 @@ enum class WebSchedulerTrackedFeature {
   // specific context types down below.
   kOutstandingNetworkRequestOthers = 15,
 
-  // TODO(altimin): This doesn't include service worker-controlled origins.
-  // We need to track them too.
-  kServiceWorkerControlledPage = 16,
+  // kServiceWorkerControlledPage = 16. Removed after implementing ServiceWorker
+  // support.
 
   kOutstandingIndexedDBTransaction = 17,
 
@@ -94,9 +95,11 @@ enum class WebSchedulerTrackedFeature {
   kPaymentManager = 49,
   kSpeechSynthesis = 50,
   kKeyboardLock = 51,
+  kWebOTPService = 52,
+  kOutstandingNetworkRequestDirectSocket = 53,
 
   // NB: This enum is used in a bitmask, so kMaxValue must be less than 64.
-  kMaxValue = kKeyboardLock
+  kMaxValue = kOutstandingNetworkRequestDirectSocket
 };
 
 static_assert(static_cast<uint32_t>(WebSchedulerTrackedFeature::kMaxValue) < 64,
@@ -111,6 +114,13 @@ BLINK_COMMON_EXPORT constexpr uint64_t FeatureToBit(
     WebSchedulerTrackedFeature feature) {
   return 1ull << static_cast<uint32_t>(feature);
 }
+
+// Sticky features can't be unregistered and remain active for the rest of the
+// lifetime of the page.
+BLINK_COMMON_EXPORT bool IsFeatureSticky(WebSchedulerTrackedFeature feature);
+
+// All the sticky features in bitmask form.
+BLINK_COMMON_EXPORT uint64_t StickyFeaturesBitmask();
 
 }  // namespace scheduler
 }  // namespace blink

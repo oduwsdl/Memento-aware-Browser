@@ -32,6 +32,8 @@ class ShareGroupMtl : public ShareGroupImpl
 
 class ContextMtl;
 
+struct DefaultShaderAsyncInfoMtl;
+
 class DisplayMtl : public DisplayImpl
 {
   public:
@@ -85,13 +87,19 @@ class DisplayMtl : public DisplayImpl
 
     EGLSyncImpl *createSync(const egl::AttributeMap &attribs) override;
 
-    egl::Error makeCurrent(egl::Surface *drawSurface,
+    egl::Error makeCurrent(egl::Display *display,
+                           egl::Surface *drawSurface,
                            egl::Surface *readSurface,
                            gl::Context *context) override;
 
     void populateFeatureList(angle::FeatureList *features) override;
 
     bool isValidNativeWindow(EGLNativeWindowType window) const override;
+
+    egl::Error validateClientBuffer(const egl::Config *configuration,
+                                    EGLenum buftype,
+                                    EGLClientBuffer clientBuffer,
+                                    const egl::AttributeMap &attribs) const override;
 
     egl::ConfigSet generateConfigs() override;
 
@@ -102,6 +110,14 @@ class DisplayMtl : public DisplayImpl
     const gl::Limitations &getNativeLimitations() const { return mNativeLimitations; }
     const angle::FeaturesMtl &getFeatures() const { return mFeatures; }
 
+    // Check whether either of the specified iOS or Mac GPU family is supported
+    bool supportsEitherGPUFamily(uint8_t iOSFamily, uint8_t macFamily) const;
+    bool supportsIOSGPUFamily(uint8_t iOSFamily) const;
+    bool supportsMacGPUFamily(uint8_t macFamily) const;
+    bool isAMD() const;
+    bool isIntel() const;
+    bool isNVIDIA() const;
+
     id<MTLDevice> getMetalDevice() const { return mMetalDevice; }
 
     mtl::CommandQueue &cmdQueue() { return mCmdQueue; }
@@ -109,7 +125,7 @@ class DisplayMtl : public DisplayImpl
     mtl::RenderUtils &getUtils() { return mUtils; }
     mtl::StateCache &getStateCache() { return mStateCache; }
 
-    id<MTLLibrary> getDefaultShadersLib() const { return mDefaultShaders; }
+    id<MTLLibrary> getDefaultShadersLib();
 
     id<MTLDepthStencilState> getDepthStencilState(const mtl::DepthStencilDesc &desc)
     {
@@ -124,6 +140,10 @@ class DisplayMtl : public DisplayImpl
     {
         return mFormatTable.getPixelFormat(angleFormatId);
     }
+    const mtl::FormatCaps &getNativeFormatCaps(MTLPixelFormat mtlFormat) const
+    {
+        return mFormatTable.getNativeFormatCaps(mtlFormat);
+    }
 
     // See mtl::FormatTable::getVertexFormat()
     const mtl::VertexFormat &getVertexFormat(angle::FormatID angleFormatId,
@@ -131,7 +151,9 @@ class DisplayMtl : public DisplayImpl
     {
         return mFormatTable.getVertexFormat(angleFormatId, tightlyPacked);
     }
-
+#if ANGLE_MTL_EVENT_AVAILABLE
+    mtl::AutoObjCObj<MTLSharedEventListener> getOrCreateSharedEventListener();
+#endif
   protected:
     void generateExtensions(egl::DisplayExtensions *outExtensions) const override;
     void generateCaps(egl::Caps *outCaps) const override;
@@ -146,15 +168,19 @@ class DisplayMtl : public DisplayImpl
     angle::Result initializeShaderLibrary();
 
     mtl::AutoObjCPtr<id<MTLDevice>> mMetalDevice = nil;
+    uint32_t mMetalDeviceVendorId                = 0;
 
     mtl::CommandQueue mCmdQueue;
 
-    mtl::FormatTable mFormatTable;
+    mutable mtl::FormatTable mFormatTable;
     mtl::StateCache mStateCache;
     mtl::RenderUtils mUtils;
 
     // Built-in Shaders
-    mtl::AutoObjCPtr<id<MTLLibrary>> mDefaultShaders = nil;
+    std::shared_ptr<DefaultShaderAsyncInfoMtl> mDefaultShadersAsyncInfo;
+#if ANGLE_MTL_EVENT_AVAILABLE
+    mtl::AutoObjCObj<MTLSharedEventListener> mSharedEventListener;
+#endif
 
     mutable bool mCapsInitialized;
     mutable gl::TextureCapsMap mNativeTextureCaps;

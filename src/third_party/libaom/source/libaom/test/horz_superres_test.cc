@@ -51,7 +51,7 @@ std::ostream &operator<<(std::ostream &os, const TestVideoParam &test_arg) {
 }
 
 const TestVideoParam kTestVideoVectors[] = {
-  { "park_joy_90p_8_420.y4m", AOM_IMG_FMT_I420, AOM_BITS_8, 0, 5, 0, 25.5 },
+  { "park_joy_90p_8_420.y4m", AOM_IMG_FMT_I420, AOM_BITS_8, 0, 5, 0, 12.5 },
 #if CONFIG_AV1_HIGHBITDEPTH
   { "park_joy_90p_10_444.y4m", AOM_IMG_FMT_I44416, AOM_BITS_10, 1, 5, 0,
     27.84 },
@@ -177,9 +177,9 @@ class HorzSuperresEndToEndTest
 
 TEST_P(HorzSuperresEndToEndTest, HorzSuperresEndToEndPSNRTest) { DoTest(); }
 
-AV1_INSTANTIATE_TEST_CASE(HorzSuperresEndToEndTest,
-                          ::testing::ValuesIn(kTestVideoVectors),
-                          ::testing::ValuesIn(kSuperresModesWithoutParams));
+AV1_INSTANTIATE_TEST_SUITE(HorzSuperresEndToEndTest,
+                           ::testing::ValuesIn(kTestVideoVectors),
+                           ::testing::ValuesIn(kSuperresModesWithoutParams));
 
 // Test parameter list:
 //  <[needed for EncoderTest], test_video_param_, tuple(superres_denom_,
@@ -288,9 +288,9 @@ class HorzSuperresFixedEndToEndTest
 
 TEST_P(HorzSuperresFixedEndToEndTest, HorzSuperresFixedTestParam) { DoTest(); }
 
-AV1_INSTANTIATE_TEST_CASE(HorzSuperresFixedEndToEndTest,
-                          ::testing::ValuesIn(kTestVideoVectors),
-                          ::testing::ValuesIn(kSuperresDenominators));
+AV1_INSTANTIATE_TEST_SUITE(HorzSuperresFixedEndToEndTest,
+                           ::testing::ValuesIn(kTestVideoVectors),
+                           ::testing::ValuesIn(kSuperresDenominators));
 
 // Test parameter list:
 //  <[needed for EncoderTest], test_video_param_,
@@ -401,8 +401,8 @@ TEST_P(HorzSuperresQThreshEndToEndTest, HorzSuperresQThreshEndToEndPSNRTest) {
   DoTest();
 }
 
-AV1_INSTANTIATE_TEST_CASE(HorzSuperresQThreshEndToEndTest,
-                          ::testing::ValuesIn(kTestVideoVectors),
-                          ::testing::ValuesIn(kSuperresQThresholds));
+AV1_INSTANTIATE_TEST_SUITE(HorzSuperresQThreshEndToEndTest,
+                           ::testing::ValuesIn(kTestVideoVectors),
+                           ::testing::ValuesIn(kSuperresQThresholds));
 
 }  // namespace

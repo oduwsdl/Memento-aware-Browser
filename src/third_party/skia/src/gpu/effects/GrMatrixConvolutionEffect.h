@@ -31,22 +31,9 @@ public:
                                                      bool convolveAlpha,
                                                      const GrCaps&);
 
-    static std::unique_ptr<GrFragmentProcessor> MakeGaussian(GrRecordingContext*,
-                                                             GrSurfaceProxyView srcView,
-                                                             const SkIRect& srcBounds,
-                                                             const SkISize& kernelSize,
-                                                             SkScalar gain,
-                                                             SkScalar bias,
-                                                             const SkIPoint& kernelOffset,
-                                                             GrSamplerState::WrapMode,
-                                                             bool convolveAlpha,
-                                                             SkScalar sigmaX,
-                                                             SkScalar sigmaY,
-                                                             const GrCaps&);
-
     const SkIRect& bounds() const { return fBounds; }
     SkISize kernelSize() const { return fKernel.size(); }
-    const SkV2 kernelOffset() const { return fKernelOffset; }
+    SkVector kernelOffset() const { return fKernelOffset; }
     bool kernelIsSampled() const { return fKernel.isSampled(); }
     const float *kernel() const { return fKernel.array().data(); }
     float kernelSampleGain() const { return fKernel.biasAndGain().fGain; }
@@ -129,19 +116,16 @@ private:
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
-    // We really just want the unaltered local coords, but the only way to get that right now is
-    // an identity coord transform.
-    GrCoordTransform fCoordTransform = {};
     SkIRect          fBounds;
     KernelWrapper    fKernel;
     float            fGain;
     float            fBias;
-    SkV2             fKernelOffset;
+    SkVector         fKernelOffset;
     bool             fConvolveAlpha;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 #endif

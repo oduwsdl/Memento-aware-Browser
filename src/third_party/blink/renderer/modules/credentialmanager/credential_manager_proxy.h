@@ -6,7 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_CREDENTIALMANAGER_CREDENTIAL_MANAGER_PROXY_H_
 
 #include "third_party/blink/public/mojom/credentialmanager/credential_manager.mojom-blink.h"
-#include "third_party/blink/public/mojom/sms/sms_receiver.mojom-blink.h"
+#include "third_party/blink/public/mojom/payments/payment_credential.mojom-blink.h"
+#include "third_party/blink/public/mojom/sms/webotp_service.mojom-blink.h"
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom-blink.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -33,8 +34,6 @@ class ScriptState;
 class MODULES_EXPORT CredentialManagerProxy
     : public GarbageCollected<CredentialManagerProxy>,
       public Supplement<LocalDOMWindow> {
-  USING_GARBAGE_COLLECTED_MIXIN(CredentialManagerProxy);
-
  public:
   static const char kSupplementName[];
 
@@ -47,11 +46,9 @@ class MODULES_EXPORT CredentialManagerProxy
 
   mojom::blink::Authenticator* Authenticator() { return authenticator_.get(); }
 
-  mojom::blink::SmsReceiver* SmsReceiver();
+  mojom::blink::WebOTPService* WebOTPService();
 
-  void FlushCredentialManagerConnectionForTesting() {
-    credential_manager_.FlushForTesting();
-  }
+  payments::mojom::blink::PaymentCredential* PaymentCredential();
 
   void Trace(Visitor*) const override;
 
@@ -60,15 +57,10 @@ class MODULES_EXPORT CredentialManagerProxy
   static CredentialManagerProxy* From(ScriptState*);
 
  private:
-  HeapMojoRemote<mojom::blink::Authenticator,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
-      authenticator_;
-  HeapMojoRemote<mojom::blink::CredentialManager,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
-      credential_manager_;
-  HeapMojoRemote<mojom::blink::SmsReceiver,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
-      sms_receiver_;
+  HeapMojoRemote<mojom::blink::Authenticator> authenticator_;
+  HeapMojoRemote<mojom::blink::CredentialManager> credential_manager_;
+  HeapMojoRemote<mojom::blink::WebOTPService> webotp_service_;
+  HeapMojoRemote<payments::mojom::blink::PaymentCredential> payment_credential_;
 };
 
 }  // namespace blink

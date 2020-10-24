@@ -18,7 +18,6 @@ export const generatedProperties = [
   {'longhands': ['break-after'], 'name': '-webkit-column-break-after'},
   {'longhands': ['break-before'], 'name': '-webkit-column-break-before'},
   {'longhands': ['break-inside'], 'name': '-webkit-column-break-inside'},
-  {'name': '-webkit-font-size-delta'},
   {'name': '-webkit-font-smoothing', 'inherited': true},
   {'name': '-webkit-highlight', 'inherited': true},
   {'name': '-webkit-hyphenate-character', 'inherited': true},
@@ -95,6 +94,7 @@ export const generatedProperties = [
     'keywords': ['read-only', 'read-write', 'read-write-plaintext-only']
   },
   {'name': '-webkit-writing-mode', 'inherited': true},
+  {'name': 'advance-override'},
   {'name': 'align-content'},
   {'name': 'align-items'},
   {'name': 'align-self'},
@@ -107,7 +107,7 @@ export const generatedProperties = [
   {
     'longhands': [
       'animation-duration', 'animation-timing-function', 'animation-delay', 'animation-iteration-count',
-      'animation-direction', 'animation-fill-mode', 'animation-play-state', 'animation-name'
+      'animation-direction', 'animation-fill-mode', 'animation-play-state', 'animation-name', 'animation-timeline'
     ],
     'name': 'animation'
   },
@@ -127,6 +127,7 @@ export const generatedProperties = [
     ]
   },
   {'name': 'appearance'},
+  {'name': 'ascent-override'},
   {'name': 'aspect-ratio', 'keywords': ['auto']},
   {'name': 'backdrop-filter', 'keywords': ['none']},
   {'name': 'backface-visibility', 'keywords': ['visible', 'hidden']},
@@ -326,6 +327,7 @@ export const generatedProperties = [
   {'name': 'content-visibility', 'keywords': ['visible', 'auto', 'hidden', 'hidden-matchable']},
   {'name': 'counter-increment', 'keywords': ['none']},
   {'name': 'counter-reset', 'keywords': ['none']},
+  {'name': 'counter-set', 'keywords': ['none']},
   {
     'name': 'cursor',
     'inherited': true,
@@ -340,6 +342,7 @@ export const generatedProperties = [
   {'svg': true, 'name': 'cx'},
   {'svg': true, 'name': 'cy'},
   {'name': 'd', 'svg': true, 'keywords': ['none']},
+  {'name': 'descent-override'},
   {'name': 'direction', 'inherited': true, 'keywords': ['ltr', 'rtl']},
   {
     'keywords': [
@@ -376,6 +379,7 @@ export const generatedProperties = [
     'keywords': ['auto', 'alphabetic', 'ideographic', 'middle', 'central', 'mathematical', 'hanging']
   },
   {'name': 'empty-cells', 'inherited': true, 'keywords': ['show', 'hide']},
+  {'name': 'end'},
   {'name': 'fill', 'svg': true, 'inherited': true},
   {'svg': true, 'inherited': true, 'name': 'fill-opacity'},
   {'name': 'fill-rule', 'svg': true, 'inherited': true, 'keywords': ['nonzero', 'evenodd']},
@@ -509,6 +513,7 @@ export const generatedProperties = [
   {'inherited': true, 'keywords': ['normal'], 'name': 'letter-spacing'},
   {'name': 'lighting-color', 'svg': true, 'keywords': ['currentcolor']},
   {'name': 'line-break', 'inherited': true, 'keywords': ['auto', 'loose', 'normal', 'strict', 'anywhere']},
+  {'name': 'line-gap-override'},
   {'name': 'line-height', 'inherited': true, 'keywords': ['normal']},
   {'name': 'line-height-step', 'inherited': true},
   {
@@ -596,10 +601,10 @@ export const generatedProperties = [
   {'svg': true, 'inherited': true, 'keywords': ['none'], 'name': 'marker-mid'},
   {'svg': true, 'inherited': true, 'keywords': ['none'], 'name': 'marker-start'},
   {'svg': true, 'name': 'mask'},
-  {'name': 'mask-source-type'},
   {'keywords': ['luminance', 'alpha'], 'svg': true, 'name': 'mask-type'},
-  {'name': 'math-style', 'inherited': true, 'keywords': ['inline', 'display']},
-  {'name': 'math-superscript-shift-style', 'inherited': true, 'keywords': ['inline', 'display']},
+  {'name': 'math-depth', 'inherited': true},
+  {'name': 'math-shift', 'inherited': true, 'keywords': ['normal', 'compact']},
+  {'name': 'math-style', 'inherited': true, 'keywords': ['normal', 'compact']},
   {'keywords': ['none'], 'name': 'max-block-size'},
   {'name': 'max-height', 'keywords': ['none']},
   {'keywords': ['none'], 'name': 'max-inline-size'},
@@ -646,8 +651,8 @@ export const generatedProperties = [
   {'name': 'overflow-block'},
   {'name': 'overflow-inline'},
   {'name': 'overflow-wrap', 'inherited': true, 'keywords': ['normal', 'break-word', 'anywhere']},
-  {'name': 'overflow-x', 'keywords': ['visible', 'hidden', 'scroll', 'auto', 'overlay']},
-  {'name': 'overflow-y', 'keywords': ['visible', 'hidden', 'scroll', 'auto', 'overlay']},
+  {'name': 'overflow-x', 'keywords': ['visible', 'hidden', 'scroll', 'auto', 'overlay', 'clip']},
+  {'name': 'overflow-y', 'keywords': ['visible', 'hidden', 'scroll', 'auto', 'overlay', 'clip']},
   {'longhands': ['overscroll-behavior-x', 'overscroll-behavior-y'], 'name': 'overscroll-behavior'},
   {'name': 'overscroll-behavior-block'},
   {'name': 'overscroll-behavior-inline'},
@@ -684,7 +689,7 @@ export const generatedProperties = [
     ]
   },
   {'name': 'position', 'keywords': ['static', 'relative', 'absolute', 'fixed', 'sticky']},
-  {'name': 'quotes', 'inherited': true, 'keywords': ['none']},
+  {'name': 'quotes', 'inherited': true, 'keywords': ['auto', 'none']},
   {'svg': true, 'name': 'r'},
   {'name': 'resize', 'keywords': ['none', 'both', 'horizontal', 'vertical', 'block', 'inline']},
   {'name': 'right', 'keywords': ['auto']},
@@ -727,6 +732,7 @@ export const generatedProperties = [
   {'name': 'scroll-snap-align', 'keywords': ['none', 'start', 'end', 'center']},
   {'name': 'scroll-snap-stop', 'keywords': ['normal', 'always']},
   {'name': 'scroll-snap-type', 'keywords': ['none', 'x', 'y', 'block', 'inline', 'both', 'mandatory', 'proximity']},
+  {'name': 'scrollbar-gutter', 'inherited': false, 'keywords': ['auto', 'stable', 'always']},
   {'name': 'shape-image-threshold'},
   {'name': 'shape-margin', 'keywords': ['none']},
   {'name': 'shape-outside', 'keywords': ['none']},
@@ -737,12 +743,14 @@ export const generatedProperties = [
     'keywords': ['auto', 'optimizespeed', 'crispedges', 'geometricprecision']
   },
   {'name': 'size'},
+  {'name': 'source'},
   {
     'name': 'speak',
     'inherited': true,
     'keywords': ['none', 'normal', 'spell-out', 'digits', 'literal-punctuation', 'no-punctuation']
   },
   {'name': 'src'},
+  {'name': 'start'},
   {'name': 'stop-color', 'svg': true, 'keywords': ['currentcolor']},
   {'name': 'stop-opacity', 'svg': true},
   {'name': 'stroke', 'svg': true, 'inherited': true},
@@ -759,19 +767,21 @@ export const generatedProperties = [
   {
     'name': 'text-align',
     'inherited': true,
-    'keywords': [
-      'left', 'right', 'center', 'justify', '-webkit-left', '-webkit-right', '-webkit-center', 'start', 'end',
-      '-internal-space-around'
-    ]
+    'keywords':
+        ['left', 'right', 'center', 'justify', '-webkit-left', '-webkit-right', '-webkit-center', 'start', 'end']
   },
   {
     'name': 'text-align-last',
     'inherited': true,
-    'keywords': ['auto', 'start', 'end', 'left', 'right', 'center', 'justify', '-internal-space-around']
+    'keywords': ['auto', 'start', 'end', 'left', 'right', 'center', 'justify']
   },
   {'name': 'text-anchor', 'svg': true, 'inherited': true, 'keywords': ['start', 'middle', 'end']},
   {'name': 'text-combine-upright', 'inherited': true, 'keywords': ['none', 'all']},
-  {'longhands': ['text-decoration-line', 'text-decoration-style', 'text-decoration-color'], 'name': 'text-decoration'},
+  {
+    'longhands':
+        ['text-decoration-line', 'text-decoration-thickness', 'text-decoration-style', 'text-decoration-color'],
+    'name': 'text-decoration'
+  },
   {'name': 'text-decoration-color', 'keywords': ['currentcolor']},
   {'name': 'text-decoration-line', 'keywords': ['none', 'underline', 'overline', 'line-through', 'blink']},
   {'name': 'text-decoration-skip-ink', 'inherited': true, 'keywords': ['none', 'auto']},
@@ -795,6 +805,7 @@ export const generatedProperties = [
   },
   {'name': 'text-underline-offset', 'inherited': true, 'keywords': ['auto']},
   {'name': 'text-underline-position', 'inherited': true, 'keywords': ['auto', 'from-font', 'under', 'left', 'right']},
+  {'name': 'time-range'},
   {'name': 'top', 'keywords': ['auto']},
   {
     'name': 'touch-action',
@@ -943,6 +954,7 @@ export const generatedPropertyValues = {
   'content-visibility': {'values': ['visible', 'auto', 'hidden', 'hidden-matchable']},
   'counter-increment': {'values': ['none']},
   'counter-reset': {'values': ['none']},
+  'counter-set': {'values': ['none']},
   'cursor': {
     'values': [
       'auto',        'default',   'none',      'context-menu',  'help',        'pointer',    'progress',   'wait',
@@ -1126,8 +1138,8 @@ export const generatedPropertyValues = {
   'marker-mid': {'values': ['none']},
   'marker-start': {'values': ['none']},
   'mask-type': {'values': ['luminance', 'alpha']},
-  'math-style': {'values': ['inline', 'display']},
-  'math-superscript-shift-style': {'values': ['inline', 'display']},
+  'math-shift': {'values': ['normal', 'compact']},
+  'math-style': {'values': ['normal', 'compact']},
   'max-block-size': {'values': ['none']},
   'max-height': {'values': ['none']},
   'max-inline-size': {'values': ['none']},
@@ -1150,8 +1162,8 @@ export const generatedPropertyValues = {
   'outline-width': {'values': ['thin', 'medium', 'thick']},
   'overflow-anchor': {'values': ['visible', 'none', 'auto']},
   'overflow-wrap': {'values': ['normal', 'break-word', 'anywhere']},
-  'overflow-x': {'values': ['visible', 'hidden', 'scroll', 'auto', 'overlay']},
-  'overflow-y': {'values': ['visible', 'hidden', 'scroll', 'auto', 'overlay']},
+  'overflow-x': {'values': ['visible', 'hidden', 'scroll', 'auto', 'overlay', 'clip']},
+  'overflow-y': {'values': ['visible', 'hidden', 'scroll', 'auto', 'overlay', 'clip']},
   'overscroll-behavior-x': {'values': ['auto', 'contain', 'none']},
   'overscroll-behavior-y': {'values': ['auto', 'contain', 'none']},
   'page': {'values': ['auto']},
@@ -1164,7 +1176,7 @@ export const generatedPropertyValues = {
     ]
   },
   'position': {'values': ['static', 'relative', 'absolute', 'fixed', 'sticky']},
-  'quotes': {'values': ['none']},
+  'quotes': {'values': ['auto', 'none']},
   'resize': {'values': ['none', 'both', 'horizontal', 'vertical', 'block', 'inline']},
   'right': {'values': ['auto']},
   'row-gap': {'values': ['normal']},
@@ -1182,6 +1194,7 @@ export const generatedPropertyValues = {
   'scroll-snap-align': {'values': ['none', 'start', 'end', 'center']},
   'scroll-snap-stop': {'values': ['normal', 'always']},
   'scroll-snap-type': {'values': ['none', 'x', 'y', 'block', 'inline', 'both', 'mandatory', 'proximity']},
+  'scrollbar-gutter': {'values': ['auto', 'stable', 'always']},
   'shape-margin': {'values': ['none']},
   'shape-outside': {'values': ['none']},
   'shape-rendering': {'values': ['auto', 'optimizespeed', 'crispedges', 'geometricprecision']},

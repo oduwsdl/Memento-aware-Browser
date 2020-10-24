@@ -23,7 +23,9 @@ class TextCharPos;
 
 class CBC_OneDimWriter : public CBC_Writer {
  public:
-  static const CFX_TextRenderOptions& GetTextRenderOptions();
+  static constexpr CFX_TextRenderOptions GetTextRenderOptions() {
+    return CFX_TextRenderOptions(CFX_TextRenderOptions::kLcd);
+  }
   static bool HasValidContentSize(WideStringView contents);
 
   CBC_OneDimWriter();

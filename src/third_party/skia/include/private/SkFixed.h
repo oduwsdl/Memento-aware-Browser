@@ -11,6 +11,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkSafe_math.h"
+#include "include/private/SkTPin.h"
 #include "include/private/SkTo.h"
 
 /** \file SkFixed.h
@@ -101,7 +102,7 @@ static inline SkFixed SkFixedMul(SkFixed a, SkFixed b) {
 
 // The VCVT float-to-fixed instruction is part of the VFPv3 instruction set.
 #if defined(__ARM_VFPV3__)
-    /* This guy does not handle NaN or other obscurities, but is faster than
+    /* This does not handle NaN or other obscurities, but is faster than
        than (int)(x*65536).  When built on Android with -Os, needs forcing
        to inline or we lose the speed benefit.
     */

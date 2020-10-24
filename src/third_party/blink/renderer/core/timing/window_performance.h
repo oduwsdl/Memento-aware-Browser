@@ -32,10 +32,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_WINDOW_PERFORMANCE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_WINDOW_PERFORMANCE_H_
 
+#include "base/rand_util.h"
 #include "third_party/blink/public/web/web_swap_result.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/frame/performance_monitor.h"
+#include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/core/timing/event_counts.h"
 #include "third_party/blink/renderer/core/timing/memory_info.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
@@ -45,10 +47,12 @@
 
 namespace blink {
 
+class IntSize;
+
 class CORE_EXPORT WindowPerformance final : public Performance,
                                             public PerformanceMonitor::Client,
-                                            public ExecutionContextClient {
-  USING_GARBAGE_COLLECTED_MIXIN(WindowPerformance);
+                                            public ExecutionContextClient,
+                                            public PageVisibilityObserver {
   friend class WindowPerformanceTest;
 
  public:
@@ -89,6 +93,10 @@ class CORE_EXPORT WindowPerformance final : public Performance,
                         Element*);
 
   void AddLayoutShiftEntry(LayoutShift*);
+  void AddVisibilityStateEntry(bool is_visible, base::TimeTicks start_time);
+
+  // PageVisibilityObserver
+  void PageVisibilityChanged() override;
 
   void OnLargestContentfulPaintUpdated(base::TimeTicks paint_time,
                                        uint64_t paint_size,

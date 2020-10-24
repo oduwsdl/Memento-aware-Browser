@@ -48,7 +48,7 @@ class FrameSelectionTest : public EditingTestBase {
     return Selection().ComputeVisibleSelectionInDOMTree();
   }
   VisibleSelectionInFlatTree GetVisibleSelectionInFlatTree() const {
-    return Selection().GetSelectionInFlatTree();
+    return Selection().ComputeVisibleSelectionInFlatTree();
   }
 
   Text* AppendTextNode(const String& data);
@@ -126,7 +126,7 @@ TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
   GetDocument().body()->focus();
   EXPECT_TRUE(GetDocument().body()->IsFocused());
 
-  Selection().SetCaretVisible(true);
+  Selection().SetCaretEnabled(true);
   Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder().Collapse(Position(text, 0)).Build());
   UpdateAllLifecyclePhasesForTest();

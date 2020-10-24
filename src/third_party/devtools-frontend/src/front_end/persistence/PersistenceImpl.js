@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Bindings from '../bindings/bindings.js';
 import * as Common from '../common/common.js';
 import * as Components from '../components/components.js';
@@ -10,6 +13,9 @@ import * as Workspace from '../workspace/workspace.js';
 
 import {Automapping, AutomappingStatus} from './Automapping.js';  // eslint-disable-line no-unused-vars
 import {LinkDecorator} from './PersistenceUtils.js';
+
+/** @type {!PersistenceImpl} */
+let persistenceInstance;
 
 /**
  * @unrestricted
@@ -33,6 +39,21 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper {
     Components.Linkifier.Linkifier.setLinkDecorator(linkDecorator);
 
     this._mapping = new Automapping(this._workspace, this._onStatusAdded.bind(this), this._onStatusRemoved.bind(this));
+  }
+
+  /**
+   * @param {{forceNew: ?boolean}} opts
+   */
+  static instance(opts = {forceNew: null, workspace: null, breakpointManager: null}) {
+    const {forceNew, workspace, breakpointManager} = opts;
+    if (!persistenceInstance || forceNew) {
+      if (!workspace || !breakpointManager) {
+        throw new Error('Missing arguments for workspace');
+      }
+      persistenceInstance = new PersistenceImpl(workspace, breakpointManager);
+    }
+
+    return persistenceInstance;
   }
 
   /**
@@ -144,6 +165,7 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper {
 
   /**
    * @param {!AutomappingStatus} status
+   * @return {!Promise<void>}
    */
   async _onStatusAdded(status) {
     const binding = new PersistenceBinding(status.network, status.fileSystem);
@@ -153,6 +175,7 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper {
 
   /**
    * @param {!AutomappingStatus} status
+   * @return {!Promise<void>}
    */
   async _onStatusRemoved(status) {
     const binding = /** @type {!PersistenceBinding} */ (status[_binding]);

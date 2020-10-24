@@ -31,6 +31,7 @@
 #include "libANGLE/Context.h"
 #include "libANGLE/Device.h"
 #include "libANGLE/EGLSync.h"
+#include "libANGLE/FrameCapture.h"
 #include "libANGLE/Image.h"
 #include "libANGLE/ResourceManager.h"
 #include "libANGLE/Stream.h"
@@ -457,7 +458,9 @@ static constexpr uint32_t kScratchBufferLifetime = 64u;
 
 // ShareGroup
 ShareGroup::ShareGroup(rx::EGLImplFactory *factory)
-    : mRefCount(1), mImplementation(factory->createShareGroup())
+    : mRefCount(1),
+      mImplementation(factory->createShareGroup()),
+      mFrameCaptureShared(new angle::FrameCaptureShared)
 {}
 
 ShareGroup::~ShareGroup()
@@ -471,10 +474,14 @@ void ShareGroup::addRef()
     mRefCount++;
 }
 
-void ShareGroup::release(const gl::Context *context)
+void ShareGroup::release(const Display *display)
 {
     if (--mRefCount == 0)
     {
+        if (mImplementation)
+        {
+            mImplementation->onDestroy(display);
+        }
         delete this;
     }
 }
@@ -563,7 +570,11 @@ Display *Display::GetDisplayFromNativeDisplay(EGLNativeDisplayType nativeDisplay
             // No valid display implementation for these attributes
             return nullptr;
         }
-        SetUseAndroidOpenGLTlsSlot(displayType == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE);
+
+#if defined(ANGLE_PLATFORM_ANDROID)
+        angle::gUseAndroidOpenGLTlsSlot = displayType == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE;
+#endif  // defined(ANGLE_PLATFORM_ANDROID)
+
         display->setupDisplayPlatform(impl);
     }
 
@@ -651,9 +662,11 @@ Display::Display(EGLenum platform, EGLNativeDisplayType displayId, Device *eglDe
       mSurface(nullptr),
       mPlatform(platform),
       mTextureManager(nullptr),
+      mSemaphoreManager(nullptr),
       mBlobCache(gl::kDefaultMaxProgramCacheMemoryBytes),
       mMemoryProgramCache(mBlobCache),
-      mGlobalTextureShareGroupUsers(0)
+      mGlobalTextureShareGroupUsers(0),
+      mGlobalSemaphoreShareGroupUsers(0)
 {}
 
 Display::~Display()
@@ -776,7 +789,7 @@ Error Display::initialize()
         mBlobCache.resize(1024 * 1024);
     }
 
-    gl::InitializeDebugAnnotations(&mAnnotator);
+    setGlobalDebugAnnotator();
 
     gl::InitializeDebugMutexIfNeeded();
 
@@ -875,10 +888,12 @@ Error Display::terminate(const Thread *thread)
         ANGLE_TRY(destroyContext(thread, *mContextSet.begin()));
     }
 
-    ANGLE_TRY(makeCurrent(thread, nullptr, nullptr, nullptr));
+    ANGLE_TRY(makeCurrent(thread->getContext(), nullptr, nullptr, nullptr));
 
-    // The global texture manager should be deleted with the last context that uses it.
+    // The global texture and semaphore managers should be deleted with the last context that uses
+    // it.
     ASSERT(mGlobalTextureShareGroupUsers == 0 && mTextureManager == nullptr);
+    ASSERT(mGlobalSemaphoreShareGroupUsers == 0 && mSemaphoreManager == nullptr);
 
     while (!mImageSet.empty())
     {
@@ -1143,6 +1158,23 @@ Error Display::createContext(const Config *configuration,
         shareTextures = mTextureManager;
     }
 
+    // This display semaphore sharing will allow the first context to create the semaphore share
+    // group.
+    bool usingDisplaySemaphoreShareGroup =
+        attribs.get(EGL_DISPLAY_SEMAPHORE_SHARE_GROUP_ANGLE, EGL_FALSE) == EGL_TRUE;
+    gl::SemaphoreManager *shareSemaphores = nullptr;
+    if (usingDisplaySemaphoreShareGroup)
+    {
+        ASSERT((mSemaphoreManager == nullptr) == (mGlobalSemaphoreShareGroupUsers == 0));
+        if (mSemaphoreManager == nullptr)
+        {
+            mSemaphoreManager = new gl::SemaphoreManager();
+        }
+
+        mGlobalSemaphoreShareGroupUsers++;
+        shareSemaphores = mSemaphoreManager;
+    }
+
     gl::MemoryProgramCache *cachePointer = &mMemoryProgramCache;
 
     // Check context creation attributes to see if we are using EGL_ANGLE_program_cache_control.
@@ -1162,9 +1194,9 @@ Error Display::createContext(const Config *configuration,
         }
     }
 
-    gl::Context *context =
-        new gl::Context(this, configuration, shareContext, shareTextures, cachePointer, clientType,
-                        attribs, mDisplayExtensions, GetClientExtensions());
+    gl::Context *context = new gl::Context(this, configuration, shareContext, shareTextures,
+                                           shareSemaphores, cachePointer, clientType, attribs,
+                                           mDisplayExtensions, GetClientExtensions());
     if (shareContext != nullptr)
     {
         shareContext->setShared();
@@ -1172,6 +1204,8 @@ Error Display::createContext(const Config *configuration,
 
     ASSERT(context != nullptr);
     mContextSet.insert(context);
+
+    context->addRef();
 
     ASSERT(outContext != nullptr);
     *outContext = context;
@@ -1204,7 +1238,7 @@ Error Display::createSync(const gl::Context *currentContext,
     return NoError();
 }
 
-Error Display::makeCurrent(const Thread *thread,
+Error Display::makeCurrent(gl::Context *previousContext,
                            egl::Surface *drawSurface,
                            egl::Surface *readSurface,
                            gl::Context *context)
@@ -1214,17 +1248,28 @@ Error Display::makeCurrent(const Thread *thread,
         return NoError();
     }
 
-    gl::Context *previousContext = thread->getContext();
-    if (previousContext)
+    // If the context is changing we need to update the reference counts. If it's not, e.g. just
+    // changing the surfaces leave the reference count alone. Otherwise the reference count might go
+    // to zero even though we know we are not done with the context.
+    bool updateRefCount = context != previousContext;
+    if (previousContext != nullptr)
     {
         ANGLE_TRY(previousContext->unMakeCurrent(this));
+        if (updateRefCount)
+        {
+            ANGLE_TRY(releaseContext(previousContext));
+        }
     }
 
-    ANGLE_TRY(mImplementation->makeCurrent(drawSurface, readSurface, context));
+    ANGLE_TRY(mImplementation->makeCurrent(this, drawSurface, readSurface, context));
 
     if (context != nullptr)
     {
         ANGLE_TRY(context->makeCurrent(this, drawSurface, readSurface));
+        if (updateRefCount)
+        {
+            context->addRef();
+        }
     }
 
     // Tick all the scratch buffers to make sure they get cleaned up eventually if they stop being
@@ -1301,18 +1346,17 @@ void Display::destroyStream(egl::Stream *stream)
     SafeDelete(stream);
 }
 
-Error Display::destroyContext(const Thread *thread, gl::Context *context)
+// releaseContext must be called with the context being deleted as current.
+// To do that we can only call this in two places, Display::makeCurrent at the point where this
+// context is being made uncurrent and in Display::destroyContext where we make the context current
+// as part of destruction.
+Error Display::releaseContext(gl::Context *context)
 {
-    gl::Context *currentContext   = thread->getContext();
-    Surface *currentDrawSurface   = thread->getCurrentDrawSurface();
-    Surface *currentReadSurface   = thread->getCurrentReadSurface();
-    bool changeContextForDeletion = context != currentContext;
-
-    // Make the context being deleted current during it's deletion.  This allows it to delete
-    // any resources it's holding.
-    if (changeContextForDeletion)
+    context->release();
+    size_t refCount = context->getRefCount();
+    if (refCount > 0)
     {
-        ANGLE_TRY(makeCurrent(thread, nullptr, nullptr, context));
+        return NoError();
     }
 
     if (context->usingDisplayTextureShareGroup())
@@ -1329,14 +1373,55 @@ Error Display::destroyContext(const Thread *thread, gl::Context *context)
         mGlobalTextureShareGroupUsers--;
     }
 
+    if (context->usingDisplaySemaphoreShareGroup())
+    {
+        ASSERT(mGlobalSemaphoreShareGroupUsers >= 1 && mSemaphoreManager != nullptr);
+        if (mGlobalSemaphoreShareGroupUsers == 1)
+        {
+            // If this is the last context using the global share group, destroy the global
+            // semaphore manager so that the semaphores can be destroyed while a context still
+            // exists
+            mSemaphoreManager->release(context);
+            mSemaphoreManager = nullptr;
+        }
+        mGlobalSemaphoreShareGroupUsers--;
+    }
+
     ANGLE_TRY(context->onDestroy(this));
     mContextSet.erase(context);
     SafeDelete(context);
 
+    return NoError();
+}
+
+Error Display::destroyContext(const Thread *thread, gl::Context *context)
+{
+    size_t refCount = context->getRefCount();
+    if (refCount > 1)
+    {
+        context->release();
+        return NoError();
+    }
+
+    // This is the last reference for this context, so we can destroy it now.
+    gl::Context *currentContext   = thread->getContext();
+    Surface *currentDrawSurface   = thread->getCurrentDrawSurface();
+    Surface *currentReadSurface   = thread->getCurrentReadSurface();
+    bool changeContextForDeletion = context != currentContext;
+
+    // Make the context being deleted current during its deletion.  This allows it to delete
+    // any resources it's holding.
+    if (changeContextForDeletion)
+    {
+        ANGLE_TRY(makeCurrent(currentContext, nullptr, nullptr, context));
+    }
+
+    ANGLE_TRY(releaseContext(context));
+
     // Set the previous context back to current
     if (changeContextForDeletion)
     {
-        ANGLE_TRY(makeCurrent(thread, currentDrawSurface, currentReadSurface, currentContext));
+        ANGLE_TRY(makeCurrent(context, currentDrawSurface, currentReadSurface, currentContext));
     }
 
     return NoError();
@@ -1394,6 +1479,28 @@ void Display::setBlobCacheFuncs(EGLSetBlobFuncANDROID set, EGLGetBlobFuncANDROID
 EGLClientBuffer Display::GetNativeClientBuffer(const AHardwareBuffer *buffer)
 {
     return angle::android::AHardwareBufferToClientBuffer(buffer);
+}
+
+// static
+Error Display::CreateNativeClientBuffer(const egl::AttributeMap &attribMap,
+                                        EGLClientBuffer *eglClientBuffer)
+{
+    int androidHardwareBufferFormat = gl::GetAndroidHardwareBufferFormatFromChannelSizes(attribMap);
+    int width                       = attribMap.getAsInt(EGL_WIDTH, 0);
+    int height                      = attribMap.getAsInt(EGL_HEIGHT, 0);
+    int usage                       = attribMap.getAsInt(EGL_NATIVE_BUFFER_USAGE_ANDROID, 0);
+
+    // https://developer.android.com/ndk/reference/group/a-hardware-buffer#ahardwarebuffer_lock
+    // for AHardwareBuffer_lock()
+    // The passed AHardwareBuffer must have one layer, otherwise the call will fail.
+    constexpr int kLayerCount = 1;
+
+    *eglClientBuffer = angle::android::CreateEGLClientBufferFromAHardwareBuffer(
+        width, height, kLayerCount, androidHardwareBufferFormat, usage);
+
+    return (*eglClientBuffer == nullptr)
+               ? egl::EglBadParameter() << "native client buffer allocation failed."
+               : NoError();
 }
 
 Error Display::waitClient(const gl::Context *context)
@@ -1557,6 +1664,7 @@ void Display::initDisplayExtensions()
     mDisplayExtensions.createContextBindGeneratesResource = true;
     mDisplayExtensions.createContextClientArrays          = true;
     mDisplayExtensions.pixelFormatFloat                   = true;
+    mDisplayExtensions.reusableSyncKHR                    = true;
 
     // Force EGL_KHR_get_all_proc_addresses on.
     mDisplayExtensions.getAllProcAddresses = true;
@@ -1661,6 +1769,7 @@ void Display::initializeFrontendFeatures()
     // Enable on all Impls
     ANGLE_FEATURE_CONDITION((&mFrontendFeatures), loseContextOnOutOfMemory, true);
     ANGLE_FEATURE_CONDITION((&mFrontendFeatures), scalarizeVecAndMatConstructorArgs, true);
+    ANGLE_FEATURE_CONDITION((&mFrontendFeatures), allowCompressedFormats, true);
 
     mImplementation->initializeFrontendFeatures(&mFrontendFeatures);
 
@@ -1797,6 +1906,11 @@ EGLint Display::programCacheResize(EGLint limit, EGLenum mode)
     }
 }
 
+void Display::overrideFrontendFeatures(const std::vector<std::string> &featureNames, bool enabled)
+{
+    mFrontendFeatures.overrideFeatures(featureNames, enabled);
+}
+
 const char *Display::queryStringi(const EGLint name, const EGLint index)
 {
     const char *result = nullptr;
@@ -1891,5 +2005,4 @@ egl::Error Display::handleGPUSwitch()
 {
     return mImplementation->handleGPUSwitch();
 }
-
 }  // namespace egl

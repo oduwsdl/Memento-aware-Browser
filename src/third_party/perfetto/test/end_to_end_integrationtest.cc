@@ -65,7 +65,7 @@ using ::testing::ContainsRegex;
 using ::testing::ElementsAreArray;
 using ::testing::HasSubstr;
 
-constexpr size_t kBuiltinPackets = 8;
+constexpr size_t kBuiltinPackets = 12;
 
 std::string RandomTraceFileName() {
 #if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
@@ -292,7 +292,7 @@ TEST_F(PerfettoTest, TreeHuggerOnly(TestFtraceProducer)) {
   ds_config->set_ftrace_config_raw(ftrace_config.SerializeAsString());
 
   helper.StartTracing(trace_config);
-  helper.WaitForTracingDisabled();
+  helper.WaitForTracingDisabled(10000);
 
   helper.ReadData();
   helper.WaitForReadData();
@@ -418,8 +418,8 @@ TEST_F(PerfettoTest, TreeHuggerOnly(TestBatteryTracing)) {
     has_battery_packet = true;
     // Unfortunately we cannot make any assertions on the charge counter.
     // On some devices it can reach negative values (b/64685329).
-    EXPECT_GE(packet.battery().capacity_percent(), 0);
-    EXPECT_LE(packet.battery().capacity_percent(), 100);
+    EXPECT_GE(packet.battery().capacity_percent(), 0.f);
+    EXPECT_LE(packet.battery().capacity_percent(), 100.f);
   }
 
   ASSERT_TRUE(has_battery_packet);
@@ -1012,6 +1012,8 @@ TEST_F(PerfettoCmdlineTest, DISABLED_NoDataNoFileWithoutTrigger) {
   protos::gen::TraceConfig trace_config;
   trace_config.add_buffers()->set_size_kb(1024);
   trace_config.set_allow_user_build_tracing(true);
+  auto* incident_config = trace_config.mutable_incident_report_config();
+  incident_config->set_destination_package("foo.bar.baz");
   auto* ds_config = trace_config.add_data_sources()->mutable_config();
   ds_config->set_name("android.perfetto.FakeProducer");
   ds_config->mutable_for_testing()->set_message_count(kMessageCount);
@@ -1055,7 +1057,7 @@ TEST_F(PerfettoCmdlineTest, DISABLED_NoDataNoFileWithoutTrigger) {
   background_trace.join();
 
   EXPECT_THAT(stderr_str,
-              ::testing::HasSubstr("Skipping write to dropbox. Empty trace."));
+              ::testing::HasSubstr("Skipping write to incident. Empty trace."));
 }
 
 TEST_F(PerfettoCmdlineTest, NoSanitizers(StopTracingTriggerFromConfig)) {

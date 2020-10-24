@@ -1,3 +1,85 @@
+# [3.2.0](https://github.com/wasdk/wasmparser/compare/v3.1.3...v3.2.0) (2020-10-13)
+
+
+### Features
+
+* support some extended name subsections ([d3efc60](https://github.com/wasdk/wasmparser/commit/d3efc60a93326c09502d8bbace5d2d6231df03e3))
+
+## [3.1.3](https://github.com/wasdk/wasmparser/compare/v3.1.2...v3.1.3) (2020-10-12)
+
+
+### Bug Fixes
+
+* ignore unsupported "name" subsections ([652f0f7](https://github.com/wasdk/wasmparser/commit/652f0f7c79db00edcc21d9049bb73e4d41383740))
+
+## [3.1.2](https://github.com/wasdk/wasmparser/compare/v3.1.1...v3.1.2) (2020-08-26)
+
+
+### Bug Fixes
+
+* extensions have an leb128 opcode ([#77](https://github.com/wasdk/wasmparser/issues/77)) ([149816c](https://github.com/wasdk/wasmparser/commit/149816c5aa42f7c30bcced7d36742ad9984683fa))
+
+## [3.1.1](https://github.com/wasdk/wasmparser/compare/v3.1.0...v3.1.1) (2020-08-19)
+
+
+### Bug Fixes
+
+* **threads:** add atomic.fence ([a9fd605](https://github.com/wasdk/wasmparser/commit/a9fd605d175fe91f4991321cd43d0db7868f01df)), closes [/github.com/WebAssembly/wabt/commit/d041025854ba2b00b3df9f308914c8aba05dcda9#diff-25d902c24283ab8cfbac54dfa101ad31](https://github.com//github.com/WebAssembly/wabt/commit/d041025854ba2b00b3df9f308914c8aba05dcda9/issues/diff-25d902c24283ab8cfbac54dfa101ad31)
+
+# [3.1.0](https://github.com/wasdk/wasmparser/compare/v3.0.0...v3.1.0) (2020-07-13)
+
+
+### Bug Fixes
+
+* make chunked parsing work for element entries ([34d35d0](https://github.com/wasdk/wasmparser/commit/34d35d0820da552963d619ee473877be4e1fbcca)), closes [#22](https://github.com/wasdk/wasmparser/issues/22)
+
+
+### Features
+
+* add tests for chunked disassembly ([4976b44](https://github.com/wasdk/wasmparser/commit/4976b4404c3e6fcf48481ac205d8b6fc611b2b29))
+
+# [3.0.0](https://github.com/wasdk/wasmparser/compare/v2.2.5...v3.0.0) (2020-06-24)
+
+
+* revert!: add option to truncate disassembly ([2eb0025](https://github.com/wasdk/wasmparser/commit/2eb002523493efbe286f3661696fa8f4fd31d402)), closes [#30](https://github.com/wasdk/wasmparser/issues/30)
+
+
+### BREAKING CHANGES
+
+* dropping the `WasmDisassembler#maxLines`
+feature that was introduced earlier.
+
+The `WasmDisassembler#maxLines` feature doesn't interact well
+with the chunked disassembly machinery, in particular the
+logic in `getResult()` to avoid breaking def-use chains for
+labels didn't play well with the `maxLines` feature at all
+(it would remove `;; -- text is truncated due to size --`
+marker when the line limit was reached).
+
+Since there's already support for chunked disassembly built
+into wasmparser by design, that should be used instead.
+
+## [2.2.5](https://github.com/wasdk/wasmparser/compare/v2.2.4...v2.2.5) (2020-06-23)
+
+
+### Bug Fixes
+
+* imports need to use .js suffix to work correctly ([64a7f77](https://github.com/wasdk/wasmparser/commit/64a7f776e896e3c5aea8371456d84d0052b577be))
+
+## [2.2.4](https://github.com/wasdk/wasmparser/compare/v2.2.3...v2.2.4) (2020-06-23)
+
+
+### Bug Fixes
+
+* rename atomic.notify and *.atomic.wait ([9d10a22](https://github.com/wasdk/wasmparser/commit/9d10a22193e66ac3e953a3722c1c3bf673c00914)), closes [WebAssembly/threads#149](https://github.com/WebAssembly/threads/issues/149)
+
+## [2.2.3](https://github.com/wasdk/wasmparser/compare/v2.2.2...v2.2.3) (2020-06-21)
+
+
+### Bug Fixes
+
+* correct import from "WasmParser" in "WasmDis.ts" ([8abb34b](https://github.com/wasdk/wasmparser/commit/8abb34b59ec0820259587db07cac95a94a54958e))
+
 ## [2.2.2](https://github.com/wasdk/wasmparser/compare/v2.2.1...v2.2.2) (2020-06-16)
 
 

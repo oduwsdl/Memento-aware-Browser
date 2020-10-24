@@ -23,9 +23,6 @@ NGCustomLayoutAlgorithm::NGCustomLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
     : NGLayoutAlgorithm(params), params_(params) {
   DCHECK(params.space.IsNewFormattingContext());
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
 }
 
 MinMaxSizesResult NGCustomLayoutAlgorithm::ComputeMinMaxSizes(
@@ -165,13 +162,9 @@ scoped_refptr<const NGLayoutResult> NGCustomLayoutAlgorithm::Layout() {
 
   container_builder_.SetCustomLayoutData(std::move(fragment_result_data));
   container_builder_.SetIntrinsicBlockSize(auto_block_size);
-  container_builder_.SetBlockSize(block_size);
+  container_builder_.SetFragmentsTotalBlockSize(block_size);
 
-  NGOutOfFlowLayoutPart(
-      Node(), ConstraintSpace(),
-      container_builder_.Borders() + container_builder_.Scrollbar(),
-      &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   return container_builder_.ToBoxFragment();
 }

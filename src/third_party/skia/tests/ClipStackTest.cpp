@@ -22,7 +22,7 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrConfig.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/private/GrResourceKey.h"
 #include "include/private/SkTemplates.h"
 #include "include/utils/SkRandom.h"
@@ -31,7 +31,7 @@
 #include "src/core/SkTLList.h"
 #include "src/gpu/GrClip.h"
 #include "src/gpu/GrClipStackClip.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrReducedClip.h"
 #include "src/gpu/GrResourceCache.h"
 #include "src/gpu/GrTexture.h"
@@ -122,7 +122,6 @@ static void test_assign_and_comparison(skiatest::Reporter* reporter) {
     s.clipRect(r, SkMatrix::I(), kUnion_SkClipOp, doAA);
     REPORTER_ASSERT(reporter, s != copy);
 
-    // Sanity check
     s.restore();
     REPORTER_ASSERT(reporter, 2 == s.getSaveCount());
 
@@ -1064,7 +1063,7 @@ static void test_reduced_clip_stack(skiatest::Reporter* reporter, bool enableCli
             }
         }
 
-        auto context = GrContext::MakeMock(nullptr);
+        sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(nullptr);
         const GrCaps* caps = context->priv().caps();
 
         // Zero the memory we will new the GrReducedClip into. This ensures the elements gen ID
@@ -1139,7 +1138,7 @@ static void test_reduced_clip_stack_genid(skiatest::Reporter* reporter) {
                        kReplace_SkClipOp, true);
         SkRect bounds = SkRect::MakeXYWH(0, 0, 100, 100);
 
-        auto context = GrContext::MakeMock(nullptr);
+        sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(nullptr);
         const GrCaps* caps = context->priv().caps();
 
         SkAlignedSTStorage<1, GrReducedClip> storage;
@@ -1228,7 +1227,7 @@ static void test_reduced_clip_stack_genid(skiatest::Reporter* reporter) {
 
 #undef XYWH
 #undef IXYWH
-        auto context = GrContext::MakeMock(nullptr);
+        sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(nullptr);
         const GrCaps* caps = context->priv().caps();
 
         for (size_t i = 0; i < SK_ARRAY_COUNT(testCases); ++i) {
@@ -1255,7 +1254,7 @@ static void test_reduced_clip_stack_no_aa_crash(skiatest::Reporter* reporter) {
     stack.clipDevRect(SkIRect::MakeXYWH(0, 0, 50, 50), kReplace_SkClipOp);
     SkRect bounds = SkRect::MakeXYWH(0, 0, 100, 100);
 
-    auto context = GrContext::MakeMock(nullptr);
+    sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(nullptr);
     const GrCaps* caps = context->priv().caps();
 
     // At the time, this would crash.
@@ -1274,7 +1273,7 @@ static void test_aa_query(skiatest::Reporter* reporter, const SkString& testName
                           const SkClipStack& stack, const SkMatrix& queryXform,
                           const SkRect& preXformQuery, ClipMethod expectedMethod,
                           int numExpectedElems = 0) {
-    auto context = GrContext::MakeMock(nullptr);
+    sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(nullptr);
     const GrCaps* caps = context->priv().caps();
 
     SkRect queryBounds;
@@ -1436,7 +1435,7 @@ static void test_tiny_query_bounds_assertion_bug(skiatest::Reporter* reporter) {
     SkClipStack pathStack;
     pathStack.clipPath(clipPath, SkMatrix::I(), kIntersect_SkClipOp, true);
 
-    auto context = GrContext::MakeMock(nullptr);
+    sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(nullptr);
     const GrCaps* caps = context->priv().caps();
 
     for (const SkClipStack& stack : {rectStack, pathStack}) {
@@ -1546,8 +1545,9 @@ DEF_TEST(ClipStack, reporter) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-sk_sp<GrTextureProxy> GrClipStackClip::testingOnly_createClipMask(GrContext* context) const {
-    const GrReducedClip reducedClip(*fStack, SkRect::MakeWH(512, 512), 0);
+sk_sp<GrTextureProxy> GrClipStackClip::testingOnly_createClipMask(
+        GrRecordingContext* context) const {
+    const GrReducedClip reducedClip(*fStack, SkRect::MakeWH(512, 512), nullptr);
     return this->createSoftwareClipMask(context, reducedClip, nullptr).asTextureProxyRef();
 }
 
@@ -1555,7 +1555,7 @@ sk_sp<GrTextureProxy> GrClipStackClip::testingOnly_createClipMask(GrContext* con
 DEF_GPUTEST_FOR_ALL_CONTEXTS(ClipMaskCache, reporter, ctxInfo) {
     // This test uses resource key tags which only function in debug builds.
 #ifdef SK_DEBUG
-    GrContext* context = ctxInfo.grContext();
+    auto context = ctxInfo.directContext();
     SkClipStack stack;
 
     SkPath path;

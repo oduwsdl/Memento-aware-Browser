@@ -25,11 +25,9 @@
 class GrMemoryPool {
 public:
 #ifdef SK_FORCE_8_BYTE_ALIGNMENT
-    // This is an issue for WASM builds using emscripten, which had
-    // std::max_align_t = 16, but was returning pointers only aligned to 8
-    // bytes. https://github.com/emscripten-core/emscripten/issues/10072
-    // Since Skia does not use "long double" (16 bytes), we should be ok to
-    // force it back to 8 bytes until emscripten is fixed.
+    // https://github.com/emscripten-core/emscripten/issues/10072
+    // Since Skia does not use "long double" (16 bytes), we should be ok to force it back to 8 bytes
+    // until emscripten is fixed.
     static constexpr size_t kAlignment = 8;
 #else
     // Guaranteed alignment of pointer returned by allocate().
@@ -69,7 +67,8 @@ public:
     bool isEmpty() const {
         // If size is the same as preallocSize, there aren't any heap blocks, so currentBlock()
         // is the inline head block.
-        return 0 == this->size() && 0 == fAllocator.currentBlock()->metadata();
+        return fAllocator.currentBlock() == fAllocator.headBlock() &&
+               fAllocator.currentBlock()->metadata() == 0;
     }
 
     /**
@@ -122,14 +121,21 @@ public:
 
     template <typename Op, typename... OpArgs>
     std::unique_ptr<Op> allocate(OpArgs&&... opArgs) {
-        auto mem = this->allocate(sizeof(Op));
-        return std::unique_ptr<Op>(new (mem) Op(std::forward<OpArgs>(opArgs)...));
+        #if defined(GR_OP_ALLOCATE_USE_NEW)
+            void* m = ::operator new(sizeof(Op));
+            Op* op =  new (m) Op(std::forward<OpArgs>(opArgs)...);
+            return std::unique_ptr<Op>(op);
+        #else
+            auto mem = this->allocate(sizeof(Op));
+            return std::unique_ptr<Op>(new (mem) Op(std::forward<OpArgs>(opArgs)...));
+        #endif
     }
 
     void* allocate(size_t size) { return fPool.allocate(size); }
 
-    void release(std::unique_ptr<GrOp> op);
-
+    #if !defined(GR_OP_ALLOCATE_USE_NEW)
+        void release(std::unique_ptr<GrOp> op);
+    #endif
     bool isEmpty() const { return fPool.isEmpty(); }
 
 private:

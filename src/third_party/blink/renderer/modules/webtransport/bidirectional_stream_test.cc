@@ -22,8 +22,10 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_tester.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_iterator_result_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_uint8_array.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_bidirectional_stream.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_quic_transport_options.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/readable_stream_default_reader.h"
@@ -181,9 +183,9 @@ class ScopedQuicTransport : public mojom::blink::QuicTransportConnector {
         mojom::blink::QuicTransportConnector::Name_,
         base::BindRepeating(&ScopedQuicTransport::BindConnector,
                             weak_ptr_factory_.GetWeakPtr()));
-    quic_transport_ = QuicTransport::Create(scope.GetScriptState(),
-                                            "quic-transport://example.com/",
-                                            ASSERT_NO_EXCEPTION);
+    quic_transport_ = QuicTransport::Create(
+        scope.GetScriptState(), "quic-transport://example.com/",
+        MakeGarbageCollected<QuicTransportOptions>(), ASSERT_NO_EXCEPTION);
 
     test::RunPendingTasks();
   }
@@ -378,6 +380,25 @@ TEST(BidirectionalStreamTest, IncomingStreamCleanClose) {
   scoped_quic_transport.GetQuicTransport()->OnIncomingStreamClosed(
       kDefaultStreamId, true);
   scoped_quic_transport.Stub()->InputProducer().reset();
+
+  auto* script_state = scope.GetScriptState();
+  auto* reader = bidirectional_stream->readable()->getReader(
+      script_state, ASSERT_NO_EXCEPTION);
+
+  ScriptPromise read_promise = reader->read(script_state, ASSERT_NO_EXCEPTION);
+
+  ScriptPromiseTester read_tester(script_state, read_promise);
+  read_tester.WaitUntilSettled();
+  EXPECT_TRUE(read_tester.IsFulfilled());
+
+  v8::Local<v8::Value> result = read_tester.Value().V8Value();
+  DCHECK(result->IsObject());
+  v8::Local<v8::Value> v8value;
+  bool done = false;
+  EXPECT_TRUE(
+      V8UnpackIteratorResult(script_state, result.As<v8::Object>(), &done)
+          .ToLocal(&v8value));
+  EXPECT_TRUE(done);
 
   ScriptPromiseTester tester(scope.GetScriptState(),
                              bidirectional_stream->writingAborted());

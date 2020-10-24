@@ -634,8 +634,8 @@ CUSTOM_C_INTERCEPTS = {
     pSurfaceCapabilities->currentExtent.height = 0xFFFFFFFF;
     pSurfaceCapabilities->minImageExtent.width = 1;
     pSurfaceCapabilities->minImageExtent.height = 1;
-    pSurfaceCapabilities->maxImageExtent.width = 3840;
-    pSurfaceCapabilities->maxImageExtent.height = 2160;
+    pSurfaceCapabilities->maxImageExtent.width = 0xFFFF;
+    pSurfaceCapabilities->maxImageExtent.height = 0xFFFF;
     pSurfaceCapabilities->maxImageArrayLayers = 128;
     pSurfaceCapabilities->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR |
                                                 VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR |
@@ -1034,6 +1034,7 @@ class MockICDGeneratorOptions(GeneratorOptions):
                  conventions = None,
                  filename = None,
                  directory = '.',
+                 genpath = None,
                  apiname = None,
                  profile = None,
                  versions = '.*',
@@ -1057,9 +1058,20 @@ class MockICDGeneratorOptions(GeneratorOptions):
                  alignFuncParam = 0,
                  expandEnumerants = True,
                  helper_file_type = ''):
-        GeneratorOptions.__init__(self, conventions, filename, directory, apiname, profile,
-                                  versions, emitversions, defaultExtensions,
-                                  addExtensions, removeExtensions, emitExtensions, sortProcedure)
+        GeneratorOptions.__init__(self,
+                 conventions = conventions,
+                 filename = filename,
+                 directory = directory,
+                 genpath = genpath,
+                 apiname = apiname,
+                 profile = profile,
+                 versions = versions,
+                 emitversions = emitversions,
+                 defaultExtensions = defaultExtensions,
+                 addExtensions = addExtensions,
+                 removeExtensions = removeExtensions,
+                 emitExtensions = emitExtensions,
+                 sortProcedure = sortProcedure)
         self.prefixText      = prefixText
         self.genFuncPointers = genFuncPointers
         self.protectFile     = protectFile

@@ -85,6 +85,7 @@ typedef uint8_t stack_element;
 
 const char*  //
 fuzz_one_token(wuffs_base__token t,
+               wuffs_base__token prev_token,
                wuffs_base__io_buffer* src,
                size_t* ti,
                stack_element* stack,
@@ -97,8 +98,9 @@ fuzz_one_token(wuffs_base__token t,
   }
   *ti += len;
 
-  if ((t.repr >> 63) != 0) {
-    return "fuzz: internal error: token high bit was not zero";
+  if ((wuffs_base__token__value_extension(&t) >= 0) &&
+      !wuffs_base__token__continued(&prev_token)) {
+    return "fuzz: internal error: extended token not after continued token";
   }
 
   int64_t vbc = wuffs_base__token__value_base_category(&t);
@@ -169,11 +171,11 @@ fuzz_one_token(wuffs_base__token t,
         wuffs_base__slice_u8 s =
             wuffs_base__make_slice_u8(src->data.ptr + *ti - len, len);
         if ((vbd & WUFFS_BASE__TOKEN__VBD__STRING__DEFINITELY_UTF_8) &&
-            (s.len != wuffs_base__utf_8__longest_valid_prefix(s))) {
+            (s.len != wuffs_base__utf_8__longest_valid_prefix(s.ptr, s.len))) {
           return "fuzz: internal error: invalid UTF-8";
         }
         if ((vbd & WUFFS_BASE__TOKEN__VBD__STRING__DEFINITELY_ASCII) &&
-            (s.len != wuffs_base__ascii__longest_valid_prefix(s))) {
+            (s.len != wuffs_base__ascii__longest_valid_prefix(s.ptr, s.len))) {
           return "fuzz: internal error: invalid ASCII";
         }
       }
@@ -207,7 +209,7 @@ fuzz_one_token(wuffs_base__token t,
 }
 
 uint64_t  //
-buffer_limit(uint32_t hash_6_bits, uint64_t min, uint64_t max) {
+buffer_limit(uint64_t hash_6_bits, uint64_t min, uint64_t max) {
   uint64_t n;
   if (hash_6_bits < 0x20) {
     n = min + hash_6_bits;
@@ -222,7 +224,7 @@ buffer_limit(uint32_t hash_6_bits, uint64_t min, uint64_t max) {
   return n;
 }
 
-void set_quirks(wuffs_json__decoder* dec, uint32_t hash_12_bits) {
+void set_quirks(wuffs_json__decoder* dec, uint64_t hash_44_bits) {
   uint32_t quirks[] = {
       WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_A,
       WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_CAPITAL_U,
@@ -230,7 +232,7 @@ void set_quirks(wuffs_json__decoder* dec, uint32_t hash_12_bits) {
       WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_QUESTION_MARK,
       WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_SINGLE_QUOTE,
       WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_V,
-      WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_X,
+      WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_X_AS_CODE_POINTS,
       WUFFS_JSON__QUIRK_ALLOW_BACKSLASH_ZERO,
       WUFFS_JSON__QUIRK_ALLOW_COMMENT_BLOCK,
       WUFFS_JSON__QUIRK_ALLOW_COMMENT_LINE,
@@ -238,31 +240,31 @@ void set_quirks(wuffs_json__decoder* dec, uint32_t hash_12_bits) {
       WUFFS_JSON__QUIRK_ALLOW_INF_NAN_NUMBERS,
       WUFFS_JSON__QUIRK_ALLOW_LEADING_ASCII_RECORD_SEPARATOR,
       WUFFS_JSON__QUIRK_ALLOW_LEADING_UNICODE_BYTE_ORDER_MARK,
-      WUFFS_JSON__QUIRK_ALLOW_TRAILING_NEW_LINE,
+      WUFFS_JSON__QUIRK_ALLOW_TRAILING_FILLER,
       WUFFS_JSON__QUIRK_REPLACE_INVALID_UNICODE,
       0,
   };
 
   uint32_t i;
   for (i = 0; quirks[i]; i++) {
-    uint32_t bit = 1 << (i % 12);
-    if (hash_12_bits & bit) {
+    uint64_t bit = 1 << (i % 44);
+    if (hash_44_bits & bit) {
       wuffs_json__decoder__set_quirk_enabled(dec, quirks[i], true);
     }
   }
 }
 
 const char*  //
-fuzz_complex(wuffs_base__io_buffer* full_src, uint32_t hash_24_bits) {
+fuzz_complex(wuffs_base__io_buffer* full_src, uint64_t hash_56_bits) {
   uint64_t tok_limit = buffer_limit(
-      hash_24_bits & 0x3F, WUFFS_JSON__DECODER_DST_TOKEN_BUFFER_LENGTH_MIN_INCL,
+      hash_56_bits & 0x3F, WUFFS_JSON__DECODER_DST_TOKEN_BUFFER_LENGTH_MIN_INCL,
       TOK_BUFFER_ARRAY_SIZE);
-  uint32_t hash_18_bits = hash_24_bits >> 6;
+  uint64_t hash_50_bits = hash_56_bits >> 6;
 
   uint64_t src_limit =
-      buffer_limit(hash_18_bits & 0x3F,
+      buffer_limit(hash_50_bits & 0x3F,
                    WUFFS_JSON__DECODER_SRC_IO_BUFFER_LENGTH_MIN_INCL, 4096);
-  uint32_t hash_12_bits = hash_18_bits >> 6;
+  uint64_t hash_44_bits = hash_50_bits >> 6;
 
   // ----
 
@@ -273,7 +275,7 @@ fuzz_complex(wuffs_base__io_buffer* full_src, uint32_t hash_24_bits) {
   if (!wuffs_base__status__is_ok(&status)) {
     return wuffs_base__status__message(&status);
   }
-  set_quirks(&dec, hash_12_bits);
+  set_quirks(&dec, hash_44_bits);
 
   wuffs_base__token tok_array[TOK_BUFFER_ARRAY_SIZE];
   wuffs_base__token_buffer tok = ((wuffs_base__token_buffer){
@@ -284,7 +286,7 @@ fuzz_complex(wuffs_base__io_buffer* full_src, uint32_t hash_24_bits) {
       }),
   });
 
-  wuffs_base__token final_token = wuffs_base__make_token(0);
+  wuffs_base__token prev_token = wuffs_base__make_token(0);
   uint32_t no_progress_count = 0;
 
   stack_element stack[STACK_SIZE];
@@ -329,11 +331,12 @@ fuzz_complex(wuffs_base__io_buffer* full_src, uint32_t hash_24_bits) {
 
     while (tok.meta.ri < tok.meta.wi) {  // Inner loop.
       wuffs_base__token t = tok.data.ptr[tok.meta.ri++];
-      const char* z = fuzz_one_token(t, &src, &ti, &stack[0], &depth);
+      const char* z =
+          fuzz_one_token(t, prev_token, &src, &ti, &stack[0], &depth);
       if (z != NULL) {
         return z;
       }
-      final_token = t;
+      prev_token = t;
     }  // Inner loop.
 
     // ----
@@ -368,7 +371,7 @@ fuzz_complex(wuffs_base__io_buffer* full_src, uint32_t hash_24_bits) {
 
   if (depth != 0) {
     return "fuzz: internal error: decoded OK but final depth was not zero";
-  } else if (wuffs_base__token__continued(&final_token)) {
+  } else if (wuffs_base__token__continued(&prev_token)) {
     return "fuzz: internal error: decoded OK but final token was continued";
   }
   return NULL;
@@ -411,7 +414,7 @@ fuzz_simple(wuffs_base__io_buffer* full_src) {
 }
 
 const char*  //
-fuzz(wuffs_base__io_buffer* full_src, uint32_t hash) {
+fuzz(wuffs_base__io_buffer* full_src, uint64_t hash) {
   // Send 99.6% of inputs to fuzz_complex and the remainder to fuzz_simple. The
   // 0xA5 constant is arbitrary but non-zero. If the hash function maps the
   // empty input to 0, this still sends the empty input to fuzz_complex.

@@ -32,6 +32,7 @@
 
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker_mode.mojom-blink-forward.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
@@ -49,7 +50,6 @@
 namespace blink {
 
 enum class ResourceType : uint8_t;
-class CodeCacheLoader;
 class DetachableConsoleLogger;
 class DetachableUseCounter;
 class DetachableResourceFetcherProperties;
@@ -61,6 +61,8 @@ class Resource;
 class ResourceError;
 class ResourceLoadObserver;
 class ResourceTimingInfo;
+class SubresourceWebBundle;
+class WebCodeCacheLoader;
 class WebURLLoader;
 struct ResourceFetcherInit;
 struct ResourceLoaderOptions;
@@ -96,7 +98,7 @@ class PLATFORM_EXPORT ResourceFetcher
         scoped_refptr<base::SingleThreadTaskRunner>) = 0;
 
     // Create a code cache loader to fetch data from code caches.
-    virtual std::unique_ptr<CodeCacheLoader> CreateCodeCacheLoader() = 0;
+    virtual std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader() = 0;
   };
 
   // ResourceFetcher creators are responsible for setting consistent objects
@@ -140,6 +142,14 @@ class PLATFORM_EXPORT ResourceFetcher
                             const ResourceFactory&,
                             ResourceClient*);
 
+  // TODO(crbug/1112515): Instead of having one-off notifications of these
+  // loading milestones, we should introduce an abstract interface that
+  // interested parties can hook into, to be notified of relevant loading
+  // milestones.
+  // These are only called for main frames.
+  void MarkFirstPaint();
+  void MarkFirstContentfulPaint();
+
   // Returns the task runner used by this fetcher, and loading operations
   // this fetcher initiates. The returned task runner will keep working even
   // after ClearContext is called.
@@ -148,11 +158,11 @@ class PLATFORM_EXPORT ResourceFetcher
   }
 
   // Create a loader. This cannot be called after ClearContext is called.
-  std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
+  std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequestHead&,
                                                 const ResourceLoaderOptions&);
   // Create a code cache loader. This cannot be called after ClearContext is
   // called.
-  std::unique_ptr<CodeCacheLoader> CreateCodeCacheLoader();
+  std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader();
 
   Resource* CachedResource(const KURL&) const;
   static void AddPriorityObserverForTesting(const KURL&,
@@ -222,13 +232,12 @@ class PLATFORM_EXPORT ResourceFetcher
                          uint32_t inflight_keepalive_bytes);
   blink::mojom::ControllerServiceWorkerMode IsControlledByServiceWorker() const;
 
-  String GetCacheIdentifier() const;
+  String GetCacheIdentifier(const KURL& url) const;
 
   enum IsImageSet { kImageNotImageSet, kImageIsImageSet };
 
-  WARN_UNUSED_RESULT static mojom::RequestContextType DetermineRequestContext(
-      ResourceType,
-      IsImageSet);
+  WARN_UNUSED_RESULT static mojom::blink::RequestContextType
+      DetermineRequestContext(ResourceType, IsImageSet);
 
   static network::mojom::RequestDestination DetermineRequestDestination(
       ResourceType);
@@ -246,7 +255,7 @@ class PLATFORM_EXPORT ResourceFetcher
   // TODO(hiroshige): Remove this hack.
   void EmulateLoadStartedForInspector(Resource*,
                                       const KURL&,
-                                      mojom::RequestContextType,
+                                      mojom::blink::RequestContextType,
                                       network::mojom::RequestDestination,
                                       const AtomicString& initiator_name);
 
@@ -281,6 +290,15 @@ class PLATFORM_EXPORT ResourceFetcher
       ResourceLoadScheduler::ThrottleOptionOverride throttle_option_override) {
     scheduler_->SetThrottleOptionOverride(throttle_option_override);
   }
+
+  void SetOptimizationGuideHints(
+      mojom::blink::DelayCompetingLowPriorityRequestsHintsPtr
+          optimization_hints) {
+    scheduler_->SetOptimizationGuideHints(std::move(optimization_hints));
+  }
+
+  void AddSubresourceWebBundle(SubresourceWebBundle& subresource_web_bundle);
+  void RemoveSubresourceWebBundle(SubresourceWebBundle& subresource_web_bundle);
 
  private:
   friend class ResourceCacheValidationSuppressor;
@@ -437,6 +455,8 @@ class PLATFORM_EXPORT ResourceFetcher
                  HeapMojoWrapperMode::kWithoutContextObserver>
       blob_registry_remote_;
 
+  HeapHashSet<Member<SubresourceWebBundle>> subresource_web_bundles_;
+
   // This is not in the bit field below because we want to use AutoReset.
   bool is_in_request_resource_ = false;
 
@@ -489,12 +509,14 @@ struct PLATFORM_EXPORT ResourceFetcherInit final {
   ResourceFetcherInit(DetachableResourceFetcherProperties& properties,
                       FetchContext* context,
                       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                      ResourceFetcher::LoaderFactory* loader_factory);
+                      ResourceFetcher::LoaderFactory* loader_factory,
+                      ContextLifecycleNotifier* context_lifecycle_notifier);
 
   DetachableResourceFetcherProperties* const properties;
   FetchContext* const context;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner;
   ResourceFetcher::LoaderFactory* const loader_factory;
+  ContextLifecycleNotifier* const context_lifecycle_notifier;
   DetachableUseCounter* use_counter = nullptr;
   DetachableConsoleLogger* console_logger = nullptr;
   ResourceLoadScheduler::ThrottlingPolicy initial_throttling_policy =
@@ -503,6 +525,7 @@ struct PLATFORM_EXPORT ResourceFetcherInit final {
   FrameOrWorkerScheduler* frame_or_worker_scheduler = nullptr;
   ResourceLoadScheduler::ThrottleOptionOverride throttle_option_override =
       ResourceLoadScheduler::ThrottleOptionOverride::kNone;
+  LoadingBehaviorObserver* loading_behavior_observer = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceFetcherInit);
 };

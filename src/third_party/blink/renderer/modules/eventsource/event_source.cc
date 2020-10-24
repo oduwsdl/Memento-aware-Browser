@@ -34,6 +34,7 @@
 
 #include <memory>
 
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -75,13 +76,14 @@ inline EventSource::EventSource(ExecutionContext* context,
       connect_timer_(context->GetTaskRunner(TaskType::kRemoteEvent),
                      this,
                      &EventSource::ConnectTimerFired),
-      reconnect_delay_(kDefaultReconnectDelay) {}
+      reconnect_delay_(kDefaultReconnectDelay),
+      world_(context->GetCurrentWorld()) {}
 
 EventSource* EventSource::Create(ExecutionContext* context,
                                  const String& url,
                                  const EventSourceInit* event_source_init,
                                  ExceptionState& exception_state) {
-  UseCounter::Count(context, context->IsDocument()
+  UseCounter::Count(context, context->IsWindow()
                                  ? WebFeature::kEventSourceDocument
                                  : WebFeature::kEventSourceWorker);
 
@@ -129,14 +131,14 @@ void EventSource::Connect() {
   request.SetHttpMethod(http_names::kGET);
   request.SetHttpHeaderField(http_names::kAccept, "text/event-stream");
   request.SetHttpHeaderField(http_names::kCacheControl, "no-cache");
-  request.SetRequestContext(mojom::RequestContextType::EVENT_SOURCE);
+  request.SetRequestContext(mojom::blink::RequestContextType::EVENT_SOURCE);
   request.SetMode(network::mojom::RequestMode::kCors);
   request.SetCredentialsMode(
       with_credentials_ ? network::mojom::CredentialsMode::kInclude
                         : network::mojom::CredentialsMode::kSameOrigin);
   request.SetCacheMode(blink::mojom::FetchCacheMode::kNoStore);
   request.SetExternalRequestStateFromRequestorAddressSpace(
-      execution_context.GetSecurityContext().AddressSpace());
+      execution_context.AddressSpace());
   request.SetCorsPreflightPolicy(
       network::mojom::CorsPreflightPolicy::kPreventPreflight);
   if (parser_ && !parser_->LastEventId().IsEmpty()) {
@@ -151,7 +153,7 @@ void EventSource::Connect() {
                      last_event_id_utf8.length()));
   }
 
-  ResourceLoaderOptions resource_loader_options;
+  ResourceLoaderOptions resource_loader_options(world_);
   resource_loader_options.data_buffering_policy = kDoNotBufferData;
 
   probe::WillSendEventSourceRequest(&execution_context);

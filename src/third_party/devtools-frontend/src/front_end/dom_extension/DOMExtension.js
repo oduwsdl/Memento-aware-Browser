@@ -142,7 +142,8 @@ Node.prototype.traverseNextTextNode = function(stayWithin) {
     return null;
   }
   const nonTextTags = {'STYLE': 1, 'SCRIPT': 1};
-  while (node && (node.nodeType !== Node.TEXT_NODE || nonTextTags[node.parentElement.nodeName])) {
+  while (node &&
+         (node.nodeType !== Node.TEXT_NODE || nonTextTags[node.parentElement ? node.parentElement.nodeName : ''])) {
     node = node.traverseNextNode(stayWithin);
   }
 
@@ -177,18 +178,6 @@ Element.prototype.positionAt = function(x, y, relativeTo) {
   } else {
     this.style.removeProperty('position');
   }
-};
-
-/**
- * @return {boolean}
- */
-Element.prototype.isScrolledToBottom = function() {
-  // This code works only for 0-width border.
-  // The scrollTop, clientHeight and scrollHeight are computed in double values internally.
-  // However, they are exposed to javascript differently, each being either rounded (via
-  // round, ceil or floor functions) or left intouch.
-  // This adds up a total error up to 2.
-  return Math.abs(this.scrollTop + this.clientHeight - this.scrollHeight) <= 2;
 };
 
 /**
@@ -428,29 +417,6 @@ Element.prototype.createChild = function(elementName, className, customElementTy
 DocumentFragment.prototype.createChild = Element.prototype.createChild;
 
 /**
- * @param {string} text
- * @return {!Text}
- */
-Element.prototype.createTextChild = function(text) {
-  const element = this.ownerDocument.createTextNode(text);
-  this.appendChild(element);
-  return element;
-};
-
-DocumentFragment.prototype.createTextChild = Element.prototype.createTextChild;
-
-/**
- * @param {...string} var_args
- */
-Element.prototype.createTextChildren = function(var_args) {
-  for (let i = 0, n = arguments.length; i < n; ++i) {
-    this.createTextChild(arguments[i]);
-  }
-};
-
-DocumentFragment.prototype.createTextChildren = Element.prototype.createTextChildren;
-
-/**
  * @return {number}
  */
 Element.prototype.totalOffsetLeft = function() {
@@ -619,15 +585,6 @@ Element.prototype.selectionLeftOffset = function() {
 };
 
 /**
- * @param {...!Node} var_args
- */
-Node.prototype.appendChildren = function(var_args) {
-  for (let i = 0, n = arguments.length; i < n; ++i) {
-    this.appendChild(arguments[i]);
-  }
-};
-
-/**
  * @return {string}
  */
 Node.prototype.deepTextContent = function() {
@@ -646,7 +603,7 @@ Node.prototype.childTextNodes = function() {
   const result = [];
   const nonTextTags = {'STYLE': 1, 'SCRIPT': 1};
   while (node) {
-    if (!nonTextTags[node.parentElement.nodeName]) {
+    if (!nonTextTags[node.parentElement ? node.parentElement.nodeName : '']) {
       result.push(node);
     }
     node = node.traverseNextTextNode(this);
@@ -905,3 +862,55 @@ DOMTokenList.prototype['toggle'] = function(token, force) {
   return originalToggle.call(this, token, !!force);
 };
 })();
+
+export const originalAppendChild = Element.prototype.appendChild;
+export const originalInsertBefore = Element.prototype.insertBefore;
+export const originalRemoveChild = Element.prototype.removeChild;
+export const originalRemoveChildren = Element.prototype.removeChildren;
+
+/**
+ * @override
+ * @param {?Node} child
+ * @return {!Node}
+ * @suppress {duplicate}
+ */
+Element.prototype.appendChild = function(child) {
+  if (child.__widget && child.parentElement !== this) {
+    throw new Error('Attempt to add widget via regular DOM operation.');
+  }
+  return originalAppendChild.call(this, child);
+};
+
+/**
+ * @override
+ * @param {?Node} child
+ * @param {?Node} anchor
+ * @return {!Node}
+ * @suppress {duplicate}
+ */
+Element.prototype.insertBefore = function(child, anchor) {
+  if (child.__widget && child.parentElement !== this) {
+    throw new Error('Attempt to add widget via regular DOM operation.');
+  }
+  return originalInsertBefore.call(this, child, anchor);
+};
+
+/**
+ * @override
+ * @param {?Node} child
+ * @return {!Node}
+ * @suppress {duplicate}
+ */
+Element.prototype.removeChild = function(child) {
+  if (child.__widgetCounter || child.__widget) {
+    throw new Error('Attempt to remove element containing widget via regular DOM operation');
+  }
+  return originalRemoveChild.call(this, child);
+};
+
+Element.prototype.removeChildren = function() {
+  if (this.__widgetCounter) {
+    throw new Error('Attempt to remove element containing widget via regular DOM operation');
+  }
+  originalRemoveChildren.call(this);
+};

@@ -52,7 +52,6 @@ class BrowserInterfaceBrokerProxy;
 class WebDevToolsAgentImpl;
 class WebLocalFrameImpl;
 class WebSpellCheckPanelHostClient;
-enum class GlobalObjectReusePolicy;
 
 class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
  public:
@@ -86,11 +85,6 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
 
   bool HasWebView() const override;
   bool InShadowTree() const override;
-  Frame* Opener() const override;
-  Frame* Parent() const override;
-  Frame* Top() const override;
-  Frame* NextSibling() const override;
-  Frame* FirstChild() const override;
   void WillBeDetached() override;
   void Detached(FrameDetachType) override;
   void DispatchWillSendRequest(ResourceRequest&) override;
@@ -101,9 +95,10 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
                                        WebHistoryCommitType,
                                        bool content_initiated) override;
   void DispatchDidReceiveTitle(const String&) override;
-  void DispatchDidCommitLoad(HistoryItem*,
-                             WebHistoryCommitType,
-                             GlobalObjectReusePolicy) override;
+  void DispatchDidCommitLoad(
+      HistoryItem*,
+      WebHistoryCommitType,
+      bool should_reset_browser_interface_broker) override;
   void DispatchDidFailLoad(const ResourceError&, WebHistoryCommitType) override;
   void DispatchDidFinishDocumentLoad() override;
   void DispatchDidFinishLoad() override;
@@ -111,7 +106,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   void BeginNavigation(
       const ResourceRequest&,
       mojom::RequestContextFrameType,
-      Document* origin_document,
+      LocalDOMWindow* origin_window,
       DocumentLoader*,
       WebNavigationType,
       NavigationPolicy,
@@ -133,11 +128,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   void DidStartLoading() override;
   void DidStopLoading() override;
   bool NavigateBackForward(int offset) const override;
-  void DidRunInsecureContent(const SecurityOrigin*,
-                             const KURL& insecure_url) override;
   void DidDispatchPingLoader(const KURL&) override;
-  void DidDisplayContentWithCertificateErrors() override;
-  void DidRunContentWithCertificateErrors() override;
   void DidChangePerformanceTiming() override;
   void DidObserveInputDelay(base::TimeDelta) override;
   void DidChangeCpuTiming(base::TimeDelta) override;
@@ -151,7 +142,6 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
                           uint32_t ng_call_count) override;
   void DidObserveLazyLoadBehavior(
       WebLocalFrameClient::LazyLoadBehavior lazy_load_behavior) override;
-  bool ShouldTrackUseCounter(const KURL&) override;
   void SelectorMatchChanged(const Vector<String>& added_selectors,
                             const Vector<String>& removed_selectors) override;
 
@@ -177,7 +167,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   void TransitionToCommittedForNewPage() override;
   LocalFrame* CreateFrame(const WTF::AtomicString& name,
                           HTMLFrameOwnerElement*) override;
-  std::pair<RemoteFrame*, base::UnguessableToken> CreatePortal(
+  std::pair<RemoteFrame*, PortalToken> CreatePortal(
       HTMLPortalElement*,
       mojo::PendingAssociatedReceiver<mojom::blink::Portal>,
       mojo::PendingAssociatedRemote<mojom::blink::PortalClient>) override;
@@ -203,7 +193,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   void DidSetFramePolicyHeaders(
       network::mojom::blink::WebSandboxFlags,
       const ParsedFeaturePolicy& fp_header,
-      const blink::DocumentPolicy::FeatureState& dp_header) override;
+      const blink::DocumentPolicyFeatureState& dp_header) override;
 
   std::unique_ptr<WebServiceWorkerProvider> CreateServiceWorkerProvider()
       override;
@@ -250,7 +240,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
 
   void FocusedElementChanged(Element* element) override;
 
-  void OnMainFrameDocumentIntersectionChanged(
+  void OnMainFrameIntersectionChanged(
       const IntRect& intersection_rect) override;
 
   bool IsPluginHandledExternally(HTMLPlugInElement&,
@@ -266,11 +256,15 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   std::unique_ptr<WebContentSettingsClient> CreateWorkerContentSettingsClient()
       override;
 
+  std::unique_ptr<media::SpeechRecognitionClient> CreateSpeechRecognitionClient(
+      media::SpeechRecognitionClient::OnReadyCallback callback) override;
+
   void SetMouseCapture(bool capture) override;
 
   bool UsePrintingLayout() const override;
 
-  void TransferUserActivationFrom(LocalFrame* source_frame) override;
+  std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+  CreateResourceLoadInfoNotifierWrapper() override;
 
   void UpdateSubresourceFactory(
       std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory)

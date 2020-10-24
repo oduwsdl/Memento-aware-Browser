@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/modules/scheduler/dom_task.h"
 #include "third_party/blink/renderer/modules/scheduler/dom_task_signal.h"
+#include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_priority.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_task_queue.h"
@@ -32,7 +33,7 @@ static ScriptPromise RejectPromiseImmediately(ExceptionState& exception_state) {
 
 const char DOMScheduler::kSupplementName[] = "DOMScheduler";
 
-DOMScheduler* DOMScheduler::From(LocalDOMWindow& window) {
+DOMScheduler* DOMScheduler::scheduler(LocalDOMWindow& window) {
   DOMScheduler* scheduler =
       Supplement<LocalDOMWindow>::From<DOMScheduler>(window);
   if (!scheduler) {
@@ -90,7 +91,7 @@ ScriptPromise DOMScheduler::postTask(ScriptState* script_state,
     WebSchedulingPriority priority =
         options->hasPriorityNonNull()
             ? WebSchedulingPriorityFromString(
-                  AtomicString(options->priorityNonNull()))
+                  AtomicString(IDLEnumAsString(options->priorityNonNull())))
             : WebSchedulingPriority::kUserVisiblePriority;
     task_signal = MakeGarbageCollected<DOMTaskSignal>(
         GetSupplementable(), priority, DOMTaskSignal::Type::kImplicit);

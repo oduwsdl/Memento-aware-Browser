@@ -12,13 +12,11 @@ namespace blink {
 
 class DOMMimeTypeArray;
 class DOMPluginArray;
-class LocalFrame;
+class LocalDOMWindow;
 class Navigator;
 
 class NavigatorPlugins final : public GarbageCollected<NavigatorPlugins>,
                                public Supplement<Navigator> {
-  USING_GARBAGE_COLLECTED_MIXIN(NavigatorPlugins);
-
  public:
   static const char kSupplementName[];
 
@@ -34,13 +32,11 @@ class NavigatorPlugins final : public GarbageCollected<NavigatorPlugins>,
   void Trace(Visitor*) const override;
 
  private:
-  DOMPluginArray* plugins(LocalFrame*) const;
-  DOMMimeTypeArray* mimeTypes(LocalFrame*) const;
+  DOMPluginArray* plugins(LocalDOMWindow*) const;
+  DOMMimeTypeArray* mimeTypes(LocalDOMWindow*) const;
 
   mutable Member<DOMPluginArray> plugins_;
   mutable Member<DOMMimeTypeArray> mime_types_;
-
-  base::span<const uint8_t> StringToBytesSafe(String str) const;
 };
 
 }  // namespace blink

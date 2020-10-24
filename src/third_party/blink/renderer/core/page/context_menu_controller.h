@@ -68,8 +68,13 @@ class CORE_EXPORT ContextMenuController final
   friend class ContextMenuControllerTest;
 
   // Returns whether a Context Menu was actually shown.
-  bool ShowContextMenu(LocalFrame*, const PhysicalOffset&, WebMenuSourceType);
+  bool ShowContextMenu(LocalFrame*,
+                       const PhysicalOffset&,
+                       WebMenuSourceType,
+                       const MouseEvent* mouse_event = nullptr);
   bool ShouldShowContextMenuFromTouch(const WebContextMenuData&);
+
+  void UpdateTextFragmentSelectorGenerator(LocalFrame*);
 
   Member<Page> page_;
   Member<ContextMenuProvider> menu_provider_;

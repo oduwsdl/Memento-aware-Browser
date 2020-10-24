@@ -162,7 +162,7 @@ TEST_F(IntersectionObserverTest, NotificationSentWhenRootRemoved) {
 
 TEST_F(IntersectionObserverTest, DocumentRootClips) {
   ScopedIntersectionObserverDocumentScrollingElementRootForTest scope(true);
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   SimRequest iframe_resource("https://example.com/iframe.html", "text/html");
   LoadURL("https://example.com/");
@@ -207,7 +207,7 @@ TEST_F(IntersectionObserverTest, DocumentRootClips) {
 
 TEST_F(IntersectionObserverTest, ReportsFractionOfTargetOrRoot) {
   // Place a 100x100 target element in the middle of a 200x200 main frame.
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -235,7 +235,8 @@ TEST_F(IntersectionObserverTest, ReportsFractionOfTargetOrRoot) {
       MakeGarbageCollected<IntersectionObserver>(
           *target_observer_delegate, nullptr, Vector<Length>(),
           Vector<float>{kExpectedFractionOfTarget / 2},
-          IntersectionObserver::kFractionOfTarget, 0, false, false);
+          IntersectionObserver::kFractionOfTarget, 0, false, false,
+          IntersectionObserver::kApplyMarginToRoot);
   DummyExceptionStateForTesting exception_state;
   target_observer->observe(target, exception_state);
   ASSERT_FALSE(exception_state.HadException());
@@ -246,7 +247,8 @@ TEST_F(IntersectionObserverTest, ReportsFractionOfTargetOrRoot) {
       MakeGarbageCollected<IntersectionObserver>(
           *root_observer_delegate, nullptr, Vector<Length>(),
           Vector<float>{kExpectedFractionOfRoot / 2},
-          IntersectionObserver::kFractionOfRoot, 0, false, false);
+          IntersectionObserver::kFractionOfRoot, 0, false, false,
+          IntersectionObserver::kApplyMarginToRoot);
   root_observer->observe(target, exception_state);
   ASSERT_FALSE(exception_state.HadException());
 
@@ -268,7 +270,7 @@ TEST_F(IntersectionObserverTest, ReportsFractionOfTargetOrRoot) {
 }
 
 TEST_F(IntersectionObserverTest, ResumePostsTask) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -328,7 +330,7 @@ TEST_F(IntersectionObserverTest, ResumePostsTask) {
 }
 
 TEST_F(IntersectionObserverTest, HitTestAfterMutation) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -375,7 +377,7 @@ TEST_F(IntersectionObserverTest, HitTestAfterMutation) {
 }
 
 TEST_F(IntersectionObserverTest, DisconnectClearsNotifications) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -418,7 +420,7 @@ TEST_F(IntersectionObserverTest, DisconnectClearsNotifications) {
 
 TEST_F(IntersectionObserverTest, RootIntersectionWithForceZeroLayoutHeight) {
   WebView().GetSettings()->SetForceZeroLayoutHeight(true);
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -631,7 +633,7 @@ TEST_F(IntersectionObserverTest, TrackedRootBookkeeping) {
 
 TEST_F(IntersectionObserverTest, RootMarginDevicePixelRatio) {
   WebView().SetZoomFactorForDeviceScaleFactor(3.5f);
-  WebView().MainFrameWidget()->Resize(WebSize(2800, 2100));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(2800, 2100));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -670,7 +672,7 @@ TEST_F(IntersectionObserverTest, RootMarginDevicePixelRatio) {
 }
 
 TEST_F(IntersectionObserverTest, CachedRectsTest) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -725,7 +727,8 @@ TEST_F(IntersectionObserverTest, CachedRectsTest) {
   EXPECT_FALSE(observation2->CanUseCachedRectsForTesting());
 
   // Scrolling the root should not invalidate.
-  PaintLayerScrollableArea* root_scroller = root->GetScrollableArea();
+  PaintLayerScrollableArea* root_scroller =
+      root->GetLayoutBoxForScrolling()->GetScrollableArea();
   root_scroller->SetScrollOffset(ScrollOffset(0, 100),
                                  mojom::blink::ScrollType::kProgrammatic);
   EXPECT_TRUE(observation1->CanUseCachedRectsForTesting());
@@ -781,7 +784,7 @@ TEST_F(IntersectionObserverV2Test, TrackVisibilityInit) {
 }
 
 TEST_F(IntersectionObserverV2Test, BasicOcclusion) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -840,7 +843,7 @@ TEST_F(IntersectionObserverV2Test, BasicOcclusion) {
 }
 
 TEST_F(IntersectionObserverV2Test, BasicOpacity) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -889,7 +892,7 @@ TEST_F(IntersectionObserverV2Test, BasicOpacity) {
 }
 
 TEST_F(IntersectionObserverV2Test, BasicTransform) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
   main_resource.Complete(R"HTML(
@@ -948,4 +951,111 @@ TEST_F(IntersectionObserverV2Test, BasicTransform) {
   EXPECT_FALSE(observer_delegate->LastEntry()->isVisible());
 }
 
+TEST_F(IntersectionObserverTest, ApplyMarginToTarget) {
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
+  SimRequest main_resource("https://example.com/", "text/html");
+  LoadURL("https://example.com/");
+  main_resource.Complete(R"HTML(
+    <style>
+    #scroller { height: 100px; overflow: scroll; }
+    #target { width: 50px; height: 50px; }
+    .spacer { height: 105px; }
+    </style>
+    <div id=scroller>
+      <div class=spacer></div>
+      <div id=target></div>
+    </div>
+  )HTML");
+
+  Element* target = GetDocument().getElementById("target");
+  ASSERT_TRUE(target);
+
+  TestIntersectionObserverDelegate* root_margin_delegate =
+      MakeGarbageCollected<TestIntersectionObserverDelegate>(GetDocument());
+  IntersectionObserver* root_margin_observer =
+      MakeGarbageCollected<IntersectionObserver>(
+          *root_margin_delegate, nullptr, Vector<Length>{Length::Fixed(10)},
+          Vector<float>{std::numeric_limits<float>::min()},
+          IntersectionObserver::kFractionOfTarget, 0, false, false,
+          IntersectionObserver::kApplyMarginToRoot);
+
+  DummyExceptionStateForTesting exception_state;
+  root_margin_observer->observe(target, exception_state);
+  ASSERT_FALSE(exception_state.HadException());
+
+  TestIntersectionObserverDelegate* target_margin_delegate =
+      MakeGarbageCollected<TestIntersectionObserverDelegate>(GetDocument());
+  // Same parameters as above except that margin is applied to target.
+  IntersectionObserver* target_margin_observer =
+      MakeGarbageCollected<IntersectionObserver>(
+          *target_margin_delegate, nullptr, Vector<Length>{Length::Fixed(10)},
+          Vector<float>{std::numeric_limits<float>::min()},
+          IntersectionObserver::kFractionOfTarget, 0, false, false,
+          IntersectionObserver::kApplyMarginToTarget);
+
+  target_margin_observer->observe(target, exception_state);
+  ASSERT_FALSE(exception_state.HadException());
+
+  Compositor().BeginFrame();
+  test::RunPendingTasks();
+  ASSERT_FALSE(Compositor().NeedsBeginFrame());
+
+  EXPECT_EQ(root_margin_delegate->CallCount(), 1);
+  EXPECT_EQ(root_margin_delegate->EntryCount(), 1);
+  // Since the inner scroller clips content, the root margin has no effect and
+  // target is not intersecting.
+  EXPECT_FALSE(root_margin_delegate->LastEntry()->isIntersecting());
+
+  EXPECT_EQ(target_margin_delegate->CallCount(), 1);
+  EXPECT_EQ(target_margin_delegate->EntryCount(), 1);
+  // Since the margin is applied to the target, the inner scroller clips an
+  // expanded rect, which ends up being visible in the root. Hence, it is
+  // intersecting.
+  EXPECT_TRUE(target_margin_delegate->LastEntry()->isIntersecting());
+}
+
+TEST_F(IntersectionObserverTest, TargetMarginPercentResolvesAgainstRoot) {
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 500));
+  SimRequest main_resource("https://example.com/", "text/html");
+  LoadURL("https://example.com/");
+  main_resource.Complete(R"HTML(
+    <style>
+    #scroller { height: 100px; overflow: scroll; }
+    #target { width: 50px; height: 50px; }
+    .spacer { height: 145px; }
+    </style>
+    <div id=scroller>
+      <div class=spacer></div>
+      <div id=target></div>
+    </div>
+  )HTML");
+
+  Element* target = GetDocument().getElementById("target");
+  ASSERT_TRUE(target);
+
+  TestIntersectionObserverDelegate* target_margin_delegate =
+      MakeGarbageCollected<TestIntersectionObserverDelegate>(GetDocument());
+  // 10% margin on a target would be 5px if it resolved against target, which is
+  // not enough to intersect. It would be 10px if it resolved against the
+  // scroller, which is also not enough. However, it would be 50px if it
+  // resolved against root, which would make it intersecting.
+  IntersectionObserver* target_margin_observer =
+      MakeGarbageCollected<IntersectionObserver>(
+          *target_margin_delegate, nullptr, Vector<Length>{Length::Percent(10)},
+          Vector<float>{std::numeric_limits<float>::min()},
+          IntersectionObserver::kFractionOfTarget, 0, false, false,
+          IntersectionObserver::kApplyMarginToTarget);
+
+  DummyExceptionStateForTesting exception_state;
+  target_margin_observer->observe(target, exception_state);
+  ASSERT_FALSE(exception_state.HadException());
+
+  Compositor().BeginFrame();
+  test::RunPendingTasks();
+  ASSERT_FALSE(Compositor().NeedsBeginFrame());
+
+  EXPECT_EQ(target_margin_delegate->CallCount(), 1);
+  EXPECT_EQ(target_margin_delegate->EntryCount(), 1);
+  EXPECT_TRUE(target_margin_delegate->LastEntry()->isIntersecting());
+}
 }  // namespace blink

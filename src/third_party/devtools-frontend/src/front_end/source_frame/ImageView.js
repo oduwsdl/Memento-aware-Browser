@@ -26,6 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
 import * as Host from '../host/host.js';
 import * as Platform from '../platform/platform.js';
@@ -66,7 +69,6 @@ export class ImageView extends UI.View.SimpleView {
     this._container = this.element.createChild('div', 'image');
     this._imagePreviewElement = this._container.createChild('img', 'resource-image-view');
     this._imagePreviewElement.addEventListener('contextmenu', this._contextMenu.bind(this), true);
-    this._imagePreviewElement.alt = ls`Image from ${this._url}`;
   }
 
   /**
@@ -113,8 +115,11 @@ export class ImageView extends UI.View.SimpleView {
     if (content === null) {
       imageSrc = this._url;
     }
-    const loadPromise = new Promise(x => this._imagePreviewElement.onload = x);
+    const loadPromise = new Promise(x => {
+      this._imagePreviewElement.onload = x;
+    });
     this._imagePreviewElement.src = imageSrc;
+    this._imagePreviewElement.alt = ls`Image from ${this._url}`;
     const size = content && !contentEncoded ? content.length : base64ToSize(content);
     this._sizeLabel.setText(Platform.NumberUtilities.bytesToString(size));
     await loadPromise;

@@ -27,21 +27,46 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Bindings from '../bindings/bindings.js';
 import * as Common from '../common/common.js';
 import * as Components from '../components/components.js';
 import * as Host from '../host/host.js';
 import * as InlineEditor from '../inline_editor/inline_editor.js';
+import * as Root from '../root/root.js';
 import * as SDK from '../sdk/sdk.js';
 import * as TextUtils from '../text_utils/text_utils.js';
 import * as UI from '../ui/ui.js';
 
+import {ComputedStyleModel} from './ComputedStyleModel.js';
+import {CSSAngleRegex} from './CSSAngleRegex.js';
+import {findIcon} from './CSSPropertyIconResolver.js';
 import {linkifyDeferredNodeReference} from './DOMLinkifier.js';
 import {ElementsSidebarPane} from './ElementsSidebarPane.js';
+import * as Icon from './Icon_bridge.js';
 import {ImagePreviewPopover} from './ImagePreviewPopover.js';
 import {StylePropertyHighlighter} from './StylePropertyHighlighter.js';
 import {StylePropertyTreeElement} from './StylePropertyTreeElement.js';
 import {Context} from './StylePropertyTreeElement.js';  // eslint-disable-line no-unused-vars
+
+// Highlightable properties are those that can be hovered in the sidebar to trigger a specific
+// highlighting mode on the current element.
+const HIGHLIGHTABLE_PROPERTIES = [
+  {property: 'padding', mode: 'padding'},
+  {property: 'border', mode: 'border'},
+  {property: 'margin', mode: 'margin'},
+  {property: 'grid-gap', mode: 'gap'},
+  {property: 'gap', mode: 'gap'},
+  {property: 'grid-column-gap', mode: 'column-gap'},
+  {property: 'grid-row-gap', mode: 'row-gap'},
+  {property: 'column-gap', mode: 'column-gap'},
+  {property: 'row-gap', mode: 'row-gap'},
+  {property: 'grid-template-areas', mode: 'grid-areas'},
+  {property: 'grid-template-columns', mode: 'grid-template-columns'},
+  {property: 'grid-template-rows', mode: 'grid-template-rows'},
+];
 
 export class StylesSidebarPane extends ElementsSidebarPane {
   constructor() {
@@ -60,7 +85,10 @@ export class StylesSidebarPane extends ElementsSidebarPane {
     this._pendingWidget = null;
     /** @type {?UI.Toolbar.ToolbarToggle} */
     this._pendingWidgetToggle = null;
+    /** @type {?UI.Toolbar.Toolbar} */
+    this._toolbar = null;
     this._toolbarPaneElement = this._createStylesSidebarToolbar();
+    this._computedStyleModel = new ComputedStyleModel();
 
     this._noMatchesElement = this.contentElement.createChild('div', 'gray-info-message hidden');
     this._noMatchesElement.textContent = ls`No matching selector or style`;
@@ -73,13 +101,16 @@ export class StylesSidebarPane extends ElementsSidebarPane {
 
     this._swatchPopoverHelper = new InlineEditor.SwatchPopoverHelper.SwatchPopoverHelper();
     this._linkifier = new Components.Linkifier.Linkifier(_maxLinkLength, /* useLinkDecorator */ true);
-    /** @type {?StylePropertyHighlighter} */
-    this._decorator = null;
+    /** @type {!StylePropertyHighlighter} */
+    this._decorator = new StylePropertyHighlighter(this);
+    /** @type {?SDK.CSSProperty.CSSProperty} */
+    this._lastRevealedProperty = null;
     this._userOperation = false;
     this._isEditingStyle = false;
     /** @type {?RegExp} */
     this._filterRegex = null;
     this._isActivePropertyHighlighted = false;
+    this._initialUpdateCompleted = false;
 
     this.contentElement.classList.add('styles-pane');
 
@@ -89,7 +120,7 @@ export class StylesSidebarPane extends ElementsSidebarPane {
     this._idleCallbackManager = null;
     this._needsForceUpdate = false;
     StylesSidebarPane._instance = this;
-    self.UI.context.addFlavorChangeListener(SDK.DOMModel.DOMNode, this.forceUpdate, this);
+    UI.Context.Context.instance().addFlavorChangeListener(SDK.DOMModel.DOMNode, this.forceUpdate, this);
     this.contentElement.addEventListener('copy', this._clipboardCopy.bind(this));
     this._resizeThrottler = new Common.Throttler.Throttler(100);
 
@@ -118,17 +149,22 @@ export class StylesSidebarPane extends ElementsSidebarPane {
 
   /**
    * @param {!SDK.CSSProperty.CSSProperty} property
+   * @param {?string} title
    * @return {!Element}
    */
-  static createExclamationMark(property) {
+  static createExclamationMark(property, title) {
     const exclamationElement = createElement('span', 'dt-icon-label');
     exclamationElement.className = 'exclamation-mark';
     if (!StylesSidebarPane.ignoreErrorsForProperty(property)) {
       exclamationElement.type = 'smallicon-warning';
     }
-    exclamationElement.title = SDK.CSSMetadata.cssMetadata().isCSSPropertyName(property.name) ?
-        Common.UIString.UIString('Invalid property value') :
-        Common.UIString.UIString('Unknown property name');
+    if (title) {
+      exclamationElement.title = title;
+    } else {
+      exclamationElement.title = SDK.CSSMetadata.cssMetadata().isCSSPropertyName(property.name) ?
+          Common.UIString.UIString('Invalid property value') :
+          Common.UIString.UIString('Unknown property name');
+    }
     return exclamationElement;
   }
 
@@ -185,6 +221,8 @@ export class StylesSidebarPane extends ElementsSidebarPane {
    */
   static createPropertyFilterElement(placeholder, container, filterCallback) {
     const input = document.createElement('input');
+    input.type = 'search';
+    input.classList.add('custom-search-input');
     input.placeholder = placeholder;
 
     function searchHandler() {
@@ -224,9 +262,13 @@ export class StylesSidebarPane extends ElementsSidebarPane {
    * @param {!SDK.CSSProperty.CSSProperty} cssProperty
    */
   revealProperty(cssProperty) {
-    this._decorator = new StylePropertyHighlighter(this, cssProperty);
-    this._decorator.perform();
+    this._decorator.highlightProperty(cssProperty);
+    this._lastRevealedProperty = cssProperty;
     this.update();
+  }
+
+  jumpToProperty(propertyName) {
+    this._decorator.findAndHighlightPropertyName(propertyName);
   }
 
   forceUpdate() {
@@ -384,8 +426,26 @@ export class StylesSidebarPane extends ElementsSidebarPane {
    * @override
    * @return {!Promise.<?>}
    */
-  doUpdate() {
-    return this._fetchMatchedCascade().then(this._innerRebuildUpdate.bind(this));
+  async doUpdate() {
+    if (!this._initialUpdateCompleted) {
+      setTimeout(() => {
+        if (!this._initialUpdateCompleted) {
+          // the spinner will get automatically removed when _innerRebuildUpdate is called
+          this._sectionsContainer.createChild('span', 'spinner');
+        }
+      }, 200 /* only spin for loading time > 200ms to avoid unpleasant render flashes */);
+    }
+
+    const matchedStyles = await this._fetchMatchedCascade();
+    await this._innerRebuildUpdate(matchedStyles);
+    if (!this._initialUpdateCompleted) {
+      this._initialUpdateCompleted = true;
+      this.dispatchEventToListeners(Events.InitialUpdateCompleted);
+    }
+  }
+
+  initialUpdateCompleted() {
+    return this._initialUpdateCompleted;
   }
 
   /**
@@ -400,7 +460,9 @@ export class StylesSidebarPane extends ElementsSidebarPane {
    */
   _innerResize() {
     const width = this.contentElement.getBoundingClientRect().width + 'px';
-    this.allSections().forEach(section => section.propertiesTreeOutline.element.style.width = width);
+    this.allSections().forEach(section => {
+      section.propertiesTreeOutline.element.style.width = width;
+    });
     return Promise.resolve();
   }
 
@@ -463,8 +525,8 @@ export class StylesSidebarPane extends ElementsSidebarPane {
 
     const rule = treeElement.property.ownerStyle.parentRule;
     const selectorList = (rule instanceof SDK.CSSRule.CSSStyleRule) ? rule.selectorText() : undefined;
-    for (const mode of ['padding', 'border', 'margin']) {
-      if (!treeElement.name.startsWith(mode)) {
+    for (const {property, mode} of HIGHLIGHTABLE_PROPERTIES) {
+      if (!treeElement.name.startsWith(property)) {
         continue;
       }
       this.node().domModel().overlayModel().highlightInOverlay(
@@ -521,7 +583,6 @@ export class StylesSidebarPane extends ElementsSidebarPane {
       const element = section.closestPropertyForEditing(propertyIndex);
       if (!element) {
         section.element.focus();
-        UI.UIUtils.markAsFocusedByKeyboard(section.element);
         return;
       }
       element.startEditing();
@@ -594,10 +655,13 @@ export class StylesSidebarPane extends ElementsSidebarPane {
     }
 
     this._nodeStylesUpdatedForTest(/** @type {!SDK.DOMModel.DOMNode} */ (node), true);
-    if (this._decorator) {
-      this._decorator.perform();
-      this._decorator = null;
+    if (this._lastRevealedProperty) {
+      this._decorator.highlightProperty(this._lastRevealedProperty);
+      this._lastRevealedProperty = null;
     }
+
+    // Record the elements tool load time after the sidepane has loaded.
+    Host.userMetrics.panelLoaded('elements', 'DevTools.Launch.Elements');
   }
 
   /**
@@ -789,6 +853,7 @@ export class StylesSidebarPane extends ElementsSidebarPane {
     const toolbar = new UI.Toolbar.Toolbar('styles-pane-toolbar', hbox);
     toolbar.makeToggledGray();
     toolbar.appendItemsAtLocation('styles-sidebarpane-toolbar');
+    this._toolbar = toolbar;
     const toolbarPaneContainer = container.createChild('div', 'styles-sidebar-toolbar-pane-container');
     const toolbarPaneContent = toolbarPaneContainer.createChild('div', 'styles-sidebar-toolbar-pane');
 
@@ -813,6 +878,15 @@ export class StylesSidebarPane extends ElementsSidebarPane {
 
     if (widget && toggle) {
       toggle.setToggled(true);
+    }
+  }
+
+  /**
+   * @param {!UI.Toolbar.ToolbarItem} item
+   */
+  appendToolbarItem(item) {
+    if (this._toolbar) {
+      this._toolbar.appendToolbarItem(item);
     }
   }
 
@@ -872,6 +946,11 @@ export class StylesSidebarPane extends ElementsSidebarPane {
   }
 }
 
+/** @enum {symbol} */
+export const Events = {
+  InitialUpdateCompleted: Symbol('InitialUpdateCompleted'),
+};
+
 export const _maxLinkLength = 23;
 
 export class SectionBlock {
@@ -912,7 +991,7 @@ export class SectionBlock {
   static async _createInheritedNodeBlock(node) {
     const separatorElement = createElement('div');
     separatorElement.className = 'sidebar-separator';
-    separatorElement.createTextChild(ls`Inherited from${' '}`);
+    UI.UIUtils.createTextChild(separatorElement, ls`Inherited from${' '}`);
     const link = await Common.Linkifier.Linkifier.linkify(node, {preventKeyboardFocus: true});
     separatorElement.appendChild(link);
     return new SectionBlock(separatorElement);
@@ -940,7 +1019,7 @@ export class SectionBlock {
   }
 }
 
-class IdleCallbackManager {
+export class IdleCallbackManager {
   constructor() {
     this._discarded = false;
     /** @type {!Array<!Promise<void>>} */
@@ -953,8 +1032,9 @@ class IdleCallbackManager {
 
   /**
    * @param {function():void} fn
+   * @param {number} timeout
    */
-  schedule(fn) {
+  schedule(fn, timeout = 100) {
     if (this._discarded) {
       return;
     }
@@ -972,7 +1052,7 @@ class IdleCallbackManager {
           return resolve();
         }
         run();
-      }, {timeout: 100});
+      }, {timeout});
     }));
   }
 
@@ -1039,6 +1119,16 @@ export class StylePropertiesSection {
     const closeBrace = this._innerElement.createChild('div', 'sidebar-pane-closing-brace');
     closeBrace.textContent = '}';
 
+    if (this._style.parentRule) {
+      const newRuleButton =
+          new UI.Toolbar.ToolbarButton(Common.UIString.UIString('Insert Style Rule Below'), 'largeicon-add');
+      newRuleButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this._onNewRuleClick, this);
+      newRuleButton.element.tabIndex = -1;
+      const expandToolbar = new UI.Toolbar.Toolbar('sidebar-pane-section-toolbar', this._innerElement);
+      expandToolbar.appendToolbarItem(newRuleButton);
+      UI.ARIAUtils.markAsHidden(expandToolbar.element);
+    }
+
     this._selectorElement.addEventListener('click', this._handleSelectorClick.bind(this), false);
     this.element.addEventListener('mousedown', this._handleEmptySpaceMouseDown.bind(this), false);
     this.element.addEventListener('click', this._handleEmptySpaceClick.bind(this), false);
@@ -1094,6 +1184,17 @@ export class StylePropertiesSection {
     const ruleLocation = this._getRuleLocationFromCSSRule(rule);
 
     const header = rule.styleSheetId ? matchedStyles.cssModel().styleSheetHeaderForId(rule.styleSheetId) : null;
+
+    if (header && header.isMutable && !header.isViaInspector()) {
+      const label = header.isConstructed ? Common.UIString.UIString('constructed stylesheet') : '<style>';
+      if (header.ownerNode) {
+        const link = linkifyDeferredNodeReference(header.ownerNode);
+        link.textContent = label;
+        return link;
+      }
+      return createTextNode(label);
+    }
+
     if (ruleLocation && rule.styleSheetId && header && !header.isAnonymousInlineStyleSheet()) {
       return StylePropertiesSection._linkifyRuleLocation(
           matchedStyles.cssModel(), linkifier, rule.styleSheetId, ruleLocation);
@@ -1347,6 +1448,17 @@ export class StylePropertiesSection {
     } while (curElement && !curElement._section);
 
     return curElement ? curElement._section : null;
+  }
+
+  /**
+   * @param {!Common.EventTarget.EventTargetEvent} event
+   */
+  _onNewRuleClick(event) {
+    event.data.consume();
+    const rule = this._style.parentRule;
+    const range =
+        TextUtils.TextRange.TextRange.createFromLocation(rule.style.range.endLine, rule.style.range.endColumn + 1);
+    this._parentPane._addBlankSection(this, /** @type {string} */ (rule.styleSheetId), range);
   }
 
   /**
@@ -1608,7 +1720,7 @@ export class StylePropertiesSection {
     const fragment = createDocumentFragment();
     for (let i = 0; i < selectors.length; ++i) {
       if (i) {
-        fragment.createTextChild(', ');
+        UI.UIUtils.createTextChild(fragment, ', ');
       }
       fragment.appendChild(this._createSelectorElement(selectors[i], matchingSelectors[i], i));
     }
@@ -1788,11 +1900,9 @@ export class StylePropertiesSection {
   }
 
   /**
-   * @param {!Element} editor
-   * @param {!Event} blurEvent
    * @return {boolean}
    */
-  _editingMediaBlurHandler(editor, blurEvent) {
+  _editingMediaBlurHandler() {
     return true;
   }
 
@@ -2287,6 +2397,15 @@ export class KeyframePropertiesSection extends StylePropertiesSection {
   }
 }
 
+/**
+ * @param {string} familyName
+ * @return {string}
+ * @suppress {missingProperties} Closure doesn't know String.p.replaceAll exists.
+ */
+export function quoteFamilyName(familyName) {
+  return `'${familyName.replaceAll('\'', '\\\'')}'`;
+}
+
 export class CSSPropertyPrompt extends UI.TextPrompt.TextPrompt {
   /**
    * @param {!StylePropertyTreeElement} treeElement
@@ -2296,19 +2415,29 @@ export class CSSPropertyPrompt extends UI.TextPrompt.TextPrompt {
     // Use the same callback both for applyItemCallback and acceptItemCallback.
     super();
     this.initialize(this._buildPropertyCompletions.bind(this), UI.UIUtils.StyleValueDelimiters);
+    const cssMetadata = SDK.CSSMetadata.cssMetadata();
     this._isColorAware = SDK.CSSMetadata.cssMetadata().isColorAwareProperty(treeElement.property.name);
     /** @type {!Array<string>} */
     this._cssCompletions = [];
+    const node = treeElement.node();
     if (isEditingName) {
-      this._cssCompletions = SDK.CSSMetadata.cssMetadata().allProperties();
-      if (!treeElement.node().isSVGNode()) {
-        this._cssCompletions =
-            this._cssCompletions.filter(property => !SDK.CSSMetadata.cssMetadata().isSVGProperty(property));
+      this._cssCompletions = cssMetadata.allProperties();
+      if (node && !node.isSVGNode()) {
+        this._cssCompletions = this._cssCompletions.filter(property => !cssMetadata.isSVGProperty(property));
       }
     } else {
-      this._cssCompletions = SDK.CSSMetadata.cssMetadata().propertyValues(treeElement.nameElement.textContent);
+      this._cssCompletions = cssMetadata.propertyValues(treeElement.property.name);
+      if (node && cssMetadata.isFontFamilyProperty(treeElement.property.name)) {
+        const fontFamilies = node.domModel().cssModel().fontFaces().map(font => quoteFamilyName(font.getFontFamily()));
+        this._cssCompletions.unshift(...fontFamilies);
+      }
     }
 
+    /**
+     * Computed styles cache populated by cssFlexboxFeatures experiment.
+     * @type {?Map<string, string>}
+     */
+    this._selectedNodeComputedStyles = null;
     this._treeElement = treeElement;
     this._isEditingName = isEditingName;
     this._cssVariables = treeElement.matchedStyles().availableCSSVariables(treeElement.property.ownerStyle);
@@ -2447,7 +2576,7 @@ export class CSSPropertyPrompt extends UI.TextPrompt.TextPrompt {
    * @param {boolean=} force
    * @return {!Promise<!UI.SuggestBox.Suggestions>}
    */
-  _buildPropertyCompletions(expression, query, force) {
+  async _buildPropertyCompletions(expression, query, force) {
     const lowerQuery = query.toLowerCase();
     const editingVariable = !this._isEditingName && expression.trim().endsWith('var(');
     if (!query && !force && !editingVariable && (this._isEditingName || expression)) {
@@ -2480,11 +2609,12 @@ export class CSSPropertyPrompt extends UI.TextPrompt.TextPrompt {
         }
       }
     }
-    results.forEach(result => {
+
+    for (const result of results) {
       if (editingVariable) {
         result.title = result.text;
         result.text += ')';
-        return;
+        continue;
       }
       const valuePreset = SDK.CSSMetadata.cssMetadata().getValuePreset(this._treeElement.name, result.text);
       if (!this._isEditingName && valuePreset) {
@@ -2492,7 +2622,42 @@ export class CSSPropertyPrompt extends UI.TextPrompt.TextPrompt {
         result.text = valuePreset.text;
         result.selectionRange = {startColumn: valuePreset.startColumn, endColumn: valuePreset.endColumn};
       }
-    });
+    }
+
+    if (Root.Runtime.experiments.isEnabled('cssFlexboxFeatures')) {
+      const node = this._treeElement.node();
+
+      const getComputedStyle = async () => {
+        if (!this._selectedNodeComputedStyles) {
+          this._selectedNodeComputedStyles = await node.domModel().cssModel().computedStylePromise(node.id);
+        }
+        return this._selectedNodeComputedStyles;
+      };
+
+      for (const result of results) {
+        const iconInfo = findIcon(
+            this._isEditingName ? result.text : `${this._treeElement.property.name}: ${result.text}`,
+            await getComputedStyle());
+        if (!iconInfo) {
+          continue;
+        }
+        const icon = Icon.createIcon();
+        const width = '13px';
+        const height = '13px';
+        icon.data = {
+          iconName: iconInfo.iconName,
+          width,
+          height,
+          color: 'black',
+        };
+        icon.style.transform =
+            `rotate(${iconInfo.rotate}deg) scale(${iconInfo.scaleX * 1.1}, ${iconInfo.scaleY * 1.1})`;
+        icon.style.maxHeight = height;
+        icon.style.maxWidth = width;
+        result.iconElement = icon;
+      }
+    }
+
     if (this._isColorAware && !this._isEditingName) {
       results.sort((a, b) => {
         if (!!a.subtitleRenderer === !!b.subtitleRenderer) {
@@ -2538,9 +2703,8 @@ export class CSSPropertyPrompt extends UI.TextPrompt.TextPrompt {
      * @return {!Element}
      */
     function swatchRenderer(color) {
-      const swatch = InlineEditor.ColorSwatch.ColorSwatch.create();
-      swatch.hideText(true);
-      swatch.setColor(color);
+      const swatch = InlineEditor.ColorSwatch.createColorSwatch();
+      swatch.renderColor(color);
       swatch.style.pointerEvents = 'none';
       return swatch;
     }
@@ -2569,6 +2733,8 @@ export class StylesSidebarPropertyRenderer {
     this._gridHandler = null;
     /** @type {?function(string):!Node} */
     this._varHandler = createTextNode;
+    /** @type {?function(string):!Node} */
+    this._angleHandler = null;
   }
 
   /**
@@ -2604,6 +2770,13 @@ export class StylesSidebarPropertyRenderer {
    */
   setVarHandler(handler) {
     this._varHandler = handler;
+  }
+
+  /**
+   * @param {function(string):!Node} handler
+   */
+  setAngleHandler(handler) {
+    this._angleHandler = handler;
   }
 
   /**
@@ -2656,6 +2829,11 @@ export class StylesSidebarPropertyRenderer {
       regexes.push(Common.Color.Regex);
       processors.push(this._colorHandler);
     }
+    if (this._angleHandler && metadata.isAngleAwareProperty(this._propertyName)) {
+      // TODO(changhaohan): crbug.com/1138628 refactor this to handle unitless 0 cases
+      regexes.push(CSSAngleRegex);
+      processors.push(this._angleHandler);
+    }
     const results = TextUtils.TextUtils.Utils.splitStringByRegexes(this._propertyValue, regexes);
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
@@ -2678,7 +2856,7 @@ export class StylesSidebarPropertyRenderer {
       url = url.substring(1, url.length - 1);
     }
     const container = createDocumentFragment();
-    container.createTextChild('url(');
+    UI.UIUtils.createTextChild(container, 'url(');
     let hrefUrl = null;
     if (this._rule && this._rule.resourceURL()) {
       hrefUrl = Common.ParsedURL.ParsedURL.completeURL(this._rule.resourceURL(), url);
@@ -2697,7 +2875,7 @@ export class StylesSidebarPropertyRenderer {
         }),
         hrefUrl || url);
     container.appendChild(link);
-    container.createTextChild(')');
+    UI.UIUtils.createTextChild(container, ')');
     return container;
   }
 }
@@ -2713,14 +2891,14 @@ export class ButtonProvider {
     this._button.element.appendChild(longclickTriangle);
 
     new UI.UIUtils.LongClickController(this._button.element, this._longClicked.bind(this));
-    self.UI.context.addFlavorChangeListener(SDK.DOMModel.DOMNode, onNodeChanged.bind(this));
+    UI.Context.Context.instance().addFlavorChangeListener(SDK.DOMModel.DOMNode, onNodeChanged.bind(this));
     onNodeChanged.call(this);
 
     /**
      * @this {ButtonProvider}
      */
     function onNodeChanged() {
-      let node = self.UI.context.flavor(SDK.DOMModel.DOMNode);
+      let node = UI.Context.Context.instance().flavor(SDK.DOMModel.DOMNode);
       node = node ? node.enclosingElementOrSelf() : null;
       this._button.setEnabled(!!node);
     }

@@ -8,13 +8,13 @@
 #include "core/fxcrt/widestring.h"
 #include "core/fxge/cfx_font.h"
 #include "core/fxge/fx_font.h"
-#include "xfa/fgas/font/cfgas_fontmgr.h"
 #include "xfa/fgas/font/cfgas_gefont.h"
 #include "xfa/fgas/layout/cfx_char.h"
 #include "xfa/fgas/layout/cfx_rtfbreak.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  auto fontmgr = std::make_unique<CFGAS_FontMgr>();
+  if (size > 8192)
+    return 0;
 
   auto font = std::make_unique<CFX_Font>();
   font->LoadSubst("Arial", true, 0, FXFONT_FW_NORMAL, 0, 0, 0);
@@ -22,7 +22,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   CFX_RTFBreak rtf_break(FX_LAYOUTSTYLE_ExpandTab);
   rtf_break.SetLineBreakTolerance(1);
-  rtf_break.SetFont(CFGAS_GEFont::LoadFont(std::move(font), fontmgr.get()));
+  rtf_break.SetFont(CFGAS_GEFont::LoadFont(std::move(font)));
   rtf_break.SetFontSize(12);
 
   WideString input =

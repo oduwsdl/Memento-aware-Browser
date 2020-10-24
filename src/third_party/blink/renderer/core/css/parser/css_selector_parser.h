@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PARSER_CSS_SELECTOR_PARSER_H_
 
 #include <memory>
-#include "base/macros.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_selector.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
@@ -47,6 +46,12 @@ class CORE_EXPORT CSSSelectorParser {
   CSSSelectorList ConsumeComplexSelectorList(CSSParserTokenStream&,
                                              CSSParserObserver*);
   CSSSelectorList ConsumeCompoundSelectorList(CSSParserTokenRange&);
+  // Consumes a forgiving complex selector list if inside_compound_pseudo_ is
+  // false, otherwise consumes a forgiving compound selector list.
+  CSSSelectorList ConsumeNestedSelectorList(CSSParserTokenRange&);
+  // https://drafts.csswg.org/selectors/#typedef-forgiving-selector-list
+  CSSSelectorList ConsumeForgivingComplexSelectorList(CSSParserTokenRange&);
+  CSSSelectorList ConsumeForgivingCompoundSelectorList(CSSParserTokenRange&);
 
   std::unique_ptr<CSSParserSelector> ConsumeComplexSelector(
       CSSParserTokenRange&);
@@ -91,6 +96,22 @@ class CORE_EXPORT CSSSelectorParser {
 
   bool failed_parsing_ = false;
   bool disallow_pseudo_elements_ = false;
+  // We don't allow mixing ShadowDOMv0 features and nested complex selectors,
+  // such as :is(). When :is() or :where() is encountered, ShadowDOM V0 features
+  // are disallowed, and whenever /deep/, ::content or ::shadow is encountered
+  // we disallow :is()/:where().
+  bool disallow_shadow_dom_v0_ = false;
+  bool disallow_nested_complex_ = false;
+  // If we're inside a pseudo class that only accepts compound selectors,
+  // for example :host, inner :is()/:where() pseudo classes are also only
+  // allowed to contain compound selectors.
+  bool inside_compound_pseudo_ = false;
+  // When parsing a compound which includes a pseudo-element, the simple
+  // selectors permitted to follow that pseudo-element may be restricted.
+  // If this is the case, then restricting_pseudo_element_ will be set to the
+  // PseudoType of the pseudo-element causing the restriction.
+  CSSSelector::PseudoType restricting_pseudo_element_ =
+      CSSSelector::kPseudoUnknown;
 
   class DisallowPseudoElementsScope {
     STACK_ALLOCATED();
@@ -100,6 +121,9 @@ class CORE_EXPORT CSSSelectorParser {
         : parser_(parser), was_disallowed_(parser_->disallow_pseudo_elements_) {
       parser_->disallow_pseudo_elements_ = true;
     }
+    DisallowPseudoElementsScope(const DisallowPseudoElementsScope&) = delete;
+    DisallowPseudoElementsScope& operator=(const DisallowPseudoElementsScope&) =
+        delete;
 
     ~DisallowPseudoElementsScope() {
       parser_->disallow_pseudo_elements_ = was_disallowed_;
@@ -108,7 +132,6 @@ class CORE_EXPORT CSSSelectorParser {
    private:
     CSSSelectorParser* parser_;
     bool was_disallowed_;
-    DISALLOW_COPY_AND_ASSIGN(DisallowPseudoElementsScope);
   };
 };
 

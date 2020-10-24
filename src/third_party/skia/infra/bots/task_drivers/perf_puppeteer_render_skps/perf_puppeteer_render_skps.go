@@ -22,9 +22,12 @@ import (
 	"go.skia.org/infra/go/exec"
 	"go.skia.org/infra/go/skerr"
 	"go.skia.org/infra/go/sklog"
+	"go.skia.org/infra/go/util"
 	"go.skia.org/infra/task_driver/go/lib/os_steps"
 	"go.skia.org/infra/task_driver/go/td"
 )
+
+const perfKeyWebGLVersion = "webgl_version"
 
 func main() {
 	var (
@@ -42,6 +45,7 @@ func main() {
 		modelTrace         = flag.String("model_trace", "", "Description of host machine.")
 		cpuOrGPUTrace      = flag.String("cpu_or_gpu_trace", "", "If this is a CPU or GPU configuration.")
 		cpuOrGPUValueTrace = flag.String("cpu_or_gpu_value_trace", "", "The hardware of this CPU/GPU")
+		webGLVersion       = flag.String("webgl_version", "", "Major WebGL version to use when creating gl drawing context. 1 or 2")
 
 		// Flags that may be required for certain configs
 		canvaskitBinPath = flag.String("canvaskit_bin_path", "", "The location of a canvaskit.js and canvaskit.wasm")
@@ -57,10 +61,11 @@ func main() {
 	defer td.EndRun(ctx)
 
 	keys := map[string]string{
-		"os":               *osTrace,
-		"model":            *modelTrace,
-		perfKeyCpuOrGPU:    *cpuOrGPUTrace,
-		"cpu_or_gpu_value": *cpuOrGPUValueTrace,
+		"os":                *osTrace,
+		"model":             *modelTrace,
+		perfKeyCpuOrGPU:     *cpuOrGPUTrace,
+		"cpu_or_gpu_value":  *cpuOrGPUValueTrace,
+		perfKeyWebGLVersion: *webGLVersion,
 	}
 
 	outputWithoutResults, err := makePerfObj(*gitHash, *taskID, os.Getenv("SWARMING_BOT_ID"), keys)
@@ -68,11 +73,11 @@ func main() {
 		td.Fatal(ctx, skerr.Wrap(err))
 	}
 	// Absolute paths work more consistently than relative paths.
-	nodeBinAbsPath := getAbsoluteOfRequiredFlag(ctx, *nodeBinPath, "node_bin_path")
-	benchmarkAbsPath := getAbsoluteOfRequiredFlag(ctx, *benchmarkPath, "benchmark_path")
-	canvaskitBinAbsPath := getAbsoluteOfRequiredFlag(ctx, *canvaskitBinPath, "canvaskit_bin_path")
-	skpsAbsPath := getAbsoluteOfRequiredFlag(ctx, *skpsPath, "skps_path")
-	outputAbsPath := getAbsoluteOfRequiredFlag(ctx, *outputPath, "output_path")
+	nodeBinAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *nodeBinPath, "node_bin_path")
+	benchmarkAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *benchmarkPath, "benchmark_path")
+	canvaskitBinAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *canvaskitBinPath, "canvaskit_bin_path")
+	skpsAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *skpsPath, "skps_path")
+	outputAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *outputPath, "output_path")
 
 	if err := setup(ctx, benchmarkAbsPath, nodeBinAbsPath); err != nil {
 		td.Fatal(ctx, skerr.Wrap(err))
@@ -88,17 +93,6 @@ func main() {
 	if err := processSKPData(ctx, outputWithoutResults, benchmarkAbsPath, outputFile); err != nil {
 		td.Fatal(ctx, skerr.Wrap(err))
 	}
-}
-
-func getAbsoluteOfRequiredFlag(ctx context.Context, nonEmptyPath, flag string) string {
-	if nonEmptyPath == "" {
-		td.Fatalf(ctx, "--%s must be specified", flag)
-	}
-	absPath, err := filepath.Abs(nonEmptyPath)
-	if err != nil {
-		td.Fatal(ctx, skerr.Wrap(err))
-	}
-	return absPath
 }
 
 const perfKeyCpuOrGPU = "cpu_or_gpu"
@@ -146,6 +140,12 @@ func setup(ctx context.Context, benchmarkPath, nodeBinPath string) error {
 	return nil
 }
 
+var cpuSkiplist = []string{
+	// When the SKPs were generated on Sept 27 2020, this started to timeout on CPU
+	"desk_carsvg.skp",
+}
+var gpuSkiplist = []string{}
+
 // benchSKPs serves skps from a folder and runs the RenderSKPs benchmark on each of them
 // individually. The benchmark is run N times to reduce the noise of the resulting data.
 // The output for each will be a JSON file in $benchmarkPath/out/ corresponding to the skp name
@@ -171,11 +171,18 @@ func benchSKPs(ctx context.Context, perf perfJSONFormat, benchmarkPath, canvaski
 	if err != nil {
 		return td.FailStep(ctx, skerr.Wrap(err))
 	}
-
+	skiplist := cpuSkiplist
+	if perf.Key[perfKeyCpuOrGPU] != "CPU" {
+		skiplist = gpuSkiplist
+	}
 	sklog.Infof("Identified %d skp files to benchmark", len(skpFiles))
 
 	for _, skp := range skpFiles {
 		name := filepath.Base(skp)
+		if util.In(name, skiplist) {
+			sklog.Infof("Skipping skp %s", name)
+			continue
+		}
 		err = td.Do(ctx, td.Props(fmt.Sprintf("Benchmark %s", name)), func(ctx context.Context) error {
 			// See comment in setup about why we specify the absolute path for node.
 			args := []string{filepath.Join(nodeBinPath, "node"),
@@ -183,11 +190,15 @@ func benchSKPs(ctx context.Context, perf perfJSONFormat, benchmarkPath, canvaski
 				"--bench_html", "render-skp.html",
 				"--canvaskit_js", filepath.Join(canvaskitBinPath, "canvaskit.js"),
 				"--canvaskit_wasm", filepath.Join(canvaskitBinPath, "canvaskit.wasm"),
+				"--timeout", "90", // 90 seconds before timeout
 				"--input_skp", skp,
 				"--output", filepath.Join(benchmarkPath, "out", name+".json"),
 			}
 			if perf.Key[perfKeyCpuOrGPU] != "CPU" {
 				args = append(args, "--use_gpu")
+				if perf.Key[perfKeyWebGLVersion] == "1" {
+					args = append(args, "--query_params webgl1")
+				}
 			}
 			_, err := exec.RunCwd(ctx, benchmarkPath, args...)
 			if err != nil {
@@ -244,6 +255,9 @@ func processSKPData(ctx context.Context, perf perfJSONFormat, benchmarkPath, out
 			config := "software"
 			if perf.Key[perfKeyCpuOrGPU] != "CPU" {
 				config = "webgl2"
+				if perf.Key[perfKeyWebGLVersion] == "1" {
+					config = "webgl1"
+				}
 			}
 
 			b, err := os_steps.ReadFile(ctx, skp)

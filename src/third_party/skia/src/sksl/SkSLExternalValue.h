@@ -17,8 +17,10 @@ class Type;
 
 class ExternalValue : public Symbol {
 public:
+    static constexpr Kind kSymbolKind = Kind::kExternal;
+
     ExternalValue(const char* name, const Type& type)
-        : INHERITED(-1, kExternal_Kind, name)
+        : INHERITED(-1, kSymbolKind, name)
         , fType(type) {}
 
     virtual bool canRead() const {
@@ -36,7 +38,7 @@ public:
     /**
      * Returns the type for purposes of read and write operations.
      */
-    virtual const Type& type() const {
+    const Type& type() const override {
         return fType;
     }
 
@@ -65,7 +67,7 @@ public:
      * in this external value.
      * 'index' is the element index ([0 .. N-1]) within a call to ByteCode::run()
      */
-    virtual void read(int index, float* target) {
+    virtual void read(int index, float* target) const {
         SkASSERT(false);
     }
 
@@ -74,7 +76,7 @@ public:
      * pointer to the type of data expected by this external value.
      * 'index' is the element index ([0 .. N-1]) within a call to ByteCode::run()
      */
-    virtual void write(int index, float* src) {
+    virtual void write(int index, float* src) const {
         SkASSERT(false);
     }
 
@@ -85,15 +87,13 @@ public:
      * value.
      * 'index' is the element index ([0 .. N-1]) within a call to ByteCode::run()
      */
-    virtual void call(int index, float* arguments, float* outResult) {
+    virtual void call(int index, float* arguments, float* outResult) const {
         SkASSERT(false);
     }
 
     /**
      * Resolves 'name' within this context and returns an ExternalValue which represents it, or
-     * null if no such child exists. If the implementation of this method creates new
-     * ExternalValues and there isn't a more convenient place for ownership of the objects to
-     * reside, the compiler's takeOwnership method may be useful.
+     * null if no such child exists.
      *
      * The 'name' string may not persist after this call; do not store this pointer.
      */
@@ -102,15 +102,15 @@ public:
     }
 
     String description() const override {
-        return String("external<") + fName + ">";
+        return String("external<") + this->name() + ">";
     }
 
 private:
-    typedef Symbol INHERITED;
+    using INHERITED = Symbol;
 
     const Type& fType;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

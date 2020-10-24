@@ -5,17 +5,18 @@
 * found in the LICENSE file.
 */
 
-#include "include/gpu/GrContext.h"
+#include "src/gpu/vk/GrVkPipelineStateBuilder.h"
+
+#include "include/gpu/GrDirectContext.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrAutoLocaleSetter.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrPersistentCacheUtils.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/GrStencilSettings.h"
 #include "src/gpu/vk/GrVkDescriptorSetManager.h"
 #include "src/gpu/vk/GrVkGpu.h"
-#include "src/gpu/vk/GrVkPipelineStateBuilder.h"
 #include "src/gpu/vk/GrVkRenderPass.h"
 #include "src/gpu/vk/GrVkRenderTarget.h"
 
@@ -164,7 +165,7 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
                                                       VkRenderPass compatibleRenderPass) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
-    VkDescriptorSetLayout dsLayout[2];
+    VkDescriptorSetLayout dsLayout[GrVkUniformHandler::kDescSetCount];
     VkPipelineLayout pipelineLayout;
     VkShaderModule shaderModules[kGrShaderTypeCount] = { VK_NULL_HANDLE,
                                                          VK_NULL_HANDLE,
@@ -180,13 +181,18 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
     dsLayout[GrVkUniformHandler::kSamplerDescSet] =
             resourceProvider.getSamplerDSLayout(samplerDSHandle);
 
+    dsLayout[GrVkUniformHandler::kInputDescSet] = resourceProvider.getInputDSLayout();
+
+    bool usesInput = SkToBool(fProgramInfo.renderPassBarriers() & GrXferBarrierFlags::kTexture);
+    uint32_t layoutCount =
+            usesInput ? GrVkUniformHandler::kDescSetCount : (GrVkUniformHandler::kDescSetCount - 1);
     // Create the VkPipelineLayout
     VkPipelineLayoutCreateInfo layoutCreateInfo;
     memset(&layoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateFlags));
     layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.pNext = 0;
+    layoutCreateInfo.pNext = nullptr;
     layoutCreateInfo.flags = 0;
-    layoutCreateInfo.setLayoutCount = 2;
+    layoutCreateInfo.setLayoutCount = layoutCount;
     layoutCreateInfo.pSetLayouts = dsLayout;
     layoutCreateInfo.pushConstantRangeCount = 0;
     layoutCreateInfo.pPushConstantRanges = nullptr;
@@ -341,6 +347,5 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
                                  fUniformHandler.fSamplers,
                                  std::move(fGeometryProcessor),
                                  std::move(fXferProcessor),
-                                 std::move(fFragmentProcessors),
-                                 fFragmentProcessorCnt);
+                                 std::move(fFragmentProcessors));
 }

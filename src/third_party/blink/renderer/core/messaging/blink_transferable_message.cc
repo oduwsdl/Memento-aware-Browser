@@ -38,14 +38,12 @@ BlinkTransferableMessage BlinkTransferableMessage::FromMessageEvent(
   Vector<MessagePortChannel> ports = message_event->ReleaseChannels();
   result.ports.AppendRange(ports.begin(), ports.end());
 
-  // User activation and |allow_autoplay|.
+  // User activation
   UserActivation* user_activation = message_event->userActivation();
   if (user_activation) {
     result.user_activation = mojom::blink::UserActivationSnapshot::New(
         user_activation->hasBeenActive(), user_activation->isActive());
   }
-  result.transfer_user_activation = message_event->transferUserActivation();
-  result.allow_autoplay = message_event->allowAutoplay();
 
   // Blobs.
   for (const auto& blob : serialized_script_value->BlobDataHandles()) {
@@ -158,8 +156,6 @@ BlinkTransferableMessage BlinkTransferableMessage::FromTransferableMessage(
         message.user_activation->has_been_active,
         message.user_activation->was_active);
   }
-  result.transfer_user_activation = message.transfer_user_activation;
-  result.allow_autoplay = message.allow_autoplay;
 
   if (!message.array_buffer_contents_array.empty()) {
     SerializedScriptValue::ArrayBufferContentsArray array_buffer_contents_array;
@@ -231,7 +227,7 @@ scoped_refptr<StaticBitmapImage> ToStaticBitmapImage(
 base::Optional<SkBitmap> ToSkBitmap(
     const scoped_refptr<blink::StaticBitmapImage>& static_bitmap_image) {
   const sk_sp<SkImage> image =
-      static_bitmap_image->PaintImageForCurrentFrame().GetSkImage();
+      static_bitmap_image->PaintImageForCurrentFrame().GetSwSkImage();
   SkBitmap result;
   if (image && image->asLegacyBitmap(
                    &result, SkImage::LegacyBitmapMode::kRO_LegacyBitmapMode)) {

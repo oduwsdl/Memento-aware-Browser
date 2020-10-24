@@ -117,7 +117,7 @@ namespace GrPathUtils {
     // must specify the orientation of the contour containing the cubic.
     void convertCubicToQuadsConstrainToTangents(const SkPoint p[4],
                                                 SkScalar tolScale,
-                                                SkPathPriv::FirstDirection dir,
+                                                SkPathFirstDirection dir,
                                                 SkTArray<SkPoint, true>* quads);
 
     enum class ExcludedTerm {
@@ -213,5 +213,5 @@ namespace GrPathUtils {
 
     // We guarantee that no quad or cubic will ever produce more than this many points
     static const int kMaxPointsPerCurve = 1 << 10;
-};
+}  // namespace GrPathUtils
 #endif

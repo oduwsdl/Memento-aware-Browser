@@ -35,7 +35,7 @@ class RefCounted {
     virtual void DeleteThis();
 
   private:
-    std::atomic_uint64_t mRefCount;
+    std::atomic<uint64_t> mRefCount;
 };
 
 template <typename T>
@@ -120,6 +120,14 @@ class Ref {
     ~Ref() {
         Release();
         mPointee = nullptr;
+    }
+
+    bool operator==(const T* other) const {
+        return mPointee == other;
+    }
+
+    bool operator!=(const T* other) const {
+        return mPointee != other;
     }
 
     operator bool() {

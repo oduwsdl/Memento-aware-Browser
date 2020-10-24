@@ -32,6 +32,7 @@
 #include "api/test/frame_generator_interface.h"
 #include "api/test/simulated_network.h"
 #include "api/test/stats_observer_interface.h"
+#include "api/test/track_id_stream_info_map.h"
 #include "api/test/video_quality_analyzer_interface.h"
 #include "api/transport/network_control.h"
 #include "api/units/time_delta.h"
@@ -228,8 +229,7 @@ class PeerConnectionE2EQualityTestFixture {
     bool show_on_screen = false;
     // If specified, determines a sync group to which this video stream belongs.
     // According to bugs.webrtc.org/4762 WebRTC supports synchronization only
-    // for pair of single audio and single video stream. Framework won't do any
-    // enforcements on this field.
+    // for pair of single audio and single video stream.
     absl::optional<std::string> sync_group;
   };
 
@@ -256,8 +256,7 @@ class PeerConnectionE2EQualityTestFixture {
     int sampling_frequency_in_hz = 48000;
     // If specified, determines a sync group to which this audio stream belongs.
     // According to bugs.webrtc.org/4762 WebRTC supports synchronization only
-    // for pair of single audio and single video stream. Framework won't do any
-    // enforcements on this field.
+    // for pair of single audio and single video stream.
     absl::optional<std::string> sync_group;
   };
 
@@ -334,8 +333,8 @@ class PeerConnectionE2EQualityTestFixture {
         PeerConnectionInterface::RTCConfiguration configuration) = 0;
     // Set bitrate parameters on PeerConnection. This constraints will be
     // applied to all summed RTP streams for this peer.
-    virtual PeerConfigurer* SetBitrateParameters(
-        PeerConnectionInterface::BitrateParameters bitrate_params) = 0;
+    virtual PeerConfigurer* SetBitrateSettings(
+        BitrateSettings bitrate_settings) = 0;
   };
 
   // Contains configuration for echo emulator.
@@ -409,7 +408,14 @@ class PeerConnectionE2EQualityTestFixture {
 
     // Invoked by framework after peer connection factory and peer connection
     // itself will be created but before offer/answer exchange will be started.
-    virtual void Start(absl::string_view test_case_name) = 0;
+    // |test_case_name| is name of test case, that should be used to report all
+    // metrics.
+    // |reporter_helper| is a pointer to a class that will allow track_id to
+    // stream_id matching. The caller is responsible for ensuring the
+    // TrackIdStreamInfoMap will be valid from Start() to
+    // StopAndReportResults().
+    virtual void Start(absl::string_view test_case_name,
+                       const TrackIdStreamInfoMap* reporter_helper) = 0;
 
     // Invoked by framework after call is ended and peer connection factory and
     // peer connection are destroyed.

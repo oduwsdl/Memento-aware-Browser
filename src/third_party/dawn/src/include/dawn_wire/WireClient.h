@@ -26,7 +26,9 @@ namespace dawn_wire {
     namespace client {
         class Client;
         class MemoryTransferService;
-    }
+
+        DAWN_WIRE_EXPORT const DawnProcTable& GetProcs();
+    }  // namespace client
 
     struct ReservedTexture {
         WGPUTexture texture;
@@ -43,8 +45,6 @@ namespace dawn_wire {
       public:
         WireClient(const WireClientDescriptor& descriptor);
         ~WireClient() override;
-
-        static DawnProcTable GetProcs();
 
         WGPUDevice GetDevice() const;
         const volatile char* HandleCommands(const volatile char* commands,

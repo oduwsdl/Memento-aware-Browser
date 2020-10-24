@@ -12,7 +12,7 @@ namespace textlayout {
 
 class Decorations {
     public:
-    void paint(SkCanvas* canvas, const TextStyle& textStyle, const TextLine::ClipContext& context, SkScalar baseline, SkPoint offset);
+    void paint(SkCanvas* canvas, const TextStyle& textStyle, const TextLine::ClipContext& context, SkScalar baseline);
 
     private:
 
@@ -29,6 +29,6 @@ class Decorations {
     SkPaint fPaint;
     SkPath fPath;
 };
-}
-}
+}  // namespace textlayout
+}  // namespace skia
 #endif

@@ -10,7 +10,7 @@
 #include "build/build_config.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_study_participation.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -43,7 +43,8 @@ constexpr base::TimeDelta kEncodeRowSlackBeforeDeadline =
     base::TimeDelta::FromMicroseconds(100);
 
 /* The value is based on user statistics on Nov 2017. */
-#if (defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN))
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) || \
+     defined(OS_WIN))
 const double kIdleTaskStartTimeoutDelayMs = 1000.0;
 #else
 const double kIdleTaskStartTimeoutDelayMs = 4000.0;  // For ChromeOS, Mobile
@@ -149,7 +150,7 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
     ToBlobFunctionType function_type,
     base::TimeTicks start_time,
     ExecutionContext* context,
-    base::Optional<UkmParameters> ukm_params,
+    UkmParameters ukm_params,
     ScriptPromiseResolver* resolver)
     : CanvasAsyncBlobCreator(image,
                              options,
@@ -167,7 +168,7 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
     V8BlobCallback* callback,
     base::TimeTicks start_time,
     ExecutionContext* context,
-    base::Optional<UkmParameters> ukm_params,
+    UkmParameters ukm_params,
     ScriptPromiseResolver* resolver)
     : fail_encoder_initialization_for_test_(false),
       enforce_idle_encoding_for_test_(false),
@@ -178,6 +179,7 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
       start_time_(start_time),
       static_bitmap_image_loaded_(false),
       callback_(callback),
+      ukm_params_(ukm_params),
       script_promise_resolver_(resolver) {
   DCHECK(image);
   DCHECK(context);
@@ -190,7 +192,8 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
   // necessary.
   image_ = image_->MakeUnaccelerated();
 
-  sk_sp<SkImage> skia_image = image_->PaintImageForCurrentFrame().GetSkImage();
+  sk_sp<SkImage> skia_image =
+      image_->PaintImageForCurrentFrame().GetSwSkImage();
   DCHECK(skia_image);
   DCHECK(!skia_image->isTextureBacked());
 
@@ -211,7 +214,7 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
       image_ = image_->ConvertToColorSpace(
           SkColorSpace::MakeSRGB(),
           GetColorTypeForConversion(skia_image->colorType()));
-      skia_image = image_->PaintImageForCurrentFrame().GetSkImage();
+      skia_image = image_->PaintImageForCurrentFrame().GetSwSkImage();
     }
 
     if (skia_image->peekPixels(&src_data_)) {
@@ -239,7 +242,7 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
     if (needs_color_space_conversion) {
       image_ = UnacceleratedStaticBitmapImage::Create(skia_image);
       image_ = image_->ConvertToColorSpace(blob_color_space, target_color_type);
-      skia_image = image_->PaintImageForCurrentFrame().GetSkImage();
+      skia_image = image_->PaintImageForCurrentFrame().GetSwSkImage();
     } else if (skia_image->colorType() != target_color_type) {
       size_t data_length = skia_image->width() * skia_image->height() *
                            SkColorTypeBytesPerPixel(target_color_type);
@@ -272,7 +275,7 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
 
   idle_task_status_ = kIdleTaskNotSupported;
   num_rows_completed_ = 0;
-  if (context->IsDocument()) {
+  if (context->IsWindow()) {
     parent_frame_task_runner_ =
         context->GetTaskRunner(TaskType::kCanvasBlobSerialization);
   }
@@ -484,8 +487,10 @@ void CanvasAsyncBlobCreator::CreateBlobAndReturnResult() {
 }
 
 void CanvasAsyncBlobCreator::RecordIdentifiabilityMetric() {
-  if (!ukm_params_.has_value() || !IsUserInIdentifiabilityStudy())
+  if (!IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+          blink::IdentifiableSurface::Type::kCanvasReadback)) {
     return;
+  }
   // Creating this ImageDataBuffer has some overhead, namely getting the SkImage
   // and computing the pixmap.
   // We need the StaticBitmapImage to be deleted on the same thread on which it
@@ -502,7 +507,7 @@ void CanvasAsyncBlobCreator::RecordIdentifiabilityMetric() {
                 if (!data_buffer)
                   return;
                 blink::IdentifiabilityMetricBuilder(ukm_params.source_id)
-                    .Set(blink::IdentifiableSurface::FromTypeAndInput(
+                    .Set(blink::IdentifiableSurface::FromTypeAndToken(
                              blink::IdentifiableSurface::Type::kCanvasReadback,
                              0),
                          blink::IdentifiabilityDigestOfBytes(
@@ -510,7 +515,7 @@ void CanvasAsyncBlobCreator::RecordIdentifiabilityMetric() {
                                              data_buffer->ComputeByteSize())))
                     .Record(ukm_params.ukm_recorder);
               },
-              image_, ukm_params_.value()));
+              image_, ukm_params_));
 }
 
 void CanvasAsyncBlobCreator::CreateNullAndReturnResult() {

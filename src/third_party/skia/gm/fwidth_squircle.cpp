@@ -14,12 +14,11 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkString.h"
-#include "include/gpu/GrContext.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/private/GrTypesPriv.h"
 #include "src/gpu/GrBuffer.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrGpuBuffer.h"
 #include "src/gpu/GrMemoryPool.h"
@@ -88,7 +87,7 @@ private:
 
     class Impl;
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 class FwidthSquircleTestProcessor::Impl : public GrGLSLGeometryProcessor {
@@ -129,8 +128,8 @@ class FwidthSquircleTestProcessor::Impl : public GrGLSLGeometryProcessor {
         f->codeAppendf("%s = half4(coverage);", args.fOutputCoverage);
     }
 
-    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& primProc,
-                 const CoordTransformRange&) override {
+    void setData(const GrGLSLProgramDataManager& pdman,
+                 const GrPrimitiveProcessor& primProc) override {
         const auto& proc = primProc.cast<FwidthSquircleTestProcessor>();
         pdman.setSkMatrix(fViewMatrixHandle, proc.fViewMatrix);
     }
@@ -173,13 +172,15 @@ private:
                                      SkArenaAlloc* arena,
                                      const GrSurfaceProxyView* writeView,
                                      GrAppliedClip&& appliedClip,
-                                     const GrXferProcessor::DstProxyView& dstProxyView) const {
+                                     const GrXferProcessor::DstProxyView& dstProxyView,
+                                     GrXferBarrierFlags renderPassXferBarriers) const {
         GrGeometryProcessor* geomProc = FwidthSquircleTestProcessor::Make(arena, fViewMatrix);
 
         return sk_gpu_test::CreateProgramInfo(caps, arena, writeView,
                                               std::move(appliedClip), dstProxyView,
                                               geomProc, SkBlendMode::kSrcOver,
-                                              GrPrimitiveType::kTriangleStrip);
+                                              GrPrimitiveType::kTriangleStrip,
+                                              renderPassXferBarriers);
     }
 
     GrProgramInfo* createProgramInfo(GrOpFlushState* flushState) const {
@@ -187,20 +188,23 @@ private:
                                        flushState->allocator(),
                                        flushState->writeView(),
                                        flushState->detachAppliedClip(),
-                                       flushState->dstProxyView());
+                                       flushState->dstProxyView(),
+                                       flushState->renderPassBarriers());
     }
 
     void onPrePrepare(GrRecordingContext* context,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip* clip,
-                      const GrXferProcessor::DstProxyView& dstProxyView) final {
+                      const GrXferProcessor::DstProxyView& dstProxyView,
+                      GrXferBarrierFlags renderPassXferBarriers) final {
         SkArenaAlloc* arena = context->priv().recordTimeAllocator();
 
         // This is equivalent to a GrOpFlushState::detachAppliedClip
         GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip::Disabled();
 
         fProgramInfo = this->createProgramInfo(context->priv().caps(), arena, writeView,
-                                               std::move(appliedClip), dstProxyView);
+                                               std::move(appliedClip), dstProxyView,
+                                               renderPassXferBarriers);
 
         context->priv().recordProgramInfo(fProgramInfo);
     }
@@ -226,7 +230,7 @@ private:
         }
 
         flushState->bindPipeline(*fProgramInfo, SkRect::MakeIWH(kWidth, kHeight));
-        flushState->bindBuffers(nullptr, nullptr, fVertexBuffer.get());
+        flushState->bindBuffers(nullptr, nullptr, std::move(fVertexBuffer));
         flushState->draw(4, 0);
 
     }
@@ -246,7 +250,7 @@ private:
 
     friend class ::GrOpMemoryPool; // for ctor
 
-    typedef GrDrawOp INHERITED;
+    using INHERITED = GrDrawOp;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -264,4 +268,4 @@ DEF_SIMPLE_GPU_GM_CAN_FAIL(fwidth_squircle, ctx, rtc, canvas, errorMsg, 200, 200
     return skiagm::DrawResult::kOk;
 }
 
-}
+}  // namespace skiagm

@@ -2,18 +2,38 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Bindings from '../bindings/bindings.js';
 import * as Common from '../common/common.js';
 import * as Platform from '../platform/platform.js';
-import * as Profiler from '../profiler/profiler.js';  // eslint-disable-line no-unused-vars
 import * as SDK from '../sdk/sdk.js';
 import * as SourceFrame from '../source_frame/source_frame.js';  // eslint-disable-line no-unused-vars
 import * as TextEditor from '../text_editor/text_editor.js';     // eslint-disable-line no-unused-vars
 import * as Workspace from '../workspace/workspace.js';          // eslint-disable-line no-unused-vars
 
+/** @type {!Performance} */
+let performanceInstance;
+
 export class Performance {
+  /**
+   * @private
+   */
   constructor() {
     this._helper = new Helper('performance');
+  }
+
+  /**
+   * @param {{forceNew: ?boolean}} opts
+   */
+  static instance(opts = {forceNew: null}) {
+    const {forceNew} = opts;
+    if (!performanceInstance || forceNew) {
+      performanceInstance = new Performance();
+    }
+
+    return performanceInstance;
   }
 
   reset() {
@@ -72,9 +92,27 @@ export class Performance {
   }
 }
 
+/** @type {!Memory} */
+let memoryInstance;
+
 export class Memory {
+  /**
+   * @private
+   */
   constructor() {
     this._helper = new Helper('memory');
+  }
+
+  /**
+   * @param {{forceNew: ?boolean}} opts
+   */
+  static instance(opts = {forceNew: null}) {
+    const {forceNew} = opts;
+    if (!memoryInstance || forceNew) {
+      memoryInstance = new Memory();
+    }
+
+    return memoryInstance;
   }
 
   reset() {
@@ -230,7 +268,7 @@ export class LineDecorator {
   /**
    * @override
    * @param {!Workspace.UISourceCode.UISourceCode} uiSourceCode
-   * @param {!TextEditor.CodeMirrorTextEditor.CodeMirrorTextEditor} textEditor
+   * @param {!SourceFrame.SourcesTextEditor.SourcesTextEditor} textEditor
    * @param {string} type
    */
   decorate(uiSourceCode, textEditor, type) {

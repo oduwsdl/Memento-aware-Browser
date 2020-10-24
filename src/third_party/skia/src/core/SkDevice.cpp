@@ -18,6 +18,7 @@
 #include "src/core/SkDraw.h"
 #include "src/core/SkGlyphRun.h"
 #include "src/core/SkImageFilterCache.h"
+#include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkLatticeIter.h"
 #include "src/core/SkMarkerStack.h"
@@ -33,7 +34,7 @@
 #include "src/utils/SkPatchUtils.h"
 
 SkBaseDevice::SkBaseDevice(const SkImageInfo& info, const SkSurfaceProps& surfaceProps)
-        : SkMatrixProvider(/* fLocalToDevice = */ SkMatrix::I())
+        : SkMatrixProvider(/* localToDevice = */ SkMatrix::I())
         , fInfo(info)
         , fSurfaceProps(surfaceProps) {
     fDeviceToGlobal.reset();
@@ -86,10 +87,10 @@ SkIPoint SkBaseDevice::getOrigin() const {
                           SkScalarFloorToInt(fDeviceToGlobal.getTranslateY()));
 }
 
-SkMatrix SkBaseDevice::getRelativeTransform(const SkBaseDevice& inputDevice) const {
-    // To get the transform from the input's space to this space, transform from the input space to
-    // the global space, and then from the global space back to this space.
-    return SkMatrix::Concat(fGlobalToDevice, inputDevice.fDeviceToGlobal);
+SkMatrix SkBaseDevice::getRelativeTransform(const SkBaseDevice& dstDevice) const {
+    // To get the transform from this space to the other device's, transform from our space to
+    // global and then from global to the other device.
+    return SkMatrix::Concat(dstDevice.fGlobalToDevice, fDeviceToGlobal);
 }
 
 bool SkBaseDevice::getLocalToMarker(uint32_t id, SkM44* localToMarker) const {
@@ -183,8 +184,9 @@ void SkBaseDevice::drawImageLattice(const SkImage* image,
     const SkImageInfo info = SkImageInfo::Make(1, 1, kBGRA_8888_SkColorType, kUnpremul_SkAlphaType);
 
     while (iter.next(&srcR, &dstR, &isFixedColor, &c)) {
-          if (isFixedColor || (srcR.width() <= 1.0f && srcR.height() <= 1.0f &&
-                               image->readPixels(info, &c, 4, srcR.fLeft, srcR.fTop))) {
+        // TODO: support this fast-path for GPU images
+        if (isFixedColor || (srcR.width() <= 1.0f && srcR.height() <= 1.0f &&
+                             image->readPixels(nullptr, info, &c, 4, srcR.fLeft, srcR.fTop))) {
               // Fast draw with drawRect, if this is a patch containing a single color
               // or if this is a patch containing a single pixel.
               if (0 != c || !paint.isSrcOver()) {
@@ -315,12 +317,50 @@ void SkBaseDevice::drawDrawable(SkDrawable* drawable, const SkMatrix* matrix, Sk
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-void SkBaseDevice::drawSpecial(SkSpecialImage*, int x, int y, const SkPaint&) {}
+void SkBaseDevice::drawSpecial(SkSpecialImage*, const SkMatrix&, const SkPaint&) {}
 sk_sp<SkSpecialImage> SkBaseDevice::makeSpecial(const SkBitmap&) { return nullptr; }
 sk_sp<SkSpecialImage> SkBaseDevice::makeSpecial(const SkImage*) { return nullptr; }
 sk_sp<SkSpecialImage> SkBaseDevice::snapSpecial(const SkIRect&, bool) { return nullptr; }
 sk_sp<SkSpecialImage> SkBaseDevice::snapSpecial() {
     return this->snapSpecial(SkIRect::MakeWH(this->width(), this->height()));
+}
+
+void SkBaseDevice::drawDevice(SkBaseDevice* device, const SkPaint& paint) {
+    sk_sp<SkSpecialImage> deviceImage = device->snapSpecial();
+    if (deviceImage) {
+        this->drawSpecial(deviceImage.get(), device->getRelativeTransform(*this), paint);
+    }
+}
+
+void SkBaseDevice::drawFilteredImage(const skif::Mapping& mapping, SkSpecialImage* src,
+                                     const SkImageFilter* filter, const SkPaint& paint) {
+    SkASSERT(!paint.getImageFilter() && !paint.getMaskFilter());
+    using For = skif::Usage;
+
+    skif::LayerSpace<SkIRect> targetOutput = mapping.deviceToLayer(
+            skif::DeviceSpace<SkIRect>(this->devClipBounds()));
+
+    // FIXME If the saved layer (so src) was created to use F16, should we do all image filtering
+    // in F16 and then only flatten to the destination color encoding at the end?
+    // Currently, this context converts everything to the dst color type ASAP.
+    SkColorType colorType = this->imageInfo().colorType();
+    if (colorType == kUnknown_SkColorType) {
+        colorType = kRGBA_8888_SkColorType;
+    }
+
+    // getImageFilterCache returns a bare image filter cache pointer that must be ref'ed until the
+    // filter's filterImage(ctx) function returns.
+    sk_sp<SkImageFilterCache> cache(this->getImageFilterCache());
+    skif::Context ctx(mapping, targetOutput, cache.get(), colorType, this->imageInfo().colorSpace(),
+                      skif::FilterResult<For::kInput>(sk_ref_sp(src)));
+
+    SkIPoint offset;
+    sk_sp<SkSpecialImage> result = as_IFB(filter)->filterImage(ctx).imageAndOffset(&offset);
+    if (result) {
+        SkMatrix deviceMatrixWithOffset = mapping.deviceMatrix();
+        deviceMatrixWithOffset.preTranslate(offset.fX, offset.fY);
+        this->drawSpecial(result.get(), deviceMatrixWithOffset, paint);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

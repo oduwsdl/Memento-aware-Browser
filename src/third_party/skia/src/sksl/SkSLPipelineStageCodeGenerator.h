@@ -27,8 +27,6 @@ private:
 
     String getTypeName(const Type& type) override;
 
-    void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence) override;
-
     void writeFunctionCall(const FunctionCall& c) override;
 
     void writeIntLiteral(const IntLiteral& i) override;
@@ -45,10 +43,10 @@ private:
 
     PipelineStageArgs* fArgs;
 
-    typedef GLSLCodeGenerator INHERITED;
+    using INHERITED = GLSLCodeGenerator;
 };
 
-}
+}  // namespace SkSL
 
 #endif
 

@@ -42,8 +42,6 @@ class ResourceResponse;
 class CORE_EXPORT ImageResourceContent final
     : public GarbageCollected<ImageResourceContent>,
       public ImageObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(ImageResourceContent);
-
  public:
   // Used for loading.
   // Returned content will be associated immediately later with ImageResource.
@@ -82,6 +80,11 @@ class CORE_EXPORT ImageResourceContent final
     return size_available_ != Image::kSizeUnavailable;
   }
 
+  // Correct the image orientation preference for potentially cross-origin
+  // content.
+  RespectImageOrientationEnum ForceOrientationIfNecessary(
+      RespectImageOrientationEnum default_orientation) const;
+
   void Trace(Visitor*) const override;
 
   // Content status and deriving predicates.
@@ -106,7 +109,7 @@ class CORE_EXPORT ImageResourceContent final
   // Redirecting methods to Resource.
   const KURL& Url() const;
   base::TimeTicks LoadResponseEnd() const;
-  bool IsAccessAllowed();
+  bool IsAccessAllowed() const;
   const ResourceResponse& GetResponse() const;
   base::Optional<ResourceError> GetResourceError() const;
   // DEPRECATED: ImageResourceContents consumers shouldn't need to worry about

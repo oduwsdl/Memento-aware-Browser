@@ -14,6 +14,9 @@ const int kReportIntervalSeconds = 10;
 
 }  // namespace
 
+const base::Feature kWebRtcThermalResource{"WebRtcThermalResource",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
 // static
 scoped_refptr<ThermalResource> ThermalResource::Create(
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
@@ -38,6 +41,7 @@ std::string ThermalResource::Name() const {
 
 void ThermalResource::SetResourceListener(webrtc::ResourceListener* listener) {
   base::AutoLock auto_lock(lock_);
+  DCHECK(!listener_ || !listener) << "Must not overwrite existing listener.";
   listener_ = listener;
   if (listener_ &&
       measurement_ != base::PowerObserver::DeviceThermalState::kUnknown) {

@@ -1,5 +1,4 @@
 {
-  "scripts": [],
   "modules": [
     "cm.js",
     "../third_party/codemirror/package/lib/codemirror.js",
@@ -29,8 +28,7 @@
     "../third_party/codemirror/package/addon/fold/foldcode.js",
     "../third_party/codemirror/package/addon/fold/foldgutter.js",
     "../third_party/codemirror/package/addon/fold/brace-fold.js"
-  ],
-  "resources": [
+  ],  "resources": [
     "codemirror.css"
   ]
 }

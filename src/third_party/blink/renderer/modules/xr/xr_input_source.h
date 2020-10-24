@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_XR_XR_INPUT_SOURCE_H_
 
 #include "base/optional.h"
-#include "device/vr/public/mojom/vr_service.mojom-blink-forward.h"
+#include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "third_party/blink/renderer/modules/gamepad/gamepad.h"
 #include "third_party/blink/renderer/modules/xr/xr_native_origin_information.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -30,7 +30,6 @@ class XRTargetRaySpace;
 
 class XRInputSource : public ScriptWrappable, public Gamepad::Client {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(XRInputSource);
 
  public:
   static XRInputSource* CreateOrUpdateFrom(

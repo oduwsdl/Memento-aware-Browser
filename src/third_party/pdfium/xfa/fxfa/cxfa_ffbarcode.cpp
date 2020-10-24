@@ -6,10 +6,10 @@
 
 #include "xfa/fxfa/cxfa_ffbarcode.h"
 
-#include <memory>
 #include <utility>
 
 #include "core/fxcrt/fx_extension.h"
+#include "third_party/base/check.h"
 #include "xfa/fwl/cfwl_app.h"
 #include "xfa/fwl/cfwl_barcode.h"
 #include "xfa/fwl/cfwl_notedriver.h"
@@ -138,18 +138,20 @@ CXFA_FFBarcode::CXFA_FFBarcode(CXFA_Node* pNode, CXFA_Barcode* barcode)
 
 CXFA_FFBarcode::~CXFA_FFBarcode() = default;
 
+void CXFA_FFBarcode::Trace(cppgc::Visitor* visitor) const {
+  CXFA_FFTextEdit::Trace(visitor);
+  visitor->Trace(barcode_);
+}
+
 bool CXFA_FFBarcode::LoadWidget() {
-  ASSERT(!IsLoaded());
+  DCHECK(!IsLoaded());
 
-  // Prevents destruction of the CXFA_ContentLayoutItem that owns |this|.
-  RetainPtr<CXFA_ContentLayoutItem> retain_layout(m_pLayoutItem.Get());
-
-  auto pNew = std::make_unique<CFWL_Barcode>(GetFWLApp());
-  CFWL_Barcode* pFWLBarcode = pNew.get();
-  SetNormalWidget(std::move(pNew));
+  CFWL_Barcode* pFWLBarcode = cppgc::MakeGarbageCollected<CFWL_Barcode>(
+      GetFWLApp()->GetHeap()->GetAllocationHandle(), GetFWLApp());
+  SetNormalWidget(pFWLBarcode);
   pFWLBarcode->SetAdapterIface(this);
 
-  CFWL_NoteDriver* pNoteDriver = pFWLBarcode->GetOwnerApp()->GetNoteDriver();
+  CFWL_NoteDriver* pNoteDriver = pFWLBarcode->GetFWLApp()->GetNoteDriver();
   pNoteDriver->RegisterEventTarget(pFWLBarcode, pFWLBarcode);
   m_pOldDelegate = pFWLBarcode->GetDelegate();
   pFWLBarcode->SetDelegate(this);
@@ -163,7 +165,7 @@ bool CXFA_FFBarcode::LoadWidget() {
   return CXFA_FFField::LoadWidget();
 }
 
-void CXFA_FFBarcode::RenderWidget(CXFA_Graphics* pGS,
+void CXFA_FFBarcode::RenderWidget(CFGAS_GEGraphics* pGS,
                                   const CFX_Matrix& matrix,
                                   HighlightOption highlight) {
   if (!HasVisibleStatus())

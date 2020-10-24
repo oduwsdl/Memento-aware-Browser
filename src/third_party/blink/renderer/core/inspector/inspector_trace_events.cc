@@ -360,6 +360,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoSlotted)
     DEFINE_STRING_MAPPING(PseudoSpatialNavigationFocus)
     DEFINE_STRING_MAPPING(PseudoSpatialNavigationInterest)
+    DEFINE_STRING_MAPPING(PseudoHasDatalist)
     DEFINE_STRING_MAPPING(PseudoIsHtml)
     DEFINE_STRING_MAPPING(PseudoListBox)
     DEFINE_STRING_MAPPING(PseudoMultiSelectFocus)
@@ -367,6 +368,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoVideoPersistent)
     DEFINE_STRING_MAPPING(PseudoVideoPersistentAncestor)
     DEFINE_STRING_MAPPING(PseudoXrOverlay)
+    DEFINE_STRING_MAPPING(PseudoTargetText)
 #undef DEFINE_STRING_MAPPING
   }
 
@@ -395,43 +397,47 @@ const char* CompileOptionsString(v8::ScriptCompiler::CompileOptions options) {
 
 const char* NotStreamedReasonString(ScriptStreamer::NotStreamingReason reason) {
   switch (reason) {
-    case ScriptStreamer::kNotHTTP:
+    case ScriptStreamer::NotStreamingReason::kNotHTTP:
       return "not http/https protocol";
-    case ScriptStreamer::kRevalidate:
+    case ScriptStreamer::NotStreamingReason::kRevalidate:
       return "revalidation event";
-    case ScriptStreamer::kContextNotValid:
+    case ScriptStreamer::NotStreamingReason::kContextNotValid:
       return "script context not valid";
-    case ScriptStreamer::kEncodingNotSupported:
+    case ScriptStreamer::NotStreamingReason::kEncodingNotSupported:
       return "encoding not supported";
-    case ScriptStreamer::kThreadBusy:
+    case ScriptStreamer::NotStreamingReason::kThreadBusy:
       return "script streamer thread busy";
-    case ScriptStreamer::kV8CannotStream:
+    case ScriptStreamer::NotStreamingReason::kV8CannotStream:
       return "V8 cannot stream script";
-    case ScriptStreamer::kScriptTooSmall:
+    case ScriptStreamer::NotStreamingReason::kScriptTooSmall:
       return "script too small";
-    case ScriptStreamer::kNoResourceBuffer:
+    case ScriptStreamer::NotStreamingReason::kNoResourceBuffer:
       return "resource no longer alive";
-    case ScriptStreamer::kHasCodeCache:
+    case ScriptStreamer::NotStreamingReason::kHasCodeCache:
       return "script has code-cache available";
-    case ScriptStreamer::kStreamerNotReadyOnGetSource:
+    case ScriptStreamer::NotStreamingReason::kStreamerNotReadyOnGetSource:
       return "streamer not ready";
-    case ScriptStreamer::kInlineScript:
+    case ScriptStreamer::NotStreamingReason::kInlineScript:
       return "inline script";
-    case ScriptStreamer::kDidntTryToStartStreaming:
-      return "start streaming not called";
-    case ScriptStreamer::kErrorOccurred:
+    case ScriptStreamer::NotStreamingReason::kErrorOccurred:
       return "an error occurred";
-    case ScriptStreamer::kStreamingDisabled:
+    case ScriptStreamer::NotStreamingReason::kStreamingDisabled:
       return "already disabled streaming";
-    case ScriptStreamer::kSecondScriptResourceUse:
+    case ScriptStreamer::NotStreamingReason::kSecondScriptResourceUse:
       return "already used streamed data";
-    case ScriptStreamer::kWorkerTopLevelScript:
+    case ScriptStreamer::NotStreamingReason::kWorkerTopLevelScript:
       return "worker top-level scripts are not streamable";
-    case ScriptStreamer::kModuleScript:
+    case ScriptStreamer::NotStreamingReason::kModuleScript:
       return "module script";
-    case ScriptStreamer::kAlreadyLoaded:
-    case ScriptStreamer::kCount:
-    case ScriptStreamer::kInvalid:
+    case ScriptStreamer::NotStreamingReason::kNoDataPipe:
+      return "no data pipe received";
+    case ScriptStreamer::NotStreamingReason::kDisabledByFeatureList:
+      return "streaming disabled from the feature list";
+    case ScriptStreamer::NotStreamingReason::kLoadingCancelled:
+      return "loading was cancelled";
+    case ScriptStreamer::NotStreamingReason::kDidntTryToStartStreaming:
+    case ScriptStreamer::NotStreamingReason::kAlreadyLoaded:
+    case ScriptStreamer::NotStreamingReason::kInvalid:
       NOTREACHED();
   }
   NOTREACHED();
@@ -1063,7 +1069,7 @@ std::unique_ptr<TracedValue> inspector_paint_event::Data(
   LocalToPageQuad(*layout_object, clip_rect, &quad);
   CreateQuad(value.get(), "clip", quad);
   SetGeneratingNodeInfo(value.get(), layout_object, "nodeId");
-  int graphics_layer_id = graphics_layer ? graphics_layer->CcLayer()->id() : 0;
+  int graphics_layer_id = graphics_layer ? graphics_layer->CcLayer().id() : 0;
   value->SetInteger("layerId", graphics_layer_id);
   SetCallStack(value.get());
   return value;
@@ -1442,6 +1448,19 @@ std::unique_ptr<TracedValue> inspector_animation_state_event::Data(
     const Animation& animation) {
   auto value = std::make_unique<TracedValue>();
   value->SetString("state", animation.PlayStateString());
+  return value;
+}
+
+std::unique_ptr<TracedValue> inspector_animation_compositor_event::Data(
+    CompositorAnimations::FailureReasons failure_reasons,
+    const PropertyHandleSet& unsupported_properties) {
+  auto value = std::make_unique<TracedValue>();
+  value->SetInteger("compositeFailed", failure_reasons);
+  value->BeginArray("unsupportedProperties");
+  for (const PropertyHandle& p : unsupported_properties) {
+    value->PushString(p.GetCSSPropertyName().ToAtomicString());
+  }
+  value->EndArray();
   return value;
 }
 

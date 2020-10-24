@@ -218,6 +218,32 @@ export class NetworkManager extends SDKModel {
   _bypassServiceWorkerChanged() {
     this._networkAgent.invoke_setBypassServiceWorker({bypass: this._bypassServiceWorkerSetting.get()});
   }
+
+  /**
+   * @param {string} frameId
+   * @returns {!Promise<?Protocol.Network.SecurityIsolationStatus>}
+   */
+  async getSecurityIsolationStatus(frameId) {
+    const result = await this._networkAgent.invoke_getSecurityIsolationStatus({frameId});
+    if (result.getError()) {
+      return null;
+    }
+    return result.status;
+  }
+
+  /**
+    * @param {string} frameId
+    * @param {string} url
+    * @param {!Protocol.Network.LoadNetworkResourceOptions} options
+    * @return {!Promise<!Protocol.Network.LoadNetworkResourcePageResult>}
+    */
+  async loadNetworkResource(frameId, url, options) {
+    const result = await this._networkAgent.invoke_loadNetworkResource({frameId, url, options});
+    if (result.getError()) {
+      throw new Error(result.getError());
+    }
+    return result.resource;
+  }
 }
 
 /** @enum {symbol} */
@@ -267,7 +293,7 @@ export const Fast3GConditions = {
 const MAX_EAGER_POST_REQUEST_BODY_LENGTH = 64 * 1024;  // bytes
 
 /**
- * @implements {ProtocolProxyApiWorkaround_NetworkDispatcher}
+ * @implements {ProtocolProxyApi.NetworkDispatcher}
  * @unrestricted
  */
 export class NetworkDispatcher {
@@ -282,13 +308,6 @@ export class NetworkDispatcher {
     this._inflightRequestsByURL = {};
     /** @type {!Map<string, !RedirectExtraInfoBuilder>} */
     this._requestIdToRedirectExtraInfoBuilder = new Map();
-  }
-
-  /**
-   * @return {!Protocol.UsesObjectNotation}
-   */
-  usesObjectNotation() {
-    return true;
   }
 
   /**
@@ -496,7 +515,7 @@ export class NetworkDispatcher {
           requestId,
           loaderId,
           timestamp,
-          type: Protocol.Network.ResourceType.Other,
+          type: type || Protocol.Network.ResourceType.Other,
           response: redirectResponse,
           frameId
         });
@@ -541,6 +560,7 @@ export class NetworkDispatcher {
     if (!networkRequest) {
       const lastModifiedHeader = lowercaseHeaders['last-modified'];
       // We missed the requestWillBeSent.
+      /** @type {!RequestUpdateDroppedEventData} */
       const eventData = {
         url: response.url,
         frameId: frameId || '',
@@ -1518,7 +1538,9 @@ export class InterceptedRequest {
      */
     async function blobToBase64(blob) {
       const reader = new FileReader();
-      const fileContentsLoadedPromise = new Promise(resolve => reader.onloadend = resolve);
+      const fileContentsLoadedPromise = new Promise(resolve => {
+        reader.onloadend = resolve;
+      });
       reader.readAsDataURL(blob);
       await fileContentsLoadedPromise;
       if (reader.error) {
@@ -1683,3 +1705,7 @@ export let InterceptionPattern;
 /** @typedef {!function(!InterceptedRequest):!Promise<void>} */
 // @ts-ignore typedef
 export let RequestInterceptor;
+
+/** @typedef {!{url: string, frameId: string, loaderId: string, resourceType: Protocol.Network.ResourceType, mimeType: string, lastModified: ?Date}} */
+// @ts-ignore typedef
+export let RequestUpdateDroppedEventData;

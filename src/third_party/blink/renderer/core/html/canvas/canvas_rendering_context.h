@@ -27,6 +27,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_CANVAS_CANVAS_RENDERING_CONTEXT_H_
 
 #include "base/macros.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -76,6 +77,18 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
     kContextTypeUnknown = 9,
     kMaxValue = kContextTypeUnknown,
   };
+
+  // Correspond to CanvasRenderingAPI defined in
+  // tools/metrics/histograms/enums.xml
+  enum CanvasRenderingAPI {
+    k2D = 0,
+    kWebgl = 1,
+    kWebgl2 = 2,
+    kBitmaprenderer = 3,
+    kWebgpu = 4,
+  };
+
+  void RecordUKMCanvasRenderingAPI(CanvasRenderingAPI canvasRenderingAPI);
 
   static ContextType ContextTypeFromId(const String& id);
   static ContextType ResolveContextTypeAliases(ContextType);
@@ -203,7 +216,14 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   void Trace(Visitor*) const override;
   virtual void Stop() = 0;
 
-  virtual uint64_t IdentifiabilityTextDigest() { return 0; }
+  virtual IdentifiableToken IdentifiableTextToken() const {
+    // Token representing no bytes.
+    return IdentifiableToken(base::span<const uint8_t>());
+  }
+
+  virtual bool IdentifiabilityEncounteredSkippedOps() const { return false; }
+
+  virtual bool IdentifiabilityEncounteredSensitiveOps() const { return false; }
 
  protected:
   CanvasRenderingContext(CanvasRenderingContextHost*,

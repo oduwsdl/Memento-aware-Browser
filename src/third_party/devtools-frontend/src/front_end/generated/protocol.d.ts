@@ -14,11 +14,6 @@ declare namespace Protocol {
     /** Returns an error message if the request failed. */
     getError(): string|undefined;
   }
-  export type UsesObjectNotation = true;
-  export interface Dispatcher {
-    /** This dispatcher requires objects as parameters, rather than multiple arguments */
-    usesObjectNotation(): UsesObjectNotation;
-  }
 
   export namespace Accessibility {
 
@@ -290,6 +285,37 @@ declare namespace Protocol {
     }
 
     export interface GetFullAXTreeResponse extends ProtocolResponseWithError {
+      nodes: AXNode[];
+    }
+
+    export interface QueryAXTreeRequest {
+      /**
+       * Identifier of the node for the root to query.
+       */
+      nodeId?: DOM.NodeId;
+      /**
+       * Identifier of the backend node for the root to query.
+       */
+      backendNodeId?: DOM.BackendNodeId;
+      /**
+       * JavaScript object id of the node wrapper for the root to query.
+       */
+      objectId?: Runtime.RemoteObjectId;
+      /**
+       * Find nodes with this computed name.
+       */
+      accessibleName?: string;
+      /**
+       * Find nodes with this computed role.
+       */
+      role?: string;
+    }
+
+    export interface QueryAXTreeResponse extends ProtocolResponseWithError {
+      /**
+       * A list of `Accessibility.AXNode` matching the specified attributes,
+       * including nodes that are ignored for accessibility.
+       */
       nodes: AXNode[];
     }
   }
@@ -698,6 +724,8 @@ declare namespace Protocol {
     export enum SameSiteCookieExclusionReason {
       ExcludeSameSiteUnspecifiedTreatedAsLax = 'ExcludeSameSiteUnspecifiedTreatedAsLax',
       ExcludeSameSiteNoneInsecure = 'ExcludeSameSiteNoneInsecure',
+      ExcludeSameSiteLax = 'ExcludeSameSiteLax',
+      ExcludeSameSiteStrict = 'ExcludeSameSiteStrict',
     }
 
     export enum SameSiteCookieWarningReason {
@@ -820,8 +848,65 @@ declare namespace Protocol {
      */
     export interface BlockedByResponseIssueDetails {
       request: AffectedRequest;
-      frame?: AffectedFrame;
+      parentFrame?: AffectedFrame;
+      blockedFrame?: AffectedFrame;
       reason: BlockedByResponseReason;
+    }
+
+    export enum HeavyAdResolutionStatus {
+      HeavyAdBlocked = 'HeavyAdBlocked',
+      HeavyAdWarning = 'HeavyAdWarning',
+    }
+
+    export enum HeavyAdReason {
+      NetworkTotalLimit = 'NetworkTotalLimit',
+      CpuTotalLimit = 'CpuTotalLimit',
+      CpuPeakLimit = 'CpuPeakLimit',
+    }
+
+    export interface HeavyAdIssueDetails {
+      /**
+       * The resolution status, either blocking the content or warning.
+       */
+      resolution: HeavyAdResolutionStatus;
+      /**
+       * The reason the ad was blocked, total network or cpu or peak cpu.
+       */
+      reason: HeavyAdReason;
+      /**
+       * The frame that was blocked.
+       */
+      frame: AffectedFrame;
+    }
+
+    export enum ContentSecurityPolicyViolationType {
+      KInlineViolation = 'kInlineViolation',
+      KEvalViolation = 'kEvalViolation',
+      KURLViolation = 'kURLViolation',
+      KTrustedTypesSinkViolation = 'kTrustedTypesSinkViolation',
+      KTrustedTypesPolicyViolation = 'kTrustedTypesPolicyViolation',
+    }
+
+    export interface SourceCodeLocation {
+      url: string;
+      lineNumber: integer;
+      columnNumber: integer;
+    }
+
+    export interface ContentSecurityPolicyIssueDetails {
+      /**
+       * The url not included in allowed sources.
+       */
+      blockedURL?: string;
+      /**
+       * Specific directive that is violated, causing the CSP issue.
+       */
+      violatedDirective: string;
+      isReportOnly: boolean;
+      contentSecurityPolicyViolationType: ContentSecurityPolicyViolationType;
+      frameAncestor?: AffectedFrame;
+      sourceCodeLocation?: SourceCodeLocation;
+      violatingNodeId?: DOM.BackendNodeId;
     }
 
     /**
@@ -833,6 +918,8 @@ declare namespace Protocol {
       SameSiteCookieIssue = 'SameSiteCookieIssue',
       MixedContentIssue = 'MixedContentIssue',
       BlockedByResponseIssue = 'BlockedByResponseIssue',
+      HeavyAdIssue = 'HeavyAdIssue',
+      ContentSecurityPolicyIssue = 'ContentSecurityPolicyIssue',
     }
 
     /**
@@ -844,6 +931,8 @@ declare namespace Protocol {
       sameSiteCookieIssueDetails?: SameSiteCookieIssueDetails;
       mixedContentIssueDetails?: MixedContentIssueDetails;
       blockedByResponseIssueDetails?: BlockedByResponseIssueDetails;
+      heavyAdIssueDetails?: HeavyAdIssueDetails;
+      contentSecurityPolicyIssueDetails?: ContentSecurityPolicyIssueDetails;
     }
 
     /**
@@ -1055,6 +1144,7 @@ declare namespace Protocol {
       ProtectedMediaIdentifier = 'protectedMediaIdentifier',
       Sensors = 'sensors',
       VideoCapture = 'videoCapture',
+      VideoCapturePanTiltZoom = 'videoCapturePanTiltZoom',
       IdleDetection = 'idleDetection',
       WakeLockScreen = 'wakeLockScreen',
       WakeLockSystem = 'wakeLockSystem',
@@ -1086,13 +1176,13 @@ declare namespace Protocol {
        */
       userVisibleOnly?: boolean;
       /**
-       * For "wake-lock" permission, must specify type as either "screen" or "system".
-       */
-      type?: string;
-      /**
        * For "clipboard" permission, may specify allowWithoutSanitization.
        */
       allowWithoutSanitization?: boolean;
+      /**
+       * For "camera" permission, may specify panTiltZoom.
+       */
+      panTiltZoom?: boolean;
     }
 
     /**
@@ -1463,10 +1553,14 @@ declare namespace Protocol {
       /**
        * Whether this stylesheet is mutable. Inline stylesheets become mutable
        * after they have been modified via CSSOM API.
-       * <link> element's stylesheets are never mutable. Constructed stylesheets
-       * (new CSSStyleSheet()) are mutable immediately after creation.
+       * <link> element's stylesheets become mutable only if DevTools modifies them.
+       * Constructed stylesheets (new CSSStyleSheet()) are mutable immediately after creation.
        */
       isMutable: boolean;
+      /**
+       * Whether this stylesheet is a constructed stylesheet (created using new CSSStyleSheet()).
+       */
+      isConstructed: boolean;
       /**
        * Line offset of the stylesheet within the resource (zero based).
        */
@@ -1753,7 +1847,34 @@ declare namespace Protocol {
     }
 
     /**
+     * Information about font variation axes for variable fonts
+     */
+    export interface FontVariationAxis {
+      /**
+       * The font-variation-setting tag (a.k.a. "axis tag").
+       */
+      tag: string;
+      /**
+       * Human-readable variation name in the default language (normally, "en").
+       */
+      name: string;
+      /**
+       * The minimum value (inclusive) the font supports for this tag.
+       */
+      minValue: number;
+      /**
+       * The maximum value (inclusive) the font supports for this tag.
+       */
+      maxValue: number;
+      /**
+       * The default value.
+       */
+      defaultValue: number;
+    }
+
+    /**
      * Properties of a web font: https://www.w3.org/TR/2008/REC-CSS2-20080411/fonts.html#font-descriptions
+     * and additional information such as platformFontFamily and fontVariationAxes.
      */
     export interface FontFace {
       /**
@@ -1788,6 +1909,10 @@ declare namespace Protocol {
        * The resolved platform font family
        */
       platformFontFamily: string;
+      /**
+       * Available variation settings (a.k.a. "axes").
+       */
+      fontVariationAxes?: FontVariationAxis[];
     }
 
     /**
@@ -2013,6 +2138,17 @@ declare namespace Protocol {
       text: string;
     }
 
+    export interface TrackComputedStyleUpdatesRequest {
+      propertiesToTrack: CSSComputedStyleProperty[];
+    }
+
+    export interface TakeComputedStyleUpdatesResponse extends ProtocolResponseWithError {
+      /**
+       * The list of node Ids that have their tracked computed styles updated
+       */
+      nodeIds: DOM.NodeId[];
+    }
+
     export interface SetEffectivePropertyValueForNodeRequest {
       /**
        * The element id for which to set property.
@@ -2094,6 +2230,13 @@ declare namespace Protocol {
        * Monotonically increasing time, in seconds.
        */
       timestamp: number;
+    }
+
+    export interface SetLocalFontsEnabledRequest {
+      /**
+       * Whether rendering of local fonts is enabled.
+       */
+      enabled: boolean;
     }
 
     /**
@@ -2408,6 +2551,7 @@ declare namespace Protocol {
       Marker = 'marker',
       Backdrop = 'backdrop',
       Selection = 'selection',
+      TargetText = 'target-text',
       FirstLineInherited = 'first-line-inherited',
       Scrollbar = 'scrollbar',
       ScrollbarThumb = 'scrollbar-thumb',
@@ -2650,6 +2794,17 @@ declare namespace Protocol {
       height: number;
     }
 
+    export interface CSSComputedStyleProperty {
+      /**
+       * Computed style property name.
+       */
+      name: string;
+      /**
+       * Computed style property value.
+       */
+      value: string;
+    }
+
     export interface CollectClassNamesFromSubtreeRequest {
       /**
        * Id of the node to collect class names.
@@ -2857,6 +3012,29 @@ declare namespace Protocol {
        * Resulting node.
        */
       nodes: Node[];
+    }
+
+    export interface GetNodesForSubtreeByStyleRequest {
+      /**
+       * Node ID pointing to the root of a subtree.
+       */
+      nodeId: NodeId;
+      /**
+       * The style to filter nodes by (includes nodes if any of properties matches).
+       */
+      computedStyles: CSSComputedStyleProperty[];
+      /**
+       * Whether or not iframes and shadow roots in the same target should be traversed when returning the
+       * results (default is false).
+       */
+      pierce?: boolean;
+    }
+
+    export interface GetNodesForSubtreeByStyleResponse extends ProtocolResponseWithError {
+      /**
+       * Resulting nodes.
+       */
+      nodeIds: NodeId[];
     }
 
     export interface GetNodeForLocationRequest {
@@ -4308,6 +4486,29 @@ declare namespace Protocol {
       angle: integer;
     }
 
+    export enum DisplayFeatureOrientation {
+      Vertical = 'vertical',
+      Horizontal = 'horizontal',
+    }
+
+    export interface DisplayFeature {
+      /**
+       * Orientation of a display feature in relation to screen
+       */
+      orientation: DisplayFeatureOrientation;
+      /**
+       * The offset from the screen origin in either the x (for vertical
+       * orientation) or y (for horizontal orientation) direction.
+       */
+      offset: integer;
+      /**
+       * A display feature may mask content such that it is not physically
+       * displayed - this length along with the offset describes this area.
+       * A display feature that only splits content will have a 0 mask_length.
+       */
+      maskLength: integer;
+    }
+
     export interface MediaFeature {
       name: string;
       value: string;
@@ -4426,6 +4627,11 @@ declare namespace Protocol {
        * change is not observed by the page, e.g. viewport-relative elements do not change positions.
        */
       viewport?: Page.Viewport;
+      /**
+       * If set, the display feature of a multi-segment screen. If not set, multi-segment support
+       * is turned-off.
+       */
+      displayFeature?: DisplayFeature;
     }
 
     export interface SetScrollbarsHiddenRequest {
@@ -4498,6 +4704,17 @@ declare namespace Protocol {
        * Mock accuracy
        */
       accuracy?: number;
+    }
+
+    export interface SetIdleOverrideRequest {
+      /**
+       * Mock isUserActive
+       */
+      isUserActive: boolean;
+      /**
+       * Mock isScreenUnlocked
+       */
+      isScreenUnlocked: boolean;
     }
 
     export interface SetNavigatorOverridesRequest {
@@ -5171,6 +5388,12 @@ declare namespace Protocol {
        * 0).
        */
       location?: integer;
+      /**
+       * Editing commands to send with the key event (e.g., 'selectAll') (default: []).
+       * These are related to but not equal the command names used in `document.execCommand` and NSStandardKeyBindingResponding.
+       * See https://source.chromium.org/chromium/chromium/src/+/master:third_party/blink/renderer/core/editing/commands/editor_command_names.h for valid command names.
+       */
+      commands?: string[];
     }
 
     export interface InsertTextRequest {
@@ -6152,6 +6375,13 @@ declare namespace Protocol {
       VeryHigh = 'VeryHigh',
     }
 
+    /**
+     * Post data entry for HTTP request
+     */
+    export interface PostDataEntry {
+      bytes?: binary;
+    }
+
     export enum RequestReferrerPolicy {
       UnsafeUrl = 'unsafe-url',
       NoReferrerWhenDowngrade = 'no-referrer-when-downgrade',
@@ -6192,6 +6422,10 @@ declare namespace Protocol {
        */
       hasPostData?: boolean;
       /**
+       * Request body elements. This will be converted from base64 to binary
+       */
+      postDataEntries?: PostDataEntry[];
+      /**
        * The mixed content type of the request.
        */
       mixedContentType?: Security.MixedContentType;
@@ -6207,6 +6441,11 @@ declare namespace Protocol {
        * Whether is loaded via link preload.
        */
       isLinkPreload?: boolean;
+      /**
+       * Set for requests when the TrustToken API is used. Contains the parameters
+       * passed by the developer (e.g. via "fetch") as understood by the backend.
+       */
+      trustTokenParams?: TrustTokenParams;
     }
 
     /**
@@ -6341,6 +6580,35 @@ declare namespace Protocol {
       HttpCache = 'http-cache',
       FallbackCode = 'fallback-code',
       Network = 'network',
+    }
+
+    export enum TrustTokenParamsRefreshPolicy {
+      UseCached = 'UseCached',
+      Refresh = 'Refresh',
+    }
+
+    /**
+     * Determines what type of Trust Token operation is executed and
+     * depending on the type, some additional parameters.
+     */
+    export interface TrustTokenParams {
+      type: TrustTokenOperationType;
+      /**
+       * Only set for "srr-token-redemption" type and determine whether
+       * to request a fresh SRR or use a still valid cached SRR.
+       */
+      refreshPolicy: TrustTokenParamsRefreshPolicy;
+      /**
+       * Origins of issuers from whom to request tokens or redemption
+       * records.
+       */
+      issuers?: string[];
+    }
+
+    export enum TrustTokenOperationType {
+      Issuance = 'Issuance',
+      Redemption = 'Redemption',
+      Signing = 'Signing',
     }
 
     /**
@@ -6552,6 +6820,11 @@ declare namespace Protocol {
        * module) (0-based).
        */
       lineNumber?: number;
+      /**
+       * Initiator column number, set for Parser type or for Script type (when script is importing
+       * module) (0-based).
+       */
+      columnNumber?: number;
     }
 
     /**
@@ -6620,6 +6893,9 @@ declare namespace Protocol {
       InvalidDomain = 'InvalidDomain',
       InvalidPrefix = 'InvalidPrefix',
       UnknownError = 'UnknownError',
+      SchemefulSameSiteStrict = 'SchemefulSameSiteStrict',
+      SchemefulSameSiteLax = 'SchemefulSameSiteLax',
+      SchemefulSameSiteUnspecifiedTreatedAsLax = 'SchemefulSameSiteUnspecifiedTreatedAsLax',
     }
 
     /**
@@ -6635,6 +6911,9 @@ declare namespace Protocol {
       SameSiteNoneInsecure = 'SameSiteNoneInsecure',
       UserPreferences = 'UserPreferences',
       UnknownError = 'UnknownError',
+      SchemefulSameSiteStrict = 'SchemefulSameSiteStrict',
+      SchemefulSameSiteLax = 'SchemefulSameSiteLax',
+      SchemefulSameSiteUnspecifiedTreatedAsLax = 'SchemefulSameSiteUnspecifiedTreatedAsLax',
     }
 
     /**
@@ -6924,6 +7203,67 @@ declare namespace Protocol {
       errors?: SignedExchangeError[];
     }
 
+    export enum CrossOriginOpenerPolicyValue {
+      SameOrigin = 'SameOrigin',
+      SameOriginAllowPopups = 'SameOriginAllowPopups',
+      UnsafeNone = 'UnsafeNone',
+      SameOriginPlusCoep = 'SameOriginPlusCoep',
+    }
+
+    export interface CrossOriginOpenerPolicyStatus {
+      value: CrossOriginOpenerPolicyValue;
+      reportOnlyValue: CrossOriginOpenerPolicyValue;
+      reportingEndpoint?: string;
+      reportOnlyReportingEndpoint?: string;
+    }
+
+    export enum CrossOriginEmbedderPolicyValue {
+      None = 'None',
+      RequireCorp = 'RequireCorp',
+    }
+
+    export interface CrossOriginEmbedderPolicyStatus {
+      value: CrossOriginEmbedderPolicyValue;
+      reportOnlyValue: CrossOriginEmbedderPolicyValue;
+      reportingEndpoint?: string;
+      reportOnlyReportingEndpoint?: string;
+    }
+
+    export interface SecurityIsolationStatus {
+      coop: CrossOriginOpenerPolicyStatus;
+      coep: CrossOriginEmbedderPolicyStatus;
+    }
+
+    /**
+     * An object providing the result of a network resource load.
+     */
+    export interface LoadNetworkResourcePageResult {
+      success: boolean;
+      /**
+       * Optional values used for error reporting.
+       */
+      netError?: number;
+      netErrorName?: string;
+      httpStatusCode?: number;
+      /**
+       * If successful, one of the following two fields holds the result.
+       */
+      stream?: IO.StreamHandle;
+      /**
+       * Response headers.
+       */
+      headers?: Network.Headers;
+    }
+
+    /**
+     * An options object that may be extended later to better support CORS,
+     * CORB and streaming.
+     */
+    export interface LoadNetworkResourceOptions {
+      disableCache: boolean;
+      includeCredentials: boolean;
+    }
+
     export interface CanClearBrowserCacheResponse extends ProtocolResponseWithError {
       /**
        * True if browser cache can be cleared.
@@ -7061,7 +7401,9 @@ declare namespace Protocol {
 
     export interface GetCookiesRequest {
       /**
-       * The list of URLs for which applicable cookies will be fetched
+       * The list of URLs for which applicable cookies will be fetched.
+       * If not specified, it's assumed to be set to the list containing
+       * the URLs of the page and all of its subframes.
        */
       urls?: string[];
     }
@@ -7231,7 +7573,7 @@ declare namespace Protocol {
 
     export interface SetCookieResponse extends ProtocolResponseWithError {
       /**
-       * True if successfully set cookie.
+       * Always set to true. If an error occurs, the response indicates protocol error.
        */
       success: boolean;
     }
@@ -7261,6 +7603,13 @@ declare namespace Protocol {
       headers: Headers;
     }
 
+    export interface SetAttachDebugHeaderRequest {
+      /**
+       * Whether to send a debug header.
+       */
+      enabled: boolean;
+    }
+
     export interface SetRequestInterceptionRequest {
       /**
        * Requests matching any of these patterns will be forwarded and wait for the corresponding
@@ -7286,6 +7635,36 @@ declare namespace Protocol {
        * To be sent in Sec-CH-UA-* headers and returned in navigator.userAgentData
        */
       userAgentMetadata?: Emulation.UserAgentMetadata;
+    }
+
+    export interface GetSecurityIsolationStatusRequest {
+      /**
+       * If no frameId is provided, the status of the target is provided.
+       */
+      frameId?: Page.FrameId;
+    }
+
+    export interface GetSecurityIsolationStatusResponse extends ProtocolResponseWithError {
+      status: SecurityIsolationStatus;
+    }
+
+    export interface LoadNetworkResourceRequest {
+      /**
+       * Frame id to get the resource for.
+       */
+      frameId: Page.FrameId;
+      /**
+       * URL of the resource to get content for.
+       */
+      url: string;
+      /**
+       * Options for the request.
+       */
+      options: LoadNetworkResourceOptions;
+    }
+
+    export interface LoadNetworkResourceResponse extends ProtocolResponseWithError {
+      resource: LoadNetworkResourcePageResult;
     }
 
     /**
@@ -7754,6 +8133,20 @@ declare namespace Protocol {
   export namespace Overlay {
 
     /**
+     * Configuration data for drawing the source order of an elements children.
+     */
+    export interface SourceOrderConfig {
+      /**
+       * the color to outline the givent element in.
+       */
+      parentOutlineColor: DOM.RGBA;
+      /**
+       * the color to outline the child elements in.
+       */
+      childOutlineColor: DOM.RGBA;
+    }
+
+    /**
      * Configuration data for the highlighting of Grid elements.
      */
     export interface GridHighlightConfig {
@@ -7766,21 +8159,53 @@ declare namespace Protocol {
        */
       showPositiveLineNumbers?: boolean;
       /**
+       * Show Negative line number labels (default: false).
+       */
+      showNegativeLineNumbers?: boolean;
+      /**
+       * Show area name labels (default: false).
+       */
+      showAreaNames?: boolean;
+      /**
+       * Show line name labels (default: false).
+       */
+      showLineNames?: boolean;
+      /**
+       * Show track size labels (default: false).
+       */
+      showTrackSizes?: boolean;
+      /**
        * The grid container border highlight color (default: transparent).
        */
       gridBorderColor?: DOM.RGBA;
       /**
-       * The cell border color (default: transparent).
+       * The cell border color (default: transparent). Deprecated, please use rowLineColor and columnLineColor instead.
        */
       cellBorderColor?: DOM.RGBA;
+      /**
+       * The row line color (default: transparent).
+       */
+      rowLineColor?: DOM.RGBA;
+      /**
+       * The column line color (default: transparent).
+       */
+      columnLineColor?: DOM.RGBA;
       /**
        * Whether the grid border is dashed (default: false).
        */
       gridBorderDash?: boolean;
       /**
-       * Whether the cell border is dashed (default: false).
+       * Whether the cell border is dashed (default: false). Deprecated, please us rowLineDash and columnLineDash instead.
        */
       cellBorderDash?: boolean;
+      /**
+       * Whether row lines are dashed (default: false).
+       */
+      rowLineDash?: boolean;
+      /**
+       * Whether column lines are dashed (default: false).
+       */
+      columnLineDash?: boolean;
       /**
        * The row gap highlight fill color (default: transparent).
        */
@@ -7797,6 +8222,14 @@ declare namespace Protocol {
        * The column gap hatching fill color (default: transparent).
        */
       columnHatchColor?: DOM.RGBA;
+      /**
+       * The named grid areas border color (Default: transparent).
+       */
+      areaBorderColor?: DOM.RGBA;
+      /**
+       * The grid container background color (Default: transparent).
+       */
+      gridBackgroundColor?: DOM.RGBA;
     }
 
     /**
@@ -7815,6 +8248,10 @@ declare namespace Protocol {
        * Whether the rulers should be shown (default: false).
        */
       showRulers?: boolean;
+      /**
+       * Whether the a11y info should be shown (default: true).
+       */
+      showAccessibilityInfo?: boolean;
       /**
        * Whether the extension lines from node to the rulers should be shown (default: false).
        */
@@ -7868,6 +8305,20 @@ declare namespace Protocol {
     }
 
     /**
+     * Configurations for Persistent Grid Highlight
+     */
+    export interface GridNodeHighlightConfig {
+      /**
+       * A descriptor for the highlight appearance.
+       */
+      gridHighlightConfig: GridHighlightConfig;
+      /**
+       * Identifier of the node to highlight.
+       */
+      nodeId: DOM.NodeId;
+    }
+
+    /**
      * Configuration for dual screen hinge
      */
     export interface HingeConfig {
@@ -7907,14 +8358,46 @@ declare namespace Protocol {
        */
       includeStyle?: boolean;
       /**
-       * The color format to get config with (default: hex)
+       * The color format to get config with (default: hex).
        */
       colorFormat?: ColorFormat;
+      /**
+       * Whether to show accessibility info (default: true).
+       */
+      showAccessibilityInfo?: boolean;
     }
 
     export interface GetHighlightObjectForTestResponse extends ProtocolResponseWithError {
       /**
        * Highlight data for the node.
+       */
+      highlight: any;
+    }
+
+    export interface GetGridHighlightObjectsForTestRequest {
+      /**
+       * Ids of the node to get highlight object for.
+       */
+      nodeIds: DOM.NodeId[];
+    }
+
+    export interface GetGridHighlightObjectsForTestResponse extends ProtocolResponseWithError {
+      /**
+       * Grid Highlight data for the node ids provided.
+       */
+      highlights: any;
+    }
+
+    export interface GetSourceOrderHighlightObjectForTestRequest {
+      /**
+       * Id of the node to highlight.
+       */
+      nodeId: DOM.NodeId;
+    }
+
+    export interface GetSourceOrderHighlightObjectForTestResponse extends ProtocolResponseWithError {
+      /**
+       * Source order highlight data for the node id provided.
        */
       highlight: any;
     }
@@ -7999,6 +8482,25 @@ declare namespace Protocol {
       outlineColor?: DOM.RGBA;
     }
 
+    export interface HighlightSourceOrderRequest {
+      /**
+       * A descriptor for the appearance of the overlay drawing.
+       */
+      sourceOrderConfig: SourceOrderConfig;
+      /**
+       * Identifier of the node to highlight.
+       */
+      nodeId?: DOM.NodeId;
+      /**
+       * Identifier of the backend node to highlight.
+       */
+      backendNodeId?: DOM.BackendNodeId;
+      /**
+       * JavaScript object id of the node to be highlighted.
+       */
+      objectId?: Runtime.RemoteObjectId;
+    }
+
     export interface SetInspectModeRequest {
       /**
        * Set an inspection mode.
@@ -8037,6 +8539,13 @@ declare namespace Protocol {
        * True for showing the FPS counter
        */
       show: boolean;
+    }
+
+    export interface SetShowGridOverlaysRequest {
+      /**
+       * An array of node identifiers and descriptors for the highlight appearance.
+       */
+      gridNodeHighlightConfigs: GridNodeHighlightConfig[];
     }
 
     export interface SetShowPaintRectsRequest {
@@ -8121,6 +8630,34 @@ declare namespace Protocol {
     export type FrameId = string;
 
     /**
+     * Indicates whether a frame has been identified as an ad.
+     */
+    export enum AdFrameType {
+      None = 'none',
+      Child = 'child',
+      Root = 'root',
+    }
+
+    /**
+     * Indicates whether the frame is a secure context and why it is the case.
+     */
+    export enum SecureContextType {
+      Secure = 'Secure',
+      SecureLocalhost = 'SecureLocalhost',
+      InsecureScheme = 'InsecureScheme',
+      InsecureAncestor = 'InsecureAncestor',
+    }
+
+    /**
+     * Indicates whether the frame is cross-origin isolated and why it is the case.
+     */
+    export enum CrossOriginIsolatedContextType {
+      Isolated = 'Isolated',
+      NotIsolated = 'NotIsolated',
+      NotIsolatedFeatureDisabled = 'NotIsolatedFeatureDisabled',
+    }
+
+    /**
      * Information about the Frame on the page.
      */
     export interface Frame {
@@ -8149,6 +8686,13 @@ declare namespace Protocol {
        */
       urlFragment?: string;
       /**
+       * Frame document's registered domain, taking the public suffixes list into account.
+       * Extracted from the Frame's url.
+       * Example URLs: http://www.google.com/file.html -> "google.com"
+       *               http://a.b.co.uk/file.html      -> "b.co.uk"
+       */
+      domainAndRegistry: string;
+      /**
        * Frame document's security origin.
        */
       securityOrigin: string;
@@ -8160,6 +8704,18 @@ declare namespace Protocol {
        * If the frame failed to load, this contains the URL that could not be loaded. Note that unlike url above, this URL may contain a fragment.
        */
       unreachableUrl?: string;
+      /**
+       * Indicates whether this frame was tagged as an ad.
+       */
+      adFrameType?: AdFrameType;
+      /**
+       * Indicates whether the main document is a secure context and explains why that is the case.
+       */
+      secureContextType: SecureContextType;
+      /**
+       * Indicates whether this is a cross origin isolated context.
+       */
+      crossOriginIsolatedContextType: CrossOriginIsolatedContextType;
     }
 
     /**
@@ -10106,9 +10662,30 @@ declare namespace Protocol {
        */
       quota: number;
       /**
+       * Whether or not the origin has an active storage quota override
+       */
+      overrideActive: boolean;
+      /**
        * Storage usage per type (bytes).
        */
       usageBreakdown: UsageForType[];
+    }
+
+    export interface OverrideQuotaForOriginRequest {
+      /**
+       * Security origin.
+       */
+      origin: string;
+      /**
+       * The quota size (in bytes) to override the original quota with.
+       * If this is called multiple times, the overriden quota will be equal to
+       * the quotaSize provided in the final call. If this is called without
+       * specifying a quotaSize, the quota will be reset to the default value for
+       * the specified origin. If this is called multiple times with different
+       * origins, the override will be maintained for each origin until it is
+       * disabled (called without a quotaSize).
+       */
+      quotaSize?: number;
     }
 
     export interface TrackCacheStorageForOriginRequest {
@@ -10439,6 +11016,14 @@ declare namespace Protocol {
        * Opener target Id
        */
       openerId?: TargetID;
+      /**
+       * Whether the target has access to the originating window.
+       */
+      canAccessOpener: boolean;
+      /**
+       * Frame id of originating window (is only set if target has an opener).
+       */
+      openerFrameId?: Page.FrameId;
       browserContextId?: Browser.BrowserContextID;
     }
 
@@ -10480,6 +11065,9 @@ declare namespace Protocol {
     }
 
     export interface CloseTargetResponse extends ProtocolResponseWithError {
+      /**
+       * Always set to true. If an error occurs, the response indicates protocol error.
+       */
       success: boolean;
     }
 
@@ -11106,7 +11694,7 @@ declare namespace Protocol {
       /**
        * If set, overrides the post data in the request.
        */
-      postData?: string;
+      postData?: binary;
       /**
        * If set, overrides the request headers.
        */
@@ -11334,7 +11922,7 @@ declare namespace Protocol {
     }
 
     /**
-     * Protocol object for AudioListner
+     * Protocol object for AudioListener
      */
     export interface AudioListener {
       listenerId: GraphObjectId;
@@ -11520,6 +12108,12 @@ declare namespace Protocol {
        */
       hasUserVerification?: boolean;
       /**
+       * If set to true, the authenticator will support the largeBlob extension.
+       * https://w3c.github.io/webauthn#largeBlob
+       * Defaults to false.
+       */
+      hasLargeBlob?: boolean;
+      /**
        * If set to true, tests of user presence will succeed immediately.
        * Otherwise, they will not be resolved. Defaults to true.
        */
@@ -11602,6 +12196,11 @@ declare namespace Protocol {
     export interface SetUserVerifiedRequest {
       authenticatorId: AuthenticatorId;
       isUserVerified: boolean;
+    }
+
+    export interface SetAutomaticPresenceSimulationRequest {
+      authenticatorId: AuthenticatorId;
+      enabled: boolean;
     }
   }
 
@@ -11832,6 +12431,15 @@ declare namespace Protocol {
     export interface ScriptPosition {
       lineNumber: integer;
       columnNumber: integer;
+    }
+
+    /**
+     * Location range within one script.
+     */
+    export interface LocationRange {
+      scriptId: Runtime.ScriptId;
+      start: ScriptPosition;
+      end: ScriptPosition;
     }
 
     /**
@@ -12438,6 +13046,17 @@ declare namespace Protocol {
        * before next pause.
        */
       breakOnAsyncCall?: boolean;
+      /**
+       * The skipList specifies location ranges that should be skipped on step into.
+       */
+      skipList?: LocationRange[];
+    }
+
+    export interface StepOverRequest {
+      /**
+       * The skipList specifies location ranges that should be skipped on step over.
+       */
+      skipList?: LocationRange[];
     }
 
     /**
@@ -12570,6 +13189,10 @@ declare namespace Protocol {
        * The language of the script.
        */
       scriptLanguage?: Debugger.ScriptLanguage;
+      /**
+       * The name the embedder supplied for this script.
+       */
+      embedderName?: string;
     }
 
     /**
@@ -12649,6 +13272,10 @@ declare namespace Protocol {
        * If the scriptLanguage is WebASsembly, the source of debug symbols for the module.
        */
       debugSymbols?: Debugger.DebugSymbols;
+      /**
+       * The name the embedder supplied for this script.
+       */
+      embedderName?: string;
     }
   }
 
@@ -13007,6 +13634,24 @@ declare namespace Protocol {
       value: integer;
     }
 
+    /**
+     * Runtime call counter information.
+     */
+    export interface RuntimeCallCounterInfo {
+      /**
+       * Counter name.
+       */
+      name: string;
+      /**
+       * Counter value.
+       */
+      value: number;
+      /**
+       * Counter time in seconds.
+       */
+      time: number;
+    }
+
     export interface GetBestEffortCoverageResponse extends ProtocolResponseWithError {
       /**
        * Coverage data for the current isolate.
@@ -13068,11 +13713,18 @@ declare namespace Protocol {
       result: ScriptTypeProfile[];
     }
 
-    export interface GetRuntimeCallStatsResponse extends ProtocolResponseWithError {
+    export interface GetCountersResponse extends ProtocolResponseWithError {
       /**
-       * Collected counter information.
+       * Collected counters information.
        */
       result: CounterInfo[];
+    }
+
+    export interface GetRuntimeCallStatsResponse extends ProtocolResponseWithError {
+      /**
+       * Collected runtime call counter information.
+       */
+      result: RuntimeCallCounterInfo[];
     }
 
     export interface ConsoleProfileFinishedEvent {
@@ -13786,6 +14438,13 @@ declare namespace Protocol {
        * `replMode` themselves.
        */
       replMode?: boolean;
+      /**
+       * The Content Security Policy (CSP) for the target might block 'unsafe-eval'
+       * which includes eval(), Function(), setTimeout() and setInterval()
+       * when called with non-callable arguments. This flag bypasses CSP for this
+       * evaluation and allows unsafe-eval. Defaults to true.
+       */
+      allowUnsafeEvalBlockedByCSP?: boolean;
     }
 
     export interface EvaluateResponse extends ProtocolResponseWithError {
@@ -13967,7 +14626,21 @@ declare namespace Protocol {
 
     export interface AddBindingRequest {
       name: string;
+      /**
+       * If specified, the binding would only be exposed to the specified
+       * execution context. If omitted and `executionContextName` is not set,
+       * the binding is exposed to all execution contexts of the target.
+       * This parameter is mutually exclusive with `executionContextName`.
+       */
       executionContextId?: ExecutionContextId;
+      /**
+       * If specified, the binding is exposed to the executionContext with
+       * matching name, even for contexts created after the binding is added.
+       * See also `ExecutionContext.name` and `worldName` parameter to
+       * `Page.addScriptToEvaluateOnNewDocument`.
+       * This parameter is mutually exclusive with `executionContextId`.
+       */
+      executionContextName?: string;
     }
 
     export interface RemoveBindingRequest {

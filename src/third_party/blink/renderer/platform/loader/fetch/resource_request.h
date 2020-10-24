@@ -224,6 +224,9 @@ class PLATFORM_EXPORT ResourceRequestHead {
   bool HasUserGesture() const { return has_user_gesture_; }
   void SetHasUserGesture(bool);
 
+  bool HasTextFragmentToken() const { return has_text_fragment_token_; }
+  void SetHasTextFragmentToken(bool);
+
   // True if request shuold be downloaded to blob.
   bool DownloadToBlob() const { return download_to_blob_; }
   void SetDownloadToBlob(bool download_to_blob) {
@@ -267,10 +270,10 @@ class PLATFORM_EXPORT ResourceRequestHead {
     download_to_cache_only_ = download_to_cache_only;
   }
 
-  mojom::RequestContextType GetRequestContext() const {
+  mojom::blink::RequestContextType GetRequestContext() const {
     return request_context_;
   }
-  void SetRequestContext(mojom::RequestContextType context) {
+  void SetRequestContext(mojom::blink::RequestContextType context) {
     request_context_ = context;
   }
 
@@ -318,10 +321,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
     fetch_integrity_ = integrity;
   }
 
-  WebURLRequest::PreviewsState GetPreviewsState() const {
-    return previews_state_;
-  }
-  void SetPreviewsState(WebURLRequest::PreviewsState previews_state) {
+  PreviewsState GetPreviewsState() const { return previews_state_; }
+  void SetPreviewsState(PreviewsState previews_state) {
     previews_state_ = previews_state;
   }
 
@@ -396,6 +397,17 @@ class PLATFORM_EXPORT ResourceRequestHead {
   void SetPurposeHeader(const String& value) { purpose_header_ = value; }
   const String& GetPurposeHeader() const { return purpose_header_; }
 
+  // A V8 stack id string describing where the request was initiated. DevTools
+  // can use this to display the initiator call stack when debugging a process
+  // that later intercepts the request, e.g., in a service worker fetch event
+  // handler.
+  const base::Optional<String>& GetDevToolsStackId() const {
+    return devtools_stack_id_;
+  }
+  void SetDevToolsStackId(const base::Optional<String>& devtools_stack_id) {
+    devtools_stack_id_ = devtools_stack_id;
+  }
+
   void SetUkmSourceId(ukm::SourceId ukm_source_id) {
     ukm_source_id_ = ukm_source_id;
   }
@@ -462,6 +474,13 @@ class PLATFORM_EXPORT ResourceRequestHead {
   // |url|,
   bool CanDisplay(const KURL&) const;
 
+  void SetAllowHTTP1ForStreamingUpload(bool allow) {
+    allowHTTP1ForStreamingUpload_ = allow;
+  }
+  bool AllowHTTP1ForStreamingUpload() const {
+    return allowHTTP1ForStreamingUpload_;
+  }
+
  private:
   const CacheControlHeader& GetCacheControlHeader() const;
 
@@ -483,6 +502,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   bool report_upload_progress_ : 1;
   bool report_raw_headers_ : 1;
   bool has_user_gesture_ : 1;
+  bool has_text_fragment_token_ : 1;
   bool download_to_blob_ : 1;
   bool use_stream_on_response_ : 1;
   bool keepalive_ : 1;
@@ -495,9 +515,9 @@ class PLATFORM_EXPORT ResourceRequestHead {
   ResourceLoadPriority priority_;
   int intra_priority_value_;
   int requestor_id_;
-  WebURLRequest::PreviewsState previews_state_;
+  PreviewsState previews_state_;
   scoped_refptr<WebURLRequest::ExtraData> extra_data_;
-  mojom::RequestContextType request_context_;
+  mojom::blink::RequestContextType request_context_;
   network::mojom::RequestDestination destination_;
   network::mojom::RequestMode mode_;
   mojom::FetchImportanceMode fetch_importance_mode_;
@@ -530,6 +550,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
   String client_data_header_;
   String purpose_header_;
 
+  base::Optional<String> devtools_stack_id_;
+
   ukm::SourceId ukm_source_id_ = ukm::kInvalidSourceId;
 
   base::UnguessableToken fetch_window_id_;
@@ -546,6 +568,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
   // the prefetch cache will be restricted to top-level-navigations.
   bool prefetch_maybe_for_top_level_navigation_ = false;
 
+  bool allowHTTP1ForStreamingUpload_ = false;
+
   // This is used when fetching preload header requests from cross-origin
   // prefetch responses. The browser process uses this token to ensure the
   // request is cached correctly.
@@ -556,6 +580,9 @@ class PLATFORM_EXPORT ResourceRequestBody {
  public:
   ResourceRequestBody();
   explicit ResourceRequestBody(scoped_refptr<EncodedFormData> form_body);
+  explicit ResourceRequestBody(
+      mojo::PendingRemote<network::mojom::blink::ChunkedDataPipeGetter>
+          stream_body);
   ResourceRequestBody(const ResourceRequestBody&) = delete;
   ResourceRequestBody(ResourceRequestBody&&);
 
@@ -564,6 +591,7 @@ class PLATFORM_EXPORT ResourceRequestBody {
 
   ~ResourceRequestBody();
 
+  bool IsEmpty() const { return !form_body_ && !stream_body_; }
   const scoped_refptr<EncodedFormData>& FormBody() const { return form_body_; }
   void SetFormBody(scoped_refptr<EncodedFormData>);
 

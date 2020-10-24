@@ -115,7 +115,8 @@ class DisplayGbm final : public DisplayEGL
                                const gl::Context *shareContext,
                                const egl::AttributeMap &attribs) override;
 
-    egl::Error makeCurrent(egl::Surface *drawSurface,
+    egl::Error makeCurrent(egl::Display *display,
+                           egl::Surface *drawSurface,
                            egl::Surface *readSurface,
                            gl::Context *context) override;
 
@@ -148,6 +149,7 @@ class DisplayGbm final : public DisplayEGL
                                 unsigned int tv_usec,
                                 void *data);
     void pageFlipHandler(unsigned int sequence, uint64_t tv);
+    bool validateEglConfig(const EGLint *configAttribs);
 
     gbm_device *mGBM;
     drmModeConnectorPtr mConnector;

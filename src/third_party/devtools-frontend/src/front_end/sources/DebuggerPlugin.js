@@ -28,10 +28,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Bindings from '../bindings/bindings.js';
 import * as Common from '../common/common.js';
 import * as Host from '../host/host.js';
 import * as ObjectUI from '../object_ui/object_ui.js';
+import * as Root from '../root/root.js';
 import * as SDK from '../sdk/sdk.js';
 import * as SourceFrame from '../source_frame/source_frame.js';
 import * as TextEditor from '../text_editor/text_editor.js';
@@ -117,7 +121,7 @@ export class DebuggerPlugin extends Plugin {
         return true;
       }
     };
-    self.UI.shortcutRegistry.addShortcutListener(this._textEditor.element, shortcutHandlers);
+    UI.ShortcutRegistry.ShortcutRegistry.instance().addShortcutListener(this._textEditor.element, shortcutHandlers);
     this._boundKeyDown = /** @type {function(!Event)} */ (this._onKeyDown.bind(this));
     this._textEditor.element.addEventListener('keydown', this._boundKeyDown, true);
     this._boundKeyUp = /** @type {function(!Event)} */ (this._onKeyUp.bind(this));
@@ -135,9 +139,8 @@ export class DebuggerPlugin extends Plugin {
     };
     this._textEditor.element.addEventListener('wheel', this._boundWheel, true);
 
-    this._textEditor.addEventListener(SourceFrame.SourcesTextEditor.Events.GutterClick, event => {
-      this._handleGutterClick(event);
-    }, this);
+    this._boundGutterClick = /** @type {function({data: *})} */ (this._handleGutterClick.bind(this));
+    this._textEditor.addEventListener(SourceFrame.SourcesTextEditor.Events.GutterClick, this._boundGutterClick, this);
 
     this._breakpointManager.addEventListener(
         Bindings.BreakpointManager.Events.BreakpointAdded, this._breakpointAdded, this);
@@ -171,7 +174,7 @@ export class DebuggerPlugin extends Plugin {
     /** @type {?Map<!Object, !Function>} */
     this._continueToLocationDecorations = null;
 
-    self.UI.context.addFlavorChangeListener(SDK.DebuggerModel.CallFrame, this._callFrameChanged, this);
+    UI.Context.Context.instance().addFlavorChangeListener(SDK.DebuggerModel.CallFrame, this._callFrameChanged, this);
     this._liveLocationPool = new Bindings.LiveLocation.LiveLocationPool();
     this._callFrameChanged();
 
@@ -467,18 +470,19 @@ export class DebuggerPlugin extends Plugin {
    * @return {boolean}
    */
   _isIdentifier(tokenType) {
-    return tokenType.startsWith('js-variable') || tokenType.startsWith('js-property') || tokenType === 'js-def';
+    return tokenType.startsWith('js-variable') || tokenType.startsWith('js-property') || tokenType === 'js-def' ||
+        tokenType === 'variable';
   }
 
   /**
    * @param {!MouseEvent} event
-   * @return {?UI.PopoverRequest}
+   * @return {?UI.PopoverHelper.PopoverRequest}
    */
   _getPopoverRequest(event) {
     if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlOrMeta(event)) {
       return null;
     }
-    const target = self.UI.context.flavor(SDK.SDKModel.Target);
+    const target = UI.Context.Context.instance().flavor(SDK.SDKModel.Target);
     const debuggerModel = target ? target.model(SDK.DebuggerModel.DebuggerModel) : null;
     if (!debuggerModel || !debuggerModel.isPaused()) {
       return null;
@@ -498,17 +502,11 @@ export class DebuggerPlugin extends Plugin {
     let endHighlight;
 
     const selectedCallFrame =
-        /** @type {!SDK.DebuggerModel.CallFrame} */ (self.UI.context.flavor(SDK.DebuggerModel.CallFrame));
+        /** @type {!SDK.DebuggerModel.CallFrame} */ (UI.Context.Context.instance().flavor(SDK.DebuggerModel.CallFrame));
     if (!selectedCallFrame) {
       return null;
     }
 
-    // Block popover eager evaluation for Wasm frames for now. We don't have
-    // a way to Debug-Evaluate Wasm yet, and the logic below assumes JavaScript
-    // source code. See https://crbug.com/1063875 for details.
-    if (selectedCallFrame.script.isWasm()) {
-      return null;
-    }
 
     if (textSelection && !textSelection.isEmpty()) {
       if (textSelection.startLine !== textSelection.endLine || textSelection.startLine !== mouseLine ||
@@ -523,6 +521,17 @@ export class DebuggerPlugin extends Plugin {
       editorLineNumber = textSelection.startLine;
       startHighlight = textSelection.startColumn;
       endHighlight = textSelection.endColumn - 1;
+    } else if (this._uiSourceCode.mimeType() === 'application/wasm') {
+      const token = this._textEditor.tokenAtTextPosition(textPosition.startLine, textPosition.startColumn);
+      if (!token || token.type !== 'variable-2') {
+        return null;
+      }
+      const leftCorner = this._textEditor.cursorPositionToCoordinates(textPosition.startLine, token.startColumn);
+      const rightCorner = this._textEditor.cursorPositionToCoordinates(textPosition.startLine, token.endColumn - 1);
+      anchorBox = new AnchorBox(leftCorner.x, leftCorner.y, rightCorner.x - leftCorner.x, leftCorner.height);
+      editorLineNumber = textPosition.startLine;
+      startHighlight = token.startColumn;
+      endHighlight = token.endColumn - 1;
     } else {
       const token = this._textEditor.tokenAtTextPosition(textPosition.startLine, textPosition.startColumn);
       if (!token || !token.type) {
@@ -573,26 +582,50 @@ export class DebuggerPlugin extends Plugin {
     let objectPopoverHelper;
     let highlightDescriptor;
 
+    /*
+     * @param {string} evaluationText
+     * @param {!Workspace.UISourceCode.UISourceCode}
+     * @return {!Promise<?EvaluationResult>}
+     */
+    async function evaluate(uiSourceCode, evaluationText) {
+      if (selectedCallFrame.script.isWasm()) {
+        const sourceScopeChain = await selectedCallFrame.sourceScopeChain;
+        if (sourceScopeChain) {
+          for (const scopeChain of sourceScopeChain) {
+            const object = await /** @type {!Bindings.DebuggerLanguagePlugins.SourceScope}*/ (scopeChain)
+                               .getVariableValue(evaluationText);
+            if (object) {
+              return {object};
+            }
+          }
+          return null;
+        }
+      }
+
+      const resolvedText = await resolveExpression(
+          selectedCallFrame, evaluationText, uiSourceCode, editorLineNumber, startHighlight, endHighlight);
+      return await selectedCallFrame.evaluate({
+        expression: resolvedText || evaluationText,
+        objectGroup: 'popover',
+        includeCommandLineAPI: false,
+        silent: true,
+        returnByValue: false,
+        generatePreview: false
+      });
+    }
+
     return {
       box: anchorBox,
       show: async popover => {
         const evaluationText = this._textEditor.line(editorLineNumber).substring(startHighlight, endHighlight + 1);
-        const resolvedText = await resolveExpression(
-            selectedCallFrame, evaluationText, this._uiSourceCode, editorLineNumber, startHighlight, endHighlight);
-        const result = await selectedCallFrame.evaluate({
-          expression: resolvedText || evaluationText,
-          objectGroup: 'popover',
-          includeCommandLineAPI: false,
-          silent: true,
-          returnByValue: false,
-          generatePreview: false
-        });
-        if (!result.object || (result.object.type === 'object' && result.object.subtype === 'error')) {
+        const result = await evaluate(this._uiSourceCode, evaluationText);
+
+        if (!result || !result.object || (result.object.type === 'object' && result.object.subtype === 'error')) {
           return false;
         }
         objectPopoverHelper =
             await ObjectUI.ObjectPopoverHelper.ObjectPopoverHelper.buildObjectPopover(result.object, popover);
-        const potentiallyUpdatedCallFrame = self.UI.context.flavor(SDK.DebuggerModel.CallFrame);
+        const potentiallyUpdatedCallFrame = UI.Context.Context.instance().flavor(SDK.DebuggerModel.CallFrame);
         if (!objectPopoverHelper || selectedCallFrame !== potentiallyUpdatedCallFrame) {
           debuggerModel.runtimeModel().releaseObjectGroup('popover');
           if (objectPopoverHelper) {
@@ -617,7 +650,9 @@ export class DebuggerPlugin extends Plugin {
    * @param {!KeyboardEvent} event
    */
   async _onKeyDown(event) {
-    this._clearControlDown();
+    if (!event.ctrlKey || (!event.metaKey && Host.Platform.isMac())) {
+      this._clearControlDown();
+    }
 
     if (event.key === 'Escape') {
       if (this._popoverHelper.isPopoverVisible()) {
@@ -705,9 +740,6 @@ export class DebuggerPlugin extends Plugin {
    * @param {!Event} event
    */
   _onBlur(event) {
-    if (this._textEditor.element.isAncestor(/** @type {!Node} */ (event.target))) {
-      return;
-    }
     this._clearControlDown();
   }
 
@@ -782,11 +814,11 @@ export class DebuggerPlugin extends Plugin {
     if (!Common.Settings.Settings.instance().moduleSetting('inlineVariableValues').get()) {
       return;
     }
-    const executionContext = self.UI.context.flavor(SDK.RuntimeModel.ExecutionContext);
+    const executionContext = UI.Context.Context.instance().flavor(SDK.RuntimeModel.ExecutionContext);
     if (!executionContext) {
       return;
     }
-    const callFrame = self.UI.context.flavor(SDK.DebuggerModel.CallFrame);
+    const callFrame = UI.Context.Context.instance().flavor(SDK.DebuggerModel.CallFrame);
     if (!callFrame) {
       return;
     }
@@ -802,11 +834,11 @@ export class DebuggerPlugin extends Plugin {
 
   _showContinueToLocations() {
     this._popoverHelper.hidePopover();
-    const executionContext = self.UI.context.flavor(SDK.RuntimeModel.ExecutionContext);
+    const executionContext = UI.Context.Context.instance().flavor(SDK.RuntimeModel.ExecutionContext);
     if (!executionContext) {
       return;
     }
-    const callFrame = self.UI.context.flavor(SDK.DebuggerModel.CallFrame);
+    const callFrame = UI.Context.Context.instance().flavor(SDK.DebuggerModel.CallFrame);
     if (!callFrame) {
       return;
     }
@@ -822,7 +854,6 @@ export class DebuggerPlugin extends Plugin {
     function renderLocations(locations) {
       this._clearContinueToLocationsNoRestore();
       this._textEditor.hideExecutionLineBackground();
-      this._clearValueWidgets();
       this._continueToLocationDecorations = new Map();
       locations = locations.reverse();
       let previousCallLine = -1;
@@ -1103,11 +1134,11 @@ export class DebuggerPlugin extends Plugin {
           continue;
         }  // Only render name once in the given continuous block.
         if (renderedNameCount) {
-          widget.createTextChild(', ');
+          UI.UIUtils.createTextChild(widget, ', ');
         }
         const nameValuePair = widget.createChild('span');
         widget.__nameToToken.set(name, nameValuePair);
-        nameValuePair.createTextChild(name + ' = ');
+        UI.UIUtils.createTextChild(nameValuePair, name + ' = ');
         const value = valuesMap.get(name);
         const propertyCount = value.preview ? value.preview.properties.length : 0;
         const entryCount = value.preview && value.preview.entries ? value.preview.entries.length : 0;
@@ -1613,8 +1644,10 @@ export class DebuggerPlugin extends Plugin {
         'Associated files should be added to the file tree. You can debug these resolved source files as regular JavaScript files.'));
     this._sourceMapInfobar.createDetailsRowMessage(Common.UIString.UIString(
         'Associated files are available via file tree or %s.',
-        self.UI.shortcutRegistry.shortcutTitleForAction('quickOpen.show')));
-    this._sourceMapInfobar.setCloseCallback(() => this._sourceMapInfobar = null);
+        UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutTitleForAction('quickOpen.show')));
+    this._sourceMapInfobar.setCloseCallback(() => {
+      this._sourceMapInfobar = null;
+    });
     this._textEditor.attachInfobar(this._sourceMapInfobar);
   }
 
@@ -1624,7 +1657,7 @@ export class DebuggerPlugin extends Plugin {
       return;
     }
 
-    const editorActions = await self.runtime.allInstances(Sources.SourcesView.EditorAction);
+    const editorActions = await Root.Runtime.Runtime.instance().allInstances(Sources.SourcesView.EditorAction);
     let formatterCallback = null;
     for (const editorAction of editorActions) {
       if (editorAction instanceof Sources.ScriptFormatterEditorAction) {
@@ -1645,7 +1678,9 @@ export class DebuggerPlugin extends Plugin {
       return;
     }
 
-    this._prettyPrintInfobar.setCloseCallback(() => this._prettyPrintInfobar = null);
+    this._prettyPrintInfobar.setCloseCallback(() => {
+      this._prettyPrintInfobar = null;
+    });
     const toolbar = new UI.Toolbar.Toolbar('');
     const button = new UI.Toolbar.ToolbarButton('', 'largeicon-pretty-print');
     toolbar.appendToolbarItem(button);
@@ -1715,17 +1750,6 @@ export class DebuggerPlugin extends Plugin {
       return;
     }
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.ScriptsBreakpointSet);
-    if (editorLineNumber < this._textEditor.linesCount) {
-      const start = this._transformer.editorLocationToUILocation(editorLineNumber, 0);
-      const end = this._transformer.editorLocationToUILocation(editorLineNumber + 1, 0);
-      const locations = await this._breakpointManager.possibleBreakpoints(
-          this._uiSourceCode,
-          new TextUtils.TextRange.TextRange(start.lineNumber, start.columnNumber, end.lineNumber, end.columnNumber));
-      if (locations && locations.length) {
-        await this._setBreakpoint(locations[0].lineNumber, locations[0].columnNumber, condition, enabled);
-        return;
-      }
-    }
     const origin = this._transformer.editorLocationToUILocation(editorLineNumber, 0);
     await this._setBreakpoint(origin.lineNumber, origin.columnNumber, condition, enabled);
   }
@@ -1754,7 +1778,7 @@ export class DebuggerPlugin extends Plugin {
 
   async _callFrameChanged() {
     this._liveLocationPool.disposeAll();
-    const callFrame = self.UI.context.flavor(SDK.DebuggerModel.CallFrame);
+    const callFrame = UI.Context.Context.instance().flavor(SDK.DebuggerModel.CallFrame);
     if (!callFrame) {
       this._clearExecutionLine();
       return;
@@ -1802,9 +1826,8 @@ export class DebuggerPlugin extends Plugin {
     this._textEditor.element.removeEventListener('focusout', this._boundBlur, false);
     this._textEditor.element.removeEventListener('wheel', this._boundWheel, true);
 
-    this._textEditor.removeEventListener(SourceFrame.SourcesTextEditor.Events.GutterClick, event => {
-      this._handleGutterClick(event);
-    }, this);
+    this._textEditor.removeEventListener(
+        SourceFrame.SourcesTextEditor.Events.GutterClick, this._boundGutterClick, this);
     this._popoverHelper.hidePopover();
     this._popoverHelper.dispose();
 
@@ -1826,7 +1849,7 @@ export class DebuggerPlugin extends Plugin {
     super.dispose();
 
     this._clearExecutionLine();
-    self.UI.context.removeFlavorChangeListener(SDK.DebuggerModel.CallFrame, this._callFrameChanged, this);
+    UI.Context.Context.instance().removeFlavorChangeListener(SDK.DebuggerModel.CallFrame, this._callFrameChanged, this);
     this._liveLocationPool.disposeAll();
   }
 }
@@ -1850,7 +1873,7 @@ export class BreakpointDecoration {
     this.enabled = enabled;
     this.bound = bound;
     this.breakpoint = breakpoint;
-    this.element = createElement('span');
+    this.element = document.createElement('span');
     this.element.classList.toggle('cm-inline-breakpoint', true);
 
     /** @type {?TextEditor.CodeMirrorTextEditor.TextEditorBookMark} */

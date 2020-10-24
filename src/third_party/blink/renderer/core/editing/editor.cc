@@ -65,7 +65,6 @@
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/editing/visible_units.h"
-#include "third_party/blink/renderer/core/editing/writing_direction.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/text_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -133,7 +132,7 @@ SelectionInDOMTree Editor::SelectionForCommand(Event* event) {
 // not available.
 EditingBehavior Editor::Behavior() const {
   if (!GetFrame().GetSettings())
-    return EditingBehavior(kEditingMacBehavior);
+    return EditingBehavior(mojom::blink::EditingBehavior::kEditingMacBehavior);
 
   return EditingBehavior(GetFrame().GetSettings()->GetEditingBehaviorType());
 }
@@ -633,14 +632,17 @@ void Editor::Redo() {
   undo_stack_->Redo();
 }
 
-void Editor::SetBaseWritingDirection(WritingDirection direction) {
+void Editor::SetBaseWritingDirection(
+    mojo_base::mojom::blink::TextDirection direction) {
   Element* focused_element = GetFrame().GetDocument()->FocusedElement();
   if (auto* text_control = ToTextControlOrNull(focused_element)) {
-    if (direction == WritingDirection::kNatural)
+    if (direction == mojo_base::mojom::blink::TextDirection::UNKNOWN_DIRECTION)
       return;
     text_control->setAttribute(
         html_names::kDirAttr,
-        direction == WritingDirection::kLeftToRight ? "ltr" : "rtl");
+        direction == mojo_base::mojom::blink::TextDirection::LEFT_TO_RIGHT
+            ? "ltr"
+            : "rtl");
     text_control->DispatchInputEvent();
     return;
   }
@@ -649,10 +651,12 @@ void Editor::SetBaseWritingDirection(WritingDirection direction) {
       MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLQuirksMode);
   style->SetProperty(
       CSSPropertyID::kDirection,
-      direction == WritingDirection::kLeftToRight
+      direction == mojo_base::mojom::blink::TextDirection::LEFT_TO_RIGHT
           ? "ltr"
-          : direction == WritingDirection::kRightToLeft ? "rtl" : "inherit",
-      /* important */ false, GetFrame().GetDocument()->GetSecureContextMode());
+          : direction == mojo_base::mojom::blink::TextDirection::RIGHT_TO_LEFT
+                ? "rtl"
+                : "inherit",
+      /* important */ false, GetFrame().DomWindow()->GetSecureContextMode());
   ApplyParagraphStyleToSelection(
       style, InputEvent::InputType::kFormatSetBlockTextDirection);
 }
@@ -809,7 +813,8 @@ Range* Editor::FindRangeOfString(
     Document& document,
     const String& target,
     const EphemeralRangeInFlatTree& reference_range,
-    FindOptions options) {
+    FindOptions options,
+    bool* wrapped_around) {
   if (target.IsEmpty())
     return nullptr;
 
@@ -846,10 +851,7 @@ Range* Editor::FindRangeOfString(
   // the reference range, find again. Build a selection with the found range
   // to remove collapsed whitespace. Compare ranges instead of selection
   // objects to ignore the way that the current selection was made.
-  const bool find_next_if_selection_matches =
-      !(options & kDontFindNextIfSelectionMatches);
-  if (find_next_if_selection_matches && result_range &&
-      start_in_reference_range &&
+  if (result_range && start_in_reference_range &&
       NormalizeRange(EphemeralRangeInFlatTree(result_range)) ==
           reference_range) {
     if (forward)
@@ -863,8 +865,11 @@ Range* Editor::FindRangeOfString(
     result_range = FindStringBetweenPositions(target, search_range, options);
   }
 
-  if (!result_range && options & kWrapAround)
+  if (!result_range && options & kWrapAround) {
+    if (wrapped_around)
+      *wrapped_around = true;
     return FindStringBetweenPositions(target, document_range, options);
+  }
 
   return result_range;
 }

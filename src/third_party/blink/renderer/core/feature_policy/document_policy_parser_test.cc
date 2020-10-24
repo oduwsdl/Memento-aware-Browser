@@ -12,6 +12,8 @@
 
 namespace blink {
 
+constexpr const mojom::blink::DocumentPolicyFeature kDefault =
+    mojom::blink::DocumentPolicyFeature::kDefault;
 constexpr const mojom::blink::DocumentPolicyFeature kBoolFeature =
     static_cast<mojom::blink::DocumentPolicyFeature>(1);
 constexpr const mojom::blink::DocumentPolicyFeature kDoubleFeature =
@@ -36,12 +38,14 @@ class DocumentPolicyParserTest
  protected:
   DocumentPolicyParserTest()
       : name_feature_map(DocumentPolicyNameFeatureMap{
+            {"*", kDefault},
             {"f-bool", kBoolFeature},
             {"f-double", kDoubleFeature},
         }),
         feature_info_map(DocumentPolicyFeatureInfoMap{
-            {kBoolFeature, {"f-bool", "", PolicyValue(true)}},
-            {kDoubleFeature, {"f-double", "value", PolicyValue(1.0)}},
+            {kDefault, {"*", PolicyValue::CreateBool(true)}},
+            {kBoolFeature, {"f-bool", PolicyValue::CreateBool(true)}},
+            {kDoubleFeature, {"f-double", PolicyValue::CreateDecDouble(1.0)}},
         }) {
     available_features.insert(kBoolFeature);
     available_features.insert(kDoubleFeature);
@@ -58,7 +62,7 @@ class DocumentPolicyParserTest
   }
 
   base::Optional<std::string> Serialize(
-      const DocumentPolicy::FeatureState& policy) {
+      const DocumentPolicyFeatureState& policy) {
     return DocumentPolicy::SerializeInternal(policy, feature_info_map);
   }
 
@@ -100,79 +104,86 @@ const ParseTestCase DocumentPolicyParserTest::kCases[] = {
         "f-bool",
         /* parsed_policy */
         {
-            /* feature_state */ {{kBoolFeature, PolicyValue(true)}},
+            /* feature_state */ {{kBoolFeature, PolicyValue::CreateBool(true)}},
             /* endpoint_map */ {},
         },
         /* messages */ {},
     },
     {
         "ParseBoolFeatureWithValueFalse",
-        "no-f-bool",
+        "f-bool=?0",
         /* parsed_policy */
         {
-            /* feature_state */ {{kBoolFeature, PolicyValue(false)}},
+            /* feature_state */ {
+                {kBoolFeature, PolicyValue::CreateBool(false)}},
             /* endpoint_map */ {},
         },
         /* messages */ {},
     },
     {
         "ParseDoubleFeature1",
-        "f-double;value=1.0",
+        "f-double=1.0",
         /* parsed_policy */
         {
-            /* feature_state */ {{kDoubleFeature, PolicyValue(1.0)}},
+            /* feature_state */ {
+                {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
             /* endpoint_map */ {},
         },
         /* messages */ {},
     },
     {
         "ParseDoubleFeature2",
-        "f-double;value=2",
+        "f-double=2",
         /* parsed_policy */
         {
-            /* feature_state */ {{kDoubleFeature, PolicyValue(2.0)}},
+            /* feature_state */ {
+                {kDoubleFeature, PolicyValue::CreateDecDouble(2.0)}},
             /* endpoint_map */ {},
         },
         /* messages */ {},
     },
     {
         "ParseDoubleFeatureAndBoolFeature",
-        "f-double;value=1,no-f-bool",
+        "f-double=1,f-bool=?0",
         /* parsed_policy */
         {
-            /* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                                 {kDoubleFeature, PolicyValue(1.0)}},
+            /* feature_state */ {
+                {kBoolFeature, PolicyValue::CreateBool(false)},
+                {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
             /* endpoint_map */ {},
         },
         /* messages */ {},
     },
     {
         "ParseBoolFeatureAndDoubleFeature",
-        "no-f-bool,f-double;value=1",
+        "f-bool=?0,f-double=1",
         /* parsed_policy */
         {
-            /* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                                 {kDoubleFeature, PolicyValue(1.0)}},
+            /* feature_state */ {
+                {kBoolFeature, PolicyValue::CreateBool(false)},
+                {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
             /* endpoint_map */ {},
         },
         /* messages */ {},
     },
     {
         "WhitespaceIsAllowedInSomePositionsInStructuredHeader",
-        "no-f-bool,   f-double;value=1",
+        "f-bool=?0,   f-double=1",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(1.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
          /* endpoint_map */ {}},
         /* messages */ {},
     },
     {
         "UnrecognizedParametersAreIgnoredButTheFeatureEntryShould"
         "RemainValid",
-        "no-f-bool,f-double;value=1;unknown_param=xxx",
+        "f-bool=?0,f-double=1;unknown_param=xxx",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(1.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
          /* endpoint_map */ {}},
         /* messages */
         {{mojom::blink::ConsoleMessageLevel::kWarning,
@@ -180,83 +191,109 @@ const ParseTestCase DocumentPolicyParserTest::kCases[] = {
     },
     {
         "ParsePolicyWithReportEndpointSpecified1",
-        "no-f-bool,f-double;value=1;report-to=default",
+        "f-bool=?0,f-double=1;report-to=default",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(1.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
          /* endpoint_map */ {{kDoubleFeature, "default"}}},
         /* messages */ {},
     },
     {
         "ParsePolicyWithReportEndpointSpecified2",
-        "no-f-bool;report-to=default,f-double;value=1",
+        "f-bool=?0;report-to=default,f-double=1",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(1.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
          /* endpoint_map */ {{kBoolFeature, "default"}}},
         /* messages */ {},
     },
     {
         "ParsePolicyWithDefaultReportEndpointAndNone"
         "KeywordShouldOverwriteDefaultValue",
-        "no-f-bool;report-to=none, f-double;value=2.0, *;report-to=default",
+        "f-bool=?0;report-to=none, f-double=2.0, *;report-to=default",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(2.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(2.0)}},
          /* endpoint_map */ {{kDoubleFeature, "default"}}},
         /* messages */ {},
     },
     {
         "ParsePolicyWithDefaultReportEndpointSpecified",
-        "no-f-bool;report-to=not_none, f-double;value=2.0, "
+        "f-bool=?0;report-to=not_none, f-double=2.0, "
         "*;report-to=default",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(2.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(2.0)}},
          /* endpoint_map */ {{kBoolFeature, "not_none"},
                              {kDoubleFeature, "default"}}},
         /* messages */ {},
     },
     {
         "ParsePolicyWithDefaultReportEndpointSpecifiedAsNone",
-        "no-f-bool;report-to=not_none, f-double;value=2.0, *;report-to=none",
+        "f-bool=?0;report-to=not_none, f-double=2.0, *;report-to=none",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(2.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(2.0)}},
          /* endpoint_map */ {{kBoolFeature, "not_none"}}},
         /* messages */ {},
     },
     {
         "DefaultEndpointCanBeSpecifiedAnywhereInTheHeader",
-        "no-f-bool;report-to=not_none, *;report-to=default, "
-        "f-double;value=2.0",
+        "f-bool=?0;report-to=not_none, *;report-to=default, "
+        "f-double=2.0",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(2.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(2.0)}},
          /* endpoint_map */ {{kBoolFeature, "not_none"},
                              {kDoubleFeature, "default"}}},
         /* messages */ {},
     },
     {
         "DefaultEndpointCanBeSpecifiedMultipleTimesInTheHeader",
-        "no-f-bool;report-to=not_none, f-double;value=2.0, "
+        "f-bool=?0;report-to=not_none, f-double=2.0, "
         "*;report-to=default, *;report-to=none",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)},
-                              {kDoubleFeature, PolicyValue(2.0)}},
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(2.0)}},
          /* endpoint_map */ {{kBoolFeature, "not_none"}}},
         /* messages */ {},
     },
     {
         "EvenIfDefaultEndpointIsNotSpecifiedNoneStillShouldBe"
         "TreatedAsReservedKeywordForEndpointNames",
-        "no-f-bool;report-to=none",
+        "f-bool=?0;report-to=none",
         /* parsed_policy */
-        {/* feature_state */ {{kBoolFeature, PolicyValue(false)}},
+        {/* feature_state */ {{kBoolFeature, PolicyValue::CreateBool(false)}},
          /* endpoint_map */ {}},
         /* messages */ {},
     },
-
+    {
+        "MissingEndpointGroupForDefaultFeature1",
+        "*",
+        /* parsed_policy */
+        {
+            /* feature_state */ {},
+            /* endpoint_map */ {},
+        },
+        /* messages */ {},
+    },
+    {
+        "MissingEndpointGroupForDefaultFeature2",
+        "*,f-bool=?0,f-double=1;report-to=default",
+        /* parsed_policy */
+        {/* feature_state */ {
+             {kBoolFeature, PolicyValue::CreateBool(false)},
+             {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
+         /* endpoint_map */ {{kDoubleFeature, "default"}}},
+        /* messages */ {},
+    },
     //
     // Parse invalid policies.
     //
@@ -289,7 +326,7 @@ const ParseTestCase DocumentPolicyParserTest::kCases[] = {
     {
         "ParsePolicyWithWrongTypeOfParamExpectedDoubleTypeButGet"
         "BooleanType",
-        "f-double;value=?0",
+        "f-double=?0",
         /* parsed_policy */
         {
             /* feature_state */ {},
@@ -297,12 +334,13 @@ const ParseTestCase DocumentPolicyParserTest::kCases[] = {
         },
         /* messages */
         {{mojom::blink::ConsoleMessageLevel::kWarning,
-          "Parameter value in feature f-double should be Double, but get "
+          "Parameter for feature f-double should be Double, not "
           "Boolean."}},
     },
     {
-        "PolicyMemberShouldBeTokenInsteadOfString",
-        "\"f-bool\"",
+        "ParsePolicyWithWrongTypeOfParamExpectedBooleanTypeButGet"
+        "DoubleType",
+        "f-bool=1.0",
         /* parsed_policy */
         {
             /* feature_state */ {},
@@ -310,11 +348,12 @@ const ParseTestCase DocumentPolicyParserTest::kCases[] = {
         },
         /* messages */
         {{mojom::blink::ConsoleMessageLevel::kWarning,
-          "The item in directive should be token type."}},
+          "Parameter for feature f-bool should be Boolean, not "
+          "Decimal."}},
     },
     {
-        "FeatureTokenShouldNotBeEmpty",
-        "();value=2",
+        "FeatureValueItemShouldNotBeEmpty",
+        "f-double=()",
         /* parsed_policy */
         {
             /* feature_state */ {},
@@ -322,11 +361,12 @@ const ParseTestCase DocumentPolicyParserTest::kCases[] = {
         },
         /* messages */
         {{mojom::blink::ConsoleMessageLevel::kWarning,
-          "Directives must not be inner lists."}},
+          "Parameter for feature f-double should be single item, but get list "
+          "of items(length=0)."}},
     },
     {
-        "TooManyFeatureTokens",
-        "(f-bool f-double);value=2",
+        "TooManyFeatureValueItems",
+        "f-double=(1.1 2.0)",
         /* parsed_policy */
         {
             /* feature_state */ {},
@@ -334,20 +374,8 @@ const ParseTestCase DocumentPolicyParserTest::kCases[] = {
         },
         /* messages */
         {{mojom::blink::ConsoleMessageLevel::kWarning,
-          "Directives must not be inner lists."}},
-    },
-    {
-        "MissingMandatoryParameter",
-        "f-double;report-to=default",
-        /* parsed_policy */
-        {
-            /* feature_state */ {},
-            /* endpoint_map */ {},
-        },
-        /* messages */
-        {{mojom::blink::ConsoleMessageLevel::kWarning,
-          "Policy value parameter missing for feature f-double. Expected "
-          "something like \"f-double;value=...\"."}},
+          "Parameter for feature f-double should be single item, but get list "
+          "of items(length=2)."}},
     },
     {
         "ReportToParameterValueTypeShouldBeTokenInsteadOf"
@@ -364,35 +392,36 @@ const ParseTestCase DocumentPolicyParserTest::kCases[] = {
     },
 };
 
-const std::pair<DocumentPolicy::FeatureState, std::string>
+const std::pair<DocumentPolicyFeatureState, std::string>
     kPolicySerializationTestCases[] = {
-        {{{kBoolFeature, PolicyValue(false)},
-          {kDoubleFeature, PolicyValue(1.0)}},
-         "no-f-bool, f-double;value=1.0"},
+        {{{kBoolFeature, PolicyValue::CreateBool(false)},
+          {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
+         "f-bool=?0, f-double=1.0"},
         // Changing ordering of FeatureState element should not affect
         // serialization result.
-        {{{kDoubleFeature, PolicyValue(1.0)},
-          {kBoolFeature, PolicyValue(false)}},
-         "no-f-bool, f-double;value=1.0"},
+        {{{kDoubleFeature, PolicyValue::CreateDecDouble(1.0)},
+          {kBoolFeature, PolicyValue::CreateBool(false)}},
+         "f-bool=?0, f-double=1.0"},
         // Flipping boolean-valued policy from false to true should not affect
         // result ordering of feature.
-        {{{kBoolFeature, PolicyValue(true)},
-          {kDoubleFeature, PolicyValue(1.0)}},
-         "f-bool, f-double;value=1.0"}};
+        {{{kBoolFeature, PolicyValue::CreateBool(true)},
+          {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
+         "f-bool, f-double=1.0"}};
 
-const DocumentPolicy::FeatureState kParsedPolicies[] = {
+const DocumentPolicyFeatureState kParsedPolicies[] = {
     {},  // An empty policy
-    {{kBoolFeature, PolicyValue(false)}},
-    {{kBoolFeature, PolicyValue(true)}},
-    {{kDoubleFeature, PolicyValue(1.0)}},
-    {{kBoolFeature, PolicyValue(true)}, {kDoubleFeature, PolicyValue(1.0)}}};
+    {{kBoolFeature, PolicyValue::CreateBool(false)}},
+    {{kBoolFeature, PolicyValue::CreateBool(true)}},
+    {{kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}},
+    {{kBoolFeature, PolicyValue::CreateBool(true)},
+     {kDoubleFeature, PolicyValue::CreateDecDouble(1.0)}}};
 
 // Serialize and then Parse the result of serialization should cancel each
 // other out, i.e. d == Parse(Serialize(d)).
 // The other way s == Serialize(Parse(s)) is not always true because structured
 // header allows some optional white spaces in its parsing targets and floating
 // point numbers will be rounded, e.g. value=1 will be parsed to
-// PolicyValue(1.0) and get serialized to value=1.0.
+// PolicyValue::CreateDecDouble(1.0) and get serialized to value=1.0.
 TEST_F(DocumentPolicyParserTest, SerializeAndParse) {
   for (const auto& policy : kParsedPolicies) {
     const base::Optional<std::string> policy_string = Serialize(policy);
@@ -408,7 +437,7 @@ TEST_F(DocumentPolicyParserTest, SerializeAndParse) {
 
 TEST_F(DocumentPolicyParserTest, SerializeResultShouldMatch) {
   for (const auto& test_case : kPolicySerializationTestCases) {
-    const DocumentPolicy::FeatureState& policy = test_case.first;
+    const DocumentPolicyFeatureState& policy = test_case.first;
     const std::string& expected = test_case.second;
     const auto result = Serialize(policy);
 

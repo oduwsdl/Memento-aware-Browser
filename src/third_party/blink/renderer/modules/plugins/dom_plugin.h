@@ -32,11 +32,10 @@ namespace blink {
 class ExceptionState;
 
 class DOMPlugin final : public ScriptWrappable, public ExecutionContextClient {
-  USING_GARBAGE_COLLECTED_MIXIN(DOMPlugin);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  DOMPlugin(LocalFrame*, const PluginInfo&);
+  DOMPlugin(LocalDOMWindow*, const PluginInfo&);
 
   String name() const;
   String filename() const;

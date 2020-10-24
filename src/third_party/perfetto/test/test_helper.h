@@ -53,7 +53,10 @@ class ServiceThread {
       svc_ = ServiceIPCHost::CreateInstance(runner_->get());
       unlink(producer_socket_.c_str());
       unlink(consumer_socket_.c_str());
-
+      setenv("PERFETTO_PRODUCER_SOCK_NAME", producer_socket_.c_str(),
+             /*overwrite=*/true);
+      setenv("PERFETTO_CONSUMER_SOCK_NAME", consumer_socket_.c_str(),
+             /*overwrite=*/true);
       bool res =
           svc_->Start(producer_socket_.c_str(), consumer_socket_.c_str());
       PERFETTO_CHECK(res);
@@ -133,8 +136,7 @@ class FakeProducerThread {
   void CreateProducerProvidedSmb() {
     PosixSharedMemory::Factory factory;
     shm_ = factory.CreateSharedMemory(1024 * 1024);
-    shm_arbiter_ =
-        SharedMemoryArbiter::CreateUnboundInstance(shm_.get(), base::kPageSize);
+    shm_arbiter_ = SharedMemoryArbiter::CreateUnboundInstance(shm_.get(), 4096);
   }
 
   void ProduceStartupEventBatch(const protos::gen::TestConfig& config,
@@ -172,6 +174,11 @@ class TestHelper : public Consumer {
   void OnTraceStats(bool, const TraceStats&) override;
   void OnObservableEvents(const ObservableEvents&) override;
 
+  // Starts the tracing service unconditionally.
+  void StartService();
+
+  // Starts the tracing service unless the build was configured to use an
+  // existing one running on the system.
   void StartServiceIfRequired();
 
   // Connects the producer and waits that the service has seen the
@@ -217,6 +224,9 @@ class TestHelper : public Consumer {
   base::ThreadTaskRunner* producer_thread() {
     return fake_producer_thread_.runner();
   }
+  const std::vector<protos::gen::TracePacket>& full_trace() {
+    return full_trace_;
+  }
   const std::vector<protos::gen::TracePacket>& trace() { return trace_; }
 
  private:
@@ -231,6 +241,7 @@ class TestHelper : public Consumer {
   std::function<void()> on_detach_callback_;
   std::function<void(bool)> on_attach_callback_;
 
+  std::vector<protos::gen::TracePacket> full_trace_;
   std::vector<protos::gen::TracePacket> trace_;
 
   ServiceThread service_thread_;

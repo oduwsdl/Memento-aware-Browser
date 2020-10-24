@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Common from '../common/common.js';
 import * as UI from '../ui/ui.js';
+
+const ls = Common.ls;
 
 /**
  * @enum {string}
@@ -42,9 +45,9 @@ template.innerHTML = `
     }
 
     slot {
-      display: inline-block;
+      display: inline-flex;
+      box-sizing: border-box;
       height: 13px;
-      line-height: 13px;
       padding: 0 6px;
       font-size: 8.5px;
       color: var(--adorner-text-color, #3c4043);
@@ -53,10 +56,8 @@ template.innerHTML = `
       border-radius: var(--adorner-border-radius, 10px);
     }
 
-    :host-context(.-theme-with-dark-background) slot {
-      color: var(--adorner-text-color, #ffffffde);
-      background-color: var(--adorner-background-color, #5db0d726);
-      border: var(--adorner-border, 1px solid #5db0d780);
+    ::slotted(*) {
+      height: 10px;
     }
   </style>
   <slot name="content"></slot>
@@ -93,8 +94,8 @@ export class Adorner extends HTMLElement {
     this.name = '';
     this.category = AdornerCategories.Default;
     this._isToggle = false;
-    this._ariaLabelDefault = `${this.name} adorner`;
-    this._ariaLabelActive = `${this.name} adorner active`;
+    this._ariaLabelDefault = ls`adorner`;
+    this._ariaLabelActive = ls`adorner active`;
   }
 
   /**
@@ -102,17 +103,29 @@ export class Adorner extends HTMLElement {
    */
   connectedCallback() {
     if (!this.getAttribute('aria-label')) {
-      UI.ARIAUtils.setAccessibleName(this, this._ariaLabelDefault);
+      UI.ARIAUtils.setAccessibleName(this, ls`${this.name} adorner`);
     }
   }
 
-  toggle() {
+  /**
+   * @return {boolean}
+   */
+  isActive() {
+    return this.getAttribute('aria-pressed') === 'true';
+  }
+
+  /**
+   * Toggle the active state of the adorner. Optionally pass `true` to force-set
+   * an active state; pass `false` to force-set an inactive state.
+   * @param {boolean=} forceActiveState
+   */
+  toggle(forceActiveState) {
     if (!this._isToggle) {
       return;
     }
-    const shouldBePressed = this.getAttribute('aria-pressed') === 'false';
-    UI.ARIAUtils.setPressed(this, shouldBePressed);
-    UI.ARIAUtils.setAccessibleName(this, shouldBePressed ? this._ariaLabelActive : this._ariaLabelDefault);
+    const shouldBecomeActive = forceActiveState === undefined ? !this.isActive() : forceActiveState;
+    UI.ARIAUtils.setPressed(this, shouldBecomeActive);
+    UI.ARIAUtils.setAccessibleName(this, shouldBecomeActive ? this._ariaLabelActive : this._ariaLabelDefault);
   }
 
   show() {
@@ -133,7 +146,6 @@ export class Adorner extends HTMLElement {
   addInteraction(action, options = {}) {
     const {isToggle = false, shouldPropagateOnKeydown = false, ariaLabelDefault, ariaLabelActive} = options;
 
-    this.addEventListener('click', action);
     this._isToggle = isToggle;
 
     if (ariaLabelDefault) {
@@ -142,12 +154,16 @@ export class Adorner extends HTMLElement {
     }
 
     if (isToggle) {
-      UI.ARIAUtils.setPressed(this, false);
-      this.addEventListener('click', this.toggle);
+      this.addEventListener('click', () => {
+        this.toggle();
+      });
       if (ariaLabelActive) {
         this._ariaLabelActive = ariaLabelActive;
       }
+      this.toggle(false /* initialize inactive state */);
     }
+
+    this.addEventListener('click', action);
 
     // Simulate an ARIA-capable toggle button
     this.classList.add('clickable');

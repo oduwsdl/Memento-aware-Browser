@@ -50,9 +50,40 @@ class CORE_EXPORT Agent : public GarbageCollected<Agent> {
 
   const base::UnguessableToken& cluster_id() const { return cluster_id_; }
 
+  // Representing agent cluster's "cross-origin isolated" concept.
+  // TODO(yhirano): Have the spec URL.
+  // This property is renderer process global because we ensure that a
+  // renderer process host only cross-origin isolated agents or only
+  // non-cross-origin isolated agents, not both.
+  // This variable is initialized before any frame is created, and will not
+  // be modified after that. Hence this can be accessed from the main thread
+  // and worker/worklet threads.
+  static bool IsCrossOriginIsolated();
+  // Only called from blink::SetIsCrossOriginIsolated.
+  static void SetIsCrossOriginIsolated(bool value);
+
+  // Representing agent cluster's "origin isolated" concept.
+  // https://github.com/whatwg/html/pull/5545
+  // TODO(domenic): update to final spec URL when that pull request is merged.
+  //
+  // Note that unlike IsCrossOriginIsolated(), this is not static/process-global
+  // because we do not guarantee that a given process only contains agents with
+  // the same origin-isolation status.
+  //
+  // For example, a page with no Origin-Isolation header, that uses a data: URL
+  // to create an iframe, would have an origin-isolated data: URL Agent, plus a
+  // non-origin-isolated outer page Agent, both in the same process.
+  bool IsOriginIsolated();
+  void SetIsOriginIsolated(bool value);
+
  private:
   scoped_refptr<scheduler::EventLoop> event_loop_;
   const base::UnguessableToken cluster_id_;
+  bool is_origin_isolated_ = false;
+
+#if DCHECK_IS_ON()
+  bool is_origin_isolated_set_ = false;
+#endif
 };
 
 }  // namespace blink

@@ -81,12 +81,12 @@
         p.lifetime = 3 + rand(p.seed);
         p.vel.y = -50;
       }
-      
+
       void update(inout Particle p) {
         float w = mix(15, 3, p.age);
         p.pos.x = sin(radians(p.age * 320)) * mix(25, 10, p.age) + mix(-w, w, rand(p.seed));
         if (rand(p.seed) < 0.5) { p.pos.x = -p.pos.x; }
-      
+
         p.color.g = (mix(75, 220, p.age) + mix(-30, 30, rand(p.seed))) / 255;
       }
       `
@@ -100,7 +100,7 @@
   uniform float4 in_colors0;
   uniform float4 in_colors1;
 
-  void main(float2 p, inout half4 color) {
+  half4 main(float2 p) {
       float2 pp = p - in_center;
       float radius = sqrt(dot(pp, pp));
       radius = sqrt(radius);
@@ -108,7 +108,7 @@
       float t = (angle + 3.1415926/2) / (3.1415926);
       t += radius * rad_scale;
       t = fract(t);
-      color = half4(mix(in_colors0, in_colors1, t));
+      return half4(mix(in_colors0, in_colors1, t));
   }`;
 
   // Examples which only require canvaskit
@@ -122,10 +122,10 @@
   // Examples requiring external resources.
   // Set bounds to fix the 4:3 resolution of the legos
   Promise.all([ckLoaded, loadLegoJSON]).then(([ck, jsonstr]) => {
-    SkottieExample(ck, 'sk_legos', jsonstr, {fLeft: -50, fTop: 0, fRight: 350, fBottom: 300});
+    SkottieExample(ck, 'sk_legos', jsonstr, [-50, 0, 350, 300]);
   });
   // Re-size to fit
-  let fullBounds = {fLeft: 0, fTop: 0, fRight: 500, fBottom: 500};
+  let fullBounds = [0, 0, 500, 500];
   Promise.all([ckLoaded, loadDrinksJSON]).then(([ck, jsonstr]) => {
     SkottieExample(ck, 'sk_drinks', jsonstr, fullBounds);
   });
@@ -146,6 +146,11 @@
   Promise.all([ckLoaded, loadSkp]).then((results) => {SkpExample(...results)});
   Promise.all([ckLoaded, loadBrickTex, loadBrickBump, loadFont]).then((results) => {Camera3D(...results)});
 
+  const rectLeft = 0;
+  const rectTop = 1;
+  const rectRight = 2;
+  const rectBottom = 3;
+
   function SkottieExample(CanvasKit, id, jsonStr, bounds, assets) {
     if (!CanvasKit || !jsonStr) {
       return;
@@ -154,7 +159,7 @@
     const duration = animation.duration() * 1000;
     const size = animation.size();
     let c = document.getElementById(id);
-    bounds = bounds || {fLeft: 0, fTop: 0, fRight: size.w, fBottom: size.h};
+    bounds = bounds || CanvasKit.LTRBRect(0, 0, size.w, size.h);
 
     // Basic managed animation test.
     if (id === 'sk_drinks') {
@@ -172,8 +177,8 @@
     function drawFrame(canvas) {
       let seek = ((Date.now() - firstFrame) / duration) % 1.0;
       let damage = animation.seek(seek);
-      // TODO: SkRect.isEmpty()?
-      if (damage.fRight > damage.fLeft && damage.fBottom > damage.fTop) {
+
+      if (damage[rectRight] > damage[rectLeft] && damage[rectBottom] > damage[rectTop]) {
         canvas.clear(CanvasKit.WHITE);
         animation.render(canvas, bounds);
       }
@@ -181,7 +186,6 @@
     }
     surface.requestAnimationFrame(drawFrame);
 
-    //animation.delete();
     return surface;
   }
 
@@ -220,7 +224,7 @@
     }
 
     const canvas = surface.getCanvas();
-    const fontMgr = CanvasKit.SkFontMgr.FromData([fontData]);
+    const fontMgr = CanvasKit.FontMgr.FromData([fontData]);
 
     const paraStyle = new CanvasKit.ParagraphStyle({
         textStyle: {
@@ -241,8 +245,8 @@
     let X = 100;
     let Y = 100;
 
-    const font = new CanvasKit.SkFont(null, 18);
-    const fontPaint = new CanvasKit.SkPaint();
+    const font = new CanvasKit.Font(null, 18);
+    const fontPaint = new CanvasKit.Paint();
     fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
     fontPaint.setAntiAlias(true);
 
@@ -283,13 +287,13 @@
 
     const canvas = surface.getCanvas();
 
-    const effect = CanvasKit.SkRuntimeEffect.Make(spiralSkSL);
+    const effect = CanvasKit.RuntimeEffect.Make(spiralSkSL);
     const shader = effect.makeShader([
       0.5,
       150, 150,
       0, 1, 0, 1,
       1, 0, 0, 1], true);
-    const paint = new CanvasKit.SkPaint();
+    const paint = new CanvasKit.Paint();
     paint.setShader(shader);
     canvas.drawRect(CanvasKit.LTRBRect(0, 0, 300, 300), paint);
 
@@ -315,10 +319,10 @@
     const quadrantSize = 150;
 
     const dogShader = dogImg.makeShader(CanvasKit.TileMode.Clamp, CanvasKit.TileMode.Clamp,
-                                        CanvasKit.SkMatrix.scaled(quadrantSize/dogImg.width(),
+                                        CanvasKit.Matrix.scaled(quadrantSize/dogImg.width(),
                                                                   quadrantSize/dogImg.height()));
     const mandrillShader = mandrillImg.makeShader(CanvasKit.TileMode.Clamp, CanvasKit.TileMode.Clamp,
-                                                  CanvasKit.SkMatrix.scaled(
+                                                  CanvasKit.Matrix.scaled(
                                                     quadrantSize/mandrillImg.width(),
                                                     quadrantSize/mandrillImg.height()));
 
@@ -341,21 +345,21 @@
           return clamp(x, 0, 1);
       }
 
-      void main(float2 xy, inout half4 color) {
+      half4 main(float2 xy) {
           half4 before = sample(before_map, xy);
           half4 after = sample(after_map, xy);
 
           float m = smooth_cutoff(sample(threshold_map, xy).r);
-          color = mix(before, after, half(m));
+          return mix(before, after, half(m));
       }`;
 
     const canvas = surface.getCanvas();
 
-    const thresholdEffect = CanvasKit.SkRuntimeEffect.Make(prog);
-    const spiralEffect = CanvasKit.SkRuntimeEffect.Make(spiralSkSL);
+    const thresholdEffect = CanvasKit.RuntimeEffect.Make(prog);
+    const spiralEffect = CanvasKit.RuntimeEffect.Make(spiralSkSL);
 
     const draw = (x, y, shader) => {
-      const paint = new CanvasKit.SkPaint();
+      const paint = new CanvasKit.Paint();
       paint.setShader(shader);
       canvas.save();
       canvas.translate(x, y);
@@ -379,9 +383,9 @@
       // draw the shader into the offscreen canvas and mess with it. When we can, that
       // would be cool to show off.
 
-      const blur = CanvasKit.SkImageFilter.MakeBlur(0.1, 0.1, CanvasKit.TileMode.Clamp, null);
+      const blur = CanvasKit.ImageFilter.MakeBlur(0.1, 0.1, CanvasKit.TileMode.Clamp, null);
 
-      const paint = new CanvasKit.SkPaint();
+      const paint = new CanvasKit.Paint();
       paint.setShader(spiralShader);
       paint.setImageFilter(blur);
       oCanvas.drawRect(CanvasKit.LTRBRect(0, 0, quadrantSize, quadrantSize), paint);
@@ -423,7 +427,7 @@
       return;
     }
 
-    const pic = CanvasKit.MakeSkPicture(skpData);
+    const pic = CanvasKit.MakePicture(skpData);
 
     function drawFrame(canvas) {
       canvas.clear(CanvasKit.TRANSPARENT);
@@ -438,36 +442,6 @@
     surface.drawOnce(drawFrame);
   }
 
-  // Return the inverse of an SkM44. throw an error if it's not invertible
-  function mustInvert(m) {
-    const m2 = CanvasKit.SkM44.invert(m);
-    if (m2 === null) {
-      throw "Matrix not invertible";
-    }
-    return m2;
-  }
-
-  // TODO(nifong): This function is in desperate need of some explanation of what it does
-  // cam is a object having eye, coa, up, near, far, angle
-  function saveCamera(canvas, /* rect */ area, /* scalar */ zscale, cam) {
-    const camera = CanvasKit.SkM44.lookat(cam.eye, cam.coa, cam.up);
-    const perspective = CanvasKit.SkM44.perspective(cam.near, cam.far, cam.angle);
-    // Calculate viewport scale. Even through we know these values are all constants in this
-    // example it might be handy to change the size later.
-    const center = [(area.fLeft + area.fRight)/2, (area.fTop + area.fBottom)/2, 0];
-    const viewScale = [(area.fRight - area.fLeft)/2, (area.fBottom - area.fTop)/2, zscale];
-    const viewport = CanvasKit.SkM44.multiply(
-      CanvasKit.SkM44.translated(center),
-      CanvasKit.SkM44.scaled(viewScale));
-
-    // want "world" to be in our big coordinates (e.g. area), so apply this inverse
-    // as part of our "camera".
-    canvas.concat(CanvasKit.SkM44.multiply(viewport, perspective));
-    canvas.concat(CanvasKit.SkM44.multiply(camera, mustInvert(viewport)));
-    // Mark the matrix to make it available to the shader by this name.
-    canvas.markCTM('local_to_world');
-  }
-
   function Camera3D(canvas, textureImgData, normalImgData, robotoData) {
     const surface = CanvasKit.MakeCanvasSurface('camera3d');
     if (!surface) {
@@ -478,12 +452,12 @@
     const sizeX = document.getElementById('camera3d').width;
     const sizeY = document.getElementById('camera3d').height;
 
-    let clickToWorld = CanvasKit.SkM44.identity();
-    let worldToClick = CanvasKit.SkM44.identity();
+    let clickToWorld = CanvasKit.M44.identity();
+    let worldToClick = CanvasKit.M44.identity();
     // rotation of the cube shown in the demo
-    let rotation = CanvasKit.SkM44.identity();
+    let rotation = CanvasKit.M44.identity();
     // temporary during a click and drag
-    let clickRotation = CanvasKit.SkM44.identity();
+    let clickRotation = CanvasKit.M44.identity();
 
     // A virtual sphere used for tumbling the object on screen.
     const vSphereCenter = [sizeX/2, sizeY/2];
@@ -515,13 +489,13 @@
     let lastRadians = 0;
     let spinning = setInterval(keepSpinning, 30);
 
-    const textPaint = new CanvasKit.SkPaint();
+    const textPaint = new CanvasKit.Paint();
     textPaint.setColor(CanvasKit.BLACK);
     textPaint.setAntiAlias(true);
-    const roboto = CanvasKit.SkFontMgr.RefDefault().MakeTypefaceFromData(robotoData);
-    const textFont = new CanvasKit.SkFont(roboto, 30);
+    const roboto = CanvasKit.FontMgr.RefDefault().MakeTypefaceFromData(robotoData);
+    const textFont = new CanvasKit.Font(roboto, 30);
 
-    const imgscale = CanvasKit.SkMatrix.scaled(2, 2);
+    const imgscale = CanvasKit.Matrix.scaled(2, 2);
     const textureShader = CanvasKit.MakeImageFromEncoded(textureImgData).makeShader(
       CanvasKit.TileMode.Clamp, CanvasKit.TileMode.Clamp, imgscale);
     const normalShader = CanvasKit.MakeImageFromEncoded(normalImgData).makeShader(
@@ -542,7 +516,7 @@
         return n;
       }
 
-      void main(float2 p, inout half4 color) {
+      half4 main(float2 p) {
         float3 norm = convert_normal_sample(sample(normal_map, p));
         float3 plane_norm = normalize(localToWorldAdjInv * float4(norm, 0)).xyz;
 
@@ -553,11 +527,11 @@
         float dp = dot(plane_norm, light_dir);
         float scale = min(ambient + max(dp, 0), 1);
 
-        color = sample(color_map, p) * half4(float4(scale, scale, scale, 1)); 
+        return sample(color_map, p) * half4(float4(scale, scale, scale, 1));
       }
 `;
 
-    const fact = CanvasKit.SkRuntimeEffect.Make(prog);
+    const fact = CanvasKit.RuntimeEffect.Make(prog);
 
     // properties of light
     let lightLocation = [...vSphereCenter];
@@ -566,14 +540,14 @@
     let draggingLight = false;
 
     function computeLightWorldPos() {
-      return CanvasKit.SkVector.add(CanvasKit.SkVector.mulScalar([...vSphereCenter, 0], 0.5),
-        CanvasKit.SkVector.mulScalar(vSphereUnitV3(lightLocation), lightDistance));
+      return CanvasKit.Vector.add(CanvasKit.Vector.mulScalar([...vSphereCenter, 0], 0.5),
+        CanvasKit.Vector.mulScalar(vSphereUnitV3(lightLocation), lightDistance));
     }
 
     let lightWorldPos = computeLightWorldPos();
 
     function drawLight(canvas) {
-      const paint = new CanvasKit.SkPaint();
+      const paint = new CanvasKit.Paint();
       paint.setAntiAlias(true);
       paint.setColor(CanvasKit.WHITE);
       canvas.drawCircle(...lightLocation, lightIconRadius + 2, paint);
@@ -584,10 +558,10 @@
     // Takes an x and y rotation in radians and a scale and returns a 4x4 matrix used to draw a
     // face of the cube in that orientation.
     function faceM44(rx, ry, scale) {
-      return CanvasKit.SkM44.multiply(
-        CanvasKit.SkM44.rotated([0,1,0], ry),
-        CanvasKit.SkM44.rotated([1,0,0], rx),
-        CanvasKit.SkM44.translated([0, 0, scale]));
+      return CanvasKit.M44.multiply(
+        CanvasKit.M44.rotated([0,1,0], ry),
+        CanvasKit.M44.rotated([1,0,0], rx),
+        CanvasKit.M44.translated([0, 0, scale]));
     }
 
     const faceScale = vSphereRadius/2
@@ -607,9 +581,9 @@
     // that face is currently in front.
     function front(m) {
       // Is this invertible?
-      var m2 = CanvasKit.SkM44.invert(m);
+      var m2 = CanvasKit.M44.invert(m);
       if (m2 === null) {
-        m2 = CanvasKit.SkM44.identity();
+        m2 = CanvasKit.M44.identity();
       }
       // look at the sign of the z-scale of the inverse of m.
       // that's the number in row 2, col 2.
@@ -618,13 +592,13 @@
 
     function setClickToWorld(canvas, matrix) {
       const l2d = canvas.getLocalToDevice();
-      worldToClick = CanvasKit.SkM44.multiply(mustInvert(matrix), l2d);
-      clickToWorld = mustInvert(worldToClick);
+      worldToClick = CanvasKit.M44.multiply(CanvasKit.M44.mustInvert(matrix), l2d);
+      clickToWorld = CanvasKit.M44.mustInvert(worldToClick);
     }
 
     function drawCubeFace(canvas, m, color) {
-      const trans = new CanvasKit.SkM44.translated([vSphereRadius/2, vSphereRadius/2, 0]);
-      canvas.concat(CanvasKit.SkM44.multiply(trans, m, mustInvert(trans)));
+      const trans = new CanvasKit.M44.translated([vSphereRadius/2, vSphereRadius/2, 0]);
+      canvas.concat(CanvasKit.M44.multiply(trans, m, CanvasKit.M44.mustInvert(trans)));
       const znormal = front(canvas.getLocalToDevice());
       if (znormal < 0) {
         return; // skip faces facing backwards
@@ -632,7 +606,7 @@
       // Pad with space for two 4x4 matrices. Even though the shader uses a layout()
       // statement to populate them, we still have to reserve space for them.
       const uniforms = [...lightWorldPos, ...Array(32).fill(0)];
-      const paint = new CanvasKit.SkPaint();
+      const paint = new CanvasKit.Paint();
       paint.setAntiAlias(true);
       const shader = fact.makeShaderWithChildren(uniforms, true /*=opaque*/, children);
       paint.setShader(shader);
@@ -645,19 +619,22 @@
       canvas.save();
       canvas.translate(vSphereCenter[0] - vSphereRadius/2, vSphereCenter[1] - vSphereRadius/2);
       // pass surface dimensions as viewport size.
-      saveCamera(canvas, CanvasKit.LTRBRect(0, 0, vSphereRadius, vSphereRadius), vSphereRadius/2, cam);
+      canvas.concat(CanvasKit.M44.setupCamera(
+        CanvasKit.LTRBRect(0, 0, vSphereRadius, vSphereRadius), vSphereRadius/2, cam));
+      // Mark the matrix to make it available to the shader by this name.
+      canvas.markCTM('local_to_world');
       setClickToWorld(canvas, clickM);
       for (let f of faces) {
         const saveCount = canvas.getSaveCount();
         canvas.save();
-        drawCubeFace(canvas, CanvasKit.SkM44.multiply(clickRotation, rotation, f.matrix), f.color);
+        drawCubeFace(canvas, CanvasKit.M44.multiply(clickRotation, rotation, f.matrix), f.color);
         canvas.restoreToCount(saveCount);
       }
       canvas.restore();  // camera
       canvas.restore();  // center the following content in the window
 
       // draw virtual sphere outline.
-      const paint = new CanvasKit.SkPaint();
+      const paint = new CanvasKit.Paint();
       paint.setAntiAlias(true);
       paint.setStyle(CanvasKit.PaintStyle.Stroke);
       paint.setColor(CanvasKit.Color(64, 255, 0, 1.0));
@@ -675,12 +652,12 @@
     // of a hemisphere.
     function vSphereUnitV3(p) {
       // v = (v - fCenter) * (1 / fRadius);
-      let v = CanvasKit.SkVector.mulScalar(CanvasKit.SkVector.sub(p, vSphereCenter), 1/vSphereRadius);
+      let v = CanvasKit.Vector.mulScalar(CanvasKit.Vector.sub(p, vSphereCenter), 1/vSphereRadius);
 
       // constrain the clicked point within the circle.
-      let len2 = CanvasKit.SkVector.lengthSquared(v);
+      let len2 = CanvasKit.Vector.lengthSquared(v);
       if (len2 > 1) {
-          v = CanvasKit.SkVector.normalize(v);
+          v = CanvasKit.Vector.normalize(v);
           len2 = 1;
       }
       // the closer to the edge of the circle you are, the closer z is to zero.
@@ -693,14 +670,14 @@
       const u = vSphereUnitV3(start);
       const v = vSphereUnitV3(end);
       // Axis is in the scope of the Camera3D function so it can be used in keepSpinning.
-      axis = CanvasKit.SkVector.cross(u, v);
-      const sinValue = CanvasKit.SkVector.length(axis);
-      const cosValue = CanvasKit.SkVector.dot(u, v);
+      axis = CanvasKit.Vector.cross(u, v);
+      const sinValue = CanvasKit.Vector.length(axis);
+      const cosValue = CanvasKit.Vector.dot(u, v);
 
-      let m = new CanvasKit.SkM44.identity();
+      let m = new CanvasKit.M44.identity();
       if (Math.abs(sinValue) > 0.000000001) {
-          m = CanvasKit.SkM44.rotatedUnitSinCos(
-            CanvasKit.SkVector.mulScalar(axis, 1/sinValue), sinValue, cosValue);
+          m = CanvasKit.M44.rotatedUnitSinCos(
+            CanvasKit.Vector.mulScalar(axis, 1/sinValue), sinValue, cosValue);
           const radians = Math.atan(cosValue / sinValue);
           spinRate = lastRadians - radians;
           lastRadians = radians;
@@ -710,7 +687,7 @@
 
     function keepSpinning() {
       totalSpin += spinRate;
-      clickRotation = CanvasKit.SkM44.rotated(axis, totalSpin);
+      clickRotation = CanvasKit.M44.rotated(axis, totalSpin);
       spinRate *= .998;
       if (spinRate < 0.01) {
         stopSpinning();
@@ -720,8 +697,8 @@
 
     function stopSpinning() {
         clearInterval(spinning);
-        rotation = CanvasKit.SkM44.multiply(clickRotation, rotation);
-        clickRotation = CanvasKit.SkM44.identity();
+        rotation = CanvasKit.M44.multiply(clickRotation, rotation);
+        clickRotation = CanvasKit.M44.identity();
     }
 
     function interact(e) {
@@ -752,7 +729,7 @@
         }
       } else if (type === 'pointerdown') {
         // Are we repositioning the light?
-        if (CanvasKit.SkVector.dist(eventPos, lightLocation) < lightIconRadius) {
+        if (CanvasKit.Vector.dist(eventPos, lightLocation) < lightIconRadius) {
           draggingLight = true;
           return;
         }
@@ -803,7 +780,7 @@
 
     let lastImage = null;
 
-    const fontMgr = CanvasKit.SkFontMgr.FromData([robotoData]);
+    const fontMgr = CanvasKit.FontMgr.FromData([robotoData]);
 
     const paraStyle = new CanvasKit.ParagraphStyle({
         textStyle: {
@@ -830,7 +807,7 @@
     const builder = CanvasKit.ParagraphBuilder.Make(paraStyle, fontMgr);
     builder.addText(text);
     const paragraph = builder.build();
-    const font = new CanvasKit.SkFont(null, 18);
+    const font = new CanvasKit.Font(null, 18);
     // wrap the text to a given width.
     paragraph.layout(sizeX - margin*2);
 
@@ -857,21 +834,22 @@
       // then covering with semitransparent background color.
       if (lastImage) {
         canvas.drawImage(lastImage, 0, 0, null);
-        canvas.drawColor(CanvasKit.Color(171, 244, 255, 0.1)); // sky blue, almost transparent 
+        canvas.drawColor(CanvasKit.Color(171, 244, 255, 0.1)); // sky blue, almost transparent
       } else {
         canvas.clear(CanvasKit.Color(171, 244, 255)); // sky blue, opaque
       }
       canvas.save();
       // Set up 3D view enviroment
-      saveCamera(canvas, CanvasKit.LTRBRect(0, 0, sizeX, sizeY), halfDim, cam);
+      canvas.concat(CanvasKit.M44.setupCamera(
+        CanvasKit.LTRBRect(0, 0, sizeX, sizeY), halfDim, cam));
 
       // Rotate the whole paragraph as a unit.
       const paraRotPoint = [halfDim, halfDim, 1];
-      canvas.concat(CanvasKit.SkM44.multiply(
-        CanvasKit.SkM44.translated(paraRotPoint),
-        CanvasKit.SkM44.rotated([0,1,0], rotX),
-        CanvasKit.SkM44.rotated([1,0,0], rotY * 0.2),
-        CanvasKit.SkM44.translated(CanvasKit.SkVector.mulScalar(paraRotPoint, -1)),
+      canvas.concat(CanvasKit.M44.multiply(
+        CanvasKit.M44.translated(paraRotPoint),
+        CanvasKit.M44.rotated([0,1,0], rotX),
+        CanvasKit.M44.rotated([1,0,0], rotY * 0.2),
+        CanvasKit.M44.translated(CanvasKit.Vector.mulScalar(paraRotPoint, -1)),
       ));
 
       // Rotate every glyph in the paragraph individually.
@@ -881,22 +859,22 @@
         let r = letter['r'];
         // rotate about the center of the glyph's rect.
         rotationPoint = [
-          margin + r.fLeft + (r.fRight - r.fLeft) / 2,
-          marginTop + r.fTop + (r.fBottom - r.fTop) / 2,
+          margin + r[rectLeft] + (r[rectRight] - r[rectLeft]) / 2,
+          marginTop + r[rectTop] + (r[rectBottom] - r[rectTop]) / 2,
           0
         ];
-        distanceFromPointer = CanvasKit.SkVector.dist(pointer, rotationPoint.slice(0, 2));
+        distanceFromPointer = CanvasKit.Vector.dist(pointer, rotationPoint.slice(0, 2));
         // Rotate more around the Y-axis depending on the glyph's distance from the pointer.
-        canvas.concat(CanvasKit.SkM44.multiply(
-          CanvasKit.SkM44.translated(rotationPoint),
+        canvas.concat(CanvasKit.M44.multiply(
+          CanvasKit.M44.translated(rotationPoint),
           // note that I'm rotating around the x axis first, undoing some of the rotation done to the whole
           // paragraph above, where x came second. If I rotated y first, a lot of letters would end up
           // upside down, which is a bit too hard to unscramble.
-          CanvasKit.SkM44.rotated([1,0,0], rotY * -0.6),
-          CanvasKit.SkM44.rotated([0,1,0], distanceFromPointer * -0.035),
-          CanvasKit.SkM44.translated(CanvasKit.SkVector.mulScalar(rotationPoint, -1)),
+          CanvasKit.M44.rotated([1,0,0], rotY * -0.6),
+          CanvasKit.M44.rotated([0,1,0], distanceFromPointer * -0.035),
+          CanvasKit.M44.translated(CanvasKit.Vector.mulScalar(rotationPoint, -1)),
         ));
-        canvas.drawParagraph(letter['para'], margin + r.fLeft, marginTop + r.fTop);
+        canvas.drawParagraph(letter['para'], margin + r[rectLeft], marginTop + r[rectTop]);
         i++;
         canvas.restore();
       }
@@ -916,7 +894,7 @@
   }
 
   function ColorSupport(CanvasKit) {
-    const surface = CanvasKit.MakeCanvasSurface('colorsupport', CanvasKit.SkColorSpace.ADOBE_RGB);
+    const surface = CanvasKit.MakeCanvasSurface('colorsupport', CanvasKit.ColorSpace.ADOBE_RGB);
     if (!surface) {
       console.error('Could not make surface');
       return;
@@ -929,13 +907,13 @@
     // Even if the monitor it is viewed on cannot accurately represent that color space.
 
     let red = CanvasKit.Color4f(1, 0, 0, 1);
-    let paint = new CanvasKit.SkPaint();
-    paint.setColor(red, CanvasKit.SkColorSpace.ADOBE_RGB);
+    let paint = new CanvasKit.Paint();
+    paint.setColor(red, CanvasKit.ColorSpace.ADOBE_RGB);
     canvas.drawPaint(paint);
-    paint.setColor(red, CanvasKit.SkColorSpace.DISPLAY_P3);
-    canvas.drawRoundRect(CanvasKit.LTRBRect(50, 50, 250, 250), 30, 30, paint);
-    paint.setColor(red, CanvasKit.SkColorSpace.SRGB);
-    canvas.drawRoundRect(CanvasKit.LTRBRect(100, 100, 200, 200), 30, 30, paint);
+    paint.setColor(red, CanvasKit.ColorSpace.DISPLAY_P3);
+    canvas.drawRRect(CanvasKit.RRectXY([50, 50, 250, 250], 30, 30), paint);
+    paint.setColor(red, CanvasKit.ColorSpace.SRGB);
+    canvas.drawRRect(CanvasKit.RRectXY([100, 100, 200, 200], 30, 30), paint);
 
     surface.flush();
     surface.delete();

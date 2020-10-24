@@ -4,5 +4,10 @@ ts_library("test_setup") {
   testonly = true
   sources = [ "test_setup.ts" ]
 
-  deps = [ "../helpers" ]
+  deps = [
+    "../../../../front_end/common:bundle",
+    "../../../../front_end/component_helpers:bundle",
+    "../../../../front_end/theme_support:bundle",
+    "../helpers",
+  ]
 }

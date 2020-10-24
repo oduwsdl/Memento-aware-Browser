@@ -120,13 +120,13 @@ std::unique_ptr<NGExclusionShapeData> CreateExclusionShapeData(
     case CSSBoxType::kContent:
       const NGConstraintSpace space =
           CreateConstraintSpaceForFloat(unpositioned_float);
-      NGBoxStrut strut = ComputeBorders(space, style);
+      NGBoxStrut strut = ComputeBorders(space, unpositioned_float.node);
       if (style.ShapeOutside()->CssBox() == CSSBoxType::kContent)
         strut += ComputePadding(space, style);
-      shape_insets =
-          strut.ConvertToPhysical(style.GetWritingMode(), style.Direction())
-              .ConvertToLogical(parent_space.GetWritingMode(),
-                                TextDirection::kLtr);
+      // |TextDirection::kLtr| is used as this is line relative.
+      shape_insets = strut.ConvertToPhysical(style.GetWritingDirection())
+                         .ConvertToLogical({parent_space.GetWritingMode(),
+                                            TextDirection::kLtr});
       break;
   }
 
@@ -187,7 +187,8 @@ LayoutUnit ComputeMarginBoxInlineSizeForUnpositionedFloat(
 
   const NGConstraintSpace& parent_space = unpositioned_float->parent_space;
 
-  return (NGFragment(parent_space.GetWritingMode(), fragment).InlineSize() +
+  return (NGFragment(parent_space.GetWritingDirection(), fragment)
+              .InlineSize() +
           unpositioned_float->margins.InlineSum())
       .ClampNegativeToZero();
 }
@@ -215,7 +216,7 @@ NGPositionedFloat PositionFloat(NGUnpositionedFloat* unpositioned_float,
     layout_result = unpositioned_float->layout_result;
     fragment_margins = unpositioned_float->margins;
 
-    NGFragment float_fragment(parent_space.GetWritingMode(),
+    NGFragment float_fragment(parent_space.GetWritingDirection(),
                               layout_result->PhysicalFragment());
 
     // Find a layout opportunity that will fit our float.
@@ -225,26 +226,37 @@ NGPositionedFloat PositionFloat(NGUnpositionedFloat* unpositioned_float,
   } else {
     fragment_margins = ComputeMarginsFor(
         node.Style(), unpositioned_float->percentage_size.inline_size,
-        parent_space.GetWritingMode(), parent_space.Direction());
-    AdjustForFragmentation(unpositioned_float->token.get(), &fragment_margins);
+        parent_space.GetWritingDirection());
+    AdjustMarginsForFragmentation(unpositioned_float->token.get(),
+                                  &fragment_margins);
 
     // When fragmenting, we need to set the block-offset of the node before
     // laying it out. This is a float, and in order to calculate its offset, we
     // first need to know its inline-size.
 
-    // TODO(crbug.com/915929): In some cases the inline-size of the float is
-    // already known at this point, and then we should be able to set the
-    // correct layout opportunity right away, i.e. no need for optimistic
-    // placement. However, this only happens in inline formatting contexts, and
-    // we don't support fragmenting floats in inline formatting contexts yet.
-    bool optimistically_placed = true;
-
-    // We'll estimate the offset to be the one we'd get if the float isn't
-    // affected by any other floats in the block formatting context. If this
-    // turns out to be wrong, we'll need to lay out again.
-    LayoutUnit fragmentainer_delta =
-        unpositioned_float->origin_bfc_offset.block_offset +
-        fragment_margins.block_start;
+    LayoutUnit fragmentainer_delta;
+    bool optimistically_placed = false;
+    if (unpositioned_float->layout_result) {
+      // We have already laid out the float to find its inline-size.
+      NGFragment float_fragment(
+          parent_space.GetWritingDirection(),
+          unpositioned_float->layout_result->PhysicalFragment());
+      // We can find a layout opportunity and set the fragmentainer offset right
+      // away.
+      opportunity = FindLayoutOpportunityForFloat(
+          *unpositioned_float, *exclusion_space, fragment_margins,
+          float_fragment.InlineSize());
+      fragmentainer_delta = opportunity.rect.start_offset.block_offset +
+                            fragment_margins.block_start;
+    } else {
+      // If we don't know the inline-size yet, we'll estimate the offset to be
+      // the one we'd get if the float isn't affected by any other floats in the
+      // block formatting context. If this turns out to be wrong, we'll need to
+      // lay out again.
+      fragmentainer_delta = unpositioned_float->origin_bfc_offset.block_offset +
+                            fragment_margins.block_start;
+      optimistically_placed = true;
+    }
 
     do {
       NGConstraintSpace space = CreateConstraintSpaceForFloat(
@@ -256,7 +268,7 @@ NGPositionedFloat PositionFloat(NGUnpositionedFloat* unpositioned_float,
       if (!optimistically_placed)
         break;
 
-      NGFragment float_fragment(parent_space.GetWritingMode(),
+      NGFragment float_fragment(parent_space.GetWritingDirection(),
                                 layout_result->PhysicalFragment());
 
       // Find a layout opportunity that will fit our float, and see if our
@@ -319,7 +331,7 @@ NGPositionedFloat PositionFloat(NGUnpositionedFloat* unpositioned_float,
     }
   }
 
-  NGFragment float_fragment(parent_space.GetWritingMode(),
+  NGFragment float_fragment(parent_space.GetWritingDirection(),
                             layout_result->PhysicalFragment());
 
   // Calculate the float's margin box BFC offset.
@@ -340,7 +352,8 @@ NGPositionedFloat PositionFloat(NGUnpositionedFloat* unpositioned_float,
     // fragmentainer means that the in-flow block also needs to be pushed, while
     // if the in-flow block has clear:right, it may still be allowed in the
     // current fragmentainer).
-    NGBfcOffset past_everything(LayoutUnit(), LayoutUnit::Max());
+    NGBfcOffset past_everything(LayoutUnit(),
+                                FragmentainerSpaceAtBfcStart(parent_space));
     scoped_refptr<const NGExclusion> exclusion =
         NGExclusion::Create(NGBfcRect(past_everything, past_everything),
                             node.Style().Floating(parent_space.Direction()));

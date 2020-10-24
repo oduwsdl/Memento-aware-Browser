@@ -127,11 +127,10 @@ export class EditingLocationHistoryManager {
    * @param {!Workspace.UISourceCode.UISourceCode} uiSourceCode
    */
   removeHistoryForSourceCode(uiSourceCode) {
-    function filterOut(entry) {
-      return entry._projectId === uiSourceCode.project().id() && entry._url === uiSourceCode.url();
-    }
-
-    this._historyManager.filterOut(filterOut);
+    this._historyManager.filterOut(entry => {
+      const historyEntry = /** @type {!EditingLocationHistoryEntry} */ (entry);
+      return historyEntry._projectId === uiSourceCode.project().id() && historyEntry._url === uiSourceCode.url();
+    });
   }
 }
 

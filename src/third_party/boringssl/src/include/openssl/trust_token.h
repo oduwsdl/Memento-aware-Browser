@@ -36,14 +36,21 @@ extern "C" {
 //
 // WARNING: This API is unstable and subject to change.
 
-// TRUST_TOKEN_experiment_v0 is an experimental Trust Tokens protocol using
-// PMBTokens and P-521.
-OPENSSL_EXPORT const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v0(void);
-
 // TRUST_TOKEN_experiment_v1 is an experimental Trust Tokens protocol using
-// PMBTokens and P-384. This version is still under developement and should not
-// be used yet.
+// PMBTokens and P-384.
 OPENSSL_EXPORT const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v1(void);
+
+// TRUST_TOKEN_experiment_v2_voprf is an experimental Trust Tokens protocol
+// using VOPRFs and P-384 with up to 6 keys, without RR verification.
+//
+// This version is incomplete and should not be used.
+OPENSSL_EXPORT const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v2_voprf(void);
+
+// TRUST_TOKEN_experiment_v2_pmb is an experimental Trust Tokens protocol using
+// PMBTokens and P-384 with up to 3 keys, without RR verification.
+//
+// This version is incomplete and should not be used.
+OPENSSL_EXPORT const TRUST_TOKEN_METHOD *TRUST_TOKEN_experiment_v2_pmb(void);
 
 // trust_token_st represents a single-use token for the Trust Token protocol.
 // For the client, this is the token and its corresponding signature. For the
@@ -151,13 +158,15 @@ OPENSSL_EXPORT int TRUST_TOKEN_CLIENT_begin_redemption(
     const TRUST_TOKEN *token, const uint8_t *data, size_t data_len,
     uint64_t time);
 
-// TRUST_TOKEN_CLIENT_finish_redemption consumes |response| from the issuer and
-// verifies the SRR. If valid, it returns one and sets |*out_srr| and
-// |*out_srr_len| (respectively, |*out_sig| and |*out_sig_len|) to a
-// newly-allocated buffer containing the SRR (respectively, the SRR signature).
-// Otherwise, it returns zero.
+// TRUST_TOKEN_CLIENT_finish_redemption consumes |response| from the issuer. In
+// |TRUST_TOKEN_experiment_v1|, it then verifies the SRR and if valid  sets
+// |*out_rr| and |*out_rr_len| (respectively, |*out_sig| and |*out_sig_len|)
+// to a newly-allocated buffer containing the SRR (respectively, the SRR
+// signature). In other versions, it sets |*out_rr| and |*out_rr_len|
+// to a newly-allocated buffer containing |response| and leaves all validation
+// to the caller. It returns one on success or zero on failure.
 OPENSSL_EXPORT int TRUST_TOKEN_CLIENT_finish_redemption(
-    TRUST_TOKEN_CLIENT *ctx, uint8_t **out_srr, size_t *out_srr_len,
+    TRUST_TOKEN_CLIENT *ctx, uint8_t **out_rr, size_t *out_rr_len,
     uint8_t **out_sig, size_t *out_sig_len, const uint8_t *response,
     size_t response_len);
 
@@ -234,9 +243,6 @@ OPENSSL_EXPORT int TRUST_TOKEN_ISSUER_issue(
 // returning the SRR to the client. If the value has been reused, the caller
 // must discard the SRR and report an error to the caller. Returning an SRR with
 // replayed values allows an attacker to double-spend tokens.
-//
-// The private metadata construction in |TRUST_TOKEN_experiment_v0| does not
-// keep the value secret and should not be used when secrecy is required.
 OPENSSL_EXPORT int TRUST_TOKEN_ISSUER_redeem(
     const TRUST_TOKEN_ISSUER *ctx, uint8_t **out, size_t *out_len,
     TRUST_TOKEN **out_token, uint8_t **out_client_data,
@@ -246,7 +252,6 @@ OPENSSL_EXPORT int TRUST_TOKEN_ISSUER_redeem(
 // TRUST_TOKEN_decode_private_metadata decodes |encrypted_bit| using the
 // private metadata key specified by a |key| buffer of length |key_len| and the
 // nonce by a |nonce| buffer of length |nonce_len|. The nonce in
-// |TRUST_TOKEN_experiment_v0| is the client-data field of the SRR. The nonce in
 // |TRUST_TOKEN_experiment_v1| is the token-hash field of the SRR. |*out_value|
 // is set to the decrypted value, either zero or one. It returns one on success
 // and zero on error.

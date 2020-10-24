@@ -39,6 +39,7 @@ import * as PerfUI from '../perf_ui/perf_ui.js';
 import * as Platform from '../platform/platform.js';
 import * as SDK from '../sdk/sdk.js';
 import * as TextUtils from '../text_utils/text_utils.js';
+import * as ThemeSupport from '../theme_support/theme_support.js';
 import * as UI from '../ui/ui.js';
 
 import {HARWriter} from './HARWriter.js';
@@ -55,7 +56,7 @@ export class NetworkLogView extends UI.Widget.VBox {
   /**
    * @param {!UI.FilterBar.FilterBar} filterBar
    * @param {!Element} progressBarContainer
-   * @param {!Common.Settings.Setting} networkLogLargeRowsSetting
+   * @param {!Common.Settings.Setting<number>} networkLogLargeRowsSetting
    */
   constructor(filterBar, progressBarContainer, networkLogLargeRowsSetting) {
     super();
@@ -105,6 +106,7 @@ export class NetworkLogView extends UI.Widget.VBox {
     this._mainRequestLoadTime = -1;
     /** @type {number} */
     this._mainRequestDOMContentLoadedTime = -1;
+    /** @type {*} */
     this._highlightedSubstringChanges = [];
 
     /** @type {!Array.<!Filter>} */
@@ -120,7 +122,7 @@ export class NetworkLogView extends UI.Widget.VBox {
     /** @type {?NetworkRequestNode} */
     this._highlightedNode = null;
 
-    this.linkifier = new Components.Linkifier.Linkifier();
+    this._linkifier = new Components.Linkifier.Linkifier();
 
     this._recording = false;
     this._needsRefresh = false;
@@ -205,6 +207,11 @@ export class NetworkLogView extends UI.Widget.VBox {
         .addChangeListener(() => this._updateGroupByFrame());
 
     this._filterBar = filterBar;
+
+    this._textFilterSetting = Common.Settings.Settings.instance().createSetting('networkTextFilter', '');
+    if (this._textFilterSetting.get()) {
+      this.setTextFilterValue(this._textFilterSetting.get());
+    }
   }
 
   _updateGroupByFrame() {
@@ -480,6 +487,26 @@ export class NetworkLogView extends UI.Widget.VBox {
     return request.parsedURL.isValid && (request.scheme in HTTPSchemas);
   }
 
+
+  /**
+   * @param {string} value
+   * @param {!SDK.NetworkRequest.NetworkRequest} request
+   * @return {boolean}
+   */
+  static _resourceTypeFilter(value, request) {
+    return request.resourceType().name() === value;
+  }
+
+  /**
+   * @param {string} value
+   * @param {!SDK.NetworkRequest.NetworkRequest} request
+   * @return {boolean}
+   */
+  static _requestUrlFilter(value, request) {
+    const regex = new RegExp(value.escapeForRegExp(), 'i');
+    return regex.test(request.url());
+  }
+
   /**
    * @param {number} windowStart
    * @param {number} windowEnd
@@ -515,10 +542,11 @@ export class NetworkLogView extends UI.Widget.VBox {
    */
   static async _copyResponse(request) {
     const contentData = await request.contentData();
+    /** @type {?string} */
     let content = contentData.content || '';
     if (!request.contentType().isTextType()) {
       content = TextUtils.ContentProvider.contentAsDataURL(content, request.mimeType, contentData.encoded);
-    } else if (contentData.encoded) {
+    } else if (contentData.encoded && content) {
       content = window.atob(content);
     }
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(content);
@@ -549,7 +577,10 @@ export class NetworkLogView extends UI.Widget.VBox {
     const reader = new Bindings.FileUtils.ChunkedFileReader(file, /* chunkSize */ 10000000);
     const success = await reader.read(outputStream);
     if (!success) {
-      this._harLoadFailed(reader.error().message);
+      const error = reader.error();
+      if (error) {
+        this._harLoadFailed(/** @type {*} */ (error).message);
+      }
       return;
     }
     let harRoot;
@@ -596,7 +627,7 @@ export class NetworkLogView extends UI.Widget.VBox {
    * @return {?NetworkRequestNode}
    */
   nodeForRequest(request) {
-    return request[_networkNodeSymbol] || null;
+    return networkRequestToNode.get(request) || null;
   }
 
   /**
@@ -650,6 +681,14 @@ export class NetworkLogView extends UI.Widget.VBox {
 
   /**
    * @override
+   * @return {!Components.Linkifier.Linkifier}
+   */
+  linkifier() {
+    return this._linkifier;
+  }
+
+  /**
+   * @override
    * @param {number} start
    * @param {number} end
    */
@@ -688,6 +727,7 @@ export class NetworkLogView extends UI.Widget.VBox {
     this.removeAllNodeHighlights();
     this._parseFilterQuery(this._textFilterUI.value());
     this._filterRequests();
+    this._textFilterSetting.set(this._textFilterUI.value());
   }
 
   async resetFilter() {
@@ -700,7 +740,8 @@ export class NetworkLogView extends UI.Widget.VBox {
     const hintText = this._recordingHint.createChild('div', 'recording-hint');
 
     let reloadShortcutNode = null;
-    const reloadShortcut = self.UI.shortcutRegistry.shortcutsForAction('inspector_main.reload')[0];
+    const reloadShortcut =
+        UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutsForAction('inspector_main.reload')[0];
     if (reloadShortcut) {
       reloadShortcutNode = this._recordingHint.createChild('b');
       reloadShortcutNode.textContent = reloadShortcut.title();
@@ -716,7 +757,8 @@ export class NetworkLogView extends UI.Widget.VBox {
       }
     } else {
       const recordNode = hintText.createChild('b');
-      recordNode.textContent = self.UI.shortcutRegistry.shortcutTitleForAction('network.toggle-recording');
+      recordNode.textContent =
+          UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutTitleForAction('network.toggle-recording') || '';
       if (reloadShortcutNode) {
         hintText.appendChild(UI.UIUtils.formatLocalized(
             'Record (%s) or reload (%s) to display network activity.', [recordNode, reloadShortcutNode]));
@@ -727,7 +769,7 @@ export class NetworkLogView extends UI.Widget.VBox {
     hintText.createChild('br');
     hintText.appendChild(UI.XLink.XLink.create(
         'https://developers.google.com/web/tools/chrome-devtools/network/?utm_source=devtools&utm_campaign=2019Q1',
-        'Learn more'));
+        ls`Learn more`));
 
     this._setHidden(true);
     this._dataGrid.updateGridAccessibleName('');
@@ -769,7 +811,7 @@ export class NetworkLogView extends UI.Widget.VBox {
 
   _setupDataGrid() {
     this._dataGrid.setRowContextMenuCallback((contextMenu, node) => {
-      const request = node.request();
+      const request = (/** @type {!NetworkNode} */ (node)).request();
       if (request) {
         this.handleContextMenuForRequest(contextMenu, request);
       }
@@ -783,7 +825,7 @@ export class NetworkLogView extends UI.Widget.VBox {
     this._dataGrid.element.addEventListener('mouseleave', () => this._setHoveredNode(null), true);
     this._dataGrid.element.addEventListener('keydown', event => {
       if (isEnterOrSpaceKey(event)) {
-        this.dispatchEventToListeners(Events.RequestActivated, {showPanel: true});
+        this.dispatchEventToListeners(Events.RequestActivated, {showPanel: true, takeFocus: true});
         event.consume(true);
       }
     });
@@ -796,8 +838,10 @@ export class NetworkLogView extends UI.Widget.VBox {
    * @param {!Event} event
    */
   _dataGridMouseMove(event) {
-    const node = (this._dataGrid.dataGridNodeFromNode(/** @type {!Node} */ (event.target)));
-    const highlightInitiatorChain = event.shiftKey;
+    const mouseEvent = /** @type {!MouseEvent} */ (event);
+    const node =
+        /** @type {!NetworkNode} */ (this._dataGrid.dataGridNodeFromNode(/** @type {!Node} */ (mouseEvent.target)));
+    const highlightInitiatorChain = mouseEvent.shiftKey;
     this._setHoveredNode(node, highlightInitiatorChain);
   }
 
@@ -827,8 +871,9 @@ export class NetworkLogView extends UI.Widget.VBox {
    * @param {!Event} event
    */
   _dataGridMouseDown(event) {
-    if (!this._dataGrid.selectedNode && event.button) {
-      event.consume();
+    const mouseEvent = /** @type {!MouseEvent} */ (event);
+    if (!this._dataGrid.selectedNode && mouseEvent.button) {
+      mouseEvent.consume();
     }
   }
 
@@ -845,7 +890,7 @@ export class NetworkLogView extends UI.Widget.VBox {
 
     let nodeCount = 0;
     for (const request of SDK.NetworkLog.NetworkLog.instance().requests()) {
-      const node = request[_networkNodeSymbol];
+      const node = networkRequestToNode.get(request);
       if (!node) {
         continue;
       }
@@ -854,7 +899,7 @@ export class NetworkLogView extends UI.Widget.VBox {
       transferSize += requestTransferSize;
       const requestResourceSize = request.resourceSize;
       resourceSize += requestResourceSize;
-      if (!node[isFilteredOutSymbol]) {
+      if (!filteredNetworkRequests.has(node)) {
         selectedNodeNumber++;
         selectedTransferSize += requestTransferSize;
         selectedResourceSize += requestResourceSize;
@@ -881,13 +926,13 @@ export class NetworkLogView extends UI.Widget.VBox {
     /**
      * @param {string} chunk
      * @param {string=} title
-     * @return {!Element}
+     * @return {!HTMLDivElement}
      */
     const appendChunk = (chunk, title) => {
       const toolbarText = new UI.Toolbar.ToolbarText(chunk);
       toolbarText.setTitle(title ? title : chunk);
       this._summaryToolbar.appendToolbarItem(toolbarText);
-      return toolbarText.element;
+      return /** @type {!HTMLDivElement} */ (toolbarText.element);
     };
 
     if (selectedNodeNumber !== nodeCount) {
@@ -1079,11 +1124,15 @@ export class NetworkLogView extends UI.Widget.VBox {
    * @return {!Array<!NetworkNode>}
    */
   flatNodesList() {
-    return this._dataGrid.rootNode().flatChildren();
+    /** @type {!DataGrid.ViewportDataGrid.ViewportDataGridNode<!DataGrid.SortableDataGrid.SortableDataGridNode<!NetworkNode>>} */
+    const rootNode = (this._dataGrid.rootNode());
+    return /** @type {!Array<!NetworkNode>} */ (rootNode.flatChildren());
   }
 
   _onDataGridFocus() {
-    this.element.classList.add('grid-focused');
+    if (this._dataGrid.element.matches(':focus-visible')) {
+      this.element.classList.add('grid-focused');
+    }
     this.updateNodeBackground();
   }
 
@@ -1095,7 +1144,7 @@ export class NetworkLogView extends UI.Widget.VBox {
   /** @override */
   updateNodeBackground() {
     if (this._dataGrid.selectedNode) {
-      this._dataGrid.selectedNode.updateBackgroundColor();
+      (/** @type {!NetworkNode} */ (this._dataGrid.selectedNode)).updateBackgroundColor();
     }
   }
 
@@ -1131,7 +1180,7 @@ export class NetworkLogView extends UI.Widget.VBox {
     this._timeCalculator.updateBoundariesForEventTime(this._mainRequestDOMContentLoadedTime);
     this._durationCalculator.updateBoundariesForEventTime(this._mainRequestDOMContentLoadedTime);
 
-    /** @type {!Map<!NetworkNode, !Network.NetworkNode>} */
+    /** @type {!Map<!NetworkNode, !NetworkNode>} */
     const nodesToInsert = new Map();
     /** @type {!Array<!NetworkNode>} */
     const nodesToRefresh = [];
@@ -1142,9 +1191,9 @@ export class NetworkLogView extends UI.Widget.VBox {
     // While creating nodes it may add more entries into _staleRequests because redirect request nodes update the parent
     // node so we loop until we have no more stale requests.
     while (this._staleRequests.size) {
-      const request = this._staleRequests.firstValue();
+      const request = this._staleRequests.values().next().value;
       this._staleRequests.delete(request);
-      let node = request[_networkNodeSymbol];
+      let node = networkRequestToNode.get(request);
       if (!node) {
         node = this._createNodeForRequest(request);
       }
@@ -1164,16 +1213,24 @@ export class NetworkLogView extends UI.Widget.VBox {
       this._timeCalculator.updateBoundaries(request);
       this._durationCalculator.updateBoundaries(request);
       const newParent = this._parentNodeForInsert(node);
-      if (node[isFilteredOutSymbol] === isFilteredOut && node.parent === newParent) {
+      const wasAlreadyFiltered = filteredNetworkRequests.has(node);
+      if (wasAlreadyFiltered === isFilteredOut && node.parent === newParent) {
         continue;
       }
-      node[isFilteredOutSymbol] = isFilteredOut;
+      if (isFilteredOut) {
+        filteredNetworkRequests.add(node);
+      } else {
+        filteredNetworkRequests.delete(node);
+      }
       const removeFromParent = node.parent && (isFilteredOut || node.parent !== newParent);
       if (removeFromParent) {
         let parent = node.parent;
+        if (!parent) {
+          continue;
+        }
         parent.removeChild(node);
         while (parent && !parent.hasChildren() && parent.dataGrid && parent.dataGrid.rootNode() !== parent) {
-          const grandparent = parent.parent;
+          const grandparent = /** @type {!NetworkNode} */ (parent.parent);
           grandparent.removeChild(parent);
           parent = grandparent;
         }
@@ -1184,14 +1241,14 @@ export class NetworkLogView extends UI.Widget.VBox {
       }
 
       if (!newParent.dataGrid && !nodesToInsert.has(newParent)) {
-        nodesToInsert.set(newParent, this._dataGrid.rootNode());
+        nodesToInsert.set(newParent, /** @type {!NetworkNode} */ (this._dataGrid.rootNode()));
         nodesToRefresh.push(newParent);
       }
       nodesToInsert.set(node, newParent);
     }
 
     for (const node of nodesToInsert.keys()) {
-      nodesToInsert.get(node).appendChild(node);
+      /** @type {!NetworkNode} */ (nodesToInsert.get(node)).appendChild(node);
     }
 
     for (const node of nodesToRefresh) {
@@ -1217,12 +1274,12 @@ export class NetworkLogView extends UI.Widget.VBox {
    */
   _parentNodeForInsert(node) {
     if (!this._activeGroupLookup) {
-      return this._dataGrid.rootNode();
+      return /** @type {!NetworkNode} */ (this._dataGrid.rootNode());
     }
 
     const groupNode = this._activeGroupLookup.groupNodeForRequest(node.request());
     if (!groupNode) {
-      return this._dataGrid.rootNode();
+      return /** @type {!NetworkNode} */ (this._dataGrid.rootNode());
     }
     return groupNode;
   }
@@ -1237,7 +1294,7 @@ export class NetworkLogView extends UI.Widget.VBox {
     this._calculator.reset();
 
     this._timeCalculator.setWindow(null);
-    this.linkifier.reset();
+    this._linkifier.reset();
 
     if (this._activeGroupLookup) {
       this._activeGroupLookup.reset();
@@ -1271,8 +1328,8 @@ export class NetworkLogView extends UI.Widget.VBox {
    */
   _createNodeForRequest(request) {
     const node = new NetworkRequestNode(this, request);
-    request[_networkNodeSymbol] = node;
-    node[isFilteredOutSymbol] = true;
+    networkRequestToNode.set(request, node);
+    filteredNetworkRequests.add(node);
 
     for (let redirect = request.redirectSource(); redirect; redirect = redirect.redirectSource()) {
       this._refreshRequest(redirect);
@@ -1298,6 +1355,8 @@ export class NetworkLogView extends UI.Widget.VBox {
     this._suggestionBuilder.addItem(FilterType.MimeType, request.mimeType);
     this._suggestionBuilder.addItem(FilterType.Scheme, '' + request.scheme);
     this._suggestionBuilder.addItem(FilterType.StatusCode, '' + request.statusCode);
+    this._suggestionBuilder.addItem(FilterType.ResourceType, request.resourceType().name());
+    this._suggestionBuilder.addItem(FilterType.Url, request.securityOrigin());
 
     const priority = request.priority();
     if (priority) {
@@ -1552,10 +1611,14 @@ export class NetworkLogView extends UI.Widget.VBox {
 
   /**
    * @override
-   * @return {!Promise}
+   * @return {!Promise<void>}
    */
   async exportAll() {
-    const url = SDK.SDKModel.TargetManager.instance().mainTarget().inspectedURL();
+    const mainTarget = SDK.SDKModel.TargetManager.instance().mainTarget();
+    if (!mainTarget) {
+      return;
+    }
+    const url = mainTarget.inspectedURL();
     const parsedURL = Common.ParsedURL.ParsedURL.fromString(url);
     const filename = parsedURL ? parsedURL.host : 'network-log';
     const stream = new Bindings.FileUtils.FileOutputStream();
@@ -1718,6 +1781,12 @@ export class NetworkLogView extends UI.Widget.VBox {
 
       case FilterType.StatusCode:
         return NetworkLogView._statusCodeFilter.bind(null, value);
+
+      case FilterType.ResourceType:
+        return NetworkLogView._resourceTypeFilter.bind(null, value);
+
+      case FilterType.Url:
+        return NetworkLogView._requestUrlFilter.bind(null, value);
     }
     return null;
   }
@@ -1753,7 +1822,7 @@ export class NetworkLogView extends UI.Widget.VBox {
    */
   _reveal(request) {
     this.removeAllNodeHighlights();
-    const node = request[_networkNodeSymbol];
+    const node = networkRequestToNode.get(request);
     if (!node || !node.dataGrid) {
       return null;
     }
@@ -1821,61 +1890,63 @@ export class NetworkLogView extends UI.Widget.VBox {
    * @return {!Promise<string>}
    */
   async _generateFetchCall(request, includeCookies) {
-    const ignoredHeaders = {
+    const ignoredHeaders = new Set([
       // Internal headers
-      'method': 1,
-      'path': 1,
-      'scheme': 1,
-      'version': 1,
+      'method',
+      'path',
+      'scheme',
+      'version',
 
       // Unsafe headers
       // Keep this list synchronized with src/net/http/http_util.cc
-      'accept-charset': 1,
-      'accept-encoding': 1,
-      'access-control-request-headers': 1,
-      'access-control-request-method': 1,
-      'connection': 1,
-      'content-length': 1,
-      'cookie': 1,
-      'cookie2': 1,
-      'date': 1,
-      'dnt': 1,
-      'expect': 1,
-      'host': 1,
-      'keep-alive': 1,
-      'origin': 1,
-      'referer': 1,
-      'te': 1,
-      'trailer': 1,
-      'transfer-encoding': 1,
-      'upgrade': 1,
-      'via': 1,
+      'accept-charset',
+      'accept-encoding',
+      'access-control-request-headers',
+      'access-control-request-method',
+      'connection',
+      'content-length',
+      'cookie',
+      'cookie2',
+      'date',
+      'dnt',
+      'expect',
+      'host',
+      'keep-alive',
+      'origin',
+      'referer',
+      'te',
+      'trailer',
+      'transfer-encoding',
+      'upgrade',
+      'via',
       // TODO(phistuck) - remove this once crbug.com/571722 is fixed.
-      'user-agent': 1
-    };
+      'user-agent',
+    ]);
 
-    const credentialHeaders = {'cookie': 1, 'authorization': 1};
+    const credentialHeaders = new Set(['cookie', 'authorization']);
 
     const url = JSON.stringify(request.url());
 
     const requestHeaders = request.requestHeaders();
+    /** @type {!Headers} */
     const headerData = requestHeaders.reduce((result, header) => {
       const name = header.name;
 
-      if (!ignoredHeaders[name.toLowerCase()] && !name.includes(':')) {
+      if (!ignoredHeaders.has(name.toLowerCase()) && !name.includes(':')) {
         result.append(name, header.value);
       }
 
       return result;
     }, new Headers());
 
+    /** @type {!HeadersInit} */
     const headers = {};
     for (const headerArray of headerData) {
       headers[headerArray[0]] = headerArray[1];
     }
 
     const credentials = request.includedRequestCookies().length ||
-            requestHeaders.some(({name}) => credentialHeaders[name.toLowerCase()]) ?
+            requestHeaders.some(({name}) => credentialHeaders.has(name.toLowerCase())) ?
         'include' :
         'omit';
 
@@ -1887,13 +1958,14 @@ export class NetworkLogView extends UI.Widget.VBox {
 
     const requestBody = await request.requestFormData();
 
+    /** @type {!RequestInit} */
     const fetchOptions = {
       headers: Object.keys(headers).length ? headers : void 0,
       referrer,
       referrerPolicy,
       body: requestBody,
       method: request.requestMethod,
-      mode: 'cors'
+      mode: 'cors',
     };
 
     if (includeCookies) {
@@ -1933,8 +2005,11 @@ export class NetworkLogView extends UI.Widget.VBox {
     let command = [];
     // Most of these headers are derived from the URL and are automatically added by cURL.
     // The |Accept-Encoding| header is ignored to prevent decompression errors. crbug.com/1015321
-    const ignoredHeaders = {'accept-encoding': 1, 'host': 1, 'method': 1, 'path': 1, 'scheme': 1, 'version': 1};
+    const ignoredHeaders = new Set(['accept-encoding', 'host', 'method', 'path', 'scheme', 'version']);
 
+    /**
+     * @param {string} str
+     */
     function escapeStringWin(str) {
       /* If there are no new line characters do not escape the " characters
                since it only uglifies the command.
@@ -2022,11 +2097,11 @@ export class NetworkLogView extends UI.Widget.VBox {
       // Note that formData is not necessarily urlencoded because it might for example
       // come from a fetch request made with an explicitly unencoded body.
       data.push('--data-raw ' + escapeString(formData));
-      ignoredHeaders['content-length'] = true;
+      ignoredHeaders.add('content-length');
       inferredMethod = 'POST';
     } else if (formData) {
       data.push('--data-binary ' + escapeString(formData));
-      ignoredHeaders['content-length'] = true;
+      ignoredHeaders.add('content-length');
       inferredMethod = 'POST';
     }
 
@@ -2038,7 +2113,7 @@ export class NetworkLogView extends UI.Widget.VBox {
     for (let i = 0; i < requestHeaders.length; i++) {
       const header = requestHeaders[i];
       const name = header.name.replace(/^:/, '');  // Translate SPDY v3 headers to HTTP headers.
-      if (name.toLowerCase() in ignoredHeaders) {
+      if (ignoredHeaders.has(name.toLowerCase())) {
         continue;
       }
       command.push('-H ' + escapeString(name + ': ' + header.value));
@@ -2135,7 +2210,7 @@ export class NetworkLogView extends UI.Widget.VBox {
    * @return {string}
    */
   static getDCLEventColor() {
-    if (self.UI.themeSupport.themeName() === 'dark') {
+    if (ThemeSupport.ThemeSupport.instance().themeName() === 'dark') {
       return '#03A9F4';
     }
     return '#0867CB';
@@ -2145,12 +2220,23 @@ export class NetworkLogView extends UI.Widget.VBox {
    * @return {string}
    */
   static getLoadEventColor() {
-    return self.UI.themeSupport.patchColorText('#B31412', UI.UIUtils.ThemeSupport.ColorUsage.Foreground);
+    return ThemeSupport.ThemeSupport.instance().patchColorText(
+        '#B31412', ThemeSupport.ThemeSupport.ColorUsage.Foreground);
   }
 }
 
-export const isFilteredOutSymbol = Symbol('isFilteredOut');
-export const _networkNodeSymbol = Symbol('NetworkNode');
+/** @type {!WeakSet<!NetworkRequestNode>} */
+const filteredNetworkRequests = new WeakSet();
+/** @type {!WeakMap<!SDK.NetworkRequest.NetworkRequest, !NetworkRequestNode>} */
+const networkRequestToNode = new WeakMap();
+
+/**
+ * @param {!NetworkRequestNode} request
+ * @return {boolean}
+ */
+export function isRequestFilteredOut(request) {
+  return filteredNetworkRequests.has(request);
+}
 
 export const HTTPSchemas = {
   'http': true,
@@ -2173,11 +2259,13 @@ export const FilterType = {
   SetCookieDomain: 'set-cookie-domain',
   SetCookieName: 'set-cookie-name',
   SetCookieValue: 'set-cookie-value',
+  ResourceType: 'resource-type',
   CookieDomain: 'cookie-domain',
   CookieName: 'cookie-name',
   CookiePath: 'cookie-path',
   CookieValue: 'cookie-value',
-  StatusCode: 'status-code'
+  StatusCode: 'status-code',
+  Url: 'url'
 };
 
 /** @enum {string} */
@@ -2197,7 +2285,7 @@ export const IsFilterType = {
 };
 
 /** @type {!Array<string>} */
-export const _searchKeys = Object.keys(FilterType).map(key => FilterType[key]);
+export const _searchKeys = Object.values(FilterType);
 
 /**
  * @interface
@@ -2208,6 +2296,7 @@ export class GroupLookupInterface {
    * @return {?NetworkGroupNode}
    */
   groupNodeForRequest(request) {
+    throw new Error('Not implemented yet');
   }
 
   reset() {
@@ -2215,4 +2304,5 @@ export class GroupLookupInterface {
 }
 
 /** @typedef {function(!SDK.NetworkRequest.NetworkRequest): boolean} */
+// @ts-ignore typedef
 export let Filter;

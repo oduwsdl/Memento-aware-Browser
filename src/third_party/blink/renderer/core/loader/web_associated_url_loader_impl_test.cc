@@ -36,6 +36,7 @@
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -311,7 +312,7 @@ TEST_F(WebAssociatedURLLoaderTest, CrossOriginSuccess) {
   WebURLRequest request(url);
   // No-CORS requests (CrossOriginRequestPolicyAllow) aren't allowed for the
   // default context. So we set the context as Script here.
-  request.SetRequestContext(mojom::RequestContextType::SCRIPT);
+  request.SetRequestContext(mojom::blink::RequestContextType::SCRIPT);
   request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
 
   expected_response_ = WebURLResponse();
@@ -328,63 +329,6 @@ TEST_F(WebAssociatedURLLoaderTest, CrossOriginSuccess) {
   EXPECT_TRUE(did_receive_response_);
   EXPECT_TRUE(did_receive_data_);
   EXPECT_TRUE(did_finish_loading_);
-}
-
-// Test a successful cross-origin load using CORS.
-TEST_F(WebAssociatedURLLoaderTest, CrossOriginWithAccessControlSuccess) {
-  // This is cross-origin since the frame was loaded from www.test.com.
-  KURL url =
-      ToKURL("http://www.other.com/CrossOriginWithAccessControlSuccess.html");
-  WebURLRequest request(url);
-  request.SetMode(network::mojom::RequestMode::kCors);
-  request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
-
-  expected_response_ = WebURLResponse();
-  expected_response_.SetMimeType("text/html");
-  expected_response_.SetHttpStatusCode(200);
-  expected_response_.AddHttpHeaderField("access-control-allow-origin", "*");
-  RegisterMockedURLLoadWithCustomResponse(url, expected_response_,
-                                          frame_file_path_);
-
-  WebAssociatedURLLoaderOptions options;
-  expected_loader_ = CreateAssociatedURLLoader(options);
-  EXPECT_TRUE(expected_loader_);
-  expected_loader_->LoadAsynchronously(request, this);
-  ServeRequests();
-  EXPECT_TRUE(did_receive_response_);
-  EXPECT_TRUE(did_receive_data_);
-  EXPECT_TRUE(did_finish_loading_);
-}
-
-// Test an unsuccessful cross-origin load using CORS.
-TEST_F(WebAssociatedURLLoaderTest, CrossOriginWithAccessControlFailure) {
-  // This is cross-origin since the frame was loaded from www.test.com.
-  KURL url =
-      ToKURL("http://www.other.com/CrossOriginWithAccessControlFailure.html");
-  // Send credentials. This will cause the CORS checks to fail, because
-  // credentials can't be sent to a server which returns the header
-  // "access-control-allow-origin" with "*" as its value.
-  WebURLRequest request(url);
-  request.SetMode(network::mojom::RequestMode::kCors);
-
-  expected_response_ = WebURLResponse();
-  expected_response_.SetMimeType("text/html");
-  expected_response_.SetHttpStatusCode(200);
-  expected_response_.AddHttpHeaderField("access-control-allow-origin", "*");
-  RegisterMockedURLLoadWithCustomResponse(url, expected_response_,
-                                          frame_file_path_);
-
-  WebAssociatedURLLoaderOptions options;
-  expected_loader_ = CreateAssociatedURLLoader(options);
-  EXPECT_TRUE(expected_loader_);
-  expected_loader_->LoadAsynchronously(request, this);
-
-  // Failure should not be reported synchronously.
-  EXPECT_FALSE(did_fail_);
-  // The loader needs to receive the response, before doing the CORS check.
-  ServeRequests();
-  EXPECT_TRUE(did_fail_);
-  EXPECT_FALSE(did_receive_response_);
 }
 
 // Test a same-origin URL redirect and load.
@@ -457,48 +401,6 @@ TEST_F(WebAssociatedURLLoaderTest, RedirectCrossOriginFailure) {
   EXPECT_FALSE(did_receive_response_);
   EXPECT_FALSE(did_receive_data_);
   EXPECT_FALSE(did_finish_loading_);
-}
-
-// Test that a cross origin redirect response without CORS headers fails.
-TEST_F(WebAssociatedURLLoaderTest,
-       RedirectCrossOriginWithAccessControlFailure) {
-  KURL url = ToKURL(
-      "http://www.test.com/RedirectCrossOriginWithAccessControlFailure.html");
-  char redirect[] =
-      "http://www.other.com/"
-      "RedirectCrossOriginWithAccessControlFailure.html";  // Cross-origin
-  KURL redirect_url = ToKURL(redirect);
-
-  WebURLRequest request(url);
-  request.SetMode(network::mojom::RequestMode::kCors);
-  request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
-
-  expected_redirect_response_ = WebURLResponse();
-  expected_redirect_response_.SetMimeType("text/html");
-  expected_redirect_response_.SetHttpStatusCode(301);
-  expected_redirect_response_.SetHttpHeaderField("Location", redirect);
-  RegisterMockedURLLoadWithCustomResponse(url, expected_redirect_response_,
-                                          frame_file_path_);
-
-  expected_new_url_ = WebURL(redirect_url);
-
-  expected_response_ = WebURLResponse();
-  expected_response_.SetMimeType("text/html");
-  expected_response_.SetHttpStatusCode(200);
-  RegisterMockedURLLoadWithCustomResponse(redirect_url, expected_response_,
-                                          frame_file_path_);
-
-  WebAssociatedURLLoaderOptions options;
-  expected_loader_ = CreateAssociatedURLLoader(options);
-  EXPECT_TRUE(expected_loader_);
-  expected_loader_->LoadAsynchronously(request, this);
-
-  ServeRequests();
-  // We should get a notification about access control check failure.
-  EXPECT_TRUE(will_follow_redirect_);
-  EXPECT_FALSE(did_receive_response_);
-  EXPECT_FALSE(did_receive_data_);
-  EXPECT_TRUE(did_fail_);
 }
 
 // Test that a cross origin redirect response with CORS headers that allow the
@@ -665,7 +567,7 @@ TEST_F(WebAssociatedURLLoaderTest, AccessCheckForLocalURL) {
   KURL url = ToKURL("file://test.pdf");
 
   WebURLRequest request(url);
-  request.SetRequestContext(mojom::RequestContextType::PLUGIN);
+  request.SetRequestContext(mojom::blink::RequestContextType::PLUGIN);
   request.SetMode(network::mojom::RequestMode::kNoCors);
   request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
 
@@ -692,7 +594,7 @@ TEST_F(WebAssociatedURLLoaderTest, BypassAccessCheckForLocalURL) {
   KURL url = ToKURL("file://test.pdf");
 
   WebURLRequest request(url);
-  request.SetRequestContext(mojom::RequestContextType::PLUGIN);
+  request.SetRequestContext(mojom::blink::RequestContextType::PLUGIN);
   request.SetMode(network::mojom::RequestMode::kNoCors);
   request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
 

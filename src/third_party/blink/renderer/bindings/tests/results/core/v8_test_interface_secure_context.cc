@@ -88,7 +88,7 @@ static void SecureContextAttributeAttributeSetter(
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext, "TestInterfaceSecureContext", "secureContextAttribute");
 
   // Prepare the value to be set.
-  bool cpp_value = NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state);
+  bool cpp_value{ NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state) };
   if (exception_state.HadException())
     return;
 
@@ -116,7 +116,7 @@ static void SecureContextRuntimeEnabledAttributeAttributeSetter(
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext, "TestInterfaceSecureContext", "secureContextRuntimeEnabledAttribute");
 
   // Prepare the value to be set.
-  bool cpp_value = NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state);
+  bool cpp_value{ NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state) };
   if (exception_state.HadException())
     return;
 
@@ -144,7 +144,7 @@ static void SecureContextWindowExposedAttributeAttributeSetter(
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext, "TestInterfaceSecureContext", "secureContextWindowExposedAttribute");
 
   // Prepare the value to be set.
-  bool cpp_value = NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state);
+  bool cpp_value{ NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state) };
   if (exception_state.HadException())
     return;
 
@@ -172,7 +172,7 @@ static void SecureContextWorkerExposedAttributeAttributeSetter(
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext, "TestInterfaceSecureContext", "secureContextWorkerExposedAttribute");
 
   // Prepare the value to be set.
-  bool cpp_value = NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state);
+  bool cpp_value{ NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state) };
   if (exception_state.HadException())
     return;
 
@@ -200,7 +200,7 @@ static void SecureContextWindowExposedRuntimeEnabledAttributeAttributeSetter(
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext, "TestInterfaceSecureContext", "secureContextWindowExposedRuntimeEnabledAttribute");
 
   // Prepare the value to be set.
-  bool cpp_value = NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state);
+  bool cpp_value{ NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state) };
   if (exception_state.HadException())
     return;
 
@@ -228,7 +228,7 @@ static void SecureContextWorkerExposedRuntimeEnabledAttributeAttributeSetter(
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext, "TestInterfaceSecureContext", "secureContextWorkerExposedRuntimeEnabledAttribute");
 
   // Prepare the value to be set.
-  bool cpp_value = NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state);
+  bool cpp_value{ NativeValueTraits<IDLBoolean>::NativeValue(info.GetIsolate(), v8_value, exception_state) };
   if (exception_state.HadException())
     return;
 
@@ -505,7 +505,7 @@ void V8TestInterfaceSecureContext::InstallConditionalFeatures(
             base::size(kAccessorConfigurations));
       }
     }
-    if (execution_context && (execution_context->IsDocument())) {
+    if (execution_context && (execution_context->IsWindow())) {
       if (is_secure_context) {
         static constexpr V8DOMConfiguration::AccessorConfiguration
         kAccessorConfigurations[] = {
@@ -580,7 +580,7 @@ void V8TestInterfaceSecureContext::InstallConditionalFeatures(
       }
     }
     if (is_secure_context) {
-      if (execution_context && (execution_context->IsDocument())) {
+      if (execution_context && (execution_context->IsWindow())) {
         {
           // Install secureContextWindowExposedMethod configuration
           const V8DOMConfiguration::MethodConfiguration kConfigurations[] = {
@@ -610,7 +610,7 @@ void V8TestInterfaceSecureContext::InstallConditionalFeatures(
       }
     }
     if (is_secure_context) {
-      if (execution_context && (execution_context->IsDocument())) {
+      if (execution_context && (execution_context->IsWindow())) {
         if (RuntimeEnabledFeatures::SecureFeatureEnabled()) {
           {
             // Install secureContextWindowExposedRuntimeEnabledMethod configuration

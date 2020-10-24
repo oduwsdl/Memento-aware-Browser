@@ -27,9 +27,11 @@
 #include "System/Memory.hpp"
 #include "System/Timer.hpp"
 #include "Vulkan/VkConfig.hpp"
+#include "Vulkan/VkDescriptorSet.hpp"
 #include "Vulkan/VkDevice.hpp"
 #include "Vulkan/VkFence.hpp"
 #include "Vulkan/VkImageView.hpp"
+#include "Vulkan/VkPipelineLayout.hpp"
 #include "Vulkan/VkQueryPool.hpp"
 
 #include "marl/containers.h"
@@ -206,6 +208,9 @@ void Renderer::draw(const sw::Context *context, VkIndexType indexType, unsigned 
 		pixelRoutine = pixelProcessor.routine(pixelState, context->pipelineLayout, context->pixelShader, context->descriptorSets);
 	}
 
+	draw->containsImageWrite = (context->vertexShader && context->vertexShader->containsImageWrite()) ||
+	                           (context->pixelShader && context->pixelShader->containsImageWrite());
+
 	DrawCall::SetupFunction setupPrimitives = nullptr;
 	int ms = context->sampleCount;
 	unsigned int numPrimitivesPerBatch = MaxBatchSize / ms;
@@ -240,6 +245,7 @@ void Renderer::draw(const sw::Context *context, VkIndexType indexType, unsigned 
 	}
 
 	DrawData *data = draw->data;
+	draw->device = device;
 	draw->occlusionQuery = occlusionQuery;
 	draw->batchDataPool = &batchDataPool;
 	draw->numPrimitives = count;
@@ -249,6 +255,8 @@ void Renderer::draw(const sw::Context *context, VkIndexType indexType, unsigned 
 	draw->provokingVertexMode = context->provokingVertexMode;
 	draw->indexType = indexType;
 	draw->lineRasterizationMode = context->lineRasterizationMode;
+	draw->descriptorSetObjects = context->descriptorSetObjects;
+	draw->pipelineLayout = context->pipelineLayout;
 
 	draw->vertexRoutine = vertexRoutine;
 	draw->setupRoutine = setupRoutine;
@@ -295,6 +303,10 @@ void Renderer::draw(const sw::Context *context, VkIndexType indexType, unsigned 
 			data->a2c0 = float4(0.25f);
 			data->a2c1 = float4(0.75f);
 		}
+		else if(ms == 1)
+		{
+			data->a2c0 = float4(0.5f);
+		}
 		else
 			ASSERT(false);
 	}
@@ -318,11 +330,6 @@ void Renderer::draw(const sw::Context *context, VkIndexType indexType, unsigned 
 		float Z = F - N;
 		constexpr float subPixF = vk::SUBPIXEL_PRECISION_FACTOR;
 
-		if(context->isDrawTriangle(false))
-		{
-			N += context->depthBias;
-		}
-
 		data->WxF = float4(W * subPixF);
 		data->HxF = float4(H * subPixF);
 		data->X0xF = float4(X0 * subPixF - subPixF / 2);
@@ -330,9 +337,27 @@ void Renderer::draw(const sw::Context *context, VkIndexType indexType, unsigned 
 		data->halfPixelX = float4(0.5f / W);
 		data->halfPixelY = float4(0.5f / H);
 		data->viewportHeight = abs(viewport.height);
-		data->slopeDepthBias = context->slopeDepthBias;
 		data->depthRange = Z;
 		data->depthNear = N;
+		data->constantDepthBias = context->constantDepthBias;
+		data->slopeDepthBias = context->slopeDepthBias;
+		data->depthBiasClamp = context->depthBiasClamp;
+
+		if(context->depthBuffer)
+		{
+			switch(context->depthBuffer->getFormat(VK_IMAGE_ASPECT_DEPTH_BIT))
+			{
+				case VK_FORMAT_D16_UNORM:
+					data->minimumResolvableDepthDifference = 1.0f / 0xFFFF;
+					break;
+				case VK_FORMAT_D32_SFLOAT:
+					// The minimum resolvable depth difference is determined per-polygon for floating-point depth
+					// buffers. DrawData::minimumResolvableDepthDifference is unused.
+					break;
+				default:
+					UNSUPPORTED("Depth format: %d", int(context->depthBuffer->getFormat(VK_IMAGE_ASPECT_DEPTH_BIT)));
+			}
+		}
 	}
 
 	// Target
@@ -382,6 +407,8 @@ void Renderer::draw(const sw::Context *context, VkIndexType indexType, unsigned 
 
 	draw->events = events;
 
+	vk::DescriptorSet::PrepareForSampling(draw->descriptorSetObjects, draw->pipelineLayout, device);
+
 	DrawCall::run(draw, &drawTickets, clusterQueues);
 }
 
@@ -418,6 +445,19 @@ void DrawCall::teardown()
 	vertexRoutine = {};
 	setupRoutine = {};
 	pixelRoutine = {};
+
+	for(auto *rt : renderTarget)
+	{
+		if(rt)
+		{
+			rt->contentsChanged();
+		}
+	}
+
+	if(containsImageWrite)
+	{
+		vk::DescriptorSet::ContentsChanged(descriptorSetObjects, pipelineLayout, device);
+	}
 }
 
 void DrawCall::run(const marl::Loan<DrawCall> &draw, marl::Ticket::Queue *tickets, marl::Ticket::Queue clusterQueues[MaxClusterCount])

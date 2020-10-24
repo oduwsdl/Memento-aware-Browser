@@ -6,12 +6,10 @@
 
 #include "xfa/fxfa/parser/cxfa_linear.h"
 
-#include <memory>
-
-#include "core/fxge/render_defines.h"
 #include "fxjs/xfa/cjx_node.h"
+#include "xfa/fgas/graphics/cfgas_geshading.h"
 #include "xfa/fxfa/parser/cxfa_color.h"
-#include "xfa/fxgraphics/cxfa_geshading.h"
+#include "xfa/fxfa/parser/cxfa_document.h"
 
 namespace {
 
@@ -38,7 +36,9 @@ CXFA_Linear::CXFA_Linear(CXFA_Document* doc, XFA_PacketType packet)
                 XFA_Element::Linear,
                 kLinearPropertyData,
                 kLinearAttributeData,
-                std::make_unique<CJX_Node>(this)) {}
+                cppgc::MakeGarbageCollected<CJX_Node>(
+                    doc->GetHeap()->GetAllocationHandle(),
+                    this)) {}
 
 CXFA_Linear::~CXFA_Linear() = default;
 
@@ -52,8 +52,8 @@ CXFA_Color* CXFA_Linear::GetColorIfExists() {
   return GetChild<CXFA_Color>(0, XFA_Element::Color, false);
 }
 
-void CXFA_Linear::Draw(CXFA_Graphics* pGS,
-                       CXFA_GEPath* fillPath,
+void CXFA_Linear::Draw(CFGAS_GEGraphics* pGS,
+                       CFGAS_GEPath* fillPath,
                        FX_ARGB crStart,
                        const CFX_RectF& rtFill,
                        const CFX_Matrix& matrix) {
@@ -83,10 +83,10 @@ void CXFA_Linear::Draw(CXFA_Graphics* pGS,
       break;
   }
 
-  CXFA_GEShading shading(ptStart, ptEnd, false, false, crStart, crEnd);
+  CFGAS_GEShading shading(ptStart, ptEnd, false, false, crStart, crEnd);
 
   pGS->SaveGraphState();
-  pGS->SetFillColor(CXFA_GEColor(&shading));
-  pGS->FillPath(fillPath, FXFILL_WINDING, &matrix);
+  pGS->SetFillColor(CFGAS_GEColor(&shading));
+  pGS->FillPath(fillPath, CFX_FillRenderOptions::FillType::kWinding, &matrix);
   pGS->RestoreGraphState();
 }

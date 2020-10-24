@@ -33,6 +33,7 @@
 
 #include <limits>
 #include <memory>
+#include <unordered_set>
 
 #include "base/macros.h"
 #include "build/build_config.h"
@@ -49,6 +50,7 @@
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/sanitizers.h"
+#include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 
 namespace blink {
 
@@ -56,29 +58,30 @@ namespace incremental_marking_test {
 class IncrementalMarkingScopeBase;
 }  // namespace incremental_marking_test
 
-namespace weakness_marking_test {
-class EphemeronCallbacksCounter;
-}  // namespace weakness_marking_test
-
 class ConcurrentMarkingVisitor;
 class ThreadHeapStatsCollector;
 class PageBloomFilter;
 class PagePool;
 class ProcessHeapReporter;
 class RegionTree;
+class MarkingSchedulingOracle;
 
 using MarkingItem = TraceDescriptor;
 using NotFullyConstructedItem = const void*;
-using WeakTableItem = MarkingItem;
 
-struct BackingStoreCallbackItem {
-  const void* backing;
-  MovingObjectCallback callback;
+struct EphemeronPairItem {
+  const void* key;
+  TraceDescriptor value_desc;
 };
 
 struct CustomCallbackItem {
   WeakCallback callback;
   const void* parameter;
+};
+
+struct NotSafeToConcurrentlyTraceItem {
+  TraceDescriptor desc;
+  size_t bailout_size;
 };
 
 using V8Reference = const TraceWrapperV8Reference<v8::Value>*;
@@ -95,12 +98,22 @@ using WeakCallbackWorklist =
 // regressions.
 using MovableReferenceWorklist =
     Worklist<const MovableReference*, 256 /* local entries */>;
-using WeakTableWorklist = Worklist<WeakTableItem, 16 /* local entries */>;
-using BackingStoreCallbackWorklist =
-    Worklist<BackingStoreCallbackItem, 16 /* local entries */>;
+using EphemeronPairsWorklist =
+    Worklist<EphemeronPairItem, 64 /* local entries */>;
 using V8ReferencesWorklist = Worklist<V8Reference, 16 /* local entries */>;
 using NotSafeToConcurrentlyTraceWorklist =
-    Worklist<MarkingItem, 64 /* local entries */>;
+    Worklist<NotSafeToConcurrentlyTraceItem, 64 /* local entries */>;
+
+class WeakContainersWorklist {
+ public:
+  void Push(const HeapObjectHeader*);
+  void Erase(const HeapObjectHeader*);
+  bool Contains(const HeapObjectHeader*);
+
+ private:
+  WTF::Mutex lock_;
+  std::unordered_set<const HeapObjectHeader*> objects_;
+};
 
 class PLATFORM_EXPORT HeapAllocHooks {
   STATIC_ONLY(HeapAllocHooks);
@@ -195,6 +208,8 @@ struct IsGarbageCollectedContainer<
 class PLATFORM_EXPORT ThreadHeap {
   USING_FAST_MALLOC(ThreadHeap);
 
+  using EphemeronProcessing = ThreadState::EphemeronProcessing;
+
  public:
   explicit ThreadHeap(ThreadState*);
   ~ThreadHeap();
@@ -211,6 +226,11 @@ class PLATFORM_EXPORT ThreadHeap {
     return not_fully_constructed_worklist_.get();
   }
 
+  NotFullyConstructedWorklist* GetPreviouslyNotFullyConstructedWorklist()
+      const {
+    return previously_not_fully_constructed_worklist_.get();
+  }
+
   WeakCallbackWorklist* GetWeakCallbackWorklist() const {
     return weak_callback_worklist_.get();
   }
@@ -219,12 +239,12 @@ class PLATFORM_EXPORT ThreadHeap {
     return movable_reference_worklist_.get();
   }
 
-  WeakTableWorklist* GetWeakTableWorklist() const {
-    return weak_table_worklist_.get();
+  EphemeronPairsWorklist* GetDiscoveredEphemeronPairsWorklist() const {
+    return discovered_ephemeron_pairs_worklist_.get();
   }
 
-  BackingStoreCallbackWorklist* GetBackingStoreCallbackWorklist() const {
-    return backing_store_callback_worklist_.get();
+  EphemeronPairsWorklist* GetEphemeronPairsToProcessWorklist() const {
+    return ephemeron_pairs_to_process_worklist_.get();
   }
 
   V8ReferencesWorklist* GetV8ReferencesWorklist() const {
@@ -235,6 +255,11 @@ class PLATFORM_EXPORT ThreadHeap {
       const {
     return not_safe_to_concurrently_trace_worklist_.get();
   }
+
+  WeakContainersWorklist* GetWeakContainersWorklist() const {
+    return weak_containers_worklist_.get();
+  }
+
   // Register an ephemeron table for fixed-point iteration.
   void RegisterWeakTable(void* container_object,
                          EphemeronCallback);
@@ -271,16 +296,25 @@ class PLATFORM_EXPORT ThreadHeap {
   // not need to rely on conservative handling.
   void FlushNotFullyConstructedObjects();
 
+  // Moves ephemeron pairs from |discovered_ephemeron_pairs_worklist_| to
+  // |ephemeron_pairs_to_process_worklist_|
+  void FlushEphemeronPairs(EphemeronProcessing);
+
   // Marks not fully constructed objects.
   void MarkNotFullyConstructedObjects(MarkingVisitor*);
   // Marks the transitive closure including ephemerons.
-  bool AdvanceMarking(MarkingVisitor*, base::TimeTicks deadline);
+  bool AdvanceMarking(MarkingVisitor*, base::TimeTicks, EphemeronProcessing);
   void VerifyMarking();
 
   // Returns true if concurrent markers will have work to steal
   bool HasWorkForConcurrentMarking() const;
+  // Returns the amount of work currently available for stealing (there could be
+  // work remaining even if this is 0).
+  size_t ConcurrentMarkingGlobalWorkSize() const;
   // Returns true if marker is done
-  bool AdvanceConcurrentMarking(ConcurrentMarkingVisitor*, base::TimeTicks);
+  bool AdvanceConcurrentMarking(ConcurrentMarkingVisitor*,
+                                base::JobDelegate*,
+                                MarkingSchedulingOracle* marking_scheduler);
 
   // Conservatively checks whether an address is a pointer in any of the
   // thread heaps.  If so marks the object pointed to as live.
@@ -373,7 +407,9 @@ class PLATFORM_EXPORT ThreadHeap {
   void DestroyMarkingWorklists(BlinkGC::StackState);
   void DestroyCompactionWorklists();
 
-  bool InvokeEphemeronCallbacks(MarkingVisitor*, base::TimeTicks);
+  bool InvokeEphemeronCallbacks(EphemeronProcessing,
+                                MarkingVisitor*,
+                                base::TimeTicks);
 
   bool FlushV8References(base::TimeTicks);
 
@@ -418,11 +454,8 @@ class PLATFORM_EXPORT ThreadHeap {
 
   // Worklist of ephemeron callbacks. Used to pass new callbacks from
   // MarkingVisitor to ThreadHeap.
-  std::unique_ptr<WeakTableWorklist> weak_table_worklist_;
-
-  // This worklist is used to passing backing store callback to HeapCompact.
-  std::unique_ptr<BackingStoreCallbackWorklist>
-      backing_store_callback_worklist_;
+  std::unique_ptr<EphemeronPairsWorklist> discovered_ephemeron_pairs_worklist_;
+  std::unique_ptr<EphemeronPairsWorklist> ephemeron_pairs_to_process_worklist_;
 
   // Worklist for storing the V8 references until ThreadHeap can flush them
   // to V8.
@@ -431,9 +464,7 @@ class PLATFORM_EXPORT ThreadHeap {
   std::unique_ptr<NotSafeToConcurrentlyTraceWorklist>
       not_safe_to_concurrently_trace_worklist_;
 
-  // No duplicates allowed for ephemeron callbacks. Hence, we use a hashmap
-  // with the key being the HashTable.
-  WTF::HashMap<const void*, EphemeronCallback> ephemeron_callbacks_;
+  std::unique_ptr<WeakContainersWorklist> weak_containers_worklist_;
 
   std::unique_ptr<HeapCompact> compaction_;
 
@@ -443,11 +474,15 @@ class PLATFORM_EXPORT ThreadHeap {
 
   static ThreadHeap* main_thread_heap_;
 
+  static constexpr size_t kStepsBeforeEphemeronPairsFlush = 4u;
+  size_t steps_since_last_ephemeron_pairs_flush_ = 0;
+  static constexpr size_t kStepsBeforeEphemeronProcessing = 16u;
+  size_t steps_since_last_ephemeron_processing_ = 0;
+
   friend class incremental_marking_test::IncrementalMarkingScopeBase;
   template <typename T>
   friend class Member;
   friend class ThreadState;
-  friend class weakness_marking_test::EphemeronCallbacksCounter;
 };
 
 template <typename T>

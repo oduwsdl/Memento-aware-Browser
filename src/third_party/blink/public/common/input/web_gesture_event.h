@@ -5,7 +5,10 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_INPUT_WEB_GESTURE_EVENT_H_
 #define THIRD_PARTY_BLINK_PUBLIC_COMMON_INPUT_WEB_GESTURE_EVENT_H_
 
-#include "base/logging.h"
+#include <memory>
+
+#include "base/check.h"
+#include "base/notreached.h"
 #include "cc/paint/element_id.h"
 #include "third_party/blink/public/common/input/web_gesture_device.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -325,10 +328,11 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
   // Coalesce the |new_event| with |last_event| and optionally
   // |second_last_event|. Scroll and pinch are two separate gestures so they
   // would need separate events that is why this method returns a pair.
-  static std::pair<WebGestureEvent, WebGestureEvent> CoalesceScrollAndPinch(
-      const WebGestureEvent* second_last_event,
-      const WebGestureEvent& last_event,
-      const WebGestureEvent& new_event);
+  static std::pair<std::unique_ptr<WebGestureEvent>,
+                   std::unique_ptr<WebGestureEvent>>
+  CoalesceScrollAndPinch(const WebGestureEvent* second_last_event,
+                         const WebGestureEvent& last_event,
+                         const WebGestureEvent& new_event);
 
   // Whether |event_in_queue| is a touchscreen GesturePinchUpdate or
   // GestureScrollUpdate and has the same modifiers/source as the new

@@ -113,9 +113,8 @@ namespace dawn_native { namespace vulkan {
                     hasDependencies = HasDep(InstanceExt::Surface);
                     break;
 
-                default:
+                case InstanceExt::EnumCount:
                     UNREACHABLE();
-                    break;
             }
 
             trimmedSet.Set(ext, hasDependencies && advertisedExts.Has(ext));
@@ -152,6 +151,7 @@ namespace dawn_native { namespace vulkan {
         {DeviceExt::_16BitStorage, "VK_KHR_16bit_storage", VulkanVersion_1_1},
         {DeviceExt::SamplerYCbCrConversion, "VK_KHR_sampler_ycbcr_conversion", VulkanVersion_1_1},
 
+        {DeviceExt::DriverProperties, "VK_KHR_driver_properties", VulkanVersion_1_2},
         {DeviceExt::ImageFormatList, "VK_KHR_image_format_list", VulkanVersion_1_2},
         {DeviceExt::ShaderFloat16Int8, "VK_KHR_shader_float16_int8", VulkanVersion_1_2},
 
@@ -259,6 +259,7 @@ namespace dawn_native { namespace vulkan {
                                       HasDep(DeviceExt::GetPhysicalDeviceProperties2);
                     break;
 
+                case DeviceExt::DriverProperties:
                 case DeviceExt::ShaderFloat16Int8:
                     hasDependencies = HasDep(DeviceExt::GetPhysicalDeviceProperties2);
                     break;
@@ -297,9 +298,8 @@ namespace dawn_native { namespace vulkan {
                     hasDependencies = icdVersion >= VulkanVersion_1_1;
                     break;
 
-                default:
+                case DeviceExt::EnumCount:
                     UNREACHABLE();
-                    break;
             }
 
             trimmedSet.Set(ext, hasDependencies && advertisedExts.Has(ext));

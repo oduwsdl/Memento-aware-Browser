@@ -209,6 +209,16 @@ std::ostream &operator<<(std::ostream &stream, const PlatformParameters &pp)
         stream << "_EmulateCopyTexImage2DFromRenderbuffers";
     }
 
+    if (pp.eglParameters.shaderStencilOutputFeature == EGL_FALSE)
+    {
+        stream << "_NoStencilOutput";
+    }
+
+    if (pp.eglParameters.genMultipleMipsPerPassFeature == EGL_FALSE)
+    {
+        stream << "_NoGenMultipleMipsPerPass";
+    }
+
     return stream;
 }
 

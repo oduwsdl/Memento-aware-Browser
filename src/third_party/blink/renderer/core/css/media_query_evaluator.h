@@ -28,7 +28,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_MEDIA_QUERY_EVALUATOR_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_MEDIA_QUERY_EVALUATOR_H_
 
-#include "base/macros.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -39,6 +38,7 @@ class MediaQuery;
 class MediaQueryExp;
 class MediaQueryResult;
 class MediaQuerySet;
+class MediaQuerySetResult;
 class MediaValues;
 class MediaValuesInitialViewport;
 
@@ -75,6 +75,8 @@ class CORE_EXPORT MediaQueryEvaluator final
   explicit MediaQueryEvaluator(const MediaValues&);
 
   explicit MediaQueryEvaluator(MediaValuesInitialViewport*);
+  MediaQueryEvaluator(const MediaQueryEvaluator&) = delete;
+  MediaQueryEvaluator& operator=(const MediaQueryEvaluator&) = delete;
 
   ~MediaQueryEvaluator();
 
@@ -97,6 +99,10 @@ class CORE_EXPORT MediaQueryEvaluator final
   // evaluation.
   bool DidResultsChange(const MediaQueryResultList& results) const;
 
+  // Returns true if any of the media queries in the results lists changed its
+  // evaluation.
+  bool DidResultsChange(const Vector<MediaQuerySetResult>& results) const;
+
   void Trace(Visitor*) const;
 
  private:
@@ -104,7 +110,10 @@ class CORE_EXPORT MediaQueryEvaluator final
 
   String media_type_;
   Member<MediaValues> media_values_;
-  DISALLOW_COPY_AND_ASSIGN(MediaQueryEvaluator);
+
+  // Even if UKM reporting is enabled, do not report any media query evaluation
+  // results if this is set to true.
+  mutable bool skip_ukm_reporting_{false};
 };
 
 }  // namespace blink

@@ -13,9 +13,12 @@
 <translation id="1211441953136645838">бележка в края</translation>
 <translation id="1281252709823657822">диалогов прозорец</translation>
 <translation id="1306460908038601864">Изключване</translation>
+<translation id="1311894908970423688">Стойността трябва да е <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">признания за източника</translation>
 <translation id="1342835525016946179">статия</translation>
 <translation id="1359897965706325498">банер</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> елемента</translation>
+<translation id="1480676835519562650">възможност за избиране на няколко опции, избрани са <ph name="SELECTED" /> от <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">регион</translation>
 <translation id="1591562245178063882">Този месец</translation>
 <translation id="1637811476055996098">Избор на файлове</translation>
@@ -27,6 +30,7 @@
 <translation id="1806710327868736751">диалогов прозорец със сигнал</translation>
 <translation id="1821985195704844674">дървовидна таблица</translation>
 <translation id="1822429046913737220">AM/PM</translation>
+<translation id="1823704031293214298">долен колонтитул на страницата</translation>
 <translation id="1832974991323546415">възпроизвеждане на отдалечено устройство</translation>
 <translation id="190587075670221089">изтриване</translation>
 <translation id="1907737156431278478">пример</translation>
@@ -44,6 +48,7 @@
 <translation id="2247351761944213033">Седмица <ph name="WEEKNUMBER" />, <ph name="YEAR" /> г.</translation>
 <translation id="2277199496770840904">Запис <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">квадратче за отметка</translation>
+<translation id="2307576640803031502">в списък, елемент <ph name="INDEX" /> от <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">разделител на страници</translation>
 <translation id="2335594187091864976">инструмент за избор на дата и час</translation>
 <translation id="2393030564806080191">Шестнадесетична стойност за цвета</translation>
@@ -51,6 +56,7 @@
 <translation id="248395913932153421">Ден</translation>
 <translation id="2507943997699731163">Моля, попълнете това поле.</translation>
 <translation id="2508569020611168319">списък с раздели</translation>
+<translation id="2530182415807757784">възможност за избиране на няколко опции, не е избрано нищо.</translation>
 <translation id="2561842179657104141">показване на още контроли за мултимедия</translation>
 <translation id="2572483411312390101">пускане</translation>
 <translation id="2613802280814924224">Моля, въведете валидна стойност. Най-близката такава е <ph name="VALID_VALUE" />.</translation>
@@ -100,9 +106,9 @@
 <translation id="4201051445878709314">Показване на предишния месец</translation>
 <translation id="421884353938374759">инструмент за избор на цветове</translation>
 <translation id="4248100235867064564">лента с менюта</translation>
+<translation id="4293574643247337246">горен колонтитул на страницата</translation>
 <translation id="4360991593054037559">Моля, въведете валидна стойност. Двете най-близки такива са <ph name="VALID_VALUE_LOW" /> и <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Въпроси и отговори</translation>
-<translation id="4413860115965805769">бутон за меню</translation>
 <translation id="4444765639179266822">Изглежда, че пише: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">препратка към определение в терминологичния речник</translation>
 <translation id="4522570452068850558">Подробности</translation>
@@ -154,9 +160,11 @@
 <translation id="5677946354068040947">още опции</translation>
 <translation id="576709008726043716">въведение</translation>
 <translation id="57838592816432529">Заглушаване</translation>
+<translation id="5860033963881614850">Изключено</translation>
 <translation id="588258955323874662">Цял екран</translation>
 <translation id="5888666972993069672">В момента се предава към „<ph name="DEVICE_FRIENDLY_NAME" />“</translation>
 <translation id="591047860372322273">поле за търсене</translation>
+<translation id="5916664084637901428">Включено</translation>
 <translation id="5939518447894949180">Нулиране</translation>
 <translation id="5966707198760109579">Седмица</translation>
 <translation id="5987525920412732405">брояч</translation>
@@ -184,6 +192,7 @@
 <translation id="6643016212128521049">Изчистване</translation>
 <translation id="668171684555832681">Друг...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Стойността трябва да е <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Лошо качество на възпроизвеждането</translation>
 <translation id="6755330956360078551">подсказка</translation>
 <translation id="6790428901817661496">Пускане</translation>
@@ -284,6 +293,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" /> – започва от <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Картина в картината</translation>
 <translation id="9168329111483466115">бележка под линия</translation>
+<translation id="945780513535800434">Частично отметнато</translation>
 <translation id="954003015749068518">вход в режима „Картина в картината“</translation>
 <translation id="966787709310836684">меню</translation>
 </translationbundle>

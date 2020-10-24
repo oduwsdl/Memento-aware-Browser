@@ -162,7 +162,10 @@ class EphemeronCallbacksCounter
   }
 
   void Callback(const LivenessBroker& info) {
-    *count_holder_ = ThreadState::Current()->Heap().ephemeron_callbacks_.size();
+    *count_holder_ = ThreadState::Current()
+                         ->Heap()
+                         .GetDiscoveredEphemeronPairsWorklist()
+                         ->SizeForTesting();
   }
 
  private:
@@ -198,8 +201,6 @@ TEST_F(WeaknessMarkingTest, TracableEphemeronIsRegsitered) {
   EXPECT_NE(old_ephemeron_count, ephemeron_count);
 }
 
-// TODO(keinakashima): add tests for NewLinkedHashSet after supporting
-// WeakMember
 TEST_F(WeaknessMarkingTest, SwapIntoAlreadyProcessedWeakSet) {
   // Regression test: https://crbug.com/1038623
   //
@@ -207,14 +208,14 @@ TEST_F(WeaknessMarkingTest, SwapIntoAlreadyProcessedWeakSet) {
   // weakness callbacks. This is important as another backing may be swapped in
   // at some point after marking it initially.
   using WeakLinkedSet = HeapLinkedHashSet<WeakMember<IntegerObject>>;
-  Persistent<WeakLinkedSet> holder1(MakeGarbageCollected<WeakLinkedSet>());
-  Persistent<WeakLinkedSet> holder2(MakeGarbageCollected<WeakLinkedSet>());
-  holder1->insert(MakeGarbageCollected<IntegerObject>(1));
-  IncrementalMarkingTestDriver driver(ThreadState::Current());
-  driver.Start();
-  driver.FinishSteps();
-  holder1->Swap(*holder2.Get());
-  driver.FinishGC();
+  Persistent<WeakLinkedSet> holder3(MakeGarbageCollected<WeakLinkedSet>());
+  Persistent<WeakLinkedSet> holder4(MakeGarbageCollected<WeakLinkedSet>());
+  holder3->insert(MakeGarbageCollected<IntegerObject>(1));
+  IncrementalMarkingTestDriver driver2(ThreadState::Current());
+  driver2.Start();
+  driver2.FinishSteps();
+  holder3->Swap(*holder4.Get());
+  driver2.FinishGC();
 }
 
 TEST_F(WeaknessMarkingTest, EmptyEphemeronCollection) {
@@ -240,6 +241,22 @@ TEST_F(WeaknessMarkingTest, ClearWeakHashTableAfterMarking) {
   driver.FinishSteps();
   holder->clear();
   driver.FinishGC();
+}
+
+TEST_F(WeaknessMarkingTest, StrongifyBackingOnStack) {
+  // Test eunsures that conservative GC strongifies the backing store of
+  // on-stack HeapLinkedHashSet.
+  using WeakSet = HeapLinkedHashSet<WeakMember<IntegerObject>>;
+  using StrongSet = HeapLinkedHashSet<Member<IntegerObject>>;
+  WeakSet weak_set_on_stack;
+  weak_set_on_stack.insert(MakeGarbageCollected<IntegerObject>(1));
+  StrongSet strong_set_on_stack;
+  strong_set_on_stack.insert(MakeGarbageCollected<IntegerObject>(1));
+  TestSupportingGC::ConservativelyCollectGarbage();
+  EXPECT_EQ(1u, weak_set_on_stack.size());
+  EXPECT_EQ(1u, strong_set_on_stack.size());
+  EXPECT_EQ(1, weak_set_on_stack.begin()->Get()->Value());
+  EXPECT_EQ(1, strong_set_on_stack.begin()->Get()->Value());
 }
 
 }  // namespace weakness_marking_test

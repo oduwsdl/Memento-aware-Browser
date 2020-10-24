@@ -78,12 +78,12 @@ struct PrintToStringParamName
         const ::testing::TestParamInfo<DrawBaseVertexBaseInstanceTestParams> &info) const
     {
         ::std::stringstream ss;
-        ss << (std::get<3>(info.param) == BufferDataUsageOption::StaticDraw ? "StaticDraw_"
-                                                                            : "DynamicDraw_")
-           << (std::get<2>(info.param) == BaseInstanceOption::UseBaseInstance ? "UseBaseInstance_"
+        ss << std::get<0>(info.param) << "_"
+           << (std::get<3>(info.param) == BufferDataUsageOption::StaticDraw ? "_StaticDraw"
+                                                                            : "_DynamicDraw")
+           << (std::get<2>(info.param) == BaseInstanceOption::UseBaseInstance ? "_UseBaseInstance"
                                                                               : "")
-           << (std::get<1>(info.param) == BaseVertexOption::UseBaseVertex ? "UseBaseVertex_" : "")
-           << std::get<0>(info.param);
+           << (std::get<1>(info.param) == BaseVertexOption::UseBaseVertex ? "_UseBaseVertex" : "");
         return ss.str();
     }
 };
@@ -359,14 +359,14 @@ void main()
     void doDrawArraysBaseInstanceReset()
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawArrays(GL_TRIANGLES, 0, 6 * kCountY);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 6 * kCountY, 1);
     }
 
     void doDrawElementsBaseVertexBaseInstanceReset()
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawElements(GL_TRIANGLES, 6 * kCountY, GL_UNSIGNED_SHORT,
-                       reinterpret_cast<GLvoid *>(static_cast<uintptr_t>(0)));
+        glDrawElementsInstanced(GL_TRIANGLES, 6 * kCountY, GL_UNSIGNED_SHORT,
+                                reinterpret_cast<GLvoid *>(static_cast<uintptr_t>(0)), 1);
     }
 
     void doMultiDrawElementsInstancedBaseVertexBaseInstance()
@@ -582,6 +582,7 @@ TEST_P(DrawBaseVertexBaseInstanceTest, DrawArraysInstancedBaseInstance)
     checkDrawResult(false);
 
     doDrawArraysBaseInstanceReset();
+    EXPECT_GL_NO_ERROR();
     checkDrawResult(false, true);
 }
 
@@ -598,7 +599,6 @@ TEST_P(DrawBaseVertexBaseInstanceTest, MultiDrawArraysInstancedBaseInstance)
     }
 
     ANGLE_SKIP_TEST_IF(!requestExtensions());
-    ANGLE_SKIP_TEST_IF(getBufferDataUsage() == GL_DYNAMIC_DRAW);
 
     GLProgram program;
     setupProgram(program, true, true);
@@ -619,6 +619,7 @@ TEST_P(DrawBaseVertexBaseInstanceTest, MultiDrawArraysInstancedBaseInstance)
     checkDrawResult(false);
 
     doDrawArraysBaseInstanceReset();
+    EXPECT_GL_NO_ERROR();
     checkDrawResult(false, true);
 }
 
@@ -656,7 +657,6 @@ TEST_P(DrawBaseVertexBaseInstanceTest, DrawElementsInstancedBaseVertexBaseInstan
 TEST_P(DrawBaseVertexBaseInstanceTest, MultiDrawElementsInstancedBaseVertexBaseInstance)
 {
     ANGLE_SKIP_TEST_IF(!requestExtensions());
-    ANGLE_SKIP_TEST_IF(getBufferDataUsage() == GL_DYNAMIC_DRAW);
 
     GLProgram program;
     setupProgram(program, false, true);

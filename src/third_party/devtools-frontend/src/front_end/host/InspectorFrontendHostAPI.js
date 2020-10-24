@@ -242,7 +242,7 @@ export class InspectorFrontendHostAPI {
   }
 
   /**
-   * @param {string} actionName
+   * @param {!EnumeratedHistogram} actionName
    * @param {number} actionCode
    * @param {number} bucketSize
    */
@@ -400,3 +400,32 @@ export let LoadNetworkResourceResult;
 }} */
 // @ts-ignore typedef
 export let ExtensionDescriptor;
+
+/**
+ * Enum for recordPerformanceHistogram
+ * Warning: There are two other definitions of this enum in the DevTools code
+ * base, keep them in sync:
+ * front_end/extern.js
+ * front_end/devtools_compatibility.js
+ * @readonly
+ * @enum {string}
+ */
+export const EnumeratedHistogram = {
+  ActionTaken: 'DevTools.ActionTaken',
+  ColorPickerFixedColor: 'DevTools.ColorPicker.FixedColor',
+  PanelClosed: 'DevTools.PanelClosed',
+  PanelShown: 'DevTools.PanelShown',
+  SidebarPaneShown: 'DevTools.SidebarPaneShown',
+  KeyboardShortcutFired: 'DevTools.KeyboardShortcutFired',
+  IssuesPanelIssueExpanded: 'DevTools.IssuesPanelIssueExpanded',
+  IssuesPanelOpenedFrom: 'DevTools.IssuesPanelOpenedFrom',
+  IssuesPanelResourceOpened: 'DevTools.IssuesPanelResourceOpened',
+  KeybindSetSettingChanged: 'DevTools.KeybindSetSettingChanged',
+  DualScreenDeviceEmulated: 'DevTools.DualScreenDeviceEmulated',
+  CSSGridSettings: 'DevTools.CSSGridSettings2',
+  HighlightedPersistentCSSGridCount: 'DevTools.HighlightedPersistentCSSGridCount',
+  ExperimentEnabledAtLaunch: 'DevTools.ExperimentEnabledAtLaunch',
+  ExperimentEnabled: 'DevTools.ExperimentEnabled',
+  ExperimentDisabled: 'DevTools.ExperimentDisabled',
+  GridOverlayOpenedFrom: 'DevTools.GridOverlayOpenedFrom',
+};

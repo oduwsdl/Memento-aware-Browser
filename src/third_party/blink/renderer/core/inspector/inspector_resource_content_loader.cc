@@ -31,8 +31,6 @@ namespace blink {
 class InspectorResourceContentLoader::ResourceClient final
     : public GarbageCollected<InspectorResourceContentLoader::ResourceClient>,
       private RawResourceClient {
-  USING_GARBAGE_COLLECTED_MIXIN(ResourceClient);
-
  public:
   explicit ResourceClient(InspectorResourceContentLoader* loader)
       : loader_(loader) {}
@@ -71,6 +69,8 @@ void InspectorResourceContentLoader::Start() {
   InspectedFrames* inspected_frames =
       MakeGarbageCollected<InspectedFrames>(inspected_frame_);
   for (LocalFrame* frame : *inspected_frames) {
+    if (frame->GetDocument()->IsInitialEmptyDocument())
+      continue;
     documents.push_back(frame->GetDocument());
     documents.AppendVector(InspectorPageAgent::ImportsForFrame(frame));
   }
@@ -87,7 +87,8 @@ void InspectorResourceContentLoader::Start() {
       resource_request = ResourceRequest(document->Url());
       resource_request.SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
     }
-    resource_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
+    resource_request.SetRequestContext(
+        mojom::blink::RequestContextType::INTERNAL);
     if (document->Loader() &&
         document->Loader()->GetResponse().WasFetchedViaServiceWorker()) {
       resource_request.SetCacheMode(mojom::FetchCacheMode::kDefault);
@@ -101,9 +102,12 @@ void InspectorResourceContentLoader::Start() {
       // CompleteURL() to use imported Documents' base URLs.
       fetcher = document->GetExecutionContext()->Fetcher();
     }
+
+    scoped_refptr<const DOMWrapperWorld> world =
+        document->GetExecutionContext()->GetCurrentWorld();
     if (!resource_request.Url().GetString().IsEmpty()) {
       urls_to_fetch.insert(resource_request.Url().GetString());
-      ResourceLoaderOptions options;
+      ResourceLoaderOptions options(world);
       options.initiator_info.name = fetch_initiator_type_names::kInternal;
       FetchParameters params(std::move(resource_request), options);
       ResourceClient* resource_client =
@@ -123,11 +127,12 @@ void InspectorResourceContentLoader::Start() {
       if (url.IsEmpty() || urls_to_fetch.Contains(url))
         continue;
       urls_to_fetch.insert(url);
-      ResourceRequest resource_request(url);
-      resource_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
-      ResourceLoaderOptions options;
+      ResourceRequest style_sheet_resource_request(url);
+      style_sheet_resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::INTERNAL);
+      ResourceLoaderOptions options(world);
       options.initiator_info.name = fetch_initiator_type_names::kInternal;
-      FetchParameters params(std::move(resource_request), options);
+      FetchParameters params(std::move(style_sheet_resource_request), options);
       ResourceClient* resource_client =
           MakeGarbageCollected<ResourceClient>(this);
       // Prevent garbage collection by holding a reference to this resource.
@@ -157,7 +162,7 @@ void InspectorResourceContentLoader::Start() {
                           : network::mojom::CredentialsMode::kOmit);
       manifest_request.SetRequestContext(
           mojom::blink::RequestContextType::MANIFEST);
-      ResourceLoaderOptions manifest_options;
+      ResourceLoaderOptions manifest_options(world);
       manifest_options.initiator_info.name =
           fetch_initiator_type_names::kInternal;
       FetchParameters manifest_params(std::move(manifest_request),

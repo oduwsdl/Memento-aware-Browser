@@ -44,7 +44,6 @@ class CORE_EXPORT DOMTimer final : public GarbageCollected<DOMTimer>,
                                    public ExecutionContextLifecycleObserver,
                                    public TimerBase,
                                    public NameClient {
-  USING_GARBAGE_COLLECTED_MIXIN(DOMTimer);
   USING_PRE_FINALIZER(DOMTimer, Dispose);
 
  public:
@@ -58,7 +57,7 @@ class CORE_EXPORT DOMTimer final : public GarbageCollected<DOMTimer>,
 
   DOMTimer(ExecutionContext*,
            ScheduledAction*,
-           base::TimeDelta interval,
+           base::TimeDelta timeout,
            bool single_shot,
            int timeout_id);
   ~DOMTimer() override;
@@ -79,6 +78,11 @@ class CORE_EXPORT DOMTimer final : public GarbageCollected<DOMTimer>,
 
  private:
   void Fired() override;
+
+  // Increments the nesting level, clamping at the maximum value that can be
+  // represented by |int|. Since the value is only used to compare with
+  // |kMaxTimerNestingLevel|, the clamping doesn't affect behavior.
+  void IncrementNestingLevel();
 
   int timeout_id_;
   int nesting_level_;

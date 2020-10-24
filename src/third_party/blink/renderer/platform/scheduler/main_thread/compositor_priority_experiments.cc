@@ -112,6 +112,7 @@ void CompositorPriorityExperiments::OnTaskCompleted(
     case Experiment::kVeryHighPriorityForCompositingAlways:
       return;
     case Experiment::kVeryHighPriorityForCompositingWhenFast:
+      scheduler_->OnCompositorPriorityExperimentUpdateCompositorPriority();
       return;
     case Experiment::kVeryHighPriorityForCompositingAlternating:
       // Deprioritize the compositor if it has just run a task. Prioritize the
@@ -212,8 +213,8 @@ void CompositorPriorityExperiments::CompositorBudgetPoolController::
                     MainThreadTaskQueue::TaskTiming* task_timing,
                     bool have_seen_stop_signal) {
   if (have_seen_stop_signal) {
-    compositor_budget_pool_->RecordTaskRunTime(queue, task_timing->start_time(),
-                                               task_timing->end_time());
+    compositor_budget_pool_->RecordTaskRunTime(
+        nullptr, task_timing->start_time(), task_timing->end_time());
   }
   UpdateCompositorBudgetState(task_timing->end_time());
 }

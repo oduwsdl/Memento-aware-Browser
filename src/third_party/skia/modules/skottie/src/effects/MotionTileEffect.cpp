@@ -11,6 +11,7 @@
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkShader.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/private/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
@@ -223,7 +224,7 @@ private:
     using INHERITED = DiscardableAdapterBase<MotionTileAdapter, TileRenderNode>;
 };
 
-} // anonymous ns
+}  // namespace
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachMotionTileEffect(const skjson::ArrayValue& jprops,
                                                               sk_sp<sksg::RenderNode> layer) const {

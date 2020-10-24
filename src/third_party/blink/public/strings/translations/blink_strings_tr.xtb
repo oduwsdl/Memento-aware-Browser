@@ -13,9 +13,12 @@
 <translation id="1211441953136645838">son not</translation>
 <translation id="1281252709823657822">iletişim kutusu</translation>
 <translation id="1306460908038601864">Kapalı</translation>
+<translation id="1311894908970423688">Değer, <ph name="VALUE_DATE_OR_TIME" /> olmalıdır.</translation>
 <translation id="1335095011850992622">katkıda bulunanlar</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> öğe</translation>
+<translation id="1480676835519562650">çoklu seçilebilir, <ph name="SELECTED" />/<ph name="COUNT" /> seçildi.</translation>
 <translation id="1589122976691792535">bölge</translation>
 <translation id="1591562245178063882">Bu ay</translation>
 <translation id="1637811476055996098">Dosyaları Seç</translation>
@@ -27,6 +30,7 @@
 <translation id="1806710327868736751">alert_dialog</translation>
 <translation id="1821985195704844674">ağaç tablo</translation>
 <translation id="1822429046913737220">AM/PM</translation>
+<translation id="1823704031293214298">sayfa alt bilgisi</translation>
 <translation id="1832974991323546415">uzaktan cihazda oynat</translation>
 <translation id="190587075670221089">silme</translation>
 <translation id="1907737156431278478">örnek</translation>
@@ -44,6 +48,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. hafta, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904"><ph name="NUMBER" />. parça</translation>
 <translation id="2291999235780842123">onay kutusu</translation>
+<translation id="2307576640803031502">listede <ph name="COUNT" /> öğenin <ph name="INDEX" />. sırasında</translation>
 <translation id="2311842470354187719">sayfa sonu</translation>
 <translation id="2335594187091864976">tarih ve saat seçici</translation>
 <translation id="2393030564806080191">On altılı renk değeri</translation>
@@ -51,6 +56,7 @@
 <translation id="248395913932153421">Gün</translation>
 <translation id="2507943997699731163">Lütfen bu alanı doldurun.</translation>
 <translation id="2508569020611168319">sekme listesi</translation>
+<translation id="2530182415807757784">çoklu seçilebilir, hiçbiri seçilmedi.</translation>
 <translation id="2561842179657104141">diğer medya kontrollerini göster</translation>
 <translation id="2572483411312390101">oynat</translation>
 <translation id="2613802280814924224">Lütfen geçerli bir değer girin. En yakın geçerli değer şudur: <ph name="VALID_VALUE" /></translation>
@@ -100,9 +106,9 @@
 <translation id="4201051445878709314">Önceki ayı göster</translation>
 <translation id="421884353938374759">renk seçici</translation>
 <translation id="4248100235867064564">menü çubuğu</translation>
+<translation id="4293574643247337246">sayfa üstbilgisi</translation>
 <translation id="4360991593054037559">Lütfen geçerli bir değer girin. En yakın iki geçerli değer şunlardır: <ph name="VALID_VALUE_LOW" /> ve <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Soru-Cevap</translation>
-<translation id="4413860115965805769">menü düğmesi</translation>
 <translation id="4444765639179266822">Şöyle diyor olabilir: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">terimler sözlüğü referansı</translation>
 <translation id="4522570452068850558">Ayrıntılar</translation>
@@ -154,9 +160,11 @@
 <translation id="5677946354068040947">diğer seçenekler</translation>
 <translation id="576709008726043716">giriş</translation>
 <translation id="57838592816432529">Sesi kapat</translation>
+<translation id="5860033963881614850">Kapalı</translation>
 <translation id="588258955323874662">Tam ekran</translation>
 <translation id="5888666972993069672">Şimdi <ph name="DEVICE_FRIENDLY_NAME" /> adlı cihaza yayınlanıyor</translation>
 <translation id="591047860372322273">arama kutusu</translation>
+<translation id="5916664084637901428">Açık</translation>
 <translation id="5939518447894949180">Sıfırla</translation>
 <translation id="5966707198760109579">Hafta</translation>
 <translation id="5987525920412732405">dönme düğmesi</translation>
@@ -184,6 +192,7 @@
 <translation id="6643016212128521049">Temizle</translation>
 <translation id="668171684555832681">Diğer...</translation>
 <translation id="6692633176391053278">stepper (adımlayıcı)</translation>
+<translation id="6709093583001123835">Değer, <ph name="VALUE" /> olmalıdır.</translation>
 <translation id="6709570249143506788">Oynatma kalitesi kötü</translation>
 <translation id="6755330956360078551">ipucu</translation>
 <translation id="6790428901817661496">Oynat</translation>
@@ -284,6 +293,7 @@
 <translation id="9155987714137265666"><ph name="WEEK_START_DATE" /> tarihinde başlayan <ph name="WEEK" /></translation>
 <translation id="916607977885256133">Pencere içinde Pencere</translation>
 <translation id="9168329111483466115">dipnot</translation>
+<translation id="945780513535800434">Kısmen İşaretlendi</translation>
 <translation id="954003015749068518">pencere içinde pencere moduna gir</translation>
 <translation id="966787709310836684">menü</translation>
 </translationbundle>

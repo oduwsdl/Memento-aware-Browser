@@ -28,6 +28,7 @@ LayoutSVGHiddenContainer::LayoutSVGHiddenContainer(SVGElement* element)
     : LayoutSVGContainer(element) {}
 
 void LayoutSVGHiddenContainer::UpdateLayout() {
+  NOT_DESTROYED();
   DCHECK(NeedsLayout());
   LayoutAnalyzer::Scope analyzer(*this);
 
@@ -37,8 +38,7 @@ void LayoutSVGHiddenContainer::UpdateLayout() {
       GetElement()->HasRelativeLengths() &&
       SVGLayoutSupport::LayoutSizeOfNearestViewportChanged(this);
 
-  SVGLayoutSupport::LayoutChildren(FirstChild(), SelfNeedsLayout(), false,
-                                   layout_size_changed);
+  Content().Layout(SelfNeedsLayout(), false, layout_size_changed);
   UpdateCachedBoundaries();
   ClearNeedsLayout();
 }
@@ -47,6 +47,7 @@ bool LayoutSVGHiddenContainer::NodeAtPoint(HitTestResult&,
                                            const HitTestLocation&,
                                            const PhysicalOffset&,
                                            HitTestAction) {
+  NOT_DESTROYED();
   return false;
 }
 

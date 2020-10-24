@@ -86,9 +86,12 @@ class ExportJsonTest : public ::testing::Test {
   }
 
   Json::Value ToJsonValue(const std::string& json) {
-    Json::Reader reader;
+    Json::CharReaderBuilder b;
+    auto reader = std::unique_ptr<Json::CharReader>(b.newCharReader());
     Json::Value result;
-    EXPECT_TRUE(reader.parse(json, result)) << json;
+    EXPECT_TRUE(reader->parse(json.data(), json.data() + json.length(), &result,
+                              nullptr))
+        << json;
     return result;
   }
 
@@ -224,9 +227,8 @@ TEST_F(ExportJsonTest, StorageWithThreadName) {
 }
 
 TEST_F(ExportJsonTest, SystemEventsIgnored) {
-  constexpr int64_t kCookie = 22;
-  TrackId track = context_.track_tracker->InternAndroidAsyncTrack(
-      /*name=*/kNullStringId, /*upid=*/0, kCookie);
+  TrackId track = context_.track_tracker->CreateAndroidAsyncTrack(
+      /*name=*/kNullStringId, /*upid=*/0);
   context_.args_tracker->Flush();  // Flush track args.
 
   // System events have no category.
@@ -443,10 +445,6 @@ TEST_F(ExportJsonTest, StorageWithArgs) {
 TEST_F(ExportJsonTest, StorageWithSliceAndFlowEventArgs) {
   const char* kCategory = "cat";
   const char* kName = "name";
-  const uint64_t kBindId = 0xaa00aa00aa00aa00;
-  const char* kFlowDirection = "inout";
-  const char* kArgName = "arg_name";
-  const int kArgValue = 123;
 
   TraceStorage* storage = context_.storage.get();
 
@@ -455,23 +453,14 @@ TEST_F(ExportJsonTest, StorageWithSliceAndFlowEventArgs) {
   context_.args_tracker->Flush();  // Flush track args.
   StringId cat_id = storage->InternString(base::StringView(kCategory));
   StringId name_id = storage->InternString(base::StringView(kName));
-  SliceId id = storage->mutable_slice_table()
-                   ->Insert({0, 0, track, cat_id, name_id, 0, 0, 0})
-                   .id;
-  auto inserter = context_.args_tracker->AddArgsTo(id);
+  SliceId id1 = storage->mutable_slice_table()
+                    ->Insert({0, 0, track, cat_id, name_id, 0, 0, 0})
+                    .id;
+  SliceId id2 = storage->mutable_slice_table()
+                    ->Insert({100, 0, track, cat_id, name_id, 0, 0, 0})
+                    .id;
 
-  auto add_arg = [&](const char* key, Variadic value) {
-    inserter.AddArg(storage->InternString(key), value);
-  };
-
-  add_arg("legacy_event.bind_id", Variadic::UnsignedInteger(kBindId));
-  add_arg("legacy_event.bind_to_enclosing", Variadic::Boolean(true));
-  StringId flow_direction_id = storage->InternString(kFlowDirection);
-  add_arg("legacy_event.flow_direction", Variadic::String(flow_direction_id));
-
-  add_arg(kArgName, Variadic::Integer(kArgValue));
-
-  context_.args_tracker->Flush();
+  storage->mutable_flow_table()->Insert({id1, id2, 0});
 
   base::TempFile temp_file = base::TempFile::Create();
   FILE* output = fopen(temp_file.path().c_str(), "w+");
@@ -480,17 +469,30 @@ TEST_F(ExportJsonTest, StorageWithSliceAndFlowEventArgs) {
   EXPECT_TRUE(status.ok());
 
   Json::Value result = ToJsonValue(ReadFile(output));
-  EXPECT_EQ(result["traceEvents"].size(), 1u);
+  EXPECT_EQ(result["traceEvents"].size(), 4u);
 
-  Json::Value event = result["traceEvents"][0];
-  EXPECT_EQ(event["cat"].asString(), kCategory);
-  EXPECT_EQ(event["name"].asString(), kName);
-  EXPECT_EQ(event["bind_id"].asString(), "0xaa00aa00aa00aa00");
-  EXPECT_EQ(event["bp"].asString(), "e");
-  EXPECT_EQ(event["flow_in"].asBool(), true);
-  EXPECT_EQ(event["flow_out"].asBool(), true);
-  EXPECT_EQ(event["args"][kArgName].asInt(), kArgValue);
-  EXPECT_FALSE(event["args"].isMember("legacy_event"));
+  Json::Value slice_out = result["traceEvents"][0];
+  Json::Value slice_in = result["traceEvents"][1];
+  Json::Value flow_out = result["traceEvents"][2];
+  Json::Value flow_in = result["traceEvents"][3];
+
+  EXPECT_EQ(flow_out["cat"].asString(), kCategory);
+  EXPECT_EQ(flow_out["name"].asString(), kName);
+  EXPECT_EQ(flow_out["ph"].asString(), "s");
+  EXPECT_EQ(flow_out["tid"].asString(), slice_out["tid"].asString());
+  EXPECT_EQ(flow_out["pid"].asString(), slice_out["pid"].asString());
+
+  EXPECT_EQ(flow_in["cat"].asString(), kCategory);
+  EXPECT_EQ(flow_in["name"].asString(), kName);
+  EXPECT_EQ(flow_in["ph"].asString(), "f");
+  EXPECT_EQ(flow_in["bp"].asString(), "e");
+  EXPECT_EQ(flow_in["tid"].asString(), slice_in["tid"].asString());
+  EXPECT_EQ(flow_in["pid"].asString(), slice_in["pid"].asString());
+
+  EXPECT_LE(slice_out["ts"].asInt64(), flow_out["ts"].asInt64());
+  EXPECT_GE(slice_in["ts"].asInt64(), flow_in["ts"].asInt64());
+
+  EXPECT_EQ(flow_out["id"].asString(), flow_in["id"].asString());
 }
 
 TEST_F(ExportJsonTest, StorageWithListArgs) {
@@ -814,8 +816,7 @@ TEST_F(ExportJsonTest, DuplicatePidAndTid) {
       base::nullopt, base::nullopt, 1, kNullStringId);
   UniqueTid utid1a = context_.process_tracker->UpdateThread(1, 1);
   UniqueTid utid1b = context_.process_tracker->UpdateThread(2, 1);
-  UniqueTid utid1c =
-      context_.process_tracker->StartNewThread(base::nullopt, 2, kNullStringId);
+  UniqueTid utid1c = context_.process_tracker->StartNewThread(base::nullopt, 2);
   // Associate the new thread with its process.
   ASSERT_EQ(utid1c, context_.process_tracker->UpdateThread(2, 1));
 
@@ -1285,10 +1286,6 @@ TEST_F(ExportJsonTest, RawEvent) {
   EXPECT_EQ(event["use_async_tts"].asInt(), 1);
   EXPECT_EQ(event["id2"]["global"].asString(), "0xaaffaaffaaffaaff");
   EXPECT_EQ(event["scope"].asString(), kIdScope);
-  EXPECT_EQ(event["bind_id"].asString(), "0xaa00aa00aa00aa00");
-  EXPECT_EQ(event["bp"].asString(), "e");
-  EXPECT_EQ(event["flow_in"].asBool(), true);
-  EXPECT_EQ(event["flow_out"].asBool(), true);
   EXPECT_EQ(event["args"][kArgName].asInt(), kArgValue);
 }
 

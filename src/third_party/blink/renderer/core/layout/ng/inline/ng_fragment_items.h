@@ -19,6 +19,7 @@ class NGFragmentItemsBuilder;
 // transformed to a flat list of |NGFragmentItem| and stored in this class.
 class CORE_EXPORT NGFragmentItems {
  public:
+  NGFragmentItems(const NGFragmentItems& other);
   explicit NGFragmentItems(NGFragmentItemsBuilder* builder);
   ~NGFragmentItems();
 
@@ -36,14 +37,33 @@ class CORE_EXPORT NGFragmentItems {
     return items_[0];
   }
 
+  // Text content for |this| inline formatting context.
+  const String& NormalText() const { return text_content_; }
+  // Text content for `::first-line`. Available only if `::first-line` has
+  // different style than non-first-line style.
+  const String& FirstLineText() const { return first_line_text_content_; }
+  // Returns |FirstLineText()| if it is available and |first_line| is |true|.
+  // Otherwise returns |NormalText()|.
   const String& Text(bool first_line) const {
-    return UNLIKELY(first_line) ? first_line_text_content_ : text_content_;
+    return UNLIKELY(first_line && first_line_text_content_)
+               ? first_line_text_content_
+               : text_content_;
+  }
+
+  // When block-fragmented, returns the number of |NGFragmentItem| in earlier
+  // fragments for this box. 0 for the first fragment.
+  wtf_size_t SizeOfEarlierFragments() const {
+    return size_of_earlier_fragments_;
+  }
+  wtf_size_t EndItemIndex() const { return size_of_earlier_fragments_ + size_; }
+  bool HasItemIndex(wtf_size_t index) const {
+    return index >= SizeOfEarlierFragments() && index < EndItemIndex();
   }
 
   // Associate |NGFragmentItem|s with |LayoutObject|s and finalize the items
   // (set which ones are the first / last for the LayoutObject).
   static void FinalizeAfterLayout(
-      const Vector<scoped_refptr<const NGLayoutResult>, 1>&);
+      const Vector<scoped_refptr<const NGLayoutResult>, 1>& results);
 
   // Disassociate |NGFragmentItem|s with |LayoutObject|s. And more.
   static void ClearAssociatedFragments(LayoutObject* container);
@@ -68,6 +88,10 @@ class CORE_EXPORT NGFragmentItems {
   }
   wtf_size_t ByteSize() const { return ByteSizeFor(Size()); }
 
+#if DCHECK_IS_ON()
+  void CheckAllItemsAreValid() const;
+#endif
+
  private:
   const NGFragmentItem* ItemsData() const { return items_; }
 
@@ -79,6 +103,10 @@ class CORE_EXPORT NGFragmentItems {
   String first_line_text_content_;
 
   wtf_size_t size_;
+
+  // Total size of |NGFragmentItem| in earlier fragments when block fragmented.
+  // 0 for the first |NGFragmentItems|.
+  mutable wtf_size_t size_of_earlier_fragments_;
 
   // Semantically, |items_| is a flexible array of |scoped_refptr<const
   // NGFragmentItem>|, but |scoped_refptr| has non-trivial destruction which

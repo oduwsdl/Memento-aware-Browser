@@ -41,10 +41,12 @@ AXSlider::AXSlider(LayoutObject* layout_object,
     : AXLayoutObject(layout_object, ax_object_cache) {}
 
 ax::mojom::Role AXSlider::DetermineAccessibilityRole() {
+  native_role_ = ax::mojom::blink::Role::kSlider;
+
   if ((aria_role_ = DetermineAriaRoleAttribute()) != ax::mojom::Role::kUnknown)
     return aria_role_;
 
-  return ax::mojom::Role::kSlider;
+  return native_role_;
 }
 
 AccessibilityOrientation AXSlider::Orientation() const {
@@ -81,9 +83,7 @@ void AXSlider::AddChildren() {
 
   AXObjectCacheImpl& cache = AXObjectCache();
 
-  AXSliderThumb* thumb = static_cast<AXSliderThumb*>(
-      cache.GetOrCreate(ax::mojom::Role::kSliderThumb));
-  thumb->SetParent(this);
+  AXObject* thumb = cache.Create(ax::mojom::blink::Role::kSliderThumb, this);
 
   // Before actually adding the value indicator to the hierarchy,
   // allow the platform to make a final decision about it.
@@ -111,7 +111,7 @@ bool AXSlider::OnNativeSetValueAction(const String& value) {
 
   input->setValue(value, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
 
-  // Fire change event manually, as LayoutSlider::setValueForPosition does.
+  // Fire change event manually, as SliderThumbElement::StopDragging does.
   input->DispatchFormControlChangeEvent();
 
   // Dispatching an event could result in changes to the document, like
@@ -137,12 +137,12 @@ LayoutObject* AXSliderThumb::LayoutObjectForRelativeBounds() const {
     return nullptr;
 
   LayoutObject* slider_layout_object = parent_->GetLayoutObject();
-  if (!slider_layout_object || !slider_layout_object->IsSlider())
+  if (!slider_layout_object)
     return nullptr;
   Element* thumb_element =
       To<Element>(slider_layout_object->GetNode())
           ->UserAgentShadowRoot()
-          ->getElementById(shadow_element_names::SliderThumb());
+          ->getElementById(shadow_element_names::kIdSliderThumb);
   DCHECK(thumb_element);
   return thumb_element->GetLayoutObject();
 }

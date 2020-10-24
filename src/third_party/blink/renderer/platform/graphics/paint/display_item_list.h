@@ -13,7 +13,6 @@
 namespace blink {
 
 class JSONArray;
-struct PaintChunk;
 
 // kDisplayItemAlignment must be a multiple of alignof(derived display item) for
 // each derived display item; the ideal value is the least common multiple.
@@ -28,8 +27,16 @@ static constexpr wtf_size_t kMaximumDisplayItemSize =
 class PLATFORM_EXPORT DisplayItemList
     : public ContiguousContainer<DisplayItem, kDisplayItemAlignment> {
  public:
-  DisplayItemList(wtf_size_t initial_size_bytes)
-      : ContiguousContainer(kMaximumDisplayItemSize, initial_size_bytes) {}
+  static constexpr wtf_size_t kDefaultCapacityInBytes = 512;
+
+  // Using 0 as the default value to make 0 also fall back to
+  // kDefaultCapacityInBytes.
+  explicit DisplayItemList(wtf_size_t initial_capacity_in_bytes = 0)
+      : ContiguousContainer(kMaximumDisplayItemSize,
+                            initial_capacity_in_bytes
+                                ? initial_capacity_in_bytes
+                                : kDefaultCapacityInBytes) {}
+
   DisplayItemList(DisplayItemList&& source)
       : ContiguousContainer(std::move(source)) {}
 
@@ -58,7 +65,7 @@ class PLATFORM_EXPORT DisplayItemList
     item.fragment_ = result.fragment_;
     DCHECK(item.GetId() == result.GetId());
     item.visual_rect_ = result.visual_rect_;
-    item.outset_for_raster_effects_ = result.outset_for_raster_effects_;
+    item.raster_effect_outset_ = result.raster_effect_outset_;
     result.SetMovedFromCachedSubsequence(false);
     return result;
   }
@@ -71,13 +78,26 @@ class PLATFORM_EXPORT DisplayItemList
         : begin_(begin), end_(end) {}
     Iterator begin() const { return begin_; }
     Iterator end() const { return end_; }
+    wtf_size_t size() const { return end_ - begin_; }
+
+    // To meet the requirement of gmock ElementsAre().
+    using value_type = DisplayItem;
+    using const_iterator = DisplayItemList::const_iterator;
 
    private:
     Iterator begin_;
     Iterator end_;
   };
-  Range<iterator> ItemsInPaintChunk(const PaintChunk&);
-  Range<const_iterator> ItemsInPaintChunk(const PaintChunk&) const;
+
+  // In most cases, we should use PaintChunkSubset::Iterator::DisplayItems()
+  // instead of these.
+  Range<iterator> ItemsInRange(wtf_size_t begin_index, wtf_size_t end_index) {
+    return Range<iterator>(begin() + begin_index, begin() + end_index);
+  }
+  Range<const_iterator> ItemsInRange(wtf_size_t begin_index,
+                                     wtf_size_t end_index) const {
+    return Range<const_iterator>(begin() + begin_index, begin() + end_index);
+  }
 
 #if DCHECK_IS_ON()
   enum JsonOptions {
@@ -91,15 +111,15 @@ class PLATFORM_EXPORT DisplayItemList
   };
   typedef unsigned JsonFlags;
 
-  std::unique_ptr<JSONArray> DisplayItemsAsJSON(wtf_size_t begin_index,
-                                                wtf_size_t end_index,
-                                                JsonFlags) const;
-  void AppendSubsequenceAsJSON(wtf_size_t begin_index,
-                               wtf_size_t end_index,
-                               JsonFlags,
-                               JSONArray&) const;
+  static std::unique_ptr<JSONArray> DisplayItemsAsJSON(
+      wtf_size_t first_item_index,
+      const Range<const_iterator>& display_items,
+      JsonFlags);
 #endif  // DCHECK_IS_ON()
 };
+
+using DisplayItemIterator = DisplayItemList::const_iterator;
+using DisplayItemRange = DisplayItemList::Range<DisplayItemIterator>;
 
 }  // namespace blink
 

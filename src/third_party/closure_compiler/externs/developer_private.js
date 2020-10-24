@@ -86,6 +86,7 @@ chrome.developerPrivate.ViewType = {
   EXTENSION_DIALOG: 'EXTENSION_DIALOG',
   EXTENSION_GUEST: 'EXTENSION_GUEST',
   EXTENSION_POPUP: 'EXTENSION_POPUP',
+  EXTENSION_SERVICE_WORKER_BACKGROUND: 'EXTENSION_SERVICE_WORKER_BACKGROUND',
   TAB_CONTENTS: 'TAB_CONTENTS',
 };
 
@@ -181,6 +182,7 @@ chrome.developerPrivate.RuntimeError;
  *   corruptInstall: boolean,
  *   updateRequired: boolean,
  *   blockedByPolicy: boolean,
+ *   reloading: boolean,
  *   custodianApprovalRequired: boolean,
  *   parentDisabledPermissions: boolean
  * }}
@@ -218,13 +220,6 @@ chrome.developerPrivate.ExtensionView;
 /**
  * @enum {string}
  */
-chrome.developerPrivate.ControllerType = {
-  POLICY: 'POLICY',
-};
-
-/**
- * @enum {string}
- */
 chrome.developerPrivate.HostAccess = {
   ON_CLICK: 'ON_CLICK',
   ON_SPECIFIC_SITES: 'ON_SPECIFIC_SITES',
@@ -233,7 +228,6 @@ chrome.developerPrivate.HostAccess = {
 
 /**
  * @typedef {{
- *   type: !chrome.developerPrivate.ControllerType,
  *   text: string
  * }}
  */
@@ -472,6 +466,8 @@ chrome.developerPrivate.EventType = {
   COMMAND_ADDED: 'COMMAND_ADDED',
   COMMAND_REMOVED: 'COMMAND_REMOVED',
   PERMISSIONS_CHANGED: 'PERMISSIONS_CHANGED',
+  SERVICE_WORKER_STARTED: 'SERVICE_WORKER_STARTED',
+  SERVICE_WORKER_STOPPED: 'SERVICE_WORKER_STOPPED',
 };
 
 /**
@@ -548,6 +544,7 @@ chrome.developerPrivate.RequestFileSourceResponse;
  *   extensionId: (string|undefined),
  *   renderViewId: number,
  *   renderProcessId: number,
+ *   isServiceWorker: (boolean|undefined),
  *   incognito: (boolean|undefined),
  *   url: (string|undefined),
  *   lineNumber: (number|undefined),

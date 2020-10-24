@@ -8,6 +8,7 @@
 #ifndef SKSL_EXTERNALFUNCTIONCALL
 #define SKSL_EXTERNALFUNCTIONCALL
 
+#include "include/private/SkTArray.h"
 #include "src/sksl/SkSLExternalValue.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
@@ -17,18 +18,36 @@ namespace SkSL {
 /**
  * An external function invocation.
  */
-struct ExternalFunctionCall : public Expression {
-    ExternalFunctionCall(int offset, const Type& type, ExternalValue* function,
-                         std::vector<std::unique_ptr<Expression>> arguments)
-    : INHERITED(offset, kExternalFunctionCall_Kind, type)
-    , fFunction(function)
-    , fArguments(std::move(arguments)) {}
+class ExternalFunctionCall : public Expression {
+public:
+    static constexpr Kind kExpressionKind = Kind::kExternalFunctionCall;
+
+    ExternalFunctionCall(int offset, const ExternalValue* function, ExpressionArray arguments)
+    : INHERITED(offset, kExpressionKind, ExternalValueData{&function->callReturnType(), function}) {
+        fExpressionChildren = std::move(arguments);
+    }
+
+    const Type& type() const override {
+        return *this->externalValueData().fType;
+    }
+
+    ExpressionArray& arguments() {
+        return fExpressionChildren;
+    }
+
+    const ExpressionArray& arguments() const {
+        return fExpressionChildren;
+    }
+
+    const ExternalValue& function() const {
+        return *this->externalValueData().fValue;
+    }
 
     bool hasProperty(Property property) const override {
         if (property == Property::kSideEffects) {
             return true;
         }
-        for (const auto& arg : fArguments) {
+        for (const auto& arg : this->arguments()) {
             if (arg->hasProperty(property)) {
                 return true;
             }
@@ -36,43 +55,31 @@ struct ExternalFunctionCall : public Expression {
         return false;
     }
 
-    int nodeCount() const override {
-        int result = 1;
-        for (const auto& a : fArguments) {
-            result += a->nodeCount();
-        }
-        return result;
-    }
-
     std::unique_ptr<Expression> clone() const override {
-        std::vector<std::unique_ptr<Expression>> cloned;
-        for (const auto& arg : fArguments) {
+        ExpressionArray cloned;
+        cloned.reserve_back(this->arguments().size());
+        for (const auto& arg : this->arguments()) {
             cloned.push_back(arg->clone());
         }
-        return std::unique_ptr<Expression>(new ExternalFunctionCall(fOffset,
-                                                                    fType,
-                                                                    fFunction,
-                                                                    std::move(cloned)));
+        return std::make_unique<ExternalFunctionCall>(fOffset, &this->function(),
+                                                      std::move(cloned));
     }
 
     String description() const override {
-        String result = String(fFunction->fName) + "(";
+        String result = String(this->function().name()) + "(";
         String separator;
-        for (size_t i = 0; i < fArguments.size(); i++) {
+        for (const std::unique_ptr<Expression>& arg : this->arguments()) {
             result += separator;
-            result += fArguments[i]->description();
+            result += arg->description();
             separator = ", ";
         }
         result += ")";
         return result;
     }
 
-    ExternalValue* fFunction;
-    std::vector<std::unique_ptr<Expression>> fArguments;
-
-    typedef Expression INHERITED;
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

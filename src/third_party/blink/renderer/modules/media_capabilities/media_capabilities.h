@@ -9,6 +9,7 @@
 #include "media/learning/mojo/public/cpp/mojo_learning_task_controller.h"
 #include "media/learning/mojo/public/mojom/learning_task_controller.mojom-blink.h"
 #include "media/mojo/mojom/video_decode_perf_history.mojom-blink.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_configuration.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -51,7 +52,8 @@ class MODULES_EXPORT MediaCapabilities final : public ScriptWrappable {
    public:
     PendingCallbackState(ScriptPromiseResolver* resolver,
                          MediaKeySystemAccess* access,
-                         const base::TimeTicks& request_time);
+                         const base::TimeTicks& request_time,
+                         base::Optional<IdentifiableToken> input_token);
     virtual void Trace(blink::Visitor* visitor) const;
 
     Member<ScriptPromiseResolver> resolver;
@@ -60,7 +62,9 @@ class MODULES_EXPORT MediaCapabilities final : public ScriptWrappable {
     base::Optional<bool> is_nnr_prediction_smooth;
     base::Optional<bool> db_is_smooth;
     base::Optional<bool> db_is_power_efficient;
+    base::Optional<bool> is_gpu_factories_supported;
     base::TimeTicks request_time;
+    base::Optional<IdentifiableToken> input_token;
   };
 
   // Lazily binds remote LearningTaskControllers for ML smoothness predictions
@@ -74,6 +78,7 @@ class MODULES_EXPORT MediaCapabilities final : public ScriptWrappable {
   ScriptPromise GetEmeSupport(ScriptState*,
                               media::VideoCodec,
                               media::VideoCodecProfile,
+                              media::VideoColorSpace,
                               const MediaDecodingConfiguration*,
                               const base::TimeTicks& request_time,
                               ExceptionState&);
@@ -81,7 +86,8 @@ class MODULES_EXPORT MediaCapabilities final : public ScriptWrappable {
   // parallel request to GetPerfInfo_ML() when learning experiment is enabled.
   void GetPerfInfo(media::VideoCodec,
                    media::VideoCodecProfile,
-                   const VideoConfiguration*,
+                   media::VideoColorSpace,
+                   const MediaDecodingConfiguration*,
                    const base::TimeTicks& request_time,
                    ScriptPromiseResolver*,
                    MediaKeySystemAccess*);
@@ -93,6 +99,15 @@ class MODULES_EXPORT MediaCapabilities final : public ScriptWrappable {
                       media::VideoCodecProfile video_profile,
                       int width,
                       double framerate);
+
+  // Query media::GpuVideoAcceleratorFactories for support of hardware
+  // accelerate decode. Only called when |UseGpuFactoriesForPowerEfficient()|
+  // is true.
+  void GetGpuFactoriesSupport(int callback_id,
+                              media::VideoCodec video_codec,
+                              media::VideoCodecProfile video_profile,
+                              media::VideoColorSpace,
+                              const MediaDecodingConfiguration*);
 
   // Callback for perf info from the VideoDecodePerfHistory service.
   void OnPerfHistoryInfo(int callback_id,
@@ -108,6 +123,9 @@ class MODULES_EXPORT MediaCapabilities final : public ScriptWrappable {
   void OnNnrPrediction(
       int callback_id,
       const base::Optional<::media::learning::TargetHistogram>& histogram);
+
+  // Callback for GetGpuFactoriesSupport().
+  void OnGpuFactoriesSupport(int callback_id, bool is_supported);
 
   // Resolves the callback with associated |callback_id| and removes it from the
   // |pending_callback_map_|.

@@ -8,6 +8,9 @@
 #include <utility>
 
 #include "base/metrics/histogram_functions.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
 #include "third_party/blink/renderer/core/css/offscreen_font_selector.h"
@@ -45,16 +48,16 @@ namespace blink {
 OffscreenCanvas::OffscreenCanvas(ExecutionContext* context, const IntSize& size)
     : CanvasRenderingContextHost(
           CanvasRenderingContextHost::HostType::kOffscreenCanvasHost,
-          base::make_optional<UkmParameters>()),
+          {context->UkmRecorder(), context->UkmSourceID()}),
       execution_context_(context),
       size_(size) {
   // Other code in Blink watches for destruction of the context; be
   // robust here as well.
   if (!context->IsContextDestroyed()) {
-    if (context->IsDocument()) {
+    if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
       // If this OffscreenCanvas is being created in the context of a
       // cross-origin iframe, it should prefer to use the low-power GPU.
-      LocalFrame* frame = To<LocalDOMWindow>(context)->GetFrame();
+      LocalFrame* frame = window->GetFrame();
       if (!(frame && frame->IsCrossOriginToMainFrame())) {
         AllowHighPerformancePowerPreference();
       }
@@ -211,7 +214,24 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
                                       "ImageBitmap construction failed");
   }
 
+  RecordIdentifiabilityMetric(
+      blink::IdentifiableSurface::FromTypeAndToken(
+          blink::IdentifiableSurface::Type::kCanvasReadback,
+          context_ ? context_->GetContextType()
+                   : CanvasRenderingContext::kContextTypeUnknown),
+      0);
+
   return image;
+}
+
+void OffscreenCanvas::RecordIdentifiabilityMetric(
+    const blink::IdentifiableSurface& surface,
+    const IdentifiableToken& token) const {
+  if (!IdentifiabilityStudySettings::Get()->IsSurfaceAllowed(surface))
+    return;
+  blink::IdentifiabilityMetricBuilder(GetExecutionContext()->UkmSourceID())
+      .Set(surface, token)
+      .Record(GetExecutionContext()->UkmRecorder());
 }
 
 scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
@@ -361,7 +381,8 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
   IntSize surface_size(width(), height());
   const bool can_use_gpu =
       SharedGpuContext::IsGpuCompositingEnabled() &&
-      (Is3d() || RuntimeEnabledFeatures::Accelerated2dCanvasEnabled());
+      (Is3d() || (RuntimeEnabledFeatures::Accelerated2dCanvasEnabled() &&
+                  !context_->CreationAttributes().will_read_frequently));
   const bool composited_mode =
       (Is3d() ? RuntimeEnabledFeatures::WebGLImageChromiumEnabled()
               : RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled());
@@ -378,16 +399,18 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
 
   if (can_use_gpu) {
     provider = CanvasResourceProvider::CreateSharedImageProvider(
-        surface_size, SharedGpuContext::ContextProviderWrapper(),
-        FilterQuality(), context_->ColorParams(), false /*is_origin_top_left*/,
-        RasterMode::kGPU, shared_image_usage_flags);
+        surface_size, FilterQuality(), context_->ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear,
+        SharedGpuContext::ContextProviderWrapper(), RasterMode::kGPU,
+        false /*is_origin_top_left*/, shared_image_usage_flags);
   } else if (HasPlaceholderCanvas() && composited_mode) {
     // Only try a SoftwareComposited SharedImage if the context has Placeholder
     // canvas and the composited mode is enabled.
     provider = CanvasResourceProvider::CreateSharedImageProvider(
-        surface_size, SharedGpuContext::ContextProviderWrapper(),
-        FilterQuality(), context_->ColorParams(), false /*is_origin_top_left*/,
-        RasterMode::kCPU, shared_image_usage_flags);
+        surface_size, FilterQuality(), context_->ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear,
+        SharedGpuContext::ContextProviderWrapper(), RasterMode::kCPU,
+        false /*is_origin_top_left*/, shared_image_usage_flags);
   }
 
   if (!provider && HasPlaceholderCanvas()) {
@@ -398,6 +421,7 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
         GetOrCreateResourceDispatcher()->GetWeakPtr();
     provider = CanvasResourceProvider::CreateSharedBitmapProvider(
         surface_size, FilterQuality(), context_->ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear,
         std::move(dispatcher_weakptr));
   }
 
@@ -405,7 +429,8 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
     // If any of the above Create was able to create a valid provider, a
     // BitmapProvider will be created here.
     provider = CanvasResourceProvider::CreateBitmapProvider(
-        surface_size, FilterQuality(), context_->ColorParams());
+        surface_size, FilterQuality(), context_->ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear);
   }
 
   ReplaceResourceProvider(std::move(provider));
@@ -418,7 +443,6 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
                               ResourceProvider()->IsAccelerated());
     base::UmaHistogramEnumeration("Blink.Canvas.ResourceProviderType",
                                   ResourceProvider()->GetType());
-    ResourceProvider()->Clear();
     DidDraw();
 
     if (needs_matrix_clip_restore_) {

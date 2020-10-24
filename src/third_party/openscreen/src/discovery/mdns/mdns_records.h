@@ -135,9 +135,9 @@ class RawRecordRdata {
 };
 
 // SRV record format (http://www.ietf.org/rfc/rfc2782.txt):
-// 2 bytes network-order unsigned priority
-// 2 bytes network-order unsigned weight
-// 2 bytes network-order unsigned port
+//   2 bytes network-order unsigned priority
+//   2 bytes network-order unsigned weight
+//   2 bytes network-order unsigned port
 // target: domain name (on-the-wire representation)
 class SrvRecordRdata {
  public:
@@ -557,12 +557,12 @@ class MdnsQuestion {
 // id: 2 bytes network-order identifier assigned by the program that generates
 // any kind of query. This identifier is copied to the corresponding reply and
 // can be used by the requester to match up replies to outstanding queries.
-// flags: 2 bytes network-order flags bitfield
-// questions: questions in the message
-// answers: resource records that answer the questions
-// authority_records: resource records that point toward authoritative name
+// flags: 2 bytes network-order flags bitfield.
+// questions: questions in the message.
+// answers: resource records that answer the questions.
+// authority_records: resource records that point toward authoritative name.
 // servers additional_records: additional resource records that relate to the
-// query
+// query.
 class MdnsMessage {
  public:
   static ErrorOr<MdnsMessage> TryCreate(

@@ -30,7 +30,7 @@ public:
                                                                       int sampleCnt,
                                                                       const D3D12_RESOURCE_DESC&,
                                                                       GrProtected isProtected,
-                                                                      GrMipMapsStatus);
+                                                                      GrMipmapStatus);
 
     static sk_sp<GrD3DTextureRenderTarget> MakeWrappedTextureRenderTarget(
             GrD3DGpu*, SkISize dimensions, int sampleCnt, GrWrapCacheable,
@@ -56,7 +56,6 @@ private:
     GrD3DTextureRenderTarget(GrD3DGpu* gpu,
                              SkBudgeted budgeted,
                              SkISize dimensions,
-                             int sampleCnt,
                              const GrD3DTextureResourceInfo& info,
                              sk_sp<GrD3DResourceState> state,
                              const GrD3DDescriptorHeap::CPUHandle& shaderResourceView,
@@ -64,7 +63,7 @@ private:
                              sk_sp<GrD3DResourceState> msaaState,
                              const GrD3DDescriptorHeap::CPUHandle& colorRenderTargetView,
                              const GrD3DDescriptorHeap::CPUHandle& resolveRenderTargetView,
-                             GrMipMapsStatus);
+                             GrMipmapStatus);
 
     // non-MSAA, not-wrapped
     GrD3DTextureRenderTarget(GrD3DGpu* gpu,
@@ -74,12 +73,11 @@ private:
                              sk_sp<GrD3DResourceState> state,
                              const GrD3DDescriptorHeap::CPUHandle& shaderResourceView,
                              const GrD3DDescriptorHeap::CPUHandle& renderTargetView,
-                             GrMipMapsStatus);
+                             GrMipmapStatus);
 
     // MSAA, wrapped
     GrD3DTextureRenderTarget(GrD3DGpu* gpu,
                              SkISize dimensions,
-                             int sampleCnt,
                              const GrD3DTextureResourceInfo& info,
                              sk_sp<GrD3DResourceState> state,
                              const GrD3DDescriptorHeap::CPUHandle& shaderResourceView,
@@ -87,7 +85,7 @@ private:
                              sk_sp<GrD3DResourceState> msaaState,
                              const GrD3DDescriptorHeap::CPUHandle& colorRenderTargetView,
                              const GrD3DDescriptorHeap::CPUHandle& resolveRenderTargetView,
-                             GrMipMapsStatus,
+                             GrMipmapStatus,
                              GrWrapCacheable);
 
     // non-MSAA, wrapped
@@ -97,7 +95,7 @@ private:
                              sk_sp<GrD3DResourceState> state,
                              const GrD3DDescriptorHeap::CPUHandle& shaderResourceView,
                              const GrD3DDescriptorHeap::CPUHandle& renderTargetView,
-                             GrMipMapsStatus,
+                             GrMipmapStatus,
                              GrWrapCacheable);
 
     // GrGLRenderTarget accounts for the texture's memory and any MSAA renderbuffer's memory.
@@ -110,5 +108,9 @@ private:
         this->setResourceRelease(std::move(releaseHelper));
     }
 };
+
+#ifdef SK_BUILD_FOR_WIN
+#pragma warning(pop)
+#endif
 
 #endif

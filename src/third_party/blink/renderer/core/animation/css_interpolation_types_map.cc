@@ -158,6 +158,7 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
       case CSSPropertyID::kStrokeDashoffset:
       case CSSPropertyID::kStrokeWidth:
       case CSSPropertyID::kTextDecorationThickness:
+      case CSSPropertyID::kTextUnderlineOffset:
       case CSSPropertyID::kTop:
       case CSSPropertyID::kVerticalAlign:
       case CSSPropertyID::kWebkitBorderHorizontalSpacing:
@@ -198,6 +199,7 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
             std::make_unique<CSSNumberInterpolationType>(used_property));
         break;
       case CSSPropertyID::kLineHeight:
+      case CSSPropertyID::kTabSize:
         applicable_types->push_back(
             std::make_unique<CSSLengthInterpolationType>(used_property));
         applicable_types->push_back(
@@ -341,6 +343,11 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
             std::make_unique<CSSImageSliceInterpolationType>(used_property));
         break;
       case CSSPropertyID::kClipPath:
+        applicable_types->push_back(
+            std::make_unique<CSSBasicShapeInterpolationType>(used_property));
+        applicable_types->push_back(
+            std::make_unique<CSSPathInterpolationType>(used_property));
+        break;
       case CSSPropertyID::kShapeOutside:
         applicable_types->push_back(
             std::make_unique<CSSBasicShapeInterpolationType>(used_property));

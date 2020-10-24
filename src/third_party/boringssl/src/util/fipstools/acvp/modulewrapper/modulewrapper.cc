@@ -17,13 +17,16 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 #include <string.h>
 #include <sys/uio.h>
 #include <unistd.h>
 #include <cstdarg>
 
+#include <openssl/aead.h>
 #include <openssl/aes.h>
 #include <openssl/bn.h>
+#include <openssl/cmac.h>
 #include <openssl/digest.h>
 #include <openssl/ec.h>
 #include <openssl/ec_key.h>
@@ -77,14 +80,19 @@ static bool WriteReply(int fd, Args... args) {
   iovs[0].iov_base = nums;
   iovs[0].iov_len = sizeof(uint32_t) * (1 + spans.size());
 
+  size_t num_iov = 1;
   for (size_t i = 0; i < spans.size(); i++) {
     const auto &span = spans[i];
     nums[i + 1] = span.size();
-    iovs[i + 1].iov_base = const_cast<uint8_t *>(span.data());
-    iovs[i + 1].iov_len = span.size();
+    if (span.size() == 0) {
+      continue;
+    }
+
+    iovs[num_iov].iov_base = const_cast<uint8_t *>(span.data());
+    iovs[num_iov].iov_len = span.size();
+    num_iov++;
   }
 
-  const size_t num_iov = spans.size() + 1;
   size_t iov_done = 0;
   while (iov_done < num_iov) {
     ssize_t r;
@@ -97,7 +105,7 @@ static bool WriteReply(int fd, Args... args) {
     }
 
     size_t written = r;
-    for (size_t i = iov_done; written > 0 && i < num_iov; i++) {
+    for (size_t i = iov_done; i < num_iov && written > 0; i++) {
       iovec &iov = iovs[i];
 
       size_t done = written;
@@ -165,10 +173,82 @@ static bool GetConfig(const Span<const uint8_t> args[]) {
         "keyLen": [128, 192, 256]
       },
       {
+        "algorithm": "ACVP-AES-CTR",
+        "revision": "1.0",
+        "direction": ["encrypt", "decrypt"],
+        "keyLen": [128, 192, 256],
+        "payloadLen": [{
+          "min": 8, "max": 128, "increment": 8
+        }],
+        "incrementalCounter": true,
+        "overflowCounter": true,
+        "performCounterTests": true
+      },
+      {
         "algorithm": "ACVP-AES-CBC",
         "revision": "1.0",
         "direction": ["encrypt", "decrypt"],
         "keyLen": [128, 192, 256]
+      },
+      {
+        "algorithm": "ACVP-AES-GCM",
+        "revision": "1.0",
+        "direction": ["encrypt", "decrypt"],
+        "keyLen": [128, 192, 256],
+        "payloadLen": [{
+          "min": 0, "max": 256, "increment": 8
+        }],
+        "aadLen": [{
+          "min": 0, "max": 256, "increment": 8
+        }],
+        "tagLen": [128],
+        "ivLen": [96],
+        "ivGen": "external"
+      },
+      {
+        "algorithm": "ACVP-AES-KW",
+        "revision": "1.0",
+        "direction": [
+            "encrypt",
+            "decrypt"
+        ],
+        "kwCipher": [
+            "cipher"
+        ],
+        "keyLen": [
+            128, 192, 256
+        ],
+        "payloadLen": [{"min": 128, "max": 1024, "increment": 64}]
+      },
+      {
+        "algorithm": "ACVP-AES-KWP",
+        "revision": "1.0",
+        "direction": [
+            "encrypt",
+            "decrypt"
+        ],
+        "kwCipher": [
+            "cipher"
+        ],
+        "keyLen": [
+            128, 192, 256
+        ],
+        "payloadLen": [{"min": 8, "max": 1024, "increment": 8}]
+      },
+      {
+        "algorithm": "ACVP-AES-CCM",
+        "revision": "1.0",
+        "direction": [
+            "encrypt",
+            "decrypt"
+        ],
+        "keyLen": [
+            128
+        ],
+        "payloadLen": [{"min": 0, "max": 256, "increment": 8}],
+        "ivLen": [104],
+        "tagLen": [32],
+        "aadLen": [{"min": 0, "max": 1024, "increment": 8}]
       },
       {
         "algorithm": "HMAC-SHA-1",
@@ -299,6 +379,24 @@ static bool GetConfig(const Span<const uint8_t> args[]) {
             "SHA2-512"
           ]
         }]
+      },
+      {
+        "algorithm": "CMAC-AES",
+        "revision": "1.0",
+        "capabilities": [{
+          "direction": ["gen", "ver"],
+          "msgLen": [{
+            "min": 0,
+            "max": 65536,
+            "increment": 8
+          }],
+          "keyLen": [128, 256],
+          "macLen": [{
+            "min": 32,
+            "max": 128,
+            "increment": 8
+          }]
+        }]
       }
     ])";
   return WriteReply(
@@ -353,6 +451,273 @@ static bool AES_CBC(const Span<const uint8_t> args[]) {
   AES_cbc_encrypt(args[1].data(), out.data(), args[1].size(), &key, iv,
                   Direction);
   return WriteReply(STDOUT_FILENO, Span<const uint8_t>(out));
+}
+
+static bool AES_CTR(const Span<const uint8_t> args[]) {
+  AES_KEY key;
+  if (AES_set_encrypt_key(args[0].data(), args[0].size() * 8, &key) != 0) {
+    return false;
+  }
+  if (args[2].size() != AES_BLOCK_SIZE) {
+    return false;
+  }
+  uint8_t iv[AES_BLOCK_SIZE];
+  memcpy(iv, args[2].data(), AES_BLOCK_SIZE);
+
+  std::vector<uint8_t> out;
+  out.resize(args[1].size());
+  unsigned num = 0;
+  uint8_t ecount_buf[AES_BLOCK_SIZE];
+  AES_ctr128_encrypt(args[1].data(), out.data(), args[1].size(), &key, iv,
+                     ecount_buf, &num);
+  return WriteReply(STDOUT_FILENO, Span<const uint8_t>(out));
+}
+
+static bool AESGCMSetup(EVP_AEAD_CTX *ctx, Span<const uint8_t> tag_len_span,
+                        Span<const uint8_t> key) {
+  uint32_t tag_len_32;
+  if (tag_len_span.size() != sizeof(tag_len_32)) {
+    fprintf(stderr, "Tag size value is %u bytes, not an uint32_t\n",
+            static_cast<unsigned>(tag_len_span.size()));
+    return false;
+  }
+  memcpy(&tag_len_32, tag_len_span.data(), sizeof(tag_len_32));
+
+  const EVP_AEAD *aead;
+  switch (key.size()) {
+    case 16:
+      aead = EVP_aead_aes_128_gcm();
+      break;
+    case 24:
+      aead = EVP_aead_aes_192_gcm();
+      break;
+    case 32:
+      aead = EVP_aead_aes_256_gcm();
+      break;
+    default:
+      fprintf(stderr, "Bad AES-GCM key length %u\n",
+              static_cast<unsigned>(key.size()));
+      return false;
+  }
+
+  if (!EVP_AEAD_CTX_init(ctx, aead, key.data(), key.size(), tag_len_32,
+                         nullptr)) {
+    fprintf(stderr, "Failed to setup AES-GCM with tag length %u\n",
+            static_cast<unsigned>(tag_len_32));
+    return false;
+  }
+
+  return true;
+}
+
+static bool AESCCMSetup(EVP_AEAD_CTX *ctx, Span<const uint8_t> tag_len_span,
+                        Span<const uint8_t> key) {
+  uint32_t tag_len_32;
+  if (tag_len_span.size() != sizeof(tag_len_32)) {
+    fprintf(stderr, "Tag size value is %u bytes, not an uint32_t\n",
+            static_cast<unsigned>(tag_len_span.size()));
+    return false;
+  }
+  memcpy(&tag_len_32, tag_len_span.data(), sizeof(tag_len_32));
+  if (tag_len_32 != 4) {
+    fprintf(stderr, "AES-CCM only supports 4-byte tags, but %u was requested\n",
+            static_cast<unsigned>(tag_len_32));
+    return false;
+  }
+
+  if (key.size() != 16) {
+    fprintf(stderr,
+            "AES-CCM only supports 128-bit keys, but %u bits were given\n",
+            static_cast<unsigned>(key.size() * 8));
+    return false;
+  }
+
+  if (!EVP_AEAD_CTX_init(ctx, EVP_aead_aes_128_ccm_bluetooth(), key.data(),
+                         key.size(), tag_len_32, nullptr)) {
+    fprintf(stderr, "Failed to setup AES-CCM with tag length %u\n",
+            static_cast<unsigned>(tag_len_32));
+    return false;
+  }
+
+  return true;
+}
+
+template <bool (*SetupFunc)(EVP_AEAD_CTX *ctx, Span<const uint8_t> tag_len_span,
+                            Span<const uint8_t> key)>
+static bool AEADSeal(const Span<const uint8_t> args[]) {
+  Span<const uint8_t> tag_len_span = args[0];
+  Span<const uint8_t> key = args[1];
+  Span<const uint8_t> plaintext = args[2];
+  Span<const uint8_t> nonce = args[3];
+  Span<const uint8_t> ad = args[4];
+
+  bssl::ScopedEVP_AEAD_CTX ctx;
+  if (!SetupFunc(ctx.get(), tag_len_span, key)) {
+    return false;
+  }
+
+  if (EVP_AEAD_MAX_OVERHEAD + plaintext.size() < EVP_AEAD_MAX_OVERHEAD) {
+    return false;
+  }
+  std::vector<uint8_t> out(EVP_AEAD_MAX_OVERHEAD + plaintext.size());
+
+  size_t out_len;
+  if (!EVP_AEAD_CTX_seal(ctx.get(), out.data(), &out_len, out.size(),
+                         nonce.data(), nonce.size(), plaintext.data(),
+                         plaintext.size(), ad.data(), ad.size())) {
+    return false;
+  }
+
+  out.resize(out_len);
+  return WriteReply(STDOUT_FILENO, Span<const uint8_t>(out));
+}
+
+template <bool (*SetupFunc)(EVP_AEAD_CTX *ctx, Span<const uint8_t> tag_len_span,
+                            Span<const uint8_t> key)>
+static bool AEADOpen(const Span<const uint8_t> args[]) {
+  Span<const uint8_t> tag_len_span = args[0];
+  Span<const uint8_t> key = args[1];
+  Span<const uint8_t> ciphertext = args[2];
+  Span<const uint8_t> nonce = args[3];
+  Span<const uint8_t> ad = args[4];
+
+  bssl::ScopedEVP_AEAD_CTX ctx;
+  if (!SetupFunc(ctx.get(), tag_len_span, key)) {
+    return false;
+  }
+
+  std::vector<uint8_t> out(ciphertext.size());
+  size_t out_len;
+  uint8_t success_flag[1] = {0};
+
+  if (!EVP_AEAD_CTX_open(ctx.get(), out.data(), &out_len, out.size(),
+                         nonce.data(), nonce.size(), ciphertext.data(),
+                         ciphertext.size(), ad.data(), ad.size())) {
+    return WriteReply(STDOUT_FILENO, Span<const uint8_t>(success_flag),
+                      Span<const uint8_t>());
+  }
+
+  out.resize(out_len);
+  success_flag[0] = 1;
+  return WriteReply(STDOUT_FILENO, Span<const uint8_t>(success_flag),
+                    Span<const uint8_t>(out));
+}
+
+static bool AESPaddedKeyWrapSetup(AES_KEY *out, bool decrypt,
+                                  Span<const uint8_t> key) {
+  if ((decrypt ? AES_set_decrypt_key : AES_set_encrypt_key)(
+          key.data(), key.size() * 8, out) != 0) {
+    fprintf(stderr, "Invalid AES key length for AES-KW(P): %u\n",
+            static_cast<unsigned>(key.size()));
+    return false;
+  }
+  return true;
+}
+
+static bool AESKeyWrapSetup(AES_KEY *out, bool decrypt, Span<const uint8_t> key,
+                            Span<const uint8_t> input) {
+  if (!AESPaddedKeyWrapSetup(out, decrypt, key)) {
+    return false;
+  }
+
+  if (input.size() % 8) {
+    fprintf(stderr, "Invalid AES-KW input length: %u\n",
+            static_cast<unsigned>(input.size()));
+    return false;
+  }
+
+  return true;
+}
+
+static bool AESKeyWrapSeal(const Span<const uint8_t> args[]) {
+  Span<const uint8_t> key = args[1];
+  Span<const uint8_t> plaintext = args[2];
+
+  AES_KEY aes;
+  if (!AESKeyWrapSetup(&aes, /*decrypt=*/false, key, plaintext) ||
+      plaintext.size() > INT_MAX - 8) {
+    return false;
+  }
+
+  std::vector<uint8_t> out(plaintext.size() + 8);
+  if (AES_wrap_key(&aes, /*iv=*/nullptr, out.data(), plaintext.data(),
+                   plaintext.size()) != static_cast<int>(out.size())) {
+    fprintf(stderr, "AES-KW failed\n");
+    return false;
+  }
+
+  return WriteReply(STDOUT_FILENO, Span<const uint8_t>(out));
+}
+
+static bool AESKeyWrapOpen(const Span<const uint8_t> args[]) {
+  Span<const uint8_t> key = args[1];
+  Span<const uint8_t> ciphertext = args[2];
+
+  AES_KEY aes;
+  if (!AESKeyWrapSetup(&aes, /*decrypt=*/true, key, ciphertext) ||
+      ciphertext.size() < 8 ||
+      ciphertext.size() > INT_MAX) {
+    return false;
+  }
+
+  std::vector<uint8_t> out(ciphertext.size() - 8);
+  uint8_t success_flag[1] = {0};
+  if (AES_unwrap_key(&aes, /*iv=*/nullptr, out.data(), ciphertext.data(),
+                     ciphertext.size()) != static_cast<int>(out.size())) {
+    return WriteReply(STDOUT_FILENO, Span<const uint8_t>(success_flag),
+                      Span<const uint8_t>());
+  }
+
+  success_flag[0] = 1;
+  return WriteReply(STDOUT_FILENO, Span<const uint8_t>(success_flag),
+                    Span<const uint8_t>(out));
+}
+
+static bool AESPaddedKeyWrapSeal(const Span<const uint8_t> args[]) {
+  Span<const uint8_t> key = args[1];
+  Span<const uint8_t> plaintext = args[2];
+
+  AES_KEY aes;
+  if (!AESPaddedKeyWrapSetup(&aes, /*decrypt=*/false, key) ||
+      plaintext.size() + 15 < 15) {
+    return false;
+  }
+
+  std::vector<uint8_t> out(plaintext.size() + 15);
+  size_t out_len;
+  if (!AES_wrap_key_padded(&aes, out.data(), &out_len, out.size(),
+                           plaintext.data(), plaintext.size())) {
+    fprintf(stderr, "AES-KWP failed\n");
+    return false;
+  }
+
+  out.resize(out_len);
+  return WriteReply(STDOUT_FILENO, Span<const uint8_t>(out));
+}
+
+static bool AESPaddedKeyWrapOpen(const Span<const uint8_t> args[]) {
+  Span<const uint8_t> key = args[1];
+  Span<const uint8_t> ciphertext = args[2];
+
+  AES_KEY aes;
+  if (!AESPaddedKeyWrapSetup(&aes, /*decrypt=*/true, key) ||
+      ciphertext.size() % 8) {
+    return false;
+  }
+
+  std::vector<uint8_t> out(ciphertext.size());
+  size_t out_len;
+  uint8_t success_flag[1] = {0};
+  if (!AES_unwrap_key_padded(&aes, out.data(), &out_len, out.size(),
+                             ciphertext.data(), ciphertext.size())) {
+    return WriteReply(STDOUT_FILENO, Span<const uint8_t>(success_flag),
+                      Span<const uint8_t>());
+  }
+
+  success_flag[0] = 1;
+  out.resize(out_len);
+  return WriteReply(STDOUT_FILENO, Span<const uint8_t>(success_flag),
+                    Span<const uint8_t>(out));
 }
 
 template <const EVP_MD *HashFunc()>
@@ -566,6 +931,25 @@ static bool ECDSASigVer(const Span<const uint8_t> args[]) {
   return WriteReply(STDOUT_FILENO, Span<const uint8_t>(reply));
 }
 
+static bool CMAC_AES(const Span<const uint8_t> args[]) {
+  uint8_t mac[16];
+  if (!AES_CMAC(mac, args[1].data(), args[1].size(), args[2].data(),
+                args[2].size())) {
+    return false;
+  }
+
+  uint32_t mac_len;
+  if (args[0].size() != sizeof(mac_len)) {
+    return false;
+  }
+  memcpy(&mac_len, args[0].data(), sizeof(mac_len));
+  if (mac_len > sizeof(mac)) {
+    return false;
+  }
+
+  return WriteReply(STDOUT_FILENO, Span<const uint8_t>(mac, mac_len));
+}
+
 static constexpr struct {
   const char name[kMaxNameLength + 1];
   uint8_t expected_args;
@@ -581,6 +965,16 @@ static constexpr struct {
     {"AES/decrypt", 2, AES<AES_set_decrypt_key, AES_decrypt>},
     {"AES-CBC/encrypt", 3, AES_CBC<AES_set_encrypt_key, AES_ENCRYPT>},
     {"AES-CBC/decrypt", 3, AES_CBC<AES_set_decrypt_key, AES_DECRYPT>},
+    {"AES-CTR/encrypt", 3, AES_CTR},
+    {"AES-CTR/decrypt", 3, AES_CTR},
+    {"AES-GCM/seal", 5, AEADSeal<AESGCMSetup>},
+    {"AES-GCM/open", 5, AEADOpen<AESGCMSetup>},
+    {"AES-KW/seal", 5, AESKeyWrapSeal},
+    {"AES-KW/open", 5, AESKeyWrapOpen},
+    {"AES-KWP/seal", 5, AESPaddedKeyWrapSeal},
+    {"AES-KWP/open", 5, AESPaddedKeyWrapOpen},
+    {"AES-CCM/seal", 5, AEADSeal<AESCCMSetup>},
+    {"AES-CCM/open", 5, AEADOpen<AESCCMSetup>},
     {"HMAC-SHA-1", 2, HMAC<EVP_sha1>},
     {"HMAC-SHA2-224", 2, HMAC<EVP_sha224>},
     {"HMAC-SHA2-256", 2, HMAC<EVP_sha256>},
@@ -591,6 +985,7 @@ static constexpr struct {
     {"ECDSA/keyVer", 3, ECDSAKeyVer},
     {"ECDSA/sigGen", 4, ECDSASigGen},
     {"ECDSA/sigVer", 7, ECDSASigVer},
+    {"CMAC-AES", 3, CMAC_AES},
 };
 
 int main() {
@@ -659,7 +1054,7 @@ int main() {
       offset += nums[i + 1];
     }
 
-    bool found = true;
+    bool found = false;
     for (const auto &func : kFunctions) {
       if (args[0].size() == strlen(func.name) &&
           memcmp(args[0].data(), func.name, args[0].size()) == 0) {
@@ -671,6 +1066,7 @@ int main() {
         }
 
         if (!func.handler(&args[1])) {
+          fprintf(stderr, "\'%s\' operation failed.\n", func.name);
           return 4;
         }
 

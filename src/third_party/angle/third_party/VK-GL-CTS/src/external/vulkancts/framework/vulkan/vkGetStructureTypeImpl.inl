@@ -1,6 +1,21 @@
 /* WARNING: This is auto-generated file. Do not modify, since changes will
  * be lost! Modify the generating script instead.
  */
+template<> VkStructureType getStructureType<VkBufferMemoryBarrier> (void)
+{
+	return VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+}
+
+template<> VkStructureType getStructureType<VkImageMemoryBarrier> (void)
+{
+	return VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+}
+
+template<> VkStructureType getStructureType<VkMemoryBarrier> (void)
+{
+	return VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+}
+
 template<> VkStructureType getStructureType<VkApplicationInfo> (void)
 {
 	return VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -26,14 +41,14 @@ template<> VkStructureType getStructureType<VkSubmitInfo> (void)
 	return VK_STRUCTURE_TYPE_SUBMIT_INFO;
 }
 
-template<> VkStructureType getStructureType<VkMemoryAllocateInfo> (void)
-{
-	return VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-}
-
 template<> VkStructureType getStructureType<VkMappedMemoryRange> (void)
 {
 	return VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+}
+
+template<> VkStructureType getStructureType<VkMemoryAllocateInfo> (void)
+{
+	return VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 }
 
 template<> VkStructureType getStructureType<VkBindSparseInfo> (void)
@@ -96,6 +111,11 @@ template<> VkStructureType getStructureType<VkPipelineShaderStageCreateInfo> (vo
 	return VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 }
 
+template<> VkStructureType getStructureType<VkComputePipelineCreateInfo> (void)
+{
+	return VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+}
+
 template<> VkStructureType getStructureType<VkPipelineVertexInputStateCreateInfo> (void)
 {
 	return VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -146,11 +166,6 @@ template<> VkStructureType getStructureType<VkGraphicsPipelineCreateInfo> (void)
 	return VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 }
 
-template<> VkStructureType getStructureType<VkComputePipelineCreateInfo> (void)
-{
-	return VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-}
-
 template<> VkStructureType getStructureType<VkPipelineLayoutCreateInfo> (void)
 {
 	return VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -161,9 +176,9 @@ template<> VkStructureType getStructureType<VkSamplerCreateInfo> (void)
 	return VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 }
 
-template<> VkStructureType getStructureType<VkDescriptorSetLayoutCreateInfo> (void)
+template<> VkStructureType getStructureType<VkCopyDescriptorSet> (void)
 {
-	return VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	return VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
 }
 
 template<> VkStructureType getStructureType<VkDescriptorPoolCreateInfo> (void)
@@ -176,14 +191,14 @@ template<> VkStructureType getStructureType<VkDescriptorSetAllocateInfo> (void)
 	return VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 }
 
+template<> VkStructureType getStructureType<VkDescriptorSetLayoutCreateInfo> (void)
+{
+	return VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+}
+
 template<> VkStructureType getStructureType<VkWriteDescriptorSet> (void)
 {
 	return VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-}
-
-template<> VkStructureType getStructureType<VkCopyDescriptorSet> (void)
-{
-	return VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
 }
 
 template<> VkStructureType getStructureType<VkFramebufferCreateInfo> (void)
@@ -214,21 +229,6 @@ template<> VkStructureType getStructureType<VkCommandBufferInheritanceInfo> (voi
 template<> VkStructureType getStructureType<VkCommandBufferBeginInfo> (void)
 {
 	return VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-}
-
-template<> VkStructureType getStructureType<VkMemoryBarrier> (void)
-{
-	return VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-}
-
-template<> VkStructureType getStructureType<VkBufferMemoryBarrier> (void)
-{
-	return VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-}
-
-template<> VkStructureType getStructureType<VkImageMemoryBarrier> (void)
-{
-	return VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 }
 
 template<> VkStructureType getStructureType<VkRenderPassBeginInfo> (void)
@@ -1031,6 +1031,61 @@ template<> VkStructureType getStructureType<VkPipelineExecutableInternalRepresen
 	return VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INTERNAL_REPRESENTATION_KHR;
 }
 
+template<> VkStructureType getStructureType<VkBufferCopy2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_BUFFER_COPY_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkCopyBufferInfo2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkImageCopy2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_IMAGE_COPY_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkCopyImageInfo2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkBufferImageCopy2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkCopyBufferToImageInfo2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkCopyImageToBufferInfo2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkImageBlit2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_IMAGE_BLIT_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkBlitImageInfo2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkImageResolve2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2_KHR;
+}
+
+template<> VkStructureType getStructureType<VkResolveImageInfo2KHR> (void)
+{
+	return VK_STRUCTURE_TYPE_RESOLVE_IMAGE_INFO_2_KHR;
+}
+
 template<> VkStructureType getStructureType<VkDebugReportCallbackCreateInfoEXT> (void)
 {
 	return VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
@@ -1246,14 +1301,14 @@ template<> VkStructureType getStructureType<VkDebugUtilsMessengerCallbackDataEXT
 	return VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CALLBACK_DATA_EXT;
 }
 
-template<> VkStructureType getStructureType<VkDebugUtilsObjectTagInfoEXT> (void)
-{
-	return VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT;
-}
-
 template<> VkStructureType getStructureType<VkDebugUtilsMessengerCreateInfoEXT> (void)
 {
 	return VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+}
+
+template<> VkStructureType getStructureType<VkDebugUtilsObjectTagInfoEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT;
 }
 
 template<> VkStructureType getStructureType<VkPhysicalDeviceInlineUniformBlockFeaturesEXT> (void)
@@ -1661,6 +1716,11 @@ template<> VkStructureType getStructureType<VkPhysicalDeviceCoherentMemoryFeatur
 	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD;
 }
 
+template<> VkStructureType getStructureType<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
+}
+
 template<> VkStructureType getStructureType<VkPhysicalDeviceMemoryBudgetPropertiesEXT> (void)
 {
 	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
@@ -1761,6 +1821,11 @@ template<> VkStructureType getStructureType<VkPipelineRasterizationLineStateCrea
 	return VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT;
 }
 
+template<> VkStructureType getStructureType<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+}
+
 template<> VkStructureType getStructureType<VkPhysicalDeviceIndexTypeUint8FeaturesEXT> (void)
 {
 	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT;
@@ -1836,6 +1901,21 @@ template<> VkStructureType getStructureType<VkCommandBufferInheritanceRenderPass
 	return VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDER_PASS_TRANSFORM_INFO_QCOM;
 }
 
+template<> VkStructureType getStructureType<VkPhysicalDeviceDeviceMemoryReportFeaturesEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT;
+}
+
+template<> VkStructureType getStructureType<VkDeviceMemoryReportCallbackDataEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_DEVICE_MEMORY_REPORT_CALLBACK_DATA_EXT;
+}
+
+template<> VkStructureType getStructureType<VkDeviceDeviceMemoryReportCreateInfoEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT;
+}
+
 template<> VkStructureType getStructureType<VkPhysicalDeviceRobustness2FeaturesEXT> (void)
 {
 	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
@@ -1891,6 +1971,26 @@ template<> VkStructureType getStructureType<VkDeviceDiagnosticsConfigCreateInfoN
 	return VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV;
 }
 
+template<> VkStructureType getStructureType<VkPhysicalDeviceFragmentDensityMap2FeaturesEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_FEATURES_EXT;
+}
+
+template<> VkStructureType getStructureType<VkPhysicalDeviceFragmentDensityMap2PropertiesEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_PROPERTIES_EXT;
+}
+
+template<> VkStructureType getStructureType<VkPhysicalDeviceImageRobustnessFeaturesEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT;
+}
+
+template<> VkStructureType getStructureType<VkPhysicalDevice4444FormatsFeaturesEXT> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT;
+}
+
 template<> VkStructureType getStructureType<VkAndroidSurfaceCreateInfoKHR> (void)
 {
 	return VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
@@ -1924,6 +2024,16 @@ template<> VkStructureType getStructureType<VkMemoryGetAndroidHardwareBufferInfo
 template<> VkStructureType getStructureType<VkExternalFormatANDROID> (void)
 {
 	return VK_STRUCTURE_TYPE_EXTERNAL_FORMAT_ANDROID;
+}
+
+template<> VkStructureType getStructureType<VkPhysicalDevicePortabilitySubsetFeaturesKHR> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR;
+}
+
+template<> VkStructureType getStructureType<VkPhysicalDevicePortabilitySubsetPropertiesKHR> (void)
+{
+	return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_PROPERTIES_KHR;
 }
 
 template<> VkStructureType getStructureType<VkDeferredOperationInfoKHR> (void)

@@ -38,8 +38,10 @@ import {ActionDelegate as ActionDelegateInterface} from './ActionDelegate.js';  
 import {Context} from './Context.js';                                           // eslint-disable-line no-unused-vars
 import {ContextMenu} from './ContextMenu.js';                                   // eslint-disable-line no-unused-vars
 import {Dialog} from './Dialog.js';
+import {DockController} from './DockController.js';
 import {GlassPane} from './GlassPane.js';
 import {Icon} from './Icon.js';  // eslint-disable-line no-unused-vars
+import {Infobar, Type as InfobarType} from './Infobar.js';
 import {KeyboardShortcut} from './KeyboardShortcut.js';
 import {Panel} from './Panel.js';  // eslint-disable-line no-unused-vars
 import {SplitWidget} from './SplitWidget.js';
@@ -49,6 +51,9 @@ import {ToolbarButton} from './Toolbar.js';
 import {View, ViewLocation, ViewLocationResolver} from './View.js';  // eslint-disable-line no-unused-vars
 import {ViewManager} from './ViewManager.js';
 import {VBox, WidgetFocusRestorer} from './Widget.js';
+
+/** @type {!InspectorView} */
+let inspectorViewInstance;
 
 /**
  * @implements {ViewLocationResolver}
@@ -78,11 +83,19 @@ export class InspectorView extends VBox {
     this._drawerTabbedPane.element.classList.add('drawer-tabbed-pane');
     const closeDrawerButton = new ToolbarButton(Common.UIString.UIString('Close drawer'), 'largeicon-delete');
     closeDrawerButton.addEventListener(ToolbarButton.Events.Click, this._closeDrawer, this);
-    this._drawerTabbedPane.addEventListener(TabbedPaneEvents.TabSelected, this._drawerTabSelected, this);
+    this._drawerTabbedPane.addEventListener(TabbedPaneEvents.TabSelected, this._tabSelected, this);
     this._drawerTabbedPane.setTabDelegate(this._tabDelegate);
 
+    this._drawerSplitWidget.installResizer(this._drawerTabbedPane.headerElement());
     this._drawerSplitWidget.setSidebarWidget(this._drawerTabbedPane);
     this._drawerTabbedPane.rightToolbar().appendToolbarItem(closeDrawerButton);
+
+    /**
+     * Lazily-initialized in {_attachReloadRequiredInfobar} because we only need it
+     * if the InfoBar is presented.
+     * @type {?HTMLDivElement}
+     */
+    this._infoBarDiv;
 
     // Create main area tabbed pane.
     this._tabbedLocation = ViewManager.instance().createTabbedLocation(
@@ -120,10 +133,16 @@ export class InspectorView extends VBox {
   }
 
   /**
+   * @param {{forceNew: ?boolean}=} opts
    * @return {!InspectorView}
    */
-  static instance() {
-    return /** @type {!InspectorView} */ (self.runtime.sharedInstance(InspectorView));
+  static instance(opts = {forceNew: null}) {
+    const {forceNew} = opts;
+    if (!inspectorViewInstance || forceNew) {
+      inspectorViewInstance = new InspectorView();
+    }
+
+    return inspectorViewInstance;
   }
 
   /**
@@ -302,6 +321,7 @@ export class InspectorView extends VBox {
    */
   closeDrawerTab(id, userGesture) {
     this._drawerTabbedPane.closeTab(id, userGesture);
+    Host.userMetrics.panelClosed(id);
   }
 
   /**
@@ -363,14 +383,6 @@ export class InspectorView extends VBox {
   }
 
   /**
-   * @param {!Common.EventTarget.EventTargetEvent} event
-   */
-  _drawerTabSelected(event) {
-    const tabId = /** @type {string} */ (event.data['tabId']);
-    Host.userMetrics.drawerShown(tabId);
-  }
-
-  /**
    * @param {!SplitWidget} splitWidget
    */
   setOwnerSplit(splitWidget) {
@@ -395,6 +407,46 @@ export class InspectorView extends VBox {
       this._ownerSplitWidget.setSidebarMinimized(false);
     }
   }
+
+  /**
+   * @param {string} message
+   */
+  displayReloadRequiredWarning(message) {
+    if (!this._reloadRequiredInfobar) {
+      const infobar = new Infobar(InfobarType.Info, message, [
+        {
+          text: ls`Reload DevTools`,
+          highlight: true,
+          delegate: () => {
+            if (DockController.instance().canDock() &&
+                DockController.instance().dockSide() === DockController.State.Undocked) {
+              Host.InspectorFrontendHost.InspectorFrontendHostInstance.setIsDocked(true, function() {});
+            }
+            Host.InspectorFrontendHost.InspectorFrontendHostInstance.reattach(() => window.location.reload());
+          },
+          dismiss: false
+        },
+      ]);
+      infobar.setParentView(this);
+      this._attachReloadRequiredInfobar(infobar);
+      this._reloadRequiredInfobar = infobar;
+      infobar.setCloseCallback(() => {
+        delete this._reloadRequiredInfobar;
+      });
+    }
+  }
+
+  /**
+   * @param {!Infobar} infobar
+   */
+  _attachReloadRequiredInfobar(infobar) {
+    if (!this._infoBarDiv) {
+      this._infoBarDiv = /** @type {!HTMLDivElement} */ (document.createElement('div'));
+      this._infoBarDiv.classList.add('flex-none');
+      this.contentElement.insertBefore(this._infoBarDiv, this.contentElement.firstChild);
+    }
+    this._infoBarDiv.appendChild(infobar.element);
+  }
 }
 
 /**
@@ -411,19 +463,19 @@ export class ActionDelegate {
   handleAction(context, actionId) {
     switch (actionId) {
       case 'main.toggle-drawer':
-        if (self.UI.inspectorView.drawerVisible()) {
-          self.UI.inspectorView._closeDrawer();
+        if (InspectorView.instance().drawerVisible()) {
+          InspectorView.instance()._closeDrawer();
         } else {
-          self.UI.inspectorView._showDrawer(true);
+          InspectorView.instance()._showDrawer(true);
         }
         return true;
       case 'main.next-tab':
-        self.UI.inspectorView._tabbedPane.selectNextTab();
-        self.UI.inspectorView._tabbedPane.focus();
+        InspectorView.instance()._tabbedPane.selectNextTab();
+        InspectorView.instance()._tabbedPane.focus();
         return true;
       case 'main.previous-tab':
-        self.UI.inspectorView._tabbedPane.selectPrevTab();
-        self.UI.inspectorView._tabbedPane.focus();
+        InspectorView.instance()._tabbedPane.selectPrevTab();
+        InspectorView.instance()._tabbedPane.focus();
         return true;
     }
     return false;
@@ -441,6 +493,10 @@ export class InspectorViewTabDelegate {
    */
   closeTabs(tabbedPane, ids) {
     tabbedPane.closeTabs(ids, true);
+    // Log telemetry about the closure
+    ids.forEach(id => {
+      Host.userMetrics.panelClosed(id);
+    });
   }
 
   /**
@@ -467,11 +523,6 @@ export class InspectorViewTabDelegate {
   onContextMenu(tabId, contextMenu) {
     // Special case for console, we don't show the movable context panel for this two tabs
     if (tabId === 'console' || tabId === 'console-view') {
-      return;
-    }
-
-    // Only show the context menu if the experiment is enabled
-    if (!Root.Runtime.experiments.isEnabled('movableTabs')) {
       return;
     }
 

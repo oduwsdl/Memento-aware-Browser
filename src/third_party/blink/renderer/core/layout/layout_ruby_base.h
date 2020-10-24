@@ -45,9 +45,13 @@ class LayoutRubyBase : public LayoutBlockFlow {
   static LayoutRubyBase* CreateAnonymous(Document*,
                                          const LayoutRubyRun& ruby_run);
 
-  const char* GetName() const override { return "LayoutRubyBase"; }
+  const char* GetName() const override {
+    NOT_DESTROYED();
+    return "LayoutRubyBase";
+  }
 
   bool IsOfType(LayoutObjectType type) const override {
+    NOT_DESTROYED();
     return type == kLayoutObjectRubyBase || LayoutBlockFlow::IsOfType(type);
   }
 
@@ -57,6 +61,12 @@ class LayoutRubyBase : public LayoutBlockFlow {
   // The argument must be nullptr. It's necessary for the LayoutNGMixin
   // constructor.
   explicit LayoutRubyBase(Element*);
+
+  ETextAlign TextAlignmentForLine(bool ends_with_soft_break) const override;
+  void AdjustInlineDirectionLineBounds(
+      unsigned expansion_opportunity_count,
+      LayoutUnit& logical_left,
+      LayoutUnit& logical_width) const override;
 
   void MoveChildren(LayoutRubyBase* to_base,
                     LayoutObject* before_child = nullptr);

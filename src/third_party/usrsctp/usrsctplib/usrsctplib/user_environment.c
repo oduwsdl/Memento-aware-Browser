@@ -30,8 +30,11 @@
 
 /* __Userspace__ */
 
-#include <stdlib.h>
-#if !defined (__Userspace_os_Windows)
+#if defined(_WIN32)
+#if !defined(_CRT_RAND_S) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#define _CRT_RAND_S
+#endif
+#else
 #include <stdint.h>
 #include <netinet/sctp_os_userspace.h>
 #endif
@@ -41,7 +44,6 @@
 #if !defined(MIN)
 #define MIN(arg1,arg2) ((arg1) < (arg2) ? (arg1) : (arg2))
 #endif
-#include <string.h>
 
 #define uHZ 1000
 
@@ -64,50 +66,241 @@ userland_mutex_t atomic_mtx;
  * provide _some_ kind of randomness. This should only be used
  * inside other RNG's, like arc4random(9).
  */
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-static int
-read_random_phony(void *buf, int count)
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#include <string.h>
+
+void
+init_random(void)
 {
-	memset(buf, 'A', count);
-	return (count);
+	return;
 }
-#else
-#if defined(__Userspace_os_FreeBSD) || defined(__Userspace_os_Darwin)
-static int
-read_random_phony(void *buf, int count)
+
+void
+read_random(void *buf, size_t size)
 {
-	if (count >= 0) {
-		arc4random_buf(buf, count);
+	memset(buf, 'A', size);
+	return;
+}
+
+void
+finish_random(void)
+{
+	return;
+}
+#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__) || defined(__Bitrig__)
+#include <stdlib.h>
+
+void
+init_random(void)
+{
+	return;
+}
+
+void
+read_random(void *buf, size_t size)
+{
+	arc4random_buf(buf, size);
+	return;
+}
+
+void
+finish_random(void)
+{
+	return;
+}
+#elif defined(_WIN32)
+#include <stdlib.h>
+
+void
+init_random(void)
+{
+	return;
+}
+
+void
+read_random(void *buf, size_t size)
+{
+	unsigned int randval;
+	size_t position, remaining;
+
+	position = 0;
+	while (position < size) {
+		if (rand_s(&randval) == 0) {
+			remaining = MIN(size - position, sizeof(unsigned int));
+			memcpy((char *)buf + position, &randval, remaining);
+			position += sizeof(unsigned int);
+		}
 	}
-	return (count);
+	return;
+}
+
+void
+finish_random(void)
+{
+	return;
+}
+#elif defined(__ANDROID__)
+#if (__ANDROID_API__ < 28)
+#include <fcntl.h>
+
+static int fd = -1;
+
+void
+init_random(void)
+{
+	fd = open("/dev/urandom", O_RDONLY);
+	return;
+}
+
+void
+read_random(void *buf, size_t size)
+{
+	size_t position;
+	ssize_t n;
+
+	position = 0;
+	while (position < size) {
+		n = read(fd, (char *)buf + position, size - position);
+		if (n > 0) {
+			position += n;
+		}
+	}
+	return;
+}
+
+void
+finish_random(void)
+{
+	close(fd);
+	return;
 }
 #else
-static int
-read_random_phony(void *buf, int count)
+#include <sys/random.h>
+
+void
+init_random(void)
+{
+	return;
+}
+
+void
+read_random(void *buf, size_t size)
+{
+	size_t position;
+	ssize_t n;
+
+	position = 0;
+	while (position < size) {
+		n = getrandom((char *)buf + position, size - position, 0);
+		if (n > 0) {
+			position += n;
+		}
+	}
+	return;
+}
+
+void
+finish_random(void)
+{
+	return;
+}
+#endif
+#elif defined(__linux__)
+#include <unistd.h>
+#include <sys/syscall.h>
+
+void
+init_random(void)
+{
+	return;
+}
+
+void
+read_random(void *buf, size_t size)
+{
+	size_t position;
+	ssize_t n;
+
+	position = 0;
+	while (position < size) {
+		/* Using syscall directly because getrandom isn't present in glibc < 2.25. */
+		n = syscall(__NR_getrandom, (char *)buf + position, size - position, 0);
+		if (n > 0) {
+			position += n;
+		}
+	}
+	return;
+}
+
+void
+finish_random(void)
+{
+	return;
+}
+#elif defined(__Fuchsia__)
+#include <zircon/syscalls.h>
+
+void
+init_random(void)
+{
+	return;
+}
+
+void
+read_random(void *buf, size_t size)
+{
+	zx_cprng_draw(buf, size);
+	return;
+}
+
+void
+finish_random(void)
+{
+	return;
+}
+#else
+#include <stdlib.h>
+#include <unistd.h>
+
+void
+init_random(void)
+{
+	struct timeval now;
+	unsigned int seed;
+
+	(void)SCTP_GETTIME_TIMEVAL(&now);
+	seed = 0;
+	seed |= (unsigned int)now.tv_sec;
+	seed |= (unsigned int)now.tv_usec;
+#if !defined(__native_client__)
+	seed |= getpid();
+#endif
+#if defined(__native_client__)
+	srand(seed);
+#else
+	srandom(seed);
+#endif
+	return;
+}
+
+void
+read_random(void *buf, size_t size)
 {
 	uint32_t randval;
-	int size, i;
-
-	/* srandom() is called in kern/init_main.c:proc0_post() */
+	size_t position, remaining;
 
 	/* Fill buf[] with random(9) output */
-	for (i = 0; i < count; i+= (int)sizeof(uint32_t)) {
+	for (position = 0; position < size; position += sizeof(uint32_t)) {
 		randval = random();
-		size = MIN(count - i, (int)sizeof(uint32_t));
-		memcpy(&((char *)buf)[i], &randval, (size_t)size);
+		remaining = MIN(size - position, sizeof(uint32_t));
+		memcpy((char *)buf + position, &randval, remaining);
 	}
-
-	return (count);
+	return;
 }
-#endif
-#endif
 
-static int (*read_func)(void *, int) = read_random_phony;
-
-/* Userland-visible version of read_random */
-int
-read_random(void *buf, int count)
+void
+finish_random(void)
 {
-	return ((*read_func)(buf, count));
+	return;
 }
-
+#endif

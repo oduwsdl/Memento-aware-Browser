@@ -32,6 +32,7 @@ from google.appengine.ext import ndb
 
 from dashboard import pinpoint_request
 from dashboard import sheriff_config_client
+from dashboard import revision_info_client
 from dashboard.common import file_bug
 from dashboard.common import utils
 from dashboard.models import alert_group
@@ -47,7 +48,7 @@ _TEMPLATE_LOADER = jinja2.FileSystemLoader(
     searchpath=os.path.join(os.path.dirname(os.path.realpath(__file__))))
 _TEMPLATE_ENV = jinja2.Environment(loader=_TEMPLATE_LOADER)
 _TEMPLATE_ISSUE_TITLE = jinja2.Template(
-    'Chromeperf Alerts: '
+    '[{{ group.subscription_name }}]: '
     '{{ regressions|length }} regressions in {{ group.name }}')
 _TEMPLATE_ISSUE_CONTENT = _TEMPLATE_ENV.get_template(
     'alert_groups_bug_description.j2')
@@ -100,7 +101,7 @@ class AlertGroupWorkflow(object):
 
   class BenchmarkDetails(
       collections.namedtuple('BenchmarkDetails',
-                             ('name', 'bot', 'owners', 'regressions'))):
+                             ('name', 'owners', 'regressions', 'info_blurb'))):
     __slots__ = ()
 
   class BugUpdateDetails(
@@ -108,14 +109,18 @@ class AlertGroupWorkflow(object):
                              ('components', 'cc', 'labels'))):
     __slots__ = ()
 
-  def __init__(self,
-               group,
-               config=None,
-               sheriff_config=None,
-               issue_tracker=None,
-               pinpoint=None,
-               crrev=None,
-               gitiles=None):
+  def __init__(
+      self,
+      group,
+      config=None,
+      sheriff_config=None,
+      issue_tracker=None,
+      pinpoint=None,
+      crrev=None,
+      gitiles=None,
+      revision_info=None,
+      service_account=None,
+  ):
     self._group = group
     self._config = config or self.Config(
         active_window=_ALERT_GROUP_ACTIVE_WINDOW,
@@ -127,6 +132,8 @@ class AlertGroupWorkflow(object):
     self._pinpoint = pinpoint or pinpoint_service
     self._crrev = crrev or crrev_service
     self._gitiles = gitiles or gitiles_service
+    self._revision_info = revision_info or revision_info_client
+    self._service_account = service_account or utils.ServiceAccountEmail
 
   def _PrepareGroupUpdate(self):
     now = datetime.datetime.utcnow()
@@ -139,6 +146,10 @@ class AlertGroupWorkflow(object):
     }:
       issue = self._issue_tracker.GetIssue(
           self._group.bug.bug_id, project=self._group.bug.project)
+      # GetIssueComments doesn't work with empty project id so we have to
+      # manually replace it with 'chromium'.
+      issue['comments'] = self._issue_tracker.GetIssueComments(
+          self._group.bug.bug_id, project=self._group.bug.project or 'chromium')
     return self.GroupUpdate(now, anomalies, issue)
 
   def Process(self, update=None):
@@ -164,8 +175,12 @@ class AlertGroupWorkflow(object):
       subscriptions, _ = self._sheriff_config.Match(
           a.test.string_id(), check=True)
       a.subscriptions = subscriptions
-      a.auto_triage_enable = any(s.auto_triage_enable for s in subscriptions)
-      a.auto_bisect_enable = any(s.auto_bisect_enable for s in subscriptions)
+      a.auto_triage_enable = any(s.auto_triage_enable
+                                 for s in subscriptions
+                                 if s.name == self._group.subscription_name)
+      a.auto_bisect_enable = any(s.auto_bisect_enable
+                                 for s in subscriptions
+                                 if s.name == self._group.subscription_name)
       a.relative_delta = (
           abs(a.absolute_delta / float(a.median_before_anomaly))
           if a.median_before_anomaly != 0. else float('Inf'))
@@ -212,18 +227,35 @@ class AlertGroupWorkflow(object):
 
     # Check whether all the anomalies associated have been marked recovered.
     if all(a.recovered for a in anomalies if not a.is_improvement):
-      return self._CloseBecauseRecovered()
-
-    regressions, subscriptions = self._GetRegressions(added)
-
-    # Only update issue if there is at least one regression
-    if not regressions or not any(r.auto_triage_enable for r in regressions):
+      if issue.get('state') == 'open':
+        self._CloseBecauseRecovered()
       return
 
-    if issue.get('state') == 'closed':
-      self._ReopenWithNewRegressions(regressions, subscriptions)
+    new_regressions, subscriptions = self._GetRegressions(added)
+    all_regressions, _ = self._GetRegressions(anomalies)
+
+    # Only update issue if there is at least one regression
+    if not new_regressions:
+      return
+
+    closed_by_pinpoint = False
+    for c in sorted(
+        issue.get('comments') or [], key=lambda c: c["id"], reverse=True):
+      if c.get('updates', {}).get('status') in ('WontFix', 'Fixed', 'Verified',
+                                                'Invalid', 'Duplicate', 'Done'):
+        closed_by_pinpoint = (c.get('author') == self._service_account())
+        break
+
+    has_new_regression = any(a.auto_bisect_enable
+                             for a in anomalies
+                             if not a.is_improvement and not a.recovered)
+
+    if (issue.get('state') == 'closed' and closed_by_pinpoint
+        and has_new_regression):
+      self._ReopenWithNewRegressions(all_regressions, new_regressions,
+                                     subscriptions)
     else:
-      self._FileNormalUpdate(regressions, subscriptions)
+      self._FileNormalUpdate(all_regressions, new_regressions, subscriptions)
 
   def _CloseBecauseRecovered(self):
     self._issue_tracker.AddBugComment(
@@ -231,32 +263,42 @@ class AlertGroupWorkflow(object):
         'All regressions for this issue have been marked recovered; closing.',
         status='WontFix',
         labels='Chromeperf-Auto-Closed',
-        project=self._group.project_id)
+        project=self._group.project_id,
+        send_email=False,
+    )
 
-  def _ReopenWithNewRegressions(self, regressions, subscriptions):
-    template_args = self._GetTemplateArgs(regressions)
-    comment = _TEMPLATE_REOPEN_COMMENT.render(template_args)
-    components, cc, _ = self._ComputeBugUpdate(subscriptions, regressions)
+  def _ReopenWithNewRegressions(self, all_regressions, added, subscriptions):
+    summary = _TEMPLATE_ISSUE_TITLE.render(
+        self._GetTemplateArgs(all_regressions))
+    comment = _TEMPLATE_REOPEN_COMMENT.render(self._GetTemplateArgs(added))
+    components, cc, _ = self._ComputeBugUpdate(subscriptions, added)
     self._issue_tracker.AddBugComment(
         self._group.bug.bug_id,
         comment,
+        summary=summary,
         components=components,
         labels=['Chromeperf-Auto-Reopened'],
         status='Unconfirmed',
         cc_list=cc,
-        project=self._group.project_id)
+        project=self._group.project_id,
+        send_email=False,
+    )
 
-  def _FileNormalUpdate(self, regressions, subscriptions):
-    template_args = self._GetTemplateArgs(regressions)
-    comment = _TEMPLATE_ISSUE_COMMENT.render(template_args)
-    components, cc, labels = self._ComputeBugUpdate(subscriptions, regressions)
+  def _FileNormalUpdate(self, all_regressions, added, subscriptions):
+    summary = _TEMPLATE_ISSUE_TITLE.render(
+        self._GetTemplateArgs(all_regressions))
+    comment = _TEMPLATE_ISSUE_COMMENT.render(self._GetTemplateArgs(added))
+    components, cc, labels = self._ComputeBugUpdate(subscriptions, added)
     self._issue_tracker.AddBugComment(
         self._group.bug.bug_id,
         comment,
+        summary=summary,
         labels=labels,
         cc_list=cc,
         components=components,
-        project=self._group.project_id)
+        project=self._group.project_id,
+        send_email=False,
+    )
 
   def _GetRegressions(self, anomalies):
     regressions = []
@@ -272,11 +314,14 @@ class AlertGroupWorkflow(object):
     benchmarks_dict = dict()
     for regression in regressions:
       name = regression.benchmark_name
-      benchmark = benchmarks_dict.get(
-          name, cls.BenchmarkDetails(name, regression.bot_name, set(), []))
+      emails = []
+      info_blurb = None
       if regression.ownership:
         emails = regression.ownership.get('emails') or []
-        benchmark.owners.update(emails)
+        info_blurb = regression.ownership.get('info_blurb') or ''
+      benchmark = benchmarks_dict.get(
+          name, cls.BenchmarkDetails(name, list(set(emails)), list(),
+                                     info_blurb))
       benchmark.regressions.append(regression)
       benchmarks_dict[name] = benchmark
     return benchmarks_dict.values()
@@ -324,7 +369,8 @@ class AlertGroupWorkflow(object):
         # Performance regressions sorted by relative difference
         'regressions': regressions,
 
-        # Benchmarks that occur in regressions, including names and owners
+        # Benchmarks that occur in regressions, including names, owners, and
+        # information blurbs.
         'benchmarks': benchmarks,
 
         # Parse the real unit (remove things like smallerIsBetter)
@@ -358,6 +404,7 @@ class AlertGroupWorkflow(object):
     if not commit_info:
       return False
     assert self._group.bug is not None
+
     file_bug.AssignBugToCLAuthor(
         self._group.bug.bug_id,
         commit_info,
@@ -408,7 +455,9 @@ class AlertGroupWorkflow(object):
         _TEMPLATE_AUTO_BISECT_COMMENT.render(
             {'test': utils.TestPath(regression.test)}),
         labels=['Chromeperf-Auto-Bisected'],
-        project=self._group.project_id)
+        project=self._group.project_id,
+        send_email=False,
+    )
     regression.pinpoint_bisects.append(job_id)
     regression.put()
 
@@ -421,6 +470,12 @@ class AlertGroupWorkflow(object):
       return None, []
 
     template_args = self._GetTemplateArgs(regressions)
+    top_regression = template_args['regressions'][0]
+    template_args['revision_infos'] = self._revision_info.GetRangeRevisionInfo(
+        top_regression.test,
+        top_regression.start_revision,
+        top_regression.end_revision,
+    )
     # Rendering issue's title and content
     title = _TEMPLATE_ISSUE_TITLE.render(template_args)
     description = _TEMPLATE_ISSUE_CONTENT.render(template_args)
@@ -508,13 +563,9 @@ class AlertGroupWorkflow(object):
     # test, so we derive that from the suite name. Eventually, this would
     # ideally be stored in a SparseDiagnostic but for now we can guess. Also,
     # Pinpoint only currently works well with Telemetry targets, so we only run
-    # benchmarks that are not explicitly blacklisted.
-    target = pinpoint_request.GetIsolateTarget(
-        alert.bot_name,
-        alert.benchmark_name,
-        alert.start_revision,
-        alert.end_revision,
-        only_telemetry=True)
+    # benchmarks that are not explicitly denylisted.
+    target = pinpoint_request.GetIsolateTarget(alert.bot_name,
+                                               alert.benchmark_name)
     if not target:
       return None
 

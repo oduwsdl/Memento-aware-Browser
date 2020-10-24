@@ -35,6 +35,9 @@
 import * as Common from '../common/common.js';
 import * as Host from '../host/host.js';
 import * as Platform from '../platform/platform.js';
+import * as Root from '../root/root.js';
+import * as TextUtils from '../text_utils/text_utils.js';
+import * as ThemeSupport from '../theme_support/theme_support.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
 import {Dialog} from './Dialog.js';
@@ -54,8 +57,6 @@ import {XLink} from './XLink.js';
 
 export const highlightedSearchResultClassName = 'highlighted-search-result';
 export const highlightedCurrentSearchResultClassName = 'current-search-result';
-
-export {markAsFocusedByKeyboard} from './utils/focus-changed.js';
 
 /**
  * @param {!Element} element
@@ -755,19 +756,6 @@ function _windowFocused(document, event) {
   if (event.target.document.nodeType === Node.DOCUMENT_NODE) {
     document.body.classList.remove('inactive');
   }
-  UI._keyboardFocus = true;
-  const listener = () => {
-    const activeElement = document.deepActiveElement();
-    if (activeElement) {
-      activeElement.removeAttribute('data-keyboard-focus');
-    }
-    UI._keyboardFocus = false;
-  };
-  document.defaultView.requestAnimationFrame(() => {
-    UI._keyboardFocus = false;
-    document.removeEventListener('mousedown', listener, true);
-  });
-  document.addEventListener('mousedown', listener, true);
 }
 
 /**
@@ -778,14 +766,6 @@ function _windowBlurred(document, event) {
   if (event.target.document.nodeType === Node.DOCUMENT_NODE) {
     document.body.classList.add('inactive');
   }
-}
-
-/**
- * @param {!Element} element
- * @returns {boolean}
- */
-export function elementIsFocusedByKeyboard(element) {
-  return element.hasAttribute('data-keyboard-focus');
 }
 
 /**
@@ -821,14 +801,14 @@ export class ElementFocusRestorer {
  * @return {?Element}
  */
 export function highlightSearchResult(element, offset, length, domChanges) {
-  const result = highlightSearchResults(element, [new TextUtils.SourceRange(offset, length)], domChanges);
+  const result = highlightSearchResults(element, [new TextUtils.TextRange.SourceRange(offset, length)], domChanges);
   return result.length ? result[0] : null;
 }
 
 /**
  * @param {!Element} element
- * @param {!Array.<!TextUtils.SourceRange>} resultRanges
- * @param {!Array.<!Object>=} changes
+ * @param {!Array.<!TextUtils.TextRange.SourceRange>} resultRanges
+ * @param {!Array.<!HighlightChange>=} changes
  * @return {!Array.<!Element>}
  */
 export function highlightSearchResults(element, resultRanges, changes) {
@@ -855,9 +835,9 @@ export function runCSSAnimationOnce(element, className) {
 
 /**
  * @param {!Element} element
- * @param {!Array.<!TextUtils.SourceRange>} resultRanges
+ * @param {!Array.<!TextUtils.TextRange.SourceRange>} resultRanges
  * @param {string} styleClass
- * @param {!Array.<!Object>=} changes
+ * @param {!Array.<!HighlightChange>=} changes
  * @return {!Array.<!Element>}
  */
 export function highlightRangesWithStyleClass(element, resultRanges, styleClass, changes) {
@@ -1207,11 +1187,6 @@ export class LongClickController extends Common.ObjectWrapper.ObjectWrapper {
 
 LongClickController.TIME_MS = 200;
 
-function _trackKeyboardFocus() {
-  UI._keyboardFocus = true;
-  document.defaultView.requestAnimationFrame(() => void (UI._keyboardFocus = false));
-}
-
 /**
  * @param {!Document} document
  * @param {!Common.Settings.Setting<string>} themeSetting
@@ -1222,16 +1197,10 @@ export function initializeUIUtils(document, themeSetting) {
   document.defaultView.addEventListener('blur', _windowBlurred.bind(UI, document), false);
   document.addEventListener('focus', focusChanged.bind(UI), true);
 
-  // Track which focus changes occur due to keyboard input.
-  // When focus changes from tab navigation (keydown).
-  // When focus() is called in keyboard initiated click events (keyup).
-  document.addEventListener('keydown', _trackKeyboardFocus, true);
-  document.addEventListener('keyup', _trackKeyboardFocus, true);
-
-  if (!self.UI.themeSupport) {
-    self.UI.themeSupport = new ThemeSupport(themeSetting);
+  if (!ThemeSupport.ThemeSupport.hasInstance()) {
+    ThemeSupport.ThemeSupport.instance({forceNew: true, setting: themeSetting});
   }
-  self.UI.themeSupport.applyTheme(document);
+  ThemeSupport.ThemeSupport.instance().applyTheme(document);
 
   const body = /** @type {!Element} */ (document.body);
   appendStyle(body, 'ui/inspectorStyle.css');
@@ -1247,14 +1216,35 @@ export function beautifyFunctionName(name) {
 }
 
 /**
+ * @param {!Element|!DocumentFragment} element
+ * @param {string} text
+ * @return {!Text}
+ */
+export const createTextChild = (element, text) => {
+  const textNode = element.ownerDocument.createTextNode(text);
+  element.appendChild(textNode);
+  return textNode;
+};
+
+/**
+ * @param {!Element|!DocumentFragment} element
+ * @param {...string} childrenText
+ */
+export const createTextChildren = (element, ...childrenText) => {
+  for (const child of childrenText) {
+    createTextChild(element, child);
+  }
+};
+
+/**
  * @param {string} text
  * @param {function(!Event):*=} clickHandler
  * @param {string=} className
  * @param {boolean=} primary
- * @return {!Element}
+ * @return {!HTMLButtonElement}
  */
 export function createTextButton(text, clickHandler, className, primary) {
-  const element = document.createElement('button');
+  const element = /** @type {!HTMLButtonElement} */ (document.createElement('button'));
   if (className) {
     element.className = className;
   }
@@ -1273,7 +1263,7 @@ export function createTextButton(text, clickHandler, className, primary) {
 /**
  * @param {string=} className
  * @param {string=} type
- * @return {!Element}
+ * @return {!HTMLInputElement}
  */
 export function createInput(className, type) {
   const element = document.createElement('input');
@@ -1285,7 +1275,7 @@ export function createInput(className, type) {
   if (type) {
     element.type = type;
   }
-  return element;
+  return /** @type {!HTMLInputElement} */ (element);
 }
 
 /**
@@ -1311,14 +1301,14 @@ export function createLabel(title, className, associatedControl) {
  * @param {string} name
  * @param {string} title
  * @param {boolean=} checked
- * @return {!Element}
+ * @return {!DevToolsRadioButton}
  */
 export function createRadioLabel(name, title, checked) {
   const element = createElement('span', 'dt-radio');
   element.radioElement.name = name;
   element.radioElement.checked = !!checked;
-  element.labelElement.createTextChild(title);
-  return element;
+  createTextChild(element.labelElement, title);
+  return /** @type {!DevToolsRadioButton} */ (element);
 }
 
 /**
@@ -1420,38 +1410,7 @@ export class CheckboxLabel extends HTMLSpanElement {
   }
 }
 
-(function() {
-let labelId = 0;
-registerCustomElement('span', 'dt-radio', class extends HTMLSpanElement {
-  constructor() {
-    super();
-    this.radioElement = this.createChild('input', 'dt-radio-button');
-    this.labelElement = this.createChild('label');
-
-    const id = 'dt-radio-button-id' + (++labelId);
-    this.radioElement.id = id;
-    this.radioElement.type = 'radio';
-    this.labelElement.htmlFor = id;
-    const root = createShadowRootWithCoreStyles(this, 'ui/radioButton.css');
-    root.createChild('slot');
-    this.addEventListener('click', radioClickHandler, false);
-  }
-});
-
-/**
-   * @param {!Event} event
-   * @suppressReceiverCheck
-   * @this {Element}
-   */
-function radioClickHandler(event) {
-  if (this.radioElement.checked || this.radioElement.disabled) {
-    return;
-  }
-  this.radioElement.checked = true;
-  this.radioElement.dispatchEvent(new Event('change'));
-}
-
-registerCustomElement('span', 'dt-icon-label', class extends HTMLSpanElement {
+export class DevToolsIconLabel extends HTMLSpanElement {
   constructor() {
     super();
     const root = createShadowRootWithCoreStyles(this);
@@ -1468,9 +1427,44 @@ registerCustomElement('span', 'dt-icon-label', class extends HTMLSpanElement {
   set type(type) {
     this._iconElement.setIconType(type);
   }
-});
+}
 
-registerCustomElement('span', 'dt-slider', class extends HTMLSpanElement {
+let labelId = 0;
+
+export class DevToolsRadioButton extends HTMLSpanElement {
+  constructor() {
+    super();
+    this.radioElement = /** @type {!HTMLInputElement} */ (this.createChild('input', 'dt-radio-button'));
+    this.labelElement = this.createChild('label');
+
+    const id = 'dt-radio-button-id' + (++labelId);
+    this.radioElement.id = id;
+    this.radioElement.type = 'radio';
+    this.labelElement.htmlFor = id;
+    const root = createShadowRootWithCoreStyles(this, 'ui/radioButton.css');
+    root.createChild('slot');
+    this.addEventListener('click', radioClickHandler, false);
+  }
+}
+
+registerCustomElement('span', 'dt-radio', DevToolsRadioButton);
+
+/**
+   * @param {!Event} event
+   * @suppressReceiverCheck
+   * @this {Element}
+   */
+function radioClickHandler(event) {
+  if (this.radioElement.checked || this.radioElement.disabled) {
+    return;
+  }
+  this.radioElement.checked = true;
+  this.radioElement.dispatchEvent(new Event('change'));
+}
+
+registerCustomElement('span', 'dt-icon-label', DevToolsIconLabel);
+
+class DevToolsSlider extends HTMLSpanElement {
   constructor() {
     super();
     const root = createShadowRootWithCoreStyles(this, 'ui/slider.css');
@@ -1494,9 +1488,11 @@ registerCustomElement('span', 'dt-slider', class extends HTMLSpanElement {
   get value() {
     return this.sliderElement.value;
   }
-});
+}
 
-registerCustomElement('span', 'dt-small-bubble', class extends HTMLSpanElement {
+registerCustomElement('span', 'dt-slider', DevToolsSlider);
+
+export class DevToolsSmallBubble extends HTMLSpanElement {
   constructor() {
     super();
     const root = createShadowRootWithCoreStyles(this, 'ui/smallBubble.css');
@@ -1512,9 +1508,11 @@ registerCustomElement('span', 'dt-small-bubble', class extends HTMLSpanElement {
   set type(type) {
     this._textElement.className = type;
   }
-});
+}
 
-registerCustomElement('div', 'dt-close-button', class extends HTMLDivElement {
+registerCustomElement('span', 'dt-small-bubble', DevToolsSmallBubble);
+
+export class DevToolsCloseButton extends HTMLDivElement {
   constructor() {
     super();
     const root = createShadowRootWithCoreStyles(this, 'ui/closeButton.css');
@@ -1562,8 +1560,9 @@ registerCustomElement('div', 'dt-close-button', class extends HTMLDivElement {
       this._buttonElement.tabIndex = -1;
     }
   }
-});
-})();
+}
+
+registerCustomElement('div', 'dt-close-button', DevToolsCloseButton);
 
 /**
  * @param {!Element} input
@@ -1723,295 +1722,6 @@ export function measureTextWidth(context, text) {
   }
   return width;
 }
-
-/**
- * @unrestricted
- */
-export class ThemeSupport {
-  /**
-   * @param {!Common.Settings.Setting<string>} setting
-   */
-  constructor(setting) {
-    const systemPreferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
-    this._themeName = setting.get() === 'systemPreferred' ? systemPreferredTheme : setting.get();
-    this._themableProperties = new Set([
-      'color', 'box-shadow', 'text-shadow', 'outline-color', 'background-image', 'background-color',
-      'border-left-color', 'border-right-color', 'border-top-color', 'border-bottom-color', '-webkit-border-image',
-      'fill', 'stroke'
-    ]);
-    /** @type {!Map<string, string>} */
-    this._cachedThemePatches = new Map();
-    this._setting = setting;
-    this._customSheets = new Set();
-    this._computedRoot = Common.Lazy.lazy(() => window.getComputedStyle(document.documentElement));
-  }
-
-  /**
-   * @param {string} variableName
-   * @returns {string}
-   */
-  getComputedValue(variableName) {
-    const computedRoot = this._computedRoot();
-
-    if (typeof computedRoot === 'symbol') {
-      throw new Error(`Computed value for property (${variableName}) could not be found on :root.`);
-    }
-
-    return computedRoot.getPropertyValue(variableName);
-  }
-
-  /**
-   * @return {boolean}
-   */
-  hasTheme() {
-    return this._themeName !== 'default';
-  }
-
-  /**
-   * @return {string}
-   */
-  themeName() {
-    return this._themeName;
-  }
-
-  /**
-   * @param {!Element|!ShadowRoot} element
-   */
-  injectHighlightStyleSheets(element) {
-    this._injectingStyleSheet = true;
-    appendStyle(element, 'ui/inspectorSyntaxHighlight.css');
-    if (this._themeName === 'dark') {
-      appendStyle(element, 'ui/inspectorSyntaxHighlightDark.css');
-    }
-    this._injectingStyleSheet = false;
-  }
-
-  /**
-   * @param {!Element|!ShadowRoot} element
-   */
-  injectCustomStyleSheets(element) {
-    for (const sheet of this._customSheets) {
-      const styleElement = createElement('style');
-      styleElement.textContent = sheet;
-      element.appendChild(styleElement);
-    }
-  }
-
-  /**
-   * @return {boolean}
-   */
-  isForcedColorsMode() {
-    return window.matchMedia('(forced-colors: active)').matches;
-  }
-
-  /**
-   * @param {string} sheetText
-   */
-  addCustomStylesheet(sheetText) {
-    this._customSheets.add(sheetText);
-  }
-
-  /**
-   * @param {!Document} document
-   */
-  applyTheme(document) {
-    if (!this.hasTheme() || this.isForcedColorsMode()) {
-      return;
-    }
-
-    if (this._themeName === 'dark') {
-      document.documentElement.classList.add('-theme-with-dark-background');
-    }
-
-    const styleSheets = document.styleSheets;
-    const result = [];
-    for (let i = 0; i < styleSheets.length; ++i) {
-      result.push(this._patchForTheme(styleSheets[i].href, styleSheets[i]));
-    }
-    result.push('/*# sourceURL=inspector.css.theme */');
-
-    const styleElement = createElement('style');
-    styleElement.textContent = result.join('\n');
-    document.head.appendChild(styleElement);
-  }
-
-  /**
-   * @param {string} id
-   * @param {string} text
-   * @return {string}
-   * @suppressGlobalPropertiesCheck
-   */
-  themeStyleSheet(id, text) {
-    if (!this.hasTheme() || this._injectingStyleSheet || this.isForcedColorsMode()) {
-      return '';
-    }
-
-    let patch = this._cachedThemePatches.get(id);
-    if (!patch) {
-      const styleElement = createElement('style');
-      styleElement.textContent = text;
-      document.body.appendChild(styleElement);
-      patch = this._patchForTheme(id, styleElement.sheet);
-      document.body.removeChild(styleElement);
-    }
-    return patch;
-  }
-
-  /**
-   * @param {string} id
-   * @param {!StyleSheet} styleSheet
-   * @return {string}
-   */
-  _patchForTheme(id, styleSheet) {
-    const cached = this._cachedThemePatches.get(id);
-    if (cached) {
-      return cached;
-    }
-
-    try {
-      const rules = styleSheet.cssRules;
-      const result = [];
-      for (let j = 0; j < rules.length; ++j) {
-        if (rules[j] instanceof CSSImportRule) {
-          result.push(this._patchForTheme(rules[j].styleSheet.href, rules[j].styleSheet));
-          continue;
-        }
-        const output = [];
-        const style = rules[j].style;
-        const selectorText = rules[j].selectorText;
-        for (let i = 0; style && i < style.length; ++i) {
-          this._patchProperty(selectorText, style, style[i], output);
-        }
-        if (output.length) {
-          result.push(rules[j].selectorText + '{' + output.join('') + '}');
-        }
-      }
-
-      const fullText = result.join('\n');
-      this._cachedThemePatches.set(id, fullText);
-      return fullText;
-    } catch (e) {
-      this._setting.set('default');
-      return '';
-    }
-  }
-
-  /**
-   * @param {string} selectorText
-   * @param {!CSSStyleDeclaration} style
-   * @param {string} name
-   * @param {!Array<string>} output
-   *
-   * Theming API is primarily targeted at making dark theme look good.
-   * - If rule has ".-theme-preserve" in selector, it won't be affected.
-   * - One can create specializations for dark themes via body.-theme-with-dark-background selector in host context.
-   */
-  _patchProperty(selectorText, style, name, output) {
-    if (!this._themableProperties.has(name)) {
-      return;
-    }
-
-    const value = style.getPropertyValue(name);
-    if (!value || value === 'none' || value === 'inherit' || value === 'initial' || value === 'transparent') {
-      return;
-    }
-    if (name === 'background-image' && value.indexOf('gradient') === -1) {
-      return;
-    }
-
-    if (selectorText.indexOf('-theme-') !== -1) {
-      return;
-    }
-
-    let colorUsage = ThemeSupport.ColorUsage.Unknown;
-    if (name.indexOf('background') === 0 || name.indexOf('border') === 0) {
-      colorUsage |= ThemeSupport.ColorUsage.Background;
-    }
-    if (name.indexOf('background') === -1) {
-      colorUsage |= ThemeSupport.ColorUsage.Foreground;
-    }
-
-    output.push(name);
-    output.push(':');
-    const items = value.replace(Common.Color.Regex, '\0$1\0').split('\0');
-    for (let i = 0; i < items.length; ++i) {
-      output.push(this.patchColorText(items[i], /** @type {!ThemeSupport.ColorUsage} */ (colorUsage)));
-    }
-    if (style.getPropertyPriority(name)) {
-      output.push(' !important');
-    }
-    output.push(';');
-  }
-
-  /**
-   * @param {string} text
-   * @param {!ThemeSupport.ColorUsage} colorUsage
-   * @return {string}
-   */
-  patchColorText(text, colorUsage) {
-    const color = Common.Color.Color.parse(text);
-    if (!color) {
-      return text;
-    }
-    const outColor = this.patchColor(color, colorUsage);
-    let outText = outColor.asString(null);
-    if (!outText) {
-      outText = outColor.asString(outColor.hasAlpha() ? Common.Color.Format.RGBA : Common.Color.Format.RGB);
-    }
-    return outText || text;
-  }
-
-  /**
-   * @param {!Common.Color.Color} color
-   * @param {!ThemeSupport.ColorUsage} colorUsage
-   * @return {!Common.Color.Color}
-   */
-  patchColor(color, colorUsage) {
-    const hsla = color.hsla();
-    this._patchHSLA(hsla, colorUsage);
-    const rgba = [];
-    Common.Color.Color.hsl2rgb(hsla, rgba);
-    return new Common.Color.Color(rgba, color.format());
-  }
-
-  /**
-   * @param {!Array<number>} hsla
-   * @param {!ThemeSupport.ColorUsage} colorUsage
-   */
-  _patchHSLA(hsla, colorUsage) {
-    const hue = hsla[0];
-    const sat = hsla[1];
-    let lit = hsla[2];
-    const alpha = hsla[3];
-
-    switch (this._themeName) {
-      case 'dark': {
-        const minCap = colorUsage & ThemeSupport.ColorUsage.Background ? 0.14 : 0;
-        const maxCap = colorUsage & ThemeSupport.ColorUsage.Foreground ? 0.9 : 1;
-        lit = 1 - lit;
-        if (lit < minCap * 2) {
-          lit = minCap + lit / 2;
-        } else if (lit > 2 * maxCap - 1) {
-          lit = maxCap - 1 / 2 + lit / 2;
-        }
-        break;
-      }
-    }
-    hsla[0] = Platform.NumberUtilities.clamp(hue, 0, 1);
-    hsla[1] = Platform.NumberUtilities.clamp(sat, 0, 1);
-    hsla[2] = Platform.NumberUtilities.clamp(lit, 0, 1);
-    hsla[3] = Platform.NumberUtilities.clamp(alpha, 0, 1);
-  }
-}
-
-/**
- * @enum {number}
- */
-ThemeSupport.ColorUsage = {
-  Unknown: 0,
-  Foreground: 1 << 0,
-  Background: 1 << 1,
-};
 
 /**
  * @param {string} article
@@ -2201,7 +1911,7 @@ Renderer.render = async function(object, options) {
   if (!object) {
     throw new Error('Can\'t render ' + object);
   }
-  const renderer = await self.runtime.extension(Renderer, object).instance();
+  const renderer = await Root.Runtime.Runtime.instance().extension(Renderer, object).instance();
   return renderer ? renderer.render(object, options || {}) : null;
 };
 
@@ -2230,3 +1940,28 @@ export function formatTimestamp(timestamp, full) {
 
 /** @typedef {!{title: (string|!Element|undefined), editable: (boolean|undefined) }} */
 export let Options;
+
+/** @typedef {{
+ *  node: !Element,
+ *  type: string,
+ *  oldText: string,
+ *  newText: string,
+ *  nextSibling: (Node|undefined),
+ *  parent: (Node|undefined),
+ * }}
+ */
+export let HighlightChange;
+
+
+/**
+ * @param {!Element} element
+ * @return {boolean}
+ */
+export const isScrolledToBottom = element => {
+  // This code works only for 0-width border.
+  // The scrollTop, clientHeight and scrollHeight are computed in double values internally.
+  // However, they are exposed to javascript differently, each being either rounded (via
+  // round, ceil or floor functions) or left intouch.
+  // This adds up a total error up to 2.
+  return Math.abs(element.scrollTop + element.clientHeight - element.scrollHeight) <= 2;
+};

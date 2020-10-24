@@ -281,6 +281,14 @@ VKAPI_ATTR bool VKAPI_CALL loader_icd_init_entries(struct loader_icd_term *icd_t
     // ---- VK_EXT_headless_surface extension commands
     LOOKUP_GIPA(CreateHeadlessSurfaceEXT, false);
 
+    // ---- VK_EXT_directfb_surface extension commands
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    LOOKUP_GIPA(CreateDirectFBSurfaceEXT, false);
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    LOOKUP_GIPA(GetPhysicalDeviceDirectFBPresentationSupportEXT, false);
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
+
 #undef LOOKUP_GIPA
 
     return true;
@@ -588,6 +596,14 @@ VKAPI_ATTR void VKAPI_CALL loader_init_device_extension_dispatch_table(struct lo
     table->GetPipelineExecutableStatisticsKHR = (PFN_vkGetPipelineExecutableStatisticsKHR)gdpa(dev, "vkGetPipelineExecutableStatisticsKHR");
     table->GetPipelineExecutableInternalRepresentationsKHR = (PFN_vkGetPipelineExecutableInternalRepresentationsKHR)gdpa(dev, "vkGetPipelineExecutableInternalRepresentationsKHR");
 
+    // ---- VK_KHR_copy_commands2 extension commands
+    table->CmdCopyBuffer2KHR = (PFN_vkCmdCopyBuffer2KHR)gdpa(dev, "vkCmdCopyBuffer2KHR");
+    table->CmdCopyImage2KHR = (PFN_vkCmdCopyImage2KHR)gdpa(dev, "vkCmdCopyImage2KHR");
+    table->CmdCopyBufferToImage2KHR = (PFN_vkCmdCopyBufferToImage2KHR)gdpa(dev, "vkCmdCopyBufferToImage2KHR");
+    table->CmdCopyImageToBuffer2KHR = (PFN_vkCmdCopyImageToBuffer2KHR)gdpa(dev, "vkCmdCopyImageToBuffer2KHR");
+    table->CmdBlitImage2KHR = (PFN_vkCmdBlitImage2KHR)gdpa(dev, "vkCmdBlitImage2KHR");
+    table->CmdResolveImage2KHR = (PFN_vkCmdResolveImage2KHR)gdpa(dev, "vkCmdResolveImage2KHR");
+
     // ---- VK_EXT_debug_marker extension commands
     table->DebugMarkerSetObjectTagEXT = (PFN_vkDebugMarkerSetObjectTagEXT)gdpa(dev, "vkDebugMarkerSetObjectTagEXT");
     table->DebugMarkerSetObjectNameEXT = (PFN_vkDebugMarkerSetObjectNameEXT)gdpa(dev, "vkDebugMarkerSetObjectNameEXT");
@@ -749,6 +765,20 @@ VKAPI_ATTR void VKAPI_CALL loader_init_device_extension_dispatch_table(struct lo
 
     // ---- VK_EXT_host_query_reset extension commands
     table->ResetQueryPoolEXT = (PFN_vkResetQueryPoolEXT)gdpa(dev, "vkResetQueryPoolEXT");
+
+    // ---- VK_EXT_extended_dynamic_state extension commands
+    table->CmdSetCullModeEXT = (PFN_vkCmdSetCullModeEXT)gdpa(dev, "vkCmdSetCullModeEXT");
+    table->CmdSetFrontFaceEXT = (PFN_vkCmdSetFrontFaceEXT)gdpa(dev, "vkCmdSetFrontFaceEXT");
+    table->CmdSetPrimitiveTopologyEXT = (PFN_vkCmdSetPrimitiveTopologyEXT)gdpa(dev, "vkCmdSetPrimitiveTopologyEXT");
+    table->CmdSetViewportWithCountEXT = (PFN_vkCmdSetViewportWithCountEXT)gdpa(dev, "vkCmdSetViewportWithCountEXT");
+    table->CmdSetScissorWithCountEXT = (PFN_vkCmdSetScissorWithCountEXT)gdpa(dev, "vkCmdSetScissorWithCountEXT");
+    table->CmdBindVertexBuffers2EXT = (PFN_vkCmdBindVertexBuffers2EXT)gdpa(dev, "vkCmdBindVertexBuffers2EXT");
+    table->CmdSetDepthTestEnableEXT = (PFN_vkCmdSetDepthTestEnableEXT)gdpa(dev, "vkCmdSetDepthTestEnableEXT");
+    table->CmdSetDepthWriteEnableEXT = (PFN_vkCmdSetDepthWriteEnableEXT)gdpa(dev, "vkCmdSetDepthWriteEnableEXT");
+    table->CmdSetDepthCompareOpEXT = (PFN_vkCmdSetDepthCompareOpEXT)gdpa(dev, "vkCmdSetDepthCompareOpEXT");
+    table->CmdSetDepthBoundsTestEnableEXT = (PFN_vkCmdSetDepthBoundsTestEnableEXT)gdpa(dev, "vkCmdSetDepthBoundsTestEnableEXT");
+    table->CmdSetStencilTestEnableEXT = (PFN_vkCmdSetStencilTestEnableEXT)gdpa(dev, "vkCmdSetStencilTestEnableEXT");
+    table->CmdSetStencilOpEXT = (PFN_vkCmdSetStencilOpEXT)gdpa(dev, "vkCmdSetStencilOpEXT");
 
     // ---- VK_NV_device_generated_commands extension commands
     table->GetGeneratedCommandsMemoryRequirementsNV = (PFN_vkGetGeneratedCommandsMemoryRequirementsNV)gdpa(dev, "vkGetGeneratedCommandsMemoryRequirementsNV");
@@ -1027,6 +1057,14 @@ VKAPI_ATTR void VKAPI_CALL loader_init_instance_extension_dispatch_table(VkLayer
 
     // ---- VK_EXT_headless_surface extension commands
     table->CreateHeadlessSurfaceEXT = (PFN_vkCreateHeadlessSurfaceEXT)gpa(inst, "vkCreateHeadlessSurfaceEXT");
+
+    // ---- VK_EXT_directfb_surface extension commands
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    table->CreateDirectFBSurfaceEXT = (PFN_vkCreateDirectFBSurfaceEXT)gpa(inst, "vkCreateDirectFBSurfaceEXT");
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    table->GetPhysicalDeviceDirectFBPresentationSupportEXT = (PFN_vkGetPhysicalDeviceDirectFBPresentationSupportEXT)gpa(inst, "vkGetPhysicalDeviceDirectFBPresentationSupportEXT");
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
 }
 
 // Device command lookup function
@@ -1322,6 +1360,14 @@ VKAPI_ATTR void* VKAPI_CALL loader_lookup_device_dispatch_table(const VkLayerDis
     if (!strcmp(name, "GetPipelineExecutableStatisticsKHR")) return (void *)table->GetPipelineExecutableStatisticsKHR;
     if (!strcmp(name, "GetPipelineExecutableInternalRepresentationsKHR")) return (void *)table->GetPipelineExecutableInternalRepresentationsKHR;
 
+    // ---- VK_KHR_copy_commands2 extension commands
+    if (!strcmp(name, "CmdCopyBuffer2KHR")) return (void *)table->CmdCopyBuffer2KHR;
+    if (!strcmp(name, "CmdCopyImage2KHR")) return (void *)table->CmdCopyImage2KHR;
+    if (!strcmp(name, "CmdCopyBufferToImage2KHR")) return (void *)table->CmdCopyBufferToImage2KHR;
+    if (!strcmp(name, "CmdCopyImageToBuffer2KHR")) return (void *)table->CmdCopyImageToBuffer2KHR;
+    if (!strcmp(name, "CmdBlitImage2KHR")) return (void *)table->CmdBlitImage2KHR;
+    if (!strcmp(name, "CmdResolveImage2KHR")) return (void *)table->CmdResolveImage2KHR;
+
     // ---- VK_EXT_debug_marker extension commands
     if (!strcmp(name, "DebugMarkerSetObjectTagEXT")) return (void *)table->DebugMarkerSetObjectTagEXT;
     if (!strcmp(name, "DebugMarkerSetObjectNameEXT")) return (void *)table->DebugMarkerSetObjectNameEXT;
@@ -1483,6 +1529,20 @@ VKAPI_ATTR void* VKAPI_CALL loader_lookup_device_dispatch_table(const VkLayerDis
 
     // ---- VK_EXT_host_query_reset extension commands
     if (!strcmp(name, "ResetQueryPoolEXT")) return (void *)table->ResetQueryPoolEXT;
+
+    // ---- VK_EXT_extended_dynamic_state extension commands
+    if (!strcmp(name, "CmdSetCullModeEXT")) return (void *)table->CmdSetCullModeEXT;
+    if (!strcmp(name, "CmdSetFrontFaceEXT")) return (void *)table->CmdSetFrontFaceEXT;
+    if (!strcmp(name, "CmdSetPrimitiveTopologyEXT")) return (void *)table->CmdSetPrimitiveTopologyEXT;
+    if (!strcmp(name, "CmdSetViewportWithCountEXT")) return (void *)table->CmdSetViewportWithCountEXT;
+    if (!strcmp(name, "CmdSetScissorWithCountEXT")) return (void *)table->CmdSetScissorWithCountEXT;
+    if (!strcmp(name, "CmdBindVertexBuffers2EXT")) return (void *)table->CmdBindVertexBuffers2EXT;
+    if (!strcmp(name, "CmdSetDepthTestEnableEXT")) return (void *)table->CmdSetDepthTestEnableEXT;
+    if (!strcmp(name, "CmdSetDepthWriteEnableEXT")) return (void *)table->CmdSetDepthWriteEnableEXT;
+    if (!strcmp(name, "CmdSetDepthCompareOpEXT")) return (void *)table->CmdSetDepthCompareOpEXT;
+    if (!strcmp(name, "CmdSetDepthBoundsTestEnableEXT")) return (void *)table->CmdSetDepthBoundsTestEnableEXT;
+    if (!strcmp(name, "CmdSetStencilTestEnableEXT")) return (void *)table->CmdSetStencilTestEnableEXT;
+    if (!strcmp(name, "CmdSetStencilOpEXT")) return (void *)table->CmdSetStencilOpEXT;
 
     // ---- VK_NV_device_generated_commands extension commands
     if (!strcmp(name, "GetGeneratedCommandsMemoryRequirementsNV")) return (void *)table->GetGeneratedCommandsMemoryRequirementsNV;
@@ -1765,6 +1825,14 @@ VKAPI_ATTR void* VKAPI_CALL loader_lookup_instance_dispatch_table(const VkLayerI
 
     // ---- VK_EXT_headless_surface extension commands
     if (!strcmp(name, "CreateHeadlessSurfaceEXT")) return (void *)table->CreateHeadlessSurfaceEXT;
+
+    // ---- VK_EXT_directfb_surface extension commands
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    if (!strcmp(name, "CreateDirectFBSurfaceEXT")) return (void *)table->CreateDirectFBSurfaceEXT;
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    if (!strcmp(name, "GetPhysicalDeviceDirectFBPresentationSupportEXT")) return (void *)table->GetPhysicalDeviceDirectFBPresentationSupportEXT;
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
 
     *found_name = false;
     return NULL;
@@ -2334,6 +2402,51 @@ VKAPI_ATTR VkResult VKAPI_CALL GetPipelineExecutableInternalRepresentationsKHR(
     VkPipelineExecutableInternalRepresentationKHR* pInternalRepresentations) {
     const VkLayerDispatchTable *disp = loader_get_dispatch(device);
     return disp->GetPipelineExecutableInternalRepresentationsKHR(device, pExecutableInfo, pInternalRepresentationCount, pInternalRepresentations);
+}
+
+
+// ---- VK_KHR_copy_commands2 extension trampoline/terminators
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferInfo2KHR*                 pCopyBufferInfo) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdCopyBuffer2KHR(commandBuffer, pCopyBufferInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageInfo2KHR*                  pCopyImageInfo) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdCopyImage2KHR(commandBuffer, pCopyImageInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyBufferToImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdCopyBufferToImage2KHR(commandBuffer, pCopyBufferToImageInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyImageToBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdCopyImageToBuffer2KHR(commandBuffer, pCopyImageToBufferInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdBlitImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkBlitImageInfo2KHR*                  pBlitImageInfo) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdBlitImage2KHR(commandBuffer, pBlitImageInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdResolveImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkResolveImageInfo2KHR*               pResolveImageInfo) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdResolveImage2KHR(commandBuffer, pResolveImageInfo);
 }
 
 
@@ -3579,6 +3692,104 @@ VKAPI_ATTR void VKAPI_CALL ResetQueryPoolEXT(
 }
 
 
+// ---- VK_EXT_extended_dynamic_state extension trampoline/terminators
+
+VKAPI_ATTR void VKAPI_CALL CmdSetCullModeEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkCullModeFlags                             cullMode) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetCullModeEXT(commandBuffer, cullMode);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetFrontFaceEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkFrontFace                                 frontFace) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetFrontFaceEXT(commandBuffer, frontFace);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetPrimitiveTopologyEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPrimitiveTopology                         primitiveTopology) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetPrimitiveTopologyEXT(commandBuffer, primitiveTopology);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetViewportWithCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    viewportCount,
+    const VkViewport*                           pViewports) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetViewportWithCountEXT(commandBuffer, viewportCount, pViewports);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetScissorWithCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    scissorCount,
+    const VkRect2D*                             pScissors) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetScissorWithCountEXT(commandBuffer, scissorCount, pScissors);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdBindVertexBuffers2EXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstBinding,
+    uint32_t                                    bindingCount,
+    const VkBuffer*                             pBuffers,
+    const VkDeviceSize*                         pOffsets,
+    const VkDeviceSize*                         pSizes,
+    const VkDeviceSize*                         pStrides) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdBindVertexBuffers2EXT(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDepthTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthTestEnable) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetDepthTestEnableEXT(commandBuffer, depthTestEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDepthWriteEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthWriteEnable) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetDepthWriteEnableEXT(commandBuffer, depthWriteEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDepthCompareOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkCompareOp                                 depthCompareOp) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetDepthCompareOpEXT(commandBuffer, depthCompareOp);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDepthBoundsTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthBoundsTestEnable) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetDepthBoundsTestEnableEXT(commandBuffer, depthBoundsTestEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetStencilTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    stencilTestEnable) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetStencilTestEnableEXT(commandBuffer, stencilTestEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetStencilOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkStencilFaceFlags                          faceMask,
+    VkStencilOp                                 failOp,
+    VkStencilOp                                 passOp,
+    VkStencilOp                                 depthFailOp,
+    VkCompareOp                                 compareOp) {
+    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
+    disp->CmdSetStencilOpEXT(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp);
+}
+
+
 // ---- VK_NV_device_generated_commands extension trampoline/terminators
 
 VKAPI_ATTR void VKAPI_CALL GetGeneratedCommandsMemoryRequirementsNV(
@@ -4232,6 +4443,32 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
         return true;
     }
 
+    // ---- VK_KHR_copy_commands2 extension commands
+    if (!strcmp("vkCmdCopyBuffer2KHR", name)) {
+        *addr = (void *)CmdCopyBuffer2KHR;
+        return true;
+    }
+    if (!strcmp("vkCmdCopyImage2KHR", name)) {
+        *addr = (void *)CmdCopyImage2KHR;
+        return true;
+    }
+    if (!strcmp("vkCmdCopyBufferToImage2KHR", name)) {
+        *addr = (void *)CmdCopyBufferToImage2KHR;
+        return true;
+    }
+    if (!strcmp("vkCmdCopyImageToBuffer2KHR", name)) {
+        *addr = (void *)CmdCopyImageToBuffer2KHR;
+        return true;
+    }
+    if (!strcmp("vkCmdBlitImage2KHR", name)) {
+        *addr = (void *)CmdBlitImage2KHR;
+        return true;
+    }
+    if (!strcmp("vkCmdResolveImage2KHR", name)) {
+        *addr = (void *)CmdResolveImage2KHR;
+        return true;
+    }
+
     // ---- VK_EXT_debug_marker extension commands
     if (!strcmp("vkDebugMarkerSetObjectTagEXT", name)) {
         *addr = (void *)DebugMarkerSetObjectTagEXT;
@@ -4778,6 +5015,56 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
         return true;
     }
 
+    // ---- VK_EXT_extended_dynamic_state extension commands
+    if (!strcmp("vkCmdSetCullModeEXT", name)) {
+        *addr = (void *)CmdSetCullModeEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetFrontFaceEXT", name)) {
+        *addr = (void *)CmdSetFrontFaceEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetPrimitiveTopologyEXT", name)) {
+        *addr = (void *)CmdSetPrimitiveTopologyEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetViewportWithCountEXT", name)) {
+        *addr = (void *)CmdSetViewportWithCountEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetScissorWithCountEXT", name)) {
+        *addr = (void *)CmdSetScissorWithCountEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdBindVertexBuffers2EXT", name)) {
+        *addr = (void *)CmdBindVertexBuffers2EXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetDepthTestEnableEXT", name)) {
+        *addr = (void *)CmdSetDepthTestEnableEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetDepthWriteEnableEXT", name)) {
+        *addr = (void *)CmdSetDepthWriteEnableEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetDepthCompareOpEXT", name)) {
+        *addr = (void *)CmdSetDepthCompareOpEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetDepthBoundsTestEnableEXT", name)) {
+        *addr = (void *)CmdSetDepthBoundsTestEnableEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetStencilTestEnableEXT", name)) {
+        *addr = (void *)CmdSetStencilTestEnableEXT;
+        return true;
+    }
+    if (!strcmp("vkCmdSetStencilOpEXT", name)) {
+        *addr = (void *)CmdSetStencilOpEXT;
+        return true;
+    }
+
     // ---- VK_NV_device_generated_commands extension commands
     if (!strcmp("vkGetGeneratedCommandsMemoryRequirementsNV", name)) {
         *addr = (void *)GetGeneratedCommandsMemoryRequirementsNV;
@@ -5266,6 +5553,14 @@ const VkLayerInstanceDispatchTable instance_disp = {
 
     // ---- VK_EXT_headless_surface extension commands
     .CreateHeadlessSurfaceEXT = terminator_CreateHeadlessSurfaceEXT,
+
+    // ---- VK_EXT_directfb_surface extension commands
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    .CreateDirectFBSurfaceEXT = terminator_CreateDirectFBSurfaceEXT,
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    .GetPhysicalDeviceDirectFBPresentationSupportEXT = terminator_GetPhysicalDeviceDirectFBPresentationSupportEXT,
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
 };
 
 // A null-terminated list of all of the instance extensions supported by the loader.
@@ -5325,5 +5620,8 @@ const char *const LOADER_INSTANCE_EXTENSIONS[] = {
 #endif // VK_USE_PLATFORM_METAL_EXT
                                                   VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME,
                                                   VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+                                                  VK_EXT_DIRECTFB_SURFACE_EXTENSION_NAME,
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
                                                   NULL };
 

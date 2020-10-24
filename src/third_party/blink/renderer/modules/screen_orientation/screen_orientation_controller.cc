@@ -7,8 +7,10 @@
 #include <memory>
 #include <utility>
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
+#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -57,17 +59,17 @@ ScreenOrientationController::ScreenOrientationController(LocalDOMWindow& window)
 
 // Compute the screen orientation using the orientation angle and the screen
 // width / height.
-WebScreenOrientationType ScreenOrientationController::ComputeOrientation(
-    const IntRect& rect,
+mojom::blink::ScreenOrientation ScreenOrientationController::ComputeOrientation(
+    const gfx::Rect& rect,
     uint16_t rotation) {
   // Bypass orientation detection in web tests to get consistent results.
   // FIXME: The screen dimension should be fixed when running the web tests
   // to avoid such issues.
   if (WebTestSupport::IsRunningWebTest())
-    return kWebScreenOrientationPortraitPrimary;
+    return mojom::blink::ScreenOrientation::kPortraitPrimary;
 
-  bool is_tall_display = rotation % 180 ? rect.Height() < rect.Width()
-                                        : rect.Height() > rect.Width();
+  bool is_tall_display = rotation % 180 ? rect.height() < rect.width()
+                                        : rect.height() > rect.width();
 
   // https://w3c.github.io/screen-orientation/#dfn-current-orientation-angle
   // allows the UA to associate *-primary and *-secondary values at will. Blink
@@ -76,20 +78,24 @@ WebScreenOrientationType ScreenOrientationController::ComputeOrientation(
   // together fully determine the relationship.
   switch (rotation) {
     case 0:
-      return is_tall_display ? kWebScreenOrientationPortraitPrimary
-                             : kWebScreenOrientationLandscapePrimary;
+      return is_tall_display
+                 ? mojom::blink::ScreenOrientation::kPortraitPrimary
+                 : mojom::blink::ScreenOrientation::kLandscapePrimary;
     case 90:
-      return is_tall_display ? kWebScreenOrientationLandscapePrimary
-                             : kWebScreenOrientationPortraitSecondary;
+      return is_tall_display
+                 ? mojom::blink::ScreenOrientation::kLandscapePrimary
+                 : mojom::blink::ScreenOrientation::kPortraitSecondary;
     case 180:
-      return is_tall_display ? kWebScreenOrientationPortraitSecondary
-                             : kWebScreenOrientationLandscapeSecondary;
+      return is_tall_display
+                 ? mojom::blink::ScreenOrientation::kPortraitSecondary
+                 : mojom::blink::ScreenOrientation::kLandscapeSecondary;
     case 270:
-      return is_tall_display ? kWebScreenOrientationLandscapeSecondary
-                             : kWebScreenOrientationPortraitPrimary;
+      return is_tall_display
+                 ? mojom::blink::ScreenOrientation::kLandscapeSecondary
+                 : mojom::blink::ScreenOrientation::kPortraitPrimary;
     default:
       NOTREACHED();
-      return kWebScreenOrientationPortraitPrimary;
+      return mojom::blink::ScreenOrientation::kPortraitPrimary;
   }
 }
 
@@ -97,31 +103,25 @@ void ScreenOrientationController::UpdateOrientation() {
   DCHECK(orientation_);
   DCHECK(GetPage());
   ChromeClient& chrome_client = GetPage()->GetChromeClient();
-  WebScreenInfo screen_info = chrome_client.GetScreenInfo(*GetFrame());
-  WebScreenOrientationType orientation_type = screen_info.orientation_type;
-  if (orientation_type == kWebScreenOrientationUndefined) {
+  ScreenInfo screen_info = chrome_client.GetScreenInfo(*GetFrame());
+  mojom::blink::ScreenOrientation orientation_type =
+      screen_info.orientation_type;
+  if (orientation_type == mojom::blink::ScreenOrientation::kUndefined) {
     // The embedder could not provide us with an orientation, deduce it
     // ourselves.
     orientation_type =
         ComputeOrientation(chrome_client.GetScreenInfo(*GetFrame()).rect,
                            screen_info.orientation_angle);
   }
-  DCHECK(orientation_type != kWebScreenOrientationUndefined);
+  DCHECK(orientation_type != mojom::blink::ScreenOrientation::kUndefined);
 
   orientation_->SetType(orientation_type);
   orientation_->SetAngle(screen_info.orientation_angle);
 }
 
-bool ScreenOrientationController::IsActive() const {
-  return orientation_ && screen_orientation_service_.is_bound();
-}
-
-bool ScreenOrientationController::IsVisible() const {
-  return GetPage() && GetPage()->IsPageVisible();
-}
-
 bool ScreenOrientationController::IsActiveAndVisible() const {
-  return IsActive() && IsVisible();
+  return orientation_ && screen_orientation_service_.is_bound() && GetPage() &&
+         GetPage()->IsPageVisible();
 }
 
 void ScreenOrientationController::PageVisibilityChanged() {
@@ -146,42 +146,37 @@ void ScreenOrientationController::PageVisibilityChanged() {
 }
 
 void ScreenOrientationController::NotifyOrientationChanged() {
-  if (!IsVisible() || !GetFrame())
-    return;
-
-  if (IsActive())
-    UpdateOrientation();
-
   // Keep track of the frames that need to be notified before notifying the
   // current frame as it will prevent side effects from the change event
   // handlers.
-  HeapVector<Member<LocalFrame>> child_frames;
-  for (Frame* child = GetFrame()->Tree().FirstChild(); child;
-       child = child->Tree().NextSibling()) {
-    if (auto* child_local_frame = DynamicTo<LocalFrame>(child))
-      child_frames.push_back(child_local_frame);
+  HeapVector<Member<LocalFrame>> frames;
+  for (Frame* frame = GetFrame(); frame;
+       frame = frame->Tree().TraverseNext(GetFrame())) {
+    if (auto* local_frame = DynamicTo<LocalFrame>(frame))
+      frames.push_back(local_frame);
   }
+  for (LocalFrame* frame : frames) {
+    if (auto* controller = FromIfExists(*frame->DomWindow()))
+      controller->NotifyOrientationChangedInternal();
+  }
+}
 
-  // Notify current orientation object.
-  if (IsActive() && orientation_) {
-    GetExecutionContext()
-        ->GetTaskRunner(TaskType::kMiscPlatformAPI)
-        ->PostTask(FROM_HERE,
-                   WTF::Bind(
-                       [](ScreenOrientation* orientation) {
-                         ScopedAllowFullscreen allow_fullscreen(
-                             ScopedAllowFullscreen::kOrientationChange);
-                         orientation->DispatchEvent(
-                             *Event::Create(event_type_names::kChange));
-                       },
-                       WrapPersistent(orientation_.Get())));
-  }
+void ScreenOrientationController::NotifyOrientationChangedInternal() {
+  if (!IsActiveAndVisible())
+    return;
 
-  // ... and child frames.
-  for (LocalFrame* child_frame : child_frames) {
-    if (auto* controller = FromIfExists(*child_frame->DomWindow()))
-      controller->NotifyOrientationChanged();
-  }
+  UpdateOrientation();
+  GetExecutionContext()
+      ->GetTaskRunner(TaskType::kMiscPlatformAPI)
+      ->PostTask(FROM_HERE,
+                 WTF::Bind(
+                     [](ScreenOrientation* orientation) {
+                       ScopedAllowFullscreen allow_fullscreen(
+                           ScopedAllowFullscreen::kOrientationChange);
+                       orientation->DispatchEvent(
+                           *Event::Create(event_type_names::kChange));
+                     },
+                     WrapPersistent(orientation_.Get())));
 }
 
 void ScreenOrientationController::SetOrientation(
@@ -192,7 +187,7 @@ void ScreenOrientationController::SetOrientation(
 }
 
 void ScreenOrientationController::lock(
-    WebScreenOrientationLockType orientation,
+    device::mojom::blink::ScreenOrientationLockType orientation,
     std::unique_ptr<WebLockOrientationCallback> callback) {
   // When detached, the |screen_orientation_service_| is no longer valid.
   if (!screen_orientation_service_.is_bound())
@@ -244,6 +239,18 @@ void ScreenOrientationController::OnLockOrientationResult(
     ScreenOrientationLockResult result) {
   if (!pending_callback_ || request_id != request_id_)
     return;
+
+  if (IdentifiabilityStudySettings::Get()->IsSurfaceAllowed(
+          IdentifiableSurface::FromTypeAndToken(
+              IdentifiableSurface::Type::kWebFeature,
+              WebFeature::kScreenOrientationLock))) {
+    auto* context = GetExecutionContext();
+    IdentifiabilityMetricBuilder(context->UkmSourceID())
+        .SetWebfeature(WebFeature::kScreenOrientationLock,
+                       result == ScreenOrientationLockResult::
+                                     SCREEN_ORIENTATION_LOCK_RESULT_SUCCESS)
+        .Record(context->UkmRecorder());
+  }
 
   switch (result) {
     case ScreenOrientationLockResult::SCREEN_ORIENTATION_LOCK_RESULT_SUCCESS:

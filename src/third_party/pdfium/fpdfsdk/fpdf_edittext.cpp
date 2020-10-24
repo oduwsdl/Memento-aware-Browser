@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
-#include <limits>
 #include <map>
 #include <memory>
 #include <utility>
@@ -290,10 +288,7 @@ RetainPtr<CPDF_Font> LoadSimpleFont(CPDF_Document* pDoc,
                                     static_cast<int>(dwCurrentChar));
   CPDF_Array* widthsArray = pDoc->NewIndirect<CPDF_Array>();
   while (true) {
-    uint32_t width =
-        std::min(pFont->GetGlyphWidth(dwGlyphIndex),
-                 static_cast<uint32_t>(std::numeric_limits<int>::max()));
-    widthsArray->AppendNew<CPDF_Number>(static_cast<int>(width));
+    widthsArray->AppendNew<CPDF_Number>(pFont->GetGlyphWidth(dwGlyphIndex));
     uint32_t nextChar =
         FT_Get_Next_Char(pFont->GetFaceRec(), dwCurrentChar, &dwGlyphIndex);
     // Simple fonts have 1-byte charcodes only.
@@ -597,7 +592,7 @@ FPDFTextObj_GetTextRenderMode(FPDF_PAGEOBJECT text) {
   CPDF_TextObject* pTextObj = CPDFTextObjectFromFPDFPageObject(text);
   if (!pTextObj)
     return FPDF_TEXTRENDERMODE_UNKNOWN;
-  return static_cast<FPDF_TEXT_RENDERMODE>(pTextObj->m_TextState.GetTextMode());
+  return static_cast<FPDF_TEXT_RENDERMODE>(pTextObj->GetTextRenderMode());
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
@@ -612,7 +607,6 @@ FPDFTextObj_SetTextRenderMode(FPDF_PAGEOBJECT text,
   if (!pTextObj)
     return false;
 
-  pTextObj->m_TextState.SetTextMode(
-      static_cast<TextRenderingMode>(render_mode));
+  pTextObj->SetTextRenderMode(static_cast<TextRenderingMode>(render_mode));
   return true;
 }

@@ -104,7 +104,6 @@ bool ExternalPopupMenu::ShowInternal() {
     IntRect rect_in_viewport = local_frame_->View()->FrameToViewport(rect);
     float scale_for_emulation = WebLocalFrameImpl::FromFrame(local_frame_)
                                     ->LocalRootFrameWidget()
-                                    ->Client()
                                     ->GetEmulatorScale();
 
     gfx::Rect bounds =
@@ -128,7 +127,7 @@ bool ExternalPopupMenu::ShowInternal() {
 void ExternalPopupMenu::Show() {
   if (!ShowInternal())
     return;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   const WebInputEvent* current_event = CurrentInputEvent::Get();
   if (current_event &&
       current_event->GetType() == WebInputEvent::Type::kMouseDown) {
@@ -202,7 +201,8 @@ void ExternalPopupMenu::DisconnectClient() {
 }
 
 void ExternalPopupMenu::DidAcceptIndices(const Vector<int32_t>& indices) {
-  local_frame_->NotifyUserActivation();
+  local_frame_->NotifyUserActivation(
+      mojom::blink::UserActivationNotificationType::kInteraction);
 
   // Calling methods on the HTMLSelectElement might lead to this object being
   // derefed. This ensures it does not get deleted while we are running this
@@ -232,8 +232,6 @@ void ExternalPopupMenu::DidAcceptIndices(const Vector<int32_t>& indices) {
 }
 
 void ExternalPopupMenu::DidCancel() {
-  local_frame_->NotifyUserActivation();
-
   if (owner_element_)
     owner_element_->PopupDidHide();
   Reset();

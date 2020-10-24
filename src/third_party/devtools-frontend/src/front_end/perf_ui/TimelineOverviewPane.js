@@ -28,7 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
+import * as SDK from '../sdk/sdk.js';  // eslint-disable-line no-unused-vars
 import * as UI from '../ui/ui.js';
 
 import {Events as OverviewGridEvents, OverviewGrid} from './OverviewGrid.js';
@@ -56,6 +60,7 @@ export class TimelineOverviewPane extends UI.Widget.VBox {
     this._overviewGrid.setResizeEnabled(false);
     this._overviewGrid.addEventListener(OverviewGridEvents.WindowChanged, this._onWindowChanged, this);
     this._overviewGrid.setClickHandler(this._onClick.bind(this));
+    /** @type {!Array.<!TimelineOverview>} */
     this._overviewControls = [];
     this._markers = new Map();
 
@@ -92,7 +97,7 @@ export class TimelineOverviewPane extends UI.Widget.VBox {
     const x = this._cursorPosition;
     const elements = await Promise.all(this._overviewControls.map(control => control.overviewInfoPromise(x)));
     const fragment = document.createDocumentFragment();
-    fragment.appendChildren.apply(fragment, elements.filter(element => element !== null));
+    fragment.append(...elements.filter(element => element !== null));
     return fragment;
   }
 
@@ -151,6 +156,13 @@ export class TimelineOverviewPane extends UI.Widget.VBox {
     this._overviewCalculator.setBounds(minimumBoundary, maximumBoundary);
     this._overviewGrid.setResizeEnabled(true);
     this._cursorEnabled = true;
+  }
+
+  /**
+   * @param {!Map<string, !SDK.TracingModel.Event>} navStartTimes
+   */
+  setNavStartTimes(navStartTimes) {
+    this._overviewCalculator.setNavStartTimes(navStartTimes);
   }
 
   scheduleUpdate() {
@@ -315,6 +327,13 @@ export class TimelineOverviewCalculator {
   }
 
   /**
+   * @param {!Map<string, !SDK.TracingModel.Event>} navStartTimes
+   */
+  setNavStartTimes(navStartTimes) {
+    this._navStartTimes = navStartTimes;
+  }
+
+  /**
    * @param {number} clientWidth
    */
   setDisplayWidth(clientWidth) {
@@ -332,6 +351,19 @@ export class TimelineOverviewCalculator {
    * @return {string}
    */
   formatValue(value, precision) {
+    // If there are nav start times the value needs to be remapped.
+    if (this._navStartTimes) {
+      // Find the latest possible nav start time which is considered earlier
+      // than the value passed through.
+      const navStartTimes = Array.from(this._navStartTimes.values());
+      for (let i = navStartTimes.length - 1; i >= 0; i--) {
+        if (value > navStartTimes[i].startTime) {
+          value -= (navStartTimes[i].startTime - this.zeroTime());
+          break;
+        }
+      }
+    }
+
     return Number.preciseMillisToString(value - this.zeroTime(), precision);
   }
 

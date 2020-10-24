@@ -356,6 +356,35 @@
   // InspectorFrontendHostImpl --------------------------------------------------
 
   /**
+   * Enum for recordPerformanceHistogram
+   * Warning: There are two other definitions of this enum in the DevTools code
+   * base, keep them in sync:
+   * front_end/extern.js
+   * front_end/host/InspectorFrontendHostAPI.js
+   * @readonly
+   * @enum {string}
+   */
+  const EnumeratedHistogram = {
+    ActionTaken: 'DevTools.ActionTaken',
+    ColorPickerFixedColor: 'DevTools.ColorPicker.FixedColor',
+    PanelClosed: 'DevTools.PanelClosed',
+    PanelShown: 'DevTools.PanelShown',
+    SidebarPaneShown: 'DevTools.SidebarPaneShown',
+    KeyboardShortcutFired: 'DevTools.KeyboardShortcutFired',
+    IssuesPanelIssueExpanded: 'DevTools.IssuesPanelIssueExpanded',
+    IssuesPanelOpenedFrom: 'DevTools.IssuesPanelOpenedFrom',
+    IssuesPanelResourceOpened: 'DevTools.IssuesPanelResourceOpened',
+    KeybindSetSettingChanged: 'DevTools.KeybindSetSettingChanged',
+    DualScreenDeviceEmulated: 'DevTools.DualScreenDeviceEmulated',
+    CSSGridSettings: 'DevTools.CSSGridSettings2',
+    HighlightedPersistentCSSGridCount: 'DevTools.HighlightedPersistentCSSGridCount',
+    ExperimentEnabledAtLaunch: 'DevTools.ExperimentEnabledAtLaunch',
+    ExperimentEnabled: 'DevTools.ExperimentEnabled',
+    ExperimentDisabled: 'DevTools.ExperimentDisabled',
+    GridOverlayOpenedFrom: 'DevTools.GridOverlayOpenedFrom',
+  };
+
+  /**
    * @implements {InspectorFrontendHostAPI}
    * @unrestricted
    */
@@ -570,13 +599,12 @@
 
     /**
      * @override
-     * @param {string} actionName
+     * @param {!InspectorFrontendHostAPI.EnumeratedHistogram} actionName
      * @param {number} actionCode
      * @param {number} bucketSize
      */
     recordEnumeratedHistogram(actionName, actionCode, bucketSize) {
-      // Support for M49 frontend.
-      if (actionName === 'DevTools.DrawerShown') {
+      if (!Object.values(EnumeratedHistogram).includes(actionName)) {
         return;
       }
       DevToolsAPI.sendMessageToEmbedder('recordEnumeratedHistogram', [actionName, actionCode, bucketSize], null);
@@ -888,7 +916,7 @@
      * @param {number} actionCode
      */
     recordActionTaken(actionCode) {
-      this.recordEnumeratedHistogram('DevTools.ActionTaken', actionCode, 100);
+      // Do not record actions, as that may crash the DevTools renderer.
     }
 
     /**
@@ -896,7 +924,7 @@
      * @param {number} panelCode
      */
     recordPanelShown(panelCode) {
-      this.recordEnumeratedHistogram('DevTools.PanelShown', panelCode, 20);
+      // Do not record actions, as that may crash the DevTools renderer.
     }
   };
 
@@ -1277,7 +1305,7 @@
       };
 
       Object.defineProperty(HTMLSlotElement.prototype, 'select', {
-        async set(selector) {
+        set(selector) {
           this.name = selector;
         }
       });

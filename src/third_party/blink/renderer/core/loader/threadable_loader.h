@@ -36,6 +36,7 @@
 
 #include "base/macros.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/raw_resource.h"
@@ -69,8 +70,6 @@ class ThreadableLoaderClient;
 class CORE_EXPORT ThreadableLoader final
     : public GarbageCollected<ThreadableLoader>,
       private RawResourceClient {
-  USING_GARBAGE_COLLECTED_MIXIN(ThreadableLoader);
-
  public:
   // ThreadableLoaderClient methods are never called before Start() call.
   //
@@ -217,7 +216,7 @@ class CORE_EXPORT ThreadableLoader final
   // up-to-date values from them and this variable, and use it.
   const ResourceLoaderOptions resource_loader_options_;
 
-  // True when feature OutOfBlinkCors is enabled (https://crbug.com/736308).
+  // Always true. TODO(1053866): Remove this flag and code hidden by this flag.
   const bool out_of_blink_cors_;
 
   // Corresponds to the CORS flag in the Fetch spec.
@@ -228,7 +227,7 @@ class CORE_EXPORT ThreadableLoader final
   const bool async_;
 
   // Holds the original request context (used for sanity checks).
-  mojom::RequestContextType request_context_;
+  mojom::blink::RequestContextType request_context_;
 
   // Saved so that we can use the original value for the modes in
   // ResponseReceived() where |resource| might be a reused one (e.g. preloaded
@@ -243,7 +242,7 @@ class CORE_EXPORT ThreadableLoader final
   // Holds the original request and options for it during preflight request
   // handling phase.
   ResourceRequest actual_request_;
-  ResourceLoaderOptions actual_options_;
+  ResourceLoaderOptions actual_options_{nullptr /* world */};
   network::mojom::FetchResponseType response_tainting_ =
       network::mojom::FetchResponseType::kBasic;
 

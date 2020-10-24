@@ -23,7 +23,7 @@
 #include "third_party/blink/renderer/core/css/properties/shorthands.h"
 #include "third_party/blink/renderer/core/css/zoom_adjusted_pixel_value.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
-#include "third_party/blink/renderer/core/layout/layout_theme.h"
+#include "third_party/blink/renderer/core/layout/layout_theme_font_provider.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -64,6 +64,8 @@ CSSValue* ConsumeAnimationValue(CSSPropertyID property,
                                              CSSValueID::kPaused>(range);
     case CSSPropertyID::kAnimationTimingFunction:
       return css_parsing_utils::ConsumeAnimationTimingFunction(range, context);
+    case CSSPropertyID::kAnimationTimeline:
+      return css_parsing_utils::ConsumeAnimationTimeline(range, context);
     default:
       NOTREACHED();
       return nullptr;
@@ -78,7 +80,7 @@ bool Animation::ParseShorthand(
     const CSSParserContext& context,
     const CSSParserLocalContext& local_context,
     HeapVector<CSSPropertyValue, 256>& properties) const {
-  const StylePropertyShorthand shorthand = animationShorthandForParsing();
+  const StylePropertyShorthand shorthand = animationShorthand();
   const unsigned longhand_count = shorthand.length();
 
   HeapVector<Member<CSSValueList>, css_parsing_utils::kMaxNumAnimationLonghands>
@@ -127,6 +129,15 @@ const CSSValue* Animation::CSSValueFromComputedStyleInternal(
           CSSTimingData::GetRepeated(animation_data->PlayStateList(), i)));
       list->Append(*MakeGarbageCollected<CSSCustomIdentValue>(
           animation_data->NameList()[i]));
+      // When serializing shorthands, a component value must be omitted
+      // if doesn't change the meaning of the overall value.
+      // https://drafts.csswg.org/cssom/#serializing-css-values
+      if (CSSAnimationData::InitialTimeline() !=
+          animation_data->GetTimeline(i)) {
+        DCHECK(RuntimeEnabledFeatures::CSSScrollTimelineEnabled());
+        list->Append(*ComputedStyleUtils::ValueForStyleNameOrKeyword(
+            animation_data->GetTimeline(i)));
+      }
       animations_list->Append(*list);
     }
     return animations_list;
@@ -1000,16 +1011,16 @@ bool ConsumeSystemFont(bool important,
   if (!range.AtEnd())
     return false;
 
-  FontSelectionValue font_style = NormalSlopeValue();
+  FontSelectionValue font_slope = NormalSlopeValue();
   FontSelectionValue font_weight = NormalWeightValue();
   float font_size = 0;
   AtomicString font_family;
-  LayoutTheme::GetTheme().SystemFont(system_font_id, font_style, font_weight,
-                                     font_size, font_family);
+  LayoutThemeFontProvider::SystemFont(system_font_id, font_slope, font_weight,
+                                      font_size, font_family);
 
   css_parsing_utils::AddProperty(
       CSSPropertyID::kFontStyle, CSSPropertyID::kFont,
-      *CSSIdentifierValue::Create(font_style == ItalicSlopeValue()
+      *CSSIdentifierValue::Create(font_slope == ItalicSlopeValue()
                                       ? CSSValueID::kItalic
                                       : CSSValueID::kNormal),
       important, css_parsing_utils::IsImplicitProperty::kNotImplicit,

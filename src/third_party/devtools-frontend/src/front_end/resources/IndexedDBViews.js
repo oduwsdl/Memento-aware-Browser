@@ -28,6 +28,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
 import * as DataGrid from '../data_grid/data_grid.js';
 import * as ObjectUI from '../object_ui/object_ui.js';
@@ -75,7 +78,7 @@ export class IDBDatabaseView extends UI.Widget.VBox {
   _refreshDatabase() {
     this._securityOriginElement.textContent = this._database.databaseId.securityOrigin;
     this._versionElement.textContent = this._database.version;
-    this._objectStoreCountElement.textContent = Object.keys(this._database.objectStores).length;
+    this._objectStoreCountElement.textContent = this._database.objectStores.size;
   }
 
   _refreshDatabaseButtonClicked() {
@@ -197,26 +200,26 @@ export class IDBDataView extends UI.View.SimpleView {
    */
   _keyColumnHeaderFragment(prefix, keyPath) {
     const keyColumnHeaderFragment = createDocumentFragment();
-    keyColumnHeaderFragment.createTextChild(prefix);
+    UI.UIUtils.createTextChild(keyColumnHeaderFragment, prefix);
     if (keyPath === null) {
       return keyColumnHeaderFragment;
     }
 
-    keyColumnHeaderFragment.createTextChild(' (' + Common.UIString.UIString('Key path: '));
+    UI.UIUtils.createTextChild(keyColumnHeaderFragment, ' (' + Common.UIString.UIString('Key path: '));
     if (Array.isArray(keyPath)) {
-      keyColumnHeaderFragment.createTextChild('[');
+      UI.UIUtils.createTextChild(keyColumnHeaderFragment, '[');
       for (let i = 0; i < keyPath.length; ++i) {
         if (i !== 0) {
-          keyColumnHeaderFragment.createTextChild(', ');
+          UI.UIUtils.createTextChild(keyColumnHeaderFragment, ', ');
         }
         keyColumnHeaderFragment.appendChild(this._keyPathStringFragment(keyPath[i]));
       }
-      keyColumnHeaderFragment.createTextChild(']');
+      UI.UIUtils.createTextChild(keyColumnHeaderFragment, ']');
     } else {
       const keyPathString = /** @type {string} */ (keyPath);
       keyColumnHeaderFragment.appendChild(this._keyPathStringFragment(keyPathString));
     }
-    keyColumnHeaderFragment.createTextChild(')');
+    UI.UIUtils.createTextChild(keyColumnHeaderFragment, ')');
     return keyColumnHeaderFragment;
   }
 
@@ -226,10 +229,10 @@ export class IDBDataView extends UI.View.SimpleView {
    */
   _keyPathStringFragment(keyPathString) {
     const keyPathStringFragment = createDocumentFragment();
-    keyPathStringFragment.createTextChild('"');
+    UI.UIUtils.createTextChild(keyPathStringFragment, '"');
     const keyPathSpan = keyPathStringFragment.createChild('span', 'source-code indexed-db-key-path');
     keyPathSpan.textContent = keyPathString;
-    keyPathStringFragment.createTextChild('"');
+    UI.UIUtils.createTextChild(keyPathStringFragment, '"');
     return keyPathStringFragment;
   }
 
@@ -491,7 +494,7 @@ export class IDBDataGridNode extends DataGrid.DataGrid.DataGridNode {
 
   /**
    * @override
-   * @return {!Element}
+   * @return {!HTMLElement}
    */
   createCell(columnIdentifier) {
     const cell = super.createCell(columnIdentifier);

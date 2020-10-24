@@ -33,9 +33,11 @@
 #include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/editing/commands/typing_command.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/editing/ime/ime_text_span.h"
 #include "third_party/blink/renderer/core/editing/plain_text_range.h"
+#include "third_party/blink/renderer/core/events/input_event.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -51,8 +53,6 @@ enum class TypingContinuation;
 class CORE_EXPORT InputMethodController final
     : public GarbageCollected<InputMethodController>,
       public ExecutionContextLifecycleObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(InputMethodController);
-
  public:
   enum ConfirmCompositionBehavior {
     kDoNotKeepSelection,
@@ -72,6 +72,12 @@ class CORE_EXPORT InputMethodController final
   void SetCompositionFromExistingText(const Vector<ImeTextSpan>& ime_text_spans,
                                       unsigned composition_start,
                                       unsigned composition_end);
+  void AddImeTextSpansToExistingText(const Vector<ImeTextSpan>& ime_text_spans,
+                                     unsigned text_start,
+                                     unsigned text_end);
+  void ClearImeTextSpansByType(ImeTextSpan::Type type,
+                               unsigned text_start,
+                               unsigned text_end);
 
   // Deletes ongoing composing text if any, inserts specified text, and
   // changes the selection according to relativeCaretPosition, which is
@@ -219,6 +225,21 @@ class CORE_EXPORT InputMethodController final
   //   2) CommitText()
   //   3) SetComposingText() (SetComposition())
   void RemoveSuggestionMarkerInCompositionRange();
+
+  void DispatchCompositionUpdateEvent(LocalFrame& frame, const String& text);
+  void DispatchBeforeInputFromComposition(EventTarget* target,
+                                          InputEvent::InputType input_type,
+                                          const String& data);
+  void InsertTextDuringCompositionWithEvents(
+      LocalFrame& frame,
+      const String& text,
+      TypingCommand::Options options,
+      TypingCommand::TextCompositionType composition_type);
+  void DispatchCompositionEndEvent(LocalFrame& frame, const String& text);
+
+  // Gets ime text spans of interest at the cursor position.
+  WebVector<ui::ImeTextSpan> GetImeTextSpansAroundPosition(
+      unsigned position) const;
 
   FRIEND_TEST_ALL_PREFIXES(InputMethodControllerTest,
                            InputModeOfFocusedElement);

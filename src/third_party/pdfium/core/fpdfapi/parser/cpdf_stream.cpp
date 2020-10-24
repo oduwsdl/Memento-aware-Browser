@@ -23,13 +23,13 @@
 namespace {
 
 bool IsMetaDataStreamDictionary(const CPDF_Dictionary* dict) {
-  return dict && dict->GetStringFor("Type") == "Metadata" &&
-         dict->GetStringFor("Subtype") == "XML";
+  return dict && dict->GetNameFor("Type") == "Metadata" &&
+         dict->GetNameFor("Subtype") == "XML";
 }
 
 }  // namespace
 
-CPDF_Stream::CPDF_Stream() {}
+CPDF_Stream::CPDF_Stream() = default;
 
 CPDF_Stream::CPDF_Stream(std::unique_ptr<uint8_t, FxFreeDeleter> pData,
                          uint32_t size,

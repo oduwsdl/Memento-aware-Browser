@@ -40,6 +40,7 @@ cc_library {
         "source/scale.cc",
         "source/scale_any.cc",
         "source/scale_argb.cc",
+        "source/scale_uv.cc",
         "source/scale_common.cc",
         "source/scale_gcc.cc",
         "source/scale_mmi.cc",
@@ -91,6 +92,7 @@ cc_test {
         "unit_test/rotate_argb_test.cc",
         "unit_test/rotate_test.cc",
         "unit_test/scale_argb_test.cc",
+        "unit_test/scale_uv_test.cc",
         "unit_test/scale_test.cc",
         "unit_test/video_common_test.cc",
     ],
@@ -101,6 +103,15 @@ cc_test {
     gtest: false,
     srcs: [
         "util/compare.cc",
+    ],
+    static_libs: ["libyuv"],
+}
+
+cc_test {
+    name: "i444tonv12_eg",
+    gtest: false,
+    srcs: [
+        "util/i444tonv12_eg.cc",
     ],
     static_libs: ["libyuv"],
 }

@@ -47,13 +47,14 @@ std::unique_ptr<TracingService::ProducerEndpoint> ProducerIPCClient::Connect(
     size_t shared_memory_size_hint_bytes,
     size_t shared_memory_page_size_hint_bytes,
     std::unique_ptr<SharedMemory> shm,
-    std::unique_ptr<SharedMemoryArbiter> shm_arbiter) {
+    std::unique_ptr<SharedMemoryArbiter> shm_arbiter,
+    ConnectionFlags conn_flags) {
   return std::unique_ptr<TracingService::ProducerEndpoint>(
-      new ProducerIPCClientImpl(service_sock_name, producer, producer_name,
-                                task_runner, smb_scraping_mode,
-                                shared_memory_size_hint_bytes,
-                                shared_memory_page_size_hint_bytes,
-                                std::move(shm), std::move(shm_arbiter)));
+      new ProducerIPCClientImpl(
+          service_sock_name, producer, producer_name, task_runner,
+          smb_scraping_mode, shared_memory_size_hint_bytes,
+          shared_memory_page_size_hint_bytes, std::move(shm),
+          std::move(shm_arbiter), conn_flags));
 }
 
 ProducerIPCClientImpl::ProducerIPCClientImpl(
@@ -65,10 +66,14 @@ ProducerIPCClientImpl::ProducerIPCClientImpl(
     size_t shared_memory_size_hint_bytes,
     size_t shared_memory_page_size_hint_bytes,
     std::unique_ptr<SharedMemory> shm,
-    std::unique_ptr<SharedMemoryArbiter> shm_arbiter)
+    std::unique_ptr<SharedMemoryArbiter> shm_arbiter,
+    ProducerIPCClient::ConnectionFlags conn_flags)
     : producer_(producer),
       task_runner_(task_runner),
-      ipc_channel_(ipc::Client::CreateInstance(service_sock_name, task_runner)),
+      ipc_channel_(ipc::Client::CreateInstance(
+          service_sock_name,
+          conn_flags == ProducerIPCClient::ConnectionFlags::kRetryIfUnreachable,
+          task_runner)),
       producer_port_(this /* event_listener */),
       shared_memory_(std::move(shm)),
       shared_memory_arbiter_(std::move(shm_arbiter)),
@@ -92,7 +97,9 @@ ProducerIPCClientImpl::ProducerIPCClientImpl(
   PERFETTO_DCHECK_THREAD(thread_checker_);
 }
 
-ProducerIPCClientImpl::~ProducerIPCClientImpl() = default;
+ProducerIPCClientImpl::~ProducerIPCClientImpl() {
+  PERFETTO_DCHECK_THREAD(thread_checker_);
+}
 
 // Called by the IPC layer if the BindService() succeeds.
 void ProducerIPCClientImpl::OnConnect() {
@@ -166,8 +173,8 @@ void ProducerIPCClientImpl::OnDisconnect() {
   PERFETTO_DCHECK_THREAD(thread_checker_);
   PERFETTO_DLOG("Tracing service connection failure");
   connected_ = false;
-  producer_->OnDisconnect();
   data_sources_setup_.clear();
+  producer_->OnDisconnect();  // Note: may delete |this|.
 }
 
 void ProducerIPCClientImpl::OnConnectionInitialized(

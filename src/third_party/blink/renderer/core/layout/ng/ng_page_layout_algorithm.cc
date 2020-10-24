@@ -17,18 +17,15 @@ namespace blink {
 
 NGPageLayoutAlgorithm::NGPageLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
-    : NGLayoutAlgorithm(params) {
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
-}
+    : NGLayoutAlgorithm(params) {}
 
 scoped_refptr<const NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
   LogicalSize page_size = ChildAvailableSize();
 
   NGConstraintSpace child_space = CreateConstraintSpaceForPages(page_size);
 
-  WritingMode writing_mode = ConstraintSpace().GetWritingMode();
+  WritingDirectionMode writing_direction =
+      ConstraintSpace().GetWritingDirection();
   scoped_refptr<const NGBlockBreakToken> break_token = BreakToken();
   LayoutUnit intrinsic_block_size;
   LogicalOffset page_offset = BorderScrollbarPadding().StartOffset();
@@ -48,7 +45,8 @@ scoped_refptr<const NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
 
     container_builder_.AddChild(page, page_offset);
 
-    LayoutUnit page_block_size = NGFragment(writing_mode, page).BlockSize();
+    LayoutUnit page_block_size =
+        NGFragment(writing_direction, page).BlockSize();
     intrinsic_block_size = std::max(intrinsic_block_size,
                                     page_offset.block_offset + page_block_size);
     page_offset += page_progression;
@@ -61,13 +59,9 @@ scoped_refptr<const NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
   LayoutUnit block_size = ComputeBlockSizeForFragment(
       ConstraintSpace(), Style(), BorderPadding(), intrinsic_block_size,
       container_builder_.InitialBorderBoxSize().inline_size);
-  container_builder_.SetBlockSize(block_size);
+  container_builder_.SetFragmentsTotalBlockSize(block_size);
 
-  NGOutOfFlowLayoutPart(
-      Node(), ConstraintSpace(),
-      container_builder_.Borders() + container_builder_.Scrollbar(),
-      &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   // TODO(mstensho): Propagate baselines.
 

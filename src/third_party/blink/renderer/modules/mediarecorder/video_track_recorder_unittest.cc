@@ -14,16 +14,17 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/public/web/web_heap.h"
 #include "third_party/blink/renderer/modules/mediarecorder/buildflags.h"
 #include "third_party/blink/renderer/modules/mediarecorder/fake_encoded_video_frame.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_media_stream_video_source.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/testing/io_task_runner_testing_platform_support.h"
+#include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/video_frame_utils.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -91,7 +92,6 @@ class VideoTrackRecorderTest
     const String track_id("dummy");
     source_ = MakeGarbageCollected<MediaStreamSource>(
         track_id, MediaStreamSource::kTypeVideo, track_id, false /*remote*/);
-    mock_source_->SetOwner(source_);
     source_->SetPlatformSource(base::WrapUnique(mock_source_));
     component_ = MakeGarbageCollected<MediaStreamComponent>(source_);
 
@@ -114,9 +114,13 @@ class VideoTrackRecorderTest
     WebHeap::CollectAllGarbageForTesting();
   }
 
-  void InitializeRecorder(VideoTrackRecorder::CodecId codec) {
+  void InitializeRecorder(VideoTrackRecorder::CodecId codec_id) {
+    InitializeRecorder(VideoTrackRecorder::CodecProfile(codec_id));
+  }
+
+  void InitializeRecorder(VideoTrackRecorder::CodecProfile codec_profile) {
     video_track_recorder_ = std::make_unique<VideoTrackRecorderImpl>(
-        codec, WebMediaStreamTrack(component_.Get()),
+        codec_profile, WebMediaStreamTrack(component_.Get()),
         ConvertToBaseRepeatingCallback(
             CrossThreadBindRepeating(&VideoTrackRecorderTest::OnEncodedVideo,
                                      CrossThreadUnretained(this))),
@@ -431,6 +435,19 @@ TEST_F(VideoTrackRecorderTest, ReleasesFrame) {
   Mock::VerifyAndClearExpectations(this);
 }
 
+TEST_F(VideoTrackRecorderTest, RequiredRefreshRate) {
+  // |RequestRefreshFrame| will be called first by |AddSink| and the second time
+  // by the refresh timer using the required min fps.
+  EXPECT_CALL(*mock_source_, OnRequestRefreshFrame).Times(2);
+
+  track_->SetIsScreencastForTesting(true);
+  InitializeRecorder(VideoTrackRecorder::CodecId::VP8);
+
+  EXPECT_EQ(video_track_recorder_->GetRequiredMinFramesPerSec(), 1);
+
+  test::RunDelayedTasks(base::TimeDelta::FromSeconds(1));
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          VideoTrackRecorderTest,
                          ::testing::Combine(ValuesIn(kTrackRecorderTestCodec),
@@ -447,7 +464,6 @@ class VideoTrackRecorderPassthroughTest
     const String track_id("dummy");
     source_ = MakeGarbageCollected<MediaStreamSource>(
         track_id, MediaStreamSource::kTypeVideo, track_id, false /*remote*/);
-    mock_source_->SetOwner(source_);
     source_->SetPlatformSource(base::WrapUnique(mock_source_));
     component_ = MakeGarbageCollected<MediaStreamComponent>(source_);
 
@@ -653,6 +669,17 @@ class CodecEnumeratorTest : public ::testing::Test {
     return profiles;
   }
 
+  media::VideoEncodeAccelerator::SupportedProfiles MakeH264Profiles() {
+    media::VideoEncodeAccelerator::SupportedProfiles profiles;
+    profiles.emplace_back(media::H264PROFILE_BASELINE, gfx::Size(1920, 1080),
+                          24, 1);
+    profiles.emplace_back(media::H264PROFILE_MAIN, gfx::Size(1920, 1080), 30,
+                          1);
+    profiles.emplace_back(media::H264PROFILE_HIGH, gfx::Size(1920, 1080), 60,
+                          1);
+    return profiles;
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(CodecEnumeratorTest);
 };
@@ -706,5 +733,21 @@ TEST_F(CodecEnumeratorTest, GetFirstSupportedVideoCodecProfileNoVp8) {
   EXPECT_EQ(media::VIDEO_CODEC_PROFILE_UNKNOWN,
             emulator.GetFirstSupportedVideoCodecProfile(CodecId::VP8));
 }
+
+#if BUILDFLAG(RTC_USE_H264)
+TEST_F(CodecEnumeratorTest, FindSupportedVideoCodecProfileH264) {
+  const CodecEnumerator emulator(MakeH264Profiles());
+  EXPECT_EQ(media::H264PROFILE_HIGH,
+            emulator.FindSupportedVideoCodecProfile(CodecId::H264,
+                                                    media::H264PROFILE_HIGH));
+}
+
+TEST_F(CodecEnumeratorTest, FindSupportedVideoCodecProfileNoProfileH264) {
+  const CodecEnumerator emulator(MakeH264Profiles());
+  EXPECT_EQ(media::VIDEO_CODEC_PROFILE_UNKNOWN,
+            emulator.FindSupportedVideoCodecProfile(
+                CodecId::H264, media::H264PROFILE_HIGH422PROFILE));
+}
+#endif
 
 }  // namespace blink

@@ -144,6 +144,7 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
           "specified.");
       return ScriptPromise();
     }
+    // The following function only works on SVGImages (as checked above).
     return ImageBitmap::CreateAsync(this, crop_rect, script_state, options);
   }
   return ImageBitmapSource::FulfillImageBitmap(
@@ -167,11 +168,6 @@ Image::ImageDecodingMode ImageElementBase::GetDecodingModeForPainting(
       decoding_mode_ == Image::ImageDecodingMode::kUnspecifiedDecode)
     return Image::ImageDecodingMode::kSyncDecode;
   return decoding_mode_;
-}
-
-RespectImageOrientationEnum ImageElementBase::RespectImageOrientation() const {
-  return LayoutObject::ShouldRespectImageOrientation(
-      GetElement().GetLayoutObject());
 }
 
 }  // namespace blink

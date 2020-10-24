@@ -7,6 +7,7 @@
 
 #include "src/gpu/GrMemoryPool.h"
 
+#include "include/private/SkTPin.h"
 #include "src/gpu/ops/GrOp.h"
 
 #ifdef SK_DEBUG
@@ -132,9 +133,11 @@ std::unique_ptr<GrOpMemoryPool> GrOpMemoryPool::Make(size_t preallocSize, size_t
     return std::unique_ptr<GrOpMemoryPool>(new (mem) GrOpMemoryPool(preallocSize, minAllocSize));
 }
 
-void GrOpMemoryPool::release(std::unique_ptr<GrOp> op) {
-    GrOp* tmp = op.release();
-    SkASSERT(tmp);
-    tmp->~GrOp();
-    fPool.release(tmp);
-}
+#if !defined(GR_OP_ALLOCATE_USE_NEW)
+    void GrOpMemoryPool::release(std::unique_ptr<GrOp> op) {
+        GrOp* tmp = op.release();
+        SkASSERT(tmp);
+        tmp->~GrOp();
+        fPool.release(tmp);
+    }
+#endif

@@ -68,6 +68,7 @@ class CORE_EXPORT FetchResponseData final
   }
   const KURL* Url() const;
   uint16_t Status() const { return status_; }
+  uint16_t InternalStatus() const;
   AtomicString StatusMessage() const { return status_message_; }
   FetchHeaderList* HeaderList() const { return header_list_.Get(); }
   FetchHeaderList* InternalHeaderList() const;
@@ -82,6 +83,7 @@ class CORE_EXPORT FetchResponseData final
   const HTTPHeaderSet& CorsExposedHeaderNames() const {
     return cors_exposed_header_names_;
   }
+  bool HasRangeRequested() const { return has_range_requested_; }
 
   void SetResponseSource(network::mojom::FetchResponseSource response_source) {
     response_source_ = response_source;
@@ -95,6 +97,9 @@ class CORE_EXPORT FetchResponseData final
     status_message_ = status_message;
   }
   void SetMimeType(const String& type) { mime_type_ = type; }
+  void SetRequestMethod(const AtomicString& method) {
+    request_method_ = method;
+  }
   void SetResponseTime(base::Time response_time) {
     response_time_ = response_time;
   }
@@ -117,6 +122,9 @@ class CORE_EXPORT FetchResponseData final
   void SetWasFetchedViaSpdy(bool was_fetched_via_spdy) {
     was_fetched_via_spdy_ = was_fetched_via_spdy;
   }
+  void SetHasRangeRequested(bool has_range_requested) {
+    has_range_requested_ = has_range_requested;
+  }
 
   // If the type is Default, replaces |buffer_|.
   // If the type is Basic or CORS, replaces |buffer_| and
@@ -131,6 +139,7 @@ class CORE_EXPORT FetchResponseData final
   // Initialize non-body data from the given |response|.
   void InitFromResourceResponse(
       const Vector<KURL>& request_url_list,
+      const AtomicString& request_method,
       network::mojom::CredentialsMode request_credentials,
       FetchRequestData::Tainting tainting,
       const ResourceResponse& response);
@@ -148,6 +157,7 @@ class CORE_EXPORT FetchResponseData final
   Member<FetchResponseData> internal_response_;
   Member<BodyStreamBuffer> buffer_;
   String mime_type_;
+  AtomicString request_method_;
   base::Time response_time_;
   String cache_storage_cache_name_;
   HTTPHeaderSet cors_exposed_header_names_;
@@ -155,6 +165,7 @@ class CORE_EXPORT FetchResponseData final
   AtomicString alpn_negotiated_protocol_;
   bool loaded_with_credentials_;
   bool was_fetched_via_spdy_;
+  bool has_range_requested_;
 
   DISALLOW_COPY_AND_ASSIGN(FetchResponseData);
 };

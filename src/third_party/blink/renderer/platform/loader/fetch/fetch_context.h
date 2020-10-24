@@ -39,6 +39,7 @@
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-blink-forward.h"
+#include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_info.h"
@@ -56,6 +57,7 @@ enum class ResourceType : uint8_t;
 class ClientHintsPreferences;
 class FeaturePolicy;
 class KURL;
+struct ResourceLoaderOptions;
 class ResourceTimingInfo;
 class WebScopedVirtualTimePauser;
 
@@ -119,7 +121,7 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
     return ResourceRequestBlockedReason::kOther;
   }
   virtual base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
-      mojom::RequestContextType,
+      mojom::blink::RequestContextType,
       network::mojom::RequestDestination request_destination,
       const KURL&,
       const ResourceLoaderOptions&,
@@ -136,7 +138,7 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
                                        const ClientHintsPreferences&,
                                        const FetchParameters::ResourceWidth&,
                                        ResourceRequest&,
-                                       const FetchInitiatorInfo&);
+                                       const ResourceLoaderOptions&);
 
   // Called when the underlying context is detached. Note that some
   // FetchContexts continue working after detached (e.g., for fetch() operations
@@ -157,14 +159,20 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
     return false;
   }
 
-  virtual WebURLRequest::PreviewsState previews_state() const {
-    return WebURLRequest::kPreviewsUnspecified;
+  virtual PreviewsState previews_state() const {
+    return PreviewsTypes::kPreviewsUnspecified;
   }
 
   // Returns a receiver corresponding to a request with |request_id|.
   // Null if the request has not been intercepted by a service worker.
   virtual mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
   TakePendingWorkerTimingReceiver(int request_id);
+
+  // Returns a wrapper of ResourceLoadInfoNotifier to notify loading stats.
+  virtual std::unique_ptr<ResourceLoadInfoNotifierWrapper>
+  CreateResourceLoadInfoNotifierWrapper() {
+    return nullptr;
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FetchContext);

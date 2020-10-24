@@ -208,6 +208,7 @@ class TestLoader(object):
                  total_chunks=1,
                  chunk_number=1,
                  include_https=True,
+                 include_h2=True,
                  include_quic=False,
                  skip_timeout=False,
                  skip_implementation_status=None,
@@ -222,6 +223,7 @@ class TestLoader(object):
         self.tests = None
         self.disabled_tests = None
         self.include_https = include_https
+        self.include_h2 = include_h2
         self.include_quic = include_quic
         self.skip_timeout = skip_timeout
         self.skip_implementation_status = skip_implementation_status
@@ -308,6 +310,8 @@ class TestLoader(object):
         for test_path, test_type, test in self.iter_tests():
             enabled = not test.disabled()
             if not self.include_https and test.environment["protocol"] == "https":
+                enabled = False
+            if not self.include_h2 and test.environment["protocol"] == "h2":
                 enabled = False
             if not self.include_quic and test.environment["quic"]:
                 enabled = False
@@ -461,13 +465,16 @@ class GroupFileTestSource(TestSource):
     def make_queue(cls, tests, **kwargs):
         tests_by_group = cls.tests_by_group(tests, **kwargs)
 
+        ids_to_tests = {test.id: test for test in tests}
+
         test_queue = Queue()
 
-        for group_name, tests in iteritems(tests_by_group):
+        for group_name, test_ids in iteritems(tests_by_group):
             group_metadata = {"scope": group_name}
             group = deque()
 
-            for test in tests:
+            for test_id in test_ids:
+                test = ids_to_tests[test_id]
                 group.append(test)
                 test.update_metadata(group_metadata)
 
@@ -487,6 +494,6 @@ class GroupFileTestSource(TestSource):
             except KeyError:
                 logger.error("%s is missing from test groups file" % test.id)
                 raise
-            tests_by_group[group].append(test)
+            tests_by_group[group].append(test.id)
 
         return tests_by_group

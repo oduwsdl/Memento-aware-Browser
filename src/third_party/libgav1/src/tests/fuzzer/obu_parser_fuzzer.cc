@@ -47,7 +47,7 @@ inline void ParseObu(const uint8_t* const data, size_t size) {
                                   libgav1::ReleaseInternalFrameBuffer,
                                   &buffer_list);
   libgav1::DecoderState decoder_state;
-  libgav1::ObuParser parser(data, size, &buffer_pool, &decoder_state);
+  libgav1::ObuParser parser(data, size, 0, &buffer_pool, &decoder_state);
   libgav1::RefCountedBufferPtr current_frame;
   int parsed_frames = 0;
   while (parser.HasData()) {

@@ -610,6 +610,11 @@ DocumentFragment* CreateFragmentForInnerOuterHTML(
     const char* method,
     ExceptionState& exception_state) {
   DCHECK(context_element);
+  if (IsA<HTMLTemplateElement>(*context_element) &&
+      !context_element->GetExecutionContext()) {
+    return nullptr;
+  }
+
   Document& document =
       IsA<HTMLTemplateElement>(*context_element)
           ? context_element->GetDocument().EnsureTemplateDocument()
@@ -695,10 +700,10 @@ DocumentFragment* CreateContextualFragment(
     next_node = node->nextSibling();
     if (IsA<HTMLHtmlElement>(node) || IsA<HTMLHeadElement>(node) ||
         IsA<HTMLBodyElement>(node)) {
-      auto* element = To<HTMLElement>(node);
-      if (Node* first_child = element->firstChild())
+      auto* child_element = To<HTMLElement>(node);
+      if (Node* first_child = child_element->firstChild())
         next_node = first_child;
-      RemoveElementPreservingChildren(fragment, element);
+      RemoveElementPreservingChildren(fragment, child_element);
     }
   }
   return fragment;
@@ -781,7 +786,9 @@ static Document* CreateStagingDocumentForMarkupSanitization() {
   LocalFrame* frame = MakeGarbageCollected<LocalFrame>(
       MakeGarbageCollected<EmptyLocalFrameClient>(), *page,
       nullptr,  // FrameOwner*
-      base::UnguessableToken::Create(),
+      nullptr,  // Frame* parent
+      nullptr,  // Frame* previous_sibling
+      FrameInsertType::kInsertInConstructor, base::UnguessableToken::Create(),
       nullptr,  // WindowAgentFactory*
       nullptr   // InterfaceRegistry*
   );
@@ -789,7 +796,7 @@ static Document* CreateStagingDocumentForMarkupSanitization() {
   LocalFrameView* frame_view =
       MakeGarbageCollected<LocalFrameView>(*frame, IntSize(800, 600));
   frame->SetView(frame_view);
-  frame->Init();
+  frame->Init(nullptr);
 
   Document* document = frame->GetDocument();
   DCHECK(document);

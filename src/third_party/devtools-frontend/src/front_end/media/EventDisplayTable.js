@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as DataGrid from '../data_grid/data_grid.js';
 import * as UI from '../ui/ui.js';
 
@@ -40,7 +43,7 @@ export class EventNode extends DataGrid.DataGrid.DataGridNode {
   /**
    * @override
    * @param {string} columnId
-   * @return {!Element}
+   * @return {!HTMLElement}
    */
   createCell(columnId) {
     const cell = this.createTD(columnId);
@@ -52,7 +55,7 @@ export class EventNode extends DataGrid.DataGrid.DataGridNode {
       this._expandableElement.show(enclosed);
     } else {
       cell.classList.add('event-display-table-basic-text-table-entry');
-      cell.createTextChild(cellData);
+      UI.UIUtils.createTextChild(cell, cellData);
     }
     return cell;
   }
@@ -74,10 +77,10 @@ export class PlayerEventsView extends UI.Widget.VBox {
         id: MediaEventColumnKeys.Timestamp,
         title: ls`Timestamp`,
         weight: 1,
-        sortingFunction: DataGrid.SortableDataGrid.SortableDataGrid.NumericComparator.bind(
-            null, MediaEventColumnKeys.Timestamp)
+        sortingFunction:
+            DataGrid.SortableDataGrid.SortableDataGrid.NumericComparator.bind(null, MediaEventColumnKeys.Timestamp)
       },
-      {id: MediaEventColumnKeys.Event, title: ls`Event Name`, weight: 2},
+      {id: MediaEventColumnKeys.Event, title: ls`Event name`, weight: 2},
       {id: MediaEventColumnKeys.Value, title: ls`Value`, weight: 7}
     ]);
 
@@ -99,7 +102,7 @@ export class PlayerEventsView extends UI.Widget.VBox {
     // TODO(tmathmeyer) SortableDataGrid doesn't play nice with nested JSON
     // renderers, since they can change size, and this breaks the visible
     // element computation in ViewportDataGrid.
-    const datagrid = new DataGrid.DataGrid.DataGridImpl({displayName: ls`Event Display`, columns: gridColumnDescs});
+    const datagrid = new DataGrid.DataGrid.DataGridImpl({displayName: ls`Event display`, columns: gridColumnDescs});
     datagrid.asWidget().contentElement.classList.add('no-border-top-datagrid');
     return datagrid;
   }
@@ -120,7 +123,12 @@ export class PlayerEventsView extends UI.Widget.VBox {
       delete json['event'];
       event.value = json;
       const node = new EventNode(event);
+      const scroll = this._dataGrid.scrollContainer;
+      const isAtBottom = scroll.scrollTop === (scroll.scrollHeight - scroll.offsetHeight);
       this._dataGrid.rootNode().appendChild(node);
+      if (isAtBottom) {
+        scroll.scrollTop = scroll.scrollHeight;
+      }
     } catch (e) {
       // If this is a legacy message event, ignore it for now until they
       // are handled.

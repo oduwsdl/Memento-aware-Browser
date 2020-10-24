@@ -36,10 +36,9 @@ class ScriptState;
 class CORE_EXPORT OriginTrialContext final
     : public GarbageCollected<OriginTrialContext> {
  public:
-  OriginTrialContext();
-  explicit OriginTrialContext(std::unique_ptr<TrialTokenValidator> validator);
+  explicit OriginTrialContext(ExecutionContext*);
 
-  void BindExecutionContext(ExecutionContext*);
+  void SetTrialTokenValidatorForTesting(std::unique_ptr<TrialTokenValidator>);
 
   // Parses an Origin-Trial header as specified in
   // https://jpchase.github.io/OriginTrials/#header into individual tokens.
@@ -73,15 +72,12 @@ class CORE_EXPORT OriginTrialContext final
       const Vector<OriginTrialFeature>*);
 
   void AddToken(const String& token);
-  // Add Token injected from external script. The token may be a third-party
+  // Add a token injected from external script. The token may be a third-party
   // token, which will be validated against the given origin of the injecting
   // script.
   void AddTokenFromExternalScript(const String& token,
                                   const SecurityOrigin* origin);
   void AddTokens(const Vector<String>& tokens);
-  void AddTokens(const SecurityOrigin* origin,
-                 bool is_secure,
-                 const Vector<String>& tokens);
 
   void ActivateNavigationFeaturesFromInitiator(
       const Vector<OriginTrialFeature>& features);
@@ -179,8 +175,6 @@ class CORE_EXPORT OriginTrialContext final
   WTF::HashMap<OriginTrialFeature, base::Time> feature_expiry_times_;
   std::unique_ptr<TrialTokenValidator> trial_token_validator_;
   Member<ExecutionContext> context_;
-
-  friend class OriginTrialContextTest;
 };
 
 }  // namespace blink

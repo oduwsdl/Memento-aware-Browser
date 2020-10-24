@@ -6,6 +6,167 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Added
+ - `MakeFractalNoise`, `MakeImprovedNoise`, and `MakeTurbulence` have been added to
+   `CanvasKit.Shader`.
+
+### Breaking
+ - `CanvasKit.MakePathFromSVGString` was renamed to `CanvasKit.Path.MakeFromSVGString`
+ - `CanvasKit.MakePathFromOp` was renamed to `CanvasKit.Path.MakeFromOp`
+
+### Changed
+ - We now compile CanvasKit with emsdk 2.0.6 when testing and deploying to npm.
+ - We no longer compile with rtti on, saving about 1% in code size.
+ - `CanvasKit.Shader.Blend`, `...Color`, and `...Lerp` have been renamed to
+   `CanvasKit.Shader.MakeBlend`, `...MakeColor` and `...MakeLerp` to align with naming conventions.
+   The old names will be removed in an upcoming release.
+
+### Removed
+ - `CanvasKit.MakePathFromCmds`; Was deprecated in favor of `CanvasKit.Path.MakeFromCmds`.
+ - `new CanvasKit.Path(path)` in favor of existing `path.copy()`.
+ - Unused internal APIs (_getRasterN32PremulSurface, Drawable)
+
+### Type Changes (index.d.ts)
+ - Return value for MakeFromCmds correctly reflects the possibility of null.
+ - `CanvasKit.GrContext` was renamed to `CanvasKit.GrDirectContext`.
+ - Add docs/types for Shader Gradients (e.g. `CanvasKit.Shader.MakeLinearGradient`).
+
+## [0.19.0] - 2020-10-08
+
+### Breaking
+ - "Sk" has been removed from all names. e.g. `new CanvasKit.SkPaint()` becomes
+   `new CanvasKit.Paint()`. See `./types/index.d.ts` for all the new names.
+
+### Removed
+ - `Surface.captureFrameAsSkPicture`; it was deprecated previously.
+ - `CanvasKit.MakeSkCornerPathEffect`, `CanvasKit.MakeSkDiscretePathEffect`,
+   `CanvasKit.MakeBlurMaskFilter`, `CanvasKit.MakeSkDashPathEffect`,
+   `CanvasKit.MakeLinearGradientShader`, `CanvasKit.MakeRadialGradientShader`,
+   `CanvasKit.MakeTwoPointConicalGradientShader`;  these were deprecated previously and have
+   replacements like `CanvasKit.PathEffect.MakeDash`.
+ - `Canvas.concat44`; it was deprecated previously, just use `Canvas.concat`
+
+## [0.18.1] - 2020-10-06
+
+### Added
+ - Typescript types (and documentation) are now in the types subfolder. We will keep these updated
+   as we make changes to the CanvasKit library.
+
+## [0.18.0] - 2020-10-05
+
+### Breaking
+ - SkRect are no longer returned from `CanvasKit.LTRBRect`, `CanvasKit.XYWHRect` nor
+   are accepted as JS objects. Instead, the format is 4 floats in either an array, a
+   Float32Array or a piece of memory returned by CanvasKit.Malloc. These floats are the
+   left, top, right, bottom numbers of the rectangle.
+ - SkIRect (Rectangles with Integer values) are no longer accepted as JS objects.
+   Instead, the format is 4 ints in either an array, an Int32Array or a piece of memory
+   returned by CanvasKit.Malloc. These ints are the left, top, right, bottom numbers of
+   the rectangle.
+ - SkRRect (Rectangles with rounded corners) are no longer returned from `CanvasKit.RRectXY`
+   nor are accepted as JS objects. Instead, the format is 12 floats in either an array, a
+   Float32Array or a piece of memory returned by CanvasKit.Malloc. The first 4 floats
+   are the left, top, right, bottom numbers of the rectangle and then 4 sets of points
+   starting in the upper left corner and going clockwise. This change allows for faster
+   transfer between JS and WASM code.
+ - `SkPath.addRoundRect` has been replaced with `SkPath.addRRect`. The same functionality
+   can be had with the `CanvasKit.RRectXY` helper.
+ - `SkPath.addRect` no longer accepts 4 floats as separate arguments. It only accepts
+   an SkRect (an array/Float32Array of 4 floats) and an optional boolean for
+   determining clockwise or counter-clockwise directionality.
+ - The order of `SkCanvas.saveLayer` arguments is slightly different (more consistent).
+   It is now `paint, bounds, backdrop, flags`
+
+### Changed
+ - We now compile CanvasKit with emsdk 2.0.0 when testing and deploying to npm.
+ - WebGL interface creation is a little leaner in terms of code size and speed.
+ - The signature of `main` used with SkSL passed to `CanvasKit.SkRuntimeEffect.Make` has changed.
+   There is no longer an `inout half4 color` parameter, effects must return their color instead.
+   Valid signatures are now `half4 main()` or `half4 main(float2 coord)`.
+ - `SkPath.getBounds`, `SkShapedText.getBounds`, and `SkVertices.bounds` now
+   take an optional argument. If a Float32Array with length 4 or greater is
+   provided, the bounds will be copied into this array instead of allocating
+   a new one.
+ - `SkCanvas.drawAnimatedImage` has been removed in favor of calling
+   `SkCanvas.drawImageAtCurrentFrame` or `SkAnimatedImage.makeImageAtCurrentFrame` and then
+   `SkCanvas.drawImage`.
+ - `SkTextBlob.MakeFromRSXform` also accepts a (possibly Malloc'd) Float32Array of RSXforms (
+   see SkRSXform for more.)
+
+### Removed
+ - `SkCanvas.drawRoundRect` has been removed in favor of `SkCanvas.drawRRect`
+   The same functionality can be had with the `CanvasKit.RRectXY` helper.
+ - `SkPath.arcTo` which had been deprecated in favor of `SkPath.arcToOval`,
+   `SkPath.arcToRotated`, `SkPath.arcToTangent`.
+ - Extraneous ColorTypes from `ColorType` enum.
+
+### Added
+ - `CanvasKit.LTRBiRect` and `CanvasKit.XYWHiRect` as helpers to create SkIRects.
+ - `SkCanvas.drawRect4f` as a somewhat experimental way to have array-free APIs for clients that
+   already have their own representation of Rect. This is experimental because we don't know
+   if it's faster/better under real-world use and because we don't want to commit to having these
+   for all Rect APIs (and for similar types) until it has baked in a bit.
+ - Added the following to `TextStyle`:
+   - `decorationStyle`
+   - `textBaseline`
+   - `letterSpacing`
+   - `wordSpacing`
+   - `heightMultiplier`
+   - `locale`
+   - `shadows`
+   - `fontFeatures`
+ - Added `strutStyle` to `ParagraphStyle`.
+ - Added `addPlaceholder` to `ParagraphBuilder`.
+ - Added `getRectsForPlaceholders` to `Paragraph`.
+ - `SkFont.getGlyphIDs`, `SkFont.getGlyphBounds`, `SkFont.getGlyphWidths` for turning code points
+   into GlyphIDs and getting the associated metrics with those glyphs. Note: glyph ids are only
+   valid for the font of which they were requested.
+ - `SkTextBlob.MakeFromRSXformGlyphs` and `SkTextBlob.MakeFromGlyphs` as a way to build TextBlobs
+   using GlyphIDs instead of code points.
+ - `CanvasKit.MallocGlyphIDs` as a helper for pre-allocating space on the WASM heap for Glyph IDs.
+
+### Deprecated
+ - `SkAnimatedImage.getCurrentFrame`; prefer `SkAnimatedImage.makeImageAtCurrentFrame` (which
+   follows the establishing naming convention).
+ - `SkSurface.captureFrameAsSkPicture` will be removed in a future release. Callers can simply
+   use `SkPictureRecorder` directly.
+ - `CanvasKit.FourFloatArrayHelper` and related helpers (mostly helping with drawAtlas).
+   `CanvasKit.Malloc` is the better tool and will replace these soon.
+ - `SkPathMeasure`; SkContourMeasureIter has all the same functionality and a cleaner pattern.
+
+### Fixed
+ - Addressed Memory leak in `SkCanvas.drawText`.
+ - Made SkTextBlob hang on to less memory during its lifetime.
+ - `SkPath.computeTightBounds()` works again. Like getBounds() it takes an optional argument
+   to put the bounds into.
+
+## [0.17.3] - 2020-08-05
+
+### Added
+ - Added `CanvasKit.TypefaceFontProvider`, which can be used to register fonts
+   with a font family alias. For example, "Roboto Light" may be registered with
+   the alias "Roboto", and it will be used when "Roboto" is used with a light
+   font weight.
+ - Added `CanvasKit.ParagraphBuilder.MakeFromFontProvider` to make a
+   `ParagraphBuilder` from a `TypefaceFontProvider`.
+ - Added `CanvasKit.ParagraphBuilder.pushPaintStyle` which can be used to stroke or fill
+   text with paints instead of simple colors.
+
+## [0.17.2] - 2020-07-22
+
+### Fixed
+ - Shader programs are no longer generated with `do-while` loops in WebGL 1.0.
+
+## [0.17.1] - 2020-07-21
+
+### Added
+ - Compile option to deserialize effects in skps `include_effects_deserialization`.
+
+### Changed
+ - Pathops and SKP deserialization/serialization enabled on the npm build.
+
+## [0.17.0] - 2020-07-20
+
 ### Added
  - Added `CanvasKit.MakeImageFromCanvasImageSource` which takes either an HTMLImageElement,
    SVGImageElement, HTMLVideoElement, HTMLCanvasElement, ImageBitmap, or OffscreenCanvas and returns
@@ -13,20 +174,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    SkImages when loading and decoding images. In the future, codesize of CanvasKit may be able to be
    reduced by removing image codecs in wasm, if browser APIs for decoding images are used along with
    `CanvasKit.MakeImageFromCanvasImageSource` instead of `CanvasKit.MakeImageFromEncoded`.
--  Three usage examples of `CanvasKit.MakeImageFromCanvasImageSource` in core.spec.ts.
--  Added support for asynchronous callbacks in perfs and tests.
+ - Three usage examples of `CanvasKit.MakeImageFromCanvasImageSource` in core.spec.ts.
+ - Added support for asynchronous callbacks in perfs and tests.
+ - `CanvasKit.SkPath.MakeFromVerbsPointsWeights` and `CanvasKit.SkPath.addVerbsPointsWeights` for
+  supplying many path operations (e.g. moveTo, cubicTo) at once.
+ - The object returned by `CanvasKit.malloc` now has a `subarray` method which works exactly like
+  the normal TypedArray version. The TypedArray which it returns is also backed by WASM memory
+  and when passed into CanvasKit will be used w/o copying the data (just like
+  `Malloc.toTypedArray`).
+ - `SkM44.setupCamera` to return a 4x4 matrix which sets up a perspective view from a camera.
+ - `SkPath.arcToOval`, `SkPath.arcToTangent`, and `SkPath.arcToRotated` to replace the three
+   overloads of `SkPath.arcTo`. https://github.com/flutter/flutter/issues/61305
 
 ### Changed
  - In all places where color arrays are accepted (gradient makers, drawAtlas, and MakeSkVertices),
-   You can now provide either flat Float32Arrays of float colors, Uint32Arrays of int colors, or 
+   You can now provide either flat Float32Arrays of float colors, Uint32Arrays of int colors, or
    2d Arrays of Float32Array(4) colors. The one thing you should not pass is an Array of numbers,
    since canvaskit wouldn't be able to tell whether they're ints or floats without checking them all.
    The fastest choice for gradients is the flat Float32Array, the fastest choice for drawAtlas and
    MakeSkVertices is the flat Uint32Array.
  - Color arrays may also be objects created with CanvasKit.Malloc
+ - renamed `reportBackendType` to `reportBackendTypeIsGPU` and made it return a boolean
+ - `MakeWebGLCanvasSurface` can now accept an optional dictionary of WebGL context attributes that
+   can be used to override default attributes.
 
 ### Fixed
  - `TextStyle.color` can correctly be a Malloc'd Float32Array.
+ - Support wombat-dressing-room. go/npm-publish
+
+### Deprecated
+ - `CanvasKit.MakePathFromCmds` has been renamed to `CanvasKit.SkPath.MakeFromCmds`. The alias
+   will be removed in an upcoming release.
+ - `SkPath.arcTo` Separated into three functions.
 
 ## [0.16.2] - 2020-06-05
 

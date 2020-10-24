@@ -228,6 +228,15 @@ void CPDFSDK_PageView::ReplaceSelection(const WideString& text) {
   }
 }
 
+bool CPDFSDK_PageView::SelectAllText() {
+  CPDFSDK_Annot* annot = GetFocusAnnot();
+  if (!annot)
+    return false;
+
+  CPDFSDK_AnnotHandlerMgr* handler = m_pFormFillEnv->GetAnnotHandlerMgr();
+  return handler->Annot_SelectAllText(annot);
+}
+
 bool CPDFSDK_PageView::CanUndo() {
   if (CPDFSDK_Annot* pAnnot = GetFocusAnnot()) {
     CPDFSDK_AnnotHandlerMgr* pAnnotHandlerMgr =
@@ -488,9 +497,9 @@ void CPDFSDK_PageView::LoadFXAnnots() {
   CPDF_Document::Extension* pContext = m_pFormFillEnv->GetDocExtension();
   if (pContext && pContext->ContainsExtensionFullForm()) {
     CXFA_FFPageView* pageView = protector->GetXFAPageView();
-    std::unique_ptr<IXFA_WidgetIterator> pWidgetHandler =
-        pageView->CreateFormWidgetIterator(XFA_WidgetStatus_Visible |
-                                           XFA_WidgetStatus_Viewable);
+    IXFA_WidgetIterator* pWidgetHandler =
+        pageView->CreateGCedFormWidgetIterator(XFA_WidgetStatus_Visible |
+                                               XFA_WidgetStatus_Viewable);
 
     while (CXFA_FFWidget* pXFAAnnot = pWidgetHandler->MoveToNext()) {
       std::unique_ptr<CPDFSDK_Annot> pNewAnnot =

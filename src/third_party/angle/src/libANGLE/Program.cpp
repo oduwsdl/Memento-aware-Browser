@@ -12,12 +12,12 @@
 #include <algorithm>
 #include <utility>
 
+#include "common/angle_version.h"
 #include "common/bitset_utils.h"
 #include "common/debug.h"
 #include "common/platform.h"
 #include "common/string_utils.h"
 #include "common/utilities.h"
-#include "common/version.h"
 #include "compiler/translator/blocklayout.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/ErrorStrings.h"
@@ -889,6 +889,7 @@ void WriteShaderVar(BinaryOutputStream *stream, const sh::ShaderVariable &var)
     stream->writeInt(var.offset);
     stream->writeInt(var.readonly);
     stream->writeInt(var.writeonly);
+    stream->writeInt(var.texelFetchStaticUse);
 
     ASSERT(var.fields.empty());
 }
@@ -906,10 +907,11 @@ void LoadShaderVar(BinaryInputStream *stream, sh::ShaderVariable *var)
     var->structName = stream->readString();
     var->setParentArrayIndex(stream->readInt<int>());
 
-    var->imageUnitFormat = stream->readInt<GLenum>();
-    var->offset          = stream->readInt<int>();
-    var->readonly        = stream->readBool();
-    var->writeonly       = stream->readBool();
+    var->imageUnitFormat     = stream->readInt<GLenum>();
+    var->offset              = stream->readInt<int>();
+    var->readonly            = stream->readBool();
+    var->writeonly           = stream->readBool();
+    var->texelFetchStaticUse = stream->readBool();
 }
 
 // VariableLocation implementation.
@@ -1437,6 +1439,7 @@ angle::Result Program::linkImpl(const Context *context)
     // TODO: http://anglebug.com/4530: Enable program caching for separable programs
     if (cache && !isSeparable())
     {
+        std::lock_guard<std::mutex> cacheLock(context->getProgramCacheMutex());
         angle::Result cacheResult = cache->getProgram(context, this, &programHash);
         ANGLE_TRY(cacheResult);
 
@@ -1460,11 +1463,13 @@ angle::Result Program::linkImpl(const Context *context)
     bool result = linkValidateShaders(infoLog);
     ASSERT(result);
 
+    ProgramMergedVaryings mergedVaryings;
+
     if (mState.mAttachedShaders[ShaderType::Compute])
     {
         mState.mExecutable->mResources.reset(new ProgramLinkedResources(
             0, PackMode::ANGLE_RELAXED, &mState.mExecutable->mUniformBlocks,
-            &mState.mExecutable->mUniforms, &mState.mExecutable->mShaderStorageBlocks,
+            &mState.mExecutable->mUniforms, &mState.mExecutable->mComputeShaderStorageBlocks,
             &mState.mBufferVariables, &mState.mExecutable->mAtomicCounterBuffers));
 
         GLuint combinedImageUniforms = 0u;
@@ -1521,7 +1526,7 @@ angle::Result Program::linkImpl(const Context *context)
         mState.mExecutable->mResources.reset(new ProgramLinkedResources(
             static_cast<GLuint>(data.getCaps().maxVaryingVectors), packMode,
             &mState.mExecutable->mUniformBlocks, &mState.mExecutable->mUniforms,
-            &mState.mExecutable->mShaderStorageBlocks, &mState.mBufferVariables,
+            &mState.mExecutable->mGraphicsShaderStorageBlocks, &mState.mBufferVariables,
             &mState.mExecutable->mAtomicCounterBuffers));
 
         if (!linkAttributes(context, infoLog))
@@ -1584,15 +1589,13 @@ angle::Result Program::linkImpl(const Context *context)
         ProgramPipeline *programPipeline = context->getState().getProgramPipeline();
         if (programPipeline && programPipeline->usesShaderProgram(id()))
         {
-            const ProgramMergedVaryings &mergedVaryings =
-                context->getState().getProgramPipeline()->getMergedVaryings();
-            ANGLE_TRY(linkMergedVaryings(context, *mState.mExecutable, mergedVaryings));
+            mergedVaryings = context->getState().getProgramPipeline()->getMergedVaryings();
         }
         else
         {
-            const ProgramMergedVaryings &mergedVaryings = getMergedVaryings();
-            ANGLE_TRY(linkMergedVaryings(context, *mState.mExecutable, mergedVaryings));
+            mergedVaryings = getMergedVaryings();
         }
+        ANGLE_TRY(linkMergedVaryings(context, *mState.mExecutable, mergedVaryings));
     }
 
     updateLinkedShaderStages();
@@ -1600,7 +1603,8 @@ angle::Result Program::linkImpl(const Context *context)
     mLinkingState.reset(new LinkingState());
     mLinkingState->linkingFromBinary = false;
     mLinkingState->programHash       = programHash;
-    mLinkingState->linkEvent = mProgram->link(context, mState.mExecutable->getResources(), infoLog);
+    mLinkingState->linkEvent =
+        mProgram->link(context, mState.mExecutable->getResources(), infoLog, mergedVaryings);
 
     // Must be after mProgram->link() to avoid misleading the linker about output variables.
     mState.updateProgramInterfaceInputs();
@@ -1649,14 +1653,15 @@ void Program::resolveLinkImpl(const Context *context)
     ASSERT(mLinked);
 
     // Mark implementation-specific unreferenced uniforms as ignored.
+    std::vector<ImageBinding> *imageBindings = getExecutable().getImageBindings();
     mProgram->markUnusedUniformLocations(&mState.mUniformLocations,
-                                         &mState.mExecutable->mSamplerBindings,
-                                         &mState.mExecutable->mImageBindings);
+                                         &mState.mExecutable->mSamplerBindings, imageBindings);
 
     // Must be called after markUnusedUniformLocations.
     postResolveLink(context);
 
     // Save to the program cache.
+    std::lock_guard<std::mutex> cacheLock(context->getProgramCacheMutex());
     MemoryProgramCache *cache = context->getMemoryProgramCache();
     // TODO: http://anglebug.com/4530: Enable program caching for separable programs
     if (cache && !isSeparable() &&
@@ -2908,8 +2913,9 @@ GLuint Program::getImageUniformBinding(const VariableLocation &uniformLocation) 
 {
     ASSERT(!mLinkingState);
     GLuint imageIndex = mState.getImageIndexFromUniformIndex(uniformLocation.index);
-    const std::vector<GLuint> &boundImageUnits =
-        mState.mExecutable->mImageBindings[imageIndex].boundImageUnits;
+
+    const std::vector<ImageBinding> &imageBindings = getExecutable().getImageBindings();
+    const std::vector<GLuint> &boundImageUnits     = imageBindings[imageIndex].boundImageUnits;
     return boundImageUnits[uniformLocation.arrayIndex];
 }
 
@@ -3698,6 +3704,14 @@ void Program::linkSamplerAndImageBindings(GLuint *combinedImageUniforms)
 
     mState.mExecutable->mImageUniformRange = RangeUI(low, high);
     *combinedImageUniforms                 = 0u;
+    // The Program is still linking, so getExecutable().isCompute() isn't accurate yet.
+    bool hasComputeShader = mState.mAttachedShaders[ShaderType::Compute] != nullptr;
+    std::vector<ImageBinding> &imageBindings = hasComputeShader
+                                                   ? mState.mExecutable->mComputeImageBindings
+                                                   : mState.mExecutable->mGraphicsImageBindings;
+    // The arrays of arrays are flattened to arrays, it needs to record the array offset for the
+    // correct binding image unit.
+    uint32_t arrayOffset = 0;
     // If uniform is a image type, insert it into the mImageBindings array.
     for (unsigned int imageIndex : mState.mExecutable->getImageUniformRange())
     {
@@ -3708,17 +3722,25 @@ void Program::linkSamplerAndImageBindings(GLuint *combinedImageUniforms)
         auto &imageUniform = mState.mExecutable->getUniforms()[imageIndex];
         if (imageUniform.binding == -1)
         {
-            mState.mExecutable->mImageBindings.emplace_back(
-                ImageBinding(imageUniform.getBasicTypeElementCount()));
+            imageBindings.emplace_back(ImageBinding(imageUniform.getBasicTypeElementCount()));
         }
         else
         {
-            mState.mExecutable->mImageBindings.emplace_back(
-                ImageBinding(imageUniform.binding, imageUniform.getBasicTypeElementCount(), false));
+            imageBindings.emplace_back(ImageBinding(imageUniform.binding + arrayOffset,
+                                                    imageUniform.getBasicTypeElementCount(),
+                                                    false));
         }
 
         GLuint arraySize = imageUniform.isArray() ? imageUniform.arraySizes[0] : 1u;
         *combinedImageUniforms += imageUniform.activeShaderCount() * arraySize;
+        if (imageUniform.hasParentArrayIndex() && imageUniform.isArray())
+        {
+            arrayOffset += arraySize;
+        }
+        else
+        {
+            arrayOffset = 0;
+        }
     }
 
     highIter = lowIter;
@@ -5110,6 +5132,8 @@ angle::Result Program::serialize(const Context *context, angle::MemoryBuffer *bi
         stream.writeInt(0);
     }
 
+    mState.mExecutable->save(&stream);
+
     const auto &computeLocalSize = mState.getComputeShaderLocalSize();
 
     stream.writeInt(computeLocalSize[0]);
@@ -5270,8 +5294,6 @@ angle::Result Program::serialize(const Context *context, angle::MemoryBuffer *bi
     stream.writeInt(mState.getAtomicCounterUniformRange().low());
     stream.writeInt(mState.getAtomicCounterUniformRange().high());
 
-    mState.mExecutable->save(&stream);
-
     mProgram->save(context, &stream);
 
     ASSERT(binaryOut);
@@ -5306,6 +5328,8 @@ angle::Result Program::deserialize(const Context *context,
         infoLog << "Cannot load program binaries across different ES context versions.";
         return angle::Result::Incomplete;
     }
+
+    mState.mExecutable->load(&stream);
 
     mState.mComputeShaderLocalSize[0] = stream.readInt<int>();
     mState.mComputeShaderLocalSize[1] = stream.readInt<int>();
@@ -5393,7 +5417,14 @@ angle::Result Program::deserialize(const Context *context,
     {
         InterfaceBlock shaderStorageBlock;
         LoadInterfaceBlock(&stream, &shaderStorageBlock);
-        mState.mExecutable->mShaderStorageBlocks.push_back(shaderStorageBlock);
+        if (getExecutable().isCompute())
+        {
+            mState.mExecutable->mComputeShaderStorageBlocks.push_back(shaderStorageBlock);
+        }
+        else
+        {
+            mState.mExecutable->mGraphicsShaderStorageBlocks.push_back(shaderStorageBlock);
+        }
     }
 
     unsigned int atomicCounterBufferCount = stream.readInt<unsigned int>();
@@ -5475,8 +5506,9 @@ angle::Result Program::deserialize(const Context *context,
     static_assert(IMPLEMENTATION_MAX_DRAW_BUFFERS * 2 <= 8 * sizeof(uint32_t),
                   "All bits of mDrawBufferTypeMask and mActiveOutputVariables types and mask fit "
                   "into 32 bits each");
-    mState.mDrawBufferTypeMask    = gl::ComponentTypeMask(stream.readInt<uint32_t>());
-    mState.mActiveOutputVariables = stream.readInt<gl::DrawBufferMask>();
+    mState.mDrawBufferTypeMask = gl::ComponentTypeMask(stream.readInt<uint32_t>());
+    mState.mActiveOutputVariables =
+        gl::DrawBufferMask(stream.readInt<gl::DrawBufferMask::value_type>());
 
     unsigned int defaultUniformRangeLow  = stream.readInt<unsigned int>();
     unsigned int defaultUniformRangeHigh = stream.readInt<unsigned int>();
@@ -5509,7 +5541,14 @@ angle::Result Program::deserialize(const Context *context,
         {
             imageBinding.boundImageUnits[i] = stream.readInt<unsigned int>();
         }
-        mState.mExecutable->mImageBindings.emplace_back(imageBinding);
+        if (getExecutable().isCompute())
+        {
+            mState.mExecutable->mComputeImageBindings.emplace_back(imageBinding);
+        }
+        else
+        {
+            mState.mExecutable->mGraphicsImageBindings.emplace_back(imageBinding);
+        }
     }
 
     unsigned int atomicCounterRangeLow  = stream.readInt<unsigned int>();
@@ -5523,8 +5562,6 @@ angle::Result Program::deserialize(const Context *context,
     {
         mState.updateTransformFeedbackStrides();
     }
-
-    mState.mExecutable->load(&stream);
 
     postResolveLink(context);
     mState.mExecutable->updateCanDrawWith();

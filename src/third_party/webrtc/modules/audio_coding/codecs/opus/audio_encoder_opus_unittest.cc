@@ -93,17 +93,13 @@ std::unique_ptr<AudioEncoderOpusStates> CreateCodec(int sample_rate_hz,
 AudioEncoderRuntimeConfig CreateEncoderRuntimeConfig() {
   constexpr int kBitrate = 40000;
   constexpr int kFrameLength = 60;
-  constexpr bool kEnableFec = true;
   constexpr bool kEnableDtx = false;
   constexpr size_t kNumChannels = 1;
-  constexpr float kPacketLossFraction = 0.1f;
   AudioEncoderRuntimeConfig config;
   config.bitrate_bps = kBitrate;
   config.frame_length_ms = kFrameLength;
-  config.enable_fec = kEnableFec;
   config.enable_dtx = kEnableDtx;
   config.num_channels = kNumChannels;
-  config.uplink_packet_loss_fraction = kPacketLossFraction;
   return config;
 }
 
@@ -111,7 +107,6 @@ void CheckEncoderRuntimeConfig(const AudioEncoderOpusImpl* encoder,
                                const AudioEncoderRuntimeConfig& config) {
   EXPECT_EQ(*config.bitrate_bps, encoder->GetTargetBitrate());
   EXPECT_EQ(*config.frame_length_ms, encoder->next_frame_length_ms());
-  EXPECT_EQ(*config.enable_fec, encoder->fec_enabled());
   EXPECT_EQ(*config.enable_dtx, encoder->GetDtx());
   EXPECT_EQ(*config.num_channels, encoder->num_channels_to_encode());
 }
@@ -259,6 +254,8 @@ TEST_P(AudioEncoderOpusTest,
 
 TEST_P(AudioEncoderOpusTest,
        InvokeAudioNetworkAdaptorOnReceivedUplinkBandwidth) {
+  test::ScopedFieldTrials override_field_trials(
+      "WebRTC-Audio-StableTargetAdaptation/Disabled/");
   auto states = CreateCodec(sample_rate_hz_, 2);
   states->encoder->EnableAudioNetworkAdaptor("", nullptr);
 
@@ -276,6 +273,28 @@ TEST_P(AudioEncoderOpusTest,
   EXPECT_CALL(*states->mock_bitrate_smoother, AddSample(kTargetAudioBitrate));
   states->encoder->OnReceivedUplinkBandwidth(kTargetAudioBitrate,
                                              kProbingIntervalMs);
+
+  CheckEncoderRuntimeConfig(states->encoder.get(), config);
+}
+
+TEST_P(AudioEncoderOpusTest,
+       InvokeAudioNetworkAdaptorOnReceivedUplinkAllocation) {
+  auto states = CreateCodec(sample_rate_hz_, 2);
+  states->encoder->EnableAudioNetworkAdaptor("", nullptr);
+
+  auto config = CreateEncoderRuntimeConfig();
+  EXPECT_CALL(*states->mock_audio_network_adaptor, GetEncoderRuntimeConfig())
+      .WillOnce(Return(config));
+
+  BitrateAllocationUpdate update;
+  update.target_bitrate = DataRate::BitsPerSec(30000);
+  update.stable_target_bitrate = DataRate::BitsPerSec(20000);
+  update.bwe_period = TimeDelta::Millis(200);
+  EXPECT_CALL(*states->mock_audio_network_adaptor,
+              SetTargetAudioBitrate(update.target_bitrate.bps()));
+  EXPECT_CALL(*states->mock_audio_network_adaptor,
+              SetUplinkBandwidth(update.stable_target_bitrate.bps()));
+  states->encoder->OnReceivedUplinkAllocation(update);
 
   CheckEncoderRuntimeConfig(states->encoder.get(), config);
 }
@@ -506,6 +525,8 @@ TEST_P(AudioEncoderOpusTest, EmptyConfigDoesNotAffectEncoderSettings) {
 }
 
 TEST_P(AudioEncoderOpusTest, UpdateUplinkBandwidthInAudioNetworkAdaptor) {
+  test::ScopedFieldTrials override_field_trials(
+      "WebRTC-Audio-StableTargetAdaptation/Disabled/");
   auto states = CreateCodec(sample_rate_hz_, 2);
   states->encoder->EnableAudioNetworkAdaptor("", nullptr);
   const size_t opus_rate_khz = rtc::CheckedDivExact(sample_rate_hz_, 1000);

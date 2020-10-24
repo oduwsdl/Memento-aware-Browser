@@ -57,7 +57,8 @@ bool GrVkMemory::AllocAndBindBufferMemory(GrVkGpu* gpu,
         propFlags = AllocationPropertyFlags::kNone;
     }
 
-    if (!allocator->allocateMemoryForBuffer(buffer, usage, propFlags, &memory)) {
+    VkResult result = allocator->allocateBufferMemory(buffer, usage, propFlags, &memory);
+    if (!gpu->checkVkResult(result)) {
         return false;
     }
     allocator->getAllocInfo(memory, alloc);
@@ -81,8 +82,6 @@ void GrVkMemory::FreeBufferMemory(const GrVkGpu* gpu, GrVkBuffer::Type type,
     allocator->freeMemory(alloc.fBackendMemory);
 }
 
-const VkDeviceSize kMaxSmallImageSize = 256 * 1024;
-
 bool GrVkMemory::AllocAndBindImageMemory(GrVkGpu* gpu,
                                          VkImage image,
                                          bool linearTiling,
@@ -95,8 +94,11 @@ bool GrVkMemory::AllocAndBindImageMemory(GrVkGpu* gpu,
     GR_VK_CALL(gpu->vkInterface(), GetImageMemoryRequirements(gpu->device(), image, &memReqs));
 
     AllocationPropertyFlags propFlags;
-    if (memReqs.size > kMaxSmallImageSize ||
-               gpu->vkCaps().shouldAlwaysUseDedicatedImageMemory()) {
+    // If we ever find that our allocator is not aggressive enough in using dedicated image
+    // memory we can add a size check here to force the use of dedicate memory. However for now,
+    // we let the allocators decide. The allocator can query the GPU for each image to see if the
+    // GPU recommends or requires the use of dedicated memory.
+    if (gpu->vkCaps().shouldAlwaysUseDedicatedImageMemory()) {
         propFlags = AllocationPropertyFlags::kDedicatedAllocation;
     } else {
         propFlags = AllocationPropertyFlags::kNone;
@@ -106,9 +108,11 @@ bool GrVkMemory::AllocAndBindImageMemory(GrVkGpu* gpu,
         propFlags |= AllocationPropertyFlags::kProtected;
     }
 
-    if (!allocator->allocateMemoryForImage(image, propFlags, &memory)) {
+    VkResult result = allocator->allocateImageMemory(image, propFlags, &memory);
+    if (!gpu->checkVkResult(result)) {
         return false;
     }
+
     allocator->getAllocInfo(memory, alloc);
 
     // Bind buffer
@@ -134,7 +138,12 @@ void* GrVkMemory::MapAlloc(GrVkGpu* gpu, const GrVkAlloc& alloc) {
     SkASSERT(GrVkAlloc::kMappable_Flag & alloc.fFlags);
     SkASSERT(alloc.fBackendMemory);
     GrVkMemoryAllocator* allocator = gpu->memoryAllocator();
-    return allocator->mapMemory(alloc.fBackendMemory);
+    void* mapPtr;
+    VkResult result = allocator->mapMemory(alloc.fBackendMemory, &mapPtr);
+    if (!gpu->checkVkResult(result)) {
+        return nullptr;
+    }
+    return mapPtr;
 }
 
 void GrVkMemory::UnmapAlloc(const GrVkGpu* gpu, const GrVkAlloc& alloc) {
@@ -166,25 +175,27 @@ void GrVkMemory::GetNonCoherentMappedMemoryRange(const GrVkAlloc& alloc, VkDevic
     range->size = size;
 }
 
-void GrVkMemory::FlushMappedAlloc(const GrVkGpu* gpu, const GrVkAlloc& alloc, VkDeviceSize offset,
+void GrVkMemory::FlushMappedAlloc(GrVkGpu* gpu, const GrVkAlloc& alloc, VkDeviceSize offset,
                                   VkDeviceSize size) {
     if (alloc.fFlags & GrVkAlloc::kNoncoherent_Flag) {
         SkASSERT(offset == 0);
         SkASSERT(size <= alloc.fSize);
         SkASSERT(alloc.fBackendMemory);
         GrVkMemoryAllocator* allocator = gpu->memoryAllocator();
-        allocator->flushMappedMemory(alloc.fBackendMemory, offset, size);
+        VkResult result = allocator->flushMemory(alloc.fBackendMemory, offset, size);
+        gpu->checkVkResult(result);
     }
 }
 
-void GrVkMemory::InvalidateMappedAlloc(const GrVkGpu* gpu, const GrVkAlloc& alloc,
+void GrVkMemory::InvalidateMappedAlloc(GrVkGpu* gpu, const GrVkAlloc& alloc,
                                        VkDeviceSize offset, VkDeviceSize size) {
     if (alloc.fFlags & GrVkAlloc::kNoncoherent_Flag) {
         SkASSERT(offset == 0);
         SkASSERT(size <= alloc.fSize);
         SkASSERT(alloc.fBackendMemory);
         GrVkMemoryAllocator* allocator = gpu->memoryAllocator();
-        allocator->invalidateMappedMemory(alloc.fBackendMemory, offset, size);
+        VkResult result = allocator->invalidateMemory(alloc.fBackendMemory, offset, size);
+        gpu->checkVkResult(result);
     }
 }
 

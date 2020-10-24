@@ -95,7 +95,7 @@ public:
 
     void flushIfNecessary();
 
-    static bool ProgramUnitTest(GrContext* context, int maxStages, int maxLevels);
+    static bool ProgramUnitTest(GrDirectContext*, int maxStages, int maxLevels);
 
     GrSemaphoresSubmitted flushSurfaces(GrSurfaceProxy* proxies[],
                                         int cnt,
@@ -113,6 +113,9 @@ public:
 
 #if GR_TEST_UTILS
     void testingOnly_removeOnFlushCallbackObject(GrOnFlushCallbackObject*);
+    GrPathRendererChain::Options testingOnly_getOptionsForPathRendererChain() {
+        return fOptionsForPathRendererChain;
+    }
 #endif
 
     GrRenderTask* getLastRenderTask(const GrSurfaceProxy*) const;
@@ -120,7 +123,7 @@ public:
     void setLastRenderTask(const GrSurfaceProxy*, GrRenderTask*);
 
     void moveRenderTasksToDDL(SkDeferredDisplayList* ddl);
-    void copyRenderTasksFromDDL(const SkDeferredDisplayList*, GrRenderTargetProxy* newDest);
+    void copyRenderTasksFromDDL(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest);
 
 private:
     // This class encapsulates maintenance and manipulation of the drawing manager's DAG of
@@ -199,8 +202,8 @@ private:
 
     SkDEBUGCODE(void validate() const);
 
-    friend class GrContext; // access to: flush & cleanup
-    friend class GrContextPriv; // access to: flush
+    friend class GrDirectContext; // access to: flush & cleanup
+    friend class GrDirectContextPriv; // access to: flush
     friend class GrOnFlushResourceProvider; // this is just a shallow wrapper around this class
     friend class GrRecordingContext;  // access to: ctor
     friend class SkImage; // for access to: flush

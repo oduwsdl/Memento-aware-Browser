@@ -31,10 +31,10 @@ void RenderbufferMtl::releaseTexture()
 }
 
 angle::Result RenderbufferMtl::setStorageImpl(const gl::Context *context,
-                                              size_t samples,
+                                              GLsizei samples,
                                               GLenum internalformat,
-                                              size_t width,
-                                              size_t height)
+                                              GLsizei width,
+                                              GLsizei height)
 {
     ContextMtl *contextMtl = mtl::GetImpl(context);
 
@@ -45,8 +45,7 @@ angle::Result RenderbufferMtl::setStorageImpl(const gl::Context *context,
     {
         // Check against the state if we need to recreate the storage.
         if (internalformat != mState.getFormat().info->internalFormat ||
-            static_cast<GLsizei>(width) != mState.getWidth() ||
-            static_cast<GLsizei>(height) != mState.getHeight())
+            width != mState.getWidth() || height != mState.getHeight())
         {
             releaseTexture();
         }
@@ -59,11 +58,20 @@ angle::Result RenderbufferMtl::setStorageImpl(const gl::Context *context,
 
     if ((mTexture == nullptr || !mTexture->valid()) && (width != 0 && height != 0))
     {
-        ANGLE_TRY(mtl::Texture::Make2DTexture(contextMtl, mFormat, static_cast<uint32_t>(width),
-                                              static_cast<uint32_t>(height), 1, false, false,
-                                              &mTexture));
+        ANGLE_TRY(mtl::Texture::Make2DTexture(contextMtl, mFormat, width, height, 1, false,
+                                              mFormat.hasDepthAndStencilBits(), &mTexture));
 
-        mRenderTarget.set(mTexture, 0, 0, mFormat);
+        mRenderTarget.set(mTexture, mtl::kZeroNativeMipLevel, 0, mFormat);
+
+        // For emulated channels that GL texture intends to not have,
+        // we need to initialize their content.
+        bool emulatedChannels = mtl::IsFormatEmulated(mFormat);
+        if (emulatedChannels)
+        {
+            auto index = mtl::ImageNativeIndex::FromBaseZeroGLIndex(gl::ImageIndex::Make2D(0));
+
+            ANGLE_TRY(mtl::InitializeTextureContents(context, mTexture, mFormat, index));
+        }
     }
 
     return angle::Result::Continue;
@@ -71,17 +79,18 @@ angle::Result RenderbufferMtl::setStorageImpl(const gl::Context *context,
 
 angle::Result RenderbufferMtl::setStorage(const gl::Context *context,
                                           GLenum internalformat,
-                                          size_t width,
-                                          size_t height)
+                                          GLsizei width,
+                                          GLsizei height)
 {
     return setStorageImpl(context, 1, internalformat, width, height);
 }
 
 angle::Result RenderbufferMtl::setStorageMultisample(const gl::Context *context,
-                                                     size_t samples,
+                                                     GLsizei samples,
                                                      GLenum internalformat,
-                                                     size_t width,
-                                                     size_t height)
+                                                     GLsizei width,
+                                                     GLsizei height,
+                                                     gl::MultisamplingMode mode)
 {
     // NOTE(hqle): Support MSAA
     UNIMPLEMENTED();
@@ -111,6 +120,7 @@ angle::Result RenderbufferMtl::getAttachmentRenderTarget(const gl::Context *cont
 angle::Result RenderbufferMtl::initializeContents(const gl::Context *context,
                                                   const gl::ImageIndex &imageIndex)
 {
-    return mtl::InitializeTextureContents(context, mTexture, mFormat, imageIndex);
+    return mtl::InitializeTextureContents(context, mTexture, mFormat,
+                                          mtl::ImageNativeIndex::FromBaseZeroGLIndex(imageIndex));
 }
 }

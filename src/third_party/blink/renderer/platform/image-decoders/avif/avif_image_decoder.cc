@@ -4,19 +4,25 @@
 
 #include "third_party/blink/renderer/platform/image-decoders/avif/avif_image_decoder.h"
 
+#include <stdint.h>
+
+#include <cstring>
 #include <memory>
 
+#include "base/bits.h"
 #include "base/containers/adapters.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/numerics/ranges.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "cc/base/math_util.h"
 #include "media/base/video_color_space.h"
 #include "media/base/video_frame.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
+#include "media/video/half_float_maker.h"
 #include "third_party/blink/renderer/platform/image-decoders/fast_shared_buffer_reader.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_animation.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_decoder.h"
@@ -24,10 +30,8 @@
 #include "third_party/libavif/src/include/avif/avif.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "third_party/skia/include/core/SkData.h"
-#include "third_party/skia/include/core/SkYUVAIndex.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/color_transform.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/half_float.h"
 #include "ui/gfx/icc_profile.h"
 
@@ -42,14 +46,20 @@ namespace {
 // YUV-to-RGB conversion. If the image does not have an ICC profile, this color
 // space is also used to create the embedded color profile.
 gfx::ColorSpace GetColorSpace(const avifImage* image) {
-  // MIAF Section 7.3.6.4 says:
+  // (As of ISO/IEC 23000-22:2019 Amendment 2) MIAF Section 7.3.6.4 says:
   //   If a coded image has no associated colour property, the default property
   //   is defined as having colour_type equal to 'nclx' with properties as
   //   follows:
-  //   – For YCbCr encoding, sYCC should be assumed as indicated by
-  //   colour_primaries equal to 1, transfer_characteristics equal to 13,
-  //   matrix_coefficients equal to 1, and full_range_flag equal to 1.
+  //   – colour_primaries equal to 1,
+  //   - transfer_characteristics equal to 13,
+  //   - matrix_coefficients equal to 5 or 6 (which are functionally identical),
+  //     and
+  //   - full_range_flag equal to 1.
   //   ...
+  // These values correspond to AVIF_COLOR_PRIMARIES_BT709,
+  // AVIF_TRANSFER_CHARACTERISTICS_SRGB, and AVIF_MATRIX_COEFFICIENTS_BT601,
+  // respectively.
+  //
   // Note that this only specifies the default color property when the color
   // property is absent. It does not really specify the default values for
   // colour_primaries, transfer_characteristics, and matrix_coefficients when
@@ -68,7 +78,7 @@ gfx::ColorSpace GetColorSpace(const avifImage* image) {
                             : image->transferCharacteristics;
   const auto matrix =
       image->matrixCoefficients == AVIF_MATRIX_COEFFICIENTS_UNSPECIFIED
-          ? AVIF_MATRIX_COEFFICIENTS_BT709
+          ? AVIF_MATRIX_COEFFICIENTS_BT601
           : image->matrixCoefficients;
   const auto range = image->yuvRange == AVIF_RANGE_FULL
                          ? gfx::ColorSpace::RangeID::FULL
@@ -85,34 +95,6 @@ gfx::ColorSpace GetColorSpace(const avifImage* image) {
   return gfx::ColorSpace::CreateREC709();
 }
 
-// Returns the SkYUVColorSpace that matches |image|->matrixCoefficients and
-// |image|->yuvRange.
-base::Optional<SkYUVColorSpace> GetSkYUVColorSpace(const avifImage* image) {
-  const auto matrix =
-      image->matrixCoefficients == AVIF_MATRIX_COEFFICIENTS_UNSPECIFIED
-          ? AVIF_MATRIX_COEFFICIENTS_BT709
-          : image->matrixCoefficients;
-  if (image->yuvRange == AVIF_RANGE_FULL) {
-    if (matrix == AVIF_MATRIX_COEFFICIENTS_BT470BG ||
-        matrix == AVIF_MATRIX_COEFFICIENTS_BT601) {
-      return kJPEG_SkYUVColorSpace;
-    }
-    return base::nullopt;
-  }
-
-  if (matrix == AVIF_MATRIX_COEFFICIENTS_BT470BG ||
-      matrix == AVIF_MATRIX_COEFFICIENTS_BT601) {
-    return kRec601_SkYUVColorSpace;
-  }
-  if (matrix == AVIF_MATRIX_COEFFICIENTS_BT709) {
-    return kRec709_SkYUVColorSpace;
-  }
-  if (matrix == AVIF_MATRIX_COEFFICIENTS_BT2020_NCL) {
-    return kBT2020_SkYUVColorSpace;
-  }
-  return base::nullopt;
-}
-
 // Returns whether media::PaintCanvasVideoRenderer (PCVR) can convert the YUV
 // color space of |image| to RGB.
 // media::PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels() uses libyuv
@@ -124,18 +106,19 @@ base::Optional<SkYUVColorSpace> GetSkYUVColorSpace(const avifImage* image) {
 // full-range YUV color spaces, but we want to use the JPEG matrix coefficients
 // only for full-range BT.601 YUV.
 bool IsColorSpaceSupportedByPCVR(const avifImage* image) {
-  base::Optional<SkYUVColorSpace> yuv_color_space = GetSkYUVColorSpace(image);
-  if (!yuv_color_space)
+  SkYUVColorSpace yuv_color_space;
+  if (!GetColorSpace(image).ToSkYUVColorSpace(image->depth, &yuv_color_space))
     return false;
-  if (!image->alphaPlane)
-    return true;
+  if (!image->alphaPlane) {
+    return yuv_color_space == kJPEG_Full_SkYUVColorSpace ||
+           yuv_color_space == kRec601_Limited_SkYUVColorSpace ||
+           yuv_color_space == kRec709_Limited_SkYUVColorSpace ||
+           yuv_color_space == kBT2020_8bit_Limited_SkYUVColorSpace;
+  }
   // libyuv supports the alpha channel only with the I420 pixel format, which is
-  // 8-bit YUV 4:2:0 with kRec601_SkYUVColorSpace. libavif reports monochrome
-  // 4:0:0 as AVIF_PIXEL_FORMAT_YUV420 with null U and V planes, so we need to
-  // check for genuine YUV 4:2:0, not monochrome 4:0:0.
-  const bool is_mono = !image->yuvPlanes[AVIF_CHAN_U];
+  // 8-bit YUV 4:2:0 with kRec601_Limited_SkYUVColorSpace.
   return image->depth == 8 && image->yuvFormat == AVIF_PIXEL_FORMAT_YUV420 &&
-         !is_mono && *yuv_color_space == kRec601_SkYUVColorSpace &&
+         yuv_color_space == kRec601_Limited_SkYUVColorSpace &&
          image->alphaRange == AVIF_RANGE_FULL;
 }
 
@@ -157,18 +140,24 @@ media::VideoPixelFormat AvifToVideoPixelFormat(avifPixelFormat fmt, int depth) {
       media::PIXEL_FORMAT_YUV444P12};
   switch (fmt) {
     case AVIF_PIXEL_FORMAT_YUV420:
+    case AVIF_PIXEL_FORMAT_YUV400:
       return kYUV420Formats[index];
     case AVIF_PIXEL_FORMAT_YUV422:
       return kYUV422Formats[index];
     case AVIF_PIXEL_FORMAT_YUV444:
       return kYUV444Formats[index];
-    case AVIF_PIXEL_FORMAT_YV12:
-      NOTIMPLEMENTED();
-      return media::PIXEL_FORMAT_UNKNOWN;
     case AVIF_PIXEL_FORMAT_NONE:
       NOTREACHED();
       return media::PIXEL_FORMAT_UNKNOWN;
   }
+}
+
+// |y_size| is the width or height of the Y plane. Returns the width or height
+// of the U and V planes. |chroma_shift| represents the subsampling of the
+// chroma (U and V) planes in the x (for width) or y (for height) direction.
+int UVSize(int y_size, int chroma_shift) {
+  DCHECK(chroma_shift == 0 || chroma_shift == 1);
+  return (y_size + chroma_shift) >> chroma_shift;
 }
 
 inline void WritePixel(float max_channel,
@@ -176,13 +165,10 @@ inline void WritePixel(float max_channel,
                        float alpha,
                        bool premultiply_alpha,
                        uint32_t* rgba_dest) {
-  unsigned r =
-      gfx::ToRoundedInt(base::ClampToRange(pixel.x(), 0.0f, 1.0f) * 255.0f);
-  unsigned g =
-      gfx::ToRoundedInt(base::ClampToRange(pixel.y(), 0.0f, 1.0f) * 255.0f);
-  unsigned b =
-      gfx::ToRoundedInt(base::ClampToRange(pixel.z(), 0.0f, 1.0f) * 255.0f);
-  unsigned a = gfx::ToRoundedInt(alpha * 255.0f);
+  uint8_t r = base::ClampRound<uint8_t>(pixel.x() * 255.0f);
+  uint8_t g = base::ClampRound<uint8_t>(pixel.y() * 255.0f);
+  uint8_t b = base::ClampRound<uint8_t>(pixel.z() * 255.0f);
+  uint8_t a = base::ClampRound<uint8_t>(alpha * 255.0f);
   if (premultiply_alpha)
     blink::ImageFrame::SetRGBAPremultiply(rgba_dest, r, g, b, a);
   else
@@ -273,16 +259,15 @@ namespace blink {
 AVIFImageDecoder::AVIFImageDecoder(AlphaOption alpha_option,
                                    HighBitDepthDecodingOption hbd_option,
                                    const ColorBehavior& color_behavior,
-                                   size_t max_decoded_bytes)
-    : ImageDecoder(alpha_option,
-                   hbd_option,
-                   color_behavior,
-                   max_decoded_bytes) {}
+                                   size_t max_decoded_bytes,
+                                   AnimationOption animation_option)
+    : ImageDecoder(alpha_option, hbd_option, color_behavior, max_decoded_bytes),
+      animation_option_(animation_option) {}
 
 AVIFImageDecoder::~AVIFImageDecoder() = default;
 
 bool AVIFImageDecoder::ImageIsHighBitDepth() {
-  return is_high_bit_depth_;
+  return bit_depth_ > 8;
 }
 
 void AVIFImageDecoder::OnSetData(SegmentReader* data) {
@@ -291,6 +276,173 @@ void AVIFImageDecoder::OnSetData(SegmentReader* data) {
   // https://github.com/AOMediaCodec/libavif/issues/11.
   if (IsAllDataReceived() && !MaybeCreateDemuxer())
     SetFailed();
+}
+
+cc::YUVSubsampling AVIFImageDecoder::GetYUVSubsampling() const {
+  switch (decoder_->image->yuvFormat) {
+    case AVIF_PIXEL_FORMAT_YUV420:
+      return cc::YUVSubsampling::k420;
+    case AVIF_PIXEL_FORMAT_YUV422:
+      return cc::YUVSubsampling::k422;
+    case AVIF_PIXEL_FORMAT_YUV444:
+      return cc::YUVSubsampling::k444;
+    case AVIF_PIXEL_FORMAT_YUV400:
+      return cc::YUVSubsampling::kUnknown;
+    case AVIF_PIXEL_FORMAT_NONE:
+      NOTREACHED();
+      return cc::YUVSubsampling::kUnknown;
+  }
+}
+
+IntSize AVIFImageDecoder::DecodedYUVSize(cc::YUVIndex index) const {
+  DCHECK(IsDecodedSizeAvailable());
+  if (index == cc::YUVIndex::kU || index == cc::YUVIndex::kV) {
+    return IntSize(UVSize(Size().Width(), chroma_shift_x_),
+                   UVSize(Size().Height(), chroma_shift_y_));
+  }
+  return Size();
+}
+
+size_t AVIFImageDecoder::DecodedYUVWidthBytes(cc::YUVIndex index) const {
+  DCHECK(IsDecodedSizeAvailable());
+  // Try to return the same width bytes as used by the dav1d library. This will
+  // allow DecodeToYUV() to copy each plane with a single memcpy() call.
+  //
+  // The comments for Dav1dPicAllocator in dav1d/picture.h require the pixel
+  // width be padded to a multiple of 128 pixels.
+  int aligned_width = base::bits::Align(Size().Width(), 128);
+  if (index == cc::YUVIndex::kU || index == cc::YUVIndex::kV) {
+    aligned_width >>= chroma_shift_x_;
+  }
+  // When the stride is a multiple of 1024, dav1d_default_picture_alloc()
+  // slightly pads the stride to avoid a reduction in cache hit rate in most
+  // L1/L2 cache implementations. Match that trick here. (Note that this padding
+  // is not documented in dav1d/picture.h.)
+  if ((aligned_width & 1023) == 0)
+    aligned_width += 64;
+
+  // High bit depth YUV is stored as a uint16_t, double the number of bytes.
+  if (bit_depth_ > 8) {
+    DCHECK_LE(bit_depth_, 16);
+    aligned_width *= 2;
+  }
+
+  return aligned_width;
+}
+
+SkYUVColorSpace AVIFImageDecoder::GetYUVColorSpace() const {
+  DCHECK(CanDecodeToYUV());
+  DCHECK_NE(yuv_color_space_, SkYUVColorSpace::kIdentity_SkYUVColorSpace);
+  return yuv_color_space_;
+}
+
+uint8_t AVIFImageDecoder::GetYUVBitDepth() const {
+  DCHECK(CanDecodeToYUV());
+  return bit_depth_;
+}
+
+void AVIFImageDecoder::DecodeToYUV() {
+  DCHECK(image_planes_);
+  DCHECK(CanDecodeToYUV());
+  DCHECK(IsAllDataReceived());
+
+  if (Failed())
+    return;
+
+  DCHECK(decoder_);
+  DCHECK_EQ(decoded_frame_count_, 1u);  // Not animation.
+
+  // libavif cannot decode to an external buffer. So we need to copy from
+  // libavif's internal buffer to |image_planes_|.
+  // TODO(crbug.com/1099825): Enhance libavif to decode to an external buffer.
+  if (!DecodeImage(0)) {
+    SetFailed();
+    return;
+  }
+
+  const auto* image = decoder_->image;
+  // Frame size must be equal to container size.
+  if (Size() != IntSize(image->width, image->height)) {
+    DVLOG(1) << "Frame size " << IntSize(image->width, image->height)
+             << " differs from container size " << Size();
+    SetFailed();
+    return;
+  }
+  // Frame bit depth must be equal to container bit depth.
+  if (image->depth != bit_depth_) {
+    DVLOG(1) << "Frame bit depth must be equal to container bit depth";
+    SetFailed();
+    return;
+  }
+  // Frame YUV format must be equal to container YUV format.
+  if (image->yuvFormat != avif_yuv_format_) {
+    DVLOG(1) << "Frame YUV format must be equal to container YUV format";
+    SetFailed();
+    return;
+  }
+  DCHECK(!image->alphaPlane);
+  static_assert(cc::YUVIndex::kY == static_cast<cc::YUVIndex>(AVIF_CHAN_Y), "");
+  static_assert(cc::YUVIndex::kU == static_cast<cc::YUVIndex>(AVIF_CHAN_U), "");
+  static_assert(cc::YUVIndex::kV == static_cast<cc::YUVIndex>(AVIF_CHAN_V), "");
+
+  // Disable subnormal floats which can occur when converting to half float.
+  std::unique_ptr<cc::ScopedSubnormalFloatDisabler> disable_subnormals;
+  const bool is_f16 = image_planes_->color_type() == kA16_float_SkColorType;
+  if (is_f16)
+    disable_subnormals = std::make_unique<cc::ScopedSubnormalFloatDisabler>();
+  const float kHighBitDepthMultiplier =
+      (is_f16 ? 1.0f : 65535.0f) / ((1 << bit_depth_) - 1);
+
+  // Initialize |width| and |height| to the width and height of the luma plane.
+  uint32_t width = image->width;
+  uint32_t height = image->height;
+
+  // |height| comes from the AV1 sequence header or frame header, which encodes
+  // max_frame_height_minus_1 and frame_height_minus_1, respectively, as n-bit
+  // unsigned integers for some n.
+  DCHECK_GT(height, 0u);
+  for (size_t plane_index = 0; plane_index < cc::kNumYUVPlanes; ++plane_index) {
+    const cc::YUVIndex plane = static_cast<cc::YUVIndex>(plane_index);
+    const size_t src_row_bytes =
+        base::strict_cast<size_t>(image->yuvRowBytes[plane_index]);
+    const size_t dst_row_bytes = image_planes_->RowBytes(plane);
+
+    if (bit_depth_ == 8) {
+      DCHECK_EQ(image_planes_->color_type(), kGray_8_SkColorType);
+      const uint8_t* src = image->yuvPlanes[plane_index];
+      uint8_t* dst = static_cast<uint8_t*>(image_planes_->Plane(plane));
+      libyuv::CopyPlane(src, src_row_bytes, dst, dst_row_bytes, width, height);
+    } else {
+      DCHECK_GT(bit_depth_, 8u);
+      DCHECK_LE(bit_depth_, 16u);
+      const uint16_t* src =
+          reinterpret_cast<uint16_t*>(image->yuvPlanes[plane_index]);
+      uint16_t* dst = static_cast<uint16_t*>(image_planes_->Plane(plane));
+      if (image_planes_->color_type() == kA16_unorm_SkColorType) {
+        const size_t src_stride = src_row_bytes / 2;
+        const size_t dst_stride = dst_row_bytes / 2;
+        for (uint32_t j = 0; j < height; ++j) {
+          for (uint32_t i = 0; i < width; ++i) {
+            dst[j * dst_stride + i] =
+                src[j * src_stride + i] * kHighBitDepthMultiplier + 0.5f;
+          }
+        }
+      } else if (image_planes_->color_type() == kA16_float_SkColorType) {
+        // Note: Unlike CopyPlane_16, HalfFloatPlane wants the stride in bytes.
+        libyuv::HalfFloatPlane(src, src_row_bytes, dst, dst_row_bytes,
+                               kHighBitDepthMultiplier, width, height);
+      } else {
+        NOTREACHED() << "Unsupported color type: "
+                     << static_cast<int>(image_planes_->color_type());
+      }
+    }
+    if (plane == cc::YUVIndex::kY) {
+      // Having processed the luma plane, change |width| and |height| to the
+      // width and height of the chroma planes.
+      width = UVSize(width, chroma_shift_x_);
+      height = UVSize(height, chroma_shift_y_);
+    }
+  }
 }
 
 int AVIFImageDecoder::RepetitionCount() const {
@@ -303,19 +455,38 @@ base::TimeDelta AVIFImageDecoder::FrameDurationAtIndex(size_t index) const {
              : base::TimeDelta();
 }
 
+bool AVIFImageDecoder::ImageHasBothStillAndAnimatedSubImages() const {
+  // Per MIAF, all animated AVIF files must have a still image, even if it's
+  // just a pointer to the first frame of the animation.
+  if (decoded_frame_count_ > 1)
+    return true;
+
+  // TODO(wtc): We should rely on libavif to tell us if the file has both an
+  // image and an animation track instead of just checking the major brand.
+  constexpr base::StringPiece kAnimationType = "avis";
+  char buf[kAnimationType.size() + 1] = {0};
+  image_data_->copyRange(8, kAnimationType.size(), &buf);
+  return kAnimationType == buf;
+}
+
 // static
 bool AVIFImageDecoder::MatchesAVIFSignature(
     const FastSharedBufferReader& fast_reader) {
   // avifPeekCompatibleFileType() clamps compatible brands at 32 when reading in
-  // the ftyp box in ISOBMFF for the 'av01' brand. So the maximum number of
-  // bytes read is 144 bytes (type 4 bytes, size 4 bytes, major brand 4 bytes,
-  // version 4 bytes, and 4 bytes * 32 compatible brands).
+  // the ftyp box in ISO BMFF for the 'avif' or 'avis' brand. So the maximum
+  // number of bytes read is 144 bytes (size 4 bytes, type 4 bytes, major brand
+  // 4 bytes, minor version 4 bytes, and 4 bytes * 32 compatible brands).
   char buffer[144];
   avifROData input;
   input.size = std::min(sizeof(buffer), fast_reader.size());
   input.data = reinterpret_cast<const uint8_t*>(
       fast_reader.GetConsecutiveData(0, input.size, buffer));
   return avifPeekCompatibleFileType(&input);
+}
+
+gfx::ColorTransform* AVIFImageDecoder::GetColorTransformForTesting() {
+  UpdateColorTransform(GetColorSpace(decoder_->image), decoder_->image->depth);
+  return color_transform_.get();
 }
 
 void AVIFImageDecoder::DecodeSize() {
@@ -334,28 +505,18 @@ void AVIFImageDecoder::InitializeNewFrame(size_t index) {
   if (decode_to_half_float_)
     buffer.SetPixelFormat(ImageFrame::PixelFormat::kRGBA_F16);
 
+  // For AVIFs, the frame always fills the entire image.
   buffer.SetOriginalFrameRect(IntRect(IntPoint(), Size()));
 
   avifImageTiming timing;
   auto ret = avifDecoderNthImageTiming(decoder_.get(), index, &timing);
   DCHECK_EQ(ret, AVIF_RESULT_OK);
   buffer.SetDuration(base::TimeDelta::FromSecondsD(timing.duration));
-
-  // The AVIF file format does not contain information equivalent to the
-  // disposal method or alpha blend source. Since the AVIF decoder handles frame
-  // dependence internally, set options that best correspond to "each frame is
-  // independent".
-  buffer.SetDisposalMethod(ImageFrame::kDisposeNotSpecified);
-  buffer.SetAlphaBlendSource(ImageFrame::kBlendAtopBgcolor);
-
-  // Leave all frames as being independent (the default) because we require all
-  // frames be the same size.
-  DCHECK_EQ(buffer.RequiredPreviousFrameIndex(), kNotFound);
 }
 
 void AVIFImageDecoder::Decode(size_t index) {
-  // TODO(dalecurtis): For fragmented avif-sequence files we probably want to
-  // allow partial decoding. Depends on if we see frequent use of multi-track
+  // TODO(dalecurtis): For fragmented AVIF image sequence files we probably want
+  // to allow partial decoding. Depends on if we see frequent use of multi-track
   // images where there's lots to ignore.
   if (Failed() || !IsAllDataReceived())
     return;
@@ -368,15 +529,22 @@ void AVIFImageDecoder::Decode(size_t index) {
   }
 
   const auto* image = decoder_->image;
-  // All frames must be the same size.
+  // Frame size must be equal to container size.
   if (Size() != IntSize(image->width, image->height)) {
-    DVLOG(1) << "All frames must be the same size";
+    DVLOG(1) << "Frame size " << IntSize(image->width, image->height)
+             << " differs from container size " << Size();
     SetFailed();
     return;
   }
   // Frame bit depth must be equal to container bit depth.
-  if (image->depth != decoder_->containerDepth) {
+  if (image->depth != bit_depth_) {
     DVLOG(1) << "Frame bit depth must be equal to container bit depth";
+    SetFailed();
+    return;
+  }
+  // Frame YUV format must be equal to container YUV format.
+  if (image->yuvFormat != avif_yuv_format_) {
+    DVLOG(1) << "Frame YUV format must be equal to container YUV format";
     SetFailed();
     return;
   }
@@ -421,63 +589,93 @@ bool AVIFImageDecoder::MaybeCreateDemuxer() {
     return false;
 
   // TODO(dalecurtis): This may create a second copy of the media data in
-  // memory, which is not great. Upstream should provide a read() based API:
+  // memory, which is not great. libavif should provide a read() based API:
   // https://github.com/AOMediaCodec/libavif/issues/11
   image_data_ = data_->GetAsSkData();
   if (!image_data_)
     return false;
 
-  avifROData raw_data = {image_data_->bytes(), image_data_->size()};
-  auto ret = avifDecoderParse(decoder_.get(), &raw_data);
+  // TODO(wtc): Currently libavif always prioritizes the animation, but that's
+  // not correct. It should instead select animation or still image based on the
+  // preferred and major brands listed in the file.
+  if (animation_option_ != AnimationOption::kUnspecified &&
+      avifDecoderSetSource(
+          decoder_.get(), animation_option_ == AnimationOption::kPreferAnimation
+                              ? AVIF_DECODER_SOURCE_TRACKS
+                              : AVIF_DECODER_SOURCE_PRIMARY_ITEM) !=
+          AVIF_RESULT_OK) {
+    return false;
+  }
+
+  // Chrome doesn't use XMP and Exif metadata. Ignoring XMP and Exif will ensure
+  // avifDecoderParse() isn't waiting for some tiny Exif payload hiding at the
+  // end of a file.
+  decoder_->ignoreXMP = AVIF_TRUE;
+  decoder_->ignoreExif = AVIF_TRUE;
+  auto ret = avifDecoderSetIOMemory(decoder_.get(), image_data_->bytes(),
+                                    image_data_->size());
+  if (ret != AVIF_RESULT_OK) {
+    DVLOG(1) << "avifDecoderSetIOMemory failed: " << avifResultToString(ret);
+    return false;
+  }
+  ret = avifDecoderParse(decoder_.get());
   if (ret != AVIF_RESULT_OK) {
     DVLOG(1) << "avifDecoderParse failed: " << avifResultToString(ret);
     return false;
   }
 
-  // containerWidth and containerHeight are read from either the tkhd (track
-  // header) box of a track or the ispe (image spatial extents) property of an
-  // image item, both of which are mandatory in the spec.
-  if (decoder_->containerWidth == 0 || decoder_->containerHeight == 0) {
+  // Image metadata is available in decoder_->image after avifDecoderParse()
+  // even though decoder_->imageIndex is invalid (-1).
+  DCHECK_EQ(decoder_->imageIndex, -1);
+  // This variable is named |container| to emphasize the fact that the current
+  // contents of decoder_->image come from the container, not any frame.
+  const auto* container = decoder_->image;
+
+  // The container width and container height are read from either the tkhd
+  // (track header) box of a track or the ispe (image spatial extents) property
+  // of an image item, both of which are mandatory in the spec.
+  if (container->width == 0 || container->height == 0) {
     DVLOG(1) << "Container width and height must be present";
     return false;
   }
 
-  // containerDepth is read from either the av1C box of a track or the av1C
+  // The container depth is read from either the av1C box of a track or the av1C
   // property of an image item, both of which are mandatory in the spec.
-  if (decoder_->containerDepth == 0) {
+  if (container->depth == 0) {
     DVLOG(1) << "Container depth must be present";
     return false;
   }
 
   DCHECK_GT(decoder_->imageCount, 0);
   decoded_frame_count_ = decoder_->imageCount;
-  is_high_bit_depth_ = decoder_->containerDepth > 8;
+  bit_depth_ = container->depth;
   decode_to_half_float_ =
-      is_high_bit_depth_ &&
+      ImageIsHighBitDepth() &&
       high_bit_depth_decoding_option_ == kHighBitDepthToHalfFloat;
+
+  avif_yuv_format_ = container->yuvFormat;
+  avifPixelFormatInfo format_info;
+  avifGetPixelFormatInfo(container->yuvFormat, &format_info);
+  chroma_shift_x_ = format_info.chromaShiftX;
+  chroma_shift_y_ = format_info.chromaShiftY;
 
   // SetEmbeddedColorProfile() must be called before IsSizeAvailable() becomes
   // true. So call SetEmbeddedColorProfile() before calling SetSize(). The color
-  // profile is either an ICC profile or the CICP color description and comes
-  // from the colr box in the container. It is available in decoder_->image
-  // after avifDecoderParse() even though decoder_->imageIndex is invalid (-1).
-  DCHECK_EQ(decoder_->imageIndex, -1);
-  const auto* image = decoder_->image;
+  // profile is either an ICC profile or the CICP color description.
 
   if (!IgnoresColorSpace()) {
     // The CICP color description is always present because we can always get it
     // from the AV1 sequence header for the frames. If an ICC profile is
     // present, use it instead of the CICP color description.
-    if (image->icc.size) {
+    if (container->icc.size) {
       std::unique_ptr<ColorProfile> profile =
-          ColorProfile::Create(image->icc.data, image->icc.size);
+          ColorProfile::Create(container->icc.data, container->icc.size);
       if (!profile) {
         DVLOG(1) << "Failed to parse image ICC profile";
         return false;
       }
       uint32_t data_color_space = profile->GetProfile()->data_color_space;
-      // TODO(wtc): Check for a monochrome (grayscale) image.
-      const bool is_mono = false;
+      const bool is_mono = container->yuvFormat == AVIF_PIXEL_FORMAT_YUV400;
       if (is_mono) {
         if (data_color_space != skcms_Signature_Gray &&
             data_color_space != skcms_Signature_RGB)
@@ -492,10 +690,10 @@ bool AVIFImageDecoder::MaybeCreateDemuxer() {
         return false;
       }
       SetEmbeddedColorProfile(std::move(profile));
-    } else if (image->colorPrimaries != AVIF_COLOR_PRIMARIES_UNSPECIFIED ||
-               image->transferCharacteristics !=
+    } else if (container->colorPrimaries != AVIF_COLOR_PRIMARIES_UNSPECIFIED ||
+               container->transferCharacteristics !=
                    AVIF_TRANSFER_CHARACTERISTICS_UNSPECIFIED) {
-      gfx::ColorSpace frame_cs = GetColorSpace(image);
+      gfx::ColorSpace frame_cs = GetColorSpace(container);
       sk_sp<SkColorSpace> sk_color_space =
           frame_cs.GetAsFullRangeRGB().ToSkColorSpace();
       skcms_ICCProfile profile;
@@ -504,14 +702,24 @@ bool AVIFImageDecoder::MaybeCreateDemuxer() {
     }
   }
 
-  return SetSize(decoder_->containerWidth, decoder_->containerHeight);
+  // Determine whether the image can be decoded to YUV.
+  // * Alpha channel is not supported.
+  // * Multi-frame images (animations) are not supported. (The DecodeToYUV()
+  //   method does not have an 'index' parameter.)
+  // * If ColorTransform() returns a non-null pointer, the decoder has to do a
+  //   color space conversion, so we don't decode to YUV.
+  allow_decode_to_yuv_ = avif_yuv_format_ != AVIF_PIXEL_FORMAT_YUV400 &&
+                         !decoder_->alphaPresent && decoded_frame_count_ == 1 &&
+                         GetColorSpace(container).ToSkYUVColorSpace(
+                             container->depth, &yuv_color_space_) &&
+                         !ColorTransform();
+  return SetSize(container->width, container->height);
 }
 
 bool AVIFImageDecoder::DecodeImage(size_t index) {
   const auto ret = avifDecoderNthImage(decoder_.get(), index);
-  // We shouldn't be called more times than specified in
-  // DecodeFrameCount(); possibly this should truncate if the initial
-  // count is wrong?
+  // |index| should be less than what DecodeFrameCount() returns, so we should
+  // not get the AVIF_RESULT_NO_IMAGES_REMAINING error.
   DCHECK_NE(ret, AVIF_RESULT_NO_IMAGES_REMAINING);
   return ret == AVIF_RESULT_OK;
 }
@@ -530,11 +738,9 @@ void AVIFImageDecoder::UpdateColorTransform(const gfx::ColorSpace& frame_cs,
 
 bool AVIFImageDecoder::RenderImage(const avifImage* image, ImageFrame* buffer) {
   const gfx::ColorSpace frame_cs = GetColorSpace(image);
-  const bool is_mono = !image->yuvPlanes[AVIF_CHAN_U];
+  const bool is_mono = image->yuvFormat == AVIF_PIXEL_FORMAT_YUV400;
   const bool premultiply_alpha = buffer->PremultiplyAlpha();
 
-  // TODO(dalecurtis): We should decode to YUV when possible. Currently the
-  // YUV path seems to only support still-image YUV8.
   if (decode_to_half_float_) {
     UpdateColorTransform(frame_cs, image->depth);
 
@@ -545,7 +751,7 @@ bool AVIFImageDecoder::RenderImage(const avifImage* image, ImageFrame* buffer) {
       YUVAToRGBA<ColorType::kMono, uint16_t>(image, color_transform_.get(),
                                              premultiply_alpha, rgba_hhhh);
     } else {
-      // TODO: Add fast path for 10bit 4:2:0 using libyuv.
+      // TODO(crbug.com/1099820): Add fast path for 10bit 4:2:0 using libyuv.
       YUVAToRGBA<ColorType::kColor, uint16_t>(image, color_transform_.get(),
                                               premultiply_alpha, rgba_hhhh);
     }

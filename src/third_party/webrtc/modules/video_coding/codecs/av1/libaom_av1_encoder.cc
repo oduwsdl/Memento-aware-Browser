@@ -18,16 +18,18 @@
 
 #include "absl/algorithm/container.h"
 #include "absl/base/macros.h"
+#include "absl/types/optional.h"
 #include "api/scoped_refptr.h"
 #include "api/video/encoded_image.h"
 #include "api/video/i420_buffer.h"
 #include "api/video/video_frame.h"
 #include "api/video_codecs/video_codec.h"
 #include "api/video_codecs/video_encoder.h"
-#include "modules/video_coding/codecs/av1/scalable_video_controller.h"
-#include "modules/video_coding/codecs/av1/scalable_video_controller_no_layering.h"
 #include "modules/video_coding/include/video_codec_interface.h"
 #include "modules/video_coding/include/video_error_codes.h"
+#include "modules/video_coding/svc/create_scalability_structure.h"
+#include "modules/video_coding/svc/scalable_video_controller.h"
+#include "modules/video_coding/svc/scalable_video_controller_no_layering.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "third_party/libaom/source/libaom/aom/aom_codec.h"
@@ -82,7 +84,8 @@ class LibaomAv1Encoder final : public VideoEncoder {
   EncoderInfo GetEncoderInfo() const override;
 
  private:
-  // Configures the encoder with scalability for the next coded video sequence.
+  bool SvcEnabled() const { return svc_params_.has_value(); }
+  // Fills svc_params_ memeber value. Returns false on error.
   bool SetSvcParams(ScalableVideoController::StreamLayersConfig svc_config);
   // Configures the encoder with layer for the next frame.
   void SetSvcLayerId(
@@ -91,9 +94,9 @@ class LibaomAv1Encoder final : public VideoEncoder {
   void SetSvcRefFrameConfig(
       const ScalableVideoController::LayerFrameConfig& layer_frame);
 
-  const std::unique_ptr<ScalableVideoController> svc_controller_;
+  std::unique_ptr<ScalableVideoController> svc_controller_;
   bool inited_;
-  bool svc_enabled_;
+  absl::optional<aom_svc_params_t> svc_params_;
   VideoCodec encoder_settings_;
   aom_image_t* frame_for_encode_;
   aom_codec_ctx_t ctx_;
@@ -130,7 +133,6 @@ LibaomAv1Encoder::LibaomAv1Encoder(
     std::unique_ptr<ScalableVideoController> svc_controller)
     : svc_controller_(std::move(svc_controller)),
       inited_(false),
-      svc_enabled_(false),
       frame_for_encode_(nullptr),
       encoded_image_callback_(nullptr) {
   RTC_DCHECK(svc_controller_);
@@ -163,6 +165,25 @@ int LibaomAv1Encoder::InitEncode(const VideoCodec* codec_settings,
                            "LibaomAv1Encoder.";
     return result;
   }
+  if (encoder_settings_.numberOfSimulcastStreams > 1) {
+    RTC_LOG(LS_WARNING) << "Simulcast is not implemented by LibaomAv1Encoder.";
+    return result;
+  }
+  absl::string_view scalability_mode = encoder_settings_.ScalabilityMode();
+  // When scalability_mode is not set, keep using svc_controller_ created
+  // at construction of the encoder.
+  if (!scalability_mode.empty()) {
+    svc_controller_ = CreateScalabilityStructure(scalability_mode);
+  }
+  if (svc_controller_ == nullptr) {
+    RTC_LOG(LS_WARNING) << "Failed to set scalability mode "
+                        << scalability_mode;
+    return WEBRTC_VIDEO_CODEC_ERR_PARAMETER;
+  }
+
+  if (!SetSvcParams(svc_controller_->StreamConfig())) {
+    return WEBRTC_VIDEO_CODEC_ERROR;
+  }
 
   // Initialize encoder configuration structure with default values
   aom_codec_err_t ret =
@@ -185,10 +206,7 @@ int LibaomAv1Encoder::InitEncode(const VideoCodec* codec_settings,
   cfg_.rc_min_quantizer = kQpMin;
   cfg_.rc_max_quantizer = encoder_settings_.qpMax;
   cfg_.g_usage = kUsageProfile;
-  if (svc_controller_->StreamConfig().num_spatial_layers > 1 ||
-      svc_controller_->StreamConfig().num_temporal_layers > 1) {
-    cfg_.g_error_resilient = 1;
-  }
+  cfg_.g_error_resilient = 0;
   // Low-latency settings.
   cfg_.rc_end_usage = AOM_CBR;          // Constant Bit Rate (CBR) mode
   cfg_.g_pass = AOM_RC_ONE_PASS;        // One-pass rate control
@@ -221,6 +239,12 @@ int LibaomAv1Encoder::InitEncode(const VideoCodec* codec_settings,
                         << " on control AV1E_SET_CPUUSED.";
     return WEBRTC_VIDEO_CODEC_ERROR;
   }
+  ret = aom_codec_control(&ctx_, AV1E_SET_ENABLE_CDEF, 1);
+  if (ret != AOM_CODEC_OK) {
+    RTC_LOG(LS_WARNING) << "LibaomAv1Encoder::EncodeInit returned " << ret
+                        << " on control AV1E_SET_ENABLE_CDEF.";
+    return WEBRTC_VIDEO_CODEC_ERROR;
+  }
   ret = aom_codec_control(&ctx_, AV1E_SET_ENABLE_TPL_MODEL, 0);
   if (ret != AOM_CODEC_OK) {
     RTC_LOG(LS_WARNING) << "LibaomAv1Encoder::EncodeInit returned " << ret
@@ -245,9 +269,15 @@ int LibaomAv1Encoder::InitEncode(const VideoCodec* codec_settings,
                         << " on control AV1E_SET_AQ_MODE.";
     return WEBRTC_VIDEO_CODEC_ERROR;
   }
-  if (!SetSvcParams(svc_controller_->StreamConfig())) {
-    return WEBRTC_VIDEO_CODEC_ERROR;
+  if (SvcEnabled()) {
+    ret = aom_codec_control(&ctx_, AV1E_SET_SVC_PARAMS, &*svc_params_);
+    if (ret != AOM_CODEC_OK) {
+      RTC_LOG(LS_WARNING) << "LibaomAV1Encoder::EncodeInit returned " << ret
+                          << " on control AV1E_SET_SVC_PARAMS.";
+      return false;
+    }
   }
+
   ret = aom_codec_control(&ctx_, AOME_SET_MAX_INTRA_BITRATE_PCT, 300);
   if (ret != AOM_CODEC_OK) {
     RTC_LOG(LS_WARNING) << "LibaomAv1Encoder::EncodeInit returned " << ret
@@ -278,12 +308,12 @@ int LibaomAv1Encoder::InitEncode(const VideoCodec* codec_settings,
 
 bool LibaomAv1Encoder::SetSvcParams(
     ScalableVideoController::StreamLayersConfig svc_config) {
-  svc_enabled_ =
+  bool svc_enabled =
       svc_config.num_spatial_layers > 1 || svc_config.num_temporal_layers > 1;
-  if (!svc_enabled_) {
+  if (!svc_enabled) {
+    svc_params_ = absl::nullopt;
     return true;
   }
-  aom_svc_params_t svc_params = {};
   if (svc_config.num_spatial_layers < 1 || svc_config.num_spatial_layers > 4) {
     RTC_LOG(LS_WARNING) << "Av1 supports up to 4 spatial layers. "
                         << svc_config.num_spatial_layers << " configured.";
@@ -295,6 +325,7 @@ bool LibaomAv1Encoder::SetSvcParams(
                         << svc_config.num_temporal_layers << " configured.";
     return false;
   }
+  aom_svc_params_t& svc_params = svc_params_.emplace();
   svc_params.number_spatial_layers = svc_config.num_spatial_layers;
   svc_params.number_temporal_layers = svc_config.num_temporal_layers;
 
@@ -311,20 +342,11 @@ bool LibaomAv1Encoder::SetSvcParams(
         1 << (svc_config.num_temporal_layers - tid - 1);
   }
 
-  // TODO(danilchap): Add support for custom resolution factor.
   for (int sid = 0; sid < svc_config.num_spatial_layers; ++sid) {
-    svc_params.scaling_factor_num[sid] = 1;
-    svc_params.scaling_factor_den[sid] =
-        1 << (svc_config.num_spatial_layers - sid - 1);
+    svc_params.scaling_factor_num[sid] = svc_config.scaling_factor_num[sid];
+    svc_params.scaling_factor_den[sid] = svc_config.scaling_factor_den[sid];
   }
 
-  aom_codec_err_t ret =
-      aom_codec_control(&ctx_, AV1E_SET_SVC_PARAMS, &svc_params);
-  if (ret != AOM_CODEC_OK) {
-    RTC_LOG(LS_WARNING) << "LibaomAV1Encoder::EncodeInit returned " << ret
-                        << " on control AV1E_SET_SVC_PARAMS.";
-    return false;
-  }
   return true;
 }
 
@@ -444,7 +466,7 @@ int32_t LibaomAv1Encoder::Encode(
     aom_enc_frame_flags_t flags =
         layer_frame.IsKeyframe() ? AOM_EFLAG_FORCE_KF : 0;
 
-    if (svc_enabled_) {
+    if (SvcEnabled()) {
       SetSvcLayerId(layer_frame);
       SetSvcRefFrameConfig(layer_frame);
     }
@@ -513,9 +535,21 @@ int32_t LibaomAv1Encoder::Encode(
       if (is_keyframe && codec_specific_info.generic_frame_info) {
         codec_specific_info.template_structure =
             svc_controller_->DependencyStructure();
+        auto& resolutions = codec_specific_info.template_structure->resolutions;
+        if (SvcEnabled()) {
+          resolutions.resize(svc_params_->number_spatial_layers);
+          for (int sid = 0; sid < svc_params_->number_spatial_layers; ++sid) {
+            int n = svc_params_->scaling_factor_num[sid];
+            int d = svc_params_->scaling_factor_den[sid];
+            resolutions[sid] =
+                RenderResolution(cfg_.g_w * n / d, cfg_.g_h * n / d);
+          }
+        } else {
+          resolutions = {RenderResolution(cfg_.g_w, cfg_.g_h)};
+        }
       }
       encoded_image_callback_->OnEncodedImage(encoded_image,
-                                              &codec_specific_info, nullptr);
+                                              &codec_specific_info);
     }
   }
 
@@ -544,8 +578,27 @@ void LibaomAv1Encoder::SetRates(const RateControlParameters& parameters) {
     RTC_DCHECK_LE(rc_target_bitrate_kbps, encoder_settings_.maxBitrate);
   RTC_DCHECK_GE(rc_target_bitrate_kbps, encoder_settings_.minBitrate);
 
+  svc_controller_->OnRatesUpdated(parameters.bitrate);
   // Set target bit rate.
   cfg_.rc_target_bitrate = rc_target_bitrate_kbps;
+
+  if (SvcEnabled()) {
+    for (int sid = 0; sid < svc_params_->number_spatial_layers; ++sid) {
+      // libaom bitrate for spatial id S and temporal id T means bitrate
+      // of frames with spatial_id=S and temporal_id<=T
+      // while `parameters.bitrate` provdies bitrate of frames with
+      // spatial_id=S and temporal_id=T
+      int accumulated_bitrate_bps = 0;
+      for (int tid = 0; tid < svc_params_->number_temporal_layers; ++tid) {
+        int layer_index = sid * svc_params_->number_temporal_layers + tid;
+        accumulated_bitrate_bps += parameters.bitrate.GetBitrate(sid, tid);
+        // `svc_params.layer_target_bitrate` expects bitrate in kbps.
+        svc_params_->layer_target_bitrate[layer_index] =
+            accumulated_bitrate_bps / 1000;
+      }
+    }
+    aom_codec_control(&ctx_, AV1E_SET_SVC_PARAMS, &*svc_params_);
+  }
 
   // Set frame rate to closest integer value.
   encoder_settings_.maxFramerate =
@@ -566,6 +619,7 @@ VideoEncoder::EncoderInfo LibaomAv1Encoder::GetEncoderInfo() const {
   info.has_trusted_rate_controller = true;
   info.is_hardware_accelerated = false;
   info.scaling_settings = VideoEncoder::ScalingSettings(kMinQindex, kMaxQindex);
+  info.preferred_pixel_formats = {VideoFrameBuffer::Type::kI420};
   return info;
 }
 

@@ -1269,6 +1269,10 @@ enum aome_enc_control_id {
    * single pass vbr based on LAP, unsigned int parameter
    */
   AV1E_SET_VBR_CORPUS_COMPLEXITY_LAP = 157,
+
+  /*!\brief Control to get baseline gf interval
+   */
+  AV1E_GET_BASELINE_GF_INTERVAL = 158,
 };
 
 /*!\brief aom 1-D scaling mode
@@ -1279,7 +1283,10 @@ typedef enum aom_scaling_mode_1d {
   AOME_NORMAL = 0,
   AOME_FOURFIVE = 1,
   AOME_THREEFIVE = 2,
-  AOME_ONETWO = 3
+  AOME_THREEFOUR = 3,
+  AOME_ONEFOUR = 4,
+  AOME_ONEEIGHT = 5,
+  AOME_ONETWO = 6
 } AOM_SCALING_MODE;
 
 /*!\brief Max number of segments
@@ -1687,6 +1694,9 @@ AOM_CTRL_USE_TYPE(AV1E_SET_SUPERBLOCK_SIZE, unsigned int)
 
 AOM_CTRL_USE_TYPE(AV1E_GET_SEQ_LEVEL_IDX, int *)
 #define AOM_CTRL_AV1E_GET_SEQ_LEVEL_IDX
+
+AOM_CTRL_USE_TYPE(AV1E_GET_BASELINE_GF_INTERVAL, int *)
+#define AOM_CTRL_AV1E_GET_BASELINE_GF_INTERVAL
 
 AOM_CTRL_USE_TYPE(AV1E_SET_SINGLE_TILE_DECODING, unsigned int)
 #define AOM_CTRL_AV1E_SET_SINGLE_TILE_DECODING

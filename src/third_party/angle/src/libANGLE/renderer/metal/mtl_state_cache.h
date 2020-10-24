@@ -206,6 +206,8 @@ struct RenderPipelineOutputDesc
 {
     bool operator==(const RenderPipelineOutputDesc &rhs) const;
 
+    void updateEnabledDrawBuffers(gl::DrawBufferMask enabledBuffers);
+
     RenderPipelineColorAttachmentDesc colorAttachments[kMaxRenderTargets];
 
     // Use uint16_t instead of MTLPixelFormat to compact space
@@ -214,6 +216,7 @@ struct RenderPipelineOutputDesc
 
     static_assert(kMaxRenderTargets <= 4, "kMaxRenderTargets must be <= 4");
     uint8_t numColorAttachments : 3;
+    uint8_t sampleCount : 5;
 };
 
 // Some SDK levels don't declare MTLPrimitiveTopologyClass. Needs to do compile time check here:
@@ -230,6 +233,28 @@ constexpr PrimitiveTopologyClass kPrimitiveTopologyClassTriangle =
 constexpr PrimitiveTopologyClass kPrimitiveTopologyClassPoint = MTLPrimitiveTopologyClassPoint;
 #endif
 
+enum class RenderPipelineRasterization : uint32_t
+{
+    // This flag is used for vertex shader not writing any stage output (e.g gl_Position).
+    // This will disable fragment shader stage. This is useful for transform feedback ouput vertex
+    // shader.
+    Disabled,
+
+    // Fragment shader is enabled.
+    Enabled,
+
+    // This flag is for rasterization discard emulation when vertex shader still writes to stage
+    // output. Disabled flag cannot be used in this case since Metal doesn't allow that. The
+    // emulation would insert a code snippet to move gl_Position out of clip space's visible area to
+    // simulate the discard.
+    EmulatedDiscard,
+
+    EnumCount,
+};
+
+template <typename T>
+using RenderPipelineRasterStateMap = angle::PackedEnumMap<RenderPipelineRasterization, T>;
+
 struct alignas(4) RenderPipelineDesc
 {
     RenderPipelineDesc();
@@ -242,6 +267,8 @@ struct alignas(4) RenderPipelineDesc
 
     size_t hash() const;
 
+    bool rasterizationEnabled() const;
+
     VertexDesc vertexDescriptor;
 
     RenderPipelineOutputDesc outputDescriptor;
@@ -249,7 +276,13 @@ struct alignas(4) RenderPipelineDesc
     // Use uint8_t instead of PrimitiveTopologyClass to compact space.
     uint8_t inputPrimitiveTopology : 2;
 
-    bool rasterizationEnabled;
+    bool alphaToCoverageEnabled : 1;
+
+    // These flags are for emulation and do not correspond to any flags in
+    // MTLRenderPipelineDescriptor descriptor. These flags should be used by
+    // RenderPipelineCacheSpecializeShaderFactory.
+    RenderPipelineRasterization rasterizationType : 2;
+    bool emulateCoverageMask : 1;
 };
 
 struct RenderPassAttachmentDesc
@@ -261,9 +294,15 @@ struct RenderPassAttachmentDesc
     bool equalIgnoreLoadStoreOptions(const RenderPassAttachmentDesc &other) const;
     bool operator==(const RenderPassAttachmentDesc &other) const;
 
+    ANGLE_INLINE bool hasImplicitMSTexture() const { return implicitMSTexture.get(); }
+
     TextureRef texture;
-    uint32_t level;
-    uint32_t slice;
+    // Implicit multisample texture that will be rendered into and discarded at the end of
+    // a render pass. Its result will be resolved into normal texture above.
+    TextureRef implicitMSTexture;
+    MipmapNativeLevel level;
+    uint32_t sliceOrDepth;
+
     MTLLoadAction loadAction;
     MTLStoreAction storeAction;
     MTLStoreActionOptions storeActionOptions;
@@ -315,6 +354,8 @@ struct RenderPassDesc
     RenderPassDepthAttachmentDesc depthAttachment;
     RenderPassStencilAttachmentDesc stencilAttachment;
 
+    void convertToMetalDesc(MTLRenderPassDescriptor *objCDesc) const;
+
     // This will populate the RenderPipelineOutputDesc with default blend state and
     // MTLColorWriteMaskAll
     void populateRenderPipelineOutputDesc(RenderPipelineOutputDesc *outDesc) const;
@@ -331,10 +372,9 @@ struct RenderPassDesc
     inline bool operator!=(const RenderPassDesc &other) const { return !(*this == other); }
 
     uint32_t numColorAttachments = 0;
+    uint32_t sampleCount         = 1;
 };
 
-// convert to Metal object
-AutoObjCObj<MTLRenderPassDescriptor> ToMetalObj(const RenderPassDesc &desc);
 }  // namespace mtl
 }  // namespace rx
 
@@ -365,18 +405,43 @@ namespace rx
 {
 namespace mtl
 {
-// render pipeline state cache per shader program
+
+// Abstract factory to create specialized vertex & fragment shaders based on RenderPipelineDesc.
+class RenderPipelineCacheSpecializeShaderFactory
+{
+  public:
+    virtual ~RenderPipelineCacheSpecializeShaderFactory() = default;
+
+    // Get specialized shader for the render pipeline cache.
+    virtual angle::Result getSpecializedShader(Context *context,
+                                               gl::ShaderType shaderType,
+                                               const RenderPipelineDesc &renderPipelineDesc,
+                                               id<MTLFunction> *shaderOut) = 0;
+    // Check whether specialized shaders is required for the specified RenderPipelineDesc.
+    // If not, the render pipeline cache will use the supplied non-specialized shaders.
+    virtual bool hasSpecializedShader(gl::ShaderType shaderType,
+                                      const RenderPipelineDesc &renderPipelineDesc) = 0;
+};
+
+// Render pipeline state cache per shader program.
 class RenderPipelineCache final : angle::NonCopyable
 {
   public:
     RenderPipelineCache();
+    RenderPipelineCache(RenderPipelineCacheSpecializeShaderFactory *specializedShaderFactory);
     ~RenderPipelineCache();
 
+    // Set non-specialized vertex/fragment shader to be used by render pipeline cache to create
+    // render pipeline state. If the internal
+    // RenderPipelineCacheSpecializeShaderFactory.hasSpecializedShader() returns false for a
+    // particular RenderPipelineDesc, the render pipeline cache will use the non-specialized
+    // shaders.
     void setVertexShader(Context *context, id<MTLFunction> shader);
     void setFragmentShader(Context *context, id<MTLFunction> shader);
 
-    id<MTLFunction> getVertexShader() { return mVertexShader.get(); }
-    id<MTLFunction> getFragmentShader() { return mFragmentShader.get(); }
+    // Get non-specialized shaders supplied via set*Shader().
+    id<MTLFunction> getVertexShader() { return mVertexShader; }
+    id<MTLFunction> getFragmentShader() { return mFragmentShader; }
 
     AutoObjCPtr<id<MTLRenderPipelineState>> getRenderPipelineState(ContextMtl *context,
                                                                    const RenderPipelineDesc &desc);
@@ -384,8 +449,10 @@ class RenderPipelineCache final : angle::NonCopyable
     void clear();
 
   protected:
-    AutoObjCPtr<id<MTLFunction>> mVertexShader   = nil;
-    AutoObjCPtr<id<MTLFunction>> mFragmentShader = nil;
+    // Non-specialized vertex shader
+    AutoObjCPtr<id<MTLFunction>> mVertexShader;
+    // Non-specialized fragment shader
+    AutoObjCPtr<id<MTLFunction>> mFragmentShader;
 
   private:
     void clearPipelineStates();
@@ -404,6 +471,8 @@ class RenderPipelineCache final : angle::NonCopyable
     // One table with default attrib and one table without.
     std::unordered_map<RenderPipelineDesc, AutoObjCPtr<id<MTLRenderPipelineState>>>
         mRenderPipelineStates[2];
+
+    RenderPipelineCacheSpecializeShaderFactory *mSpecializedShaderFactory;
 };
 
 class StateCache final : angle::NonCopyable

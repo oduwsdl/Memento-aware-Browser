@@ -22,11 +22,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "cc/base/features.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/layers/scrollbar_layer_base.h"
+#include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/property_tree.h"
-#include "cc/trees/scroll_and_scale_set.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/sticky_position_constraint.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -45,8 +47,8 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
@@ -78,8 +80,8 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
  public:
   ScrollingTest() : base_url_("http://www.test.com/") {
     helper_.Initialize(nullptr, nullptr, nullptr, &ConfigureSettings);
-    GetWebView()->MainFrameWidgetBase()->Resize(IntSize(320, 240));
-    GetWebView()->MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    GetWebView()->MainFrameViewWidget()->Resize(gfx::Size(320, 240));
+    GetWebView()->MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -97,7 +99,7 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
   }
 
   void ForceFullCompositingUpdate() {
-    GetWebView()->MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    GetWebView()->MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -115,6 +117,15 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
     return helper_.GetWebWidgetClient();
   }
 
+  PaintLayerScrollableArea* ScrollableAreaByDOMElementId(
+      const char* id_value) const {
+    return GetFrame()
+        ->GetDocument()
+        ->getElementById(id_value)
+        ->GetLayoutBoxForScrolling()
+        ->GetScrollableArea();
+  }
+
   void LoadAhem() { helper_.LoadAhem(); }
 
   const cc::ScrollNode* ScrollNodeForScrollableArea(
@@ -129,8 +140,7 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
   }
 
   const cc::ScrollNode* ScrollNodeByDOMElementId(const char* dom_id) const {
-    return ScrollNodeForScrollableArea(
-        GetFrame()->GetDocument()->getElementById(dom_id)->GetScrollableArea());
+    return ScrollNodeForScrollableArea(ScrollableAreaByDOMElementId(dom_id));
   }
 
   gfx::ScrollOffset CurrentScrollOffset(cc::ElementId element_id) const {
@@ -175,10 +185,7 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
 
   const cc::Layer* ScrollingContentsLayerByDOMElementId(
       const char* element_id) const {
-    const auto* scrollable_area = GetFrame()
-                                      ->GetDocument()
-                                      ->getElementById(element_id)
-                                      ->GetScrollableArea();
+    const auto* scrollable_area = ScrollableAreaByDOMElementId(element_id);
     return ScrollingContentsCcLayerByScrollElementId(
         RootCcLayer(), scrollable_area->GetScrollElementId());
   }
@@ -197,7 +204,7 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
 INSTANTIATE_PAINT_TEST_SUITE_P(ScrollingTest);
 
 TEST_P(ScrollingTest, fastScrollingByDefault) {
-  GetWebView()->MainFrameWidgetBase()->Resize(WebSize(800, 600));
+  GetWebView()->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   LoadHTML("<div id='spacer' style='height: 1000px'></div>");
   ForceFullCompositingUpdate();
 
@@ -205,11 +212,6 @@ TEST_P(ScrollingTest, fastScrollingByDefault) {
   LocalFrameView* frame_view = GetFrame()->View();
   Page* page = GetFrame()->GetPage();
   ASSERT_TRUE(page->GetScrollingCoordinator());
-  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-    ASSERT_TRUE(
-        page->GetScrollingCoordinator()->CoordinatesScrollingForFrameView(
-            frame_view));
-  }
 
   // Fast scrolling should be enabled by default.
   const auto* outer_scroll_node =
@@ -231,6 +233,8 @@ TEST_P(ScrollingTest, fastScrollingByDefault) {
 }
 
 TEST_P(ScrollingTest, fastFractionalScrollingDiv) {
+  ScopedFractionalScrollOffsetsForTest fractional_scroll_offsets(true);
+
   RegisterMockedHttpURLLoad("fractional-scroll-div.html");
   NavigateTo(base_url_ + "fractional-scroll-div.html");
   ForceFullCompositingUpdate();
@@ -878,6 +882,372 @@ TEST_P(ScrollingTest, WindowTouchEventHandlerInvalidation) {
   EXPECT_TRUE(region.IsEmpty());
 }
 
+TEST_P(ScrollingTest, TouchActionChangeWithoutContent) {
+  LoadHTML(R"HTML(
+    <div id="blocking"
+        style="will-change: transform; width: 100px; height: 100px;"></div>
+  )HTML");
+  ForceFullCompositingUpdate();
+
+  // Adding a blocking window event handler should create a touch action region.
+  auto* listener = MakeGarbageCollected<ScrollingTestMockEventListener>();
+  auto* resolved_options =
+      MakeGarbageCollected<AddEventListenerOptionsResolved>();
+  resolved_options->setPassive(false);
+  auto* target_element = GetFrame()->GetDocument()->getElementById("blocking");
+  target_element->addEventListener(event_type_names::kTouchstart, listener,
+                                   resolved_options);
+  ForceFullCompositingUpdate();
+
+  const auto* cc_layer = LayerByDOMElementId("blocking");
+  cc::Region region = cc_layer->touch_action_region().GetRegionForTouchAction(
+      TouchAction::kNone);
+  EXPECT_EQ(region.bounds(), gfx::Rect(0, 0, 100, 100));
+}
+
+TEST_P(ScrollingTest, WheelEventRegion) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  LoadHTML(R"HTML(
+    <style>
+      #scrollable {
+        width: 200px;
+        height: 200px;
+        will-change: transform;
+        overflow: scroll;
+      }
+      #content {
+        width: 1000px;
+        height: 1000px;
+      }
+    </style>
+    <div id="scrollable">
+      <div id="content"></div>
+    </div>
+    <script>
+      document.getElementById("scrollable").addEventListener('wheel', (e) => {
+        e.preventDefault();
+      });
+    </script>
+  )HTML");
+  ForceFullCompositingUpdate();
+
+  auto* cc_layer = MainFrameScrollingContentsLayer();
+  cc::Region region = cc_layer->wheel_event_region();
+  EXPECT_TRUE(region.IsEmpty());
+
+  cc_layer = LayerByDOMElementId("scrollable");
+  region = cc_layer->wheel_event_region();
+  EXPECT_EQ(region.GetRegionComplexity(), 1);
+  EXPECT_EQ(region.bounds(), gfx::Rect(0, 0, 200, 200));
+
+  cc_layer = ScrollingContentsLayerByDOMElementId("scrollable");
+  region = cc_layer->wheel_event_region();
+  EXPECT_EQ(region.GetRegionComplexity(), 1);
+  EXPECT_EQ(region.bounds(), gfx::Rect(0, 0, 1000, 1000));
+}
+
+TEST_P(ScrollingTest, WheelEventHandlerInvalidation) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  LoadHTML(R"HTML(
+    <style>
+      #scrollable {
+        width: 200px;
+        height: 200px;
+        will-change: transform;
+        overflow: scroll;
+      }
+      #content {
+        width: 1000px;
+        height: 1000px;
+      }
+    </style>
+    <div id="scrollable">
+      <div id="content"></div>
+    </div>
+  )HTML");
+  ForceFullCompositingUpdate();
+
+  // Initially there are no wheel event regions.
+  const auto* cc_layer = LayerByDOMElementId("scrollable");
+  auto region = cc_layer->wheel_event_region();
+  EXPECT_TRUE(region.IsEmpty());
+
+  const auto* cc_layer_content =
+      ScrollingContentsLayerByDOMElementId("scrollable");
+  region = cc_layer->wheel_event_region();
+  EXPECT_TRUE(region.IsEmpty());
+
+  // Adding a blocking window event handler should create a wheel event region.
+  auto* listener = MakeGarbageCollected<ScrollingTestMockEventListener>();
+  auto* resolved_options =
+      MakeGarbageCollected<AddEventListenerOptionsResolved>();
+  resolved_options->setPassive(false);
+  GetFrame()
+      ->GetDocument()
+      ->getElementById("scrollable")
+      ->addEventListener(event_type_names::kWheel, listener, resolved_options);
+  ForceFullCompositingUpdate();
+  region = cc_layer->wheel_event_region();
+  EXPECT_FALSE(region.IsEmpty());
+  region = cc_layer_content->wheel_event_region();
+  EXPECT_FALSE(region.IsEmpty());
+
+  // Removing the window event handler also removes the wheel event region.
+  GetFrame()
+      ->GetDocument()
+      ->getElementById("scrollable")
+      ->RemoveAllEventListeners();
+  ForceFullCompositingUpdate();
+  region = cc_layer->wheel_event_region();
+  EXPECT_TRUE(region.IsEmpty());
+  region = cc_layer_content->wheel_event_region();
+  EXPECT_TRUE(region.IsEmpty());
+}
+
+TEST_P(ScrollingTest, WheelEventRegions) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  LoadHTML(R"HTML(
+    <style>
+      #scrollable {
+        width: 200px;
+        height: 200px;
+        will-change: transform;
+        overflow: scroll;
+      }
+      #content {
+        width: 1000px;
+        height: 1000px;
+      }
+      .region {
+        width: 100px;
+        height: 100px;
+      }
+    </style>
+    <div id="scrollable">
+      <div id="region1" class="region"></div>
+      <div id="content"></div>
+      <div id="region2" class="region"></div>
+    </div>
+    <script>
+      document.getElementById("region1").addEventListener('wheel', (e) => {
+        e.preventDefault();
+      });
+      document.getElementById("region2").addEventListener('wheel', (e) => {
+        e.preventDefault();
+      });
+    </script>
+  )HTML");
+  ForceFullCompositingUpdate();
+
+  auto* cc_layer = LayerByDOMElementId("scrollable");
+  cc::Region region = cc_layer->wheel_event_region();
+  EXPECT_TRUE(region.IsEmpty());
+
+  cc_layer = ScrollingContentsLayerByDOMElementId("scrollable");
+  region = cc_layer->wheel_event_region();
+
+  cc::Region expected_region;
+  expected_region.Union(gfx::Rect(0, 0, 100, 100));
+  expected_region.Union(gfx::Rect(0, 1100, 100, 100));
+
+  EXPECT_EQ(region, expected_region);
+}
+
+TEST_P(ScrollingTest, WheelEventRegionUpdatedOnSubscrollerScrollChange) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  GetWebView()->GetSettings()->SetPreferCompositingToLCDTextEnabled(false);
+  LoadHTML(R"HTML(
+    <style>
+      #noncomposited {
+        width: 200px;
+        height: 200px;
+        overflow: auto;
+        position: absolute;
+        top: 50px;
+        background: white;
+        box-shadow: 10px 10px black inset;
+      }
+      #content {
+        width: 100%;
+        height: 1000px;
+      }
+      .region {
+        width: 100px;
+        height: 100px;
+      }
+    </style>
+    <div id="noncomposited">
+      <div id="region" class="region"></div>
+      <div id="content"></div>
+    </div>
+    <script>
+      document.getElementById("region").addEventListener('wheel', (e) => {
+        e.preventDefault();
+      }, {passive: false});
+    </script>
+  )HTML");
+  ForceFullCompositingUpdate();
+
+  const auto* cc_layer = MainFrameScrollingContentsLayer();
+  cc::Region region = cc_layer->wheel_event_region();
+  EXPECT_EQ(region.bounds(), gfx::Rect(8, 50, 100, 100));
+
+  Element* scrollable_element =
+      GetFrame()->GetDocument()->getElementById("noncomposited");
+  DCHECK(scrollable_element);
+
+  // Change scroll position and verify that blocking wheel handler region is
+  // updated accordingly.
+  scrollable_element->setScrollTop(10.0);
+  ForceFullCompositingUpdate();
+  region = cc_layer->wheel_event_region();
+  EXPECT_EQ(region.bounds(), gfx::Rect(8, 50, 100, 90));
+}
+
+// Box shadow is not hit testable and should not be included in wheel region.
+TEST_P(ScrollingTest, WheelEventRegionExcludesBoxShadow) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  LoadHTML(R"HTML(
+    <style>
+      #shadow {
+        width: 100px;
+        height: 100px;
+        box-shadow: 10px 5px 5px red;
+      }
+    </style>
+    <div id="shadow"></div>
+    <script>
+      document.getElementById("shadow").addEventListener('wheel', (e) => {
+        e.preventDefault();
+      });
+    </script>
+  )HTML");
+  ForceFullCompositingUpdate();
+
+  const auto* cc_layer = MainFrameScrollingContentsLayer();
+
+  cc::Region region = cc_layer->wheel_event_region();
+  EXPECT_EQ(region.bounds(), gfx::Rect(8, 8, 100, 100));
+}
+
+TEST_P(ScrollingTest, IframeWindowWheelEventHandler) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  LoadHTML(R"HTML(
+    <iframe style="width: 275px; height: 250px; will-change: transform">
+    </iframe>
+  )HTML");
+  auto* child_frame =
+      To<WebLocalFrameImpl>(GetWebView()->MainFrameImpl()->FirstChild());
+  frame_test_helpers::LoadHTMLString(child_frame, R"HTML(
+      <p style="margin: 1000px"> Hello </p>
+      <script>
+        window.addEventListener('wheel', (e) => {
+          e.preventDefault();
+        }, {passive: false});
+      </script>
+    )HTML",
+                                     url_test_helpers::ToKURL("about:blank"));
+  ForceFullCompositingUpdate();
+
+  const auto* child_cc_layer =
+      FrameScrollingContentsLayer(*child_frame->GetFrame());
+  cc::Region region_child_frame = child_cc_layer->wheel_event_region();
+  cc::Region region_main_frame =
+      MainFrameScrollingContentsLayer()->wheel_event_region();
+  EXPECT_TRUE(region_main_frame.bounds().IsEmpty());
+  EXPECT_FALSE(region_child_frame.bounds().IsEmpty());
+  // We only check for the content size for verification as the offset is 0x0
+  // due to child frame having its own composited layer.
+
+  // Because blocking wheel rects are painted on the scrolling contents layer,
+  // the size of the rect should be equal to the entire scrolling contents area.
+  EXPECT_EQ(gfx::Rect(child_cc_layer->bounds()), region_child_frame.bounds());
+}
+
+TEST_P(ScrollingTest, WindowWheelEventHandler) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  LoadHTML(R"HTML(
+    <style>
+      html { width: 200px; height: 200px; }
+      body { width: 100px; height: 100px; }
+    </style>
+    <script>
+      window.addEventListener('wheel', function(event) {
+        event.preventDefault();
+      }, {passive: false} );
+    </script>
+  )HTML");
+  ForceFullCompositingUpdate();
+
+  auto* cc_layer = MainFrameScrollingContentsLayer();
+
+  // The wheel region should include the entire frame, even though the
+  // document is smaller than the frame.
+  cc::Region region = cc_layer->wheel_event_region();
+  EXPECT_EQ(region.bounds(), gfx::Rect(0, 0, 320, 240));
+}
+
+TEST_P(ScrollingTest, WindowWheelEventHandlerInvalidation) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  LoadHTML("");
+  ForceFullCompositingUpdate();
+
+  auto* cc_layer = MainFrameScrollingContentsLayer();
+
+  // Initially there are no wheel event regions.
+  auto region = cc_layer->wheel_event_region();
+  EXPECT_TRUE(region.IsEmpty());
+
+  // Adding a blocking window event handler should create a wheel event region.
+  auto* listener = MakeGarbageCollected<ScrollingTestMockEventListener>();
+  auto* resolved_options =
+      MakeGarbageCollected<AddEventListenerOptionsResolved>();
+  resolved_options->setPassive(false);
+  GetFrame()->DomWindow()->addEventListener(event_type_names::kWheel, listener,
+                                            resolved_options);
+  ForceFullCompositingUpdate();
+  region = cc_layer->wheel_event_region();
+  EXPECT_FALSE(region.IsEmpty());
+
+  // Removing the window event handler also removes the wheel event region.
+  GetFrame()->DomWindow()->RemoveAllEventListeners();
+  ForceFullCompositingUpdate();
+  region = cc_layer->wheel_event_region();
+  EXPECT_TRUE(region.IsEmpty());
+}
+
+TEST_P(ScrollingTest, WheelEventHandlerChangeWithoutContent) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  LoadHTML(R"HTML(
+    <div id="blocking"
+        style="will-change: transform; width: 100px; height: 100px;"></div>
+  )HTML");
+  ForceFullCompositingUpdate();
+
+  // Adding a blocking window event handler should create a touch action region.
+  auto* listener = MakeGarbageCollected<ScrollingTestMockEventListener>();
+  auto* resolved_options =
+      MakeGarbageCollected<AddEventListenerOptionsResolved>();
+  resolved_options->setPassive(false);
+  auto* target_element = GetFrame()->GetDocument()->getElementById("blocking");
+  target_element->addEventListener(event_type_names::kWheel, listener,
+                                   resolved_options);
+  ForceFullCompositingUpdate();
+
+  const auto* cc_layer = LayerByDOMElementId("blocking");
+  cc::Region region = cc_layer->wheel_event_region();
+  EXPECT_EQ(region.bounds(), gfx::Rect(0, 0, 100, 100));
+}
+
 // Ensure we don't crash when a plugin becomes a LayoutInline
 TEST_P(ScrollingTest, PluginBecomesLayoutInline) {
   LoadHTML(R"HTML(
@@ -991,8 +1361,10 @@ TEST_P(ScrollingTest, overflowScrolling) {
   EXPECT_TRUE(scroll_node->user_scrollable_horizontal);
   EXPECT_TRUE(scroll_node->user_scrollable_vertical);
 
-  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node, cc::HORIZONTAL));
-  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node, cc::VERTICAL));
+  EXPECT_TRUE(ScrollbarLayerForScrollNode(
+      scroll_node, cc::ScrollbarOrientation::HORIZONTAL));
+  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node,
+                                          cc::ScrollbarOrientation::VERTICAL));
 }
 
 TEST_P(ScrollingTest, overflowHidden) {
@@ -1038,8 +1410,10 @@ TEST_P(ScrollingTest, iframeScrolling) {
   const auto* scroll_node =
       ScrollNodeForScrollableArea(inner_frame_view->LayoutViewport());
   ASSERT_TRUE(scroll_node);
-  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node, cc::HORIZONTAL));
-  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node, cc::VERTICAL));
+  EXPECT_TRUE(ScrollbarLayerForScrollNode(
+      scroll_node, cc::ScrollbarOrientation::HORIZONTAL));
+  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node,
+                                          cc::ScrollbarOrientation::VERTICAL));
 }
 
 TEST_P(ScrollingTest, rtlIframe) {
@@ -1085,7 +1459,7 @@ TEST_P(ScrollingTest, setupScrollbarLayerShouldNotCrash) {
   // an empty document by javascript.
 }
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
 TEST_P(ScrollingTest, DISABLED_setupScrollbarLayerShouldSetScrollLayerOpaque)
 #else
 TEST_P(ScrollingTest, setupScrollbarLayerShouldSetScrollLayerOpaque)
@@ -1104,8 +1478,8 @@ TEST_P(ScrollingTest, setupScrollbarLayerShouldSetScrollLayerOpaque)
       ScrollNodeForScrollableArea(frame_view->LayoutViewport());
   ASSERT_TRUE(scroll_node);
 
-  const auto* horizontal_scrollbar_layer =
-      ScrollbarLayerForScrollNode(scroll_node, cc::HORIZONTAL);
+  const auto* horizontal_scrollbar_layer = ScrollbarLayerForScrollNode(
+      scroll_node, cc::ScrollbarOrientation::HORIZONTAL);
   ASSERT_TRUE(horizontal_scrollbar_layer);
   // TODO(crbug.com/1029620): CAP needs more accurate contents_opaque.
   if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
@@ -1115,7 +1489,8 @@ TEST_P(ScrollingTest, setupScrollbarLayerShouldSetScrollLayerOpaque)
               horizontal_scrollbar_layer->contents_opaque());
   }
 
-  EXPECT_FALSE(ScrollbarLayerForScrollNode(scroll_node, cc::VERTICAL));
+  EXPECT_FALSE(ScrollbarLayerForScrollNode(scroll_node,
+                                           cc::ScrollbarOrientation::VERTICAL));
 }
 
 TEST_P(ScrollingTest, NestedIFramesMainThreadScrollingRegion) {
@@ -1362,19 +1737,16 @@ TEST_P(ScrollingTest, ScrollOffsetClobberedBeforeCompositingUpdate) {
       )HTML");
   ForceFullCompositingUpdate();
 
-  auto* scrollable_area = GetFrame()
-                              ->GetDocument()
-                              ->getElementById("container")
-                              ->GetScrollableArea();
+  auto* scrollable_area = ScrollableAreaByDOMElementId("container");
   ASSERT_EQ(0, scrollable_area->GetScrollOffset().Height());
   const auto* scroll_node = ScrollNodeForScrollableArea(scrollable_area);
 
   // Simulate 100px of scroll coming from the compositor thread during a commit.
   gfx::ScrollOffset compositor_delta(0, 100.f);
-  cc::ScrollAndScaleSet scroll_and_scale_set;
-  scroll_and_scale_set.scrolls.push_back(
+  cc::CompositorCommitData commit_data;
+  commit_data.scrolls.push_back(
       {scrollable_area->GetScrollElementId(), compositor_delta, base::nullopt});
-  RootCcLayer()->layer_tree_host()->ApplyScrollAndScale(&scroll_and_scale_set);
+  RootCcLayer()->layer_tree_host()->ApplyCompositorChanges(&commit_data);
   // The compositor offset is reflected in blink and cc scroll tree.
   EXPECT_EQ(compositor_delta,
             gfx::ScrollOffset(scrollable_area->ScrollPosition()));
@@ -1420,91 +1792,6 @@ TEST_P(ScrollingTest, UpdateVisualViewportScrollLayer) {
   ForceFullCompositingUpdate();
   EXPECT_EQ(gfx::ScrollOffset(10, 20),
             CurrentScrollOffset(inner_viewport_scroll_node));
-}
-
-TEST_P(ScrollingTest, UpdateUMAMetricUpdated) {
-  // The metrics are recorced in ScrollingCoordinator::UpdateAfterPaint() which
-  // is not called in CompositeAfterPaint.
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
-  HistogramTester histogram_tester;
-  LoadHTML(R"HTML(
-    <div id='bg' style='background: blue;'></div>
-    <div id='scroller' style='overflow: scroll; width: 10px; height: 10px; background: blue'>
-      <div id='forcescroll' style='height: 1000px;'></div>
-    </div>
-  )HTML");
-
-  // The initial counts should be zero.
-  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 0);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PreFCP", 0);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PostFCP", 0);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.AggregatedPreFCP", 0);
-
-  // After an initial compositing update, we should have one scrolling update
-  // recorded as PreFCP.
-  GetWebView()->MainFrameWidgetBase()->RecordStartOfFrameMetrics();
-  ForceFullCompositingUpdate();
-  GetWebView()->MainFrameWidgetBase()->RecordEndOfFrameMetrics(
-      base::TimeTicks(), 0);
-  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 1);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PreFCP", 1);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PostFCP", 0);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.AggregatedPreFCP", 0);
-
-  // An update with no scrolling changes should not cause a scrolling update.
-  GetWebView()->MainFrameWidgetBase()->RecordStartOfFrameMetrics();
-  ForceFullCompositingUpdate();
-  GetWebView()->MainFrameWidgetBase()->RecordEndOfFrameMetrics(
-      base::TimeTicks(), 0);
-  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 1);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PreFCP", 1);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PostFCP", 0);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.AggregatedPreFCP", 0);
-
-  // A change to background color does not need to cause a scrolling update but,
-  // because we record hit test data, we also cause a scrolling coordinator
-  // update when the background paints. Also render some text to get past FCP.
-  // Note that this frame is still considered pre-FCP.
-  auto* background = GetFrame()->GetDocument()->getElementById("bg");
-  background->removeAttribute(html_names::kStyleAttr);
-  background->setInnerHTML("Some Text");
-  GetWebView()->MainFrameWidgetBase()->RecordStartOfFrameMetrics();
-  ForceFullCompositingUpdate();
-  GetWebView()->MainFrameWidgetBase()->RecordEndOfFrameMetrics(
-      base::TimeTicks(), 0);
-  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 2);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PreFCP", 2);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PostFCP", 0);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.AggregatedPreFCP", 1);
-
-  // Removing a scrollable area should cause a scrolling update.
-  auto* scroller = GetFrame()->GetDocument()->getElementById("scroller");
-  scroller->removeAttribute(html_names::kStyleAttr);
-  GetWebView()->MainFrameWidgetBase()->RecordStartOfFrameMetrics();
-  ForceFullCompositingUpdate();
-  GetWebView()->MainFrameWidgetBase()->RecordEndOfFrameMetrics(
-      base::TimeTicks(), 0);
-  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 3);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PreFCP", 2);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.PostFCP", 1);
-  histogram_tester.ExpectTotalCount(
-      "Blink.ScrollingCoordinator.UpdateTime.AggregatedPreFCP", 1);
 }
 
 TEST_P(ScrollingTest, NonCompositedNonFastScrollableRegion) {
@@ -1629,9 +1916,9 @@ TEST_P(ScrollingTest, TouchActionUpdatesOutsideInterestRect) {
 
   ForceFullCompositingUpdate();
 
-  auto* scroller = GetFrame()->GetDocument()->getElementById("scroller");
-  scroller->GetScrollableArea()->SetScrollOffset(
-      ScrollOffset(0, 5100), mojom::blink::ScrollType::kProgrammatic);
+  ScrollableAreaByDOMElementId("scroller")
+      ->SetScrollOffset(ScrollOffset(0, 5100),
+                        mojom::blink::ScrollType::kProgrammatic);
 
   ForceFullCompositingUpdate();
 
@@ -1662,10 +1949,10 @@ TEST_P(ScrollingTest, MainThreadScrollAndDeltaFromImplSide) {
 
   // Simulate the scroll update with scroll delta from impl-side at the
   // beginning of BeginMainFrame.
-  cc::ScrollAndScaleSet scroll_and_scale;
-  scroll_and_scale.scrolls.push_back(cc::ScrollAndScaleSet::ScrollUpdateInfo(
+  cc::CompositorCommitData commit_data;
+  commit_data.scrolls.push_back(cc::CompositorCommitData::ScrollUpdateInfo(
       element_id, gfx::ScrollOffset(0, 10), base::nullopt));
-  RootCcLayer()->layer_tree_host()->ApplyScrollAndScale(&scroll_and_scale);
+  RootCcLayer()->layer_tree_host()->ApplyCompositorChanges(&commit_data);
   EXPECT_EQ(FloatPoint(0, 210), scrollable_area->ScrollPosition());
   EXPECT_EQ(gfx::ScrollOffset(0, 210), CurrentScrollOffset(element_id));
 }
@@ -1677,8 +1964,8 @@ class UnifiedScrollingSimTest : public SimTest, public PaintTestConfigurations {
   void SetUp() override {
     SimTest::SetUp();
     WebView().GetSettings()->SetPreferCompositingToLCDTextEnabled(false);
-    WebView().MainFrameWidgetBase()->Resize(IntSize(1000, 1000));
-    WebView().MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    WebView().MainFrameViewWidget()->Resize(gfx::Size(1000, 1000));
+    WebView().MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -1701,6 +1988,15 @@ class UnifiedScrollingSimTest : public SimTest, public PaintTestConfigurations {
     return property_trees->scroll_tree.Node(
         property_trees->element_id_to_scroll_node_index.at(
             scrollable_area->GetScrollElementId()));
+  }
+
+  PaintLayerScrollableArea* ScrollableAreaByDOMElementId(const char* id_value) {
+    auto* box = MainFrame()
+                    .GetFrame()
+                    ->GetDocument()
+                    ->getElementById(id_value)
+                    ->GetLayoutBoxForScrolling();
+    return box ? box->GetScrollableArea() : nullptr;
   }
 
  protected:
@@ -1743,7 +2039,8 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForNonCompositedScroller) {
 
   Element* noncomposited_element =
       MainFrame().GetFrame()->GetDocument()->getElementById("noncomposited");
-  auto* scrollable_area = noncomposited_element->GetScrollableArea();
+  auto* scrollable_area =
+      noncomposited_element->GetLayoutBoxForScrolling()->GetScrollableArea();
   ASSERT_EQ(
       cc::MainThreadScrollingReason::kCantPaintScrollingBackgroundAndLCDText,
       scrollable_area->GetNonCompositedMainThreadScrollingReasons());
@@ -1802,7 +2099,8 @@ TEST_P(UnifiedScrollingSimTest,
 
   Element* composited_element =
       MainFrame().GetFrame()->GetDocument()->getElementById("composited");
-  auto* scrollable_area = composited_element->GetScrollableArea();
+  auto* scrollable_area =
+      composited_element->GetLayoutBoxForScrolling()->GetScrollableArea();
   EXPECT_EQ(0u, scrollable_area->GetNonCompositedMainThreadScrollingReasons());
 
   const auto* scroll_node = ScrollNodeForScrollableArea(scrollable_area);
@@ -1898,6 +2196,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForEmbeddedScrollers) {
   // Ensure we have a compositor scroll node for the noncomposited subscroller.
   auto* child_scrollable_area = iframe->contentDocument()
                                     ->getElementById("scroller")
+                                    ->GetLayoutBoxForScrolling()
                                     ->GetScrollableArea();
   const auto* child_scroll_node =
       ScrollNodeForScrollableArea(child_scrollable_area);
@@ -1982,6 +2281,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForNestedEmbeddedScrollers) {
   // nested in the second iframe.
   auto* child_scrollable_area = child_iframe_2->contentDocument()
                                     ->getElementById("scroller")
+                                    ->GetLayoutBoxForScrolling()
                                     ->GetScrollableArea();
   const auto* child_scroll_node =
       ScrollNodeForScrollableArea(child_scrollable_area);
@@ -2041,11 +2341,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForInvisibleNonCompositedScroller) {
   Compositor().BeginFrame();
 
   // Ensure the opacity 0 noncomposited scrollable area generates a scroll node
-  auto* invisible_scrollable_area = MainFrame()
-                                        .GetFrame()
-                                        ->GetDocument()
-                                        ->getElementById("invisible")
-                                        ->GetScrollableArea();
+  auto* invisible_scrollable_area = ScrollableAreaByDOMElementId("invisible");
   ASSERT_EQ(
       cc::MainThreadScrollingReason::kCantPaintScrollingBackgroundAndLCDText,
       invisible_scrollable_area->GetNonCompositedMainThreadScrollingReasons());
@@ -2064,11 +2360,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForInvisibleNonCompositedScroller) {
 
   // Ensure there's no scrollable area (and therefore no scroll node) for a
   // display none scroller.
-  EXPECT_EQ(nullptr, MainFrame()
-                         .GetFrame()
-                         ->GetDocument()
-                         ->getElementById("displaynone")
-                         ->GetScrollableArea());
+  EXPECT_EQ(nullptr, ScrollableAreaByDOMElementId("displaynone"));
 }
 
 // Tests that the compositor gets a scroll node for scrollable input boxes,
@@ -2088,9 +2380,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForInputBox) {
   )HTML");
   Compositor().BeginFrame();
 
-  Element* input_element =
-      MainFrame().GetFrame()->GetDocument()->getElementById("textinput");
-  auto* scrollable_area = input_element->GetScrollableArea();
+  auto* scrollable_area = ScrollableAreaByDOMElementId("textinput");
   ASSERT_EQ(0u, scrollable_area->GetNonCompositedMainThreadScrollingReasons());
 
   const auto* scroll_node = ScrollNodeForScrollableArea(scrollable_area);
@@ -2111,8 +2401,8 @@ class ScrollingSimTest : public SimTest,
   void SetUp() override {
     SimTest::SetUp();
     WebView().GetSettings()->SetPreferCompositingToLCDTextEnabled(true);
-    WebView().MainFrameWidgetBase()->Resize(IntSize(1000, 1000));
-    WebView().MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    WebView().MainFrameViewWidget()->Resize(gfx::Size(1000, 1000));
+    WebView().MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 

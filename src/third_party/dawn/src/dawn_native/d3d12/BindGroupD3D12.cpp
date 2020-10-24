@@ -88,7 +88,7 @@ namespace dawn_native { namespace d3d12 {
                     desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 
                     d3d12Device->CreateUnorderedAccessView(
-                        ToBackend(binding.buffer)->GetD3D12Resource().Get(), nullptr, &desc,
+                        ToBackend(binding.buffer)->GetD3D12Resource(), nullptr, &desc,
                         viewAllocation.OffsetFrom(viewSizeIncrement, bindingOffsets[bindingIndex]));
                     break;
                 }
@@ -108,14 +108,15 @@ namespace dawn_native { namespace d3d12 {
                     desc.Buffer.StructureByteStride = 0;
                     desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
                     d3d12Device->CreateShaderResourceView(
-                        ToBackend(binding.buffer)->GetD3D12Resource().Get(), &desc,
+                        ToBackend(binding.buffer)->GetD3D12Resource(), &desc,
                         viewAllocation.OffsetFrom(viewSizeIncrement, bindingOffsets[bindingIndex]));
                     break;
                 }
 
+                case wgpu::BindingType::SampledTexture:
+                case wgpu::BindingType::MultisampledTexture:
                 // Readonly storage is implemented as SRV so it can be used at the same time as a
                 // sampled texture.
-                case wgpu::BindingType::SampledTexture:
                 case wgpu::BindingType::ReadonlyStorageTexture: {
                     auto* view = ToBackend(GetBindingAsTextureView(bindingIndex));
                     auto& srv = view->GetSRVDescriptor();
@@ -138,12 +139,6 @@ namespace dawn_native { namespace d3d12 {
                         viewAllocation.OffsetFrom(viewSizeIncrement, bindingOffsets[bindingIndex]));
                     break;
                 }
-
-                case wgpu::BindingType::StorageTexture:
-                    UNREACHABLE();
-                    break;
-
-                    // TODO(shaobo.yan@intel.com): Implement dynamic buffer offset.
             }
         }
     }

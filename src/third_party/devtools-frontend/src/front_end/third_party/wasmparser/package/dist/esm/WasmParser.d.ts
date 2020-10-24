@@ -222,6 +222,7 @@ export declare const enum OperatorCode {
     atomic_notify = 65024,
     i32_atomic_wait = 65025,
     i64_atomic_wait = 65026,
+    atomic_fence = 65027,
     i32_atomic_load = 65040,
     i64_atomic_load = 65041,
     i32_atomic_load8_u = 65042,
@@ -496,7 +497,11 @@ export declare const enum LinkingType {
 export declare const enum NameType {
     Module = 0,
     Function = 1,
-    Local = 2
+    Local = 2,
+    Type = 4,
+    Table = 5,
+    Memory = 6,
+    Global = 7
 }
 export declare const enum BinaryReaderState {
     ERROR = -1,
@@ -616,6 +621,18 @@ export interface ILocalName {
 export interface ILocalNameEntry extends INameEntry {
     funcs: ILocalName[];
 }
+export interface ITypeNameEntry extends INameEntry {
+    names: INaming[];
+}
+export interface ITableNameEntry extends INameEntry {
+    names: INaming[];
+}
+export interface IMemoryNameEntry extends INameEntry {
+    names: INaming[];
+}
+export interface IGlobalNameEntry extends INameEntry {
+    names: INaming[];
+}
 export interface ILinkingEntry {
     type: LinkingType;
     index?: number;
@@ -722,6 +739,7 @@ export declare class BinaryReader {
     private readVarInt64;
     private readStringBytes;
     private readBytes;
+    private skipBytes;
     private hasStringBytes;
     private hasSectionPayload;
     private readFuncType;

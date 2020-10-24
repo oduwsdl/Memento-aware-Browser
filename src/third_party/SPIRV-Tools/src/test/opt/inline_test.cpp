@@ -381,6 +381,7 @@ TEST_F(InlineTest, InOutParameter) {
 
   const std::vector<const char*> after = {
       // clang-format off
+         "%26 = OpUndef %void",
        "%main = OpFunction %void None %11",
          "%23 = OpLabel",
           "%b = OpVariable %_ptr_Function_v4float Function",
@@ -1503,11 +1504,11 @@ OpSource OpenCL_C 120
 %bool = OpTypeBool
 %true = OpConstantTrue %bool
 %void = OpTypeVoid
+%5 = OpTypeFunction %void
 )";
 
   const std::string nonEntryFuncs =
-      R"(%5 = OpTypeFunction %void
-%6 = OpFunction %void None %5
+      R"(%6 = OpFunction %void None %5
 %7 = OpLabel
 OpBranch %8
 %8 = OpLabel
@@ -1542,9 +1543,11 @@ OpReturn
 OpFunctionEnd
 )";
 
-  SinglePassRunAndCheck<InlineExhaustivePass>(predefs + nonEntryFuncs + before,
-                                              predefs + nonEntryFuncs + after,
-                                              false, true);
+  const std::string undef = "%11 = OpUndef %void\n";
+
+  SinglePassRunAndCheck<InlineExhaustivePass>(
+      predefs + nonEntryFuncs + before, predefs + undef + nonEntryFuncs + after,
+      false, true);
 }
 
 TEST_F(InlineTest, MultiBlockLoopHeaderCallsMultiBlockCallee) {
@@ -1619,9 +1622,10 @@ OpReturn
 OpFunctionEnd
 )";
 
-  SinglePassRunAndCheck<InlineExhaustivePass>(predefs + nonEntryFuncs + before,
-                                              predefs + nonEntryFuncs + after,
-                                              false, true);
+  const std::string undef = "%20 = OpUndef %void\n";
+  SinglePassRunAndCheck<InlineExhaustivePass>(
+      predefs + nonEntryFuncs + before, predefs + undef + nonEntryFuncs + after,
+      false, true);
 }
 
 TEST_F(InlineTest, SingleBlockLoopCallsMultiBlockCalleeHavingSelectionMerge) {
@@ -1635,7 +1639,7 @@ TEST_F(InlineTest, SingleBlockLoopCallsMultiBlockCalleeHavingSelectionMerge) {
   // the OpSelectionMerge, so inlining must create a new block to contain
   // the callee contents.
   //
-  // Additionally, we have two dummy OpCopyObject instructions to prove that
+  // Additionally, we have two extra OpCopyObject instructions to prove that
   // the OpLoopMerge is moved to the right location.
   //
   // Also ensure that OpPhis within the cloned callee code are valid.
@@ -1707,10 +1711,10 @@ OpBranchConditional %true %13 %16
 OpReturn
 OpFunctionEnd
 )";
-
-  SinglePassRunAndCheck<InlineExhaustivePass>(predefs + nonEntryFuncs + before,
-                                              predefs + nonEntryFuncs + after,
-                                              false, true);
+  const std::string undef = "%15 = OpUndef %void\n";
+  SinglePassRunAndCheck<InlineExhaustivePass>(
+      predefs + nonEntryFuncs + before, predefs + undef + nonEntryFuncs + after,
+      false, true);
 }
 
 TEST_F(InlineTest,
@@ -1789,9 +1793,10 @@ OpReturn
 OpFunctionEnd
 )";
 
-  SinglePassRunAndCheck<InlineExhaustivePass>(predefs + nonEntryFuncs + before,
-                                              predefs + nonEntryFuncs + after,
-                                              false, true);
+  const std::string undef = "%20 = OpUndef %void\n";
+  SinglePassRunAndCheck<InlineExhaustivePass>(
+      predefs + nonEntryFuncs + before, predefs + undef + nonEntryFuncs + after,
+      false, true);
 }
 
 TEST_F(InlineTest, NonInlinableCalleeWithSingleReturn) {
@@ -2164,6 +2169,7 @@ OpName %foo "foo"
 OpName %foo_entry "foo_entry"
 %void = OpTypeVoid
 %void_fn = OpTypeFunction %void
+%3 = OpUndef %void
 %foo = OpFunction %void None %void_fn
 %foo_entry = OpLabel
 OpReturn
@@ -2437,6 +2443,7 @@ OpName %kill_ "kill("
 %3 = OpTypeFunction %void
 %bool = OpTypeBool
 %true = OpConstantTrue %bool
+%16 = OpUndef %void
 %main = OpFunction %void None %3
 %5 = OpLabel
 OpKill
@@ -2446,6 +2453,104 @@ OpFunctionEnd
 %kill_ = OpFunction %void None %3
 %7 = OpLabel
 OpKill
+OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<InlineExhaustivePass>(before, after, false, true);
+}
+
+TEST_F(InlineTest, DontInlineFuncWithOpTerminateInvocationInContinue) {
+  const std::string test =
+      R"(OpCapability Shader
+OpExtension "SPV_KHR_terminate_invocation"
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main"
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 330
+OpName %main "main"
+OpName %kill_ "kill("
+%void = OpTypeVoid
+%3 = OpTypeFunction %void
+%bool = OpTypeBool
+%true = OpConstantTrue %bool
+%main = OpFunction %void None %3
+%5 = OpLabel
+OpBranch %9
+%9 = OpLabel
+OpLoopMerge %11 %12 None
+OpBranch %13
+%13 = OpLabel
+OpBranchConditional %true %10 %11
+%10 = OpLabel
+OpBranch %12
+%12 = OpLabel
+%16 = OpFunctionCall %void %kill_
+OpBranch %9
+%11 = OpLabel
+OpReturn
+OpFunctionEnd
+%kill_ = OpFunction %void None %3
+%7 = OpLabel
+OpTerminateInvocation
+OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<InlineExhaustivePass>(test, test, false, true);
+}
+
+TEST_F(InlineTest, InlineFuncWithOpTerminateInvocationNotInContinue) {
+  const std::string before =
+      R"(OpCapability Shader
+OpExtension "SPV_KHR_terminate_invocation"
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main"
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 330
+OpName %main "main"
+OpName %kill_ "kill("
+%void = OpTypeVoid
+%3 = OpTypeFunction %void
+%bool = OpTypeBool
+%true = OpConstantTrue %bool
+%main = OpFunction %void None %3
+%5 = OpLabel
+%16 = OpFunctionCall %void %kill_
+OpReturn
+OpFunctionEnd
+%kill_ = OpFunction %void None %3
+%7 = OpLabel
+OpTerminateInvocation
+OpFunctionEnd
+)";
+
+  const std::string after =
+      R"(OpCapability Shader
+OpExtension "SPV_KHR_terminate_invocation"
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main"
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 330
+OpName %main "main"
+OpName %kill_ "kill("
+%void = OpTypeVoid
+%3 = OpTypeFunction %void
+%bool = OpTypeBool
+%true = OpConstantTrue %bool
+%16 = OpUndef %void
+%main = OpFunction %void None %3
+%5 = OpLabel
+OpTerminateInvocation
+%18 = OpLabel
+OpReturn
+OpFunctionEnd
+%kill_ = OpFunction %void None %3
+%7 = OpLabel
+OpTerminateInvocation
 OpFunctionEnd
 )";
 
@@ -2664,6 +2769,7 @@ OpFunctionEnd
 %uint_0 = OpConstant %uint 0
 %false = OpConstantFalse %bool
 %_ptr_Function_bool = OpTypePointer Function %bool
+%11 = OpUndef %void
 %foo_ = OpFunction %void None %4
 %7 = OpLabel
 %18 = OpVariable %_ptr_Function_bool Function %false
@@ -3747,6 +3853,35 @@ OpFunctionEnd
 %bar_ret = OpFAdd %v4float %foo_val0 %v4f2
 OpReturnValue %bar_ret
 OpFunctionEnd
+)";
+
+  SinglePassRunAndMatch<InlineExhaustivePass>(text, true);
+}
+
+TEST_F(InlineTest, UsingVoidFunctionResult) {
+  const std::string text = R"(
+; CHECK: [[undef:%\w+]] = OpUndef %void
+; CHECK: OpFunction
+; CHECK: OpCopyObject %void [[undef]]
+; CHECK: OpFunctionEnd
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main"
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource ESSL 320
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+          %8 = OpFunctionCall %2 %6
+          %9 = OpCopyObject %2 %8
+               OpReturn
+               OpFunctionEnd
+          %6 = OpFunction %2 None %3
+          %7 = OpLabel
+               OpReturn
+               OpFunctionEnd
 )";
 
   SinglePassRunAndMatch<InlineExhaustivePass>(text, true);

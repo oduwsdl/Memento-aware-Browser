@@ -5,11 +5,13 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_TABLE_NG_TABLE_LAYOUT_ALGORITHM_TYPES_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_TABLE_NG_TABLE_LAYOUT_ALGORITHM_TYPES_H_
 
+#include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
 #include "third_party/blink/renderer/core/layout/min_max_sizes.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
+#include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -19,7 +21,7 @@ class NGBlockNode;
 class NGLayoutInputNode;
 
 // Define constraint classes for NGTableLayoutAlgorithm.
-class NGTableTypes {
+class CORE_EXPORT NGTableTypes {
  public:
   static constexpr LayoutUnit kTableMaxInlineSize = LayoutUnit::Max();
 
@@ -30,6 +32,8 @@ class NGTableTypes {
     LayoutUnit min_inline_size;
     LayoutUnit max_inline_size;
     base::Optional<float> percent;  // 100% is stored as 100.0f
+    LayoutUnit percent_border_padding;  // Border/padding used for percentage
+                                        // size resolution.
     bool is_constrained;  // True if this cell has a specified inline-size.
 
     void Encompass(const CellInlineConstraint&);
@@ -47,14 +51,6 @@ class NGTableTypes {
         : cell_inline_constraint(cell_inline_constraint),
           start_column(start_column),
           span(span) {}
-    // ColspanCells are distributed in column order.
-    bool operator<(const NGTableTypes::ColspanCell& rhs) const {
-      // '<' means left to right sort.
-      // Legacy sorts right-to-left, FF, Edge left-to-right.
-      if (span == rhs.span)
-        return start_column < rhs.start_column;
-      return span < rhs.span;
-    }
   };
 
   // Constraint for a column.
@@ -65,18 +61,19 @@ class NGTableTypes {
     base::Optional<LayoutUnit> min_inline_size;
     base::Optional<LayoutUnit> max_inline_size;
     base::Optional<float> percent;  // 100% is stored as 100.0f
+    LayoutUnit percent_border_padding;  // Border/padding used for percentage
+                                        // size resolution.
     // True if any cell for this column is constrained.
     bool is_constrained = false;
+    bool is_collapsed = false;
 
-    // The final inline-size of the column after all constraints have been
-    // applied.
-    LayoutUnit computed_inline_size;
     void Encompass(const base::Optional<NGTableTypes::CellInlineConstraint>&);
     LayoutUnit ResolvePercentInlineSize(
-        LayoutUnit percentage_resolution_inline_size) {
+        LayoutUnit percentage_resolution_inline_size) const {
       return std::max(
           min_inline_size.value_or(LayoutUnit()),
-          LayoutUnit(*percent * percentage_resolution_inline_size / 100));
+          LayoutUnit(*percent * percentage_resolution_inline_size / 100) +
+              percent_border_padding);
     }
     bool IsFixed() const {
       return is_constrained && !percent && max_inline_size;
@@ -169,6 +166,7 @@ class NGTableTypes {
   struct ColumnLocation {
     LayoutUnit offset;  // inline offset from table edge.
     LayoutUnit size;
+    bool is_collapsed;
   };
 
   struct Section {
@@ -182,11 +180,10 @@ class NGTableTypes {
   };
 
   static Column CreateColumn(const ComputedStyle&,
-                             bool is_fixed_layout,
                              base::Optional<LayoutUnit> default_inline_size);
 
   static CellInlineConstraint CreateCellInlineConstraint(
-      const NGLayoutInputNode&,
+      const NGBlockNode&,
       WritingMode table_writing_mode,
       bool is_fixed_layout,
       const NGBoxStrut& cell_border,
@@ -213,7 +210,8 @@ class NGTableTypes {
       CellBlockConstraint*,
       base::Optional<LayoutUnit> css_block_size);
 
-  using Columns = Vector<Column>;
+  // Columns are cached by LayoutNGTable, and need to be RefCounted.
+  typedef base::RefCountedData<WTF::Vector<Column>> Columns;
   // Inline constraints are optional because we need to distinguish between an
   // empty cell, and a non-existent cell.
   using CellInlineConstraints = Vector<base::Optional<CellInlineConstraint>>;

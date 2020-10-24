@@ -78,6 +78,7 @@ set(LLVM_LIST
     ${LLVM_DIR}/lib/Analysis/ProfileSummaryInfo.cpp
     ${LLVM_DIR}/lib/Analysis/PtrUseVisitor.cpp
     ${LLVM_DIR}/lib/Analysis/RegionInfo.cpp
+    ${LLVM_DIR}/lib/Analysis/RegionPrinter.cpp
     ${LLVM_DIR}/lib/Analysis/ScalarEvolution.cpp
     ${LLVM_DIR}/lib/Analysis/ScalarEvolutionAliasAnalysis.cpp
     ${LLVM_DIR}/lib/Analysis/ScalarEvolutionExpander.cpp
@@ -92,6 +93,7 @@ set(LLVM_LIST
     ${LLVM_DIR}/lib/Analysis/ValueLatticeUtils.cpp
     ${LLVM_DIR}/lib/Analysis/ValueTracking.cpp
     ${LLVM_DIR}/lib/Analysis/VectorUtils.cpp
+    ${LLVM_DIR}/lib/Analysis/VFABIDemangling.cpp
     ${LLVM_DIR}/lib/BinaryFormat/Dwarf.cpp
     ${LLVM_DIR}/lib/BinaryFormat/Magic.cpp
     ${LLVM_DIR}/lib/BinaryFormat/Wasm.cpp
@@ -382,6 +384,7 @@ set(LLVM_LIST
     ${LLVM_DIR}/lib/DebugInfo/DWARF/DWARFVerifier.cpp
     ${LLVM_DIR}/lib/Demangle/ItaniumDemangle.cpp
     ${LLVM_DIR}/lib/ExecutionEngine/ExecutionEngine.cpp
+    ${LLVM_DIR}/lib/ExecutionEngine/GDBRegistrationListener.cpp
     ${LLVM_DIR}/lib/ExecutionEngine/Orc/CompileUtils.cpp
     ${LLVM_DIR}/lib/ExecutionEngine/Orc/Core.cpp
     ${LLVM_DIR}/lib/ExecutionEngine/Orc/IRCompileLayer.cpp
@@ -460,6 +463,7 @@ set(LLVM_LIST
     ${LLVM_DIR}/lib/MC/MCAsmInfoCOFF.cpp
     ${LLVM_DIR}/lib/MC/MCAsmInfoDarwin.cpp
     ${LLVM_DIR}/lib/MC/MCAsmInfoELF.cpp
+    ${LLVM_DIR}/lib/MC/MCAsmMacro.cpp
     ${LLVM_DIR}/lib/MC/MCAsmStreamer.cpp
     ${LLVM_DIR}/lib/MC/MCAssembler.cpp
     ${LLVM_DIR}/lib/MC/MCCodeEmitter.cpp
@@ -564,6 +568,7 @@ set(LLVM_LIST
     ${LLVM_DIR}/lib/Support/BlockFrequency.cpp
     ${LLVM_DIR}/lib/Support/BranchProbability.cpp
     ${LLVM_DIR}/lib/Support/Chrono.cpp
+    ${LLVM_DIR}/lib/Support/circular_raw_ostream.cpp
     ${LLVM_DIR}/lib/Support/CodeGenCoverage.cpp
     ${LLVM_DIR}/lib/Support/CommandLine.cpp
     ${LLVM_DIR}/lib/Support/Compression.cpp
@@ -592,6 +597,7 @@ set(LLVM_LIST
     ${LLVM_DIR}/lib/Support/KnownBits.cpp
     ${LLVM_DIR}/lib/Support/LEB128.cpp
     ${LLVM_DIR}/lib/Support/LineIterator.cpp
+    ${LLVM_DIR}/lib/Support/Locale.cpp
     ${LLVM_DIR}/lib/Support/LowLevelType.cpp
     ${LLVM_DIR}/lib/Support/ManagedStatic.cpp
     ${LLVM_DIR}/lib/Support/MathExtras.cpp
@@ -809,18 +815,6 @@ set(LLVM_LIST
     ${LLVM_DIR}/lib/Transforms/Vectorize/VPlanTransforms.cpp
     ${LLVM_DIR}/lib/Transforms/Vectorize/VPlanVerifier.cpp
 )
-
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    list(APPEND LLVM_LIST
-        ${LLVM_DIR}/lib/Analysis/RegionInfo.cpp
-        ${LLVM_DIR}/lib/Analysis/RegionPrinter.cpp
-        ${LLVM_DIR}/lib/Analysis/VFABIDemangling.cpp
-        ${LLVM_DIR}/lib/MC/MCAsmMacro.cpp
-        ${LLVM_DIR}/lib/Support/circular_raw_ostream.cpp
-        ${LLVM_DIR}/lib/Support/Debug.cpp
-        ${LLVM_DIR}/lib/Support/Locale.cpp
-    )
-endif()
 
 if(ARCH STREQUAL "x86" OR ARCH STREQUAL "x86_64")
     list(APPEND LLVM_LIST
@@ -1205,7 +1199,6 @@ add_library(llvm STATIC EXCLUDE_FROM_ALL ${LLVM_LIST})
 
 set_target_properties(llvm PROPERTIES
     POSITION_INDEPENDENT_CODE 1
-    FOLDER "LLVM"
 )
 
 target_include_directories(llvm

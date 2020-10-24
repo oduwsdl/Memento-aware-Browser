@@ -5,6 +5,8 @@ import("//build/config/dcheck_always_on.gni")
 import("//third_party/blink/renderer/core/core.gni")
 
 blink_core_sources("exported") {
+  configs += [ "//build/config/compiler:noshadowing" ]
+
   sources = [
     "local_frame_client_impl.cc",
     "local_frame_client_impl.h",
@@ -25,8 +27,6 @@ blink_core_sources("exported") {
     "web_dom_message_event.cc",
     "web_element.cc",
     "web_element_collection.cc",
-    "web_external_widget_impl.cc",
-    "web_external_widget_impl.h",
     "web_form_control_element.cc",
     "web_form_element.cc",
     "web_form_element_observer_impl.cc",
@@ -35,6 +35,7 @@ blink_core_sources("exported") {
     "web_frame_content_dumper.cc",
     "web_frame_serializer.cc",
     "web_heap.cc",
+    "web_history_entry.cc",
     "web_history_item.cc",
     "web_hit_test_result.cc",
     "web_image.cc",
@@ -42,6 +43,7 @@ blink_core_sources("exported") {
     "web_input_element.cc",
     "web_input_method_controller_impl.cc",
     "web_input_method_controller_impl.h",
+    "web_isolated_world_info.cc",
     "web_label_element.cc",
     "web_language_detection_details.cc",
     "web_local_frame_client.cc",

@@ -33,6 +33,9 @@ const char BaseRenderingContext2D::kDefaultFont[] = "10px sans-serif";
 const char BaseRenderingContext2D::kInheritDirectionString[] = "inherit";
 const char BaseRenderingContext2D::kRtlDirectionString[] = "rtl";
 const char BaseRenderingContext2D::kLtrDirectionString[] = "ltr";
+const char BaseRenderingContext2D::kAutoKerningString[] = "auto";
+const char BaseRenderingContext2D::kNormalKerningString[] = "normal";
+const char BaseRenderingContext2D::kNoneKerningString[] = "none";
 const double BaseRenderingContext2D::kCDeviceScaleFactor = 1.0;
 
 BaseRenderingContext2D::BaseRenderingContext2D()
@@ -138,7 +141,7 @@ void BaseRenderingContext2D::UnwindStateStack() {
   }
 }
 
-void BaseRenderingContext2D::Reset() {
+void BaseRenderingContext2D::reset() {
   ValidateStateStack();
   UnwindStateStack();
   state_stack_.resize(1);
@@ -175,6 +178,28 @@ static inline void ConvertCanvasStyleToUnionType(
   return_value.SetString(style->GetColor());
 }
 
+void BaseRenderingContext2D::IdentifiabilityMaybeUpdateForStyleUnion(
+    const StringOrCanvasGradientOrCanvasPattern& style) {
+  if (style.IsString()) {
+    identifiability_study_helper_.MaybeUpdateBuilder(
+        IdentifiabilityBenignStringToken(style.GetAsString()));
+  } else if (style.IsCanvasPattern()) {
+    identifiability_study_helper_.MaybeUpdateBuilder(
+        style.GetAsCanvasPattern()->GetIdentifiableToken());
+  } else if (style.IsCanvasGradient()) {
+    identifiability_study_helper_.MaybeUpdateBuilder(
+        style.GetAsCanvasGradient()->GetIdentifiableToken());
+  }
+}
+
+RespectImageOrientationEnum
+BaseRenderingContext2D::RespectImageOrientationInternal(
+    CanvasImageSource* image_source) {
+  if (image_source->WouldTaintOrigin())
+    return kRespectImageOrientation;
+  return RespectImageOrientation();
+}
+
 void BaseRenderingContext2D::strokeStyle(
     StringOrCanvasGradientOrCanvasPattern& return_value) const {
   ConvertCanvasStyleToUnionType(GetState().StrokeStyle(), return_value);
@@ -183,6 +208,8 @@ void BaseRenderingContext2D::strokeStyle(
 void BaseRenderingContext2D::setStrokeStyle(
     const StringOrCanvasGradientOrCanvasPattern& style) {
   DCHECK(!style.IsNull());
+  identifiability_study_helper_.MaybeUpdateBuilder(CanvasOps::kSetStrokeStyle);
+  IdentifiabilityMaybeUpdateForStyleUnion(style);
 
   String color_string;
   CanvasStyle* canvas_style = nullptr;
@@ -226,6 +253,9 @@ void BaseRenderingContext2D::setFillStyle(
     const StringOrCanvasGradientOrCanvasPattern& style) {
   DCHECK(!style.IsNull());
   ValidateStateStack();
+  identifiability_study_helper_.MaybeUpdateBuilder(CanvasOps::kSetFillStyle);
+  IdentifiabilityMaybeUpdateForStyleUnion(style);
+
   String color_string;
   CanvasStyle* canvas_style = nullptr;
   if (style.IsString()) {
@@ -706,8 +736,13 @@ void BaseRenderingContext2D::fillRect(double x,
   if (IsAccelerated() &&
       GetState().HasPattern(CanvasRenderingContext2DState::kFillPaintType) &&
       !GetState().PatternIsAccelerated(
-          CanvasRenderingContext2DState::kFillPaintType))
+          CanvasRenderingContext2DState::kFillPaintType)) {
     DisableAcceleration();
+    base::UmaHistogramEnumeration(
+        "Blink.Canvas.GPUFallbackToCPU",
+        GPUFallbackToCPUScenario::kLargePatternDrawnToGPU);
+  }
+
   SkRect rect = SkRect::MakeXYWH(fx, fy, fwidth, fheight);
   Draw([&rect](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
        { c->drawRect(rect, *flags); },
@@ -961,17 +996,16 @@ static inline CanvasImageSource* ToImageSourceInternal(
             .IsEmpty()) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kInvalidStateError,
-          String::Format("The image argument is a canvas element with a width "
-                         "or height of 0."));
+          "The image argument is a canvas element with a width "
+          "or height of 0.");
       return nullptr;
     }
     return value.GetAsHTMLCanvasElement();
   }
   if (value.IsImageBitmap()) {
     if (static_cast<ImageBitmap*>(value.GetAsImageBitmap())->IsNeutered()) {
-      exception_state.ThrowDOMException(
-          DOMExceptionCode::kInvalidStateError,
-          String::Format("The image source is detached"));
+      exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                        "The image source is detached");
       return nullptr;
     }
     return value.GetAsImageBitmap();
@@ -979,9 +1013,8 @@ static inline CanvasImageSource* ToImageSourceInternal(
   if (value.IsOffscreenCanvas()) {
     if (static_cast<OffscreenCanvas*>(value.GetAsOffscreenCanvas())
             ->IsNeutered()) {
-      exception_state.ThrowDOMException(
-          DOMExceptionCode::kInvalidStateError,
-          String::Format("The image source is detached"));
+      exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                        "The image source is detached");
       return nullptr;
     }
     if (static_cast<OffscreenCanvas*>(value.GetAsOffscreenCanvas())
@@ -989,8 +1022,8 @@ static inline CanvasImageSource* ToImageSourceInternal(
             .IsEmpty()) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kInvalidStateError,
-          String::Format("The image argument is an OffscreenCanvas element "
-                         "with a width or height of 0."));
+          "The image argument is an OffscreenCanvas element "
+          "with a width or height of 0.");
       return nullptr;
     }
     return value.GetAsOffscreenCanvas();
@@ -1009,7 +1042,8 @@ void BaseRenderingContext2D::drawImage(
       ToImageSourceInternal(image_source, exception_state);
   if (!image_source_internal)
     return;
-  RespectImageOrientationEnum respect_orientation = RespectImageOrientation();
+  RespectImageOrientationEnum respect_orientation =
+      RespectImageOrientationInternal(image_source_internal);
   FloatSize default_object_size(Width(), Height());
   FloatSize source_rect_size = image_source_internal->ElementSize(
       default_object_size, respect_orientation);
@@ -1034,7 +1068,8 @@ void BaseRenderingContext2D::drawImage(
     return;
   FloatSize default_object_size(this->Width(), this->Height());
   FloatSize source_rect_size = image_source_internal->ElementSize(
-      default_object_size, RespectImageOrientation());
+      default_object_size,
+      RespectImageOrientationInternal(image_source_internal));
   drawImage(script_state, image_source_internal, 0, 0, source_rect_size.Width(),
             source_rect_size.Height(), x, y, width, height, exception_state);
 }
@@ -1136,7 +1171,8 @@ void BaseRenderingContext2D::DrawImageInternal(cc::PaintCanvas* c,
     // We always use the image-orientation property on the canvas element
     // because the alternative would result in complex rules depending on
     // the source of the image.
-    RespectImageOrientationEnum respect_orientation = RespectImageOrientation();
+    RespectImageOrientationEnum respect_orientation =
+        RespectImageOrientationInternal(image_source);
     FloatRect corrected_src_rect = src_rect;
     if (respect_orientation == kRespectImageOrientation &&
         !image->HasDefaultOrientation()) {
@@ -1222,8 +1258,8 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
 
   FloatRect src_rect = NormalizeRect(FloatRect(fsx, fsy, fsw, fsh));
   FloatRect dst_rect = NormalizeRect(FloatRect(fdx, fdy, fdw, fdh));
-  FloatSize image_size =
-      image_source->ElementSize(default_object_size, RespectImageOrientation());
+  FloatSize image_size = image_source->ElementSize(
+      default_object_size, RespectImageOrientationInternal(image_source));
 
   ClipRectsToImageRect(FloatRect(FloatPoint(), image_size), &src_rect,
                        &dst_rect);
@@ -1382,6 +1418,22 @@ CanvasGradient* BaseRenderingContext2D::createRadialGradient(
   return gradient;
 }
 
+CanvasGradient* BaseRenderingContext2D::createConicGradient(double startAngle,
+                                                            double centerX,
+                                                            double centerY) {
+  if (!std::isfinite(startAngle) || !std::isfinite(centerX) ||
+      !std::isfinite(centerY))
+    return nullptr;
+
+  // clamp to float to avoid float cast overflow
+  float a = clampTo<float>(startAngle);
+  float x = clampTo<float>(centerX);
+  float y = clampTo<float>(centerY);
+
+  auto* gradient = MakeGarbageCollected<CanvasGradient>(a, FloatPoint(x, y));
+  return gradient;
+}
+
 CanvasPattern* BaseRenderingContext2D::createPattern(
     ScriptState* script_state,
     const CanvasImageSourceUnion& image_source,
@@ -1426,7 +1478,8 @@ CanvasPattern* BaseRenderingContext2D::createPattern(
           String::Format("The canvas %s is 0.",
                          image_source
                                  ->ElementSize(default_object_size,
-                                               RespectImageOrientation())
+                                               RespectImageOrientationInternal(
+                                                   image_source))
                                  .Width()
                              ? "height"
                              : "width"));
@@ -1538,26 +1591,6 @@ ImageData* BaseRenderingContext2D::createImageData(
                                     exception_state);
 }
 
-ImageData* BaseRenderingContext2D::createImageData(
-    ImageDataArray& data_array,
-    unsigned width,
-    unsigned height,
-    ExceptionState& exception_state) const {
-  return ImageData::CreateImageData(data_array, width, height,
-                                    ImageDataColorSettings::Create(),
-                                    exception_state);
-}
-
-ImageData* BaseRenderingContext2D::createImageData(
-    ImageDataArray& data_array,
-    unsigned width,
-    unsigned height,
-    ImageDataColorSettings* color_settings,
-    ExceptionState& exception_state) const {
-  return ImageData::CreateImageData(data_array, width, height, color_settings,
-                                    exception_state);
-}
-
 ImageData* BaseRenderingContext2D::getImageData(
     int sx,
     int sy,
@@ -1624,9 +1657,19 @@ ImageData* BaseRenderingContext2D::getImageData(
   FinalizeFrame();
   scoped_refptr<StaticBitmapImage> snapshot = GetImage();
 
-  // GetImagedata is faster in Unaccelerated canvases
-  if (IsAccelerated())
-    DisableAcceleration();
+  // TODO(crbug.com/1101055): Remove the check for NewCanvas2DAPI flag once
+  // released.
+  // New Canvas2D API utilizes willReadFrequently attribute that let the users
+  // indicate if a canvas will be read frequently through getImageData, thus
+  // uses CPU rendering from the start in such cases. (crbug.com/1090180)
+  if (!RuntimeEnabledFeatures::NewCanvas2DAPIEnabled()) {
+    // GetImagedata is faster in Unaccelerated canvases
+    if (IsAccelerated()) {
+      DisableAcceleration();
+      base::UmaHistogramEnumeration("Blink.Canvas.GPUFallbackToCPU",
+                                    GPUFallbackToCPUScenario::kGetImageData);
+    }
+  }
 
   size_t size_in_bytes;
   if (!StaticBitmapImage::GetSizeInBytes(image_data_rect, color_params)
@@ -1801,8 +1844,11 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
                    IntPoint(dest_offset));
     }
   } else {
-    PutByteArray(data->data()->Data(), IntSize(data->width(), data->height()),
-                 source_rect, IntPoint(dest_offset));
+    // TODO(crbug.com/1115317): PutByteArray works with uint8 only. It should be
+    // compatible with uint16 and float32.
+    PutByteArray(data->data().GetAsUint8ClampedArray()->Data(),
+                 IntSize(data->width(), data->height()), source_rect,
+                 IntPoint(dest_offset));
   }
 
   if (!IsPaint2D()) {
@@ -1981,6 +2027,14 @@ void BaseRenderingContext2D::CheckOverdraw(
   WillOverwriteCanvas();
 }
 
+double BaseRenderingContext2D::textLetterSpacing() const {
+  return GetState().GetTextLetterSpacing();
+}
+
+double BaseRenderingContext2D::textWordSpacing() const {
+  return GetState().GetTextWordSpacing();
+}
+
 float BaseRenderingContext2D::GetFontBaseline(
     const SimpleFontData& font_data) const {
   return TextMetrics::GetFontBaseline(GetState().GetTextBaseline(), font_data);
@@ -1991,6 +2045,8 @@ String BaseRenderingContext2D::textAlign() const {
 }
 
 void BaseRenderingContext2D::setTextAlign(const String& s) {
+  identifiability_study_helper_.MaybeUpdateBuilder(
+      CanvasOps::kSetTextAlign, IdentifiabilityBenignStringToken(s));
   TextAlign align;
   if (!ParseTextAlign(s, align))
     return;
@@ -2004,12 +2060,18 @@ String BaseRenderingContext2D::textBaseline() const {
 }
 
 void BaseRenderingContext2D::setTextBaseline(const String& s) {
+  identifiability_study_helper_.MaybeUpdateBuilder(
+      CanvasOps::kSetTextBaseline, IdentifiabilityBenignStringToken(s));
   TextBaseline baseline;
   if (!ParseTextBaseline(s, baseline))
     return;
   if (GetState().GetTextBaseline() == baseline)
     return;
   ModifiableState().SetTextBaseline(baseline);
+}
+
+String BaseRenderingContext2D::fontKerning() const {
+  return FontDescription::ToString(GetState().GetFontKerning());
 }
 
 void BaseRenderingContext2D::Trace(Visitor* visitor) const {

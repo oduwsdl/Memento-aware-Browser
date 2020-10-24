@@ -38,7 +38,10 @@ def main():
   entities = (
       p
       | 'ReadFromDatastore(Anomaly)' >> ReadTimestampRangeFromDatastore(
-          {'project': project, 'kind': 'Anomaly'},
+          {
+              'project': project,
+              'kind': 'Anomaly'
+          },
           time_range_provider=bq_export_options.GetTimeRangeProvider()))
 
   def AnomalyEntityToRowDict(entity):
@@ -92,6 +95,7 @@ def main():
     except (KeyError, UnconvertibleAnomalyError):
       failed_entity_transforms.inc()
       return []
+
   anomaly_dicts = (
       entities
       | 'ConvertEntityToRow(Anomaly)' >> beam.FlatMap(AnomalyEntityToRowDict))
@@ -261,11 +265,16 @@ def main():
       ]
   }
 
-  table_name = '{}:chromeperf_dashboard_data.anomalies{}'.format(
-      project, bq_export_options.table_suffix)
+  # 'dataset' may be a RuntimeValueProvider, so we have to defer calculating
+  # the table name until runtime.  The simplest way to do this is by passing a
+  # function for the table name rather than a string.
+  def TableNameFn(unused_element):
+    return '{}:{}.anomalies{}'.format(project, bq_export_options.dataset.get(),
+                                      bq_export_options.table_suffix)
+
   _ = (
       anomaly_dicts | 'WriteToBigQuery(anomalies)' >>
-      WriteToPartitionedBigQuery(table_name, bq_anomaly_schema))
+      WriteToPartitionedBigQuery(TableNameFn, bq_anomaly_schema))
 
   result = p.run()
   result.wait_until_finish()

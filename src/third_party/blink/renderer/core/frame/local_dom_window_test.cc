@@ -129,20 +129,47 @@ TEST_F(LocalDOMWindowTest, OutgoingReferrerWithUniqueOrigin) {
   EXPECT_EQ(String(), GetFrame().DomWindow()->OutgoingReferrer());
 }
 
-// Test fixture parameterized on whether the "IsolatedWorldCSP" feature is
-// enabled.
-class IsolatedWorldCSPTest : public PageTestBase,
-                             public testing::WithParamInterface<bool>,
-                             private ScopedIsolatedWorldCSPForTest {
- public:
-  IsolatedWorldCSPTest() : ScopedIsolatedWorldCSPForTest(GetParam()) {}
+TEST_F(LocalDOMWindowTest, EnforceSandboxFlags) {
+  NavigateTo(KURL("http://example.test/"), {{http_names::kContentSecurityPolicy,
+                                             "sandbox allow-same-origin"}});
+  EXPECT_FALSE(GetFrame().DomWindow()->GetSecurityOrigin()->IsOpaque());
+  EXPECT_FALSE(
+      GetFrame().DomWindow()->GetSecurityOrigin()->IsPotentiallyTrustworthy());
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(IsolatedWorldCSPTest);
-};
+  NavigateTo(KURL("http://example.test/"),
+             {{http_names::kContentSecurityPolicy, "sandbox"}});
+  EXPECT_TRUE(GetFrame().DomWindow()->GetSecurityOrigin()->IsOpaque());
+  EXPECT_FALSE(
+      GetFrame().DomWindow()->GetSecurityOrigin()->IsPotentiallyTrustworthy());
 
-// Tests ExecutionContext::GetContentSecurityPolicyForWorld().
-TEST_P(IsolatedWorldCSPTest, CSPForWorld) {
+  // A unique origin does not bypass secure context checks unless it
+  // is also potentially trustworthy.
+  url::ScopedSchemeRegistryForTests scoped_registry;
+  url::AddStandardScheme("very-special-scheme", url::SCHEME_WITH_HOST);
+  SchemeRegistry::RegisterURLSchemeBypassingSecureContextCheck(
+      "very-special-scheme");
+  NavigateTo(KURL("very-special-scheme://example.test"),
+             {{http_names::kContentSecurityPolicy, "sandbox"}});
+  EXPECT_TRUE(GetFrame().DomWindow()->GetSecurityOrigin()->IsOpaque());
+  EXPECT_FALSE(
+      GetFrame().DomWindow()->GetSecurityOrigin()->IsPotentiallyTrustworthy());
+
+  SchemeRegistry::RegisterURLSchemeAsSecure("very-special-scheme");
+  NavigateTo(KURL("very-special-scheme://example.test"),
+             {{http_names::kContentSecurityPolicy, "sandbox"}});
+  EXPECT_TRUE(GetFrame().DomWindow()->GetSecurityOrigin()->IsOpaque());
+  EXPECT_TRUE(
+      GetFrame().DomWindow()->GetSecurityOrigin()->IsPotentiallyTrustworthy());
+
+  NavigateTo(KURL("https://example.test"),
+             {{http_names::kContentSecurityPolicy, "sandbox"}});
+  EXPECT_TRUE(GetFrame().DomWindow()->GetSecurityOrigin()->IsOpaque());
+  EXPECT_TRUE(
+      GetFrame().DomWindow()->GetSecurityOrigin()->IsPotentiallyTrustworthy());
+}
+
+// Tests ExecutionContext::GetContentSecurityPolicyForCurrentWorld().
+TEST_F(PageTestBase, CSPForWorld) {
   using ::testing::ElementsAre;
 
   // Set a CSP for the main world.
@@ -175,7 +202,8 @@ TEST_P(IsolatedWorldCSPTest, CSPForWorld) {
 
   // Returns the csp headers being used for the current world.
   auto get_csp_headers = [this]() {
-    auto* csp = GetFrame().DomWindow()->GetContentSecurityPolicyForWorld();
+    auto* csp =
+        GetFrame().DomWindow()->GetContentSecurityPolicyForCurrentWorld();
     return csp->Headers();
   };
 
@@ -199,28 +227,13 @@ TEST_P(IsolatedWorldCSPTest, CSPForWorld) {
   }
 
   {
-    bool is_isolated_world_csp_enabled = GetParam();
-    SCOPED_TRACE(base::StringPrintf(
-        "In isolated world with csp and 'IsolatedWorldCSP' %s",
-        is_isolated_world_csp_enabled ? "enabled" : "disabled"));
+    SCOPED_TRACE("In isolated world with csp.");
     ScriptState::Scope scope(isolated_world_with_csp_script_state);
-
-    if (!is_isolated_world_csp_enabled) {
-      // With 'IsolatedWorldCSP' feature disabled, we should just bypass the
-      // main world CSP by using an empty CSP.
-      EXPECT_TRUE(get_csp_headers().IsEmpty());
-    } else {
-      // With 'IsolatedWorldCSP' feature enabled, we use the isolated world's
-      // CSP if it specified one.
-      EXPECT_THAT(
-          get_csp_headers(),
-          ElementsAre(CSPHeaderAndType(
-              {kIsolatedWorldCSP, ContentSecurityPolicyType::kEnforce})));
-    }
+    // We use the isolated world's CSP if it specified one.
+    EXPECT_THAT(get_csp_headers(),
+                ElementsAre(CSPHeaderAndType(
+                    {kIsolatedWorldCSP, ContentSecurityPolicyType::kEnforce})));
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         IsolatedWorldCSPTest,
-                         testing::Values(true, false));
 }  // namespace blink

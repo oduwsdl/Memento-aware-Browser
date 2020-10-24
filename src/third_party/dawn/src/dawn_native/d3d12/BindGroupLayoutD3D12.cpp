@@ -31,21 +31,20 @@ namespace dawn_native { namespace d3d12 {
                 case wgpu::BindingType::WriteonlyStorageTexture:
                     return BindGroupLayout::DescriptorType::UAV;
                 case wgpu::BindingType::SampledTexture:
+                case wgpu::BindingType::MultisampledTexture:
                 case wgpu::BindingType::ReadonlyStorageBuffer:
                 case wgpu::BindingType::ReadonlyStorageTexture:
                     return BindGroupLayout::DescriptorType::SRV;
                 case wgpu::BindingType::Sampler:
                 case wgpu::BindingType::ComparisonSampler:
                     return BindGroupLayout::DescriptorType::Sampler;
-                case wgpu::BindingType::StorageTexture:
-                    UNREACHABLE();
-                    return BindGroupLayout::DescriptorType::UAV;
             }
         }
     }  // anonymous namespace
 
     BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor* descriptor)
         : BindGroupLayoutBase(device, descriptor),
+          mBindingOffsets(GetBindingCount()),
           mDescriptorCounts{},
           mBindGroupAllocator(MakeFrontendBindGroupAllocator<BindGroup>(4096)) {
         for (BindingIndex bindingIndex = GetDynamicBufferCount(); bindingIndex < GetBindingCount();
@@ -117,9 +116,9 @@ namespace dawn_native { namespace d3d12 {
                         mBindingOffsets[bindingIndex] = baseRegister++;
                         break;
                     case wgpu::BindingType::SampledTexture:
+                    case wgpu::BindingType::MultisampledTexture:
                     case wgpu::BindingType::Sampler:
                     case wgpu::BindingType::ComparisonSampler:
-                    case wgpu::BindingType::StorageTexture:
                     case wgpu::BindingType::ReadonlyStorageTexture:
                     case wgpu::BindingType::WriteonlyStorageTexture:
                         UNREACHABLE();
@@ -170,9 +169,8 @@ namespace dawn_native { namespace d3d12 {
         mBindGroupAllocator.Deallocate(bindGroup);
     }
 
-    const ityp::array<BindingIndex, uint32_t, kMaxBindingsPerGroup>&
-    BindGroupLayout::GetBindingOffsets() const {
-        return mBindingOffsets;
+    ityp::span<BindingIndex, const uint32_t> BindGroupLayout::GetBindingOffsets() const {
+        return {mBindingOffsets.data(), mBindingOffsets.size()};
     }
 
     uint32_t BindGroupLayout::GetCbvUavSrvDescriptorTableSize() const {

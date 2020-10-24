@@ -202,6 +202,7 @@ class RunTestsCommand(command_line.OptparseCommand):
     runner.args.retry_only_retry_on_failure_tests = (
         args.retry_only_retry_on_failure_tests)
     runner.args.path.append(util.GetUnittestDataDir())
+    runner.args.quiet = args.quiet
 
     # Standard verbosity will only emit output on test failure. Higher verbosity
     # levels spam the output with logging, making it very difficult to figure
@@ -266,9 +267,8 @@ def _SetUpProcess(child, context): # pylint: disable=unused-argument
   ps_util.EnableListingStrayProcessesUponExitHook()
   # Make sure that we don't invokes cloud storage I/Os when we run the tests in
   # parallel.
-  # TODO(nednguyen): always do this once telemetry tests in Chromium is updated
-  # to prefetch files.
-  # (https://github.com/catapult-project/catapult/issues/2192)
+  # TODO(https://github.com/catapult-project/catapult/issues/2192): always do
+  # this once telemetry tests in Chromium is updated to prefetch files.
   args = context
   if args.disable_cloud_storage_io:
     os.environ[cloud_storage.DISABLE_CLOUD_STORAGE_IO] = '1'

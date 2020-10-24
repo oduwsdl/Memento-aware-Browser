@@ -115,7 +115,7 @@ SetupOptions(int argc, const char *argv[], Options *options) {
   int ch;
   constexpr char flag_pattern[] = "u:v:x:p:k:t:c:i:hf?";
 
-  while ((ch = getopt(argc, (char * const *)argv, flag_pattern)) != -1) {
+  while ((ch = getopt(argc, (char * const*)argv, flag_pattern)) != -1) {
     switch (ch) {
       case 'h':
       case '?':

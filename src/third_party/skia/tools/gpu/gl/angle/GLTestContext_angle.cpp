@@ -48,11 +48,11 @@ std::function<void()> context_restorer() {
 
 static GrGLFuncPtr angle_get_gl_proc(void* ctx, const char name[]) {
     const Libs* libs = reinterpret_cast<const Libs*>(ctx);
-    GrGLFuncPtr proc = (GrGLFuncPtr) GetProcedureAddress(libs->fGLLib, name);
+    GrGLFuncPtr proc = (GrGLFuncPtr) SkGetProcedureAddress(libs->fGLLib, name);
     if (proc) {
         return proc;
     }
-    proc = (GrGLFuncPtr) GetProcedureAddress(libs->fEGLLib, name);
+    proc = (GrGLFuncPtr) SkGetProcedureAddress(libs->fEGLLib, name);
     if (proc) {
         return proc;
     }
@@ -375,7 +375,7 @@ GrEGLImage ANGLEGLContext::texture2DToEGLImage(GrGLuint texID) const {
 void ANGLEGLContext::destroyEGLImage(GrEGLImage image) const { fDestroyImage(fDisplay, image); }
 
 GrGLuint ANGLEGLContext::eglImageToExternalTexture(GrEGLImage image) const {
-    GrGLClearErr(this->gl());
+    while (this->gl()->fFunctions.fGetError() != GR_GL_NO_ERROR) {}
     if (!this->gl()->hasExtension("GL_OES_EGL_image_external")) {
         return 0;
     }
@@ -391,12 +391,12 @@ GrGLuint ANGLEGLContext::eglImageToExternalTexture(GrEGLImage image) const {
         return 0;
     }
     GR_GL_CALL(this->gl(), BindTexture(GR_GL_TEXTURE_EXTERNAL, texID));
-    if (GR_GL_GET_ERROR(this->gl()) != GR_GL_NO_ERROR) {
+    if (this->gl()->fFunctions.fGetError() != GR_GL_NO_ERROR) {
         GR_GL_CALL(this->gl(), DeleteTextures(1, &texID));
         return 0;
     }
     glEGLImageTargetTexture2D(GR_GL_TEXTURE_EXTERNAL, image);
-    if (GR_GL_GET_ERROR(this->gl()) != GR_GL_NO_ERROR) {
+    if (this->gl()->fFunctions.fGetError() != GR_GL_NO_ERROR) {
         GR_GL_CALL(this->gl(), DeleteTextures(1, &texID));
         return 0;
     }
@@ -483,14 +483,14 @@ sk_sp<const GrGLInterface> CreateANGLEGLInterface() {
     if (nullptr == gLibs.fGLLib) {
         // We load the ANGLE library and never let it go
 #if defined _WIN32
-        gLibs.fGLLib = DynamicLoadLibrary("libGLESv2.dll");
-        gLibs.fEGLLib = DynamicLoadLibrary("libEGL.dll");
+        gLibs.fGLLib = SkLoadDynamicLibrary("libGLESv2.dll");
+        gLibs.fEGLLib = SkLoadDynamicLibrary("libEGL.dll");
 #elif defined SK_BUILD_FOR_MAC
-        gLibs.fGLLib = DynamicLoadLibrary("libGLESv2.dylib");
-        gLibs.fEGLLib = DynamicLoadLibrary("libEGL.dylib");
+        gLibs.fGLLib = SkLoadDynamicLibrary("libGLESv2.dylib");
+        gLibs.fEGLLib = SkLoadDynamicLibrary("libEGL.dylib");
 #else
-        gLibs.fGLLib = DynamicLoadLibrary("libGLESv2.so");
-        gLibs.fEGLLib = DynamicLoadLibrary("libEGL.so");
+        gLibs.fGLLib = SkLoadDynamicLibrary("libGLESv2.so");
+        gLibs.fEGLLib = SkLoadDynamicLibrary("libEGL.so");
 #endif
     }
 

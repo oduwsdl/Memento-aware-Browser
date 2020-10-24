@@ -113,9 +113,6 @@ class WebRtcRecordableEncodedFrame : public RecordableEncodedFrame {
 
 VideoCodec CreateDecoderVideoCodec(const VideoReceiveStream::Decoder& decoder) {
   VideoCodec codec;
-  memset(&codec, 0, sizeof(codec));
-
-  codec.plType = decoder.payload_type;
   codec.codecType = PayloadStringToCodecType(decoder.video_format.name);
 
   if (codec.codecType == kVideoCodecVP8) {
@@ -133,8 +130,19 @@ VideoCodec CreateDecoderVideoCodec(const VideoReceiveStream::Decoder& decoder) {
     return associated_codec;
   }
 
-  codec.width = 320;
-  codec.height = 180;
+  FieldTrialOptional<int> width("w");
+  FieldTrialOptional<int> height("h");
+  ParseFieldTrial(
+      {&width, &height},
+      field_trial::FindFullName("WebRTC-Video-InitialDecoderResolution"));
+  if (width && height) {
+    codec.width = width.Value();
+    codec.height = height.Value();
+  } else {
+    codec.width = 320;
+    codec.height = 180;
+  }
+
   const int kDefaultStartBitrate = 300;
   codec.startBitrate = codec.minBitrate = codec.maxBitrate =
       kDefaultStartBitrate;
@@ -235,9 +243,9 @@ VideoReceiveStream2::VideoReceiveStream2(
   module_process_sequence_checker_.Detach();
 
   RTC_DCHECK(!config_.decoders.empty());
+  RTC_CHECK(config_.decoder_factory);
   std::set<int> decoder_payload_types;
   for (const Decoder& decoder : config_.decoders) {
-    RTC_CHECK(decoder.decoder_factory);
     RTC_CHECK(decoder_payload_types.find(decoder.payload_type) ==
               decoder_payload_types.end())
         << "Duplicate payload type (" << decoder.payload_type
@@ -295,8 +303,6 @@ void VideoReceiveStream2::Start() {
   const bool protected_by_fec = config_.rtp.protected_by_flexfec ||
                                 rtp_video_stream_receiver_.IsUlpfecEnabled();
 
-  frame_buffer_->Start();
-
   if (rtp_video_stream_receiver_.IsRetransmissionsEnabled() &&
       protected_by_fec) {
     frame_buffer_->SetProtectionMode(kProtectionNackFEC);
@@ -314,7 +320,7 @@ void VideoReceiveStream2::Start() {
 
   for (const Decoder& decoder : config_.decoders) {
     std::unique_ptr<VideoDecoder> video_decoder =
-        decoder.decoder_factory->LegacyCreateVideoDecoder(decoder.video_format,
+        config_.decoder_factory->LegacyCreateVideoDecoder(decoder.video_format,
                                                           config_.stream_id);
     // If we still have no valid decoder, we have to create a "Null" decoder
     // that ignores all calls. The reason we can get into this state is that the
@@ -350,11 +356,12 @@ void VideoReceiveStream2::Start() {
     VideoCodec codec = CreateDecoderVideoCodec(decoder);
 
     const bool raw_payload =
-        config_.rtp.raw_payload_types.count(codec.plType) > 0;
-    rtp_video_stream_receiver_.AddReceiveCodec(
-        codec, decoder.video_format.parameters, raw_payload);
+        config_.rtp.raw_payload_types.count(decoder.payload_type) > 0;
+    rtp_video_stream_receiver_.AddReceiveCodec(decoder.payload_type, codec,
+                                               decoder.video_format.parameters,
+                                               raw_payload);
     RTC_CHECK_EQ(VCM_OK, video_receiver_.RegisterReceiveCodec(
-                             &codec, num_cpu_cores_, false));
+                             decoder.payload_type, &codec, num_cpu_cores_));
   }
 
   RTC_DCHECK(renderer != nullptr);
@@ -546,7 +553,7 @@ void VideoReceiveStream2::OnCompleteFrame(
   }
   last_complete_frame_time_ms_ = time_now_ms;
 
-  const PlayoutDelay& playout_delay = frame->EncodedImage().playout_delay_;
+  const VideoPlayoutDelay& playout_delay = frame->EncodedImage().playout_delay_;
   if (playout_delay.min_ms >= 0) {
     frame_minimum_playout_delay_ms_ = playout_delay.min_ms;
     UpdatePlayoutDelays();
@@ -598,10 +605,11 @@ void VideoReceiveStream2::SetEstimatedPlayoutNtpTimestampMs(
   RTC_NOTREACHED();
 }
 
-void VideoReceiveStream2::SetMinimumPlayoutDelay(int delay_ms) {
+bool VideoReceiveStream2::SetMinimumPlayoutDelay(int delay_ms) {
   RTC_DCHECK_RUN_ON(&worker_sequence_checker_);
   syncable_minimum_playout_delay_ms_ = delay_ms;
   UpdatePlayoutDelays();
+  return true;
 }
 
 int64_t VideoReceiveStream2::GetMaxWaitMs() const {

@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/editing/visible_selection.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/web_feature_forward.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
@@ -154,11 +155,10 @@ static bool IsSpecialHTMLElement(const Node& n) {
   if (!layout_object)
     return false;
 
-  if (layout_object->Style()->Display() == EDisplay::kTable ||
-      layout_object->Style()->Display() == EDisplay::kInlineTable)
+  if (layout_object->Style()->IsDisplayTableBox())
     return true;
 
-  if (layout_object->Style()->IsFloating())
+  if (layout_object->IsFloating())
     return true;
 
   return false;

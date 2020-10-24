@@ -4,8 +4,6 @@
 
 #include "testing/embedder_test.h"
 
-#include <limits.h>
-
 #include <memory>
 #include <string>
 #include <utility>
@@ -23,18 +21,16 @@
 #include "testing/utils/file_util.h"
 #include "testing/utils/hash.h"
 #include "testing/utils/path_service.h"
-#include "third_party/base/logging.h"
+#include "third_party/base/notreached.h"
 #include "third_party/base/stl_util.h"
 
 #ifdef PDF_ENABLE_V8
-#include "testing/v8_initializer.h"
+#include "testing/v8_test_environment.h"
 #include "v8/include/v8-platform.h"
 #include "v8/include/v8.h"
 #endif  // PDF_ENABLE_V8
 
 namespace {
-
-EmbedderTestEnvironment* g_environment = nullptr;
 
 int GetBitmapBytesPerPixel(FPDF_BITMAP bitmap) {
   return EmbedderTest::BytesPerPixelForFormat(FPDFBitmap_GetFormat(bitmap));
@@ -54,55 +50,6 @@ int CALLBACK GetRecordProc(HDC hdc,
 
 }  // namespace
 
-EmbedderTestEnvironment::EmbedderTestEnvironment(const char* exe_name)
-#ifdef PDF_ENABLE_V8
-    : exe_path_(exe_name)
-#endif
-{
-  ASSERT(!g_environment);
-  g_environment = this;
-}
-
-EmbedderTestEnvironment::~EmbedderTestEnvironment() {
-  ASSERT(g_environment);
-  g_environment = nullptr;
-
-#ifdef PDF_ENABLE_V8
-#ifdef V8_USE_EXTERNAL_STARTUP_DATA
-  if (v8_snapshot_)
-    free(const_cast<char*>(v8_snapshot_->data));
-#endif  // V8_USE_EXTERNAL_STARTUP_DATA
-#endif  // PDF_ENABLE_V8
-}
-
-// static
-EmbedderTestEnvironment* EmbedderTestEnvironment::GetInstance() {
-  return g_environment;
-}
-
-void EmbedderTestEnvironment::SetUp() {
-#ifdef PDF_ENABLE_V8
-#ifdef V8_USE_EXTERNAL_STARTUP_DATA
-  if (v8_snapshot_) {
-    platform_ =
-        InitializeV8ForPDFiumWithStartupData(exe_path_, std::string(), nullptr);
-  } else {
-    v8_snapshot_ = std::make_unique<v8::StartupData>();
-    platform_ = InitializeV8ForPDFiumWithStartupData(exe_path_, std::string(),
-                                                     v8_snapshot_.get());
-  }
-#else
-  platform_ = InitializeV8ForPDFium(exe_path_);
-#endif  // V8_USE_EXTERNAL_STARTUP_DATA
-#endif  // FPDF_ENABLE_V8
-}
-
-void EmbedderTestEnvironment::TearDown() {
-#ifdef PDF_ENABLE_V8
-  v8::V8::ShutdownPlatform();
-#endif  // PDF_ENABLE_V8
-}
-
 EmbedderTest::EmbedderTest()
     : default_delegate_(std::make_unique<EmbedderTest::Delegate>()),
       delegate_(default_delegate_.get()) {
@@ -113,25 +60,11 @@ EmbedderTest::EmbedderTest()
 EmbedderTest::~EmbedderTest() = default;
 
 void EmbedderTest::SetUp() {
-  FPDF_LIBRARY_CONFIG config;
-  config.version = 3;
-  config.m_pUserFontPaths = nullptr;
-  config.m_v8EmbedderSlot = 0;
-  config.m_pIsolate = external_isolate_;
-#ifdef PDF_ENABLE_V8
-  config.m_pPlatform = EmbedderTestEnvironment::GetInstance()->platform();
-#else   // PDF_ENABLE_V8
-  config.m_pPlatform = nullptr;
-#endif  // PDF_ENABLE_V8
-
-  FPDF_InitLibraryWithConfig(&config);
-
   UNSUPPORT_INFO* info = static_cast<UNSUPPORT_INFO*>(this);
   memset(info, 0, sizeof(UNSUPPORT_INFO));
   info->version = 1;
   info->FSDK_UnSupport_Handler = UnsupportedHandlerTrampoline;
   FSDK_SetUnSpObjProcessHandler(info);
-
   saved_document_ = nullptr;
 }
 
@@ -140,20 +73,12 @@ void EmbedderTest::TearDown() {
   // possible. This can fail when an ASSERT test fails in a test case.
   EXPECT_EQ(0U, page_map_.size());
   EXPECT_EQ(0U, saved_page_map_.size());
-
   if (document_)
     CloseDocument();
 
   FPDFAvail_Destroy(avail_);
-  FPDF_DestroyLibrary();
   loader_.reset();
 }
-
-#ifdef PDF_ENABLE_V8
-void EmbedderTest::SetExternalIsolate(void* isolate) {
-  external_isolate_ = static_cast<v8::Isolate*>(isolate);
-}
-#endif  // PDF_ENABLE_V8
 
 bool EmbedderTest::CreateEmptyDocument() {
   document_ = FPDF_CreateNewDocument();
@@ -295,9 +220,8 @@ FPDF_FORMHANDLE EmbedderTest::SetupFormFillEnvironment(
     JavaScriptOption javascript_option) {
   IPDF_JSPLATFORM* platform = static_cast<IPDF_JSPLATFORM*>(this);
   memset(platform, '\0', sizeof(IPDF_JSPLATFORM));
-  platform->version = 2;
+  platform->version = 3;
   platform->app_alert = AlertTrampoline;
-  platform->m_isolate = external_isolate_;
 
   FPDF_FORMFILLINFO* formfillinfo = static_cast<FPDF_FORMFILLINFO*>(this);
   memset(formfillinfo, 0, sizeof(FPDF_FORMFILLINFO));

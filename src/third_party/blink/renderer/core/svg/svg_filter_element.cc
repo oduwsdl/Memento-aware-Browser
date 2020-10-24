@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/core/svg/svg_filter_element.h"
 
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_filter.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_length.h"
 #include "third_party/blink/renderer/core/svg/svg_resource.h"
 #include "third_party/blink/renderer/core/svg/svg_tree_scope_resources.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -119,8 +120,8 @@ void SVGFilterElement::PrimitiveAttributeChanged(
 
 void SVGFilterElement::InvalidateFilterChain() {
   if (LocalSVGResource* resource = AssociatedResource()) {
-    resource->NotifyContentChanged(SVGResourceClient::kLayoutInvalidation |
-                                   SVGResourceClient::kBoundariesInvalidation);
+    resource->NotifyContentChanged(SVGResourceClient::kPaintInvalidation |
+                                   SVGResourceClient::kFilterCacheInvalidation);
   }
 }
 

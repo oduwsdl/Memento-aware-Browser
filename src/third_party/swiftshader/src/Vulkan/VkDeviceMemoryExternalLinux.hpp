@@ -66,6 +66,11 @@ public:
 						exportFd = true;
 					}
 					break;
+					case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO:
+						// This can safely be ignored, as the Vulkan spec mentions:
+						// "If the pNext chain includes a VkMemoryDedicatedAllocateInfo structure, then that structure
+						//  includes a handle of the sole buffer or image resource that the memory *can* be bound to."
+						break;
 
 					default:
 						WARN("VkMemoryAllocateInfo->pNext sType = %s", vk::Stringify(createInfo->sType).c_str());
@@ -77,7 +82,7 @@ public:
 
 	static const VkExternalMemoryHandleTypeFlagBits typeFlagBit = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
 
-	static bool supportsAllocateInfo(const VkMemoryAllocateInfo *pAllocateInfo)
+	static bool SupportsAllocateInfo(const VkMemoryAllocateInfo *pAllocateInfo)
 	{
 		AllocateInfo info(pAllocateInfo);
 		return info.importFd || info.exportFd;

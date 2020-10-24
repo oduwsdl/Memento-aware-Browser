@@ -87,8 +87,6 @@ class D3D12ResidencyTestBase : public DawnTest {
     }
 
     wgpu::Buffer mSourceBuffer;
-    void* mMappedWriteData = nullptr;
-    const void* mMappedReadData = nullptr;
 };
 
 class D3D12ResourceResidencyTests : public D3D12ResidencyTestBase {
@@ -108,26 +106,6 @@ class D3D12ResourceResidencyTests : public D3D12ResidencyTestBase {
 
     bool IsUMA() const {
         return reinterpret_cast<dawn_native::d3d12::Device*>(device.Get())->GetDeviceInfo().isUMA;
-    }
-
-    static void MapReadCallback(WGPUBufferMapAsyncStatus status,
-                                const void* data,
-                                uint64_t,
-                                void* userdata) {
-        ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-        ASSERT_NE(nullptr, data);
-
-        static_cast<D3D12ResourceResidencyTests*>(userdata)->mMappedReadData = data;
-    }
-
-    static void MapWriteCallback(WGPUBufferMapAsyncStatus status,
-                                 void* data,
-                                 uint64_t,
-                                 void* userdata) {
-        ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-        ASSERT_NE(nullptr, data);
-
-        static_cast<D3D12ResourceResidencyTests*>(userdata)->mMappedWriteData = data;
     }
 };
 
@@ -211,7 +189,7 @@ TEST_P(D3D12ResourceResidencyTests, OvercommitLargeResources) {
     EXPECT_FALSE(CheckIfBufferIsResident(bufferSet1[indexOfBufferInSet1]));
 }
 
-// Check that calling MapReadAsync makes the buffer resident and keeps it locked resident.
+// Check that calling MapAsync for reading makes the buffer resident and keeps it locked resident.
 TEST_P(D3D12ResourceResidencyTests, AsyncMappedBufferRead) {
     // Create a mappable buffer.
     wgpu::Buffer buffer = CreateBuffer(4, kMapReadBufferUsage);
@@ -231,11 +209,18 @@ TEST_P(D3D12ResourceResidencyTests, AsyncMappedBufferRead) {
     // The mappable buffer should have been evicted.
     EXPECT_FALSE(CheckIfBufferIsResident(buffer));
 
-    // Calling MapReadAsync should make the buffer resident.
-    buffer.MapReadAsync(MapReadCallback, this);
+    // Calling MapAsync for reading should make the buffer resident.
+    bool done = false;
+    buffer.MapAsync(
+        wgpu::MapMode::Read, 0, sizeof(uint32_t),
+        [](WGPUBufferMapAsyncStatus status, void* userdata) {
+            ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+            *static_cast<bool*>(userdata) = true;
+        },
+        &done);
     EXPECT_TRUE(CheckIfBufferIsResident(buffer));
 
-    while (mMappedReadData == nullptr) {
+    while (!done) {
         WaitABit();
     }
 
@@ -254,7 +239,7 @@ TEST_P(D3D12ResourceResidencyTests, AsyncMappedBufferRead) {
     EXPECT_FALSE(CheckIfBufferIsResident(buffer));
 }
 
-// Check that calling MapWriteAsync makes the buffer resident and keeps it locked resident.
+// Check that calling MapAsync for writing makes the buffer resident and keeps it locked resident.
 TEST_P(D3D12ResourceResidencyTests, AsyncMappedBufferWrite) {
     // Create a mappable buffer.
     wgpu::Buffer buffer = CreateBuffer(4, kMapWriteBufferUsage);
@@ -270,11 +255,18 @@ TEST_P(D3D12ResourceResidencyTests, AsyncMappedBufferWrite) {
     // The mappable buffer should have been evicted.
     EXPECT_FALSE(CheckIfBufferIsResident(buffer));
 
-    // Calling MapWriteAsync should make the buffer resident.
-    buffer.MapWriteAsync(MapWriteCallback, this);
+    // Calling MapAsync for writing should make the buffer resident.
+    bool done = false;
+    buffer.MapAsync(
+        wgpu::MapMode::Write, 0, sizeof(uint32_t),
+        [](WGPUBufferMapAsyncStatus status, void* userdata) {
+            ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+            *static_cast<bool*>(userdata) = true;
+        },
+        &done);
     EXPECT_TRUE(CheckIfBufferIsResident(buffer));
 
-    while (mMappedWriteData == nullptr) {
+    while (!done) {
         WaitABit();
     }
 
@@ -375,7 +367,8 @@ TEST_P(D3D12DescriptorResidencyTests, SwitchedViewHeapResidency) {
         d3dDevice->GetViewShaderVisibleDescriptorAllocator();
     const uint64_t heapSize = allocator->GetShaderVisibleHeapSizeForTesting();
 
-    const Serial heapSerial = allocator->GetShaderVisibleHeapSerialForTesting();
+    const dawn_native::d3d12::HeapVersionID heapSerial =
+        allocator->GetShaderVisibleHeapSerialForTesting();
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     {
@@ -400,7 +393,8 @@ TEST_P(D3D12DescriptorResidencyTests, SwitchedViewHeapResidency) {
     queue.Submit(1, &commands);
 
     // Check the heap serial to ensure the heap has switched.
-    EXPECT_EQ(allocator->GetShaderVisibleHeapSerialForTesting(), heapSerial + 1);
+    EXPECT_EQ(allocator->GetShaderVisibleHeapSerialForTesting(),
+              heapSerial + dawn_native::d3d12::HeapVersionID(1));
 
     // Check that currrently bound ShaderVisibleHeap is locked resident.
     EXPECT_TRUE(allocator->IsShaderVisibleHeapLockedResidentForTesting());

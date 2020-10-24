@@ -9,8 +9,8 @@
 
 #include "include/core/SkPath.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/gpu/GrContext.h"
-#include "src/gpu/GrContextPriv.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrStyle.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
@@ -687,7 +687,8 @@ static SkPath create_path_46() {
     return path;
 }
 
-static std::unique_ptr<GrFragmentProcessor> create_linear_gradient_processor(GrContext* ctx) {
+static std::unique_ptr<GrFragmentProcessor> create_linear_gradient_processor(
+            GrRecordingContext* rContext) {
 
     SkPoint pts[2] = { {0, 0}, {1, 1} };
     SkColor colors[2] = { SK_ColorGREEN, SK_ColorBLUE };
@@ -695,11 +696,11 @@ static std::unique_ptr<GrFragmentProcessor> create_linear_gradient_processor(GrC
         pts, colors, nullptr, SK_ARRAY_COUNT(colors), SkTileMode::kClamp);
     GrColorInfo colorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr);
     SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
-    GrFPArgs args(ctx, matrixProvider, SkFilterQuality::kLow_SkFilterQuality, &colorInfo);
+    GrFPArgs args(rContext, matrixProvider, SkFilterQuality::kLow_SkFilterQuality, &colorInfo);
     return as_SB(shader)->asFragmentProcessor(args);
 }
 
-static void test_path(GrContext* ctx,
+static void test_path(GrRecordingContext* rContext,
                       GrRenderTargetContext* renderTargetContext,
                       const SkPath& path,
                       const SkMatrix& matrix = SkMatrix::I(),
@@ -711,14 +712,14 @@ static void test_path(GrContext* ctx,
     GrPaint paint;
     paint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
     if (fp) {
-        paint.addColorFragmentProcessor(std::move(fp));
+        paint.setColorFragmentProcessor(std::move(fp));
     }
 
     SkIRect clipConservativeBounds = SkIRect::MakeWH(renderTargetContext->width(),
                                                      renderTargetContext->height());
     GrStyle style(SkStrokeRec::kFill_InitStyle);
     GrStyledShape shape(path, style);
-    GrPathRenderer::DrawPathArgs args{ctx,
+    GrPathRenderer::DrawPathArgs args{rContext,
                                       std::move(paint),
                                       &GrUserStencilSettings::kUnused,
                                       renderTargetContext,
@@ -732,10 +733,10 @@ static void test_path(GrContext* ctx,
 }
 
 DEF_GPUTEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests, reporter, ctxInfo) {
-    GrContext* ctx = ctxInfo.grContext();
+    auto ctx = ctxInfo.directContext();
     auto rtc = GrRenderTargetContext::Make(
             ctx, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {800, 800}, 1,
-            GrMipMapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
+            GrMipmapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
     if (!rtc) {
         return;
     }

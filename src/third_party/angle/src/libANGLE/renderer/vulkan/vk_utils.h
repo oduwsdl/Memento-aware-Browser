@@ -46,12 +46,13 @@ namespace egl
 {
 class Display;
 class Image;
+class ShareGroup;
 }  // namespace egl
 
 namespace gl
 {
 struct Box;
-class DummyOverlay;
+class MockOverlay;
 struct Extents;
 struct RasterizerState;
 struct Rectangle;
@@ -67,12 +68,12 @@ ANGLE_GL_OBJECTS_X(ANGLE_PRE_DECLARE_OBJECT)
 
 namespace rx
 {
-class CommandGraphResource;
 class DisplayVk;
 class ImageVk;
 class RenderTargetVk;
 class RendererVk;
 class RenderPassCache;
+class ShareGroupVk;
 }  // namespace rx
 
 namespace angle
@@ -102,9 +103,42 @@ enum class TextureDimension
     TEX_2D_ARRAY,
 };
 
+// A maximum offset of 4096 covers almost every Vulkan driver on desktop (80%) and mobile (99%). The
+// next highest values to meet native drivers are 16 bits or 32 bits.
+constexpr uint32_t kAttributeOffsetMaxBits = 15;
+
 namespace vk
 {
 struct Format;
+
+// A packed attachment index interface with vulkan API
+class PackedAttachmentIndex final
+{
+  public:
+    explicit constexpr PackedAttachmentIndex(uint32_t index) : mAttachmentIndex(index) {}
+    constexpr PackedAttachmentIndex(const PackedAttachmentIndex &other) = default;
+    constexpr PackedAttachmentIndex &operator=(const PackedAttachmentIndex &other) = default;
+
+    constexpr uint32_t get() const { return mAttachmentIndex; }
+    PackedAttachmentIndex &operator++()
+    {
+        ++mAttachmentIndex;
+        return *this;
+    }
+    constexpr bool operator==(const PackedAttachmentIndex &other) const
+    {
+        return mAttachmentIndex == other.mAttachmentIndex;
+    }
+    constexpr bool operator!=(const PackedAttachmentIndex &other) const
+    {
+        return mAttachmentIndex != other.mAttachmentIndex;
+    }
+
+  private:
+    uint32_t mAttachmentIndex;
+};
+static constexpr PackedAttachmentIndex kAttachmentIndexInvalid = PackedAttachmentIndex(-1);
+static constexpr PackedAttachmentIndex kAttachmentIndexZero    = PackedAttachmentIndex(0);
 
 // Prepend ptr to the pNext chain at chainStart
 template <typename VulkanStruct1, typename VulkanStruct2>
@@ -116,6 +150,14 @@ void AddToPNextChain(VulkanStruct1 *chainStart, VulkanStruct2 *ptr)
     ptr->pNext                   = localPtr->pNext;
     localPtr->pNext              = reinterpret_cast<VkBaseOutStructure *>(ptr);
 }
+
+struct Error
+{
+    VkResult mErrorCode;
+    const char *mFile;
+    const char *mFunction;
+    unsigned int mLine;
+};
 
 // Abstracts error handling. Implemented by both ContextVk for GL and DisplayVk for EGL errors.
 class Context : angle::NonCopyable
@@ -165,7 +207,7 @@ struct ImplTypeHelper<gl::OBJ>         \
 ANGLE_GL_OBJECTS_X(ANGLE_IMPL_TYPE_HELPER_GL)
 
 template <>
-struct ImplTypeHelper<gl::DummyOverlay>
+struct ImplTypeHelper<gl::MockOverlay>
 {
     using ImplType = OverlayVk;
 };
@@ -182,6 +224,12 @@ struct ImplTypeHelper<egl::Image>
     using ImplType = ImageVk;
 };
 
+template <>
+struct ImplTypeHelper<egl::ShareGroup>
+{
+    using ImplType = ShareGroupVk;
+};
+
 template <typename T>
 using GetImplType = typename ImplTypeHelper<T>::ImplType;
 
@@ -192,7 +240,7 @@ GetImplType<T> *GetImpl(const T *glObject)
 }
 
 template <>
-inline OverlayVk *GetImpl(const gl::DummyOverlay *glObject)
+inline OverlayVk *GetImpl(const gl::MockOverlay *glObject)
 {
     return nullptr;
 }
@@ -285,6 +333,7 @@ class MemoryProperties final : angle::NonCopyable
     MemoryProperties();
 
     void init(VkPhysicalDevice physicalDevice);
+    bool hasLazilyAllocatedMemory() const;
     angle::Result findCompatibleMemoryIndex(Context *context,
                                             const VkMemoryRequirements &memoryRequirements,
                                             VkMemoryPropertyFlags requestedMemoryPropertyFlags,
@@ -478,9 +527,14 @@ template <typename T>
 class BindingPointer final : angle::NonCopyable
 {
   public:
-    BindingPointer() : mRefCounted(nullptr) {}
-
+    BindingPointer() = default;
     ~BindingPointer() { reset(); }
+
+    BindingPointer(BindingPointer &&other)
+    {
+        set(other.mRefCounted);
+        other.reset();
+    }
 
     void set(RefCounted<T> *refCounted)
     {
@@ -505,7 +559,7 @@ class BindingPointer final : angle::NonCopyable
     bool valid() const { return mRefCounted != nullptr; }
 
   private:
-    RefCounted<T> *mRefCounted;
+    RefCounted<T> *mRefCounted = nullptr;
 };
 
 // Helper class to share ref-counted Vulkan objects.  Requires that T have a destroy method
@@ -633,8 +687,8 @@ using SpecializationConstantMap = angle::PackedEnumMap<sh::vk::SpecializationCon
 
 void MakeDebugUtilsLabel(GLenum source, const char *marker, VkDebugUtilsLabelEXT *label);
 
-constexpr size_t kClearValueDepthIndex   = gl::IMPLEMENTATION_MAX_DRAW_BUFFERS;
-constexpr size_t kClearValueStencilIndex = gl::IMPLEMENTATION_MAX_DRAW_BUFFERS + 1;
+constexpr size_t kUnpackedDepthIndex   = gl::IMPLEMENTATION_MAX_DRAW_BUFFERS;
+constexpr size_t kUnpackedStencilIndex = gl::IMPLEMENTATION_MAX_DRAW_BUFFERS + 1;
 
 class ClearValuesArray final
 {
@@ -646,6 +700,7 @@ class ClearValuesArray final
     ClearValuesArray &operator=(const ClearValuesArray &rhs);
 
     void store(uint32_t index, VkImageAspectFlags aspectFlags, const VkClearValue &clearValue);
+    void storeNoDepthStencil(uint32_t index, const VkClearValue &clearValue);
 
     void reset(size_t index)
     {
@@ -654,29 +709,124 @@ class ClearValuesArray final
     }
 
     bool test(size_t index) const { return mEnabled.test(index); }
-    bool testDepth() const { return mEnabled.test(kClearValueDepthIndex); }
-    bool testStencil() const { return mEnabled.test(kClearValueStencilIndex); }
+    bool testDepth() const { return mEnabled.test(kUnpackedDepthIndex); }
+    bool testStencil() const { return mEnabled.test(kUnpackedStencilIndex); }
+    gl::DrawBufferMask getColorMask() const;
 
     const VkClearValue &operator[](size_t index) const { return mValues[index]; }
 
-    float getDepthValue() const { return mValues[kClearValueDepthIndex].depthStencil.depth; }
-    uint32_t getStencilValue() const
-    {
-        return mValues[kClearValueStencilIndex].depthStencil.stencil;
-    }
+    float getDepthValue() const { return mValues[kUnpackedDepthIndex].depthStencil.depth; }
+    uint32_t getStencilValue() const { return mValues[kUnpackedStencilIndex].depthStencil.stencil; }
 
     const VkClearValue *data() const { return mValues.data(); }
     bool empty() const { return mEnabled.none(); }
-
-    gl::DrawBufferMask getEnabledColorAttachmentsMask() const
-    {
-        return gl::DrawBufferMask(mEnabled.to_ulong());
-    }
+    bool any() const { return mEnabled.any(); }
 
   private:
     gl::AttachmentArray<VkClearValue> mValues;
     gl::AttachmentsMask mEnabled;
 };
+
+// Defines Serials for Vulkan objects.
+#define ANGLE_VK_SERIAL_OP(X) \
+    X(Buffer)                 \
+    X(Image)                  \
+    X(ImageView)              \
+    X(Sampler)
+
+#define ANGLE_DEFINE_VK_SERIAL_TYPE(Type)                                     \
+    class Type##Serial                                                        \
+    {                                                                         \
+      public:                                                                 \
+        constexpr Type##Serial() : mSerial(kInvalid) {}                       \
+        constexpr explicit Type##Serial(uint32_t serial) : mSerial(serial) {} \
+                                                                              \
+        constexpr bool operator==(const Type##Serial &other) const            \
+        {                                                                     \
+            ASSERT(mSerial != kInvalid);                                      \
+            ASSERT(other.mSerial != kInvalid);                                \
+            return mSerial == other.mSerial;                                  \
+        }                                                                     \
+        constexpr bool operator!=(const Type##Serial &other) const            \
+        {                                                                     \
+            ASSERT(mSerial != kInvalid);                                      \
+            ASSERT(other.mSerial != kInvalid);                                \
+            return mSerial != other.mSerial;                                  \
+        }                                                                     \
+        constexpr uint32_t getValue() const { return mSerial; }               \
+        constexpr bool valid() const { return mSerial != kInvalid; }          \
+                                                                              \
+      private:                                                                \
+        uint32_t mSerial;                                                     \
+        static constexpr uint32_t kInvalid = 0;                               \
+    };                                                                        \
+    static constexpr Type##Serial kInvalid##Type##Serial = Type##Serial();
+
+ANGLE_VK_SERIAL_OP(ANGLE_DEFINE_VK_SERIAL_TYPE)
+
+#define ANGLE_DECLARE_GEN_VK_SERIAL(Type) Type##Serial generate##Type##Serial();
+
+class ResourceSerialFactory final : angle::NonCopyable
+{
+  public:
+    ResourceSerialFactory();
+    ~ResourceSerialFactory();
+
+    ANGLE_VK_SERIAL_OP(ANGLE_DECLARE_GEN_VK_SERIAL)
+
+  private:
+    uint32_t issueSerial();
+
+    // Kept atomic so it can be accessed from multiple Context threads at once.
+    std::atomic<uint32_t> mCurrentUniqueSerial;
+};
+
+// Performance and resource counters.
+struct RenderPassPerfCounters
+{
+    // load/storeOps. Includes ops for resolve attachment. Maximum value = 2.
+    uint8_t depthClears;
+    uint8_t depthLoads;
+    uint8_t depthStores;
+    uint8_t stencilClears;
+    uint8_t stencilLoads;
+    uint8_t stencilStores;
+    // Number of unresolve and resolve operations.  Maximum value for color =
+    // gl::IMPLEMENTATION_MAX_DRAW_BUFFERS and for depth/stencil = 1 each.
+    uint8_t colorAttachmentUnresolves;
+    uint8_t colorAttachmentResolves;
+    uint8_t depthAttachmentUnresolves;
+    uint8_t depthAttachmentResolves;
+    uint8_t stencilAttachmentUnresolves;
+    uint8_t stencilAttachmentResolves;
+    // Whether the depth/stencil attachment is using a read-only layout.
+    uint8_t readOnlyDepthStencil;
+};
+
+struct PerfCounters
+{
+    uint32_t primaryBuffers;
+    uint32_t renderPasses;
+    uint32_t writeDescriptorSets;
+    uint32_t flushedOutsideRenderPassCommandBuffers;
+    uint32_t resolveImageCommands;
+    uint32_t depthClears;
+    uint32_t depthLoads;
+    uint32_t depthStores;
+    uint32_t stencilClears;
+    uint32_t stencilLoads;
+    uint32_t stencilStores;
+    uint32_t colorAttachmentUnresolves;
+    uint32_t depthAttachmentUnresolves;
+    uint32_t stencilAttachmentUnresolves;
+    uint32_t colorAttachmentResolves;
+    uint32_t depthAttachmentResolves;
+    uint32_t stencilAttachmentResolves;
+    uint32_t readOnlyDepthStencilRenderPasses;
+};
+
+// A Vulkan image level index.
+using LevelIndex = gl::LevelIndexWrapper<uint32_t>;
 }  // namespace vk
 
 #if !defined(ANGLE_SHARED_LIBVULKAN)
@@ -685,6 +835,8 @@ void InitDebugUtilsEXTFunctions(VkInstance instance);
 void InitDebugReportEXTFunctions(VkInstance instance);
 void InitGetPhysicalDeviceProperties2KHRFunctions(VkInstance instance);
 void InitTransformFeedbackEXTFunctions(VkDevice device);
+void InitSamplerYcbcrKHRFunctions(VkDevice device);
+void InitRenderPass2KHRFunctions(VkDevice device);
 
 #    if defined(ANGLE_PLATFORM_FUCHSIA)
 // VK_FUCHSIA_imagepipe_surface
@@ -717,6 +869,9 @@ void InitExternalFenceFdFunctions(VkInstance instance);
 void InitExternalSemaphoreCapabilitiesFunctions(VkInstance instance);
 
 #endif  // !defined(ANGLE_SHARED_LIBVULKAN)
+
+GLenum CalculateGenerateMipmapFilter(ContextVk *contextVk, const vk::Format &format);
+size_t PackSampleCount(GLint sampleCount);
 
 namespace gl_vk
 {
@@ -756,6 +911,8 @@ void GetExtentsAndLayerCount(gl::TextureType textureType,
                              const gl::Extents &extents,
                              VkExtent3D *extentsOut,
                              uint32_t *layerCountOut);
+
+vk::LevelIndex GetLevelIndex(gl::LevelIndex levelGL, gl::LevelIndex baseLevel);
 }  // namespace gl_vk
 
 namespace vk_gl
@@ -780,19 +937,21 @@ void AddSampleCounts(VkSampleCountFlags sampleCounts, gl::SupportedSampleSet *ou
 GLuint GetMaxSampleCount(VkSampleCountFlags sampleCounts);
 // Return a supported sample count that's at least as large as the requested one.
 GLuint GetSampleCount(VkSampleCountFlags supportedCounts, GLuint requestedCount);
+
+gl::LevelIndex GetLevelIndex(vk::LevelIndex levelVk, gl::LevelIndex baseLevel);
 }  // namespace vk_gl
 
 }  // namespace rx
 
-#define ANGLE_VK_TRY(context, command)                                                 \
-    do                                                                                 \
-    {                                                                                  \
-        auto ANGLE_LOCAL_VAR = command;                                                \
-        if (ANGLE_UNLIKELY(ANGLE_LOCAL_VAR != VK_SUCCESS))                             \
-        {                                                                              \
-            context->handleError(ANGLE_LOCAL_VAR, __FILE__, ANGLE_FUNCTION, __LINE__); \
-            return angle::Result::Stop;                                                \
-        }                                                                              \
+#define ANGLE_VK_TRY(context, command)                                                   \
+    do                                                                                   \
+    {                                                                                    \
+        auto ANGLE_LOCAL_VAR = command;                                                  \
+        if (ANGLE_UNLIKELY(ANGLE_LOCAL_VAR != VK_SUCCESS))                               \
+        {                                                                                \
+            (context)->handleError(ANGLE_LOCAL_VAR, __FILE__, ANGLE_FUNCTION, __LINE__); \
+            return angle::Result::Stop;                                                  \
+        }                                                                                \
     } while (0)
 
 #define ANGLE_VK_CHECK(context, test, error) ANGLE_VK_TRY(context, test ? VK_SUCCESS : error)

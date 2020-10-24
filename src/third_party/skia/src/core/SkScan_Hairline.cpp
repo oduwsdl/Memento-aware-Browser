@@ -122,7 +122,11 @@ void SkScan::HairLineRgn(const SkPoint array[], int arrayCount, const SkRegion* 
             if (ix0 == ix1) {// too short to draw
                 continue;
             }
-
+#if defined(SK_BUILD_FOR_FUZZER)
+            if ((ix1 - ix0) > 100000 || (ix1 - ix0) < 0) {
+                continue; // too big to draw
+            }
+#endif
             SkFixed slope = SkFixedDiv(dy, dx);
             SkFixed startY = SkFDot6ToFixed(y0) + (slope * ((32 - x0) & 63) >> 6);
 
@@ -138,7 +142,11 @@ void SkScan::HairLineRgn(const SkPoint array[], int arrayCount, const SkRegion* 
             if (iy0 == iy1) { // too short to draw
                 continue;
             }
-
+#if defined(SK_BUILD_FOR_FUZZER)
+            if ((iy1 - iy0) > 100000 || (iy1 - iy0) < 0) {
+                continue; // too big to draw
+            }
+#endif
             SkFixed slope = SkFixedDiv(dx, dy);
             SkFixed startX = SkFDot6ToFixed(x0) + (slope * ((32 - y0) & 63) >> 6);
 
@@ -439,7 +447,7 @@ static int compute_quad_level(const SkPoint pts[3]) {
      than a pixel.
      */
     int level = (33 - SkCLZ(d)) >> 1;
-    // sanity check on level (from the previous version)
+    // safety check on level (from the previous version)
     if (level > kMaxQuadSubdivideLevel) {
         level = kMaxQuadSubdivideLevel;
     }
@@ -499,7 +507,7 @@ void extend_pts(SkPath::Verb prevVerb, SkPath::Verb nextVerb, SkPoint* pts, int 
 }
 
 template <SkPaint::Cap capStyle>
-void hair_path(const SkPath& path, const SkRasterClip& rclip, SkBlitter* blitter,
+void hair_path(const SkPathView& path, const SkRasterClip& rclip, SkBlitter* blitter,
                       SkScan::HairRgnProc lineproc) {
     if (path.isEmpty()) {
         return;
@@ -513,7 +521,7 @@ void hair_path(const SkPath& path, const SkRasterClip& rclip, SkBlitter* blitter
 
     {
         const int capOut = SkPaint::kButt_Cap == capStyle ? 1 : 2;
-        const SkIRect ibounds = path.getBounds().roundOut().makeOutset(capOut, capOut);
+        const SkIRect ibounds = path.fBounds.roundOut().makeOutset(capOut, capOut);
         if (rclip.quickReject(ibounds)) {
             return;
         }
@@ -635,27 +643,27 @@ void hair_path(const SkPath& path, const SkRasterClip& rclip, SkBlitter* blitter
     }
 }
 
-void SkScan::HairPath(const SkPath& path, const SkRasterClip& clip, SkBlitter* blitter) {
+void SkScan::HairPath(const SkPathView& path, const SkRasterClip& clip, SkBlitter* blitter) {
     hair_path<SkPaint::kButt_Cap>(path, clip, blitter, SkScan::HairLineRgn);
 }
 
-void SkScan::AntiHairPath(const SkPath& path, const SkRasterClip& clip, SkBlitter* blitter) {
+void SkScan::AntiHairPath(const SkPathView& path, const SkRasterClip& clip, SkBlitter* blitter) {
     hair_path<SkPaint::kButt_Cap>(path, clip, blitter, SkScan::AntiHairLineRgn);
 }
 
-void SkScan::HairSquarePath(const SkPath& path, const SkRasterClip& clip, SkBlitter* blitter) {
+void SkScan::HairSquarePath(const SkPathView& path, const SkRasterClip& clip, SkBlitter* blitter) {
     hair_path<SkPaint::kSquare_Cap>(path, clip, blitter, SkScan::HairLineRgn);
 }
 
-void SkScan::AntiHairSquarePath(const SkPath& path, const SkRasterClip& clip, SkBlitter* blitter) {
+void SkScan::AntiHairSquarePath(const SkPathView& path, const SkRasterClip& clip, SkBlitter* blitter) {
     hair_path<SkPaint::kSquare_Cap>(path, clip, blitter, SkScan::AntiHairLineRgn);
 }
 
-void SkScan::HairRoundPath(const SkPath& path, const SkRasterClip& clip, SkBlitter* blitter) {
+void SkScan::HairRoundPath(const SkPathView& path, const SkRasterClip& clip, SkBlitter* blitter) {
     hair_path<SkPaint::kRound_Cap>(path, clip, blitter, SkScan::HairLineRgn);
 }
 
-void SkScan::AntiHairRoundPath(const SkPath& path, const SkRasterClip& clip, SkBlitter* blitter) {
+void SkScan::AntiHairRoundPath(const SkPathView& path, const SkRasterClip& clip, SkBlitter* blitter) {
     hair_path<SkPaint::kRound_Cap>(path, clip, blitter, SkScan::AntiHairLineRgn);
 }
 

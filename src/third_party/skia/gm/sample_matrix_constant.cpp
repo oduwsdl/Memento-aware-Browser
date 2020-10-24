@@ -9,7 +9,7 @@
 #include "include/effects/SkGradientShader.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/ops/GrFillRectOp.h"
@@ -21,11 +21,11 @@ public:
 
     SampleMatrixConstantEffect(std::unique_ptr<GrFragmentProcessor> child)
             : INHERITED(CLASS_ID, kNone_OptimizationFlags) {
-        child->setSampleMatrix(SkSL::SampleMatrix(SkSL::SampleMatrix::Kind::kConstantOrUniform,
-                                                  child.get(), "float3x3(float3(0.5, 0.0, 0.0), "
-                                                                        "float3(0.0, 0.5, 0.0), "
-                                                                        "float3(0.0, 0.0, 1.0))"));
-        this->registerChildProcessor(std::move(child));
+        this->registerChild(std::move(child),
+                            SkSL::SampleUsage::UniformMatrix(
+                                    "float3x3(float3(0.5, 0.0, 0.0), "
+                                             "float3(0.0, 0.5, 0.0), "
+                                             "float3(0.0, 0.0, 1.0))"));
     }
 
     const char* name() const override { return "SampleMatrixConstantEffect"; }
@@ -40,13 +40,13 @@ public:
 
 private:
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 class GLSLSampleMatrixConstantEffect : public GrGLSLFragmentProcessor {
     void emitCode(EmitArgs& args) override {
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-        SkString sample = this->invokeChild(0, args);
+        SkString sample = this->invokeChildWithMatrix(0, args);
         fragBuilder->codeAppendf("%s = %s;\n", args.fOutputColor, sample.c_str());
     }
 };
@@ -63,14 +63,14 @@ DEF_SIMPLE_GPU_GM(sample_matrix_constant, ctx, rtCtx, canvas, 1024, 256) {
     auto draw = [rtCtx, &wrap](std::unique_ptr<GrFragmentProcessor> baseFP, int tx, int ty) {
         auto fp = wrap(std::move(baseFP));
         GrPaint paint;
-        paint.addColorFragmentProcessor(std::move(fp));
+        paint.setColorFragmentProcessor(std::move(fp));
         rtCtx->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::Translate(tx, ty),
                         SkRect::MakeIWH(256, 256));
     };
     auto draw2 = [rtCtx, &wrap](std::unique_ptr<GrFragmentProcessor> baseFP, int tx, int ty) {
       auto fp = wrap(wrap(std::move(baseFP)));
       GrPaint paint;
-      paint.addColorFragmentProcessor(std::move(fp));
+      paint.setColorFragmentProcessor(std::move(fp));
       rtCtx->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::Translate(tx, ty),
                       SkRect::MakeIWH(256, 256));
     };
@@ -79,11 +79,11 @@ DEF_SIMPLE_GPU_GM(sample_matrix_constant, ctx, rtCtx, canvas, 1024, 256) {
         SkBitmap bmp;
         GetResourceAsBitmap("images/mandrill_256.png", &bmp);
         GrBitmapTextureMaker maker(ctx, bmp, GrImageTexGenPolicy::kDraw);
-        auto view = maker.view(GrMipMapped::kNo);
+        auto view = maker.view(GrMipmapped::kNo);
         std::unique_ptr<GrFragmentProcessor> imgFP =
                 GrTextureEffect::Make(std::move(view), bmp.alphaType(), SkMatrix());
         draw(std::move(imgFP), 0, 0);
-        view = maker.view(GrMipMapped::kNo);
+        view = maker.view(GrMipmapped::kNo);
         imgFP =
                 GrTextureEffect::Make(std::move(view), bmp.alphaType(), SkMatrix());
         draw2(std::move(imgFP), 256, 0);

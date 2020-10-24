@@ -50,10 +50,6 @@
   overflow: hidden;
 }
 
-.storage-view {
-  overflow: hidden;
-}
-
 .storage-view .data-grid:not(.inline) {
   border: none;
   flex: auto;
@@ -115,7 +111,7 @@
   flex-shrink: 0;
 }
 
-.database-user-query[data-keyboard-focus="true"]:focus {
+.database-user-query:focus-visible {
   background-color: hsl(214deg 48% 95%);
 }
 

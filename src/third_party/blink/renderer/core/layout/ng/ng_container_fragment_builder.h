@@ -77,14 +77,9 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
     unpositioned_list_marker_ = marker;
   }
 
-  void AddChild(const NGPhysicalContainerFragment&,
-                const LogicalOffset&,
-                const LayoutInline* inline_container = nullptr);
-
-  void AddChild(scoped_refptr<const NGPhysicalTextFragment> child,
-                const LogicalOffset& offset) {
-    AddChildInternal(child, offset);
-  }
+  void ReplaceChild(wtf_size_t index,
+                    const NGPhysicalContainerFragment& new_child,
+                    const LogicalOffset offset);
 
   const ChildrenVector& Children() const { return children_; }
 
@@ -126,14 +121,24 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
       const LogicalOffset& child_offset,
       TextDirection inline_container_direction);
 
+  void AddOutOfFlowFragmentainerDescendant(
+      const NGLogicalOutOfFlowPositionedNode& descendant);
+
   void AddOutOfFlowDescendant(
       const NGLogicalOutOfFlowPositionedNode& descendant);
 
   void SwapOutOfFlowPositionedCandidates(
       Vector<NGLogicalOutOfFlowPositionedNode>* candidates);
 
+  void SwapOutOfFlowFragmentainerDescendants(
+      Vector<NGLogicalOutOfFlowPositionedNode>* descendants);
+
   bool HasOutOfFlowPositionedCandidates() const {
     return !oof_positioned_candidates_.IsEmpty();
+  }
+
+  bool HasOutOfFlowFragmentainerDescendants() const {
+    return !oof_positioned_fragmentainer_descendants_.IsEmpty();
   }
 
   // This method should only be used within the inline layout algorithm. It is
@@ -173,6 +178,10 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
     is_fragmentation_context_root_ = true;
   }
 
+  bool IsBlockFragmentationContextRoot() const {
+    return is_fragmentation_context_root_;
+  }
+
   // See NGLayoutResult::AnnotationOverflow().
   void SetAnnotationOverflow(LayoutUnit overflow) {
     annotation_overflow_ = overflow;
@@ -181,6 +190,10 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   // See NGLayoutRsult::BlockEndAnnotatioSpace().
   void SetBlockEndAnnotationSpace(LayoutUnit space) {
     block_end_annotation_space_ = space;
+  }
+
+  void SetHasDescendantThatDependsOnPercentageBlockSize() {
+    has_descendant_that_depends_on_percentage_block_size_ = true;
   }
 
   const NGConstraintSpace* ConstraintSpace() const { return space_; }
@@ -220,6 +233,8 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   NGExclusionSpace exclusion_space_;
 
   Vector<NGLogicalOutOfFlowPositionedNode> oof_positioned_candidates_;
+  Vector<NGLogicalOutOfFlowPositionedNode>
+      oof_positioned_fragmentainer_descendants_;
   Vector<NGLogicalOutOfFlowPositionedNode> oof_positioned_descendants_;
 
   NGUnpositionedListMarker unpositioned_list_marker_;
@@ -239,6 +254,10 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   // See NGLayoutResult::BlockEndAnotationSpace().
   LayoutUnit block_end_annotation_space_;
 
+  // The block size consumed by all preceding fragmentainers. Used to position
+  // OOF nodes.
+  LayoutUnit fragmentainer_consumed_block_size_;
+
   NGAdjoiningObjectTypes adjoining_object_types_ = kAdjoiningNone;
   bool has_adjoining_object_descendants_ = false;
 
@@ -247,11 +266,9 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   bool is_legacy_layout_root_ = false;
 
   bool has_floating_descendants_for_paint_ = false;
-  bool has_orthogonal_flow_roots_ = false;
   bool has_descendant_that_depends_on_percentage_block_size_ = false;
   bool has_block_fragmentation_ = false;
   bool is_fragmentation_context_root_ = false;
-  bool may_have_descendant_above_block_start_ = false;
 
   bool has_oof_candidate_that_needs_block_offset_adjustment_ = false;
 };

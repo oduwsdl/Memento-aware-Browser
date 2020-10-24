@@ -60,6 +60,9 @@ export class TimelineDetailsView extends UI.Widget.VBox {
     this.element.appendChild(this._additionalMetricsToolbar.element);
 
     this._tabbedPane.addEventListener(UI.TabbedPane.Events.TabSelected, this._tabSelected, this);
+
+    /** @type {!PerformanceModel} */
+    this._model;
   }
 
   /**
@@ -71,7 +74,7 @@ export class TimelineDetailsView extends UI.Widget.VBox {
       if (this._model) {
         this._model.removeEventListener(Events.WindowChanged, this._onWindowChanged, this);
       }
-      this._model = model;
+      this._model = /** @type {!PerformanceModel} */ (model);
       if (this._model) {
         this._model.addEventListener(Events.WindowChanged, this._onWindowChanged, this);
       }
@@ -92,8 +95,12 @@ export class TimelineDetailsView extends UI.Widget.VBox {
       const isEstimate = estimated ? ` (${ls`estimated`})` : '';
       const message = ls`Total blocking time: ${time.toFixed(2)}ms${isEstimate}`;
 
-      const warning = createElement('span');
-      const clsLink = UI.UIUtils.createWebDevLink('tbt/', ls`Learn more`);
+      const warning = document.createElement('span');
+      const clsLink = /** @type {!UI.XLink.XLink} */ (UI.UIUtils.createWebDevLink('tbt/', ls`Learn more`));
+      // crbug.com/1103188: In dark mode the focus ring is hidden by the surrounding
+      // container of this link. For some additional spacing on the right to make
+      // sure the ring is fully visible.
+      clsLink.style.marginRight = '2px';
       warning.appendChild(UI.UIUtils.formatLocalized('%s', [clsLink]));
 
       this._additionalMetricsToolbar.appendText(message);
@@ -226,7 +233,7 @@ export class TimelineDetailsView extends UI.Widget.VBox {
   }
 
   /**
-   * @return {!UI.Widget.Widget}
+   * @return {!TimelineLayersView}
    */
   _layersView() {
     if (this._lazyLayersView) {

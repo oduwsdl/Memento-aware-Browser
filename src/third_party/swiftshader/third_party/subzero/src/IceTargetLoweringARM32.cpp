@@ -3098,7 +3098,7 @@ void TargetARM32::lowerArithmetic(const InstArithmetic *Instr) {
     default:
       UnimplementedLoweringError(this, Instr);
       return;
-    // Explicitly whitelist vector instructions we have implemented/enabled.
+    // Explicitly allow vector instructions we have implemented/enabled.
     case InstArithmetic::Add:
     case InstArithmetic::And:
     case InstArithmetic::Ashr:
@@ -5140,7 +5140,7 @@ void TargetARM32::lowerIntrinsicCall(const InstIntrinsicCall *Instr) {
       _dmb();
       lowerLoadLinkedStoreExclusive(
           DestTy, Instr->getArg(0),
-          [this, Expected, New, Instr, DestTy, &LoadedValue](Variable *Tmp) {
+          [this, Expected, New, &LoadedValue](Variable *Tmp) {
             auto *ExpectedLoR = llvm::cast<Variable>(loOperand(Expected));
             auto *ExpectedHiR = llvm::cast<Variable>(hiOperand(Expected));
             auto *TmpLoR = llvm::cast<Variable>(loOperand(Tmp));
@@ -5171,7 +5171,7 @@ void TargetARM32::lowerIntrinsicCall(const InstIntrinsicCall *Instr) {
     _dmb();
     lowerLoadLinkedStoreExclusive(
         DestTy, Instr->getArg(0),
-        [this, Expected, New, Instr, DestTy, &LoadedValue](Variable *Tmp) {
+        [this, Expected, New, &LoadedValue](Variable *Tmp) {
           lowerIcmpCond(InstIcmp::Eq, Tmp, Expected);
           LoadedValue = Tmp;
           return New;

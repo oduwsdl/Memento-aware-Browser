@@ -43,7 +43,7 @@ public:
     TextLine& operator=(TextLine&&) = default;
     ~TextLine() = default;
 
-    TextLine(ParagraphImpl* master,
+    TextLine(ParagraphImpl* owner,
              SkVector offset,
              SkVector advance,
              BlockRange blocks,
@@ -53,8 +53,6 @@ public:
              ClusterRange clustersWithGhosts,
              SkScalar widthWithSpaces,
              InternalLineMetrics sizes);
-
-    void setMaster(ParagraphImpl* master) { fMaster = master; }
 
     TextRange trimmedText() const { return fTextRange; }
     TextRange textWithSpaces() const { return fTextWithWhitespacesRange; }
@@ -86,7 +84,7 @@ public:
     void iterateThroughClustersInGlyphsOrder(bool reverse, bool includeGhosts, const ClustersVisitor& visitor) const;
 
     void format(TextAlign align, SkScalar maxWidth);
-    void paint(SkCanvas* canvas);
+    SkRect paint(SkCanvas* canvas, SkScalar x, SkScalar y);
 
     void createEllipsis(SkScalar maxWidth, const SkString& ellipsis, bool ltr);
 
@@ -111,8 +109,6 @@ public:
 
     LineMetrics getMetrics() const;
 
-    SkRect calculateBoundaries();
-
     SkRect extendHeight(const ClipContext& context) const;
 
     SkScalar metricsWithoutMultiplier(TextHeightBehavior correction);
@@ -125,14 +121,14 @@ private:
     std::unique_ptr<Run> shapeEllipsis(const SkString& ellipsis, Run* run);
     void justify(SkScalar maxWidth);
 
-    void paintText(SkCanvas* canvas, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
-    void paintBackground(SkCanvas* canvas, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
-    void paintShadow(SkCanvas* canvas, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
-    void paintDecorations(SkCanvas* canvas, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
+    SkRect paintText(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
+    void paintBackground(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
+    SkRect paintShadow(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
+    void paintDecorations(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
 
     void shiftCluster(const Cluster* cluster, SkScalar shift, SkScalar prevShift);
 
-    ParagraphImpl* fMaster;
+    ParagraphImpl* fOwner;
     BlockRange fBlockRange;
     TextRange fTextRange;
     TextRange fTextWithWhitespacesRange;

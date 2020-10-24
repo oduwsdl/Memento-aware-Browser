@@ -11,12 +11,11 @@
 #include <memory>
 #include <vector>
 
-#include "core/fxge/fx_dib.h"
+#include "core/fxge/dib/fx_dib.h"
 #include "third_party/base/span.h"
 #include "xfa/fde/cfde_data.h"
 #include "xfa/fgas/layout/cfx_char.h"
 
-class CFDE_RenderDevice;
 class CFGAS_GEFont;
 class CFX_RenderDevice;
 class CFX_TxtBreak;

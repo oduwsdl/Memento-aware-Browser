@@ -42,7 +42,11 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_study_participation.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+#include "third_party/blink/public/mojom/gpu/gpu.mojom-blink.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/resources/grit/blink_image_resources.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -80,7 +84,6 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
-#include "third_party/blink/renderer/core/paint/paint_timing.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
@@ -90,6 +93,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/base/resource/scale_factor.h"
 #include "v8/include/v8.h"
@@ -116,8 +120,7 @@ HTMLCanvasElement::HTMLCanvasElement(Document& document)
       PageVisibilityObserver(document.GetPage()),
       CanvasRenderingContextHost(
           CanvasRenderingContextHost::HostType::kCanvasHost,
-          base::make_optional<UkmParameters>(
-              {document.UkmRecorder(), document.UkmSourceID()})),
+          {document.UkmRecorder(), document.UkmSourceID()}),
       size_(kDefaultCanvasWidth, kDefaultCanvasHeight),
       context_creation_was_blocked_(false),
       ignore_reset_(false),
@@ -256,11 +259,55 @@ void HTMLCanvasElement::RegisterRenderingContextFactory(
 }
 
 void HTMLCanvasElement::RecordIdentifiabilityMetric(
-    const blink::IdentifiableSurface& surface,
-    int64_t value) const {
+    IdentifiableSurface surface,
+    IdentifiableToken value) const {
   blink::IdentifiabilityMetricBuilder(GetDocument().UkmSourceID())
       .Set(surface, value)
       .Record(GetDocument().UkmRecorder());
+}
+
+void HTMLCanvasElement::IdentifiabilityReportWithDigest(
+    IdentifiableToken canvas_contents_token) const {
+  if (IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+          blink::IdentifiableSurface::Type::kCanvasReadback)) {
+    const uint64_t context_digest =
+        context_ ? context_->IdentifiableTextToken().ToUkmMetricValue() : 0;
+    const IdentifiabilityPaintOpDigest* const identifiability_paintop_digest =
+        ResourceProvider()
+            ? &(ResourceProvider()->GetIdentifiablityPaintOpDigest())
+            : nullptr;
+    const uint64_t canvas_digest =
+        identifiability_paintop_digest
+            ? identifiability_paintop_digest->GetToken().ToUkmMetricValue()
+            : 0;
+    const uint64_t context_type =
+        context_ ? context_->GetContextType()
+                 : CanvasRenderingContext::kContextTypeUnknown;
+    const bool encountered_skipped_ops =
+        (context_ && context_->IdentifiabilityEncounteredSkippedOps()) ||
+        (identifiability_paintop_digest &&
+         identifiability_paintop_digest->encountered_skipped_ops());
+    const bool encountered_sensitive_ops =
+        context_ && context_->IdentifiabilityEncounteredSensitiveOps();
+    const bool encountered_partially_digested_image =
+        identifiability_paintop_digest &&
+        identifiability_paintop_digest->encountered_partially_digested_image();
+    // Bits [0-3] are the context type, bits [4-6] are skipped ops, sensitive
+    // ops, and partial image ops bits, respectively. The remaining bits are
+    // for the canvas digest.
+    uint64_t final_digest =
+        ((context_digest ^ canvas_digest) << 7) | context_type;
+    if (encountered_skipped_ops)
+      final_digest |= IdentifiableSurface::CanvasTaintBit::kSkipped;
+    if (encountered_sensitive_ops)
+      final_digest |= IdentifiableSurface::CanvasTaintBit::kSensitive;
+    if (encountered_partially_digested_image)
+      final_digest |= IdentifiableSurface::CanvasTaintBit::kPartiallyDigested;
+    RecordIdentifiabilityMetric(
+        blink::IdentifiableSurface::FromTypeAndToken(
+            blink::IdentifiableSurface::Type::kCanvasReadback, final_digest),
+        canvas_contents_token.ToUkmMetricValue());
+  }
 }
 
 CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContext(
@@ -268,6 +315,17 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContext(
     const CanvasContextCreationAttributesCore& attributes) {
   auto* old_contents_cc_layer = ContentsCcLayer();
   auto* result = GetCanvasRenderingContextInternal(type, attributes);
+
+  if (IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+          IdentifiableSurface::Type::kCanvasRenderingContext)) {
+    IdentifiabilityMetricBuilder(ukm_params_.source_id)
+        .Set(IdentifiableSurface::FromTypeAndToken(
+                 IdentifiableSurface::Type::kCanvasRenderingContext,
+                 CanvasRenderingContext::ContextTypeFromId(type)),
+             !!result)
+        .Record(ukm_params_.ukm_recorder);
+  }
+
   if (ContentsCcLayer() != old_contents_cc_layer)
     OnContentsCcLayerChanged();
   return result;
@@ -286,14 +344,6 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
 
   // Log the aliased context type used.
   if (!context_) {
-    if (IsUserInIdentifiabilityStudy()) {
-      RecordIdentifiabilityMetric(
-          blink::IdentifiableSurface::FromTypeAndInput(
-              blink::IdentifiableSurface::Type::kWebFeature,
-              static_cast<uint64_t>(
-                  blink::WebFeature::kCanvasRenderingContext)),
-          blink::IdentifiabilityDigestHelper(context_type));
-    }
     UMA_HISTOGRAM_ENUMERATION("Blink.Canvas.ContextType", context_type);
   }
 
@@ -413,18 +463,20 @@ bool HTMLCanvasElement::IsWebGL2Enabled() const {
 
 bool HTMLCanvasElement::IsWebGLBlocked() const {
   Document& document = GetDocument();
-  LocalFrame* frame = document.GetFrame();
-  if (!frame)
-    return false;
-
   bool blocked = false;
-  frame->GetLocalFrameHostRemote().Are3DAPIsBlocked(&blocked);
+  mojo::Remote<mojom::blink::GpuDataManager> gpu_data_manager;
+  Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
+      gpu_data_manager.BindNewPipeAndPassReceiver());
+  gpu_data_manager->Are3DAPIsBlockedForUrl(document.Url(), &blocked);
   return blocked;
 }
 
 void HTMLCanvasElement::DidDraw(const FloatRect& rect) {
   if (rect.IsEmpty())
     return;
+  if (GetLayoutObject() && GetLayoutObject()->PreviousVisibilityVisible() &&
+      GetDocument().GetPage())
+    GetDocument().GetPage()->Animator().SetHasCanvasInvalidation();
   canvas_is_clear_ = false;
   if (GetLayoutObject() && !LowLatencyEnabled())
     GetLayoutObject()->SetShouldCheckForPaintInvalidation();
@@ -446,12 +498,6 @@ void HTMLCanvasElement::DidDraw() {
 
 void HTMLCanvasElement::PreFinalizeFrame() {
   RecordCanvasSizeToUMA(size_);
-
-  // PreFinalizeFrame indicates the end of a script task that may have rendered
-  // into the canvas, now is a good time to unlock cache entries.
-  auto* resource_provider = ResourceProvider();
-  if (resource_provider)
-    resource_provider->ReleaseLockedImages();
 
   // Low-latency 2d canvases produce their frames after the resource gets single
   // buffered.
@@ -769,9 +815,6 @@ void HTMLCanvasElement::Paint(GraphicsContext& context,
   if (!context_ && !OffscreenCanvasFrame())
     return;
 
-  if (HasResourceProvider() && !canvas_is_clear_)
-    PaintTiming::From(GetDocument()).MarkFirstContentfulPaint();
-
   // If the canvas is gpu composited, it has another way of getting to screen
   if (!PaintsIntoCanvasBuffer()) {
     // For click-and-drag or printing we still want to draw
@@ -958,22 +1001,7 @@ String HTMLCanvasElement::ToDataURLInternal(
       // Currently we only support three encoding types.
       NOTREACHED();
     }
-    if (IsUserInIdentifiabilityStudy()) {
-      const uint64_t context_digest =
-          context_ ? context_->IdentifiabilityTextDigest() : 0;
-      const uint64_t canvas_digest =
-          ResourceProvider() ? ResourceProvider()->GetIdentifiabilityDigest()
-                             : 0;
-      const uint64_t context_type =
-          context_ ? context_->GetContextType()
-                   : CanvasRenderingContext::kContextTypeUnknown;
-      const uint64_t final_digest =
-          ((context_digest ^ canvas_digest) << 4) | context_type;
-      RecordIdentifiabilityMetric(
-          blink::IdentifiableSurface::FromTypeAndInput(
-              blink::IdentifiableSurface::Type::kCanvasReadback, final_digest),
-          blink::IdentifiabilityDigestOfBytes(data_url.Span8()));
-    }
+    IdentifiabilityReportWithDigest(IdentifiabilityBenignStringToken(data_url));
     return data_url;
   }
 
@@ -1040,18 +1068,12 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
         image_bitmap, options,
         CanvasAsyncBlobCreator::kHTMLCanvasToBlobCallback, callback, start_time,
         GetExecutionContext(),
-        base::make_optional<UkmParameters>(
-            {GetDocument().UkmRecorder(), GetDocument().UkmSourceID()}));
+        UkmParameters{GetDocument().UkmRecorder(),
+                      GetDocument().UkmSourceID()});
   }
 
-  if (IsUserInIdentifiabilityStudy()) {
-    RecordIdentifiabilityMetric(
-        blink::IdentifiableSurface::FromTypeAndInput(
-            blink::IdentifiableSurface::Type::kCanvasReadback,
-            context_ ? context_->GetContextType()
-                     : CanvasRenderingContext::kContextTypeUnknown),
-        0);
-  }
+  // TODO(crbug.com/973801): Report real digest for toBlob().
+  IdentifiabilityReportWithDigest(IdentifiableToken(0));
 
   if (async_creator) {
     async_creator->ScheduleAsyncBlobCreation(quality);
@@ -1108,8 +1130,11 @@ bool HTMLCanvasElement::ShouldAccelerate() const {
     return false;
   }
 
-  // Webview crashes with accelerated small canvases TODO(crbug.com/1004304)
-  if (!RuntimeEnabledFeatures::AcceleratedSmallCanvasesEnabled()) {
+  // Webview crashes with accelerated small canvases (crbug.com/1004304)
+  // Experimenting to see if this still causes crashes (crbug.com/1136603)
+  if (!RuntimeEnabledFeatures::AcceleratedSmallCanvasesEnabled() &&
+      !base::FeatureList::IsEnabled(
+          features::kWebviewAccelerateSmallCanvases)) {
     base::CheckedNumeric<int> checked_canvas_pixel_count =
         Size().Width() * Size().Height();
     if (!checked_canvas_pixel_count.IsValid())
@@ -1165,6 +1190,9 @@ void HTMLCanvasElement::SetCanvas2DLayerBridgeInternal(
     // use accelerated-GPU rendering.
     // If any of the two conditions fails, or if the creation of accelerated
     // resource provider fails, the canvas will fallback to CPU rendering.
+    UMA_HISTOGRAM_BOOLEAN("Blink.Canvas.WillReadFrequently",
+                          context_->CreationAttributes().will_read_frequently);
+
     if (ShouldAccelerate() &&
         !context_->CreationAttributes().will_read_frequently) {
       canvas2d_bridge_ = Create2DLayerBridge(RasterMode::kGPU);
@@ -1247,11 +1275,25 @@ void HTMLCanvasElement::ContextDestroyed() {
     context_->Stop();
 }
 
+bool HTMLCanvasElement::StyleChangeNeedsDidDraw(
+    const ComputedStyle* old_style,
+    const ComputedStyle& new_style) {
+  // It will only need to redraw for a style change, if the new imageRendering
+  // is different than the previous one, and only if one of the two ir
+  // pixelated.
+  return old_style &&
+         old_style->ImageRendering() != new_style.ImageRendering() &&
+         (old_style->ImageRendering() == EImageRendering::kPixelated ||
+          new_style.ImageRendering() == EImageRendering::kPixelated);
+}
+
 void HTMLCanvasElement::StyleDidChange(const ComputedStyle* old_style,
                                        const ComputedStyle& new_style) {
   UpdateFilterQuality(FilterQualityFromStyle(&new_style));
   if (context_)
     context_->StyleDidChange(old_style, new_style);
+  if (StyleChangeNeedsDidDraw(old_style, new_style))
+    DidDraw();
 }
 
 void HTMLCanvasElement::LayoutObjectDestroyed() {

@@ -25,6 +25,12 @@ GrVkImage::GrVkImage(const GrVkGpu* gpu,
     SkASSERT(fMutableState->getImageLayout() == fInfo.fImageLayout);
     SkASSERT(fMutableState->getQueueFamilyIndex() == fInfo.fCurrentQueueFamily);
 #ifdef SK_DEBUG
+    if (info.fImageUsageFlags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+        SkASSERT(SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    } else {
+        SkASSERT(SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+                 SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    }
     // We can't transfer from the non graphics queue to the graphics queue since we can't
     // release the image from the original queue without having that queue. This limits us in terms
     // of the types of queue indices we can handle.
@@ -87,13 +93,11 @@ VkAccessFlags GrVkImage::LayoutToSrcAccessMask(const VkImageLayout layout) {
         flags = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
                 VK_ACCESS_TRANSFER_WRITE_BIT |
-                VK_ACCESS_TRANSFER_READ_BIT |
-                VK_ACCESS_SHADER_READ_BIT |
-                VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_HOST_READ_BIT;
+                VK_ACCESS_HOST_WRITE_BIT;
     } else if (VK_IMAGE_LAYOUT_PREINITIALIZED == layout) {
         flags = VK_ACCESS_HOST_WRITE_BIT;
     } else if (VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL == layout) {
-        flags = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+        flags = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     } else if (VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL == layout) {
         flags = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     } else if (VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL == layout) {
@@ -194,7 +198,7 @@ void GrVkImage::setImageLayoutAndQueueIndex(const GrVkGpu* gpu,
         fInfo.fImage,                                    // image
         { aspectFlags, 0, fInfo.fLevelCount, 0, 1 }      // subresourceRange
     };
-
+    SkASSERT(srcAccessMask == imageMemoryBarrier.srcAccessMask);
     gpu->addImageMemoryBarrier(this->resource(), srcStageMask, dstStageMask, byRegion,
                                &imageMemoryBarrier);
 
@@ -243,7 +247,7 @@ bool GrVkImage::InitImageInfo(GrVkGpu* gpu, const ImageDesc& imageDesc, GrVkImag
         imageDesc.fUsageFlags,                       // VkImageUsageFlags
         VK_SHARING_MODE_EXCLUSIVE,                   // VkSharingMode
         0,                                           // queueFamilyCount
-        0,                                           // pQueueFamilyIndices
+        nullptr,                                     // pQueueFamilyIndices
         initialLayout                                // initialLayout
     };
 
@@ -263,6 +267,8 @@ bool GrVkImage::InitImageInfo(GrVkGpu* gpu, const ImageDesc& imageDesc, GrVkImag
     info->fImageTiling = imageDesc.fImageTiling;
     info->fImageLayout = initialLayout;
     info->fFormat = imageDesc.fFormat;
+    info->fImageUsageFlags = imageDesc.fUsageFlags;
+    info->fSampleCount = imageDesc.fSamples;
     info->fLevelCount = imageDesc.fLevels;
     info->fCurrentQueueFamily = VK_QUEUE_FAMILY_IGNORED;
     info->fProtected =

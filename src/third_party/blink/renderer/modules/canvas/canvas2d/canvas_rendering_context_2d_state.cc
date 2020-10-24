@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/css/resolver/filter_operation_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
+#include "third_party/blink/renderer/core/css/scoped_css_value.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/paint/filter_effect_builder.h"
@@ -45,8 +46,6 @@ CanvasRenderingContext2DState::CanvasRenderingContext2DState()
       unparsed_font_(defaultFont),
       unparsed_filter_(defaultFilter),
       text_align_(kStartTextAlign),
-      text_baseline_(kAlphabeticTextBaseline),
-      direction_(kDirectionInherit),
       realized_font_(false),
       is_transform_invertible_(true),
       has_clip_(false),
@@ -102,6 +101,9 @@ CanvasRenderingContext2DState::CanvasRenderingContext2DState(
       text_align_(other.text_align_),
       text_baseline_(other.text_baseline_),
       direction_(other.direction_),
+      letter_spacing_(other.letter_spacing_),
+      word_spacing_(other.word_spacing_),
+      font_kerning_(other.font_kerning_),
       realized_font_(other.realized_font_),
       is_transform_invertible_(other.is_transform_invertible_),
       has_clip_(other.has_clip_),
@@ -125,11 +127,8 @@ void CanvasRenderingContext2DState::FontsNeedUpdate(FontSelector* font_selector,
   DCHECK_EQ(font_selector, font_.GetFontSelector());
   DCHECK(realized_font_);
 
-  if (!RuntimeEnabledFeatures::CSSReducedFontLoadingInvalidationsEnabled()) {
-    // With the feature enabled, |font_| will revalidate its FontFallbackList on
-    // demand. We don't need to manually reset the Font object here.
-    font_ = Font(font_.GetFontDescription(), font_selector);
-  }
+  // |font_| will revalidate its FontFallbackList on demand. We don't need to
+  // manually reset the Font object here.
 
   // FIXME: We only really need to invalidate the resolved filter if the font
   // update above changed anything and the filter uses font-dependent units.
@@ -280,6 +279,16 @@ const FontDescription& CanvasRenderingContext2DState::GetFontDescription()
   return font_.GetFontDescription();
 }
 
+void CanvasRenderingContext2DState::SetFontKerning(
+    FontDescription::Kerning font_kerning,
+    FontSelector* selector) {
+  DCHECK(realized_font_);
+  FontDescription font_description(GetFontDescription());
+  font_description.SetKerning(font_kerning);
+  font_kerning_ = font_kerning;
+  SetFont(font_description, selector);
+}
+
 void CanvasRenderingContext2DState::SetTransform(
     const AffineTransform& transform) {
   is_transform_invertible_ = transform.IsInvertible();
@@ -367,8 +376,9 @@ sk_sp<PaintFilter> CanvasRenderingContext2DState::GetFilter(
                                       filter_style.get(), filter_style.get());
     resolver_state.SetStyle(filter_style);
 
-    StyleBuilder::ApplyProperty(GetCSSPropertyFilter(), resolver_state,
-                                *filter_value_);
+    StyleBuilder::ApplyProperty(
+        GetCSSPropertyFilter(), resolver_state,
+        ScopedCSSValue(*filter_value_, &style_resolution_host->GetDocument()));
     resolver_state.LoadPendingResources();
 
     // We can't reuse m_fillFlags and m_strokeFlags for the filter, since these
@@ -648,6 +658,25 @@ bool CanvasRenderingContext2DState::PatternIsAccelerated(
     PaintType paint_type) const {
   DCHECK(HasPattern(paint_type));
   return Style(paint_type)->GetCanvasPattern()->GetPattern()->IsTextureBacked();
+}
+
+void CanvasRenderingContext2DState::SetTextLetterSpacing(
+    float letter_spacing,
+    FontSelector* selector) {
+  DCHECK(realized_font_);
+  FontDescription font_description(GetFontDescription());
+  font_description.SetLetterSpacing(letter_spacing);
+  letter_spacing_ = letter_spacing;
+  SetFont(font_description, selector);
+}
+
+void CanvasRenderingContext2DState::SetTextWordSpacing(float word_spacing,
+                                                       FontSelector* selector) {
+  DCHECK(realized_font_);
+  FontDescription font_description(GetFontDescription());
+  font_description.SetWordSpacing(word_spacing);
+  word_spacing_ = word_spacing;
+  SetFont(font_description, selector);
 }
 
 }  // namespace blink

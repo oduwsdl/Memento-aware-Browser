@@ -39,6 +39,7 @@ import * as ProtocolClient from '../protocol_client/protocol_client.js';
 import * as Root from '../root/root.js';
 
 import {CSSModel} from './CSSModel.js';
+import {FrameManager} from './FrameManager.js';
 import {OverlayModel} from './OverlayModel.js';
 import {RemoteObject} from './RemoteObject.js';  // eslint-disable-line no-unused-vars
 import {RuntimeModel} from './RuntimeModel.js';
@@ -173,6 +174,20 @@ export class DOMNode {
       this.name = payload.name;
       this.value = payload.value;
     }
+  }
+
+  /**
+   * @return {boolean}
+   */
+  isAdFrameNode() {
+    if (this.isIframe() && this._frameOwnerFrameId) {
+      const frame = FrameManager.instance().getFrame(this._frameOwnerFrameId);
+      if (!frame) {
+        return false;
+      }
+      return frame.adFrameType() !== Protocol.Page.AdFrameType.None;
+    }
+    return false;
   }
 
   /**
@@ -1071,16 +1086,19 @@ export class DOMNode {
     if (this.nodeType() !== Node.ELEMENT_NODE) {
       return lowerCaseName;
     }
-    if (lowerCaseName === 'input' && this.getAttribute('type') && !this.getAttribute('id') &&
-        !this.getAttribute('class')) {
-      return lowerCaseName + '[type="' + this.getAttribute('type') + '"]';
+    const type = this.getAttribute('type');
+    const id = this.getAttribute('id');
+    const classes = this.getAttribute('class');
+
+    if (lowerCaseName === 'input' && type && !id && !classes) {
+      return lowerCaseName + '[type="' + CSS.escape(type) + '"]';
     }
-    if (this.getAttribute('id')) {
-      return lowerCaseName + '#' + this.getAttribute('id');
+    if (id) {
+      return lowerCaseName + '#' + CSS.escape(id);
     }
-    if (this.getAttribute('class')) {
-      return (lowerCaseName === 'div' ? '' : lowerCaseName) + '.' +
-          this.getAttribute('class').trim().replace(/\s+/g, '.');
+    if (classes) {
+      const classList = classes.trim().split(/\s+/g);
+      return (lowerCaseName === 'div' ? '' : lowerCaseName) + '.' + classList.map(cls => CSS.escape(cls)).join('.');
     }
     return lowerCaseName;
   }
@@ -1174,6 +1192,8 @@ export class DOMDocument extends DOMNode {
    */
   constructor(domModel, payload) {
     super(domModel);
+    this.body = null;
+    this.documentElement = null;
     this._init(this, false, payload);
     this.documentURL = payload.documentURL || '';
     this.baseURL = payload.baseURL || '';
@@ -1279,6 +1299,19 @@ export class DOMModel extends SDKModel {
       this._pendingDocumentRequestPromise = this._requestDocument();
     }
     return this._pendingDocumentRequestPromise;
+  }
+
+  /**
+   * @param {!Protocol.Page.FrameId} frameId
+   * @returns {!Promise<?DeferredDOMNode>}
+   */
+  async getOwnerNodeForFrame(frameId) {
+    // Returns an error if the frameId does not belong to the current target.
+    const response = await this._agent.invoke_getFrameOwner({frameId});
+    if (response.getError()) {
+      return null;
+    }
+    return new DeferredDOMNode(this.target(), response.backendNodeId);
   }
 
   /**
@@ -1646,6 +1679,21 @@ export class DOMModel extends SDKModel {
   }
 
   /**
+   * @param {!Array<!{name: string, value: string}>} computedStyles
+   * @param {boolean} pierce
+   * @return {!Promise<!Array<number>>}
+   */
+  async getNodesByStyle(computedStyles, pierce = false) {
+    await this.requestDocument();
+    const response =
+        await this._agent.invoke_getNodesForSubtreeByStyle({nodeId: this._document.id, computedStyles, pierce});
+    if (response.getError()) {
+      throw response.getError();
+    }
+    return response.nodeIds;
+  }
+
+  /**
    * @param {string} query
    * @param {boolean} includeUserAgentShadowDOM
    * @return {!Promise<number>}
@@ -1781,7 +1829,7 @@ export const Events = {
 };
 
 /**
- * @implements {ProtocolProxyApiWorkaround_DOMDispatcher}
+ * @implements {ProtocolProxyApi.DOMDispatcher}
  */
 class DOMDispatcher {
   /**
@@ -1789,13 +1837,6 @@ class DOMDispatcher {
    */
   constructor(domModel) {
     this._domModel = domModel;
-  }
-
-  /**
-   * @return {!Protocol.UsesObjectNotation}
-   */
-  usesObjectNotation() {
-    return true;
   }
 
   /**

@@ -48,10 +48,10 @@ def _GetDocsForTest(test):
   return docs[0]
 
 
-def _AdditionalDetails(bug_id, alerts):
+def _AdditionalDetails(bug_id, project_id, alerts):
   """Returns a message with additional information to add to a bug."""
   base_url = '%s/group_report' % _GetServerURL()
-  bug_page_url = '%s?bug_id=%s' % (base_url, bug_id)
+  bug_page_url = '%s?bug_id=%s&project_id=%s' % (base_url, bug_id, project_id)
   sid = short_uri.GetOrCreatePageState(json.dumps(_UrlsafeKeys(alerts)))
   alerts_url = '%s?sid=%s' % (base_url, sid)
   comment = '<b>All graphs for this bug:</b>\n  %s\n\n' % bug_page_url
@@ -257,7 +257,6 @@ def GetCommitInfoForAlert(alert, crrev=None, gitiles=None):
 
   rev = str(auto_bisect.GetRevisionForBisect(alert.end_revision, alert.test))
 
-  # TODO(sullivan, dtu): merge this with similar pinoint code.
   if (re.match(r'^[0-9]{5,7}$', rev)
       and repository_url == repositories['chromium']['repository_url']):
     # This is a commit position, need the git hash.
@@ -282,6 +281,13 @@ def AssignBugToCLAuthor(bug_id,
   """Assigns the bug to the author of the given revision."""
   author = commit_info['author']['email']
   message = commit_info['message']
+
+  # Check first whether the assignee is an auto-roll, and get the alternative
+  # result/assignee.
+  alternative_assignee = utils.GetSheriffForAutorollCommit(
+      author, message)
+  author = alternative_assignee or author
+
   service.AddBugComment(
       bug_id,
       'Assigning to %s because this is the only CL in range:\n%s' %
@@ -289,7 +295,8 @@ def AssignBugToCLAuthor(bug_id,
       status='Assigned',
       labels=labels,
       owner=author,
-      project=project)
+      project=project,
+  )
 
 
 def FileBug(http,
@@ -297,6 +304,7 @@ def FileBug(http,
             cc,
             summary,
             description,
+            project_id,
             labels,
             components,
             urlsafe_keys,
@@ -315,6 +323,7 @@ def FileBug(http,
   new_bug_response = user_issue_tracker_service.NewBug(
       summary,
       description,
+      project=project_id or 'chromium',
       labels=labels,
       components=components,
       owner=owner,
@@ -324,34 +333,33 @@ def FileBug(http,
     return {'error': new_bug_response['error']}
 
   bug_id = new_bug_response['bug_id']
-  bug_data.Bug(id=bug_id).put()
+  bug_data.Bug.New(bug_id=bug_id, project=project_id or 'chromium').put()
 
   for a in alerts:
     a.bug_id = bug_id
+    a.project_id = project_id
 
   ndb.put_multi(alerts)
-  comment_body = _AdditionalDetails(bug_id, alerts)
+  comment_body = _AdditionalDetails(bug_id, project_id, alerts)
 
   # Add the bug comment with the service account, so that there are no
   # permissions issues.
   dashboard_issue_tracker_service = issue_tracker_service.IssueTrackerService(
       utils.ServiceAccountHttp())
-  dashboard_issue_tracker_service.AddBugComment(bug_id, comment_body)
-  template_params = {'bug_id': bug_id}
+  dashboard_issue_tracker_service.AddBugComment(bug_id, comment_body,
+                                                project_id)
+  template_params = {'bug_id': bug_id, 'project_id': project_id}
   if all(k.kind() == 'Anomaly' for k in alert_keys):
     logging.info('Kicking bisect for bug ' + str(bug_id))
     culprit_rev = _GetSingleCLForAnomalies(alerts)
     if culprit_rev is not None:
       commit_info = GetCommitInfoForAlert(alerts[0])
       if commit_info:
-        author = commit_info['author']['email']
-        message = commit_info['message']
-        if not utils.GetSheriffForAutorollCommit(author, message):
-          needs_bisect = False
-          AssignBugToCLAuthor(bug_id, commit_info,
-                              dashboard_issue_tracker_service)
+        needs_bisect = False
+        AssignBugToCLAuthor(bug_id, commit_info,
+                            dashboard_issue_tracker_service)
     if needs_bisect:
-      bisect_result = auto_bisect.StartNewBisectForBug(bug_id)
+      bisect_result = auto_bisect.StartNewBisectForBug(bug_id, project_id)
       if 'error' in bisect_result:
         logging.info('Failed to kick bisect for ' + str(bug_id))
         template_params['bisect_error'] = bisect_result['error']

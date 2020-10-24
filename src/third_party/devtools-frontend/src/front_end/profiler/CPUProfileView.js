@@ -23,6 +23,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
 import * as Components from '../components/components.js';
 import * as Host from '../host/host.js';
@@ -58,9 +61,8 @@ export class CPUProfileView extends ProfileView {
    */
   wasShown() {
     super.wasShown();
-    const lineLevelProfile = self.runtime.sharedInstance(PerfUI.LineLevelProfile.Performance);
-    lineLevelProfile.reset();
-    lineLevelProfile.appendCPUProfile(this._profileHeader.profileModel());
+    PerfUI.LineLevelProfile.Performance.instance().reset();
+    PerfUI.LineLevelProfile.Performance.instance().appendCPUProfile(this._profileHeader.profileModel());
   }
 
   /**
@@ -173,7 +175,7 @@ export class CPUProfileType extends ProfileType {
   }
 
   _startRecordingProfile() {
-    const cpuProfilerModel = self.UI.context.flavor(SDK.CPUProfilerModel.CPUProfilerModel);
+    const cpuProfilerModel = UI.Context.Context.instance().flavor(SDK.CPUProfilerModel.CPUProfilerModel);
     if (this.profileBeingRecorded() || !cpuProfilerModel) {
       return;
     }

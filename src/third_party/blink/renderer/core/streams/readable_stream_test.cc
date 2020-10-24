@@ -21,7 +21,6 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/string_resource.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "v8/include/v8.h"
 
@@ -336,7 +335,6 @@ TEST_F(ReadableStreamTest, Error) {
 TEST_F(ReadableStreamTest, LockAndDisturb) {
   V8TestingScope scope;
   ScriptState* script_state = scope.GetScriptState();
-  ExceptionState& exception_state = scope.GetExceptionState();
 
   auto* underlying_source =
       MakeGarbageCollected<TestUnderlyingSource>(script_state);
@@ -348,16 +346,13 @@ TEST_F(ReadableStreamTest, LockAndDisturb) {
   EXPECT_FALSE(stream->IsLocked());
   EXPECT_FALSE(stream->IsDisturbed());
 
-  stream->LockAndDisturb(script_state, exception_state);
-  ASSERT_FALSE(exception_state.HadException());
+  stream->LockAndDisturb(script_state);
 
   EXPECT_TRUE(stream->IsLocked());
   EXPECT_TRUE(stream->IsDisturbed());
 }
 
 TEST_F(ReadableStreamTest, Serialize) {
-  ScopedTransferableStreamsForTest enabled(true);
-
   V8TestingScope scope;
   auto* script_state = scope.GetScriptState();
   auto* isolate = scope.GetIsolate();

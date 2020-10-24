@@ -287,6 +287,7 @@ class RTCRtpSenderImpl::RTCRtpSenderInternal
       new_parameters.encodings[i].rid = encoding.rid;
       new_parameters.encodings[i].scale_resolution_down_by =
           encoding.scale_resolution_down_by;
+      new_parameters.encodings[i].adaptive_ptime = encoding.adaptive_ptime;
     }
 
     PostCrossThreadTask(
@@ -610,9 +611,10 @@ webrtc::RtpTransceiverDirection RTCRtpSenderOnlyTransceiver::Direction() const {
   return webrtc::RtpTransceiverDirection::kSendOnly;
 }
 
-void RTCRtpSenderOnlyTransceiver::SetDirection(
+webrtc::RTCError RTCRtpSenderOnlyTransceiver::SetDirection(
     webrtc::RtpTransceiverDirection direction) {
   NOTIMPLEMENTED();
+  return webrtc::RTCError::OK();
 }
 
 base::Optional<webrtc::RtpTransceiverDirection>

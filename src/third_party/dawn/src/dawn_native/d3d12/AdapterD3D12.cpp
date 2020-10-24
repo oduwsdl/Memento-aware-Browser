@@ -22,6 +22,7 @@
 #include "dawn_native/d3d12/PlatformFunctions.h"
 
 #include <locale>
+#include <sstream>
 
 namespace dawn_native { namespace d3d12 {
 
@@ -89,9 +90,25 @@ namespace dawn_native { namespace d3d12 {
                                                : wgpu::AdapterType::DiscreteGPU;
         }
 
+        // Get the adapter's name as a UTF8 string.
         std::wstring_convert<DeletableFacet<std::codecvt<wchar_t, char, std::mbstate_t>>> converter(
             "Error converting");
         mPCIInfo.name = converter.to_bytes(adapterDesc.Description);
+
+        // Convert the adapter's D3D12 driver version to a readable string like "24.21.13.9793".
+        LARGE_INTEGER umdVersion;
+        if (mHardwareAdapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umdVersion) !=
+            DXGI_ERROR_UNSUPPORTED) {
+            uint64_t encodedVersion = umdVersion.QuadPart;
+
+            std::ostringstream o;
+            o << "D3D12 driver version ";
+            o << ((encodedVersion >> 48) & 0xFFFF) << ".";
+            o << ((encodedVersion >> 32) & 0xFFFF) << ".";
+            o << ((encodedVersion >> 16) & 0xFFFF) << ".";
+            o << (encodedVersion & 0xFFFF);
+            mDriverDescription = o.str();
+        }
 
         InitializeSupportedExtensions();
 
@@ -102,6 +119,9 @@ namespace dawn_native { namespace d3d12 {
         mSupportedExtensions.EnableExtension(Extension::TextureCompressionBC);
         mSupportedExtensions.EnableExtension(Extension::PipelineStatisticsQuery);
         mSupportedExtensions.EnableExtension(Extension::TimestampQuery);
+        if (mDeviceInfo.supportsShaderFloat16 && GetBackend()->GetFunctions()->IsDXCAvailable()) {
+            mSupportedExtensions.EnableExtension(Extension::ShaderFloat16);
+        }
     }
 
     MaybeError Adapter::InitializeDebugLayerFilters() {
@@ -136,17 +156,21 @@ namespace dawn_native { namespace d3d12 {
             // https://crbug.com/dawn/422
             D3D12_MESSAGE_ID_EXECUTECOMMANDLISTS_GPU_WRITTEN_READBACK_RESOURCE_MAPPED,
 
+            // WebGPU allows empty scissors without empty viewports.
+            D3D12_MESSAGE_ID_DRAW_EMPTY_SCISSOR_RECTANGLE,
+
             //
             // Temporary IDs: list of warnings that should be fixed or promoted
             //
 
             // Remove after warning have been addressed
-            // https://crbug.com/dawn/419
-            D3D12_MESSAGE_ID_UNMAP_RANGE_NOT_EMPTY,
-
-            // Remove after warning have been addressed
             // https://crbug.com/dawn/421
             D3D12_MESSAGE_ID_GPU_BASED_VALIDATION_INCOMPATIBLE_RESOURCE_STATE,
+
+            // For small placed resource alignment, we first request the small alignment, which may
+            // get rejected and generate a debug error. Then, we request 0 to get the allowed
+            // allowed alignment.
+            D3D12_MESSAGE_ID_CREATERESOURCE_INVALIDALIGNMENT,
         };
 
         // Create a retrieval filter with a deny list to suppress messages.
@@ -165,6 +189,11 @@ namespace dawn_native { namespace d3d12 {
         ComPtr<ID3D12InfoQueue> infoQueue;
         ASSERT_SUCCESS(mD3d12Device.As(&infoQueue));
 
+        // To avoid flooding the console, a storage-filter is also used to
+        // prevent messages from getting logged.
+        DAWN_TRY(CheckHRESULT(infoQueue->PushStorageFilter(&filter),
+                              "ID3D12InfoQueue::PushStorageFilter"));
+
         DAWN_TRY(CheckHRESULT(infoQueue->PushRetrievalFilter(&filter),
                               "ID3D12InfoQueue::PushRetrievalFilter"));
 
@@ -178,6 +207,7 @@ namespace dawn_native { namespace d3d12 {
         ComPtr<ID3D12InfoQueue> infoQueue;
         ASSERT_SUCCESS(mD3d12Device.As(&infoQueue));
         infoQueue->PopRetrievalFilter();
+        infoQueue->PopStorageFilter();
     }
 
     ResultOrError<DeviceBase*> Adapter::CreateDeviceImpl(const DeviceDescriptor* descriptor) {

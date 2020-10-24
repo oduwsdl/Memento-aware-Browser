@@ -96,8 +96,10 @@ class BotUpdateApi(recipe_api.RecipeApi):
                       disable_syntax_validation=False,
                       patch_refs=None,
                       ignore_input_commit=False,
+                      add_blamelists=False,
                       set_output_commit=False,
                       step_test_data=None,
+                      enforce_fetch=False,
                       **kwargs):
     """
     Args:
@@ -112,6 +114,8 @@ class BotUpdateApi(recipe_api.RecipeApi):
         such as bisect.
       ignore_input_commit: if True, ignore api.buildbucket.gitiles_commit.
         Exists for historical reasons. Please do not use.
+      add_blamelists: if True, add blamelist pins for all of the repos that had
+        revisions specified in the gclient config.
       set_output_commit: if True, mark the checked out commit as the
         primary output commit of this build, i.e. call
         api.buildbucket.set_output_gitiles_commit.
@@ -121,6 +125,8 @@ class BotUpdateApi(recipe_api.RecipeApi):
         Requires falsy ignore_input_commit.
       step_test_data: a null function that returns test bot_update.py output.
         Use test_api.output_json to generate test data.
+      enforce_fetch: Enforce a new fetch to refresh the git cache, even if the
+        solution revision passed in already exists in the current git cache.
     """
     assert use_site_config_creds is None, "use_site_config_creds is deprecated"
     assert rietveld is None, "rietveld is deprecated"
@@ -194,6 +200,9 @@ class BotUpdateApi(recipe_api.RecipeApi):
       # This is necessary because existing builders rely on this behavior,
       # e.g. they want to force refs/heads/master at the config level.
       in_commit_repo_path = self._get_commit_repo_path(in_commit, cfg)
+      # The repo_path that comes back on Windows will have backslashes, which
+      # won't match the paths that the gclient configs and bot_update script use
+      in_commit_repo_path = in_commit_repo_path.replace(self.m.path.sep, '/')
       revisions[in_commit_repo_path] = (
           revisions.get(in_commit_repo_path) or in_commit_rev)
       parsed_solution_urls = set(
@@ -267,6 +276,8 @@ class BotUpdateApi(recipe_api.RecipeApi):
       cmd.append('--with_tags')
     if gerrit_no_reset:
       cmd.append('--gerrit_no_reset')
+    if enforce_fetch:
+      cmd.append('--enforce_fetch')
     if no_fetch_tags:
       cmd.append('--no_fetch_tags')
     if gerrit_no_rebase_patch_ref:
@@ -314,8 +325,21 @@ class BotUpdateApi(recipe_api.RecipeApi):
           step_text = result['step_text']
           step_result.presentation.step_text = step_text
 
+        if add_blamelists and 'manifest' in result:
+          blamelist_pins = []
+          for name in revisions:
+            m = result['manifest'][name]
+            pin = {'id': m['revision']}
+            pin['host'], pin['project'] = (
+                self.m.gitiles.parse_repo_url(m['repository']))
+            blamelist_pins.append(pin)
+
+          result.blamelist_pins = blamelist_pins
+          self.m.milo.show_blamelist_for(blamelist_pins)
+
         # Set output commit of the build.
-        if set_output_commit:
+        if (set_output_commit and
+            'got_revision' in self._last_returned_properties):
           # As of April 2019, got_revision describes the output commit,
           # the same commit that Build.output.gitiles_commit describes.
           # In particular, users tend to set got_revision to make Milo display

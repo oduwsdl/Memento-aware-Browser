@@ -21,9 +21,9 @@
 #include "call/audio_state.h"
 #include "call/bitrate_allocator.h"
 #include "modules/rtp_rtcp/source/rtp_rtcp_interface.h"
-#include "rtc_base/constructor_magic.h"
 #include "rtc_base/experiments/struct_parameters_parser.h"
 #include "rtc_base/race_checker.h"
+#include "rtc_base/synchronization/mutex.h"
 #include "rtc_base/task_queue.h"
 #include "rtc_base/thread_checker.h"
 
@@ -74,6 +74,11 @@ class AudioSendStream final : public webrtc::AudioSendStream,
                   RtcEventLog* event_log,
                   const absl::optional<RtpState>& suspended_rtp_state,
                   std::unique_ptr<voe::ChannelSendInterface> channel_send);
+
+  AudioSendStream() = delete;
+  AudioSendStream(const AudioSendStream&) = delete;
+  AudioSendStream& operator=(const AudioSendStream&) = delete;
+
   ~AudioSendStream() override;
 
   // webrtc::AudioSendStream implementation.
@@ -166,10 +171,10 @@ class AudioSendStream final : public webrtc::AudioSendStream,
   int encoder_sample_rate_hz_ = 0;
   size_t encoder_num_channels_ = 0;
   bool sending_ = false;
-  rtc::CriticalSection audio_level_lock_;
+  mutable Mutex audio_level_lock_;
   // Keeps track of audio level, total audio energy and total samples duration.
   // https://w3c.github.io/webrtc-stats/#dom-rtcaudiohandlerstats-totalaudioenergy
-  webrtc::voe::AudioLevel audio_level_;
+  webrtc::voe::AudioLevel audio_level_ RTC_GUARDED_BY(audio_level_lock_);
 
   BitrateAllocatorInterface* const bitrate_allocator_
       RTC_GUARDED_BY(worker_queue_);
@@ -194,7 +199,7 @@ class AudioSendStream final : public webrtc::AudioSendStream,
       const std::vector<RtpExtension>& extensions);
   static int TransportSeqNumId(const Config& config);
 
-  rtc::CriticalSection overhead_per_packet_lock_;
+  mutable Mutex overhead_per_packet_lock_;
   size_t overhead_per_packet_ RTC_GUARDED_BY(overhead_per_packet_lock_) = 0;
 
   // Current transport overhead (ICE, TURN, etc.)
@@ -205,8 +210,6 @@ class AudioSendStream final : public webrtc::AudioSendStream,
   size_t total_packet_overhead_bytes_ RTC_GUARDED_BY(worker_queue_) = 0;
   absl::optional<std::pair<TimeDelta, TimeDelta>> frame_length_range_
       RTC_GUARDED_BY(worker_queue_);
-
-  RTC_DISALLOW_IMPLICIT_CONSTRUCTORS(AudioSendStream);
 };
 }  // namespace internal
 }  // namespace webrtc

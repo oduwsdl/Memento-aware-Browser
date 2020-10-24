@@ -242,6 +242,7 @@ export var OperatorCode;
     OperatorCode[OperatorCode["atomic_notify"] = 65024] = "atomic_notify";
     OperatorCode[OperatorCode["i32_atomic_wait"] = 65025] = "i32_atomic_wait";
     OperatorCode[OperatorCode["i64_atomic_wait"] = 65026] = "i64_atomic_wait";
+    OperatorCode[OperatorCode["atomic_fence"] = 65027] = "atomic_fence";
     OperatorCode[OperatorCode["i32_atomic_load"] = 65040] = "i32_atomic_load";
     OperatorCode[OperatorCode["i64_atomic_load"] = 65041] = "i64_atomic_load";
     OperatorCode[OperatorCode["i32_atomic_load8_u"] = 65042] = "i32_atomic_load8_u";
@@ -1018,10 +1019,10 @@ export const OperatorCodeNames = [
     OperatorCodeNames[0xfd00 | i] = s;
 });
 [
-    "atomic.notify",
-    "i32.atomic.wait",
-    "i64.atomic.wait",
-    undefined,
+    "memory.atomic.notify",
+    "memory.atomic.wait32",
+    "memory.atomic.wait64",
+    "atomic.fence",
     undefined,
     undefined,
     undefined,
@@ -1140,6 +1141,10 @@ export var NameType;
     NameType[NameType["Module"] = 0] = "Module";
     NameType[NameType["Function"] = 1] = "Function";
     NameType[NameType["Local"] = 2] = "Local";
+    NameType[NameType["Type"] = 4] = "Type";
+    NameType[NameType["Table"] = 5] = "Table";
+    NameType[NameType["Memory"] = 6] = "Memory";
+    NameType[NameType["Global"] = 7] = "Global";
 })(NameType || (NameType = {}));
 export var BinaryReaderState;
 (function (BinaryReaderState) {
@@ -1420,6 +1425,9 @@ export class BinaryReader {
         this._pos += length;
         return new Uint8Array(result); // making a clone of the data
     }
+    skipBytes(length) {
+        this._pos += length;
+    }
     hasStringBytes() {
         if (!this.hasVarIntBytes())
             return false;
@@ -1611,33 +1619,44 @@ export class BinaryReader {
     }
     readElementEntryBody() {
         let funcType = 0 /* unspecified */;
+        const pos = this._pos;
         if (this._segmentFlags &
             (1 /* IsPassive */ | 2 /* HasTableIndex */)) {
+            if (!this.hasMoreBytes())
+                return false;
             funcType = this.readVarInt7();
         }
-        if (!this.hasVarIntBytes())
-            return false;
-        const pos = this._pos;
-        const numElemements = this.readVarUint32();
-        if (!this.hasBytes(numElemements)) {
-            // Shall have at least the numElemements amount of bytes.
+        if (!this.hasVarIntBytes()) {
             this._pos = pos;
             return false;
         }
+        const numElemements = this.readVarUint32();
         const elements = new Uint32Array(numElemements);
         for (let i = 0; i < numElemements; i++) {
             if (this._segmentFlags & 4 /* FunctionsAsElements */) {
+                if (!this.hasMoreBytes()) {
+                    this._pos = pos;
+                    return false;
+                }
                 // Read initializer expression, which must either be null ref or func ref
                 let operator = this.readUint8();
                 if (operator == 208 /* ref_null */) {
                     elements[i] = NULL_FUNCTION_INDEX;
                 }
                 else if (operator == 210 /* ref_func */) {
+                    if (!this.hasVarIntBytes()) {
+                        this._pos = pos;
+                        return false;
+                    }
                     elements[i] = this.readVarInt32();
                 }
                 else {
                     this.error = new Error("Invalid initializer expression for element");
                     return true;
+                }
+                if (!this.hasMoreBytes()) {
+                    this._pos = pos;
+                    return false;
                 }
                 operator = this.readUint8();
                 if (operator != 11 /* end */) {
@@ -1737,13 +1756,17 @@ export class BinaryReader {
         switch (type) {
             case 0 /* Module */:
                 result = {
-                    type: type,
+                    type,
                     moduleName: this.readStringBytes(),
                 };
                 break;
             case 1 /* Function */:
+            case 4 /* Type */:
+            case 5 /* Table */:
+            case 6 /* Memory */:
+            case 7 /* Global */:
                 result = {
-                    type: type,
+                    type,
                     names: this.readNameMap(),
                 };
                 break;
@@ -1758,14 +1781,15 @@ export class BinaryReader {
                     });
                 }
                 result = {
-                    type: type,
+                    type,
                     funcs: funcs,
                 };
                 break;
             default:
-                this.error = new Error(`Bad name entry type: ${type}`);
-                this.state = -1 /* ERROR */;
-                return true;
+                // Skip this unknown name subsection (as per specification,
+                // custom section errors shouldn't cause Wasm parsing to fail).
+                this.skipBytes(payloadLength);
+                return this.read();
         }
         this.state = 19 /* NAME_SECTION_ENTRY */;
         this.result = result;
@@ -1881,7 +1905,10 @@ export class BinaryReader {
         return true;
     }
     readCodeOperator_0xfc() {
-        var code = this._data[this._pos++] | 0xfc00;
+        if (!this.hasVarIntBytes()) {
+            return false;
+        }
+        var code = this.readVarUint32() | 0xfc00;
         var reserved, segmentIndex, destinationIndex, tableIndex;
         switch (code) {
             case 64512 /* i32_trunc_sat_f32_s */:
@@ -1950,6 +1977,9 @@ export class BinaryReader {
         const MAX_CODE_OPERATOR_0XFD_SIZE = 17;
         var pos = this._pos;
         if (!this._eof && pos + MAX_CODE_OPERATOR_0XFD_SIZE > this._length) {
+            return false;
+        }
+        if (!this.hasVarIntBytes()) {
             return false;
         }
         var code = this.readVarUint32() | 0xfd00;
@@ -2137,7 +2167,10 @@ export class BinaryReader {
         if (!this._eof && pos + MAX_CODE_OPERATOR_0XFE_SIZE > this._length) {
             return false;
         }
-        var code = this._data[this._pos++] | 0xfe00;
+        if (!this.hasVarIntBytes()) {
+            return false;
+        }
+        var code = this.readVarUint32() | 0xfe00;
         var memoryAddress;
         switch (code) {
             case 65024 /* atomic_notify */:
@@ -2208,6 +2241,15 @@ export class BinaryReader {
             case 65102 /* i64_atomic_rmw32_cmpxchg_u */:
                 memoryAddress = this.readMemoryImmediate();
                 break;
+            case 65027 /* atomic_fence */: {
+                var consistency_model = this.readUint8();
+                if (consistency_model != 0) {
+                    this.error = new Error("atomic.fence consistency model must be 0");
+                    this.state = -1 /* ERROR */;
+                    return true;
+                }
+                break;
+            }
             default:
                 this.error = new Error(`Unknown operator: ${code}`);
                 this.state = -1 /* ERROR */;

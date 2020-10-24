@@ -22,12 +22,12 @@
 
 #include "third_party/blink/renderer/core/svg/svg_animate_element.h"
 
-#include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
+#include "third_party/blink/renderer/core/svg/animation/smil_animation_effect_parameters.h"
 #include "third_party/blink/renderer/core/svg/properties/svg_animated_property.h"
 #include "third_party/blink/renderer/core/svg/properties/svg_property.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_color.h"
@@ -54,13 +54,16 @@ String ComputeCSSPropertyValue(SVGElement* element, CSSPropertyID id) {
   // Refer to comment in Element::computedStyle.
   DCHECK(element->InActiveDocument());
 
+  element->GetDocument().UpdateStyleAndLayoutTreeForNode(element);
+
   // Don't include any properties resulting from CSS Transitions/Animations or
   // SMIL animations, as we want to retrieve the "base value".
-  element->SetUseOverrideComputedStyle(true);
-  String value = MakeGarbageCollected<CSSComputedStyleDeclaration>(element)
-                     ->GetPropertyValue(id);
-  element->SetUseOverrideComputedStyle(false);
-  return value;
+  const ComputedStyle* style = element->BaseComputedStyleForSMIL();
+  if (!style)
+    return "";
+  const CSSValue* value = CSSProperty::Get(id).CSSValueFromComputedStyle(
+      *style, element->GetLayoutObject(), false);
+  return value ? value->CssText() : "";
 }
 
 AnimatedPropertyValueType PropertyValueType(const QualifiedName& attribute_name,
@@ -212,11 +215,6 @@ void SVGAnimateElement::UpdateTargetProperty() {
     ClearTargetProperty();
 }
 
-AnimatedPropertyType SVGAnimateElement::GetAnimatedPropertyType() const {
-  // TODO(fs): Should be possible to DCHECK targetElement() here instead.
-  return !targetElement() ? kAnimatedUnknown : type_;
-}
-
 bool SVGAnimateElement::HasValidAnimation() const {
   if (AttributeName() == AnyQName())
     return false;
@@ -344,24 +342,20 @@ void SVGAnimateElement::CalculateAnimatedValue(
     return;
 
   DCHECK(percentage >= 0 && percentage <= 1);
-  DCHECK_NE(GetAnimatedPropertyType(), kAnimatedUnknown);
+  DCHECK_NE(type_, kAnimatedUnknown);
   DCHECK(from_property_);
-  DCHECK_EQ(from_property_->GetType(), GetAnimatedPropertyType());
+  DCHECK_EQ(from_property_->GetType(), type_);
   DCHECK(to_property_);
 
   auto* result_animation_element = To<SVGAnimateElement>(result_element);
   DCHECK(result_animation_element->animated_value_);
-  DCHECK_EQ(result_animation_element->GetAnimatedPropertyType(),
-            GetAnimatedPropertyType());
+  DCHECK_EQ(result_animation_element->type_, type_);
 
   if (IsA<SVGSetElement>(*this))
     percentage = 1;
 
   if (GetCalcMode() == kCalcModeDiscrete)
     percentage = percentage < 0.5 ? 0 : 1;
-
-  // Target element might have changed.
-  SVGElement* target_element = targetElement();
 
   // Values-animation accumulates using the last values entry corresponding to
   // the end of duration time.
@@ -386,9 +380,10 @@ void SVGAnimateElement::CalculateAnimatedValue(
     return;
   }
 
+  SMILAnimationEffectParameters parameters = ComputeEffectParameters();
   animated_value->CalculateAnimatedValue(
-      *this, percentage, repeat_count, from_value, to_value,
-      to_at_end_of_duration_value, target_element);
+      parameters, percentage, repeat_count, from_value, to_value,
+      to_at_end_of_duration_value, targetElement());
 }
 
 bool SVGAnimateElement::CalculateToAtEndOfDurationValue(
@@ -413,14 +408,12 @@ bool SVGAnimateElement::CalculateFromAndToValues(const String& from_string,
 bool SVGAnimateElement::CalculateFromAndByValues(const String& from_string,
                                                  const String& by_string) {
   DCHECK(targetElement());
+  DCHECK(GetAnimationMode() == kByAnimation ||
+         GetAnimationMode() == kFromByAnimation);
 
-  if (GetAnimationMode() == kByAnimation && !IsAdditive())
-    return false;
-
-  // from-by animation may only be used with attributes that support addition
+  // by/from-by animation may only be used with attributes that support addition
   // (e.g. most numeric attributes).
-  if (GetAnimationMode() == kFromByAnimation &&
-      !AnimatedPropertyTypeSupportsAddition())
+  if (!AnimatedPropertyTypeSupportsAddition())
     return false;
 
   DCHECK(!IsA<SVGSetElement>(*this));
@@ -433,7 +426,7 @@ bool SVGAnimateElement::CalculateFromAndByValues(const String& from_string,
   return true;
 }
 
-void SVGAnimateElement::ResetAnimatedType() {
+void SVGAnimateElement::ResetAnimatedType(bool needs_underlying_value) {
   DCHECK(targetElement());
   if (IsAnimatingSVGDom()) {
     // SVG DOM animVal animation code-path.
@@ -448,7 +441,9 @@ void SVGAnimateElement::ResetAnimatedType() {
 
   // CSS properties animation code-path.
   String base_value =
-      ComputeCSSPropertyValue(targetElement(), css_property_id_);
+      needs_underlying_value
+          ? ComputeCSSPropertyValue(targetElement(), css_property_id_)
+          : g_empty_string;
   animated_value_ = CreatePropertyForAnimation(base_value);
 }
 
@@ -474,9 +469,9 @@ void SVGAnimateElement::ClearAnimatedType() {
 }
 
 void SVGAnimateElement::ApplyResultsToTarget() {
-  DCHECK_NE(GetAnimatedPropertyType(), kAnimatedUnknown);
   DCHECK(animated_value_);
   DCHECK(targetElement());
+  DCHECK_NE(type_, kAnimatedUnknown);
 
   // We do update the style and the animation property independent of each
   // other.
@@ -492,7 +487,8 @@ void SVGAnimateElement::ApplyResultsToTarget() {
     auto& document = target_element->GetDocument();
     auto set_result = properties->SetProperty(
         css_property_id_, animated_value_string, false,
-        document.GetSecureContextMode(), document.ElementSheet().Contents());
+        document.GetExecutionContext()->GetSecureContextMode(),
+        document.ElementSheet().Contents());
     if (set_result.did_change) {
       target_element->SetNeedsStyleRecalc(
           kLocalStyleChange,
@@ -505,8 +501,9 @@ void SVGAnimateElement::ApplyResultsToTarget() {
 }
 
 bool SVGAnimateElement::AnimatedPropertyTypeSupportsAddition() const {
+  DCHECK(targetElement());
   // http://www.w3.org/TR/SVG/animate.html#AnimationAttributesAndProperties.
-  switch (GetAnimatedPropertyType()) {
+  switch (type_) {
     case kAnimatedBoolean:
     case kAnimatedEnumeration:
     case kAnimatedPreserveAspectRatio:
@@ -516,16 +513,6 @@ bool SVGAnimateElement::AnimatedPropertyTypeSupportsAddition() const {
     default:
       return true;
   }
-}
-
-bool SVGAnimateElement::IsAdditive() const {
-  if (GetAnimationMode() == kByAnimation ||
-      GetAnimationMode() == kFromByAnimation) {
-    if (!AnimatedPropertyTypeSupportsAddition())
-      return false;
-  }
-
-  return SVGAnimationElement::IsAdditive();
 }
 
 float SVGAnimateElement::CalculateDistance(const String& from_string,

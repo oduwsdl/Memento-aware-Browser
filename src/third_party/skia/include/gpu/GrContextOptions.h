@@ -98,7 +98,7 @@ struct SK_API GrContextOptions {
 
     /** Construct mipmaps manually, via repeated downsampling draw-calls. This is used when
         the driver's implementation (glGenerateMipmap) contains bugs. This requires mipmap
-        level and LOD control (ie desktop or ES3). */
+        level control (ie desktop or ES3). */
     bool fDoManualMipmapping = false;
 
     /**
@@ -225,6 +225,22 @@ struct SK_API GrContextOptions {
      */
     int  fInternalMultisampleCount = 4;
 
+    /**
+     * In Skia's vulkan backend a single GrContext submit equates to the submission of a single
+     * primary command buffer to the VkQueue. This value specifies how many vulkan secondary command
+     * buffers we will cache for reuse on a given primary command buffer. A single submit may use
+     * more than this many secondary command buffers, but after the primary command buffer is
+     * finished on the GPU it will only hold on to this many secondary command buffers for reuse.
+     *
+     * A value of -1 means we will pick a limit value internally.
+     */
+    int fMaxCachedVulkanSecondaryCommandBuffers = -1;
+
+    /**
+     * If true, the caps will never support mipmaps.
+     */
+    bool fSuppressMipmapSupport = false;
+
 #if GR_TEST_UTILS
     /**
      * Private options that are only meant for testing within Skia's tools.
@@ -252,6 +268,17 @@ struct SK_API GrContextOptions {
     bool fSuppressTessellationShaders = false;
 
     /**
+     * If greater than zero and less than the actual hardware limit, overrides the maximum number of
+     * tessellation segments supported by the caps.
+     */
+    int  fMaxTessellationSegmentsOverride = 0;
+
+    /**
+     * If true, then all paths are processed as if "setIsVolatile" had been called.
+     */
+    bool fAllPathsVolatile = false;
+
+    /**
      * Render everything in wireframe
      */
     bool fWireframeMode = false;
@@ -260,6 +287,11 @@ struct SK_API GrContextOptions {
      * Enforces clearing of all textures when they're created.
      */
     bool fClearAllTextures = false;
+
+    /**
+     * Randomly generate a (false) GL_OUT_OF_MEMORY error
+     */
+    bool fRandomGLOOM = false;
 
     /**
      * Include or exclude specific GPU path renderers.

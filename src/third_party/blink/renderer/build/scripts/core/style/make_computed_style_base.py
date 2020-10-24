@@ -29,6 +29,7 @@ ALIGNMENT_ORDER = [
     'ScaleTransformOperation',
     'RotateTransformOperation',
     'TranslateTransformOperation',
+    'GridTrackList',
     'base::Optional<IntSize>',
     'double',
     # Aligns like a pointer (can be 32 or 64 bits)
@@ -50,6 +51,7 @@ ALIGNMENT_ORDER = [
     'NinePieceImage',
     'IntrinsicLength',
     'TextDecorationThickness',
+    'StyleAspectRatio',
     # Aligns like float
     'base::Optional<Length>',
     'StyleOffsetRotation',
@@ -69,8 +71,8 @@ ALIGNMENT_ORDER = [
     'cc::ScrollSnapAlign',
     'BorderValue',
     'StyleColor',
+    'StyleAutoColor',
     'Color',
-    'CSSValueID',
     'LayoutUnit',
     'LineClampValue',
     'OutlineValue',

@@ -86,6 +86,13 @@ endif()
 
 find_library(X11 X11)
 find_library(XCB xcb)
+if(SWIFTSHADER_BUILD_WSI_WAYLAND)
+    find_library(WAYLAND wayland-client)
+endif(SWIFTSHADER_BUILD_WSI_WAYLAND)
+if(SWIFTSHADER_BUILD_WSI_DIRECTFB)
+    find_library(DIRECTFB directfb)
+    find_path(DIRECTFB_INCLUDE_DIR directfb/directfb.h)
+endif(SWIFTSHADER_BUILD_WSI_DIRECTFB)
 
 ###########################################################
 # Options
@@ -112,8 +119,11 @@ option_if_not_defined(SWIFTSHADER_BUILD_EGL "Build the EGL library" TRUE)
 option_if_not_defined(SWIFTSHADER_BUILD_GLESv2 "Build the OpenGL ES 2 library" TRUE)
 option_if_not_defined(SWIFTSHADER_BUILD_GLES_CM "Build the OpenGL ES 1.1 library" TRUE)
 option_if_not_defined(SWIFTSHADER_BUILD_VULKAN "Build the Vulkan library" TRUE)
+option_if_not_defined(SWIFTSHADER_BUILD_WSI_WAYLAND "Build the Wayland WSI support" FALSE)
+option_if_not_defined(SWIFTSHADER_BUILD_WSI_DIRECTFB "Build the DirectFB WSI support" FALSE)
 option_if_not_defined(SWIFTSHADER_BUILD_PVR "Build the PowerVR examples" TRUE)
 option_if_not_defined(SWIFTSHADER_GET_PVR "Check out the PowerVR submodule" FALSE)
+option_if_not_defined(SWIFTSHADER_BUILD_ANGLE "Build angle" FALSE)
 
 option_if_not_defined(SWIFTSHADER_USE_GROUP_SOURCES "Group the source files in a folder tree for Visual Studio" TRUE)
 
@@ -147,14 +157,19 @@ set(DEFAULT_REACTOR_BACKEND "LLVM")
 set(REACTOR_BACKEND ${DEFAULT_REACTOR_BACKEND} CACHE STRING "JIT compiler back-end used by Reactor")
 set_property(CACHE REACTOR_BACKEND PROPERTY STRINGS LLVM Subzero)
 
-set(DEFAULT_SWIFTSHADER_LLVM_VERSION "7.0")
+set(DEFAULT_SWIFTSHADER_LLVM_VERSION "10.0")
 set(SWIFTSHADER_LLVM_VERSION ${DEFAULT_SWIFTSHADER_LLVM_VERSION} CACHE STRING "LLVM version to use")
-set_property(CACHE SWIFTSHADER_LLVM_VERSION PROPERTY STRINGS "7.0" "10.0")
+set_property(CACHE SWIFTSHADER_LLVM_VERSION PROPERTY STRINGS "10.0")
 
 # If defined, overrides the default optimization level of the current reactor backend.
 # Set to one of the rr::Optimization::Level enum values.
 set(REACTOR_DEFAULT_OPT_LEVEL "Default" CACHE STRING "Reactor default optimization level")
 set_property(CACHE REACTOR_DEFAULT_OPT_LEVEL PROPERTY STRINGS "None" "Less" "Default" "Aggressive")
+
+if(NOT DEFINED SWIFTSHADER_LOGGING_LEVEL)
+    set(SWIFTSHADER_LOGGING_LEVEL "Info" CACHE STRING "SwiftShader logging level")
+    set_property(CACHE SWIFTSHADER_LOGGING_LEVEL PROPERTY STRINGS "Verbose" "Debug" "Info" "Warn" "Error" "Fatal" "Disabled")
+endif()
 
 # LLVM disallows calling cmake . from the main LLVM dir, the reason is that
 # it builds header files that could overwrite the orignal ones. Here we
@@ -223,6 +238,9 @@ if(SWIFTSHADER_BUILD_CPPDAP)
     InitSubmodule(cppdap ${THIRD_PARTY_DIR}/cppdap)
 endif()
 
+if(SWIFTSHADER_BUILD_ANGLE)
+    InitSubmodule(angle ${THIRD_PARTY_DIR}/angle/angle)
+endif()
 
 ###########################################################
 # Convenience macros
@@ -320,7 +338,7 @@ endmacro()
 
 macro(set_linker_flag FLAG)
     if(${ARGC} GREATER 1)
-        set(CMAKE_EXE_LINKER_FLAGS ${ARGV1} "${CMAKE_EXE_LINKER_FLAGS ${ARGV1}} ${FLAG}")
+        set(CMAKE_EXE_LINKER_FLAGS_${ARGV1} "${CMAKE_EXE_LINKER_FLAGS_${ARGV1}} ${FLAG}")
     else()
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FLAG}")
     endif()
@@ -333,8 +351,8 @@ if(MSVC)
     add_definitions(-D_SBCS)  # Single Byte Character Set (ASCII)
     add_definitions(-D_ENABLE_EXTENDED_ALIGNED_STORAGE)  # Disable MSVC warnings about std::aligned_storage being broken before VS 2017 15.8
 
-    set_cpp_flag("/DEBUG:FASTLINK" DEBUG)
-    set_cpp_flag("/DEBUG:FASTLINK" RELWITHDEBINFO)
+    set_linker_flag("/DEBUG:FASTLINK" DEBUG)
+    set_linker_flag("/DEBUG:FASTLINK" RELWITHDEBINFO)
 
     # Disable specific warnings
     # TODO: Not all of these should be disabled, but for now, we want a warning-free msvc build. Remove these one by one
@@ -540,6 +558,10 @@ if(REACTOR_DEFAULT_OPT_LEVEL)
     list(APPEND SWIFTSHADER_COMPILE_OPTIONS "-DREACTOR_DEFAULT_OPT_LEVEL=${REACTOR_DEFAULT_OPT_LEVEL}")
 endif()
 
+if(DEFINED SWIFTSHADER_LOGGING_LEVEL)
+    list(APPEND SWIFTSHADER_COMPILE_OPTIONS "-DSWIFTSHADER_LOGGING_LEVEL=${SWIFTSHADER_LOGGING_LEVEL}")
+endif()
+
 if(WIN32)
     add_definitions(-DWINVER=0x501 -DNOMINMAX -DSTRICT)
     set(CMAKE_FIND_LIBRARY_PREFIXES ${CMAKE_FIND_LIBRARY_PREFIXES} "" "lib")
@@ -569,12 +591,15 @@ endif()
 # LLVM
 ###########################################################
 add_subdirectory(${THIRD_PARTY_DIR}/llvm-${SWIFTSHADER_LLVM_VERSION} EXCLUDE_FROM_ALL)
+set_target_properties(llvm PROPERTIES FOLDER "third_party")
 
 ###########################################################
 # Subzero
 ###########################################################
 add_subdirectory(${THIRD_PARTY_DIR}/llvm-subzero EXCLUDE_FROM_ALL)
 add_subdirectory(${THIRD_PARTY_DIR}/subzero EXCLUDE_FROM_ALL)
+set_target_properties(llvm-subzero PROPERTIES FOLDER "third_party")
+set_target_properties(subzero PROPERTIES FOLDER "third_party")
 
 ###########################################################
 # marl
@@ -582,6 +607,7 @@ add_subdirectory(${THIRD_PARTY_DIR}/subzero EXCLUDE_FROM_ALL)
 if(BUILD_MARL)
     set(MARL_THIRD_PARTY_DIR ${THIRD_PARTY_DIR})
     add_subdirectory(${THIRD_PARTY_DIR}/marl)
+    set_target_properties(marl PROPERTIES FOLDER "third_party")
 endif()
 
 if(MARL_THREAD_SAFETY_ANALYSIS_SUPPORTED)
@@ -601,6 +627,7 @@ endif()
 ###########################################################
 if(SWIFTSHADER_ENABLE_ASTC)
     add_subdirectory(${THIRD_PARTY_DIR}/astc-encoder)
+    set_target_properties(astc-encoder PROPERTIES FOLDER "third_party")
 endif()
 
 ###########################################################
@@ -613,6 +640,10 @@ if(SWIFTSHADER_BUILD_TESTS)
     # gtest finds python, which picks python 2 first, if present.
     # We need to undo this so that SPIR-V can later find python3.
     unset(PYTHON_EXECUTABLE CACHE)
+    set_target_properties(gmock PROPERTIES FOLDER "third_party")
+    set_target_properties(gmock_main PROPERTIES FOLDER "third_party")
+    set_target_properties(gtest PROPERTIES FOLDER "third_party")
+    set_target_properties(gtest_main PROPERTIES FOLDER "third_party")
 endif()
 
 ###########################################################
@@ -627,6 +658,13 @@ if(WIN32)
     set(OS_LIBS odbc32 odbccp32 WS2_32 dxguid)
 elseif(LINUX)
     set(OS_LIBS dl pthread)
+    if(SWIFTSHADER_BUILD_WSI_WAYLAND)
+        list(APPEND OS_LIBS "${WAYLAND}")
+    endif(SWIFTSHADER_BUILD_WSI_WAYLAND)
+    if(SWIFTSHADER_BUILD_WSI_DIRECTFB)
+        list(APPEND OS_LIBS "${DIRECTFB}")
+        include_directories(${DIRECTFB_INCLUDE_DIR}/directfb)
+    endif(SWIFTSHADER_BUILD_WSI_DIRECTFB)
 elseif(FUCHSIA)
     set(OS_LIBS zircon)
 elseif(APPLE)
@@ -707,6 +745,16 @@ if(SWIFTSHADER_BUILD_VULKAN)
         if(XCB)
             target_compile_definitions(vk_base INTERFACE "VK_USE_PLATFORM_XCB_KHR")
         endif()
+        if(SWIFTSHADER_BUILD_WSI_WAYLAND)
+            if(WAYLAND)
+                target_compile_definitions(vk_base INTERFACE "VK_USE_PLATFORM_WAYLAND_KHR")
+            endif()
+        endif(SWIFTSHADER_BUILD_WSI_WAYLAND)
+        if(SWIFTSHADER_BUILD_WSI_DIRECTFB)
+            if(DIRECTFB AND DIRECTFB_INCLUDE_DIR)
+                target_compile_definitions(vk_base INTERFACE "VK_USE_PLATFORM_DIRECTFB_EXT")
+            endif()
+        endif(SWIFTSHADER_BUILD_WSI_DIRECTFB)
     elseif(APPLE)
         target_compile_definitions(vk_base INTERFACE "VK_USE_PLATFORM_MACOS_MVK")
     elseif(FUCHSIA)
@@ -722,16 +770,31 @@ if(SWIFTSHADER_BUILD_VULKAN)
     add_subdirectory(src/Vulkan) # Add vk_swiftshader target
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND # turbo-cov is only useful for clang coverage info
-       SWIFTSHADER_LLVM_VERSION EQUAL "10.0" AND # turbo-cov does not build with earlier llvm versions
        SWIFTSHADER_EMIT_COVERAGE)
         add_subdirectory(${TESTS_DIR}/regres/cov/turbo-cov)
     endif()
 
 endif()
 
+if(SWIFTSHADER_BUILD_ANGLE)
+    add_subdirectory(${THIRD_PARTY_DIR}/angle)
+
+    # Make angle depend on vk_swiftshader so we can test SWANGLE
+    if (TARGET vk_swiftshader)
+        add_dependencies(angle vk_swiftshader)
+    endif()
+endif()
+
+
 ###########################################################
 # Sample programs and tests
 ###########################################################
+
+# TODO(b/161976310): Add support for building PowerVR on MacOS
+if(APPLE AND HAVE_PVR_SUBMODULE AND SWIFTSHADER_BUILD_PVR)
+    message(WARNING "Building PowerVR examples for SwiftShader is not yet supported on Apple platforms.")
+    set(SWIFTSHADER_BUILD_PVR FALSE)
+endif()
 
 if(HAVE_PVR_SUBMODULE AND SWIFTSHADER_BUILD_PVR)
     if(UNIX AND NOT APPLE)
@@ -850,6 +913,13 @@ if(HAVE_PVR_SUBMODULE AND SWIFTSHADER_BUILD_PVR)
     foreach(pvr_target ${PVR_TARGET_OTHER} ${PVR_VULKAN_TARGET_OTHER} ${PVR_GLES_TARGET_OTHER})
         set_target_properties(${pvr_target} PROPERTIES FOLDER Samples/PowerVR-Build)
     endforeach()
+
+    # Make angle target depend on PowerVR GL examples
+    if (TARGET angle)
+        foreach(pvr_target ${PVR_GLES_TARGET})
+            add_dependencies(angle ${pvr_target})
+        endforeach()
+    endif()
 endif()
 
 if(SWIFTSHADER_BUILD_TESTS)
@@ -863,6 +933,8 @@ if(SWIFTSHADER_BUILD_BENCHMARKS)
     if (NOT TARGET benchmark::benchmark)
         set(BENCHMARK_ENABLE_TESTING FALSE CACHE BOOL FALSE FORCE)
         add_subdirectory(${THIRD_PARTY_DIR}/benchmark)
+        set_target_properties(benchmark PROPERTIES FOLDER "third_party")
+        set_target_properties(benchmark_main PROPERTIES FOLDER "third_party")
     endif()
 
     if (NOT TARGET glslang)

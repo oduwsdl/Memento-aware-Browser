@@ -4,8 +4,8 @@
 
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_timeline_element.h"
 
+#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
@@ -111,7 +111,7 @@ void MediaControlTimelineElement::DefaultEventHandler(Event& event) {
         UserMetricsAction("Media.Controls.ScrubbingBegin"));
     GetMediaControls().BeginScrubbing(MediaControlsImpl::IsTouchEvent(&event));
     Element* thumb = UserAgentShadowRoot()->getElementById(
-        shadow_element_names::SliderThumb());
+        shadow_element_names::kIdSliderThumb);
     bool started_from_thumb = thumb && thumb == event.target()->ToNode();
     metrics_.StartGesture(started_from_thumb);
   } else if (EndScrubbingEvent(event)) {

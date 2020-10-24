@@ -336,6 +336,8 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   PerformanceEntryVector getEntriesByTypeInternal(
       PerformanceEntry::EntryType type);
 
+  void MeasureMemoryExperimentTimerFired(TimerBase*);
+
  protected:
   Performance(base::TimeTicks time_origin,
               scoped_refptr<base::SingleThreadTaskRunner>);
@@ -370,6 +372,7 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   PerformanceEntryVector layout_shift_buffer_;
   PerformanceEntryVector largest_contentful_paint_buffer_;
   PerformanceEntryVector longtask_buffer_;
+  PerformanceEntryVector visibility_state_buffer_;
   Member<PerformanceEntry> navigation_timing_;
   Member<UserTiming> user_timing_;
   Member<PerformanceEntry> first_paint_timing_;

@@ -1062,11 +1062,30 @@
                 slot->linearHoriAdvance / 65536.0 ));
     FT_TRACE5(( "  linear y advance: %f\n",
                 slot->linearVertAdvance / 65536.0 ));
+    FT_TRACE5(( "\n" ));
     FT_TRACE5(( "  bitmap %dx%d, %s (mode %d)\n",
                 slot->bitmap.width,
                 slot->bitmap.rows,
                 pixel_modes[slot->bitmap.pixel_mode],
                 slot->bitmap.pixel_mode ));
+    FT_TRACE5(( "\n" ));
+
+    {
+      FT_Glyph_Metrics*  metrics = &slot->metrics;
+
+
+      FT_TRACE5(( "  metrics:\n" ));
+      FT_TRACE5(( "    width:  %f\n", metrics->width  / 64.0 ));
+      FT_TRACE5(( "    height: %f\n", metrics->height / 64.0 ));
+      FT_TRACE5(( "\n" ));
+      FT_TRACE5(( "    horiBearingX: %f\n", metrics->horiBearingX / 64.0 ));
+      FT_TRACE5(( "    horiBearingY: %f\n", metrics->horiBearingY / 64.0 ));
+      FT_TRACE5(( "    horiAdvance:  %f\n", metrics->horiAdvance  / 64.0 ));
+      FT_TRACE5(( "\n" ));
+      FT_TRACE5(( "    vertBearingX: %f\n", metrics->vertBearingX / 64.0 ));
+      FT_TRACE5(( "    vertBearingY: %f\n", metrics->vertBearingY / 64.0 ));
+      FT_TRACE5(( "    vertAdvance:  %f\n", metrics->vertAdvance  / 64.0 ));
+    }
 #endif
 
   Exit:
@@ -1841,15 +1860,15 @@
       /* FT2 allocator takes signed long buffer length,
        * too large value causing overflow should be checked
        */
-      FT_TRACE4(( "                 POST fragment #%d: length=0x%08x"
-                  " total pfb_len=0x%08x\n",
+      FT_TRACE4(( "                 POST fragment #%d: length=0x%08lx"
+                  " total pfb_len=0x%08lx\n",
                   i, temp, pfb_len + temp + 6 ));
 
       if ( FT_MAC_RFORK_MAX_LEN < temp               ||
            FT_MAC_RFORK_MAX_LEN - temp < pfb_len + 6 )
       {
         FT_TRACE2(( "             MacOS resource length cannot exceed"
-                    " 0x%08x\n",
+                    " 0x%08lx\n",
                     FT_MAC_RFORK_MAX_LEN ));
 
         error = FT_THROW( Invalid_Offset );
@@ -1860,13 +1879,13 @@
     }
 
     FT_TRACE2(( "             total buffer size to concatenate"
-                " %d POST fragments: 0x%08x\n",
+                " %ld POST fragments: 0x%08lx\n",
                  resource_cnt, pfb_len + 2 ));
 
     if ( pfb_len + 2 < 6 )
     {
       FT_TRACE2(( "             too long fragment length makes"
-                  " pfb_len confused: pfb_len=0x%08x\n",
+                  " pfb_len confused: pfb_len=0x%08lx\n",
                   pfb_len ));
 
       error = FT_THROW( Array_Too_Large );
@@ -1909,7 +1928,7 @@
         goto Exit2;
 
       FT_TRACE3(( "POST fragment[%d]:"
-                  " offsets=0x%08x, rlen=0x%08x, flags=0x%04x\n",
+                  " offsets=0x%08lx, rlen=0x%08lx, flags=0x%04x\n",
                   i, offsets[i], rlen, flags ));
 
       error = FT_ERR( Array_Too_Large );
@@ -1936,7 +1955,7 @@
       else
       {
         FT_TRACE3(( "    Write POST fragment #%d header (4-byte) to buffer"
-                    " %p + 0x%08x\n",
+                    " %p + 0x%08lx\n",
                     i, pfb_data, pfb_lenpos ));
 
         if ( pfb_lenpos + 3 > pfb_len + 2 )
@@ -1951,7 +1970,7 @@
           break;
 
         FT_TRACE3(( "    Write POST fragment #%d header (6-byte) to buffer"
-                    " %p + 0x%08x\n",
+                    " %p + 0x%08lx\n",
                     i, pfb_data, pfb_pos ));
 
         if ( pfb_pos + 6 > pfb_len + 2 )
@@ -1973,8 +1992,8 @@
       if ( pfb_pos > pfb_len || pfb_pos + rlen > pfb_len )
         goto Exit2;
 
-      FT_TRACE3(( "    Load POST fragment #%d (%d byte) to buffer"
-                  " %p + 0x%08x\n",
+      FT_TRACE3(( "    Load POST fragment #%d (%ld byte) to buffer"
+                  " %p + 0x%08lx\n",
                   i, rlen, pfb_data, pfb_pos ));
 
       error = FT_Stream_Read( stream, (FT_Byte *)pfb_data + pfb_pos, rlen );
@@ -2259,7 +2278,7 @@
       args2.flags    = FT_OPEN_PATHNAME;
       args2.pathname = file_names[i] ? file_names[i] : args->pathname;
 
-      FT_TRACE3(( "Try rule %d: %s (offset=%d) ...",
+      FT_TRACE3(( "Try rule %d: %s (offset=%ld) ...",
                   i, args2.pathname, offsets[i] ));
 
       error = FT_Stream_New( library, &args2, &stream2 );
@@ -3214,9 +3233,9 @@
       FT_Size_Metrics*  metrics = &face->size->metrics;
 
 
-      FT_TRACE5(( "  x scale: %d (%f)\n",
+      FT_TRACE5(( "  x scale: %ld (%f)\n",
                   metrics->x_scale, metrics->x_scale / 65536.0 ));
-      FT_TRACE5(( "  y scale: %d (%f)\n",
+      FT_TRACE5(( "  y scale: %ld (%f)\n",
                   metrics->y_scale, metrics->y_scale / 65536.0 ));
       FT_TRACE5(( "  ascender: %f\n",    metrics->ascender / 64.0 ));
       FT_TRACE5(( "  descender: %f\n",   metrics->descender / 64.0 ));
@@ -3289,9 +3308,9 @@
       FT_Size_Metrics*  metrics = &face->size->metrics;
 
 
-      FT_TRACE5(( "  x scale: %d (%f)\n",
+      FT_TRACE5(( "  x scale: %ld (%f)\n",
                   metrics->x_scale, metrics->x_scale / 65536.0 ));
-      FT_TRACE5(( "  y scale: %d (%f)\n",
+      FT_TRACE5(( "  y scale: %ld (%f)\n",
                   metrics->y_scale, metrics->y_scale / 65536.0 ));
       FT_TRACE5(( "  ascender: %f\n",    metrics->ascender / 64.0 ));
       FT_TRACE5(( "  descender: %f\n",   metrics->descender / 64.0 ));
@@ -3451,7 +3470,7 @@
               if ( akerning->x != orig_x_rounded ||
                    akerning->y != orig_y_rounded )
                 FT_TRACE5(( "FT_Get_Kerning: horizontal kerning"
-                            " (%d, %d) scaled down to (%d, %d) pixels\n",
+                            " (%ld, %ld) scaled down to (%ld, %ld) pixels\n",
                             orig_x_rounded / 64, orig_y_rounded / 64,
                             akerning->x / 64, akerning->y / 64 ));
             }
@@ -3723,7 +3742,7 @@
       if ( charcode > 0xFFFFFFFFUL )
       {
         FT_TRACE1(( "FT_Get_Char_Index: too large charcode" ));
-        FT_TRACE1(( " 0x%x is truncated\n", charcode ));
+        FT_TRACE1(( " 0x%lx is truncated\n", charcode ));
       }
 
       result = cmap->clazz->char_index( cmap, (FT_UInt32)charcode );
@@ -3899,13 +3918,13 @@
         {
           FT_TRACE1(( "FT_Face_GetCharVariantIndex:"
                       " too large charcode" ));
-          FT_TRACE1(( " 0x%x is truncated\n", charcode ));
+          FT_TRACE1(( " 0x%lx is truncated\n", charcode ));
         }
         if ( variantSelector > 0xFFFFFFFFUL )
         {
           FT_TRACE1(( "FT_Face_GetCharVariantIndex:"
                       " too large variantSelector" ));
-          FT_TRACE1(( " 0x%x is truncated\n", variantSelector ));
+          FT_TRACE1(( " 0x%lx is truncated\n", variantSelector ));
         }
 
         result = vcmap->clazz->char_var_index( vcmap, ucmap,
@@ -3942,13 +3961,13 @@
         {
           FT_TRACE1(( "FT_Face_GetCharVariantIsDefault:"
                       " too large charcode" ));
-          FT_TRACE1(( " 0x%x is truncated\n", charcode ));
+          FT_TRACE1(( " 0x%lx is truncated\n", charcode ));
         }
         if ( variantSelector > 0xFFFFFFFFUL )
         {
           FT_TRACE1(( "FT_Face_GetCharVariantIsDefault:"
                       " too large variantSelector" ));
-          FT_TRACE1(( " 0x%x is truncated\n", variantSelector ));
+          FT_TRACE1(( " 0x%lx is truncated\n", variantSelector ));
         }
 
         result = vcmap->clazz->char_var_default( vcmap,
@@ -4011,7 +4030,7 @@
         if ( charcode > 0xFFFFFFFFUL )
         {
           FT_TRACE1(( "FT_Face_GetVariantsOfChar: too large charcode" ));
-          FT_TRACE1(( " 0x%x is truncated\n", charcode ));
+          FT_TRACE1(( " 0x%lx is truncated\n", charcode ));
         }
 
         result = vcmap->clazz->charvariant_list( vcmap, memory,
@@ -4045,7 +4064,7 @@
         if ( variantSelector > 0xFFFFFFFFUL )
         {
           FT_TRACE1(( "FT_Get_Char_Index: too large variantSelector" ));
-          FT_TRACE1(( " 0x%x is truncated\n", variantSelector ));
+          FT_TRACE1(( " 0x%lx is truncated\n", variantSelector ));
         }
 
         result = vcmap->clazz->variantchar_list( vcmap, memory,

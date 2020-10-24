@@ -26,19 +26,24 @@ void NGLineBoxFragmentBuilder::Reset() {
   unpositioned_list_marker_ = NGUnpositionedListMarker();
 
   size_.inline_size = LayoutUnit();
-  metrics_ = NGLineHeightMetrics();
+  metrics_ = FontHeight::Empty();
   line_box_type_ = NGPhysicalLineBoxFragment::kNormalLineBox;
 
   break_appeal_ = kBreakAppealPerfect;
   has_floating_descendants_for_paint_ = false;
-  has_orthogonal_flow_roots_ = false;
   has_descendant_that_depends_on_percentage_block_size_ = false;
   has_block_fragmentation_ = false;
-  may_have_descendant_above_block_start_ = false;
 }
 
 void NGLineBoxFragmentBuilder::SetIsEmptyLineBox() {
   line_box_type_ = NGPhysicalLineBoxFragment::kEmptyLineBox;
+}
+
+void NGLineBoxFragmentBuilder::AddChild(
+    const NGPhysicalContainerFragment& child,
+    const LogicalOffset& child_offset) {
+  PropagateChildData(child, child_offset);
+  AddChildInternal(&child, child_offset);
 }
 
 void NGLineBoxFragmentBuilder::AddChildren(NGLogicalLineItems& children) {
@@ -46,12 +51,12 @@ void NGLineBoxFragmentBuilder::AddChildren(NGLogicalLineItems& children) {
 
   for (auto& child : children) {
     if (child.layout_result) {
-      DCHECK(!child.fragment);
+      DCHECK(!child.text_fragment);
       AddChild(child.layout_result->PhysicalFragment(), child.Offset());
       child.layout_result.reset();
-    } else if (child.fragment) {
-      AddChild(std::move(child.fragment), child.Offset());
-      DCHECK(!child.fragment);
+    } else if (child.text_fragment) {
+      AddChild(std::move(child.text_fragment), child.Offset());
+      DCHECK(!child.text_fragment);
     } else if (child.out_of_flow_positioned_box) {
       AddOutOfFlowInlineChildCandidate(
           NGBlockNode(ToLayoutBox(child.out_of_flow_positioned_box)),
@@ -66,7 +71,7 @@ void NGLineBoxFragmentBuilder::PropagateChildrenData(
   for (unsigned index = 0; index < children.size(); ++index) {
     auto& child = children[index];
     if (child.layout_result) {
-      DCHECK(!child.fragment);
+      DCHECK(!child.text_fragment);
       PropagateChildData(child.layout_result->PhysicalFragment(),
                          child.Offset());
 

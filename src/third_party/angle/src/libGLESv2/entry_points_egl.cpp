@@ -8,9 +8,9 @@
 
 #include "libGLESv2/entry_points_egl.h"
 
+#include "common/angle_version.h"
 #include "common/debug.h"
 #include "common/utilities.h"
-#include "common/version.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/Display.h"
 #include "libANGLE/EGLSync.h"
@@ -56,7 +56,7 @@ extern "C" {
 EGLint EGLAPIENTRY EGL_GetError(void)
 {
     ANGLE_SCOPED_GLOBAL_LOCK();
-    EVENT(__FUNCTION__, "");
+    EVENT(nullptr, gl::EntryPoint::Begin, __FUNCTION__, "");
     Thread *thread = egl::GetCurrentThread();
 
     EGLint error = thread->getError();
@@ -106,7 +106,8 @@ EGLBoolean EGLAPIENTRY EGL_Terminate(EGLDisplay dpy)
     ANGLE_EGL_TRY_RETURN(thread, ValidateTerminate(display), "eglTerminate",
                          GetDisplayIfValid(display), EGL_FALSE);
 
-    ANGLE_EGL_TRY_RETURN(thread, display->makeCurrent(thread, nullptr, nullptr, nullptr),
+    ANGLE_EGL_TRY_RETURN(thread,
+                         display->makeCurrent(thread->getContext(), nullptr, nullptr, nullptr),
                          "eglTerminate", GetDisplayIfValid(display), EGL_FALSE);
     SetContextCurrent(thread, nullptr);
     ANGLE_EGL_TRY_RETURN(thread, display->terminate(thread), "eglTerminate",
@@ -416,6 +417,8 @@ EGLBoolean EGLAPIENTRY EGL_DestroyContext(EGLDisplay dpy, EGLContext ctx)
 
     if (contextWasCurrent)
     {
+        ANGLE_EGL_TRY_RETURN(thread, display->makeCurrent(context, nullptr, nullptr, nullptr),
+                             "eglDestroyContext", GetContextIfValid(display, context), EGL_FALSE);
         SetContextCurrent(thread, nullptr);
     }
 
@@ -451,9 +454,9 @@ EGLBoolean EGLAPIENTRY EGL_MakeCurrent(EGLDisplay dpy,
     // Only call makeCurrent if the context or surfaces have changed.
     if (previousDraw != drawSurface || previousRead != readSurface || previousContext != context)
     {
-        ANGLE_EGL_TRY_RETURN(thread,
-                             display->makeCurrent(thread, drawSurface, readSurface, context),
-                             "eglMakeCurrent", GetContextIfValid(display, context), EGL_FALSE);
+        ANGLE_EGL_TRY_RETURN(
+            thread, display->makeCurrent(previousContext, drawSurface, readSurface, context),
+            "eglMakeCurrent", GetContextIfValid(display, context), EGL_FALSE);
 
         SetContextCurrent(thread, context);
     }
@@ -488,7 +491,7 @@ EGLSurface EGLAPIENTRY EGL_GetCurrentSurface(EGLint readdraw)
 EGLDisplay EGLAPIENTRY EGL_GetCurrentDisplay(void)
 {
     ANGLE_SCOPED_GLOBAL_LOCK();
-    EVENT(__FUNCTION__, "");
+    EVENT(nullptr, gl::EntryPoint::Begin, __FUNCTION__, "");
     Thread *thread = egl::GetCurrentThread();
 
     thread->setSuccess();
@@ -527,7 +530,7 @@ EGLBoolean EGLAPIENTRY EGL_QueryContext(EGLDisplay dpy,
 EGLBoolean EGLAPIENTRY EGL_WaitGL(void)
 {
     ANGLE_SCOPED_GLOBAL_LOCK();
-    EVENT(__FUNCTION__, "");
+    EVENT(nullptr, gl::EntryPoint::Begin, __FUNCTION__, "");
     Thread *thread = egl::GetCurrentThread();
 
     egl::Display *display = thread->getDisplay();
@@ -727,7 +730,7 @@ EGLBoolean EGLAPIENTRY EGL_BindAPI(EGLenum api)
 EGLenum EGLAPIENTRY EGL_QueryAPI(void)
 {
     ANGLE_SCOPED_GLOBAL_LOCK();
-    EVENT(__FUNCTION__, "");
+    EVENT(nullptr, gl::EntryPoint::Begin, __FUNCTION__, "");
     Thread *thread = egl::GetCurrentThread();
 
     EGLenum API = thread->getAPI();
@@ -773,7 +776,7 @@ EGLSurface EGLAPIENTRY EGL_CreatePbufferFromClientBuffer(EGLDisplay dpy,
 EGLBoolean EGLAPIENTRY EGL_ReleaseThread(void)
 {
     ANGLE_SCOPED_GLOBAL_LOCK();
-    EVENT(__FUNCTION__, "");
+    EVENT(nullptr, gl::EntryPoint::Begin, __FUNCTION__, "");
     Thread *thread = egl::GetCurrentThread();
 
     Surface *previousDraw         = thread->getCurrentDrawSurface();
@@ -787,9 +790,9 @@ EGLBoolean EGLAPIENTRY EGL_ReleaseThread(void)
     {
         if (previousDisplay != EGL_NO_DISPLAY)
         {
-            ANGLE_EGL_TRY_RETURN(thread,
-                                 previousDisplay->makeCurrent(thread, nullptr, nullptr, nullptr),
-                                 "eglReleaseThread", nullptr, EGL_FALSE);
+            ANGLE_EGL_TRY_RETURN(
+                thread, previousDisplay->makeCurrent(previousContext, nullptr, nullptr, nullptr),
+                "eglReleaseThread", nullptr, EGL_FALSE);
         }
 
         SetContextCurrent(thread, nullptr);
@@ -802,7 +805,7 @@ EGLBoolean EGLAPIENTRY EGL_ReleaseThread(void)
 EGLBoolean EGLAPIENTRY EGL_WaitClient(void)
 {
     ANGLE_SCOPED_GLOBAL_LOCK();
-    EVENT(__FUNCTION__, "");
+    EVENT(nullptr, gl::EntryPoint::Begin, __FUNCTION__, "");
     Thread *thread = egl::GetCurrentThread();
 
     egl::Display *display = thread->getDisplay();
@@ -822,7 +825,7 @@ EGLBoolean EGLAPIENTRY EGL_WaitClient(void)
 EGLContext EGLAPIENTRY EGL_GetCurrentContext(void)
 {
     ANGLE_SCOPED_GLOBAL_LOCK();
-    EVENT(__FUNCTION__, "");
+    EVENT(nullptr, gl::EntryPoint::Begin, __FUNCTION__, "");
     Thread *thread = egl::GetCurrentThread();
 
     gl::Context *context = thread->getContext();

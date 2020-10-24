@@ -116,9 +116,10 @@ export class TreeOutline extends Common.ObjectWrapper.ObjectWrapper {
 
   /**
    * @param {!TreeElement} child
+   * @param {(function(!TreeElement, !TreeElement):number)=} comparator
    */
-  appendChild(child) {
-    this._rootElement.appendChild(child);
+  appendChild(child, comparator) {
+    this._rootElement.appendChild(child, comparator);
   }
 
   /**
@@ -454,8 +455,8 @@ export class TreeElement {
     this._boundOnFocus = this._onFocus.bind(this);
     this._boundOnBlur = this._onBlur.bind(this);
 
-    this._listItemNode = createElement('li');
-    /** @protected */
+    this._listItemNode = /** @type {!HTMLLIElement} */ (createElement('li'));
+
     this.titleElement = this._listItemNode.createChild('span', 'tree-element-title');
     this._listItemNode.treeElement = this;
     if (title) {
@@ -477,6 +478,7 @@ export class TreeElement {
     this.selected = false;
     this.setExpandable(expandable || false);
     this._collapsible = true;
+    this.toggleOnClick = false;
   }
 
   /**
@@ -572,14 +574,17 @@ export class TreeElement {
 
   /**
    * @param {!TreeElement} child
+   * @param {(function(!TreeElement, !TreeElement):number)=} comparator
    */
-  appendChild(child) {
+  appendChild(child, comparator) {
     if (!this._children) {
       this._children = [];
     }
 
     let insertionIndex;
-    if (this.treeOutline && this.treeOutline._comparator) {
+    if (comparator) {
+      insertionIndex = this._children.lowerBound(child, comparator);
+    } else if (this.treeOutline && this.treeOutline._comparator) {
       insertionIndex = this._children.lowerBound(child, this.treeOutline._comparator);
     } else {
       insertionIndex = this._children.length;

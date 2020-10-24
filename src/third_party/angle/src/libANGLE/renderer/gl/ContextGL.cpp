@@ -10,6 +10,7 @@
 #include "libANGLE/renderer/gl/ContextGL.h"
 
 #include "libANGLE/Context.h"
+#include "libANGLE/Context.inl.h"
 #include "libANGLE/renderer/OverlayImpl.h"
 #include "libANGLE/renderer/gl/BufferGL.h"
 #include "libANGLE/renderer/gl/CompilerGL.h"
@@ -36,8 +37,11 @@ namespace rx
 
 ContextGL::ContextGL(const gl::State &state,
                      gl::ErrorSet *errorSet,
-                     const std::shared_ptr<RendererGL> &renderer)
-    : ContextImpl(state, errorSet), mRenderer(renderer)
+                     const std::shared_ptr<RendererGL> &renderer,
+                     RobustnessVideoMemoryPurgeStatus robustnessVideoMemoryPurgeStatus)
+    : ContextImpl(state, errorSet),
+      mRenderer(renderer),
+      mRobustnessVideoMemoryPurgeStatus(robustnessVideoMemoryPurgeStatus)
 {}
 
 ContextGL::~ContextGL() {}
@@ -101,7 +105,12 @@ RenderbufferImpl *ContextGL::createRenderbuffer(const gl::RenderbufferState &sta
 
 BufferImpl *ContextGL::createBuffer(const gl::BufferState &state)
 {
-    return new BufferGL(state, getFunctions(), getStateManager());
+    const FunctionsGL *functions = getFunctions();
+
+    GLuint buffer = 0;
+    functions->genBuffers(1, &buffer);
+
+    return new BufferGL(state, buffer);
 }
 
 VertexArrayImpl *ContextGL::createVertexArray(const gl::VertexArrayState &data)
@@ -650,9 +659,87 @@ angle::Result ContextGL::drawElementsIndirect(const gl::Context *context,
     return angle::Result::Continue;
 }
 
+angle::Result ContextGL::multiDrawArrays(const gl::Context *context,
+                                         gl::PrimitiveMode mode,
+                                         const GLint *firsts,
+                                         const GLsizei *counts,
+                                         GLsizei drawcount)
+{
+    return rx::MultiDrawArraysGeneral(this, context, mode, firsts, counts, drawcount);
+}
+
+angle::Result ContextGL::multiDrawArraysInstanced(const gl::Context *context,
+                                                  gl::PrimitiveMode mode,
+                                                  const GLint *firsts,
+                                                  const GLsizei *counts,
+                                                  const GLsizei *instanceCounts,
+                                                  GLsizei drawcount)
+{
+    return rx::MultiDrawArraysInstancedGeneral(this, context, mode, firsts, counts, instanceCounts,
+                                               drawcount);
+}
+
+angle::Result ContextGL::multiDrawElements(const gl::Context *context,
+                                           gl::PrimitiveMode mode,
+                                           const GLsizei *counts,
+                                           gl::DrawElementsType type,
+                                           const GLvoid *const *indices,
+                                           GLsizei drawcount)
+{
+    return rx::MultiDrawElementsGeneral(this, context, mode, counts, type, indices, drawcount);
+}
+
+angle::Result ContextGL::multiDrawElementsInstanced(const gl::Context *context,
+                                                    gl::PrimitiveMode mode,
+                                                    const GLsizei *counts,
+                                                    gl::DrawElementsType type,
+                                                    const GLvoid *const *indices,
+                                                    const GLsizei *instanceCounts,
+                                                    GLsizei drawcount)
+{
+    return rx::MultiDrawElementsInstancedGeneral(this, context, mode, counts, type, indices,
+                                                 instanceCounts, drawcount);
+}
+
+angle::Result ContextGL::multiDrawArraysInstancedBaseInstance(const gl::Context *context,
+                                                              gl::PrimitiveMode mode,
+                                                              const GLint *firsts,
+                                                              const GLsizei *counts,
+                                                              const GLsizei *instanceCounts,
+                                                              const GLuint *baseInstances,
+                                                              GLsizei drawcount)
+{
+    return rx::MultiDrawArraysInstancedBaseInstanceGeneral(
+        this, context, mode, firsts, counts, instanceCounts, baseInstances, drawcount);
+}
+
+angle::Result ContextGL::multiDrawElementsInstancedBaseVertexBaseInstance(
+    const gl::Context *context,
+    gl::PrimitiveMode mode,
+    const GLsizei *counts,
+    gl::DrawElementsType type,
+    const GLvoid *const *indices,
+    const GLsizei *instanceCounts,
+    const GLint *baseVertices,
+    const GLuint *baseInstances,
+    GLsizei drawcount)
+{
+    return rx::MultiDrawElementsInstancedBaseVertexBaseInstanceGeneral(
+        this, context, mode, counts, type, indices, instanceCounts, baseVertices, baseInstances,
+        drawcount);
+}
+
 gl::GraphicsResetStatus ContextGL::getResetStatus()
 {
-    return mRenderer->getResetStatus();
+    gl::GraphicsResetStatus resetStatus = mRenderer->getResetStatus();
+    if (resetStatus == gl::GraphicsResetStatus::PurgedContextResetNV)
+    {
+        if (mRobustnessVideoMemoryPurgeStatus == RobustnessVideoMemoryPurgeStatus::NOT_REQUESTED)
+        {
+            resetStatus = gl::GraphicsResetStatus::UnknownContextReset;
+        }
+    }
+    return resetStatus;
 }
 
 std::string ContextGL::getVendorString() const

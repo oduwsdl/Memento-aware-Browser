@@ -45,8 +45,6 @@ class SpeechGrammarList;
 class SpeechRecognitionController final
     : public GarbageCollected<SpeechRecognitionController>,
       public Supplement<LocalDOMWindow> {
-  USING_GARBAGE_COLLECTED_MIXIN(SpeechRecognitionController);
-
  public:
   static const char kSupplementName[];
 
@@ -73,14 +71,6 @@ class SpeechRecognitionController final
   HeapMojoRemote<mojom::blink::SpeechRecognizer,
                  HeapMojoWrapperMode::kWithoutContextObserver>
       speech_recognizer_;
-
-  // Disable BackForwardCache when using the SpeechRecognition feature, because
-  // currently we do not handle speech recognition after placing the page in
-  // BackForwardCache.
-  // TODO(sreejakshetty): Make SpeechRecognition compatile with
-  // BackForwardCache.
-  FrameOrWorkerScheduler::SchedulingAffectingFeatureHandle
-      feature_handle_for_scheduler_;
 };
 
 }  // namespace blink

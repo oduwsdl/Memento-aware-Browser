@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';
 import * as UI from '../ui/ui.js';
 
@@ -60,6 +63,7 @@ export class ProfileSidebarTreeElement extends UI.TreeOutline.TreeElement {
       this._titlesElement.classList.toggle('no-subtitle', !statusUpdate.subtitle);
     }
     if (typeof statusUpdate.wait === 'boolean' && this.listItemElement) {
+      this._iconElement.classList.toggle('spinner', statusUpdate.wait);
       this.listItemElement.classList.toggle('wait', statusUpdate.wait);
     }
   }
@@ -134,7 +138,7 @@ export class ProfileSidebarTreeElement extends UI.TreeOutline.TreeElement {
     if (this._small) {
       this.listItemElement.classList.add('small');
     }
-    this.listItemElement.appendChildren(this._iconElement, this._titlesElement);
+    this.listItemElement.append(this._iconElement, this._titlesElement);
     this.listItemElement.addEventListener('contextmenu', this._handleContextMenuEvent.bind(this), true);
 
     UI.ARIAUtils.setDescription(this.listItemElement, ls`${this.profile.profileType().name}`);

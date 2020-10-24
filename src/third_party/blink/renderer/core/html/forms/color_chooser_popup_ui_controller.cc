@@ -118,7 +118,7 @@ void ColorChooserPopupUIController::WriteColorPickerDocument(
   AddProperty("zoomFactor", ScaledZoomFactor(), data);
   AddProperty("shouldShowColorSuggestionPicker", false, data);
   AddProperty("isEyeDropperEnabled", features::IsEyeDropperEnabled(), data);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   AddProperty("isBorderTransparent", features::IsFormControlsRefreshEnabled(),
               data);
 #endif
@@ -188,7 +188,7 @@ void ColorChooserPopupUIController::WriteColorSuggestionPickerDocument(
   AddProperty("isFormControlsRefreshEnabled",
               features::IsFormControlsRefreshEnabled(), data);
   AddProperty("isEyeDropperEnabled", features::IsEyeDropperEnabled(), data);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   AddProperty("isBorderTransparent", features::IsFormControlsRefreshEnabled(),
               data);
 #endif
@@ -276,6 +276,12 @@ void ColorChooserPopupUIController::EyeDropperResponseHandler(bool success,
 }
 
 void ColorChooserPopupUIController::OpenEyeDropper() {
+  // Don't open the eye dropper without user activation or if it is already
+  // opened.
+  if (!LocalFrame::HasTransientUserActivation(frame_) ||
+      eye_dropper_chooser_.is_bound())
+    return;
+
   frame_->GetBrowserInterfaceBroker().GetInterface(
       eye_dropper_chooser_.BindNewPipeAndPassReceiver(
           frame_->GetTaskRunner(TaskType::kUserInteraction)));

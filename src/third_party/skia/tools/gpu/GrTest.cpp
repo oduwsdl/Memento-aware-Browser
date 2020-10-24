@@ -8,11 +8,11 @@
 #include "include/core/SkString.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkMathPriv.h"
 #include "src/gpu/GrClip.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrDrawOpAtlas.h"
 #include "src/gpu/GrDrawingManager.h"
 #include "src/gpu/GrGpu.h"
@@ -69,8 +69,10 @@ void GrRenderTargetContextPriv::testingOnly_addDrawOp(
         std::unique_ptr<GrDrawOp> op,
         const std::function<GrRenderTargetContext::WillAddOpFn>& willAddFn) {
     ASSERT_SINGLE_OWNER
-    if (fRenderTargetContext->fContext->priv().abandoned()) {
-        fRenderTargetContext->fContext->priv().opMemoryPool()->release(std::move(op));
+    if (fRenderTargetContext->fContext->abandoned()) {
+        #if !defined(GR_OP_ALLOCATE_USE_NEW)
+            fRenderTargetContext->fContext->priv().opMemoryPool()->release(std::move(op));
+        #endif
         return;
     }
     SkDEBUGCODE(fRenderTargetContext->validate());
@@ -200,6 +202,10 @@ void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext
     uint32_t index = random->nextULessThan(static_cast<uint32_t>(kTotal));
     auto op = gFactories[index](
             std::move(paint), random, context, renderTargetContext->numSamples());
-    SkASSERT(op);
-    renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
+
+    // Creating a GrAtlasTextOp my not produce an op if for example, it is totally outside the
+    // render target context.
+    if (op) {
+        renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
+    }
 }

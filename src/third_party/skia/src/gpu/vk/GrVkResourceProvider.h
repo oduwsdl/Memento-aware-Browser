@@ -13,6 +13,7 @@
 #include "src/core/SkLRUCache.h"
 #include "src/core/SkTDynamicHash.h"
 #include "src/core/SkTInternalLList.h"
+#include "src/gpu/GrGpu.h"
 #include "src/gpu/GrManagedResource.h"
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrResourceHandle.h"
@@ -52,19 +53,24 @@ public:
 
     GR_DEFINE_RESOURCE_HANDLE_CLASS(CompatibleRPHandle);
 
+    using SelfDependencyFlags = GrVkRenderPass::SelfDependencyFlags;
+
     // Finds or creates a simple render pass that matches the target, increments the refcount,
     // and returns. The caller can optionally pass in a pointer to a CompatibleRPHandle. If this is
     // non null it will be set to a handle that can be used in the furutre to quickly return a
     // compatible GrVkRenderPasses without the need inspecting a GrVkRenderTarget.
     const GrVkRenderPass* findCompatibleRenderPass(const GrVkRenderTarget& target,
                                                    CompatibleRPHandle* compatibleHandle,
-                                                   bool withStencil);
+                                                   bool withStencil,
+                                                   SelfDependencyFlags selfDepFlags);
     const GrVkRenderPass* findCompatibleRenderPass(GrVkRenderPass::AttachmentsDescriptor*,
                                                    GrVkRenderPass::AttachmentFlags,
+                                                   SelfDependencyFlags selfDepFlags,
                                                    CompatibleRPHandle* compatibleHandle = nullptr);
 
     const GrVkRenderPass* findCompatibleExternalRenderPass(VkRenderPass,
                                                            uint32_t colorAttachmentIndex);
+
 
     // Finds or creates a render pass that matches the target and LoadStoreOps, increments the
     // refcount, and returns. The caller can optionally pass in a pointer to a CompatibleRPHandle.
@@ -75,7 +81,8 @@ public:
                                          const GrVkRenderPass::LoadStoreOps& colorOps,
                                          const GrVkRenderPass::LoadStoreOps& stencilOps,
                                          CompatibleRPHandle* compatibleHandle,
-                                         bool withStencil);
+                                         bool withStencil,
+                                         SelfDependencyFlags selfDepFlags);
 
     // The CompatibleRPHandle must be a valid handle previously set by a call to findRenderPass or
     // findCompatibleRenderPass.
@@ -125,14 +132,16 @@ public:
     void getSamplerDescriptorSetHandle(VkDescriptorType type,
                                        const GrVkUniformHandler&,
                                        GrVkDescriptorSetManager::Handle* handle);
-    void getSamplerDescriptorSetHandle(VkDescriptorType type,
-                                       const SkTArray<uint32_t>& visibilities,
-                                       GrVkDescriptorSetManager::Handle* handle);
 
     // Returns the compatible VkDescriptorSetLayout to use for uniform buffers. The caller does not
     // own the VkDescriptorSetLayout and thus should not delete it. This function should be used
     // when the caller needs the layout to create a VkPipelineLayout.
     VkDescriptorSetLayout getUniformDSLayout() const;
+
+    // Returns the compatible VkDescriptorSetLayout to use for input attachments. The caller does
+    // not own the VkDescriptorSetLayout and thus should not delete it. This function should be used
+    // when the caller needs the layout to create a VkPipelineLayout.
+    VkDescriptorSetLayout getInputDSLayout() const;
 
     // Returns the compatible VkDescriptorSetLayout to use for a specific sampler handle. The caller
     // does not own the VkDescriptorSetLayout and thus should not delete it. This function should be
@@ -148,6 +157,9 @@ public:
     // the caller.
     const GrVkDescriptorSet* getSamplerDescriptorSet(const GrVkDescriptorSetManager::Handle&);
 
+    // Returns a GrVkDescriptorSet that can be used for input attachments. The GrVkDescriptorSet
+    // is already reffed for the caller.
+    const GrVkDescriptorSet* getInputDescriptorSet();
 
     // Signals that the descriptor set passed it, which is compatible with the passed in handle,
     // can be reused by the next allocation request.
@@ -227,7 +239,8 @@ private:
         CompatibleRenderPassSet(GrVkRenderPass* renderPass);
 
         bool isCompatible(const GrVkRenderPass::AttachmentsDescriptor&,
-                          GrVkRenderPass::AttachmentFlags) const;
+                          GrVkRenderPass::AttachmentFlags,
+                          SelfDependencyFlags selfDepFlags) const;
 
         const GrVkRenderPass* getCompatibleRenderPass() const {
             // The first GrVkRenderpass should always exist since we create the basic load store
@@ -280,6 +293,7 @@ private:
     SkSTArray<4, std::unique_ptr<GrVkDescriptorSetManager>> fDescriptorSetManagers;
 
     GrVkDescriptorSetManager::Handle fUniformDSHandle;
+    GrVkDescriptorSetManager::Handle fInputDSHandle;
 
     std::recursive_mutex fBackgroundMutex;
 };

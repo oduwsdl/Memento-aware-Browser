@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_item.h"
 #include "third_party/blink/renderer/core/layout/bidi_run_for_line.h"
+#include "third_party/blink/renderer/core/layout/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_ruby_run.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -180,6 +181,7 @@ static bool ParentIsConstructedOrHaveNext(InlineFlowBox* parent_box) {
 InlineFlowBox* LayoutBlockFlow::CreateLineBoxes(LineLayoutItem line_layout_item,
                                                 const LineInfo& line_info,
                                                 InlineBox* child_box) {
+  NOT_DESTROYED();
   // See if we have an unconstructed line box for this object that is also
   // the last item on the line.
   unsigned line_depth = 1;
@@ -286,6 +288,7 @@ static bool ReachedEndOfTextRun(const BidiRunList<BidiRun>& bidi_runs) {
 
 RootInlineBox* LayoutBlockFlow::ConstructLine(BidiRunList<BidiRun>& bidi_runs,
                                               const LineInfo& line_info) {
+  NOT_DESTROYED();
   DCHECK(bidi_runs.FirstRun());
 
   InlineFlowBox* parent_box = nullptr;
@@ -363,6 +366,12 @@ RootInlineBox* LayoutBlockFlow::ConstructLine(BidiRunList<BidiRun>& bidi_runs,
   return LastRootBox();
 }
 
+ETextAlign LayoutBlockFlow::TextAlignmentForLine(
+    bool ends_with_soft_break) const {
+  NOT_DESTROYED();
+  return StyleRef().GetTextAlign(!ends_with_soft_break);
+}
+
 static bool TextAlignmentNeedsTrailingSpace(ETextAlign text_align,
                                             const ComputedStyle& style) {
   switch (text_align) {
@@ -374,7 +383,6 @@ static bool TextAlignmentNeedsTrailingSpace(ETextAlign text_align,
     case ETextAlign::kCenter:
     case ETextAlign::kWebkitCenter:
     case ETextAlign::kJustify:
-    case ETextAlign::kInternalSpaceAround:
       return style.CollapseWhiteSpace();
     case ETextAlign::kStart:
       return style.CollapseWhiteSpace() && !style.IsLeftToRightDirection();
@@ -469,6 +477,7 @@ void LayoutBlockFlow::SetMarginsForRubyRun(BidiRun* run,
                                            LayoutRubyRun* layout_ruby_run,
                                            LayoutObject* previous_object,
                                            const LineInfo& line_info) {
+  NOT_DESTROYED();
   int start_overhang;
   int end_overhang;
   LayoutObject* next_object = nullptr;
@@ -549,7 +558,7 @@ static inline void SetLogicalWidthForTextRun(
   bool kerning_is_enabled =
       font.GetFontDescription().GetTypesettingFeatures() & kKerning;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // FIXME: Having any font feature settings enabled can lead to selection gaps
   // on Chromium-mac. https://bugs.webkit.org/show_bug.cgi?id=113418
   bool can_use_cached_word_measurements =
@@ -656,6 +665,7 @@ void LayoutBlockFlow::UpdateLogicalWidthForAlignment(
     LayoutUnit& total_logical_width,
     LayoutUnit& available_logical_width,
     unsigned expansion_opportunity_count) {
+  NOT_DESTROYED();
   TextDirection direction;
   if (root_inline_box &&
       root_inline_box->GetLineLayoutItem().StyleRef().GetUnicodeBidi() ==
@@ -687,30 +697,9 @@ void LayoutBlockFlow::UpdateLogicalWidthForAlignment(
           StyleRef().IsLeftToRightDirection(), trailing_space_run, logical_left,
           total_logical_width, available_logical_width);
       break;
-
-    case ETextAlign::kInternalSpaceAround: {
-      int max_preferred_logical_width =
-          PreferredLogicalWidths().max_size.ToInt();
-      if (max_preferred_logical_width < available_logical_width) {
-        unsigned capped_count =
-            static_cast<unsigned>(LayoutUnit::Max().Floor());
-        capped_count = std::min(expansion_opportunity_count, capped_count);
-
-        // Inset the line by half the inter-ideograph expansion amount.
-        LayoutUnit inset =
-            (available_logical_width - max_preferred_logical_width) /
-            (capped_count + 1);
-        // For <rt>,  inset it by no more than a full-width ruby character on
-        // each side.
-        if (IsRubyText() && capped_count > 0)
-          inset = std::min(LayoutUnit(2 * StyleRef().FontSize()), inset);
-
-        logical_left += inset / 2;
-        available_logical_width -= inset;
-      }
-      FALLTHROUGH;
-    }
     case ETextAlign::kJustify:
+      AdjustInlineDirectionLineBounds(expansion_opportunity_count, logical_left,
+                                      available_logical_width);
       if (expansion_opportunity_count) {
         if (trailing_space_run) {
           total_logical_width -= trailing_space_run->box_->LogicalWidth();
@@ -745,6 +734,7 @@ void LayoutBlockFlow::UpdateLogicalWidthForAlignment(
 }
 
 bool LayoutBlockFlow::CanContainFirstFormattedLine() const {
+  NOT_DESTROYED();
   // The 'text-indent' only affects a line if it is the first formatted
   // line of an element. For example, the first line of an anonymous block
   // box is only affected if it is the first child of its parent element.
@@ -777,6 +767,7 @@ void LayoutBlockFlow::ComputeInlineDirectionPositionsForLine(
     GlyphOverflowAndFallbackFontsMap& text_box_data_map,
     VerticalPositionCache& vertical_position_cache,
     const WordMeasurements& word_measurements) {
+  NOT_DESTROYED();
   bool is_first_line =
       line_info.IsFirstLine() && CanContainFirstFormattedLine();
   bool is_after_hard_line_break =
@@ -818,6 +809,7 @@ BidiRun* LayoutBlockFlow::ComputeInlineDirectionPositionsForSegment(
     GlyphOverflowAndFallbackFontsMap& text_box_data_map,
     VerticalPositionCache& vertical_position_cache,
     const WordMeasurements& word_measurements) {
+  NOT_DESTROYED();
   bool needs_word_spacing = true;
   LayoutUnit total_logical_width = line_box->GetFlowSpacingLogicalWidth();
   bool is_after_expansion = true;
@@ -838,9 +830,8 @@ BidiRun* LayoutBlockFlow::ComputeInlineDirectionPositionsForSegment(
     }
     if (r->line_layout_item_.IsText()) {
       LineLayoutText rt(r->line_layout_item_);
-      if ((text_align == ETextAlign::kJustify ||
-           text_align == ETextAlign::kInternalSpaceAround) &&
-          r != trailing_space_run && text_justify != TextJustify::kNone) {
+      if (text_align == ETextAlign::kJustify && r != trailing_space_run &&
+          text_justify != TextJustify::kNone) {
         if (!is_after_expansion)
           ToInlineTextBox(r->box_)->SetCanHaveLeadingExpansion(true);
         expansions.AddRunWithExpansions(*r, is_after_expansion, text_justify);
@@ -897,6 +888,7 @@ void LayoutBlockFlow::ComputeBlockDirectionPositionsForLine(
     BidiRun* first_run,
     GlyphOverflowAndFallbackFontsMap& text_box_data_map,
     VerticalPositionCache& vertical_position_cache) {
+  NOT_DESTROYED();
   SetLogicalHeight(line_box->AlignBoxesInBlockDirection(
       LogicalHeight(), text_box_data_map, vertical_position_cache));
 
@@ -924,6 +916,7 @@ void LayoutBlockFlow::ComputeBlockDirectionPositionsForLine(
 
 void LayoutBlockFlow::AppendFloatingObjectToLastLine(
     FloatingObject& floating_object) {
+  NOT_DESTROYED();
   DCHECK(!floating_object.OriginatingLine());
   floating_object.SetOriginatingLine(LastRootBox());
   LastRootBox()->AppendFloat(floating_object.GetLayoutObject());
@@ -939,6 +932,7 @@ RootInlineBox* LayoutBlockFlow::CreateLineBoxesFromBidiRuns(
     VerticalPositionCache& vertical_position_cache,
     BidiRun* trailing_space_run,
     const WordMeasurements& word_measurements) {
+  NOT_DESTROYED();
   if (!bidi_runs.RunCount())
     return nullptr;
 
@@ -1000,6 +994,7 @@ static void DeleteLineRange(LineLayoutState& layout_state,
 }
 
 void LayoutBlockFlow::LayoutRunsAndFloats(LineLayoutState& layout_state) {
+  NOT_DESTROYED();
   // We want to skip ahead to the first dirty line
   InlineBidiResolver resolver;
   RootInlineBox* start_line = DetermineStartPosition(layout_state, resolver);
@@ -1033,6 +1028,7 @@ inline const InlineIterator& LayoutBlockFlow::RestartLayoutRunsAndFloatsInRange(
     FloatingObject* last_float_from_previous_line,
     InlineBidiResolver& resolver,
     const InlineIterator& old_end) {
+  NOT_DESTROYED();
   RemoveFloatingObjectsBelow(last_float_from_previous_line, old_logical_height);
   SetLogicalHeight(new_logical_height);
   resolver.SetPositionIgnoringNestedIsolates(old_end);
@@ -1044,6 +1040,7 @@ void LayoutBlockFlow::AppendFloatsToLastLine(
     const InlineIterator& clean_line_start,
     const InlineBidiResolver& resolver,
     const BidiStatus& clean_line_bidi_status) {
+  NOT_DESTROYED();
   const FloatingObjectSet& floating_object_set = floating_objects_->Set();
   FloatingObjectSetIterator it = floating_object_set.begin();
   FloatingObjectSetIterator end = floating_object_set.end();
@@ -1092,6 +1089,7 @@ void LayoutBlockFlow::LayoutRunsAndFloatsInRange(
     InlineBidiResolver& resolver,
     const InlineIterator& clean_line_start,
     const BidiStatus& clean_line_bidi_status) {
+  NOT_DESTROYED();
   const ComputedStyle& style_to_use = StyleRef();
   bool paginated =
       View()->GetLayoutState() && View()->GetLayoutState()->IsPaginated();
@@ -1184,9 +1182,9 @@ void LayoutBlockFlow::LayoutRunsAndFloatsInRange(
             BidiStatus(direction, IsOverride(style_to_use.GetUnicodeBidi())));
       }
 
-      ETextAlign text_align = StyleRef().GetTextAlign(
-          end_of_line.AtEnd() ||
-          layout_state.GetLineInfo().PreviousLineBrokeCleanly());
+      ETextAlign text_align = TextAlignmentForLine(
+          !end_of_line.AtEnd() &&
+          !layout_state.GetLineInfo().PreviousLineBrokeCleanly());
       layout_state.GetLineInfo().SetTextAlign(text_align);
       resolver.SetNeedsTrailingSpace(
           TextAlignmentNeedsTrailingSpace(text_align, style_to_use));
@@ -1404,6 +1402,7 @@ void LayoutBlockFlow::LayoutRunsAndFloatsInRange(
 }
 
 void LayoutBlockFlow::LinkToEndLineIfNeeded(LineLayoutState& layout_state) {
+  NOT_DESTROYED();
   if (layout_state.EndLine()) {
     if (layout_state.EndLineMatched()) {
       bool recalculate_struts =
@@ -1449,6 +1448,7 @@ void LayoutBlockFlow::LinkToEndLineIfNeeded(LineLayoutState& layout_state) {
 
 void LayoutBlockFlow::MarkDirtyFloatsForPaintInvalidation(
     Vector<FloatWithRect>& floats) {
+  NOT_DESTROYED();
   size_t float_count = floats.size();
   // Floats that did not have layout did not paint invalidations when we laid
   // them out. They would have painted by now if they had moved, but if they
@@ -1475,6 +1475,9 @@ void LayoutBlockFlow::MarkDirtyFloatsForPaintInvalidation(
 //     can have distinct borders/margin/padding that contribute to the min/max
 //     width.
 struct InlineMinMaxIterator {
+  STACK_ALLOCATED();
+
+ public:
   LayoutObject* parent;
   LayoutObject* current;
   bool end_of_inline;
@@ -1628,8 +1631,12 @@ DISABLE_CFI_PERF
 void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
     LayoutUnit& min_logical_width,
     LayoutUnit& max_logical_width) {
+  NOT_DESTROYED();
   LayoutUnit inline_max;
   LayoutUnit inline_min;
+
+  if (IsListItem())
+    ToLayoutListItem(this)->UpdateMarkerTextIfNeeded();
 
   const ComputedStyle& style_to_use = StyleRef();
 
@@ -1951,6 +1958,7 @@ static bool IsInlineWithOutlineAndContinuation(const LayoutObject& o) {
 }
 
 bool LayoutBlockFlow::ShouldTruncateOverflowingText() const {
+  NOT_DESTROYED();
   const LayoutObject* object_to_check = this;
   if (IsAnonymousBlock()) {
     const LayoutObject* parent = Parent();
@@ -1958,13 +1966,14 @@ bool LayoutBlockFlow::ShouldTruncateOverflowingText() const {
       return false;
     object_to_check = parent;
   }
-  return object_to_check->HasOverflowClip() &&
+  return object_to_check->HasNonVisibleOverflow() &&
          object_to_check->StyleRef().TextOverflow() != ETextOverflow::kClip;
 }
 
 DISABLE_CFI_PERF
 void LayoutBlockFlow::LayoutInlineChildren(bool relayout_children,
                                            LayoutUnit after_edge) {
+  NOT_DESTROYED();
   // Figure out if we should clear out our line boxes.
   // FIXME: Handle resize eventually!
   bool is_full_layout =
@@ -2064,8 +2073,7 @@ void LayoutBlockFlow::LayoutInlineChildren(bool relayout_children,
            parent && parent != this; parent = parent->Parent()) {
         DCHECK(!parent->SelfNeedsLayout());
         DCHECK(!parent->NeedsLayout() ||
-               parent->LayoutBlockedByDisplayLock(
-                   DisplayLockLifecycleTarget::kChildren));
+               parent->ChildLayoutBlockedByDisplayLock());
       }
 #endif
     }
@@ -2112,6 +2120,7 @@ void LayoutBlockFlow::LayoutInlineChildren(bool relayout_children,
 RootInlineBox* LayoutBlockFlow::DetermineStartPosition(
     LineLayoutState& layout_state,
     InlineBidiResolver& resolver) {
+  NOT_DESTROYED();
   RootInlineBox* curr = nullptr;
   RootInlineBox* last = nullptr;
   RootInlineBox* first_line_box_with_break_and_clearance = nullptr;
@@ -2240,6 +2249,7 @@ RootInlineBox* LayoutBlockFlow::DetermineStartPosition(
 }
 
 bool LayoutBlockFlow::LineBoxHasBRWithClearance(RootInlineBox* curr) {
+  NOT_DESTROYED();
   // If the linebox breaks cleanly and with clearance then dirty from at least
   // this point onwards so that we can clear the correct floats without
   // difficulty.
@@ -2256,6 +2266,7 @@ void LayoutBlockFlow::DetermineEndPosition(LineLayoutState& layout_state,
                                            RootInlineBox* start_line,
                                            InlineIterator& clean_line_start,
                                            BidiStatus& clean_line_bidi_status) {
+  NOT_DESTROYED();
   DCHECK(!layout_state.EndLine());
   RootInlineBox* last = nullptr;
   bool previous_was_clean = false;
@@ -2301,6 +2312,7 @@ void LayoutBlockFlow::DetermineEndPosition(LineLayoutState& layout_state,
 
 bool LayoutBlockFlow::CheckPaginationAndFloatsAtEndLine(
     LineLayoutState& layout_state) {
+  NOT_DESTROYED();
   if (!floating_objects_ || !layout_state.EndLine())
     return true;
 
@@ -2352,6 +2364,7 @@ bool LayoutBlockFlow::MatchedEndLine(LineLayoutState& layout_state,
                                      const InlineBidiResolver& resolver,
                                      const InlineIterator& end_line_start,
                                      const BidiStatus& end_line_status) {
+  NOT_DESTROYED();
   if (resolver.GetPosition() == end_line_start) {
     if (resolver.Status() != end_line_status)
       return false;
@@ -2392,6 +2405,7 @@ bool LayoutBlockFlow::MatchedEndLine(LineLayoutState& layout_state,
 bool LayoutBlockFlow::GeneratesLineBoxesForInlineChild(LayoutObject* inline_obj)
 
 {
+  NOT_DESTROYED();
   DCHECK_EQ(inline_obj->Parent(), this);
 
   InlineIterator it(LineLayoutBlockFlow(this), LineLayoutItem(inline_obj), 0);
@@ -2403,9 +2417,9 @@ bool LayoutBlockFlow::GeneratesLineBoxesForInlineChild(LayoutObject* inline_obj)
 }
 
 void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
-  // TODO(crbug.com/1086968): Change to DCHECK after diagnosing the bug.
-  CHECK(!NeedsLayout());
-  DCHECK(!PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
+  NOT_DESTROYED();
+  DCHECK(!NeedsLayout());
+  DCHECK(!ChildPrePaintBlockedByDisplayLock());
 
   if (const NGPaintFragment* paint_fragment = PaintFragment()) {
     for (const NGPaintFragment* child : paint_fragment->Children()) {
@@ -2460,7 +2474,7 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
         outline_rects, PhysicalOffset(),
         o.OutlineRectsShouldIncludeBlockVisualOverflow());
     if (!outline_rects.IsEmpty()) {
-      PhysicalRect outline_bounds = UnionRectEvenIfEmpty(outline_rects);
+      PhysicalRect outline_bounds = UnionRect(outline_rects);
       outline_bounds.Inflate(LayoutUnit(o.StyleRef().OutlineOutsetExtent()));
       outline_bounds_of_all_continuations.Unite(outline_bounds);
     }
@@ -2469,14 +2483,16 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
 }
 
 void LayoutBlockFlow::AddLayoutOverflowFromInlineChildren() {
-  DCHECK(!LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
+  NOT_DESTROYED();
+  DCHECK(!ChildLayoutBlockedByDisplayLock());
 
-  LayoutUnit end_padding = HasOverflowClip() ? PaddingEnd() : LayoutUnit();
+  LayoutUnit end_padding =
+      HasNonVisibleOverflow() ? PaddingEnd() : LayoutUnit();
   // FIXME: Need to find another way to do this, since scrollbars could show
   // when we don't want them to.
   // The test[1] verifies this.
   // [1] editing/input/editable-container-with-word-wrap-normal.html
-  if (HasOverflowClip() && !end_padding && GetNode() &&
+  if (HasNonVisibleOverflow() && !end_padding && GetNode() &&
       IsRootEditableElement(*GetNode()) &&
       StyleRef().IsLeftToRightDirection()) {
     if (const NGPhysicalBoxFragment* fragment = CurrentFragment()) {
@@ -2514,6 +2530,7 @@ void LayoutBlockFlow::AddLayoutOverflowFromInlineChildren() {
 }
 
 void LayoutBlockFlow::DeleteEllipsisLineBoxes() {
+  NOT_DESTROYED();
   ETextAlign text_align = StyleRef().GetTextAlign();
   IndentTextOrNot indent_text = kIndentText;
   for (RootInlineBox* curr = FirstRootBox(); curr; curr = curr->NextRootBox()) {
@@ -2540,6 +2557,7 @@ void LayoutBlockFlow::DeleteEllipsisLineBoxes() {
 }
 
 void LayoutBlockFlow::ClearTruncationOnAtomicInlines(RootInlineBox* root) {
+  NOT_DESTROYED();
   bool ltr = StyleRef().IsLeftToRightDirection();
   InlineBox* first_child = ltr ? root->LastChild() : root->FirstChild();
   for (InlineBox* box = first_child; box;
@@ -2556,6 +2574,7 @@ void LayoutBlockFlow::ClearTruncationOnAtomicInlines(RootInlineBox* root) {
 }
 
 void LayoutBlockFlow::CheckLinesForTextOverflow() {
+  NOT_DESTROYED();
   // Determine the width of the ellipsis using the current font.
   const Font& font = StyleRef().GetFont();
 
@@ -2590,7 +2609,7 @@ void LayoutBlockFlow::CheckLinesForTextOverflow() {
   ellipsis_width = (font == first_line_font) ? first_line_ellipsis_width : 0;
 
   if (!ellipsis_width) {
-    const SimpleFontData* font_data = font.PrimaryFont();
+    font_data = font.PrimaryFont();
     DCHECK(font_data);
     if (font_data &&
         font_data->GlyphForCharacter(kHorizontalEllipsisCharacter)) {
@@ -2664,6 +2683,7 @@ void LayoutBlockFlow::TryPlacingEllipsisOnAtomicInlines(
     LayoutUnit ellipsis_width,
     const AtomicString& selected_ellipsis_str,
     InlineBox* box_truncation_starts_at) {
+  NOT_DESTROYED();
   bool found_box = box_truncation_starts_at ? true : false;
   bool ltr = StyleRef().IsLeftToRightDirection();
   LayoutUnit logical_left_offset = block_left_edge;
@@ -2722,15 +2742,15 @@ void LayoutBlockFlow::TryPlacingEllipsisOnAtomicInlines(
           continue;
         // Root boxes can vary in width so move our offset out to allow
         // comparison with the right hand edge of the block.
-        LayoutUnit logical_left_offset = box->LogicalLeft();
+        LayoutUnit line_logical_left_offset = box->LogicalLeft();
         max_root_box_width =
             std::max<LayoutUnit>(curr->LogicalWidth(), max_root_box_width);
-        if (logical_left_offset < 0)
-          logical_left_offset += max_root_box_width - curr->LogicalWidth();
+        if (line_logical_left_offset < 0)
+          line_logical_left_offset += max_root_box_width - curr->LogicalWidth();
         InlineBox* truncation_box = nullptr;
         curr->PlaceEllipsis(selected_ellipsis_str, ltr, block_left_edge,
                             block_right_edge, ellipsis_width,
-                            logical_left_offset, &truncation_box);
+                            line_logical_left_offset, &truncation_box);
         placed_ellipsis = true;
       }
     }
@@ -2742,6 +2762,7 @@ void LayoutBlockFlow::TryPlacingEllipsisOnAtomicInlines(
 void LayoutBlockFlow::MarkLinesDirtyInBlockRange(LayoutUnit logical_top,
                                                  LayoutUnit logical_bottom,
                                                  RootInlineBox* highest) {
+  NOT_DESTROYED();
   if (logical_top >= logical_bottom)
     return;
 
@@ -2765,6 +2786,7 @@ void LayoutBlockFlow::MarkLinesDirtyInBlockRange(LayoutUnit logical_top,
 LayoutUnit LayoutBlockFlow::StartAlignedOffsetForLine(
     LayoutUnit position,
     IndentTextOrNot indent_text) {
+  NOT_DESTROYED();
   ETextAlign text_align = StyleRef().GetTextAlign();
 
   bool apply_indent_text;
@@ -2805,6 +2827,7 @@ LayoutUnit LayoutBlockFlow::StartAlignedOffsetForLine(
 }
 
 void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
+  NOT_DESTROYED();
   DCHECK(ChildrenInline());
 
   if (const NGPaintFragment* paint_fragment = PaintFragment()) {
@@ -2821,8 +2844,12 @@ void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
         // Mark all descendants of the first line if first-line style.
         for (NGInlineCursor descendants = first_line.CursorForDescendants();
              descendants; descendants.MoveToNext()) {
-          LayoutObject* layout_object =
-              descendants.Current()->GetMutableLayoutObject();
+          const NGFragmentItem* item = descendants.Current().Item();
+          if (UNLIKELY(item->IsLayoutObjectDestroyedOrMoved())) {
+            descendants.MoveToNextSkippingChildren();
+            continue;
+          }
+          LayoutObject* layout_object = item->GetMutableLayoutObject();
           DCHECK(layout_object);
           layout_object->StyleRef().ClearCachedPseudoElementStyles();
           layout_object->SetShouldDoFullPaintInvalidation();

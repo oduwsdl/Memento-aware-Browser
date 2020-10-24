@@ -7,7 +7,7 @@
 
 #include "src/gpu/ops/GrFillRRectOp.h"
 
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkRRectPriv.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrMemoryPool.h"
@@ -104,7 +104,8 @@ private:
                              SkArenaAlloc*,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&&,
-                             const GrXferProcessor::DstProxyView&) final;
+                             const GrXferProcessor::DstProxyView&,
+                             GrXferBarrierFlags renderPassXferBarriers) final;
 
     Helper         fHelper;
     SkPMColor4f    fColor;
@@ -125,7 +126,7 @@ private:
     // onExecute. In the prePrepared case it will have been stored in the record-time arena.
     GrProgramInfo* fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 GR_MAKE_BITFIELD_CLASS_OPS(FillRRectOp::ProcessorFlags)
@@ -361,7 +362,7 @@ private:
     class CoverageImpl;
     class MSAAImpl;
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 constexpr GrPrimitiveProcessor::Attribute FillRRectOp::Processor::kVertexAttribs[];
@@ -680,15 +681,13 @@ class FillRRectOp::Processor::CoverageImpl : public GrGLSLGeometryProcessor {
         v->codeAppend("float2 aa_outset = aa_bloat_direction.xy * aa_bloatradius;");
         v->codeAppend("float2 vertexpos = corner + radius_outset * radii + aa_outset;");
 
-        // Emit transforms.
+        // Write positions
         GrShaderVar localCoord("", kFloat2_GrSLType);
         if (proc.fFlags & ProcessorFlags::kHasLocalCoords) {
             v->codeAppend("float2 localcoord = (local_rect.xy * (1 - vertexpos) + "
                                                "local_rect.zw * (1 + vertexpos)) * .5;");
-            localCoord.set(kFloat2_GrSLType, "localcoord");
+            gpArgs->fLocalCoordVar.set(kFloat2_GrSLType, "localcoord");
         }
-        this->emitTransforms(v, varyings, args.fUniformHandler, localCoord,
-                             args.fFPCoordTransformHandler);
 
         // Transform to device space.
         SkASSERT(!(proc.fFlags & ProcessorFlags::kHasPerspective));
@@ -741,10 +740,7 @@ class FillRRectOp::Processor::CoverageImpl : public GrGLSLGeometryProcessor {
         f->codeAppendf("%s = half4(coverage);", args.fOutputCoverage);
     }
 
-    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&,
-                 const CoordTransformRange& transformRange) override {
-        this->setTransformDataHelper(SkMatrix::I(), pdman, transformRange);
-    }
+    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&) override {}
 };
 
 
@@ -781,15 +777,13 @@ class FillRRectOp::Processor::MSAAImpl : public GrGLSLGeometryProcessor {
         // [-1,-1,+1,+1] space.
         v->codeAppend("float2 vertexpos = corner + radius_outset * radii;");
 
-        // Emit transforms.
+        // Write positions
         GrShaderVar localCoord("", kFloat2_GrSLType);
         if (hasLocalCoords) {
             v->codeAppend("float2 localcoord = (local_rect.xy * (1 - vertexpos) + "
                                                "local_rect.zw * (1 + vertexpos)) * .5;");
-            localCoord.set(kFloat2_GrSLType, "localcoord");
+            gpArgs->fLocalCoordVar.set(kFloat2_GrSLType, "localcoord");
         }
-        this->emitTransforms(v, varyings, args.fUniformHandler, localCoord,
-                             args.fFPCoordTransformHandler);
 
         // Transform to device space.
         if (!hasPerspective) {
@@ -847,10 +841,7 @@ class FillRRectOp::Processor::MSAAImpl : public GrGLSLGeometryProcessor {
         f->codeAppendf("}");
     }
 
-    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&,
-                 const CoordTransformRange& transformRange) override {
-        this->setTransformDataHelper(SkMatrix::I(), pdman, transformRange);
-    }
+    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&) override {}
 };
 
 GrGLSLPrimitiveProcessor* FillRRectOp::Processor::createGLSLInstance(
@@ -865,12 +856,14 @@ void FillRRectOp::onCreateProgramInfo(const GrCaps* caps,
                                       SkArenaAlloc* arena,
                                       const GrSurfaceProxyView* writeView,
                                       GrAppliedClip&& appliedClip,
-                                      const GrXferProcessor::DstProxyView& dstProxyView) {
+                                      const GrXferProcessor::DstProxyView& dstProxyView,
+                                      GrXferBarrierFlags renderPassXferBarriers) {
     GrGeometryProcessor* gp = Processor::Make(arena, fHelper.aaType(), fProcessorFlags);
     SkASSERT(gp->instanceStride() == (size_t)fInstanceStride);
 
     fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
-                                             dstProxyView, gp, GrPrimitiveType::kTriangles);
+                                             dstProxyView, gp, GrPrimitiveType::kTriangles,
+                                             renderPassXferBarriers);
 }
 
 void FillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {
@@ -884,7 +877,8 @@ void FillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBound
 
     flushState->bindPipelineAndScissorClip(*fProgramInfo, this->bounds());
     flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
-    flushState->bindBuffers(fIndexBuffer.get(), fInstanceBuffer.get(), fVertexBuffer.get());
+    flushState->bindBuffers(std::move(fIndexBuffer), std::move(fInstanceBuffer),
+                            std::move(fVertexBuffer));
     flushState->drawIndexedInstanced(fIndexCount, 0, fInstanceCount, fBaseInstance, 0);
 }
 

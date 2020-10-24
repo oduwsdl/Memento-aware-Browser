@@ -36,6 +36,43 @@ public:
         return this->internalSize();
     }
 
+    /** Used to initialize a key. */
+    class Builder {
+    public:
+        ~Builder() { this->finish(); }
+
+        void finish() {
+            if (nullptr == fKey) {
+                return;
+            }
+            uint32_t* hash = &fKey->fKey[kHash_MetaDataIdx];
+            *hash = GrResourceKeyHash(hash + 1, fKey->internalSize() - sizeof(uint32_t));
+            fKey->validate();
+            fKey = nullptr;
+        }
+
+        uint32_t& operator[](int dataIdx) {
+            SkASSERT(fKey);
+            SkDEBUGCODE(size_t dataCount = fKey->internalSize() / sizeof(uint32_t) - kMetaDataCnt;)
+                    SkASSERT(SkToU32(dataIdx) < dataCount);
+            return fKey->fKey[(int)kMetaDataCnt + dataIdx];
+        }
+
+    protected:
+        Builder(GrResourceKey* key, uint32_t domain, int data32Count) : fKey(key) {
+            size_t count = SkToSizeT(data32Count);
+            SkASSERT(domain != kInvalidDomain);
+            key->fKey.reset(kMetaDataCnt + count);
+            size_t size = (count + kMetaDataCnt) * sizeof(uint32_t);
+            SkASSERT(SkToU16(size) == size);
+            SkASSERT(SkToU16(domain) == domain);
+            key->fKey[kDomainAndSize_MetaDataIdx] = domain | (size << 16);
+        }
+
+    private:
+        GrResourceKey* fKey;
+    };
+
 protected:
     static const uint32_t kInvalidDomain = 0;
 
@@ -91,49 +128,14 @@ protected:
             SkDebugf("hash: %d ", this->hash());
             SkDebugf("domain: %d ", this->domain());
             SkDebugf("size: %dB ", this->internalSize());
-            for (size_t i = 0; i < this->internalSize(); ++i) {
-                SkDebugf("%d ", fKey[SkTo<int>(i)]);
+            size_t dataCount = this->internalSize() / sizeof(uint32_t) - kMetaDataCnt;
+            for (size_t i = 0; i < dataCount; ++i) {
+                SkDebugf("%d ", fKey[SkTo<int>(kMetaDataCnt+i)]);
             }
             SkDebugf("\n");
         }
     }
 #endif
-
-    /** Used to initialize a key. */
-    class Builder {
-    public:
-        Builder(GrResourceKey* key, uint32_t domain, int data32Count) : fKey(key) {
-            size_t count = SkToSizeT(data32Count);
-            SkASSERT(domain != kInvalidDomain);
-            key->fKey.reset(kMetaDataCnt + count);
-            size_t size = (count + kMetaDataCnt) * sizeof(uint32_t);
-            SkASSERT(SkToU16(size) == size);
-            SkASSERT(SkToU16(domain) == domain);
-            key->fKey[kDomainAndSize_MetaDataIdx] = domain | (size << 16);
-        }
-
-        ~Builder() { this->finish(); }
-
-        void finish() {
-            if (nullptr == fKey) {
-                return;
-            }
-            uint32_t* hash = &fKey->fKey[kHash_MetaDataIdx];
-            *hash = GrResourceKeyHash(hash + 1, fKey->internalSize() - sizeof(uint32_t));
-            fKey->validate();
-            fKey = nullptr;
-        }
-
-        uint32_t& operator[](int dataIdx) {
-            SkASSERT(fKey);
-            SkDEBUGCODE(size_t dataCount = fKey->internalSize() / sizeof(uint32_t) - kMetaDataCnt;)
-            SkASSERT(SkToU32(dataIdx) < dataCount);
-            return fKey->fKey[(int)kMetaDataCnt + dataIdx];
-        }
-
-    private:
-        GrResourceKey* fKey;
-    };
 
 private:
     enum MetaDataIdx {
@@ -184,7 +186,7 @@ private:
  */
 class GrScratchKey : public GrResourceKey {
 private:
-    typedef GrResourceKey INHERITED;
+    using INHERITED = GrResourceKey;
 
 public:
     /** Uniquely identifies the type of resource that is cached as scratch. */
@@ -236,7 +238,7 @@ public:
  */
 class GrUniqueKey : public GrResourceKey {
 private:
-    typedef GrResourceKey INHERITED;
+    using INHERITED = GrResourceKey;
 
 public:
     typedef uint32_t Domain;
@@ -265,6 +267,7 @@ public:
 
     void setCustomData(sk_sp<SkData> data) { fData = std::move(data); }
     SkData* getCustomData() const { return fData.get(); }
+    sk_sp<SkData> refCustomData() const { return fData; }
 
     const char* tag() const { return fTag; }
 

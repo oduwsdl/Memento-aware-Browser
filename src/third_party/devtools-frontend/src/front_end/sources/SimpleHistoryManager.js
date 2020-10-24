@@ -36,6 +36,7 @@ export class HistoryEntry {
    * @return {boolean}
    */
   valid() {
+    throw new Error('not implemented');
   }
 
   reveal() {}
@@ -49,6 +50,7 @@ export class SimpleHistoryManager {
    * @param {number} historyDepth
    */
   constructor(historyDepth) {
+    /** @type {!Array<!HistoryEntry>} */
     this._entries = [];
     this._activeEntryIndex = -1;
     this._coalescingReadonly = 0;

@@ -87,6 +87,7 @@ function isWebIDLConstructor(propertyKey) {
 }
 
 var wellKnownSymbols = new Map([
+    [Symbol.asyncIterator, "@@asyncIterator"],
     [Symbol.hasInstance, "@@hasInstance"],
     [Symbol.isConcatSpreadable, "@@isConcatSpreadable"],
     [Symbol.iterator, "@@iterator"],
@@ -191,7 +192,7 @@ function outputProperty(property) {
     outputFunc('    ' + property);
 }
 
-// FIXME: List interfaces with NoInterfaceObject specified in their IDL file.
+// FIXME: List interfaces with LegacyNoInterfaceObject specified in their IDL file.
 outputFunc('[INTERFACES]');
 var interfaceNames = Object.getOwnPropertyNames(this)
                            .filter(isWebIDLConstructor)

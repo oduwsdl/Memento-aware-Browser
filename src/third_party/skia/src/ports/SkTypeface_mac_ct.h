@@ -93,10 +93,10 @@ public:
 protected:
     int onGetUPEM() const override;
     std::unique_ptr<SkStreamAsset> onOpenStream(int* ttcIndex) const override;
-    std::unique_ptr<SkFontData> onMakeFontData() const override;
     int onGetVariationDesignPosition(SkFontArguments::VariationPosition::Coordinate coordinates[],
                                      int coordinateCount) const override;
     void onGetFamilyName(SkString* familyName) const override;
+    bool onGetPostScriptName(SkString*) const override;
     SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const override;
     int onGetTableTags(SkFontTableTag tags[]) const override;
     size_t onGetTableData(SkFontTableTag, size_t offset, size_t length, void* data) const override;
@@ -121,7 +121,7 @@ private:
     bool fIsFromStream;
     mutable SkOnce fInitStream;
 
-    typedef SkTypeface INHERITED;
+    using INHERITED = SkTypeface;
 };
 
 #endif

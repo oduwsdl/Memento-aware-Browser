@@ -27,7 +27,7 @@ ValidationTest::ValidationTest() {
 
     // Validation tests run against the null backend, find the corresponding adapter
     bool foundNullAdapter = false;
-    for (auto &currentAdapter : adapters) {
+    for (auto& currentAdapter : adapters) {
         wgpu::AdapterProperties adapterProperties;
         currentAdapter.GetProperties(&adapterProperties);
 
@@ -40,8 +40,7 @@ ValidationTest::ValidationTest() {
 
     ASSERT(foundNullAdapter);
 
-    DawnProcTable procs = dawn_native::GetProcs();
-    dawnProcSetProcs(&procs);
+    dawnProcSetProcs(&dawn_native::GetProcs());
 
     device = CreateDeviceFromAdapter(adapter, std::vector<const char*>());
 }
@@ -87,6 +86,29 @@ std::string ValidationTest::GetLastDeviceErrorMessage() const {
     return mDeviceErrorMessage;
 }
 
+void ValidationTest::WaitForAllOperations(const wgpu::Device& device) const {
+    wgpu::Queue queue = device.GetDefaultQueue();
+    wgpu::Fence fence = queue.CreateFence();
+
+    // Force the currently submitted operations to completed.
+    queue.Signal(fence, 1);
+    while (fence.GetCompletedValue() < 1) {
+        device.Tick();
+    }
+
+    // TODO(cwallez@chromium.org): It's not clear why we need this additional tick. Investigate it
+    // once WebGPU has defined the ordering of callbacks firing.
+    device.Tick();
+}
+
+bool ValidationTest::HasWGSL() const {
+#ifdef DAWN_ENABLE_WGSL
+    return true;
+#else
+    return false;
+#endif
+}
+
 // static
 void ValidationTest::OnDeviceError(WGPUErrorType type, const char* message, void* userdata) {
     ASSERT(type != WGPUErrorType_NoError);
@@ -114,7 +136,7 @@ ValidationTest::DummyRenderPass::DummyRenderPass(const wgpu::Device& device)
     wgpu::TextureView view = attachment.CreateView();
     mColorAttachment.attachment = view;
     mColorAttachment.resolveTarget = nullptr;
-    mColorAttachment.clearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+    mColorAttachment.clearColor = {0.0f, 0.0f, 0.0f, 0.0f};
     mColorAttachment.loadOp = wgpu::LoadOp::Clear;
     mColorAttachment.storeOp = wgpu::StoreOp::Store;
 

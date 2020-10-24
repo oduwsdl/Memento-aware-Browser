@@ -118,7 +118,7 @@ void ScrollableArea::Dispose() {
 }
 
 void ScrollableArea::ClearScrollableArea() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (scroll_animator_)
     scroll_animator_->Dispose();
 #endif
@@ -376,7 +376,10 @@ PhysicalRect ScrollableArea::ScrollIntoView(
 
 void ScrollableArea::ScrollOffsetChanged(const ScrollOffset& offset,
                                          mojom::blink::ScrollType scroll_type) {
-  TRACE_EVENT0("blink", "ScrollableArea::scrollOffsetChanged");
+  TRACE_EVENT2("input", "ScrollableArea::scrollOffsetChanged", "x",
+               offset.Width(), "y", offset.Height());
+  TRACE_EVENT_INSTANT1("input", "Type", TRACE_EVENT_SCOPE_THREAD, "type",
+                       scroll_type);
 
   ScrollOffset old_offset = GetScrollOffset();
   ScrollOffset truncated_offset = ShouldUseIntegerScrollOffset()
@@ -737,6 +740,11 @@ void ScrollableArea::ShowNonMacOverlayScrollbars() {
       !GetPageScrollbarTheme().BlinkControlsOverlayVisibility())
     return;
 
+  // Don't do this for composited scrollbars. These scrollbars are handled
+  // by separate code in cc::ScrollbarAnimationController.
+  if (LayerForVerticalScrollbar() || LayerForHorizontalScrollbar())
+    return;
+
   SetScrollbarsHiddenIfOverlay(false);
   needs_show_scrollbar_layers_ = true;
 
@@ -764,8 +772,20 @@ void ScrollableArea::ShowNonMacOverlayScrollbars() {
   }
 }
 
+Node* ScrollableArea::EventTargetNode() const {
+  const LayoutBox* box = GetLayoutBox();
+  Node* node = box->GetNode();
+  if (!node && box->Parent() && box->Parent()->IsLayoutNGFieldset())
+    node = box->Parent()->GetNode();
+  if (node && IsA<Element>(node))
+    DCHECK_EQ(box, To<Element>(node)->GetLayoutBoxForScrolling());
+  return node;
+}
+
 const Document* ScrollableArea::GetDocument() const {
-  return &GetLayoutBox()->GetDocument();
+  if (auto* box = GetLayoutBox())
+    return &box->GetDocument();
+  return nullptr;
 }
 
 IntSize ScrollableArea::ClampScrollOffset(const IntSize& scroll_offset) const {
@@ -789,7 +809,7 @@ int ScrollableArea::PageStep(ScrollbarOrientation orientation) const {
   // rect.
   // [1] https://drafts.csswg.org/css-scroll-snap/#scroll-padding
   IntSize snapport_size =
-      VisibleScrollSnapportRect(kIncludeScrollbars).PixelSnappedSize();
+      VisibleScrollSnapportRect(kExcludeScrollbars).PixelSnappedSize();
   int length = (orientation == kHorizontalScrollbar) ? snapport_size.Width()
                                                      : snapport_size.Height();
   int min_page_step =
@@ -817,7 +837,7 @@ float ScrollableArea::PercentageStep(ScrollbarOrientation orientation) const {
 
 int ScrollableArea::VerticalScrollbarWidth(
     OverlayScrollbarClipBehavior behavior) const {
-  DCHECK_EQ(behavior, kIgnorePlatformOverlayScrollbarSize);
+  DCHECK_EQ(behavior, kIgnoreOverlayScrollbarSize);
   if (Scrollbar* vertical_bar = VerticalScrollbar())
     return !vertical_bar->IsOverlayScrollbar() ? vertical_bar->Width() : 0;
   return 0;
@@ -825,7 +845,7 @@ int ScrollableArea::VerticalScrollbarWidth(
 
 int ScrollableArea::HorizontalScrollbarHeight(
     OverlayScrollbarClipBehavior behavior) const {
-  DCHECK_EQ(behavior, kIgnorePlatformOverlayScrollbarSize);
+  DCHECK_EQ(behavior, kIgnoreOverlayScrollbarSize);
   if (Scrollbar* horizontal_bar = HorizontalScrollbar())
     return !horizontal_bar->IsOverlayScrollbar() ? horizontal_bar->Height() : 0;
   return 0;
@@ -864,7 +884,7 @@ CompositorElementId ScrollableArea::GetScrollbarElementId(
 void ScrollableArea::OnScrollFinished() {
   if (GetLayoutBox()) {
     if (RuntimeEnabledFeatures::OverscrollCustomizationEnabled()) {
-      if (Node* node = GetLayoutBox()->GetNode())
+      if (Node* node = EventTargetNode())
         node->GetDocument().EnqueueScrollEndEventForNode(node);
     }
     GetLayoutBox()
@@ -969,6 +989,19 @@ void ScrollableArea::InjectGestureScrollEvent(
   // We shouldn't be injecting scrolls for the visual viewport scrollbar, since
   // it is not hit-testable.
   DCHECK(GetLayoutBox());
+
+  if (granularity == ScrollGranularity::kScrollByPrecisePixel ||
+      granularity == ScrollGranularity::kScrollByPixel) {
+    // Pixel-based deltas need to be scaled up by the input event scale factor,
+    // since the GSUs will be scaled down by that factor when being handled.
+    float scale = 1;
+    LocalFrameView* root_view =
+        GetLayoutBox()->GetFrame()->LocalFrameRoot().View();
+    if (root_view)
+      scale = root_view->InputEventsScaleFactor();
+    delta.Scale(scale);
+  }
+
   GetChromeClient()->InjectGestureScrollEvent(
       *GetLayoutBox()->GetFrame(), device,
       gfx::Vector2dF(delta.Width(), delta.Height()), granularity,
@@ -979,13 +1012,26 @@ ScrollableArea* ScrollableArea::GetForScrolling(const LayoutBox* layout_box) {
   if (!layout_box)
     return nullptr;
 
-  if (!layout_box->IsGlobalRootScroller())
+  if (!layout_box->IsGlobalRootScroller()) {
+    if (const auto* element = DynamicTo<Element>(layout_box->GetNode())) {
+      if (auto* scrolling_box = element->GetLayoutBoxForScrolling())
+        return scrolling_box->GetScrollableArea();
+    }
     return layout_box->GetScrollableArea();
+  }
 
   // The global root scroller should be scrolled by the root frame view's
   // ScrollableArea.
   LocalFrame& root_frame = layout_box->GetFrame()->LocalFrameRoot();
   return root_frame.View()->GetScrollableArea();
+}
+
+float ScrollableArea::ScaleFromDIP() const {
+  auto* client = GetChromeClient();
+  auto* document = GetDocument();
+  if (client && document)
+    return client->WindowToViewportScalar(document->GetFrame(), 1.0f);
+  return 1.0f;
 }
 
 }  // namespace blink

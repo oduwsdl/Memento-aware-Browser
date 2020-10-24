@@ -92,7 +92,7 @@ base::TimeDelta GetIntensiveWakeUpThrottlingGracePeriod() {
   static const base::FeatureParam<int>
       kIntensiveWakeUpThrottling_GracePeriodSeconds{
           &features::kIntensiveWakeUpThrottling,
-          kIntensiveWakeUpThrottling_GracePeriodSeconds_Name,
+          features::kIntensiveWakeUpThrottling_GracePeriodSeconds_Name,
           kIntensiveWakeUpThrottling_GracePeriodSeconds_Default};
 
   int seconds = kIntensiveWakeUpThrottling_GracePeriodSeconds_Default;
@@ -101,6 +101,42 @@ base::TimeDelta GetIntensiveWakeUpThrottlingGracePeriod() {
     seconds = kIntensiveWakeUpThrottling_GracePeriodSeconds.Get();
   }
   return base::TimeDelta::FromSeconds(seconds);
+}
+
+base::TimeDelta GetTimeToInhibitIntensiveThrottlingOnTitleOrFaviconUpdate() {
+  DCHECK(IsIntensiveWakeUpThrottlingEnabled());
+
+  constexpr int kDefaultSeconds = 3;
+
+  static const base::FeatureParam<int> kFeatureParam{
+      &features::kIntensiveWakeUpThrottling,
+      "inhibit_seconds_on_title_or_favicon_update_seconds", kDefaultSeconds};
+
+  int seconds = kDefaultSeconds;
+  if (GetIntensiveWakeUpThrottlingPolicyOverride() ==
+      PolicyOverride::NO_OVERRIDE) {
+    seconds = kFeatureParam.Get();
+  }
+
+  return base::TimeDelta::FromSeconds(seconds);
+}
+
+bool CanIntensivelyThrottleLowNestingLevel() {
+  DCHECK(IsIntensiveWakeUpThrottlingEnabled());
+
+  static const base::FeatureParam<bool> kFeatureParam{
+      &features::kIntensiveWakeUpThrottling,
+      kIntensiveWakeUpThrottling_CanIntensivelyThrottleLowNestingLevel_Name,
+      kIntensiveWakeUpThrottling_CanIntensivelyThrottleLowNestingLevel_Default};
+
+  bool value =
+      kIntensiveWakeUpThrottling_CanIntensivelyThrottleLowNestingLevel_Default;
+  if (GetIntensiveWakeUpThrottlingPolicyOverride() ==
+      PolicyOverride::NO_OVERRIDE) {
+    value = kFeatureParam.Get();
+  }
+
+  return value;
 }
 
 }  // namespace scheduler

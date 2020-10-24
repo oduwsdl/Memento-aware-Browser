@@ -16,6 +16,7 @@
 
 #include "Pipeline/ShaderCore.hpp"
 #include "Reactor/Reactor.hpp"
+#include "System/CPUID.hpp"
 #include "System/Debug.hpp"
 #include "System/Half.hpp"
 #include "System/Memory.hpp"
@@ -23,6 +24,11 @@
 #include "Vulkan/VkImage.hpp"
 
 #include <utility>
+
+#if defined(__i386__) || defined(__x86_64__)
+#	include <xmmintrin.h>
+#	include <emmintrin.h>
+#endif
 
 namespace {
 rr::RValue<rr::Int> PackFields(rr::Int4 const &ints, const sw::int4 shifts)
@@ -152,6 +158,7 @@ void Blitter::clear(void *pixel, vk::Format format, vk::Image *dest, const vk::F
 			}
 		}
 	}
+	dest->contentsChanged(subresourceRange);
 }
 
 bool Blitter::fastClear(void *clearValue, vk::Format clearFormat, vk::Image *dest, const vk::Format &viewFormat, const VkImageSubresourceRange &subresourceRange, const VkRect2D *renderArea)
@@ -163,11 +170,25 @@ bool Blitter::fastClear(void *clearValue, vk::Format clearFormat, vk::Image *des
 		return false;
 	}
 
-	float *color = reinterpret_cast<float *>(clearValue);
-	float r = color[0];
-	float g = color[1];
-	float b = color[2];
-	float a = color[3];
+	union ClearValue
+	{
+		struct
+		{
+			float r;
+			float g;
+			float b;
+			float a;
+		};
+
+		float rgb[3];
+
+		float d;
+		uint32_t d_as_u32;
+
+		uint32_t s;
+	};
+
+	ClearValue &c = *reinterpret_cast<ClearValue *>(clearValue);
 
 	uint32_t packed = 0;
 
@@ -175,42 +196,42 @@ bool Blitter::fastClear(void *clearValue, vk::Format clearFormat, vk::Image *des
 	switch(viewFormat)
 	{
 		case VK_FORMAT_R5G6B5_UNORM_PACK16:
-			packed = ((uint16_t)(31 * b + 0.5f) << 0) |
-			         ((uint16_t)(63 * g + 0.5f) << 5) |
-			         ((uint16_t)(31 * r + 0.5f) << 11);
+			packed = ((uint16_t)(31 * c.b + 0.5f) << 0) |
+			         ((uint16_t)(63 * c.g + 0.5f) << 5) |
+			         ((uint16_t)(31 * c.r + 0.5f) << 11);
 			break;
 		case VK_FORMAT_B5G6R5_UNORM_PACK16:
-			packed = ((uint16_t)(31 * r + 0.5f) << 0) |
-			         ((uint16_t)(63 * g + 0.5f) << 5) |
-			         ((uint16_t)(31 * b + 0.5f) << 11);
+			packed = ((uint16_t)(31 * c.r + 0.5f) << 0) |
+			         ((uint16_t)(63 * c.g + 0.5f) << 5) |
+			         ((uint16_t)(31 * c.b + 0.5f) << 11);
 			break;
 		case VK_FORMAT_A8B8G8R8_UINT_PACK32:
 		case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
 		case VK_FORMAT_R8G8B8A8_UNORM:
-			packed = ((uint32_t)(255 * a + 0.5f) << 24) |
-			         ((uint32_t)(255 * b + 0.5f) << 16) |
-			         ((uint32_t)(255 * g + 0.5f) << 8) |
-			         ((uint32_t)(255 * r + 0.5f) << 0);
+			packed = ((uint32_t)(255 * c.a + 0.5f) << 24) |
+			         ((uint32_t)(255 * c.b + 0.5f) << 16) |
+			         ((uint32_t)(255 * c.g + 0.5f) << 8) |
+			         ((uint32_t)(255 * c.r + 0.5f) << 0);
 			break;
 		case VK_FORMAT_B8G8R8A8_UNORM:
-			packed = ((uint32_t)(255 * a + 0.5f) << 24) |
-			         ((uint32_t)(255 * r + 0.5f) << 16) |
-			         ((uint32_t)(255 * g + 0.5f) << 8) |
-			         ((uint32_t)(255 * b + 0.5f) << 0);
+			packed = ((uint32_t)(255 * c.a + 0.5f) << 24) |
+			         ((uint32_t)(255 * c.r + 0.5f) << 16) |
+			         ((uint32_t)(255 * c.g + 0.5f) << 8) |
+			         ((uint32_t)(255 * c.b + 0.5f) << 0);
 			break;
 		case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
-			packed = R11G11B10F(color);
+			packed = R11G11B10F(c.rgb);
 			break;
 		case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:
-			packed = RGB9E5(color);
+			packed = RGB9E5(c.rgb);
 			break;
 		case VK_FORMAT_D32_SFLOAT:
 			ASSERT(clearFormat == VK_FORMAT_D32_SFLOAT);
-			packed = *reinterpret_cast<uint32_t *>(clearValue);  // float reinterpreted as uint32
+			packed = c.d_as_u32;  // float reinterpreted as uint32
 			break;
 		case VK_FORMAT_S8_UINT:
 			ASSERT(clearFormat == VK_FORMAT_S8_UINT);
-			packed = *reinterpret_cast<uint8_t *>(clearValue);
+			packed = static_cast<uint8_t>(c.s);
 			break;
 		default:
 			return false;
@@ -292,6 +313,7 @@ bool Blitter::fastClear(void *clearValue, vk::Format clearFormat, vk::Image *des
 			}
 		}
 	}
+	dest->contentsChanged(subresourceRange);
 
 	return true;
 }
@@ -356,6 +378,7 @@ Float4 Blitter::readFloat4(Pointer<Byte> element, const State &state)
 			c = Float4(*Pointer<Byte4>(element));
 			break;
 		case VK_FORMAT_R16G16B16A16_SINT:
+		case VK_FORMAT_R16G16B16A16_SNORM:
 			c = Float4(*Pointer<Short4>(element));
 			break;
 		case VK_FORMAT_R16G16B16A16_UNORM:
@@ -1724,31 +1747,10 @@ Blitter::CornerUpdateRoutineType Blitter::getCornerUpdateRoutine(const State &st
 	return cornerUpdateRoutine;
 }
 
-void Blitter::copy(const vk::Image *src, uint8_t *dst, unsigned int dstPitch)
-{
-	VkExtent3D extent = src->getMipLevelExtent(VK_IMAGE_ASPECT_COLOR_BIT, 0);
-	size_t rowBytes = src->getFormat(VK_IMAGE_ASPECT_COLOR_BIT).bytes() * extent.width;
-	unsigned int srcPitch = src->rowPitchBytes(VK_IMAGE_ASPECT_COLOR_BIT, 0);
-	ASSERT(dstPitch >= rowBytes && srcPitch >= rowBytes && src->getMipLevelExtent(VK_IMAGE_ASPECT_COLOR_BIT, 0).height >= extent.height);
-
-	const uint8_t *s = (uint8_t *)src->getTexelPointer({ 0, 0, 0 }, { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 });
-	uint8_t *d = dst;
-
-	for(uint32_t y = 0; y < extent.height; y++)
-	{
-		memcpy(d, s, rowBytes);
-
-		s += srcPitch;
-		d += dstPitch;
-	}
-}
-
 void Blitter::blit(const vk::Image *src, vk::Image *dst, VkImageBlit region, VkFilter filter)
 {
-	if(dst->getFormat() == VK_FORMAT_UNDEFINED)
-	{
-		return;
-	}
+	ASSERT(src->getFormat() != VK_FORMAT_UNDEFINED);
+	ASSERT(dst->getFormat() != VK_FORMAT_UNDEFINED);
 
 	// Vulkan 1.2 section 18.5. Image Copies with Scaling:
 	// "The layerCount member of srcSubresource and dstSubresource must match"
@@ -1857,7 +1859,7 @@ void Blitter::blit(const vk::Image *src, vk::Image *dst, VkImageBlit region, VkF
 	VkImageSubresourceRange dstSubresRange = {
 		region.dstSubresource.aspectMask,
 		region.dstSubresource.mipLevel,
-		1,
+		1,  // levelCount
 		region.dstSubresource.baseArrayLayer,
 		region.dstSubresource.layerCount
 	};
@@ -1873,6 +1875,197 @@ void Blitter::blit(const vk::Image *src, vk::Image *dst, VkImageBlit region, VkF
 		ASSERT(data.dest < dst->end());
 
 		blitRoutine(&data);
+	}
+
+	dst->contentsChanged(dstSubresRange);
+}
+
+void Blitter::resolve(const vk::Image *src, vk::Image *dst, VkImageResolve region)
+{
+	// "The aspectMask member of srcSubresource and dstSubresource must only contain VK_IMAGE_ASPECT_COLOR_BIT"
+	ASSERT(region.srcSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
+	ASSERT(region.dstSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
+	// "The layerCount member of srcSubresource and dstSubresource must match"
+	ASSERT(region.srcSubresource.layerCount == region.dstSubresource.layerCount);
+
+	// We use this method both for explicit resolves from vkCmdResolveImage, and implicit ones for resolve attachments.
+	// - vkCmdResolveImage: "srcImage and dstImage must have been created with the same image format."
+	// - VkSubpassDescription: "each resolve attachment that is not VK_ATTACHMENT_UNUSED must have the same VkFormat as its corresponding color attachment."
+	ASSERT(src->getFormat() == dst->getFormat());
+
+	if(fastResolve(src, dst, region))
+	{
+		return;
+	}
+
+	// Fall back to a generic blit which performs the resolve.
+	VkImageBlit blitRegion;
+
+	blitRegion.srcOffsets[0] = blitRegion.srcOffsets[1] = region.srcOffset;
+	blitRegion.srcOffsets[1].x += region.extent.width;
+	blitRegion.srcOffsets[1].y += region.extent.height;
+	blitRegion.srcOffsets[1].z += region.extent.depth;
+
+	blitRegion.dstOffsets[0] = blitRegion.dstOffsets[1] = region.dstOffset;
+	blitRegion.dstOffsets[1].x += region.extent.width;
+	blitRegion.dstOffsets[1].y += region.extent.height;
+	blitRegion.dstOffsets[1].z += region.extent.depth;
+
+	blitRegion.srcSubresource = region.srcSubresource;
+	blitRegion.dstSubresource = region.dstSubresource;
+
+	blit(src, dst, blitRegion, VK_FILTER_NEAREST);
+}
+
+static inline uint32_t averageByte4(uint32_t x, uint32_t y)
+{
+	return (x & y) + (((x ^ y) >> 1) & 0x7F7F7F7F) + ((x ^ y) & 0x01010101);
+}
+
+bool Blitter::fastResolve(const vk::Image *src, vk::Image *dst, VkImageResolve region)
+{
+	if(region.dstOffset != VkOffset3D{ 0, 0, 0 })
+	{
+		return false;
+	}
+
+	if(region.srcOffset != VkOffset3D{ 0, 0, 0 })
+	{
+		return false;
+	}
+
+	if(region.srcSubresource.layerCount != 1)
+	{
+		return false;
+	}
+
+	if(region.extent != src->getExtent() ||
+	   region.extent != dst->getExtent() ||
+	   region.extent.depth != 1)
+	{
+		return false;
+	}
+
+	VkImageSubresource srcSubresource = {
+		region.srcSubresource.aspectMask,
+		region.srcSubresource.mipLevel,
+		region.srcSubresource.baseArrayLayer
+	};
+
+	VkImageSubresource dstSubresource = {
+		region.dstSubresource.aspectMask,
+		region.dstSubresource.mipLevel,
+		region.dstSubresource.baseArrayLayer
+	};
+
+	VkImageSubresourceRange dstSubresourceRange = {
+		region.dstSubresource.aspectMask,
+		region.dstSubresource.mipLevel,
+		1,  // levelCount
+		region.dstSubresource.baseArrayLayer,
+		region.dstSubresource.layerCount
+	};
+
+	void *source = src->getTexelPointer({ 0, 0, 0 }, srcSubresource);
+	uint8_t *dest = reinterpret_cast<uint8_t *>(dst->getTexelPointer({ 0, 0, 0 }, dstSubresource));
+
+	auto format = src->getFormat();
+	auto samples = src->getSampleCountFlagBits();
+	auto extent = src->getExtent();
+
+	int width = extent.width;
+	int height = extent.height;
+	int pitch = src->rowPitchBytes(VK_IMAGE_ASPECT_COLOR_BIT, region.srcSubresource.mipLevel);
+	int slice = src->slicePitchBytes(VK_IMAGE_ASPECT_COLOR_BIT, region.srcSubresource.mipLevel);
+
+	uint8_t *source0 = (uint8_t *)source;
+	uint8_t *source1 = source0 + slice;
+	uint8_t *source2 = source1 + slice;
+	uint8_t *source3 = source2 + slice;
+
+	const bool SSE2 = CPUID::supportsSSE2();
+
+	if(format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_A8B8G8R8_UNORM_PACK32)
+	{
+		if(samples == 4)
+		{
+			for(int y = 0; y < height; y++)
+			{
+				int x = 0;
+
+#if defined(__i386__) || defined(__x86_64__)
+				if(SSE2)
+				{
+					for(; (x + 3) < width; x += 4)
+					{
+						__m128i c0 = _mm_loadu_si128((__m128i *)(source0 + 4 * x));
+						__m128i c1 = _mm_loadu_si128((__m128i *)(source1 + 4 * x));
+						__m128i c2 = _mm_loadu_si128((__m128i *)(source2 + 4 * x));
+						__m128i c3 = _mm_loadu_si128((__m128i *)(source3 + 4 * x));
+
+						c0 = _mm_avg_epu8(c0, c1);
+						c2 = _mm_avg_epu8(c2, c3);
+						c0 = _mm_avg_epu8(c0, c2);
+
+						_mm_storeu_si128((__m128i *)(dest + 4 * x), c0);
+					}
+				}
+#endif
+
+				for(; x < width; x++)
+				{
+					uint32_t c0 = *(uint32_t *)(source0 + 4 * x);
+					uint32_t c1 = *(uint32_t *)(source1 + 4 * x);
+					uint32_t c2 = *(uint32_t *)(source2 + 4 * x);
+					uint32_t c3 = *(uint32_t *)(source3 + 4 * x);
+
+					uint32_t c01 = averageByte4(c0, c1);
+					uint32_t c23 = averageByte4(c2, c3);
+					uint32_t c03 = averageByte4(c01, c23);
+
+					*(uint32_t *)(dest + 4 * x) = c03;
+				}
+
+				source0 += pitch;
+				source1 += pitch;
+				source2 += pitch;
+				source3 += pitch;
+				dest += pitch;
+
+				ASSERT(source0 < src->end());
+				ASSERT(source3 < src->end());
+				ASSERT(dest < dst->end());
+			}
+		}
+		else
+			UNSUPPORTED("Samples: %d", samples);
+	}
+	else
+	{
+		return false;
+	}
+
+	dst->contentsChanged(dstSubresourceRange);
+
+	return true;
+}
+
+void Blitter::copy(const vk::Image *src, uint8_t *dst, unsigned int dstPitch)
+{
+	VkExtent3D extent = src->getExtent();
+	size_t rowBytes = src->getFormat(VK_IMAGE_ASPECT_COLOR_BIT).bytes() * extent.width;
+	unsigned int srcPitch = src->rowPitchBytes(VK_IMAGE_ASPECT_COLOR_BIT, 0);
+	ASSERT(dstPitch >= rowBytes && srcPitch >= rowBytes && src->getMipLevelExtent(VK_IMAGE_ASPECT_COLOR_BIT, 0).height >= extent.height);
+
+	const uint8_t *s = (uint8_t *)src->getTexelPointer({ 0, 0, 0 }, { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 });
+	uint8_t *d = dst;
+
+	for(uint32_t y = 0; y < extent.height; y++)
+	{
+		memcpy(d, s, rowBytes);
+
+		s += srcPitch;
+		d += dstPitch;
 	}
 }
 

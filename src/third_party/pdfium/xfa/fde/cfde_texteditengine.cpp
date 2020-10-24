@@ -10,7 +10,10 @@
 #include <limits>
 #include <utility>
 
+#include "core/fxcrt/fx_extension.h"
 #include "core/fxge/text_char_pos.h"
+#include "third_party/base/check.h"
+#include "third_party/base/notreached.h"
 #include "xfa/fde/cfde_textout.h"
 #include "xfa/fde/cfde_wordbreak_data.h"
 #include "xfa/fgas/font/cfgas_gefont.h"
@@ -1069,7 +1072,7 @@ std::vector<TextCharPos> CFDE_TextEditEngine::GetDisplayPos(
 }
 
 void CFDE_TextEditEngine::RebuildPieces() {
-  text_break_.EndBreak(CFX_BreakType::Paragraph);
+  text_break_.EndBreak(CFX_BreakType::kParagraph);
   text_break_.ClearBreakPieces();
 
   char_widths_.clear();
@@ -1084,14 +1087,14 @@ void CFDE_TextEditEngine::RebuildPieces() {
   size_t current_piece_start = 0;
   float current_line_start = 0;
 
-  auto iter = std::make_unique<CFDE_TextEditEngine::Iterator>(this);
-  while (!iter->IsEOF(false)) {
-    iter->Next(false);
+  CFDE_TextEditEngine::Iterator iter(this);
+  while (!iter.IsEOF(false)) {
+    iter.Next(false);
 
     CFX_BreakType break_status = text_break_.AppendChar(
-        password_mode_ ? password_alias_ : iter->GetChar());
-    if (iter->IsEOF(false) && CFX_BreakTypeNoneOrPiece(break_status))
-      break_status = text_break_.EndBreak(CFX_BreakType::Paragraph);
+        password_mode_ ? password_alias_ : iter.GetChar());
+    if (iter.IsEOF(false) && CFX_BreakTypeNoneOrPiece(break_status))
+      break_status = text_break_.EndBreak(CFX_BreakType::kParagraph);
 
     if (CFX_BreakTypeNoneOrPiece(break_status))
       continue;
@@ -1151,8 +1154,8 @@ void CFDE_TextEditEngine::RebuildPieces() {
 
 std::pair<int32_t, CFX_RectF> CFDE_TextEditEngine::GetCharacterInfo(
     int32_t start_idx) {
-  ASSERT(start_idx >= 0);
-  ASSERT(static_cast<size_t>(start_idx) <= text_length_);
+  DCHECK(start_idx >= 0);
+  DCHECK(static_cast<size_t>(start_idx) <= text_length_);
 
   // Make sure the current available data is fresh.
   Layout();

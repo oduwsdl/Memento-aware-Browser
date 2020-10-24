@@ -17,8 +17,8 @@
 
 #include "dawn_native/dawn_platform.h"
 
-#include "common/Serial.h"
 #include "common/SerialQueue.h"
+#include "dawn_native/Commands.h"
 #include "dawn_native/Device.h"
 #include "dawn_native/vulkan/CommandRecordingContext.h"
 #include "dawn_native/vulkan/Forward.h"
@@ -68,12 +68,13 @@ namespace dawn_native { namespace vulkan {
         // Dawn Native API
 
         TextureBase* CreateTextureWrappingVulkanImage(
-            const ExternalImageDescriptor* descriptor,
+            const ExternalImageDescriptorVk* descriptor,
             ExternalMemoryHandle memoryHandle,
             const std::vector<ExternalSemaphoreHandle>& waitHandles);
-
-        MaybeError SignalAndExportExternalTexture(Texture* texture,
-                                                  ExternalSemaphoreHandle* outHandle);
+        bool SignalAndExportExternalTexture(Texture* texture,
+                                            VkImageLayout desiredLayout,
+                                            ExternalImageExportInfoVk* info,
+                                            std::vector<ExternalSemaphoreHandle>* semaphoreHandle);
 
         // Dawn API
         CommandBufferBase* CreateCommandBuffer(CommandEncoder* encoder,
@@ -87,6 +88,10 @@ namespace dawn_native { namespace vulkan {
                                            BufferBase* destination,
                                            uint64_t destinationOffset,
                                            uint64_t size) override;
+        MaybeError CopyFromStagingToTexture(const StagingBufferBase* source,
+                                            const TextureDataLayout& src,
+                                            TextureCopy* dst,
+                                            const Extent3D& copySizePixels) override;
 
         ResultOrError<ResourceMemoryAllocation> AllocateMemory(VkMemoryRequirements requirements,
                                                                bool mappable);
@@ -100,6 +105,9 @@ namespace dawn_native { namespace vulkan {
         // needs to be set.
         uint32_t GetComputeSubgroupSize() const;
 
+        uint32_t GetOptimalBytesPerRowAlignment() const override;
+        uint64_t GetOptimalBufferToTextureCopyOffsetAlignment() const override;
+
       private:
         Device(Adapter* adapter, const DeviceDescriptor* descriptor);
 
@@ -107,7 +115,8 @@ namespace dawn_native { namespace vulkan {
             const BindGroupDescriptor* descriptor) override;
         ResultOrError<BindGroupLayoutBase*> CreateBindGroupLayoutImpl(
             const BindGroupLayoutDescriptor* descriptor) override;
-        ResultOrError<BufferBase*> CreateBufferImpl(const BufferDescriptor* descriptor) override;
+        ResultOrError<Ref<BufferBase>> CreateBufferImpl(
+            const BufferDescriptor* descriptor) override;
         ResultOrError<ComputePipelineBase*> CreateComputePipelineImpl(
             const ComputePipelineDescriptor* descriptor) override;
         ResultOrError<PipelineLayoutBase*> CreatePipelineLayoutImpl(
@@ -151,7 +160,7 @@ namespace dawn_native { namespace vulkan {
         VkQueue mQueue = VK_NULL_HANDLE;
         uint32_t mComputeSubgroupSize = 0;
 
-        SerialQueue<Ref<BindGroupLayout>> mBindGroupLayoutsPendingDeallocation;
+        SerialQueue<ExecutionSerial, Ref<BindGroupLayout>> mBindGroupLayoutsPendingDeallocation;
         std::unique_ptr<FencedDeleter> mDeleter;
         std::unique_ptr<ResourceMemoryAllocator> mResourceMemoryAllocator;
         std::unique_ptr<RenderPassCache> mRenderPassCache;
@@ -160,13 +169,13 @@ namespace dawn_native { namespace vulkan {
         std::unique_ptr<external_semaphore::Service> mExternalSemaphoreService;
 
         ResultOrError<VkFence> GetUnusedFence();
-        Serial CheckAndUpdateCompletedSerials() override;
+        ExecutionSerial CheckAndUpdateCompletedSerials() override;
 
         // We track which operations are in flight on the GPU with an increasing serial.
         // This works only because we have a single queue. Each submit to a queue is associated
         // to a serial and a fence, such that when the fence is "ready" we know the operations
         // have finished.
-        std::queue<std::pair<VkFence, Serial>> mFencesInFlight;
+        std::queue<std::pair<VkFence, ExecutionSerial>> mFencesInFlight;
         // Fences in the unused list aren't reset yet.
         std::vector<VkFence> mUnusedFences;
 
@@ -177,13 +186,13 @@ namespace dawn_native { namespace vulkan {
             VkCommandPool pool = VK_NULL_HANDLE;
             VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         };
-        SerialQueue<CommandPoolAndBuffer> mCommandsInFlight;
+        SerialQueue<ExecutionSerial, CommandPoolAndBuffer> mCommandsInFlight;
         // Command pools in the unused list haven't been reset yet.
         std::vector<CommandPoolAndBuffer> mUnusedCommands;
         // There is always a valid recording context stored in mRecordingContext
         CommandRecordingContext mRecordingContext;
 
-        MaybeError ImportExternalImage(const ExternalImageDescriptor* descriptor,
+        MaybeError ImportExternalImage(const ExternalImageDescriptorVk* descriptor,
                                        ExternalMemoryHandle memoryHandle,
                                        VkImage image,
                                        const std::vector<ExternalSemaphoreHandle>& waitHandles,

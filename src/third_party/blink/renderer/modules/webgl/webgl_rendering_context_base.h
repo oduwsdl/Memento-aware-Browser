@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/core/typed_arrays/typed_flexible_array_buffer_view.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_extension_name.h"
+#include "third_party/blink/renderer/modules/webgl/webgl_fast_call.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_texture.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_vertex_array_object_base.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
@@ -60,6 +61,7 @@
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES3/gl31.h"
 #include "third_party/skia/include/core/SkData.h"
+#include "v8/include/v8-fast-api-calls.h"
 
 namespace cc {
 class Layer;
@@ -107,8 +109,6 @@ class WebGLShaderPrecisionFormat;
 class WebGLUniformLocation;
 class WebGLVertexArrayObjectBase;
 
-class WebGLRenderingContextErrorMessageCallback;
-
 using GLenumHashSet = HashSet<GLenum,
                               WTF::AlreadyHashed,
                               WTF::UnsignedWithZeroKeyHashTraits<GLenum>>;
@@ -141,8 +141,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     return static_cast<HTMLCanvasElement*>(Host());
   }
 
-  base::Optional<UkmParameters> ukm_parameters() const {
-    return Host()->ukm_parameters();
+  const UkmParameters GetUkmParameters() const {
+    return Host()->GetUkmParameters();
   }
 
   virtual String ContextName() const = 0;
@@ -168,9 +168,15 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void attachShader(WebGLProgram*, WebGLShader*);
   void bindAttribLocation(WebGLProgram*, GLuint index, const String& name);
   void bindBuffer(GLenum target, WebGLBuffer*);
+  void bindBuffer(GLenum target,
+                  WebGLBuffer*,
+                  v8::FastApiCallbackOptions& options);
   virtual void bindFramebuffer(GLenum target, WebGLFramebuffer*);
   void bindRenderbuffer(GLenum target, WebGLRenderbuffer*);
   void bindTexture(GLenum target, WebGLTexture*);
+  void bindTexture(GLenum target,
+                   WebGLTexture*,
+                   v8::FastApiCallbackOptions& options);
   void blendColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
   void blendEquation(GLenum mode);
   void blendEquationSeparate(GLenum mode_rgb, GLenum mode_alpha);
@@ -257,7 +263,16 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void disable(GLenum cap);
   void disableVertexAttribArray(GLuint index);
   void drawArrays(GLenum mode, GLint first, GLsizei count);
+  void drawArrays(GLenum mode,
+                  GLint first,
+                  GLsizei count,
+                  v8::FastApiCallbackOptions& options);
   void drawElements(GLenum mode, GLsizei count, GLenum type, int64_t offset);
+  void drawElements(GLenum mode,
+                    GLsizei count,
+                    GLenum type,
+                    int64_t offset,
+                    v8::FastApiCallbackOptions& options);
 
   void DrawArraysInstancedANGLE(GLenum mode,
                                 GLint first,
@@ -630,7 +645,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   friend class ScopedFramebufferRestorer;
   friend class ScopedTexture2DRestorer;
   friend class ScopedUnpackParametersResetRestore;
-  friend class WebGLRenderingContextErrorMessageCallback;
 
   // WebGL extensions.
   friend class EXTDisjointTimerQuery;
@@ -801,7 +815,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void MakeXrCompatibleAsync();
   void OnMakeXrCompatibleFinished(
       device::mojom::blink::XrCompatibleResult xr_compatible_result);
-  void CompleteXrCompatiblePromiseIfPending();
+  void CompleteXrCompatiblePromiseIfPending(DOMExceptionCode exception_code);
   bool xr_compatible_;
   Member<ScriptPromiseResolver> make_xr_compatible_resolver_;
 
@@ -1020,6 +1034,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   bool is_web_gl_depth_texture_formats_types_added_ = false;
   bool is_ext_srgb_formats_types_added_ = false;
   bool is_ext_color_buffer_float_formats_added_ = false;
+  bool is_ext_color_buffer_half_float_formats_added_ = false;
   bool is_ext_texture_norm16_added_ = false;
 
   GLenumHashSet supported_internal_formats_;
@@ -1217,12 +1232,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   // Helper function to check if an identifier starts with reserved prefixes.
   bool IsPrefixReserved(const String& name);
 
-  // Helper function to check if all characters in the shader source belong to
-  // the ASCII subset as defined in GLSL ES 1.0 spec section 3.1 Character Set
-  // for WebGL 1.0 and in GLSL ES 3.00 spec section 3.1 Character Set for WebGL
-  // 2.0.
-  bool ValidateShaderSource(const String&);
-
   virtual bool ValidateShaderType(const char* function_name,
                                   GLenum shader_type);
 
@@ -1407,6 +1416,12 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   // Helper function to print warnings to console. Currently
   // used only to warn about use of obsolete functions.
   void PrintWarningToConsole(const String&);
+
+  // Wrap probe::DidFireWebGLErrorOrWarning and friends, but defer inside a
+  // FastCall.
+  void NotifyWebGLErrorOrWarning(const String& message);
+  void NotifyWebGLError(const String& error_type);
+  void NotifyWebGLWarning();
 
   // Helper function to validate the target for checkFramebufferStatus and
   // validateFramebufferFuncParameters.
@@ -1789,6 +1804,16 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
       WebGraphicsContext3DProvider* context_provider);
   static unsigned CurrentMaxGLContexts();
 
+  void RecordIdentifiableGLParameterDigest(GLenum pname,
+                                           IdentifiableToken value);
+
+  void RecordShaderPrecisionFormatForStudy(GLenum shader_type,
+                                           GLenum precision_type,
+                                           WebGLShaderPrecisionFormat* format);
+
+  void bindBufferImpl(GLenum target, WebGLBuffer*);
+  void bindTextureImpl(GLenum target, WebGLTexture*);
+
   static bool webgl_context_limits_initialized_;
   static unsigned max_active_webgl_contexts_;
   static unsigned max_active_webgl_contexts_on_worker_;
@@ -1804,6 +1829,9 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
       feature_handle_for_scheduler_;
 
   int number_of_user_allocated_multisampled_renderbuffers_;
+
+  friend class WebGLFastCallHelper;
+  WebGLFastCallHelper fast_call_;
 
   DISALLOW_COPY_AND_ASSIGN(WebGLRenderingContextBase);
 };

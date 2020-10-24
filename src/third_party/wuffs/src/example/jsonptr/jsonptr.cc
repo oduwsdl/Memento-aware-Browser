@@ -14,6 +14,9 @@
 
 // ----------------
 
+// jsonptr is discussed extensively at
+// https://nigeltao.github.io/blog/2020/jsonptr.html
+
 /*
 jsonptr is a JSON formatter (pretty-printer) that supports the JSON Pointer
 (RFC 6901) query syntax. It reads UTF-8 JSON from stdin and writes
@@ -86,8 +89,7 @@ it runs in a SECCOMP_MODE_STRICT sandbox.
 
 ----
 
-This example program differs from most other example Wuffs programs in that it
-is written in C++, not C.
+To run:
 
 $CXX jsonptr.cc && ./a.out < ../../test/data/github-tags.json; rm -f a.out
 
@@ -152,11 +154,18 @@ static const char* g_usage =
     "Flags:\n"
     "    -c      -compact-output\n"
     "    -d=NUM  -max-output-depth=NUM\n"
-    "    -i=NUM  -indent=NUM\n"
     "    -q=STR  -query=STR\n"
-    "    -s      -strict-json-pointer-syntax\n"
+    "    -s=NUM  -spaces=NUM\n"
     "    -t      -tabs\n"
     "            -fail-if-unsandboxed\n"
+    "            -input-allow-comments\n"
+    "            -input-allow-extra-comma\n"
+    "            -input-allow-inf-nan-numbers\n"
+    "            -jwcc\n"
+    "            -output-comments\n"
+    "            -output-extra-comma\n"
+    "            -output-inf-nan-numbers\n"
+    "            -strict-json-pointer-syntax\n"
     "\n"
     "The input.json filename is optional. If absent, it reads from stdin.\n"
     "\n"
@@ -171,8 +180,37 @@ static const char* g_usage =
     "duplicate keys. Canonicalization does not imply Unicode normalization.\n"
     "\n"
     "Formatted means that arrays' and objects' elements are indented, each\n"
-    "on its own line. Configure this with the -c / -compact-output, -i=NUM /\n"
-    "-indent=NUM (for NUM ranging from 0 to 8) and -t / -tabs flags.\n"
+    "on its own line. Configure this with the -c / -compact-output, -s=NUM /\n"
+    "-spaces=NUM (for NUM ranging from 0 to 8) and -t / -tabs flags.\n"
+    "\n"
+    "The -input-allow-comments flag allows \"/*slash-star*/\" and\n"
+    "\"//slash-slash\" C-style comments within JSON input. Such comments are\n"
+    "stripped from the output unless -output-comments was also set.\n"
+    "\n"
+    "The -input-allow-extra-comma flag allows input like \"[1,2,]\", with a\n"
+    "comma after the final element of a JSON list or dictionary.\n"
+    "\n"
+    "The -input-allow-inf-nan-numbers flag allows non-finite floating point\n"
+    "numbers (infinities and not-a-numbers) within JSON input. This flag\n"
+    "requires that -output-inf-nan-numbers also be set.\n"
+    "\n"
+    "The -output-comments flag copies any input comments to the output. It\n"
+    "has no effect unless -input-allow-comments was also set. Comments look\n"
+    "better after commas than before them, but a closing \"]\" or \"}\" can\n"
+    "occur after arbitrarily many comments, so -output-comments also requires\n"
+    "that one or both of -compact-output and -output-extra-comma be set.\n"
+    "\n"
+    "The -output-extra-comma flag writes output like \"[1,2,]\", with a comma\n"
+    "after the final element of a JSON list or dictionary. Such commas are\n"
+    "non-compliant with the JSON specification but many parsers accept them\n"
+    "and they can produce simpler line-based diffs. This flag is ignored when\n"
+    "-compact-output is set.\n"
+    "\n"
+    "The -jwcc flag (JSON With Commas and Comments) enables all of:\n"
+    "            -input-allow-comments\n"
+    "            -input-allow-extra-comma\n"
+    "            -output-comments\n"
+    "            -output-extra-comma\n"
     "\n"
     "----\n"
     "\n"
@@ -201,12 +239,12 @@ static const char* g_usage =
     "object has multiple \"foo\" children but the first one doesn't have a\n"
     "\"bar\" child, even if later ones do.\n"
     "\n"
-    "The -s or -strict-json-pointer-syntax flag restricts the -query=STR\n"
-    "string to exactly RFC 6901, with only two escape sequences: \"~0\" and\n"
-    "\"~1\" for \"~\" and \"/\". Without this flag, this program also lets\n"
-    "\"~n\" and \"~r\" escape the New Line and Carriage Return ASCII control\n"
-    "characters, which can work better with line oriented Unix tools that\n"
-    "assume exactly one value (i.e. one JSON Pointer string) per line.\n"
+    "The -strict-json-pointer-syntax flag restricts the -query=STR string to\n"
+    "exactly RFC 6901, with only two escape sequences: \"~0\" and \"~1\" for\n"
+    "\"~\" and \"/\". Without this flag, this program also lets \"~n\" and\n"
+    "\"~r\" escape the New Line and Carriage Return ASCII control characters,\n"
+    "which can work better with line oriented Unix tools that assume exactly\n"
+    "one value (i.e. one JSON Pointer string) per line.\n"
     "\n"
     "----\n"
     "\n"
@@ -236,6 +274,138 @@ static const char* g_usage =
 
 // ----
 
+// ascii_escapes was created by script/print-json-ascii-escapes.go.
+const uint8_t ascii_escapes[1024] = {
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x30, 0x00,  // 0x00: "\\u0000"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x31, 0x00,  // 0x01: "\\u0001"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x32, 0x00,  // 0x02: "\\u0002"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x33, 0x00,  // 0x03: "\\u0003"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x34, 0x00,  // 0x04: "\\u0004"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x35, 0x00,  // 0x05: "\\u0005"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x36, 0x00,  // 0x06: "\\u0006"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x37, 0x00,  // 0x07: "\\u0007"
+    0x02, 0x5C, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x08: "\\b"
+    0x02, 0x5C, 0x74, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x09: "\\t"
+    0x02, 0x5C, 0x6E, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x0A: "\\n"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x42, 0x00,  // 0x0B: "\\u000B"
+    0x02, 0x5C, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x0C: "\\f"
+    0x02, 0x5C, 0x72, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x0D: "\\r"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x45, 0x00,  // 0x0E: "\\u000E"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x30, 0x46, 0x00,  // 0x0F: "\\u000F"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x30, 0x00,  // 0x10: "\\u0010"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x31, 0x00,  // 0x11: "\\u0011"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x32, 0x00,  // 0x12: "\\u0012"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x33, 0x00,  // 0x13: "\\u0013"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x34, 0x00,  // 0x14: "\\u0014"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x35, 0x00,  // 0x15: "\\u0015"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x36, 0x00,  // 0x16: "\\u0016"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x37, 0x00,  // 0x17: "\\u0017"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x38, 0x00,  // 0x18: "\\u0018"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x39, 0x00,  // 0x19: "\\u0019"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x41, 0x00,  // 0x1A: "\\u001A"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x42, 0x00,  // 0x1B: "\\u001B"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x43, 0x00,  // 0x1C: "\\u001C"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x44, 0x00,  // 0x1D: "\\u001D"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x45, 0x00,  // 0x1E: "\\u001E"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x31, 0x46, 0x00,  // 0x1F: "\\u001F"
+    0x06, 0x5C, 0x75, 0x30, 0x30, 0x32, 0x30, 0x00,  // 0x20: "\\u0020"
+    0x01, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x21: "!"
+    0x02, 0x5C, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x22: "\\\""
+    0x01, 0x23, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x23: "#"
+    0x01, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x24: "$"
+    0x01, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x25: "%"
+    0x01, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x26: "&"
+    0x01, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x27: "'"
+    0x01, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x28: "("
+    0x01, 0x29, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x29: ")"
+    0x01, 0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x2A: "*"
+    0x01, 0x2B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x2B: "+"
+    0x01, 0x2C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x2C: ","
+    0x01, 0x2D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x2D: "-"
+    0x01, 0x2E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x2E: "."
+    0x01, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x2F: "/"
+    0x01, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x30: "0"
+    0x01, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x31: "1"
+    0x01, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x32: "2"
+    0x01, 0x33, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x33: "3"
+    0x01, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x34: "4"
+    0x01, 0x35, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x35: "5"
+    0x01, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x36: "6"
+    0x01, 0x37, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x37: "7"
+    0x01, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x38: "8"
+    0x01, 0x39, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x39: "9"
+    0x01, 0x3A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x3A: ":"
+    0x01, 0x3B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x3B: ";"
+    0x01, 0x3C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x3C: "<"
+    0x01, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x3D: "="
+    0x01, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x3E: ">"
+    0x01, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x3F: "?"
+    0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x40: "@"
+    0x01, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x41: "A"
+    0x01, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x42: "B"
+    0x01, 0x43, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x43: "C"
+    0x01, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x44: "D"
+    0x01, 0x45, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x45: "E"
+    0x01, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x46: "F"
+    0x01, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x47: "G"
+    0x01, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x48: "H"
+    0x01, 0x49, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x49: "I"
+    0x01, 0x4A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x4A: "J"
+    0x01, 0x4B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x4B: "K"
+    0x01, 0x4C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x4C: "L"
+    0x01, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x4D: "M"
+    0x01, 0x4E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x4E: "N"
+    0x01, 0x4F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x4F: "O"
+    0x01, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x50: "P"
+    0x01, 0x51, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x51: "Q"
+    0x01, 0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x52: "R"
+    0x01, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x53: "S"
+    0x01, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x54: "T"
+    0x01, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x55: "U"
+    0x01, 0x56, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x56: "V"
+    0x01, 0x57, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x57: "W"
+    0x01, 0x58, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x58: "X"
+    0x01, 0x59, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x59: "Y"
+    0x01, 0x5A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x5A: "Z"
+    0x01, 0x5B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x5B: "["
+    0x02, 0x5C, 0x5C, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x5C: "\\\\"
+    0x01, 0x5D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x5D: "]"
+    0x01, 0x5E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x5E: "^"
+    0x01, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x5F: "_"
+    0x01, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x60: "`"
+    0x01, 0x61, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x61: "a"
+    0x01, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x62: "b"
+    0x01, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x63: "c"
+    0x01, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x64: "d"
+    0x01, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x65: "e"
+    0x01, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x66: "f"
+    0x01, 0x67, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x67: "g"
+    0x01, 0x68, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x68: "h"
+    0x01, 0x69, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x69: "i"
+    0x01, 0x6A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x6A: "j"
+    0x01, 0x6B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x6B: "k"
+    0x01, 0x6C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x6C: "l"
+    0x01, 0x6D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x6D: "m"
+    0x01, 0x6E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x6E: "n"
+    0x01, 0x6F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x6F: "o"
+    0x01, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x70: "p"
+    0x01, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x71: "q"
+    0x01, 0x72, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x72: "r"
+    0x01, 0x73, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x73: "s"
+    0x01, 0x74, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x74: "t"
+    0x01, 0x75, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x75: "u"
+    0x01, 0x76, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x76: "v"
+    0x01, 0x77, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x77: "w"
+    0x01, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x78: "x"
+    0x01, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x79: "y"
+    0x01, 0x7A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x7A: "z"
+    0x01, 0x7B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x7B: "{"
+    0x01, 0x7C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x7C: "|"
+    0x01, 0x7D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x7D: "}"
+    0x01, 0x7E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x7E: "~"
+    0x01, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x7F: "<DEL>"
+};
+
 // Wuffs allows either statically or dynamically allocated work buffers. This
 // program exercises static allocation.
 #define WORK_BUFFER_ARRAY_SIZE \
@@ -251,9 +421,22 @@ bool g_sandboxed = false;
 
 int g_input_file_descriptor = 0;  // A 0 default means stdin.
 
-#define MAX_INDENT 8
-#define INDENT_SPACES_STRING "        "
-#define INDENT_TAB_STRING "\t"
+#define NEW_LINE_THEN_256_SPACES                                               \
+  "\n                                                                        " \
+  "                                                                          " \
+  "                                                                          " \
+  "                                    "
+#define NEW_LINE_THEN_256_TABS                                                 \
+  "\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" \
+  "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" \
+  "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" \
+  "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" \
+  "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" \
+  "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" \
+  "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t"
+
+const char* g_new_line_then_256_indent_bytes;
+uint32_t g_bytes_per_indent_depth;
 
 #ifndef DST_BUFFER_ARRAY_SIZE
 #define DST_BUFFER_ARRAY_SIZE (32 * 1024)
@@ -261,6 +444,7 @@ int g_input_file_descriptor = 0;  // A 0 default means stdin.
 #ifndef SRC_BUFFER_ARRAY_SIZE
 #define SRC_BUFFER_ARRAY_SIZE (32 * 1024)
 #endif
+// 1 token is 8 bytes. 4Ki tokens is 32KiB.
 #ifndef TOKEN_BUFFER_ARRAY_SIZE
 #define TOKEN_BUFFER_ARRAY_SIZE (4 * 1024)
 #endif
@@ -273,10 +457,9 @@ wuffs_base__io_buffer g_dst;
 wuffs_base__io_buffer g_src;
 wuffs_base__token_buffer g_tok;
 
-// g_curr_token_end_src_index is the g_src.data.ptr index of the end of the
-// current token. An invariant is that (g_curr_token_end_src_index <=
-// g_src.meta.ri).
-size_t g_curr_token_end_src_index;
+// g_cursor_index is the g_src.data.ptr index between the previous and current
+// token. An invariant is that (g_cursor_index <= g_src.meta.ri).
+size_t g_cursor_index;
 
 uint32_t g_depth;
 
@@ -287,6 +470,7 @@ enum class context {
   in_dict_after_brace,
   in_dict_after_key,
   in_dict_after_value,
+  end_of_data,
 } g_ctx;
 
 bool  //
@@ -294,6 +478,8 @@ in_dict_before_key() {
   return (g_ctx == context::in_dict_after_brace) ||
          (g_ctx == context::in_dict_after_value);
 }
+
+bool g_is_after_comment;
 
 uint32_t g_suppress_write_dst;
 bool g_wrote_to_dst;
@@ -431,8 +617,9 @@ class Query {
     m_depth = d + 1;
     if (all_digits) {
       // wuffs_base__parse_number_u64 rejects leading zeroes, e.g. "00", "07".
-      m_array_index =
-          wuffs_base__parse_number_u64(wuffs_base__make_slice_u8(i, k - i));
+      m_array_index = wuffs_base__parse_number_u64(
+          wuffs_base__make_slice_u8(i, k - i),
+          WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS);
     }
     return true;
   }
@@ -520,7 +707,7 @@ class Query {
         wuffs_base__make_slice_u8((uint8_t*)query_c_string, length);
     bool previous_was_tilde = false;
     while (s.len > 0) {
-      wuffs_base__utf_8__next__output o = wuffs_base__utf_8__next(s);
+      wuffs_base__utf_8__next__output o = wuffs_base__utf_8__next(s.ptr, s.len);
       if (!o.is_valid()) {
         return false;
       }
@@ -557,16 +744,24 @@ struct {
 
   bool compact_output;
   bool fail_if_unsandboxed;
-  size_t indent;
-  uint32_t max_output_depth;
-  char* query_c_string;
+  bool input_allow_comments;
+  bool input_allow_extra_comma;
+  bool input_allow_inf_nan_numbers;
+  bool output_comments;
+  bool output_extra_comma;
+  bool output_inf_nan_numbers;
   bool strict_json_pointer_syntax;
   bool tabs;
+
+  uint32_t max_output_depth;
+  uint32_t spaces;
+
+  char* query_c_string;
 } g_flags = {0};
 
 const char*  //
 parse_flags(int argc, char** argv) {
-  g_flags.indent = 4;
+  g_flags.spaces = 4;
   g_flags.max_output_depth = 0xFFFFFFFF;
 
   int c = (argc > 0) ? 1 : 0;  // Skip argv[0], the program name.
@@ -601,8 +796,9 @@ parse_flags(int argc, char** argv) {
       while (*arg++ != '=') {
       }
       wuffs_base__result_u64 u = wuffs_base__parse_number_u64(
-          wuffs_base__make_slice_u8((uint8_t*)arg, strlen(arg)));
-      if (wuffs_base__status__is_ok(&u.status) && (u.value <= 0xFFFFFFFF)) {
+          wuffs_base__make_slice_u8((uint8_t*)arg, strlen(arg)),
+          WUFFS_BASE__PARSE_NUMBER_XXX__DEFAULT_OPTIONS);
+      if (u.status.is_ok() && (u.value <= 0xFFFFFFFF)) {
         g_flags.max_output_depth = (uint32_t)(u.value);
         continue;
       }
@@ -612,14 +808,36 @@ parse_flags(int argc, char** argv) {
       g_flags.fail_if_unsandboxed = true;
       continue;
     }
-    if (!strncmp(arg, "i=", 2) || !strncmp(arg, "indent=", 7)) {
-      while (*arg++ != '=') {
-      }
-      if (('0' <= arg[0]) && (arg[0] <= '8') && (arg[1] == '\x00')) {
-        g_flags.indent = arg[0] - '0';
-        continue;
-      }
-      return g_usage;
+    if (!strcmp(arg, "input-allow-comments")) {
+      g_flags.input_allow_comments = true;
+      continue;
+    }
+    if (!strcmp(arg, "input-allow-extra-comma")) {
+      g_flags.input_allow_extra_comma = true;
+      continue;
+    }
+    if (!strcmp(arg, "input-allow-inf-nan-numbers")) {
+      g_flags.input_allow_inf_nan_numbers = true;
+      continue;
+    }
+    if (!strcmp(arg, "jwcc")) {
+      g_flags.input_allow_comments = true;
+      g_flags.input_allow_extra_comma = true;
+      g_flags.output_comments = true;
+      g_flags.output_extra_comma = true;
+      continue;
+    }
+    if (!strcmp(arg, "output-comments")) {
+      g_flags.output_comments = true;
+      continue;
+    }
+    if (!strcmp(arg, "output-extra-comma")) {
+      g_flags.output_extra_comma = true;
+      continue;
+    }
+    if (!strcmp(arg, "output-inf-nan-numbers")) {
+      g_flags.output_inf_nan_numbers = true;
+      continue;
     }
     if (!strncmp(arg, "q=", 2) || !strncmp(arg, "query=", 6)) {
       while (*arg++ != '=') {
@@ -627,7 +845,16 @@ parse_flags(int argc, char** argv) {
       g_flags.query_c_string = arg;
       continue;
     }
-    if (!strcmp(arg, "s") || !strcmp(arg, "strict-json-pointer-syntax")) {
+    if (!strncmp(arg, "s=", 2) || !strncmp(arg, "spaces=", 7)) {
+      while (*arg++ != '=') {
+      }
+      if (('0' <= arg[0]) && (arg[0] <= '8') && (arg[1] == '\x00')) {
+        g_flags.spaces = arg[0] - '0';
+        continue;
+      }
+      return g_usage;
+    }
+    if (!strcmp(arg, "strict-json-pointer-syntax")) {
       g_flags.strict_json_pointer_syntax = true;
       continue;
     }
@@ -664,15 +891,26 @@ initialize_globals(int argc, char** argv) {
       wuffs_base__make_slice_token(g_tok_array, TOKEN_BUFFER_ARRAY_SIZE),
       wuffs_base__empty_token_buffer_meta());
 
-  g_curr_token_end_src_index = 0;
+  g_cursor_index = 0;
 
   g_depth = 0;
 
   g_ctx = context::none;
 
+  g_is_after_comment = false;
+
   TRY(parse_flags(argc, argv));
   if (g_flags.fail_if_unsandboxed && !g_sandboxed) {
     return "main: unsandboxed";
+  }
+  if (g_flags.output_comments && !g_flags.compact_output &&
+      !g_flags.output_extra_comma) {
+    return "main: -output-comments requires one or both of -compact-output and "
+           "-output-extra-comma";
+  }
+  if (g_flags.input_allow_inf_nan_numbers && !g_flags.output_inf_nan_numbers) {
+    return "main: -input-allow-inf-nan-numbers requires "
+           "-output-inf-nan-numbers";
   }
   const int stdin_fd = 0;
   if (g_flags.remaining_argc >
@@ -680,9 +918,13 @@ initialize_globals(int argc, char** argv) {
     return g_usage;
   }
 
+  g_new_line_then_256_indent_bytes =
+      g_flags.tabs ? NEW_LINE_THEN_256_TABS : NEW_LINE_THEN_256_SPACES;
+  g_bytes_per_indent_depth = g_flags.tabs ? 1 : g_flags.spaces;
+
   g_query.reset(g_flags.query_c_string);
 
-  // If the query is non-empty, suprress writing to stdout until we've
+  // If the query is non-empty, suppress writing to stdout until we've
   // completed the query.
   g_suppress_write_dst = g_query.next_fragment() ? 1 : 0;
   g_wrote_to_dst = false;
@@ -690,11 +932,22 @@ initialize_globals(int argc, char** argv) {
   TRY(g_dec.initialize(sizeof__wuffs_json__decoder(), WUFFS_VERSION, 0)
           .message());
 
-  // Consume an optional whitespace trailer. This isn't part of the JSON spec,
-  // but it works better with line oriented Unix tools (such as "echo 123 |
-  // jsonptr" where it's "echo", not "echo -n") or hand-edited JSON files which
-  // can accidentally contain trailing whitespace.
-  g_dec.set_quirk_enabled(WUFFS_JSON__QUIRK_ALLOW_TRAILING_NEW_LINE, true);
+  if (g_flags.input_allow_comments) {
+    g_dec.set_quirk_enabled(WUFFS_JSON__QUIRK_ALLOW_COMMENT_BLOCK, true);
+    g_dec.set_quirk_enabled(WUFFS_JSON__QUIRK_ALLOW_COMMENT_LINE, true);
+  }
+  if (g_flags.input_allow_extra_comma) {
+    g_dec.set_quirk_enabled(WUFFS_JSON__QUIRK_ALLOW_EXTRA_COMMA, true);
+  }
+  if (g_flags.input_allow_inf_nan_numbers) {
+    g_dec.set_quirk_enabled(WUFFS_JSON__QUIRK_ALLOW_INF_NAN_NUMBERS, true);
+  }
+
+  // Consume any optional trailing whitespace and comments. This isn't part of
+  // the JSON spec, but it works better with line oriented Unix tools (such as
+  // "echo 123 | jsonptr" where it's "echo", not "echo -n") or hand-edited JSON
+  // files which can accidentally contain trailing whitespace.
+  g_dec.set_quirk_enabled(WUFFS_JSON__QUIRK_ALLOW_TRAILING_FILLER, true);
 
   return nullptr;
 }
@@ -715,8 +968,8 @@ read_src() {
     return "main: g_src buffer is full";
   }
   while (true) {
-    ssize_t n = read(g_input_file_descriptor, g_src.data.ptr + g_src.meta.wi,
-                     g_src.data.len - g_src.meta.wi);
+    ssize_t n = read(g_input_file_descriptor, g_src.writer_pointer(),
+                     g_src.writer_length());
     if (n >= 0) {
       g_src.meta.wi += n;
       g_src.meta.closed = n == 0;
@@ -731,12 +984,12 @@ read_src() {
 const char*  //
 flush_dst() {
   while (true) {
-    size_t n = g_dst.meta.wi - g_dst.meta.ri;
+    size_t n = g_dst.reader_length();
     if (n == 0) {
       break;
     }
     const int stdout_fd = 1;
-    ssize_t i = write(stdout_fd, g_dst.data.ptr + g_dst.meta.ri, n);
+    ssize_t i = write(stdout_fd, g_dst.reader_pointer(), n);
     if (i >= 0) {
       g_dst.meta.ri += i;
     } else if (errno != EINTR) {
@@ -748,19 +1001,16 @@ flush_dst() {
 }
 
 const char*  //
-write_dst(const void* s, size_t n) {
-  if (g_suppress_write_dst > 0) {
-    return nullptr;
-  }
+write_dst_slow(const void* s, size_t n) {
   const uint8_t* p = static_cast<const uint8_t*>(s);
   while (n > 0) {
-    size_t i = g_dst.writer_available();
+    size_t i = g_dst.writer_length();
     if (i == 0) {
       const char* z = flush_dst();
       if (z) {
         return z;
       }
-      i = g_dst.writer_available();
+      i = g_dst.writer_length();
       if (i == 0) {
         return "main: g_dst buffer is full";
       }
@@ -778,71 +1028,69 @@ write_dst(const void* s, size_t n) {
   return nullptr;
 }
 
-// ----
-
-uint8_t  //
-hex_digit(uint8_t nibble) {
-  nibble &= 0x0F;
-  if (nibble <= 9) {
-    return '0' + nibble;
+inline const char*  //
+write_dst(const void* s, size_t n) {
+  if (g_suppress_write_dst > 0) {
+    return nullptr;
+  } else if (n <= (DST_BUFFER_ARRAY_SIZE - g_dst.meta.wi)) {
+    memcpy(g_dst.data.ptr + g_dst.meta.wi, s, n);
+    g_dst.meta.wi += n;
+    g_wrote_to_dst = true;
+    return nullptr;
   }
-  return ('A' - 10) + nibble;
+  return write_dst_slow(s, n);
 }
+
+#define TRY_INDENT_WITH_LEADING_NEW_LINE                                   \
+  do {                                                                     \
+    uint32_t indent = g_depth * g_bytes_per_indent_depth;                  \
+    TRY(write_dst(g_new_line_then_256_indent_bytes, 1 + (indent & 0xFF))); \
+    for (indent >>= 8; indent > 0; indent--) {                             \
+      TRY(write_dst(g_new_line_then_256_indent_bytes + 1, 0x100));         \
+    }                                                                      \
+  } while (false)
+
+// TRY_INDENT_SANS_LEADING_NEW_LINE is used after comments, which print their
+// own "\n".
+#define TRY_INDENT_SANS_LEADING_NEW_LINE                                   \
+  do {                                                                     \
+    uint32_t indent = g_depth * g_bytes_per_indent_depth;                  \
+    TRY(write_dst(g_new_line_then_256_indent_bytes + 1, (indent & 0xFF))); \
+    for (indent >>= 8; indent > 0; indent--) {                             \
+      TRY(write_dst(g_new_line_then_256_indent_bytes + 1, 0x100));         \
+    }                                                                      \
+  } while (false)
+
+// ----
 
 const char*  //
 handle_unicode_code_point(uint32_t ucp) {
-  if (ucp < 0x0020) {
-    switch (ucp) {
-      case '\b':
-        return write_dst("\\b", 2);
-      case '\f':
-        return write_dst("\\f", 2);
-      case '\n':
-        return write_dst("\\n", 2);
-      case '\r':
-        return write_dst("\\r", 2);
-      case '\t':
-        return write_dst("\\t", 2);
-      default: {
-        // Other bytes less than 0x0020 are valid UTF-8 but not valid in a
-        // JSON string. They need to remain escaped.
-        uint8_t esc6[6];
-        esc6[0] = '\\';
-        esc6[1] = 'u';
-        esc6[2] = '0';
-        esc6[3] = '0';
-        esc6[4] = hex_digit(ucp >> 4);
-        esc6[5] = hex_digit(ucp >> 0);
-        return write_dst(&esc6[0], 6);
-      }
-    }
-
-  } else if (ucp == '\"') {
-    return write_dst("\\\"", 2);
-
-  } else if (ucp == '\\') {
-    return write_dst("\\\\", 2);
-
-  } else {
-    uint8_t u[WUFFS_BASE__UTF_8__BYTE_LENGTH__MAX_INCL];
-    size_t n = wuffs_base__utf_8__encode(
-        wuffs_base__make_slice_u8(&u[0],
-                                  WUFFS_BASE__UTF_8__BYTE_LENGTH__MAX_INCL),
-        ucp);
-    if (n > 0) {
-      return write_dst(&u[0], n);
-    }
+  if (ucp < 0x80) {
+    return write_dst(&ascii_escapes[8 * ucp + 1], ascii_escapes[8 * ucp]);
   }
-
-  return "main: internal error: unexpected Unicode code point";
+  uint8_t u[WUFFS_BASE__UTF_8__BYTE_LENGTH__MAX_INCL];
+  size_t n = wuffs_base__utf_8__encode(
+      wuffs_base__make_slice_u8(&u[0],
+                                WUFFS_BASE__UTF_8__BYTE_LENGTH__MAX_INCL),
+      ucp);
+  if (n == 0) {
+    return "main: internal error: unexpected Unicode code point";
+  }
+  return write_dst(&u[0], n);
 }
 
-const char*  //
+// ----
+
+inline const char*  //
 handle_token(wuffs_base__token t, bool start_of_token_chain) {
   do {
     int64_t vbc = t.value_base_category();
     uint64_t vbd = t.value_base_detail();
-    uint64_t len = t.length();
+    uint64_t token_length = t.length();
+    // The "- token_length" is because we incremented g_cursor_index before
+    // calling handle_token.
+    wuffs_base__slice_u8 tok = wuffs_base__make_slice_u8(
+        g_src.data.ptr + g_cursor_index - token_length, token_length);
 
     // Handle ']' or '}'.
     if ((vbc == WUFFS_BASE__TOKEN__VBC__STRUCTURE) &&
@@ -867,11 +1115,13 @@ handle_token(wuffs_base__token t, bool start_of_token_chain) {
         if ((g_ctx != context::in_list_after_bracket) &&
             (g_ctx != context::in_dict_after_brace) &&
             !g_flags.compact_output) {
-          TRY(write_dst("\n", 1));
-          for (uint32_t i = 0; i < g_depth; i++) {
-            TRY(write_dst(
-                g_flags.tabs ? INDENT_TAB_STRING : INDENT_SPACES_STRING,
-                g_flags.tabs ? 1 : g_flags.indent));
+          if (g_is_after_comment) {
+            TRY_INDENT_SANS_LEADING_NEW_LINE;
+          } else {
+            if (g_flags.output_extra_comma) {
+              TRY(write_dst(",", 1));
+            }
+            TRY_INDENT_WITH_LEADING_NEW_LINE;
           }
         }
 
@@ -889,7 +1139,9 @@ handle_token(wuffs_base__token t, bool start_of_token_chain) {
     // Write preceding whitespace and punctuation, if it wasn't ']', '}' or a
     // continuation of a multi-token chain.
     if (start_of_token_chain) {
-      if (g_ctx == context::in_dict_after_key) {
+      if (g_is_after_comment) {
+        TRY_INDENT_SANS_LEADING_NEW_LINE;
+      } else if (g_ctx == context::in_dict_after_key) {
         TRY(write_dst(": ", g_flags.compact_output ? 1 : 2));
       } else if (g_ctx != context::none) {
         if ((g_ctx != context::in_list_after_bracket) &&
@@ -897,12 +1149,7 @@ handle_token(wuffs_base__token t, bool start_of_token_chain) {
           TRY(write_dst(",", 1));
         }
         if (!g_flags.compact_output) {
-          TRY(write_dst("\n", 1));
-          for (size_t i = 0; i < g_depth; i++) {
-            TRY(write_dst(
-                g_flags.tabs ? INDENT_TAB_STRING : INDENT_SPACES_STRING,
-                g_flags.tabs ? 1 : g_flags.indent));
-          }
+          TRY_INDENT_WITH_LEADING_NEW_LINE;
         }
       }
 
@@ -968,15 +1215,9 @@ handle_token(wuffs_base__token t, bool start_of_token_chain) {
                                    g_query.is_at(g_depth));
         }
 
-        if (vbd & WUFFS_BASE__TOKEN__VBD__STRING__CONVERT_0_DST_1_SRC_DROP) {
-          // No-op.
-        } else if (vbd &
-                   WUFFS_BASE__TOKEN__VBD__STRING__CONVERT_1_DST_1_SRC_COPY) {
-          uint8_t* ptr = g_src.data.ptr + g_curr_token_end_src_index - len;
-          TRY(write_dst(ptr, len));
-          g_query.incremental_match_slice(ptr, len);
-        } else {
-          return "main: internal error: unexpected string-token conversion";
+        if (vbd & WUFFS_BASE__TOKEN__VBD__STRING__CONVERT_1_DST_1_SRC_COPY) {
+          TRY(write_dst(tok.ptr, tok.len));
+          g_query.incremental_match_slice(tok.ptr, tok.len);
         }
 
         if (t.continued()) {
@@ -992,15 +1233,11 @@ handle_token(wuffs_base__token t, bool start_of_token_chain) {
         TRY(handle_unicode_code_point(vbd));
         g_query.incremental_match_code_point(vbd);
         return nullptr;
-
-      case WUFFS_BASE__TOKEN__VBC__LITERAL:
-      case WUFFS_BASE__TOKEN__VBC__NUMBER:
-        TRY(write_dst(g_src.data.ptr + g_curr_token_end_src_index - len, len));
-        goto after_value;
     }
 
-    // Return an error if we didn't match the (vbc, vbd) pair.
-    return "main: internal error: unexpected token";
+    // We have a literal or a number.
+    TRY(write_dst(tok.ptr, tok.len));
+    goto after_value;
   } while (0);
 
   // Book-keeping after completing a value (whether a container value or a
@@ -1033,7 +1270,7 @@ const char*  //
 main1(int argc, char** argv) {
   TRY(initialize_globals(argc, argv));
 
-  bool start_of_token_chain = false;
+  bool start_of_token_chain = true;
   while (true) {
     wuffs_base__status status = g_dec.decode_tokens(
         &g_tok, &g_src,
@@ -1041,70 +1278,92 @@ main1(int argc, char** argv) {
 
     while (g_tok.meta.ri < g_tok.meta.wi) {
       wuffs_base__token t = g_tok.data.ptr[g_tok.meta.ri++];
-      uint64_t n = t.length();
-      if ((g_src.meta.ri - g_curr_token_end_src_index) < n) {
+      uint64_t token_length = t.length();
+      if ((g_src.meta.ri - g_cursor_index) < token_length) {
         return "main: internal error: inconsistent g_src indexes";
       }
-      g_curr_token_end_src_index += n;
+      g_cursor_index += token_length;
 
-      // Skip filler tokens (e.g. whitespace).
-      if (t.value() == 0) {
+      // Handle filler tokens (e.g. whitespace, punctuation and comments).
+      // These are skipped, unless -output-comments is enabled.
+      if (t.value_base_category() == WUFFS_BASE__TOKEN__VBC__FILLER) {
+        if (g_flags.output_comments &&
+            (t.value_base_detail() &
+             WUFFS_BASE__TOKEN__VBD__FILLER__COMMENT_ANY)) {
+          if (g_flags.compact_output) {
+            TRY(write_dst(g_src.data.ptr + g_cursor_index - token_length,
+                          token_length));
+          } else {
+            if (start_of_token_chain) {
+              if (g_is_after_comment) {
+                TRY_INDENT_SANS_LEADING_NEW_LINE;
+              } else if (g_ctx != context::none) {
+                if (g_ctx == context::in_dict_after_key) {
+                  TRY(write_dst(":", 1));
+                } else if ((g_ctx != context::in_list_after_bracket) &&
+                           (g_ctx != context::in_dict_after_brace) &&
+                           (g_ctx != context::end_of_data)) {
+                  TRY(write_dst(",", 1));
+                }
+                if (!g_flags.compact_output) {
+                  TRY_INDENT_WITH_LEADING_NEW_LINE;
+                }
+              }
+            }
+            TRY(write_dst(g_src.data.ptr + g_cursor_index - token_length,
+                          token_length));
+            if (!t.continued() &&
+                (t.value_base_detail() &
+                 WUFFS_BASE__TOKEN__VBD__FILLER__COMMENT_BLOCK)) {
+              TRY(write_dst("\n", 1));
+            }
+            g_is_after_comment = true;
+          }
+        }
         start_of_token_chain = !t.continued();
         continue;
       }
 
       const char* z = handle_token(t, start_of_token_chain);
+      g_is_after_comment = false;
       start_of_token_chain = !t.continued();
       if (z == nullptr) {
         continue;
-      } else if (z == g_eod) {
-        goto end_of_data;
+      } else if (z != g_eod) {
+        return z;
+      } else if (g_flags.query_c_string && *g_flags.query_c_string) {
+        // With a non-empty g_query, don't try to consume trailing filler or
+        // confirm that we've processed all the tokens.
+        return nullptr;
       }
-      return z;
+      g_ctx = context::end_of_data;
     }
 
     if (status.repr == nullptr) {
-      return "main: internal error: unexpected end of token stream";
+      if (g_ctx != context::end_of_data) {
+        return "main: internal error: unexpected end of token stream";
+      }
+      // Check that we've exhausted the input.
+      if ((g_src.meta.ri == g_src.meta.wi) && !g_src.meta.closed) {
+        TRY(read_src());
+      }
+      if ((g_src.meta.ri < g_src.meta.wi) || !g_src.meta.closed) {
+        return "main: valid JSON followed by further (unexpected) data";
+      }
+      // All done.
+      return nullptr;
     } else if (status.repr == wuffs_base__suspension__short_read) {
-      if (g_curr_token_end_src_index != g_src.meta.ri) {
+      if (g_cursor_index != g_src.meta.ri) {
         return "main: internal error: inconsistent g_src indexes";
       }
       TRY(read_src());
-      g_curr_token_end_src_index = g_src.meta.ri;
+      g_cursor_index = g_src.meta.ri;
     } else if (status.repr == wuffs_base__suspension__short_write) {
       g_tok.compact();
     } else {
       return status.message();
     }
   }
-end_of_data:
-
-  // With a non-empty g_query, don't try to consume trailing whitespace or
-  // confirm that we've processed all the tokens.
-  if (g_flags.query_c_string && *g_flags.query_c_string) {
-    return nullptr;
-  }
-
-  // Check that we've exhausted the input.
-  if ((g_src.meta.ri == g_src.meta.wi) && !g_src.meta.closed) {
-    TRY(read_src());
-  }
-  if ((g_src.meta.ri < g_src.meta.wi) || !g_src.meta.closed) {
-    return "main: valid JSON followed by further (unexpected) data";
-  }
-
-  // Check that we've used all of the decoded tokens, other than trailing
-  // filler tokens. For example, "true\n" is valid JSON (and fully consumed
-  // with WUFFS_JSON__QUIRK_ALLOW_TRAILING_NEW_LINE enabled) with a trailing
-  // filler token for the "\n".
-  for (; g_tok.meta.ri < g_tok.meta.wi; g_tok.meta.ri++) {
-    if (g_tok.data.ptr[g_tok.meta.ri].value_base_category() !=
-        WUFFS_BASE__TOKEN__VBC__FILLER) {
-      return "main: internal error: decoded OK but unprocessed tokens remain";
-    }
-  }
-
-  return nullptr;
 }
 
 int  //
@@ -1170,7 +1429,7 @@ main(int argc, char** argv) {
 
   const char* z = main1(argc, argv);
   if (g_wrote_to_dst) {
-    const char* z1 = write_dst("\n", 1);
+    const char* z1 = g_is_after_comment ? nullptr : write_dst("\n", 1);
     const char* z2 = flush_dst();
     z = z ? z : (z1 ? z1 : z2);
   }

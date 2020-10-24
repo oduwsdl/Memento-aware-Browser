@@ -15,6 +15,7 @@ import subprocess
 from devil import base_error
 from devil.android import apk_helper
 from devil.android import flag_changer
+from devil.android.sdk import version_codes
 from py_utils import dependency_util
 from py_utils import file_util
 from py_utils import tempfile_ext
@@ -89,6 +90,7 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
     self._local_apk = local_apk
     self._flag_changer = None
     self._modules_to_install = None
+    self._compile_apk = finder_options.compile_apk
 
     if self._local_apk is None and finder_options.chrome_root is not None:
       self._local_apk = self._backend_settings.FindLocalApk(
@@ -159,14 +161,7 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
     return -1
 
   def _GetPathsForOsPageCacheFlushing(self):
-    paths_to_flush = [self.profile_directory]
-    # On N+ the Monochrome is the most widely used configuration. Since Webview
-    # is used often, the typical usage is closer to have the DEX and the native
-    # library be resident in memory. Skip the pagecache flushing for browser
-    # directory on N+.
-    if self._platform_backend.device.build_version_sdk < 24:
-      paths_to_flush.append(self.browser_directory)
-    return paths_to_flush
+    return [self.profile_directory, self.browser_directory]
 
   def _InitPlatformIfNeeded(self):
     pass
@@ -214,7 +209,8 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
 
     # Remove any old crash dumps
     self._platform_backend.device.RemovePath(
-        self._platform_backend.GetDumpLocation(), recursive=True, force=True)
+        self._platform_backend.GetDumpLocation(self._backend_settings.package),
+        recursive=True, force=True)
 
   def _TearDownEnvironment(self):
     self._RestoreCommandLineFlags()
@@ -286,7 +282,8 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
     # crashpad_stackwalker.py is hard-coded to look for a "Crashpad" directory
     # in the dump directory that it is provided.
     startup_args.append('--breakpad-dump-location=' + posixpath.join(
-        self._platform_backend.GetDumpLocation(), 'Crashpad'))
+        self._platform_backend.GetDumpLocation(self._backend_settings.package),
+        'Crashpad'))
 
     return startup_args
 
@@ -305,19 +302,45 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
   @decorators.Cache
   def UpdateExecutableIfNeeded(self):
     # TODO(crbug.com/815133): This logic should belong to backend_settings.
-    if self._local_apk:
-      logging.warn('Installing %s on device if needed.', self._local_apk)
-      self.platform.InstallApplication(
-          self._local_apk, modules=self._modules_to_install)
-
     for apk in self._support_apk_list:
       logging.warn('Installing %s on device if needed.', apk)
       self.platform.InstallApplication(apk)
 
-    if (self._backend_settings.GetApkName(
-        self._platform_backend.device) == 'Monochrome.apk'):
-      self._platform_backend.device.SetWebViewImplementation(
-          android_browser_backend_settings.ANDROID_CHROME.package)
+    apk_name = self._backend_settings.GetApkName(
+        self._platform_backend.device)
+    is_webview_apk = apk_name is not None and ('SystemWebView' in apk_name or
+                                               'system_webview' in apk_name or
+                                               'TrichromeWebView' in apk_name or
+                                               'trichrome_webview' in apk_name)
+    # The WebView fallback logic prevents sideloaded WebView APKs from being
+    # installed and set as the WebView implementation correctly. Disable the
+    # fallback logic before installing the WebView APK to make sure the fallback
+    # logic doesn't interfere.
+    if is_webview_apk:
+      self._platform_backend.device.SetWebViewFallbackLogic(False)
+
+    if self._local_apk:
+      logging.warn('Installing %s on device if needed.', self._local_apk)
+      self.platform.InstallApplication(
+          self._local_apk, modules=self._modules_to_install)
+      if self._compile_apk:
+        package_name = apk_helper.GetPackageName(self._local_apk)
+        logging.warn('Compiling %s.', package_name)
+        self._platform_backend.device.RunShellCommand(
+            ['cmd', 'package', 'compile', '-m', 'speed', '-f', package_name],
+            check_return=True)
+
+    sdk_version = self._platform_backend.device.build_version_sdk
+    # Bundles are in the ../bin directory, so it's safer to just check the
+    # correct name is part of the path.
+    is_monochrome = apk_name is not None and (apk_name == 'Monochrome.apk' or
+                                              'monochrome_bundle' in apk_name)
+    if ((is_webview_apk or
+         (is_monochrome and sdk_version < version_codes.Q)) and
+        sdk_version >= version_codes.NOUGAT):
+      package_name = apk_helper.GetPackageName(self._local_apk)
+      logging.warn('Setting %s as WebView implementation.', package_name)
+      self._platform_backend.device.SetWebViewImplementation(package_name)
 
   def GetTypExpectationsTags(self):
     tags = super(PossibleAndroidBrowser, self).GetTypExpectationsTags()

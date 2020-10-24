@@ -58,78 +58,108 @@ class DeprecationTests : public DawnTest {
         }                                                                        \
     } while (0)
 
-// Test that using SetSubData emits a deprecation warning.
-TEST_P(DeprecationTests, SetSubDataDeprecated) {
-    wgpu::BufferDescriptor descriptor;
-    descriptor.usage = wgpu::BufferUsage::CopyDst;
-    descriptor.size = 4;
-    wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
+// Test that using BGLEntry.multisampled = true emits a deprecation warning.
+TEST_P(DeprecationTests, BGLEntryMultisampledDeprecated) {
+    wgpu::BindGroupLayoutEntry entry{};
+    entry.visibility = wgpu::ShaderStage::Fragment;
+    entry.type = wgpu::BindingType::SampledTexture;
+    entry.multisampled = true;
+    entry.binding = 0;
 
-    EXPECT_DEPRECATION_WARNING(buffer.SetSubData(0, 0, nullptr));
+    wgpu::BindGroupLayoutDescriptor desc;
+    desc.entryCount = 1;
+    desc.entries = &entry;
+    EXPECT_DEPRECATION_WARNING(device.CreateBindGroupLayout(&desc));
 }
 
-// Test that using SetSubData works
-TEST_P(DeprecationTests, SetSubDataStillWorks) {
-    DAWN_SKIP_TEST_IF(IsNull());
+// Test that using BGLEntry.multisampled = true with MultisampledTexture is an error.
+TEST_P(DeprecationTests, BGLEntryMultisampledBooleanAndTypeIsAnError) {
+    wgpu::BindGroupLayoutEntry entry{};
+    entry.visibility = wgpu::ShaderStage::Fragment;
+    entry.type = wgpu::BindingType::MultisampledTexture;
+    entry.multisampled = true;
+    entry.binding = 0;
 
-    wgpu::BufferDescriptor descriptor;
-    descriptor.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
-    descriptor.size = 4;
-    wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
-
-    uint32_t data = 2020;
-    EXPECT_DEPRECATION_WARNING(buffer.SetSubData(0, 4, &data));
-    EXPECT_BUFFER_U32_EQ(data, buffer, 0);
+    wgpu::BindGroupLayoutDescriptor desc;
+    desc.entryCount = 1;
+    desc.entries = &entry;
+    ASSERT_DEVICE_ERROR(device.CreateBindGroupLayout(&desc));
 }
 
-// Test that using TextureDescriptor::arrayLayerCount emits a warning.
-TEST_P(DeprecationTests, TextureDescriptorArrayLayerCountDeprecated) {
-    wgpu::TextureDescriptor desc;
-    desc.usage = wgpu::TextureUsage::Sampled;
-    desc.dimension = wgpu::TextureDimension::e2D;
-    desc.size = {1, 1, 1};
-    desc.arrayLayerCount = 2;
-    desc.format = wgpu::TextureFormat::RGBA8Unorm;
-    desc.mipLevelCount = 1;
-    desc.sampleCount = 1;
+// Test that a using BGLEntry.multisampled produces the correct state tracking.
+TEST_P(DeprecationTests, BGLEntryMultisampledBooleanTracking) {
+    // Create a BGL with the deprecated multisampled boolean
+    wgpu::BindGroupLayoutEntry entry{};
+    entry.visibility = wgpu::ShaderStage::Fragment;
+    entry.type = wgpu::BindingType::SampledTexture;
+    entry.multisampled = true;
+    entry.binding = 0;
 
-    EXPECT_DEPRECATION_WARNING(device.CreateTexture(&desc));
+    wgpu::BindGroupLayoutDescriptor desc;
+    desc.entryCount = 1;
+    desc.entries = &entry;
+    wgpu::BindGroupLayout bgl;
+    EXPECT_DEPRECATION_WARNING(bgl = device.CreateBindGroupLayout(&desc));
+
+    // Create both a multisampled and non-multisampled texture.
+    wgpu::TextureDescriptor textureDesc;
+    textureDesc.format = wgpu::TextureFormat::RGBA8Unorm;
+    textureDesc.usage = wgpu::TextureUsage::Sampled;
+    textureDesc.size = {1, 1, 1};
+    textureDesc.dimension = wgpu::TextureDimension::e2D;
+    textureDesc.sampleCount = 1;
+    wgpu::Texture texture1Sample = device.CreateTexture(&textureDesc);
+
+    textureDesc.sampleCount = 4;
+    wgpu::Texture texture4Sample = device.CreateTexture(&textureDesc);
+
+    // Creating a bindgroup with that layout is only valid with multisampled = true
+    ASSERT_DEVICE_ERROR(utils::MakeBindGroup(device, bgl, {{0, texture1Sample.CreateView()}}));
+    utils::MakeBindGroup(device, bgl, {{0, texture4Sample.CreateView()}});
 }
 
-// Test that using both TextureDescriptor::arrayLayerCount and size.depth triggers an error.
-TEST_P(DeprecationTests, TextureDescriptorArrayLayerCountAndDepthSizeIsError) {
-    wgpu::TextureDescriptor desc;
-    desc.usage = wgpu::TextureUsage::Sampled;
-    desc.dimension = wgpu::TextureDimension::e2D;
-    desc.size = {1, 1, 2};
-    desc.arrayLayerCount = 2;
-    desc.format = wgpu::TextureFormat::RGBA8Unorm;
-    desc.mipLevelCount = 1;
-    desc.sampleCount = 1;
+// Test that compiling a pipeline with TextureComponentType::Float in the BGL when ::DepthComparison
+// is expected emits a deprecation warning but isn't an error.
+TEST_P(DeprecationTests, TextureComponentTypeFloatWhenDepthComparisonIsExpected) {
+    wgpu::ShaderModule module =
+        utils::CreateShaderModule(device, utils::SingleShaderStage::Compute, R"(
+            #version 450
+            layout(set = 0, binding = 0) uniform samplerShadow samp;
+            layout(set = 0, binding = 1) uniform texture2D tex;
 
-    ASSERT_DEVICE_ERROR(device.CreateTexture(&desc));
-}
+            void main() {
+                texture(sampler2DShadow(tex, samp), vec3(0.5, 0.5, 0.5));
+            }
+        )");
 
-// Test that TextureDescriptor::arrayLayerCount does correct state tracking.
-TEST_P(DeprecationTests, TextureDescriptorArrayLayerCountStateTracking) {
-    wgpu::TextureDescriptor desc;
-    desc.usage = wgpu::TextureUsage::Sampled;
-    desc.dimension = wgpu::TextureDimension::e2D;
-    desc.size = {1, 1, 1};
-    desc.arrayLayerCount = 2;
-    desc.format = wgpu::TextureFormat::RGBA8Unorm;
-    desc.mipLevelCount = 1;
-    desc.sampleCount = 1;
+    {
+        wgpu::BindGroupLayout goodBgl = utils::MakeBindGroupLayout(
+            device,
+            {{0, wgpu::ShaderStage::Compute, wgpu::BindingType::ComparisonSampler},
+             {1, wgpu::ShaderStage::Compute, wgpu::BindingType::SampledTexture, false, 0, false,
+              wgpu::TextureViewDimension::e2D, wgpu::TextureComponentType::DepthComparison}});
 
-    wgpu::Texture texture;
-    EXPECT_DEPRECATION_WARNING(texture = device.CreateTexture(&desc));
+        wgpu::ComputePipelineDescriptor goodDesc;
+        goodDesc.layout = utils::MakeBasicPipelineLayout(device, &goodBgl);
+        goodDesc.computeStage.module = module;
+        goodDesc.computeStage.entryPoint = "main";
 
-    wgpu::TextureViewDescriptor viewDesc;
-    viewDesc.dimension = wgpu::TextureViewDimension::e2DArray;
-    viewDesc.arrayLayerCount = 2;
-    texture.CreateView(&viewDesc);
-    viewDesc.arrayLayerCount = 3;
-    ASSERT_DEVICE_ERROR(texture.CreateView(&viewDesc));
+        device.CreateComputePipeline(&goodDesc);
+    }
+
+    {
+        wgpu::BindGroupLayout badBgl = utils::MakeBindGroupLayout(
+            device, {{0, wgpu::ShaderStage::Compute, wgpu::BindingType::ComparisonSampler},
+                     {1, wgpu::ShaderStage::Compute, wgpu::BindingType::SampledTexture, false, 0,
+                      false, wgpu::TextureViewDimension::e2D, wgpu::TextureComponentType::Float}});
+
+        wgpu::ComputePipelineDescriptor badDesc;
+        badDesc.layout = utils::MakeBasicPipelineLayout(device, &badBgl);
+        badDesc.computeStage.module = module;
+        badDesc.computeStage.entryPoint = "main";
+
+        EXPECT_DEPRECATION_WARNING(device.CreateComputePipeline(&badDesc));
+    }
 }
 
 DAWN_INSTANTIATE_TEST(DeprecationTests,
@@ -139,10 +169,10 @@ DAWN_INSTANTIATE_TEST(DeprecationTests,
                       OpenGLBackend(),
                       VulkanBackend());
 
-class TextureCopyViewArrayLayerDeprecationTests : public DeprecationTests {
+class BufferCopyViewDeprecationTests : public DeprecationTests {
   protected:
-    wgpu::TextureCopyView MakeOldTextureCopyView() {
-        wgpu::TextureDescriptor desc;
+    wgpu::TextureCopyView MakeTextureCopyView() {
+        wgpu::TextureDescriptor desc = {};
         desc.usage = wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst;
         desc.dimension = wgpu::TextureDimension::e2D;
         desc.size = {1, 1, 2};
@@ -150,104 +180,114 @@ class TextureCopyViewArrayLayerDeprecationTests : public DeprecationTests {
 
         wgpu::TextureCopyView copy;
         copy.texture = device.CreateTexture(&desc);
-        copy.arrayLayer = 1;
-        copy.origin = {0, 0, 0};
-        return copy;
-    }
-
-    wgpu::TextureCopyView MakeNewTextureCopyView() {
-        wgpu::TextureCopyView copy = MakeOldTextureCopyView();
-        copy.arrayLayer = 0;
-        copy.origin.z = 1;
-        return copy;
-    }
-
-    wgpu::TextureCopyView MakeErrorTextureCopyView() {
-        wgpu::TextureCopyView copy = MakeOldTextureCopyView();
-        copy.origin.z = 1;
-        return copy;
-    }
-
-    wgpu::BufferCopyView MakeBufferCopyView() const {
-        wgpu::BufferDescriptor desc;
-        desc.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst;
-        desc.size = 4;
-
-        wgpu::BufferCopyView copy;
-        copy.buffer = device.CreateBuffer(&desc);
-        copy.bytesPerRow = kTextureBytesPerRowAlignment;
+        copy.origin = {0, 0, 1};
         return copy;
     }
 
     wgpu::Extent3D copySize = {1, 1, 1};
 };
 
-// Test that using TextureCopyView::arrayLayer emits a warning.
-TEST_P(TextureCopyViewArrayLayerDeprecationTests, DeprecationWarning) {
-    wgpu::TextureCopyView texOldCopy = MakeOldTextureCopyView();
-    wgpu::TextureCopyView texNewCopy = MakeNewTextureCopyView();
-    wgpu::BufferCopyView bufCopy = MakeBufferCopyView();
+constexpr uint32_t kRTSize = 400;
+
+class SetIndexBufferDeprecationTests : public DeprecationTests {
+  protected:
+    void SetUp() override {
+        DeprecationTests::SetUp();
+
+        renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
+    }
+
+    utils::BasicRenderPass renderPass;
+
+    wgpu::RenderPipeline MakeTestPipeline(wgpu::IndexFormat format) {
+        wgpu::ShaderModule vsModule =
+            utils::CreateShaderModule(device, utils::SingleShaderStage::Vertex, R"(
+                #version 450
+                layout(location = 0) in vec4 pos;
+                void main() {
+                    gl_Position = pos;
+                })");
+
+        wgpu::ShaderModule fsModule =
+            utils::CreateShaderModule(device, utils::SingleShaderStage::Fragment, R"(
+                #version 450
+                layout(location = 0) out vec4 fragColor;
+                void main() {
+                    fragColor = vec4(0.0, 1.0, 0.0, 1.0);
+                })");
+
+        utils::ComboRenderPipelineDescriptor descriptor(device);
+        descriptor.vertexStage.module = vsModule;
+        descriptor.cFragmentStage.module = fsModule;
+        descriptor.primitiveTopology = wgpu::PrimitiveTopology::TriangleStrip;
+        descriptor.cVertexState.indexFormat = format;
+        descriptor.cVertexState.vertexBufferCount = 1;
+        descriptor.cVertexState.cVertexBuffers[0].arrayStride = 4 * sizeof(float);
+        descriptor.cVertexState.cVertexBuffers[0].attributeCount = 1;
+        descriptor.cVertexState.cAttributes[0].format = wgpu::VertexFormat::Float4;
+        descriptor.cColorStates[0].format = renderPass.colorFormat;
+
+        return device.CreateRenderPipeline(&descriptor);
+    }
+};
+
+// Test that the Uint32 index format is correctly interpreted
+TEST_P(SetIndexBufferDeprecationTests, Uint32) {
+    wgpu::RenderPipeline pipeline = MakeTestPipeline(wgpu::IndexFormat::Uint32);
+
+    wgpu::Buffer vertexBuffer = utils::CreateBufferFromData<float>(
+        device, wgpu::BufferUsage::Vertex,
+        {-1.0f, -1.0f, 0.0f, 1.0f,  // Note Vertices[0] = Vertices[1]
+         -1.0f, -1.0f, 0.0f, 1.0f, 1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f});
+    // If this is interpreted as Uint16, then it would be 0, 1, 0, ... and would draw nothing.
+    wgpu::Buffer indexBuffer =
+        utils::CreateBufferFromData<uint32_t>(device, wgpu::BufferUsage::Index, {1, 2, 3});
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
-    EXPECT_DEPRECATION_WARNING(encoder.CopyBufferToTexture(&bufCopy, &texOldCopy, &copySize));
-    EXPECT_DEPRECATION_WARNING(encoder.CopyTextureToTexture(&texNewCopy, &texOldCopy, &copySize));
-    EXPECT_DEPRECATION_WARNING(encoder.CopyTextureToBuffer(&texOldCopy, &bufCopy, &copySize));
-    EXPECT_DEPRECATION_WARNING(encoder.CopyTextureToTexture(&texOldCopy, &texNewCopy, &copySize));
-    wgpu::CommandBuffer command = encoder.Finish();
+    {
+        wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPass.renderPassInfo);
+        pass.SetPipeline(pipeline);
+        pass.SetVertexBuffer(0, vertexBuffer);
+        EXPECT_DEPRECATION_WARNING(pass.SetIndexBuffer(indexBuffer));
+        pass.DrawIndexed(3);
+        pass.EndPass();
+    }
 
-    queue.Submit(1, &command);
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    EXPECT_PIXEL_RGBA8_EQ(RGBA8::kGreen, renderPass.color, 100, 300);
 }
 
-// Test that using both TextureCopyView::arrayLayer and origin.z is an error.
-TEST_P(TextureCopyViewArrayLayerDeprecationTests, BothArrayLayerAndOriginZIsError) {
-    wgpu::TextureCopyView texErrorCopy = MakeErrorTextureCopyView();
-    wgpu::TextureCopyView texNewCopy = MakeNewTextureCopyView();
-    wgpu::BufferCopyView bufCopy = MakeBufferCopyView();
+// Test that the Uint16 index format is correctly interpreted
+TEST_P(SetIndexBufferDeprecationTests, Uint16) {
+    wgpu::RenderPipeline pipeline = MakeTestPipeline(wgpu::IndexFormat::Uint16);
+
+    wgpu::Buffer vertexBuffer = utils::CreateBufferFromData<float>(
+        device, wgpu::BufferUsage::Vertex,
+        {-1.0f, -1.0f, 0.0f, 1.0f, 1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f});
+    // If this is interpreted as uint32, it will have index 1 and 2 be both 0 and render nothing
+    wgpu::Buffer indexBuffer =
+        utils::CreateBufferFromData<uint16_t>(device, wgpu::BufferUsage::Index, {1, 2, 0, 0, 0, 0});
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
-    encoder.CopyBufferToTexture(&bufCopy, &texErrorCopy, &copySize);
-    ASSERT_DEVICE_ERROR(encoder.Finish());
+    {
+        wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPass.renderPassInfo);
+        pass.SetPipeline(pipeline);
+        pass.SetVertexBuffer(0, vertexBuffer);
+        EXPECT_DEPRECATION_WARNING(pass.SetIndexBuffer(indexBuffer));
+        pass.DrawIndexed(3);
+        pass.EndPass();
+    }
 
-    encoder = device.CreateCommandEncoder();
-    encoder.CopyTextureToTexture(&texNewCopy, &texErrorCopy, &copySize);
-    ASSERT_DEVICE_ERROR(encoder.Finish());
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
 
-    encoder = device.CreateCommandEncoder();
-    encoder.CopyTextureToBuffer(&texErrorCopy, &bufCopy, &copySize);
-    ASSERT_DEVICE_ERROR(encoder.Finish());
-
-    encoder = device.CreateCommandEncoder();
-    encoder.CopyTextureToTexture(&texErrorCopy, &texNewCopy, &copySize);
-    ASSERT_DEVICE_ERROR(encoder.Finish());
+    EXPECT_PIXEL_RGBA8_EQ(RGBA8::kGreen, renderPass.color, 100, 300);
 }
 
-// Test that using TextureCopyView::arrayLayer is correctly taken into account
-TEST_P(TextureCopyViewArrayLayerDeprecationTests, StateTracking) {
-    wgpu::TextureCopyView texOOBCopy = MakeErrorTextureCopyView();
-    texOOBCopy.arrayLayer = 2;  // Oh no, it is OOB!
-    wgpu::TextureCopyView texNewCopy = MakeNewTextureCopyView();
-    wgpu::BufferCopyView bufCopy = MakeBufferCopyView();
-
-    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
-    encoder.CopyBufferToTexture(&bufCopy, &texOOBCopy, &copySize);
-    ASSERT_DEVICE_ERROR(encoder.Finish());
-
-    encoder = device.CreateCommandEncoder();
-    encoder.CopyTextureToTexture(&texNewCopy, &texOOBCopy, &copySize);
-    ASSERT_DEVICE_ERROR(encoder.Finish());
-
-    encoder = device.CreateCommandEncoder();
-    encoder.CopyTextureToBuffer(&texOOBCopy, &bufCopy, &copySize);
-    ASSERT_DEVICE_ERROR(encoder.Finish());
-
-    encoder = device.CreateCommandEncoder();
-    encoder.CopyTextureToTexture(&texOOBCopy, &texNewCopy, &copySize);
-    ASSERT_DEVICE_ERROR(encoder.Finish());
-}
-
-DAWN_INSTANTIATE_TEST(TextureCopyViewArrayLayerDeprecationTests,
+DAWN_INSTANTIATE_TEST(SetIndexBufferDeprecationTests,
                       D3D12Backend(),
                       MetalBackend(),
-                      NullBackend(),
                       OpenGLBackend(),
                       VulkanBackend());

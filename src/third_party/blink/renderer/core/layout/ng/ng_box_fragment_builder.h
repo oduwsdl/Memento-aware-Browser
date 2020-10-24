@@ -5,8 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_BOX_FRAGMENT_BUILDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_BOX_FRAGMENT_BUILDER_H_
 
+#include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
-#include "third_party/blink/renderer/core/layout/ng/geometry/ng_border_edges.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_fragment_geometry.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items_builder.h"
@@ -14,8 +14,11 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_container_fragment_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_layout_overflow_calculator.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
+#include "third_party/blink/renderer/core/layout/ng/table/ng_table_borders.h"
+#include "third_party/blink/renderer/core/layout/ng/table/ng_table_fragment_data.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -82,7 +85,6 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   void AdjustBorderScrollbarPaddingForTableCell() {
     if (!space_->IsTableCell())
       return;
-
     border_scrollbar_padding_ +=
         ComputeIntrinsicPadding(*space_, *style_, Scrollbar());
   }
@@ -92,12 +94,60 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     return *initial_fragment_geometry_;
   }
 
+  // Use the block-size setters/getters further down instead of the inherited
+  // ones.
+  LayoutUnit BlockSize() const = delete;
+  void SetBlockSize(LayoutUnit block_size) = delete;
+
+  // Set the total border-box block-size of all the fragments to be generated
+  // from this node (as if we stitched them together). Layout algorithms are
+  // expected to pass this value, and at the end of layout (if block
+  // fragmentation is needed), the fragmentation machinery will be invoked to
+  // adjust the block-size to the correct size, ensuring that we break at the
+  // best location.
+  void SetFragmentsTotalBlockSize(LayoutUnit block_size) {
+#if DCHECK_IS_ON()
+    // Note that we just store the block-size in a shared field. We have a flag
+    // for debugging, to assert that we know what we're doing when attempting to
+    // access the data.
+    block_size_is_for_all_fragments_ = true;
+#endif
+    size_.block_size = block_size;
+  }
+  LayoutUnit FragmentsTotalBlockSize() const {
+#if DCHECK_IS_ON()
+    if (has_block_fragmentation_)
+      DCHECK(block_size_is_for_all_fragments_);
+#endif
+    return size_.block_size;
+  }
+
+  // Set the final block-size of this fragment.
+  void SetFragmentBlockSize(LayoutUnit block_size) {
+#if DCHECK_IS_ON()
+    // Note that we just store the block-size in a shared field. We have a flag
+    // for debugging, to assert that we know what we're doing when attempting to
+    // access the data.
+    block_size_is_for_all_fragments_ = false;
+#endif
+    size_.block_size = block_size;
+  }
+
+  LayoutUnit FragmentBlockSize() const {
+#if DCHECK_IS_ON()
+    if (has_block_fragmentation_)
+      DCHECK(!block_size_is_for_all_fragments_);
+#endif
+    return size_.block_size;
+  }
+
   void SetOverflowBlockSize(LayoutUnit overflow_block_size) {
     overflow_block_size_ = overflow_block_size;
   }
   void SetIntrinsicBlockSize(LayoutUnit intrinsic_block_size) {
     intrinsic_block_size_ = intrinsic_block_size;
   }
+  LayoutUnit IntrinsicBlockSize() const { return intrinsic_block_size_; }
   const NGBoxStrut& Borders() const {
     DCHECK(initial_fragment_geometry_);
     DCHECK_NE(BoxType(), NGPhysicalFragment::kInlineBox);
@@ -131,6 +181,10 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     DCHECK(space_);
     return child_available_size_;
   }
+  const NGBlockNode& Node() {
+    DCHECK(node_);
+    return To<NGBlockNode>(node_);
+  }
 
   // Add a break token for a child that doesn't yet have any fragments, because
   // its first fragment is to be produced in the next fragmentainer. This will
@@ -147,9 +201,21 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // descendants, propagating fragmentainer breaks, and more.
   void AddResult(const NGLayoutResult&, const LogicalOffset);
 
+  void AddChild(scoped_refptr<const NGPhysicalTextFragment> child,
+                const LogicalOffset& offset) {
+    AddChildInternal(child, offset);
+  }
+
+  void AddChild(const NGPhysicalContainerFragment&,
+                const LogicalOffset&,
+                const LayoutInline* inline_container = nullptr,
+                const NGMarginStrut* margin_strut = nullptr,
+                bool is_self_collapsing = false);
+
   // Manually add a break token to the builder. Note that we're assuming that
   // this break token is for content in the same flow as this parent.
-  void AddBreakToken(scoped_refptr<const NGBreakToken>);
+  void AddBreakToken(scoped_refptr<const NGBreakToken>,
+                     bool is_in_parallel_flow = false);
 
   void AddOutOfFlowLegacyCandidate(NGBlockNode,
                                    const NGLogicalStaticPosition&,
@@ -163,6 +229,16 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // building now.
   void SetConsumedBlockSize(LayoutUnit size) { consumed_block_size_ = size; }
 
+  // Set how much of the column block-size we've used so far. This will be used
+  // to determine the block-size of any new columns added by descendant
+  // out-of-flow positioned elements.
+  void SetBlockOffsetForAdditionalColumns(LayoutUnit size) {
+    block_offset_for_additional_columns_ = size;
+  }
+  LayoutUnit BlockOffsetForAdditionalColumns() const {
+    return block_offset_for_additional_columns_;
+  }
+
   void SetSequenceNumber(unsigned sequence_number) {
     sequence_number_ = sequence_number;
   }
@@ -171,6 +247,15 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // not because of a child break, but rather due to the size of this node).
   bool DidBreakSelf() const { return did_break_self_; }
   void SetDidBreakSelf() { did_break_self_ = true; }
+
+  // Store the previous break token, if one exists.
+  void SetPreviousBreakToken(
+      scoped_refptr<const NGBlockBreakToken> break_token) {
+    previous_break_token_ = std::move(break_token);
+  }
+  const NGBlockBreakToken* PreviousBreakToken() const {
+    return previous_break_token_.get();
+  }
 
   // Return true if we need to break before or inside any child, doesn't matter
   // if it's in-flow or not. As long as there are only breaks in parallel flows,
@@ -192,6 +277,11 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool HasInflowChildBreakInside() const {
     return has_inflow_child_break_inside_;
   }
+
+  // Return true if we need to break before or inside any floated child. Floats
+  // are encapsulated by their container if the container establishes a new
+  // block formatting context.
+  bool HasFloatBreakInside() const { return has_float_break_inside_; }
 
   // Report space shortage, i.e. how much more space would have been sufficient
   // to prevent some piece of content from breaking. This information may be
@@ -327,20 +417,29 @@ class CORE_EXPORT NGBoxFragmentBuilder final
       scoped_refptr<const ShapeResultView> operator_shape_result_view,
       LayoutUnit operator_inline_size,
       LayoutUnit operator_ascent,
-      LayoutUnit operator_descent) {
+      LayoutUnit operator_descent,
+      const LayoutUnit* radical_operator_inline_offset,
+      const NGBoxStrut* radical_base_margins) {
     if (!mathml_paint_info_)
       mathml_paint_info_ = std::make_unique<NGMathMLPaintInfo>();
 
+    mathml_paint_info_->operator_character = operator_character;
     mathml_paint_info_->operator_shape_result_view =
         std::move(operator_shape_result_view);
 
     mathml_paint_info_->operator_inline_size = operator_inline_size;
     mathml_paint_info_->operator_ascent = operator_ascent;
     mathml_paint_info_->operator_descent = operator_descent;
+    if (radical_base_margins)
+      mathml_paint_info_->radical_base_margins = *radical_base_margins;
+    if (radical_operator_inline_offset) {
+      mathml_paint_info_->radical_operator_inline_offset =
+          *radical_operator_inline_offset;
+    }
   }
 
-  void SetBorderEdges(NGBorderEdges border_edges) {
-    border_edges_ = border_edges;
+  void SetSidesToInclude(LogicalBoxSides sides_to_include) {
+    sides_to_include_ = sides_to_include;
   }
 
   // Either this function or SetBoxType must be called before ToBoxFragment().
@@ -366,6 +465,34 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // The inline block baseline is at the block end margin edge under some
   // circumstances. This function updates |LastBaseline| in such cases.
   void SetLastBaselineToBlockEndMarginEdgeIfNeeded();
+
+  void SetTableGridRect(const PhysicalRect& table_grid_rect) {
+    table_grid_rect_ = table_grid_rect;
+  }
+
+  void SetTableColumnGeometry(
+      const NGTableFragmentData::ColumnGeometries& table_column_geometries) {
+    table_column_geometries_ = table_column_geometries;
+  }
+
+  void SetTableCollapsedBorders(const NGTableBorders& table_collapsed_borders) {
+    table_collapsed_borders_ = &table_collapsed_borders;
+  }
+
+  void SetTableCollapsedBordersGeometry(
+      std::unique_ptr<NGTableFragmentData::CollapsedBordersGeometry>
+          table_collapsed_borders_geometry) {
+    table_collapsed_borders_geometry_ =
+        std::move(table_collapsed_borders_geometry);
+  }
+
+  void SetTableColumnCount(wtf_size_t table_column_count) {
+    table_column_count_ = table_column_count;
+  }
+
+  void SetTableCellColumnIndex(wtf_size_t table_cell_column_index) {
+    table_cell_column_index_ = table_cell_column_index;
+  }
 
   // The |NGFragmentItemsBuilder| for the inline formatting context of this box.
   NGFragmentItemsBuilder* ItemsBuilder() { return items_builder_; }
@@ -422,18 +549,21 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   LogicalSize child_available_size_;
   LayoutUnit overflow_block_size_ = kIndefiniteSize;
   LayoutUnit intrinsic_block_size_;
+  base::Optional<LogicalRect> inflow_bounds_;
 
   NGFragmentItemsBuilder* items_builder_ = nullptr;
 
   NGBlockNode column_spanner_ = nullptr;
 
   NGPhysicalFragment::NGBoxType box_type_;
+  bool may_have_descendant_above_block_start_ = false;
   bool is_fieldset_container_ = false;
   bool is_initial_block_size_indefinite_ = false;
   bool is_inline_formatting_context_;
   bool is_first_for_node_ = true;
   bool did_break_self_ = false;
   bool has_inflow_child_break_inside_ = false;
+  bool has_float_break_inside_ = false;
   bool has_forced_break_ = false;
   bool is_new_fc_ = false;
   bool subtree_modified_margin_strut_ = false;
@@ -441,6 +571,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool is_math_fraction_ = false;
   bool is_at_block_end_ = false;
   LayoutUnit consumed_block_size_;
+  LayoutUnit block_offset_for_additional_columns_;
   unsigned sequence_number_ = 0;
 
   LayoutUnit minimal_space_shortage_ = LayoutUnit::Max();
@@ -455,13 +586,35 @@ class CORE_EXPORT NGBoxFragmentBuilder final
 
   base::Optional<LayoutUnit> baseline_;
   base::Optional<LayoutUnit> last_baseline_;
-  NGBorderEdges border_edges_;
+
+  // Table specific types.
+  base::Optional<PhysicalRect> table_grid_rect_;
+  base::Optional<NGTableFragmentData::ColumnGeometries>
+      table_column_geometries_;
+  scoped_refptr<const NGTableBorders> table_collapsed_borders_;
+  std::unique_ptr<NGTableFragmentData::CollapsedBordersGeometry>
+      table_collapsed_borders_geometry_;
+  base::Optional<wtf_size_t> table_column_count_;
+
+  // Table cell specific types.
+  base::Optional<wtf_size_t> table_cell_column_index_;
+
+  LogicalBoxSides sides_to_include_;
 
   scoped_refptr<SerializedScriptValue> custom_layout_data_;
   base::Optional<int> lines_until_clamp_;
 
   std::unique_ptr<NGMathMLPaintInfo> mathml_paint_info_;
 
+  scoped_refptr<const NGBlockBreakToken> previous_break_token_;
+
+#if DCHECK_IS_ON()
+  // Describes what size_.block_size represents; either the size of a single
+  // fragment (false), or the size of all fragments for a node (true).
+  bool block_size_is_for_all_fragments_ = false;
+#endif
+
+  friend class NGBlockBreakToken;
   friend class NGPhysicalBoxFragment;
   friend class NGLayoutResult;
 };

@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
@@ -57,6 +58,8 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
+#include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
+#include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
 
 namespace blink {
 
@@ -165,10 +168,9 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
   }
 
   void GiveRemainingTo(StringBuilder& recipient) {
-    if (characters_->Is8Bit())
-      recipient.Append(characters_->Characters8() + current_, end_ - current_);
-    else
-      recipient.Append(characters_->Characters16() + current_, end_ - current_);
+    WTF::VisitCharacters(*characters_, [&](const auto* chars, unsigned length) {
+      recipient.Append(chars + current_, end_ - current_);
+    });
     current_ = end_;
   }
 
@@ -190,15 +192,16 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
     if (length == start - end_)  // It's all whitespace.
       return String(characters_->Substring(start, start - end_));
 
-    StringBuilder result;
-    result.ReserveCapacity(length);
+    // All HTML spaces are ASCII.
+    StringBuffer<LChar> result(length);
+    unsigned j = 0;
     for (unsigned i = start; i < end_; ++i) {
       UChar c = (*characters_)[i];
-      if (IsHTMLSpace<UChar>(c))
-        result.Append(c);
+      if (IsHTMLSpace(c))
+        result[j++] = static_cast<LChar>(c);
     }
-
-    return result.ToString();
+    DCHECK_EQ(j, length);
+    return String::Adopt(result);
   }
 
  private:
@@ -896,7 +899,8 @@ void HTMLTreeBuilder::ProcessTemplateStartTag(AtomicHTMLToken* token) {
 
   DeclarativeShadowRootType declarative_shadow_root_type(
       DeclarativeShadowRootType::kNone);
-  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled()) {
+  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+          tree_.CurrentNode()->GetExecutionContext())) {
     if (Attribute* type_attribute =
             token->GetAttributeItem(html_names::kShadowrootAttr)) {
       String shadow_mode = type_attribute->Value();
@@ -942,7 +946,8 @@ bool HTMLTreeBuilder::ProcessTemplateEndTag(AtomicHTMLToken* token) {
   tree_.ActiveFormattingElements()->ClearToLastMarker();
   template_insertion_modes_.pop_back();
   ResetInsertionModeAppropriately();
-  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled() &&
+  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+          shadow_host_stack_item->GetNode()->GetExecutionContext()) &&
       template_stack_item) {
     DCHECK(template_stack_item->IsElementNode());
     HTMLTemplateElement* template_element =

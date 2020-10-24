@@ -29,21 +29,37 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
+#include "third_party/blink/renderer/modules/peerconnection/adapters/web_rtc_cross_thread_copier.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_error_event.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
+
+namespace WTF {
+
+template <>
+struct CrossThreadCopier<scoped_refptr<webrtc::DataChannelInterface>>
+    : public CrossThreadCopierPassThrough<
+          scoped_refptr<webrtc::DataChannelInterface>> {
+  STATIC_ONLY(CrossThreadCopier);
+};
+
+}  // namespace WTF
 
 namespace blink {
 
@@ -108,6 +124,12 @@ void RecordMessageSent(const webrtc::DataChannelInterface& channel,
                                 SafeCast<int>(num_bytes), 1, kMaxBucketSize,
                                 kNumBuckets);
   }
+}
+
+void SendOnSignalingThread(
+    const scoped_refptr<webrtc::DataChannelInterface> channel,
+    const webrtc::DataBuffer data_buffer) {
+  channel->Send(data_buffer);
 }
 
 }  // namespace
@@ -223,10 +245,12 @@ RTCDataChannel::RTCDataChannel(
       buffered_amount_(0U),
       stopped_(false),
       closed_from_owner_(false),
+      is_rtp_data_channel_(peer_connection_handler->enable_rtp_data_channel()),
       observer_(base::MakeRefCounted<Observer>(
           context->GetTaskRunner(TaskType::kNetworking),
           this,
-          channel)) {
+          channel)),
+      signaling_thread_(peer_connection_handler->signaling_thread()) {
   DCHECK(peer_connection_handler);
 
   // Register observer and get state update to make up for state change updates
@@ -364,9 +388,7 @@ void RTCDataChannel::send(const String& data, ExceptionState& exception_state) {
   }
   buffered_amount_ += data_buffer.size();
   RecordMessageSent(*channel().get(), data_buffer.size());
-  if (!channel()->Send(data_buffer)) {
-    // TODO(https://crbug.com/937848): Don't throw an exception if data is
-    // queued.
+  if (!SendDataBuffer(std::move(data_buffer))) {
     ThrowCouldNotSendDataException(&exception_state);
   }
 }
@@ -441,6 +463,7 @@ void RTCDataChannel::ContextDestroyed() {
   Dispose();
   stopped_ = true;
   state_ = webrtc::DataChannelInterface::kClosed;
+  feature_handle_for_scheduler_.reset();
 }
 
 // ActiveScriptWrappable
@@ -489,8 +512,10 @@ void RTCDataChannel::Trace(Visitor* visitor) const {
 }
 
 void RTCDataChannel::SetStateToOpenWithoutEvent() {
+  DCHECK_NE(state_, webrtc::DataChannelInterface::kOpen);
   IncrementCounter(DataChannelCounters::kOpened);
   state_ = webrtc::DataChannelInterface::kOpen;
+  CreateFeatureHandleForScheduler();
 }
 
 void RTCDataChannel::DispatchOpenEvent() {
@@ -518,6 +543,7 @@ void RTCDataChannel::OnStateChange(
   switch (state_) {
     case webrtc::DataChannelInterface::kOpen:
       IncrementCounter(DataChannelCounters::kOpened);
+      CreateFeatureHandleForScheduler();
       DispatchEvent(*Event::Create(event_type_names::kOpen));
       break;
     case webrtc::DataChannelInterface::kClosing:
@@ -526,6 +552,7 @@ void RTCDataChannel::OnStateChange(
       }
       break;
     case webrtc::DataChannelInterface::kClosed:
+      feature_handle_for_scheduler_.reset();
       if (!channel()->error().ok()) {
         DispatchEvent(*MakeGarbageCollected<RTCErrorEvent>(
             event_type_names::kError, channel()->error()));
@@ -613,7 +640,39 @@ bool RTCDataChannel::SendRawData(const char* data, size_t length) {
   rtc::CopyOnWriteBuffer buffer(data, length);
   webrtc::DataBuffer data_buffer(buffer, true);
   RecordMessageSent(*channel().get(), data_buffer.size());
-  return channel()->Send(data_buffer);
+  return SendDataBuffer(std::move(data_buffer));
+}
+
+bool RTCDataChannel::SendDataBuffer(webrtc::DataBuffer data_buffer) {
+  // RTP data channels return false on failure to send. SCTP data channels
+  // queue the packet on failure and always return true, so Send can be
+  // called asynchronously for them.
+  if (is_rtp_data_channel_) {
+    return channel()->Send(data_buffer);
+  }
+  PostCrossThreadTask(*signaling_thread_.get(), FROM_HERE,
+                      CrossThreadBindOnce(&SendOnSignalingThread, channel(),
+                                          std::move(data_buffer)));
+  return true;
+}
+
+void RTCDataChannel::CreateFeatureHandleForScheduler() {
+  DCHECK(!feature_handle_for_scheduler_);
+  LocalDOMWindow* window = DynamicTo<LocalDOMWindow>(GetExecutionContext());
+  // Ideally we'd use To<LocalDOMWindow>, but in unittests the ExecutionContext
+  // may not be a LocalDOMWindow.
+  if (!window)
+    return;
+  // This can happen for detached frames.
+  if (!window->GetFrame())
+    return;
+  feature_handle_for_scheduler_ =
+      window->GetFrame()->GetFrameScheduler()->RegisterFeature(
+          SchedulingPolicy::Feature::kWebRTC,
+          base::FeatureList::IsEnabled(features::kOptOutWebRTCFromAllThrottling)
+              ? SchedulingPolicy{SchedulingPolicy::DisableAllThrottling()}
+              : SchedulingPolicy{
+                    SchedulingPolicy::DisableAggressiveThrottling()});
 }
 
 }  // namespace blink

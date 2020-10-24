@@ -82,9 +82,11 @@ absl_cc_test(
     absl::stack_consumption
     absl::symbolize
     absl::base
+    absl::config
     absl::core_headers
     absl::memory
     absl::raw_logging_internal
+    absl::strings
     gmock
 )
 
@@ -188,6 +190,7 @@ absl_cc_test(
   DEPS
     absl::demangle_internal
     absl::stack_consumption
+    absl::config
     absl::core_headers
     absl::memory
     absl::raw_logging_internal

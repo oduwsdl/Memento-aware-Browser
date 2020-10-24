@@ -57,7 +57,8 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) final {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) final {}
 
     void onPrepare(GrOpFlushState*) final {}
 
@@ -68,7 +69,7 @@ private:
     bool fDoAA;
     GrProcessorSet fProcessorSet;
 
-    typedef GrDrawOp INHERITED;
+    using INHERITED = GrDrawOp;
 };
 
 class GrDrawPathOp final : public GrDrawPathOpBase {
@@ -79,10 +80,6 @@ public:
             GrRecordingContext*, const SkMatrix& viewMatrix, GrPaint&&, GrAA, sk_sp<const GrPath>);
 
     const char* name() const override { return "DrawPath"; }
-
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override;
-#endif
 
 private:
     friend class GrOpMemoryPool; // for ctor
@@ -96,10 +93,13 @@ private:
     }
 
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
 
     sk_sp<const GrPath> fPath;
 
-    typedef GrDrawPathOpBase INHERITED;
+    using INHERITED = GrDrawPathOpBase;
 };
 
 #endif

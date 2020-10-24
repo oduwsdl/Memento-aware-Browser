@@ -334,15 +334,17 @@ static INLINE int check_txfm_eval(MACROBLOCK *const x, BLOCK_SIZE bsize,
   // Derive aggressiveness factor for gating the transform search
   // Lower value indicates more aggressiveness. Be more conservative (high
   // value) for (i) low quantizers (ii) regions where prediction is poor
-  const int scale[5] = { INT_MAX, 4, 3, 3, 2 };
+  const int scale[6] = { INT_MAX, 4, 3, 3, 2, 2 };
   const int qslope = 2 * (!is_luma_only);
   int aggr_factor = 1;
-  if (!is_luma_only) {
+  const int pred_qindex_thresh = (level >= 5) ? 100 : 0;
+  if (!is_luma_only && level <= 4) {
     aggr_factor = AOMMAX(
         1, ((MAXQ - x->qindex) * qslope + QINDEX_RANGE / 2) >> QINDEX_BITS);
   }
-  if (best_skip_rd >
-      (x->source_variance << (num_pels_log2_lookup[bsize] + RDDIV_BITS)))
+  if ((best_skip_rd >
+       (x->source_variance << (num_pels_log2_lookup[bsize] + RDDIV_BITS))) &&
+      (x->qindex >= pred_qindex_thresh))
     aggr_factor *= scale[level];
   // For level setting 1, be more conservative for luma only case even when
   // prediction is good
@@ -353,7 +355,7 @@ static INLINE int check_txfm_eval(MACROBLOCK *const x, BLOCK_SIZE bsize,
   // since best_skip_rd is computed after and skip_rd is computed (with 8-bit
   // prediction signals blended for WEDGE/DIFFWTD rather than 16-bit) before
   // interpolation filter search
-  const int luma_mul[5] = { INT_MAX, 32, 29, 20, 17 };
+  const int luma_mul[6] = { INT_MAX, 32, 29, 20, 17, 17 };
   int mul_factor = is_luma_only ? luma_mul[level] : 16;
   int64_t rd_thresh =
       (best_skip_rd == INT64_MAX)
@@ -424,16 +426,16 @@ static INLINE void set_tx_size_search_method(
 
 static INLINE void set_tx_type_prune(const SPEED_FEATURES *sf,
                                      TxfmSearchParams *txfm_params,
-                                     int enable_winner_mode_tx_type_pruning,
+                                     int winner_mode_tx_type_pruning,
                                      int is_winner_mode) {
   // Populate prune transform mode appropriately
   txfm_params->prune_2d_txfm_mode = sf->tx_sf.tx_type_search.prune_2d_txfm_mode;
-  if (enable_winner_mode_tx_type_pruning) {
-    if (is_winner_mode)
-      txfm_params->prune_2d_txfm_mode = NO_PRUNE;
-    else
-      txfm_params->prune_2d_txfm_mode = PRUNE_2D_AGGRESSIVE;
-  }
+  if (!winner_mode_tx_type_pruning) return;
+
+  const int prune_mode[2][2] = { { TX_TYPE_PRUNE_4, TX_TYPE_PRUNE_0 },
+                                 { TX_TYPE_PRUNE_5, TX_TYPE_PRUNE_2 } };
+  txfm_params->prune_2d_txfm_mode =
+      prune_mode[winner_mode_tx_type_pruning - 1][is_winner_mode];
 }
 
 static INLINE void set_tx_domain_dist_params(
@@ -518,9 +520,9 @@ static INLINE void set_mode_eval_params(const struct AV1_COMP *cpi,
           cm, winner_mode_params, txfm_params,
           sf->winner_mode_sf.enable_winner_mode_for_tx_size_srch, 0);
       // Set transform type prune for mode evaluation
-      set_tx_type_prune(
-          sf, txfm_params,
-          sf->tx_sf.tx_type_search.enable_winner_mode_tx_type_pruning, 0);
+      set_tx_type_prune(sf, txfm_params,
+                        sf->tx_sf.tx_type_search.winner_mode_tx_type_pruning,
+                        0);
       break;
     case WINNER_MODE_EVAL:
       txfm_params->use_default_inter_tx_type = 0;
@@ -547,9 +549,9 @@ static INLINE void set_mode_eval_params(const struct AV1_COMP *cpi,
           cm, winner_mode_params, txfm_params,
           sf->winner_mode_sf.enable_winner_mode_for_tx_size_srch, 1);
       // Set default transform type prune mode for winner mode evaluation
-      set_tx_type_prune(
-          sf, txfm_params,
-          sf->tx_sf.tx_type_search.enable_winner_mode_tx_type_pruning, 1);
+      set_tx_type_prune(sf, txfm_params,
+                        sf->tx_sf.tx_type_search.winner_mode_tx_type_pruning,
+                        1);
 
       // Reset hash state for winner mode processing. Winner mode and subsequent
       // transform/mode evaluations (palette/IntraBC) cann't reuse old data as
@@ -595,21 +597,24 @@ static INLINE void store_winner_mode_stats(
     const AV1_COMMON *const cm, MACROBLOCK *x, const MB_MODE_INFO *mbmi,
     RD_STATS *rd_cost, RD_STATS *rd_cost_y, RD_STATS *rd_cost_uv,
     THR_MODES mode_index, uint8_t *color_map, BLOCK_SIZE bsize, int64_t this_rd,
-    int enable_multiwinner_mode_process, int txfm_search_done) {
+    int multi_winner_mode_type, int txfm_search_done) {
   WinnerModeStats *winner_mode_stats = x->winner_mode_stats;
   int mode_idx = 0;
   int is_palette_mode = mbmi->palette_mode_info.palette_size[PLANE_TYPE_Y] > 0;
   // Mode stat is not required when multiwinner mode processing is disabled
-  if (!enable_multiwinner_mode_process) return;
+  if (multi_winner_mode_type == MULTI_WINNER_MODE_OFF) return;
   // Ignore mode with maximum rd
   if (this_rd == INT64_MAX) return;
   // TODO(any): Winner mode processing is currently not applicable for palette
   // mode in Inter frames. Clean-up the following code, once support is added
   if (!frame_is_intra_only(cm) && is_palette_mode) return;
 
-  const int max_winner_mode_count = frame_is_intra_only(cm)
-                                        ? MAX_WINNER_MODE_COUNT_INTRA
-                                        : MAX_WINNER_MODE_COUNT_INTER;
+  int max_winner_mode_count = frame_is_intra_only(cm)
+                                  ? MAX_WINNER_MODE_COUNT_INTRA
+                                  : MAX_WINNER_MODE_COUNT_INTER;
+  max_winner_mode_count = (multi_winner_mode_type == MULTI_WINNER_MODE_FAST)
+                              ? AOMMIN(max_winner_mode_count, 2)
+                              : max_winner_mode_count;
   assert(x->winner_mode_count >= 0 &&
          x->winner_mode_count <= max_winner_mode_count);
 

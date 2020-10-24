@@ -576,16 +576,9 @@ RTCError JsepTransportController::ApplyDescription_n(
   }
 
   std::vector<int> merged_encrypted_extension_ids;
-  absl::optional<std::string> bundle_media_alt_protocol;
-  absl::optional<std::string> bundle_data_alt_protocol;
   if (bundle_group_) {
     merged_encrypted_extension_ids =
         MergeEncryptedHeaderExtensionIdsForBundle(description);
-    error = GetAltProtocolsForBundle(description, &bundle_media_alt_protocol,
-                                     &bundle_data_alt_protocol);
-    if (!error.ok()) {
-      return error;
-    }
   }
 
   for (const cricket::ContentInfo& content_info : description->contents()) {
@@ -604,8 +597,6 @@ RTCError JsepTransportController::ApplyDescription_n(
              description->transport_infos().size());
   for (size_t i = 0; i < description->contents().size(); ++i) {
     const cricket::ContentInfo& content_info = description->contents()[i];
-    const cricket::MediaContentDescription* media_description =
-        content_info.media_description();
     const cricket::TransportInfo& transport_info =
         description->transport_infos()[i];
     if (content_info.rejected) {
@@ -628,23 +619,10 @@ RTCError JsepTransportController::ApplyDescription_n(
     }
 
     std::vector<int> extension_ids;
-    absl::optional<std::string> media_alt_protocol;
-    absl::optional<std::string> data_alt_protocol;
     if (bundled_mid() && content_info.name == *bundled_mid()) {
       extension_ids = merged_encrypted_extension_ids;
-      media_alt_protocol = bundle_media_alt_protocol;
-      data_alt_protocol = bundle_data_alt_protocol;
     } else {
       extension_ids = GetEncryptedHeaderExtensionIds(content_info);
-      switch (media_description->type()) {
-        case cricket::MEDIA_TYPE_AUDIO:
-        case cricket::MEDIA_TYPE_VIDEO:
-          media_alt_protocol = media_description->alt_protocol();
-          break;
-        case cricket::MEDIA_TYPE_DATA:
-          data_alt_protocol = media_description->alt_protocol();
-          break;
-      }
     }
 
     int rtp_abs_sendtime_extn_id =
@@ -658,8 +636,7 @@ RTCError JsepTransportController::ApplyDescription_n(
 
     cricket::JsepTransportDescription jsep_description =
         CreateJsepTransportDescription(content_info, transport_info,
-                                       extension_ids, rtp_abs_sendtime_extn_id,
-                                       media_alt_protocol, data_alt_protocol);
+                                       extension_ids, rtp_abs_sendtime_extn_id);
     if (local) {
       error =
           transport->SetLocalJsepTransportDescription(jsep_description, type);
@@ -860,9 +837,7 @@ JsepTransportController::CreateJsepTransportDescription(
     const cricket::ContentInfo& content_info,
     const cricket::TransportInfo& transport_info,
     const std::vector<int>& encrypted_extension_ids,
-    int rtp_abs_sendtime_extn_id,
-    absl::optional<std::string> media_alt_protocol,
-    absl::optional<std::string> data_alt_protocol) {
+    int rtp_abs_sendtime_extn_id) {
   const cricket::MediaContentDescription* content_desc =
       content_info.media_description();
   RTC_DCHECK(content_desc);
@@ -872,8 +847,7 @@ JsepTransportController::CreateJsepTransportDescription(
 
   return cricket::JsepTransportDescription(
       rtcp_mux_enabled, content_desc->cryptos(), encrypted_extension_ids,
-      rtp_abs_sendtime_extn_id, transport_info.description, media_alt_protocol,
-      data_alt_protocol);
+      rtp_abs_sendtime_extn_id, transport_info.description);
 }
 
 bool JsepTransportController::ShouldUpdateBundleGroup(
@@ -937,55 +911,6 @@ JsepTransportController::MergeEncryptedHeaderExtensionIdsForBundle(
     }
   }
   return merged_ids;
-}
-
-RTCError JsepTransportController::GetAltProtocolsForBundle(
-    const cricket::SessionDescription* description,
-    absl::optional<std::string>* media_alt_protocol,
-    absl::optional<std::string>* data_alt_protocol) {
-  RTC_DCHECK(description);
-  RTC_DCHECK(bundle_group_);
-  RTC_DCHECK(media_alt_protocol);
-  RTC_DCHECK(data_alt_protocol);
-
-  bool found_media = false;
-  bool found_data = false;
-  for (const cricket::ContentInfo& content : description->contents()) {
-    if (bundle_group_->HasContentName(content.name)) {
-      const cricket::MediaContentDescription* media_description =
-          content.media_description();
-      switch (media_description->type()) {
-        case cricket::MEDIA_TYPE_AUDIO:
-        case cricket::MEDIA_TYPE_VIDEO:
-          if (found_media &&
-              *media_alt_protocol != media_description->alt_protocol()) {
-            return RTCError(RTCErrorType::INVALID_PARAMETER,
-                            "The BUNDLE group contains conflicting "
-                            "alt-protocols for media ('" +
-                                media_alt_protocol->value_or("") + "' and '" +
-                                media_description->alt_protocol().value_or("") +
-                                "')");
-          }
-          found_media = true;
-          *media_alt_protocol = media_description->alt_protocol();
-          break;
-        case cricket::MEDIA_TYPE_DATA:
-          if (found_data &&
-              *data_alt_protocol != media_description->alt_protocol()) {
-            return RTCError(RTCErrorType::INVALID_PARAMETER,
-                            "The BUNDLE group contains conflicting "
-                            "alt-protocols for data ('" +
-                                data_alt_protocol->value_or("") + "' and '" +
-                                media_description->alt_protocol().value_or("") +
-                                "')");
-          }
-          found_data = true;
-          *data_alt_protocol = media_description->alt_protocol();
-          break;
-      }
-    }
-  }
-  return RTCError::OK();
 }
 
 int JsepTransportController::GetRtpAbsSendTimeHeaderExtensionId(
@@ -1101,8 +1026,6 @@ RTCError JsepTransportController::MaybeCreateJsepTransport(
 
   jsep_transport->SignalRtcpMuxActive.connect(
       this, &JsepTransportController::UpdateAggregateStates_n);
-  jsep_transport->SignalDataChannelTransportNegotiated.connect(
-      this, &JsepTransportController::OnDataChannelTransportNegotiated_n);
   SetTransportForMid(content_info.name, jsep_transport.get());
 
   jsep_transports_by_name_[content_info.name] = std::move(jsep_transport);
@@ -1283,18 +1206,6 @@ void JsepTransportController::OnTransportStateChanged_n(
   UpdateAggregateStates_n();
 }
 
-void JsepTransportController::OnDataChannelTransportNegotiated_n(
-    cricket::JsepTransport* transport,
-    DataChannelTransportInterface* data_channel_transport) {
-  for (const auto& it : mid_to_transport_) {
-    if (it.second == transport) {
-      config_.transport_observer->OnTransportChanged(
-          it.first, transport->rtp_transport(), transport->RtpDtlsTransport(),
-          data_channel_transport);
-    }
-  }
-}
-
 void JsepTransportController::UpdateAggregateStates_n() {
   RTC_DCHECK(network_thread_->IsCurrent());
 
@@ -1345,10 +1256,11 @@ void JsepTransportController::UpdateAggregateStates_n() {
   }
   if (ice_connection_state_ != new_connection_state) {
     ice_connection_state_ = new_connection_state;
-    invoker_.AsyncInvoke<void>(RTC_FROM_HERE, signaling_thread_,
-                               [this, new_connection_state] {
-                                 SignalIceConnectionState(new_connection_state);
-                               });
+
+    invoker_.AsyncInvoke<void>(
+        RTC_FROM_HERE, signaling_thread_, [this, new_connection_state] {
+          SignalIceConnectionState.Send(new_connection_state);
+        });
   }
 
   // Compute the current RTCIceConnectionState as described in
@@ -1470,7 +1382,10 @@ void JsepTransportController::UpdateAggregateStates_n() {
                                });
   }
 
-  if (all_done_gathering) {
+  // Compute the gathering state.
+  if (dtls_transports.empty()) {
+    new_gathering_state = cricket::kIceGatheringNew;
+  } else if (all_done_gathering) {
     new_gathering_state = cricket::kIceGatheringComplete;
   } else if (any_gathering) {
     new_gathering_state = cricket::kIceGatheringGathering;

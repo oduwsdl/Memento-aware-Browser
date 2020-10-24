@@ -14,10 +14,10 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "media/base/video_frame_pool.h"
 #include "media/muxers/webm_muxer.h"
 #include "media/video/video_encode_accelerator.h"
 #include "third_party/blink/public/common/media/video_capture.h"
-#include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/public/web/modules/mediastream/encoded_video_frame.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_sink.h"
 #include "third_party/blink/renderer/modules/mediarecorder/buildflags.h"
@@ -83,6 +83,18 @@ class VideoTrackRecorder : public TrackRecorder<MediaStreamVideoSink> {
     LAST
   };
 
+  // Video codec and its encoding profile/level.
+  struct MODULES_EXPORT CodecProfile {
+    CodecId codec_id;
+    base::Optional<media::VideoCodecProfile> profile;
+    base::Optional<uint8_t> level;
+
+    explicit CodecProfile(CodecId codec_id);
+    CodecProfile(CodecId codec_id,
+                 media::VideoCodecProfile profile,
+                 uint8_t level);
+  };
+
   using OnEncodedVideoCB = base::RepeatingCallback<void(
       const media::WebmMuxer::VideoParameters& params,
       std::string encoded_data,
@@ -90,6 +102,9 @@ class VideoTrackRecorder : public TrackRecorder<MediaStreamVideoSink> {
       base::TimeTicks capture_timestamp,
       bool is_key_frame)>;
   using OnErrorCB = base::RepeatingClosure;
+
+  // MediaStreamVideoSink implementation
+  double GetRequiredMinFramesPerSec() const override { return 1; }
 
   // Wraps a counter in a class in order to enable use of base::WeakPtr<>.
   // See https://crbug.com/859610 for why this was added.
@@ -182,7 +197,13 @@ class VideoTrackRecorder : public TrackRecorder<MediaStreamVideoSink> {
     // Used mainly by the software encoders since I420 is the only supported
     // pixel format.  The function is best-effort.  If for any reason the
     // conversion fails, the original |frame| will be returned.
-    static scoped_refptr<media::VideoFrame> ConvertToI420ForSoftwareEncoder(
+    scoped_refptr<media::VideoFrame> ConvertToI420ForSoftwareEncoder(
+        scoped_refptr<media::VideoFrame> frame);
+
+    // A helper function to map GpuMemoryBuffer-based VideoFrame. This function
+    // maps the given GpuMemoryBuffer of |frame| as-is without converting pixel
+    // format. The returned VideoFrame owns the |frame|.
+    static scoped_refptr<media::VideoFrame> WrapMappedGpuMemoryBufferVideoFrame(
         scoped_refptr<media::VideoFrame> frame);
 
     // Used to shutdown properly on the same thread we were created.
@@ -219,6 +240,8 @@ class VideoTrackRecorder : public TrackRecorder<MediaStreamVideoSink> {
     SkBitmap bitmap_;
     std::unique_ptr<cc::PaintCanvas> canvas_;
 
+    media::VideoFramePool frame_pool_;
+
     DISALLOW_COPY_AND_ASSIGN(Encoder);
   };
 
@@ -234,6 +257,12 @@ class VideoTrackRecorder : public TrackRecorder<MediaStreamVideoSink> {
     // Returns the first CodecId that has an associated VEA VideoCodecProfile,
     // or VP8 if none available.
     CodecId GetPreferredCodecId() const;
+
+    // Returns supported VEA VideoCodecProfile which matches |codec| and
+    // |profile|.
+    media::VideoCodecProfile FindSupportedVideoCodecProfile(
+        CodecId codec,
+        media::VideoCodecProfile profile) const;
 
     // Returns VEA's first supported VideoCodedProfile for a given CodecId, or
     // VIDEO_CODEC_PROFILE_UNKNOWN otherwise.
@@ -285,7 +314,7 @@ class MODULES_EXPORT VideoTrackRecorderImpl : public VideoTrackRecorder {
                                        double framerate = 0.0);
 
   VideoTrackRecorderImpl(
-      CodecId codec,
+      CodecProfile codec,
       MediaStreamComponent* track,
       OnEncodedVideoCB on_encoded_video_cb,
       base::OnceClosure on_track_source_ended_cb,
@@ -300,7 +329,7 @@ class MODULES_EXPORT VideoTrackRecorderImpl : public VideoTrackRecorder {
 
  private:
   friend class VideoTrackRecorderTest;
-  void InitializeEncoder(CodecId codec,
+  void InitializeEncoder(CodecProfile codec,
                          const OnEncodedVideoCB& on_encoded_video_cb,
                          int32_t bits_per_second,
                          bool allow_vea_encoder,

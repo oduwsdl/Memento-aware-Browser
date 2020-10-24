@@ -30,7 +30,7 @@ public:
                                                                      SkISize dimensions,
                                                                      int sampleCnt,
                                                                      const GrVkImage::ImageDesc&,
-                                                                     GrMipMapsStatus);
+                                                                     GrMipmapStatus);
 
     static sk_sp<GrVkTextureRenderTarget> MakeWrappedTextureRenderTarget(
             GrVkGpu*,
@@ -64,12 +64,11 @@ private:
                             int sampleCnt,
                             const GrVkImageInfo& info,
                             sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                            const GrVkImageView* texView,
-                            const GrVkImageInfo& msaaInfo,
-                            sk_sp<GrBackendSurfaceMutableStateImpl> msaaMutableState,
-                            const GrVkImageView* colorAttachmentView,
-                            const GrVkImageView* resolveAttachmentView,
-                            GrMipMapsStatus);
+                            sk_sp<const GrVkImageView> texView,
+                            sk_sp<GrVkAttachment> msaaAttachment,
+                            sk_sp<const GrVkImageView> colorAttachmentView,
+                            sk_sp<const GrVkImageView> resolveAttachmentView,
+                            GrMipmapStatus);
 
     // non-MSAA, not-wrapped
     GrVkTextureRenderTarget(GrVkGpu* gpu,
@@ -77,9 +76,9 @@ private:
                             SkISize dimensions,
                             const GrVkImageInfo& info,
                             sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                            const GrVkImageView* texView,
-                            const GrVkImageView* colorAttachmentView,
-                            GrMipMapsStatus);
+                            sk_sp<const GrVkImageView> texView,
+                            sk_sp<const GrVkImageView> colorAttachmentView,
+                            GrMipmapStatus);
 
     // MSAA, wrapped
     GrVkTextureRenderTarget(GrVkGpu* gpu,
@@ -87,12 +86,11 @@ private:
                             int sampleCnt,
                             const GrVkImageInfo& info,
                             sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                            const GrVkImageView* texView,
-                            const GrVkImageInfo& msaaInfo,
-                            sk_sp<GrBackendSurfaceMutableStateImpl> msaaMutableState,
-                            const GrVkImageView* colorAttachmentView,
-                            const GrVkImageView* resolveAttachmentView,
-                            GrMipMapsStatus,
+                            sk_sp<const GrVkImageView> texView,
+                            sk_sp<GrVkAttachment> msaaAttachment,
+                            sk_sp<const GrVkImageView> colorAttachmentView,
+                            sk_sp<const GrVkImageView> resolveAttachmentView,
+                            GrMipmapStatus,
                             GrBackendObjectOwnership,
                             GrWrapCacheable);
 
@@ -101,9 +99,9 @@ private:
                             SkISize dimensions,
                             const GrVkImageInfo& info,
                             sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                            const GrVkImageView* texView,
-                            const GrVkImageView* colorAttachmentView,
-                            GrMipMapsStatus,
+                            sk_sp<const GrVkImageView> texView,
+                            sk_sp<const GrVkImageView> colorAttachmentView,
+                            GrMipmapStatus,
                             GrBackendObjectOwnership,
                             GrWrapCacheable);
 
@@ -117,5 +115,9 @@ private:
         this->setResourceRelease(std::move(releaseHelper));
     }
 };
+
+#ifdef SK_BUILD_FOR_WIN
+#pragma warning(pop)
+#endif
 
 #endif

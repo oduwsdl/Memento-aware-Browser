@@ -1163,6 +1163,31 @@ tcu::TestStatus testSemaphoreSignalWaitImport (Context&						context,
 	}
 }
 
+tcu::TestStatus testSemaphoreImportSyncFdSignaled (Context&						context,
+												   const SemaphoreTestConfig	config)
+{
+	const vk::PlatformInterface&		vkp					(context.getPlatformInterface());
+	const CustomInstance				instance			(createTestInstance(context, 0u, 0u, config.externalType));
+	const vk::InstanceDriver&			vki					(instance.getDriver());
+	const vk::VkPhysicalDevice			physicalDevice		(vk::chooseDevice(vki, instance, context.getTestContext().getCommandLine()));
+	const deUint32						queueFamilyIndex	(chooseQueueFamilyIndex(vki, physicalDevice, 0u));
+	const vk::VkSemaphoreImportFlags	flags				= config.permanence == PERMANENCE_TEMPORARY ? vk::VK_SEMAPHORE_IMPORT_TEMPORARY_BIT : (vk::VkSemaphoreImportFlagBits)0u;
+
+	checkSemaphoreSupport(vki, physicalDevice, config.externalType);
+
+	{
+		const vk::Unique<vk::VkDevice>		device		(createTestDevice(context, vkp, instance, vki, physicalDevice, config.externalType, 0u, 0u, queueFamilyIndex));
+		const vk::DeviceDriver				vkd			(vkp, instance, *device);
+		const vk::VkQueue					queue		(getQueue(vkd, *device, queueFamilyIndex));
+		NativeHandle						handle		= -1;
+		const vk::Unique<vk::VkSemaphore>	semaphore	(createAndImportSemaphore(vkd, *device, config.externalType, handle, flags));
+
+		submitDummyWait(vkd, queue, *semaphore);
+
+		return tcu::TestStatus::pass("Pass");
+	}
+}
+
 tcu::TestStatus testSemaphoreMultipleExports (Context&					context,
 											  const SemaphoreTestConfig	config)
 {
@@ -1929,6 +1954,31 @@ tcu::TestStatus testFenceSignalExportImportWait (Context&				context,
 				VK_CHECK(vkd.queueWaitIdle(queue));
 			}
 		}
+
+		return tcu::TestStatus::pass("Pass");
+	}
+}
+
+tcu::TestStatus testFenceImportSyncFdSignaled (Context&					context,
+											   const FenceTestConfig	config)
+{
+	const vk::PlatformInterface&		vkp					(context.getPlatformInterface());
+	const CustomInstance				instance			(createTestInstance(context, 0u, 0u, config.externalType));
+	const vk::InstanceDriver&			vki					(instance.getDriver());
+	const vk::VkPhysicalDevice			physicalDevice		(vk::chooseDevice(vki, instance, context.getTestContext().getCommandLine()));
+	const deUint32						queueFamilyIndex	(chooseQueueFamilyIndex(vki, physicalDevice, 0u));
+	const vk::VkFenceImportFlags		flags				= config.permanence == PERMANENCE_TEMPORARY ? vk::VK_FENCE_IMPORT_TEMPORARY_BIT : (vk::VkFenceImportFlagBits)0u;
+
+	checkFenceSupport(vki, physicalDevice, config.externalType);
+
+	{
+		const vk::Unique<vk::VkDevice>	device	(createTestDevice(context, vkp, instance, vki, physicalDevice, 0u, 0u, config.externalType, queueFamilyIndex));
+		const vk::DeviceDriver			vkd		(vkp, instance, *device);
+		NativeHandle					handle	= -1;
+		const vk::Unique<vk::VkFence>	fence	(createAndImportFence(vkd, *device, config.externalType, handle, flags));
+
+		if (vkd.waitForFences(*device, 1u, &*fence, VK_TRUE, 0) != vk::VK_SUCCESS)
+			return tcu::TestStatus::pass("Imported -1 sync fd isn't signaled");
 
 		return tcu::TestStatus::pass("Pass");
 	}
@@ -3892,6 +3942,11 @@ de::MovePtr<tcu::TestCaseGroup> createFenceTests (tcu::TestContext& testCtx, vk:
 		addFunctionCase(fenceGroup.get(), std::string("reset_") + permanenceName,						"Test resetting the fence.",											testFenceReset,						config);
 		addFunctionCase(fenceGroup.get(), std::string("transference_") + permanenceName,				"Test fences transference.",											testFenceTransference,				config);
 
+		if (externalType == vk::VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT)
+		{
+			addFunctionCase(fenceGroup.get(), std::string("import_signaled_") + permanenceName,			"Test import signaled fence fd.",										testFenceImportSyncFdSignaled,		config);
+		}
+
 		if (externalType == vk::VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT
 			|| externalType == vk::VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT)
 		{
@@ -3943,33 +3998,45 @@ bool ValidateAHardwareBuffer(vk::VkFormat format, deUint64 requiredAhbUsage, con
 		}
 	}
 	NativeHandle nativeHandle(ahb);
-	vk::VkAndroidHardwareBufferFormatPropertiesANDROID formatProperties =
-	{
-		vk::VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID,
-		DE_NULL,
-		vk::VK_FORMAT_UNDEFINED,
-		0u,
-		0u,
-		{ vk::VK_COMPONENT_SWIZZLE_IDENTITY, vk::VK_COMPONENT_SWIZZLE_IDENTITY, vk::VK_COMPONENT_SWIZZLE_IDENTITY, vk::VK_COMPONENT_SWIZZLE_IDENTITY },
-		vk::VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY,
-		vk::VK_SAMPLER_YCBCR_RANGE_ITU_FULL,
-		vk::VK_CHROMA_LOCATION_COSITED_EVEN,
-		vk::VK_CHROMA_LOCATION_COSITED_EVEN
-	};
-	vk::VkAndroidHardwareBufferPropertiesANDROID bufferProperties =
-	{
-		vk::VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_PROPERTIES_ANDROID,
-		&formatProperties,
-		0u,
-		0u
-	};
 
-	VK_CHECK(vkd.getAndroidHardwareBufferPropertiesANDROID(device, ahb, &bufferProperties));
-	TCU_CHECK(formatProperties.format != vk::VK_FORMAT_UNDEFINED);
-	TCU_CHECK(formatProperties.format == format);
-	TCU_CHECK(formatProperties.externalFormat != 0u);
-	TCU_CHECK((formatProperties.formatFeatures & vk::VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0u);
-	TCU_CHECK((formatProperties.formatFeatures & (vk::VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT | vk::VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT)) != 0u);
+	const vk::VkComponentMapping mappingA = { vk::VK_COMPONENT_SWIZZLE_IDENTITY, vk::VK_COMPONENT_SWIZZLE_IDENTITY, vk::VK_COMPONENT_SWIZZLE_IDENTITY, vk::VK_COMPONENT_SWIZZLE_IDENTITY };
+	const vk::VkComponentMapping mappingB = { vk::VK_COMPONENT_SWIZZLE_R, vk::VK_COMPONENT_SWIZZLE_G, vk::VK_COMPONENT_SWIZZLE_B, vk::VK_COMPONENT_SWIZZLE_A };
+
+	for (int variantIdx = 0; variantIdx < 2; ++variantIdx)
+	{
+		// Both mappings should be equivalent and work.
+		const vk::VkComponentMapping& mapping = ((variantIdx == 0) ? mappingA : mappingB);
+
+		vk::VkAndroidHardwareBufferFormatPropertiesANDROID formatProperties =
+		{
+			vk::VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID,
+			DE_NULL,
+			vk::VK_FORMAT_UNDEFINED,
+			0u,
+			0u,
+			mapping,
+			vk::VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY,
+			vk::VK_SAMPLER_YCBCR_RANGE_ITU_FULL,
+			vk::VK_CHROMA_LOCATION_COSITED_EVEN,
+			vk::VK_CHROMA_LOCATION_COSITED_EVEN
+		};
+
+		vk::VkAndroidHardwareBufferPropertiesANDROID bufferProperties =
+		{
+			vk::VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_PROPERTIES_ANDROID,
+			&formatProperties,
+			0u,
+			0u
+		};
+
+		VK_CHECK(vkd.getAndroidHardwareBufferPropertiesANDROID(device, ahb, &bufferProperties));
+		TCU_CHECK(formatProperties.format != vk::VK_FORMAT_UNDEFINED);
+		TCU_CHECK(formatProperties.format == format);
+		TCU_CHECK(formatProperties.externalFormat != 0u);
+		TCU_CHECK((formatProperties.formatFeatures & vk::VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0u);
+		TCU_CHECK((formatProperties.formatFeatures & (vk::VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT | vk::VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT)) != 0u);
+	}
+
 	return true;
 }
 
@@ -4258,6 +4325,12 @@ de::MovePtr<tcu::TestCaseGroup> createSemaphoreTests (tcu::TestContext& testCtx,
 		addFunctionCase(semaphoreGroup.get(), std::string("signal_export_import_wait_") + permanenceName,	"Test signaling, exporting, importing and waiting for the sempahore.",	testSemaphoreSignalExportImportWait,	config);
 		addFunctionCase(semaphoreGroup.get(), std::string("signal_import_") + permanenceName,				"Test signaling and importing the semaphore.",							testSemaphoreSignalImport,				config);
 		addFunctionCase(semaphoreGroup.get(), std::string("transference_") + permanenceName,				"Test semaphores transference.",										testSemaphoreTransference,				config);
+
+		if (externalType == vk::VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT)
+		{
+			addFunctionCase(semaphoreGroup.get(), std::string("import_signaled_") + permanenceName,			"Test import signaled semaphore fd.",										testSemaphoreImportSyncFdSignaled,	config);
+		}
+
 
 		if (externalType == vk::VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT
 			|| externalType == vk::VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT)

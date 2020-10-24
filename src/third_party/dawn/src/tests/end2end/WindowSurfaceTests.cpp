@@ -50,8 +50,7 @@ class WindowSurfaceInstanceTests : public testing::Test {
         });
         DAWN_SKIP_TEST_IF(!glfwInit());
 
-        DawnProcTable procs = dawn_native::GetProcs();
-        dawnProcSetProcs(&procs);
+        dawnProcSetProcs(&dawn_native::GetProcs());
 
         mInstance = wgpu::CreateInstance();
     }
@@ -115,8 +114,8 @@ TEST_F(WindowSurfaceInstanceTests, BadChainedDescriptors) {
 
 // Test that a chained descriptor with HTMLCanvas produces an error.
 TEST_F(WindowSurfaceInstanceTests, HTMLCanvasDescriptor) {
-    wgpu::SurfaceDescriptorFromHTMLCanvasId chainedDescriptor;
-    chainedDescriptor.id = "myCanvas";
+    wgpu::SurfaceDescriptorFromCanvasHTMLSelector chainedDescriptor;
+    chainedDescriptor.selector = "#myCanvas";
 
     wgpu::SurfaceDescriptor descriptor;
     descriptor.nextInChain = &chainedDescriptor;

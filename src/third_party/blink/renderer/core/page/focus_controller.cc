@@ -35,6 +35,7 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/range.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"  // For firstPositionInOrBeforeNode
@@ -1212,7 +1213,7 @@ Element* FocusController::NextFocusableElementInForm(
       return next_element;
     }
     LayoutObject* layout = next_element->GetLayoutObject();
-    if (layout && layout->IsTextControl()) {
+    if (layout && layout->IsTextControlIncludingNG()) {
       // TODO(ajith.v) Extend it for select elements, radio buttons and check
       // boxes
       return next_element;
@@ -1351,7 +1352,12 @@ void FocusController::RegisterFocusChangedObserver(
 }
 
 void FocusController::NotifyFocusChangedObservers() const {
-  for (const auto& it : focus_changed_observers_)
+  // Since this eventually dispatches an event to the page, the page could add
+  // new observer, which would invalidate our iterators; so iterate over a copy
+  // of the observer list.
+  HeapHashSet<WeakMember<FocusChangedObserver>> observers =
+      focus_changed_observers_;
+  for (const auto& it : observers)
     it->FocusedFrameChanged();
 }
 

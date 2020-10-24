@@ -31,11 +31,9 @@ import subprocess
 import tempfile
 
 
-# Keep this in sync with the SHAs in catapult file
-# systrace/systrace/tracing_agents/atrace_from_file_agent.py.
 TRACE_TO_TEXT_SHAS = {
-    'linux': '2f4ee64e3f2135f698ee665d91c489e129fe7859',
-    'mac': 'd000e01827c439357a4d6e6c5b1076357e561a26',
+    'linux': '1ba3c2af9acc307ad924759b857c4024392916f1',
+    'mac': '09570bc9bd2697ae785c907dbfc296e8abe70c28',
 }
 TRACE_TO_TEXT_PATH = tempfile.gettempdir()
 TRACE_TO_TEXT_BASE_URL = ('https://storage.googleapis.com/perfetto/')

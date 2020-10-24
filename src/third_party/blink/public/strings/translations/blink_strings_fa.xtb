@@ -13,9 +13,12 @@
 <translation id="1211441953136645838">ته‌نویس</translation>
 <translation id="1281252709823657822">کادر گفتگو</translation>
 <translation id="1306460908038601864">خاموش</translation>
+<translation id="1311894908970423688">مقدار باید <ph name="VALUE_DATE_OR_TIME" /> باشد.</translation>
 <translation id="1335095011850992622">دست‌اندرکاران</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">برنما</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> مورد</translation>
+<translation id="1480676835519562650">قابلیت چند انتخابی، <ph name="SELECTED" /> مورد از <ph name="COUNT" /> مورد انتخاب شده است.</translation>
 <translation id="1589122976691792535">منطقه</translation>
 <translation id="1591562245178063882">این ماه</translation>
 <translation id="1637811476055996098">انتخاب فایل‌ها</translation>
@@ -27,6 +30,7 @@
 <translation id="1806710327868736751">alert_dialog</translation>
 <translation id="1821985195704844674">شبکه درختی</translation>
 <translation id="1822429046913737220">ق.ظ/ب.ظ</translation>
+<translation id="1823704031293214298">پاصفحه</translation>
 <translation id="1832974991323546415">پخش در دستگاه راه دور</translation>
 <translation id="190587075670221089">حذف</translation>
 <translation id="1907737156431278478">مثال</translation>
@@ -44,6 +48,7 @@
 <translation id="2247351761944213033">هفته <ph name="WEEKNUMBER" />، <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">آهنگ <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">کادر تأیید</translation>
+<translation id="2307576640803031502">در فهرست، مورد <ph name="INDEX" /> از <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">جداساز صفحه</translation>
 <translation id="2335594187091864976">انتخابگر تاریخ و زمان</translation>
 <translation id="2393030564806080191">مقدار رنگ در مبنای شانزده</translation>
@@ -51,11 +56,12 @@
 <translation id="248395913932153421">روز</translation>
 <translation id="2507943997699731163">لطفاً این قسمت را تکمیل کنید.</translation>
 <translation id="2508569020611168319">فهرست برگه</translation>
+<translation id="2530182415807757784">قابلیت چند انتخابی، هیچ موردی انتخاب نشده است.</translation>
 <translation id="2561842179657104141">نمایش کنترل‌های رسانه بیشتر</translation>
 <translation id="2572483411312390101">پخش</translation>
 <translation id="2613802280814924224">لطفاً یک مقدار معتبر وارد کنید. نزدیک‌ترین مقدار معتبر <ph name="VALID_VALUE" /> است.</translation>
 <translation id="2634240155926812724">کانال سبز</translation>
-<translation id="2653659639078652383">ارائه</translation>
+<translation id="2653659639078652383">ارسال</translation>
 <translation id="2657045182931379222">شیء گرافیکی</translation>
 <translation id="2674318244760992338">پانویس</translation>
 <translation id="2709516037105925701">تکمیل خودکار</translation>
@@ -100,9 +106,9 @@
 <translation id="4201051445878709314">نمایش ماه قبلی</translation>
 <translation id="421884353938374759">انتخابگر رنگ</translation>
 <translation id="4248100235867064564">نوار منو</translation>
+<translation id="4293574643247337246">سرصفحه</translation>
 <translation id="4360991593054037559">لطفاً یک مقدار معتبر وارد کنید. نزدیک‌ترین مقادیر معتبر <ph name="VALID_VALUE_LOW" /> و <ph name="VALID_VALUE_HIGHER" /> هستند.</translation>
 <translation id="4384583879834880242">پرسش و پاسخ</translation>
-<translation id="4413860115965805769">دکمه منو</translation>
 <translation id="4444765639179266822">ظاهراً <ph name="OCR_TEXT" /> را نشان می‌دهد</translation>
 <translation id="4446524499724042288">مرجع واژه‌نامه</translation>
 <translation id="4522570452068850558">جزئیات</translation>
@@ -154,9 +160,11 @@
 <translation id="5677946354068040947">گزینه‌های بیشتر</translation>
 <translation id="576709008726043716">مقدمه</translation>
 <translation id="57838592816432529">بی‌صدا کردن</translation>
+<translation id="5860033963881614850">خاموش</translation>
 <translation id="588258955323874662">تمام صفحه</translation>
 <translation id="5888666972993069672">درحال ارسال محتوا به <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">جعبه جستجو</translation>
+<translation id="5916664084637901428">روشن</translation>
 <translation id="5939518447894949180">بازنشانی</translation>
 <translation id="5966707198760109579">هفته</translation>
 <translation id="5987525920412732405">دکمه چرخش</translation>
@@ -184,6 +192,7 @@
 <translation id="6643016212128521049">پاک کردن</translation>
 <translation id="668171684555832681">دیگر...</translation>
 <translation id="6692633176391053278">گام به گام</translation>
+<translation id="6709093583001123835">مقدار باید <ph name="VALUE" /> باشد.</translation>
 <translation id="6709570249143506788">کیفیت پخش ضعیف</translation>
 <translation id="6755330956360078551">نکته ابزار</translation>
 <translation id="6790428901817661496">پخش</translation>
@@ -284,6 +293,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />، شروع از <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">تصویر در تصویر</translation>
 <translation id="9168329111483466115">پانویس</translation>
+<translation id="945780513535800434">برخی موارد علامت‌گذاری شده است</translation>
 <translation id="954003015749068518">ورود به تصویر در تصویر</translation>
 <translation id="966787709310836684">منو</translation>
 </translationbundle>

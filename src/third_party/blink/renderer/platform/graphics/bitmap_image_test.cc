@@ -69,9 +69,9 @@ class FrameSettingImageProvider : public cc::ImageProvider {
     DCHECK(!draw_image.paint_image().IsPaintWorklet());
     auto sk_image =
         draw_image.paint_image().GetSkImageForFrame(frame_index_, client_id_);
-    return ScopedResult(
-        cc::DecodedDrawImage(sk_image, SkSize::MakeEmpty(), SkSize::Make(1, 1),
-                             draw_image.filter_quality(), true));
+    return ScopedResult(cc::DecodedDrawImage(sk_image, SkSize::MakeEmpty(),
+                                             SkSize::Make(1, 1),
+                                             draw_image.filter_quality()));
   }
 
  private:
@@ -121,8 +121,6 @@ class BitmapImageTest : public testing::Test {
  public:
   class FakeImageObserver : public GarbageCollected<FakeImageObserver>,
                             public ImageObserver {
-    USING_GARBAGE_COLLECTED_MIXIN(FakeImageObserver);
-
    public:
     FakeImageObserver()
         : last_decoded_size_(0), last_decoded_size_changed_delta_(0) {}
@@ -356,8 +354,8 @@ TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
   auto image1 = image_->PaintImageForCurrentFrame();
   auto image2 = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image1, image2);
-  auto sk_image1 = image1.GetSkImage();
-  auto sk_image2 = image2.GetSkImage();
+  auto sk_image1 = image1.GetSwSkImage();
+  auto sk_image2 = image2.GetSwSkImage();
   EXPECT_EQ(sk_image1->uniqueID(), sk_image2->uniqueID());
 
   // Frame keys should be the same for these PaintImages.
@@ -368,7 +366,7 @@ TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
   // image ids for partial decodes.
   DestroyDecodedData();
   auto image3 = image_->PaintImageForCurrentFrame();
-  auto sk_image3 = image3.GetSkImage();
+  auto sk_image3 = image3.GetSwSkImage();
   EXPECT_NE(sk_image1, sk_image3);
   EXPECT_NE(sk_image1->uniqueID(), sk_image3->uniqueID());
 
@@ -380,7 +378,7 @@ TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
   // Load complete. This should generate a new image id.
   image_->SetData(image_data, true);
   auto complete_image = image_->PaintImageForCurrentFrame();
-  auto complete_sk_image = complete_image.GetSkImage();
+  auto complete_sk_image = complete_image.GetSwSkImage();
   EXPECT_NE(sk_image3, complete_sk_image);
   EXPECT_NE(sk_image3->uniqueID(), complete_sk_image->uniqueID());
   EXPECT_NE(complete_image.GetKeyForFrame(PaintImage::kDefaultFrameIndex),
@@ -391,7 +389,7 @@ TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
   // uniqueIDs.
   DestroyDecodedData();
   auto new_complete_image = image_->PaintImageForCurrentFrame();
-  auto new_complete_sk_image = new_complete_image.GetSkImage();
+  auto new_complete_sk_image = new_complete_image.GetSwSkImage();
   EXPECT_NE(new_complete_sk_image, complete_sk_image);
   EXPECT_EQ(new_complete_image.GetKeyForFrame(PaintImage::kDefaultFrameIndex),
             complete_image.GetKeyForFrame(PaintImage::kDefaultFrameIndex));
@@ -409,8 +407,8 @@ TEST_F(BitmapImageTest, ImageForDefaultFrame_MultiFrame) {
   auto paint_image1 = default_image1->PaintImageForCurrentFrame();
   auto paint_image2 = default_image2->PaintImageForCurrentFrame();
   EXPECT_EQ(paint_image1, paint_image2);
-  EXPECT_EQ(paint_image1.GetSkImage()->uniqueID(),
-            paint_image2.GetSkImage()->uniqueID());
+  EXPECT_EQ(paint_image1.GetSwSkImage()->uniqueID(),
+            paint_image2.GetSwSkImage()->uniqueID());
 }
 
 TEST_F(BitmapImageTest, ImageForDefaultFrame_SingleFrame) {
@@ -689,17 +687,20 @@ TEST_F(BitmapImageTestWithMockDecoder,
   // In all cases, the image shouldn't animate.
 
   // Only one loop allowed.
-  image_->SetAnimationPolicy(kImageAnimationPolicyAnimateOnce);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAnimateOnce);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), kAnimationNone);
 
   // No animation allowed.
-  image_->SetAnimationPolicy(kImageAnimationPolicyNoAnimation);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyNoAnimation);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), kAnimationNone);
 
   // Default policy.
-  image_->SetAnimationPolicy(kImageAnimationPolicyAllowed);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), kAnimationNone);
 }
@@ -718,17 +719,20 @@ TEST_F(BitmapImageTestWithMockDecoder,
   // other cases, it remains loop once.
 
   // Only one loop allowed.
-  image_->SetAnimationPolicy(kImageAnimationPolicyAnimateOnce);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAnimateOnce);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), kAnimationLoopOnce);
 
   // No animation allowed.
-  image_->SetAnimationPolicy(kImageAnimationPolicyNoAnimation);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyNoAnimation);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), kAnimationNone);
 
   // Default policy.
-  image_->SetAnimationPolicy(kImageAnimationPolicyAllowed);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), kAnimationLoopOnce);
 }
@@ -746,17 +750,20 @@ TEST_F(BitmapImageTestWithMockDecoder,
   // The repetition count is determined by the animation policy.
 
   // Only one loop allowed.
-  image_->SetAnimationPolicy(kImageAnimationPolicyAnimateOnce);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAnimateOnce);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), kAnimationLoopOnce);
 
   // No animation allowed.
-  image_->SetAnimationPolicy(kImageAnimationPolicyNoAnimation);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyNoAnimation);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), kAnimationNone);
 
   // Default policy.
-  image_->SetAnimationPolicy(kImageAnimationPolicyAllowed);
+  image_->SetAnimationPolicy(
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed);
   image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), repetition_count_);
 }
@@ -848,7 +855,7 @@ const DecodedImageTypeHistogramTest::ParamType
         {"animated-10color.gif", BitmapImageMetrics::kImageGIF},
         {"webp-color-profile-lossy.webp", BitmapImageMetrics::kImageWebP},
         {"wrong-frame-dimensions.ico", BitmapImageMetrics::kImageICO},
-        {"lenna.bmp", BitmapImageMetrics::kImageBMP},
+        {"gracehopper.bmp", BitmapImageMetrics::kImageBMP},
 #if BUILDFLAG(ENABLE_AV1_DECODER)
         {"red-full-ranged-8bpc.avif", BitmapImageMetrics::kImageAVIF},
 #endif

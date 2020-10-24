@@ -133,7 +133,9 @@ void WorkerScheduler::Dispose() {
 scoped_refptr<base::SingleThreadTaskRunner> WorkerScheduler::GetTaskRunner(
     TaskType type) const {
   switch (type) {
-    case TaskType::kJavascriptTimer:
+    case TaskType::kJavascriptTimerImmediate:
+    case TaskType::kJavascriptTimerDelayedLowNesting:
+    case TaskType::kJavascriptTimerDelayedHighNesting:
     case TaskType::kPostedMessage:
     case TaskType::kWorkerAnimation:
       return throttleable_task_queue_->CreateTaskRunner(type);
@@ -193,9 +195,7 @@ scoped_refptr<base::SingleThreadTaskRunner> WorkerScheduler::GetTaskRunner(
     case TaskType::kMainThreadTaskQueueDefault:
     case TaskType::kMainThreadTaskQueueInput:
     case TaskType::kMainThreadTaskQueueIdle:
-    case TaskType::kMainThreadTaskQueueIPC:
     case TaskType::kMainThreadTaskQueueControl:
-    case TaskType::kMainThreadTaskQueueCleanup:
     case TaskType::kMainThreadTaskQueueMemoryPurge:
     case TaskType::kMainThreadTaskQueueNonWaking:
     case TaskType::kCompositorThreadTaskQueueDefault:
@@ -209,6 +209,7 @@ scoped_refptr<base::SingleThreadTaskRunner> WorkerScheduler::GetTaskRunner(
     case TaskType::kExperimentalWebScheduling:
     case TaskType::kInternalFrameLifecycleControl:
     case TaskType::kInternalFindInPage:
+    case TaskType::kInternalHighPriorityLocalFrame:
     case TaskType::kCount:
       NOTREACHED();
       break;

@@ -23,6 +23,7 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/agent_group_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_origin_type.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_task_queue_controller.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_task_queue.h"
@@ -87,7 +88,6 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   bool IsFrameVisible() const override;
 
   bool IsPageVisible() const override;
-  bool IsAudioPlaying() const;
 
   void SetPaused(bool frame_paused) override;
   void SetShouldReportPostedTasksWhenDisabled(bool should_report) override;
@@ -110,6 +110,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
   CreateResourceLoadingTaskRunnerHandle() override;
 
+  AgentGroupSchedulerImpl* GetAgentGroupScheduler();
   PageScheduler* GetPageScheduler() const override;
   void DidStartProvisionalLoad(bool is_main_frame) override;
   void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
@@ -120,8 +121,14 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   void OnFirstContentfulPaint() override;
   void OnFirstMeaningfulPaint() override;
+  void OnLoad() override;
   bool IsWaitingForContentfulPaint() const;
   bool IsWaitingForMeaningfulPaint() const;
+
+  // An "ordinary" FrameScheduler is responsible for a frame whose parent page
+  // is a fully-featured page owned by a web view (as opposed to, e.g.: a Page
+  // created by an SVGImage). Virtual for testing.
+  virtual bool IsOrdinary() const;
 
   void AsValueInto(base::trace_event::TracedValue* state) const;
   bool IsExemptFromBudgetBasedThrottling() const override;
@@ -134,13 +141,24 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
                              const SchedulingPolicy& policy) override;
 
   base::WeakPtr<FrameScheduler> GetWeakPtr() override;
+  base::WeakPtr<const FrameSchedulerImpl> GetWeakPtr() const;
+  base::WeakPtr<FrameSchedulerImpl> GetInvalidatingOnBFCacheRestoreWeakPtr();
+
+  void ReportActiveSchedulerTrackedFeatures() override;
 
   scoped_refptr<base::SingleThreadTaskRunner> ControlTaskRunner();
 
   void UpdatePolicy();
 
+  // Whether the frame is opted-out from any kind of throttling.
+  bool opted_out_from_all_throttling() const {
+    return opted_out_from_all_throttling_;
+  }
+  // Whether the frame is opted-out from CPU time throttling and intensive wake
+  // up throttling.
   bool opted_out_from_aggressive_throttling() const {
-    return opted_out_from_aggressive_throttling_;
+    return opted_out_from_all_throttling_ ||
+           opted_out_from_aggressive_throttling_;
   }
 
   void OnTraceLogEnabled() { tracing_controller_.OnTraceLogEnabled(); }
@@ -162,6 +180,11 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   void OnTaskQueueCreated(
       MainThreadTaskQueue*,
       base::sequence_manager::TaskQueue::QueueEnabledVoter*) override;
+
+  void SetOnIPCTaskPostedWhileInBackForwardCacheHandler();
+  void DetachOnIPCTaskPostedWhileInBackForwardCacheHandler();
+  void OnIPCTaskPostedWhileInBackForwardCache(uint32_t ipc_hash,
+                                              const char* ipc_interface_name);
 
   // Returns the list of active features which currently tracked by the
   // scheduler for back-forward cache metrics.
@@ -208,6 +231,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   friend class main_thread_scheduler_impl_unittest::MainThreadSchedulerImplTest;
   friend class frame_scheduler_impl_unittest::FrameSchedulerImplTest;
   friend class page_scheduler_impl_unittest::PageSchedulerImplTest;
+  friend class PerAgentSchedulingBaseTest;
   friend class ResourceLoadingTaskRunnerHandleImpl;
   friend class ::blink::MainThreadSchedulerTest;
 
@@ -245,6 +269,9 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   void AddPauseSubresourceLoadingHandle();
   void RemovePauseSubresourceLoadingHandle();
+
+  void OnAddedAllThrottlingOptOut();
+  void OnRemovedAllThrottlingOptOut();
 
   void OnAddedAggressiveThrottlingOptOut();
   void OnRemovedAggressiveThrottlingOptOut();
@@ -321,9 +348,11 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   TraceableState<bool, TracingCategoryName::kInfo> task_queues_throttled_;
   TraceableState<bool, TracingCategoryName::kInfo>
       preempted_for_cooperative_scheduling_;
-  // TODO(kraynov): https://crbug.com/827113
-  // Trace the count of aggressive throttling opt outs.
-  int aggressive_throttling_opt_out_count;
+  // TODO(https://crbug.com/827113): Trace the count of opt-outs.
+  int all_throttling_opt_out_count_;
+  int aggressive_throttling_opt_out_count_;
+  TraceableState<bool, TracingCategoryName::kInfo>
+      opted_out_from_all_throttling_;
   TraceableState<bool, TracingCategoryName::kInfo>
       opted_out_from_aggressive_throttling_;
   size_t subresource_loading_pause_count_;
@@ -359,7 +388,13 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   // and documents.
   base::WeakPtrFactory<FrameSchedulerImpl> document_bound_weak_factory_{this};
 
-  base::WeakPtrFactory<FrameSchedulerImpl> weak_factory_{this};
+  // WeakPtrFactory for tracking IPCs posted to frames cached in the
+  // back-forward cache. These weak pointers are invalidated when the page is
+  // restored from the cache.
+  base::WeakPtrFactory<FrameSchedulerImpl>
+      invalidating_on_bfcache_restore_weak_factory_{this};
+
+  mutable base::WeakPtrFactory<FrameSchedulerImpl> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FrameSchedulerImpl);
 };

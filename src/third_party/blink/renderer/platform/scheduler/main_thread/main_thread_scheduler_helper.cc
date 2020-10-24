@@ -16,8 +16,6 @@ MainThreadSchedulerHelper::MainThreadSchedulerHelper(
     MainThreadSchedulerImpl* main_thread_scheduler)
     : SchedulerHelper(sequence_manager),
       main_thread_scheduler_(main_thread_scheduler),
-      // TODO(hajimehoshi): Forbid V8 execution at |default_task_queue_|
-      // (crbug.com/870606).
       default_task_queue_(
           NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
                            MainThreadTaskQueue::QueueType::kDefault)
@@ -63,11 +61,23 @@ MainThreadSchedulerHelper::DeprecatedDefaultTaskRunner() {
 
 scoped_refptr<MainThreadTaskQueue> MainThreadSchedulerHelper::NewTaskQueue(
     const MainThreadTaskQueue::QueueCreationParams& params) {
+#if DCHECK_IS_ON()
+  // This check is to ensure that we only create one queue with kCompositor
+  // prioritisation type, ie one compositor task queue, since elsewhere we
+  // assume there is only one when making priority decisions.
+  if (params.queue_traits.prioritisation_type ==
+      MainThreadTaskQueue::QueueTraits::PrioritisationType::kCompositor) {
+    DCHECK(
+        !created_compositor_task_queue_ ||
+        params.queue_traits.prioritisation_type !=
+            MainThreadTaskQueue::QueueTraits::PrioritisationType::kCompositor);
+    created_compositor_task_queue_ = true;
+  }
+#endif  // DCHECK_IS_ON()
+
   scoped_refptr<MainThreadTaskQueue> task_queue =
       sequence_manager_->CreateTaskQueueWithType<MainThreadTaskQueue>(
           params.spec, params, main_thread_scheduler_);
-  if (params.fixed_priority)
-    task_queue->SetQueuePriority(params.fixed_priority.value());
   return task_queue;
 }
 

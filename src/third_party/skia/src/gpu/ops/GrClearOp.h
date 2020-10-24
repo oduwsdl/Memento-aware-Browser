@@ -30,22 +30,6 @@ public:
 
     const char* name() const override { return "Clear"; }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        string.append(INHERITED::dumpInfo());
-        string.appendf("Scissor [ ");
-        if (fScissor.enabled()) {
-            const SkIRect& r = fScissor.rect();
-            string.appendf("L: %d, T: %d, R: %d, B: %d", r.fLeft, r.fTop, r.fRight, r.fBottom);
-        } else {
-            string.append("disabled");
-        }
-        string.appendf("], Color: 0x%08x\n", fColor.toBytes_RGBA());
-        return string;
-    }
-#endif
-
 private:
     friend class GrOpMemoryPool; // for ctors
 
@@ -63,18 +47,32 @@ private:
                                       const GrCaps& caps) override;
 
     void onPrePrepare(GrRecordingContext*, const GrSurfaceProxyView* writeView, GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) override {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) override {}
 
     void onPrepare(GrOpFlushState*) override {}
 
     void onExecute(GrOpFlushState* state, const SkRect& chainBounds) override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString string("Scissor [ ");
+        if (fScissor.enabled()) {
+            const SkIRect& r = fScissor.rect();
+            string.appendf("L: %d, T: %d, R: %d, B: %d", r.fLeft, r.fTop, r.fRight, r.fBottom);
+        } else {
+            string.append("disabled");
+        }
+        string.appendf("], Color: 0x%08x\n", fColor.toBytes_RGBA());
+        return string;
+    }
+#endif
 
     GrScissorState fScissor;
     SkPMColor4f    fColor;
     bool           fStencilInsideMask;
     Buffer         fBuffer;
 
-    typedef GrOp INHERITED;
+    using INHERITED = GrOp;
 };
 
 GR_MAKE_BITFIELD_CLASS_OPS(GrClearOp::Buffer)

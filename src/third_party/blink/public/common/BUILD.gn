@@ -9,12 +9,17 @@ import("//testing/test.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//third_party/webrtc/webrtc.gni")
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
 # Public common API headers, mojom and libraries that can be linked and
 # referenced both by browser-side and renderer-side components.
 component("common") {
   output_name = "blink_common"
 
   public_deps = [
+    "//third_party/blink/common/privacy_budget:privacy_budget",
     "//third_party/blink/public/common:headers",
     "//third_party/blink/public/mojom:mojom_modules",
     "//third_party/blink/public/mojom:web_bluetooth_mojo_bindings",
@@ -32,29 +37,34 @@ buildflag_header("buildflags") {
 }
 
 source_set("common_export") {
-  visibility = [ "//third_party/blink/public/common/*" ]
+  visibility = [
+    "//third_party/blink/common/*",
+    "//third_party/blink/public/common/*",
+  ]
   sources = [ "common_export.h" ]
 }
 
 source_set("headers") {
   visibility = [
+    ":*",
     "//chrome/*",
     "//chromecast/*",
+    "//components/*",
     "//content/*",
     "//fuchsia/*",
-    "//third_party/blink/*",
-    "//components/*",
     "//services/*",
     "//storage/*",
-    ":*",
+    "//third_party/blink/*",
   ]
 
   sources = [
+    "action_after_pagehide.h",
     "associated_interfaces/associated_interface_provider.h",
     "associated_interfaces/associated_interface_registry.h",
     "blob/blob_utils.h",
     "bluetooth/web_bluetooth_device_id.h",
     "bluetooth/web_bluetooth_device_id_mojom_traits.h",
+    "browser_interface_broker_proxy.h",
     "cache_storage/cache_storage_utils.h",
     "client_hints/client_hints.h",
     "context_menu_data/edit_flags.h",
@@ -64,21 +74,25 @@ source_set("headers") {
     "css/navigation_controls.h",
     "css/page_orientation.h",
     "css/page_size_type.h",
-    "css/preferred_color_scheme.h",
     "css/screen_spanning.h",
+    "custom_handlers/protocol_handler_utils.h",
     "device_memory/approximated_device_memory.h",
     "dom_storage/session_storage_namespace_id.h",
     "experiments/memory_ablation_experiment.h",
     "feature_policy/document_policy.h",
     "feature_policy/document_policy_features.h",
     "feature_policy/feature_policy.h",
+    "feature_policy/feature_policy_features.h",
+    "feature_policy/feature_policy_forward.h",
     "feature_policy/policy_value.h",
     "features.h",
     "fetch/fetch_api_request_headers_map.h",
     "fetch/fetch_api_request_headers_mojom_traits.h",
     "forcedark/forcedark_switches.h",
     "frame/frame_policy.h",
+    "frame/frame_visual_properties.h",
     "frame/from_ad_state.h",
+    "frame/transient_allow_fullscreen.h",
     "frame/user_activation_state.h",
     "frame/user_activation_update_source.h",
     "indexeddb/indexed_db_default_mojom_traits.h",
@@ -103,13 +117,19 @@ source_set("headers") {
     "input/web_pointer_properties.h",
     "input/web_touch_event.h",
     "input/web_touch_point.h",
+    "loader/http_body_element_type.h",
     "loader/loading_behavior_flag.h",
     "loader/mime_sniffing_throttle.h",
     "loader/mime_sniffing_url_loader.h",
+    "loader/network_utils.h",
+    "loader/previews_state.h",
+    "loader/record_load_histograms.h",
+    "loader/referrer_utils.h",
     "loader/resource_type_util.h",
     "loader/url_loader_factory_bundle.h",
     "loader/url_loader_factory_bundle_mojom_traits.h",
     "loader/url_loader_throttle.h",
+    "loader/worker_main_script_load_parameters.h",
     "logging/logging_utils.h",
     "manifest/manifest.h",
     "manifest/manifest_icon_selector.h",
@@ -130,6 +150,7 @@ source_set("headers") {
     "messaging/transferable_message_mojom_traits.h",
     "messaging/web_message_port.h",
     "metrics/document_update_reason.h",
+    "metrics/form_element_pii_type.h",
     "mime_util/mime_util.h",
     "navigation/triggering_event_info.h",
     "notifications/notification_constants.h",
@@ -140,30 +161,42 @@ source_set("headers") {
     "origin_trials/origin_trial_policy.h",
     "origin_trials/trial_token.h",
     "origin_trials/trial_token_validator.h",
+    "page/content_to_visible_time_reporter.h",
     "page/drag_mojom_traits.h",
+    "page/drag_operation.h",
     "page/launching_process_state.h",
     "page/page_zoom.h",
-    "page/web_drag_operation.h",
+    "page_state/page_state.h",
+    "page_state/page_state_serialization.h",
     "peerconnection/peer_connection_tracker_mojom_traits.h",
     "peerconnection/webrtc_ip_handling_policy.h",
     "permissions/permission_utils.h",
-    "prerender/prerender_rel_type.h",
+    "renderer_preferences/renderer_preferences.h",
     "scheduler/web_scheduler_tracked_feature.h",
-    "screen_orientation/web_screen_orientation_lock_type.h",
-    "screen_orientation/web_screen_orientation_type.h",
     "security/security_style.h",
     "security_context/insecure_request_policy.h",
+    "service_worker/service_worker_scope_match.h",
     "service_worker/service_worker_status_code.h",
     "service_worker/service_worker_type_converters.h",
     "service_worker/service_worker_types.h",
-    "service_worker/service_worker_utils.h",
-    "sms/sms_receiver_destroyed_reason.h",
-    "sms/sms_receiver_outcome.h",
+    "sms/webotp_service_destroyed_reason.h",
+    "sms/webotp_service_outcome.h",
     "switches.h",
+    "thread_safe_browser_interface_broker_proxy.h",
+    "tokens/multi_token.h",
+    "tokens/multi_token_internal.h",
+    "tokens/token_mojom_traits_helper.h",
+    "tokens/tokens.h",
+    "tokens/tokens_mojom_traits.h",
+    "unique_name/unique_name_helper.h",
     "user_agent/user_agent_metadata.h",
     "web_cache/web_cache_resource_type_stats.h",
     "web_package/signed_exchange_consts.h",
     "web_package/web_package_request_matcher.h",
+    "web_preferences/web_preferences.h",
+    "widget/device_emulation_params.h",
+    "widget/screen_info.h",
+    "widget/visual_properties.h",
   ]
 
   public_deps = [
@@ -185,10 +218,13 @@ source_set("headers") {
     ":buildflags",
     ":common_export",
     "//base",
+    "//cc",
+    "//components/viz/common",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//mojo/public/mojom/base",
     "//net",
+    "//ui/base:base",
   ]
 
   # iOS doesn't use and must not depend on //media
@@ -222,5 +258,24 @@ source_set("headers") {
 if (is_android || is_win) {
   proto_library("font_unique_name_table_proto") {
     sources = [ "font_unique_name_lookup/font_unique_name_table.proto" ]
+  }
+}
+
+proto_library("font_enumeration_table_proto") {
+  sources = [ "font_access/font_enumeration_table.proto" ]
+}
+
+if (is_android) {
+  java_cpp_features("java_features_srcjar") {
+    # External code should depend on ":common_java" instead.
+    visibility = [ ":*" ]
+    sources = [ "//third_party/blink/common/features.cc" ]
+    template = "//third_party/blink/public/common/android/java_templates/BlinkFeatures.java.tmpl"
+  }
+
+  android_library("common_java") {
+    # Right now, this only includes the Java features. But if we need more Java
+    # files, they should be added here as necessary.
+    srcjar_deps = [ ":java_features_srcjar" ]
   }
 }

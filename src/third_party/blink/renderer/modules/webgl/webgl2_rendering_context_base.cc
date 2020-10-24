@@ -10,6 +10,8 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/bindings/modules/v8/webgl_any.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -542,6 +544,15 @@ ScriptValue WebGL2RenderingContextBase::getInternalformatParameter(
     case GL_R16F:
     case GL_RG16F:
     case GL_RGBA16F:
+      if (!ExtensionEnabled(kEXTColorBufferFloatName) &&
+          !ExtensionEnabled(kEXTColorBufferHalfFloatName)) {
+        SynthesizeGLError(
+            GL_INVALID_ENUM, "getInternalformatParameter",
+            "invalid internalformat when EXT_color_buffer_[half_]float "
+            "is not enabled");
+        return ScriptValue::CreateNull(script_state->GetIsolate());
+      }
+      break;
     case GL_R32F:
     case GL_RG32F:
     case GL_RGBA32F:
@@ -570,8 +581,10 @@ ScriptValue WebGL2RenderingContextBase::getInternalformatParameter(
       auto values = std::make_unique<GLint[]>(length);
       for (GLint ii = 0; ii < length; ++ii)
         values[ii] = 0;
+
       ContextGL()->GetInternalformativ(target, internalformat, GL_SAMPLES,
                                        length, values.get());
+      RecordInternalFormatParameter(internalformat, values.get(), length);
       return WebGLAny(script_state,
                       DOMInt32Array::Create(values.get(), length));
     }
@@ -580,6 +593,26 @@ ScriptValue WebGL2RenderingContextBase::getInternalformatParameter(
                         "invalid parameter name");
       return ScriptValue::CreateNull(script_state->GetIsolate());
   }
+}
+
+void WebGL2RenderingContextBase::RecordInternalFormatParameter(
+    GLenum internalformat,
+    GLint* values,
+    GLint length) {
+  if (!IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+          IdentifiableSurface::Type::kWebGLInternalFormatParameter))
+    return;
+  const auto& ukm_params = GetUkmParameters();
+  IdentifiableTokenBuilder builder;
+  for (GLint i = 0; i < length; i++) {
+    builder.AddValue(values[i]);
+  }
+  IdentifiabilityMetricBuilder(ukm_params.source_id)
+      .Set(IdentifiableSurface::FromTypeAndToken(
+               IdentifiableSurface::Type::kWebGLInternalFormatParameter,
+               internalformat),
+           builder.GetToken())
+      .Record(ukm_params.ukm_recorder);
 }
 
 bool WebGL2RenderingContextBase::CheckAndTranslateAttachments(
@@ -836,14 +869,6 @@ void WebGL2RenderingContextBase::RenderbufferStorageHelper(
   if (!samples) {
     ContextGL()->RenderbufferStorage(target, internalformat, width, height);
   } else {
-    GLint max_number_of_samples = 0;
-    ContextGL()->GetInternalformativ(target, internalformat, GL_SAMPLES, 1,
-                                     &max_number_of_samples);
-    if (samples > max_number_of_samples) {
-      SynthesizeGLError(GL_INVALID_OPERATION, function_name,
-                        "samples out of range");
-      return;
-    }
     ContextGL()->RenderbufferStorageMultisampleCHROMIUM(
         target, samples, internalformat, width, height);
   }
@@ -913,6 +938,16 @@ void WebGL2RenderingContextBase::RenderbufferStorageImpl(
     case GL_R16F:
     case GL_RG16F:
     case GL_RGBA16F:
+      if (!ExtensionEnabled(kEXTColorBufferFloatName) &&
+          !ExtensionEnabled(kEXTColorBufferHalfFloatName)) {
+        SynthesizeGLError(
+            GL_INVALID_ENUM, function_name,
+            "EXT_color_buffer_float/EXT_color_buffer_half_float not enabled");
+        return;
+      }
+      RenderbufferStorageHelper(target, samples, internalformat, width, height,
+                                function_name);
+      break;
     case GL_R32F:
     case GL_RG32F:
     case GL_RGBA32F:

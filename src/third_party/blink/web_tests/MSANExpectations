@@ -1,5 +1,4 @@
-# tags: [ Android Fuchsia IOS IOS12.2 IOS13.0 Linux Mac Mac10.10 Mac10.11 Mac10.12 Retina
-#         Mac10.13 Win Win7 Win10 ]
+# tags: [ Android Fuchsia Linux Mac Mac10.12 Mac10.13 Win Win7 Win10 ]
 # tags: [ Release Debug ]
 # results: [ Timeout Crash Pass Failure Slow Skip ]
 
@@ -34,13 +33,6 @@ crbug.com/701563 [ Linux ] external/wpt/svg/interfaces.html [ Timeout Pass ]
 
 # Times out on MSAN
 crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-samples-in-snapshot.js [ Timeout ]
-crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-merged-nodes.js [ Timeout ]
-crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-active-dom-object.js [ Timeout ]
-crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-detached-dom-tree.js [ Timeout ]
-crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-detached-iframe.js [ Timeout ]
-crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-event-listener.js [ Timeout ]
-crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-multiple-retainers.js [ Timeout ]
-crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-no-detached-iframe.js [ Timeout ]
 
 crbug.com/751906 [ Linux ] http/tests/devtools/console/console-correct-suggestions.js [ Timeout Pass ]
 crbug.com/811820 [ Linux ] http/tests/devtools/tracing-session-id.js [ Timeout Pass ]
@@ -111,9 +103,6 @@ crbug.com/856601 [ Linux ] http/tests/devtools/elements/elements-save-to-temp-va
 # Sheriff 2018-12-13
 crbug.com/914900 [ Linux ] http/tests/devtools/network/preview-searchable.js [ Pass Timeout ]
 
-# Sheriff 2019-01-28
-crbug.com/925600 [ Linux ] external/wpt/webrtc-quic/RTCQuicStream.https.html [ Pass Timeout ]
-
 # Sheriff 2019-02-13
 crbug.com/931660 [ Linux ] fast/history/replacestate-nocrash.html [ Pass Timeout ]
 
@@ -142,7 +131,7 @@ crbug.com/993953 [ Linux ] http/tests/devtools/wasm-isolated-code-cache/wasm-cac
 
 # Sheriff 2019-11-11
 
-crbug.com/856601 [ Linux ] virtual/controls-refresh/color/color-picker-manual-color-change-invalid-values.html [ Pass Timeout ]
+crbug.com/856601 [ Linux ] fast/forms/color/color-picker-manual-color-change-invalid-values.html [ Pass Timeout ]
 
 crbug.com/856601 [ Linux ] external/wpt/compression/compression-stream.tentative.any.serviceworker.html [ Pass Timeout ]
 
@@ -158,3 +147,6 @@ crbug.com/1066647 [ Linux ] http/tests/devtools/sources/debugger-breakpoints/bre
 
 # Sheriff 2020-06-16
 crbug.com/1095518 [ Linux ] crbug.com/840659 external/wpt/webrtc/simulcast/h264.https.html [ Crash ]
+
+# Sheriff 2020-10-05
+crbug.com/1134580 [ Linux ] virtual/eye-dropper/color-picker-show-eye-dropper.html [ Pass Timeout ]

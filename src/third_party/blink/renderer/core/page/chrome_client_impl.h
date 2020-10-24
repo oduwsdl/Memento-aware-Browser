@@ -80,7 +80,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                             cc::PaintHoldingCommitTrigger) override;
   void StartDragging(LocalFrame*,
                      const WebDragData&,
-                     WebDragOperationsMask,
+                     DragOperationsMask,
                      const SkBitmap& drag_image,
                      const gfx::Point& drag_image_offset) override;
   bool AcceptsLoadDrops() const override;
@@ -89,7 +89,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                              const AtomicString& name,
                              const WebWindowFeatures&,
                              network::mojom::blink::WebSandboxFlags,
-                             const FeaturePolicy::FeatureState&,
+                             const FeaturePolicyFeatureState&,
                              const SessionStorageNamespaceId&) override;
   void Show(NavigationPolicy) override;
   void DidOverscroll(const gfx::Vector2dF& overscroll_delta,
@@ -134,9 +134,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   IntRect ViewportToScreen(const IntRect&,
                            const LocalFrameView*) const override;
   float WindowToViewportScalar(LocalFrame*, const float) const override;
-  void WindowToViewportRect(LocalFrame& frame,
-                            WebFloatRect* viewport_rect) const override;
-  WebScreenInfo GetScreenInfo(LocalFrame&) const override;
+  ScreenInfo GetScreenInfo(LocalFrame&) const override;
   void OverrideVisibleRectForMainFrame(LocalFrame& frame,
                                        IntRect* paint_rect) const override;
   float InputEventsScaleForEmulation() const override;
@@ -190,7 +188,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
 
   void EnterFullscreen(LocalFrame&,
                        const FullscreenOptions*,
-                       bool for_cross_process_descendant) override;
+                       FullscreenRequestType) override;
   void ExitFullscreen(LocalFrame&) override;
   void FullscreenElementChanged(Element* old_element,
                                 Element* new_element) override;
@@ -237,14 +235,6 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
       const String& dialog_message,
       Document::PageDismissalType) const override;
 
-  bool RequestPointerLock(LocalFrame*,
-                          WebWidgetClient::PointerLockCallback,
-                          bool) override;
-  bool RequestPointerLockChange(LocalFrame*,
-                                WebWidgetClient::PointerLockCallback,
-                                bool) override;
-  void RequestPointerUnlock(LocalFrame*) override;
-
   // AutofillClient pass throughs:
   void DidAssociateFormControlsAfterLoad(LocalFrame*) override;
   void HandleKeyboardEventOnTextField(HTMLInputElement&,
@@ -282,13 +272,16 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                                         bool request) override;
 
   void DidUpdateTextAutosizerPageInfo(
-      const WebTextAutosizerPageInfo& page_info) override;
+      const mojom::blink::TextAutosizerPageInfo& page_info) override;
 
   int GetLayerTreeId(LocalFrame& frame) override;
 
   void DocumentDetached(Document&) override;
 
   double UserZoomFactor() const override;
+
+  void BatterySavingsChanged(LocalFrame& main_frame,
+                             WebBatterySavingsFlags savings) override;
 
  private:
   bool IsChromeClientImpl() const override { return true; }

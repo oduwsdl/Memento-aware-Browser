@@ -202,8 +202,14 @@ void ShapeResultView::CreateViewsForResult(const ShapeResultType* other,
       // of |RunInfo| could be different from |part_start| for ShapeResultView.
       DCHECK_GE(part_start, run->OffsetToRunStartIndex());
       unsigned run_start = part_start - run->OffsetToRunStartIndex();
+      // TODO(jfernandez): Give a first part of 1 char (offset=2), a
+      // second part, with part_start=3 (1 + 2), this run_start will
+      // be 0. Hence, the way we are computing the adjusted_start
+      // seems incorrect.
       unsigned adjusted_start =
-          start_index > run_start ? start_index - run_start : 0;
+          start_index > run_start
+              ? std::max(start_index, part_start) - run_start
+              : 0;
       unsigned adjusted_end = std::min(end_index, run_end) - run_start;
       DCHECK(adjusted_end > adjusted_start);
       unsigned part_characters = adjusted_end - adjusted_start;
@@ -591,7 +597,7 @@ void ShapeResultView::ComputePartInkBounds(
   auto glyph_offsets = part.GetGlyphOffsets<has_non_zero_glyph_offsets>();
   const SimpleFontData& current_font_data = *part.run_->font_data_;
   unsigned num_glyphs = part.NumGlyphs();
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   Vector<Glyph, 256> glyphs(num_glyphs);
   unsigned i = 0;
   for (const auto& glyph_data : part)
@@ -603,7 +609,7 @@ void ShapeResultView::ComputePartInkBounds(
   GlyphBoundsAccumulator bounds(run_advance);
   for (unsigned j = 0; j < num_glyphs; ++j) {
     const HarfBuzzRunGlyphData& glyph_data = part.GlyphAt(j);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     FloatRect glyph_bounds = current_font_data.BoundsForGlyph(glyph_data.glyph);
 #else
     FloatRect glyph_bounds(bounds_list[j]);

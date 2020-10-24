@@ -1,5 +1,4 @@
-# tags: [ Android Fuchsia IOS IOS12.2 IOS13.0 Linux Mac Mac10.10 Mac10.11 Mac10.12 Retina
-#         Mac10.13 Win Win7 Win10 ]
+# tags: [ Android Fuchsia Linux Mac Mac10.12 Mac10.13 Win Win7 Win10 ]
 # tags: [ Release Debug ]
 # results: [ Timeout Crash Pass Failure Slow Skip ]
 
@@ -10,8 +9,6 @@ http/tests/devtools/tracing/* [ Skip ]
 virtual/composite-after-paint/* [ Skip ]
 
 virtual/layout_ng_block_frag/* [ Skip ]
-virtual/layout_ng_fieldset/* [ Skip ]
-virtual/layout_ng_flex_box/* [ Skip ]
 virtual/layout_ng_fragment_traversal/* [ Skip ]
 virtual/prefer_compositing_to_lcd_text/compositing/overflow/* [ Skip ]
 virtual/stable/* [ Skip ]
@@ -21,9 +18,7 @@ virtual/exotic-color-space/images/* [ Skip ]
 virtual/gpu-rasterization/images/* [ Skip ]
 virtual/threaded/printing/* [ Skip ]
 virtual/threaded/http/tests/devtools/tracing/* [ Skip ]
-virtual/controls-refresh/* [ Skip ]
 virtual/controls-refresh-hc/* [ Skip ]
-virtual/web-components-v0-disabled/* [ Skip ]
 
 # They test Layer::ScrollsWithRespectTo() which is for pre-CompositeAfterPaint only.
 compositing/overflow/scrolls-with-respect-to-nested.html [ Skip ]
@@ -43,15 +38,6 @@ crbug.com/802915 css3/blending/isolation-should-include-non-local-background.htm
 crbug.com/918155 virtual/prefer_compositing_to_lcd_text/scrollbars/overlay-scrollbar-over-child-layer-nested-2.html [ Pass ]
 crbug.com/918155 virtual/prefer_compositing_to_lcd_text/scrollbars/overlay-scrollbar-over-child-layer-nested.html [ Pass ]
 paint/invalidation/compositing/subpixel-offset-scaled-transform-composited.html [ Pass ]
-crbug.com/957674 external/wpt/largest-contentful-paint/invisible-images-composited-2.html [ Pass ]
-crbug.com/957674 virtual/scalefactor200/external/wpt/largest-contentful-paint/invisible-images-composited-2.html [ Pass ]
-
-external/wpt/css/css-transforms/transform3d-backface-visibility-006.html [ Failure ]
-
-printing/fixed-positioned-headers-and-footers-absolute-covering-some-pages.html [ Failure ]
-printing/fixed-positioned-headers-and-footers-larger-than-page.html [ Failure ]
-
-transforms/3d/general/background-visibility-layers.html [ Failure ]
 
 # Raster invalidation doesn't work for huge layers.
 paint/invalidation/raster-under-invalidation-checking.html [ Failure ]
@@ -59,19 +45,23 @@ paint/invalidation/raster-under-invalidation-checking.html [ Failure ]
 # No composited scrolling for overflow:hidden (on marquee).
 compositing/overflow/do-not-repaint-if-scrolling-composited-layers.html [ Failure ]
 
-# Passes on bot, timeouts locally.
-virtual/threaded/fast/events/pinch/scroll-visual-viewport-send-boundary-events.html [ Pass Timeout ]
-
 paint/invalidation/media-audio-no-spurious-repaints.html [ Failure ]
 
-# Missing WheelEventHandler
-http/tests/devtools/layers/layer-scroll-rects-get.js [ Failure ]
-
-# Outline paints incorrectly with columns.
+# Outline paints incorrectly with columns. Needs LayoutNGBlockFragment.
 crbug.com/1047358 paint/pagination/composited-paginated-outlined-box.html [ Failure ]
 
-# Ad frame highlight size is incorrect
-crbug.com/1047359 http/tests/subresource_filter/ad-highlight-frame-resized.html [ Pass Failure ]
-
 compositing/gestures/gesture-tapHighlight-composited-img.html [ Pass Failure ]
-http/tests/images/image-decode-in-frame.html [ Pass Failure ]
+
+# CompositeAfterPaint positions and scales root scrollbars incorrectly when
+# a page scale factor is applied.
+crbug.com/1106550 virtual/threaded-prefer-compositing/fast/scrolling/scrollbars/mouse-scrolling-on-div-scrollbar-thumb-scaled.html [ Failure ]
+
+# Need to force the video to be composited in this case, or change pre-CAP
+# to match CAP behavior.
+crbug.com/1108972 fullscreen/compositor-touch-hit-rects-fullscreen-video-controls.html [ Failure ]
+
+# Cross-origin iframe layerization is buggy with empty iframes.
+crbug.com/1123189 virtual/threaded-composited-iframes/external/wpt/is-input-pending/security/cross-origin-subframe-masked-pointer-events-mixed-2.sub.html [ Failure ]
+crbug.com/1123189 virtual/threaded-composited-iframes/external/wpt/is-input-pending/security/cross-origin-subframe-complex-clip.sub.html [ Failure ]
+
+crbug.com/1124979 compositing/video/video-controls-layer-creation.html [ Pass Failure ]

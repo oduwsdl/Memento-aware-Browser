@@ -95,6 +95,8 @@ absl_cc_library(
 absl_cc_library(
   NAME
     flags_commandlineflag_internal
+  SRCS
+    "internal/commandlineflag.cc"
   HDRS
     "internal/commandlineflag.h"
   COPTS
@@ -163,6 +165,7 @@ absl_cc_library(
     absl::flags_config
     absl::strings
     absl::synchronization
+    absl::flat_hash_map
 )
 
 # Internal-only target, do not depend on directly.
@@ -180,6 +183,7 @@ absl_cc_library(
   DEPS
     absl::base
     absl::config
+    absl::flags_commandlineflag
     absl::flags_commandlineflag_internal
     absl::flags_config
     absl::flags_marshalling
@@ -405,9 +409,10 @@ absl_cc_test(
     absl::flags_commandlineflag_internal
     absl::flags
     absl::flags_reflection
+    absl::flags_usage
     absl::memory
     absl::strings
-    gtest_main
+    gmock_main
 )
 
 absl_cc_test(

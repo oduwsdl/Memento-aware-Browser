@@ -419,15 +419,35 @@ typedef struct macroblockd_plane {
 
 #define BLOCK_OFFSET(i) ((i) << 4)
 
+/*!\endcond */
+
+/*!\brief Parameters related to Wiener Filter */
 typedef struct {
+  /*!
+   * Vertical filter kernel.
+   */
   DECLARE_ALIGNED(16, InterpKernel, vfilter);
+
+  /*!
+   * Horizontal filter kernel.
+   */
   DECLARE_ALIGNED(16, InterpKernel, hfilter);
 } WienerInfo;
 
+/*!\brief Parameters related to Sgrproj Filter */
 typedef struct {
+  /*!
+   * Parameter index.
+   */
   int ep;
+
+  /*!
+   * Weights for linear combination of filtered versions
+   */
   int xqd[2];
 } SgrprojInfo;
+
+/*!\cond */
 
 #if CONFIG_DEBUG
 #define CFL_SUB8X8_VAL_MI_SIZE (4)
@@ -1038,12 +1058,12 @@ static INLINE int av1_raster_order_to_block_index(TX_SIZE tx_size,
 static INLINE TX_TYPE get_default_tx_type(PLANE_TYPE plane_type,
                                           const MACROBLOCKD *xd,
                                           TX_SIZE tx_size,
-                                          int is_screen_content_type) {
+                                          int use_screen_content_tools) {
   const MB_MODE_INFO *const mbmi = xd->mi[0];
 
   if (is_inter_block(mbmi) || plane_type != PLANE_TYPE_Y ||
       xd->lossless[mbmi->segment_id] || tx_size >= TX_32X32 ||
-      is_screen_content_type)
+      use_screen_content_tools)
     return DCT_DCT;
 
   return intra_mode_to_tx_type(mbmi, plane_type);

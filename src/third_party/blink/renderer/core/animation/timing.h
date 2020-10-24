@@ -59,7 +59,7 @@ struct CORE_EXPORT Timing {
   };
   // Represents the animation direction from the Web Animations spec, see
   // https://drafts.csswg.org/web-animations-1/#animation-direction.
-  enum AnimationDirection {
+  enum class AnimationDirection {
     kForwards,
     kBackwards,
   };
@@ -82,7 +82,6 @@ struct CORE_EXPORT Timing {
   using FillMode = CompositorKeyframeModel::FillMode;
   using PlaybackDirection = CompositorKeyframeModel::Direction;
 
-  static bool IsNull(double value) { return std::isnan(value); }
   static double NullValue() { return std::numeric_limits<double>::quiet_NaN(); }
 
   static String FillModeString(FillMode);

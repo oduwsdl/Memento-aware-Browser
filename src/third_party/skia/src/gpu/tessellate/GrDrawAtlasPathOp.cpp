@@ -85,26 +85,22 @@ class DrawAtlasPathShader::Impl : public GrGLSLGeometryProcessor {
 
         gpArgs->fPositionVar.set(kFloat2_GrSLType, "devcoord");
 
-        GrShaderVar localCoord = gpArgs->fPositionVar;
         if (shader.fUsesLocalCoords) {
             args.fVertBuilder->codeAppendf(R"(
                     float2x2 M = float2x2(viewmatrix_scaleskew);
                     float2 localcoord = inverse(M) * (devcoord - viewmatrix_trans);)");
-            localCoord.set(kFloat2_GrSLType, "localcoord");
+            gpArgs->fLocalCoordVar.set(kFloat2_GrSLType, "localcoord");
         }
-        this->emitTransforms(args.fVertBuilder, args.fVaryingHandler, args.fUniformHandler,
-                             localCoord, args.fFPCoordTransformHandler);
 
         args.fFragBuilder->codeAppendf("%s = ", args.fOutputCoverage);
         args.fFragBuilder->appendTextureLookup(args.fTexSamplers[0], atlasCoord.fsIn());
         args.fFragBuilder->codeAppendf(".aaaa;");
     }
 
-    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& primProc,
-                 const CoordTransformRange& transformRange) override {
+    void setData(const GrGLSLProgramDataManager& pdman,
+                 const GrPrimitiveProcessor& primProc) override {
         const SkISize& dimensions = primProc.cast<DrawAtlasPathShader>().fAtlasDimensions;
         pdman.set2f(fAtlasAdjustUniform, 1.f / dimensions.width(), 1.f / dimensions.height());
-        this->setTransformDataHelper(SkMatrix::I(), pdman, transformRange);
     }
 
     GrGLSLUniformHandler::UniformHandle fAtlasAdjustUniform;
@@ -148,8 +144,8 @@ GrOp::CombineResult GrDrawAtlasPathOp::onCombineIfPossible(
 void GrDrawAtlasPathOp::onPrePrepare(GrRecordingContext*,
                                      const GrSurfaceProxyView* writeView,
                                      GrAppliedClip*,
-                                     const GrXferProcessor::DstProxyView&) {
-}
+                                     const GrXferProcessor::DstProxyView&,
+                                     GrXferBarrierFlags renderPassXferBarriers) {}
 
 void GrDrawAtlasPathOp::onPrepare(GrOpFlushState* state) {
     size_t instanceStride = Instance::Stride(fUsesLocalCoords);
@@ -184,10 +180,11 @@ void GrDrawAtlasPathOp::onExecute(GrOpFlushState* state, const SkRect& chainBoun
 
     GrProgramInfo programInfo(state->proxy()->numSamples(), state->proxy()->numStencilSamples(),
                               state->proxy()->backendFormat(), state->writeView()->origin(),
-                              &pipeline, &shader, GrPrimitiveType::kTriangleStrip);
+                              &pipeline, &GrUserStencilSettings::kUnused, &shader,
+                              GrPrimitiveType::kTriangleStrip, 0, state->renderPassBarriers());
 
     state->bindPipelineAndScissorClip(programInfo, this->bounds());
     state->bindTextures(shader, *fAtlasProxy, pipeline);
-    state->bindBuffers(nullptr, fInstanceBuffer.get(), nullptr);
+    state->bindBuffers(nullptr, std::move(fInstanceBuffer), nullptr);
     state->drawInstanced(fInstanceCount, fBaseInstance, 4, 0);
 }

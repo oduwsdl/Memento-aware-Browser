@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
@@ -38,6 +39,7 @@
 #include "third_party/blink/renderer/core/feature_policy/iframe_policy.h"
 #include "third_party/blink/renderer/core/fetch/trust_token_issuance_authorization.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/sandbox_flags.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/trust_token_attribute_parsing.h"
@@ -94,9 +96,9 @@ DOMTokenList* HTMLIFrameElement::sandbox() const {
 }
 
 DOMFeaturePolicy* HTMLIFrameElement::featurePolicy() {
-  if (!policy_) {
+  if (!policy_ && GetExecutionContext()) {
     policy_ = MakeGarbageCollected<IFramePolicy>(
-        &GetDocument(), GetFramePolicy().container_policy,
+        GetExecutionContext(), GetFramePolicy().container_policy,
         GetOriginForFeaturePolicy());
   }
   return policy_.Get();
@@ -138,7 +140,6 @@ void HTMLIFrameElement::CollectStyleForPresentationAttribute(
 
 void HTMLIFrameElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  DVLOG(0) << "HTMLIFrameElement::ParseAttribute";
   const QualifiedName& name = params.name;
   const AtomicString& value = params.new_value;
   if (name == html_names::kNameAttr) {
@@ -232,19 +233,35 @@ void HTMLIFrameElement::ParseAttribute(
       UpdateContainerPolicy();
     }
   } else if (name == html_names::kCspAttr) {
-    if (!ContentSecurityPolicy::IsValidCSPAttr(
-            value.GetString(), GetDocument().RequiredCSP().GetString())) {
-      required_csp_ = g_null_atom;
-      GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-          mojom::ConsoleMessageSource::kOther,
-          mojom::ConsoleMessageLevel::kError,
-          "'csp' attribute is not a valid policy: " + value));
-      return;
-    }
-    if (required_csp_ != value) {
-      required_csp_ = value;
-      FrameOwnerPropertiesChanged();
-      UseCounter::Count(GetDocument(), WebFeature::kIFrameCSPAttribute);
+    if (base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE)) {
+      if (value.Contains('\n') || value.Contains('\r') || value.Contains(',')) {
+        required_csp_ = g_null_atom;
+        GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kOther,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "'csp' attribute is invalid: " + value));
+        return;
+      }
+      if (required_csp_ != value) {
+        required_csp_ = value;
+        CSPAttributeChanged();
+        UseCounter::Count(GetDocument(), WebFeature::kIFrameCSPAttribute);
+      }
+    } else {
+      if (!ContentSecurityPolicy::IsValidCSPAttr(
+              value.GetString(), GetDocument().RequiredCSP().GetString())) {
+        required_csp_ = g_null_atom;
+        GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kOther,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "'csp' attribute is not a valid policy: " + value));
+        return;
+      }
+      if (required_csp_ != value) {
+        required_csp_ = value;
+        FrameOwnerPropertiesChanged();
+        UseCounter::Count(GetDocument(), WebFeature::kIFrameCSPAttribute);
+      }
     }
   } else if (name == html_names::kAllowAttr) {
     if (allow_ != value) {
@@ -253,6 +270,11 @@ void HTMLIFrameElement::ParseAttribute(
       if (!value.IsEmpty()) {
         UseCounter::Count(GetDocument(),
                           WebFeature::kFeaturePolicyAllowAttribute);
+      }
+      if (value.Contains(',')) {
+        Deprecation::CountDeprecation(
+            GetDocument().GetExecutionContext(),
+            WebFeature::kCommaSeparatorInAllowAttribute);
       }
     }
   } else if (name == html_names::kDisallowdocumentaccessAttr &&
@@ -294,9 +316,9 @@ void HTMLIFrameElement::ParseAttribute(
   }
 }
 
-DocumentPolicy::FeatureState HTMLIFrameElement::ConstructRequiredPolicy()
-    const {
-  if (!RuntimeEnabledFeatures::DocumentPolicyEnabled(&GetDocument()))
+DocumentPolicyFeatureState HTMLIFrameElement::ConstructRequiredPolicy() const {
+  if (!RuntimeEnabledFeatures::DocumentPolicyNegotiationEnabled(
+          GetExecutionContext()))
     return {};
 
   if (!required_policy_.IsEmpty()) {
@@ -334,15 +356,18 @@ DocumentPolicy::FeatureState HTMLIFrameElement::ConstructRequiredPolicy()
 }
 
 ParsedFeaturePolicy HTMLIFrameElement::ConstructContainerPolicy() const {
+  if (!GetExecutionContext())
+    return ParsedFeaturePolicy();
+
   scoped_refptr<const SecurityOrigin> src_origin = GetOriginForFeaturePolicy();
   scoped_refptr<const SecurityOrigin> self_origin =
-      GetDocument().GetSecurityOrigin();
+      GetExecutionContext()->GetSecurityOrigin();
 
   PolicyParserMessageBuffer logger;
 
   // Start with the allow attribute
   ParsedFeaturePolicy container_policy = FeaturePolicyParser::ParseAttribute(
-      allow_, self_origin, src_origin, logger, &GetDocument());
+      allow_, self_origin, src_origin, logger, GetExecutionContext());
 
   // Next, process sandbox flags. These all only take effect if a corresponding
   // policy does *not* exist in the allow attribute's value.
@@ -426,7 +451,8 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
   auto* html_doc = DynamicTo<HTMLDocument>(GetDocument());
   if (html_doc && insertion_point.IsInDocumentTree()) {
     html_doc->AddNamedItem(name_);
-    if (!ContentSecurityPolicy::IsValidCSPAttr(
+    if (!base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE) &&
+        !ContentSecurityPolicy::IsValidCSPAttr(
             required_csp_, GetDocument().RequiredCSP().GetString())) {
       if (!required_csp_.IsEmpty()) {
         GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(

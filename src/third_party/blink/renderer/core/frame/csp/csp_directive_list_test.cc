@@ -248,7 +248,7 @@ TEST_F(CSPDirectiveListTest, AllowFromSourceWithNonce) {
       {"https://example.com", "https://not.example.com/file", "boo", false},
       {"https://example.com", "https://not.example.com/file", "", false},
 
-      // Doesn't affect URLs that match the whitelist.
+      // Doesn't affect URLs that match the allowlist.
       {"https://example.com 'nonce-yay'", "https://example.com/file", "yay",
        true},
       {"https://example.com 'nonce-yay'", "https://example.com/file", "boo",
@@ -363,7 +363,7 @@ TEST_F(CSPDirectiveListTest, AllowScriptFromSourceWithHash) {
        false},
       {"https://example.com", "https://not.example.com/file", "", false},
 
-      // Doesn't affect URLs that match the whitelist.
+      // Doesn't affect URLs that match the allowlist.
       {"https://example.com 'sha256-yay'", "https://example.com/file",
        "sha256-yay", true},
       {"https://example.com 'sha256-yay'", "https://example.com/file",
@@ -371,7 +371,7 @@ TEST_F(CSPDirectiveListTest, AllowScriptFromSourceWithHash) {
       {"https://example.com 'sha256-yay'", "https://example.com/file", "",
        true},
 
-      // Does affect URLs that don't match the whitelist.
+      // Does affect URLs that don't match the allowlist.
       {"https://example.com 'sha256-yay'", "https://not.example.com/file",
        "sha256-yay", true},
       {"https://example.com 'sha256-yay'", "https://not.example.com/file",
@@ -393,7 +393,7 @@ TEST_F(CSPDirectiveListTest, AllowScriptFromSourceWithHash) {
       // But they also don't interfere.
       {"'sha256-yay'", "https://a.com/file", "sha256-yay asdf256-boo", true},
 
-      // Additional whitelisted hashes in the CSP don't interfere.
+      // Additional allowlisted hashes in the CSP don't interfere.
       {"'sha256-yay' 'sha384-boo'", "https://a.com/file", "sha256-yay", true},
       {"'sha256-yay' 'sha384-boo'", "https://a.com/file", "sha384-boo", true},
 
@@ -542,7 +542,7 @@ TEST_F(CSPDirectiveListTest, WorkerSrcChildSrcFallback) {
 
 TEST_F(CSPDirectiveListTest, SubsumesBasedOnCSPSourcesOnly) {
   CSPDirectiveList* a = CreateList(
-      "script-src http://*.one.com; img-src https://one.com "
+      "script-src http://*.one.com; img-src https://sub.one.com "
       "http://two.com/imgs/",
       ContentSecurityPolicyType::kEnforce);
 
@@ -556,49 +556,53 @@ TEST_F(CSPDirectiveListTest, SubsumesBasedOnCSPSourcesOnly) {
       {{"script-src http://example.com"}, false, false},
       {{"img-src http://example.com"}, false, false},
       {{"script-src http://*.one.com"}, false, true},
-      {{"img-src https://one.com http://two.com/imgs/"}, false, true},
+      {{"img-src https://sub.one.com http://two.com/imgs/"}, false, true},
       {{"default-src http://example.com"}, false, false},
-      {{"default-src https://one.com http://two.com/imgs/"}, false, false},
-      {{"default-src http://one.com"}, false, false},
+      {{"default-src https://sub.one.com http://two.com/imgs/"}, false, false},
+      {{"default-src http://sub.one.com"}, false, false},
       {{"script-src http://*.one.com; img-src http://two.com/"}, false, false},
-      {{"script-src http://*.one.com", "img-src http://one.com"}, false, true},
+      {{"script-src http://*.one.com", "img-src http://sub.one.com"},
+       false,
+       true},
       {{"script-src http://*.one.com", "script-src https://two.com"},
        false,
        true},
       {{"script-src http://*.random.com", "script-src https://random.com"},
        false,
        false},
-      {{"script-src http://one.com", "script-src https://random.com"},
+      {{"script-src http://sub.one.com", "script-src https://random.com"},
        false,
        false},
-      {{"script-src http://*.random.com; default-src http://one.com "
+      {{"script-src http://*.random.com; default-src http://sub.one.com "
         "http://two.com/imgs/",
-        "default-src https://random.com"},
+        "default-src https://sub.random.com"},
        false,
        false},
       // `listB`, which is as restrictive as `A`, is subsumed.
-      {{"default-src https://one.com"}, true, false},
+      {{"default-src https://sub.one.com"}, true, false},
       {{"default-src http://random.com",
         "default-src https://non-random.com:*"},
        true,
        false},
-      {{"script-src http://*.one.com; img-src https://one.com"}, true, false},
-      {{"script-src http://*.one.com; img-src https://one.com "
+      {{"script-src http://*.one.com; img-src https://sub.one.com"},
+       true,
+       false},
+      {{"script-src http://*.one.com; img-src https://sub.one.com "
         "http://two.com/imgs/"},
        true,
        true},
       {{"script-src http://*.one.com",
-        "img-src https://one.com http://two.com/imgs/"},
+        "img-src https://sub.one.com http://two.com/imgs/"},
        true,
        true},
-      {{"script-src http://*.random.com; default-src https://one.com "
+      {{"script-src http://*.random.com; default-src https://sub.one.com "
         "http://two.com/imgs/",
         "default-src https://else.com"},
        true,
        false},
-      {{"script-src http://*.random.com; default-src https://one.com "
+      {{"script-src http://*.random.com; default-src https://sub.one.com "
         "http://two.com/imgs/",
-        "default-src https://one.com"},
+        "default-src https://sub.one.com"},
        true,
        false},
   };

@@ -55,6 +55,7 @@ if (!build_with_chromium) {
       "audio:audio_mixer_api",
       "audio_codecs:audio_codecs_api",
       "task_queue:default_task_queue_factory",
+      "transport:field_trial_based_config",
       "video_codecs:video_codecs_api",
     ]
   }
@@ -68,7 +69,6 @@ rtc_library("rtp_headers") {
   ]
   deps = [
     ":array_view",
-    "..:webrtc_common",
     "units:timestamp",
     "video:video_rtp_headers",
   ]
@@ -87,7 +87,6 @@ rtc_library("rtp_packet_info") {
     ":refcountedbase",
     ":rtp_headers",
     ":scoped_refptr",
-    "..:webrtc_common",
     "../rtc_base:rtc_base_approved",
     "../rtc_base/system:rtc_export",
   ]
@@ -99,6 +98,7 @@ rtc_library("media_stream_interface") {
   sources = [
     "media_stream_interface.cc",
     "media_stream_interface.h",
+    "media_stream_track.h",
     "notifier.h",
   ]
   deps = [
@@ -149,6 +149,7 @@ rtc_library("libjingle_peerconnection_api") {
     "rtp_transceiver_interface.h",
     "sctp_transport_interface.cc",
     "sctp_transport_interface.h",
+    "set_local_description_observer_interface.h",
     "set_remote_description_observer_interface.h",
     "stats_types.cc",
     "stats_types.h",
@@ -185,6 +186,7 @@ rtc_library("libjingle_peerconnection_api") {
     "transport:bitrate_settings",
     "transport:enums",
     "transport:network_control",
+    "transport:sctp_transport_factory_interface",
     "transport:webrtc_key_value_config",
     "transport/rtp:rtp_source",
     "units:data_rate",
@@ -196,7 +198,6 @@ rtc_library("libjingle_peerconnection_api") {
     # Basically, don't add stuff here. You might break sensitive downstream
     # targets like pnacl. API should not depend on anything outside of this
     # file, really. All these should arguably go away in time.
-    "..:webrtc_common",
     "../media:rtc_media_base",
     "../media:rtc_media_config",
     "../modules/audio_processing:audio_processing_statistics",
@@ -296,9 +297,10 @@ rtc_source_set("video_quality_analyzer_api") {
   ]
 }
 
-rtc_source_set("track_id_stream_label_map") {
+rtc_source_set("track_id_stream_info_map") {
   visibility = [ "*" ]
-  sources = [ "test/track_id_stream_label_map.h" ]
+  sources = [ "test/track_id_stream_info_map.h" ]
+  absl_deps = [ "//third_party/abseil-cpp/absl/strings" ]
 }
 
 rtc_source_set("rtp_transceiver_direction") {
@@ -345,7 +347,7 @@ rtc_source_set("audio_quality_analyzer_api") {
 
   deps = [
     ":stats_observer_interface",
-    ":track_id_stream_label_map",
+    ":track_id_stream_info_map",
   ]
 }
 
@@ -377,6 +379,7 @@ rtc_source_set("peer_connection_quality_test_fixture_api") {
     ":rtp_parameters",
     ":simulated_network_api",
     ":stats_observer_interface",
+    ":track_id_stream_info_map",
     ":video_quality_analyzer_api",
     "../media:rtc_media_base",
     "../rtc_base:rtc_base",
@@ -397,7 +400,10 @@ rtc_source_set("peer_connection_quality_test_fixture_api") {
 rtc_source_set("frame_generator_api") {
   visibility = [ "*" ]
   testonly = true
-  sources = [ "test/frame_generator_interface.h" ]
+  sources = [
+    "test/frame_generator_interface.cc",
+    "test/frame_generator_interface.h",
+  ]
 
   deps = [
     ":scoped_refptr",
@@ -462,6 +468,7 @@ if (rtc_include_tests) {
     deps = [
       ":audio_quality_analyzer_api",
       ":peer_connection_quality_test_fixture_api",
+      ":time_controller",
       ":video_quality_analyzer_api",
       "../test/pc/e2e:peerconnection_quality_test",
     ]
@@ -576,10 +583,7 @@ rtc_source_set("bitrate_allocation") {
 rtc_source_set("simulated_network_api") {
   visibility = [ "*" ]
   sources = [ "test/simulated_network.h" ]
-  deps = [
-    "../rtc_base",
-    "../rtc_base:criticalsection",
-  ]
+  deps = [ "../rtc_base" ]
   absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
 }
 
@@ -591,6 +595,7 @@ rtc_source_set("network_emulation_manager_api") {
     "test/network_emulation_manager.h",
   ]
   deps = [
+    ":array_view",
     ":simulated_network_api",
     ":time_controller",
     "../call:simulated_network",
@@ -753,7 +758,7 @@ if (rtc_include_tests) {
       "test/videocodec_test_stats.h",
     ]
     deps = [
-      "..:webrtc_common",
+      "../media:rtc_h264_profile_id",
       "../modules/video_coding:video_codec_interface",
       "../rtc_base:stringutils",
       "video:video_frame_type",
@@ -827,7 +832,6 @@ if (rtc_include_tests) {
       ":array_view",
       ":libjingle_peerconnection_api",
       ":rtp_parameters",
-      "..:webrtc_common",
       "../rtc_base:checks",
       "../rtc_base:rtc_base_approved",
       "crypto:frame_encryptor_interface",
@@ -844,7 +848,6 @@ if (rtc_include_tests) {
       ":array_view",
       ":libjingle_peerconnection_api",
       ":rtp_parameters",
-      "..:webrtc_common",
       "../rtc_base:checks",
       "../rtc_base:rtc_base_approved",
       "crypto:frame_decryptor_interface",

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
@@ -27,6 +28,7 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_object.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_position.h"
 #include "third_party/blink/renderer/modules/accessibility/testing/accessibility_selection_test.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -82,10 +84,11 @@ TEST_F(AccessibilitySelectionTest, FromCurrentSelection) {
 
   EXPECT_EQ(
       "++<GenericContainer>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: Hel^lo.>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: How are you?>\n|",
+      "++++<GenericContainer>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: Hel^lo.>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: How are you?>\n|",
       GetSelectionText(ax_selection));
 }
 
@@ -104,20 +107,24 @@ TEST_F(AccessibilitySelectionTest, FromCurrentSelectionSelectAll) {
   ASSERT_TRUE(ax_selection.IsValid());
 
   ASSERT_FALSE(ax_selection.Base().IsTextPosition());
-  EXPECT_EQ(GetAXRootObject(), ax_selection.Base().ContainerObject());
+
+  AXObject* html_object = GetAXRootObject()->ChildAtIncludingIgnored(0);
+  ASSERT_NE(nullptr, html_object);
+  EXPECT_EQ(html_object, ax_selection.Base().ContainerObject());
   EXPECT_EQ(0, ax_selection.Base().ChildIndex());
 
   ASSERT_FALSE(ax_selection.Extent().IsTextPosition());
-  EXPECT_EQ(GetAXRootObject(), ax_selection.Extent().ContainerObject());
-  EXPECT_EQ(GetAXRootObject()->ChildCountIncludingIgnored(),
+  EXPECT_EQ(html_object, ax_selection.Extent().ContainerObject());
+  EXPECT_EQ(html_object->ChildCountIncludingIgnored(),
             ax_selection.Extent().ChildIndex());
 
   EXPECT_EQ(
-      "^++<GenericContainer>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: Hello.>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: How are you?>\n|",
+      "++<GenericContainer>\n"
+      "^++++<GenericContainer>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: Hello.>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: How are you?>\n|",
       GetSelectionText(ax_selection));
 }
 
@@ -199,10 +206,11 @@ TEST_F(AccessibilitySelectionTest, CancelSelect) {
   EXPECT_FALSE(Selection().GetSelectionInDOMTree().IsNone());
   EXPECT_EQ(
       "++<GenericContainer>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: Hel^lo.>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: How are you?>\n|",
+      "++++<GenericContainer>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: Hel^lo.>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: How are you?>\n|",
       GetSelectionText(AXSelection::FromCurrentSelection(GetDocument())));
 }
 
@@ -259,8 +267,9 @@ TEST_F(AccessibilitySelectionTest, SetSelectionInText) {
   EXPECT_EQ(5, dom_selection.Extent().OffsetInContainerNode());
   EXPECT_EQ(
       "++<GenericContainer>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: Hel^lo|>\n",
+      "++++<GenericContainer>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: Hel^lo|>\n",
       GetSelectionText(ax_selection));
 }
 
@@ -290,8 +299,9 @@ TEST_F(AccessibilitySelectionTest, SetSelectionInTextWithWhiteSpace) {
   EXPECT_EQ(10, dom_selection.Extent().OffsetInContainerNode());
   EXPECT_EQ(
       "++<GenericContainer>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: Hel^lo|>\n",
+      "++++<GenericContainer>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: Hel^lo|>\n",
       GetSelectionText(ax_selection));
 }
 
@@ -334,10 +344,11 @@ TEST_F(AccessibilitySelectionTest, SetSelectionAcrossLineBreak) {
   // selection focus marker '|' should be after it.
   EXPECT_EQ(
       "++<GenericContainer>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: Hello>\n"
-      "^++++++<LineBreak: \n>\n"
-      "|++++++<StaticText: |How are you.>\n",
+      "++++<GenericContainer>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: Hello>\n"
+      "^++++++++<LineBreak: \n>\n"
+      "|++++++++<StaticText: |How are you.>\n",
       GetSelectionText(ax_selection));
 }
 
@@ -382,10 +393,11 @@ TEST_F(AccessibilitySelectionTest, SetSelectionAcrossLineBreakInEditableText) {
   // selection focus marker '|' should be after it.
   EXPECT_EQ(
       "++<GenericContainer>\n"
-      "++++<Paragraph>\n"
-      "++++++<StaticText: Hello>\n"
-      "^++++++<LineBreak: \n>\n"
-      "|++++++<StaticText: |How are you.>\n",
+      "++++<GenericContainer>\n"
+      "++++++<Paragraph>\n"
+      "++++++++<StaticText: Hello>\n"
+      "^++++++++<LineBreak: \n>\n"
+      "|++++++++<StaticText: |How are you.>\n",
       GetSelectionText(ax_selection));
 }
 
@@ -475,15 +487,16 @@ TEST_F(AccessibilitySelectionTest, SetSelectionInDisplayNone) {
   // to DOM selections.
   const std::string selection_text(
       "++<GenericContainer>\n"
-      "++++<Main>\n"
-      "++++++<Paragraph>\n"
-      "++++++++<StaticText: Before display:none.>\n"
-      "++++++<Paragraph: Display:none 1.>\n"
-      "^++++++<Paragraph>\n"
-      "++++++++<StaticText: In between two display:none elements.>\n"
-      "++++++<Paragraph: Display:none 2.>\n"
-      "|++++++<Paragraph>\n"
-      "++++++++<StaticText: After display:none.>\n");
+      "++++<GenericContainer>\n"
+      "++++++<Main>\n"
+      "++++++++<Paragraph>\n"
+      "++++++++++<StaticText: Before display:none.>\n"
+      "++++++++<Paragraph>\n"
+      "^++++++++<Paragraph>\n"
+      "++++++++++<StaticText: In between two display:none elements.>\n"
+      "++++++++<Paragraph>\n"
+      "|++++++++<Paragraph>\n"
+      "++++++++++<StaticText: After display:none.>\n");
   EXPECT_EQ(selection_text, GetSelectionText(ax_selection_shrink));
   EXPECT_EQ(selection_text, GetSelectionText(ax_selection_extend));
 }
@@ -571,27 +584,29 @@ TEST_P(ParameterizedAccessibilitySelectionTest, SetSelectionAroundListBullet) {
   if (LayoutNGEnabled()) {
     expectations =
         "++<GenericContainer>\n"
-        "++++<Main>\n"
-        "++++++<List>\n"
-        "++++++++<ListItem>\n"
-        "++++++++++<ListMarker: \xE2\x80\xA2 >\n"
-        "^++++++++++++<StaticText: ^\xE2\x80\xA2 >\n"
-        "++++++++++<StaticText: Item 1.>\n"
-        "++++++++<ListItem>\n"
-        "++++++++++<ListMarker: \xE2\x80\xA2 >\n"
-        "++++++++++++<StaticText: \xE2\x80\xA2 >\n"
-        "++++++++++<StaticText: Item 2.|>\n";
+        "++++<GenericContainer>\n"
+        "++++++<Main>\n"
+        "++++++++<List>\n"
+        "++++++++++<ListItem>\n"
+        "++++++++++++<ListMarker: \xE2\x80\xA2 >\n"
+        "^++++++++++++++<StaticText: ^\xE2\x80\xA2 >\n"
+        "++++++++++++<StaticText: Item 1.>\n"
+        "++++++++++<ListItem>\n"
+        "++++++++++++<ListMarker: \xE2\x80\xA2 >\n"
+        "++++++++++++++<StaticText: \xE2\x80\xA2 >\n"
+        "++++++++++++<StaticText: Item 2.|>\n";
   } else {
     expectations =
         "++<GenericContainer>\n"
-        "++++<Main>\n"
-        "++++++<List>\n"
-        "++++++++<ListItem>\n"
-        "++++++++++<ListMarker: \xE2\x80\xA2 >\n"
-        "^++++++++++<StaticText: Item 1.>\n"
-        "++++++++<ListItem>\n"
-        "++++++++++<ListMarker: \xE2\x80\xA2 >\n"
-        "++++++++++<StaticText: Item 2.|>\n";
+        "++++<GenericContainer>\n"
+        "++++++<Main>\n"
+        "++++++++<List>\n"
+        "++++++++++<ListItem>\n"
+        "++++++++++++<ListMarker: \xE2\x80\xA2 >\n"
+        "^++++++++++++<StaticText: Item 1.>\n"
+        "++++++++++<ListItem>\n"
+        "++++++++++++<ListMarker: \xE2\x80\xA2 >\n"
+        "++++++++++++<StaticText: Item 2.|>\n";
   }
 
   // The |AXSelection| should remain unaffected by any shrinking and should
@@ -746,6 +761,9 @@ TEST_F(AccessibilitySelectionTest, FromCurrentSelectionInTextareaWithAffinity) {
 
 TEST_F(AccessibilitySelectionTest,
        FromCurrentSelectionInTextareaWithCollapsedSelectionAndAffinity) {
+  // TODO(crbug.com/1140302): This test fails with LayoutNGTextArea.
+  ScopedLayoutNGTextAreaForTest scope(false);
+
   SetBodyInnerHTML(R"HTML(
       <textarea id="textarea"
           rows="2" cols="15"
@@ -1059,6 +1077,12 @@ TEST_F(AccessibilitySelectionTest, ForwardSelectionInTextField) {
   EXPECT_EQ(0u, ToTextControl(*input).selectionStart());
   EXPECT_EQ(18u, ToTextControl(*input).selectionEnd());
   EXPECT_EQ("forward", ToTextControl(*input).selectionDirection());
+
+  // Ensure that the selection that was just set could be successfully
+  // retrieved.
+  const auto ax_current_selection =
+      AXSelection::FromCurrentSelection(ToTextControl(*input));
+  EXPECT_EQ(ax_selection, ax_current_selection);
 }
 
 TEST_F(AccessibilitySelectionTest, BackwardSelectionInTextField) {
@@ -1088,6 +1112,12 @@ TEST_F(AccessibilitySelectionTest, BackwardSelectionInTextField) {
   EXPECT_EQ(3u, ToTextControl(*input).selectionStart());
   EXPECT_EQ(10u, ToTextControl(*input).selectionEnd());
   EXPECT_EQ("backward", ToTextControl(*input).selectionDirection());
+
+  // Ensure that the selection that was just set could be successfully
+  // retrieved.
+  const auto ax_current_selection =
+      AXSelection::FromCurrentSelection(ToTextControl(*input));
+  EXPECT_EQ(ax_selection, ax_current_selection);
 }
 
 TEST_F(AccessibilitySelectionTest, SelectingTheWholeOfTheTextField) {
@@ -1358,6 +1388,12 @@ TEST_F(AccessibilitySelectionTest, ForwardSelectionInTextarea) {
   EXPECT_EQ(0u, ToTextControl(*textarea).selectionStart());
   EXPECT_EQ(53u, ToTextControl(*textarea).selectionEnd());
   EXPECT_EQ("forward", ToTextControl(*textarea).selectionDirection());
+
+  // Ensure that the selection that was just set could be successfully
+  // retrieved.
+  const auto ax_current_selection =
+      AXSelection::FromCurrentSelection(ToTextControl(*textarea));
+  EXPECT_EQ(ax_selection, ax_current_selection);
 }
 
 TEST_F(AccessibilitySelectionTest, BackwardSelectionInTextarea) {
@@ -1391,6 +1427,12 @@ TEST_F(AccessibilitySelectionTest, BackwardSelectionInTextarea) {
   EXPECT_EQ(3u, ToTextControl(*textarea).selectionStart());
   EXPECT_EQ(10u, ToTextControl(*textarea).selectionEnd());
   EXPECT_EQ("backward", ToTextControl(*textarea).selectionDirection());
+
+  // Ensure that the selection that was just set could be successfully
+  // retrieved.
+  const auto ax_current_selection =
+      AXSelection::FromCurrentSelection(ToTextControl(*textarea));
+  EXPECT_EQ(ax_selection, ax_current_selection);
 }
 
 TEST_F(AccessibilitySelectionTest, SelectTheWholeOfTheTextarea) {

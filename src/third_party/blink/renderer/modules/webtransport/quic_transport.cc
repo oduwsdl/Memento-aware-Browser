@@ -17,8 +17,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_array_buffer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_array_buffer_view.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_quic_transport_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_dtls_fingerprint.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/readable_stream_default_controller_with_script_scope.h"
 #include "third_party/blink/renderer/core/streams/underlying_sink_base.h"
@@ -36,6 +39,7 @@
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
@@ -340,11 +344,14 @@ class QuicTransport::BidirectionalStreamVendor final
 
 QuicTransport* QuicTransport::Create(ScriptState* script_state,
                                      const String& url,
+                                     QuicTransportOptions* options,
                                      ExceptionState& exception_state) {
   DVLOG(1) << "QuicTransport::Create() url=" << url;
+  DCHECK(options);
+  ExecutionContext::From(script_state)->CountUse(WebFeature::kQuicTransport);
   auto* transport =
       MakeGarbageCollected<QuicTransport>(PassKey(), script_state, url);
-  transport->Init(url, exception_state);
+  transport->Init(url, *options, exception_state);
   return transport;
 }
 
@@ -367,6 +374,7 @@ ScriptPromise QuicTransport::createSendStream(ScriptState* script_state,
                                               ExceptionState& exception_state) {
   DVLOG(1) << "QuicTransport::createSendStream() this=" << this;
 
+  GetExecutionContext()->CountUse(WebFeature::kQuicTransportStreamApis);
   if (!quic_transport_.is_bound()) {
     // TODO(ricea): Should we wait if we're still connecting?
     exception_state.ThrowDOMException(DOMExceptionCode::kNetworkError,
@@ -393,11 +401,17 @@ ScriptPromise QuicTransport::createSendStream(ScriptState* script_state,
   return resolver->Promise();
 }
 
+ReadableStream* QuicTransport::receiveStreams() {
+  GetExecutionContext()->CountUse(WebFeature::kQuicTransportStreamApis);
+  return received_streams_;
+}
+
 ScriptPromise QuicTransport::createBidirectionalStream(
     ScriptState* script_state,
     ExceptionState& exception_state) {
   DVLOG(1) << "QuicTransport::createBidirectionalStream() this=" << this;
 
+  GetExecutionContext()->CountUse(WebFeature::kQuicTransportStreamApis);
   if (!quic_transport_.is_bound()) {
     // TODO(ricea): We should wait if we are still connecting.
     exception_state.ThrowDOMException(DOMExceptionCode::kNetworkError,
@@ -435,6 +449,21 @@ ScriptPromise QuicTransport::createBidirectionalStream(
                 std::move(outgoing_producer), std::move(incoming_consumer)));
 
   return resolver->Promise();
+}
+
+ReadableStream* QuicTransport::receiveBidirectionalStreams() {
+  GetExecutionContext()->CountUse(WebFeature::kQuicTransportStreamApis);
+  return received_bidirectional_streams_;
+}
+
+WritableStream* QuicTransport::sendDatagrams() {
+  GetExecutionContext()->CountUse(WebFeature::kQuicTransportDatagramApis);
+  return outgoing_datagrams_;
+}
+
+ReadableStream* QuicTransport::receiveDatagrams() {
+  GetExecutionContext()->CountUse(WebFeature::kQuicTransportDatagramApis);
+  return received_datagrams_;
 }
 
 void QuicTransport::close(const WebTransportCloseInfo* close_info) {
@@ -596,7 +625,9 @@ void QuicTransport::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
 }
 
-void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
+void QuicTransport::Init(const String& url,
+                         const QuicTransportOptions& options,
+                         ExceptionState& exception_state) {
   DVLOG(1) << "QuicTransport::Init() url=" << url << " this=" << this;
   if (!url_.IsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
@@ -629,7 +660,7 @@ void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
 
   auto* execution_context = GetExecutionContext();
 
-  if (!execution_context->GetContentSecurityPolicyForWorld()
+  if (!execution_context->GetContentSecurityPolicyForCurrentWorld()
            ->AllowConnectToSource(url_, url_, RedirectStatus::kNoRedirect)) {
     // TODO(ricea): This error should probably be asynchronous like it is for
     // WebSockets and fetch.
@@ -638,6 +669,16 @@ void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
         "Refused to connect to '" + url_.ElidedString() +
             "' because it violates the document's Content Security Policy");
     return;
+  }
+
+  Vector<network::mojom::blink::QuicTransportCertificateFingerprintPtr>
+      fingerprints;
+  if (options.hasServerCertificateFingerprints()) {
+    for (const auto& fingerprint : options.serverCertificateFingerprints()) {
+      fingerprints.push_back(
+          network::mojom::blink::QuicTransportCertificateFingerprint::New(
+              fingerprint->algorithm(), fingerprint->value()));
+    }
   }
 
   // TODO(ricea): Register SchedulingPolicy so that we don't get throttled and
@@ -652,7 +693,7 @@ void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
           execution_context->GetTaskRunner(TaskType::kNetworking)));
 
   connector->Connect(
-      url_, /*fingerprints=*/{},
+      url_, std::move(fingerprints),
       handshake_client_receiver_.BindNewPipeAndPassRemote(
           execution_context->GetTaskRunner(TaskType::kNetworking)));
 

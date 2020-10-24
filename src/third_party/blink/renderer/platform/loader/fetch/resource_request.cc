@@ -53,6 +53,7 @@ ResourceRequestHead::ResourceRequestHead(const KURL& url)
       report_upload_progress_(false),
       report_raw_headers_(false),
       has_user_gesture_(false),
+      has_text_fragment_token_(false),
       download_to_blob_(false),
       use_stream_on_response_(false),
       keepalive_(false),
@@ -65,8 +66,8 @@ ResourceRequestHead::ResourceRequestHead(const KURL& url)
       priority_(ResourceLoadPriority::kUnresolved),
       intra_priority_value_(0),
       requestor_id_(0),
-      previews_state_(WebURLRequest::kPreviewsUnspecified),
-      request_context_(mojom::RequestContextType::UNSPECIFIED),
+      previews_state_(PreviewsTypes::kPreviewsUnspecified),
+      request_context_(mojom::blink::RequestContextType::UNSPECIFIED),
       destination_(network::mojom::RequestDestination::kEmpty),
       mode_(network::mojom::RequestMode::kNoCors),
       fetch_importance_mode_(mojom::FetchImportanceMode::kImportanceAuto),
@@ -95,6 +96,11 @@ ResourceRequestBody::ResourceRequestBody() : ResourceRequestBody(nullptr) {}
 ResourceRequestBody::ResourceRequestBody(
     scoped_refptr<EncodedFormData> form_body)
     : form_body_(form_body) {}
+
+ResourceRequestBody::ResourceRequestBody(
+    mojo::PendingRemote<network::mojom::blink::ChunkedDataPipeGetter>
+        stream_body)
+    : stream_body_(std::move(stream_body)) {}
 
 ResourceRequestBody::ResourceRequestBody(ResourceRequestBody&& src)
     : form_body_(std::move(src.form_body_)),
@@ -393,6 +399,11 @@ bool ResourceRequestHead::IsConditional() const {
 
 void ResourceRequestHead::SetHasUserGesture(bool has_user_gesture) {
   has_user_gesture_ |= has_user_gesture;
+}
+
+void ResourceRequestHead::SetHasTextFragmentToken(
+    bool has_text_fragment_token) {
+  has_text_fragment_token_ = has_text_fragment_token;
 }
 
 bool ResourceRequestHead::CanDisplay(const KURL& url) const {

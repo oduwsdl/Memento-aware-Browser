@@ -110,6 +110,10 @@
 1442 OPENGL : dEQP-GLES31.functional.program_interface_query.uniform.random.* = FAIL
 1442 OPENGL : dEQP-GLES31.functional.program_interface_query.uniform_block.referenced_by.* = FAIL
 
+// Slow / timeout on Linux GL
+5197 LINUX OPENGL : dEQP-GLES31.functional.compute.indirect_dispatch.gen_in_compute.large_offset = TIMEOUT
+5197 LINUX OPENGL : dEQP-GLES31.functional.compute.indirect_dispatch.gen_in_compute.large_offset_multiple_invocations = TIMEOUT
+
 // OpenGL/D3D11 Failing Tests
 1442 OPENGL : dEQP-GLES31.functional.shaders.opaque_type_indexing.* = FAIL
 1442 D3D11 : dEQP-GLES31.functional.shaders.opaque_type_indexing.* = FAIL
@@ -163,9 +167,9 @@
 // Not failing in last official run, but failed recently:
 4110 SWIFTSHADER : dEQP-GLES31.functional.shaders.helper_invocation.* = FAIL
 
-// Vulkan doesn't support array of array of opaque uniforms. Emulation is not yet done for images
-3881 VULKAN : dEQP-GLES31.functional.program_interface_query.uniform.location.default_block.array.array.image_2d = SKIP
-3881 VULKAN : dEQP-GLES31.functional.program_interface_query.uniform.location.default_block.array.array.iimage_2d_array = SKIP
+// Vulkan Android doesn't support array of array of opaque uniforms. Emulation is not yet done for images
+3881 VULKAN ANDROID : dEQP-GLES31.functional.program_interface_query.uniform.location.default_block.array.array.image_2d = SKIP
+3881 VULKAN ANDROID : dEQP-GLES31.functional.program_interface_query.uniform.location.default_block.array.array.iimage_2d_array = SKIP
 
 // Flaky crashes in Windows x86 Subzero Reactor
 4482 WIN SWIFTSHADER : dEQP-GLES31.functional.synchronization.inter_invocation.* = SKIP
@@ -204,9 +208,11 @@
 
 // Passing on recent drivers:
 3726 VULKAN ANDROID : dEQP-GLES31.functional.ssbo.layout.* = FAIL
-3726 VULKAN ANDROID : dEQP-GLES31.functional.atomic_counter.* = FAIL
 3726 VULKAN ANDROID : dEQP-GLES31.functional.synchronization.inter_call.without_memory_barrier.*atomic_counter* = FAIL
 3726 VULKAN ANDROID : dEQP-GLES31.functional.compute.basic.atomic_counter* = FAIL
+
+// Seem to trigger LowMemoryKiller when run in a certain sequence
+5185 VULKAN ANDROID : dEQP-GLES31.functional.atomic_counter.* = SKIP
 
 // Arrays of opaque types as function parameters (possibly related to issue 3882)
 2703 VULKAN ANDROID : dEQP-GLES31.functional.shaders.opaque_type_indexing.atomic_counter.const_literal_vertex = FAIL
@@ -243,3 +249,21 @@
 4371 VULKAN ANDROID : dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.add.int_to_vec3_vertex = FAIL
 4371 VULKAN ANDROID : dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.add.int_to_uvec3_vertex = FAIL
 4371 SWIFTSHADER : dEQP-GLES31.functional.shaders.implicit_conversions.* = FAIL
+
+// Unexpected crashes on Android 64-bit, some also fail on Android 32-bit
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.1 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.3 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.5 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.9 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.10 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.12 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.13 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.14 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.15 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.17 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.18 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.0 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.2 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.10 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.11 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.17 = SKIP

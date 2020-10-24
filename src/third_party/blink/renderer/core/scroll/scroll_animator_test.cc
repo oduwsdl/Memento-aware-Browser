@@ -58,8 +58,6 @@ double NowTicksInSeconds(const base::TestMockTimeTaskRunner* task_runner) {
 class MockScrollableAreaForAnimatorTest
     : public GarbageCollected<MockScrollableAreaForAnimatorTest>,
       public ScrollableArea {
-  USING_GARBAGE_COLLECTED_MIXIN(MockScrollableAreaForAnimatorTest);
-
  public:
   explicit MockScrollableAreaForAnimatorTest(bool scroll_animator_enabled,
                                              const ScrollOffset& min_offset,
@@ -83,7 +81,7 @@ class MockScrollableAreaForAnimatorTest
   MOCK_CONST_METHOD0(ScrollbarsCanBeActive, bool());
   MOCK_METHOD0(RegisterForAnimation, void());
   MOCK_METHOD0(ScheduleAnimation, bool());
-  MOCK_CONST_METHOD0(UsedColorScheme, WebColorScheme());
+  MOCK_CONST_METHOD0(UsedColorScheme, mojom::blink::ColorScheme());
 
   bool UserInputScrollable(ScrollbarOrientation) const override { return true; }
   bool ShouldPlaceVerticalScrollbarOnLeft() const override { return false; }

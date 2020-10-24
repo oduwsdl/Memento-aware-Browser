@@ -46,7 +46,6 @@ class DocumentLoader;
 class DocumentParserTiming;
 class DocumentTiming;
 class InteractiveDetector;
-class LocalFrame;
 class PaintTiming;
 class PaintTimingDetector;
 class ResourceLoadTiming;
@@ -57,18 +56,18 @@ class ScriptValue;
 class CORE_EXPORT PerformanceTiming final : public ScriptWrappable,
                                             public ExecutionContextClient {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(PerformanceTiming);
 
  public:
   struct BackForwardCacheRestoreTiming {
     uint64_t navigation_start;
     uint64_t first_paint;
+    base::Optional<base::TimeDelta> first_input_delay;
   };
 
   using BackForwardCacheRestoreTimings =
       WTF::Vector<BackForwardCacheRestoreTiming>;
 
-  explicit PerformanceTiming(LocalFrame*);
+  explicit PerformanceTiming(ExecutionContext*);
 
   uint64_t navigationStart() const;
   uint64_t inputStart() const;
@@ -141,6 +140,9 @@ class CORE_EXPORT PerformanceTiming final : public ScriptWrappable,
   uint64_t ExperimentalLargestImagePaintSize() const;
   uint64_t ExperimentalLargestTextPaint() const;
   uint64_t ExperimentalLargestTextPaintSize() const;
+  // The time at which the frame is first eligible for painting due to not
+  // being throttled. A zero value indicates throttling.
+  uint64_t FirstEligibleToPaint() const;
   // The time at which we are notified of the first input or scroll event which
   // causes the largest contentful paint algorithm to stop.
   uint64_t FirstInputOrScrollNotifiedTimestamp() const;

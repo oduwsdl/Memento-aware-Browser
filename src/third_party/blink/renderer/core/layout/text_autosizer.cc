@@ -45,7 +45,6 @@
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_list_item.h"
-#include "third_party/blink/renderer/core/layout/layout_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_ruby_run.h"
 #include "third_party/blink/renderer/core/layout/layout_table.h"
@@ -136,7 +135,7 @@ static bool IsIndependentDescendant(const LayoutBlock* layout_object) {
          (containing_block && containing_block->IsHorizontalWritingMode() !=
                                   layout_object->IsHorizontalWritingMode()) ||
          layout_object->StyleRef().IsDisplayReplacedType() ||
-         layout_object->IsTextArea() ||
+         layout_object->IsTextAreaIncludingNG() ||
          layout_object->StyleRef().UserModify() != EUserModify::kReadOnly;
 }
 
@@ -444,6 +443,9 @@ float TextAutosizer::Inflate(LayoutObject* parent,
       child = ToLayoutRubyRun(run)->FirstChild();
       behavior = kDescendToInnerBlocks;
     }
+  } else if (parent->IsListMarker()) {
+    // The list item already applied the multiplier to the marker, keep it.
+    return multiplier;
   } else if (parent->IsLayoutBlock() &&
              (parent->ChildrenInline() || behavior == kDescendToInnerBlocks)) {
     child = To<LayoutBlock>(parent)->FirstChild();
@@ -495,8 +497,8 @@ float TextAutosizer::Inflate(LayoutObject* parent,
   }
 
   if (parent->IsListItemIncludingNG()) {
-    float multiplier = ClusterMultiplier(cluster);
-    ApplyMultiplier(parent, multiplier, layouter);
+    float list_item_multiplier = ClusterMultiplier(cluster);
+    ApplyMultiplier(parent, list_item_multiplier, layouter);
 
     // The list item has to be treated special because we can have a tree such
     // that you have a list item for a form inside it. The list marker then ends
@@ -513,7 +515,7 @@ float TextAutosizer::Inflate(LayoutObject* parent,
     // it.
     for (LayoutObject* walker = marker; walker;
          walker = walker->NextInPreOrder(marker)) {
-      ApplyMultiplier(walker, multiplier, layouter);
+      ApplyMultiplier(walker, list_item_multiplier, layouter);
       walker->SetIntrinsicLogicalWidthsDirty(kMarkOnlyThis);
     }
   }
@@ -597,7 +599,7 @@ void TextAutosizer::UpdatePageInfoInAllFrames(Frame* main_frame) {
       // called UpdateWebTextAutosizerPageInfoIfNecessary().
       if (frame->IsMainFrame()) {
         const PageInfo& page_info = text_autosizer->page_info_;
-        const WebTextAutosizerPageInfo& old_page_info =
+        const mojom::blink::TextAutosizerPageInfo& old_page_info =
             document->GetPage()->TextAutosizerPageInfo();
         if (page_info.shared_info_ != old_page_info) {
           document->GetPage()->GetChromeClient().DidUpdateTextAutosizerPageInfo(
@@ -775,8 +777,9 @@ bool TextAutosizer::ClusterHasEnoughTextToAutosize(
 
   // TextAreas and user-modifiable areas get a free pass to autosize regardless
   // of text content.
-  if (root->IsTextArea() || (root->Style() && root->StyleRef().UserModify() !=
-                                                  EUserModify::kReadOnly)) {
+  if (root->IsTextAreaIncludingNG() ||
+      (root->Style() &&
+       root->StyleRef().UserModify() != EUserModify::kReadOnly)) {
     cluster->has_enough_text_to_autosize_ = kHasEnoughText;
     return true;
   }

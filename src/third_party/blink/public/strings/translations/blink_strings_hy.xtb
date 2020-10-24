@@ -13,9 +13,12 @@
 <translation id="1211441953136645838">ավարտական ծանոթագրություն</translation>
 <translation id="1281252709823657822">երկխոսության պատուհան</translation>
 <translation id="1306460908038601864">Անջատ</translation>
+<translation id="1311894908970423688">Արժեքը պետք է լինի <ph name="VALUE_DATE_OR_TIME" />։</translation>
 <translation id="1335095011850992622">երախտիքի խոսքեր</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">ազդերիզ</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> տարր</translation>
+<translation id="1480676835519562650">հնարավոր է ընտրել մի քանի տարբերակ, ընտրվել է <ph name="SELECTED" />-ը՝ <ph name="COUNT" />-ից։</translation>
 <translation id="1589122976691792535">մարզ</translation>
 <translation id="1591562245178063882">Այս ամիս</translation>
 <translation id="1637811476055996098">Ընտրել ֆայլեր</translation>
@@ -27,6 +30,7 @@
 <translation id="1806710327868736751">ծանուցման երկխոսության պատուհան</translation>
 <translation id="1821985195704844674">ծառի տեսքով ցանց</translation>
 <translation id="1822429046913737220">AM/PM</translation>
+<translation id="1823704031293214298">էջատակ</translation>
 <translation id="1832974991323546415">նվագարկել հեռակա սարքում</translation>
 <translation id="190587075670221089">ջնջում</translation>
 <translation id="1907737156431278478">օրինակ</translation>
@@ -44,6 +48,7 @@
 <translation id="2247351761944213033">Շաբաթ <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Կատարում <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">նշավանդակ</translation>
+<translation id="2307576640803031502">ցուցակում, տարր <ph name="INDEX" />՝ <ph name="COUNT" />-ից</translation>
 <translation id="2311842470354187719">էջի ընդհատում</translation>
 <translation id="2335594187091864976">ամսաթվի և ժամի ընտրիչ</translation>
 <translation id="2393030564806080191">Գույնի տասնվեցական կոդը</translation>
@@ -51,6 +56,7 @@
 <translation id="248395913932153421">Օր</translation>
 <translation id="2507943997699731163">Խնդրում ենք լրացնել այս դաշտը:</translation>
 <translation id="2508569020611168319">ներդիրների ցանկ</translation>
+<translation id="2530182415807757784">հնարավոր է ընտրել մի քանի տարբերակ, ոչ մեկը չի ընտրվել։</translation>
 <translation id="2561842179657104141">լրացուցիչ մեդիա կառավարներ</translation>
 <translation id="2572483411312390101">նվագարկել</translation>
 <translation id="2613802280814924224">Մուտքագրեք ճիշտ արժեք: Ամենամոտ ճիշտ արժեքը <ph name="VALID_VALUE" />-ն է:</translation>
@@ -100,9 +106,9 @@
 <translation id="4201051445878709314">Ցուցադրել նախորդ ամիսը</translation>
 <translation id="421884353938374759">color picker</translation>
 <translation id="4248100235867064564">ընտրացանկի գոտի</translation>
+<translation id="4293574643247337246">էջագլուխ</translation>
 <translation id="4360991593054037559">Մուտքագրեք ճիշտ արժեք: Մոտակա երկու ճիշտ արժեքներն են՝ <ph name="VALID_VALUE_LOW" /> և <ph name="VALID_VALUE_HIGHER" />:</translation>
 <translation id="4384583879834880242">Հարց ու պատասխան</translation>
-<translation id="4413860115965805769">ընտրացանկի կոճակ</translation>
 <translation id="4444765639179266822">Կարծես թե ասում է <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">մեջբերում բառացանկից</translation>
 <translation id="4522570452068850558">Մանրամասներ</translation>
@@ -154,9 +160,11 @@
 <translation id="5677946354068040947">լրացուցիչ ընտրանքներ</translation>
 <translation id="576709008726043716">ներածություն</translation>
 <translation id="57838592816432529">Անջատել ձայնը</translation>
+<translation id="5860033963881614850">Անջատ.</translation>
 <translation id="588258955323874662">Լիաէկրան</translation>
 <translation id="5888666972993069672">Հեռարձակում <ph name="DEVICE_FRIENDLY_NAME" /> սարքին</translation>
 <translation id="591047860372322273">որոնման դաշտ</translation>
+<translation id="5916664084637901428">Միացնել</translation>
 <translation id="5939518447894949180">Վերակայել</translation>
 <translation id="5966707198760109579">Շաբաթ</translation>
 <translation id="5987525920412732405">հաշվիչի կոճակ</translation>
@@ -184,6 +192,7 @@
 <translation id="6643016212128521049">Մաքրել</translation>
 <translation id="668171684555832681">Այլ…</translation>
 <translation id="6692633176391053278">հաշվիչ</translation>
+<translation id="6709093583001123835">Արժեքը պետք է լինի <ph name="VALUE" />։</translation>
 <translation id="6709570249143506788">Նվագարկման վատ որակ</translation>
 <translation id="6755330956360078551">գործիքահուշակ</translation>
 <translation id="6790428901817661496">Նվագարկել</translation>
@@ -284,6 +293,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, սկսած <ph name="WEEK_START_DATE" />-ից</translation>
 <translation id="916607977885256133">Նկար նկարի մեջ</translation>
 <translation id="9168329111483466115">ծանոթագրություն</translation>
+<translation id="945780513535800434">Մասամբ նշված</translation>
 <translation id="954003015749068518">մտնել «նկար նկարի մեջ» ռեժիմ</translation>
 <translation id="966787709310836684">ընտրացանկ</translation>
 </translationbundle>

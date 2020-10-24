@@ -378,6 +378,8 @@ FetchResponseData* Response::CreateUnfilteredFetchResponseDataWithoutBody(
   response->SetURLList(fetch_api_response.url_list);
   response->SetStatus(fetch_api_response.status_code);
   response->SetStatusMessage(WTF::AtomicString(fetch_api_response.status_text));
+  response->SetRequestMethod(
+      WTF::AtomicString(fetch_api_response.request_method));
   response->SetResponseTime(fetch_api_response.response_time);
   response->SetCacheStorageCacheName(
       fetch_api_response.cache_storage_cache_name);
@@ -387,6 +389,7 @@ FetchResponseData* Response::CreateUnfilteredFetchResponseDataWithoutBody(
   response->SetLoadedWithCredentials(
       fetch_api_response.loaded_with_credentials);
   response->SetWasFetchedViaSpdy(fetch_api_response.was_fetched_via_spdy);
+  response->SetHasRangeRequested(fetch_api_response.has_range_requested);
 
   for (const auto& header : fetch_api_response.headers)
     response->HeaderList()->Append(header.key, header.value);

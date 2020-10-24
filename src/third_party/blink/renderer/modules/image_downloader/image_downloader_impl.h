@@ -24,8 +24,6 @@ class ImageDownloaderImpl final : public GarbageCollected<ImageDownloaderImpl>,
                                   public Supplement<LocalFrame>,
                                   public ExecutionContextLifecycleObserver,
                                   public mojom::blink::ImageDownloader {
-  USING_GARBAGE_COLLECTED_MIXIN(ImageDownloaderImpl);
-
  public:
   static const char kSupplementName[];
 
@@ -96,7 +94,7 @@ class ImageDownloaderImpl final : public GarbageCollected<ImageDownloaderImpl>,
 
   HeapMojoReceiver<mojom::blink::ImageDownloader,
                    ImageDownloaderImpl,
-                   HeapMojoWrapperMode::kWithoutContextObserver>
+                   HeapMojoWrapperMode::kForceWithoutContextObserver>
       receiver_;
 
   DISALLOW_COPY_AND_ASSIGN(ImageDownloaderImpl);

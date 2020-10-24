@@ -57,7 +57,7 @@ class StyleFetchedImage final : public StyleImage,
   bool ErrorOccurred() const override;
   FloatSize ImageSize(const Document&,
                       float multiplier,
-                      const LayoutSize& default_object_size,
+                      const FloatSize& default_object_size,
                       RespectImageOrientationEnum) const override;
   bool HasIntrinsicSize() const override;
   void AddClient(ImageResourceObserver*) override;
@@ -74,6 +74,9 @@ class StyleFetchedImage final : public StyleImage,
 
   void LoadDeferredImage(const Document& document);
 
+  RespectImageOrientationEnum ForceOrientationIfNecessary(
+      RespectImageOrientationEnum default_orientation) const override;
+
   void Trace(Visitor*) const override;
 
  private:
@@ -82,7 +85,7 @@ class StyleFetchedImage final : public StyleImage,
 
   // ImageResourceObserver overrides
   void ImageNotifyFinished(ImageResourceContent*) override;
-  bool GetImageAnimationPolicy(ImageAnimationPolicy&) override;
+  bool GetImageAnimationPolicy(mojom::blink::ImageAnimationPolicy&) override;
 
   Member<ImageResourceContent> image_;
   Member<const Document> document_;

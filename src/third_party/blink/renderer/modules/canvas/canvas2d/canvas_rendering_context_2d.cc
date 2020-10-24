@@ -38,6 +38,8 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/rendering_context.h"
@@ -114,6 +116,19 @@ class CanvasRenderingContext2DAutoRestoreSkCanvas {
   CanvasRenderingContext2D* context_;
   int save_count_;
 };
+
+CanvasRenderingContext* CanvasRenderingContext2D::Factory::Create(
+    CanvasRenderingContextHost* host,
+    const CanvasContextCreationAttributesCore& attrs) {
+  DCHECK(!host->IsOffscreenCanvas());
+  CanvasRenderingContext* rendering_context =
+      MakeGarbageCollected<CanvasRenderingContext2D>(
+          static_cast<HTMLCanvasElement*>(host), attrs);
+  DCHECK(rendering_context);
+  rendering_context->RecordUKMCanvasRenderingAPI(
+      CanvasRenderingContext::CanvasRenderingAPI::k2D);
+  return rendering_context;
+}
 
 CanvasRenderingContext2D::CanvasRenderingContext2D(
     HTMLCanvasElement* canvas,
@@ -321,7 +336,7 @@ CanvasPixelFormat CanvasRenderingContext2D::PixelFormat() const {
 
 void CanvasRenderingContext2D::Reset() {
   // This is a multiple inheritance bootstrap
-  BaseRenderingContext2D::Reset();
+  BaseRenderingContext2D::reset();
 }
 
 void CanvasRenderingContext2D::RestoreCanvasMatrixClipStack(
@@ -502,8 +517,8 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
   // documents.
   if (!canvas()->GetDocument().GetFrame())
     return;
-  identifiability_study_helper_.MaybeUpdateDigest(CanvasOps::kSetFont,
-                                                  new_font);
+  identifiability_study_helper_.MaybeUpdateBuilder(
+      CanvasOps::kSetFont, IdentifiabilityBenignStringToken(new_font));
 
   base::TimeTicks start_time = base::TimeTicks::Now();
   canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(canvas());
@@ -545,7 +560,7 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
           element_font_description.SpecifiedSize());
 
       font_style->SetFontDescription(element_font_description);
-      canvas()->GetDocument().EnsureStyleResolver().ComputeFont(
+      canvas()->GetDocument().GetStyleEngine().ComputeFont(
           *canvas(), font_style.get(), *parsed_style);
 
       // We need to reset Computed and Adjusted size so we skip zoom and
@@ -680,12 +695,13 @@ ImageData* CanvasRenderingContext2D::getImageData(
     int sw,
     int sh,
     ExceptionState& exception_state) {
-  blink::IdentifiabilityMetricBuilder(ukm_source_id_)
-      .Set(blink::IdentifiableSurface::FromTypeAndInput(
-               blink::IdentifiableSurface::Type::kCanvasReadback,
-               GetContextType()),
-           0)
-      .Record(ukm_recorder_);
+  const IdentifiableSurface surface = IdentifiableSurface::FromTypeAndToken(
+      IdentifiableSurface::Type::kCanvasReadback, GetContextType());
+  if (IdentifiabilityStudySettings::Get()->IsSurfaceAllowed(surface)) {
+    blink::IdentifiabilityMetricBuilder(ukm_source_id_)
+        .Set(surface, 0)
+        .Record(ukm_recorder_);
+  }
   return BaseRenderingContext2D::getImageData(sx, sy, sw, sh, exception_state);
 }
 
@@ -790,6 +806,46 @@ void CanvasRenderingContext2D::setDirection(const String& direction_string) {
   ModifiableState().SetDirection(direction);
 }
 
+void CanvasRenderingContext2D::setTextLetterSpacing(
+    const double letter_spacing) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  float letter_spacing_float = clampTo<float>(letter_spacing);
+  ModifiableState().SetTextLetterSpacing(letter_spacing_float,
+                                         Host()->GetFontSelector());
+}
+
+void CanvasRenderingContext2D::setTextWordSpacing(const double word_spacing) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  float word_spacing_float = clampTo<float>(word_spacing);
+  ModifiableState().SetTextWordSpacing(word_spacing_float,
+                                       Host()->GetFontSelector());
+}
+
+void CanvasRenderingContext2D::setFontKerning(
+    const String& font_kerning_string) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+  FontDescription::Kerning kerning;
+  String font_kerning = font_kerning_string.LowerASCII();
+  if (font_kerning == kAutoKerningString)
+    kerning = FontDescription::kAutoKerning;
+  else if (font_kerning == kNoneKerningString)
+    kerning = FontDescription::kNoneKerning;
+  else if (font_kerning == kNormalKerningString)
+    kerning = FontDescription::kNormalKerning;
+  else
+    return;
+
+  if (GetState().GetFontKerning() == kerning)
+    return;
+
+  ModifiableState().SetFontKerning(kerning, Host()->GetFontSelector());
+}
+
 void CanvasRenderingContext2D::fillText(const String& text,
                                         double x,
                                         double y) {
@@ -865,11 +921,13 @@ void CanvasRenderingContext2D::DrawTextInternal(
   if (max_width && (!std::isfinite(*max_width) || *max_width <= 0))
     return;
 
-  identifiability_study_helper_.MaybeUpdateDigest(
+  identifiability_study_helper_.MaybeUpdateBuilder(
       paint_type == CanvasRenderingContext2DState::kFillPaintType
           ? CanvasOps::kFillText
           : CanvasOps::kStrokeText,
-      IdentifiabilitySensitiveString(text), x, y, max_width ? *max_width : -1);
+      IdentifiabilitySensitiveStringToken(text), x, y,
+      max_width ? *max_width : -1);
+  identifiability_study_helper_.set_encountered_sensitive_ops();
 
   const Font& font = AccessFont();
   const SimpleFontData* font_data = font.PrimaryFont();

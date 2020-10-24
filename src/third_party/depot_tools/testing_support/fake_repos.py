@@ -204,7 +204,7 @@ class FakeReposBase(object):
 
 class FakeRepos(FakeReposBase):
   """Implements populateGit()."""
-  NB_GIT_REPOS = 16
+  NB_GIT_REPOS = 17
 
   def populateGit(self):
     # Testing:
@@ -688,7 +688,7 @@ hooks = [{
       'origin': 'git/repo_14@2\n'
     })
 
-    # A repo with a hook to be recursed in, without use_relative_hooks
+    # A repo with a hook to be recursed in, without use_relative_paths
     self._commit_git('repo_15', {
       'DEPS': textwrap.dedent("""\
         hooks = [{
@@ -698,11 +698,10 @@ hooks = [{
         }]"""),
       'origin': 'git/repo_15@2\n'
     })
-    # A repo with a hook to be recursed in, with use_relative_hooks
+    # A repo with a hook to be recursed in, with use_relative_paths
     self._commit_git('repo_16', {
       'DEPS': textwrap.dedent("""\
         use_relative_paths=True
-        use_relative_hooks=True
         hooks = [{
           "name": "relative_cwd",
           "pattern": ".",
@@ -710,6 +709,19 @@ hooks = [{
         }]"""),
       'relative.py': 'pass',
       'origin': 'git/repo_16@2\n'
+    })
+    # A repo with a gclient_gn_args_file and use_relative_paths
+    self._commit_git('repo_17', {
+      'DEPS': textwrap.dedent("""\
+        use_relative_paths=True
+        vars = {
+          'toto': 'tata',
+        }
+        gclient_gn_args_file = 'repo17_gclient.args'
+        gclient_gn_args = [
+          'toto',
+        ]"""),
+      'origin': 'git/repo_17@2\n'
     })
 
 class FakeRepoSkiaDEPS(FakeReposBase):

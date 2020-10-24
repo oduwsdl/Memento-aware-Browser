@@ -199,19 +199,19 @@
 }
 
 .device-mode-right-resizer > div {
-  content: url(Images/resizeHorizontal.png);
+  content: url(Images/resizeHorizontal.svg);
   width: 6px;
   height: 26px;
 }
 
 .device-mode-left-resizer > div {
-  content: url(Images/resizeHorizontal.png);
+  content: url(Images/resizeHorizontal.svg);
   width: 6px;
   height: 26px;
 }
 
 .device-mode-bottom-resizer > div {
-  content: url(Images/resizeVertical.png);
+  content: url(Images/resizeVertical.svg);
   margin-bottom: -2px;
   width: 26px;
   height: 6px;
@@ -223,7 +223,7 @@
   right: 3px;
   width: 13px;
   height: 13px;
-  content: url(Images/resizeDiagonal.png);
+  content: url(Images/resizeDiagonal.svg);
 }
 
 .device-mode-bottom-left-resizer > div {
@@ -232,31 +232,9 @@
   left: 3px;
   width: 13px;
   height: 13px;
-  content: url(Images/resizeDiagonal.png);
+  content: url(Images/resizeDiagonal.svg);
   transform: rotate(90deg);
 }
-
-@media (-webkit-min-device-pixel-ratio: 1.1) {
-  .device-mode-right-resizer > div {
-    content: url(Images/resizeHorizontal_2x.png);
-  }
-
-  .device-mode-left-resizer > div {
-    content: url(Images/resizeHorizontal_2x.png);
-  }
-
-  .device-mode-bottom-resizer > div {
-    content: url(Images/resizeVertical_2x.png);
-  }
-
-  .device-mode-bottom-right-resizer > div {
-    content: url(Images/resizeDiagonal_2x.png);
-  }
-
-  .device-mode-bottom-left-resizer > div {
-    content: url(Images/resizeDiagonal_2x.png);
-  }
-} /* media */
 
 .device-mode-page-area {
   position: absolute;
@@ -297,15 +275,15 @@
   background-color: hsl(0deg 0% 98% / 90%);
 }
 
-.device-mode-content-clip.device-mode-outline-visible .device-mode-ruler-top .device-mode-ruler-content {
-  border-top: 1px solid hsl(0deg 0% 50%);
-}
-
 .device-mode-ruler-left .device-mode-ruler-content {
   border-left: 1px solid transparent;
   border-top: 1px solid transparent;
   right: 20px;
   bottom: 0;
+}
+
+.device-mode-content-clip.device-mode-outline-visible .device-mode-ruler-top .device-mode-ruler-content {
+  border-top: 1px solid hsl(0deg 0% 50%);
 }
 
 .device-mode-content-clip.device-mode-outline-visible .device-mode-ruler-left .device-mode-ruler-content {

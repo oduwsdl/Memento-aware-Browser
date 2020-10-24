@@ -17,6 +17,14 @@ namespace blink {
 
 const char NavigatorXR::kSupplementName[] = "NavigatorXR";
 
+bool NavigatorXR::AlreadyExists(Document& document) {
+  if (!document.GetFrame())
+    return false;
+
+  Navigator& navigator = *document.GetFrame()->DomWindow()->navigator();
+  return !!Supplement<Navigator>::From<NavigatorXR>(navigator);
+}
+
 NavigatorXR* NavigatorXR::From(Document& document) {
   if (!document.GetFrame())
     return nullptr;
@@ -57,10 +65,8 @@ XRSystem* NavigatorXR::xr() {
     did_log_navigator_xr_ = true;
   }
 
-  if (!xr_) {
-    xr_ = MakeGarbageCollected<XRSystem>(*document->GetFrame(),
-                                         document->UkmSourceID());
-  }
+  if (!xr_)
+    xr_ = MakeGarbageCollected<XRSystem>(*document->GetFrame());
 
   return xr_;
 }

@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
+#include "base/test/scoped_feature_list.h"
+#include "cc/base/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -164,8 +166,7 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange) {
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
@@ -191,8 +192,7 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange2DTransform) {
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
@@ -221,8 +221,7 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosAbs) {
   // This changes clips for absolute-positioned descendants of "child" but not
   // normal-position ones, which are already clipped to 50x50.
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
@@ -251,8 +250,7 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
   // This changes clips for absolute-positioned descendants of "child" but not
   // normal-position ones, which are already clipped to 50x50.
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
@@ -276,36 +274,11 @@ TEST_P(PrePaintTreeWalkTest, ClipChangeRepaintsDescendants) {
   )HTML");
 
   GetDocument().getElementById("parent")->removeAttribute("style");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   auto* greatgrandchild = GetLayoutObjectByElementId("greatgrandchild");
   auto* paint_layer = ToLayoutBoxModelObject(greatgrandchild)->Layer();
   EXPECT_TRUE(paint_layer->SelfNeedsRepaint());
-}
-
-TEST_P(PrePaintTreeWalkTest, VisualRectClipForceSubtree) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      #parent { height: 75px; position: relative; width: 100px; }
-    </style>
-    <div id='parent' style='height: 100px;'>
-      <div id='child' style='overflow: hidden; width: 100%; height: 100%;
-          position: relative'>
-        <div>
-          <div id='grandchild' style='width: 50px; height: 200px; '>
-          </div>
-        </div>
-      </div>
-    </div>
-  )HTML");
-
-  auto* grandchild = GetLayoutObjectByElementId("grandchild");
-
-  GetDocument().getElementById("parent")->removeAttribute("style");
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_EQ(200, grandchild->FirstFragment().VisualRect().Height());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClipChangeHasRadius) {
@@ -325,8 +298,7 @@ TEST_P(PrePaintTreeWalkTest, ClipChangeHasRadius) {
   auto* target = GetDocument().getElementById("target");
   auto* target_object = ToLayoutBoxModelObject(target->GetLayoutObject());
   target->setAttribute(html_names::kStyleAttr, "border-radius: 5px");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_TRUE(target_object->Layer()->SelfNeedsRepaint());
   // And should not trigger any assert failure.
   UpdateAllLifecyclePhasesForTest();
@@ -437,41 +409,60 @@ TEST_P(PrePaintTreeWalkTest, EffectiveTouchActionStyleUpdate) {
   EXPECT_FALSE(descendant.DescendantEffectiveAllowedTouchActionChanged());
 }
 
-TEST_P(PrePaintTreeWalkTest, ClipChangesDoNotCauseVisualRectUpdates) {
+TEST_P(PrePaintTreeWalkTest, InsideBlockingWheelEventHandlerUpdate) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
   SetBodyInnerHTML(R"HTML(
-    <style> #parent { width: 100px; height: 100px; overflow: hidden; } </style>
-    <div id='parent'>
-      <div id='child' style='width: 100px; height: 200px;'>
+    <div id='ancestor' style='width: 100px; height: 100px;'>
+      <div id='handler' style='width: 100px; height: 100px;'>
+        <div id='descendant' style='width: 100px; height: 100px;'>
+        </div>
       </div>
     </div>
   )HTML");
 
-  GetDocument().getElementById("parent")->setAttribute(html_names::kStyleAttr,
-                                                       "border-radius: 5px");
+  UpdateAllLifecyclePhasesForTest();
+  auto& ancestor = *GetLayoutObjectByElementId("ancestor");
+  auto& handler = *GetLayoutObjectByElementId("handler");
+  auto& descendant = *GetLayoutObjectByElementId("descendant");
+
+  EXPECT_FALSE(ancestor.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.BlockingWheelEventHandlerChanged());
+
+  EXPECT_FALSE(ancestor.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.DescendantBlockingWheelEventHandlerChanged());
+
+  EXPECT_FALSE(ancestor.InsideBlockingWheelEventHandler());
+  EXPECT_FALSE(handler.InsideBlockingWheelEventHandler());
+  EXPECT_FALSE(descendant.InsideBlockingWheelEventHandler());
+
+  PrePaintTreeWalkMockEventListener* callback =
+      MakeGarbageCollected<PrePaintTreeWalkMockEventListener>();
+  auto* handler_element = GetDocument().getElementById("handler");
+  handler_element->addEventListener(event_type_names::kWheel, callback);
+
+  EXPECT_FALSE(ancestor.BlockingWheelEventHandlerChanged());
+  EXPECT_TRUE(handler.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.BlockingWheelEventHandlerChanged());
+
+  EXPECT_TRUE(ancestor.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.DescendantBlockingWheelEventHandlerChanged());
 
   UpdateAllLifecyclePhasesForTest();
-  auto& parent = *GetLayoutObjectByElementId("parent");
-  auto& child = *GetLayoutObjectByElementId("child");
+  EXPECT_FALSE(ancestor.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.BlockingWheelEventHandlerChanged());
 
-  // Cause the child to go down the prepaint path but without on its own
-  // requiring a tree builder context.
-  child.SetShouldCheckForPaintInvalidationWithoutGeometryChange();
+  EXPECT_FALSE(ancestor.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.DescendantBlockingWheelEventHandlerChanged());
 
-  EXPECT_EQ(100, parent.FirstFragment().VisualRect().Width());
-  EXPECT_EQ(100, parent.FirstFragment().VisualRect().Height());
-  EXPECT_EQ(100, child.FirstFragment().VisualRect().Width());
-  EXPECT_EQ(200, child.FirstFragment().VisualRect().Height());
-
-  // Cause the child clip to change without changing paint property tree
-  // topology.
-  GetDocument().getElementById("parent")->setAttribute(html_names::kStyleAttr,
-                                                       "border-radius: 6px");
-
-  UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(100, parent.FirstFragment().VisualRect().Width());
-  EXPECT_EQ(100, parent.FirstFragment().VisualRect().Height());
-  EXPECT_EQ(100, child.FirstFragment().VisualRect().Width());
-  EXPECT_EQ(200, child.FirstFragment().VisualRect().Height());
+  EXPECT_FALSE(ancestor.InsideBlockingWheelEventHandler());
+  EXPECT_TRUE(handler.InsideBlockingWheelEventHandler());
+  EXPECT_TRUE(descendant.InsideBlockingWheelEventHandler());
 }
 
 }  // namespace blink

@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrAARectEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -39,7 +40,9 @@ half alpha;
         alpha = half(all(greaterThan(float4(sk_FragCoord.xy, %s.zw), float4(%s.xy, sk_FragCoord.xy))) ? 1 : 0);
         break;
     default:
-        half xSub, ySub;
+        half xSub;
+        half ySub;
+
         xSub = min(half(sk_FragCoord.x - %s.x), 0.0);
         xSub += min(half(%s.z - sk_FragCoord.x), 0.0);
         ySub = min(half(sk_FragCoord.y - %s.y), 0.0);
@@ -57,19 +60,13 @@ half alpha;
                 args.fUniformHandler->getUniformCStr(rectUniformVar),
                 args.fUniformHandler->getUniformCStr(rectUniformVar), (int)_outer.edgeType,
                 (int)_outer.edgeType);
-        SkString _input1677(args.fInputColor);
-        SkString _sample1677;
-        if (_outer.inputFP_index >= 0) {
-            _sample1677 = this->invokeChild(_outer.inputFP_index, _input1677.c_str(), args);
-        } else {
-            _sample1677.swap(_input1677);
-        }
+        SkString _sample1678 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
                 R"SkSL(
 half4 inputColor = %s;
 %s = inputColor * alpha;
 )SkSL",
-                _sample1677.c_str(), args.fOutputColor);
+                _sample1678.c_str(), args.fOutputColor);
     }
 
 private:
@@ -97,7 +94,7 @@ GrGLSLFragmentProcessor* GrAARectEffect::onCreateGLSLInstance() const {
 }
 void GrAARectEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                            GrProcessorKeyBuilder* b) const {
-    b->add32((int32_t)edgeType);
+    b->add32((uint32_t)edgeType);
 }
 bool GrAARectEffect::onIsEqual(const GrFragmentProcessor& other) const {
     const GrAARectEffect& that = other.cast<GrAARectEffect>();
@@ -106,17 +103,22 @@ bool GrAARectEffect::onIsEqual(const GrFragmentProcessor& other) const {
     if (rect != that.rect) return false;
     return true;
 }
+bool GrAARectEffect::usesExplicitReturn() const { return false; }
 GrAARectEffect::GrAARectEffect(const GrAARectEffect& src)
         : INHERITED(kGrAARectEffect_ClassID, src.optimizationFlags())
         , edgeType(src.edgeType)
         , rect(src.rect) {
-    if (src.inputFP_index >= 0) {
-        inputFP_index = this->cloneAndRegisterChildProcessor(src.childProcessor(src.inputFP_index));
-    }
+    this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrAARectEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrAARectEffect(*this));
+    return std::make_unique<GrAARectEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrAARectEffect::onDumpInfo() const {
+    return SkStringPrintf("(edgeType=%d, rect=float4(%f, %f, %f, %f))", (int)edgeType, rect.left(),
+                          rect.top(), rect.right(), rect.bottom());
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrAARectEffect);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrAARectEffect::TestCreate(GrProcessorTestData* d) {
@@ -124,13 +126,9 @@ std::unique_ptr<GrFragmentProcessor> GrAARectEffect::TestCreate(GrProcessorTestD
                                    d->fRandom->nextSScalar1(),
                                    d->fRandom->nextSScalar1(),
                                    d->fRandom->nextSScalar1());
-    std::unique_ptr<GrFragmentProcessor> fp;
-    do {
-        GrClipEdgeType edgeType =
-                static_cast<GrClipEdgeType>(d->fRandom->nextULessThan(kGrClipEdgeTypeCnt));
+    GrClipEdgeType edgeType =
+            static_cast<GrClipEdgeType>(d->fRandom->nextULessThan(kGrClipEdgeTypeCnt));
 
-        fp = GrAARectEffect::Make(/*inputFP=*/nullptr, edgeType, rect);
-    } while (nullptr == fp);
-    return fp;
+    return GrAARectEffect::Make(d->inputFP(), edgeType, rect);
 }
 #endif

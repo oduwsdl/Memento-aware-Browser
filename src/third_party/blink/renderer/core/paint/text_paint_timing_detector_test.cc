@@ -33,7 +33,7 @@ class TextPaintTimingDetectorTest : public testing::Test {
         .SetAcceleratedCompositingEnabled(true);
 
     WebLocalFrameImpl& frame_impl = *web_view_helper_.LocalMainFrame();
-    frame_impl.ViewImpl()->MainFrameWidget()->Resize(WebSize(640, 480));
+    frame_impl.ViewImpl()->MainFrameViewWidget()->Resize(gfx::Size(640, 480));
 
     frame_test_helpers::LoadFrame(
         web_view_helper_.GetWebView()->MainFrameImpl(), "about:blank");
@@ -846,6 +846,51 @@ TEST_F(TextPaintTimingDetectorTest, VisibleTextAfterUserScroll) {
   SimulateScroll();
   UpdateAllLifecyclePhasesAndSimulateSwapTime();
   EXPECT_EQ(CountVisibleTexts(), 1u);
+}
+
+TEST_F(TextPaintTimingDetectorTest, OpacityZeroHTML) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      :root {
+        opacity: 0;
+        will-change: opacity;
+      }
+    </style>
+    <div>Text</div>
+  )HTML");
+  UpdateAllLifecyclePhasesAndSimulateSwapTime();
+  EXPECT_EQ(CountVisibleTexts(), 0u);
+
+  // Change the opacity of documentElement, now the img should be a candidate.
+  GetDocument().documentElement()->setAttribute(html_names::kStyleAttr,
+                                                "opacity: 1");
+  UpdateAllLifecyclePhasesAndSimulateSwapTime();
+  EXPECT_EQ(CountVisibleTexts(), 1u);
+  EXPECT_TRUE(TextRecordOfLargestTextPaint());
+}
+
+TEST_F(TextPaintTimingDetectorTest, OpacityZeroHTML2) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #target {
+        opacity: 0;
+        will-change: opacity;
+      }
+    </style>
+    <div id="target">Text</div>
+  )HTML");
+  UpdateAllLifecyclePhasesAndSimulateSwapTime();
+  EXPECT_EQ(CountVisibleTexts(), 0u);
+
+  GetDocument().documentElement()->setAttribute(html_names::kStyleAttr,
+                                                "opacity: 0");
+  UpdateAllLifecyclePhasesAndSimulateSwapTime();
+  EXPECT_EQ(CountVisibleTexts(), 0u);
+
+  GetDocument().documentElement()->setAttribute(html_names::kStyleAttr,
+                                                "opacity: 1");
+  UpdateAllLifecyclePhasesAndSimulateSwapTime();
+  EXPECT_EQ(CountVisibleTexts(), 0u);
 }
 
 }  // namespace blink

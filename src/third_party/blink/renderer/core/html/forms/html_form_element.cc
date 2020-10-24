@@ -32,7 +32,6 @@
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/radio_node_list_or_element.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_submit_event_init.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -265,14 +264,15 @@ void HTMLFormElement::PrepareForSubmission(
     return;
   }
 
-  if (GetDocument().IsSandboxed(
+  if (GetExecutionContext()->IsSandboxed(
           network::mojom::blink::WebSandboxFlags::kForms)) {
-    GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Blocked form submission to '" + attributes_.Action() +
-            "' because the form's frame is sandboxed and the 'allow-forms' "
-            "permission is not set."));
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kSecurity,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "Blocked form submission to '" + attributes_.Action() +
+                "' because the form's frame is sandboxed and the 'allow-forms' "
+                "permission is not set."));
     return;
   }
 
@@ -454,21 +454,22 @@ void HTMLFormElement::ScheduleFormSubmission(
   DCHECK(form_submission->Form());
   if (form_submission->Action().IsEmpty())
     return;
-  if (GetDocument().IsSandboxed(
+  if (GetExecutionContext()->IsSandboxed(
           network::mojom::blink::WebSandboxFlags::kForms)) {
     // FIXME: This message should be moved off the console once a solution to
     // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
-    GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::blink::ConsoleMessageSource::kSecurity,
-        mojom::blink::ConsoleMessageLevel::kError,
-        "Blocked form submission to '" +
-            form_submission->Action().ElidedString() +
-            "' because the form's frame is sandboxed and the 'allow-forms' "
-            "permission is not set."));
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kSecurity,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "Blocked form submission to '" +
+                form_submission->Action().ElidedString() +
+                "' because the form's frame is sandboxed and the 'allow-forms' "
+                "permission is not set."));
     return;
   }
 
-  if (!GetDocument().GetContentSecurityPolicy()->AllowFormAction(
+  if (!GetExecutionContext()->GetContentSecurityPolicy()->AllowFormAction(
           form_submission->Action())) {
     return;
   }
@@ -514,6 +515,11 @@ void HTMLFormElement::ScheduleFormSubmission(
     // Cancel pending javascript url navigations for the target frame. This new
     // form submission should take precedence over them.
     target_local_frame->GetDocument()->CancelPendingJavaScriptUrls();
+
+    // Cancel any pre-existing attempt to navigate the target frame which was
+    // already sent to the browser process so this form submission will take
+    // precedence over it.
+    target_local_frame->Loader().CancelClientNavigation();
   }
 
   target_frame->ScheduleFormSubmission(scheduler, form_submission);
@@ -584,9 +590,12 @@ void HTMLFormElement::ParseAttribute(
     // If we're not upgrading insecure requests, and the new action attribute is
     // pointing to an insecure "action" location from a secure page it is marked
     // as "passive" mixed content.
-    if ((GetDocument().GetSecurityContext().GetInsecureRequestPolicy() &
+    if (GetExecutionContext() &&
+        (GetExecutionContext()
+             ->GetSecurityContext()
+             .GetInsecureRequestPolicy() &
          mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests) !=
-        mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone)
+            mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone)
       return;
     KURL action_url = GetDocument().CompleteURL(
         attributes_.Action().IsEmpty() ? GetDocument().Url().GetString()

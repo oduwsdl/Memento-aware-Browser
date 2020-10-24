@@ -46,7 +46,7 @@ export class ScopeChainSidebarPane extends UI.Widget.VBox {
     this._expandController =
         new ObjectUI.ObjectPropertiesSection.ObjectPropertiesSectionsTreeExpandController(this._treeOutline);
     this._linkifier = new Components.Linkifier.Linkifier();
-    this._infoElement = createElement('div');
+    this._infoElement = document.createElement('div');
     this._infoElement.className = 'gray-info-message';
     this._infoElement.textContent = ls`Not paused`;
     this._infoElement.tabIndex = -1;
@@ -69,18 +69,22 @@ export class ScopeChainSidebarPane extends UI.Widget.VBox {
       return;
     }
 
-    if (self.UI.context.flavor(SDK.DebuggerModel.DebuggerPausedDetails)) {
+    if (UI.Context.Context.instance().flavor(SDK.DebuggerModel.DebuggerPausedDetails)) {
       this._treeOutline.forceSelect();
     }
   }
 
-  _getScopeChain(callFrame) {
-    return callFrame.sourceScopeChain || callFrame.scopeChain();
+  /**
+   * @param {!SDK.DebuggerModel.CallFrame} callFrame
+   * @return {!Promise<!Array<!SDK.DebuggerModel.ScopeChainEntry>>}
+   */
+  async _getScopeChain(callFrame) {
+    return (await callFrame.sourceScopeChain) || callFrame.scopeChain();
   }
 
   _update() {
-    const callFrame = self.UI.context.flavor(SDK.DebuggerModel.CallFrame);
-    const details = self.UI.context.flavor(SDK.DebuggerModel.DebuggerPausedDetails);
+    const callFrame = UI.Context.Context.instance().flavor(SDK.DebuggerModel.CallFrame);
+    const details = UI.Context.Context.instance().flavor(SDK.DebuggerModel.DebuggerPausedDetails);
     this._linkifier.reset();
     resolveThisObject(callFrame).then(this._innerUpdate.bind(this, details, callFrame));
   }
@@ -90,7 +94,7 @@ export class ScopeChainSidebarPane extends UI.Widget.VBox {
    * @param {?SDK.DebuggerModel.CallFrame} callFrame
    * @param {?SDK.RemoteObject.RemoteObject} thisObject
    */
-  _innerUpdate(details, callFrame, thisObject) {
+  async _innerUpdate(details, callFrame, thisObject) {
     this._treeOutline.removeChildren();
     this.contentElement.removeChildren();
 
@@ -101,7 +105,7 @@ export class ScopeChainSidebarPane extends UI.Widget.VBox {
 
     this.contentElement.appendChild(this._treeOutline.element);
     let foundLocalScope = false;
-    const scopeChain = this._getScopeChain(callFrame);
+    const scopeChain = await this._getScopeChain(callFrame);
     for (let i = 0; i < scopeChain.length; ++i) {
       const scope = scopeChain[i];
       const extraProperties = this._extraPropertiesForScope(scope, details, callFrame, thisObject, i === 0);
@@ -126,7 +130,7 @@ export class ScopeChainSidebarPane extends UI.Widget.VBox {
   }
 
   /**
-   * @param {!SDK.DebuggerModel.Scope} scope
+   * @param {!SDK.DebuggerModel.ScopeChainEntry} scope
    * @param {!Array.<!SDK.RemoteObject.RemoteObjectProperty>} extraProperties
    * @return {!ObjectUI.ObjectPropertiesSection.RootElement}
    */
@@ -145,14 +149,22 @@ export class ScopeChainSidebarPane extends UI.Widget.VBox {
         title = ls`Closure`;
       }
     }
+    /** @type {?string} */
     let subtitle = scope.description();
     if (!title || title === subtitle) {
-      subtitle = undefined;
+      subtitle = null;
     }
+    const icon = scope.icon();
 
     const titleElement = document.createElement('div');
     titleElement.classList.add('scope-chain-sidebar-pane-section-header');
     titleElement.classList.add('tree-element-title');
+    if (icon) {
+      const iconElement = document.createElement('img');
+      iconElement.classList.add('scope-chain-sidebar-pane-section-icon');
+      iconElement.src = icon;
+      titleElement.appendChild(iconElement);
+    }
     titleElement.createChild('div', 'scope-chain-sidebar-pane-section-subtitle').textContent = subtitle;
     titleElement.createChild('div', 'scope-chain-sidebar-pane-section-title').textContent = title;
 
@@ -168,9 +180,9 @@ export class ScopeChainSidebarPane extends UI.Widget.VBox {
   }
 
   /**
-   * @param {!SDK.DebuggerModel.Scope} scope
-   * @param {?SDK.DebuggerModel.DebuggerPausedDetails} details
-   * @param {?SDK.DebuggerModel.CallFrame} callFrame
+   * @param {!SDK.DebuggerModel.ScopeChainEntry} scope
+   * @param {!SDK.DebuggerModel.DebuggerPausedDetails} details
+   * @param {!SDK.DebuggerModel.CallFrame} callFrame
    * @param {?SDK.RemoteObject.RemoteObject} thisObject
    * @param {boolean} isFirstScope
    * @return {!Array.<!SDK.RemoteObject.RemoteObjectProperty>}

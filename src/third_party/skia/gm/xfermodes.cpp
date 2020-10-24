@@ -50,11 +50,11 @@ enum SrcType {
 const struct {
     SkBlendMode fMode;
     int         fSourceTypeMask;  // The source types to use this
-    // mode with. See draw_mode for
-    // an explanation of each type.
-    // PDF has to play some tricks
-    // to support the base modes,
-    // test those more extensively.
+                                  // mode with. See draw_mode for
+                                  // an explanation of each type.
+                                  // PDF has to play some tricks
+                                  // to support the base modes,
+                                  // test those more extensively.
 } gModes[] = {
     { SkBlendMode::kClear,        kAll_SrcType   },
     { SkBlendMode::kSrc,          kAll_SrcType   },
@@ -294,6 +294,6 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 DEF_GM( return new XfermodesGM; )

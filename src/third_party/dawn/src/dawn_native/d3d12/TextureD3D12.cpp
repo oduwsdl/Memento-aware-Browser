@@ -17,6 +17,7 @@
 #include "common/Constants.h"
 #include "common/Math.h"
 #include "dawn_native/DynamicUploader.h"
+#include "dawn_native/EnumMaskIterator.h"
 #include "dawn_native/Error.h"
 #include "dawn_native/d3d12/BufferD3D12.h"
 #include "dawn_native/d3d12/CommandRecordingContext.h"
@@ -78,13 +79,7 @@ namespace dawn_native { namespace d3d12 {
             // A multisampled resource must have either D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET or
             // D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL set in D3D12_RESOURCE_DESC::Flags.
             // https://docs.microsoft.com/en-us/windows/desktop/api/d3d12/ns-d3d12-d3d12_resource_desc
-            // Currently all textures are zero-initialized via the render-target path so always add
-            // the render target flag, except for compressed textures for which the render-target
-            // flag is invalid.
-            // TODO(natlee@microsoft.com, jiawei.shao@intel.com): do not require render target for
-            // lazy clearing.
-            if ((usage & wgpu::TextureUsage::OutputAttachment) || isMultisampledTexture ||
-                !format.isCompressed) {
+            if ((usage & wgpu::TextureUsage::OutputAttachment) != 0 || isMultisampledTexture) {
                 if (format.HasDepthOrStencil()) {
                     flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
                 } else {
@@ -101,7 +96,9 @@ namespace dawn_native { namespace d3d12 {
             switch (dimension) {
                 case wgpu::TextureDimension::e2D:
                     return D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-                default:
+
+                case wgpu::TextureDimension::e1D:
+                case wgpu::TextureDimension::e3D:
                     UNREACHABLE();
             }
         }
@@ -149,8 +146,10 @@ namespace dawn_native { namespace d3d12 {
                 case wgpu::TextureFormat::RGB10A2Unorm:
                     return DXGI_FORMAT_R10G10B10A2_TYPELESS;
 
-                case wgpu::TextureFormat::RG11B10Float:
+                case wgpu::TextureFormat::RG11B10Ufloat:
                     return DXGI_FORMAT_R11G11B10_FLOAT;
+                case wgpu::TextureFormat::RGB9E5Ufloat:
+                    return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
 
                 case wgpu::TextureFormat::RG32Uint:
                 case wgpu::TextureFormat::RG32Sint:
@@ -194,7 +193,7 @@ namespace dawn_native { namespace d3d12 {
                 case wgpu::TextureFormat::BC5RGUnorm:
                     return DXGI_FORMAT_BC5_TYPELESS;
 
-                case wgpu::TextureFormat::BC6HRGBSfloat:
+                case wgpu::TextureFormat::BC6HRGBFloat:
                 case wgpu::TextureFormat::BC6HRGBUfloat:
                     return DXGI_FORMAT_BC6H_TYPELESS;
 
@@ -202,7 +201,7 @@ namespace dawn_native { namespace d3d12 {
                 case wgpu::TextureFormat::BC7RGBAUnormSrgb:
                     return DXGI_FORMAT_BC7_TYPELESS;
 
-                default:
+                case wgpu::TextureFormat::Undefined:
                     UNREACHABLE();
             }
         }
@@ -263,8 +262,10 @@ namespace dawn_native { namespace d3d12 {
                 return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
             case wgpu::TextureFormat::RGB10A2Unorm:
                 return DXGI_FORMAT_R10G10B10A2_UNORM;
-            case wgpu::TextureFormat::RG11B10Float:
+            case wgpu::TextureFormat::RG11B10Ufloat:
                 return DXGI_FORMAT_R11G11B10_FLOAT;
+            case wgpu::TextureFormat::RGB9E5Ufloat:
+                return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
 
             case wgpu::TextureFormat::RG32Uint:
                 return DXGI_FORMAT_R32G32_UINT;
@@ -313,7 +314,7 @@ namespace dawn_native { namespace d3d12 {
                 return DXGI_FORMAT_BC5_SNORM;
             case wgpu::TextureFormat::BC5RGUnorm:
                 return DXGI_FORMAT_BC5_UNORM;
-            case wgpu::TextureFormat::BC6HRGBSfloat:
+            case wgpu::TextureFormat::BC6HRGBFloat:
                 return DXGI_FORMAT_BC6H_SF16;
             case wgpu::TextureFormat::BC6HRGBUfloat:
                 return DXGI_FORMAT_BC6H_UF16;
@@ -322,7 +323,7 @@ namespace dawn_native { namespace d3d12 {
             case wgpu::TextureFormat::BC7RGBAUnormSrgb:
                 return DXGI_FORMAT_BC7_UNORM_SRGB;
 
-            default:
+            case wgpu::TextureFormat::Undefined:
                 UNREACHABLE();
         }
     }
@@ -388,29 +389,23 @@ namespace dawn_native { namespace d3d12 {
     ResultOrError<Ref<TextureBase>> Texture::Create(Device* device,
                                                     const ExternalImageDescriptor* descriptor,
                                                     HANDLE sharedHandle,
-                                                    uint64_t acquireMutexKey,
+                                                    ExternalMutexSerial acquireMutexKey,
                                                     bool isSwapChainTexture) {
         const TextureDescriptor* textureDescriptor =
             reinterpret_cast<const TextureDescriptor*>(descriptor->cTextureDescriptor);
-
-        // TODO(dawn:22): Remove once migration from GPUTextureDescriptor.arrayLayerCount to
-        // GPUTextureDescriptor.size.depth is done.
-        TextureDescriptor fixedDescriptor;
-        DAWN_TRY_ASSIGN(fixedDescriptor, FixTextureDescriptor(device, textureDescriptor));
-        textureDescriptor = &fixedDescriptor;
 
         Ref<Texture> dawnTexture =
             AcquireRef(new Texture(device, textureDescriptor, TextureState::OwnedExternal));
         DAWN_TRY(dawnTexture->InitializeAsExternalTexture(textureDescriptor, sharedHandle,
                                                           acquireMutexKey, isSwapChainTexture));
-        dawnTexture->SetIsSubresourceContentInitialized(descriptor->isCleared,
+        dawnTexture->SetIsSubresourceContentInitialized(descriptor->isInitialized,
                                                         dawnTexture->GetAllSubresources());
         return std::move(dawnTexture);
     }
 
     MaybeError Texture::InitializeAsExternalTexture(const TextureDescriptor* descriptor,
                                                     HANDLE sharedHandle,
-                                                    uint64_t acquireMutexKey,
+                                                    ExternalMutexSerial acquireMutexKey,
                                                     bool isSwapChainTexture) {
         Device* dawnDevice = ToBackend(GetDevice());
         DAWN_TRY(ValidateTextureDescriptor(dawnDevice, descriptor));
@@ -427,7 +422,7 @@ namespace dawn_native { namespace d3d12 {
         DAWN_TRY_ASSIGN(dxgiKeyedMutex,
                         dawnDevice->CreateKeyedMutexForTexture(d3d12Resource.Get()));
 
-        DAWN_TRY(CheckHRESULT(dxgiKeyedMutex->AcquireSync(acquireMutexKey, INFINITE),
+        DAWN_TRY(CheckHRESULT(dxgiKeyedMutex->AcquireSync(uint64_t(acquireMutexKey), INFINITE),
                               "D3D12 acquiring shared mutex"));
 
         mAcquireMutexKey = acquireMutexKey;
@@ -494,7 +489,7 @@ namespace dawn_native { namespace d3d12 {
         : TextureBase(device, descriptor, state),
           mSubresourceStateAndDecay(
               GetSubresourceCount(),
-              {D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_COMMON, UINT64_MAX, false}) {
+              {D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_COMMON, kMaxExecutionSerial, false}) {
     }
 
     Texture::Texture(Device* device,
@@ -527,14 +522,14 @@ namespace dawn_native { namespace d3d12 {
         if (mSwapChainTexture) {
             ID3D12SharingContract* d3dSharingContract = device->GetSharingContract();
             if (d3dSharingContract != nullptr) {
-                d3dSharingContract->Present(mResourceAllocation.GetD3D12Resource().Get(), 0, 0);
+                d3dSharingContract->Present(mResourceAllocation.GetD3D12Resource(), 0, 0);
             }
         }
 
         device->DeallocateMemory(mResourceAllocation);
 
         if (mDxgiKeyedMutex != nullptr) {
-            mDxgiKeyedMutex->ReleaseSync(mAcquireMutexKey + 1);
+            mDxgiKeyedMutex->ReleaseSync(uint64_t(mAcquireMutexKey) + 1);
             device->ReleaseKeyedMutexForTexture(std::move(mDxgiKeyedMutex));
         }
     }
@@ -544,7 +539,26 @@ namespace dawn_native { namespace d3d12 {
     }
 
     ID3D12Resource* Texture::GetD3D12Resource() const {
-        return mResourceAllocation.GetD3D12Resource().Get();
+        return mResourceAllocation.GetD3D12Resource();
+    }
+
+    DXGI_FORMAT Texture::GetD3D12CopyableSubresourceFormat(Aspect aspect) const {
+        ASSERT(GetFormat().aspects & aspect);
+
+        switch (GetFormat().format) {
+            case wgpu::TextureFormat::Depth24PlusStencil8:
+                switch (aspect) {
+                    case Aspect::Depth:
+                        return DXGI_FORMAT_R32_FLOAT;
+                    case Aspect::Stencil:
+                        return DXGI_FORMAT_R8_UINT;
+                    default:
+                        UNREACHABLE();
+                }
+            default:
+                ASSERT(HasOneBit(GetFormat().aspects));
+                return GetD3D12Format();
+        }
     }
 
     void Texture::TrackUsageAndTransitionNow(CommandRecordingContext* commandContext,
@@ -574,7 +588,15 @@ namespace dawn_native { namespace d3d12 {
         }
 
         std::vector<D3D12_RESOURCE_BARRIER> barriers;
-        barriers.reserve(range.levelCount * range.layerCount);
+
+        // TODO(enga): Consider adding a Count helper.
+        uint32_t aspectCount = 0;
+        for (Aspect aspect : IterateEnumMask(range.aspects)) {
+            aspectCount++;
+            DAWN_UNUSED(aspect);
+        }
+
+        barriers.reserve(range.levelCount * range.layerCount * aspectCount);
 
         TransitionUsageAndGetResourceBarrier(commandContext, &barriers, newState, range);
         if (barriers.size()) {
@@ -585,7 +607,7 @@ namespace dawn_native { namespace d3d12 {
     void Texture::TransitionSingleOrAllSubresources(std::vector<D3D12_RESOURCE_BARRIER>* barriers,
                                                     uint32_t index,
                                                     D3D12_RESOURCE_STATES newState,
-                                                    const Serial pendingCommandSerial,
+                                                    ExecutionSerial pendingCommandSerial,
                                                     bool allSubresources) {
         StateAndDecay* state = &mSubresourceStateAndDecay[index];
         // Reuse the subresource(s) directly and avoid transition when it isn't needed, and
@@ -652,19 +674,6 @@ namespace dawn_native { namespace d3d12 {
         barrier.Transition.Subresource =
             allSubresources ? D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES : index;
         barriers->push_back(barrier);
-        // TODO(yunchao.he@intel.com): support subresource for depth/stencil. Depth stencil
-        // texture has different plane slices. While the current implementation only has differernt
-        // mip slices and array slices for subresources.
-        // This is a hack because Dawn doesn't handle subresource of multiplanar resources
-        // correctly. We force the transition to be the same for all planes to match what the
-        // frontend validation checks for. This hack might be incorrect for stencil-only texture
-        // because we always set transition barrier for depth plane.
-        if (!allSubresources && newState == D3D12_RESOURCE_STATE_DEPTH_WRITE &&
-            GetFormat().HasStencil()) {
-            D3D12_RESOURCE_BARRIER barrierStencil = barrier;
-            barrierStencil.Transition.Subresource += GetArrayLayers() * GetNumMipLevels();
-            barriers->push_back(barrierStencil);
-        }
 
         state->isValidToDecay = false;
     }
@@ -678,6 +687,14 @@ namespace dawn_native { namespace d3d12 {
         }
     }
 
+    void Texture::TransitionUsageAndGetResourceBarrier(CommandRecordingContext* commandContext,
+                                                       std::vector<D3D12_RESOURCE_BARRIER>* barrier,
+                                                       wgpu::TextureUsage usage,
+                                                       const SubresourceRange& range) {
+        TransitionUsageAndGetResourceBarrier(commandContext, barrier,
+                                             D3D12TextureUsage(usage, GetFormat()), range);
+    }
+
     void Texture::TransitionUsageAndGetResourceBarrier(
         CommandRecordingContext* commandContext,
         std::vector<D3D12_RESOURCE_BARRIER>* barriers,
@@ -685,8 +702,8 @@ namespace dawn_native { namespace d3d12 {
         const SubresourceRange& range) {
         HandleTransitionSpecialCases(commandContext);
 
-        const Serial pendingCommandSerial = ToBackend(GetDevice())->GetPendingCommandSerial();
-        uint32_t subresourceCount = GetSubresourceCount();
+        const ExecutionSerial pendingCommandSerial =
+            ToBackend(GetDevice())->GetPendingCommandSerial();
 
         // This transitions assume it is a 2D texture
         ASSERT(GetDimension() == wgpu::TextureDimension::e2D);
@@ -695,25 +712,29 @@ namespace dawn_native { namespace d3d12 {
         // are the same, then we can use one barrier to do state transition for all subresources.
         // Note that if the texture has only one mip level and one array slice, it will fall into
         // this category.
-        bool areAllSubresourcesCovered = range.levelCount * range.layerCount == subresourceCount;
+        bool areAllSubresourcesCovered = (range.levelCount == GetNumMipLevels() &&  //
+                                          range.layerCount == GetArrayLayers() &&   //
+                                          range.aspects == GetFormat().aspects);
         if (mSameLastUsagesAcrossSubresources && areAllSubresourcesCovered) {
             TransitionSingleOrAllSubresources(barriers, 0, newState, pendingCommandSerial, true);
 
             // TODO(yunchao.he@intel.com): compress and decompress if all subresources have the
             // same states. We may need to retain mSubresourceStateAndDecay[0] only.
-            for (uint32_t i = 1; i < subresourceCount; ++i) {
+            for (uint32_t i = 1; i < GetSubresourceCount(); ++i) {
                 mSubresourceStateAndDecay[i] = mSubresourceStateAndDecay[0];
             }
 
             return;
         }
-        for (uint32_t arrayLayer = 0; arrayLayer < range.layerCount; ++arrayLayer) {
-            for (uint32_t mipLevel = 0; mipLevel < range.levelCount; ++mipLevel) {
-                uint32_t index = GetSubresourceIndex(range.baseMipLevel + mipLevel,
-                                                     range.baseArrayLayer + arrayLayer);
+        for (Aspect aspect : IterateEnumMask(range.aspects)) {
+            for (uint32_t arrayLayer = 0; arrayLayer < range.layerCount; ++arrayLayer) {
+                for (uint32_t mipLevel = 0; mipLevel < range.levelCount; ++mipLevel) {
+                    uint32_t index = GetSubresourceIndex(range.baseMipLevel + mipLevel,
+                                                         range.baseArrayLayer + arrayLayer, aspect);
 
-                TransitionSingleOrAllSubresources(barriers, index, newState, pendingCommandSerial,
-                                                  false);
+                    TransitionSingleOrAllSubresources(barriers, index, newState,
+                                                      pendingCommandSerial, false);
+                }
             }
         }
         mSameLastUsagesAcrossSubresources = areAllSubresourcesCovered;
@@ -723,9 +744,16 @@ namespace dawn_native { namespace d3d12 {
         CommandRecordingContext* commandContext,
         std::vector<D3D12_RESOURCE_BARRIER>* barriers,
         const PassTextureUsage& textureUsages) {
+        if (mResourceAllocation.GetInfo().mMethod != AllocationMethod::kExternal) {
+            // Track the underlying heap to ensure residency.
+            Heap* heap = ToBackend(mResourceAllocation.GetResourceHeap());
+            commandContext->TrackHeapUsage(heap, GetDevice()->GetPendingCommandSerial());
+        }
+
         HandleTransitionSpecialCases(commandContext);
 
-        const Serial pendingCommandSerial = ToBackend(GetDevice())->GetPendingCommandSerial();
+        const ExecutionSerial pendingCommandSerial =
+            ToBackend(GetDevice())->GetPendingCommandSerial();
         uint32_t subresourceCount = GetSubresourceCount();
         ASSERT(textureUsages.subresourceUsages.size() == subresourceCount);
         // This transitions assume it is a 2D texture
@@ -748,20 +776,22 @@ namespace dawn_native { namespace d3d12 {
             return;
         }
 
-        for (uint32_t arrayLayer = 0; arrayLayer < GetArrayLayers(); ++arrayLayer) {
-            for (uint32_t mipLevel = 0; mipLevel < GetNumMipLevels(); ++mipLevel) {
-                uint32_t index = GetSubresourceIndex(mipLevel, arrayLayer);
+        for (Aspect aspect : IterateEnumMask(GetFormat().aspects)) {
+            for (uint32_t arrayLayer = 0; arrayLayer < GetArrayLayers(); ++arrayLayer) {
+                for (uint32_t mipLevel = 0; mipLevel < GetNumMipLevels(); ++mipLevel) {
+                    uint32_t index = GetSubresourceIndex(mipLevel, arrayLayer, aspect);
 
-                // Skip if this subresource is not used during the current pass
-                if (textureUsages.subresourceUsages[index] == wgpu::TextureUsage::None) {
-                    continue;
+                    // Skip if this subresource is not used during the current pass
+                    if (textureUsages.subresourceUsages[index] == wgpu::TextureUsage::None) {
+                        continue;
+                    }
+
+                    D3D12_RESOURCE_STATES newState =
+                        D3D12TextureUsage(textureUsages.subresourceUsages[index], GetFormat());
+
+                    TransitionSingleOrAllSubresources(barriers, index, newState,
+                                                      pendingCommandSerial, false);
                 }
-
-                D3D12_RESOURCE_STATES newState =
-                    D3D12TextureUsage(textureUsages.subresourceUsages[index], GetFormat());
-
-                TransitionSingleOrAllSubresources(barriers, index, newState, pendingCommandSerial,
-                                                  false);
             }
         }
         mSameLastUsagesAcrossSubresources = textureUsages.sameUsagesAcrossSubresources;
@@ -834,20 +864,37 @@ namespace dawn_native { namespace d3d12 {
         uint8_t clearColor = (clearValue == TextureBase::ClearValue::Zero) ? 0 : 1;
         float fClearColor = (clearValue == TextureBase::ClearValue::Zero) ? 0.f : 1.f;
 
-        if (GetFormat().isRenderable) {
+        if ((GetUsage() & wgpu::TextureUsage::OutputAttachment) != 0) {
             if (GetFormat().HasDepthOrStencil()) {
                 TrackUsageAndTransitionNow(commandContext, D3D12_RESOURCE_STATE_DEPTH_WRITE, range);
-
-                D3D12_CLEAR_FLAGS clearFlags = {};
 
                 for (uint32_t level = range.baseMipLevel;
                      level < range.baseMipLevel + range.levelCount; ++level) {
                     for (uint32_t layer = range.baseArrayLayer;
                          layer < range.baseArrayLayer + range.layerCount; ++layer) {
-                        if (clearValue == TextureBase::ClearValue::Zero &&
-                            IsSubresourceContentInitialized(
-                                SubresourceRange::SingleSubresource(level, layer))) {
-                            // Skip lazy clears if already initialized.
+                        // Iterate the aspects individually to determine which clear flags to use.
+                        D3D12_CLEAR_FLAGS clearFlags = {};
+                        for (Aspect aspect : IterateEnumMask(range.aspects)) {
+                            if (clearValue == TextureBase::ClearValue::Zero &&
+                                IsSubresourceContentInitialized(
+                                    SubresourceRange::SingleMipAndLayer(level, layer, aspect))) {
+                                // Skip lazy clears if already initialized.
+                                continue;
+                            }
+
+                            switch (aspect) {
+                                case Aspect::Depth:
+                                    clearFlags |= D3D12_CLEAR_FLAG_DEPTH;
+                                    break;
+                                case Aspect::Stencil:
+                                    clearFlags |= D3D12_CLEAR_FLAG_STENCIL;
+                                    break;
+                                default:
+                                    UNREACHABLE();
+                            }
+                        }
+
+                        if (clearFlags == 0) {
                             continue;
                         }
 
@@ -860,13 +907,6 @@ namespace dawn_native { namespace d3d12 {
                         device->GetD3D12Device()->CreateDepthStencilView(GetD3D12Resource(),
                                                                          &dsvDesc, baseDescriptor);
 
-                        if (GetFormat().HasDepth()) {
-                            clearFlags |= D3D12_CLEAR_FLAG_DEPTH;
-                        }
-                        if (GetFormat().HasStencil()) {
-                            clearFlags |= D3D12_CLEAR_FLAG_STENCIL;
-                        }
-
                         commandList->ClearDepthStencilView(baseDescriptor, clearFlags, fClearColor,
                                                            clearColor, 0, nullptr);
                     }
@@ -878,13 +918,14 @@ namespace dawn_native { namespace d3d12 {
                 const float clearColorRGBA[4] = {fClearColor, fClearColor, fClearColor,
                                                  fClearColor};
 
+                ASSERT(range.aspects == Aspect::Color);
                 for (uint32_t level = range.baseMipLevel;
                      level < range.baseMipLevel + range.levelCount; ++level) {
                     for (uint32_t layer = range.baseArrayLayer;
                          layer < range.baseArrayLayer + range.layerCount; ++layer) {
                         if (clearValue == TextureBase::ClearValue::Zero &&
                             IsSubresourceContentInitialized(
-                                SubresourceRange::SingleSubresource(level, layer))) {
+                                SubresourceRange::SingleMipAndLayer(level, layer, Aspect::Color))) {
                             // Skip lazy clears if already initialized.
                             continue;
                         }
@@ -902,59 +943,63 @@ namespace dawn_native { namespace d3d12 {
                 }
             }
         } else {
-            // TODO(natlee@microsoft.com): test compressed textures are cleared
             // create temp buffer with clear color to copy to the texture image
-            uint32_t bytesPerRow =
-                Align((GetWidth() / GetFormat().blockWidth) * GetFormat().blockByteSize,
-                      kTextureBytesPerRowAlignment);
-            uint64_t bufferSize64 = bytesPerRow * (GetHeight() / GetFormat().blockHeight);
-            if (bufferSize64 > std::numeric_limits<uint32_t>::max()) {
-                return DAWN_OUT_OF_MEMORY_ERROR("Unable to allocate buffer.");
-            }
-            uint32_t bufferSize = static_cast<uint32_t>(bufferSize64);
-            DynamicUploader* uploader = device->GetDynamicUploader();
-            UploadHandle uploadHandle;
-            DAWN_TRY_ASSIGN(uploadHandle,
-                            uploader->Allocate(bufferSize, device->GetPendingCommandSerial()));
-            memset(uploadHandle.mappedBuffer, clearColor, bufferSize);
-
             TrackUsageAndTransitionNow(commandContext, D3D12_RESOURCE_STATE_COPY_DEST, range);
 
-            for (uint32_t level = range.baseMipLevel; level < range.baseMipLevel + range.levelCount;
-                 ++level) {
-                // compute d3d12 texture copy locations for texture and buffer
-                Extent3D copySize = GetMipLevelVirtualSize(level);
+            for (Aspect aspect : IterateEnumMask(range.aspects)) {
+                const TexelBlockInfo& blockInfo = GetFormat().GetAspectInfo(aspect).block;
 
-                uint32_t rowsPerImage = GetHeight();
-                TextureCopySplit copySplit =
-                    ComputeTextureCopySplit({0, 0, 0}, copySize, GetFormat(),
-                                            uploadHandle.startOffset, bytesPerRow, rowsPerImage);
+                uint32_t bytesPerRow = Align((GetWidth() / blockInfo.width) * blockInfo.byteSize,
+                                             kTextureBytesPerRowAlignment);
+                uint64_t bufferSize64 = bytesPerRow * (GetHeight() / blockInfo.height);
+                if (bufferSize64 > std::numeric_limits<uint32_t>::max()) {
+                    return DAWN_OUT_OF_MEMORY_ERROR("Unable to allocate buffer.");
+                }
+                uint32_t bufferSize = static_cast<uint32_t>(bufferSize64);
 
-                for (uint32_t layer = range.baseArrayLayer;
-                     layer < range.baseArrayLayer + range.layerCount; ++layer) {
-                    if (clearValue == TextureBase::ClearValue::Zero &&
-                        IsSubresourceContentInitialized(
-                            SubresourceRange::SingleSubresource(level, layer))) {
-                        // Skip lazy clears if already initialized.
-                        continue;
-                    }
+                DynamicUploader* uploader = device->GetDynamicUploader();
+                UploadHandle uploadHandle;
+                DAWN_TRY_ASSIGN(uploadHandle,
+                                uploader->Allocate(bufferSize, device->GetPendingCommandSerial(),
+                                                   blockInfo.byteSize));
+                memset(uploadHandle.mappedBuffer, clearColor, bufferSize);
 
-                    D3D12_TEXTURE_COPY_LOCATION textureLocation =
-                        ComputeTextureCopyLocationForTexture(this, level, layer);
-                    for (uint32_t i = 0; i < copySplit.count; ++i) {
-                        TextureCopySplit::CopyInfo& info = copySplit.copies[i];
+                for (uint32_t level = range.baseMipLevel;
+                     level < range.baseMipLevel + range.levelCount; ++level) {
+                    // compute d3d12 texture copy locations for texture and buffer
+                    Extent3D copySize = GetMipLevelVirtualSize(level);
 
-                        D3D12_TEXTURE_COPY_LOCATION bufferLocation =
-                            ComputeBufferLocationForCopyTextureRegion(
-                                this, ToBackend(uploadHandle.stagingBuffer)->GetResource(),
-                                info.bufferSize, copySplit.offset, bytesPerRow);
-                        D3D12_BOX sourceRegion =
-                            ComputeD3D12BoxFromOffsetAndSize(info.bufferOffset, info.copySize);
+                    uint32_t rowsPerImage = GetHeight() / blockInfo.height;
+                    Texture2DCopySplit copySplit = ComputeTextureCopySplit(
+                        {0, 0, 0}, copySize, blockInfo, uploadHandle.startOffset, bytesPerRow,
+                        rowsPerImage);
 
-                        // copy the buffer filled with clear color to the texture
-                        commandList->CopyTextureRegion(&textureLocation, info.textureOffset.x,
-                                                       info.textureOffset.y, info.textureOffset.z,
-                                                       &bufferLocation, &sourceRegion);
+                    for (uint32_t layer = range.baseArrayLayer;
+                         layer < range.baseArrayLayer + range.layerCount; ++layer) {
+                        if (clearValue == TextureBase::ClearValue::Zero &&
+                            IsSubresourceContentInitialized(
+                                SubresourceRange::SingleMipAndLayer(level, layer, aspect))) {
+                            // Skip lazy clears if already initialized.
+                            continue;
+                        }
+
+                        D3D12_TEXTURE_COPY_LOCATION textureLocation =
+                            ComputeTextureCopyLocationForTexture(this, level, layer, aspect);
+                        for (uint32_t i = 0; i < copySplit.count; ++i) {
+                            Texture2DCopySplit::CopyInfo& info = copySplit.copies[i];
+
+                            D3D12_TEXTURE_COPY_LOCATION bufferLocation =
+                                ComputeBufferLocationForCopyTextureRegion(
+                                    this, ToBackend(uploadHandle.stagingBuffer)->GetResource(),
+                                    info.bufferSize, copySplit.offset, bytesPerRow, aspect);
+                            D3D12_BOX sourceRegion =
+                                ComputeD3D12BoxFromOffsetAndSize(info.bufferOffset, info.copySize);
+
+                            // copy the buffer filled with clear color to the texture
+                            commandList->CopyTextureRegion(
+                                &textureLocation, info.textureOffset.x, info.textureOffset.y,
+                                info.textureOffset.z, &bufferLocation, &sourceRegion);
+                        }
                     }
                 }
             }
@@ -1006,6 +1051,7 @@ namespace dawn_native { namespace d3d12 {
                     ASSERT(texture->GetDimension() == wgpu::TextureDimension::e2D);
                     mSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
                     break;
+
                 default:
                     UNREACHABLE();
             }
@@ -1033,7 +1079,10 @@ namespace dawn_native { namespace d3d12 {
                     mSrvDesc.TextureCubeArray.MipLevels = descriptor->mipLevelCount;
                     mSrvDesc.TextureCubeArray.ResourceMinLODClamp = 0;
                     break;
-                default:
+
+                case wgpu::TextureViewDimension::e1D:
+                case wgpu::TextureViewDimension::e3D:
+                case wgpu::TextureViewDimension::Undefined:
                     UNREACHABLE();
             }
         }

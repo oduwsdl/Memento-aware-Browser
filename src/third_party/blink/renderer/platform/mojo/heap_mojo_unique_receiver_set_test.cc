@@ -10,7 +10,7 @@
 #include "third_party/blink/renderer/platform/context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/heap/heap_test_utilities.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/heap_observer_list.h"
+#include "third_party/blink/renderer/platform/heap_observer_set.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 
 namespace blink {
@@ -19,8 +19,6 @@ namespace {
 
 class FakeContextNotifier final : public GarbageCollected<FakeContextNotifier>,
                                   public ContextLifecycleNotifier {
-  USING_GARBAGE_COLLECTED_MIXIN(FakeContextNotifier);
-
  public:
   FakeContextNotifier() = default;
 
@@ -45,7 +43,7 @@ class FakeContextNotifier final : public GarbageCollected<FakeContextNotifier>,
   }
 
  private:
-  HeapObserverList<ContextLifecycleObserver> observers_;
+  HeapObserverSet<ContextLifecycleObserver> observers_;
 };
 
 template <HeapMojoWrapperMode Mode>
@@ -100,7 +98,7 @@ class HeapMojoUniqueReceiverSetWithContextObserverTest
           HeapMojoWrapperMode::kWithContextObserver> {};
 class HeapMojoUniqueReceiverSetWithoutContextObserverTest
     : public HeapMojoUniqueReceiverSetBaseTest<
-          HeapMojoWrapperMode::kWithoutContextObserver> {};
+          HeapMojoWrapperMode::kForceWithoutContextObserver> {};
 
 }  // namespace
 

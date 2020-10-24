@@ -31,6 +31,12 @@ message AndroidBatteryMetric {
     optional int64 total_screen_doze_ns = 3;
     // Total time a wakelock was held
     optional int64 total_wakelock_ns = 4;
+    // Amount of time the device was suspended. Depends on the ftrace source
+    // "power/suspend_resume".
+    optional int64 sleep_ns = 5;
+    optional int64 sleep_screen_off_ns = 6;
+    optional int64 sleep_screen_on_ns = 7;
+    optional int64 sleep_screen_doze_ns = 8;
   }
 
   // Battery counters info for each ts of the trace. This should only be
@@ -118,6 +124,30 @@ message AndroidDisplayMetrics {
   optional uint32 duplicate_frames_logged = 2;
 }
 // End of protos/perfetto/metrics/android/display_metrics.proto
+
+// Begin of protos/perfetto/metrics/android/gpu_metric.proto
+
+message AndroidGpuMetric {
+  message Process {
+    // Process name.
+    optional string name = 1;
+
+    // max/min/avg GPU memory used by this process.
+    optional int64 mem_max = 2;
+    optional int64 mem_min = 3;
+    optional int64 mem_avg = 4;
+  }
+
+  // GPU metric for processes using GPU.
+  repeated Process processes = 1;
+
+  // max/min/avg GPU memory used by the entire system.
+  optional int64 mem_max = 2;
+  optional int64 mem_min = 3;
+  optional int64 mem_avg = 4;
+}
+
+// End of protos/perfetto/metrics/android/gpu_metric.proto
 
 // Begin of protos/perfetto/metrics/android/process_metadata.proto
 
@@ -320,8 +350,11 @@ message AndroidIonMetric {
 // Begin of protos/perfetto/metrics/android/java_heap_histogram.proto
 
 message JavaHeapHistogram {
+  // Next id: 5
   message TypeCount {
     optional string type_name = 1;
+    optional string category = 4;
+
     optional uint32 obj_count = 2;
     optional uint32 reachable_obj_count = 3;
   }
@@ -691,6 +724,8 @@ message AndroidThreadTimeInStateMetric {
     optional int64 runtime_ms = 2;
     // CPU megacycles (i.e. cycles divided by 1e6).
     optional int64 mcycles = 3;
+    // Power cost as predicted by the power profile.
+    optional double power_profile_mah = 4;
   }
 
   message Thread {
@@ -710,27 +745,6 @@ message AndroidThreadTimeInStateMetric {
 
 // End of protos/perfetto/metrics/android/thread_time_in_state_metric.proto
 
-// Begin of protos/perfetto/metrics/android/unmapped_java_symbols.proto
-
-message UnmappedJavaSymbols {
-  message Field {
-    optional string field_name = 1;
-    optional string field_type_name = 2;
-  }
-
-  message ProcessSymbols {
-    reserved 3;
-
-    optional AndroidProcessMetadata process_metadata = 1;
-    repeated string type_name = 2;
-    repeated Field field = 4;
-  }
-
-  repeated ProcessSymbols process_symbols = 1;
-}
-
-// End of protos/perfetto/metrics/android/unmapped_java_symbols.proto
-
 // Begin of protos/perfetto/metrics/android/unsymbolized_frames.proto
 
 message UnsymbolizedFrames {
@@ -749,13 +763,7 @@ message UnsymbolizedFrames {
 
 // Trace processor metadata
 message TraceMetadata {
-  message Entry {
-    optional string name = 1;
-    optional uint32 idx = 2;
-    optional int64 value = 3;
-  }
-
-  repeated Entry error_stats_entry = 1;
+  reserved 1;
   optional int64 trace_duration_ns = 2;
   optional string trace_uuid = 3;
   optional string android_build_fingerprint = 4;
@@ -767,9 +775,9 @@ message TraceMetadata {
 
 // Root message for all Perfetto-based metrics.
 //
-// Next id: 26
+// Next id: 27
 message TraceMetrics {
-  reserved 4, 10, 13, 14;
+  reserved 4, 10, 13, 14, 19;
 
   // Battery counters metric on Android.
   optional AndroidBatteryMetric android_batt = 5;
@@ -819,9 +827,6 @@ message TraceMetrics {
   // Metrics used to find potential culprits of low-memory kills.
   optional AndroidLmkReasonMetric android_lmk_reason = 18;
 
-  // Java type names that have no deobfuscation mappings.
-  optional UnmappedJavaSymbols unmapped_java_symbols = 19;
-
   optional AndroidHwuiMetric android_hwui_metric = 20;
 
   optional AndroidDisplayMetrics display_metrics = 22;
@@ -833,11 +838,17 @@ message TraceMetrics {
   // Metric associated with surfaceflinger.
   optional AndroidSurfaceflingerMetric android_surfaceflinger = 25;
 
+  // GPU metrics on Android.
+  optional AndroidGpuMetric android_gpu = 26;
+
   // Demo extensions.
   extensions 450 to 499;
 
   // Vendor extensions.
   extensions 500 to 1000;
+
+  // Chrome metrics.
+  extensions 1001 to 2000;
 }
 
 // End of protos/perfetto/metrics/metrics.proto

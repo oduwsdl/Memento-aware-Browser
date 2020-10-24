@@ -210,6 +210,7 @@ TParseContext::TParseContext(TSymbolTable &symt,
       mMaxCombinedTextureImageUnits(resources.MaxCombinedTextureImageUnits),
       mMaxUniformLocations(resources.MaxUniformLocations),
       mMaxUniformBufferBindings(resources.MaxUniformBufferBindings),
+      mMaxVertexAttribs(resources.MaxVertexAttribs),
       mMaxAtomicCounterBindings(resources.MaxAtomicCounterBindings),
       mMaxShaderStorageBufferBindings(resources.MaxShaderStorageBufferBindings),
       mDeclaringFunction(false),
@@ -1541,6 +1542,18 @@ void TParseContext::nonEmptyDeclarationErrorCheck(const TPublicType &publicType,
         }
     }
 
+    if (mShaderVersion >= 300 && publicType.qualifier == EvqVertexIn)
+    {
+        // Valid vertex input declarations can't be unsized arrays since they can't be initialized.
+        // But invalid shaders may still reach here with an unsized array declaration.
+        TType type(publicType);
+        if (!type.isUnsizedArray())
+        {
+            checkAttributeLocationInRange(identifierLocation, type.getLocationCount(),
+                                          publicType.layoutQualifier);
+        }
+    }
+
     // check for layout qualifier issues
     const TLayoutQualifier layoutQualifier = publicType.layoutQualifier;
 
@@ -1788,9 +1801,30 @@ void TParseContext::checkUniformLocationInRange(const TSourceLoc &location,
                                                 const TLayoutQualifier &layoutQualifier)
 {
     int loc = layoutQualifier.location;
-    if (loc >= 0 && loc + objectLocationCount > mMaxUniformLocations)
+    if (loc >= 0)  // Shader-specified location
     {
-        error(location, "Uniform location out of range", "location");
+        if (loc >= mMaxUniformLocations || objectLocationCount > mMaxUniformLocations ||
+            static_cast<unsigned int>(loc) + static_cast<unsigned int>(objectLocationCount) >
+                static_cast<unsigned int>(mMaxUniformLocations))
+        {
+            error(location, "Uniform location out of range", "location");
+        }
+    }
+}
+
+void TParseContext::checkAttributeLocationInRange(const TSourceLoc &location,
+                                                  int objectLocationCount,
+                                                  const TLayoutQualifier &layoutQualifier)
+{
+    int loc = layoutQualifier.location;
+    if (loc >= 0)  // Shader-specified location
+    {
+        if (loc >= mMaxVertexAttribs || objectLocationCount > mMaxVertexAttribs ||
+            static_cast<unsigned int>(loc) + static_cast<unsigned int>(objectLocationCount) >
+                static_cast<unsigned int>(mMaxVertexAttribs))
+        {
+            error(location, "Attribute location out of range", "location");
+        }
     }
 }
 
@@ -6224,7 +6258,7 @@ TIntermTyped *TParseContext::addNonConstructorFunctionCall(TFunctionLookup *fnCa
         }
     }
 
-    // Error message was already written. Put on a dummy node for error recovery.
+    // Error message was already written. Put on an unused node for error recovery.
     return CreateZeroNode(TType(EbtFloat, EbpMedium, EvqConst));
 }
 

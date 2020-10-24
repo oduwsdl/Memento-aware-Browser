@@ -161,7 +161,7 @@ std::shared_ptr<WaitableEvent> AsyncWorkerPool::postWorkerTask(std::shared_ptr<C
         mTaskQueue.push(std::make_pair(waitable, task));
     }
     checkToRunPendingTasks();
-    return waitable;
+    return std::move(waitable);
 }
 
 void AsyncWorkerPool::setMaxThreads(size_t maxThreads)
@@ -298,12 +298,12 @@ std::shared_ptr<WaitableEvent> DelegateWorkerPool::postWorkerTask(std::shared_pt
 {
     auto waitable = std::make_shared<DelegateWaitableEvent>();
 
-    // The task will be deleted bu RunTask(...) its execution.
+    // The task will be deleted by DelegateWorkerTask::RunTask(...) after its execution.
     DelegateWorkerTask *workerTask = new DelegateWorkerTask(task, waitable);
     auto *platform                 = ANGLEPlatformCurrent();
     platform->postWorkerTask(platform, DelegateWorkerTask::RunTask, workerTask);
 
-    return waitable;
+    return std::move(waitable);
 }
 
 void DelegateWorkerPool::setMaxThreads(size_t maxThreads) {}
@@ -326,8 +326,8 @@ std::shared_ptr<WorkerThreadPool> WorkerThreadPool::Create(bool multithreaded)
         pool = std::shared_ptr<WorkerThreadPool>(new DelegateWorkerPool());
     }
 #endif
-#if (!pool && ANGLE_STD_ASYNC_WORKERS == ANGLE_ENABLED)
-    if (multithreaded)
+#if (ANGLE_STD_ASYNC_WORKERS == ANGLE_ENABLED)
+    if (!pool && multithreaded)
     {
         pool = std::shared_ptr<WorkerThreadPool>(
             new AsyncWorkerPool(std::thread::hardware_concurrency()));

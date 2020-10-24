@@ -80,6 +80,7 @@ WebPerformance::BackForwardCacheRestore() const {
         MillisecondsToSeconds(restore_timings[i].navigation_start);
     timings[i].first_paint =
         MillisecondsToSeconds(restore_timings[i].first_paint);
+    timings[i].first_input_delay = restore_timings[i].first_input_delay;
   }
   return timings;
 }
@@ -222,6 +223,10 @@ double WebPerformance::ExperimentalLargestTextPaint() const {
 
 uint64_t WebPerformance::ExperimentalLargestTextPaintSize() const {
   return private_->timing()->ExperimentalLargestTextPaintSize();
+}
+
+double WebPerformance::FirstEligibleToPaint() const {
+  return MillisecondsToSeconds(private_->timing()->FirstEligibleToPaint());
 }
 
 double WebPerformance::FirstInputOrScrollNotifiedTimestamp() const {

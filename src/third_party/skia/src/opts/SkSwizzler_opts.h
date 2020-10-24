@@ -9,7 +9,7 @@
 #define SkSwizzler_opts_DEFINED
 
 #include "include/private/SkColorData.h"
-
+#include "include/private/SkVx.h"
 #include <utility>
 
 #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSSE3
@@ -1384,6 +1384,6 @@ static void RGB_to_BGR1_portable(uint32_t dst[], const uint8_t* src, int count) 
     }
 #endif
 
-}
+}  // namespace SK_OPTS_NS
 
 #endif // SkSwizzler_opts_DEFINED

@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
+#include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
@@ -38,8 +39,8 @@ class MainThreadScrollingReasonsTest : public testing::Test {
  public:
   MainThreadScrollingReasonsTest() : base_url_("http://www.test.com/") {
     helper_.InitializeWithSettings(&ConfigureSettings);
-    GetWebView()->MainFrameWidget()->Resize(IntSize(320, 240));
-    GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
+    GetWebView()->MainFrameViewWidget()->Resize(gfx::Size(320, 240));
+    GetWebView()->MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -58,7 +59,7 @@ class MainThreadScrollingReasonsTest : public testing::Test {
   }
 
   void ForceFullCompositingUpdate() {
-    GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
+    GetWebView()->MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -221,7 +222,7 @@ TEST_F(MainThreadScrollingReasonsTest,
 }
 
 TEST_F(MainThreadScrollingReasonsTest, FastScrollingCanBeDisabledWithSetting) {
-  GetWebView()->MainFrameWidget()->Resize(WebSize(800, 600));
+  GetWebView()->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   LoadHTML("<div id='spacer' style='height: 1000px'></div>");
   GetWebView()->GetSettings()->SetThreadedScrollingEnabled(false);
   GetFrame()->View()->SetNeedsPaintPropertyUpdate();
@@ -256,7 +257,7 @@ TEST_F(MainThreadScrollingReasonsTest, FastScrollingForStickyPosition) {
 }
 
 TEST_F(MainThreadScrollingReasonsTest, FastScrollingByDefault) {
-  GetWebView()->MainFrameWidget()->Resize(WebSize(800, 600));
+  GetWebView()->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   LoadHTML("<div id='spacer' style='height: 1000px'></div>");
   ForceFullCompositingUpdate();
 
@@ -298,7 +299,6 @@ TEST_F(MainThreadScrollingReasonsTest,
 class NonCompositedMainThreadScrollingReasonsTest
     : public MainThreadScrollingReasonsTest {
   static const uint32_t kLCDTextRelatedReasons =
-      cc::MainThreadScrollingReason::kHasTransformAndLCDText |
       cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText;
 
  protected:
@@ -379,8 +379,8 @@ TEST_F(NonCompositedMainThreadScrollingReasonsTest, TransparentTest) {
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonsTest, TransformTest) {
-  TestNonCompositedReasons(
-      "transform", cc::MainThreadScrollingReason::kHasTransformAndLCDText);
+  TestNonCompositedReasons("transform",
+                           cc::MainThreadScrollingReason::kNotScrollingOnMain);
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonsTest, BackgroundNotOpaqueTest) {

@@ -72,21 +72,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString str;
-        str.appendf("# combined: %d\n", fRegions.count());
-        for (int i = 0; i < fRegions.count(); ++i) {
-            const RegionInfo& info = fRegions[i];
-            str.appendf("%d: Color: 0x%08x, Region with %d rects\n", i, info.fColor.toBytes_RGBA(),
-                        info.fRegion.computeRegionComplexity());
-        }
-        str += fHelper.dumpInfo();
-        str += INHERITED::dumpInfo();
-        return str;
-    }
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
     GrProcessorSet::Analysis finalize(
@@ -104,7 +89,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         GrGeometryProcessor* gp = make_gp(arena, fViewMatrix, fWideColor);
         if (!gp) {
             SkDebugf("Couldn't create GrGeometryProcessor\n");
@@ -113,7 +99,8 @@ private:
 
         fProgramInfo = fHelper.createProgramInfoWithStencil(caps, arena, writeView,
                                                             std::move(appliedClip), dstProxyView,
-                                                            gp, GrPrimitiveType::kTriangles);
+                                                            gp, GrPrimitiveType::kTriangles,
+                                                            renderPassXferBarriers);
     }
 
     void onPrepareDraws(Target* target) override {
@@ -181,6 +168,19 @@ private:
         return CombineResult::kMerged;
     }
 
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString str = SkStringPrintf("# combined: %d\n", fRegions.count());
+        for (int i = 0; i < fRegions.count(); ++i) {
+            const RegionInfo& info = fRegions[i];
+            str.appendf("%d: Color: 0x%08x, Region with %d rects\n", i, info.fColor.toBytes_RGBA(),
+                        info.fRegion.computeRegionComplexity());
+        }
+        str += fHelper.dumpInfo();
+        return str;
+    }
+#endif
+
     struct RegionInfo {
         SkPMColor4f fColor;
         SkRegion fRegion;
@@ -194,7 +194,7 @@ private:
     GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 }  // anonymous namespace
@@ -212,7 +212,7 @@ std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
     }
     return RegionOp::Make(context, std::move(paint), viewMatrix, region, aaType, stencilSettings);
 }
-}
+}  // namespace GrRegionOp
 
 #if GR_TEST_UTILS
 

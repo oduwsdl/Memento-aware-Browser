@@ -5,13 +5,13 @@
 syntax = "proto2";
 
 option optimize_for = LITE_RUNTIME;
+option java_package = "org.chromium.components.metrics";
 
 option java_outer_classname = "CastLogsProtos";
-option java_package = "org.chromium.components.metrics";
 
 package metrics;  // Cast-enabled device specific log data included in ChromeUserMetricsExtension.
 
-// Next tag: 7
+// Next tag: 8
 message CastLogsProto {
   // Cast specific device information.
   // Next tag: 7
@@ -251,10 +251,10 @@ message CastLogsProto {
   optional fixed32 virtual_release_track = 4;
 
   // Cast specific device information which is expected to change over time.
-  // Next tag: 12
+  // Next tag: 13
   message CastDeviceMutableInfo {
     // This is the last type of reboot the device encountered
-    // Next tag: 14
+    // Next tag: 17
     enum RebootType {
       REBOOT_TYPE_UNKNOWN = 0;  // Fail to get reboot type from system property
       REBOOT_TYPE_FORCED = 1;   // Power removed from device
@@ -273,6 +273,16 @@ message CastLogsProto {
       REBOOT_TYPE_REGENERATE_CLOUD_ID = 12;
       // Reboot triggered due to successive OOM events.
       REBOOT_TYPE_REPEATED_OOM = 13;
+      // Reboot triggered when the utility process is found to be in
+      // crash loop.
+      REBOOT_TYPE_UTILITY_PROCESS_CRASH = 14;
+      // design doc go/fuchsia-session-restart-metrics
+      // Restart triggered due to graceful component teardown by the Fuchsia
+      // platform. Device has not rebooted.
+      REBOOT_TYPE_GRACEFUL_RESTART = 15;
+      // Restart triggered due to ungraceful component teardown by the Fuchsia
+      // platform. Device has not rebooted.
+      REBOOT_TYPE_UNGRACEFUL_RESTART = 16;
     }
     optional RebootType last_reboot_type = 1;
 
@@ -313,9 +323,16 @@ message CastLogsProto {
 
     // Optional field to log installed manifest version.
     optional uint32 installed_manifest_version = 11;
+
+    // Optional field to log the system bundle version.
+    optional string system_bundle_version = 12;
   }
   // The device sends this information at least once per day.
   optional CastDeviceMutableInfo cast_device_mutable_info = 5;
 
   optional fixed64 receiver_metrics_id = 6;
+
+  // This ID is only ever recorded for Google-internal users (dogfooders). It
+  // is never recorded for external users."
+  optional uint64 ephemeral_id = 7;
 }

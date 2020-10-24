@@ -6,7 +6,7 @@
  /* File created by MIDL compiler version 8.xx.xxxx */
 /* at a redacted point in time
  */
-/* Compiler settings for ../../chrome/updater/app/server/win/updater_idl.idl:
+/* Compiler settings for gen/chrome/updater/app/server/win/updater_idl.idl:
     Oicf, W1, Zp8, env=Win64 (32b run), target_arch=ARM64 8.01.0622 
     protocol : dce , ms_ext, c_ext, robust
     error checks: allocation ref bounds_check enum stub_data 
@@ -73,6 +73,13 @@ typedef interface IAppWeb IAppWeb;
 #endif 	/* __IAppWeb_FWD_DEFINED__ */
 
 
+#ifndef __IUpdateState_FWD_DEFINED__
+#define __IUpdateState_FWD_DEFINED__
+typedef interface IUpdateState IUpdateState;
+
+#endif 	/* __IUpdateState_FWD_DEFINED__ */
+
+
 #ifndef __ICompleteStatus_FWD_DEFINED__
 #define __ICompleteStatus_FWD_DEFINED__
 typedef interface ICompleteStatus ICompleteStatus;
@@ -94,11 +101,37 @@ typedef interface IUpdater IUpdater;
 #endif 	/* __IUpdater_FWD_DEFINED__ */
 
 
+#ifndef __IUpdaterControl_FWD_DEFINED__
+#define __IUpdaterControl_FWD_DEFINED__
+typedef interface IUpdaterControl IUpdaterControl;
+
+#endif 	/* __IUpdaterControl_FWD_DEFINED__ */
+
+
+#ifndef __UpdaterClass_FWD_DEFINED__
+#define __UpdaterClass_FWD_DEFINED__
+
+#ifdef __cplusplus
+typedef class UpdaterClass UpdaterClass;
+#else
+typedef struct UpdaterClass UpdaterClass;
+#endif /* __cplusplus */
+
+#endif 	/* __UpdaterClass_FWD_DEFINED__ */
+
+
 #ifndef __IUpdater_FWD_DEFINED__
 #define __IUpdater_FWD_DEFINED__
 typedef interface IUpdater IUpdater;
 
 #endif 	/* __IUpdater_FWD_DEFINED__ */
+
+
+#ifndef __IUpdaterControl_FWD_DEFINED__
+#define __IUpdaterControl_FWD_DEFINED__
+typedef interface IUpdaterControl IUpdaterControl;
+
+#endif 	/* __IUpdaterControl_FWD_DEFINED__ */
 
 
 #ifndef __ICurrentState_FWD_DEFINED__
@@ -127,42 +160,6 @@ typedef interface IAppBundleWeb IAppBundleWeb;
 typedef interface IAppWeb IAppWeb;
 
 #endif 	/* __IAppWeb_FWD_DEFINED__ */
-
-
-#ifndef __UpdaterClass_FWD_DEFINED__
-#define __UpdaterClass_FWD_DEFINED__
-
-#ifdef __cplusplus
-typedef class UpdaterClass UpdaterClass;
-#else
-typedef struct UpdaterClass UpdaterClass;
-#endif /* __cplusplus */
-
-#endif 	/* __UpdaterClass_FWD_DEFINED__ */
-
-
-#ifndef __UpdaterServiceClass_FWD_DEFINED__
-#define __UpdaterServiceClass_FWD_DEFINED__
-
-#ifdef __cplusplus
-typedef class UpdaterServiceClass UpdaterServiceClass;
-#else
-typedef struct UpdaterServiceClass UpdaterServiceClass;
-#endif /* __cplusplus */
-
-#endif 	/* __UpdaterServiceClass_FWD_DEFINED__ */
-
-
-#ifndef __GoogleUpdate3WebUserClass_FWD_DEFINED__
-#define __GoogleUpdate3WebUserClass_FWD_DEFINED__
-
-#ifdef __cplusplus
-typedef class GoogleUpdate3WebUserClass GoogleUpdate3WebUserClass;
-#else
-typedef struct GoogleUpdate3WebUserClass GoogleUpdate3WebUserClass;
-#endif /* __cplusplus */
-
-#endif 	/* __GoogleUpdate3WebUserClass_FWD_DEFINED__ */
 
 
 /* header files for imported files */
@@ -1124,6 +1121,166 @@ EXTERN_C const IID IID_IAppWeb;
 #endif 	/* __IAppWeb_INTERFACE_DEFINED__ */
 
 
+#ifndef __IUpdateState_INTERFACE_DEFINED__
+#define __IUpdateState_INTERFACE_DEFINED__
+
+/* interface IUpdateState */
+/* [unique][helpstring][uuid][dual][object] */ 
+
+
+EXTERN_C const IID IID_IUpdateState;
+
+#if defined(__cplusplus) && !defined(CINTERFACE)
+    
+    MIDL_INTERFACE("46ACF70B-AC13-406D-B53B-B2C4BF091FF6")
+    IUpdateState : public IUnknown
+    {
+    public:
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_state( 
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0000) = 0;
+        
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_appId( 
+            /* [retval][out] */ BSTR *__MIDL__IUpdateState0001) = 0;
+        
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_nextVersion( 
+            /* [retval][out] */ BSTR *__MIDL__IUpdateState0002) = 0;
+        
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_downloadedBytes( 
+            /* [retval][out] */ LONGLONG *__MIDL__IUpdateState0003) = 0;
+        
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_totalBytes( 
+            /* [retval][out] */ LONGLONG *__MIDL__IUpdateState0004) = 0;
+        
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_installProgress( 
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0005) = 0;
+        
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_errorCategory( 
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0006) = 0;
+        
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_errorCode( 
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0007) = 0;
+        
+        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_extraCode1( 
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0008) = 0;
+        
+    };
+    
+    
+#else 	/* C style interface */
+
+    typedef struct IUpdateStateVtbl
+    {
+        BEGIN_INTERFACE
+        
+        HRESULT ( STDMETHODCALLTYPE *QueryInterface )( 
+            IUpdateState * This,
+            /* [in] */ REFIID riid,
+            /* [annotation][iid_is][out] */ 
+            _COM_Outptr_  void **ppvObject);
+        
+        ULONG ( STDMETHODCALLTYPE *AddRef )( 
+            IUpdateState * This);
+        
+        ULONG ( STDMETHODCALLTYPE *Release )( 
+            IUpdateState * This);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_state )( 
+            IUpdateState * This,
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0000);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_appId )( 
+            IUpdateState * This,
+            /* [retval][out] */ BSTR *__MIDL__IUpdateState0001);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_nextVersion )( 
+            IUpdateState * This,
+            /* [retval][out] */ BSTR *__MIDL__IUpdateState0002);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_downloadedBytes )( 
+            IUpdateState * This,
+            /* [retval][out] */ LONGLONG *__MIDL__IUpdateState0003);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_totalBytes )( 
+            IUpdateState * This,
+            /* [retval][out] */ LONGLONG *__MIDL__IUpdateState0004);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_installProgress )( 
+            IUpdateState * This,
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0005);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_errorCategory )( 
+            IUpdateState * This,
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0006);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_errorCode )( 
+            IUpdateState * This,
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0007);
+        
+        /* [propget] */ HRESULT ( STDMETHODCALLTYPE *get_extraCode1 )( 
+            IUpdateState * This,
+            /* [retval][out] */ LONG *__MIDL__IUpdateState0008);
+        
+        END_INTERFACE
+    } IUpdateStateVtbl;
+
+    interface IUpdateState
+    {
+        CONST_VTBL struct IUpdateStateVtbl *lpVtbl;
+    };
+
+    
+
+#ifdef COBJMACROS
+
+
+#define IUpdateState_QueryInterface(This,riid,ppvObject)	\
+    ( (This)->lpVtbl -> QueryInterface(This,riid,ppvObject) ) 
+
+#define IUpdateState_AddRef(This)	\
+    ( (This)->lpVtbl -> AddRef(This) ) 
+
+#define IUpdateState_Release(This)	\
+    ( (This)->lpVtbl -> Release(This) ) 
+
+
+#define IUpdateState_get_state(This,__MIDL__IUpdateState0000)	\
+    ( (This)->lpVtbl -> get_state(This,__MIDL__IUpdateState0000) ) 
+
+#define IUpdateState_get_appId(This,__MIDL__IUpdateState0001)	\
+    ( (This)->lpVtbl -> get_appId(This,__MIDL__IUpdateState0001) ) 
+
+#define IUpdateState_get_nextVersion(This,__MIDL__IUpdateState0002)	\
+    ( (This)->lpVtbl -> get_nextVersion(This,__MIDL__IUpdateState0002) ) 
+
+#define IUpdateState_get_downloadedBytes(This,__MIDL__IUpdateState0003)	\
+    ( (This)->lpVtbl -> get_downloadedBytes(This,__MIDL__IUpdateState0003) ) 
+
+#define IUpdateState_get_totalBytes(This,__MIDL__IUpdateState0004)	\
+    ( (This)->lpVtbl -> get_totalBytes(This,__MIDL__IUpdateState0004) ) 
+
+#define IUpdateState_get_installProgress(This,__MIDL__IUpdateState0005)	\
+    ( (This)->lpVtbl -> get_installProgress(This,__MIDL__IUpdateState0005) ) 
+
+#define IUpdateState_get_errorCategory(This,__MIDL__IUpdateState0006)	\
+    ( (This)->lpVtbl -> get_errorCategory(This,__MIDL__IUpdateState0006) ) 
+
+#define IUpdateState_get_errorCode(This,__MIDL__IUpdateState0007)	\
+    ( (This)->lpVtbl -> get_errorCode(This,__MIDL__IUpdateState0007) ) 
+
+#define IUpdateState_get_extraCode1(This,__MIDL__IUpdateState0008)	\
+    ( (This)->lpVtbl -> get_extraCode1(This,__MIDL__IUpdateState0008) ) 
+
+#endif /* COBJMACROS */
+
+
+#endif 	/* C style interface */
+
+
+
+
+#endif 	/* __IUpdateState_INTERFACE_DEFINED__ */
+
+
 #ifndef __ICompleteStatus_INTERFACE_DEFINED__
 #define __ICompleteStatus_INTERFACE_DEFINED__
 
@@ -1229,6 +1386,9 @@ EXTERN_C const IID IID_IUpdaterObserver;
     IUpdaterObserver : public IUnknown
     {
     public:
+        virtual HRESULT STDMETHODCALLTYPE OnStateChange( 
+            /* [in] */ IUpdateState *update_state) = 0;
+        
         virtual HRESULT STDMETHODCALLTYPE OnComplete( 
             /* [in] */ ICompleteStatus *status) = 0;
         
@@ -1252,6 +1412,10 @@ EXTERN_C const IID IID_IUpdaterObserver;
         
         ULONG ( STDMETHODCALLTYPE *Release )( 
             IUpdaterObserver * This);
+        
+        HRESULT ( STDMETHODCALLTYPE *OnStateChange )( 
+            IUpdaterObserver * This,
+            /* [in] */ IUpdateState *update_state);
         
         HRESULT ( STDMETHODCALLTYPE *OnComplete )( 
             IUpdaterObserver * This,
@@ -1279,6 +1443,9 @@ EXTERN_C const IID IID_IUpdaterObserver;
 #define IUpdaterObserver_Release(This)	\
     ( (This)->lpVtbl -> Release(This) ) 
 
+
+#define IUpdaterObserver_OnStateChange(This,update_state)	\
+    ( (This)->lpVtbl -> OnStateChange(This,update_state) ) 
 
 #define IUpdaterObserver_OnComplete(This,status)	\
     ( (This)->lpVtbl -> OnComplete(This,status) ) 
@@ -1309,6 +1476,9 @@ EXTERN_C const IID IID_IUpdater;
     IUpdater : public IUnknown
     {
     public:
+        virtual HRESULT STDMETHODCALLTYPE GetVersion( 
+            /* [retval][out] */ BSTR *version) = 0;
+        
         virtual HRESULT STDMETHODCALLTYPE CheckForUpdate( 
             /* [string][in] */ const WCHAR *app_id) = 0;
         
@@ -1346,6 +1516,10 @@ EXTERN_C const IID IID_IUpdater;
         
         ULONG ( STDMETHODCALLTYPE *Release )( 
             IUpdater * This);
+        
+        HRESULT ( STDMETHODCALLTYPE *GetVersion )( 
+            IUpdater * This,
+            /* [retval][out] */ BSTR *version);
         
         HRESULT ( STDMETHODCALLTYPE *CheckForUpdate )( 
             IUpdater * This,
@@ -1391,6 +1565,9 @@ EXTERN_C const IID IID_IUpdater;
     ( (This)->lpVtbl -> Release(This) ) 
 
 
+#define IUpdater_GetVersion(This,version)	\
+    ( (This)->lpVtbl -> GetVersion(This,version) ) 
+
 #define IUpdater_CheckForUpdate(This,app_id)	\
     ( (This)->lpVtbl -> CheckForUpdate(This,app_id) ) 
 
@@ -1414,6 +1591,96 @@ EXTERN_C const IID IID_IUpdater;
 #endif 	/* __IUpdater_INTERFACE_DEFINED__ */
 
 
+#ifndef __IUpdaterControl_INTERFACE_DEFINED__
+#define __IUpdaterControl_INTERFACE_DEFINED__
+
+/* interface IUpdaterControl */
+/* [unique][helpstring][uuid][dual][object] */ 
+
+
+EXTERN_C const IID IID_IUpdaterControl;
+
+#if defined(__cplusplus) && !defined(CINTERFACE)
+    
+    MIDL_INTERFACE("526DA036-9BD3-4697-865A-DA12D37DFFCA")
+    IUpdaterControl : public IUnknown
+    {
+    public:
+        virtual HRESULT STDMETHODCALLTYPE Run( 
+            /* [in] */ IUpdaterObserver *observer) = 0;
+        
+        virtual HRESULT STDMETHODCALLTYPE InitializeUpdateService( 
+            /* [in] */ IUpdaterObserver *observer) = 0;
+        
+    };
+    
+    
+#else 	/* C style interface */
+
+    typedef struct IUpdaterControlVtbl
+    {
+        BEGIN_INTERFACE
+        
+        HRESULT ( STDMETHODCALLTYPE *QueryInterface )( 
+            IUpdaterControl * This,
+            /* [in] */ REFIID riid,
+            /* [annotation][iid_is][out] */ 
+            _COM_Outptr_  void **ppvObject);
+        
+        ULONG ( STDMETHODCALLTYPE *AddRef )( 
+            IUpdaterControl * This);
+        
+        ULONG ( STDMETHODCALLTYPE *Release )( 
+            IUpdaterControl * This);
+        
+        HRESULT ( STDMETHODCALLTYPE *Run )( 
+            IUpdaterControl * This,
+            /* [in] */ IUpdaterObserver *observer);
+        
+        HRESULT ( STDMETHODCALLTYPE *InitializeUpdateService )( 
+            IUpdaterControl * This,
+            /* [in] */ IUpdaterObserver *observer);
+        
+        END_INTERFACE
+    } IUpdaterControlVtbl;
+
+    interface IUpdaterControl
+    {
+        CONST_VTBL struct IUpdaterControlVtbl *lpVtbl;
+    };
+
+    
+
+#ifdef COBJMACROS
+
+
+#define IUpdaterControl_QueryInterface(This,riid,ppvObject)	\
+    ( (This)->lpVtbl -> QueryInterface(This,riid,ppvObject) ) 
+
+#define IUpdaterControl_AddRef(This)	\
+    ( (This)->lpVtbl -> AddRef(This) ) 
+
+#define IUpdaterControl_Release(This)	\
+    ( (This)->lpVtbl -> Release(This) ) 
+
+
+#define IUpdaterControl_Run(This,observer)	\
+    ( (This)->lpVtbl -> Run(This,observer) ) 
+
+#define IUpdaterControl_InitializeUpdateService(This,observer)	\
+    ( (This)->lpVtbl -> InitializeUpdateService(This,observer) ) 
+
+#endif /* COBJMACROS */
+
+
+#endif 	/* C style interface */
+
+
+
+
+#endif 	/* __IUpdaterControl_INTERFACE_DEFINED__ */
+
+
 
 #ifndef __UpdaterLib_LIBRARY_DEFINED__
 #define __UpdaterLib_LIBRARY_DEFINED__
@@ -1427,30 +1694,15 @@ EXTERN_C const IID IID_IUpdater;
 
 
 
+
 EXTERN_C const IID LIBID_UpdaterLib;
 
 EXTERN_C const CLSID CLSID_UpdaterClass;
 
 #ifdef __cplusplus
 
-class DECLSPEC_UUID("158428A4-6014-4978-83BA-9FAD0DABE791")
+class DECLSPEC_UUID("158428a4-6014-4978-83ba-9fad0dabe791")
 UpdaterClass;
-#endif
-
-EXTERN_C const CLSID CLSID_UpdaterServiceClass;
-
-#ifdef __cplusplus
-
-class DECLSPEC_UUID("415FD747-D79E-42D7-93AC-1BA6E5FD4E93")
-UpdaterServiceClass;
-#endif
-
-EXTERN_C const CLSID CLSID_GoogleUpdate3WebUserClass;
-
-#ifdef __cplusplus
-
-class DECLSPEC_UUID("22181302-A8A6-4f84-A541-E5CBFC70CC43")
-GoogleUpdate3WebUserClass;
 #endif
 #endif /* __UpdaterLib_LIBRARY_DEFINED__ */
 

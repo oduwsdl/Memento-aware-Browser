@@ -32,11 +32,12 @@
 // TODO(crbug.com/1011811): Enable TypeScript compiler checks
 
 import * as Host from '../host/host.js';
+import * as ThemeSupport from '../theme_support/theme_support.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
 import {AnchorBehavior, GlassPane, MarginBehavior, PointerEventsBehavior, SizeBehavior,} from './GlassPane.js';  // eslint-disable-line no-unused-vars
 import {Icon} from './Icon.js';
-import {ElementFocusRestorer} from './UIUtils.js';
+import {createTextChild, ElementFocusRestorer} from './UIUtils.js';
 
 /**
  * @unrestricted
@@ -161,7 +162,7 @@ export class SoftContextMenu {
     if (!item.enabled) {
       menuItemElement.classList.add('soft-context-menu-disabled');
     }
-    menuItemElement.createTextChild(item.label);
+    createTextChild(menuItemElement, item.label);
     menuItemElement.createChild('span', 'soft-context-menu-shortcut').textContent = item.shortcut;
 
     menuItemElement.addEventListener('mousedown', this._menuItemMouseDown.bind(this), false);
@@ -205,10 +206,10 @@ export class SoftContextMenu {
     menuItemElement.appendChild(checkMarkElement);
     checkMarkElement.style.opacity = '0';
 
-    menuItemElement.createTextChild(item.label);
+    createTextChild(menuItemElement, item.label);
     ARIAUtils.setExpanded(menuItemElement, false);
 
-    if (Host.Platform.isMac() && !self.UI.themeSupport.hasTheme()) {
+    if (Host.Platform.isMac() && !ThemeSupport.ThemeSupport.instance().hasTheme()) {
       const subMenuArrowElement = menuItemElement.createChild('span', 'soft-context-menu-item-submenu-arrow');
       subMenuArrowElement.textContent = '\u25B6';  // BLACK RIGHT-POINTING TRIANGLE
     } else {
@@ -329,7 +330,7 @@ export class SoftContextMenu {
     }
     this._highlightedMenuItemElement = menuItemElement;
     if (this._highlightedMenuItemElement) {
-      if (self.UI.themeSupport.hasTheme() || Host.Platform.isMac()) {
+      if (ThemeSupport.ThemeSupport.instance().hasTheme() || Host.Platform.isMac()) {
         this._highlightedMenuItemElement.classList.add('force-white-icons');
       }
       this._highlightedMenuItemElement.classList.add('soft-context-menu-item-mouse-over');

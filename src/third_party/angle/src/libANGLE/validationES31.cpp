@@ -1448,6 +1448,12 @@ bool ValidateBindImageTexture(const Context *context,
                               GLenum access,
                               GLenum format)
 {
+    if (context->getClientVersion() < ES_3_1)
+    {
+        context->validationError(GL_INVALID_OPERATION, kES31Required);
+        return false;
+    }
+
     GLuint maxImageUnits = static_cast<GLuint>(context->getCaps().maxImageUnits);
     if (unit >= maxImageUnits)
     {
@@ -1954,6 +1960,12 @@ bool ValidateMemoryBarrier(const Context *context, GLbitfield barriers)
         GL_PIXEL_BUFFER_BARRIER_BIT | GL_TEXTURE_UPDATE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT |
         GL_FRAMEBUFFER_BARRIER_BIT | GL_TRANSFORM_FEEDBACK_BARRIER_BIT |
         GL_ATOMIC_COUNTER_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT;
+
+    if (context->getExtensions().bufferStorageEXT)
+    {
+        supported_barrier_bits |= GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT_EXT;
+    }
+
     if (barriers == 0 || (barriers & ~supported_barrier_bits) != 0)
     {
         context->validationError(GL_INVALID_VALUE, kInvalidMemoryBarrierBit);
@@ -1998,6 +2010,17 @@ bool ValidateSampleMaski(const Context *context, GLuint maskNumber, GLbitfield m
     }
 
     return ValidateSampleMaskiBase(context, maskNumber, mask);
+}
+
+bool ValidateMinSampleShadingOES(const Context *context, GLfloat value)
+{
+    if (!context->getExtensions().sampleShadingOES)
+    {
+        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
+        return false;
+    }
+
+    return true;
 }
 
 bool ValidateFramebufferTextureEXT(const Context *context,
@@ -2075,6 +2098,12 @@ bool ValidateTexStorage3DMultisampleOES(const Context *context,
         return false;
     }
 
+    if (depth > context->getCaps().maxArrayTextureLayers)
+    {
+        context->validationError(GL_INVALID_VALUE, kTextureDepthOutOfRange);
+        return false;
+    }
+
     return ValidateTexStorageMultisample(context, target, samples, sizedinternalformat, width,
                                          height);
 }
@@ -2130,6 +2159,44 @@ bool ValidateGetProgramResourceLocationIndexEXT(const Context *context,
         context->validationError(GL_INVALID_OPERATION, kProgramNotLinked);
         return false;
     }
+    return true;
+}
+
+// GL_OES_texture_buffer
+bool ValidateTexBufferOES(const Context *context,
+                          TextureType target,
+                          GLenum internalformat,
+                          BufferID bufferPacked)
+{
+    return true;
+}
+
+bool ValidateTexBufferRangeOES(const Context *context,
+                               TextureType target,
+                               GLenum internalformat,
+                               BufferID bufferPacked,
+                               GLintptr offset,
+                               GLsizeiptr size)
+{
+    return true;
+}
+
+// GL_EXT_texture_buffer
+bool ValidateTexBufferEXT(const Context *context,
+                          TextureType target,
+                          GLenum internalformat,
+                          BufferID bufferPacked)
+{
+    return true;
+}
+
+bool ValidateTexBufferRangeEXT(const Context *context,
+                               TextureType target,
+                               GLenum internalformat,
+                               BufferID bufferPacked,
+                               GLintptr offset,
+                               GLsizeiptr size)
+{
     return true;
 }
 

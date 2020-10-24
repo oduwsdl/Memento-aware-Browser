@@ -198,12 +198,13 @@ bool PlanCounter(LayoutObject& object,
           type_mask = CounterNode::kResetType;
           return true;
         }
-        value = 1;
+        value = ListItemOrdinal::IsInReversedOrderedList(*e) ? -1 : 1;
         type_mask = CounterNode::kIncrementType;
         return true;
       }
       if (auto* olist = DynamicTo<HTMLOListElement>(*e)) {
-        value = olist->StartConsideringItemCount();
+        value =
+            olist->StartConsideringItemCount() + (olist->IsReversed() ? 1 : -1);
         type_mask = CounterNode::kResetType;
         return true;
       }
@@ -494,6 +495,7 @@ LayoutCounter::LayoutCounter(PseudoElement& pseudo,
 LayoutCounter::~LayoutCounter() = default;
 
 void LayoutCounter::WillBeDestroyed() {
+  NOT_DESTROYED();
   if (counter_node_) {
     counter_node_->RemoveLayoutObject(this);
     DCHECK(!counter_node_);
@@ -504,6 +506,7 @@ void LayoutCounter::WillBeDestroyed() {
 }
 
 scoped_refptr<StringImpl> LayoutCounter::OriginalText() const {
+  NOT_DESTROYED();
   // Child will be the base of our text that we report. First, we need to find
   // an appropriate child.
   CounterNode* child = nullptr;
@@ -604,10 +607,12 @@ scoped_refptr<StringImpl> LayoutCounter::OriginalText() const {
 }
 
 void LayoutCounter::UpdateCounter() {
+  NOT_DESTROYED();
   SetTextIfNeeded(OriginalText());
 }
 
 void LayoutCounter::Invalidate() {
+  NOT_DESTROYED();
   counter_node_->RemoveLayoutObject(this);
   DCHECK(!counter_node_);
   if (DocumentBeingDestroyed())
@@ -745,11 +750,16 @@ void LayoutCounter::LayoutObjectSubtreeAttached(LayoutObject* layout_object) {
   for (LayoutObject* descendant = layout_object; descendant;
        descendant = descendant->NextInPreOrder(layout_object))
     UpdateCounters(*descendant);
+
+  bool crossed_boundary = false;
   // Since we skipped counter updates if there were no counters, we might need
   // to update parent counters that lie beyond the style containment boundary.
   for (LayoutObject* parent = layout_object->Parent(); parent;
-       parent = parent->Parent())
-    UpdateCounters(*parent);
+       parent = parent->Parent()) {
+    crossed_boundary |= parent->ShouldApplyStyleContainment();
+    if (crossed_boundary)
+      UpdateCounters(*parent);
+  }
 }
 
 void LayoutCounter::LayoutObjectStyleChanged(LayoutObject& layout_object,

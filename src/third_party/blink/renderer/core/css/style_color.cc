@@ -5,39 +5,28 @@
 #include "third_party/blink/renderer/core/css/style_color.h"
 
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
-StyleColor::StyleColor() : color_keyword_(CSSValueID::kCurrentcolor) {}
-
-StyleColor::StyleColor(Color color)
-    : color_(color), color_keyword_(CSSValueID::kInvalid) {}
-
-StyleColor::StyleColor(CSSValueID keyword) : color_keyword_(keyword) {}
-
-StyleColor StyleColor::CurrentColor() {
-  return StyleColor();
-}
-
-bool StyleColor::IsCurrentColor() const {
-  return color_keyword_ == CSSValueID::kCurrentcolor;
-}
-
-Color StyleColor::GetColor() const {
-  DCHECK(!IsCurrentColor());
+Color StyleColor::Resolve(Color current_color,
+                          mojom::blink::ColorScheme color_scheme) const {
+  if (IsCurrentColor())
+    return current_color;
+  if (EffectiveColorKeyword() != CSSValueID::kInvalid)
+    return ColorFromKeyword(color_keyword_, color_scheme);
   return color_;
 }
 
-Color StyleColor::Resolve(Color current_color) const {
-  return IsCurrentColor() ? current_color : color_;
-}
-
-bool StyleColor::HasAlpha() const {
-  return !IsCurrentColor() && color_.HasAlpha();
+Color StyleColor::ResolveWithAlpha(Color current_color,
+                                   mojom::blink::ColorScheme color_scheme,
+                                   int alpha) const {
+  Color color = Resolve(current_color, color_scheme);
+  return Color(color.Red(), color.Green(), color.Blue(), alpha);
 }
 
 Color StyleColor::ColorFromKeyword(CSSValueID keyword,
-                                   WebColorScheme color_scheme) {
+                                   mojom::blink::ColorScheme color_scheme) {
   if (const char* value_name = getValueName(keyword)) {
     if (const NamedColor* named_color =
             FindColor(value_name, static_cast<wtf_size_t>(strlen(value_name))))
@@ -79,14 +68,12 @@ bool StyleColor::IsSystemColor(CSSValueID id) {
          id == CSSValueID::kMenu;
 }
 
-bool operator==(const StyleColor& a, const StyleColor& b) {
-  if (a.IsCurrentColor() || b.IsCurrentColor())
-    return a.IsCurrentColor() && b.IsCurrentColor();
-  return a.GetColor() == b.GetColor();
-}
-
-bool operator!=(const StyleColor& a, const StyleColor& b) {
-  return !(a == b);
+CSSValueID StyleColor::EffectiveColorKeyword() const {
+  if (!RuntimeEnabledFeatures::CSSSystemColorComputeToSelfEnabled()) {
+    return IsSystemColor(color_keyword_) ? CSSValueID::kInvalid
+                                         : color_keyword_;
+  }
+  return color_keyword_;
 }
 
 }  // namespace blink

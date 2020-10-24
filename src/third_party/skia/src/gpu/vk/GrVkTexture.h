@@ -25,7 +25,7 @@ public:
                                              SkBudgeted budgeted,
                                              SkISize dimensions,
                                              const GrVkImage::ImageDesc&,
-                                             GrMipMapsStatus);
+                                             GrMipmapStatus);
 
     static sk_sp<GrVkTexture> MakeWrappedTexture(GrVkGpu*,
                                                  SkISize dimensions,
@@ -62,8 +62,8 @@ protected:
                 SkISize dimensions,
                 const GrVkImageInfo&,
                 sk_sp<GrBackendSurfaceMutableStateImpl>,
-                const GrVkImageView*,
-                GrMipMapsStatus,
+                sk_sp<const GrVkImageView>,
+                GrMipmapStatus,
                 GrBackendObjectOwnership);
 
     GrVkGpu* getVkGpu() const;
@@ -79,11 +79,11 @@ protected:
 
 private:
     GrVkTexture(GrVkGpu*, SkBudgeted, SkISize, const GrVkImageInfo&,
-                sk_sp<GrBackendSurfaceMutableStateImpl>, const GrVkImageView* imageView,
-                GrMipMapsStatus);
+                sk_sp<GrBackendSurfaceMutableStateImpl>, sk_sp<const GrVkImageView> imageView,
+                GrMipmapStatus);
     GrVkTexture(GrVkGpu*, SkISize, const GrVkImageInfo&, sk_sp<GrBackendSurfaceMutableStateImpl>,
-                const GrVkImageView*, GrMipMapsStatus, GrBackendObjectOwnership, GrWrapCacheable,
-                GrIOType, bool isExternal);
+                sk_sp<const GrVkImageView>, GrMipmapStatus, GrBackendObjectOwnership,
+                GrWrapCacheable, GrIOType, bool isExternal);
 
     // In Vulkan we call the release proc after we are finished with the underlying
     // GrVkImage::Resource object (which occurs after the GPU has finished all work on it).
@@ -94,19 +94,17 @@ private:
 
     void removeFinishIdleProcs();
 
-    const GrVkImageView* fTextureView;
+    sk_sp<const GrVkImageView> fTextureView;
 
     struct SamplerHash {
-        uint32_t operator()(GrSamplerState state) const {
-            return GrSamplerState::GenerateKey(state);
-        }
+        uint32_t operator()(GrSamplerState state) const { return state.asIndex(); }
     };
     struct DescriptorCacheEntry;
     SkLRUCache<const GrSamplerState, std::unique_ptr<DescriptorCacheEntry>, SamplerHash>
             fDescSetCache;
     static constexpr int kMaxCachedDescSets = 8;
 
-    typedef GrTexture INHERITED;
+    using INHERITED = GrTexture;
 };
 
 #endif

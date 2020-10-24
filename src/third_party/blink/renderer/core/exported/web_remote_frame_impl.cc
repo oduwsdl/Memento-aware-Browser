@@ -9,7 +9,6 @@
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_frame_owner_properties.h"
@@ -89,7 +88,6 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
   WebRemoteFrameImpl* frame = MakeGarbageCollected<WebRemoteFrameImpl>(
       mojom::blink::TreeScopeType::kDocument, client, interface_registry,
       associated_interface_provider, frame_token);
-  frame->SetOpener(opener);
   Page& page = *static_cast<WebViewImpl*>(web_view)->GetPage();
   // It would be nice to DCHECK that the main frame is not set yet here.
   // Unfortunately, there is an edge case with a pending RenderFrameHost that
@@ -100,8 +98,11 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
   // TODO(dcheng): Remove the need for this and strongly enforce this condition
   // with a DCHECK.
   frame->InitializeCoreFrame(
-      page, nullptr, g_null_atom,
+      page, nullptr, nullptr, nullptr, FrameInsertType::kInsertInConstructor,
+      g_null_atom,
       opener ? &ToCoreFrame(*opener)->window_agent_factory() : nullptr);
+  Frame* opener_frame = opener ? ToCoreFrame(*opener) : nullptr;
+  ToCoreFrame(*frame)->SetOpenerDoNotNotify(opener_frame);
   return frame;
 }
 
@@ -118,10 +119,12 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateForPortal(
 
   Element* element = portal_element;
   DCHECK(element->HasTagName(html_names::kPortalTag));
-  DCHECK(RuntimeEnabledFeatures::PortalsEnabled(&element->GetDocument()));
+  DCHECK(
+      RuntimeEnabledFeatures::PortalsEnabled(element->GetExecutionContext()));
   HTMLPortalElement* portal = static_cast<HTMLPortalElement*>(element);
   LocalFrame* host_frame = portal->GetDocument().GetFrame();
-  frame->InitializeCoreFrame(*host_frame->GetPage(), portal, g_null_atom,
+  frame->InitializeCoreFrame(*host_frame->GetPage(), portal, nullptr, nullptr,
+                             FrameInsertType::kInsertInConstructor, g_null_atom,
                              &host_frame->window_agent_factory());
 
   return frame;
@@ -132,7 +135,6 @@ WebRemoteFrameImpl::~WebRemoteFrameImpl() = default;
 void WebRemoteFrameImpl::Trace(Visitor* visitor) const {
   visitor->Trace(frame_client_);
   visitor->Trace(frame_);
-  WebFrame::TraceFrames(visitor, this);
 }
 
 bool WebRemoteFrameImpl::IsWebLocalFrame() const {
@@ -180,8 +182,6 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
   auto* child = MakeGarbageCollected<WebLocalFrameImpl>(
       util::PassKey<WebRemoteFrameImpl>(), scope, client, interface_registry,
       frame_token);
-  child->SetOpener(opener);
-  InsertAfter(child, previous_sibling);
   auto* owner = MakeGarbageCollected<RemoteFrameOwner>(
       frame_policy, frame_owner_properties, frame_owner_element_type);
 
@@ -192,8 +192,10 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
     window_agent_factory = &GetFrame()->window_agent_factory();
   }
 
-  child->InitializeCoreFrame(*GetFrame()->GetPage(), owner, name,
-                             window_agent_factory);
+  child->InitializeCoreFrame(*GetFrame()->GetPage(), owner, this,
+                             previous_sibling,
+                             FrameInsertType::kInsertInConstructor, name,
+                             window_agent_factory, opener);
   DCHECK(child->GetFrame());
   return child;
 }
@@ -201,11 +203,18 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
 void WebRemoteFrameImpl::InitializeCoreFrame(
     Page& page,
     FrameOwner* owner,
+    WebFrame* parent,
+    WebFrame* previous_sibling,
+    FrameInsertType insert_type,
     const AtomicString& name,
     WindowAgentFactory* window_agent_factory) {
+  Frame* parent_frame = parent ? ToCoreFrame(*parent) : nullptr;
+  Frame* previous_sibling_frame =
+      previous_sibling ? ToCoreFrame(*previous_sibling) : nullptr;
   SetCoreFrame(MakeGarbageCollected<RemoteFrame>(
-      frame_client_.Get(), page, owner, GetFrameToken(), window_agent_factory,
-      interface_registry_, associated_interface_provider_));
+      frame_client_.Get(), page, owner, parent_frame, previous_sibling_frame,
+      insert_type, GetFrameToken(), window_agent_factory, interface_registry_,
+      associated_interface_provider_));
   GetFrame()->CreateView();
   frame_->Tree().SetName(name);
 }
@@ -223,8 +232,6 @@ WebRemoteFrame* WebRemoteFrameImpl::CreateRemoteChild(
   auto* child = MakeGarbageCollected<WebRemoteFrameImpl>(
       scope, client, interface_registry, associated_interface_provider,
       frame_token);
-  child->SetOpener(opener);
-  AppendChild(child);
   auto* owner = MakeGarbageCollected<RemoteFrameOwner>(
       frame_policy, WebFrameOwnerProperties(), frame_owner_element_type);
   WindowAgentFactory* window_agent_factory = nullptr;
@@ -234,8 +241,11 @@ WebRemoteFrame* WebRemoteFrameImpl::CreateRemoteChild(
     window_agent_factory = &GetFrame()->window_agent_factory();
   }
 
-  child->InitializeCoreFrame(*GetFrame()->GetPage(), owner, name,
+  child->InitializeCoreFrame(*GetFrame()->GetPage(), owner, this, LastChild(),
+                             FrameInsertType::kInsertInConstructor, name,
                              window_agent_factory);
+  Frame* opener_frame = opener ? ToCoreFrame(*opener) : nullptr;
+  ToCoreFrame(*child)->SetOpenerDoNotNotify(opener_frame);
   return child;
 }
 
@@ -272,14 +282,15 @@ void WebRemoteFrameImpl::SetReplicatedSandboxFlags(
   GetFrame()->SetReplicatedSandboxFlags(flags);
 }
 
-void WebRemoteFrameImpl::SetReplicatedName(const WebString& name) {
+void WebRemoteFrameImpl::SetReplicatedName(const WebString& name,
+                                           const WebString& unique_name) {
   DCHECK(GetFrame());
-  GetFrame()->Tree().SetName(name);
+  GetFrame()->SetReplicatedName(name, unique_name);
 }
 
 void WebRemoteFrameImpl::SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
     const ParsedFeaturePolicy& parsed_header,
-    const FeaturePolicy::FeatureState& opener_feature_state) {
+    const FeaturePolicyFeatureState& opener_feature_state) {
   DCHECK(GetFrame());
   GetFrame()->SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
       parsed_header, opener_feature_state);
@@ -326,8 +337,9 @@ bool WebRemoteFrameImpl::IsIgnoredForHitTest() const {
 }
 
 void WebRemoteFrameImpl::UpdateUserActivationState(
-    mojom::blink::UserActivationUpdateType update_type) {
-  GetFrame()->UpdateUserActivationState(update_type);
+    mojom::blink::UserActivationUpdateType update_type,
+    mojom::blink::UserActivationNotificationType notification_type) {
+  GetFrame()->UpdateUserActivationState(update_type, notification_type);
 }
 
 void WebRemoteFrameImpl::SetHadStickyUserActivationBeforeNavigation(
@@ -343,6 +355,10 @@ v8::Local<v8::Object> WebRemoteFrameImpl::GlobalProxy() const {
 
 WebRect WebRemoteFrameImpl::GetCompositingRect() {
   return GetFrame()->View()->GetCompositingRect();
+}
+
+WebString WebRemoteFrameImpl::UniqueName() const {
+  return GetFrame()->UniqueName();
 }
 
 WebRemoteFrameImpl::WebRemoteFrameImpl(

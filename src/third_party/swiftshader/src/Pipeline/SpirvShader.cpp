@@ -361,15 +361,17 @@ SpirvShader::SpirvShader(
 				{
 					case spv::CapabilityMatrix: capabilities.Matrix = true; break;
 					case spv::CapabilityShader: capabilities.Shader = true; break;
+					case spv::CapabilityStorageImageMultisample: capabilities.StorageImageMultisample = true; break;
 					case spv::CapabilityClipDistance: capabilities.ClipDistance = true; break;
 					case spv::CapabilityCullDistance: capabilities.CullDistance = true; break;
+					case spv::CapabilityImageCubeArray: capabilities.ImageCubeArray = true; break;
 					case spv::CapabilityInputAttachment: capabilities.InputAttachment = true; break;
 					case spv::CapabilitySampled1D: capabilities.Sampled1D = true; break;
 					case spv::CapabilityImage1D: capabilities.Image1D = true; break;
-					case spv::CapabilityImageCubeArray: capabilities.ImageCubeArray = true; break;
 					case spv::CapabilitySampledBuffer: capabilities.SampledBuffer = true; break;
 					case spv::CapabilitySampledCubeArray: capabilities.SampledCubeArray = true; break;
 					case spv::CapabilityImageBuffer: capabilities.ImageBuffer = true; break;
+					case spv::CapabilityImageMSArray: capabilities.ImageMSArray = true; break;
 					case spv::CapabilityStorageImageExtendedFormats: capabilities.StorageImageExtendedFormats = true; break;
 					case spv::CapabilityImageQuery: capabilities.ImageQuery = true; break;
 					case spv::CapabilityDerivativeControl: capabilities.DerivativeControl = true; break;
@@ -1018,8 +1020,9 @@ int SpirvShader::VisitInterfaceInner(Type::ID id, Decorations d, const Interface
 			// iterate over members, which may themselves have Location/Component decorations
 			for(auto i = 0u; i < obj.definition.wordCount() - 2; i++)
 			{
-				ApplyDecorationsForIdMember(&d, id, i);
-				d.Location = VisitInterfaceInner(obj.definition.word(i + 2), d, f);
+				Decorations dMember = d;
+				ApplyDecorationsForIdMember(&dMember, id, i);
+				d.Location = VisitInterfaceInner(obj.definition.word(i + 2), dMember, f);
 				d.Component = 0;  // Implicit locations always have component=0
 			}
 			return d.Location;
@@ -1510,7 +1513,9 @@ OutOfBoundsBehavior SpirvShader::EmitState::getOutOfBoundsBehavior(spv::StorageC
 			                          : OutOfBoundsBehavior::UndefinedBehavior;
 
 		case spv::StorageClassImage:
-			return OutOfBoundsBehavior::UndefinedValue;  // "The value returned by a read of an invalid texel is undefined"
+			// VK_EXT_image_robustness requires nullifying out-of-bounds accesses.
+			// TODO(b/162327166): Only perform bounds checks when VK_EXT_image_robustness is enabled.
+			return OutOfBoundsBehavior::Nullify;
 
 		case spv::StorageClassInput:
 			if(executionModel == spv::ExecutionModelVertex)
@@ -2238,17 +2243,24 @@ SpirvShader::EmitResult SpirvShader::EmitAtomicOp(InsnIterator insn, EmitState *
 {
 	auto &resultType = getType(Type::ID(insn.word(1)));
 	Object::ID resultId = insn.word(2);
+	Object::ID pointerId = insn.word(3);
 	Object::ID semanticsId = insn.word(5);
 	auto memorySemantics = static_cast<spv::MemorySemanticsMask>(getObject(semanticsId).constantValue[0]);
 	auto memoryOrder = MemoryOrder(memorySemantics);
 	// Where no value is provided (increment/decrement) use an implicit value of 1.
 	auto value = (insn.wordCount() == 7) ? Operand(this, state, insn.word(6)).UInt(0) : RValue<SIMD::UInt>(1);
 	auto &dst = state->createIntermediate(resultId, resultType.componentCount);
-	auto ptr = state->getPointer(insn.word(3));
+	auto ptr = state->getPointer(pointerId);
 	auto ptrOffsets = ptr.offsets();
 
-	SIMD::UInt x(0);
-	auto mask = state->activeLaneMask() & state->storesAndAtomicsMask();
+	SIMD::Int mask = state->activeLaneMask() & state->storesAndAtomicsMask();
+
+	if(getObject(pointerId).opcode() == spv::OpImageTexelPointer)
+	{
+		mask &= ptr.isInBounds(sizeof(int32_t), OutOfBoundsBehavior::Nullify);
+	}
+
+	SIMD::UInt result(0);
 	for(int j = 0; j < SIMD::Width; j++)
 	{
 		If(Extract(mask, j) != 0)
@@ -2294,11 +2306,11 @@ SpirvShader::EmitResult SpirvShader::EmitAtomicOp(InsnIterator insn, EmitState *
 					UNREACHABLE("%s", OpcodeName(insn.opcode()).c_str());
 					break;
 			}
-			x = Insert(x, v, j);
+			result = Insert(result, v, j);
 		}
 	}
 
-	dst.move(0, x);
+	dst.move(0, result);
 	return EmitResult::Continue;
 }
 
@@ -2469,11 +2481,11 @@ SpirvShader::Operand::Operand(const SpirvShader *shader, const EmitState *state,
 {}
 
 SpirvShader::Operand::Operand(const EmitState *state, const Object &object)
-    : constant(object.constantValue.data())
+    : constant(object.kind == SpirvShader::Object::Kind::Constant ? object.constantValue.data() : nullptr)
     , intermediate(object.kind == SpirvShader::Object::Kind::Intermediate ? &state->getIntermediate(object.id()) : nullptr)
     , componentCount(intermediate ? intermediate->componentCount : object.constantValue.size())
 {
-	ASSERT(intermediate || (object.kind == SpirvShader::Object::Kind::Constant));
+	ASSERT(intermediate || constant);
 }
 
 SpirvShader::Operand::Operand(const Intermediate &value)
@@ -2481,6 +2493,24 @@ SpirvShader::Operand::Operand(const Intermediate &value)
     , intermediate(&value)
     , componentCount(value.componentCount)
 {
+}
+
+bool SpirvShader::Operand::isConstantZero() const
+{
+	if(!constant)
+	{
+		return false;
+	}
+
+	for(uint32_t i = 0; i < componentCount; i++)
+	{
+		if(constant[i] != 0)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 SpirvRoutine::SpirvRoutine(vk::PipelineLayout const *pipelineLayout)

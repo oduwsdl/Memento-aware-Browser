@@ -41,6 +41,9 @@ class BLINK_COMMON_EXPORT ThrottlingURLLoader
   // Reason used when resetting the URLLoader to follow a redirect.
   static const char kFollowRedirectReason[];
 
+  // |url_request| can be mutated by this function, and doesn't need to stay
+  // alive after calling this function.
+  //
   // |client| must stay alive during the lifetime of the returned object. Please
   // note that the request may not start immediately since it could be deferred
   // by throttles.
@@ -139,6 +142,13 @@ class BLINK_COMMON_EXPORT ThrottlingURLLoader
   // Restart the request using |original_url_|.
   void RestartWithURLResetAndFlags(int additional_load_flags);
 
+  // Restart the request immediately if the response has not started yet.
+  void RestartWithURLResetAndFlagsNow(int additional_load_flags);
+
+  // Restart the request immediately with modified headers.
+  void RestartWithModifiedHeadersNow(
+      const net::HttpRequestHeaders& modified_headers);
+
   // network::mojom::URLLoaderClient implementation:
   void OnReceiveResponse(
       network::mojom::URLResponseHeadPtr response_head) override;
@@ -186,6 +196,7 @@ class BLINK_COMMON_EXPORT ThrottlingURLLoader
   };
   DeferredStage deferred_stage_ = DEFERRED_NONE;
   bool loader_completed_ = false;
+  bool did_receive_response_ = false;
 
   struct ThrottleEntry {
     ThrottleEntry(ThrottlingURLLoader* loader,

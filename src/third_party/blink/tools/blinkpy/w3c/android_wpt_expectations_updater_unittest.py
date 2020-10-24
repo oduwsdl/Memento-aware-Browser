@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import json
 import logging
 
 from blinkpy.common.host_mock import MockHost
@@ -10,6 +11,7 @@ from blinkpy.common.net.git_cl_mock import MockGitCL
 from blinkpy.common.net.results_fetcher import Build
 from blinkpy.common.net.web_test_results import WebTestResults
 from blinkpy.common.system.log_testing import LoggingTestCase
+from blinkpy.w3c.wpt_manifest import BASE_MANIFEST_NAME
 from blinkpy.web_tests.builder_list import BuilderList
 from blinkpy.web_tests.port.factory_mock import MockPortFactory
 from blinkpy.web_tests.port.android import (
@@ -37,6 +39,7 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
         'crbug.com/1050754 external/wpt/cat.html [ Failure ]\n'
         'external/wpt/dog.html [ Crash Timeout ]\n'
         'crbug.com/6789043 external/wpt/van.html [ Failure ]\n'
+        'external/wpt/unexpected_pass.html [ Failure ]\n'
         '\n'
         '# This comment will not be deleted\n'
         'crbug.com/111111 external/wpt/hello_world.html [ Crash ]\n')
@@ -75,6 +78,18 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
                 'is_try_builder': True,
             },
         })
+        host.filesystem.write_text_file(
+            host.port_factory.get().web_tests_dir() + '/external/' +
+            BASE_MANIFEST_NAME,
+            json.dumps({
+                'items': {
+                    'testharness': {
+                        'ghi.html': ['abcdef123', [None, {}]],
+                        'van.html': ['abcdef123', [None, {}]],
+                    },
+                },
+            }))
+
         # Write dummy expectations
         for path in PRODUCTS_TO_EXPECTATION_FILE_PATHS.values():
             host.filesystem.write_text_file(
@@ -105,6 +120,11 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
                         'actual': 'CRASH CRASH TIMEOUT',
                         'is_unexpected': True,
                     },
+                    'unexpected_pass.html': {
+                        'expected': 'FAIL',
+                        'actual': 'PASS',
+                        'is_unexpected': True
+                    },
                     'dog.html': {
                         'expected': 'SKIP',
                         'actual': 'SKIP',
@@ -115,7 +135,9 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
             step_name=WEBVIEW_WPT_STEP + ' (with patch)')
         updater = AndroidWPTExpectationsUpdater(
             host, ['-vvv',  '--android-product', ANDROID_WEBVIEW,
-                   '--clean-up-affected-tests-only'])
+                   '--clean-up-test-expectations',
+                   '--clean-up-affected-tests-only',
+                   '--include-unexpected-pass'])
         updater.git_cl = MockGitCL(host, {
             Build('MOCK Android Pie', 123):
             TryJobStatus('COMPLETED', 'FAILURE')})
@@ -136,6 +158,7 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
              'crbug.com/1050754 external/wpt/ghi.html [ Timeout ]\n'
              'crbug.com/1111111 crbug.com/1050754'
              ' external/wpt/jkl.html [ Failure ]\n'
+             'crbug.com/1050754 external/wpt/unexpected_pass.html [ Failure Pass ]\n'
              'crbug.com/6789043 external/wpt/van.html [ Failure ]\n'
              'external/wpt/www.html [ Crash Failure ]\n'
              '\n'
@@ -193,6 +216,11 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
                         'actual': 'CRASH CRASH TIMEOUT',
                         'is_unexpected': True,
                     },
+                    'unexpected_pass.html': {
+                        'expected': 'FAIL',
+                        'actual': 'PASS',
+                        'is_unexpected': True,
+                    },
                     'new.html': {
                         'expected': 'PASS',
                         'actual': 'CRASH CRASH FAIL',
@@ -203,7 +231,9 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
             step_name=WEBLAYER_WPT_STEP + ' (with patch)')
         updater = AndroidWPTExpectationsUpdater(
             host, ['-vvv', '--android-product', ANDROID_WEBLAYER,
-                   '--clean-up-affected-tests-only'])
+                   '--clean-up-test-expectations',
+                   '--clean-up-affected-tests-only',
+                   '--include-unexpected-pass'])
         updater.git_cl = MockGitCL(host, {
             Build('MOCK Android Weblayer - Pie', 123):
             TryJobStatus('COMPLETED', 'FAILURE')})
@@ -225,6 +255,7 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
              'crbug.com/1111111 crbug.com/1050754'
              ' external/wpt/jkl.html [ Failure ]\n'
              'crbug.com/1050754 external/wpt/new.html [ Failure Crash ]\n'
+             'crbug.com/1050754 external/wpt/unexpected_pass.html [ Failure Pass ]\n'
              'crbug.com/6789043 external/wpt/van.html [ Failure ]\n'
              'external/wpt/www.html [ Crash Failure ]\n'
              '\n'
@@ -271,6 +302,11 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
                         'actual': 'SKIP',
                         'is_unexpected': True,
                     },
+                    'unexpected_pass.html': {
+                        'expected': 'FAIL',
+                        'actual': 'PASS',
+                        'is_unexpected': True
+                    },
                 },
             }, step_name=WEBLAYER_WPT_STEP + ' (with patch)'),
             step_name=WEBLAYER_WPT_STEP + ' (with patch)')
@@ -292,6 +328,11 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
                     'disabled.html': {
                         'expected': 'SKIP',
                         'actual': 'SKIP',
+                    },
+                    'unexpected_pass.html': {
+                        'expected': 'FAIL',
+                        'actual': 'PASS',
+                        'is_unexpected': True
                     },
                 },
             }, step_name=WEBVIEW_WPT_STEP + ' (with patch)'),
@@ -316,12 +357,19 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
                         'actual': 'SKIP',
                         'is_unexpected': True,
                     },
+                    'unexpected_pass.html': {
+                        'expected': 'FAIL',
+                        'actual': 'PASS',
+                        'is_unexpected': True
+                    },
                 },
             }, step_name=CHROME_ANDROID_WPT_STEP + ' (with patch)'),
             step_name=CHROME_ANDROID_WPT_STEP + ' (with patch)')
         updater = AndroidWPTExpectationsUpdater(
             host, ['-vvv',
+                   '--clean-up-test-expectations',
                    '--clean-up-affected-tests-only',
+                   '--include-unexpected-pass',
                    '--android-product', ANDROID_WEBLAYER,
                    '--android-product', CHROME_ANDROID,
                    '--android-product', ANDROID_WEBVIEW])
@@ -357,6 +405,7 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
              'crbug.com/1050754 external/wpt/def.html [ Crash ]\n'
              'external/wpt/dog.html [ Crash Timeout ]\n'
              'crbug.com/1111111 external/wpt/jkl.html [ Failure ]\n'
+             'crbug.com/1050754 external/wpt/unexpected_pass.html [ Failure Pass ]\n'
              'crbug.com/6789043 external/wpt/wagon.html [ Failure ]\n'
              'crbug.com/1050754 external/wpt/weblayer_only.html [ Failure Crash ]\n'
              'external/wpt/www.html [ Crash Failure ]\n'
@@ -376,6 +425,7 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
              'crbug.com/1050754 external/wpt/def.html [ Crash ]\n'
              'external/wpt/dog.html [ Crash Timeout ]\n'
              'crbug.com/1111111 external/wpt/jkl.html [ Failure ]\n'
+             'crbug.com/1050754 external/wpt/unexpected_pass.html [ Failure Pass ]\n'
              'crbug.com/6789043 external/wpt/wagon.html [ Failure ]\n'
              'crbug.com/1050754 external/wpt/webview_only.html [ Timeout ]\n'
              'external/wpt/www.html [ Crash Failure ]\n'
@@ -397,6 +447,7 @@ class AndroidWPTExpectationsUpdaterTest(LoggingTestCase):
              'external/wpt/dog.html [ Crash Timeout ]\n'
              'crbug.com/1111111 crbug.com/1050754'
              ' external/wpt/jkl.html [ Failure ]\n'
+             'crbug.com/1050754 external/wpt/unexpected_pass.html [ Failure Pass ]\n'
              'crbug.com/6789043 external/wpt/wagon.html [ Failure ]\n'
              'external/wpt/www.html [ Crash Failure ]\n'
              '\n'

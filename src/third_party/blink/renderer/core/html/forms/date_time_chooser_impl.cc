@@ -159,6 +159,7 @@ void DateTimeChooserImpl::WriteDocument(SharedBuffer* data) {
       "currentValue",
       ValueToDateTimeString(parameters_->double_value, parameters_->type),
       data);
+  AddProperty("focusedFieldIndex", parameters_->focused_field_index, data);
   AddProperty("locale", parameters_->locale.GetString(), data);
   AddProperty("todayLabel", today_label_string, data);
   AddLocalizedProperty("clearLabel", IDS_FORM_CALENDAR_CLEAR, data);
@@ -183,7 +184,7 @@ void DateTimeChooserImpl::WriteDocument(SharedBuffer* data) {
   AddProperty("isRTL", parameters_->is_anchor_element_rtl, data);
   AddProperty("isFormControlsRefreshEnabled",
               features::IsFormControlsRefreshEnabled(), data);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   AddProperty("isBorderTransparent", features::IsFormControlsRefreshEnabled(),
               data);
 #endif
@@ -217,8 +218,8 @@ void DateTimeChooserImpl::WriteDocument(SharedBuffer* data) {
     AddProperty("otherDateLabel", other_date_label_string, data);
 
     const ComputedStyle* style = OwnerElement().GetComputedStyle();
-    WebColorScheme color_scheme =
-        style ? style->UsedColorScheme() : WebColorScheme::kLight;
+    mojom::blink::ColorScheme color_scheme =
+        style ? style->UsedColorScheme() : mojom::blink::ColorScheme::kLight;
 
     AddProperty("suggestionHighlightColor",
                 LayoutTheme::GetTheme()

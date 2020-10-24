@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @ts-nocheck
+// TODO(crbug.com/1011811): Enable TypeScript compiler checks
+
 import * as Common from '../common/common.js';  // eslint-disable-line no-unused-vars
 import * as Host from '../host/host.js';
 import * as SDK from '../sdk/sdk.js';
@@ -62,16 +65,16 @@ export class LiveHeapProfile {
       if (sessionId !== this._sessionId) {
         break;
       }
-      const lineLevelProfile = self.runtime.sharedInstance(Memory);
-      lineLevelProfile.reset();
+      Memory.instance().reset();
       for (let i = 0; i < profiles.length; ++i) {
         if (profiles[i]) {
-          lineLevelProfile.appendHeapProfile(profiles[i], models[i].target());
+          Memory.instance().appendHeapProfile(profiles[i], models[i].target());
         }
       }
       await Promise.race([
-        new Promise(r => setTimeout(r, Host.InspectorFrontendHost.isUnderTest() ? 10 : 5000)),
-        new Promise(r => this._loadEventCallback = r)
+        new Promise(r => setTimeout(r, Host.InspectorFrontendHost.isUnderTest() ? 10 : 5000)), new Promise(r => {
+          this._loadEventCallback = r;
+        })
       ]);
     } while (sessionId === this._sessionId);
 
@@ -81,7 +84,7 @@ export class LiveHeapProfile {
     for (const model of SDK.SDKModel.TargetManager.instance().models(SDK.HeapProfilerModel.HeapProfilerModel)) {
       model.stopSampling();
     }
-    self.runtime.sharedInstance(Memory).reset();
+    Memory.instance().reset();
   }
 
   _stopProfiling() {

@@ -27,6 +27,7 @@
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "third_party/base/compiler_specific.h"
+#include "third_party/base/notreached.h"
 #include "third_party/base/numerics/safe_conversions.h"
 #include "third_party/base/stl_util.h"
 
@@ -315,7 +316,7 @@ bool CPDF_DataAvail::CheckPage() {
     if (!pObj->IsDictionary())
       continue;
 
-    ByteString type = pObj->GetDict()->GetStringFor("Type");
+    ByteString type = pObj->GetDict()->GetNameFor("Type");
     if (type == "Pages") {
       m_PagesArray.push_back(std::move(pObj));
       continue;
@@ -579,7 +580,7 @@ bool CPDF_DataAvail::CheckUnknownPageNode(uint32_t dwPageNo,
 
   pPageNode->m_dwPageNo = dwPageNo;
   CPDF_Dictionary* pDict = pPage->GetDict();
-  const ByteString type = pDict->GetStringFor("Type");
+  const ByteString type = pDict->GetNameFor("Type");
   if (type == "Page") {
     pPageNode->m_type = PDF_PAGENODE_PAGE;
     return true;

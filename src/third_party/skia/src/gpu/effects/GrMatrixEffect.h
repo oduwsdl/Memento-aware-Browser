@@ -11,22 +11,19 @@
 #include "include/core/SkM44.h"
 #include "include/core/SkTypes.h"
 
-#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrFragmentProcessor.h"
 
 class GrMatrixEffect : public GrFragmentProcessor {
 public:
-    static std::unique_ptr<GrFragmentProcessor> Make(
-            const SkMatrix& matrix, std::unique_ptr<GrFragmentProcessor> child) {
+    static std::unique_ptr<GrFragmentProcessor> Make(const SkMatrix& matrix,
+                                                     std::unique_ptr<GrFragmentProcessor> child) {
         if (matrix.isIdentity()) {
             return child;
         }
-        SkASSERT(!child->isSampledWithExplicitCoords());
-        SkASSERT(child->sampleMatrix().fKind == SkSL::SampleMatrix::Kind::kNone);
-        return std::unique_ptr<GrFragmentProcessor>(
-                new GrMatrixEffect(matrix, std::move(child)));
+        return std::unique_ptr<GrFragmentProcessor>(new GrMatrixEffect(matrix, std::move(child)));
     }
 
+    bool usesExplicitReturn() const override { return true; }
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "MatrixEffect"; }
     const SkMatrix& matrix() const { return fMatrix; }
@@ -35,21 +32,23 @@ private:
     GrMatrixEffect(const GrMatrixEffect& src);
 
     GrMatrixEffect(SkMatrix matrix, std::unique_ptr<GrFragmentProcessor> child)
-            : INHERITED(kGrMatrixEffect_ClassID, kNone_OptimizationFlags)
+            : INHERITED(kGrMatrixEffect_ClassID, ProcessorOptimizationFlags(child.get()))
             , fMatrix(matrix) {
         SkASSERT(child);
-        child->setSampleMatrix(
-                SkSL::SampleMatrix(SkSL::SampleMatrix::Kind::kConstantOrUniform, this, "matrix"));
-        this->registerChildProcessor(std::move(child));
+        this->registerChild(std::move(child),
+                            SkSL::SampleUsage::UniformMatrix("matrix", matrix.hasPerspective()));
     }
 
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;
+    SkPMColor4f constantOutputForConstantInput(const SkPMColor4f& inputColor) const override {
+        return ConstantOutputForConstantInput(this->childProcessor(0), inputColor);
+    }
 
     SkMatrix fMatrix;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 #endif

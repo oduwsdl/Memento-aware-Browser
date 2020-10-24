@@ -16,7 +16,7 @@ float TextMetrics::GetFontBaseline(const TextBaseline& text_baseline,
   FontMetrics font_metrics = font_data.GetFontMetrics();
   switch (text_baseline) {
     case kTopTextBaseline:
-      return font_data.EmHeightAscent().ToFloat();
+      return font_data.NormalizedTypoAscent().ToFloat();
     case kHangingTextBaseline:
       // According to
       // http://wiki.apache.org/xmlgraphics-fop/LineLayout/AlignmentHandling
@@ -26,11 +26,11 @@ float TextMetrics::GetFontBaseline(const TextBaseline& text_baseline,
     case kIdeographicTextBaseline:
       return -font_metrics.FloatDescent();
     case kBottomTextBaseline:
-      return -font_data.EmHeightDescent().ToFloat();
-    case kMiddleTextBaseline:
-      return (font_data.EmHeightAscent().ToFloat() -
-              font_data.EmHeightDescent().ToFloat()) /
-             2.0f;
+      return -font_data.NormalizedTypoDescent().ToFloat();
+    case kMiddleTextBaseline: {
+      const FontHeight metrics = font_data.NormalizedTypoAscentAndDescent();
+      return (metrics.ascent.ToFloat() - metrics.descent.ToFloat()) / 2.0f;
+    }
     case kAlphabeticTextBaseline:
     default:
       // Do nothing.
@@ -64,14 +64,16 @@ void TextMetrics::Update(const Font& font,
   if (!font_data)
     return;
 
-  // TODO(kojii): Need to figure out the desired behavior of |advances| when
-  // bidi reorder occurs.
-  TextRun text_run(
-      text, /* xpos */ 0, /* expansion */ 0,
-      TextRun::kAllowTrailingExpansion | TextRun::kForbidLeadingExpansion,
-      direction, false);
-  text_run.SetNormalizeSpace(true);
-  advances_ = font.IndividualCharacterAdvances(text_run);
+  {
+    // TODO(kojii): Need to figure out the desired behavior of |advances| when
+    // bidi reorder occurs.
+    TextRun text_run(
+        text, /* xpos */ 0, /* expansion */ 0,
+        TextRun::kAllowTrailingExpansion | TextRun::kForbidLeadingExpansion,
+        direction, false);
+    text_run.SetNormalizeSpace(true);
+    advances_ = font.IndividualCharacterAdvances(text_run);
+  }
 
   // x direction
   // Run bidi algorithm on the given text. Step 5 of:
@@ -100,19 +102,6 @@ void TextMetrics::Update(const Font& font,
     xpos += run_width;
   }
   double real_width = xpos;
-#if DCHECK_IS_ON()
-  // This DCHECK is for limited time only; to use |glyph_bounds| instead of
-  // |BoundingBox| and make sure they are compatible.
-  if (runs.size() == 1 && direction == runs[0].Direction()) {
-    FloatRect bbox = font.BoundingBox(text_run);
-    // |GetCharacterRange|, the underlying function of |BoundingBox|, clamps
-    // negative |MaxY| to 0. This is unintentional, and that we are not copying
-    // the behavior.
-    DCHECK_EQ(bbox.Y(), std::min(glyph_bounds.Y(), .0f));
-    DCHECK_EQ(bbox.MaxY(), std::max(glyph_bounds.MaxY(), .0f));
-    DCHECK_EQ(bbox.Width(), real_width);
-  }
-#endif
   width_ = real_width;
 
   float dx = 0.0f;
@@ -134,8 +123,12 @@ void TextMetrics::Update(const Font& font,
   font_bounding_box_descent_ = descent + baseline_y;
   actual_bounding_box_ascent_ = -glyph_bounds.Y() - baseline_y;
   actual_bounding_box_descent_ = glyph_bounds.MaxY() + baseline_y;
-  em_height_ascent_ = font_data->EmHeightAscent() - baseline_y;
-  em_height_descent_ = font_data->EmHeightDescent() + baseline_y;
+  // TODO(kojii): We use normalized sTypoAscent/Descent here, but this should be
+  // revisited when the spec evolves.
+  const FontHeight normalized_typo_metrics =
+      font_data->NormalizedTypoAscentAndDescent();
+  em_height_ascent_ = normalized_typo_metrics.ascent - baseline_y;
+  em_height_descent_ = normalized_typo_metrics.descent + baseline_y;
 
   // TODO(fserb): hanging/ideographic baselines are broken.
   baselines_->setAlphabetic(-baseline_y);

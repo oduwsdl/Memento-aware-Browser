@@ -599,6 +599,23 @@ void av1_get_nz_map_contexts_c(const uint8_t* const levels,
                                int8_t* const coeff_contexts);
 #define av1_get_nz_map_contexts av1_get_nz_map_contexts_c
 
+void av1_highbd_apply_temporal_filter_c(
+    const struct yv12_buffer_config* ref_frame,
+    const struct macroblockd* mbd,
+    const BLOCK_SIZE block_size,
+    const int mb_row,
+    const int mb_col,
+    const int num_planes,
+    const double* noise_levels,
+    const MV* subblock_mvs,
+    const int* subblock_mses,
+    const int q_factor,
+    const int filter_strength,
+    const uint8_t* pred,
+    uint32_t* accum,
+    uint16_t* count);
+#define av1_highbd_apply_temporal_filter av1_highbd_apply_temporal_filter_c
+
 int64_t av1_highbd_block_error_c(const tran_low_t* coeff,
                                  const tran_low_t* dqcoeff,
                                  intptr_t block_size,
@@ -1250,6 +1267,13 @@ void av1_quantize_lp_c(const int16_t* coeff_ptr,
                        uint16_t* eob_ptr,
                        const int16_t* scan);
 #define av1_quantize_lp av1_quantize_lp_c
+
+void av1_resize_and_extend_frame_c(const YV12_BUFFER_CONFIG* src,
+                                   YV12_BUFFER_CONFIG* dst,
+                                   const InterpFilter filter,
+                                   const int phase,
+                                   const int num_planes);
+#define av1_resize_and_extend_frame av1_resize_and_extend_frame_c
 
 void av1_round_shift_array_c(int32_t* arr, int size, int bit);
 #define av1_round_shift_array av1_round_shift_array_c

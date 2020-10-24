@@ -67,6 +67,7 @@ class ObjectTrackerGeneratorOptions(GeneratorOptions):
                  conventions = None,
                  filename = None,
                  directory = '.',
+                 genpath = None,
                  apiname = None,
                  profile = None,
                  versions = '.*',
@@ -92,6 +93,7 @@ class ObjectTrackerGeneratorOptions(GeneratorOptions):
                 conventions = conventions,
                 filename = filename,
                 directory = directory,
+                genpath = genpath,
                 apiname = apiname,
                 profile = profile,
                 versions = versions,
@@ -172,9 +174,6 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             'vkGetPhysicalDeviceDisplayProperties2KHR',
             'vkGetDisplayModePropertiesKHR',
             'vkGetDisplayModeProperties2KHR',
-            'vkAcquirePerformanceConfigurationINTEL',
-            'vkReleasePerformanceConfigurationINTEL',
-            'vkQueueSetPerformanceConfigurationINTEL',
             'vkCreateFramebuffer',
             'vkSetDebugUtilsObjectNameEXT',
             'vkSetDebugUtilsObjectTagEXT',
@@ -330,7 +329,10 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             for handle in self.object_types:
                 if self.handle_types.IsNonDispatchable(handle) and not self.is_aliased_type[handle]:
                     if (objtype == 'device' and self.handle_parents.IsParentDevice(handle)) or (objtype == 'instance' and not self.handle_parents.IsParentDevice(handle)):
-                        output_func += '    skip |= ReportLeaked%sObjects(%s, %s, error_code);\n' % (upper_objtype, objtype, self.GetVulkanObjType(handle))
+                        comment_prefix = ''
+                        if (handle == 'VkDisplayKHR' or handle == 'VkDisplayModeKHR'):
+                            comment_prefix = '// No destroy API -- do not report: '
+                        output_func += '    %sskip |= ReportLeaked%sObjects(%s, %s, error_code);\n' % (comment_prefix, upper_objtype, objtype, self.GetVulkanObjType(handle))
             output_func += '    return skip;\n'
             output_func += '}\n'
         return output_func
@@ -738,11 +740,15 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         validate_code = ''
         record_code = ''
         object_array = False
-        if True in [destroy_txt in proto.text for destroy_txt in ['Destroy', 'Free']]:
+        allocator = 'pAllocator'
+        if True in [destroy_txt in proto.text for destroy_txt in ['Destroy', 'Free', 'ReleasePerformanceConfigurationINTEL']]:
             # Check for special case where multiple handles are returned
             if cmd_info[-1].len is not None:
                 object_array = True;
                 param = -1
+            elif 'ReleasePerformanceConfigurationINTEL' in proto.text:
+                param = -1
+                allocator = 'nullptr'
             else:
                 param = -2
             compatalloc_vuid_string = '%s-compatalloc' % cmd_info[param].name
@@ -756,7 +762,7 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
                 else:
                     dispobj = cmd_info[0].type
                     # Call Destroy a single time
-                    validate_code += '%sskip |= ValidateDestroyObject(%s, %s, pAllocator, %s, %s);\n' % (indent, cmd_info[param].name, self.GetVulkanObjType(cmd_info[param].type), compatalloc_vuid, nullalloc_vuid)
+                    validate_code += '%sskip |= ValidateDestroyObject(%s, %s, %s, %s, %s);\n' % (indent, cmd_info[param].name, self.GetVulkanObjType(cmd_info[param].type), allocator, compatalloc_vuid, nullalloc_vuid)
                     record_code += '%sRecordDestroyObject(%s, %s);\n' % (indent, cmd_info[param].name, self.GetVulkanObjType(cmd_info[param].type))
         return object_array, validate_code, record_code
     #
@@ -905,10 +911,10 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         struct_member_dict = dict(self.structMembers)
 
         # Set command invariant information needed at a per member level in validate...
-        is_create_command = any(filter(lambda pat: pat in cmdname, ('Create', 'Allocate', 'Enumerate', 'RegisterDeviceEvent', 'RegisterDisplayEvent')))
+        is_create_command = any(filter(lambda pat: pat in cmdname, ('Create', 'Allocate', 'Enumerate', 'RegisterDeviceEvent', 'RegisterDisplayEvent', 'AcquirePerformanceConfigurationINTEL')))
         last_member_is_pointer = len(members) and self.paramIsPointer(members[-1])
         iscreate = is_create_command or ('vkGet' in cmdname and last_member_is_pointer)
-        isdestroy = any([destroy_txt in cmdname for destroy_txt in ['Destroy', 'Free']])
+        isdestroy = any([destroy_txt in cmdname for destroy_txt in ['Destroy', 'Free', 'ReleasePerformanceConfigurationINTEL']])
 
         # Generate member info
         membersInfo = []

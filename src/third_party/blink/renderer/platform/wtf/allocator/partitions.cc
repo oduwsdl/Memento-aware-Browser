@@ -34,6 +34,9 @@
 #include "base/allocator/partition_allocator/oom.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/debug/alias.h"
+#include "base/strings/safe_sprintf.h"
+#include "base/thread_annotations.h"
+#include "components/crash/core/common/crash_key.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partition_allocator.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 
@@ -66,7 +69,17 @@ bool Partitions::InitializeOnce() {
 
   base::PartitionAllocGlobalInit(&Partitions::HandleOutOfMemory);
 
+  // Restrictions:
+  // - DCHECK_IS_ON(): Memory usage of the thread cache is not optimized yet,
+  //   don't ship this.
+  // - BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC): Only one thread cache at a time
+  //   is supported, in this case it is already claimed by malloc().
+#if DCHECK_IS_ON() && !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  fast_malloc_allocator.init({base::PartitionOptions::Alignment::kRegular,
+                              base::PartitionOptions::ThreadCache::kEnabled});
+#else
   fast_malloc_allocator.init();
+#endif
   array_buffer_allocator.init();
   buffer_allocator.init();
   layout_allocator.init();
@@ -133,10 +146,15 @@ class LightPartitionStatsDumperImpl : public base::PartitionStatsDumper {
 size_t Partitions::TotalSizeOfCommittedPages() {
   DCHECK(initialized_);
   size_t total_size = 0;
-  total_size += FastMallocPartition()->total_size_of_committed_pages;
-  total_size += ArrayBufferPartition()->total_size_of_committed_pages;
-  total_size += BufferPartition()->total_size_of_committed_pages;
-  total_size += LayoutPartition()->total_size_of_committed_pages;
+  // Racy reads below: this is fine to collect statistics.
+  total_size +=
+      TS_UNCHECKED_READ(FastMallocPartition()->total_size_of_committed_pages);
+  total_size +=
+      TS_UNCHECKED_READ(ArrayBufferPartition()->total_size_of_committed_pages);
+  total_size +=
+      TS_UNCHECKED_READ(BufferPartition()->total_size_of_committed_pages);
+  total_size +=
+      TS_UNCHECKED_READ(LayoutPartition()->total_size_of_committed_pages);
   return total_size;
 }
 
@@ -244,6 +262,21 @@ void Partitions::HandleOutOfMemory(size_t size) {
   volatile size_t total_usage = TotalSizeOfCommittedPages();
   uint32_t alloc_page_error_code = base::GetAllocPageErrorCode();
   base::debug::Alias(&alloc_page_error_code);
+
+  // Report the total mapped size from PageAllocator. This is intended to
+  // distinguish better between address space exhaustion and out of memory on 32
+  // bit platforms. PartitionAlloc can use a lot of address space, as free pages
+  // are not shared between buckets (see crbug.com/421387). There is already
+  // reporting for this, however it only looks at the address space usage of a
+  // single partition. This allows to look across all the partitions, and other
+  // users such as V8.
+  char value[24];
+  // %d works for 64 bit types as well with SafeSPrintf(), see its unit tests
+  // for an example.
+  base::strings::SafeSPrintf(value, "%d", base::GetTotalMappedSize());
+  static crash_reporter::CrashKeyString<24> g_page_allocator_mapped_size(
+      "page-allocator-mapped-size");
+  g_page_allocator_mapped_size.Set(value);
 
   if (total_usage >= 2UL * 1024 * 1024 * 1024)
     PartitionsOutOfMemoryUsing2G(size);

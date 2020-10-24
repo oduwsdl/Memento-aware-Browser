@@ -5,6 +5,7 @@
 import * as Common from '../common/common.js';
 import * as Diff from '../diff/diff.js';
 import * as Host from '../host/host.js';
+import * as Root from '../root/root.js';
 import * as UI from '../ui/ui.js';
 
 import {FilteredListWidget, Provider} from './FilteredListWidget.js';
@@ -15,6 +16,7 @@ import {QuickOpenImpl} from './QuickOpen.js';
  */
 export class CommandMenu {
   constructor() {
+    /** @type {!Array<!Command>} */
     this._commands = [];
     this._loadCommands();
   }
@@ -55,14 +57,22 @@ export class CommandMenu {
   static createSettingCommand(extension, title, value) {
     const category = extension.descriptor()['category'] || '';
     const tags = extension.descriptor()['tags'] || '';
+    const reloadRequired = !!extension.descriptor()['reloadRequired'];
     const setting = Common.Settings.Settings.instance().moduleSetting(extension.descriptor()['settingName']);
     return CommandMenu.createCommand({
       category: ls(category),
       keys: tags,
       title,
       shortcut: '',
-      executeHandler: setting.set.bind(setting, value),
+      executeHandler: () => {
+        setting.set(value);
+        if (reloadRequired) {
+          UI.InspectorView.InspectorView.instance().displayReloadRequiredWarning(
+              ls`One or more settings have changed which requires a reload to take effect.`);
+        }
+      },
       availableHandler,
+      userActionCode: undefined,
     });
 
     /**
@@ -79,7 +89,7 @@ export class CommandMenu {
    */
   static createActionCommand(options) {
     const {action, userActionCode} = options;
-    const shortcut = self.UI.shortcutRegistry.shortcutTitleForAction(action.id()) || '';
+    const shortcut = UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutTitleForAction(action.id()) || '';
 
     return CommandMenu.createCommand({
       category: action.category(),
@@ -88,6 +98,7 @@ export class CommandMenu {
       shortcut,
       executeHandler: action.execute.bind(action),
       userActionCode,
+      availableHandler: undefined,
     });
   }
 
@@ -107,19 +118,20 @@ export class CommandMenu {
       executeHandler: UI.ViewManager.ViewManager.instance().showView.bind(
           UI.ViewManager.ViewManager.instance(), viewId, /* userGesture */ true),
       userActionCode,
+      availableHandler: undefined
     });
   }
 
   _loadCommands() {
     const locations = new Map();
-    self.runtime.extensions(UI.View.ViewLocationResolver).forEach(extension => {
+    Root.Runtime.Runtime.instance().extensions(UI.View.ViewLocationResolver).forEach(extension => {
       const category = extension.descriptor()['category'];
       const name = extension.descriptor()['name'];
       if (category && name) {
         locations.set(name, category);
       }
     });
-    const viewExtensions = self.runtime.extensions('view');
+    const viewExtensions = Root.Runtime.Runtime.instance().extensions('view');
     for (const extension of viewExtensions) {
       const category = locations.get(extension.descriptor()['location']);
       if (!category) {
@@ -128,16 +140,11 @@ export class CommandMenu {
 
       /** @type {!RevealViewCommandOptions} */
       const options = {extension, category: ls(category), userActionCode: undefined};
-
-      if (category === 'Settings') {
-        options.userActionCode = Host.UserMetrics.Action.SettingsOpenedFromCommandMenu;
-      }
-
       this._commands.push(CommandMenu.createRevealViewCommand(options));
     }
 
     // Populate allowlisted settings.
-    const settingExtensions = self.runtime.extensions('setting');
+    const settingExtensions = Root.Runtime.Runtime.instance().extensions('setting');
     for (const extension of settingExtensions) {
       const options = extension.descriptor()['options'];
       if (!options || !extension.descriptor()['category']) {
@@ -163,6 +170,7 @@ export class CommandMenu {
  *   userActionCode: (!Host.UserMetrics.Action|undefined),
  * }}
  */
+// @ts-ignore typedef
 export let ActionCommandOptions;
 
 /**
@@ -172,6 +180,7 @@ export let ActionCommandOptions;
  *   userActionCode: (!Host.UserMetrics.Action|undefined)
  * }}
  */
+// @ts-ignore typedef
 export let RevealViewCommandOptions;
 
 /**
@@ -180,16 +189,18 @@ export let RevealViewCommandOptions;
  *   keys: string,
  *   title: string,
  *   shortcut: string,
- *   executeHandler: !function(),
- *   availableHandler: (!function()|undefined),
+ *   executeHandler: !function():*,
+ *   availableHandler: ((!function():boolean)|undefined),
  *   userActionCode: (!Host.UserMetrics.Action|undefined)
  * }}
  */
+// @ts-ignore typedef
 export let CreateCommandOptions;
 
 export class CommandMenuProvider extends Provider {
   constructor() {
     super();
+    /** @type {!Array<!Command>} */
     this._commands = [];
   }
 
@@ -200,7 +211,7 @@ export class CommandMenuProvider extends Provider {
     const allCommands = commandMenu.commands();
 
     // Populate allowlisted actions.
-    const actions = self.UI.actionRegistry.availableActions();
+    const actions = UI.ActionRegistry.ActionRegistry.instance().availableActions();
     for (const action of actions) {
       const category = action.category();
       if (!category) {
@@ -208,11 +219,7 @@ export class CommandMenuProvider extends Provider {
       }
 
       /** @type {!ActionCommandOptions} */
-      const options = {action};
-      if (category === 'Settings') {
-        options.userActionCode = Host.UserMetrics.Action.SettingsOpenedFromCommandMenu;
-      }
-
+      const options = {action, userActionCode: undefined};
       this._commands.push(CommandMenu.createActionCommand(options));
     }
 
@@ -226,7 +233,7 @@ export class CommandMenuProvider extends Provider {
 
     /**
      * @param {!Command} left
-     * @param {!QuickOpen.CommandMenu.Command} right
+     * @param {!Command} right
      * @return {number}
      */
     function commandComparator(left, right) {
@@ -267,14 +274,7 @@ export class CommandMenuProvider extends Provider {
    */
   itemScoreAt(itemIndex, query) {
     const command = this._commands[itemIndex];
-    const opcodes = Diff.Diff.DiffWrapper.charDiff(query.toLowerCase(), command.title().toLowerCase());
-    let score = 0;
-    // Score longer sequences higher.
-    for (let i = 0; i < opcodes.length; ++i) {
-      if (opcodes[i][0] === Diff.Diff.Operation.Equal) {
-        score += opcodes[i][1].length * opcodes[i][1].length;
-      }
-    }
+    let score = Diff.Diff.DiffWrapper.characterScore(query.toLowerCase(), command.title().toLowerCase());
 
     // Score panel/drawer reveals above regular actions.
     if (command.category().startsWith('Panel')) {
@@ -296,11 +296,11 @@ export class CommandMenuProvider extends Provider {
   renderItem(itemIndex, query, titleElement, subtitleElement) {
     const command = this._commands[itemIndex];
     titleElement.removeChildren();
-    const tagElement = titleElement.createChild('span', 'tag');
+    const tagElement = /** @type {!HTMLElement} */ (titleElement.createChild('span', 'tag'));
     const index = String.hashCode(command.category()) % MaterialPaletteColors.length;
     tagElement.style.backgroundColor = MaterialPaletteColors[index];
     tagElement.textContent = command.category();
-    titleElement.createTextChild(command.title());
+    UI.UIUtils.createTextChild(titleElement, command.title());
     FilteredListWidget.highlightRanges(titleElement, query, true);
     subtitleElement.textContent = command.shortcut();
   }
@@ -341,7 +341,7 @@ export class Command {
    * @param {string} title
    * @param {string} key
    * @param {string} shortcut
-   * @param {function()} executeHandler
+   * @param {function():*} executeHandler
    * @param {function()=} availableHandler
    */
   constructor(category, title, key, shortcut, executeHandler, availableHandler) {

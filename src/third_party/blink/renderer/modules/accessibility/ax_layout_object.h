@@ -87,7 +87,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   bool IsRichlyEditable() const override;
   bool IsLineBreakingObject() const override;
   bool IsLinked() const override;
-  bool IsLoaded() const override;
   bool IsOffScreen() const override;
   bool IsVisited() const override;
 
@@ -97,16 +96,18 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   AccessibilityGrabbedState IsGrabbed() const override;
   AccessibilitySelectedState IsSelected() const override;
   bool IsSelectedFromFocus() const override;
+  bool IsNotUserSelectable() const override;
 
   // Whether objects are ignored, i.e. not included in the tree.
   AXObjectInclusion DefaultObjectInclusion(
       IgnoredReasons* = nullptr) const override;
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
+  bool CanIgnoreTextAsEmpty() const override;
 
   // Properties of static elements.
   ax::mojom::blink::ListStyle GetListStyle() const final;
   String GetText() const override;
-  ax::mojom::blink::TextDirection GetTextDirection() const final;
+  ax::mojom::blink::WritingDirection GetTextDirection() const final;
   ax::mojom::blink::TextPosition GetTextPosition() const final;
   void GetTextStyleAndTextDecorationStyle(
       int32_t* text_style,
@@ -147,15 +148,11 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   AXObject* RawNextSibling() const override;
   bool CanHaveChildren() const override;
 
-  // Properties of the object's owning document or page.
-  double EstimatedLoadingProgress() const override;
-
   // Notifications that this object may have changed.
   void HandleActiveDescendantChanged() override;
   void HandleAriaExpandedChanged() override;
   // Called when autofill/autocomplete state changes on a form control.
   void HandleAutofillStateChanged(WebAXAutofillState state) override;
-  void TextChanged() override;
 
   // For a table.
   bool IsDataTable() const override;
@@ -196,7 +193,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   bool FindAllTableCellsWithRole(ax::mojom::blink::Role, AXObjectVector&) const;
 
   LayoutRect ComputeElementRect() const;
-  bool CanIgnoreTextAsEmpty() const;
   bool CanIgnoreSpaceNextTo(LayoutObject*, bool is_after) const;
   bool HasAriaCellRole(Element*) const;
   bool IsPlaceholder() const;

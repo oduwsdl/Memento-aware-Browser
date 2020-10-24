@@ -8,7 +8,6 @@
 
 #include "base/feature_list.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/test/scoped_feature_list.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -16,6 +15,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
+#include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker_mode.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-blink.h"
@@ -50,7 +50,6 @@ class FakeWebURLLoader final : public WebURLLoader {
       std::unique_ptr<network::ResourceRequest> request,
       scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
       int requestor_id,
-      bool download_to_network_cache_only,
       bool pass_response_pipe_to_client,
       bool no_mime_sniffing,
       base::TimeDelta timeout_interval,
@@ -60,7 +59,9 @@ class FakeWebURLLoader final : public WebURLLoader {
       WebData&,
       int64_t& encoded_data_length,
       int64_t& encoded_body_length,
-      WebBlobInfo& downloaded_blob) override {
+      WebBlobInfo& downloaded_blob,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper) override {
     NOTREACHED();
   }
 
@@ -68,8 +69,9 @@ class FakeWebURLLoader final : public WebURLLoader {
       std::unique_ptr<network::ResourceRequest> request,
       scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
       int requestor_id,
-      bool download_to_network_cache_only,
       bool no_mime_sniffing,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper,
       WebURLLoaderClient* client) override {
     if (request->url.spec() == kNotFoundScriptURL) {
       WebURLResponse response;
@@ -138,6 +140,23 @@ class FakeWebServiceWorkerFetchContext final
 
  private:
   FakeWebURLLoaderFactory fake_web_url_loader_factory_;
+};
+
+class FakeBrowserInterfaceBroker final
+    : public mojom::blink::BrowserInterfaceBroker {
+ public:
+  FakeBrowserInterfaceBroker() = default;
+  ~FakeBrowserInterfaceBroker() override = default;
+
+  void GetInterface(mojo::GenericPendingReceiver) override {}
+
+  mojo::PendingRemote<mojom::blink::BrowserInterfaceBroker>
+  BindNewPipeAndPassRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+ private:
+  mojo::Receiver<mojom::blink::BrowserInterfaceBroker> receiver_{this};
 };
 
 class MockServiceWorkerContextClient final
@@ -252,7 +271,7 @@ class WebEmbeddedWorkerImplTest : public testing::Test {
         std::move(outside_settings_object));
     start_data->script_url = script_url_;
     start_data->user_agent = WebString("dummy user agent");
-    start_data->script_type = mojom::ScriptType::kClassic;
+    start_data->script_type = mojom::blink::ScriptType::kClassic;
     start_data->wait_for_debugger_mode =
         WebEmbeddedWorkerStartData::kDontWaitForDebugger;
     return start_data;
@@ -277,12 +296,14 @@ class WebEmbeddedWorkerImplTest : public testing::Test {
 }  // namespace
 
 TEST_F(WebEmbeddedWorkerImplTest, TerminateSoonAfterStart) {
-  worker_->StartWorkerContext(CreateStartData(),
-                              /*installed_scripts_manager_params=*/nullptr,
-                              /*content_settings_proxy=*/mojo::NullRemote(),
-                              /*cache_storage_remote=*/mojo::NullRemote(),
-                              /*browser_interface_broker=*/mojo::NullRemote(),
-                              Thread::Current()->GetTaskRunner());
+  FakeBrowserInterfaceBroker browser_interface_broker;
+  worker_->StartWorkerContext(
+      CreateStartData(),
+      /*installed_scripts_manager_params=*/nullptr,
+      /*content_settings_proxy=*/mojo::NullRemote(),
+      /*cache_storage_remote=*/mojo::NullRemote(),
+      browser_interface_broker.BindNewPipeAndPassRemote(),
+      Thread::Current()->GetTaskRunner());
   testing::Mock::VerifyAndClearExpectations(mock_client_.get());
 
   // Terminate the worker immediately after start.
@@ -294,12 +315,14 @@ TEST_F(WebEmbeddedWorkerImplTest, TerminateWhileWaitingForDebugger) {
   std::unique_ptr<WebEmbeddedWorkerStartData> start_data = CreateStartData();
   start_data->wait_for_debugger_mode =
       WebEmbeddedWorkerStartData::kWaitForDebugger;
-  worker_->StartWorkerContext(std::move(start_data),
-                              /*installed_scripts_manager_params=*/nullptr,
-                              /*content_settings_proxy=*/mojo::NullRemote(),
-                              /*cache_storage_remote=*/mojo::NullRemote(),
-                              /*browser_interface_broker=*/mojo::NullRemote(),
-                              Thread::Current()->GetTaskRunner());
+  FakeBrowserInterfaceBroker browser_interface_broker;
+  worker_->StartWorkerContext(
+      std::move(start_data),
+      /*installed_scripts_manager_params=*/nullptr,
+      /*content_settings_proxy=*/mojo::NullRemote(),
+      /*cache_storage_remote=*/mojo::NullRemote(),
+      browser_interface_broker.BindNewPipeAndPassRemote(),
+      Thread::Current()->GetTaskRunner());
   testing::Mock::VerifyAndClearExpectations(mock_client_.get());
 
   // Terminate the worker while waiting for the debugger.
@@ -312,14 +335,16 @@ TEST_F(WebEmbeddedWorkerImplTest, ScriptNotFound) {
   url_test_helpers::RegisterMockedErrorURLLoad(script_url);
   std::unique_ptr<WebEmbeddedWorkerStartData> start_data = CreateStartData();
   start_data->script_url = script_url;
+  FakeBrowserInterfaceBroker browser_interface_broker;
 
   // Start worker and load the script.
-  worker_->StartWorkerContext(std::move(start_data),
-                              /*installed_scripts_manager_params=*/nullptr,
-                              /*content_settings_proxy=*/mojo::NullRemote(),
-                              /*cache_storage_remote=*/mojo::NullRemote(),
-                              /*browser_interface_broker=*/mojo::NullRemote(),
-                              Thread::Current()->GetTaskRunner());
+  worker_->StartWorkerContext(
+      std::move(start_data),
+      /*installed_scripts_manager_params=*/nullptr,
+      /*content_settings_proxy=*/mojo::NullRemote(),
+      /*cache_storage_remote=*/mojo::NullRemote(),
+      browser_interface_broker.BindNewPipeAndPassRemote(),
+      Thread::Current()->GetTaskRunner());
   testing::Mock::VerifyAndClearExpectations(mock_client_.get());
 
   mock_client_->WaitUntilFailedToLoadClassicScript();
