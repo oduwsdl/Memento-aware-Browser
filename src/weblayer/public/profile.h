@@ -10,25 +10,38 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/flat_set.h"
+#include "base/time/time.h"
 
 namespace base {
 class FilePath;
 }
 
+namespace gfx {
+class Image;
+}
+
+class GURL;
+
 namespace weblayer {
 class CookieManager;
 class DownloadDelegate;
+class PrerenderController;
 
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.weblayer_private
 // GENERATED_JAVA_CLASS_NAME_OVERRIDE: ImplBrowsingDataType
 enum class BrowsingDataType {
   COOKIES_AND_SITE_DATA = 0,
   CACHE = 1,
+  SITE_SETTINGS = 2,
 };
 
+// Used for setting/getting profile related settings.
 enum class SettingType {
   BASIC_SAFE_BROWSING_ENABLED = 0,
   UKM_ENABLED = 1,
+  EXTENDED_REPORTING_SAFE_BROWSING_ENABLED = 2,
+  REAL_TIME_SAFE_BROWSING_ENABLED = 3,
+  NETWORK_PREDICTION_ENABLED = 4,
 };
 
 class Profile {
@@ -65,6 +78,9 @@ class Profile {
   // Gets the cookie manager for this profile.
   virtual CookieManager* GetCookieManager() = 0;
 
+  // Gets the prerender controller for this profile.
+  virtual PrerenderController* GetPrerenderController() = 0;
+
   // Asynchronously fetches the set of known Browser persistence-ids. See
   // Browser::PersistenceInfo for more details on persistence-ids.
   virtual void GetBrowserPersistenceIds(
@@ -84,6 +100,24 @@ class Profile {
 
   // Get the boolean value of the given setting type.
   virtual bool GetBooleanSetting(SettingType type) = 0;
+
+  // Returns the cached favicon for the specified url. Off the record profiles
+  // do not cache favicons. If this is called on an off-the-record profile
+  // the callback is run with an empty image synchronously. The returned image
+  // matches that returned by FaviconFetcher.
+  virtual void GetCachedFaviconForPageUrl(
+      const GURL& page_url,
+      base::OnceCallback<void(gfx::Image)> callback) = 0;
+
+  // For cross-origin navigations, the implementation may leverage a separate OS
+  // process for stronger isolation. If an embedder knows that a cross-origin
+  // navigation is likely starting soon, they can call this method as a hint to
+  // the implementation to start a fresh OS process. A subsequent navigation may
+  // use this preinitialized process, improving performance. It is safe to call
+  // this multiple times or when it is not certain that the spare renderer will
+  // be used, although calling this too eagerly may reduce performance as
+  // unnecessary processes are created.
+  virtual void PrepareForPossibleCrossOriginNavigation() = 0;
 };
 
 }  // namespace weblayer

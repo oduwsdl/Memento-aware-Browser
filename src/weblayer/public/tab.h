@@ -25,8 +25,12 @@ class WebView;
 #endif
 
 namespace weblayer {
+class Browser;
 class ErrorPageDelegate;
+class FaviconFetcher;
+class FaviconFetcherDelegate;
 class FullscreenDelegate;
+class GoogleAccountsDelegate;
 class NavigationController;
 class NewTabDelegate;
 class TabObserver;
@@ -36,6 +40,9 @@ class WebMessageHostFactory;
 class Tab {
  public:
   virtual ~Tab() = default;
+
+  // Returns the Browser that owns this.
+  virtual Browser* GetBrowser() = 0;
 
   // Sets the ErrorPageDelegate. If none is set, a default action will be taken
   // for any given interaction with an error page.
@@ -48,6 +55,8 @@ class Tab {
   // Sets the NewBrowserDelegate. Setting a null value implicitly disables
   // popups.
   virtual void SetNewTabDelegate(NewTabDelegate* delegate) = 0;
+
+  virtual void SetGoogleAccountsDelegate(GoogleAccountsDelegate* delegate) = 0;
 
   virtual void AddObserver(TabObserver* observer) = 0;
 
@@ -104,6 +113,17 @@ class Tab {
   // Removes the WebMessageHostFactory registered under |js_object_name|.
   virtual void RemoveWebMessageHostFactory(
       const base::string16& js_object_name) = 0;
+
+  // Creates a FaviconFetcher that notifies a FaviconFetcherDelegate when
+  // the favicon changes.
+  // A page may provide any number of favicons. The preferred image size
+  // used depends upon the platform. If a previously cached icon is available,
+  // it is used, otherwise the icon is downloaded.
+  // |delegate| may be called multiple times for the same navigation. This
+  // happens when the page dynamically updates the favicon, but may also happen
+  // if a cached icon is determined to be out of date.
+  virtual std::unique_ptr<FaviconFetcher> CreateFaviconFetcher(
+      FaviconFetcherDelegate* delegate) = 0;
 
 #if !defined(OS_ANDROID)
   // TODO: this isn't a stable API, so use it now for expediency in the C++ API,

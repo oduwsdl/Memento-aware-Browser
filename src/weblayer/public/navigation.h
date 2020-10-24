@@ -94,6 +94,11 @@ class Navigation {
   // and redirect. When called during start, the header applies to both the
   // start and redirect. |name| must be rfc 2616 compliant and |value| must
   // not contain '\0', '\n' or '\r'.
+  //
+  // This function may be used to set the referer. If the referer is set in
+  // navigation start, it is reset during the redirect. In other words, if you
+  // need to set a referer that applies to redirects, then this must be called
+  // from NavigationRedirected().
   virtual void SetRequestHeader(const std::string& name,
                                 const std::string& value) = 0;
 
@@ -104,6 +109,23 @@ class Navigation {
   // must not contain any illegal characters as documented in
   // SetRequestHeader().
   virtual void SetUserAgentString(const std::string& value) = 0;
+
+  // Whether the navigation was initiated by the page. Examples of
+  // page-initiated navigations include:
+  //  * <a> link click
+  //  * changing window.location.href
+  //  * redirect via the <meta http-equiv="refresh"> tag
+  //  * using window.history.pushState
+  //
+  // This method returns false for navigations initiated by the WebLayer
+  // API, including using window.history.forward() or window.history.back().
+  virtual bool IsPageInitiated() = 0;
+
+  // Whether the navigation is a reload. Examples of reloads include:
+  // * embedder-specified through NavigationController::Reload
+  // * page-initiated reloads, e.g. location.reload()
+  // * reloads when the network interface is reconnected
+  virtual bool IsReload() = 0;
 };
 
 }  // namespace weblayer

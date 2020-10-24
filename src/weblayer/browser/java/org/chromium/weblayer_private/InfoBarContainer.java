@@ -16,8 +16,14 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
+import org.chromium.components.infobars.InfoBar;
+import org.chromium.components.infobars.InfoBarAnimationListener;
+import org.chromium.components.infobars.InfoBarUiItem;
+import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.KeyboardVisibilityDelegate.KeyboardVisibilityListener;
+import org.chromium.ui.util.AccessibilityUtil;
 
 import java.util.ArrayList;
 
@@ -31,26 +37,18 @@ import java.util.ArrayList;
 public class InfoBarContainer implements KeyboardVisibilityListener, InfoBar.Container {
     private static final String TAG = "InfoBarContainer";
 
-    // TODO(crbug.com/1025620): Port over //chrome's listening to AccessibilityUtil if/as needed.
+    // Number of instances that have not been destroyed.
+    private static int sInstanceCount;
 
-    /**
-     * A listener for the InfoBar animations.
-     */
-    public interface InfoBarAnimationListener {
-        public static final int ANIMATION_TYPE_SHOW = 0;
-        public static final int ANIMATION_TYPE_SWAP = 1;
-        public static final int ANIMATION_TYPE_HIDE = 2;
-
-        /**
-         * Notifies the subscriber when an animation is completed.
-         */
-        void notifyAnimationFinished(int animationType);
-
-        /**
-         * Notifies the subscriber when all animations are finished.
-         * @param frontInfoBar The frontmost infobar or {@code null} if none are showing.
-         */
-        void notifyAllAnimationsFinished(InfoBarUiItem frontInfoBar);
+    // InfoBarContainer's handling of accessibility is a global toggle, and thus a static observer
+    // suffices. However, observing accessibility events has the wrinkle that all accessibility
+    // observers are removed when there are no more Browsers and are not re-added if a new Browser
+    // is subsequently created. To handle this wrinkle, |sAccessibilityObserver| is added as an
+    // observer whenever the number of non-destroyed InfoBarContainers becomes non-zero and removed
+    // whenever that number flips to zero.
+    private static final AccessibilityUtil.Observer sAccessibilityObserver;
+    static {
+        sAccessibilityObserver = (enabled) -> setIsAllowedToAutoHide(!enabled);
     }
 
     /**
@@ -87,16 +85,29 @@ public class InfoBarContainer implements KeyboardVisibilityListener, InfoBar.Con
         void onInfoBarContainerShownRatioChanged(InfoBarContainer container, float shownRatio);
     }
 
-    // TODO(crbug.com/1025620): Observe WebContents to reset the state of the InfoBarContainer when
-    // the user navigates, a la //chrome's observing of Tab here.
+    /**
+     * Resets the visibility of the InfoBarContainer when the user navigates, following Chrome's
+     * behavior. In particular in Chrome some features hide the infobar container. This hiding is
+     * always on a per-URL basis that should be undone on navigation. While no feature in WebLayer
+     * yet does this, we put this * defensive behavior in place so that any such added features
+     * don't end up inadvertently hiding the infobar container "forever" in a given tab.
+     */
+    private final WebContentsObserver mWebContentsObserver = new WebContentsObserver() {
+        @Override
+        public void didFinishNavigation(NavigationHandle navigation) {
+            if (navigation.hasCommitted() && navigation.isInMainFrame()) {
+                setHidden(false);
+            }
+        }
+    };
 
-    public void onTabDidGainActive() {
+    public void onTabAttachedToViewController() {
         initializeContainerView(mTab.getBrowser().getContext());
         updateWebContents();
         mInfoBarContainerView.addToParentView();
     }
 
-    public void onTabDidLoseActive() {
+    public void onTabDetachedFromViewController() {
         mInfoBarContainerView.removeFromParentView();
         destroyContainerView();
     }
@@ -151,7 +162,12 @@ public class InfoBarContainer implements KeyboardVisibilityListener, InfoBar.Con
     private @Nullable InfoBarContainerView mInfoBarContainerView;
 
     InfoBarContainer(TabImpl tab) {
+        if (++sInstanceCount == 1) {
+            WebLayerAccessibilityUtil.get().addObserver(sAccessibilityObserver);
+        }
+
         mTab = tab;
+        mTab.getWebContents().addObserver(mWebContentsObserver);
 
         // Chromium's InfoBarContainer may add an InfoBar immediately during this initialization
         // call, so make sure everything in the InfoBarContainer is completely ready beforehand.
@@ -287,7 +303,13 @@ public class InfoBarContainer implements KeyboardVisibilityListener, InfoBar.Con
     }
 
     public void destroy() {
-        destroyContainerView();
+        mTab.getWebContents().removeObserver(mWebContentsObserver);
+
+        if (--sInstanceCount == 0) {
+            WebLayerAccessibilityUtil.get().removeObserver(sAccessibilityObserver);
+        }
+
+        if (mInfoBarContainerView != null) destroyContainerView();
         if (mNativeInfoBarContainer != 0) {
             InfoBarContainerJni.get().destroy(mNativeInfoBarContainer, InfoBarContainer.this);
             mNativeInfoBarContainer = 0;

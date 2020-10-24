@@ -14,8 +14,8 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
-#include "base/task/cancelable_task_tracker.h"
 #include "components/sessions/content/session_tab_helper_delegate.h"
 #include "components/sessions/core/command_storage_manager_delegate.h"
 #include "components/sessions/core/session_service_commands.h"
@@ -52,6 +52,8 @@ class BrowserPersister : public sessions::CommandStorageManagerDelegate,
   BrowserPersister& operator=(const BrowserPersister&) = delete;
 
   ~BrowserPersister() override;
+
+  bool is_restore_in_progress() const { return is_restore_in_progress_; }
 
   void SaveIfNecessary();
 
@@ -139,7 +141,10 @@ class BrowserPersister : public sessions::CommandStorageManagerDelegate,
                  &TabImpl::RemoveDataObserver>
       data_observer_{this};
 
-  base::CancelableTaskTracker cancelable_task_tracker_;
+  // True while asynchronously reading the state to restore.
+  bool is_restore_in_progress_ = true;
+
+  base::WeakPtrFactory<BrowserPersister> weak_factory_{this};
 };
 
 }  // namespace weblayer

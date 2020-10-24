@@ -50,6 +50,11 @@ public final class WebLayerFactoryImpl extends IWebLayerFactory.Stub {
     @Override
     public boolean isClientSupported() {
         StrictModeWorkaround.apply();
+        // Client changes were required to support WebLayer in a split.
+        if (ProductConfig.IS_BUNDLE && WebLayerBundleUtils.IS_WEBLAYER_IN_SPLIT
+                && sClientMajorVersion < 86) {
+            return false;
+        }
         int implMajorVersion = getImplementationMajorVersion();
         // While the client always calls this method, the most recently shipped product gets to
         // decide compatibility. If we instead let the implementation always decide, then we would
@@ -69,7 +74,7 @@ public final class WebLayerFactoryImpl extends IWebLayerFactory.Stub {
     }
 
     @CalledByNative
-    static int getClientMajorVersion() {
+    public static int getClientMajorVersion() {
         if (sClientMajorVersion == 0) {
             throw new IllegalStateException(
                     "This should only be called once WebLayer is initialized");

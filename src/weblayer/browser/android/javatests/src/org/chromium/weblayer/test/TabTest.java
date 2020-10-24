@@ -6,7 +6,10 @@ package org.chromium.weblayer.test;
 
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.view.View;
+import android.view.ViewGroup;
 
+import androidx.fragment.app.Fragment;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
@@ -15,7 +18,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.weblayer.ActionModeCallback;
+import org.chromium.weblayer.ActionModeItemType;
 import org.chromium.weblayer.Browser;
 import org.chromium.weblayer.Tab;
 import org.chromium.weblayer.TabListCallback;
@@ -240,5 +246,64 @@ public class TabTest {
         // Make sure the new tab can navigate correctly.
         mActivityTestRule.navigateAndWait(
                 tab, mActivityTestRule.getTestDataURL("simple_page.html"), false);
+    }
+
+    @Test
+    @SmallTest
+    @MinWebLayerVersion(86) // New behavior added in 86
+    public void testViewDetachedTabIsInvisible() throws Exception {
+        mActivity = mActivityTestRule.launchShellWithUrl("about:blank");
+
+        boolean hidden = mActivityTestRule.executeScriptAndExtractBoolean("document.hidden;");
+        Assert.assertFalse(hidden);
+
+        Fragment fragment = mActivityTestRule.getFragment();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            View fragmentView = fragment.getView();
+            ViewGroup parent = (ViewGroup) fragmentView.getParent();
+            parent.removeView(fragmentView);
+        });
+
+        hidden = mActivityTestRule.executeScriptAndExtractBoolean("document.hidden;");
+        Assert.assertTrue(hidden);
+    }
+
+    @Test
+    @SmallTest
+    @MinWebLayerVersion(88) // Bug fix in 88.
+    // This is a regression test for https://crbug.com/1075744 .
+    public void testRotationDoesntChangeVisibility() throws Exception {
+        String url = mActivityTestRule.getTestDataURL("rotation.html");
+        mActivity = mActivityTestRule.launchShellWithUrl(url);
+        mActivity.setRetainInstance(true);
+        Assert.assertNotNull(mActivity);
+
+        // Touch to trigger fullscreen and rotation.
+        EventUtils.simulateTouchCenterOfView(mActivity.getWindow().getDecorView());
+
+        // Wait for the page to be told the orientation changed.
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            return mActivityTestRule.executeScriptAndExtractBoolean("gotOrientationChange", false);
+        });
+
+        // The WebContents should not have been hidden as a result of the rotation.
+        Assert.assertFalse(mActivityTestRule.executeScriptAndExtractBoolean("gotHide", false));
+    }
+
+    @Test
+    @SmallTest
+    @MinWebLayerVersion(88)
+    public void setFloatingActionModeOverride() throws Exception {
+        mActivity = mActivityTestRule.launchShellWithUrl("about:blank");
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivity.getBrowser().getActiveTab().setFloatingActionModeOverride(
+                    ActionModeItemType.SHARE, new ActionModeCallback() {
+                        @Override
+                        public void onActionItemClicked(
+                                @ActionModeItemType int item, String selectedText) {}
+                    });
+        });
+
+        // Smoke test. It's not possible to trigger an action mode click in a test.
     }
 }

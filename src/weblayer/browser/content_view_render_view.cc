@@ -83,13 +83,26 @@ void ContentViewRenderView::OnPhysicalBackingSizeChanged(
     JNIEnv* env,
     const JavaParamRef<jobject>& jweb_contents,
     jint width,
-    jint height) {
+    jint height,
+    jboolean for_config_change) {
   bool height_changed = height_ != height;
   height_ = height;
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(jweb_contents);
   gfx::Size size(width, height);
-  web_contents->GetNativeView()->OnPhysicalBackingSizeChanged(size);
+
+  // The default resize timeout on Android is 1s. It was chosen with browser
+  // use case in mind where resize is rare (eg orientation change, fullscreen)
+  // and users are generally willing to wait for those cases instead of seeing
+  // a frame at the wrong size. Weblayer currently can be resized while user
+  // is interacting with the page, in which case the timeout is too long.
+  // For now, use the default long timeout only for rotation (ie config change)
+  // and just use a zero timeout for all other cases.
+  base::Optional<base::TimeDelta> override_deadline;
+  if (!for_config_change)
+    override_deadline = base::TimeDelta();
+  web_contents->GetNativeView()->OnPhysicalBackingSizeChanged(
+      size, override_deadline);
 
   if (height_changed && !height_changed_listener_.is_null())
     height_changed_listener_.Run();
@@ -115,10 +128,8 @@ void ContentViewRenderView::SurfaceChanged(
     jint width,
     jint height,
     const JavaParamRef<jobject>& surface) {
-  if (current_surface_format_ != format) {
-    current_surface_format_ = format;
-    compositor_->SetSurface(surface, can_be_used_with_surface_control);
-  }
+  current_surface_format_ = format;
+  compositor_->SetSurface(surface, can_be_used_with_surface_control);
   compositor_->SetWindowBounds(gfx::Size(width, height));
 }
 
@@ -129,6 +140,13 @@ void ContentViewRenderView::SetNeedsRedraw(JNIEnv* env) {
 base::android::ScopedJavaLocalRef<jobject>
 ContentViewRenderView::GetResourceManager(JNIEnv* env) {
   return compositor_->GetResourceManager().GetJavaObject();
+}
+
+void ContentViewRenderView::UpdateBackgroundColor(JNIEnv* env) {
+  if (!compositor_)
+    return;
+  compositor_->SetBackgroundColor(
+      Java_ContentViewRenderView_getBackgroundColor(env, java_obj_));
 }
 
 void ContentViewRenderView::UpdateLayerTreeHost() {
@@ -166,6 +184,7 @@ void ContentViewRenderView::InitCompositor() {
       cc::ElementId(root_container_layer_->id()));
   root_container_layer_->SetIsDrawable(false);
   compositor_->SetRootLayer(root_container_layer_);
+  UpdateBackgroundColor(base::android::AttachCurrentThread());
 }
 
 }  // namespace weblayer

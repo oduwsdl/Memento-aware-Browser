@@ -7,10 +7,12 @@ package org.chromium.weblayer.test;
 import android.os.RemoteException;
 import android.view.View;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.weblayer.Tab;
@@ -30,7 +32,7 @@ public final class BrowserControlsHelper {
 
     // Blocks until browser controls are fully initialized. Should only be created in a test's
     // setUp() method; see BrowserControlsHelper#createInSetUp().
-    private BrowserControlsHelper(InstrumentationActivity activity) throws Throwable {
+    private BrowserControlsHelper(InstrumentationActivity activity) throws Exception {
         Assert.assertTrue(CommandLine.isInitialized());
         Assert.assertTrue(CommandLine.getInstance().hasSwitch("enable-features"));
         String enabledFeatures = CommandLine.getInstance().getSwitchValue("enable-features");
@@ -51,8 +53,8 @@ public final class BrowserControlsHelper {
 
     void waitForBrowserControlsViewToBeVisible(View v) {
         CriteriaHelper.pollUiThread(() -> {
-            Assert.assertTrue(v.getHeight() > 0);
-            Assert.assertEquals(View.VISIBLE, v.getVisibility());
+            Criteria.checkThat(v.getHeight(), Matchers.greaterThan(0));
+            Criteria.checkThat(v.getVisibility(), Matchers.is(View.VISIBLE));
         });
     }
 
@@ -71,7 +73,7 @@ public final class BrowserControlsHelper {
     }
 
     // Ensures that browser controls are fully initialized and ready for scrolls to be processed.
-    private void waitForBrowserControlsInitialization() throws Throwable {
+    private void waitForBrowserControlsInitialization() throws Exception {
         // Poll until the top view becomes visible.
         waitForBrowserControlsViewToBeVisible(mActivity.getTopContentsContainer());
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -86,7 +88,7 @@ public final class BrowserControlsHelper {
     // Creates a BrowserControlsHelper instance and blocks until browser controls are fully
     // initialized. Should be called from a test's setUp() method.
     static BrowserControlsHelper createAndBlockUntilBrowserControlsInitializedInSetUp(
-            InstrumentationActivity activity) throws Throwable {
+            InstrumentationActivity activity) throws Exception {
         return new BrowserControlsHelper(activity);
     }
 

@@ -9,6 +9,7 @@ import android.view.View;
 
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -17,8 +18,11 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.weblayer.Browser;
 import org.chromium.weblayer.Tab;
 import org.chromium.weblayer.TestWebLayer;
 import org.chromium.weblayer.shell.InstrumentationActivity;
@@ -32,10 +36,6 @@ public class InfoBarTest {
     @Rule
     public InstrumentationActivityTestRule mActivityTestRule =
             new InstrumentationActivityTestRule();
-
-    // When comparing two floats for equality via Assert.assertEquals() it is necessary to provide a
-    // delta. Use a sufficiently small value to have confidence in the equality check.
-    private static final double FLOAT_EQUALITY_DELTA = 0.0001;
 
     private Tab getActiveTab() {
         return mActivityTestRule.getActivity().getBrowser().getActiveTab();
@@ -68,6 +68,26 @@ public class InfoBarTest {
         helper.waitForFirst();
     }
 
+    private void setAccessibilityEnabled(boolean value) {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            try {
+                getTestWebLayer().setAccessibilityEnabled(value);
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    private boolean canInfoBarContainerScroll() throws Exception {
+        return TestThreadUtils.runOnUiThreadBlocking(() -> {
+            try {
+                return getTestWebLayer().canInfoBarContainerScroll(getActiveTab());
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
     @Before
     public void setUp() throws Throwable {
         final String url = mActivityTestRule.getTestDataURL("tall_page.html");
@@ -95,6 +115,7 @@ public class InfoBarTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "crbug.com/1098625")
     /**
      * Tests that infobars respond to scrolling.
      *
@@ -103,7 +124,7 @@ public class InfoBarTest {
         addInfoBarToActiveTab();
 
         View infoBarContainerView = getInfoBarContainerView();
-        Assert.assertEquals(infoBarContainerView.getTranslationY(), 0.0, /*delta=*/0.001);
+        Assert.assertEquals(0, (int) infoBarContainerView.getTranslationY());
 
         InstrumentationActivity activity = mActivityTestRule.getActivity();
         int infoBarContainerViewHeight = infoBarContainerView.getHeight();
@@ -112,17 +133,68 @@ public class InfoBarTest {
         // Scroll down and check that infobar container view is translated in response.
         EventUtils.simulateDragFromCenterOfView(
                 activity.getWindow().getDecorView(), 0, -infoBarContainerViewHeight);
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> Assert.assertEquals(infoBarContainerView.getTranslationY(),
-                                infoBarContainerViewHeight, FLOAT_EQUALITY_DELTA));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat((int) infoBarContainerView.getTranslationY(),
+                    Matchers.is(infoBarContainerViewHeight));
+        });
 
         // Scroll back up and check that infobar container view is translated in response.
         EventUtils.simulateDragFromCenterOfView(
                 activity.getWindow().getDecorView(), 0, infoBarContainerViewHeight);
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> Assert.assertEquals(
-                                infoBarContainerView.getTranslationY(), 0.0, FLOAT_EQUALITY_DELTA));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat((int) infoBarContainerView.getTranslationY(), Matchers.is(0));
+        });
+    }
+
+    @Test
+    @SmallTest
+    /**
+     * Tests that the infobar container view is removed as part of tab destruction.
+     *
+     */
+    public void testTabDestruction() throws Exception {
+        View infoBarContainerView = getInfoBarContainerView();
+        Assert.assertNotNull(infoBarContainerView.getParent());
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Browser browser = mActivityTestRule.getActivity().getBrowser();
+            browser.destroyTab(getActiveTab());
+        });
+
+        Assert.assertEquals(infoBarContainerView.getParent(), null);
+    }
+
+    @Test
+    @SmallTest
+    /**
+     * Tests that if the infobar container view is hidden, its visibility is restored on navigation.
+     *
+     */
+    public void testVisibilityRestoredOnNavigation() throws Exception {
+        View infoBarContainerView = getInfoBarContainerView();
+        Assert.assertEquals(infoBarContainerView.getVisibility(), View.VISIBLE);
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { infoBarContainerView.setVisibility(View.GONE); });
+        Assert.assertEquals(infoBarContainerView.getVisibility(), View.GONE);
+
+        mActivityTestRule.navigateAndWait("about:blank");
+        Assert.assertEquals(infoBarContainerView.getVisibility(), View.VISIBLE);
+    }
+
+    // Tests that infobar container is blocked from scrolling when accessibility is enabled.
+    @Test
+    @SmallTest
+    public void testAccessibility() throws Exception {
+        InstrumentationActivity activity = mActivityTestRule.getActivity();
+
+        // Turn on accessibility, which should disable the infobar container from scrolling. This
+        // polls as setAccessibilityEnabled() is async.
+        setAccessibilityEnabled(true);
+        CriteriaHelper.pollInstrumentationThread(() -> !canInfoBarContainerScroll());
+
+        // Turn accessibility off and verify that the infobar container can scroll.
+        setAccessibilityEnabled(false);
+        CriteriaHelper.pollInstrumentationThread(() -> canInfoBarContainerScroll());
     }
 }

@@ -5,6 +5,7 @@
 package org.chromium.weblayer_private;
 
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.text.TextUtils;
 import android.webkit.ValueCallback;
 
@@ -20,7 +21,9 @@ import org.chromium.weblayer_private.interfaces.BrowsingDataType;
 import org.chromium.weblayer_private.interfaces.ICookieManager;
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
+import org.chromium.weblayer_private.interfaces.IPrerenderController;
 import org.chromium.weblayer_private.interfaces.IProfile;
+import org.chromium.weblayer_private.interfaces.IUserIdentityCallbackClient;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.interfaces.SettingType;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
@@ -39,10 +42,12 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
     private final String mName;
     private long mNativeProfile;
     private CookieManagerImpl mCookieManager;
+    private PrerenderControllerImpl mPrerenderController;
     private Runnable mOnDestroyCallback;
     private boolean mBeingDeleted;
     private boolean mDownloadsInitialized;
     private DownloadCallbackProxy mDownloadCallbackProxy;
+    private IUserIdentityCallbackClient mUserIdentityCallbackClient;
     private List<Intent> mDownloadNotificationIntents = new ArrayList<>();
 
     public static void enumerateAllProfileNames(ValueCallback<String[]> callback) {
@@ -58,6 +63,8 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         mNativeProfile = ProfileImplJni.get().createProfile(name, ProfileImpl.this);
         mCookieManager =
                 new CookieManagerImpl(ProfileImplJni.get().getCookieManager(mNativeProfile));
+        mPrerenderController = new PrerenderControllerImpl(
+                ProfileImplJni.get().getPrerenderController(mNativeProfile));
         mOnDestroyCallback = onDestroyCallback;
         mDownloadCallbackProxy = new DownloadCallbackProxy(mName, mNativeProfile);
     }
@@ -71,6 +78,11 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         if (mCookieManager != null) {
             mCookieManager.destroy();
             mCookieManager = null;
+        }
+
+        if (mPrerenderController != null) {
+            mPrerenderController.destroy();
+            mPrerenderController = null;
         }
     }
 
@@ -130,6 +142,16 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         return ProfileImplJni.get().getBrowserContext(mNativeProfile);
     }
 
+    @Override
+    public void setUserIdentityCallbackClient(IUserIdentityCallbackClient client) {
+        StrictModeWorkaround.apply();
+        mUserIdentityCallbackClient = client;
+    }
+
+    public IUserIdentityCallbackClient getUserIdentityCallbackClient() {
+        return mUserIdentityCallbackClient;
+    }
+
     public boolean isIncognito() {
         return mName.isEmpty();
     }
@@ -173,6 +195,13 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
     }
 
     @Override
+    public IPrerenderController getPrerenderController() {
+        StrictModeWorkaround.apply();
+        checkNotDestroyed();
+        return mPrerenderController;
+    }
+
+    @Override
     public void getBrowserPersistenceIds(@NonNull IObjectWrapper callback) {
         StrictModeWorkaround.apply();
         checkNotDestroyed();
@@ -199,6 +228,23 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         ProfileImplJni.get().removeBrowserPersistenceStorage(mNativeProfile, ids, baseCallback);
     }
 
+    @Override
+    public void prepareForPossibleCrossOriginNavigation() {
+        StrictModeWorkaround.apply();
+        checkNotDestroyed();
+        ProfileImplJni.get().prepareForPossibleCrossOriginNavigation(mNativeProfile);
+    }
+
+    @Override
+    public void getCachedFaviconForPageUri(@NonNull String uri, @NonNull IObjectWrapper callback) {
+        StrictModeWorkaround.apply();
+        checkNotDestroyed();
+        ValueCallback<Bitmap> valueCallback =
+                (ValueCallback<Bitmap>) ObjectWrapper.unwrap(callback, ValueCallback.class);
+        Callback<Bitmap> baseCallback = valueCallback::onReceiveValue;
+        ProfileImplJni.get().getCachedFaviconForPageUrl(mNativeProfile, uri, baseCallback);
+    }
+
     void checkNotDestroyed() {
         if (!mBeingDeleted) return;
         throw new IllegalArgumentException("Profile being destroyed: " + mName);
@@ -216,6 +262,9 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
                     break;
                 case BrowsingDataType.CACHE:
                     convertedTypes.add(ImplBrowsingDataType.CACHE);
+                    break;
+                case BrowsingDataType.SITE_SETTINGS:
+                    convertedTypes.add(ImplBrowsingDataType.SITE_SETTINGS);
                     break;
                 default:
                     break; // Skip unrecognized values for forward compatibility.
@@ -260,11 +309,15 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
                 long fromMillis, long toMillis, Runnable callback);
         void setDownloadDirectory(long nativeProfileImpl, String directory);
         long getCookieManager(long nativeProfileImpl);
+        long getPrerenderController(long nativeProfileImpl);
         void ensureBrowserContextInitialized(long nativeProfileImpl);
         void setBooleanSetting(long nativeProfileImpl, int type, boolean value);
         boolean getBooleanSetting(long nativeProfileImpl, int type);
         void getBrowserPersistenceIds(long nativeProfileImpl, Callback<String[]> callback);
         void removeBrowserPersistenceStorage(
                 long nativeProfileImpl, String[] ids, Callback<Boolean> callback);
+        void prepareForPossibleCrossOriginNavigation(long nativeProfileImpl);
+        void getCachedFaviconForPageUrl(
+                long nativeProfileImpl, String url, Callback<Bitmap> callback);
     }
 }

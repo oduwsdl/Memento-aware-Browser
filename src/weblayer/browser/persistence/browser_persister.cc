@@ -18,13 +18,13 @@
 #include "components/sessions/core/session_constants.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/session_types.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/restore_type.h"
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/browser_impl.h"
 #include "weblayer/browser/persistence/browser_persistence_common.h"
 #include "weblayer/browser/profile_impl.h"
@@ -64,10 +64,10 @@ BrowserPersister::BrowserPersister(const base::FilePath& path,
       rebuild_on_next_save_(false),
       crypto_key_(decryption_key) {
   browser_->AddObserver(this);
-  command_storage_manager_->ScheduleGetCurrentSessionCommands(
+  command_storage_manager_->GetCurrentSessionCommands(
       base::BindOnce(&BrowserPersister::OnGotCurrentSessionCommands,
-                     base::Unretained(this)),
-      decryption_key, &cancelable_task_tracker_);
+                     weak_factory_.GetWeakPtr()),
+      decryption_key);
 }
 
 BrowserPersister::~BrowserPersister() {
@@ -277,6 +277,9 @@ void BrowserPersister::OnGotCurrentSessionCommands(
   ScheduleRebuildOnNextSave();
 
   RestoreBrowserState(browser_, std::move(commands));
+
+  is_restore_in_progress_ = false;
+  browser_->OnRestoreCompleted();
 }
 
 void BrowserPersister::BuildCommandsForTab(TabImpl* tab, int index_in_browser) {

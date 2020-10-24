@@ -4,6 +4,7 @@
 
 #include "weblayer/browser/profile_impl.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -17,6 +18,7 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -24,13 +26,21 @@
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/download_manager.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/web_contents.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia.h"
 #include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/browser_impl.h"
+#include "weblayer/browser/browser_list.h"
 #include "weblayer/browser/browsing_data_remover_delegate.h"
 #include "weblayer/browser/cookie_manager_impl.h"
+#include "weblayer/browser/favicon/favicon_service_impl.h"
+#include "weblayer/browser/favicon/favicon_service_impl_factory.h"
+#include "weblayer/browser/no_state_prefetch/prerender_controller_impl.h"
 #include "weblayer/browser/persistence/browser_persister_file_utils.h"
 #include "weblayer/browser/tab_impl.h"
 
@@ -39,6 +49,9 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/unified_consent/pref_names.h"
+#include "ui/gfx/android/java_bitmap.h"
 #include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/java/jni/ProfileImpl_jni.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_service.h"
@@ -106,6 +119,14 @@ void OnDidRemoveBrowserPersistenceStorage(
   base::android::RunBooleanCallbackAndroid(callback, result);
 }
 
+void OnDidGetCachedFaviconForPageUrl(
+    const base::android::ScopedJavaGlobalRef<jobject>& callback,
+    gfx::Image image) {
+  SkBitmap favicon = image.AsImageSkia().GetRepresentation(1.0f).GetBitmap();
+  base::android::RunObjectCallbackAndroid(
+      callback, favicon.empty() ? nullptr : gfx::ConvertToJavaBitmap(&favicon));
+}
+
 #endif  // OS_ANDROID
 
 }  // namespace
@@ -120,22 +141,30 @@ class ProfileImpl::DataClearer : public content::BrowsingDataRemover::Observer {
     remover_->AddObserver(this);
   }
 
-  ~DataClearer() override { remover_->RemoveObserver(this); }
-
-  void ClearData(uint64_t mask, base::Time from_time, base::Time to_time) {
+  void ClearData(ProfileImpl* profile,
+                 uint64_t mask,
+                 base::Time from_time,
+                 base::Time to_time) {
     uint64_t origin_types =
         content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
         content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;
     remover_->RemoveAndReply(from_time, to_time, mask, origin_types, this);
   }
 
-  void OnBrowsingDataRemoverDone() override {
+  // content::BrowsingDataRemover::Observer:
+  void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
+    // Remove the observer now as after this returns the BrowserContext may
+    // be destroyed, which owns |remover_|.
+    remover_->RemoveObserver(this);
     std::move(callback_).Run();
     delete this;
   }
 
  private:
-  content::BrowsingDataRemover* const remover_;
+  // DataClearer deletes itself when removal is done.
+  ~DataClearer() override = default;
+
+  content::BrowsingDataRemover* remover_;
   base::OnceCallback<void()> callback_;
 };
 
@@ -166,11 +195,23 @@ ProfileImpl::ProfileImpl(const std::string& name)
   // Ensure WebCacheManager is created so that it starts observing
   // OnRenderProcessHostCreated events.
   web_cache::WebCacheManager::GetInstance();
+
+#if defined(OS_ANDROID)
+  WebLayerMetricsServiceClient::GetInstance()->UpdateUkm(false);
+#endif
 }
 
 ProfileImpl::~ProfileImpl() {
-  if (browser_context_)
+  // Destroy any scheduled WebContents. These implicitly refer to the
+  // BrowserContext and must be destroyed before the BrowserContext.
+  web_contents_to_delete_.clear();
+
+  if (browser_context_) {
+    BrowserContextDependencyManager::GetInstance()
+        ->DestroyBrowserContextServices(browser_context_.get());
     browser_context_->ShutdownStoragePartitions();
+  }
+
   GetProfiles().erase(this);
   for (auto& observer : GetObservers())
     observer.ProfileDestroyed(this);
@@ -193,7 +234,17 @@ void ProfileImpl::RemoveProfileObserver(ProfileObserver* observer) {
   GetObservers().RemoveObserver(observer);
 }
 
-content::BrowserContext* ProfileImpl::GetBrowserContext() {
+void ProfileImpl::DeleteWebContentsSoon(
+    std::unique_ptr<content::WebContents> web_contents) {
+  if (web_contents_to_delete_.empty()) {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&ProfileImpl::DeleteScheduleWebContents,
+                                  weak_ptr_factory_.GetWeakPtr()));
+  }
+  web_contents_to_delete_.push_back(std::move(web_contents));
+}
+
+BrowserContextImpl* ProfileImpl::GetBrowserContext() {
   if (browser_context_)
     return browser_context_.get();
 
@@ -232,16 +283,22 @@ void ProfileImpl::ClearBrowsingData(
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE;
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_MEDIA_LICENSES;
         remove_mask |= BrowsingDataRemoverDelegate::DATA_TYPE_ISOLATED_ORIGINS;
+        remove_mask |= BrowsingDataRemoverDelegate::DATA_TYPE_FAVICONS;
+        remove_mask |= content::BrowsingDataRemover::DATA_TYPE_TRUST_TOKENS;
+        remove_mask |= content::BrowsingDataRemover::DATA_TYPE_CONVERSIONS;
         break;
       case BrowsingDataType::CACHE:
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_CACHE;
         ClearRendererCache();
         break;
+      case BrowsingDataType::SITE_SETTINGS:
+        remove_mask |= BrowsingDataRemoverDelegate::DATA_TYPE_SITE_SETTINGS;
+        break;
       default:
         NOTREACHED();
     }
   }
-  clearer->ClearData(remove_mask, from_time, to_time);
+  clearer->ClearData(this, remove_mask, from_time, to_time);
 }
 
 void ProfileImpl::SetDownloadDirectory(const base::FilePath& directory) {
@@ -256,6 +313,13 @@ CookieManager* ProfileImpl::GetCookieManager() {
   if (!cookie_manager_)
     cookie_manager_ = std::make_unique<CookieManagerImpl>(GetBrowserContext());
   return cookie_manager_.get();
+}
+
+PrerenderController* ProfileImpl::GetPrerenderController() {
+  if (!prerender_controller_)
+    prerender_controller_ =
+        std::make_unique<PrerenderControllerImpl>(GetBrowserContext());
+  return prerender_controller_.get();
 }
 
 void ProfileImpl::GetBrowserPersistenceIds(
@@ -345,8 +409,9 @@ std::unique_ptr<ProfileImpl> ProfileImpl::DestroyAndDeleteDataFromDisk(
   if (profile->GetNumberOfBrowsers() > 0)
     return profile;
 
+  ProfileInfo profile_info = profile->info_;
   GetBackgroundDiskOperationTaskRunner()->PostTaskAndReply(
-      FROM_HERE, base::BindOnce(&MarkProfileAsDeleted, profile->info_),
+      FROM_HERE, base::BindOnce(&MarkProfileAsDeleted, profile_info),
       base::BindOnce(&ProfileImpl::OnProfileMarked, std::move(profile),
                      std::move(done_callback)));
   return nullptr;
@@ -356,18 +421,16 @@ std::unique_ptr<ProfileImpl> ProfileImpl::DestroyAndDeleteDataFromDisk(
 void ProfileImpl::OnProfileMarked(std::unique_ptr<ProfileImpl> profile,
                                   base::OnceClosure done_callback) {
   // Try to finish all writes and remove all data before nuking the profile.
-  static_cast<BrowserContextImpl*>(profile->GetBrowserContext())
-      ->pref_service()
-      ->CommitPendingWrite();
+  profile->GetBrowserContext()->pref_service()->CommitPendingWrite();
 
-  // Unretained is safe here because DataClearer is owned by
-  // BrowserContextImpl which is owned by this.
+  ProfileImpl* raw_profile = profile.get();
   auto* clearer = new DataClearer(
-      profile->GetBrowserContext(),
+      raw_profile->GetBrowserContext(),
       base::BindOnce(&ProfileImpl::NukeDataAfterRemovingData,
                      std::move(profile), std::move(done_callback)));
   uint64_t remove_all_mask = 0xffffffffffffffffull;
-  clearer->ClearData(remove_all_mask, base::Time::Min(), base::Time::Max());
+  clearer->ClearData(raw_profile, remove_all_mask, base::Time::Min(),
+                     base::Time::Max());
 }
 
 #if defined(OS_ANDROID)
@@ -433,9 +496,8 @@ void ProfileImpl::ClearBrowsingData(
   base::android::JavaIntArrayToIntVector(env, j_data_types, &data_type_ints);
   std::vector<BrowsingDataType> data_types;
   data_types.reserve(data_type_ints.size());
-  for (int type : data_type_ints) {
+  for (int type : data_type_ints)
     data_types.push_back(static_cast<BrowsingDataType>(type));
-  }
   ClearBrowsingData(
       data_types,
       base::Time::FromJavaTime(static_cast<int64_t>(j_from_time_millis)),
@@ -455,6 +517,10 @@ void ProfileImpl::SetDownloadDirectory(
 
 jlong ProfileImpl::GetCookieManager(JNIEnv* env) {
   return reinterpret_cast<jlong>(GetCookieManager());
+}
+
+jlong ProfileImpl::GetPrerenderController(JNIEnv* env) {
+  return reinterpret_cast<jlong>(GetPrerenderController());
 }
 
 void ProfileImpl::EnsureBrowserContextInitialized(JNIEnv* env) {
@@ -491,6 +557,20 @@ void ProfileImpl::RemoveBrowserPersistenceStorage(
       base::flat_set<std::string>(ids.begin(), ids.end()));
 }
 
+void ProfileImpl::PrepareForPossibleCrossOriginNavigation(JNIEnv* env) {
+  PrepareForPossibleCrossOriginNavigation();
+}
+
+void ProfileImpl::GetCachedFaviconForPageUrl(
+    JNIEnv* env,
+    const base::android::JavaRef<jstring>& j_page_url,
+    const base::android::JavaRef<jobject>& j_callback) {
+  GetCachedFaviconForPageUrl(
+      GURL(base::android::ConvertJavaStringToUTF8(j_page_url)),
+      base::BindOnce(&OnDidGetCachedFaviconForPageUrl,
+                     base::android::ScopedJavaGlobalRef<jobject>(j_callback)));
+}
+
 #endif  // OS_ANDROID
 
 base::FilePath ProfileImpl::GetBrowserPersisterDataBaseDir() const {
@@ -498,41 +578,99 @@ base::FilePath ProfileImpl::GetBrowserPersisterDataBaseDir() const {
 }
 
 void ProfileImpl::SetBooleanSetting(SettingType type, bool value) {
+  auto* pref_service = GetBrowserContext()->pref_service();
   switch (type) {
     case SettingType::BASIC_SAFE_BROWSING_ENABLED:
-      basic_safe_browsing_enabled_ = value;
 #if defined(OS_ANDROID)
-      BrowserProcess::GetInstance()
-          ->GetSafeBrowsingService(weblayer::GetUserAgent())
-          ->SetSafeBrowsingDisabled(!basic_safe_browsing_enabled_);
+      safe_browsing::SetSafeBrowsingState(
+          pref_service, value ? safe_browsing::STANDARD_PROTECTION
+                              : safe_browsing::NO_SAFE_BROWSING);
 #endif
       break;
-    case SettingType::UKM_ENABLED:
-      ukm_enabled_ = value;
+    case SettingType::UKM_ENABLED: {
 #if defined(OS_ANDROID)
-      WebLayerMetricsServiceClient::GetInstance()->EnableUkm(ukm_enabled_);
+      bool old_value = pref_service->GetBoolean(prefs::kUkmEnabled);
+#endif
+      pref_service->SetBoolean(prefs::kUkmEnabled, value);
+#if defined(OS_ANDROID)
+      // Trigger a purge if the current state no longer allows UKM.
+      bool must_purge = old_value && !value;
+      WebLayerMetricsServiceClient::GetInstance()->UpdateUkm(must_purge);
 #endif
       break;
+    }
+    case SettingType::EXTENDED_REPORTING_SAFE_BROWSING_ENABLED:
+#if defined(OS_ANDROID)
+      pref_service->SetBoolean(::prefs::kSafeBrowsingScoutReportingEnabled,
+                               value);
+#endif
+      break;
+    case SettingType::REAL_TIME_SAFE_BROWSING_ENABLED:
+#if defined(OS_ANDROID)
+      pref_service->SetBoolean(
+          unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled,
+          value);
+#endif
+      break;
+    case SettingType::NETWORK_PREDICTION_ENABLED:
+      pref_service->SetBoolean(prefs::kNoStatePrefetchEnabled, value);
   }
 }
 
 bool ProfileImpl::GetBooleanSetting(SettingType type) {
+  auto* pref_service = GetBrowserContext()->pref_service();
   switch (type) {
     case SettingType::BASIC_SAFE_BROWSING_ENABLED:
-      return basic_safe_browsing_enabled_;
+#if defined(OS_ANDROID)
+      return safe_browsing::IsSafeBrowsingEnabled(*pref_service);
+#endif
+      return false;
     case SettingType::UKM_ENABLED:
-      return ukm_enabled_;
+      return pref_service->GetBoolean(prefs::kUkmEnabled);
+    case SettingType::EXTENDED_REPORTING_SAFE_BROWSING_ENABLED:
+#if defined(OS_ANDROID)
+      return pref_service->GetBoolean(
+          ::prefs::kSafeBrowsingScoutReportingEnabled);
+#endif
+      return false;
+    case SettingType::REAL_TIME_SAFE_BROWSING_ENABLED:
+#if defined(OS_ANDROID)
+      return pref_service->GetBoolean(
+          unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled);
+#endif
+      return false;
+    case SettingType::NETWORK_PREDICTION_ENABLED:
+      return pref_service->GetBoolean(prefs::kNoStatePrefetchEnabled);
   }
   NOTREACHED();
 }
 
-int ProfileImpl::GetNumberOfBrowsers() {
-  int count = 0;
-  for (BrowserImpl* browser : BrowserImpl::GetAllBrowsers()) {
-    if (browser->profile() == this)
-      ++count;
+void ProfileImpl::GetCachedFaviconForPageUrl(
+    const GURL& page_url,
+    base::OnceCallback<void(gfx::Image)> callback) {
+  auto* service =
+      FaviconServiceImplFactory::GetForBrowserContext(GetBrowserContext());
+  if (!service) {
+    std::move(callback).Run({});
+    return;
   }
-  return count;
+
+  service->GetFaviconForPageUrl(page_url, std::move(callback),
+                                &cancelable_task_tracker_);
+}
+
+void ProfileImpl::PrepareForPossibleCrossOriginNavigation() {
+  content::RenderProcessHost::WarmupSpareRenderProcessHost(GetBrowserContext());
+}
+
+int ProfileImpl::GetNumberOfBrowsers() {
+  const auto& browsers = BrowserList::GetInstance()->browsers();
+  return std::count_if(browsers.begin(), browsers.end(),
+                       [this](BrowserImpl* b) { return b->profile() == this; });
+}
+
+void ProfileImpl::DeleteScheduleWebContents() {
+  web_contents_to_delete_.clear();
 }
 
 }  // namespace weblayer

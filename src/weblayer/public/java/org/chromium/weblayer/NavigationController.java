@@ -55,12 +55,17 @@ public class NavigationController {
      */
     public void navigate(@NonNull Uri uri, @Nullable NavigateParams params) {
         ThreadCheck.ensureOnUiThread();
-        if ((WebLayer.getSupportedMajorVersionInternal() < 83) && (params != null)) {
-            throw new UnsupportedOperationException();
-        }
         try {
-            mNavigationController.navigate(
-                    uri.toString(), params == null ? null : params.toInterfaceParams());
+            if (params == null || WebLayer.getSupportedMajorVersionInternal() < 86) {
+                mNavigationController.navigate(
+                        uri.toString(), params == null ? null : params.toInterfaceParams());
+            } else {
+                mNavigationController.navigate2(uri.toString(),
+                        params == null ? false : params.getShouldReplaceCurrentEntry(),
+                        params == null ? false : params.isIntentProcessingDisabled(),
+                        params == null ? false : params.isNetworkErrorAutoReloadDisabled(),
+                        params == null ? false : params.isAutoPlayEnabled());
+            }
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -145,9 +150,6 @@ public class NavigationController {
      */
     public void goToIndex(int index) throws IndexOutOfBoundsException {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 81) {
-            throw new UnsupportedOperationException();
-        }
         checkNavigationIndex(index);
         try {
             mNavigationController.goToIndex(index);
@@ -236,9 +238,6 @@ public class NavigationController {
     @NonNull
     public String getNavigationEntryTitle(int index) throws IndexOutOfBoundsException {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 81) {
-            throw new UnsupportedOperationException();
-        }
         checkNavigationIndex(index);
         try {
             return mNavigationController.getNavigationEntryTitle(index);

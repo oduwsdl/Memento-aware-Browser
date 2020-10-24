@@ -4,10 +4,21 @@
 
 package org.chromium.weblayer.test;
 
+import android.Manifest;
+import android.annotation.TargetApi;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.RemoteException;
 
+import androidx.core.app.ActivityCompat;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
+import org.json.JSONException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -15,7 +26,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.InMemorySharedPreferencesContext;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.util.TestWebServer;
 import org.chromium.weblayer.Browser;
@@ -35,6 +51,7 @@ public final class GeolocationTest {
     private InstrumentationActivity mActivity;
     private TestWebLayer mTestWebLayer;
     private TestWebServer mTestServer;
+    private int mLocationPermission = PackageManager.PERMISSION_GRANTED;
 
     private static final String RAW_JAVASCRIPT =
             "var positionCount = 0;"
@@ -54,30 +71,57 @@ public final class GeolocationTest {
             + "      gotPos, errorCallback, {});"
             + "}";
 
-    private static final String RAW_HTML =
-            "<!doctype html>"
-            + "<html>"
-            + "  <head>"
-            + "    <title>Geolocation</title>"
-            + "    <script>" + RAW_JAVASCRIPT + "</script>"
-            + "  </head>"
-            + "  <body>"
-            + "  </body>"
-            + "</html>";
+    @TargetApi(Build.VERSION_CODES.M)
+    private class PermissionCompatDelegate implements ActivityCompat.PermissionCompatDelegate {
+        private CallbackHelper mCallbackHelper = new CallbackHelper();
+
+        @Override
+        public boolean requestPermissions(
+                Activity activity, String[] permissions, int requestCode) {
+            mCallbackHelper.notifyCalled();
+            return false;
+        }
+
+        @Override
+        public boolean onActivityResult(
+                Activity activity, int requestCode, int resultCode, Intent data) {
+            return false;
+        }
+
+        public void waitForPermissionsRequest() throws Exception {
+            mCallbackHelper.waitForFirst();
+        }
+    }
 
     @Before
     public void setUp() throws Throwable {
-        mActivity = mActivityTestRule.launchShellWithUrl("about:blank");
+        Bundle extras = new Bundle();
+        // We need to override the context with which to create WebLayer.
+        extras.putBoolean(InstrumentationActivity.EXTRA_CREATE_WEBLAYER, false);
+        mActivity = mActivityTestRule.launchShell(extras);
         Assert.assertNotNull(mActivity);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivity.loadWebLayerSync(new InMemorySharedPreferencesContext(
+                    mActivity.getApplication()) {
+                @Override
+                public int checkPermission(String permission, int pid, int uid) {
+                    if (permission.equals(Manifest.permission.ACCESS_FINE_LOCATION)
+                            || permission.equals(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                        return mLocationPermission;
+                    }
+                    return getBaseContext().checkPermission(permission, pid, uid);
+                }
+            });
+        });
+        mActivityTestRule.navigateAndWait("about:blank");
 
         mTestWebLayer = TestWebLayer.getTestWebLayer(mActivity.getApplicationContext());
         mTestWebLayer.setSystemLocationSettingEnabled(true);
         mTestWebLayer.setMockLocationProvider(true /* enable */);
 
         mTestServer = TestWebServer.start();
-        String testUrl = mTestServer.setResponse("/geolocation.html", RAW_HTML, null);
 
-        mActivityTestRule.navigateAndWait(testUrl);
+        mActivityTestRule.navigateAndWait(mActivityTestRule.getTestDataURL("geolocation.html"));
         ensureGeolocationIsRunning(false);
     }
 
@@ -159,11 +203,30 @@ public final class GeolocationTest {
         Assert.assertEquals(0, getCountFromJS("positionCount"));
     }
 
+    @Test
+    @MediumTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.M)
+    public void testRequestSystemPermission() throws Throwable {
+        mActivityTestRule.executeScriptSync("initiate_watchPosition();", false);
+        waitForDialog();
+        mTestWebLayer.clickPermissionDialogButton(true);
+
+        // Reload and deny the system permission, so it is prompted on the next call to geolocation.
+        mActivityTestRule.navigateAndWait(mActivityTestRule.getTestDataURL("geolocation.html"));
+
+        PermissionCompatDelegate delegate = new PermissionCompatDelegate();
+        ActivityCompat.setPermissionCompatDelegate(delegate);
+        mLocationPermission = PackageManager.PERMISSION_DENIED;
+        mActivityTestRule.executeScriptSync("initiate_watchPosition();", false);
+
+        delegate.waitForPermissionsRequest();
+    }
+
     // helper methods
 
     private void waitForCountEqual(String variableName, int count) {
         CriteriaHelper.pollInstrumentationThread(
-                () -> { return getCountFromJS(variableName) == count; });
+                () -> Criteria.checkThat(getCountFromJS(variableName), Matchers.is(count)));
     }
 
     private void waitForDialog() throws Exception {
@@ -173,9 +236,13 @@ public final class GeolocationTest {
                         + "function(result) { queryResult = result.state; })",
                 false);
         CriteriaHelper.pollInstrumentationThread(() -> {
-            return !mActivityTestRule.executeScriptSync("queryResult || ''", false)
-                            .getString(Tab.SCRIPT_RESULT_KEY)
-                            .equals("");
+            try {
+                String result = mActivityTestRule.executeScriptSync("queryResult || ''", false)
+                                        .getString(Tab.SCRIPT_RESULT_KEY);
+                Criteria.checkThat(result, Matchers.not(""));
+            } catch (JSONException ex) {
+                throw new CriteriaNotSatisfiedException(ex);
+            }
         });
         Assert.assertEquals("prompt",
                 mActivityTestRule.executeScriptSync("queryResult", false)
@@ -185,13 +252,20 @@ public final class GeolocationTest {
     }
 
     private void waitForCountGreaterThan(String variableName, int count) {
-        CriteriaHelper.pollInstrumentationThread(
-                () -> { return getCountFromJS(variableName) > count; });
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(getCountFromJS(variableName), Matchers.greaterThan(count));
+        });
     }
 
     private void ensureGeolocationIsRunning(boolean running) {
-        CriteriaHelper.pollInstrumentationThread(
-                () -> { return mTestWebLayer.isMockLocationProviderRunning() == running; });
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                Criteria.checkThat(
+                        mTestWebLayer.isMockLocationProviderRunning(), Matchers.is(running));
+            } catch (RemoteException ex) {
+                throw new CriteriaNotSatisfiedException(ex);
+            }
+        });
     }
 
     private int getCountFromJS(String variableName) {

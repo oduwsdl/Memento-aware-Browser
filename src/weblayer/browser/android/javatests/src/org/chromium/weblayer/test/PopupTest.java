@@ -8,12 +8,14 @@ import android.content.Context;
 
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.weblayer.TestWebLayer;
@@ -50,9 +52,12 @@ public final class PopupTest {
         mActivityTestRule.executeScriptSync("window.open('about:blank')", true);
 
         // Make sure the infobar shows up and the popup has not been opened.
-        int buttonId = ResourceUtil.getIdentifier(mRemoteContext, "id/button_primary");
-        CriteriaHelper.pollInstrumentationThread(
-                () -> { return mActivity.findViewById(buttonId) != null; });
+        String packageName =
+                TestWebLayer.getWebLayerContext(mActivity.getApplicationContext()).getPackageName();
+        int buttonId = ResourceUtil.getIdentifier(mRemoteContext, "id/button_primary", packageName);
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(mActivity.findViewById(buttonId), Matchers.notNullValue());
+        });
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { Assert.assertEquals(mActivity.getBrowser().getTabs().size(), 1); });
 

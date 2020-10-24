@@ -7,10 +7,10 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
+#include "components/infobars/android/infobar_android.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "components/translate/core/browser/translate_step.h"
 #include "components/translate/core/common/translate_errors.h"
-#include "weblayer/browser/infobar_android.h"
 
 namespace translate {
 class TranslateInfoBarDelegate;
@@ -19,7 +19,7 @@ class TranslateInfoBarDelegate;
 namespace weblayer {
 
 class TranslateCompactInfoBar
-    : public InfoBarAndroid,
+    : public infobars::InfoBarAndroid,
       public translate::TranslateInfoBarDelegate::Observer {
  public:
   explicit TranslateCompactInfoBar(
@@ -53,6 +53,8 @@ class TranslateCompactInfoBar
   void OnTranslateStepChanged(
       translate::TranslateStep step,
       translate::TranslateErrors::Type error_type) override;
+  void OnTargetLanguageChanged(
+      const std::string& target_language_code) override;
   // Returns true if the user didn't take any affirmative action.
   // The function will be called when the translate infobar is dismissed.
   // If it's true, we will record a declined event.
@@ -60,12 +62,8 @@ class TranslateCompactInfoBar
   void OnTranslateInfoBarDelegateDestroyed(
       translate::TranslateInfoBarDelegate* delegate) override;
 
-  // Instructs the Java infobar to select the button corresponding to
-  // |action_type|.
-  void SelectButtonForTesting(ActionType action_type);
-
  private:
-  // InfoBarAndroid:
+  // infobars::InfoBarAndroid:
   base::android::ScopedJavaLocalRef<jobject> CreateRenderInfoBar(
       JNIEnv* env) override;
   void ProcessButton(int action) override;

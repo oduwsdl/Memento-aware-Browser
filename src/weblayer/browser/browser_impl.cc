@@ -9,12 +9,13 @@
 #include "base/callback_forward.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/memory/ptr_util.h"
-#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "components/base32/base32.h"
-#include "content/public/browser/browser_context.h"
-#include "content/public/common/web_preferences.h"
+#include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "weblayer/browser/browser_context_impl.h"
+#include "weblayer/browser/browser_list.h"
 #include "weblayer/browser/feature_list_creator.h"
 #include "weblayer/browser/persistence/browser_persister.h"
 #include "weblayer/browser/persistence/browser_persister_file_utils.h"
@@ -23,6 +24,7 @@
 #include "weblayer/browser/tab_impl.h"
 #include "weblayer/common/weblayer_paths.h"
 #include "weblayer/public/browser_observer.h"
+#include "weblayer/public/browser_restore_observer.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/callback_android.h"
@@ -46,22 +48,11 @@ namespace weblayer {
 
 namespace {
 
-std::vector<BrowserImpl*>& GetBrowsers() {
-  static base::NoDestructor<std::vector<BrowserImpl*>> browsers;
-  return *browsers;
-}
-
 #if defined(OS_ANDROID)
 void UpdateMetricsService() {
   static bool s_foreground = false;
-  bool foreground = false;
-  for (auto* browser : GetBrowsers()) {
-    if (browser->fragment_resumed()) {
-      // We need at least one browser to be foreground.
-      foreground = true;
-      break;
-    }
-  }
+  // TODO(sky): convert this to observer.
+  bool foreground = BrowserList::GetInstance()->HasAtLeastOneResumedBrowser();
 
   if (foreground == s_foreground)
     return;
@@ -114,22 +105,22 @@ BrowserImpl::~BrowserImpl() {
   while (!tabs_.empty())
     DestroyTab(tabs_.back().get());
 #endif
-  base::Erase(GetBrowsers(), this);
+  BrowserList::GetInstance()->RemoveBrowser(this);
 
 #if defined(OS_ANDROID)
-  if (GetBrowsers().empty())
+  if (BrowserList::GetInstance()->browsers().empty())
     BrowserProcess::GetInstance()->StopSafeBrowsingService();
 #endif
-}
-
-// static
-const std::vector<BrowserImpl*>& BrowserImpl::GetAllBrowsers() {
-  return GetBrowsers();
 }
 
 TabImpl* BrowserImpl::CreateTabForSessionRestore(
     std::unique_ptr<content::WebContents> web_contents,
     const std::string& guid) {
+  if (!web_contents) {
+    content::WebContents::CreateParams create_params(
+        profile_->GetBrowserContext());
+    web_contents = content::WebContents::Create(create_params);
+  }
   std::unique_ptr<TabImpl> tab =
       std::make_unique<TabImpl>(profile_, std::move(web_contents), guid);
 #if defined(OS_ANDROID)
@@ -153,12 +144,6 @@ bool BrowserImpl::CompositorHasSurface() {
 void BrowserImpl::AddTab(JNIEnv* env,
                          long native_tab) {
   AddTab(reinterpret_cast<TabImpl*>(native_tab));
-}
-
-void BrowserImpl::RemoveTab(JNIEnv* env,
-                            long native_tab) {
-  // The Java side owns the Tab.
-  RemoveTab(reinterpret_cast<TabImpl*>(native_tab)).release();
 }
 
 ScopedJavaLocalRef<jobjectArray> BrowserImpl::GetTabs(JNIEnv* env) {
@@ -254,13 +239,11 @@ void BrowserImpl::OnFragmentStart(JNIEnv* env) {
 }
 
 void BrowserImpl::OnFragmentResume(JNIEnv* env) {
-  fragment_resumed_ = true;
-  UpdateMetricsService();
+  UpdateFragmentResumedState(true);
 }
 
 void BrowserImpl::OnFragmentPause(JNIEnv* env) {
-  fragment_resumed_ = false;
-  UpdateMetricsService();
+  UpdateFragmentResumedState(false);
 }
 
 #endif
@@ -270,18 +253,26 @@ std::vector<uint8_t> BrowserImpl::GetMinimalPersistenceState(
   return PersistMinimalState(this, max_size_in_bytes);
 }
 
-void BrowserImpl::SetWebPreferences(content::WebPreferences* prefs) {
+void BrowserImpl::SetWebPreferences(blink::web_pref::WebPreferences* prefs) {
 #if defined(OS_ANDROID)
   prefs->password_echo_enabled = Java_BrowserImpl_getPasswordEchoEnabled(
       AttachCurrentThread(), java_impl_);
   prefs->preferred_color_scheme =
       Java_BrowserImpl_getDarkThemeEnabled(AttachCurrentThread(), java_impl_)
-          ? blink::PreferredColorScheme::kDark
-          : blink::PreferredColorScheme::kLight;
+          ? blink::mojom::PreferredColorScheme::kDark
+          : blink::mojom::PreferredColorScheme::kLight;
   prefs->font_scale_factor =
       Java_BrowserImpl_getFontScale(AttachCurrentThread(), java_impl_);
 #endif
 }
+
+#if defined(OS_ANDROID)
+void BrowserImpl::RemoveTabBeforeDestroyingFromJava(Tab* tab) {
+  // The java side owns the Tab, and is going to delete it shortly. See
+  // JNI_TabImpl_DeleteTab.
+  RemoveTab(tab).release();
+}
+#endif
 
 void BrowserImpl::AddTab(Tab* tab) {
   DCHECK(tab);
@@ -295,7 +286,13 @@ void BrowserImpl::AddTab(Tab* tab) {
 }
 
 void BrowserImpl::DestroyTab(Tab* tab) {
+#if defined(OS_ANDROID)
+  // Route destruction through the java side.
+  Java_BrowserImpl_destroyTabImpl(AttachCurrentThread(), java_impl_,
+                                  static_cast<TabImpl*>(tab)->GetJavaTab());
+#else
   RemoveTab(tab);
+#endif
 }
 
 void BrowserImpl::SetActiveTab(Tab* tab) {
@@ -333,6 +330,14 @@ Tab* BrowserImpl::CreateTab() {
   return CreateTab(nullptr);
 }
 
+void BrowserImpl::OnRestoreCompleted() {
+  for (BrowserRestoreObserver& obs : browser_restore_observers_)
+    obs.OnRestoreCompleted();
+#if defined(OS_ANDROID)
+  Java_BrowserImpl_onRestoreCompleted(AttachCurrentThread(), java_impl_);
+#endif
+}
+
 void BrowserImpl::PrepareForShutdown() {
   browser_persister_.reset();
 }
@@ -346,12 +351,25 @@ std::vector<uint8_t> BrowserImpl::GetMinimalPersistenceState() {
   return GetMinimalPersistenceState(0);
 }
 
+bool BrowserImpl::IsRestoringPreviousState() {
+  return browser_persister_ && browser_persister_->is_restore_in_progress();
+}
+
 void BrowserImpl::AddObserver(BrowserObserver* observer) {
   browser_observers_.AddObserver(observer);
 }
 
 void BrowserImpl::RemoveObserver(BrowserObserver* observer) {
   browser_observers_.RemoveObserver(observer);
+}
+
+void BrowserImpl::AddBrowserRestoreObserver(BrowserRestoreObserver* observer) {
+  browser_restore_observers_.AddObserver(observer);
+}
+
+void BrowserImpl::RemoveBrowserRestoreObserver(
+    BrowserRestoreObserver* observer) {
+  browser_restore_observers_.RemoveObserver(observer);
 }
 
 void BrowserImpl::VisibleSecurityStateOfActiveTabChanged() {
@@ -365,7 +383,7 @@ void BrowserImpl::VisibleSecurityStateOfActiveTabChanged() {
 }
 
 BrowserImpl::BrowserImpl(ProfileImpl* profile) : profile_(profile) {
-  GetBrowsers().push_back(this);
+  BrowserList::GetInstance()->AddBrowser(this);
 }
 
 void BrowserImpl::RestoreStateIfNecessary(
@@ -421,6 +439,17 @@ base::FilePath BrowserImpl::GetBrowserPersisterDataPath() {
 }
 
 #if defined(OS_ANDROID)
+void BrowserImpl::UpdateFragmentResumedState(bool state) {
+  const bool old_has_at_least_one_active_browser =
+      BrowserList::GetInstance()->HasAtLeastOneResumedBrowser();
+  fragment_resumed_ = state;
+  UpdateMetricsService();
+  if (old_has_at_least_one_active_browser !=
+      BrowserList::GetInstance()->HasAtLeastOneResumedBrowser()) {
+    BrowserList::GetInstance()->NotifyHasAtLeastOneResumedBrowserChanged();
+  }
+}
+
 // This function is friended. JNI_BrowserImpl_CreateBrowser can not be
 // friended, as it requires browser_impl.h to include BrowserImpl_jni.h, which
 // is problematic (meaning not really supported and generates compile errors).

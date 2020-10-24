@@ -14,6 +14,7 @@
 #include "components/sessions/core/command_storage_backend.h"
 #include "content/public/browser/browser_thread.h"
 #include "weblayer/browser/browser_impl.h"
+#include "weblayer/browser/browser_list.h"
 #include "weblayer/browser/profile_impl.h"
 
 namespace weblayer {
@@ -27,7 +28,7 @@ bool RemoveBrowserPersistenceStorageOnBackgroundThread(
   for (const std::string& id : ids) {
     DCHECK(!id.empty());
     base::FilePath persistence_path = BuildPathForBrowserPersister(path, id);
-    if (!base::DeleteFile(persistence_path, /* recurse */ false))
+    if (!base::DeleteFile(persistence_path))
       all_succeeded = false;
   }
   return all_succeeded;
@@ -73,7 +74,7 @@ void RemoveBrowserPersistenceStorageImpl(
     base::OnceCallback<void(bool)> done_callback,
     base::flat_set<std::string> ids) {
   // Remove any ids that are actively in use.
-  for (BrowserImpl* browser : BrowserImpl::GetAllBrowsers()) {
+  for (BrowserImpl* browser : BrowserList::GetInstance()->browsers()) {
     if (browser->profile() == profile)
       ids.erase(browser->GetPersistenceId());
   }

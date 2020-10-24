@@ -5,6 +5,7 @@
 #include "weblayer/browser/browser_context_impl.h"
 
 #include "base/threading/thread_restrictions.h"
+#include "components/background_sync/background_sync_controller_impl.h"
 #include "components/blocked_content/safe_browsing_triggered_popup_blocker.h"
 #include "components/client_hints/browser/client_hints.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -25,15 +26,19 @@
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/variations/proto/study.pb.h"
+#include "components/variations/variations.mojom.h"
 #include "components/variations/variations_client.h"
-#include "components/variations/variations_http_header_provider.h"
+#include "components/variations/variations_ids_provider.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "weblayer/browser/background_sync/background_sync_controller_factory.h"
 #include "weblayer/browser/browsing_data_remover_delegate.h"
 #include "weblayer/browser/browsing_data_remover_delegate_factory.h"
 #include "weblayer/browser/client_hints_factory.h"
+#include "weblayer/browser/default_search_engine.h"
 #include "weblayer/browser/permissions/permission_manager_factory.h"
 #include "weblayer/browser/stateful_ssl_host_state_delegate_factory.h"
 #include "weblayer/public/common/switches.h"
@@ -42,6 +47,7 @@
 #include "base/android/path_utils.h"
 #include "components/cdm/browser/media_drm_storage_impl.h"  // nogncheck
 #include "components/permissions/contexts/geolocation_permission_context_android.h"
+#include "components/unified_consent/pref_names.h"
 #elif defined(OS_WIN)
 #include <KnownFolders.h>
 #include <shlobj.h>
@@ -67,6 +73,14 @@ void BindWakeLockProvider(
 
 }  // namespace
 
+namespace prefs {
+// Used to persist the public SettingType::NETWORK_PREDICTION_ENABLED API.
+const char kNoStatePrefetchEnabled[] = "weblayer.network_prediction_enabled";
+
+// Used to persist the public SettingType::UKM_ENABLED API.
+const char kUkmEnabled[] = "weblayer.ukm_enabled";
+}  // namespace prefs
+
 class ResourceContextImpl : public content::ResourceContext {
  public:
   ResourceContextImpl() = default;
@@ -88,6 +102,12 @@ BrowserContextImpl::BrowserContextImpl(ProfileImpl* profile_impl,
       this);
 
   site_isolation::SiteIsolationPolicy::ApplyPersistedIsolatedOrigins(this);
+
+  // Set the DSE permissions every time the browser context is created for
+  // simplicity. These permissions are not editable in site settings, so should
+  // not ever be changed by the user. The site settings entry will link to the
+  // client app's system level permissions page to handle these.
+  ResetDsePermissions(this);
 }
 
 BrowserContextImpl::~BrowserContextImpl() {
@@ -179,7 +199,7 @@ BrowserContextImpl::GetBackgroundFetchDelegate() {
 
 content::BackgroundSyncController*
 BrowserContextImpl::GetBackgroundSyncController() {
-  return nullptr;
+  return BackgroundSyncControllerFactory::GetForBrowserContext(this);
 }
 
 content::BrowsingDataRemoverDelegate*
@@ -234,6 +254,9 @@ void BrowserContextImpl::CreateUserPrefService() {
 
 void BrowserContextImpl::RegisterPrefs(
     user_prefs::PrefRegistrySyncable* pref_registry) {
+  pref_registry->RegisterBooleanPref(prefs::kNoStatePrefetchEnabled, true);
+  pref_registry->RegisterBooleanPref(prefs::kUkmEnabled, false);
+
   // This pref is used by captive_portal::CaptivePortalService (as well as other
   // potential use cases in the future, as it is used for various purposes
   // through //chrome).
@@ -250,12 +273,14 @@ void BrowserContextImpl::RegisterPrefs(
   blocked_content::SafeBrowsingTriggeredPopupBlocker::RegisterProfilePrefs(
       pref_registry);
   pref_registry->RegisterBooleanPref(
-      prefs::kOfferTranslateEnabled, true,
+      ::prefs::kOfferTranslateEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 #if defined(OS_ANDROID)
   cdm::MediaDrmStorageImpl::RegisterProfilePrefs(pref_registry);
   permissions::GeolocationPermissionContextAndroid::RegisterProfilePrefs(
       pref_registry);
+  pref_registry->RegisterBooleanPref(
+      unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled, false);
 #endif
 
   BrowserContextDependencyManager::GetInstance()
@@ -274,9 +299,10 @@ class BrowserContextImpl::WebLayerVariationsClient
     return browser_context_->IsOffTheRecord();
   }
 
-  std::string GetVariationsHeader() const override {
-    return variations::VariationsHttpHeaderProvider::GetInstance()
-        ->GetClientDataHeader(IsSignedIn());
+  variations::mojom::VariationsHeadersPtr GetVariationsHeaders()
+      const override {
+    return variations::VariationsIdsProvider::GetInstance()
+        ->GetClientDataHeaders(IsSignedIn());
   }
 
  private:

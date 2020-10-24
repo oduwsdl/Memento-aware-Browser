@@ -34,9 +34,8 @@ public final class TestWebLayer {
     }
 
     private TestWebLayer(@NonNull Context appContext) {
-        ClassLoader remoteClassLoader;
         try {
-            remoteClassLoader = WebLayer.getOrCreateRemoteContext(appContext).getClassLoader();
+            ClassLoader remoteClassLoader = WebLayer.getOrCreateRemoteClassLoader(appContext);
             Class TestWebLayerClass = remoteClassLoader.loadClass(
                     "org.chromium.weblayer_private.test.TestWebLayerImpl");
             mITestWebLayer = ITestWebLayer.Stub.asInterface(
@@ -50,7 +49,16 @@ public final class TestWebLayer {
         return mITestWebLayer.isNetworkChangeAutoDetectOn();
     }
 
+    /**
+     * Gets the processed context which is returned by ContextUtils.getApplicationContext() on the
+     * remote side.
+     */
     public static Context getRemoteContext(@NonNull Context appContext) {
+        return WebLayer.getApplicationContextForTesting(appContext);
+    }
+
+    /** Gets the context for the WebLayer implementation package. */
+    public static Context getWebLayerContext(@NonNull Context appContext) {
         try {
             return WebLayer.getOrCreateRemoteContext(appContext);
         } catch (PackageManager.NameNotFoundException | ReflectiveOperationException e) {
@@ -101,5 +109,33 @@ public final class TestWebLayer {
     public View getInfoBarContainerView(Tab tab) throws RemoteException {
         return (View) ObjectWrapper.unwrap(
                 mITestWebLayer.getInfoBarContainerView(tab.getITab()), View.class);
+    }
+
+    public void setIgnoreMissingKeyForTranslateManager(boolean ignore) throws RemoteException {
+        mITestWebLayer.setIgnoreMissingKeyForTranslateManager(ignore);
+    }
+
+    public void forceNetworkConnectivityState(boolean networkAvailable) throws RemoteException {
+        mITestWebLayer.forceNetworkConnectivityState(networkAvailable);
+    }
+
+    public boolean canInfoBarContainerScroll(Tab tab) throws RemoteException {
+        return mITestWebLayer.canInfoBarContainerScroll(tab.getITab());
+    }
+
+    public String getDisplayedUrl(View urlBarView) throws RemoteException {
+        return mITestWebLayer.getDisplayedUrl(ObjectWrapper.wrap(urlBarView));
+    }
+
+    public String getTranslateInfoBarTargetLanguage(Tab tab) throws RemoteException {
+        return mITestWebLayer.getTranslateInfoBarTargetLanguage(tab.getITab());
+    }
+
+    public static void disableWebViewCompatibilityMode() {
+        WebLayer.disableWebViewCompatibilityMode();
+    }
+
+    public boolean didShowFullscreenToast(Tab tab) throws RemoteException {
+        return mITestWebLayer.didShowFullscreenToast(tab.getITab());
     }
 }
