@@ -37,6 +37,7 @@
 #include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom-forward.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom-shared.h"
+#include "url/origin.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -51,6 +52,7 @@ class QuotaInternalsProxy;
 namespace storage {
 
 class QuotaManagerProxy;
+class QuotaOverrideHandle;
 class QuotaTemporaryStorageEvictor;
 class UsageTracker;
 
@@ -121,7 +123,17 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
                               int64_t quota,
                               blink::mojom::UsageBreakdownPtr usage_breakdown)>;
 
-  static const int64_t kNoLimit;
+  using UsageAndQuotaForDevtoolsCallback =
+      base::OnceCallback<void(blink::mojom::QuotaStatusCode,
+                              int64_t usage,
+                              int64_t quota,
+                              bool is_override_enabled,
+                              blink::mojom::UsageBreakdownPtr usage_breakdown)>;
+
+  static constexpr int64_t kGBytes = 1024 * 1024 * 1024;
+  static constexpr int64_t kNoLimit = INT64_MAX;
+  static constexpr int64_t kMBytes = 1024 * 1024;
+  static constexpr int kMinutesInMilliSeconds = 60 * 1000;
 
   QuotaManager(bool is_incognito,
                const base::FilePath& profile_path,
@@ -138,17 +150,24 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   // Called by clients or webapps. Returns usage per host.
   void GetUsageInfo(GetUsageInfoCallback callback);
 
-  // Called by Web Apps.
+  // Called by Web Apps (deprecated quota API).
   // This method is declared as virtual to allow test code to override it.
   virtual void GetUsageAndQuotaForWebApps(const url::Origin& origin,
                                           blink::mojom::StorageType type,
                                           UsageAndQuotaCallback callback);
-  // Called by DevTools.
+
+  // Called by Web Apps (navigator.storage.estimate())
   // This method is declared as virtual to allow test code to override it.
   virtual void GetUsageAndQuotaWithBreakdown(
       const url::Origin& origin,
       blink::mojom::StorageType type,
       UsageAndQuotaWithBreakdownCallback callback);
+
+  // Called by DevTools.
+  virtual void GetUsageAndQuotaForDevtools(
+      const url::Origin& origin,
+      blink::mojom::StorageType type,
+      UsageAndQuotaForDevtoolsCallback callback);
 
   // Called by storage backends.
   //
@@ -229,9 +248,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
                               QuotaCallback callback);
   void GetGlobalUsage(blink::mojom::StorageType type,
                       GlobalUsageCallback callback);
-  void GetHostUsage(const std::string& host,
-                    blink::mojom::StorageType type,
-                    UsageCallback callback);
   void GetHostUsageWithBreakdown(const std::string& host,
                                  blink::mojom::StorageType type,
                                  UsageWithBreakdownCallback callback);
@@ -241,9 +257,10 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   bool IsStorageUnlimited(const url::Origin& origin,
                           blink::mojom::StorageType type) const;
 
-  virtual void GetOriginsModifiedSince(blink::mojom::StorageType type,
-                                       base::Time modified_since,
-                                       GetOriginsCallback callback);
+  virtual void GetOriginsModifiedBetween(blink::mojom::StorageType type,
+                                         base::Time begin,
+                                         base::Time end,
+                                         GetOriginsCallback callback);
 
   bool ResetUsageTracker(blink::mojom::StorageType type);
 
@@ -252,13 +269,34 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   void SetStoragePressureCallback(
       base::RepeatingCallback<void(url::Origin)> storage_pressure_callback);
 
-  static const int64_t kPerHostPersistentQuotaLimit;
-  static const char kDatabaseName[];
-  static const int kThresholdOfErrorsToBeBlacklisted;
-  static const int kEvictionIntervalInMilliSeconds;
-  static const char kDaysBetweenRepeatedOriginEvictionsHistogram[];
-  static const char kEvictedOriginAccessedCountHistogram[];
-  static const char kEvictedOriginDaysSinceAccessHistogram[];
+  // DevTools Quota Override methods:
+  int GetOverrideHandleId();
+  void OverrideQuotaForOrigin(int handle_id,
+                              const url::Origin& origin,
+                              base::Optional<int64_t> quota_size);
+  // Called when a DevTools client releases all overrides, however, overrides
+  // will not be disabled for any origins for which there are other DevTools
+  // clients/QuotaOverrideHandle with an active override.
+  void WithdrawOverridesForHandle(int handle_id);
+
+  // Cap size for per-host persistent quota determined by the histogram.
+  // This is a bit lax value because the histogram says nothing about per-host
+  // persistent storage usage and we determined by global persistent storage
+  // usage that is less than 10GB for almost all users.
+  static constexpr int64_t kPerHostPersistentQuotaLimit = 10 * 1024 * kMBytes;
+
+  static constexpr int kEvictionIntervalInMilliSeconds =
+      30 * kMinutesInMilliSeconds;
+  static constexpr int kThresholdOfErrorsToBeDenylisted = 3;
+  static constexpr int kThresholdRandomizationPercent = 5;
+
+  static constexpr char kDatabaseName[] = "QuotaManager";
+  static constexpr char kDaysBetweenRepeatedOriginEvictionsHistogram[] =
+      "Quota.DaysBetweenRepeatedOriginEvictions";
+  static constexpr char kEvictedOriginAccessedCountHistogram[] =
+      "Quota.EvictedOriginAccessCount";
+  static constexpr char kEvictedOriginDaysSinceAccessHistogram[] =
+      "Quota.EvictedOriginDaysSinceAccess";
 
   // Kept non-const so that test code can change the value.
   // TODO(kinuko): Make this a real const value and add a proper way to set
@@ -289,6 +327,19 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   class DumpQuotaTableHelper;
   class DumpOriginInfoTableHelper;
   class StorageCleanupHelper;
+
+  struct QuotaOverride {
+    QuotaOverride();
+    ~QuotaOverride();
+
+    QuotaOverride(const QuotaOverride& quota_override) = delete;
+    QuotaOverride& operator=(const QuotaOverride&) = delete;
+
+    int64_t quota_size;
+
+    // Keeps track of the DevTools clients that have an active override.
+    std::set<int> active_override_session_ids;
+  };
 
   using QuotaTableEntry = QuotaDatabase::QuotaTableEntry;
   using OriginInfoTableEntry = QuotaDatabase::OriginInfoTableEntry;
@@ -424,6 +475,16 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   // callback.
   void SimulateStoragePressure(const url::Origin origin);
 
+  // Evaluates disk statistics to identify storage pressure
+  // (low disk space availability) and starts the storage
+  // pressure event dispatch if appropriate.
+  // TODO(crbug.com/1088004): Implement UsageAndQuotaInfoGatherer::Completed()
+  // to use DetermineStoragePressure().
+  // TODO(crbug.com/1102433): Define and explain StoragePressure in the README.
+  void DetermineStoragePressure(int64_t free_space, int64_t total_space);
+
+  base::Optional<int64_t> GetQuotaOverrideForOrigin(const url::Origin&);
+
   void PostTaskAndReplyWithResultForDBThread(
       const base::Location& from_here,
       base::OnceCallback<bool(QuotaDatabase*)> task,
@@ -462,12 +523,18 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   GetOriginCallback lru_origin_callback_;
   std::set<url::Origin> access_notified_origins_;
 
+  std::map<url::Origin, QuotaOverride> devtools_overrides_;
+  int next_override_handle_id_ = 0;
+
   // Owns the QuotaClient instances registered via RegisterClient().
-  std::vector<scoped_refptr<QuotaClient>> clients_;
+  //
+  // Iterating over this list is almost always incorrect. Most algorithms should
+  // iterate over an entry in |client_types_|.
+  std::vector<scoped_refptr<QuotaClient>> clients_for_ownership_;
   // Maps QuotaClient instances to client types.
   //
   // The QuotaClient instances pointed to by the map keys are guaranteed to be
-  // alive, because they are owned by |clients_|.
+  // alive, because they are owned by |clients_for_ownership_|.
   base::flat_map<blink::mojom::StorageType,
                  base::flat_map<QuotaClient*, QuotaClientType>>
       client_types_;

@@ -14,7 +14,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
 #include "sql/database.h"
@@ -446,29 +445,32 @@ void TestPageSize(const base::FilePath& db_prefix,
   const base::FilePath db_path = db_prefix.InsertBeforeExtensionASCII(
       base::NumberToString(initial_page_size));
   sql::Database::Delete(db_path);
-  sql::Database db;
-  db.set_page_size(initial_page_size);
+  sql::Database db({.page_size = initial_page_size});
   ASSERT_TRUE(db.Open(db_path));
   ASSERT_TRUE(db.Execute(kCreateSql));
   ASSERT_TRUE(db.Execute(kInsertSql1));
   ASSERT_TRUE(db.Execute(kInsertSql2));
   ASSERT_EQ(expected_initial_page_size,
             ExecuteWithResult(&db, "PRAGMA page_size"));
+  db.Close();
 
+  // Re-open the database while setting a new |options.page_size| in the object.
+  sql::Database razed_db({.page_size = final_page_size});
+  ASSERT_TRUE(razed_db.Open(db_path));
   // Raze will use the page size set in the connection object, which may not
   // match the file's page size.
-  db.set_page_size(final_page_size);
-  ASSERT_TRUE(db.Raze());
+  ASSERT_TRUE(razed_db.Raze());
 
   // SQLite 3.10.2 (at least) has a quirk with the sqlite3_backup() API (used by
   // Raze()) which causes the destination database to remember the previous
   // page_size, even if the overwriting database changed the page_size.  Access
   // the actual database to cause the cached value to be updated.
-  EXPECT_EQ("0", ExecuteWithResult(&db, "SELECT COUNT(*) FROM sqlite_master"));
+  EXPECT_EQ("0",
+            ExecuteWithResult(&razed_db, "SELECT COUNT(*) FROM sqlite_master"));
 
   EXPECT_EQ(expected_final_page_size,
-            ExecuteWithResult(&db, "PRAGMA page_size"));
-  EXPECT_EQ("1", ExecuteWithResult(&db, "PRAGMA page_count"));
+            ExecuteWithResult(&razed_db, "PRAGMA page_size"));
+  EXPECT_EQ("1", ExecuteWithResult(&razed_db, "PRAGMA page_count"));
 }
 
 // Verify that sql::Recovery maintains the page size, and the virtual table
@@ -493,8 +495,9 @@ TEST_F(SQLDatabaseTest, RazePageSize) {
   // Databases with no page size specified should result in the default
   // page size.  2k has never been the default page size.
   ASSERT_NE("2048", default_page_size);
-  EXPECT_NO_FATAL_FAILURE(TestPageSize(
-      db_path(), 2048, "2048", Database::kDefaultPageSize, default_page_size));
+  EXPECT_NO_FATAL_FAILURE(TestPageSize(db_path(), 2048, "2048",
+                                       DatabaseOptions::kDefaultPageSize,
+                                       default_page_size));
 }
 
 // Test that Raze() results are seen in other connections.
@@ -568,6 +571,8 @@ TEST_F(SQLDatabaseTest, RazeEmptyDB) {
 }
 
 // Verify that Raze() can handle a file of junk.
+// Need exclusive mode off here as there are some subtleties (by design) around
+// how the cache is used with it on which causes the test to fail.
 TEST_F(SQLDatabaseTest, RazeNOTADB) {
   db().Close();
   sql::Database::Delete(db_path());
@@ -810,17 +815,19 @@ TEST_F(SQLDatabaseTest, SetTempDirForSQL) {
 class JournalModeTest : public SQLDatabaseTest,
                         public testing::WithParamInterface<bool> {
  public:
-  void SetUp() override {
+  JournalModeTest() : SQLDatabaseTest(GetDBOptions()) {}
+
+  sql::DatabaseOptions GetDBOptions() {
+    sql::DatabaseOptions options;
+    options.wal_mode = IsWALEnabled();
 #if defined(OS_FUCHSIA)  // Exclusive mode needs to be enabled to enter WAL mode
                          // on Fuchsia
     if (IsWALEnabled()) {
-      db().set_exclusive_locking();
+      options.exclusive_locking = true;
     }
 #endif  // defined(OS_FUCHSIA)
-    db().want_wal_mode(IsWALEnabled());
-    SQLDatabaseTest::SetUp();
+    return options;
   }
-
   bool IsWALEnabled() { return GetParam(); }
 };
 
@@ -885,10 +892,13 @@ TEST_P(JournalModeTest, PosixFilePermissions) {
     EXPECT_TRUE(base::GetPosixFilePermissions(wal_path, &mode));
     ASSERT_EQ(mode, 0600);
 
-    base::FilePath shm_path = sql::Database::SharedMemoryFilePath(db_path());
-    ASSERT_TRUE(GetPathExists(shm_path));
-    EXPECT_TRUE(base::GetPosixFilePermissions(shm_path, &mode));
-    ASSERT_EQ(mode, 0600);
+    // The shm file doesn't exist in exclusive locking mode.
+    if (ExecuteWithResult(&db(), "PRAGMA locking_mode") == "normal") {
+      base::FilePath shm_path = sql::Database::SharedMemoryFilePath(db_path());
+      ASSERT_TRUE(GetPathExists(shm_path));
+      EXPECT_TRUE(base::GetPosixFilePermissions(shm_path, &mode));
+      ASSERT_EQ(mode, 0600);
+    }
   } else {  // Truncate mode
     base::FilePath journal_path = sql::Database::JournalPath(db_path());
     DLOG(ERROR) << "journal_path: " << journal_path;
@@ -1252,53 +1262,51 @@ TEST_F(SQLDatabaseTest, GetAppropriateMmapSizeAltStatus) {
             ExecuteWithResult(&db(), "SELECT * FROM MmapStatus"));
 }
 
-TEST_F(SQLDatabaseTest, EnableWALMode) {
-  db().want_wal_mode(true);
-#if defined(OS_FUCHSIA)  // Exclusive mode needs to be enabled to enter WAL mode
-                         // on Fuchsia
-  db().set_exclusive_locking();
-#endif  // defined(OS_FUCHSIA)
-  ASSERT_TRUE(Reopen());
+TEST_F(SQLDatabaseTest, GetMemoryUsage) {
+  // Databases with mmap enabled may not follow the assumptions below.
+  db().Close();
+  db().set_mmap_disabled();
+  ASSERT_TRUE(db().Open(db_path()));
 
-  EXPECT_EQ(ExecuteWithResult(&db(), "PRAGMA journal_mode"), "wal");
+  int initial_memory = db().GetMemoryUsage();
+  EXPECT_GT(initial_memory, 0)
+      << "SQLite should always use some memory for a database";
+
+  ASSERT_TRUE(db().Execute("CREATE TABLE foo (a, b)"));
+  ASSERT_TRUE(db().Execute("INSERT INTO foo(a, b) VALUES (12, 13)"));
+
+  int post_query_memory = db().GetMemoryUsage();
+  EXPECT_GT(post_query_memory, initial_memory)
+      << "Page cache usage should go up after executing queries";
+
+  db().TrimMemory();
+  int post_trim_memory = db().GetMemoryUsage();
+  EXPECT_GT(post_query_memory, post_trim_memory)
+      << "Page cache usage should go down after calling TrimMemory()";
 }
 
-TEST_F(SQLDatabaseTest, DisableWALMode) {
-  db().want_wal_mode(true);
-#if defined(OS_FUCHSIA)  // Exclusive mode needs to be enabled to enter WAL mode
-                         // on Fuchsia
-  db().set_exclusive_locking();
-#endif  // defined(OS_FUCHSIA)
-  ASSERT_TRUE(Reopen());
-  ASSERT_EQ(ExecuteWithResult(&db(), "PRAGMA journal_mode"), "wal");
+class SQLDatabaseTestExclusiveMode : public SQLDatabaseTest {
+ public:
+  SQLDatabaseTestExclusiveMode()
+      : SQLDatabaseTest({.exclusive_locking = true}) {}
+};
 
-  // Add some data to ensure that disabling WAL mode correctly handles a
-  // populated WAL file.
-  ASSERT_TRUE(
-      db().Execute("CREATE TABLE foo (id INTEGER UNIQUE, value INTEGER)"));
-  ASSERT_TRUE(db().Execute("INSERT INTO foo VALUES (1, 1)"));
-  ASSERT_TRUE(db().Execute("INSERT INTO foo VALUES (2, 2)"));
-
-  db().want_wal_mode(false);
-  ASSERT_TRUE(Reopen());
-  EXPECT_EQ(ExecuteWithResult(&db(), "PRAGMA journal_mode"), "truncate");
-  // Check that data is preserved
-  EXPECT_EQ(ExecuteWithResult(&db(), "SELECT SUM(value) FROM foo WHERE id < 3"),
-            "3");
+TEST_F(SQLDatabaseTestExclusiveMode, LockingModeExclusive) {
+  EXPECT_EQ(ExecuteWithResult(&db(), "PRAGMA locking_mode"), "exclusive");
 }
 
-TEST_F(SQLDatabaseTest, CheckpointDatabase) {
-  if (!db().UseWALMode()) {
-    db().Close();
-    sql::Database::Delete(db_path());
-    db().want_wal_mode(true);
-#if defined(OS_FUCHSIA)  // Exclusive mode needs to be enabled to enter WAL mode
-                         // on Fuchsia
-    db().set_exclusive_locking();
-#endif  // defined(OS_FUCHSIA)
-    ASSERT_TRUE(db().Open(db_path()));
-    ASSERT_EQ(ExecuteWithResult(&db(), "PRAGMA journal_mode"), "wal");
-  }
+TEST_F(SQLDatabaseTest, LockingModeNormal) {
+  EXPECT_EQ(ExecuteWithResult(&db(), "PRAGMA locking_mode"), "normal");
+}
+
+TEST_P(JournalModeTest, OpenedInCorrectMode) {
+  std::string expected_mode = IsWALEnabled() ? "wal" : "truncate";
+  EXPECT_EQ(ExecuteWithResult(&db(), "PRAGMA journal_mode"), expected_mode);
+}
+
+TEST_P(JournalModeTest, CheckpointDatabase) {
+  if (!IsWALEnabled())
+    return;
 
   base::FilePath wal_path = sql::Database::WriteAheadLogPath(db_path());
 
@@ -1328,6 +1336,22 @@ TEST_F(SQLDatabaseTest, CheckpointDatabase) {
   EXPECT_GT(db_size, db().page_size());
   EXPECT_EQ(ExecuteWithResult(&db(), "SELECT value FROM foo where id=1"), "1");
   EXPECT_EQ(ExecuteWithResult(&db(), "SELECT value FROM foo where id=2"), "2");
+}
+
+TEST_F(SQLDatabaseTest, CorruptSizeInHeaderTest) {
+  ASSERT_TRUE(db().Execute("CREATE TABLE foo (x)"));
+  ASSERT_TRUE(db().Execute("CREATE TABLE bar (x)"));
+
+  ASSERT_TRUE(CorruptSizeInHeaderOfDB());
+  {
+    sql::test::ScopedErrorExpecter expecter;
+    expecter.ExpectError(SQLITE_CORRUPT);
+    EXPECT_FALSE(db().Execute("INSERT INTO foo values (1)"));
+    EXPECT_FALSE(db().DoesTableExist("foo"));
+    EXPECT_FALSE(db().DoesTableExist("bar"));
+    EXPECT_FALSE(db().Execute("SELECT * FROM foo"));
+    EXPECT_TRUE(expecter.SawExpectedErrors());
+  }
 }
 
 // To prevent invalid SQL from accidentally shipping to production, prepared

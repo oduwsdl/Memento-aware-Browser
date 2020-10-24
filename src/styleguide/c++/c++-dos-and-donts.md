@@ -227,8 +227,8 @@ Do not use `auto` when the type would be deduced to be a pointer type; this can
 cause confusion. Instead, specify the "pointer" part outside of `auto`:
 
 ```cpp
-auto item = new Item();  // BAD: auto deduces to Item*, type of |item| is Item*
-auto* item = new Item(); // GOOD: auto deduces to Item, type of |item| is Item*
+auto item = new Item();  // BAD: auto deduces to Item*, type of `item` is Item*
+auto* item = new Item(); // GOOD: auto deduces to Item, type of `item` is Item*
 ```
 
 ## Use `const` correctly
@@ -268,21 +268,24 @@ Good::Good() = default;
 
 ## Comment style
 
-The common ways to represent names in comments are as follows:
-* Class and type names: `FooClass`
-* Function names: `FooFunction()`. The trailing parens disambiguate against
-  class names, and, occasionally, English words.
-* Variable names: `|foo_var|`. Again, the vertical lines disambiguate against
-  English words, and, occasionally, inlined function names. Code search will
-  also automatically convert `|foo_var|` into a clickable link.
+References to code in comments should be wrapped in `` ` ` `` pairs. Codesearch uses
+this as a heuristic for finding C++ symbols in comments and generating
+cross-references for that symbol.
+
+* Class and type names: `` `FooClass` ``.
+* Function names: `` `FooFunction()` ``. The trailing parens disambiguate
+  against class names, and occasionally, English words.
+* Variable names: `` `foo_var` ``. Historically, Chrome also used `||` pairs to
+  delimit variable names; codesearch understands both conventions and will
+  generate a cross-reference either way.
 * Tracking comments for future improvements: `// TODO(crbug.com/12345): ...`,
   or, less optimally, `// TODO(knowledgeable_username): ...`.  Tracking bugs
   provide space to give background context and current status; a username might
   at least provide a starting point for asking about an issue.
 
 ```cpp
-// FooImpl implements the FooBase class.
-// FooFunction() modifies |foo_member_|.
+// `FooImpl` implements the `FooBase` class.
+// `FooFunction()` modifies `foo_member_`.
 // TODO(crbug.com/1): Rename things to something more descriptive than "foo".
 ```
 

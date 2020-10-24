@@ -140,7 +140,7 @@ void SandboxFileStreamWriter::DidCreateSnapshotFile(
   }
   file_size_ = file_info.size;
   if (initial_offset_ > file_size_) {
-    // We should not be writing pass the end of the file.
+    // We should not be writing past the end of the file.
     std::move(callback).Run(net::ERR_REQUEST_RANGE_NOT_SATISFIABLE);
     return;
   }
@@ -159,6 +159,7 @@ void SandboxFileStreamWriter::DidCreateSnapshotFile(
           file_system_context_->sandbox_delegate()->memory_file_util_delegate();
     }
     file_writer_ = FileStreamWriter::CreateForMemoryFile(
+        file_system_context_->default_file_task_runner(),
         memory_file_util_delegate, platform_path, initial_offset_);
 
   } else {
@@ -265,7 +266,23 @@ int SandboxFileStreamWriter::Flush(net::CompletionOnceCallback callback) {
   if (!file_writer_)
     return net::OK;
 
-  return file_writer_->Flush(std::move(callback));
+  has_pending_operation_ = true;
+  int result = file_writer_->Flush(
+      base::BindOnce(&SandboxFileStreamWriter::DidFlush,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+  if (result != net::ERR_IO_PENDING)
+    has_pending_operation_ = false;
+  return result;
+}
+
+void SandboxFileStreamWriter::DidFlush(net::CompletionOnceCallback callback,
+                                       int result) {
+  DCHECK(has_pending_operation_);
+
+  if (CancelIfRequested())
+    return;
+  has_pending_operation_ = false;
+  std::move(callback).Run(result);
 }
 
 }  // namespace storage
