@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package cast.web;
+
+import "google/protobuf/empty.proto";
+
+option optimize_for = LITE_RUNTIME;
+
+message Message {
+  oneof message_type {
+    MessageRequest request = 1;
+    MessageResponse response = 2;
+    ChannelStatus error = 3;
+  }
+
+  MessagePortDescriptor sender = 4;
+}
+
+message MessageChannelDescriptor {
+  uint32 channel_id = 1;
+}
+
+message MessageRequest {
+  string data = 1;
+  repeated MessagePortDescriptor ports = 2;
+}
+
+message MessageResponse {
+  bool result = 1;
+}
+
+message MessagePortDescriptor {
+  MessageChannelDescriptor channel = 1;
+  uint32 sequence_number = 2;
+}
+
+message ChannelStatus {
+  enum Status {
+    OK = 0;
+    ERROR = 1;
+  }
+
+  Status status = 1;
+}

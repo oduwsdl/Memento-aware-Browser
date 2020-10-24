@@ -1,0 +1,8 @@
+{
+  "archives": [
+    "core_sdk.tar.bz2",
+    "gdb_x86_64_apple_darwin.tgz",
+    "toolchain.tar.bz2"
+  ],
+  "version": 1
+}

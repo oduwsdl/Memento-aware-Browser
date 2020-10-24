@@ -1,0 +1,259 @@
+syntax = "proto3";
+
+package cast.media.core;
+
+import "google/protobuf/timestamp.proto";
+
+option optimize_for = LITE_RUNTIME;
+
+message AudioConfiguration {
+  enum AudioCodec {
+    AUDIO_CODEC_UNKNOWN = 0;
+    AUDIO_CODEC_AAC = 1;
+    AUDIO_CODEC_MP3 = 2;
+    AUDIO_CODEC_PCM = 3;
+    AUDIO_CODEC_PCM_S16BE = 4;
+    AUDIO_CODEC_VORBIS = 5;
+    AUDIO_CODEC_OPUS = 6;
+    AUDIO_CODEC_EAC3 = 7;
+    AUDIO_CODEC_AC3 = 8;
+    AUDIO_CODEC_DTS = 9;
+    AUDIO_CODEC_FLAC = 10;
+    AUDIO_CODEC_MPEG_H_AUDIO = 11;
+  }
+
+  enum ChannelLayout {
+    CHANNEL_LAYOUT_UNSUPPORTED = 0;
+
+    // Front C
+    CHANNEL_LAYOUT_MONO = 1;
+
+    // Front L, Front R
+    CHANNEL_LAYOUT_STEREO = 2;
+
+    // Front L, Front R, Front C, LFE, Side L, Side R
+    CHANNEL_LAYOUT_SURROUND_5_1 = 3;
+
+    // Actual channel layout is specified in the bitstream and the actual
+    // channel count is unknown at Chromium media pipeline level (useful for
+    // audio pass-through mode).
+    CHANNEL_LAYOUT_BITSTREAM = 4;
+
+    // Channels are not explicitly mapped to speakers.
+    CHANNEL_LAYOUT_DISCRETE = 5;
+  }
+
+  enum SampleFormat {
+    SAMPLE_FORMAT_UNKNOWN = 0;
+    SAMPLE_FORMAT_U8 = 1;          // Unsigned 8-bit w/ bias of 128.
+    SAMPLE_FORMAT_S16 = 2;         // Signed 16-bit.
+    SAMPLE_FORMAT_S32 = 3;         // Signed 32-bit.
+    SAMPLE_FORMAT_F32 = 4;         // Float 32-bit.
+    SAMPLE_FORMAT_PLANAR_S16 = 5;  // Signed 16-bit planar.
+    SAMPLE_FORMAT_PLANAR_F32 = 6;  // Float 32-bit planar.
+    SAMPLE_FORMAT_PLANAR_S32 = 7;  // Signed 32-bit planar.
+    SAMPLE_FORMAT_S24 = 8;         // Signed 24-bit.
+  };
+
+  // Audio codec.
+  AudioCodec codec = 1;
+
+  // Audio channel layout.
+  ChannelLayout channel_layout = 2;
+
+  // The format of each audio sample.
+  SampleFormat sample_format = 3;
+
+  // Number of bytes in each channel.
+  int64 bytes_per_channel = 4;
+
+  // Number of channels in this audio stream.
+  int32 channel_number = 5;
+
+  // Number of audio samples per second.
+  int64 samples_per_second = 6;
+
+  // Extra data buffer for certain codec initialization.
+  bytes extra_data = 7;
+}
+
+// The data buffer associated with a single frame of audio data.
+message AudioDecoderBuffer {
+  // The PTS of the frame in microseconds. This is a property of the audio frame
+  // and is used by the receiver to correctly order the audio frames and to
+  // determine when they should be decoded.
+  int64 pts_micros = 1;
+
+  // A single frame of audio data as a byte array.
+  bytes data = 2;
+
+  // Indicates if this is a special frame that indicates the end of the stream.
+  // If true, functions to access the frame content cannot be called.
+  bool end_of_stream = 3;
+}
+
+// Represents the Presentation Timestamp (PTS) metadata associated with an audio
+// stream.
+message RenderingDelay {
+  // The amount of data in pipeline (in microseconds) that has not been rendered
+  // yet.
+  int64 delay_microseconds = 1;
+
+  // Timestamp (in microseconds) with respect to the system clock (must be
+  // CLOCK_MONOTONIC_RAW) at which the delay measurement was taken.
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message PushBufferResponse {
+  enum ResponseType {
+    RESPONSE_TYPE_UNKNOWN = 0;
+    // A call to PushBuffer has failed.
+    RESPONSE_TYPE_NONFATAL_ERROR = 1;
+    // A non-recoverable error has occurred, and the server should be assumed to
+    // be in an unhealthy state.
+    RESPONSE_TYPE_FATAL_ERROR = 2;
+    // The end-of-stream buffer has been rendered.
+    RESPONSE_TYPE_END_OF_STREAM = 3;
+    // Called when the PTS Offset has been updated.
+    RESPONSE_TYPE_PTS_UPDATED = 4;
+  }
+
+  // The result of a call to PushBuffer() which was not merely a success.
+  ResponseType push_buffer_response = 1;
+
+  // The current PTS Offset. In the case of a PTS_UPDATED call, this value is
+  // used to set the new PTS Offset value. In all other cases, this field may
+  // not be populated.
+  RenderingDelay pts_offset = 2;
+}
+
+message SetConfigRequest {
+  AudioConfiguration configuration = 1;
+}
+
+message SetVolumeRequest {
+  // The multiplier is in the range [0.0, 1.0].
+  float multiplier = 1;
+}
+
+message GetRenderingDelayRequest {}
+message GetRenderingDelayResponse {
+  // The current PTS offset if operation is successful.
+  RenderingDelay pts_offset = 1;
+}
+
+message GetDecodedBytesRequest {}
+message GetDecodedBytesResponse {
+  // The total number of bytes recorded since the state machine has entered the
+  // 'Playing' state.
+  uint64 total_bytes = 1;
+}
+
+message StartRequest {}
+
+message StopRequest {}
+
+message PauseRequest {}
+
+message ResumeRequest {}
+
+message StatusChangeRequest {
+  oneof request {
+    GetDecodedBytesRequest get_decoded_bytes = 1;
+    GetRenderingDelayResponse get_rendering_delay = 2;
+    SetConfigRequest set_config_request = 3;
+    SetVolumeRequest set_volume_request = 4;
+    AudioDecoderBuffer push_buffer_request = 5;
+    StartRequest start_request = 6;
+    StopRequest stop_request = 7;
+    PauseRequest pause_request = 8;
+    ResumeRequest resume_request = 9;
+  }
+}
+
+message StatusChangeResponse {
+  oneof response {
+    GetDecodedBytesResponse get_decoded_byes = 1;
+    GetRenderingDelayResponse get_rendering_delay = 2;
+    PushBufferResponse push_buffer_response = 3;
+  }
+}
+
+// This service is implemented by Chromecast devices that use an out-of-process
+// audio decoder. It defines a state machine with the following states:
+// - Playing
+// - Stopped
+// - Paused
+//
+// It is used to handle control of the media stream, and initially starts in the
+// 'Stopped' state.
+service CastAudioDecoder {
+  // Sends one of the following commands:
+  //
+  // GetDecodedBytes:
+  //   Returns the number of decoded bytes since the start of this connection's
+  //   lifetime.
+  //
+  //   May only be called in the 'Playing' state, and following this call the
+  //   state machine will be in the 'Playing' state.
+  //
+  // GetRenderingDelay:
+  //   Returns the pipeline latency: i.e. the amount of data in the pipeline
+  //   that has not been rendered yet.
+  //
+  //   May only be called in the 'Playing' state, and following this call the
+  //   state machine will be in the 'Playing' state.
+  //
+  // SetConfig:
+  //   Provides the audio configuration either at initial setup or at any time
+  //   it changes. This config will then be applied to all future frames passed
+  //   through PushBuffer.
+  //
+  //   May be called in any state, and following this call the state machine
+  //   will remain in the same state.
+  //
+  // SetVolume:
+  //   Sets the volume multiplier for this audio stream.
+  //   The multiplier is in the range [0.0, 1.0].  If not called, a default
+  //   multiplier of 1.0 is assumed. Returns true if successful.
+  //
+  //   May be called in any state, and following this call the state machine
+  //   will be in the same state.
+  //
+  // PushBuffer:
+  //   This API provides a 2 way stream for decoded bits and responses to those
+  //   bits. AudioDecodeBuffer packets are sent to the server, and responses are
+  //   sent back in the case of either a non-successful push or an edge case
+  //   such as end of input.
+  //
+  //   May only be called in the 'Playing' or 'Paused' states, and following
+  //   this call the state machine will remain the same state.
+  //
+  // Start:
+  //   Places pipeline into 'Playing' state. Playback will start at given time
+  //   once buffers are pushed.
+  //
+  //   May only be called in the 'Stopped' state, and following this call the
+  //   state machine will be in the 'Playing' state.
+  //
+  // Stop:
+  //   Stops media playback and drops all pushed buffers which have not yet been
+  //   played.
+  //
+  //   May only be called in the 'Playing' or 'Paused' states, and following
+  //   this call the state machine will be in the 'Stopped' state.
+  //
+  // Pause:
+  //   Pauses media playback
+  //
+  //   May only be called in the 'Playing' state, and following this call the
+  //   state machine will be in the 'Paused' state.
+  //
+  // Resume:
+  //   Resumes media playback
+  //
+  //   May only be called in the 'Paused' state, and following this call the
+  //   state machine will be in the 'Playing'' state.
+  rpc SendStatusChange(stream StatusChangeRequest)
+      returns (stream StatusChangeResponse);
+}

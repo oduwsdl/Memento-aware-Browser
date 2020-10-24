@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package cast.media.runtime;
+
+import "google/protobuf/empty.proto";
+
+option optimize_for = LITE_RUNTIME;
+
+message EnableOrDisableLocalPlaybackRequest {
+  bool enabled = 1;
+}
+
+// This client is used for the following purposes:
+// - Receiving commands that the playback state changes due to an out-of-bound
+//   operation (i.e. follower stops playback).
+// - The "silent leader" behavior where the media is still rendered by the
+//   runtime but not displayed.
+//
+// This service is implemented by the Cast Web runtime.
+service CmaAudioServiceClient {
+  // Enables or disables local playback.
+  rpc EnableOrDisableLocalPlayback(EnableOrDisableLocalPlaybackRequest)
+      returns (google.protobuf.Empty);
+}

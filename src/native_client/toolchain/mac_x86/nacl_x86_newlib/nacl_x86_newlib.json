@@ -1,0 +1,8 @@
+{
+  "archives": [
+    "core_sdk.tgz",
+    "gdb_x86_64_apple_darwin.tgz",
+    "naclsdk.tgz"
+  ],
+  "version": 1
+}
