@@ -307,7 +307,6 @@ vs-chromium-project.txt
 /src/ui/surface/surface.xml
 /src/ui/surface/surface_gpu_tests.xml
 /src/ui/webui/internal
-/src/v8
 /src/webkit/data
 /src/webpagereplay_logs/
 /src/x86-generic_out/
