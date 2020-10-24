@@ -9,7 +9,6 @@ from __future__ import print_function
 import io
 import os
 import signal
-import stat
 import subprocess
 import sys
 import time
@@ -19,7 +18,10 @@ SIX_DIR = os.path.join(
     'six')
 sys.path.insert(0, SIX_DIR)
 
-import six
+try:
+  import six
+except ImportError:
+  raise Exception('Failed to import six. Run under vpython or install six.')
 
 # This is hardcoded to be src/ relative to this script.
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

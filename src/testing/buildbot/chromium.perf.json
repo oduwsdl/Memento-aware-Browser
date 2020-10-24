@@ -9,7 +9,6 @@
           "--browser=android-chromium",
           "--upload-results",
           "--test-shard-map-filename=android_nexus5_perf_map.json",
-          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -104,7 +103,6 @@
           "--browser=release_x64",
           "--upload-results",
           "--test-shard-map-filename=win_7_nvidia_gpu_perf_map.json",
-          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -150,8 +148,7 @@
           "-v",
           "--browser=release",
           "--upload-results",
-          "--test-shard-map-filename=win_7_perf_map.json",
-          "--run-ref-build"
+          "--test-shard-map-filename=win_7_perf_map.json"
         ],
         "isolate_name": "performance_test_suite",
         "merge": {
@@ -192,8 +189,17 @@
   "android-builder-perf": {
     "additional_compile_targets": [
       "microdump_stackwalk",
-      "angle_perftests",
-      "chrome_apk"
+      "chrome_apk",
+      "system_webview_google_apk",
+      "android_tools",
+      "cc_perftests",
+      "chrome_public_apk",
+      "chromium_builder_perf",
+      "dump_syms",
+      "gpu_perftests",
+      "push_apps_to_background_apk",
+      "system_webview_apk",
+      "system_webview_shell_apk"
     ],
     "isolated_scripts": [
       {
@@ -210,6 +216,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -235,6 +242,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -260,6 +268,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -285,6 +294,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -310,6 +320,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -335,6 +346,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -360,6 +372,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -380,11 +393,14 @@
           "-v",
           "--browser=android-chrome",
           "--upload-results",
-          "--test-shard-map-filename=android-go-perf_map.json",
-          "--run-ref-build"
+          "--test-shard-map-filename=android-go-perf_map.json"
         ],
         "isolate_name": "performance_test_suite",
         "merge": {
+          "args": [
+            "--lightweight",
+            "--skip-perf"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -419,6 +435,14 @@
         }
       }
     ]
+  },
+  "android-go-processor-perf": {
+    "merge": {
+      "args": [
+        "--lightweight"
+      ],
+      "script": "//tools/perf/process_perf_results.py"
+    }
   },
   "android-go_webview-perf": {
     "isolated_scripts": [
@@ -471,10 +495,9 @@
       {
         "args": [
           "-v",
-          "--browser=android-chrome",
+          "--browser=android-chrome-64-bundle",
           "--upload-results",
-          "--test-shard-map-filename=android-pixel2-perf_map.json",
-          "--run-ref-build"
+          "--test-shard-map-filename=android-pixel2-perf_map.json"
         ],
         "isolate_name": "performance_test_suite",
         "merge": {
@@ -504,7 +527,7 @@
           "ignore_task_failure": false,
           "io_timeout": 21600,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 35
+          "shards": 28
         },
         "trigger_script": {
           "args": [
@@ -629,11 +652,67 @@
       "script": "//tools/perf/process_perf_results.py"
     }
   },
+  "android-pixel4a_power-perf": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "-v",
+          "--browser=android-chrome",
+          "--upload-results",
+          "--test-shard-map-filename=android-pixel4a_power-perf_map.json",
+          "--experimental-tbmv3-metrics"
+        ],
+        "isolate_name": "performance_test_suite",
+        "merge": {
+          "script": "//tools/perf/process_perf_results.py"
+        },
+        "name": "performance_test_suite",
+        "override_compile_targets": [
+          "performance_test_suite"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "device_os": "QD4A.200102.001.A1",
+              "device_os_flavor": "google",
+              "device_type": "sunfish",
+              "os": "Android",
+              "pool": "chrome.tests.pinpoint"
+            }
+          ],
+          "expiration": 7200,
+          "hard_timeout": 21600,
+          "ignore_task_failure": false,
+          "io_timeout": 21600,
+          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 1
+        },
+        "trigger_script": {
+          "args": [
+            "--multiple-dimension-script-verbose",
+            "True"
+          ],
+          "requires_simultaneous_shard_dispatch": true,
+          "script": "//testing/trigger_scripts/perf_device_trigger.py"
+        }
+      }
+    ]
+  },
   "android_arm64-builder-perf": {
     "additional_compile_targets": [
       "microdump_stackwalk",
-      "angle_perftests",
-      "chrome_apk"
+      "chrome_apk",
+      "system_webview_google_apk",
+      "android_tools",
+      "cc_perftests",
+      "chrome_public_apk",
+      "chromium_builder_perf",
+      "gpu_perftests",
+      "push_apps_to_background_apk",
+      "system_webview_apk",
+      "system_webview_shell_apk",
+      "telemetry_weblayer_apks"
     ],
     "isolated_scripts": [
       {
@@ -650,6 +729,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -675,6 +755,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -700,6 +781,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -725,6 +807,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -750,6 +833,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -775,6 +859,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -800,6 +885,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -825,6 +911,40 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86",
+              "os": "Ubuntu-16.04",
+              "pool": "chrome.tests"
+            }
+          ],
+          "expiration": 7200,
+          "hard_timeout": 21600,
+          "ignore_task_failure": false,
+          "io_timeout": 21600,
+          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
+        }
+      }
+    ]
+  },
+  "chromeos-amd64-generic-lacros-builder-perf": {
+    "additional_compile_targets": [
+      "chrome"
+    ],
+    "isolated_scripts": [
+      {
+        "args": [],
+        "isolate_name": "resource_sizes_lacros_chrome",
+        "merge": {
+          "script": "//tools/perf/process_perf_results.py"
+        },
+        "name": "resource_sizes_lacros_chrome",
+        "override_compile_targets": [
+          "resource_sizes_lacros_chrome"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
               "os": "Ubuntu-16.04",
               "pool": "chrome.tests"
             }
@@ -840,7 +960,8 @@
   },
   "linux-builder-perf": {
     "additional_compile_targets": [
-      "chromedriver"
+      "chromedriver",
+      "chromium_builder_perf"
     ]
   },
   "linux-perf": {
@@ -851,7 +972,6 @@
           "--browser=release",
           "--upload-results",
           "--test-shard-map-filename=linux-perf_map.json",
-          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -910,7 +1030,6 @@
           "--browser=release",
           "--upload-results",
           "--test-shard-map-filename=mac-10_12_laptop_low_end-perf_map.json",
-          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -969,7 +1088,6 @@
           "--browser=release",
           "--upload-results",
           "--test-shard-map-filename=mac-10_13_laptop_high_end-perf_map.json",
-          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -999,7 +1117,7 @@
           "ignore_task_failure": false,
           "io_timeout": 21600,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 23
+          "shards": 26
         },
         "trigger_script": {
           "args": [
@@ -1020,9 +1138,106 @@
       "script": "//tools/perf/process_perf_results.py"
     }
   },
+  "mac-arm-builder-perf": {
+    "additional_compile_targets": [
+      "chromedriver",
+      "chromium_builder_perf"
+    ]
+  },
+  "mac-arm_dtk_arm-perf": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "-v",
+          "--browser=release",
+          "--upload-results",
+          "--test-shard-map-filename=mac-arm_dtk_arm-perf_map.json",
+          "--assert-gpu-compositing"
+        ],
+        "isolate_name": "performance_test_suite",
+        "merge": {
+          "script": "//tools/perf/process_perf_results.py"
+        },
+        "name": "performance_test_suite",
+        "override_compile_targets": [
+          "performance_test_suite"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "arm",
+              "os": "Mac",
+              "pool": "chrome.tests.perf"
+            }
+          ],
+          "expiration": 7200,
+          "hard_timeout": 21600,
+          "ignore_task_failure": false,
+          "io_timeout": 21600,
+          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 1
+        },
+        "trigger_script": {
+          "args": [
+            "--multiple-dimension-script-verbose",
+            "True"
+          ],
+          "requires_simultaneous_shard_dispatch": true,
+          "script": "//testing/trigger_scripts/perf_device_trigger.py"
+        }
+      }
+    ]
+  },
+  "mac-arm_dtk_x86-perf": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "-v",
+          "--browser=release",
+          "--upload-results",
+          "--test-shard-map-filename=mac-arm_dtk_x86-perf_map.json",
+          "--assert-gpu-compositing"
+        ],
+        "isolate_name": "performance_test_suite",
+        "merge": {
+          "script": "//tools/perf/process_perf_results.py"
+        },
+        "name": "performance_test_suite",
+        "override_compile_targets": [
+          "performance_test_suite"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "arm",
+              "os": "Mac",
+              "pool": "chrome.tests.perf"
+            }
+          ],
+          "expiration": 7200,
+          "hard_timeout": 21600,
+          "ignore_task_failure": false,
+          "io_timeout": 21600,
+          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 1
+        },
+        "trigger_script": {
+          "args": [
+            "--multiple-dimension-script-verbose",
+            "True"
+          ],
+          "requires_simultaneous_shard_dispatch": true,
+          "script": "//testing/trigger_scripts/perf_device_trigger.py"
+        }
+      }
+    ]
+  },
   "mac-builder-perf": {
     "additional_compile_targets": [
-      "chromedriver"
+      "chromedriver",
+      "chromium_builder_perf"
     ]
   },
   "win-10-perf": {
@@ -1033,7 +1248,6 @@
           "--browser=release_x64",
           "--upload-results",
           "--test-shard-map-filename=win-10-perf_map.json",
-          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -1092,7 +1306,6 @@
           "--browser=release_x64",
           "--upload-results",
           "--test-shard-map-filename=win-10_laptop_low_end-perf_map.json",
-          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -1144,12 +1357,14 @@
   },
   "win32-builder-perf": {
     "additional_compile_targets": [
-      "chromedriver"
+      "chromedriver",
+      "chromium_builder_perf"
     ]
   },
   "win64-builder-perf": {
     "additional_compile_targets": [
-      "chromedriver"
+      "chromedriver",
+      "chromium_builder_perf"
     ]
   }
 }

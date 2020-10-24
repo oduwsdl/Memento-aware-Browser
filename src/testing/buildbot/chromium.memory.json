@@ -13,6 +13,52 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
+            "absl_hardening_tests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "MMB29Q",
+              "device_os_type": "userdebug",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
             "android_browsertests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
@@ -48,6 +94,53 @@
         },
         "test": "android_browsertests",
         "test_id_prefix": "ninja://chrome/test:android_browsertests/"
+      },
+      {
+        "args": [
+          "--test-launcher-batch-limit=1",
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "android_sync_integration_tests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "MMB29Q",
+              "device_os_type": "userdebug",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "android_sync_integration_tests",
+        "test_id_prefix": "ninja://chrome/test:android_sync_integration_tests/"
       },
       {
         "args": [
@@ -97,27 +190,15 @@
       },
       {
         "args": [
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
+          "angle_unittests",
+          "-v"
         ],
         "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "angle_unittests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -126,20 +207,11 @@
               "os": "Android"
             }
           ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "args": [
@@ -556,52 +628,6 @@
         },
         "test": "breakpad_unittests",
         "test_id_prefix": "ninja://third_party/breakpad:breakpad_unittests/"
-      },
-      {
-        "args": [
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "cacheinvalidation_unittests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "device_os": "MMB29Q",
-              "device_os_type": "userdebug",
-              "device_type": "bullhead",
-              "os": "Android"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -3127,6 +3153,52 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "zlib_unittests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "MMB29Q",
+              "device_os_type": "userdebug",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -3149,8 +3221,8 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
         "args": [
@@ -3167,11 +3239,33 @@
               "os": "Ubuntu-16.04"
             }
           ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "angle_unittests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 10
         },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "args": [
@@ -3415,26 +3509,6 @@
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -4849,6 +4923,26 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -4870,7 +4964,7 @@
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 12
+          "shards": 30
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
@@ -4911,7 +5005,7 @@
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 4
+          "shards": 10
         },
         "test": "content_browsertests",
         "test_id_prefix": "ninja://content/test:content_browsertests/"
@@ -4955,8 +5049,8 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
         "merge": {
@@ -4972,8 +5066,29 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "angle_unittests"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "merge": {
@@ -5180,23 +5295,6 @@
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -6400,6 +6498,23 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -6422,8 +6537,8 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
         "args": [
@@ -6442,8 +6557,30 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "angle_unittests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "args": [
@@ -6729,26 +6866,6 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
-      },
-      {
-        "args": [
           "--gtest_filter=-*UsingRealWebcam*",
           "--test-launcher-print-test-stdio=always"
         ],
@@ -6979,7 +7096,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_content_browsertests",
+        "name": "storage_service_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7162,7 +7279,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_extensions_browsertests",
+        "name": "storage_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7365,7 +7482,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_interactive_ui_tests",
+        "name": "storage_service_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -8262,6 +8379,26 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -8285,8 +8422,8 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
         "args": [
@@ -8306,8 +8443,31 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "angle_unittests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "args": [
@@ -8633,27 +8793,6 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
-      },
-      {
-        "args": [
           "--gtest_filter=-*UsingRealWebcam*",
           "--test-launcher-print-test-stdio=always"
         ],
@@ -8894,7 +9033,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_content_browsertests",
+        "name": "storage_service_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9087,7 +9226,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_extensions_browsertests",
+        "name": "storage_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9300,7 +9439,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_interactive_ui_tests",
+        "name": "storage_service_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -10221,6 +10360,27 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -10244,8 +10404,8 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
         "args": [
@@ -10265,8 +10425,31 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "angle_unittests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "args": [
@@ -10521,27 +10704,6 @@
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -11973,6 +12135,27 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -11995,8 +12178,8 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
         "args": [
@@ -12015,8 +12198,30 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "angle_unittests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "args": [
@@ -12242,26 +12447,6 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
-      },
-      {
-        "args": [
           "--gtest_filter=-*UsingRealWebcam*",
           "--test-launcher-print-test-stdio=always"
         ],
@@ -12454,7 +12639,6 @@
           "--use-vulkan=swiftshader",
           "--enable-oop-rasterization",
           "--enable-gpu-rasterization",
-          "--force-gpu-rasterization",
           "--disable-software-compositing-fallback",
           "--disable-vulkan-fallback-to-gl-for-testing",
           "--disable-headless-mode",
@@ -13666,6 +13850,26 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -13683,8 +13887,8 @@
           "can_use_on_swarming_builders": true,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
         "args": [
@@ -13698,8 +13902,25 @@
           "can_use_on_swarming_builders": true,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "angle_unittests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "args": [
@@ -13872,21 +14093,6 @@
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -14503,6 +14709,21 @@
           "can_use_on_swarming_builders": true,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "openscreen_unittests",
+        "test_id_prefix": "ninja://chrome/browser/media/router:openscreen_unittests/"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "pdf_unittests",
         "test_id_prefix": "ninja://pdf:pdf_unittests/"
       },
@@ -14836,6 +15057,21 @@
         },
         "test": "xr_browser_tests",
         "test_id_prefix": "ninja://chrome/test:xr_browser_tests/"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -14858,6 +15094,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14895,6 +15134,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14929,6 +15171,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14949,6 +15194,52 @@
   },
   "android-asan": {
     "gtest_tests": [
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "absl_hardening_tests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "MMB29Q",
+              "device_os_type": "userdebug",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
       {
         "args": [
           "--gs-results-bucket=chromium-result-details",
@@ -14994,6 +15285,53 @@
         },
         "test": "android_browsertests",
         "test_id_prefix": "ninja://chrome/test:android_browsertests/"
+      },
+      {
+        "args": [
+          "--test-launcher-batch-limit=1",
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "android_sync_integration_tests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "MMB29Q",
+              "device_os_type": "userdebug",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "android_sync_integration_tests",
+        "test_id_prefix": "ninja://chrome/test:android_sync_integration_tests/"
       },
       {
         "args": [
@@ -15043,27 +15381,15 @@
       },
       {
         "args": [
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
+          "angle_unittests",
+          "-v"
         ],
         "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "angle_unittests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -15072,20 +15398,11 @@
               "os": "Android"
             }
           ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "args": [
@@ -15503,52 +15820,6 @@
         },
         "test": "breakpad_unittests",
         "test_id_prefix": "ninja://third_party/breakpad:breakpad_unittests/"
-      },
-      {
-        "args": [
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "cacheinvalidation_unittests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "device_os": "MMB29Q",
-              "device_os_type": "userdebug",
-              "device_type": "bullhead",
-              "os": "Android"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -17631,6 +17902,52 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "zlib_unittests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "MMB29Q",
+              "device_os_type": "userdebug",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -17650,8 +17967,8 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
         "merge": {
@@ -17667,8 +17984,29 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "angle_unittests"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Windows-10-15063"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "merge": {
@@ -17892,23 +18230,6 @@
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-10-15063"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -19312,6 +19633,23 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Windows-10-15063"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       },
       {
         "merge": {
